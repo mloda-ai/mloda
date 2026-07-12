@@ -272,6 +272,20 @@ def test_scope_root_feature_group_class_raises_typeerror() -> None:
     assert "unexpected keyword" not in message
 
 
+def test_scope_root_feature_group_name_string_raises_typeerror() -> None:
+    """The root base NAME as a string scope must be rejected too (issue #682).
+
+    String scopes match by ancestry, and every FeatureGroup has the root base in
+    its MRO, so the string "FeatureGroup" would act as a wildcard matching every
+    candidate. It must raise the same TypeError as the class-object root form.
+    """
+    with pytest.raises(TypeError) as exc_info:
+        Feature("x", feature_group="FeatureGroup")
+    message = str(exc_info.value)
+    assert "feature_group" in message
+    assert "unexpected keyword" not in message
+
+
 # ---------------------------------------------------------------------------
 # String normalization: whitespace-only scopes collapse to None
 # ---------------------------------------------------------------------------

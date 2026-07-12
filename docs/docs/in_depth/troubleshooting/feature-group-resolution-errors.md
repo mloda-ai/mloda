@@ -52,10 +52,10 @@ def get_domain(cls):
 When two enabled sources declare the same column (for example a shared join key), requesting that column by bare name is ambiguous. Scope the request to one source. The scope is resolution-only and does not affect feature identity.
 
 ``` python
-# RECOMMENDED: class object, collision-proof
+# class object, collision-proof
 Feature("subject_token", feature_group=ClaimsReader)
 
-# class-name string form
+# class-name string form, the only form a JSON config can carry
 Feature("subject_token", feature_group="ClaimsReader")
 ```
 
@@ -69,9 +69,18 @@ The same scope in a JSON config ([feature config](../feature-config.md)):
 
 The config form takes the class-name string only, because JSON cannot express a class object; the class-object form is Python-only.
 
+Both forms match the scoped class and its subclasses, preferring the most specific one. Naming an abstract family base therefore selects the concrete subclass for the compute framework of the run, so a config can scope to the family without knowing which framework will execute it:
+
+``` json
+[
+    {"name": "age__mean_aggr", "feature_group": "AggregatedFeatureGroup"}
+]
+```
+
 Caveats:
 
-- The string form matches the exact class name only: it does not match subclasses, and two classes with the same name in different modules stay ambiguous. The class-object form matches the class and its registered subclasses, preferring the most specific subclass, so prefer the class object.
+- The class object is collision-proof; the string form is not. Two classes with the same name in different modules both match the string, so the request stays ambiguous and raises. A base whose subclasses do not narrow to one candidate also raises.
+- The root `FeatureGroup` base is rejected in either form: it would scope to everything.
 - The scope is resolution-only and excluded from Feature identity, so two requests for the same column name scoped to different sources compare equal. Requesting both in one features list raises `ValueError: Duplicate feature setup: <name>` rather than silently dropping one, so you are told, not surprised. Inside a single `input_features()` returning a set literal, a second same-name feature with a different scope is silently deduplicated by the Python set itself before the engine ever sees it, so never scope the same name twice within one feature group. To read the same column from two sources side by side, give them distinct derived feature names.
 
 ## FeatureGroup Redefinition Errors

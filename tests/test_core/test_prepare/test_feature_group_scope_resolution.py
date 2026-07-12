@@ -1,13 +1,20 @@
-"""Resolution-scope tests for IdentifyFeatureGroupClass (issue #508).
+"""Resolution-scope tests for IdentifyFeatureGroupClass (issues #508, #682).
 
 Two source feature groups (A and B) both match the shared feature name
 "subject_token". Requesting it unscoped is ambiguous ("Multiple feature groups
-found"). The new per-feature scope disambiguates resolution to a single source,
+found"). The per-feature scope disambiguates resolution to a single source,
 by class identity or by class-name string, without changing feature identity.
+
+Both scope forms match by ancestry (#682): a candidate matches when the scoped
+class is in its MRO, or, for the string form, when any class in its MRO (below
+the root FeatureGroup base) carries the scoped name. filter_subclasses then
+prefers the most specific candidate.
 
 Follows the construction conventions in test_identify_feature_group_error_message.py.
 """
 
+import inspect
+from abc import abstractmethod
 from typing import Optional
 
 import pytest
@@ -379,32 +386,194 @@ def test_scoped_ambiguity_callout_precedes_troubleshooting_url() -> None:
 
 
 # ---------------------------------------------------------------------------
-# String-form scopes match the exact class name only (no subclass matching)
+# String-form scopes match by ancestry, like the class-object form (issue #682)
+#
+# A candidate matches a string scope when any class in its FeatureGroup ancestry
+# (its MRO, excluding the root FeatureGroup base) carries that class name. This
+# lets a JSON config name an abstract family base and still reach the concrete
+# per-framework subclass, instead of hard-coding a compute-framework leaf class.
 # ---------------------------------------------------------------------------
 
 
-def test_base_class_name_string_scope_does_not_match_subclass() -> None:
-    """Pinning test: a STRING scope matches the exact class name only, never subclasses.
+def test_base_class_name_string_scope_resolves_to_accessible_subclass() -> None:
+    """A base-name STRING scope matches subclasses of the named class.
 
-    This pins the INTENDED asymmetry between the two scope forms: a class-object
-    scope uses issubclass matching (see
-    test_base_class_scope_resolves_to_accessible_subclass), while the string form
-    'ScopeSourceA' compares against get_class_name() exactly. With only the
-    subclass ScopeSourceASub accessible, the base-name string scope therefore
-    matches nothing and raises 'No feature groups found', naming the scope.
-
-    This is a characterization test of current behaviour; it may already pass.
+    The string form now carries the same subclass-preferring semantics as the
+    class-object form (see test_base_class_scope_resolves_to_accessible_subclass).
+    With only the subclass ScopeSourceASub accessible, the base-name string scope
+    'ScopeSourceA' resolves to that subclass.
     """
     feature = Feature("subject_token", feature_group=ScopeSourceA.get_class_name())
     accessible_plugins: FeatureGroupEnvironmentMapping = {
         ScopeSourceASub: {MockComputeFramework},
     }
 
-    with pytest.raises(ValueError, match="No feature groups found") as exc_info:
+    identifier = IdentifyFeatureGroupClass(
+        feature=feature,
+        accessible_plugins=accessible_plugins,
+        links=None,
+        data_access_collection=None,
+    )
+    resolved_feature_group, _compute_frameworks = identifier.get()
+    assert resolved_feature_group is ScopeSourceASub
+
+
+def test_base_class_name_string_scope_prefers_subclass_when_both_accessible() -> None:
+    """With base AND subclass accessible, a base-name string scope resolves to the subclass.
+
+    Mirrors test_base_class_scope_prefers_subclass_when_both_accessible for the
+    string form: ancestry matching keeps both candidates, then filter_subclasses
+    (same compute-framework set) drops the base in favour of the subclass.
+    """
+    feature = Feature("subject_token", feature_group=ScopeSourceA.get_class_name())
+    accessible_plugins: FeatureGroupEnvironmentMapping = {
+        ScopeSourceA: {MockComputeFramework},
+        ScopeSourceASub: {MockComputeFramework},
+    }
+
+    identifier = IdentifyFeatureGroupClass(
+        feature=feature,
+        accessible_plugins=accessible_plugins,
+        links=None,
+        data_access_collection=None,
+    )
+    resolved_feature_group, _compute_frameworks = identifier.get()
+    assert resolved_feature_group is ScopeSourceASub
+
+
+def test_string_scope_does_not_widen_to_unrelated_groups() -> None:
+    """Ancestry matching stays narrow: non-descendants are still filtered out.
+
+    ScopeSourceB also matches 'subject_token' but is unrelated to the scoped
+    class, so the base-name string scope 'ScopeSourceA' must exclude it. Widening
+    would turn this into 'Multiple feature groups found'.
+    """
+    feature = Feature("subject_token", feature_group=ScopeSourceA.get_class_name())
+    accessible_plugins: FeatureGroupEnvironmentMapping = {
+        ScopeSourceASub: {MockComputeFramework},
+        ScopeSourceB: {MockComputeFramework},
+    }
+
+    identifier = IdentifyFeatureGroupClass(
+        feature=feature,
+        accessible_plugins=accessible_plugins,
+        links=None,
+        data_access_collection=None,
+    )
+    resolved_feature_group, _compute_frameworks = identifier.get()
+    assert resolved_feature_group is ScopeSourceASub
+
+
+class ScopeAbstractFamilyBase(FeatureGroup):
+    """Abstract family base: matches "subject_token" but cannot be instantiated."""
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {"subject_token"}
+
+    @classmethod
+    def match_feature_group_criteria(
+        cls,
+        feature_name: FeatureName | str,
+        options: Options,
+        data_access_collection: Optional[DataAccessCollection] = None,
+    ) -> bool:
+        return str(feature_name) == "subject_token"
+
+    @classmethod
+    @abstractmethod
+    def _family_hook(cls) -> str:
+        """Abstract hook that makes this base abstract."""
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+        return None
+
+
+class ScopeConcreteFamilyMember(ScopeAbstractFamilyBase):
+    """The concrete implementation of the abstract family base."""
+
+    @classmethod
+    def _family_hook(cls) -> str:
+        return "concrete"
+
+
+def test_abstract_base_name_string_scope_resolves_to_concrete_subclass() -> None:
+    """A string scope naming an ABSTRACT family base resolves to the concrete subclass.
+
+    This is the config use case of issue #682: a JSON config can only carry a
+    class-name string, so naming the abstract family base must reach the concrete
+    implementation instead of forcing the config to name a framework-specific leaf.
+    """
+    assert inspect.isabstract(ScopeAbstractFamilyBase), "fixture must be abstract"
+    assert not inspect.isabstract(ScopeConcreteFamilyMember), "fixture must be concrete"
+
+    feature = Feature("subject_token", feature_group=ScopeAbstractFamilyBase.get_class_name())
+    accessible_plugins: FeatureGroupEnvironmentMapping = {
+        ScopeAbstractFamilyBase: {MockComputeFramework},
+        ScopeConcreteFamilyMember: {MockComputeFramework},
+        ScopeSourceB: {MockComputeFramework},
+    }
+
+    identifier = IdentifyFeatureGroupClass(
+        feature=feature,
+        accessible_plugins=accessible_plugins,
+        links=None,
+        data_access_collection=None,
+    )
+    resolved_feature_group, _compute_frameworks = identifier.get()
+    assert resolved_feature_group is ScopeConcreteFamilyMember
+
+
+def test_string_scope_matching_two_same_named_bases_stays_ambiguous() -> None:
+    """Ancestry matching does not disambiguate a class-name collision.
+
+    Two distinct base classes share the name 'DupNameAncestorBase' (different
+    "modules"), each with its own concrete subclass. The string scope matches both
+    subclasses through their ancestry, so resolution stays ambiguous and must name
+    the scope.
+    """
+    dup_base_a = type("DupNameAncestorBase", (_DupNameBase,), {})
+    dup_base_b = type("DupNameAncestorBase", (_DupNameBase,), {})
+    sub_a = type("DupNameAncestorSubA", (dup_base_a,), {})
+    sub_b = type("DupNameAncestorSubB", (dup_base_b,), {})
+    accessible_plugins: FeatureGroupEnvironmentMapping = {
+        sub_a: {MockComputeFramework},
+        sub_b: {MockComputeFramework},
+    }
+
+    feature = Feature("subject_token", feature_group="DupNameAncestorBase")
+
+    with pytest.raises(ValueError, match="Multiple feature groups found") as exc_info:
         IdentifyFeatureGroupClass(
             feature=feature,
             accessible_plugins=accessible_plugins,
             links=None,
             data_access_collection=None,
         )
-    assert ScopeSourceA.get_class_name() in str(exc_info.value)
+    assert "Scoped to feature group: 'DupNameAncestorBase'" in str(exc_info.value)
+
+
+def test_base_name_string_scope_with_two_sibling_subclasses_stays_ambiguous() -> None:
+    """A base-name string scope whose siblings do not narrow to one candidate still raises.
+
+    Both subclasses match through the base's name with the same compute-framework
+    set, and neither is a subclass of the other, so filter_subclasses cannot pick
+    a winner. Resolution stays ambiguous.
+    """
+    sibling_one = type("ScopeSiblingOne", (_DupNameBase,), {})
+    sibling_two = type("ScopeSiblingTwo", (_DupNameBase,), {})
+    accessible_plugins: FeatureGroupEnvironmentMapping = {
+        sibling_one: {MockComputeFramework},
+        sibling_two: {MockComputeFramework},
+    }
+
+    feature = Feature("subject_token", feature_group=_DupNameBase.get_class_name())
+
+    with pytest.raises(ValueError, match="Multiple feature groups found") as exc_info:
+        IdentifyFeatureGroupClass(
+            feature=feature,
+            accessible_plugins=accessible_plugins,
+            links=None,
+            data_access_collection=None,
+        )
+    assert "Scoped to feature group: '_DupNameBase'" in str(exc_info.value)

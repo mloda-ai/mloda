@@ -26,6 +26,7 @@ from mloda.user import Feature
 from mloda.user import PluginCollector
 from mloda.user import mloda
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
+from mloda_plugins.feature_group.experimental.aggregated_feature_group.pandas import PandasAggregatedFeatureGroup
 
 
 # ---------------------------------------------------------------------------
@@ -505,3 +506,46 @@ def test_end2end_scoped_config_feature_resolves_to_source_b() -> None:
     df = results[0]
     assert "config_shared_token" in df.columns
     assert list(df["config_shared_token"].values) == ["b1", "b2"]
+
+
+# ---------------------------------------------------------------------------
+# End to end: a config names an ABSTRACT family base and reaches the concrete
+# per-framework subclass (issue #682)
+#
+# A config can only carry a class-name STRING. Naming the framework-agnostic
+# family base "AggregatedFeatureGroup" must resolve to the concrete
+# PandasAggregatedFeatureGroup for the active compute framework, so the config
+# stays free of a compute-framework-specific leaf class name.
+# ---------------------------------------------------------------------------
+
+
+class ConfigScopeAggregationSource(FeatureGroup):
+    """Source data for the aggregated-family scope test."""
+
+    @classmethod
+    def input_data(cls) -> Optional[BaseInputData]:
+        return DataCreator(supports_features={"config_scope_sales"})
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return {"config_scope_sales": [10, 20, 30, 40]}
+
+
+def test_end2end_config_abstract_family_base_scope_resolves_to_pandas_subclass() -> None:
+    """A config scoped to 'AggregatedFeatureGroup' runs on the Pandas subclass."""
+    config_str = '[{"name": "config_scope_sales__mean_aggr", "feature_group": "AggregatedFeatureGroup"}]'
+
+    features = load_features_from_config(config_str, format="json")
+    results = list(
+        mloda.run_all(
+            features,
+            compute_frameworks={PandasDataFrame},
+            plugin_collector=PluginCollector.enabled_feature_groups(
+                {ConfigScopeAggregationSource, PandasAggregatedFeatureGroup}
+            ),
+        )
+    )
+
+    aggregated = [df for df in results if "config_scope_sales__mean_aggr" in df.columns]
+    assert len(aggregated) == 1
+    assert aggregated[0]["config_scope_sales__mean_aggr"].iloc[0] == 25.0

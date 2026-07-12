@@ -251,6 +251,7 @@ class mlodaAPI:
     def explain(
         cls,
         features: Features | list[Feature | str],
+        *,
         compute_frameworks: set[type[ComputeFramework]] | Optional[list[str]] = None,
         links: Optional[set[Link]] = None,
         data_access_collection: Optional[DataAccessCollection] = None,
@@ -264,7 +265,14 @@ class mlodaAPI:
     ) -> list[PlanStep]:
         """Resolve the execution plan without executing it.
 
-        Same as ``prepare(...).resolved_plan()``: no feature is computed.
+        Same as ``prepare(...).resolved_plan()``: no feature is computed. The plan is re-resolved
+        from scratch, so this answers "what would this request resolve to", not "what did a previous
+        ``run_all`` execute". To mirror a ``run_all`` resolution, pass the same
+        ``parallelization_modes``: ``run_all`` defaults to ``{ParallelizationMode.SYNC}`` while
+        ``prepare``/``explain`` default to None, and ``SetupComputeFramework`` filters compute
+        frameworks by mode.
+
+        Every parameter after ``features`` is keyword-only.
         """
         session = cls.prepare(
             features,

@@ -126,23 +126,29 @@ print(f"Candidates: {[fg.__name__ for fg in result.candidates]}")
 
 ##### explain and resolved_plan
 
-The runtime counterpart to `resolve_feature`: `mlodaAPI.explain(...)` builds the execution plan for a request without running it, and `session.resolved_plan()` returns the same records for a prepared session (before or after `run()`). Both return a `list[PlanStep]` in execution-plan order.
+The runtime counterpart to `resolve_feature`: `mlodaAPI.explain(...)` builds the execution plan for a request without running it, and `session.resolved_plan()` returns the same records for a prepared session (before or after `run()`). Both return a `list[PlanStep]` in execution-plan order. Every `explain` parameter after `features` is keyword-only.
+
+`explain` re-resolves the plan from scratch. It answers "what would this request resolve to", it is not a record of a prior `run_all` execution. To match a `run_all` resolution, pass the same `parallelization_modes`: `run_all` defaults to `{ParallelizationMode.SYNC}`, `prepare`/`explain` default to `None`, and compute frameworks are filtered by mode.
 
 ``` python
 from mloda.user import mloda
 
+# "sales" here stands for a root feature one of your own FeatureGroups provides.
 for step in mloda.explain(["sales__mean_aggr"], compute_frameworks=["PandasDataFrame"]):
     print(step.step_kind, step.feature_names, step.feature_group_name, step.compute_framework_name)
 ```
 
 **Returns:** `PlanStep` dataclass (frozen) with fields:
 
-- **step_kind** (`str`): `"compute"`, `"join"` or `"transform"`.
-- **feature_names** (`tuple[str, ...]`): Features computed by a compute step, empty otherwise.
-- **feature_group** (`type[FeatureGroup] | None`): Resolved FeatureGroup, the destination for a transform step, None for a join.
-- **compute_framework** (`type[ComputeFramework] | None`): Selected ComputeFramework, the destination for a transform step, the left side for a join.
-- **source_feature_group** / **source_compute_framework**: Origin of a transform step; the right side framework for a join.
-- **feature_group_name** / **compute_framework_name** (`str | None`): Class names of the above, None when unset.
+- **step_kind** (`Literal["compute", "join", "transform"]`).
+- **feature_names** (`tuple[str, ...]`): Features computed by a compute step, empty otherwise. This includes engine-injected features (link index features, global-filter features), so it is not a clean "requested feature name -> FeatureGroup" map: the same index name can appear under two different FeatureGroups in one plan.
+- **feature_group** (`type[FeatureGroup] | None`): Resolved FeatureGroup; the destination for a transform step; the link's declared left side for a join.
+- **compute_framework** (`type[ComputeFramework] | None`): Selected ComputeFramework; the destination for a transform step; the merge destination for a join.
+- **source_feature_group** / **source_compute_framework**: Origin of a transform step. For a join: the link's declared right side, and the framework merged in.
+- **join_type** (`str | None`): The link's join type (`"inner"`, `"left"`, ...) for a join step, None otherwise.
+- **feature_group_name** / **compute_framework_name** / **source_feature_group_name** / **source_compute_framework_name** (`str | None`): Class names of the above, None when unset.
+
+Join semantics, honestly: for a join step the `*_feature_group` fields are the link's declared left/right sides, while `compute_framework`/`source_compute_framework` are the merge destination and the framework merged in. The planner swaps those two frameworks for `RIGHT` joins, so they are not guaranteed to be the frameworks of the declared left/right sides.
 
 ##### get_feature_group_docs
 

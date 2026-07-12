@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta, timezone
+from typing import Any
 
 import pytest
 
@@ -266,3 +267,66 @@ class TestGlobalFilterTimeTravel:
         filter_features = {f.filter_feature.name for f in self.global_filter.filters}
         assert event_time_column in filter_features
         assert validity_time_column in filter_features
+
+
+class TestGlobalFilterCategoricalInclusion:
+    """Collection filter values must survive `GlobalFilter.add_filter` (issue #664).
+
+    `add_filter` puts the `SingleFilter` into a `set`, which hashes the parameter. Collection
+    values therefore need a hashable internal representation, but the public `values` accessor
+    must still hand back a `list` for the filter engines that consume it.
+    """
+
+    def setup_method(self) -> None:
+        self.global_filter = GlobalFilter()
+
+    def _only_filter(self) -> SingleFilter:
+        assert len(self.global_filter.filters) == 1
+        return next(iter(self.global_filter.filters))
+
+    def test_add_filter_with_list_value(self) -> None:
+        """Test add_filter accepts a list value without raising TypeError: unhashable type."""
+        self.global_filter.add_filter("region", FilterType.CATEGORICAL_INCLUSION, {"values": ["EU", "NA"]})
+
+        added_filter = self._only_filter()
+        assert added_filter.filter_type == "categorical_inclusion"
+        assert isinstance(added_filter.parameter, FilterParameterImpl)
+
+    def test_add_filter_with_list_value_exposes_values_as_list(self) -> None:
+        """Test the value round-trips through add_filter as a list, not a tuple."""
+        self.global_filter.add_filter("region", FilterType.CATEGORICAL_INCLUSION, {"values": ["EU", "NA"]})
+
+        values = self._only_filter().parameter.values
+        assert isinstance(values, list)
+        assert values == ["EU", "NA"]
+
+    def test_add_filter_with_set_value(self) -> None:
+        """Test add_filter accepts a set value and exposes it as a list."""
+        parameter: dict[str, Any] = {"values": {"EU", "NA"}}
+        self.global_filter.add_filter("region", FilterType.CATEGORICAL_INCLUSION, parameter)
+
+        values = self._only_filter().parameter.values
+        assert isinstance(values, list)
+        assert sorted(values) == ["EU", "NA"]
+
+    def test_add_filter_with_string_value_is_not_exploded(self) -> None:
+        """Test a scalar string value is not split into its characters."""
+        self.global_filter.add_filter("region", FilterType.CATEGORICAL_INCLUSION, {"values": "EU"})
+
+        values: Any = self._only_filter().parameter.values
+        assert values == "EU"
+        assert values != ["E", "U"]
+
+    def test_add_filter_deduplicates_list_and_tuple_values(self) -> None:
+        """Test list and tuple values normalize to the same filter and deduplicate in the set."""
+        self.global_filter.add_filter("region", FilterType.CATEGORICAL_INCLUSION, {"values": ["EU"]})
+        self.global_filter.add_filter("region", FilterType.CATEGORICAL_INCLUSION, {"values": ("EU",)})
+
+        assert len(self.global_filter.filters) == 1
+
+    def test_add_filter_keeps_distinct_collection_values_apart(self) -> None:
+        """Test different collection values still produce distinct filters."""
+        self.global_filter.add_filter("region", FilterType.CATEGORICAL_INCLUSION, {"values": ["EU"]})
+        self.global_filter.add_filter("region", FilterType.CATEGORICAL_INCLUSION, {"values": ["NA"]})
+
+        assert len(self.global_filter.filters) == 2

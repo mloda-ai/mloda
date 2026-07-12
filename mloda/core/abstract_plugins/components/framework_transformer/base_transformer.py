@@ -15,7 +15,11 @@ class BaseTransformer:
     1. Subclass BaseTransformer
     2. Implement all abstract methods
     3. Define the source and target frameworks
-    4. Implement the transformation logic in both directions
+    4. Implement each transform direction the transformer supports. Implementing
+       transform_fw_to_other_fw registers the forward edge, transform_other_fw_to_fw registers the
+       reverse edge, and implementing both makes the transformer two-way. To declare a direction
+       unsupported, leave its hook unimplemented; do not override it with a raising body, because
+       any override registers the edge and the chain search will then route through it.
 
     The transformer will be automatically discovered and registered with the
     ComputeFrameworkTransformer.
@@ -148,11 +152,18 @@ class BaseTransformer:
         """
         raise NotImplementedError
 
+    # The two transform hooks below are deliberately NOT @abstractmethod: the decorator is inert here
+    # (BaseTransformer has no ABC metaclass) and it signals "you must implement this", which
+    # contradicts the one-way contract. Their raising bodies are load-bearing: apply_chain relies on them.
+
     @classmethod
-    @abstractmethod
     def transform_fw_to_other_fw(cls, data: Any) -> Any:
         """
         Transform data from the primary framework to the secondary framework.
+
+        Implementing this hook registers the forward edge (framework(), other_framework()) for chain
+        composition; leaving it unimplemented declares that direction unsupported. Do not override it
+        with a raising body: the edge would still be registered and chains would crash mid-flight.
 
         Args:
             data: Data in the primary framework format
@@ -163,10 +174,13 @@ class BaseTransformer:
         raise NotImplementedError
 
     @classmethod
-    @abstractmethod
     def transform_other_fw_to_fw(cls, data: Any, framework_connection_object: Optional[Any] = None) -> Any:
         """
         Transform data from the secondary framework to the primary framework.
+
+        Implementing this hook registers the reverse edge (other_framework(), framework()) for chain
+        composition; leaving it unimplemented declares that direction unsupported. Do not override it
+        with a raising body: the edge would still be registered and chains would crash mid-flight.
 
         Args:
             data: Data in the secondary framework format

@@ -107,7 +107,7 @@ Key features:
 1. During initialization, `ComputeFrameworkTransformer` checks for existing `BaseTransformer` subclasses
 2. If none are found, it auto-loads only `*transformer*` files from the `compute_framework` group
 3. Each transformer is registered in a mapping from framework pairs to transformer classes
-4. The mapping is bidirectional, allowing transformations in both directions
+4. Each direction is registered only if the transformer implements that direction's hook: two-way transformers register both edges, one-way transformers only their forward edge
 
 ### Transformation Process
 
@@ -156,15 +156,20 @@ PyArrow Table → SparkPyarrowTransformer → Spark DataFrame (optional SparkSes
 To create a custom transformer for a new pair of frameworks:
 
 1. Subclass `BaseTransformer`
-2. Implement the required methods:
+2. Implement the four required methods:
    - `framework()` - Return the primary framework type
    - `other_framework()` - Return the secondary framework type
    - `import_fw()` - Import the primary framework module
    - `import_other_fw()` - Import the secondary framework module
-   - `transform_fw_to_other_fw()` - Transform from primary to secondary
-   - `transform_other_fw_to_fw()` - Transform from secondary to primary
+3. Implement the direction hooks the transformer supports:
+   - `transform_fw_to_other_fw()` - Transform from primary to secondary; registers the forward edge
+   - `transform_other_fw_to_fw()` - Transform from secondary to primary; registers the reverse edge
 
-Example:
+Each direction hook you implement registers that direction's edge, so implementing both yields a two-way transformer usable in chains in either direction.
+
+**One-way transformers**: to declare a direction unsupported, leave its hook unimplemented. Do not override it with `raise NotImplementedError`: registration keys off the override itself, not its body, so a raising override registers a dead edge that the chain search will route through and then crash on, instead of reporting "no chain exists". `FileSourcePyArrowTransformer` and `FileSourceDictTransformer` are the reference one-way implementations; both simply omit `transform_other_fw_to_fw()`.
+
+Example of a two-way transformer:
 
 ```python
 from typing import Any, Optional

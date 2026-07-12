@@ -4,8 +4,7 @@ from typing import Any
 
 from mloda.provider import BaseTransformer
 
-#: A leading ``+`` is deliberately rejected: pyarrow's int64 parser refuses it and falls back to
-#: double, so such a column must take the float branch (``_FLOAT_RE`` accepts ``+5``).
+#: No leading ``+``: pyarrow's int64 parser refuses it, so such a column takes the float branch.
 _INT_RE = re.compile(r"^-?[0-9]+$")
 _FLOAT_RE = re.compile(r"^[+-]?(?:[0-9]+\.[0-9]*|\.[0-9]+|[0-9]+)(?:[eE][+-]?[0-9]+)?$")
 _BOOL_MAP: dict[str, bool] = {
@@ -16,8 +15,7 @@ _BOOL_MAP: dict[str, bool] = {
     "TRUE": True,
     "FALSE": False,
 }
-#: pyarrow's default ``ConvertOptions.null_values`` minus ``""``: empty cells are already
-#: mapped to ``None`` before inference.
+#: pyarrow's default ``ConvertOptions.null_values`` minus ``""`` (empty cells are already ``None``).
 _NULL_TOKENS: frozenset[str] = frozenset(
     {
         "#N/A",
@@ -40,19 +38,15 @@ _NULL_TOKENS: frozenset[str] = frozenset(
 )
 _INT64_MIN = -(2**63)
 _INT64_MAX = 2**63 - 1
-#: Any ``_INT_RE`` cell of at most this length (sign included) holds at most 18 significant digits,
-#: so it always fits int64 and is far under the ``int(str)`` digit cap: ``int()`` needs no guard.
+#: An ``_INT_RE`` cell this short always fits int64, so ``int()`` needs no guard.
 _INT_FAST_LEN = 18
 
 
 def _as_int64(text: str) -> int | None:
-    """The value of a ``_INT_RE`` cell if it fits signed int64, else ``None``.
+    """Value of an ``_INT_RE`` cell if it fits signed int64, else ``None``.
 
-    Never calls ``int()`` on an oversized digit string: CPython caps ``int(str)`` at
-    ``sys.get_int_max_str_digits()`` (4300 by default) and LEADING ZEROS count toward that cap.
-    Stripping the sign and the leading zeros first leaves at most 19 significant digits for anything
-    that can fit int64 (the smallest 20-digit number already exceeds int64 max), so the surviving
-    ``int()`` call is always within the cap.
+    ``int(str)`` is capped at ``sys.get_int_max_str_digits()`` (4300) and leading zeros count, so
+    strip sign and zeros first: over 19 significant digits cannot fit int64 and never reaches ``int()``.
     """
     negative = text[0] == "-"
     digits = (text[1:] if negative else text).lstrip("0")
@@ -65,17 +59,13 @@ def _as_int64(text: str) -> int | None:
 
 
 def _infer_column(cells: list[str | None]) -> list[Any]:
-    """Infer a single column's type once (column-wise) and cast its cells.
+    """Infer a single column's type once (column-wise) and cast its cells, as pyarrow's CSV reader does.
 
-    Matches pyarrow's default CSV reader:
-
-    - Empty cells (``None`` here) and null tokens become ``None`` in an int/float/bool column;
-      in a string column an empty cell stays ``""`` and a null token stays literal text
-      (``strings_can_be_null=False``). A column of only empty cells and/or null tokens is all-``None``.
-    - The type is decided from the cells that are neither empty nor a null token.
-    - An int column with any value outside signed int64 range degrades entirely to float
-      (pyarrow's int64 -> double fallback); a value too large for float64 becomes ``inf``.
-    - A leading ``+`` is not an int for pyarrow, so such a column degrades to float too.
+    The type is decided from the cells that are neither empty nor a null token. Empty cells and null
+    tokens become ``None`` in an int/float/bool column; in a string column an empty cell stays ``""``
+    and a null token stays literal text (``strings_can_be_null=False``). A column of only empty cells
+    and/or null tokens is all-``None``. An int column with a value outside int64 range degrades
+    entirely to float (``inf`` beyond float64 range).
     """
     typed = [c for c in cells if c is not None and c not in _NULL_TOKENS]
 
@@ -83,8 +73,7 @@ def _infer_column(cells: list[str | None]) -> list[Any]:
         return [None] * len(cells)
 
     if all(_INT_RE.match(c) for c in typed):
-        # Parse each cell once; the loop breaks on the first out-of-range value, which degrades the
-        # whole column to float below. Short cells take the guard-free int() fast path.
+        # Break on the first out-of-range value: the column degrades to float below.
         parsed: list[Any] = []
         for c in cells:
             if c is None or c in _NULL_TOKENS:
@@ -98,7 +87,7 @@ def _infer_column(cells: list[str | None]) -> list[Any]:
                 parsed.append(value)
         else:
             return parsed
-        # Parse the float from the source string: float(int(...)) would raise on huge values.
+        # From the source string: float(int(...)) would raise on huge values.
         return [None if c is None or c in _NULL_TOKENS else float(c) for c in cells]
 
     if all(_FLOAT_RE.match(c) for c in typed):

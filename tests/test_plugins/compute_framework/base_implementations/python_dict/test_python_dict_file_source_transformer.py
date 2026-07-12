@@ -22,17 +22,13 @@ column semantics pyarrow's CSV reader gives, without pyarrow):
   (i) A UTF-8 BOM at the start of the file is tolerated (``utf-8-sig``).
   (j) A non-csv ``FileSource.format`` raises ``ValueError``; the reverse direction
       (dict -> FileSource) raises ``NotImplementedError``.
-  (k) Null tokens (pyarrow's default ``ConvertOptions.null_values``: ``NA``, ``N/A``, ``NaN``,
-      ``null``, ``#N/A``, ``-1.#IND``, ...) become ``None`` in an otherwise int / float / bool
-      column; in a STRING column they stay literal strings (``strings_can_be_null=False``);
-      a column of only null tokens (and/or empty cells) is all-``None``.
-  (l) An all-int column with any value outside signed int64 range degrades entirely to
-      ``float`` (pyarrow's int64 -> double fallback); int64 min/max stay exact ints; an
-      integer too large for float64 becomes ``inf``. Digit counts beyond 4300 are deliberate:
-      that is CPython's ``sys.get_int_max_str_digits()`` cap on ``int(str)`` (leading zeros
-      count toward it), so an ``int()``-based inference raises there instead of reading.
-  (m) pyarrow's int64 parser rejects a leading ``+``, so a column containing ``+5`` falls back
-      to double: the whole column is ``float``, not ``int``.
+  (k) Null tokens (pyarrow's default ``ConvertOptions.null_values``) become ``None`` in an
+      int / float / bool column, stay literal strings in a STRING column
+      (``strings_can_be_null=False``), and make a column of only tokens and/or empty cells all-``None``.
+  (l) An all-int column with a value outside signed int64 range degrades entirely to ``float``
+      (pyarrow's int64 -> double fallback); int64 min/max stay exact; beyond float64 range is ``inf``.
+      Digit counts beyond 4300 are deliberate: CPython caps ``int(str)`` there (leading zeros count).
+  (m) pyarrow's int64 parser rejects a leading ``+``, so a column containing ``+5`` is ``float``.
 """
 
 from __future__ import annotations
@@ -56,8 +52,8 @@ from mloda_plugins.feature_group.input_data.read_file_feature import ReadFileFea
 from mloda_plugins.feature_group.input_data.read_files.csv import CsvReader  # noqa: F401
 
 
-#: pyarrow's default ``ConvertOptions().null_values``, minus ``""`` (empty cells are handled
-#: before inference). Pinned literally so a pyarrow default change surfaces as a test failure.
+#: pyarrow's default ``ConvertOptions().null_values`` minus ``""``, pinned literally so a pyarrow
+#: default change surfaces as a test failure.
 _NULL_TOKENS: tuple[str, ...] = (
     "#N/A",
     "#N/A N/A",
@@ -91,14 +87,10 @@ def _types(values: list[Any]) -> list[type[Any]]:
 def _parity(tmp_path: Path, content: str, columns: tuple[str, ...], expected: dict[str, list[Any]]) -> dict[str, Any]:
     """Assert the dict materializer yields ``expected``, then that pyarrow agrees on the SAME file.
 
-    Two deliberate properties:
-
-    - The dict-side assertion runs BEFORE ``importorskip("pyarrow")``, so the stdlib expectations
-      stay pinned in a pyarrow-free environment (the ``nopyarrow`` tox env); only the cross-check
-      against pyarrow is skipped there.
-    - Element TYPES are compared, not just values: ``==`` is type-blind (``5 == 5.0`` and
-      ``True == 1`` are both ``True``), so a value-only assertion silently accepts an int / float /
-      bool divergence, which is exactly the class of bug this parity suite exists to catch.
+    The dict-side assertion runs BEFORE ``importorskip("pyarrow")``, so the stdlib expectations stay
+    pinned without pyarrow; only the cross-check is skipped. Element TYPES are compared as well as
+    values, because ``==`` is type-blind (``5 == 5.0``, ``True == 1``) and would accept exactly the
+    int / float / bool divergence this suite exists to catch.
     """
     dict_result: dict[str, Any] = _materialize(tmp_path, content, columns)
 
@@ -280,11 +272,8 @@ class TestEncodingAndFormat:
 class TestCsvInferenceParityWithPyArrow:
     """PARITY pin (issue #662): both materializers must agree on the SAME CSV file.
 
-    pyarrow's CSV reader is the reference. Every test states the expected dict-side column
-    (always asserted, pyarrow or not) and ``_parity`` additionally cross-checks
-    ``FileSourcePyArrowTransformer`` on the same file, comparing VALUES AND ELEMENT TYPES, so the
-    stdlib path cannot drift from pyarrow (and a pyarrow default change is caught too).
-    Covers null tokens (k), int64 overflow (l) and the leading-``+`` int64 refusal (m).
+    pyarrow's CSV reader is the reference. Covers null tokens (k), int64 overflow (l) and the
+    leading-``+`` int64 refusal (m).
     """
 
     def test_null_token_in_int_column_becomes_none(self, tmp_path: Path) -> None:
@@ -317,9 +306,7 @@ class TestCsvInferenceParityWithPyArrow:
         _parity(tmp_path, "a,b\nNA,1\n,2\nnull,3\n", ("a", "b"), {"a": [None, None, None], "b": [1, 2, 3]})
 
     def test_int64_overflow_degrades_whole_column_to_float(self, tmp_path: Path) -> None:
-        """(l) One out-of-int64-range value turns the whole column float (pyarrow int64 -> double).
-
-        The in-range cell degrades too (``1.0``, not ``1``): the column has ONE type."""
+        """(l) One out-of-range value turns the whole column float, the in-range cell with it."""
         _parity(tmp_path, "a\n9223372036854775808\n1\n", ("a",), {"a": [9.223372036854776e18, 1.0]})
 
     def test_negative_int64_overflow_degrades_whole_column_to_float(self, tmp_path: Path) -> None:
@@ -346,31 +333,26 @@ class TestCsvInferenceParityWithPyArrow:
         assert math.isinf(result["a"][0])
 
     def test_integer_beyond_int_max_str_digits_becomes_inf(self, tmp_path: Path) -> None:
-        """(l) A 5000-digit integer exceeds CPython's ``sys.get_int_max_str_digits()`` cap on
-        ``int(str)`` (4300 by default), so an ``int()``-based inference raises instead of reading
-        the file. pyarrow yields ``inf``; the dict path must too."""
+        """(l) Past the 4300-digit ``int(str)`` cap, an ``int()``-based inference raises. pyarrow
+        yields ``inf``; the dict path must too."""
         result = _parity(tmp_path, "a\n" + "1" * 5000 + "\n2\n", ("a",), {"a": [math.inf, 2.0]})
         assert math.isinf(result["a"][0])
 
     def test_leading_zeros_beyond_int_max_str_digits_stay_exact_int(self, tmp_path: Path) -> None:
-        """(l) LEADING ZEROS count toward ``sys.get_int_max_str_digits()`` (4300), so a value that
-        comfortably fits int64 can still blow the ``int(str)`` cap. pyarrow reads ``1``; the dict
-        path must stay an exact int and never raise."""
+        """(l) Leading zeros count toward the 4300-digit cap, so a value that fits int64 can still
+        blow it. Both sides must read an exact ``1``, not raise."""
         _parity(tmp_path, "a\n" + "0" * 5000 + "1\n2\n", ("a",), {"a": [1, 2]})
 
     def test_leading_zeros_within_int_max_str_digits_stay_exact_int(self, tmp_path: Path) -> None:
-        """(l) The short counterpart: ``007`` is an int ``7`` on both sides (a fix for the huge
-        zero-padded case must not push ordinary zero-padded ints onto the float path)."""
+        """(l) The short counterpart: fixing the huge zero-padded case must not push ``007`` to float."""
         _parity(tmp_path, "a\n007\n2\n", ("a",), {"a": [7, 2]})
 
     def test_leading_plus_integer_degrades_column_to_float(self, tmp_path: Path) -> None:
-        """(m) pyarrow's int64 parser REJECTS a leading ``+``, so the column falls back to double:
-        ``+5`` yields ``5.0``, and the sibling ``6`` degrades to ``6.0`` with it. The stdlib path
-        must not type this column as int."""
+        """(m) ``+5`` is not an int for pyarrow: the column falls back to double, ``6`` with it."""
         _parity(tmp_path, "a\n+5\n6\n", ("a",), {"a": [5.0, 6.0]})
 
     def test_leading_plus_float_stays_float(self, tmp_path: Path) -> None:
-        """(m) A leading ``+`` on a DECIMAL is accepted by pyarrow's double parser: still float."""
+        """(m) A leading ``+`` on a DECIMAL is fine for pyarrow's double parser: still float."""
         _parity(tmp_path, "a\n+5.5\n6.5\n", ("a",), {"a": [5.5, 6.5]})
 
 

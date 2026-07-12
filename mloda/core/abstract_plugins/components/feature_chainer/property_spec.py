@@ -24,6 +24,16 @@ def property_spec(
     required_when: Callable[..., Any] | None = None,
     match_guard: Callable[..., Any] | None = None,
 ) -> dict[str, Any]:
+    # A str/bytes is iterable, so tuple("add") would silently build ('a', 'd', 'd'). Reject the
+    # shape before materializing it. This is about the value space itself, so it holds whether or
+    # not the spec is strict.
+    if isinstance(allowed_values, (str, bytes)):
+        raise ValueError(
+            f"property_spec({explanation!r}): allowed_values is a {type(allowed_values).__name__} "
+            f"({allowed_values!r}), which would make membership a substring test. Wrap it in a "
+            f"container, for example a one-element tuple: ({allowed_values!r},)."
+        )
+
     if allowed_values is not None and not isinstance(allowed_values, Mapping):
         allowed_values = tuple(allowed_values)
 
@@ -36,6 +46,9 @@ def property_spec(
     if match_guard is not None and not callable(match_guard):
         raise ValueError(f"property_spec({explanation!r}): match_guard must be callable.")
 
+    # element_validator really is dead without strict: _validate_property_value returns early on a
+    # non-strict spec. allowed_values is NOT: a non-strict value space is still consumed, to map a
+    # name-parsed operation_config back onto its PROPERTY_MAPPING key.
     if element_validator is not None and not strict:
         raise ValueError(f"property_spec({explanation!r}): element_validator is never enforced without strict=True.")
 
@@ -46,9 +59,6 @@ def property_spec(
         raise ValueError(
             f"property_spec({explanation!r}): strict=True needs a non-empty allowed_values or an element_validator."
         )
-
-    if not strict and allowed_values is not None:
-        raise ValueError(f"property_spec({explanation!r}): allowed_values is never enforced without strict=True.")
 
     spec: dict[str, Any] = {"explanation": explanation}
     if allowed_values is not None:

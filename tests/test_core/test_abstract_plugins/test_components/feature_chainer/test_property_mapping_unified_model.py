@@ -709,11 +709,16 @@ class TestPropertySpecEmitsTheNewKeys:
             property_spec("op", type_validator=_positive_int)  # type: ignore[call-arg]
 
     def test_authoring_invariants_still_live_in_property_spec(self) -> None:
-        """The authoring-time-only invariants stay put; only the default check moved to core."""
+        """The authoring-time-only invariants stay put; only the default check moved to core.
+
+        ``allowed_values`` without strict is NOT among them: a non-strict value space is still
+        consumed (name-parsed value -> property key). ``element_validator`` without strict is,
+        because it really is never enforced. See ``test_property_mapping_spec_shape.py``.
+        """
         with pytest.raises(ValueError):
             property_spec("op", strict=True)
         with pytest.raises(ValueError):
-            property_spec("op", allowed_values={"add": "Addition"})
+            property_spec("op", element_validator=_positive_int)
         with pytest.raises(ValueError):
             property_spec("op", strict=True, element_validator=_positive_int, allowed_values=[])
         not_callable: Any = "not callable"

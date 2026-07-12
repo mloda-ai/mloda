@@ -16,8 +16,10 @@ Two rules carry most of the model:
 
 | Moment | Mechanism | Checks | Receives | On failure |
 | --- | --- | --- | --- | --- |
-| Import time (`property_spec(...)` call) | Authoring invariants | strict needs `allowed_values` or an `element_validator`; `allowed_values` without strict; empty `allowed_values`; validators are callable | The spec being built | `ValueError` at import |
-| Class definition (`FeatureGroup.__init_subclass__`) | Spec schema (`PROPERTY_SPEC_KEYS`) | Every key of a spec is a known spec key | Every spec in the mapping | `ValueError` naming the class, key, and offender |
+| Import time (`property_spec(...)` call) | Authoring invariants | strict needs `allowed_values` or an `element_validator`; empty `allowed_values`; `element_validator` without strict; validators are callable; `allowed_values` is not a str/bytes | The spec being built | `ValueError` at import |
+| Class definition (`FeatureGroup.__init_subclass__`) | Spec is a dict | A spec is a spec dict, not a bare container | Every spec in the mapping | `ValueError` naming the class and key |
+| Class definition | Spec schema (`PROPERTY_SPEC_KEYS`) | Every KEY of a spec is a known spec key | Every spec in the mapping | `ValueError` listing every offender |
+| Class definition | Spec shape | Every VALUE has the right shape: `allowed_values` is a Collection and not a str/bytes; validators are callable; `strict_validation` is a bool | Every spec in the mapping | `ValueError` naming the key and the real fault |
 | Class definition | Strict needs a value space | `strict_validation: True` has a non-empty `allowed_values` or an `element_validator` | Every spec in the mapping | `ValueError` at class definition |
 | Class definition | `check_declared_default` | A strict, non-`None` `default` is accepted by its own key | The declared default | `ValueError` at class definition |
 | Match time (parser) | `allowed_values` membership | Each element is in the accepted set | One element | `ValueError`, surfaced to the end user |
@@ -31,8 +33,12 @@ rather than adding to it: when a key declares one, `allowed_values` is not consu
 Because the parser runs before the mixin, an element rejected by membership or by
 `element_validator` short-circuits, and `match_guard` is never reached.
 
-The class-definition rules run in table order: the schema first, because a spec with an
-unknown key is malformed and its remaining keys cannot be trusted to mean what they say.
+The class-definition rules run in table order, and the order is load-bearing. The schema
+runs before the shape rules, because a spec with an unknown key is malformed and its
+remaining keys cannot be trusted to mean what they say (a *removed* key in particular must
+be reported as a rename, not as some downstream shape error). The shape rules run before
+the last two, which read those values: a non-callable `element_validator` reaching
+`check_declared_default` would be blamed on the default instead.
 
 ## Choosing a mechanism
 
@@ -98,10 +104,8 @@ raises at class definition. There is one authoring form, plus a builder for it.
 }
 ```
 
-`allowed_values` may be a value-to-docstring mapping or a re-iterable collection, but
-not a one-shot iterator (a generator would exhaust and behave like an empty set). A spec
-that declares no `allowed_values` declares an **empty** value space; the space is never
-inferred from the spec's other keys.
+A spec that declares no `allowed_values` declares an **empty** value space; the space is
+never inferred from the spec's other keys.
 
 That is what makes the unknown-key rule possible, and it is the point of it. A typo'd
 flag has exactly one reading now:
@@ -112,6 +116,30 @@ flag has exactly one reading now:
     "strict_validaton": True,  # ValueError: unknown spec key. Did you mean 'strict_validation'?
 }
 ```
+
+## A spec has a shape, not just a key set
+
+Locking down the key names is only half the contract; the value under each key is checked
+too, all at class definition.
+
+`allowed_values` must be a **Collection**: a value-to-docstring mapping, or a tuple, list,
+set or frozenset. Three shapes raise:
+
+- a **`str` or `bytes`**, which a forgotten comma produces (`("add")` is the str `"add"`,
+  not a one-tuple). Membership would silently degrade into a substring test, accepting
+  `"a"`, `"ad"` and `""`.
+- a **generator**, which is truthy whether or not it yields anything, and is consumed by
+  the first read. It makes matching stateful, and a declared `default` burns it at class
+  definition so every later value is rejected.
+- a **scalar**, for which `value in 5` raises a `TypeError` that the match path swallows
+  into a silent reject-everything.
+
+`element_validator`, `required_when` and `match_guard` must be **callable**, and
+`strict_validation` must be a real **bool** (truthiness would make `"false"` mean strict).
+
+`allowed_values` is checked for shape whether or not the spec is strict, because a
+non-strict value space is still *consumed*: it maps a value parsed out of a feature name
+back onto its `PROPERTY_MAPPING` key. It is a mapping aid there, never an enforcement.
 
 **Builder, `property_spec`:** the same dict, with the authoring invariants checked at
 construction instead of at class definition.
@@ -296,6 +324,7 @@ per-element rule, or move to `match_guard` if it really is a whole-value check.
 | Invariant | Test |
 | --- | --- |
 | Spec schema, unknown-key rule, strict needs a value space | `tests/.../feature_chainer/test_property_mapping_spec_schema.py` |
+| Spec shape: Collection value space, callable validators, bool flag | `tests/.../feature_chainer/test_property_mapping_spec_shape.py` |
 | Renamed keys, removed-key guard, shared default seam, precedence | `tests/.../feature_chainer/test_property_mapping_unified_model.py` |
 | Container invariance, no stringification, str-as-scalar, dict-as-composite, empty containers | `tests/.../feature_chainer/test_property_mapping_sequence_unpacking.py` |
 | Plugin specs behave identically across containers | `tests/test_plugins/feature_group/experimental/test_property_mapping_container_invariance.py` |

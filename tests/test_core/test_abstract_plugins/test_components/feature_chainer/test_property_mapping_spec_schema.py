@@ -519,19 +519,57 @@ class TestStrictValidationNeedsAValueSpace:
         )
 
 
-class TestNonDictSpecValuesKeepTodaysBehavior:
-    """A non-dict spec value is not a spec dict, so the schema rule has nothing to check.
+class TestNonDictSpecValuesAreRejected:
+    """A spec must BE a spec dict: a bare container bypasses every class-definition rule.
 
-    Characterization, deliberately unchanged: ``validate_property_mapping_defaults`` skips
-    non-dict entries and ``_extract_property_values`` hands them back verbatim.
+    ``PROPERTY_MAPPING = {"op": ["add", "sub", "strict_validaton"]}`` defines cleanly today and
+    the list is handed back verbatim as the value space, because all three rules skip non-dicts.
+    It is not a widening hole in the strict sense (a bare container has nowhere to put
+    ``strict_validation``, so it can never be strict), but it contradicts the one-authoring-form
+    contract the schema rule establishes, and it is the one shape the repo-wide guard cannot see.
+    No in-repo spec is a non-dict, so this is a clean hard break, consistent with the rest.
     """
 
-    def test_non_dict_spec_value_is_accepted_at_class_definition(self) -> None:
-        """A non-dict spec value neither raises nor is treated as a key-bearing spec."""
+    def test_non_dict_spec_value_rejected_at_class_definition(self) -> None:
+        """A bare list where a spec dict belongs raises, naming the class and the property key."""
+        with pytest.raises(ValueError) as exc_info:
+
+            class BareContainerFeatureGroup(FeatureChainParserMixin, FeatureGroup):
+                PROPERTY_MAPPING = {"operation_type": ["add", "sub"]}
+
+                @classmethod
+                def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+                    return data
+
+        message = str(exc_info.value)
+        del exc_info
+        assert "BareContainerFeatureGroup" in message
+        assert "operation_type" in message
+
+    def test_parser_entry_point_rejects_a_non_dict_spec_value(self) -> None:
+        """The rule lives in core, so validating a mapping directly raises the same way."""
         mapping: dict[str, Any] = {"operation_type": ["add", "sub"]}
 
-        assert FeatureChainParser.validate_property_mapping_defaults("SomeOwner", mapping) is None
+        with pytest.raises(ValueError, match="operation_type"):
+            FeatureChainParser.validate_property_mapping_defaults("SomeOwner", mapping)
 
-    def test_non_dict_spec_value_is_its_own_value_space(self) -> None:
-        """``_extract_property_values`` returns a non-dict spec value unchanged."""
-        assert FeatureChainParser._extract_property_values(["add", "sub"]) == ["add", "sub"]
+    def test_non_dict_spec_value_cannot_smuggle_a_typo_flag_as_an_accepted_value(self) -> None:
+        """The schema rule's whole point, checked on the shape that used to skip it."""
+        matched: bool
+
+        try:
+
+            class SmuggledTypoFeatureGroup(FeatureChainParserMixin, FeatureGroup):
+                PROPERTY_MAPPING = {"operation_type": ["add", "sub", TYPO_STRICT_KEY]}
+
+                @classmethod
+                def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+                    return data
+
+            matched = SmuggledTypoFeatureGroup.match_feature_group_criteria(
+                "any_feature", Options(context={"operation_type": TYPO_STRICT_KEY})
+            )
+        except ValueError:
+            matched = False
+
+        assert matched is False, "a spec must be a spec dict, so a bare container can carry no flags at all"

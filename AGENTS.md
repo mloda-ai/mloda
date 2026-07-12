@@ -78,6 +78,7 @@ source .venv/bin/activate
 - **Tests**: every new feature or bug fix must come with tests; follow the patterns in the existing `tests/` tree. Tests must be parallel-safe (pytest-xdist) and finish under the 10-second timeout. The default tox env asserts `EXPECTED_SKIP_COUNT=147`; if a test you add is skipped, update the count or unskip it.
 - **Supply chain**: `[tool.uv] exclude-newer = "7 days"` in `pyproject.toml` defers new dependency releases by 7 days. Do not edit this without a reason.
 - **Licenses**: dependencies must satisfy the allowlist in `tox.ini` (Apache-2.0, BSD, MIT, MPL-2.0, PSF, ISC, LGPLv2+). Adding a dependency with a non-listed license fails tox.
+- **`attribution/ATTRIBUTION.md`**: `tox` regenerates this file from the installed dependency versions on every run, so a dependency change shows up as a diff here. This is intended: commit the update as part of the same change so the tracked file stays current. The release workflow does not regenerate it; it ships the committed copy, so keeping it up to date in PRs is what keeps releases accurate.
 - **Commits**: use [Conventional Commits](https://www.conventionalcommits.org/) (`feat:`, `fix:`, `chore:`, `docs:`, `test:`, `refactor:`, `minor:`). semantic-release computes the next version. This project deviates from the standard: the minor version (middle number) bumps only on `minor:` commits; `feat:` is treated as a patch bump.
 
 ## Issue Creation

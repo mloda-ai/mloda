@@ -60,7 +60,9 @@ Each reader family exposes a recommended hook seam. Overriding `load_data` whole
 - **ReadDocument**: implement `produce_document` and `suffix`; optionally `document_file_type`.
 - **ReadFile**: override `load_data` wholesale to return the table. `CsvReader` resolves to a `FileSource` descriptor that the target compute framework materializes into its native type.
 
-CSV materialization semantics can differ per compute framework: the PythonDict transformer keeps integers beyond int64 exact (pyarrow yields float64) and leaves `NA`/`NaN`/`null` tokens as strings in otherwise-numeric columns (pyarrow parses them as nulls). Parity is tracked in [#662](https://github.com/mloda-ai/mloda/issues/662).
+CSV inference semantics are defined by pyarrow's default CSV reader; the stdlib reader behind PythonDict follows it. Types are inferred per column: null tokens (pyarrow's default set, e.g. `NA`, `NaN`, `null`) become `None` in an int/float/bool column but stay literal text in a string column, a column of only empty cells and/or null tokens is all-`None`, and an int column with a value outside signed int64 range degrades entirely to float.
+
+The stdlib reader does not yet cover pyarrow's full surface. Where they differ, a column pyarrow types stays a string column in PythonDict: dates, timestamps and times, whitespace-padded numbers (`" 1 "`), `inf`/`infinity`, uppercase `NAN` (the float value, not the `NaN` null token), hex literals (`0x1f`), and a `true`/`1` mix (pyarrow reads `1`/`0` as bools too).
 
 Readers are classified structurally; no reader code is executed for classification. `is_final_reader()` is True when a class overrides `load_data` wholesale, or when it overrides all hooks named by its family's `_final_reader_requires()` (for example `("produce_rows", "connect")` for ReadDB). Family bases (ReadDB, ReadDocument, ReadFile) are never discovered as final readers themselves.
 

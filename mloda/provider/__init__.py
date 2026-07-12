@@ -71,6 +71,9 @@ from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser
 from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser_mixin import FeatureChainParserMixin
 from mloda.core.abstract_plugins.components.feature_chainer.property_spec import property_spec
 
+# Subtype declaration
+from mloda.core.abstract_plugins.components.subtype_declaration import SubtypeDeclaration
+
 # Transformers
 from mloda.core.abstract_plugins.components.framework_transformer.base_transformer import BaseTransformer
 from mloda.core.abstract_plugins.components.framework_transformer.cfw_transformer import ComputeFrameworkTransformer
@@ -128,6 +131,8 @@ __all__ = [
     "INPUT_SEPARATOR",
     "FeatureChainParserMixin",
     "property_spec",
+    # Subtype declaration
+    "SubtypeDeclaration",
     # Transformers
     "BaseTransformer",
     "ComputeFrameworkTransformer",

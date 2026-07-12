@@ -27,12 +27,15 @@ def test_from_dict_with_range_params() -> None:
 
 
 def test_from_dict_with_categorical_values() -> None:
-    """Test creating FilterParameterImpl with multiple values."""
+    """Test creating FilterParameterImpl with multiple values.
+
+    Internal storage normalizes the list to a tuple so the frozen dataclass stays hashable.
+    """
     params = {"values": ["A", "B", "C"]}
     filter_param = FilterParameterImpl.from_dict(params)
 
     assert isinstance(filter_param, FilterParameterImpl)
-    assert filter_param._raw == (("values", ["A", "B", "C"]),)
+    assert filter_param._raw == (("values", ("A", "B", "C")),)
 
 
 def test_from_dict_with_max_exclusive() -> None:
@@ -78,8 +81,14 @@ def test_value_property_with_string_value() -> None:
 
 
 def test_values_property_returns_list_for_categorical() -> None:
-    """Test values property returns list for categorical_inclusion filter."""
+    """Test values property returns list for categorical_inclusion filter.
+
+    The public accessor must honour its declared `Optional[list[Any]]` type even though the
+    internal storage keeps a tuple. Filter engines rely on this: PySpark's `Column.isin` only
+    unwraps list/set arguments, so leaking a tuple silently breaks the Spark categorical filter.
+    """
     filter_param = FilterParameterImpl.from_dict({"values": ["A", "B", "C"]})
+    assert isinstance(filter_param.values, list)
     assert filter_param.values == ["A", "B", "C"]
 
 
@@ -93,6 +102,7 @@ def test_values_property_with_empty_list() -> None:
     """Test values property handles empty list."""
     params: dict[str, Any] = {"values": []}
     filter_param = FilterParameterImpl.from_dict(params)
+    assert isinstance(filter_param.values, list)
     assert filter_param.values == []
 
 
@@ -240,3 +250,73 @@ def test_parameter_sorting_is_consistent() -> None:
 
     assert filter_param1._raw == filter_param2._raw
     assert filter_param1 == filter_param2
+
+
+# --- Collection value normalization tests (see issue #664) ---
+#
+# Contract: collection values are stored hashable (tuple) in `_raw`, but the public `values`
+# property returns a `list`, matching its declared type. Scalars must never be exploded.
+
+
+def test_from_dict_with_list_values_normalizes_raw_to_tuple() -> None:
+    """Test a list value is stored as a tuple internally so the frozen dataclass stays hashable."""
+    filter_param = FilterParameterImpl.from_dict({"values": ["EU", "NA"]})
+
+    assert filter_param._raw == (("values", ("EU", "NA")),)
+    assert isinstance(hash(filter_param), int)
+
+
+def test_from_dict_with_set_values_is_hashable() -> None:
+    """Test a set value is accepted and does not break hashing."""
+    params: dict[str, Any] = {"values": {"EU", "NA"}}
+    filter_param = FilterParameterImpl.from_dict(params)
+
+    assert isinstance(hash(filter_param), int)
+
+
+def test_values_property_returns_list_for_set_input() -> None:
+    """Test a set value comes back out of the public accessor as a list."""
+    params: dict[str, Any] = {"values": {"EU", "NA"}}
+    filter_param = FilterParameterImpl.from_dict(params)
+
+    assert isinstance(filter_param.values, list)
+    assert sorted(filter_param.values) == ["EU", "NA"]
+
+
+def test_values_property_returns_list_for_tuple_input() -> None:
+    """Test a tuple value comes back out of the public accessor as a list."""
+    filter_param = FilterParameterImpl.from_dict({"values": ("EU", "NA")})
+
+    assert isinstance(filter_param.values, list)
+    assert filter_param.values == ["EU", "NA"]
+
+
+def test_values_property_does_not_explode_string_value() -> None:
+    """Test a plain string value is not treated as a sequence of characters.
+
+    Normalizing collection values must not reach into scalars: a string is iterable, so a naive
+    conversion would turn "EU" into ["E", "U"]. `values` is typed as a list, so the scalar is read
+    back through `Any`.
+    """
+    filter_param = FilterParameterImpl.from_dict({"values": "EU"})
+    values: Any = filter_param.values
+
+    assert values == "EU"
+    assert values != ["E", "U"]
+
+
+def test_value_property_does_not_explode_string_value() -> None:
+    """Test the scalar `value` accessor keeps a string intact."""
+    filter_param = FilterParameterImpl.from_dict({"value": "EU"})
+
+    assert filter_param.value == "EU"
+
+
+def test_list_and_tuple_values_are_equal_and_hash_equal() -> None:
+    """Test list and tuple inputs normalize to the same parameter so they deduplicate."""
+    from_list = FilterParameterImpl.from_dict({"values": ["EU"]})
+    from_tuple = FilterParameterImpl.from_dict({"values": ("EU",)})
+
+    assert from_list == from_tuple
+    assert hash(from_list) == hash(from_tuple)
+    assert len({from_list, from_tuple}) == 1

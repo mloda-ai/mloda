@@ -20,17 +20,26 @@ class FilterParameter(Protocol):
     def max_exclusive(self) -> bool: ...
 
 
+def _make_hashable(value: Any) -> Any:
+    """Normalize collection values to tuples so the frozen dataclass stays hashable.
+
+    Sets are ordered deterministically, str/bytes stay scalar and are never exploded.
+    """
+    if isinstance(value, (str, bytes)):
+        return value
+    if isinstance(value, (set, frozenset)):
+        return tuple(sorted(value, key=repr))
+    if isinstance(value, list):
+        return tuple(value)
+    return value
+
+
 @dataclass(frozen=True)
 class FilterParameterImpl:
     _raw: tuple[tuple[str, Any], ...]
 
     @classmethod
     def from_dict(cls, params: dict[str, Any]) -> "FilterParameterImpl":
-        # Convert list values to tuples for hashability (frozen dataclass in a set).
-        def _make_hashable(v: Any) -> Any:
-            if isinstance(v, list):
-                return tuple(v)
-            return v
         return cls(_raw=tuple(sorted((k, _make_hashable(v)) for k, v in params.items())))
 
     @property
@@ -39,7 +48,12 @@ class FilterParameterImpl:
 
     @property
     def values(self) -> Optional[list[Any]]:
-        return cast(Optional[list[Any]], self._get("values"))
+        # Stored as a tuple for hashability; hand out the declared list type. Filter engines rely
+        # on this: PySpark's Column.isin only unwraps list/set, so a tuple would silently break it.
+        stored = self._get("values")
+        if isinstance(stored, tuple):
+            return list(stored)
+        return cast(Optional[list[Any]], stored)
 
     @property
     def min_value(self) -> Optional[Any]:

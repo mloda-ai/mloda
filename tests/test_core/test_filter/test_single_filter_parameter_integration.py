@@ -62,12 +62,17 @@ def test_value_property_for_equal_filter() -> None:
 
 
 def test_values_property_for_categorical_inclusion() -> None:
-    """Test accessing parameter.values for categorical_inclusion filter."""
+    """Test accessing parameter.values for categorical_inclusion filter.
+
+    Filter engines consume this accessor directly, so it must stay a list regardless of how the
+    parameter is stored internally.
+    """
     single_filter = SingleFilter(
         filter_feature="category",
         filter_type=FilterType.CATEGORICAL_INCLUSION,
         parameter={"values": ["A", "B", "C"]},
     )
+    assert isinstance(single_filter.parameter.values, list)
     assert single_filter.parameter.values == ["A", "B", "C"]
 
 

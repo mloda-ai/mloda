@@ -15,6 +15,7 @@ from mloda.provider import (
     FeatureChainParserMixin,
 )
 from mloda.provider import DefaultOptionKeys
+from mloda.provider import SubtypeDeclaration
 
 
 class AggregatedFeatureGroup(FeatureChainParserMixin, FeatureGroup):
@@ -84,6 +85,9 @@ class AggregatedFeatureGroup(FeatureChainParserMixin, FeatureGroup):
 
     # Option key for aggregation type
     AGGREGATION_TYPE = "aggregation_type"
+
+    # Declarative subtype dimension of this family.
+    SUBTYPES = SubtypeDeclaration(key=AGGREGATION_TYPE)
 
     # Define supported aggregation types
     AGGREGATION_TYPES = {

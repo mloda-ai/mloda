@@ -18,6 +18,7 @@ Example:
 from typing import Any, Optional
 
 from mloda.core.abstract_plugins.components.base_feature_group_version import SOURCE_INTROSPECTION_ERRORS
+from mloda.core.abstract_plugins.components.subtype_declaration import SubtypeDeclaration
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.abstract_plugins.components.plugin_option.plugin_collector import PluginCollector
 from mloda.core.abstract_plugins.components.utils import get_all_subclasses, safe_field
@@ -50,6 +51,29 @@ def _as_str(value: Any) -> str:
 def _safe_version(fg_class: type[FeatureGroup]) -> str:
     """Return the feature group version or "unavailable" if source introspection fails or version() is not a str."""
     return safe_field(lambda: _as_str(fg_class.version()), "unavailable", catching=SOURCE_INTROSPECTION_ERRORS)
+
+
+def _subtype_support_or_error(fg_class: type[FeatureGroup]) -> tuple[dict[str, list[str]], Optional[str]]:
+    """Return the sorted subtype support matrix, degrading a raising class to ({}, message)."""
+    try:
+        matrix = fg_class.subtype_support_matrix()
+    except Exception as exc:
+        return {}, str(exc)
+    return {framework: sorted(supported) for framework, supported in matrix.items()}, None
+
+
+def _resolved_subtype_fields(
+    fg_class: type[FeatureGroup], feature_name: FeatureName, options: Options
+) -> tuple[Optional[str], Optional[str]]:
+    """Resolve (subtype, subtype_family) for a candidate, degrading a raising declaration to (None, None)."""
+    subtype: Optional[str] = safe_field(lambda: fg_class.resolve_subtype(feature_name, options), None)
+    if subtype is None:
+        return None, None
+    raw_subtype = subtype
+    canonical = safe_field(lambda: fg_class.canonical_subtype(raw_subtype), raw_subtype)
+    if canonical != raw_subtype:
+        return subtype, canonical
+    return subtype, None
 
 
 def _dedup_degrading_on_conflict(
@@ -159,6 +183,16 @@ def get_feature_group_docs(
         if version_contains is not None and version_contains not in version:
             continue
 
+        declaration: Optional[SubtypeDeclaration] = safe_field(
+            lambda: fg_class.SUBTYPES, None, field=f"{cls_name}.SUBTYPES"
+        )
+        subtype_key = declaration.key if declaration is not None else None
+        subtypes: list[str] = safe_field(
+            lambda: sorted(fg_class.subtype_universe()), [], field=f"{cls_name}.subtype_universe"
+        )
+        parametric_subtypes = sorted(declaration.family_names()) if declaration is not None else []
+        subtype_support, subtype_error = _subtype_support_or_error(fg_class)
+
         results.append(
             FeatureGroupInfo(
                 name=fg_name,
@@ -168,6 +202,11 @@ def get_feature_group_docs(
                 compute_frameworks=compute_frameworks,
                 supported_feature_names=supported_feature_names,
                 prefix=prefix,
+                subtype_key=subtype_key,
+                subtypes=subtypes,
+                parametric_subtypes=parametric_subtypes,
+                subtype_support=subtype_support,
+                subtype_error=subtype_error,
             )
         )
 
@@ -369,11 +408,23 @@ def resolve_feature(
             error=error,
         )
 
-    supported, rejected = split_frameworks_by_capability(candidates, feature_name_obj, resolved_options)
+    # Degrade a raising plugin declaration to an empty split; resolve_feature never raises.
+    empty_split: tuple[set[type[ComputeFramework]], set[type[ComputeFramework]]] = (set(), set())
+    supported, rejected = safe_field(
+        lambda: split_frameworks_by_capability(candidates, feature_name_obj, resolved_options),
+        empty_split,
+    )
     supported_names = sorted(c.get_class_name() for c in supported)
     rejected_names = sorted(c.get_class_name() for c in rejected)
+    filtered = _filter_subclasses(candidates)
 
     if not supported and rejected:
+        subtype_unsupported: Optional[str] = None
+        subtype_family_unsupported: Optional[str] = None
+        if len(filtered) == 1:
+            subtype_unsupported, subtype_family_unsupported = _resolved_subtype_fields(
+                filtered[0], feature_name_obj, resolved_options
+            )
         return ResolvedFeature(
             feature_name=feature_name,
             feature_group=None,
@@ -385,18 +436,22 @@ def resolve_feature(
             ),
             supported_compute_frameworks=[],
             unsupported_compute_frameworks=rejected_names,
+            subtype=subtype_unsupported,
+            subtype_family=subtype_family_unsupported,
         )
 
-    filtered = _filter_subclasses(candidates)
-
     if len(filtered) == 1:
+        resolved = filtered[0]
+        subtype, subtype_family = _resolved_subtype_fields(resolved, feature_name_obj, resolved_options)
         return ResolvedFeature(
             feature_name=feature_name,
-            feature_group=filtered[0],
+            feature_group=resolved,
             candidates=candidates,
             error=None,
             supported_compute_frameworks=supported_names,
             unsupported_compute_frameworks=rejected_names,
+            subtype=subtype,
+            subtype_family=subtype_family,
         )
 
     conflicting_names = [fg.__name__ for fg in filtered]

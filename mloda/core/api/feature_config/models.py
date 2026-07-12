@@ -23,6 +23,15 @@ def validate_feature_group_scope(value: Any) -> Optional[str]:
     return value
 
 
+def validate_feature_group_not_in_options(options: Optional[dict[str, Any]], container_name: str) -> None:
+    """Scope is a config field, not an option: a top-level 'feature_group' key in a container is a misplacement."""
+    if options and "feature_group" in options:
+        raise ValueError(
+            f"'feature_group' must not be a top-level key of '{container_name}'; "
+            "move it next to 'name' as a feature config field"
+        )
+
+
 @dataclass
 class FeatureConfig:
     """Model for a feature configuration with name and options."""
@@ -46,6 +55,9 @@ class FeatureConfig:
                 "it is meaningless without context options and would otherwise be silently dropped"
             )
         validate_feature_group_scope(self.feature_group)
+        validate_feature_group_not_in_options(self.options, "options")
+        validate_feature_group_not_in_options(self.group_options, "group_options")
+        validate_feature_group_not_in_options(self.context_options, "context_options")
 
 
 def feature_config_schema() -> dict[str, Any]:

@@ -128,6 +128,8 @@ When two enabled sources declare the same column (for example a shared join key)
 
 The config form takes a non-empty class-name string only, since JSON cannot express a class object. The string matches the exact class name: it does not match subclasses, and two classes with the same name in different modules stay ambiguous. In Python, `Feature("subject_token", feature_group=ClaimsReader)` also accepts the class object. The scope is resolution-only and excluded from feature identity, so requesting the same name scoped to two different sources in one list raises `ValueError: Duplicate feature setup: <name>` rather than silently dropping one; see [Feature Group resolution errors](troubleshooting/feature-group-resolution-errors.md).
 
+`feature_group` is a top-level field next to `name`: writing it inside `options`, `group_options`, or `context_options` is rejected with a validation error.
+
 ## Worked Example: Window, Rank, and Percentile Features
 
 Row-preserving operations (window aggregation, rank, percentile) cannot be requested by a bare name: the Feature Group only matches when the request also carries the partition/order options its matcher needs. The feature name encodes the operation (`{source}__{operation}`); the matcher then requires those options to be present. It reads them via `options.get` (group first, then context), so they resolve from either side, but `context_options` is the right home.

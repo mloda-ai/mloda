@@ -9,11 +9,20 @@ logger = logging.getLogger(__name__)
 T = TypeVar("T")
 
 
-def safe_field(read: Callable[[], T], fallback: T, catching: tuple[type[Exception], ...] = (Exception,)) -> T:
-    """Annotate tier: degrade a single unreadable field to a fallback instead of failing the whole discovery call."""
+def safe_field(
+    read: Callable[[], T],
+    fallback: T,
+    catching: tuple[type[Exception], ...] = (Exception,),
+    field: str = "",
+) -> T:
+    """Annotate tier: degrade a single unreadable field to a fallback instead of failing the whole discovery call.
+
+    A swallowed read is logged as a WARNING naming `field` and the exception, so the broken plugin stays diagnosable.
+    """
     try:
         return read()
-    except catching:
+    except catching as exc:
+        logger.warning("Degraded field '%s': %s: %s", field, type(exc).__name__, exc)
         return fallback
 
 

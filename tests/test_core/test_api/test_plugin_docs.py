@@ -15,6 +15,7 @@ from mloda.core.api.plugin_docs import (
     _safe_version,
 )
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
+from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.user import PluginLoader
 
 
@@ -232,6 +233,202 @@ class TestGetFeatureGroupDocs:
 
         assert len(lower_filtered) == expected
         assert len(upper_filtered) == expected
+
+
+class TestGetFeatureGroupDocsDegradedFieldReads:
+    """A FeatureGroup with one broken introspection hook degrades that field, it does not sink the catalog.
+
+    ``get_feature_group_docs`` reads five plugin-overridable classmethods per class.
+    Each read routes through ``safe_field`` with a base-class-derived fallback
+    (issue #609), mirroring the ``is_available`` guard already proven for compute
+    frameworks. Degraded entries stay in the catalog and are filtered on their
+    degraded values.
+
+    Isolation: every test double is defined inside its test function and reaped in
+    a ``finally`` block (``del`` plus ``gc.collect()``), because plugin docs walk the
+    live ``__subclasses__()`` registry and a leaked class would corrupt sibling
+    tests' catalog calls. This mirrors ``test_get_compute_framework_docs_degrades_when_is_available_raises``.
+    """
+
+    def test_get_class_name_raising_degrades_to_dunder_name(self) -> None:
+        """A broken get_class_name() falls back to the class __name__."""
+
+        class _DocsGetClassNameBoomFG(FeatureGroup):
+            """Test double whose get_class_name() raises."""
+
+            @classmethod  # type: ignore[misc]
+            def get_class_name(cls) -> str:
+                raise RuntimeError("boom")
+
+        try:
+            by_name = {fg.name: fg for fg in get_feature_group_docs()}
+            assert "_DocsGetClassNameBoomFG" in by_name, "Degraded class must still be documented under its __name__"
+            assert by_name["_DocsGetClassNameBoomFG"].name == "_DocsGetClassNameBoomFG"
+        finally:
+            del _DocsGetClassNameBoomFG
+            gc.collect()
+
+    def test_description_raising_degrades_to_empty_string(self) -> None:
+        """A broken description() falls back to the empty string."""
+
+        class _DocsDescriptionBoomFG(FeatureGroup):
+            """Test double whose description() raises."""
+
+            @classmethod
+            def description(cls) -> str:
+                raise RuntimeError("boom")
+
+        try:
+            by_name = {fg.name: fg for fg in get_feature_group_docs()}
+            assert "_DocsDescriptionBoomFG" in by_name, "Degraded class must still be documented"
+            assert by_name["_DocsDescriptionBoomFG"].description == ""
+        finally:
+            del _DocsDescriptionBoomFG
+            gc.collect()
+
+    def test_compute_framework_definition_raising_degrades_to_empty_list(self) -> None:
+        """A broken compute_framework_definition() falls back to an empty framework list."""
+
+        class _DocsFrameworkBoomFG(FeatureGroup):
+            """Test double whose compute_framework_definition() raises."""
+
+            @classmethod  # type: ignore[misc]
+            def compute_framework_definition(cls) -> set[type[ComputeFramework]]:
+                raise RuntimeError("boom")
+
+        try:
+            by_name = {fg.name: fg for fg in get_feature_group_docs()}
+            assert "_DocsFrameworkBoomFG" in by_name, "Degraded class must still be documented"
+            assert by_name["_DocsFrameworkBoomFG"].compute_frameworks == []
+        finally:
+            del _DocsFrameworkBoomFG
+            gc.collect()
+
+    def test_feature_names_supported_raising_degrades_to_empty_set(self) -> None:
+        """A broken feature_names_supported() falls back to an empty set."""
+
+        class _DocsFeatureNamesBoomFG(FeatureGroup):
+            """Test double whose feature_names_supported() raises."""
+
+            @classmethod
+            def feature_names_supported(cls) -> set[str]:
+                raise RuntimeError("boom")
+
+        try:
+            by_name = {fg.name: fg for fg in get_feature_group_docs()}
+            assert "_DocsFeatureNamesBoomFG" in by_name, "Degraded class must still be documented"
+            assert by_name["_DocsFeatureNamesBoomFG"].supported_feature_names == set()
+        finally:
+            del _DocsFeatureNamesBoomFG
+            gc.collect()
+
+    def test_prefix_raising_degrades_to_class_name_prefix(self) -> None:
+        """A broken prefix() falls back to the base-class convention "<__name__>_"."""
+
+        class _DocsPrefixBoomFG(FeatureGroup):
+            """Test double whose prefix() raises."""
+
+            @classmethod
+            def prefix(cls) -> str:
+                raise RuntimeError("boom")
+
+        try:
+            by_name = {fg.name: fg for fg in get_feature_group_docs()}
+            assert "_DocsPrefixBoomFG" in by_name, "Degraded class must still be documented"
+            assert by_name["_DocsPrefixBoomFG"].prefix == "_DocsPrefixBoomFG_"
+        finally:
+            del _DocsPrefixBoomFG
+            gc.collect()
+
+    def test_broken_feature_group_does_not_sink_the_catalog(self) -> None:
+        """With a raising subclass live, every other feature group is still listed."""
+        baseline = {fg.name for fg in get_feature_group_docs()}
+        assert len(baseline) > 0, "Need a populated baseline catalog"
+
+        class _DocsSinkBoomFG(FeatureGroup):
+            """Test double whose description() raises."""
+
+            @classmethod
+            def description(cls) -> str:
+                raise RuntimeError("boom")
+
+        try:
+            degraded = {fg.name for fg in get_feature_group_docs()}
+            assert baseline.issubset(degraded), "A broken plugin must not drop healthy feature groups"
+            assert "_DocsSinkBoomFG" in degraded
+        finally:
+            del _DocsSinkBoomFG
+            gc.collect()
+
+    def test_degraded_name_still_findable_by_name_filter(self) -> None:
+        """A class whose get_class_name() raises is findable via name=<its real __name__>."""
+
+        class _DocsNameFilterBoomFG(FeatureGroup):
+            """Test double whose get_class_name() raises."""
+
+            @classmethod  # type: ignore[misc]
+            def get_class_name(cls) -> str:
+                raise RuntimeError("boom")
+
+        try:
+            filtered = get_feature_group_docs(name="_DocsNameFilterBoomFG")
+            assert [fg.name for fg in filtered] == ["_DocsNameFilterBoomFG"]
+        finally:
+            del _DocsNameFilterBoomFG
+            gc.collect()
+
+    def test_degraded_description_excluded_by_search_filter(self) -> None:
+        """A class whose description() raises degrades to "" and so matches no search query."""
+
+        class _DocsSearchBoomFG(FeatureGroup):
+            """Test double whose description() raises with a searchable docstring."""
+
+            @classmethod
+            def description(cls) -> str:
+                raise RuntimeError("searchable boom")
+
+        try:
+            unfiltered = {fg.name: fg for fg in get_feature_group_docs()}
+            assert "_DocsSearchBoomFG" in unfiltered, "Degraded class must still be documented"
+            assert unfiltered["_DocsSearchBoomFG"].description == ""
+
+            searched = {fg.name for fg in get_feature_group_docs(search="searchable")}
+            assert "_DocsSearchBoomFG" not in searched, "An empty description must not match a search query"
+        finally:
+            del _DocsSearchBoomFG
+            gc.collect()
+
+    def test_degraded_compute_frameworks_excluded_by_compute_framework_filter(self) -> None:
+        """A class whose compute_framework_definition() raises is excluded by a compute_framework= filter.
+
+        This mirrors how a compute framework degraded to is_available=False is excluded
+        by available_only=True: the degraded value, not the exception, drives the filter.
+        """
+        baseline = get_feature_group_docs()
+        canonical_name: str | None = None
+        for fg in baseline:
+            if len(fg.compute_frameworks) > 0:
+                canonical_name = fg.compute_frameworks[0]
+                break
+        assert canonical_name is not None, "Need a feature group with at least one compute framework"
+
+        class _DocsFrameworkFilterBoomFG(FeatureGroup):
+            """Test double whose compute_framework_definition() raises."""
+
+            @classmethod  # type: ignore[misc]
+            def compute_framework_definition(cls) -> set[type[ComputeFramework]]:
+                raise RuntimeError("boom")
+
+        try:
+            unfiltered = {fg.name for fg in get_feature_group_docs()}
+            assert "_DocsFrameworkFilterBoomFG" in unfiltered, "Degraded class must still be documented"
+
+            filtered = get_feature_group_docs(compute_framework=canonical_name)
+            assert len(filtered) > 0, "Healthy feature groups must still match the framework filter"
+            assert "_DocsFrameworkFilterBoomFG" not in {fg.name for fg in filtered}
+        finally:
+            del _DocsFrameworkFilterBoomFG
+            gc.collect()
 
 
 class TestGetComputeFrameworkDocs:

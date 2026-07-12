@@ -84,8 +84,7 @@ The discovery functions above walk every live plugin subclass and introspect it.
 Plugins can be broken, exotic, or built at runtime (via `type()`, notebook
 re-execution, or `importlib.reload`), so introspecting one class can fail. The
 guarded catalog reads follow one shared contract so that a broken plugin
-degrades a field instead of sinking the catalog call; not every read is guarded
-yet (see below).
+degrades a field instead of sinking the catalog call.
 
 Every failure a plugin can cause falls into one of three tiers:
 
@@ -125,15 +124,18 @@ and resolution paths intentionally differ:
 ### Shared helper
 
 The annotate tier is a single shared helper,
-`safe_field(read, fallback, catching=(Exception,))` in
+`safe_field(read, fallback, catching=(Exception,), field="")` in
 `mloda.core.abstract_plugins.components.utils`: it calls the `read` thunk and
-returns `fallback` if the read raises one of `catching`. The guarded annotate
-sites route through it (the feature-group version, the four compute-framework
-fields, and extender wraps), so the next catalog function or info field reaches
-for one helper instead of re-deriving a `try/except`. The remaining overridable
-reads in `get_feature_group_docs` (class name, description, compute framework
-definition, supported feature names, prefix) are not yet guarded, so a plugin
-raising there still propagates (a known follow-up gap).
+returns `fallback` if the read raises one of `catching`. Every overridable read
+in a catalog walk is annotate tier and routes through it, so the next catalog
+function or info field reaches for one helper instead of re-deriving a
+`try/except`. Identity fields fall back to the base-class implementation rather
+than a sentinel: a feature group whose `get_class_name()` raises is listed under
+its `__name__`, and one whose `prefix()` raises gets `"<__name__>_"`. A swallowed
+read is always logged as a WARNING naming the `field` label and the exception, so
+degrading is never silent. A feature group whose `compute_framework_definition()`
+degrades to `[]` is excluded by a `compute_framework=` filter, mirroring how a
+framework degraded to `is_available=False` is excluded by `available_only=True`.
 `get_compute_framework_docs` uses the default broad `catching` (any failure
 degrades the field), while the narrower named guards `_safe_version` (in
 `plugin_docs.py`) and `_safe_class_source_hash` (one layer down in

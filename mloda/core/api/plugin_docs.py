@@ -99,13 +99,20 @@ def get_feature_group_docs(
         if fg_class.__module__ == "__main__":
             continue
 
-        fg_name = fg_class.get_class_name()
-        description = fg_class.description()
+        cls_name = fg_class.__name__
+        fg_name = safe_field(lambda: fg_class.get_class_name(), cls_name, field=f"{cls_name}.get_class_name")
+        description = safe_field(lambda: fg_class.description(), "", field=f"{cls_name}.description")
         version = _safe_version(fg_class)
         module = fg_class.__module__
-        compute_frameworks = [cfw.__name__ for cfw in fg_class.compute_framework_definition()]
-        supported_feature_names = fg_class.feature_names_supported()
-        prefix = fg_class.prefix()
+        compute_frameworks: list[str] = safe_field(
+            lambda: [cfw.__name__ for cfw in fg_class.compute_framework_definition()],
+            [],
+            field=f"{cls_name}.compute_framework_definition",
+        )
+        supported_feature_names: set[str] = safe_field(
+            lambda: fg_class.feature_names_supported(), set(), field=f"{cls_name}.feature_names_supported"
+        )
+        prefix = safe_field(lambda: fg_class.prefix(), f"{cls_name}_", field=f"{cls_name}.prefix")
 
         if name is not None and name.lower() not in fg_name.lower():
             continue

@@ -10,7 +10,11 @@ from typing import Any, Optional
 from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.components.options import Options
-from mloda.core.abstract_plugins.components.default_options_key import DefaultOptionKeys, RESERVED_PROPERTY_KEYS
+from mloda.core.abstract_plugins.components.default_options_key import (
+    REMOVED_PROPERTY_KEYS,
+    RESERVED_PROPERTY_KEYS,
+    DefaultOptionKeys,
+)
 
 # Separator constants for feature name parsing
 CHAIN_SEPARATOR = "__"  # Separates chained transformations (source→suffix)
@@ -122,10 +126,10 @@ class FeatureChainParser:
         return isinstance(property_value, dict) and property_value.get(DefaultOptionKeys.strict_validation, False)
 
     @classmethod
-    def _get_validation_function(cls, property_value: Any) -> Any:
-        """Get validation function from property mapping if present."""
+    def _get_element_validator(cls, property_value: Any) -> Any:
+        """Get the per-element validator from a property mapping spec if present."""
         if isinstance(property_value, dict):
-            return property_value.get(DefaultOptionKeys.validation_function, None)
+            return property_value.get(DefaultOptionKeys.element_validator, None)
         return None
 
     @classmethod
@@ -133,22 +137,27 @@ class FeatureChainParser:
         cls, found_property_val: Any, property_value: Any, property_name: str, original_property_config: Any
     ) -> None:
         """
-        Unified validation function: if strict validation -> apply validation function OR check membership.
+        Unified validation: if strict validation -> apply the element_validator OR check membership.
 
         Raises ValueError if validation fails, otherwise returns None.
         """
         if not cls._is_strict_validation(original_property_config):
             return  # No validation needed
 
-        validation_function = cls._get_validation_function(original_property_config)
+        element_validator = cls._get_element_validator(original_property_config)
 
-        if validation_function is not None:
-            # Use validation function if available
-            if not validation_function(found_property_val):
+        if element_validator is not None:
+            # Use the element validator if available
+            if not element_validator(found_property_val):
                 raise ValueError(f"Property value '{found_property_val}' failed validation for '{property_name}'")
         else:
-            # Fallback to membership check
-            if found_property_val not in property_value:
+            # Fallback to membership check. An unhashable element (e.g. a dict) can never be
+            # a member of the accepted set, so it is a clean rejection, not a TypeError.
+            try:
+                is_member = found_property_val in property_value
+            except TypeError:
+                is_member = False
+            if not is_member:
                 raise ValueError(f"Property value '{found_property_val}' not found in mapping for '{property_name}'")
 
     @classmethod
@@ -203,101 +212,139 @@ class FeatureChainParser:
         return property_value
 
     @classmethod
-    def validate_property_mapping_defaults(cls, owner_name: str, property_mapping: dict[str, Any] | None) -> None:
-        """Validate declared PROPERTY_MAPPING defaults at class-definition time.
+    def check_declared_default(cls, owner: str, key: str, spec: dict[str, Any]) -> None:
+        """Check one spec's declared default against its own strict-validation rules.
 
-        For every key whose spec is a dict and declares a non-``None``
-        ``DefaultOptionKeys.default`` under strict validation, the declared default
-        must be in the accepted set or pass the key's ``validation_function``.
-        A ``validation_function`` that itself errors when called with the default is
+        This is the single implementation of the default-check semantics, shared by
+        ``validate_property_mapping_defaults`` (class-definition time) and by the
+        ``property_spec`` authoring helper, so the two can never drift apart.
+
+        Under strict validation, a non-``None`` declared default must pass the key's
+        ``element_validator`` if it has one, otherwise be a member of the accepted set.
+        An ``element_validator`` that itself errors when called with the default is
         reported as having raised (with the original exception chained as the cause),
-        which is distinct from the function running and rejecting the default.
+        which is distinct from the validator running and rejecting the default.
         ``DefaultOptionKeys.required_when`` does NOT exempt this check: it is a
         conditional requirement, so the default still applies on the predicate-false
         branch. The remedies are to add the default to the accepted values or to
         remove the default (a key with no default is required).
+
+        Raises ValueError on violation, otherwise returns None.
         """
-        if property_mapping is None:
+        if DefaultOptionKeys.default not in spec:
             return
 
-        def _message(key: str, default: Any, detail: str) -> str:
+        default = spec[DefaultOptionKeys.default]
+        if default is None:
+            return
+
+        if not cls._is_strict_validation(spec):
+            return
+
+        def _message(detail: str) -> str:
             return (
-                f"{owner_name}.PROPERTY_MAPPING['{key}'] declares default {default!r}, "
+                f"{owner} declares default {default!r} for '{key}', "
                 f"but {detail} under strict_validation. "
                 f"Add the default to the accepted values, or remove the default "
                 f"(a key with no default is required)."
             )
 
+        element_validator = cls._get_element_validator(spec)
+        if element_validator is not None:
+            try:
+                verdict = element_validator(default)
+            except Exception as exc:
+                raise ValueError(
+                    _message("the key's element_validator raised an error when called with that default")
+                ) from exc
+            if not verdict:
+                raise ValueError(_message("that default is rejected by the key's element_validator"))
+            return
+
+        extracted = cls._extract_property_values(spec)
+        try:
+            cls._validate_property_value(default, extracted, key, spec)
+        except (ValueError, TypeError) as exc:
+            detail = f"that default is not one of the accepted values {sorted(extracted, key=repr)}"
+            raise ValueError(_message(detail)) from exc
+
+    @classmethod
+    def validate_property_mapping_defaults(cls, owner_name: str, property_mapping: dict[str, Any] | None) -> None:
+        """Validate a PROPERTY_MAPPING at class-definition time.
+
+        Rejects specs that still carry a removed key (see ``REMOVED_PROPERTY_KEYS``) and
+        delegates every declared default to ``check_declared_default``.
+        """
+        if property_mapping is None:
+            return
+
         for key, spec in property_mapping.items():
             if not isinstance(spec, dict):
                 continue
-            if DefaultOptionKeys.default not in spec:
-                continue
+            cls._reject_removed_property_keys(owner_name, key, spec)
+            cls.check_declared_default(f"{owner_name}.PROPERTY_MAPPING", key, spec)
 
-            default = spec[DefaultOptionKeys.default]
-            if default is None:
-                continue
+    @classmethod
+    def _reject_removed_property_keys(cls, owner_name: str, key: str, spec: dict[str, Any]) -> None:
+        """Fail loudly on a spec that still uses a removed PROPERTY_MAPPING key.
 
-            validation_function = cls._get_validation_function(spec)
-            if validation_function is not None:
-                if not cls._is_strict_validation(spec):
-                    continue
-                try:
-                    verdict = validation_function(default)
-                except Exception as exc:
-                    raise ValueError(
-                        _message(
-                            key, default, "the key's validation_function raised an error when called with that default"
-                        )
-                    ) from exc
-                if not verdict:
-                    raise ValueError(
-                        _message(key, default, "that default is rejected by the key's validation_function")
-                    )
-                continue
+        The removed keys are no longer reserved metadata, so ``_extract_property_values``
+        would absorb a leftover one into a legacy flattened spec's accepted value space,
+        silently widening what the feature group matches. Rejecting the spec turns that
+        silent corruption into an actionable migration error.
+        """
+        for stale, replacement in REMOVED_PROPERTY_KEYS.items():
+            if stale in spec:
+                raise ValueError(
+                    f"{owner_name}.PROPERTY_MAPPING['{key}'] uses the removed key '{stale}'. "
+                    f"Rename it to '{replacement.value}' (DefaultOptionKeys.{replacement.value})."
+                )
 
-            extracted = cls._extract_property_values(spec)
-            try:
-                cls._validate_property_value(default, extracted, key, spec)
-            except (ValueError, TypeError) as exc:
-                detail = f"that default is not one of the accepted values {sorted(extracted, key=repr)}"
-                raise ValueError(_message(key, default, detail)) from exc
+    @classmethod
+    def _unpack_property_value(cls, found_property_value: Any) -> list[Any]:
+        """Unpack an option value into the elements the spec validates.
+
+        The spec declares the arity, not the caller's Python syntax: every sequence
+        container (list, tuple, set, frozenset) unpacks element-wise and identically.
+        A ``str`` is a scalar, not a sequence of characters, and a ``dict`` is one
+        composite value, not a sequence of its keys. Elements keep their real type;
+        the only normalization is a ``Feature`` reduced to its name.
+        """
+        if isinstance(found_property_value, (list, tuple, set, frozenset)):
+            elements = list(found_property_value)
+        else:
+            elements = [found_property_value]
+
+        return [element.name if isinstance(element, Feature) else element for element in elements]
 
     @classmethod
     def _process_found_property_value(
         cls, found_property_value: Any, property_value: Any, property_name: str, original_property_config: Any
-    ) -> set[str]:
-        if isinstance(found_property_value, list):
-            found_property_value = tuple(found_property_value)
-        if not isinstance(found_property_value, frozenset):
-            found_property_value = frozenset([found_property_value])
-
-        collected_property_value = set()
-        for found_property_val in found_property_value:
-            if isinstance(found_property_val, Feature):
-                found_property_val = found_property_val.name
-
-            if isinstance(found_property_val, tuple):
-                # Convert tuple to string representation for hashability
-                found_property_val = str(found_property_val)
-
+    ) -> list[Any]:
+        collected_property_value: list[Any] = []
+        for found_property_val in cls._unpack_property_value(found_property_value):
             # Use unified validation function
             cls._validate_property_value(found_property_val, property_value, property_name, original_property_config)
 
-            collected_property_value.add(found_property_val)
+            collected_property_value.append(found_property_val)
 
         return collected_property_value
 
     @classmethod
     def _validate_final_properties(
-        cls, property_tracker: dict[str, None | set[str]], property_mapping: dict[str, Any]
+        cls, property_tracker: dict[str, list[Any] | None], property_mapping: dict[str, Any]
     ) -> bool:
-        """Validate that all required properties have values."""
+        """Validate that all required properties are present.
+
+        Presence is tracked explicitly: ``None`` means the option was absent, while an
+        empty list means it was present with zero elements (an empty container), which
+        is vacuously valid and still satisfies the required-presence check.
+        """
         for key, value in property_tracker.items():
             property_config = property_mapping[key]
             can_skip = cls._can_skip_required_check(property_config)
 
-            if not value and not can_skip:
+            if value is None and not can_skip:
                 return False
         return True
 
@@ -313,25 +360,20 @@ class FeatureChainParser:
         Returns:
             True if validation passes, False otherwise
         """
-        property_tracker: dict[str, None | set[str]] = {}
+        # None marks an absent option; a list (possibly empty) marks a present one.
+        property_tracker: dict[str, list[Any] | None] = {}
         for key in property_mapping:
             property_tracker[key] = None
 
         # Process each property in the mapping
         for property_name, property_value in property_mapping.items():
             found_property_value = options.get(property_name)
-            can_skip = cls._can_skip_required_check(property_value)
             property_value = cls._extract_property_values(property_value)
 
-            # Handle missing properties
+            # Handle missing properties: leave the tracker at None, so the final check
+            # decides whether the option was required.
             if found_property_value is None:
-                if can_skip:
-                    # Property with default or conditional requirement - mark as processed but empty
-                    property_tracker[property_name] = set()
-                    continue
-                else:
-                    # Required property not present - skip (will fail validation later)
-                    continue
+                continue
 
             collected_property_value = cls._process_found_property_value(
                 found_property_value, property_value, property_name, property_mapping[property_name]

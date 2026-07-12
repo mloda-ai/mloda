@@ -212,7 +212,7 @@ class TestPropertySpecDefaultOmission:
 
 
 def _positive_int(value: Any) -> bool:
-    """Shared validator for the ``validation_function`` passthrough tests (issue #536)."""
+    """Shared validator for the ``element_validator`` passthrough tests (issue #536)."""
     return isinstance(value, int) and value > 0
 
 
@@ -227,7 +227,7 @@ def _always_required(options: Any) -> bool:
 
 
 def _is_list_of_strings(value: Any) -> bool:
-    """``type_validator`` accepting only a list of strings (issue #536)."""
+    """``match_guard`` accepting only a list of strings (issue #536)."""
     return isinstance(value, list) and all(isinstance(item, str) for item in value)
 
 
@@ -236,65 +236,65 @@ def _boom(value: Any) -> bool:
     raise RuntimeError("boom")
 
 
-class TestPropertySpecValidationFunction:
-    """``validation_function`` passthrough (issue #536).
+class TestPropertySpecElementValidator:
+    """``element_validator`` passthrough (issue #536).
 
-    Core's ``_validate_property_value`` applies a spec's ``validation_function``
+    Core's ``_validate_property_value`` applies a spec's ``element_validator``
     INSTEAD of the membership check under strict validation, so a strict spec with
-    a ``validation_function`` and no ``allowed_values`` is valid and meaningful
+    an ``element_validator`` and no ``allowed_values`` is valid and meaningful
     (see the ``window_size`` example in ``docs/docs/in_depth/property-mapping.md``).
-    Like ``allowed_values``, a ``validation_function`` is only enforced under
+    Like ``allowed_values``, an ``element_validator`` is only enforced under
     strict validation, so passing it without ``strict=True`` is a silent no-op
     and is rejected.
     """
 
-    def test_strict_with_validation_function_needs_no_allowed_values(self) -> None:
-        """``strict=True`` plus a ``validation_function`` needs no ``allowed_values``."""
-        spec = property_spec("d", strict=True, validation_function=_positive_int)
+    def test_strict_with_element_validator_needs_no_allowed_values(self) -> None:
+        """``strict=True`` plus an ``element_validator`` needs no ``allowed_values``."""
+        spec = property_spec("d", strict=True, element_validator=_positive_int)
 
         assert spec["explanation"] == "d"
-        assert spec[DefaultOptionKeys.validation_function] is _positive_int
+        assert spec[DefaultOptionKeys.element_validator] is _positive_int
         assert spec[DefaultOptionKeys.strict_validation] is True
         assert spec[DefaultOptionKeys.context] is True
 
-    def test_validation_function_without_strict_raises(self) -> None:
-        """A ``validation_function`` is never enforced without ``strict`` (silent no-op)."""
+    def test_element_validator_without_strict_raises(self) -> None:
+        """A ``element_validator`` is never enforced without ``strict`` (silent no-op)."""
         with pytest.raises(ValueError):
-            property_spec("d", validation_function=_positive_int)
+            property_spec("d", element_validator=_positive_int)
 
-    def test_non_callable_validation_function_raises(self) -> None:
-        """A non-callable ``validation_function`` is rejected up front."""
+    def test_non_callable_element_validator_raises(self) -> None:
+        """A non-callable ``element_validator`` is rejected up front."""
         not_callable: Any = "not callable"
         with pytest.raises(ValueError):
-            property_spec("d", strict=True, validation_function=not_callable)
+            property_spec("d", strict=True, element_validator=not_callable)
 
 
-class TestPropertySpecValidationFunctionDefault:
-    """Strict defaults are checked via the ``validation_function`` when present (issue #536).
+class TestPropertySpecElementValidatorDefault:
+    """Strict defaults are checked via the ``element_validator`` when present (issue #536).
 
     Mirrors ``FeatureChainParser.validate_property_mapping_defaults``: when a spec
-    carries a ``validation_function``, the strict default check uses it, taking
+    carries an ``element_validator``, the strict default check uses it, taking
     precedence over membership in ``allowed_values``.
     """
 
-    def test_strict_default_accepted_by_validation_function(self) -> None:
-        """A default the ``validation_function`` accepts is legal without ``allowed_values``."""
-        spec = property_spec("d", strict=True, validation_function=_positive_int, default=5)
+    def test_strict_default_accepted_by_element_validator(self) -> None:
+        """A default the ``element_validator`` accepts is legal without ``allowed_values``."""
+        spec = property_spec("d", strict=True, element_validator=_positive_int, default=5)
 
         assert spec[DefaultOptionKeys.default] == 5
 
-    def test_strict_default_rejected_by_validation_function_raises(self) -> None:
-        """A default the ``validation_function`` rejects is illegal."""
+    def test_strict_default_rejected_by_element_validator_raises(self) -> None:
+        """A default the ``element_validator`` rejects is illegal."""
         with pytest.raises(ValueError):
-            property_spec("d", strict=True, validation_function=_positive_int, default=-1)
+            property_spec("d", strict=True, element_validator=_positive_int, default=-1)
 
-    def test_validation_function_takes_precedence_over_allowed_values(self) -> None:
-        """With both present, the default is checked via the ``validation_function``, not membership."""
-        spec = property_spec("d", strict=True, allowed_values={"add": "A"}, validation_function=_is_mul, default="mul")
+    def test_element_validator_takes_precedence_over_allowed_values(self) -> None:
+        """With both present, the default is checked via the ``element_validator``, not membership."""
+        spec = property_spec("d", strict=True, allowed_values={"add": "A"}, element_validator=_is_mul, default="mul")
 
         assert spec[DefaultOptionKeys.default] == "mul"
         assert spec[DefaultOptionKeys.allowed_values] == {"add": "A"}
-        assert spec[DefaultOptionKeys.validation_function] is _is_mul
+        assert spec[DefaultOptionKeys.element_validator] is _is_mul
 
 
 class TestPropertySpecRequiredWhen:
@@ -318,26 +318,26 @@ class TestPropertySpecRequiredWhen:
             property_spec("d", required_when=not_callable)
 
 
-class TestPropertySpecTypeValidator:
-    """``type_validator`` passthrough (issue #536).
+class TestPropertySpecMatchGuard:
+    """``match_guard`` passthrough (issue #536).
 
-    ``type_validator`` checks the raw option value's shape before any list
-    unpacking and, unlike ``validation_function``, does not require strict
+    ``match_guard`` checks the raw option value's shape before any list
+    unpacking and, unlike ``element_validator``, does not require strict
     validation.
     """
 
-    def test_type_validator_emitted_without_strict(self) -> None:
-        """The validator is emitted under ``DefaultOptionKeys.type_validator`` without ``strict``."""
-        spec = property_spec("d", type_validator=_is_list_of_strings)
+    def test_match_guard_emitted_without_strict(self) -> None:
+        """The validator is emitted under ``DefaultOptionKeys.match_guard`` without ``strict``."""
+        spec = property_spec("d", match_guard=_is_list_of_strings)
 
-        assert spec[DefaultOptionKeys.type_validator] is _is_list_of_strings
+        assert spec[DefaultOptionKeys.match_guard] is _is_list_of_strings
         assert spec[DefaultOptionKeys.strict_validation] is False
 
-    def test_non_callable_type_validator_raises(self) -> None:
-        """A non-callable ``type_validator`` is rejected up front."""
+    def test_non_callable_match_guard_raises(self) -> None:
+        """A non-callable ``match_guard`` is rejected up front."""
         not_callable: Any = "not callable"
         with pytest.raises(ValueError):
-            property_spec("d", type_validator=not_callable)
+            property_spec("d", match_guard=not_callable)
 
 
 class TestPropertySpecPassthroughOmission:
@@ -351,27 +351,27 @@ class TestPropertySpecPassthroughOmission:
     def test_omitted_passthroughs_are_absent(self) -> None:
         """Only explicitly passed passthrough keys are emitted; the rest are absent."""
         plain = property_spec("d")
-        assert DefaultOptionKeys.validation_function not in plain
+        assert DefaultOptionKeys.element_validator not in plain
         assert DefaultOptionKeys.required_when not in plain
-        assert DefaultOptionKeys.type_validator not in plain
+        assert DefaultOptionKeys.match_guard not in plain
 
         with_required_when = property_spec("d", required_when=_always_required)
-        assert DefaultOptionKeys.validation_function not in with_required_when
-        assert DefaultOptionKeys.type_validator not in with_required_when
+        assert DefaultOptionKeys.element_validator not in with_required_when
+        assert DefaultOptionKeys.match_guard not in with_required_when
 
-        with_type_validator = property_spec("d", type_validator=_is_list_of_strings)
-        assert DefaultOptionKeys.validation_function not in with_type_validator
-        assert DefaultOptionKeys.required_when not in with_type_validator
+        with_match_guard = property_spec("d", match_guard=_is_list_of_strings)
+        assert DefaultOptionKeys.element_validator not in with_match_guard
+        assert DefaultOptionKeys.required_when not in with_match_guard
 
 
-class TestPropertySpecValidationFunctionRoundTrip:
-    """A strict ``validation_function`` spec matches core semantics end to end (issue #536)."""
+class TestPropertySpecElementValidatorRoundTrip:
+    """A strict ``element_validator`` spec matches core semantics end to end (issue #536)."""
 
-    def test_class_definition_accepts_validation_function_default(self) -> None:
+    def test_class_definition_accepts_element_validator_default(self) -> None:
         """The built entry defines without error and equals the hand-written dict.
 
         Core's class-definition check (``validate_property_mapping_defaults``)
-        accepts a strict default via the ``validation_function``; the helper must
+        accepts a strict default via the ``element_validator``; the helper must
         emit exactly the dict an author would hand-write for that spec.
         """
 
@@ -381,7 +381,7 @@ class TestPropertySpecValidationFunctionRoundTrip:
                 "window_size": property_spec(
                     "Size of time window",
                     strict=True,
-                    validation_function=_positive_int,
+                    element_validator=_positive_int,
                     default=5,
                 )
             }
@@ -394,7 +394,7 @@ class TestPropertySpecValidationFunctionRoundTrip:
 
         hand_written: dict[str, Any] = {
             "explanation": "Size of time window",
-            DefaultOptionKeys.validation_function: _positive_int,
+            DefaultOptionKeys.element_validator: _positive_int,
             DefaultOptionKeys.context: True,
             DefaultOptionKeys.strict_validation: True,
             DefaultOptionKeys.default: 5,
@@ -405,21 +405,21 @@ class TestPropertySpecValidationFunctionRoundTrip:
         FeatureChainParser.validate_property_mapping_defaults("HandWritten", {"window_size": hand_written})
 
 
-class TestPropertySpecRaisingValidationFunction:
-    """A ``validation_function`` that raises on the default is wrapped (issue #536).
+class TestPropertySpecRaisingElementValidator:
+    """A ``element_validator`` that raises on the default is wrapped (issue #536).
 
     Mirrors core's ``FeatureChainParser.validate_property_mapping_defaults``, which
-    distinguishes "the validation_function raised when called with the default"
-    from "the validation_function ran and rejected the default": both surface as
+    distinguishes "the element_validator raised when called with the default"
+    from "the element_validator ran and rejected the default": both surface as
     ``ValueError``, with the original exception chained as ``__cause__`` in the
     raising case. The builder's strict-default check must behave the same way
     instead of letting the author's exception propagate raw.
     """
 
-    def test_raising_validation_function_wraps_as_value_error_with_cause(self) -> None:
+    def test_raising_element_validator_wraps_as_value_error_with_cause(self) -> None:
         """``_boom`` raising ``RuntimeError`` surfaces as ``ValueError`` with the original chained."""
         with pytest.raises(ValueError) as exc_info:
-            property_spec("d", strict=True, validation_function=_boom, default=5)
+            property_spec("d", strict=True, element_validator=_boom, default=5)
 
         assert isinstance(exc_info.value.__cause__, RuntimeError)
 
@@ -427,17 +427,17 @@ class TestPropertySpecRaisingValidationFunction:
 class TestPropertySpecEmptyAllowedValues:
     """An explicitly empty ``allowed_values`` is always an authoring mistake (issue #536).
 
-    Even when a ``validation_function`` is present (so the spec would still be
+    Even when an ``element_validator`` is present (so the spec would still be
     enforceable), an explicitly empty allowed set is dead configuration: core's
     ``_extract_property_values`` would surface it as an empty accepted set. The
     builder must reject it up front instead of silently emitting a dead, empty
     ``allowed_values`` key.
     """
 
-    def test_empty_allowed_values_with_validation_function_raises(self) -> None:
+    def test_empty_allowed_values_with_element_validator_raises(self) -> None:
         """``strict=True`` with ``allowed_values=[]`` raises even though a validator is present."""
         with pytest.raises(ValueError):
-            property_spec("d", strict=True, validation_function=_positive_int, allowed_values=[])
+            property_spec("d", strict=True, element_validator=_positive_int, allowed_values=[])
 
 
 class TestPropertySpecPassthroughRegressionGuards:
@@ -446,16 +446,16 @@ class TestPropertySpecPassthroughRegressionGuards:
     def test_falsy_non_none_default_is_still_validated(self) -> None:
         """``default=0`` is falsy but not ``None``, so it must still be checked (and rejected)."""
         with pytest.raises(ValueError):
-            property_spec("d", strict=True, validation_function=_positive_int, default=0)
+            property_spec("d", strict=True, element_validator=_positive_int, default=0)
 
-    def test_validation_function_precedence_also_rejects_allowed_member(self) -> None:
+    def test_element_validator_precedence_also_rejects_allowed_member(self) -> None:
         """With both present, a default IN ``allowed_values`` is still rejected by the validator."""
         with pytest.raises(ValueError):
             property_spec(
                 "d",
                 strict=True,
                 allowed_values={"add": "A"},
-                validation_function=_positive_int,
+                element_validator=_positive_int,
                 default="add",
             )
 
@@ -471,14 +471,14 @@ class TestPropertySpecPassthroughRegressionGuards:
         }
         assert built == hand_written
 
-    def test_type_validator_spec_equals_hand_written_dict(self) -> None:
-        """A ``type_validator`` spec is exactly the dict an author would hand-write."""
-        built = property_spec("d", type_validator=_is_list_of_strings)
+    def test_match_guard_spec_equals_hand_written_dict(self) -> None:
+        """A ``match_guard`` spec is exactly the dict an author would hand-write."""
+        built = property_spec("d", match_guard=_is_list_of_strings)
 
         hand_written: dict[str, Any] = {
             "explanation": "d",
             DefaultOptionKeys.context: True,
             DefaultOptionKeys.strict_validation: False,
-            DefaultOptionKeys.type_validator: _is_list_of_strings,
+            DefaultOptionKeys.match_guard: _is_list_of_strings,
         }
         assert built == hand_written

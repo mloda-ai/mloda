@@ -75,7 +75,7 @@ class TestPropertyMappingConsistency:
         for prop_key, entry in mapping.items():
             if not isinstance(entry, dict):
                 continue
-            if DefaultOptionKeys.validation_function in entry:
+            if DefaultOptionKeys.element_validator in entry:
                 continue
             non_metadata_keys = [
                 k

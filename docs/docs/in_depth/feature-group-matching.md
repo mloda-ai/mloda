@@ -80,7 +80,7 @@ PROPERTY_MAPPING = {
         "explanation": "Size of the time window",
         DefaultOptionKeys.context: True,
         DefaultOptionKeys.strict_validation: True,
-        DefaultOptionKeys.validation_function: lambda x: isinstance(x, int) and x > 0,
+        DefaultOptionKeys.element_validator: lambda x: isinstance(x, int) and x > 0,
     },
 }
 ```

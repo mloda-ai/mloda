@@ -1,3 +1,5 @@
+from typing import Any
+
 import pytest
 
 from mloda.user import Feature
@@ -243,11 +245,13 @@ class TestParameterResolutionUnit:
             context={DefaultOptionKeys.in_features: frozenset(), "ident": "identifier1"},
         )
 
-        # This should fail because empty frozenset means no source features
+        # A present-but-empty container has zero elements, so there is nothing to reject:
+        # the property mapping passes vacuously. Arity ("at least one source feature") is
+        # enforced by MIN_IN_FEATURES in FeatureChainParserMixin, not by the value check.
         result = FeatureChainParser.match_configuration_feature_chain_parser(
             "test_feature", options_empty_frozenset, property_mapping
         )
-        assert result is False, "Should fail validation with empty frozenset for source features"
+        assert result is True, "An empty frozenset is present with zero elements, hence vacuously valid"
 
         # Test: Special test value for property2
         options_special_value = Options(
@@ -289,33 +293,34 @@ class TestParameterResolutionUnit:
         """Test the _validate_final_properties logic."""
         property_mapping = ChainedContextFeatureGroupTest.PROPERTY_MAPPING
 
-        # Test: All required properties present
-        property_tracker_valid = {
-            "ident": {"identifier1"},
-            "property2": {"value1"},
-            DefaultOptionKeys.in_features: {"Sales"},
-            "property3": set(),  # Optional, can be empty
+        # Test: All required properties present. The tracker holds the collected elements;
+        # None means the option was absent, an empty list means present with zero elements.
+        property_tracker_valid: dict[str, list[Any] | None] = {
+            "ident": ["identifier1"],
+            "property2": ["value1"],
+            DefaultOptionKeys.in_features: ["Sales"],
+            "property3": [],  # Optional, can be empty
         }
 
-        result = FeatureChainParser._validate_final_properties(property_tracker_valid, property_mapping)  # type: ignore
+        result = FeatureChainParser._validate_final_properties(property_tracker_valid, property_mapping)
         assert result is True, "Should pass validation when all required properties are present"
 
         # Test: Required property missing
-        property_tracker_missing_required = {
+        property_tracker_missing_required: dict[str, list[Any] | None] = {
             "ident": None,  # Required property missing
-            "property2": {"value1"},
-            DefaultOptionKeys.in_features: {"Sales"},
-            "property3": set(),
+            "property2": ["value1"],
+            DefaultOptionKeys.in_features: ["Sales"],
+            "property3": [],
         }
 
         result = FeatureChainParser._validate_final_properties(property_tracker_missing_required, property_mapping)
         assert result is False, "Should fail validation when required property is missing"
 
         # Test: Optional property missing (should still pass)
-        property_tracker_missing_optional = {
-            "ident": {"identifier1"},
-            "property2": {"value1"},
-            DefaultOptionKeys.in_features: {"Sales"},
+        property_tracker_missing_optional: dict[str, list[Any] | None] = {
+            "ident": ["identifier1"],
+            "property2": ["value1"],
+            DefaultOptionKeys.in_features: ["Sales"],
             "property3": None,  # Optional property missing
         }
 

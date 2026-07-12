@@ -263,7 +263,7 @@ class Options:
             else:
                 raise TypeError(f"Cannot convert {type(item)} to Feature. Expected Feature object or str.")
 
-        if isinstance(val, (list, set, frozenset)):
+        if isinstance(val, (list, tuple, set, frozenset)):
             return frozenset(_convert_to_feature(item) for item in val)
         elif isinstance(val, str):
             # Handle comma-separated strings
@@ -276,7 +276,8 @@ class Options:
             return frozenset([_convert_to_feature(val)])
         else:
             raise TypeError(
-                f"Unsupported type for source feature: {type(val)}. Expected frozenset, str, list, set, or Feature object."
+                f"Unsupported type for source feature: {type(val)}. "
+                "Expected list, tuple, set, frozenset, str, or Feature object."
             )
 
     def __deepcopy__(self, memo: dict[int, Any]) -> "Options":

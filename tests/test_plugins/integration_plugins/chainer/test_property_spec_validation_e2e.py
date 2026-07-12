@@ -1,14 +1,14 @@
-"""End-to-end tests for the property_spec validation_function passthrough (issue #536).
+"""End-to-end tests for the property_spec element_validator passthrough (issue #536).
 
 Demonstrates the user-facing story of PR feat/property-spec-passthroughs: a feature
 group author declares a "window_size" option via
-``property_spec(..., strict=True, validation_function=...)`` and gets two distinct
+``property_spec(..., strict=True, element_validator=...)`` and gets two distinct
 validation moments for free:
 
 1. Planning time: an end-user request through the public mloda API with an invalid
    window_size raises ValueError before any computation runs.
 2. Authoring time: ``property_spec`` itself rejects a declared default that fails
-   the validation_function, at the call site (class-definition time).
+   the element_validator, at the call site (class-definition time).
 """
 
 from typing import Any, Optional
@@ -60,14 +60,14 @@ class PropertySpecE2EWindowedFeatureGroup(FeatureChainParserMixin, FeatureGroup)
     """Derived feature group whose "window_size" option is guarded by property_spec.
 
     The computation (base column + window_size) is intentionally trivial; the point
-    is the validation_function passthrough, not rolling-window logic.
+    is the element_validator passthrough, not rolling-window logic.
     """
 
     PROPERTY_MAPPING = {
         "window_size": property_spec(
             "Size of the time window, at most 13",
             strict=True,
-            validation_function=is_valid_window_size,
+            element_validator=is_valid_window_size,
         ),
         DefaultOptionKeys.in_features: property_spec("Source feature to window over"),
     }
@@ -152,11 +152,11 @@ class TestPropertySpecValidationFunctionE2E:
         assert len(CALCULATE_INVOCATIONS) == invocations_before, "rejection must happen before any computation"
 
     def test_author_side_default_rejected_at_call_site(self) -> None:
-        """A default rejected by the validation_function fails at the property_spec call."""
-        with pytest.raises(ValueError, match="default 14 is rejected by the validation_function"):
+        """A default rejected by the element_validator fails at the property_spec call."""
+        with pytest.raises(ValueError, match=r"default 14 .*rejected by the key's element_validator"):
             property_spec(
                 "Size of the time window, at most 13",
                 strict=True,
-                validation_function=is_valid_window_size,
+                element_validator=is_valid_window_size,
                 default=14,
             )

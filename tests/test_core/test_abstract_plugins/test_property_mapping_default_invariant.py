@@ -3,7 +3,7 @@
 At class definition time, for every PROPERTY_MAPPING key whose spec is a dict and
 declares a non-``None`` ``DefaultOptionKeys.default``, the declared default must be
 honored by the key's own strict-validation rules (be in the accepted set or pass the
-``validation_function``). Otherwise defining the FeatureGroup subclass must raise
+``element_validator``). Otherwise defining the FeatureGroup subclass must raise
 ``ValueError`` immediately.
 
 ``DefaultOptionKeys.required_when`` is NOT an escape hatch: it expresses a conditional
@@ -190,9 +190,9 @@ class TestStrictEnumeratedDefaultInvariant:
         assert NonStrictFeatureGroup.PROPERTY_MAPPING["operation_type"][DefaultOptionKeys.default] == "mul"
 
     def test_rejects_empty_accepted_set_under_strict_validation(self) -> None:
-        """A strict key with no enumerated values and no validation_function rejects a default.
+        """A strict key with no enumerated values and no element_validator rejects a default.
 
-        Without any accepted values and without a ``validation_function``, the
+        Without any accepted values and without a ``element_validator``, the
         declared default can never be honored, so defining the FeatureGroup subclass
         must raise ``ValueError``.
         """
@@ -247,11 +247,11 @@ class TestStrictEnumeratedDefaultInvariant:
         assert "operation_type" in message
 
 
-class TestStrictValidationFunctionDefaultInvariant:
-    """Strict validation driven by a validation_function callable."""
+class TestStrictElementValidatorDefaultInvariant:
+    """Strict validation driven by an element_validator callable."""
 
-    def test_rejects_default_failing_validation_function(self) -> None:
-        """A strict key whose default fails its validation_function must reject at class definition."""
+    def test_rejects_default_failing_element_validator(self) -> None:
+        """A strict key whose default fails its element_validator must reject at class definition."""
         with pytest.raises(ValueError) as exc_info:
 
             class BadFnDefaultFeatureGroup(FeatureChainParserMixin, FeatureGroup):
@@ -260,7 +260,7 @@ class TestStrictValidationFunctionDefaultInvariant:
                     "operation_type": {
                         DefaultOptionKeys.context: True,
                         DefaultOptionKeys.strict_validation: True,
-                        DefaultOptionKeys.validation_function: lambda v: v in {"x", "y"},
+                        DefaultOptionKeys.element_validator: lambda v: v in {"x", "y"},
                         DefaultOptionKeys.default: "z",
                     }
                 }
@@ -274,8 +274,8 @@ class TestStrictValidationFunctionDefaultInvariant:
         assert "operation_type" in message
         assert "z" in message
 
-    def test_accepts_default_passing_validation_function(self) -> None:
-        """A strict key whose default passes its validation_function defines without error."""
+    def test_accepts_default_passing_element_validator(self) -> None:
+        """A strict key whose default passes its element_validator defines without error."""
 
         class GoodFnDefaultFeatureGroup(FeatureChainParserMixin, FeatureGroup):
             PREFIX_PATTERN = r".*__([\w]+)_op$"
@@ -283,7 +283,7 @@ class TestStrictValidationFunctionDefaultInvariant:
                 "operation_type": {
                     DefaultOptionKeys.context: True,
                     DefaultOptionKeys.strict_validation: True,
-                    DefaultOptionKeys.validation_function: lambda v: v in {"x", "y"},
+                    DefaultOptionKeys.element_validator: lambda v: v in {"x", "y"},
                     DefaultOptionKeys.default: "x",
                 }
             }
@@ -326,7 +326,7 @@ class TestDefaultInvariantErrorMessaging:
     default to the accepted values, or remove the default. ``required_when`` is NOT a
     remedy (its predicate being False still lets the bad default apply silently), so
     the message must never advise it. The message must also distinguish a default that
-    was genuinely rejected by a working validation_function from a validation_function
+    was genuinely rejected by a working element_validator from an element_validator
     that itself errored when called.
     """
 
@@ -395,13 +395,13 @@ class TestDefaultInvariantErrorMessaging:
         del exc_info
         assert "['add', 'sub']" in message
 
-    def test_buggy_validation_function_reported_as_raised_not_rejected(self) -> None:
-        """A validation_function that errors when called is reported as having raised.
+    def test_buggy_element_validator_reported_as_raised_not_rejected(self) -> None:
+        """A element_validator that errors when called is reported as having raised.
 
         ``lambda: True`` takes no arguments, so calling it with the default raises
-        ``TypeError``. That is a bug in the plugin's validation_function, not a
+        ``TypeError``. That is a bug in the plugin's element_validator, not a
         verdict on the default, so the invariant must still surface a ``ValueError``
-        at class definition, must say the validation_function raised (not that the
+        at class definition, must say the element_validator raised (not that the
         default was "rejected by" it), and must chain the original ``TypeError`` as
         the cause.
         """
@@ -413,7 +413,7 @@ class TestDefaultInvariantErrorMessaging:
                     "operation_type": {
                         DefaultOptionKeys.context: True,
                         DefaultOptionKeys.strict_validation: True,
-                        DefaultOptionKeys.validation_function: lambda: True,
+                        DefaultOptionKeys.element_validator: lambda: True,
                         DefaultOptionKeys.default: "x",
                     }
                 }
@@ -433,9 +433,9 @@ class TestDefaultInvariantErrorMessaging:
         assert cause_is_type_error, "expected the original TypeError chained as __cause__"
 
     def test_genuine_rejection_still_labeled_as_rejection(self) -> None:
-        """A working validation_function that returns False is still reported as a rejection.
+        """A working element_validator that returns False is still reported as a rejection.
 
-        Distinguishing a buggy validation_function (it raised) must not erase the
+        Distinguishing a buggy element_validator (it raised) must not erase the
         rejection wording for the genuine case: a callable that runs and returns
         False has rejected the default, and the message must say so.
         """
@@ -447,7 +447,7 @@ class TestDefaultInvariantErrorMessaging:
                     "operation_type": {
                         DefaultOptionKeys.context: True,
                         DefaultOptionKeys.strict_validation: True,
-                        DefaultOptionKeys.validation_function: lambda v: False,
+                        DefaultOptionKeys.element_validator: lambda v: False,
                         DefaultOptionKeys.default: "x",
                     }
                 }
@@ -461,16 +461,16 @@ class TestDefaultInvariantErrorMessaging:
         del exc_info
         assert "RejectingFnFeatureGroup" in message
         assert "operation_type" in message
-        assert "rejected by the key's validation_function" in message
+        assert "rejected by the key's element_validator" in message
 
-    def test_validation_function_raising_attribute_error_reports_raised(self) -> None:
-        """A validation_function raising ``AttributeError`` surfaces as the curated ``ValueError``.
+    def test_element_validator_raising_attribute_error_reports_raised(self) -> None:
+        """A element_validator raising ``AttributeError`` surfaces as the curated ``ValueError``.
 
         ``lambda v: v.startswith("a")`` crashes with ``AttributeError`` for the
-        non-string default ``5``. That is a bug in the plugin's validation_function,
+        non-string default ``5``. That is a bug in the plugin's element_validator,
         not a verdict on the default, so the invariant must still surface a
         ``ValueError`` at class definition naming the class and key, must say the
-        validation_function raised (not that the default was "rejected by" it), and
+        element_validator raised (not that the default was "rejected by" it), and
         must chain the original ``AttributeError`` as the cause. The raw
         ``AttributeError`` must never escape class definition.
         """
@@ -482,7 +482,7 @@ class TestDefaultInvariantErrorMessaging:
                     "operation_type": {
                         DefaultOptionKeys.context: True,
                         DefaultOptionKeys.strict_validation: True,
-                        DefaultOptionKeys.validation_function: lambda v: v.startswith("a"),
+                        DefaultOptionKeys.element_validator: lambda v: v.startswith("a"),
                         DefaultOptionKeys.default: 5,
                     }
                 }
@@ -501,13 +501,13 @@ class TestDefaultInvariantErrorMessaging:
         assert "rejected by" not in message
         assert cause_is_attribute_error, "expected the original AttributeError chained as __cause__"
 
-    def test_validation_function_raising_value_error_reports_raised(self) -> None:
-        """A validation_function raising ``ValueError`` internally is reported as having raised.
+    def test_element_validator_raising_value_error_reports_raised(self) -> None:
+        """A element_validator raising ``ValueError`` internally is reported as having raised.
 
         ``lambda v: int(v) > 0`` crashes with ``ValueError`` for the default
         ``"abc"``: the function never returned a verdict, it errored. The invariant
         must not misreport this as the default being "rejected by" the
-        validation_function; it must say the validation_function raised and chain
+        element_validator; it must say the element_validator raised and chain
         the original ``ValueError`` as the cause.
         """
         with pytest.raises(ValueError) as exc_info:
@@ -518,7 +518,7 @@ class TestDefaultInvariantErrorMessaging:
                     "operation_type": {
                         DefaultOptionKeys.context: True,
                         DefaultOptionKeys.strict_validation: True,
-                        DefaultOptionKeys.validation_function: lambda v: int(v) > 0,
+                        DefaultOptionKeys.element_validator: lambda v: int(v) > 0,
                         DefaultOptionKeys.default: "abc",
                     }
                 }

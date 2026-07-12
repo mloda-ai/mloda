@@ -32,10 +32,12 @@ jobs:
 
       - name: Generate License Files
         env:
-          NO_WRITE_ATTRIBUTION_MD: " "
           TOX_WRITE_THIRD_PARTY_LICENSES: true
         run: |
             tox -e python310
+            # Ship the committed ATTRIBUTION.md, not a copy regenerated from this
+            # runner's environment; tox also rewrites it, so restore the tracked one.
+            git checkout -- attribution/ATTRIBUTION.md
             if [ ! -f "attribution/ATTRIBUTION.md" ]; then
               echo "Error: Expected file attribution/ATTRIBUTION.md does not exist"
               exit 1

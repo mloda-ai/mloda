@@ -179,9 +179,9 @@ class EncodingFeatureGroup(FeatureChainParserMixin, FeatureGroup):
     # Property mapping for new configuration-based approach
     PROPERTY_MAPPING = {
         ENCODER_TYPE: {
-            **SUPPORTED_ENCODERS,  # All supported encoder types as valid options
-            DefaultOptionKeys.context: True,  # Context parameter
-            DefaultOptionKeys.strict_validation: True,  # Enable strict validation
+            DefaultOptionKeys.allowed_values: SUPPORTED_ENCODERS,
+            DefaultOptionKeys.context: True,
+            DefaultOptionKeys.strict_validation: True,
         },
         DefaultOptionKeys.in_features: {
             "explanation": "Source feature to encode",

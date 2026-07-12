@@ -69,8 +69,7 @@ class TestStrictEnumeratedDefaultInvariant:
                 PREFIX_PATTERN = r".*__([\w]+)_op$"
                 PROPERTY_MAPPING = {
                     "operation_type": {
-                        "add": "Addition",
-                        "sub": "Subtraction",
+                        DefaultOptionKeys.allowed_values: {"add": "Addition", "sub": "Subtraction"},
                         DefaultOptionKeys.context: True,
                         DefaultOptionKeys.strict_validation: True,
                         DefaultOptionKeys.default: "mul",
@@ -95,8 +94,7 @@ class TestStrictEnumeratedDefaultInvariant:
             PREFIX_PATTERN = r".*__([\w]+)_op$"
             PROPERTY_MAPPING = {
                 "operation_type": {
-                    "add": "Addition",
-                    "sub": "Subtraction",
+                    DefaultOptionKeys.allowed_values: {"add": "Addition", "sub": "Subtraction"},
                     DefaultOptionKeys.context: True,
                     DefaultOptionKeys.strict_validation: True,
                     DefaultOptionKeys.default: "add",
@@ -123,8 +121,7 @@ class TestStrictEnumeratedDefaultInvariant:
                 PREFIX_PATTERN = r".*__([\w]+)_op$"
                 PROPERTY_MAPPING = {
                     "operation_type": {
-                        "add": "Addition",
-                        "sub": "Subtraction",
+                        DefaultOptionKeys.allowed_values: {"add": "Addition", "sub": "Subtraction"},
                         DefaultOptionKeys.context: True,
                         DefaultOptionKeys.strict_validation: True,
                         DefaultOptionKeys.default: "mul",
@@ -154,8 +151,10 @@ class TestStrictEnumeratedDefaultInvariant:
             PREFIX_PATTERN = r".*__([\w]+)_op$"
             PROPERTY_MAPPING = {
                 "operation_type": {
-                    "feature_engineering": "Feature engineering step",
-                    "scaling": "Scaling step",
+                    DefaultOptionKeys.allowed_values: {
+                        "feature_engineering": "Feature engineering step",
+                        "scaling": "Scaling step",
+                    },
                     DefaultOptionKeys.context: True,
                     DefaultOptionKeys.strict_validation: True,
                     DefaultOptionKeys.default: None,
@@ -175,8 +174,7 @@ class TestStrictEnumeratedDefaultInvariant:
             PREFIX_PATTERN = r".*__([\w]+)_op$"
             PROPERTY_MAPPING = {
                 "operation_type": {
-                    "add": "Addition",
-                    "sub": "Subtraction",
+                    DefaultOptionKeys.allowed_values: {"add": "Addition", "sub": "Subtraction"},
                     DefaultOptionKeys.context: True,
                     DefaultOptionKeys.strict_validation: False,
                     DefaultOptionKeys.default: "mul",
@@ -230,8 +228,7 @@ class TestStrictEnumeratedDefaultInvariant:
                 PREFIX_PATTERN = r".*__([\w]+)_op$"
                 PROPERTY_MAPPING = {
                     "operation_type": {
-                        "add": "Addition",
-                        "sub": "Subtraction",
+                        DefaultOptionKeys.allowed_values: {"add": "Addition", "sub": "Subtraction"},
                         DefaultOptionKeys.context: True,
                         DefaultOptionKeys.strict_validation: True,
                         DefaultOptionKeys.default: ["mul"],
@@ -305,8 +302,7 @@ class TestNoDefaultDeclared:
             PREFIX_PATTERN = r".*__([\w]+)_op$"
             PROPERTY_MAPPING = {
                 "operation_type": {
-                    "add": "Addition",
-                    "sub": "Subtraction",
+                    DefaultOptionKeys.allowed_values: {"add": "Addition", "sub": "Subtraction"},
                     DefaultOptionKeys.context: True,
                     DefaultOptionKeys.strict_validation: True,
                 }
@@ -344,8 +340,7 @@ class TestDefaultInvariantErrorMessaging:
                 PREFIX_PATTERN = r".*__([\w]+)_op$"
                 PROPERTY_MAPPING = {
                     "operation_type": {
-                        "add": "Addition",
-                        "sub": "Subtraction",
+                        DefaultOptionKeys.allowed_values: {"add": "Addition", "sub": "Subtraction"},
                         DefaultOptionKeys.context: True,
                         DefaultOptionKeys.strict_validation: True,
                         DefaultOptionKeys.default: "mul",
@@ -378,8 +373,7 @@ class TestDefaultInvariantErrorMessaging:
                 PREFIX_PATTERN = r".*__([\w]+)_op$"
                 PROPERTY_MAPPING = {
                     "operation_type": {
-                        "add": "Addition",
-                        "sub": "Subtraction",
+                        DefaultOptionKeys.allowed_values: {"add": "Addition", "sub": "Subtraction"},
                         DefaultOptionKeys.context: True,
                         DefaultOptionKeys.strict_validation: True,
                         DefaultOptionKeys.default: "mul",

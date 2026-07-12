@@ -40,10 +40,12 @@ class MockWithConditionalRequired(FeatureChainParserMixin):
 
     PROPERTY_MAPPING = {
         "aggregation_type": {
-            "sum": "Sum of values",
-            "avg": "Average of values",
-            "first": "First value (requires order_by)",
-            "last": "Last value (requires order_by)",
+            DefaultOptionKeys.allowed_values: {
+                "sum": "Sum of values",
+                "avg": "Average of values",
+                "first": "First value (requires order_by)",
+                "last": "Last value (requires order_by)",
+            },
             DefaultOptionKeys.context: True,
             DefaultOptionKeys.strict_validation: True,
         },
@@ -136,7 +138,7 @@ class TestRequiredWhenUnit:
             PREFIX_PATTERN = r".*__([\w]+)_windowed$"
             PROPERTY_MAPPING = {
                 "aggregation_type": {
-                    "sum": "Sum",
+                    DefaultOptionKeys.allowed_values: {"sum": "Sum"},
                     DefaultOptionKeys.context: True,
                     DefaultOptionKeys.strict_validation: True,
                 },
@@ -166,8 +168,7 @@ class TestRequiredWhenUnit:
             PREFIX_PATTERN = r".*__([\w]+)_windowed$"
             PROPERTY_MAPPING = {
                 "aggregation_type": {
-                    "sum": "Sum",
-                    "first": "First",
+                    DefaultOptionKeys.allowed_values: {"sum": "Sum", "first": "First"},
                     DefaultOptionKeys.context: True,
                     DefaultOptionKeys.strict_validation: True,
                 },
@@ -255,8 +256,7 @@ class ConditionalRequiredFeatureGroup(FeatureChainParserMixin, FeatureGroup):
 
     PROPERTY_MAPPING = {
         "aggregation_type": {
-            "sum": "Sum of values",
-            "first": "First value (requires order_by)",
+            DefaultOptionKeys.allowed_values: {"sum": "Sum of values", "first": "First value (requires order_by)"},
             DefaultOptionKeys.context: True,
             DefaultOptionKeys.strict_validation: True,
         },

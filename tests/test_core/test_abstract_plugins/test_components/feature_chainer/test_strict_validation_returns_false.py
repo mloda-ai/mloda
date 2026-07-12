@@ -12,8 +12,7 @@ class BaseMode(FeatureChainParserMixin):
 
     PROPERTY_MAPPING = {
         "mode": {
-            "mode_a": "Mode A",
-            "mode_b": "Mode B",
+            DefaultOptionKeys.allowed_values: {"mode_a": "Mode A", "mode_b": "Mode B"},
             DefaultOptionKeys.strict_validation: True,
         }
     }
@@ -23,10 +22,7 @@ class SubGroupA(BaseMode):
     """Subclass that only accepts mode_a."""
 
     PROPERTY_MAPPING = {
-        "mode": {
-            "mode_a": "Mode A",
-            DefaultOptionKeys.strict_validation: True,
-        }
+        "mode": {DefaultOptionKeys.allowed_values: {"mode_a": "Mode A"}, DefaultOptionKeys.strict_validation: True}
     }
 
 
@@ -34,10 +30,7 @@ class SubGroupB(BaseMode):
     """Subclass that only accepts mode_b."""
 
     PROPERTY_MAPPING = {
-        "mode": {
-            "mode_b": "Mode B",
-            DefaultOptionKeys.strict_validation: True,
-        }
+        "mode": {DefaultOptionKeys.allowed_values: {"mode_b": "Mode B"}, DefaultOptionKeys.strict_validation: True}
     }
 
 

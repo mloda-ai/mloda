@@ -179,7 +179,7 @@ class ForwardingE2EChainedGroup(FeatureChainParserMixin, FeatureGroup):
     PREFIX_PATTERN = r".*__([\w]+)_e2echain579fwd$"
     PROPERTY_MAPPING = {
         "operation": {
-            "double": "Doubles the source values",
+            DefaultOptionKeys.allowed_values: {"double": "Doubles the source values"},
             DefaultOptionKeys.context: True,
             DefaultOptionKeys.strict_validation: True,
         },

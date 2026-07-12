@@ -91,10 +91,10 @@ class SklearnPipelineFeatureGroup(FeatureChainParserMixin, FeatureGroup):
     # Property mapping for new configuration-based approach
     PROPERTY_MAPPING = {
         PIPELINE_NAME: {
-            **PIPELINE_TYPES,  # All supported pipeline types as valid options
+            DefaultOptionKeys.allowed_values: PIPELINE_TYPES,
             DefaultOptionKeys.context: True,
             DefaultOptionKeys.strict_validation: True,
-            DefaultOptionKeys.default: None,  # Default is None as steps + params also work
+            DefaultOptionKeys.default: None,
         },
         PIPELINE_STEPS: {
             "explanation": "List of pipeline steps as (name, transformer) tuples",

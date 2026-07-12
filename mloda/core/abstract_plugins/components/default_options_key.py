@@ -42,10 +42,11 @@ class DefaultOptionKeys(str, Enum):
         return self.value.__format__(format_spec)
 
 
-# Single source of truth for spec-internal metadata keys in a PROPERTY_MAPPING entry.
-# ``FeatureChainParser._extract_property_values`` subtracts this set to recover a spec's
-# legacy flattened value space, so a new doc-only key cannot silently widen an allowed set.
-RESERVED_PROPERTY_KEYS: frozenset[Any] = frozenset(
+# The SCHEMA of a PROPERTY_MAPPING spec dict: the complete set of permitted keys. A spec's
+# value space is declared under ``allowed_values``, never inferred, so every other key must be
+# one of these. ``FeatureChainParser.validate_property_mapping_defaults`` rejects any unknown
+# key at class-definition time, which is what stops a typo'd flag from being read as a value.
+PROPERTY_SPEC_KEYS: frozenset[Any] = frozenset(
     {
         "explanation",
         DefaultOptionKeys.allowed_values,
@@ -59,10 +60,8 @@ RESERVED_PROPERTY_KEYS: frozenset[Any] = frozenset(
     }
 )
 
-# Removed PROPERTY_MAPPING keys mapped to their replacement (issue #600). These names are no
-# longer reserved metadata, so a leftover stale key would be absorbed into a legacy flattened
-# spec's accepted VALUE set. ``FeatureChainParser.validate_property_mapping_defaults`` rejects
-# them at class-definition time instead.
+# Removed PROPERTY_MAPPING keys mapped to their replacement (issue #600). They are unknown keys
+# like any other; this map only gives the unknown-key error a precise remedy to name.
 REMOVED_PROPERTY_KEYS: dict[str, DefaultOptionKeys] = {
     "validation_function": DefaultOptionKeys.element_validator,
     "type_validator": DefaultOptionKeys.match_guard,

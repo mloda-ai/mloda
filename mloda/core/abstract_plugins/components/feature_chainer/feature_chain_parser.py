@@ -4,6 +4,7 @@ Feature chain parser for handling feature name chaining across feature groups.
 
 from __future__ import annotations
 
+import difflib
 import re
 from typing import Any, Optional
 
@@ -11,8 +12,8 @@ from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.components.default_options_key import (
+    PROPERTY_SPEC_KEYS,
     REMOVED_PROPERTY_KEYS,
-    RESERVED_PROPERTY_KEYS,
     DefaultOptionKeys,
 )
 
@@ -201,14 +202,14 @@ class FeatureChainParser:
     def _extract_property_values(cls, property_value: Any) -> Any:
         """Extract a spec's declared value space.
 
-        Prefers an explicit ``DefaultOptionKeys.allowed_values`` field; otherwise
-        falls back to the legacy flattened form (all entries minus the reserved
-        metadata keys).
+        The value space is DECLARED under ``DefaultOptionKeys.allowed_values``, never inferred.
+        A spec without it declares an EMPTY value space. Recovering the space by subtracting the
+        known keys (the retired flattened form) silently absorbed every unrecognized key as an
+        accepted value, which made a typo'd flag indistinguishable from a legitimate value.
+        A non-dict spec value is its own value space and is handed back verbatim.
         """
         if isinstance(property_value, dict):
-            if DefaultOptionKeys.allowed_values in property_value:
-                return property_value[DefaultOptionKeys.allowed_values]
-            return {k: v for k, v in property_value.items() if k not in RESERVED_PROPERTY_KEYS}
+            return property_value.get(DefaultOptionKeys.allowed_values, {})
         return property_value
 
     @classmethod
@@ -272,8 +273,17 @@ class FeatureChainParser:
     def validate_property_mapping_defaults(cls, owner_name: str, property_mapping: dict[str, Any] | None) -> None:
         """Validate a PROPERTY_MAPPING at class-definition time.
 
-        Rejects specs that still carry a removed key (see ``REMOVED_PROPERTY_KEYS``) and
-        delegates every declared default to ``check_declared_default``.
+        Three rules, in this order:
+
+        1. Every key of a spec must be in ``PROPERTY_SPEC_KEYS`` (the spec schema).
+        2. ``strict_validation: True`` needs a non-empty ``allowed_values`` or an
+           ``element_validator`` to validate against.
+        3. A declared default must satisfy the spec's own rules (``check_declared_default``).
+
+        The schema rule runs first on purpose: a spec that trips it is malformed, and its
+        remaining keys cannot be trusted to mean what they appear to mean.
+
+        A non-dict spec value is not a spec dict, so it carries no keys to check and is skipped.
         """
         if property_mapping is None:
             return
@@ -281,24 +291,68 @@ class FeatureChainParser:
         for key, spec in property_mapping.items():
             if not isinstance(spec, dict):
                 continue
-            cls._reject_removed_property_keys(owner_name, key, spec)
+            cls._reject_unknown_spec_keys(owner_name, key, spec)
+            cls._reject_strict_without_value_space(owner_name, key, spec)
             cls.check_declared_default(f"{owner_name}.PROPERTY_MAPPING", key, spec)
 
     @classmethod
-    def _reject_removed_property_keys(cls, owner_name: str, key: str, spec: dict[str, Any]) -> None:
-        """Fail loudly on a spec that still uses a removed PROPERTY_MAPPING key.
+    def _reject_unknown_spec_keys(cls, owner_name: str, key: str, spec: dict[str, Any]) -> None:
+        """Fail loudly on any key that is not part of the spec schema.
 
-        The removed keys are no longer reserved metadata, so ``_extract_property_values``
-        would absorb a leftover one into a legacy flattened spec's accepted value space,
-        silently widening what the feature group matches. Rejecting the spec turns that
-        silent corruption into an actionable migration error.
+        The value space is declared under ``allowed_values``, so an unrecognized key is never a
+        value: it is an authoring mistake. This is the one rule that covers all of them, with two
+        message variants. A key that was REMOVED names its replacement; any other unknown key gets
+        the nearest known key suggested, so ``strict_validaton`` reads as a typo instead of
+        silently turning strict validation off while joining the accepted values.
+
+        A removed key is reported ahead of any other unknown key, because it is the one offender
+        with an exact remedy.
         """
-        for stale, replacement in REMOVED_PROPERTY_KEYS.items():
-            if stale in spec:
-                raise ValueError(
-                    f"{owner_name}.PROPERTY_MAPPING['{key}'] uses the removed key '{stale}'. "
-                    f"Rename it to '{replacement.value}' (DefaultOptionKeys.{replacement.value})."
-                )
+        known = sorted(str(k) for k in PROPERTY_SPEC_KEYS)
+        unknown = [spec_key for spec_key in spec if spec_key not in PROPERTY_SPEC_KEYS]
+        if not unknown:
+            return
+
+        offender = next((k for k in unknown if str(k) in REMOVED_PROPERTY_KEYS), unknown[0])
+        prefix = f"{owner_name}.PROPERTY_MAPPING['{key}'] has unknown spec key '{offender}'."
+
+        replacement = REMOVED_PROPERTY_KEYS.get(str(offender))
+        if replacement is not None:
+            raise ValueError(
+                f"{prefix} It was removed: rename it to '{replacement.value}' (DefaultOptionKeys.{replacement.value})."
+            )
+
+        suggestion = difflib.get_close_matches(str(offender), known, n=1)
+        hint = f" Did you mean '{suggestion[0]}'?" if suggestion else ""
+        raise ValueError(
+            f"{prefix}{hint} A spec may only carry the keys {known}. Accepted VALUES belong "
+            f"under '{DefaultOptionKeys.allowed_values.value}'."
+        )
+
+    @classmethod
+    def _reject_strict_without_value_space(cls, owner_name: str, key: str, spec: dict[str, Any]) -> None:
+        """Fail loudly on strict validation that has nothing to validate against.
+
+        Strict with neither a non-empty ``allowed_values`` nor an ``element_validator`` accepts
+        nothing, so it rejects every value: a spec that can never match. ``property_spec``
+        already refuses to build one, so core enforces the same invariant to stay in step.
+        """
+        if not cls._is_strict_validation(spec):
+            return
+
+        if cls._get_element_validator(spec) is not None:
+            return
+
+        if spec.get(DefaultOptionKeys.allowed_values):
+            return
+
+        raise ValueError(
+            f"{owner_name}.PROPERTY_MAPPING['{key}'] sets "
+            f"{DefaultOptionKeys.strict_validation.value}=True but declares no value space, "
+            f"so it would reject every value. Declare a non-empty "
+            f"'{DefaultOptionKeys.allowed_values.value}' or an "
+            f"'{DefaultOptionKeys.element_validator.value}'."
+        )
 
     @classmethod
     def _unpack_property_value(cls, found_property_value: Any) -> list[Any]:

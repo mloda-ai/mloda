@@ -217,7 +217,7 @@ class _ForwardingChainedGroup(FeatureChainParserMixin):
     PREFIX_PATTERN = r".*__([\w]+)_fwdchain$"
     PROPERTY_MAPPING = {
         "operation": {
-            "op1": "Operation 1",
+            DefaultOptionKeys.allowed_values: {"op1": "Operation 1"},
             DefaultOptionKeys.context: True,
             DefaultOptionKeys.strict_validation: True,
         }

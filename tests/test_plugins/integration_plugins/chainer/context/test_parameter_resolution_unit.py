@@ -26,21 +26,20 @@ class TestParameterResolutionUnit:
 
         property_mapping = {
             "ident": {
-                "identifier1": "explanation",
-                "identifier2": "explanation",
-                DefaultOptionKeys.context: True,  # Mark as context parameter
+                DefaultOptionKeys.allowed_values: {"identifier1": "explanation", "identifier2": "explanation"},
+                DefaultOptionKeys.context: True,
             },
             "property2": {
-                "value1": "explanation",
-                "value2": "explanation",
-                "specific_val_3_test": "explanation",  # Special case for testing
-                # Not marked as context -> defaults to group parameter
+                DefaultOptionKeys.allowed_values: {
+                    "value1": "explanation",
+                    "value2": "explanation",
+                    "specific_val_3_test": "explanation",
+                }
             },
             "property3": {
-                "opt_val1": "explanation",
-                "opt_val2": "explanation",
-                DefaultOptionKeys.default: "opt_val1",  # Default value
-                DefaultOptionKeys.context: True,  # Mark as context parameter
+                DefaultOptionKeys.allowed_values: {"opt_val1": "explanation", "opt_val2": "explanation"},
+                DefaultOptionKeys.default: "opt_val1",
+                DefaultOptionKeys.context: True,
             },
             DefaultOptionKeys.in_features: {
                 "explanation": "explanation",
@@ -266,23 +265,24 @@ class TestParameterResolutionUnit:
 
     def test_parameter_extraction_logic(self) -> None:
         """Test the _extract_property_values logic."""
-        # Test: Extract values from dict with default key
+        # Test: the declared value space is returned, the metadata keys around it are not
         property_value_with_default = {
-            "opt_val1": "explanation",
-            "opt_val2": "explanation",
+            DefaultOptionKeys.allowed_values: {"opt_val1": "explanation", "opt_val2": "explanation"},
             DefaultOptionKeys.default: "opt_val1",
             DefaultOptionKeys.context: True,
         }
 
         extracted = FeatureChainParser._extract_property_values(property_value_with_default)
         expected = {"opt_val1": "explanation", "opt_val2": "explanation"}
-        assert extracted == expected, "Should extract values and remove metadata keys"
+        assert extracted == expected, "Should return exactly the declared allowed_values"
 
-        # Test: Extract values from dict without optional key
-        property_value_without_optional = {"value1": "explanation", "value2": "explanation"}
+        # Test: a spec that declares no allowed_values declares an EMPTY value space. It is
+        # never recovered by subtracting the known keys, which is what used to absorb an
+        # unrecognized key as an accepted value.
+        property_value_without_allowed_values = {"value1": "explanation", "value2": "explanation"}
 
-        extracted = FeatureChainParser._extract_property_values(property_value_without_optional)
-        assert extracted == property_value_without_optional, "Should return unchanged when no optional key"
+        extracted = FeatureChainParser._extract_property_values(property_value_without_allowed_values)
+        assert extracted == {}, "Should declare an empty value space when allowed_values is absent"
 
         # Test: Extract values from non-dict
         property_value_non_dict = "simple_value"
@@ -333,9 +333,8 @@ class TestParameterResolutionUnit:
         # Test property mapping with mixed strict/flexible validation
         property_mapping_mixed = {
             "strict_param": {
-                "allowed_value1": "explanation",
-                "allowed_value2": "explanation",
-                DefaultOptionKeys.strict_validation: True,  # Explicit strict validation
+                DefaultOptionKeys.allowed_values: {"allowed_value1": "explanation", "allowed_value2": "explanation"},
+                DefaultOptionKeys.strict_validation: True,
                 DefaultOptionKeys.context: True,
             },
             "flexible_param": {
@@ -472,21 +471,17 @@ class TestParameterResolutionUnit:
 
         property_mapping_complex = {
             "algorithm_type": {
-                "sum": "explanation",
-                "avg": "explanation",
-                # No strict_validation flag -> defaults to False (flexible)
+                DefaultOptionKeys.allowed_values: {"sum": "explanation", "avg": "explanation"},
                 DefaultOptionKeys.context: True,
             },
             "data_source": {
-                "production": "explanation",
-                "staging": "explanation",
-                DefaultOptionKeys.strict_validation: True,  # Restrict data sources
-                DefaultOptionKeys.group: True,  # This affects grouping
+                DefaultOptionKeys.allowed_values: {"production": "explanation", "staging": "explanation"},
+                DefaultOptionKeys.strict_validation: True,
+                DefaultOptionKeys.group: True,
             },
             "debug_mode": {
-                "true": "explanation",
-                "false": "explanation",
-                DefaultOptionKeys.strict_validation: False,  # Explicit flexible validation
+                DefaultOptionKeys.allowed_values: {"true": "explanation", "false": "explanation"},
+                DefaultOptionKeys.strict_validation: False,
                 DefaultOptionKeys.context: True,
             },
             DefaultOptionKeys.in_features: {

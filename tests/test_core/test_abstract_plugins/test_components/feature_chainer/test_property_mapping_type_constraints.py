@@ -47,8 +47,7 @@ class MockWithTypeConstraint(FeatureChainParserMixin):
 
     PROPERTY_MAPPING = {
         "operation": {
-            "sum": "Sum of values",
-            "avg": "Average of values",
+            DefaultOptionKeys.allowed_values: {"sum": "Sum of values", "avg": "Average of values"},
             DefaultOptionKeys.context: True,
             DefaultOptionKeys.strict_validation: True,
         },
@@ -68,8 +67,7 @@ class MockStrictWithMatchGuard(FeatureChainParserMixin):
 
     PROPERTY_MAPPING = {
         "mode": {
-            "fast": "Fast mode",
-            "slow": "Slow mode",
+            DefaultOptionKeys.allowed_values: {"fast": "Fast mode", "slow": "Slow mode"},
             DefaultOptionKeys.context: True,
             DefaultOptionKeys.strict_validation: True,
             DefaultOptionKeys.match_guard: lambda v: isinstance(v, str),
@@ -89,9 +87,7 @@ class MockStrictWithOrthogonalMatchGuard(FeatureChainParserMixin):
 
     PROPERTY_MAPPING = {
         "mode": {
-            "fast": "Fast mode",
-            "slow": "Slow mode",
-            "ok": "OK mode",
+            DefaultOptionKeys.allowed_values: {"fast": "Fast mode", "slow": "Slow mode", "ok": "OK mode"},
             DefaultOptionKeys.context: True,
             DefaultOptionKeys.strict_validation: True,
             DefaultOptionKeys.match_guard: _max_length_3,
@@ -121,7 +117,7 @@ class MockWithoutTypeConstraint(FeatureChainParserMixin):
 
     PROPERTY_MAPPING = {
         "operation": {
-            "sum": "Sum of values",
+            DefaultOptionKeys.allowed_values: {"sum": "Sum of values"},
             DefaultOptionKeys.context: True,
             DefaultOptionKeys.strict_validation: True,
         },
@@ -252,7 +248,7 @@ class MatchGuardedAggregation(FeatureChainParserMixin, FeatureGroup):
 
     PROPERTY_MAPPING = {
         "aggregation_type": {
-            "sum": "Sum of values",
+            DefaultOptionKeys.allowed_values: {"sum": "Sum of values"},
             DefaultOptionKeys.context: True,
             DefaultOptionKeys.strict_validation: True,
         },

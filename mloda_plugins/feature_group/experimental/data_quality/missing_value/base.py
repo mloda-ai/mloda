@@ -166,7 +166,7 @@ class MissingValueFeatureGroup(FeatureChainParserMixin, FeatureGroup):
 
     PROPERTY_MAPPING = {
         IMPUTATION_METHOD: {
-            **IMPUTATION_METHODS,
+            DefaultOptionKeys.allowed_values: IMPUTATION_METHODS,
             DefaultOptionKeys.context: True,
             DefaultOptionKeys.strict_validation: True,
         },

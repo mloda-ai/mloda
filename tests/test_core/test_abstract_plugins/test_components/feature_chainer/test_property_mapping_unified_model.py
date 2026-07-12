@@ -15,9 +15,9 @@ Two decisions are pinned here.
 
    The old names are GONE: no enum members, no aliases. A spec dict still carrying the
    stale string key must FAIL LOUDLY at class-definition time rather than be silently
-   ignored: once the stale keys leave ``RESERVED_PROPERTY_KEYS``, a legacy flattened
-   spec would otherwise absorb the stale CALLABLE into its accepted VALUE set, silently
-   widening what the feature group matches.
+   ignored. The stale keys are not part of the spec schema (``PROPERTY_SPEC_KEYS``), so
+   the general unknown-key rule catches them; being REMOVED keys, they get the message
+   variant that names their replacement.
 
 2. Shared default-check semantics. ``property_spec`` and
    ``FeatureChainParser.validate_property_mapping_defaults`` encoded the same rules for a
@@ -36,7 +36,7 @@ from unittest.mock import patch
 import pytest
 
 from mloda.core.abstract_plugins.components.default_options_key import (
-    RESERVED_PROPERTY_KEYS,
+    PROPERTY_SPEC_KEYS,
     DefaultOptionKeys,
 )
 from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser import FeatureChainParser
@@ -146,15 +146,15 @@ class TestRenamedKeys:
         with pytest.raises(ValueError):
             DefaultOptionKeys(STALE_MATCH_GUARD_KEY)
 
-    def test_reserved_property_keys_carry_the_new_members(self) -> None:
-        """``RESERVED_PROPERTY_KEYS`` reserves the new keys, so they never leak into a value space."""
-        assert DefaultOptionKeys.element_validator in RESERVED_PROPERTY_KEYS
-        assert DefaultOptionKeys.match_guard in RESERVED_PROPERTY_KEYS
+    def test_spec_schema_carries_the_new_members(self) -> None:
+        """``PROPERTY_SPEC_KEYS`` admits the new keys, so a spec may carry them."""
+        assert DefaultOptionKeys.element_validator in PROPERTY_SPEC_KEYS
+        assert DefaultOptionKeys.match_guard in PROPERTY_SPEC_KEYS
 
-    def test_reserved_property_keys_drop_the_old_strings(self) -> None:
-        """The stale string keys are no longer reserved metadata."""
-        assert STALE_ELEMENT_VALIDATOR_KEY not in RESERVED_PROPERTY_KEYS
-        assert STALE_MATCH_GUARD_KEY not in RESERVED_PROPERTY_KEYS
+    def test_spec_schema_drops_the_old_strings(self) -> None:
+        """The stale string keys are not part of the spec schema, so they are unknown keys."""
+        assert STALE_ELEMENT_VALIDATOR_KEY not in PROPERTY_SPEC_KEYS
+        assert STALE_MATCH_GUARD_KEY not in PROPERTY_SPEC_KEYS
 
 
 class TestRenamedInternalHelpers:
@@ -178,11 +178,10 @@ class TestRenamedInternalHelpers:
 class TestStaleKeysFailLoudly:
     """A spec dict still carrying a stale key is rejected at class definition, never honored.
 
-    This is NOT backwards compatibility. Silently ignoring the stale key would be worse
-    than the old behavior: with the key no longer reserved, ``_extract_property_values``
-    would absorb the stale CALLABLE into the accepted VALUE set of a legacy flattened
-    spec, silently widening what the feature group matches. The guard converts that
-    silent corruption into an actionable migration error.
+    This is NOT backwards compatibility. A stale key is simply not in the spec schema, so the
+    general unknown-key rule rejects it; because it is a REMOVED key, the error names the
+    replacement instead of guessing at one. Silently ignoring it would leave the spec claiming a
+    validation it does not perform, so the rule converts that into an actionable migration error.
     """
 
     def test_stale_validation_function_key_rejected_at_class_definition(self) -> None:
@@ -234,11 +233,11 @@ class TestStaleKeysFailLoudly:
         assert STALE_MATCH_GUARD_KEY in message
         assert "match_guard" in message
 
-    def test_legacy_flattened_stale_spec_rejected_at_class_definition(self) -> None:
-        """The legacy flattened form (values inline, no ``allowed_values``) is guarded too."""
+    def test_stale_key_is_reported_ahead_of_other_unknown_keys(self) -> None:
+        """A spec with several unknown keys still names the stale one: it has the exact remedy."""
         with pytest.raises(ValueError) as exc_info:
 
-            class LegacyFlattenedStaleFeatureGroup(FeatureChainParserMixin, FeatureGroup):
+            class MultiOffenderStaleFeatureGroup(FeatureChainParserMixin, FeatureGroup):
                 PROPERTY_MAPPING = {
                     "operation_type": {
                         "add": "Addition",
@@ -255,6 +254,7 @@ class TestStaleKeysFailLoudly:
 
         message = str(exc_info.value)
         del exc_info
+        assert STALE_ELEMENT_VALIDATOR_KEY in message
         assert "element_validator" in message
 
     def test_parser_entry_point_rejects_stale_spec(self) -> None:
@@ -273,9 +273,9 @@ class TestStaleKeysFailLoudly:
     def test_stale_callable_is_never_absorbed_into_the_accepted_value_set(self) -> None:
         """The regression this guard exists to prevent: the stale callable as an allowed VALUE.
 
-        With ``"validation_function"`` no longer reserved, a legacy flattened spec would
-        expose the callable itself as a member of the accepted set, so an option whose
-        value IS that callable would match. Matching such a spec must never succeed.
+        A spec is not always reached through class definition, so matching is checked too. The
+        stale callable must never end up a member of the accepted set, which is what recovering
+        the value space by subtraction used to do. Matching such a spec must never succeed.
         """
         validator = _positive_int
         mapping: dict[str, Any] = {

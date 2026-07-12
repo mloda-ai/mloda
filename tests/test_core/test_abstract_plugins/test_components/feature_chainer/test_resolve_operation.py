@@ -28,8 +28,7 @@ class MockResolverFG(FeatureChainParserMixin):
 
     PROPERTY_MAPPING = {
         "aggregation_type": {
-            "sum": "Sum",
-            "avg": "Average",
+            DefaultOptionKeys.allowed_values: {"sum": "Sum", "avg": "Average"},
             DefaultOptionKeys.context: True,
             DefaultOptionKeys.strict_validation: True,
         },

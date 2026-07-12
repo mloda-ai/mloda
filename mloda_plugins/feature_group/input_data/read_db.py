@@ -1,4 +1,4 @@
-from typing import Any, Optional
+from typing import Any
 from mloda.user import DataAccessCollection
 from mloda.provider import FeatureSet, BaseInputData
 from mloda.user import Options
@@ -14,20 +14,49 @@ class ReadDB(BaseInputData):
     To suppress auto-loading:
         PluginLoader.disable_auto_load("feature_group/input_data/read_dbs")
 
-    The following methods should be implemented in the child classes:
-    - load_data
-    - connect
-    - build_query
-    - is_valid_credentials
-    - check_feature_in_data_access
+    load_data is a template method exposing an opt-in lifecycle seam: a new
+    backend implements ``produce_rows``, ``connect``, and ``is_valid_credentials``
+    (optionally ``prepare_credentials``/``build_query``/``check_feature_in_data_access``)
+    instead of overriding ``load_data`` wholesale. Overriding ``load_data`` directly
+    is still supported.
     """
 
     _auto_load_group: str = "feature_group/input_data/read_dbs"
 
     @classmethod
-    def load_data(cls, data_access: Any, features: FeatureSet) -> Any:
-        """This function should be implemented by child classes."""
+    def prepare_credentials(cls, data_access: Any, features: FeatureSet) -> Any:
+        """Overridable hook to normalize/validate credentials before connecting; default is pass-through."""
+        return data_access
+
+    @classmethod
+    def produce_rows(cls, connection: Any, features: FeatureSet) -> Any:
+        """The per-backend row hook; implement THIS (plus connect and is_valid_credentials) instead of load_data.
+        Return fully materialized rows: close_connection runs in the template's finally block, so a lazy
+        cursor or generator dies after close. The template does not call build_query; call it here if needed."""
         raise NotImplementedError
+
+    @classmethod
+    def load_data(cls, data_access: Any, features: FeatureSet) -> Any:
+        """Template method: probe final-reader classification against the dynamic anchor,
+        prepare credentials, connect, produce rows, then close."""
+        if not cls.is_final_reader():
+            raise NotImplementedError
+
+        credentials = cls.prepare_credentials(data_access, features)
+        connection = cls.get_connection(credentials)
+        try:
+            return cls.produce_rows(connection, features)
+        finally:
+            cls.close_connection(connection)
+
+    @classmethod
+    def _final_reader_requires(cls) -> tuple[str, ...]:
+        """Hook-based discovery requires overriding connect itself; a backend that customizes
+        get_connection but leaves connect abstract must override load_data wholesale or also
+        override connect."""
+        # Requiring connect alongside produce_rows screens out intermediate bases that
+        # supply a shared produce_rows but leave connect abstract.
+        return ("produce_rows", "connect")
 
     @classmethod
     def connect(cls, credentials: Any) -> Any:
@@ -40,32 +69,22 @@ class ReadDB(BaseInputData):
 
     @classmethod
     def is_valid_credentials(cls, credentials: dict[str, Any]) -> bool:
-        """Checks if the given dictionary is a valid credentials object."""
+        """Checks if the given dictionary is a valid credentials object.
+
+        Matcher exception contract: match_read_db_data_access treats only NotImplementedError
+        as a soft no-match; any other exception propagates and aborts matching for every
+        reader sharing the DataAccessCollection.
+        """
         raise NotImplementedError
 
     @classmethod
     def check_feature_in_data_access(cls, feature_name: str, data_access: Any) -> bool:
-        """Obligatory function to check if the feature is in the data access."""
+        """Obligatory function to check if the feature is in the data access.
+
+        Same matcher exception contract as is_valid_credentials: only NotImplementedError
+        is a soft no-match, any other exception propagates.
+        """
         raise NotImplementedError
-
-    def init_reader(self, options: Optional[Options]) -> tuple["ReadDB", Any]:
-        if options is None:
-            raise ValueError(
-                f"Options were not set for {self.__class__.__name__}. "
-                f"Provide an Options object containing a 'BaseInputData' key "
-                f"with a (reader_class, data_access) tuple."
-            )
-
-        reader_data_access = options["BaseInputData"]
-
-        if reader_data_access is None:
-            raise ValueError(
-                f"'BaseInputData' key is missing or None in the provided Options for {self.__class__.__name__}. "
-                f"Set options with Options(group={{'BaseInputData': (ReaderClass, {{...}})}})."
-            )
-
-        reader, data_access = reader_data_access
-        return reader(), data_access
 
     @classmethod
     def match_subclass_data_access(cls, data_access: Any, feature_names: list[str], options: Options) -> Any:

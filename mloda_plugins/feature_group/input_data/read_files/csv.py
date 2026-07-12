@@ -1,10 +1,7 @@
+import csv
 from typing import Any
 
-try:
-    from pyarrow import csv as pyarrow_csv
-except ImportError:
-    pyarrow_csv = None
-
+from mloda.core.abstract_plugins.components.input_data.file_source import FileSource
 from mloda.provider import FeatureSet
 from mloda_plugins.feature_group.input_data.read_file import ReadFile
 
@@ -13,9 +10,10 @@ class CsvReader(ReadFile):
     """
     Base class for CSV file reading feature groups.
 
-    This feature group enables reading data from CSV (Comma-Separated Values) files,
-    providing efficient data loading using PyArrow for optimal performance. It
-    automatically detects column names and supports various CSV formats.
+    This feature group enables reading data from CSV (Comma-Separated Values) files.
+    ``load_data`` resolves a CSV into a lightweight ``FileSource`` descriptor, so the
+    actual materialization is deferred to the target compute framework's transformer.
+    It automatically detects column names and supports various CSV formats.
 
     ## Supported Operations
 
@@ -138,15 +136,12 @@ class CsvReader(ReadFile):
     - File must be readable and properly formatted
     - Feature names must match column names in the CSV header
     - All features must use the same CSV file
-    - PyArrow library must be installed
 
     ## Additional Notes
 
-    - Uses PyArrow's CSV reader for efficient parsing and memory usage
-    - Automatically detects column types and schema
+    - Header discovery uses the stdlib ``csv`` module (no third-party dependency)
     - Supports both .csv and .CSV file extensions
-    - Only requested columns are loaded into memory for efficiency
-    - The reader automatically skips the header row after reading column names
+    - The materializing transformer selects only the requested columns
     """
 
     @classmethod
@@ -158,13 +153,9 @@ class CsvReader(ReadFile):
 
     @classmethod
     def load_data(cls, data_access: Any, features: FeatureSet) -> Any:
-        if pyarrow_csv is None:
-            raise ImportError("pyarrow is required to read CSV files. Install it with: pip install 'mloda[pyarrow]'")
-        result = pyarrow_csv.read_csv(data_access)
-        return result.select(list(features.get_all_names()))
+        return FileSource(path=data_access, format="csv", columns=tuple(sorted(features.get_all_names())))
 
     @classmethod
     def get_column_names(cls, file_name: str) -> Any:
-        read_options = pyarrow_csv.ReadOptions(skip_rows_after_names=1)
-        table = pyarrow_csv.read_csv(file_name, read_options=read_options)
-        return table.schema.names
+        with open(file_name, newline="", encoding="utf-8-sig") as f:
+            return next(csv.reader(f), [])

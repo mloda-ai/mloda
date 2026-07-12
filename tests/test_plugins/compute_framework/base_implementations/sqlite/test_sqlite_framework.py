@@ -98,7 +98,13 @@ class TestSqliteFrameworkBasics:
             fw.transform(data=42, feature_names=[])
 
     def test_transform_dict_no_connection_raises(self) -> None:
-        """transform() with dict but no connection set raises ValueError."""
+        """transform() with dict but no connection set raises ValueError.
+
+        A plain dict must use SqliteFramework's native ``from_dict`` ingestion, which
+        raises "connection object is not set" when no connection is configured. It must
+        NOT be rerouted through the pa.Table chain (whose sqlite step raises a different,
+        generic connection message).
+        """
         fw = SqliteFramework(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
         with pytest.raises(ValueError, match="not set"):
             fw.transform(data={"col": [1, 2]}, feature_names=[])

@@ -50,7 +50,35 @@ class ReadFileFeature(FeatureGroup):
 - **ReadDocument**: For unstructured document loading (Markdown, YAML, text). Skips file types owned by ReadFile by default.
 - **DataCreator**: For generating synthetic data (see [access-feature-data](access-feature-data.md#data-creator))
 - **ApiInputData**: For runtime data injection (see [access-feature-data](access-feature-data.md#apidata))
-- **DatabaseConnector**: For database connections
+- **ReadDB**: For database-backed loading
+
+### Writing an input-data reader
+
+Each reader family exposes a recommended hook seam. Overriding `load_data` wholesale remains supported in every family.
+
+- **ReadDB**: implement `produce_rows`, `connect`, and `is_valid_credentials`; optionally `prepare_credentials` and `build_query`.
+- **ReadDocument**: implement `produce_document` and `suffix`; optionally `document_file_type`.
+- **ReadFile**: override `load_data` wholesale to return the table. `CsvReader` resolves to a `FileSource` descriptor that the target compute framework materializes into its native type.
+
+CSV materialization semantics can differ per compute framework: the PythonDict transformer keeps integers beyond int64 exact (pyarrow yields float64) and leaves `NA`/`NaN`/`null` tokens as strings in otherwise-numeric columns (pyarrow parses them as nulls). Parity is tracked in [#662](https://github.com/mloda-ai/mloda/issues/662).
+
+Readers are classified structurally; no reader code is executed for classification. `is_final_reader()` is True when a class overrides `load_data` wholesale, or when it overrides all hooks named by its family's `_final_reader_requires()` (for example `("produce_rows", "connect")` for ReadDB). Family bases (ReadDB, ReadDocument, ReadFile) are never discovered as final readers themselves.
+
+**Warning**: classification is structural (declared is overridden), so an intermediate base that re-declares a hook or `load_data` with a bare `raise NotImplementedError` body is classified as a final reader and enters discovery. Intermediate bases must not re-declare bare hooks; re-anchor the family by declaring `_final_reader_requires` instead.
+
+`_final_reader_requires` is underscore-named but is a stable, documented extension point for third-party reader families.
+
+### Selecting among sibling readers
+
+A feature selects a specific reader with an Option whose key equals the reader's class name (`BaseInputData.data_access_name()`, i.e. `cls.__name__`, unique per class, so sibling readers cannot collide):
+
+``` python
+Feature("value", options={UbaAirReader.__name__: url})
+```
+
+The matched `(ReaderClass, data_access)` pair is stored under the reserved `"BaseInputData"` options key and consumed by `init_reader` at load time.
+
+For non-file sources such as HTTP endpoints, subclassing `ReadFile` and overriding `match_subclass_data_access` plus `load_data` is a supported pattern; on that path `suffix()` is never consulted (it is inert). `ApiInputData` injects in-memory data passed through the API request and is not an HTTP client.
 
 ## MatchData Pattern
 

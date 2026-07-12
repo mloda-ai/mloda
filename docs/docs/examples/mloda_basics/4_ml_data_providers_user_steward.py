@@ -157,7 +157,7 @@ def _(mo):
     ```python
     class CsvReader(ReadFile):
         @classmethod
-        def suffix(cls) -> Tuple[str, ...]:
+        def suffix(cls) -> tuple[str, ...]:
             return (
                 ".csv",
                 ".CSV",
@@ -165,15 +165,15 @@ def _(mo):
 
         @classmethod
         def load_data(cls, data_access: Any, features: FeatureSet) -> Any:
-            result = pyarrow_csv.read_csv(data_access)
-            return result.select(list(features.get_all_names()))
+            return FileSource(path=data_access, format="csv", columns=tuple(sorted(features.get_all_names())))
 
         @classmethod
         def get_column_names(cls, file_name: str) -> Any:
-            read_options = pyarrow_csv.ReadOptions(skip_rows_after_names=1)
-            table = pyarrow_csv.read_csv(file_name, read_options=read_options)
-            return table.schema.names
+            with open(file_name, newline="", encoding="utf-8-sig") as f:
+                return next(csv.reader(f), [])
     ```
+
+    `load_data` returns a lightweight `FileSource` descriptor; the target compute framework materializes it into its native table type. Overriding `load_data` to return a concrete table directly is equally supported.
 
     As you can see, the implementation is flexible in the sense that if you need something, you can adjust it quite easily. The other files like .json, .parquet and the sqlite access are implemented in a similar fashion.
     """)
@@ -183,6 +183,7 @@ def _(mo):
 @app.cell
 def _():
     # In the following, we will just adjust a bit the CsvReader to handle a different delimiter.
+    # CsvReader2 overrides load_data wholesale, returning a concrete table instead of a FileSource.
 
     from typing import Any, Optional
 

@@ -3,8 +3,6 @@ from typing import Any
 
 from mloda_plugins.feature_group.input_data.read_document import ReadDocument
 
-from mloda.provider import FeatureSet
-
 
 class JsonDocumentReader(ReadDocument):
     """Load entire JSON file as a single document value for RAG pipelines."""
@@ -14,13 +12,7 @@ class JsonDocumentReader(ReadDocument):
         return (".json", ".JSON")
 
     @classmethod
-    def load_data(cls, data_access: Any, features: FeatureSet) -> Any:
-        file_path = features.get_options_key(cls.__name__)
-
+    def produce_document(cls, file_path: str) -> Any:
         with open(file_path, "r", encoding="utf-8") as f:
             content = json.load(f)
-
-        json_string = json.dumps(content)
-        file_type = cls.suffix()[0].lstrip(".")
-
-        return [{cls.get_class_name(): json_string, "source": file_path, "file_type": file_type}]
+        return json.dumps(content)

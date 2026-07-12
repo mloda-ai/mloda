@@ -7,6 +7,9 @@ from mloda.core.abstract_plugins.components.options import Options
 class ApiInputData(BaseInputData):
     """
     This class represents api input data, which was passed through the api.
+
+    It injects in-memory data passed through the API and is NOT an HTTP client;
+    HTTP sources are typically ReadFile subclasses overriding match_subclass_data_access.
     """
 
     def matches(

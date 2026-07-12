@@ -14,6 +14,7 @@ from mloda.core.abstract_plugins.function_extender import (
     _invoke_extender,
 )
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
+from mloda.core.abstract_plugins.components.input_data.input_data_descriptor import InputDataDescriptor
 from mloda.core.abstract_plugins.components.parallelization_modes import ParallelizationMode
 from mloda.core.filter.filter_engine import BaseFilterEngine
 from mloda.core.abstract_plugins.components.mask.base_mask_engine import BaseMaskEngine
@@ -145,11 +146,36 @@ class ComputeFramework(ABC):
         """
         _from_fw = type(data)
         _to_fw = self.expected_data_framework()
-        transformer_cls = self.transformer.transformer_map.get((_from_fw, _to_fw), None)
-        if transformer_cls is not None:
-            return transformer_cls.transform(_from_fw, _to_fw, data, self.framework_connection_object)
+
+        # Same native type: nothing to transform. Guard here so the chain search does not
+        # discover a spurious self-loop (e.g. dict -> pa.Table -> dict) through PyArrow.
+        if _from_fw == _to_fw:
+            return None
+
+        # A direct transformer always applies (e.g. FileSource -> pa.Table, FileSource -> dict).
+        direct = self.transformer.transformer_map.get((_from_fw, _to_fw))
+        if direct is not None:
+            return direct.transform(_from_fw, _to_fw, data, self.framework_connection_object)
+
+        # A multi-hop chain (through pa.Table) is only valid for a descriptor input that has no
+        # native framework form. A plain dict is not a descriptor, so it returns None and the
+        # framework's native transform() branch handles it.
+        if isinstance(data, InputDataDescriptor):
+            return self._materialize_descriptor(data, _from_fw, _to_fw)
 
         return None
+
+    def _materialize_descriptor(self, data: Any, _from_fw: type[Any], _to_fw: Any) -> Any:
+        chain = self.transformer.get_transformation_chain(_from_fw, _to_fw)
+        if chain is None:
+            # _to_fw may be a non-class (expected_data_framework defaults to None); render it safely.
+            target_name = getattr(_to_fw, "__name__", None) or str(_to_fw)
+            raise ValueError(
+                f"Cannot materialize {_from_fw.__name__} into {type(self).__name__}: no transformer is "
+                f"registered from {_from_fw.__name__} to {target_name}. Register a compute-framework "
+                f"transformer for this pair to enable it."
+            )
+        return self.transformer.apply_chain(_from_fw, _to_fw, chain, data, self.framework_connection_object)
 
     def select_data_by_column_names(
         self, data: Any, selected_feature_names: Sequence[FeatureName], column_ordering: Optional[str] = None

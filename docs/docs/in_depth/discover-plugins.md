@@ -105,8 +105,7 @@ The discovery functions above walk every live plugin subclass and introspect it.
 Plugins can be broken, exotic, or built at runtime (via `type()`, notebook
 re-execution, or `importlib.reload`), so introspecting one class can fail. The
 guarded catalog reads follow one shared contract so that a broken plugin
-degrades a field instead of sinking the catalog call; not every read is guarded
-yet (see below).
+degrades a field instead of sinking the catalog call.
 
 Every failure a plugin can cause falls into one of three tiers:
 
@@ -146,15 +145,24 @@ and resolution paths intentionally differ:
 ### Shared helper
 
 The annotate tier is a single shared helper,
-`safe_field(read, fallback, catching=(Exception,))` in
+`safe_field(read, fallback, catching=(Exception,), field="")` in
 `mloda.core.abstract_plugins.components.utils`: it calls the `read` thunk and
-returns `fallback` if the read raises one of `catching`. The guarded annotate
-sites route through it (the feature-group version, the four compute-framework
-fields, and extender wraps), so the next catalog function or info field reaches
-for one helper instead of re-deriving a `try/except`. The remaining overridable
-reads in `get_feature_group_docs` (class name, description, compute framework
-definition, supported feature names, prefix) are not yet guarded, so a plugin
-raising there still propagates (a known follow-up gap).
+returns `fallback` if the read raises one of `catching`, so a catalog function or
+info field reaches for one helper instead of re-deriving a `try/except`.
+
+Fallbacks are base-class-derived rather than sentinels, so a degraded entry stays
+usable: a broken `description()` falls back to the class docstring (or `__name__`),
+which keeps it findable via `search=`, and a broken `prefix()` to `"<__name__>_"`.
+The reads that feed a filter (`get_class_name()`, `description()`, `version()`)
+also reject a non-str return, so a wrong type degrades too instead of sinking the
+call at the filter.
+
+Logging is opt-in via `field`: the labelled `get_feature_group_docs` reads warn on
+swallow, where a raise does mean a broken plugin. The unlabelled guards stay silent
+because degrading there is by design (source introspection of `type()`-built
+classes, an availability probe without its optional backend, Iceberg's deliberate
+`NotImplementedError` from `merge_engine()`).
+
 `get_compute_framework_docs` uses the default broad `catching` (any failure
 degrades the field), while the narrower named guards `_safe_version` (in
 `plugin_docs.py`) and `_safe_class_source_hash` (one layer down in

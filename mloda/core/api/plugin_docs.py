@@ -40,9 +40,16 @@ def list_registered(plugin_type: type[Any]) -> list[type[Any]]:
     return PluginRegistry.default().list_registered(plugin_type)
 
 
+def _as_str(value: Any) -> str:
+    """Return `value` unchanged, raising TypeError if a plugin returned a non-str, so the guarded read degrades."""
+    if not isinstance(value, str):
+        raise TypeError(f"expected str, got {type(value).__name__}")
+    return value
+
+
 def _safe_version(fg_class: type[FeatureGroup]) -> str:
-    """Return the feature group version or "unavailable" if source introspection fails."""
-    return safe_field(lambda: fg_class.version(), "unavailable", catching=SOURCE_INTROSPECTION_ERRORS)
+    """Return the feature group version or "unavailable" if source introspection fails or version() is not a str."""
+    return safe_field(lambda: _as_str(fg_class.version()), "unavailable", catching=SOURCE_INTROSPECTION_ERRORS)
 
 
 def _dedup_degrading_on_conflict(
@@ -91,9 +98,11 @@ def get_feature_group_docs(
     before calling this function (e.g., via PluginLoader.all()).
 
     Returns gracefully on redefinition conflicts: instead of raising, each
-    conflicting class is documented as its most recently defined (live)
-    version. Reports "unavailable" as version for classes whose source
-    cannot be introspected.
+    conflicting class is documented as its most recently defined (live) version.
+
+    Degrades per field instead of failing the call: a read that raises, or that
+    returns a non-str where the field feeds a filter, falls back to a
+    base-class-derived value ("unavailable" for version).
 
     Args:
         name: Filter by feature group name (case-insensitive partial match).
@@ -120,13 +129,21 @@ def get_feature_group_docs(
         if fg_class.__module__ == "__main__":
             continue
 
-        fg_name = fg_class.get_class_name()
-        description = fg_class.description()
+        cls_name = fg_class.__name__
+        fg_name = safe_field(lambda: _as_str(fg_class.get_class_name()), cls_name, field=f"{cls_name}.get_class_name")
+        doc_fallback = (fg_class.__doc__ or "").strip() or cls_name
+        description = safe_field(lambda: _as_str(fg_class.description()), doc_fallback, field=f"{cls_name}.description")
         version = _safe_version(fg_class)
         module = fg_class.__module__
-        compute_frameworks = [cfw.__name__ for cfw in fg_class.compute_framework_definition()]
-        supported_feature_names = fg_class.feature_names_supported()
-        prefix = fg_class.prefix()
+        compute_frameworks: list[str] = safe_field(
+            lambda: [cfw.__name__ for cfw in fg_class.compute_framework_definition()],
+            [],
+            field=f"{cls_name}.compute_framework_definition",
+        )
+        supported_feature_names: set[str] = safe_field(
+            lambda: fg_class.feature_names_supported(), set(), field=f"{cls_name}.feature_names_supported"
+        )
+        prefix = safe_field(lambda: fg_class.prefix(), f"{cls_name}_", field=f"{cls_name}.prefix")
 
         if name is not None and name.lower() not in fg_name.lower():
             continue

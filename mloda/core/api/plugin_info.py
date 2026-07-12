@@ -18,8 +18,10 @@ class FeatureGroupInfo:
     subtype_key: Optional[str] = None
     # Every subtype the family declares, sorted.
     subtypes: list[str] = field(default_factory=list)
-    # Compute framework class name -> supported subtypes, sorted.
+    # Compute framework class name -> supported subtypes, sorted. Declared frameworks, not installed ones.
     subtype_support: dict[str, list[str]] = field(default_factory=dict)
+    # Why subtype_support is empty: a misdeclared capability, instead of a silently empty matrix.
+    subtype_error: Optional[str] = None
 
 
 @dataclass

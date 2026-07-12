@@ -77,22 +77,40 @@ class StatFeatureGroup(FeatureChainParserMixin, FeatureGroup):
 
     @classmethod
     def supported_subtypes(cls, compute_framework):
-        if compute_framework is SQLiteFramework:
+        if compute_framework is SqliteFramework:
             return frozenset({"sum"})  # median is unsupported on SQLite
         return cls.subtype_universe()
 ```
 
 `subtype_universe()` derives from the key's declared values, and
 `supports_compute_framework` is then derived from both: no override needed. A
-subtype outside the universe (a parametric one such as `ntile_2`) stays allowed,
-so the hook never double-gates what matching already rejects. Families that
-flatten several axes into one subtype override `subtype_universe()` themselves.
+subtype outside the declared universe (unknown, or parametric such as `ntile_2`)
+stays open on every framework, because matching does not reject it either. The
+gate therefore only narrows what the family itself declared.
+
+Exactly two declaration shapes are legal, both enforced at class-definition time:
+
+- **Shape A (single key)**: `SUBTYPE_KEY` names a `PROPERTY_MAPPING` key with an
+  enumerable value space (`allowed_values`). `subtype_universe()` may still be
+  overridden to narrow or compute it; resolution keeps using the key. A key that is
+  not declared, or one validated only by a `validation_function` (no enumerable
+  values), is a `ValueError`.
+- **Shape B (flattened)**: `SUBTYPE_KEY` stays `None` and the class overrides BOTH
+  `subtype_universe()` and `resolve_subtype()`, for families whose subtype combines
+  several keys (e.g. `frame_type` x `frame_unit` into `rows_1`). Overriding only
+  `subtype_universe()` is a `ValueError`: the flattened subtype would be unenforceable.
 
 The declaration is enumerable without probing: `subtype_support_matrix()` returns
 framework class name -> supported subtypes (and raises if a framework claims a
-subtype outside the universe), and `get_feature_group_docs()` exposes the same
-data as `subtype_key`, `subtypes` and `subtype_support`. `resolve_feature(name)`
-reports the concrete feature's `subtype`.
+subtype outside the universe), and `get_feature_group_docs()` exposes the same data
+as `subtype_key`, `subtypes`, `subtype_support` and `subtype_error` (the rejection
+message when a family misdeclares a capability). `resolve_feature(name)` reports the
+concrete feature's `subtype`.
+
+The matrix reports the **declared** frameworks of `compute_framework_definition()`,
+not the installed or importable ones (unlike `ResolvedFeature.supported_compute_frameworks`,
+which is availability-filtered). An abstract base declares the universe and reports an
+empty matrix; its concrete per-framework subclasses carry the support.
 
 ### Empty Results
 

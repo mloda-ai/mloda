@@ -45,6 +45,19 @@ def _safe_version(fg_class: type[FeatureGroup]) -> str:
     return safe_field(lambda: fg_class.version(), "unavailable", catching=SOURCE_INTROSPECTION_ERRORS)
 
 
+def _subtype_support(fg_class: type[FeatureGroup]) -> tuple[dict[str, list[str]], Optional[str]]:
+    """Read the subtype support matrix, degrading a misdeclared capability to (empty matrix, message).
+
+    ``safe_field`` cannot carry the rejection message, and a misdeclared capability must stay
+    distinguishable from a group that legitimately supports nothing.
+    """
+    try:
+        matrix = fg_class.subtype_support_matrix()
+    except Exception as exc:
+        return {}, str(exc)
+    return {cfw_name: sorted(supported) for cfw_name, supported in matrix.items()}, None
+
+
 def _dedup_degrading_on_conflict(
     feature_groups: set[type[FeatureGroup]], allow_redefinition: bool
 ) -> set[type[FeatureGroup]]:
@@ -107,10 +120,8 @@ def get_feature_group_docs(
         supported_feature_names = fg_class.feature_names_supported()
         prefix = fg_class.prefix()
         empty_universe: frozenset[str] = frozenset()
-        empty_matrix: dict[str, frozenset[str]] = {}
         subtypes = sorted(safe_field(lambda: fg_class.subtype_universe(), empty_universe))
-        support_matrix = safe_field(lambda: fg_class.subtype_support_matrix(), empty_matrix)
-        subtype_support = {cfw_name: sorted(supported) for cfw_name, supported in support_matrix.items()}
+        subtype_support, subtype_error = _subtype_support(fg_class)
 
         if name is not None and name.lower() not in fg_name.lower():
             continue
@@ -138,6 +149,7 @@ def get_feature_group_docs(
                 subtype_key=fg_class.SUBTYPE_KEY,
                 subtypes=subtypes,
                 subtype_support=subtype_support,
+                subtype_error=subtype_error,
             )
         )
 

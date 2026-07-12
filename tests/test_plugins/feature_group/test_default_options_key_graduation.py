@@ -26,7 +26,7 @@ class TestDefaultOptionKeysCoreLocation:
             "group",
             "order_by",
             "strict_validation",
-            "validation_function",
+            "element_validator",
             "strict_type_enforcement",
         ]
         for key in expected_keys:

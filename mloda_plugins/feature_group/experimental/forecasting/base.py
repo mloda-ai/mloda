@@ -134,7 +134,7 @@ class ForecastingFeatureGroup(TimeReferenceMixin, FeatureChainParserMixin, Featu
             "explanation": "Forecast horizon (number of time units to predict)",
             DefaultOptionKeys.context: True,
             DefaultOptionKeys.strict_validation: True,
-            DefaultOptionKeys.validation_function: lambda x: (
+            DefaultOptionKeys.element_validator: lambda x: (
                 (isinstance(x, int) or (isinstance(x, str) and x.isdigit())) and int(x) > 0
             ),
         },
@@ -153,7 +153,7 @@ class ForecastingFeatureGroup(TimeReferenceMixin, FeatureChainParserMixin, Featu
             DefaultOptionKeys.context: True,
             DefaultOptionKeys.strict_validation: False,
             DefaultOptionKeys.default: False,  # Default is False (don't output confidence intervals)
-            DefaultOptionKeys.validation_function: lambda value: isinstance(value, bool),
+            DefaultOptionKeys.element_validator: lambda value: isinstance(value, bool),
         },
     }
 

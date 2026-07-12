@@ -30,10 +30,10 @@ class DefaultOptionKeys(str, Enum):
     group = "group"
     order_by = "order_by"
     strict_validation = "strict_validation"
-    validation_function = "validation_function"
+    element_validator = "element_validator"
     strict_type_enforcement = "strict_type_enforcement"
     required_when = "required_when"
-    type_validator = "type_validator"
+    match_guard = "match_guard"
 
     def __str__(self) -> str:
         return self.value
@@ -53,8 +53,17 @@ RESERVED_PROPERTY_KEYS: frozenset[Any] = frozenset(
         DefaultOptionKeys.context,
         DefaultOptionKeys.group,
         DefaultOptionKeys.strict_validation,
-        DefaultOptionKeys.validation_function,
+        DefaultOptionKeys.element_validator,
         DefaultOptionKeys.required_when,
-        DefaultOptionKeys.type_validator,
+        DefaultOptionKeys.match_guard,
     }
 )
+
+# Removed PROPERTY_MAPPING keys mapped to their replacement (issue #600). These names are no
+# longer reserved metadata, so a leftover stale key would be absorbed into a legacy flattened
+# spec's accepted VALUE set. ``FeatureChainParser.validate_property_mapping_defaults`` rejects
+# them at class-definition time instead.
+REMOVED_PROPERTY_KEYS: dict[str, DefaultOptionKeys] = {
+    "validation_function": DefaultOptionKeys.element_validator,
+    "type_validator": DefaultOptionKeys.match_guard,
+}

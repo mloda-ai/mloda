@@ -69,9 +69,9 @@ class TestReservedPropertyKeys:
             DefaultOptionKeys.context,
             DefaultOptionKeys.group,
             DefaultOptionKeys.strict_validation,
-            DefaultOptionKeys.validation_function,
+            DefaultOptionKeys.element_validator,
             DefaultOptionKeys.required_when,
-            DefaultOptionKeys.type_validator,
+            DefaultOptionKeys.match_guard,
             DefaultOptionKeys.allowed_values,
         ):
             assert member in RESERVED_PROPERTY_KEYS

@@ -644,7 +644,7 @@ class StrictWindowFeatureGroup(FeatureChainParserMixin, FeatureGroup):
     """Config-based feature group with a strict, validated 'window_size' property.
 
     Deliberately does NOT override match_feature_group_criteria, so it exercises the
-    mixin's default swallow-to-False path: a validation_function rejection inside
+    mixin's default swallow-to-False path: an element_validator rejection inside
     FeatureChainParser._validate_property_value raises ValueError, which
     match_feature_group_criteria catches and turns into a plain False, discarding the
     actionable message. _strict_validation_rejection_reason recovers that message.
@@ -654,7 +654,7 @@ class StrictWindowFeatureGroup(FeatureChainParserMixin, FeatureGroup):
         "window_size": {
             "explanation": "Size of window",
             DefaultOptionKeys.strict_validation: True,
-            DefaultOptionKeys.validation_function: lambda v: isinstance(v, int) and 0 < v <= 13,
+            DefaultOptionKeys.element_validator: lambda v: isinstance(v, int) and 0 < v <= 13,
         },
         DefaultOptionKeys.in_features: {"explanation": "source", DefaultOptionKeys.context: True},
     }
@@ -673,7 +673,7 @@ class StrictMaxWindowFeatureGroup(FeatureChainParserMixin, FeatureGroup):
         "max_window": {
             "explanation": "Maximum window size",
             DefaultOptionKeys.strict_validation: True,
-            DefaultOptionKeys.validation_function: lambda v: isinstance(v, int) and 0 < v <= 13,
+            DefaultOptionKeys.element_validator: lambda v: isinstance(v, int) and 0 < v <= 13,
         },
         DefaultOptionKeys.in_features: {"explanation": "source", DefaultOptionKeys.context: True},
     }

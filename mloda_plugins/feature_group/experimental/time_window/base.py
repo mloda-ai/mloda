@@ -104,7 +104,7 @@ class TimeWindowFeatureGroup(TimeReferenceMixin, FeatureChainParserMixin, Featur
             "explanation": "Size of the time window (must be positive integer)",
             DefaultOptionKeys.context: True,  # Mark as context parameter
             DefaultOptionKeys.strict_validation: True,  # Enable strict validation
-            DefaultOptionKeys.validation_function: lambda x: (
+            DefaultOptionKeys.element_validator: lambda x: (
                 (isinstance(x, int) and x > 0) or (isinstance(x, str) and x.isdigit() and int(x) > 0)
             ),
         },

@@ -41,13 +41,13 @@ class SubGroupB(BaseMode):
     }
 
 
-class SubGroupWithValidationFunction(BaseMode):
-    """Subclass with a custom validation function."""
+class SubGroupWithElementValidator(BaseMode):
+    """Subclass with a custom element validator."""
 
     PROPERTY_MAPPING = {
         "mode": {
             DefaultOptionKeys.strict_validation: True,
-            DefaultOptionKeys.validation_function: lambda v: v.startswith("valid_"),
+            DefaultOptionKeys.element_validator: lambda v: v.startswith("valid_"),
         }
     }
 
@@ -79,12 +79,12 @@ class TestStrictValidationReturnsFalse:
 
         assert result is True
 
-    def test_validation_function_failure_returns_false(self) -> None:
-        """Custom validation_function rejection should return False, not raise ValueError."""
+    def test_element_validator_failure_returns_false(self) -> None:
+        """Custom element_validator rejection should return False, not raise ValueError."""
         feature_name = FeatureName("any_feature")
         options = Options(group={"mode": "invalid_prefix"})
 
-        result = SubGroupWithValidationFunction.match_feature_group_criteria(feature_name, options)
+        result = SubGroupWithElementValidator.match_feature_group_criteria(feature_name, options)
 
         assert result is False
 
@@ -114,12 +114,12 @@ class TestStrictValidationRejectionReason:
 
         assert reason is None
 
-    def test_validation_function_rejection_returns_message(self) -> None:
-        """SubGroupWithValidationFunction with an invalid mode returns the validation_function message."""
+    def test_element_validator_rejection_returns_message(self) -> None:
+        """SubGroupWithElementValidator with an invalid mode returns the element_validator message."""
         feature_name = FeatureName("any_feature")
         options = Options(group={"mode": "invalid_prefix"})
 
-        reason = SubGroupWithValidationFunction._strict_validation_rejection_reason(feature_name, options)
+        reason = SubGroupWithElementValidator._strict_validation_rejection_reason(feature_name, options)
 
         assert reason is not None
         assert "invalid_prefix" in reason

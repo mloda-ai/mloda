@@ -130,7 +130,7 @@ class DimensionalityReductionFeatureGroup(FeatureChainParserMixin, FeatureGroup)
             "explanation": "Target dimension for the reduction (positive integer)",
             DefaultOptionKeys.context: True,
             DefaultOptionKeys.strict_validation: True,
-            DefaultOptionKeys.validation_function: lambda value: (
+            DefaultOptionKeys.element_validator: lambda value: (
                 isinstance(value, (int, str)) and str(value).isdigit() and int(value) > 0
             ),
         },
@@ -145,7 +145,7 @@ class DimensionalityReductionFeatureGroup(FeatureChainParserMixin, FeatureGroup)
             DefaultOptionKeys.context: True,
             DefaultOptionKeys.strict_validation: False,
             DefaultOptionKeys.default: 250,
-            DefaultOptionKeys.validation_function: lambda value: (
+            DefaultOptionKeys.element_validator: lambda value: (
                 isinstance(value, (int, str)) and str(value).isdigit() and int(value) > 0
             ),
         },
@@ -154,7 +154,7 @@ class DimensionalityReductionFeatureGroup(FeatureChainParserMixin, FeatureGroup)
             DefaultOptionKeys.context: True,
             DefaultOptionKeys.strict_validation: False,
             DefaultOptionKeys.default: 50,
-            DefaultOptionKeys.validation_function: lambda value: (
+            DefaultOptionKeys.element_validator: lambda value: (
                 isinstance(value, (int, str)) and str(value).isdigit() and int(value) > 0
             ),
         },
@@ -183,7 +183,7 @@ class DimensionalityReductionFeatureGroup(FeatureChainParserMixin, FeatureGroup)
             DefaultOptionKeys.context: True,
             DefaultOptionKeys.strict_validation: False,
             DefaultOptionKeys.default: 200,
-            DefaultOptionKeys.validation_function: lambda value: (
+            DefaultOptionKeys.element_validator: lambda value: (
                 isinstance(value, (int, str)) and str(value).isdigit() and int(value) > 0
             ),
         },
@@ -193,7 +193,7 @@ class DimensionalityReductionFeatureGroup(FeatureChainParserMixin, FeatureGroup)
             DefaultOptionKeys.context: True,
             DefaultOptionKeys.strict_validation: False,
             DefaultOptionKeys.default: 5,
-            DefaultOptionKeys.validation_function: lambda value: (
+            DefaultOptionKeys.element_validator: lambda value: (
                 isinstance(value, (int, str)) and str(value).isdigit() and int(value) > 0
             ),
         },

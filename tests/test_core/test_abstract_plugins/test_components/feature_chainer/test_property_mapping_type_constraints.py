@@ -56,13 +56,13 @@ class MockWithTypeConstraint(FeatureChainParserMixin):
             "explanation": "List of columns to partition by",
             DefaultOptionKeys.context: True,
             DefaultOptionKeys.strict_validation: False,
-            DefaultOptionKeys.type_validator: _is_list_of_strings,
+            DefaultOptionKeys.match_guard: _is_list_of_strings,
         },
     }
 
 
-class MockStrictWithTypeValidator(FeatureChainParserMixin):
-    """Feature group combining strict_validation=True with type_validator on the same entry."""
+class MockStrictWithMatchGuard(FeatureChainParserMixin):
+    """Feature group combining strict_validation=True with match_guard on the same entry."""
 
     PREFIX_PATTERN = r".*__([\w]+)_strict$"
 
@@ -72,17 +72,17 @@ class MockStrictWithTypeValidator(FeatureChainParserMixin):
             "slow": "Slow mode",
             DefaultOptionKeys.context: True,
             DefaultOptionKeys.strict_validation: True,
-            DefaultOptionKeys.type_validator: lambda v: isinstance(v, str),
+            DefaultOptionKeys.match_guard: lambda v: isinstance(v, str),
         },
     }
 
 
-class MockStrictWithOrthogonalTypeValidator(FeatureChainParserMixin):
-    """Feature group where type_validator rejects values that pass strict membership.
+class MockStrictWithOrthogonalMatchGuard(FeatureChainParserMixin):
+    """Feature group where match_guard rejects values that pass strict membership.
 
-    The mapping allows "fast" and "slow", but the type_validator requires
+    The mapping allows "fast" and "slow", but the match_guard requires
     strings of at most 3 characters. "fast" (4 chars) and "slow" (4 chars) both
-    pass strict membership but fail the type_validator length check.
+    pass strict membership but fail the match_guard length check.
     """
 
     PREFIX_PATTERN = r".*__([\w]+)_ortho$"
@@ -94,13 +94,13 @@ class MockStrictWithOrthogonalTypeValidator(FeatureChainParserMixin):
             "ok": "OK mode",
             DefaultOptionKeys.context: True,
             DefaultOptionKeys.strict_validation: True,
-            DefaultOptionKeys.type_validator: _max_length_3,
+            DefaultOptionKeys.match_guard: _max_length_3,
         },
     }
 
 
 class MockWithRaisingValidator(FeatureChainParserMixin):
-    """Feature group whose type_validator raises on invalid input."""
+    """Feature group whose match_guard raises on invalid input."""
 
     PREFIX_PATTERN = r".*__([\w]+)_raise$"
 
@@ -109,7 +109,7 @@ class MockWithRaisingValidator(FeatureChainParserMixin):
             "explanation": "A list of items",
             DefaultOptionKeys.context: True,
             DefaultOptionKeys.strict_validation: False,
-            DefaultOptionKeys.type_validator: _raising_validator,
+            DefaultOptionKeys.match_guard: _raising_validator,
         },
     }
 
@@ -128,17 +128,17 @@ class MockWithoutTypeConstraint(FeatureChainParserMixin):
     }
 
 
-class TestTypeConstraintValidation:
-    """Tests for type_validator in PROPERTY_MAPPING."""
+class TestMatchGuardValidation:
+    """Tests for match_guard in PROPERTY_MAPPING."""
 
     def test_rejects_invalid_type(self) -> None:
-        """match_feature_group_criteria returns False when type_validator fails."""
+        """match_feature_group_criteria returns False when match_guard fails."""
         options = Options(context={"operation": "sum", "partition_by": "not_a_list"})
         result = MockWithTypeConstraint.match_feature_group_criteria("my_feature", options)
         assert result is False
 
     def test_accepts_valid_type(self) -> None:
-        """match_feature_group_criteria returns True when type_validator passes."""
+        """match_feature_group_criteria returns True when match_guard passes."""
         options = Options(context={"operation": "sum", "partition_by": ["region", "category"]})
         result = MockWithTypeConstraint.match_feature_group_criteria("my_feature", options)
         assert result is True
@@ -156,7 +156,7 @@ class TestTypeConstraintValidation:
         assert result is True
 
     def test_no_type_constraint_unaffected(self) -> None:
-        """Entries without type_validator are unaffected."""
+        """Entries without match_guard are unaffected."""
         options = Options(context={"operation": "sum"})
         result = MockWithoutTypeConstraint.match_feature_group_criteria("my_feature", options)
         assert result is True
@@ -174,47 +174,47 @@ class TestTypeConstraintValidation:
         assert result is True
 
     def test_string_match_rejects_invalid_type(self) -> None:
-        """String-based match also rejects when type_validator fails."""
+        """String-based match also rejects when match_guard fails."""
         options = Options(context={"operation": "sum", "partition_by": "not_a_list"})
         result = MockWithTypeConstraint.match_feature_group_criteria("source__sum_typed", options)
         assert result is False
 
-    def test_strict_validation_with_type_validator_accepts_valid(self) -> None:
-        """Both strict membership and type_validator pass for a valid mapping value."""
+    def test_strict_validation_with_match_guard_accepts_valid(self) -> None:
+        """Both strict membership and match_guard pass for a valid mapping value."""
         options = Options(context={"mode": "fast"})
-        result = MockStrictWithTypeValidator.match_feature_group_criteria("my_feature", options)
+        result = MockStrictWithMatchGuard.match_feature_group_criteria("my_feature", options)
         assert result is True
 
-    def test_strict_validation_with_type_validator_rejects_non_string(self) -> None:
-        """strict_validation rejects a non-string before type_validator runs."""
+    def test_strict_validation_with_match_guard_rejects_non_string(self) -> None:
+        """strict_validation rejects a non-string before match_guard runs."""
         options = Options(context={"mode": 123})
-        result = MockStrictWithTypeValidator.match_feature_group_criteria("my_feature", options)
+        result = MockStrictWithMatchGuard.match_feature_group_criteria("my_feature", options)
         assert result is False
 
-    def test_strict_validation_with_type_validator_rejects_unknown_value(self) -> None:
-        """strict_validation rejects a value not in the mapping, even if type_validator passes."""
+    def test_strict_validation_with_match_guard_rejects_unknown_value(self) -> None:
+        """strict_validation rejects a value not in the mapping, even if match_guard passes."""
         options = Options(context={"mode": "turbo"})
-        result = MockStrictWithTypeValidator.match_feature_group_criteria("my_feature", options)
+        result = MockStrictWithMatchGuard.match_feature_group_criteria("my_feature", options)
         assert result is False
 
-    def test_type_validator_rejects_value_that_passes_strict_membership(self) -> None:
-        """type_validator can reject a value that passes strict membership.
+    def test_match_guard_rejects_value_that_passes_strict_membership(self) -> None:
+        """match_guard can reject a value that passes strict membership.
 
         "fast" is in the mapping (passes membership) but has 4 characters
-        (fails the max-length-3 type_validator). This proves type_validator
+        (fails the max-length-3 match_guard). This proves match_guard
         runs independently of strict validation.
         """
         options = Options(context={"mode": "fast"})
-        result = MockStrictWithOrthogonalTypeValidator.match_feature_group_criteria("my_feature", options)
+        result = MockStrictWithOrthogonalMatchGuard.match_feature_group_criteria("my_feature", options)
         assert result is False
 
-    def test_type_validator_accepts_value_that_passes_both(self) -> None:
-        """A value that passes both strict membership and type_validator is accepted.
+    def test_match_guard_accepts_value_that_passes_both(self) -> None:
+        """A value that passes both strict membership and match_guard is accepted.
 
         "ok" is in the mapping (2 chars <= 3), so both checks pass.
         """
         options = Options(context={"mode": "ok"})
-        result = MockStrictWithOrthogonalTypeValidator.match_feature_group_criteria("my_feature", options)
+        result = MockStrictWithOrthogonalMatchGuard.match_feature_group_criteria("my_feature", options)
         assert result is True
 
     def test_raising_validator_treated_as_non_match(self) -> None:
@@ -230,7 +230,7 @@ class TestTypeConstraintValidation:
         assert result is True
 
 
-class TypeValidatorTestDataCreator(ATestDataCreator):
+class MatchGuardTestDataCreator(ATestDataCreator):
     compute_framework = PandasDataFrame
 
     @classmethod
@@ -241,8 +241,8 @@ class TypeValidatorTestDataCreator(ATestDataCreator):
         }
 
 
-class TypeValidatedAggregation(FeatureChainParserMixin, FeatureGroup):
-    """Feature group that uses type_validator to enforce partition_by is list[str]."""
+class MatchGuardedAggregation(FeatureChainParserMixin, FeatureGroup):
+    """Feature group that uses match_guard to enforce partition_by is list[str]."""
 
     PREFIX_PATTERN = r".*__([\w]+)_tvaggr$"
     AGGREGATION_TYPE = "aggregation_type"
@@ -260,7 +260,7 @@ class TypeValidatedAggregation(FeatureChainParserMixin, FeatureGroup):
             "explanation": "List of columns to partition by",
             DefaultOptionKeys.context: True,
             DefaultOptionKeys.strict_validation: False,
-            DefaultOptionKeys.type_validator: _is_list_of_strings,
+            DefaultOptionKeys.match_guard: _is_list_of_strings,
         },
     }
 
@@ -284,13 +284,11 @@ class TypeValidatedAggregation(FeatureChainParserMixin, FeatureGroup):
 
 
 class TestTypeConstraintIntegrationRunAll:
-    """End-to-end test: type_validator works through mloda.run_all()."""
+    """End-to-end test: match_guard works through mloda.run_all()."""
 
     def test_valid_type_runs_successfully(self) -> None:
         """Feature with valid partition_by type runs through the full pipeline."""
-        plugin_collector = PluginCollector.enabled_feature_groups(
-            {TypeValidatorTestDataCreator, TypeValidatedAggregation}
-        )
+        plugin_collector = PluginCollector.enabled_feature_groups({MatchGuardTestDataCreator, MatchGuardedAggregation})
 
         feature = Feature(
             "sales_sum",
@@ -314,9 +312,7 @@ class TestTypeConstraintIntegrationRunAll:
 
     def test_invalid_type_raises_value_error(self) -> None:
         """Feature with invalid partition_by type is rejected and raises ValueError."""
-        plugin_collector = PluginCollector.enabled_feature_groups(
-            {TypeValidatorTestDataCreator, TypeValidatedAggregation}
-        )
+        plugin_collector = PluginCollector.enabled_feature_groups({MatchGuardTestDataCreator, MatchGuardedAggregation})
 
         feature = Feature(
             "sales_sum",

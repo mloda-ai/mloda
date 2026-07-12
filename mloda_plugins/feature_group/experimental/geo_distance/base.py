@@ -112,13 +112,9 @@ class GeoDistanceFeatureGroup(FeatureChainParserMixin, FeatureGroup):
             "explanation": "Source features (exactly 2 point features required)",
             DefaultOptionKeys.context: True,
             DefaultOptionKeys.strict_validation: True,
-            DefaultOptionKeys.validation_function: lambda x: (
-                # Accept individual strings (when parser iterates over list elements)
-                isinstance(x, str)
-                or
-                # Accept collections with exactly 2 elements (when validating the whole list)
-                (isinstance(x, (list, tuple, frozenset, set)) and len(x) == 2)
-            ),
+            # Core unpacks the sequence, so this judges ONE point feature name.
+            # The arity (exactly 2) is enforced by MIN_IN_FEATURES / MAX_IN_FEATURES.
+            DefaultOptionKeys.element_validator: lambda point: isinstance(point, str),
         },
     }
 

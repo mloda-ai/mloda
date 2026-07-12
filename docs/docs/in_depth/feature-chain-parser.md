@@ -230,11 +230,11 @@ class AggregatedFeatureGroup(FeatureChainParserMixin, FeatureGroup):
 
 The three-arg form `cls._resolve_operation(feature_name, options, config_key)` is also supported for contexts where the name and options are already separate (e.g., `match_feature_group_criteria`).
 
-#### 5. Type Validation with `type_validator`
+#### 5. Whole-Value Validation with `match_guard`
 
-Add a `DefaultOptionKeys.type_validator` callable to a PROPERTY_MAPPING entry to validate the shape or composite type of the raw option value. The mixin calls the validator after basic matching succeeds. If it returns a falsy value, `match_feature_group_criteria` returns False.
+Add a `DefaultOptionKeys.match_guard` callable to a PROPERTY_MAPPING entry to validate the shape of the raw option value. The mixin calls it after basic matching succeeds, and a falsy return makes `match_feature_group_criteria` return False (a non-match, not an error).
 
-Use `type_validator` when you need to validate the whole value (e.g., must be a list of strings). Use `validation_function` with `strict_validation=True` when you need to validate individual parsed elements (after list unpacking).
+Reach for `match_guard` when the constraint is about the value as a whole (a list of strings, a dict, an ordering). Reach for `element_validator` with `strict_validation=True` when the constraint is about each element on its own.
 
 ``` python
 def _is_list_of_strings(value):
@@ -245,12 +245,14 @@ class GroupAggregation(FeatureChainParserMixin, FeatureGroup):
         "partition_by": {
             DefaultOptionKeys.context: True,
             DefaultOptionKeys.strict_validation: False,
-            DefaultOptionKeys.type_validator: _is_list_of_strings,
+            DefaultOptionKeys.match_guard: _is_list_of_strings,
         },
     }
 ```
 
-The validator is only called when the option is present (not None). Missing options are handled by the base PROPERTY_MAPPING validation. Validators must be pure functions with no side effects, since they may be called multiple times during feature group resolution. Return values use truthy/falsy semantics. If the validator raises a TypeError, ValueError, or AttributeError, the exception is caught and the value is treated as invalid (match returns False).
+The guard is only called when the option is present (not None). Validators must be pure functions, since they may be called several times during resolution. If the guard raises a TypeError, ValueError, or AttributeError, the exception is caught and the value is treated as invalid (match returns False).
+
+The full model, which invariant fires at which moment, the precedence between the two callables, and what a validator receives for each container type, lives in one place: [PROPERTY_MAPPING Configuration](property-mapping.md).
 
 ## Modern Implementation in Feature Groups
 
@@ -351,9 +353,9 @@ def calculate_feature(self, features, options):
 
 ### 5. Advanced PROPERTY_MAPPING Features
 
-#### Validation Functions
+#### Element Validators
 
-For complex validation beyond simple value lists:
+For per-element rules that a fixed value list cannot express:
 
 ``` python
 PROPERTY_MAPPING = {
@@ -361,7 +363,7 @@ PROPERTY_MAPPING = {
         "explanation": "Number of dimensions for reduction",
         DefaultOptionKeys.context: True,
         DefaultOptionKeys.strict_validation: True,
-        DefaultOptionKeys.validation_function: lambda x: isinstance(x, int) and x > 0,
+        DefaultOptionKeys.element_validator: lambda x: isinstance(x, int) and x > 0,
     },
 }
 ```

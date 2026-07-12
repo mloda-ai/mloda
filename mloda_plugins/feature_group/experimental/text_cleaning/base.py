@@ -96,23 +96,8 @@ class TextCleaningFeatureGroup(FeatureChainParserMixin, FeatureGroup):
             **SUPPORTED_OPERATIONS,  # All supported operations as valid options
             DefaultOptionKeys.context: True,  # Mark as context parameter
             DefaultOptionKeys.strict_validation: True,  # Enable strict validation
-            DefaultOptionKeys.validation_function: lambda operations: (
-                # Handle both actual tuples/lists and string representations
-                (
-                    isinstance(operations, (tuple, list))
-                    and all(op in TextCleaningFeatureGroup.SUPPORTED_OPERATIONS for op in operations)
-                )
-                or (
-                    isinstance(operations, str)
-                    and operations.startswith("(")
-                    and operations.endswith(")")
-                    and all(
-                        op.strip("'\" ,") in TextCleaningFeatureGroup.SUPPORTED_OPERATIONS
-                        for op in operations.strip("()").split(",")
-                        if op.strip("'\" ,")
-                    )
-                )
-            ),
+            # The option is a sequence of operations; core unpacks it, so this judges ONE operation.
+            DefaultOptionKeys.element_validator: lambda op: op in TextCleaningFeatureGroup.SUPPORTED_OPERATIONS,
         },
         DefaultOptionKeys.in_features: {
             "explanation": "Source feature to apply text cleaning operations to",

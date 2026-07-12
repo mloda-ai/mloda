@@ -1,13 +1,13 @@
 """
 Mixin class providing default implementations for feature chain parsing.
 
-Validation Design: ``type_validator`` vs ``validation_function``
-================================================================
+Validation Design: ``element_validator`` vs ``match_guard``
+==========================================================
 
 PROPERTY_MAPPING supports two callable-valued keys that validate option values.
 They serve different purposes and run at different points in the pipeline.
 
-``validation_function`` (``DefaultOptionKeys.validation_function``)
+``element_validator`` (``DefaultOptionKeys.element_validator``)
   - Requires ``strict_validation: True`` on the same mapping entry.
   - Runs inside ``FeatureChainParser._validate_property_value`` during
     ``_validate_options_against_property_mapping``.
@@ -19,22 +19,22 @@ They serve different purposes and run at different points in the pipeline.
   - Use case: validating that each individual element satisfies a constraint
     (e.g., ``lambda x: isinstance(x, int) and x > 0``).
 
-``type_validator`` (``DefaultOptionKeys.type_validator``)
+``match_guard`` (``DefaultOptionKeys.match_guard``)
   - Does **not** require ``strict_validation``.
   - Runs inside ``FeatureChainParserMixin.match_feature_group_criteria``
     **after** basic matching succeeds (pattern + property mapping validation).
   - Receives the **raw option value** exactly as stored in Options, before any
     list unpacking or element iteration.
   - On failure: logs a debug message and returns ``False`` (non-match). If the
-    validator raises an exception, the exception is caught, logged, and the
-    value is treated as invalid.
+    guard raises an exception, the exception is caught, logged, and the value is
+    treated as invalid.
   - Use case: validating the shape or composite type of the whole value
     (e.g., ``lambda v: isinstance(v, list) and all(isinstance(i, str) for i in v)``).
 
-When both are present on the same mapping entry, ``validation_function`` runs
+When both are present on the same mapping entry, ``element_validator`` runs
 first (during property mapping validation) on each parsed element, then
-``type_validator`` runs on the raw value. If ``validation_function`` rejects an
-element, the match fails with a ``ValueError`` before ``type_validator`` is
+``match_guard`` runs on the raw value. If ``element_validator`` rejects an
+element, the match fails with a ``ValueError`` before ``match_guard`` is
 reached.
 
 Validators must be pure functions with no side effects. They may be called
@@ -186,12 +186,12 @@ class FeatureChainParserMixin:
         Delegates to FeatureChainParser.match_configuration_feature_chain_parser() and
         optionally calls _validate_string_match() hook for custom validation.
 
-        After basic matching succeeds, enforces ``type_validator`` constraints from
+        After basic matching succeeds, enforces ``match_guard`` constraints from
         PROPERTY_MAPPING entries. For each entry that defines a
-        ``DefaultOptionKeys.type_validator`` callable, the validator is called with
-        the raw option value. Returning a falsy value causes this method to return
-        False. If the validator raises an exception, it is caught and the value is
-        treated as invalid. See the module docstring for the full validation design.
+        ``DefaultOptionKeys.match_guard`` callable, the guard is called with the raw
+        option value. Returning a falsy value causes this method to return False. If
+        the guard raises an exception, it is caught and the value is treated as
+        invalid. See the module docstring for the full validation design.
 
         Also enforces MIN_IN_FEATURES / MAX_IN_FEATURES constraints when
         in_features is present in options.
@@ -239,7 +239,7 @@ class FeatureChainParserMixin:
         if not cls._validate_required_when(result, feature_name, prefix_patterns, property_mapping, options):
             return False
 
-        if not cls._validate_type_validators(result, options, property_mapping):
+        if not cls._validate_match_guards(result, options, property_mapping):
             return False
 
         if not cls._validate_in_features(result, options):
@@ -361,24 +361,24 @@ class FeatureChainParserMixin:
         return True
 
     @classmethod
-    def _validate_type_validators(cls, result: bool, options: Options, property_mapping: dict[str, Any] | None) -> bool:
-        # Enforce type_validator constraints from PROPERTY_MAPPING
+    def _validate_match_guards(cls, result: bool, options: Options, property_mapping: dict[str, Any] | None) -> bool:
+        # Enforce match_guard constraints from PROPERTY_MAPPING
         if result and property_mapping is not None:
             for key, mapping_entry in property_mapping.items():
                 if not isinstance(mapping_entry, dict):
                     continue
-                validator = mapping_entry.get(DefaultOptionKeys.type_validator)
-                if validator is None:
+                guard = mapping_entry.get(DefaultOptionKeys.match_guard)
+                if guard is None:
                     continue
                 value = options.get(key)
                 if value is None:
                     continue
                 try:
-                    if not validator(value):
-                        logger.debug("type_validator for '%s' rejected value %r", key, value)
+                    if not guard(value):
+                        logger.debug("match_guard for '%s' rejected value %r", key, value)
                         return False
                 except (TypeError, ValueError, AttributeError) as exc:
-                    logger.debug("type_validator for '%s' raised %s for value %r", key, exc, value)
+                    logger.debug("match_guard for '%s' raised %s for value %r", key, exc, value)
                     return False
         return True
 
@@ -388,8 +388,11 @@ class FeatureChainParserMixin:
         if result and hasattr(cls, "MIN_IN_FEATURES") and hasattr(cls, "MAX_IN_FEATURES"):
             in_features_raw = options.get(DefaultOptionKeys.in_features)
             if in_features_raw is not None:
-                in_features = options.get_in_features()
-                count = len(in_features)
+                if isinstance(in_features_raw, (list, tuple, set, frozenset)) and not in_features_raw:
+                    # Present but empty: zero in_features, a non-match rather than an error.
+                    count = 0
+                else:
+                    count = len(options.get_in_features())
                 if count < cls.MIN_IN_FEATURES:
                     return False
                 if cls.MAX_IN_FEATURES is not None and count > cls.MAX_IN_FEATURES:

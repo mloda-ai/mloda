@@ -20,6 +20,7 @@ class FeatureConfig:
     context_options: Optional[dict[str, Any]] = None
     propagate_context_keys: Optional[list[str]] = None
     column_index: Optional[int] = None
+    feature_group: Optional[str] = None
 
     def __post_init__(self) -> None:
         """Validate that options and group_options/context_options are mutually exclusive."""
@@ -29,6 +30,11 @@ class FeatureConfig:
             raise ValueError(
                 "'propagate_context_keys' requires 'context_options'; "
                 "it is meaningless without context options and would otherwise be silently dropped"
+            )
+        # Config is string-only: JSON cannot carry a class object, so the class-object scope stays Python-only.
+        if self.feature_group is not None and not isinstance(self.feature_group, str):
+            raise ValueError(
+                f"'feature_group' must be a class-name string or None, got {type(self.feature_group).__name__}"
             )
 
 
@@ -48,6 +54,7 @@ def feature_config_schema() -> dict[str, Any]:
             "context_options": {"type": "object"},
             "propagate_context_keys": {"type": "array", "items": {"type": "string"}},
             "column_index": {"type": "integer"},
+            "feature_group": {"type": "string"},
         },
         "required": ["name"],
         "additionalProperties": False,

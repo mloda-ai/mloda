@@ -51,8 +51,12 @@ def process_nested_features(options: dict[str, Any]) -> dict[str, Any]:
                 else:
                     processed_nested_options["in_features"] = in_features
 
-            # Create the Feature object
-            processed[key] = Feature(name=feature_name, options=processed_nested_options)
+            # Create the Feature object; the nested dict carries its own resolution scope.
+            processed[key] = Feature(
+                name=feature_name,
+                options=processed_nested_options,
+                feature_group=value.get("feature_group"),
+            )
         elif isinstance(value, dict):
             # Recursively process nested dicts
             processed[key] = process_nested_features(value)
@@ -103,7 +107,7 @@ def load_features_from_config(config_str: str, format: str = "json") -> list[Fea
                     if item.propagate_context_keys
                     else None,
                 )
-                feature = Feature(name=feature_name, options=options)
+                feature = Feature(name=feature_name, options=options, feature_group=item.feature_group)
                 features.append(feature)
             # Check if in_features exists and create Options accordingly
             elif item.in_features:
@@ -112,12 +116,12 @@ def load_features_from_config(config_str: str, format: str = "json") -> list[Fea
                 # Always convert to frozenset for consistency (even single items)
                 source_value = frozenset(item.in_features)
                 options = Options(group=processed_options, context={DefaultOptionKeys.in_features: source_value})
-                feature = Feature(name=feature_name, options=options)
+                feature = Feature(name=feature_name, options=options, feature_group=item.feature_group)
                 features.append(feature)
             else:
                 # Process nested features in options before creating Feature
                 processed_options = process_nested_features(item.options)
-                feature = Feature(name=feature_name, options=processed_options)
+                feature = Feature(name=feature_name, options=processed_options, feature_group=item.feature_group)
                 features.append(feature)
         else:
             raise ValueError(f"Unexpected config item type: {type(item)}")

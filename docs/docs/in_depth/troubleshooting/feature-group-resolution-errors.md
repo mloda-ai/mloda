@@ -59,6 +59,14 @@ Feature("subject_token", feature_group=ClaimsReader)
 Feature("subject_token", feature_group="ClaimsReader")
 ```
 
+From a JSON config, the string form is available as the `feature_group` field:
+
+``` json
+[
+    {"name": "subject_token", "feature_group": "ClaimsReader"}
+]
+```
+
 Caveats:
 
 - The string form matches the exact class name only: it does not match subclasses, and two classes with the same name in different modules stay ambiguous. The class-object form matches the class and its registered subclasses, preferring the most specific subclass, so prefer the class object.

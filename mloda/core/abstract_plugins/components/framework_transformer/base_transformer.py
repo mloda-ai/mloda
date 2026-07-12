@@ -15,7 +15,8 @@ class BaseTransformer:
     1. Subclass BaseTransformer
     2. Implement all abstract methods
     3. Define the source and target frameworks
-    4. Implement the transformation logic in both directions
+    4. Implement each direction you support. An edge is registered only for an overridden hook, so omit
+       a hook (never override it with a raise) to declare that direction unsupported.
 
     The transformer will be automatically discovered and registered with the
     ComputeFrameworkTransformer.
@@ -148,11 +149,15 @@ class BaseTransformer:
         """
         raise NotImplementedError
 
+    # The two transform hooks below are deliberately NOT @abstractmethod, which would contradict the
+    # one-way contract. They must still exist: add() detects an override by function identity against them.
+
     @classmethod
-    @abstractmethod
     def transform_fw_to_other_fw(cls, data: Any) -> Any:
         """
         Transform data from the primary framework to the secondary framework.
+
+        Implementing this registers the forward edge; omit it to declare the direction unsupported.
 
         Args:
             data: Data in the primary framework format
@@ -163,10 +168,11 @@ class BaseTransformer:
         raise NotImplementedError
 
     @classmethod
-    @abstractmethod
     def transform_other_fw_to_fw(cls, data: Any, framework_connection_object: Optional[Any] = None) -> Any:
         """
         Transform data from the secondary framework to the primary framework.
+
+        Implementing this registers the reverse edge; omit it to declare the direction unsupported.
 
         Args:
             data: Data in the secondary framework format

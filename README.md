@@ -301,6 +301,7 @@ Built-in and custom extenders give you full lineage - trace any result back to i
 - **[Getting Started](https://mloda-ai.github.io/mloda/chapter1/installation/)** - Installation and first steps
 - **[Plugin Development](https://mloda-ai.github.io/mloda/chapter1/feature-groups/)** - Build your own plugins
 - **[API Reference](https://mloda-ai.github.io/mloda/in_depth/mloda-api/)** - Complete API docs
+- **[Plugin Development Guides](https://github.com/mloda-ai/mloda-registry/tree/main/docs/guides)** - 40+ pattern guides in mloda-registry, also intended as context for coding agents
 
 ---
 

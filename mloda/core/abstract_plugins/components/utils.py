@@ -29,6 +29,18 @@ def safe_field(
         return fallback
 
 
+def safe_field_with_error(
+    read: Callable[[], T],
+    fallback: T,
+    catching: tuple[type[Exception], ...] = (Exception,),
+) -> tuple[T, str | None]:
+    """Like safe_field, but returns (value, None) on success and (fallback, str(exc)) on a raise."""
+    try:
+        return read(), None
+    except catching as exc:
+        return fallback, str(exc)
+
+
 def get_all_subclasses(cls: Any, log_n_subclasses: int = 0) -> set[type[Any]]:
     all_subclasses = set()
 

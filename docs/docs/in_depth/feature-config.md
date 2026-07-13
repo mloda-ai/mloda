@@ -69,7 +69,7 @@ Combine strings and objects:
 |-------|------|----------|-------------|
 | `name` | string | Yes | Feature name |
 | `options` | object | No | Simple options dict (cannot be used with group_options/context_options) |
-| `in_features` | array | No | Source feature names for chained features |
+| `in_features` | array | No | Array of source feature names for chained features |
 | `group_options` | object | No | Group parameters (affect Feature Group resolution) |
 | `context_options` | object | No | Context parameters (metadata, doesn't affect resolution) |
 | `propagate_context_keys` | array | No | Context keys that propagate to dependent features |
@@ -197,6 +197,28 @@ Multiple source features:
     }
 ]
 ```
+
+### Nested in_features feature dict
+
+Inside `options`, an `in_features` key can hold a feature dict instead of a name, which defines the source feature inline:
+
+```json
+[
+    {
+        "name": "scaled_sales",
+        "options": {
+            "scaler_type": "minmax",
+            "in_features": {
+                "name": "aggregated_sales",
+                "feature_group": "SalesAggregator",
+                "options": {"in_features": "raw_sales"}
+            }
+        }
+    }
+]
+```
+
+A nested dict supports `name`, `options`, `in_features` and `feature_group` only. In a nested `in_features` dict under `options`, the top-level-only fields (`column_index`, `group_options`, `context_options`, `propagate_context_keys`) are rejected, and so is an unknown key. A feature dict must be the direct value of `in_features`: an `in_features` list holds source feature names, not feature dicts.
 
 ## Multi-Column Features
 

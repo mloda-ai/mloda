@@ -4,6 +4,9 @@ Unit tests for feature configuration parser.
 This module tests the parse_json function from mloda.core.api.feature_config.parser.
 """
 
+import json
+from typing import Any
+
 import pytest
 
 from mloda.core.api.feature_config.models import FeatureConfig
@@ -361,6 +364,95 @@ def test_parse_json_with_in_features_array() -> None:
     assert result[2].name == "ref_multi_feature"
     assert result[2].in_features == ["base_feature", "other_col"]
     assert result[2].group_options == {"group_param": "value"}
+
+
+def test_parse_json_rejects_unknown_key() -> None:
+    """Test that an unknown top-level key is rejected and named in the error (issue #680).
+
+    FeatureConfig(**item) rejects any key it does not declare, so a typo like
+    'feature_grp' fails loudly instead of being silently ignored. The nested
+    in_features path must behave the same way.
+    """
+    config_str = '[{"name": "shared_token", "feature_grp": "ClaimsReader"}]'
+
+    with pytest.raises(TypeError, match="feature_grp"):
+        parse_json(config_str)
+
+
+def test_parse_json_rejects_empty_name() -> None:
+    """Test that an empty 'name' is rejected instead of producing a feature called ''."""
+    config_str = '[{"name": ""}]'
+
+    with pytest.raises(ValueError, match="name"):
+        parse_json(config_str)
+
+
+def test_parse_json_rejects_whitespace_only_name() -> None:
+    """Test that a whitespace-only 'name' strips to nothing and is rejected."""
+    config_str = '[{"name": "   "}]'
+
+    with pytest.raises(ValueError, match="name"):
+        parse_json(config_str)
+
+
+def test_parse_json_rejects_in_features_as_string() -> None:
+    """Test that a top-level in_features string is rejected instead of char-splitting.
+
+    The loader converts in_features to a frozenset, so the string "age" silently
+    becomes frozenset({'a', 'g', 'e'}). At the top level in_features must be an
+    array of source feature names.
+    """
+    config_str = '[{"name": "scale__age", "in_features": "age"}]'
+
+    with pytest.raises(ValueError, match="in_features") as exc_info:
+        parse_json(config_str)
+
+    assert "array" in str(exc_info.value)
+
+
+def test_parse_json_rejects_in_features_as_dict() -> None:
+    """Test that a top-level in_features dict is rejected; the nested dict form is options-only."""
+    config_str = '[{"name": "scale__age", "in_features": {"name": "age"}}]'
+
+    with pytest.raises(ValueError, match="in_features") as exc_info:
+        parse_json(config_str)
+
+    assert "array" in str(exc_info.value)
+
+
+# A top-level in_features array holds source feature NAMES: the loader feeds it straight into
+# frozenset(), so an int element becomes a bogus source and a dict element dies with an internal
+# "unhashable type: 'dict'" TypeError. Every element must be a non-empty string.
+BAD_TOP_LEVEL_IN_FEATURES: list[Any] = [
+    pytest.param([1, 2], 1, id="ints"),
+    pytest.param(["age", 7], 7, id="mixed_int"),
+    pytest.param([{"name": "age"}], {"name": "age"}, id="feature_dict"),
+    pytest.param(["age", ""], "", id="empty_string"),
+    pytest.param(["age", "   "], "   ", id="whitespace_only_string"),
+    pytest.param(["age", None], None, id="null"),
+]
+
+
+@pytest.mark.parametrize("in_features, offender", BAD_TOP_LEVEL_IN_FEATURES)
+def test_parse_json_rejects_in_features_element_that_is_not_a_name(in_features: list[Any], offender: Any) -> None:
+    """Test that every top-level in_features element must be a non-empty source feature name."""
+    config_str = json.dumps([{"name": "scale__age", "in_features": in_features}])
+
+    with pytest.raises(ValueError, match="in_features") as exc_info:
+        parse_json(config_str)
+
+    assert repr(offender) in str(exc_info.value)
+
+
+def test_parse_json_accepts_in_features_array_of_names() -> None:
+    """Test that the valid top-level in_features array form keeps parsing unchanged."""
+    config_str = '[{"name": "scale__age", "in_features": ["age", "weight"]}]'
+
+    result = parse_json(config_str)
+
+    assert len(result) == 1
+    assert isinstance(result[0], FeatureConfig)
+    assert result[0].in_features == ["age", "weight"]
 
 
 def test_parse_json_rejects_mloda_source_and_in_features_together() -> None:

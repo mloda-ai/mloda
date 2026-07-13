@@ -5,6 +5,10 @@ This module tests the validation and behavior of the FeatureConfig model
 defined in mloda.core.api.feature_config.models.
 """
 
+from typing import Any
+
+import pytest
+
 from mloda.core.api.feature_config.models import FeatureConfig
 
 
@@ -31,3 +35,23 @@ def test_feature_config_options_default_empty() -> None:
 
     assert config.options == {}
     assert isinstance(config.options, dict)
+
+
+def test_feature_config_rejects_empty_name() -> None:
+    """Test that an empty name is rejected (shared invariant for the top-level and nested paths)."""
+    with pytest.raises(ValueError, match="name"):
+        FeatureConfig(name="")
+
+
+def test_feature_config_rejects_whitespace_only_name() -> None:
+    """Test that a whitespace-only name strips to nothing and is rejected."""
+    with pytest.raises(ValueError, match="name"):
+        FeatureConfig(name="   ")
+
+
+def test_feature_config_rejects_non_string_name() -> None:
+    """Test that a non-string name is rejected: 'name' is a non-empty string."""
+    bad_value: Any = 123
+
+    with pytest.raises(ValueError, match="name"):
+        FeatureConfig(name=bad_value)

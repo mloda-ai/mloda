@@ -5,7 +5,7 @@ This module defines the data models used to validate and parse
 feature configuration files.
 """
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, fields
 from typing import Any, Optional
 
 
@@ -45,17 +45,21 @@ def validate_feature_group_not_in_options(options: Optional[dict[str, Any]], con
 class FeatureConfig:
     """Model for a feature configuration with name and options."""
 
-    name: str
-    options: dict[str, Any] = field(default_factory=dict)
-    in_features: Optional[list[str]] = None
+    # metadata={"nested": True} marks the fields a nested in_features dict supports; the rest are top-level only.
+    name: str = field(metadata={"nested": True})
+    options: dict[str, Any] = field(default_factory=dict, metadata={"nested": True})
+    # A nested in_features dict reuses this field for a single source name or a further nested feature dict.
+    in_features: Optional[list[str] | dict[str, Any] | str] = field(default=None, metadata={"nested": True})
     group_options: Optional[dict[str, Any]] = None
     context_options: Optional[dict[str, Any]] = None
     propagate_context_keys: Optional[list[str]] = None
     column_index: Optional[int] = None
-    feature_group: Optional[str] = None
+    feature_group: Optional[str] = field(default=None, metadata={"nested": True})
 
     def __post_init__(self) -> None:
-        """Validate that options and group_options/context_options are mutually exclusive."""
+        """Validate the invariants shared by the top-level and the nested feature dict."""
+        if not isinstance(self.name, str) or not self.name.strip():
+            raise ValueError(f"'name' must be a non-empty string, got: {self.name!r}")
         if self.options and (self.group_options or self.context_options):
             raise ValueError("Cannot use both 'options' and 'group_options'/'context_options'")
         if self.propagate_context_keys and not self.context_options:
@@ -69,11 +73,84 @@ class FeatureConfig:
         validate_feature_group_not_in_options(self.context_options, "context_options")
 
 
+FEATURE_CONFIG_FIELDS = frozenset(f.name for f in fields(FeatureConfig))
+NESTED_FIELDS = frozenset(f.name for f in fields(FeatureConfig) if f.metadata.get("nested"))
+
+
+def validate_top_level_in_features(value: Any) -> None:
+    """Top-level in_features is an array of source feature names.
+
+    Not a __post_init__ invariant: the nested in_features dict legitimately carries a string or a dict here.
+    """
+    if value is None:
+        return
+    if not isinstance(value, list):
+        raise ValueError(
+            f"'in_features' must be an array of source feature names at the top level of a feature config, got: "
+            f"{value!r}"
+        )
+    for element in value:
+        if not isinstance(element, str) or not element.strip():
+            raise ValueError(
+                f"'in_features' must be an array of non-empty source feature names at the top level of a feature "
+                f"config, got element: {element!r}"
+            )
+
+
+def validate_nested_in_features(value: Any) -> None:
+    """A nested in_features value is a source name, a list of source names, or a further nested feature dict."""
+    if value is None:
+        return
+    if isinstance(value, dict):
+        return
+    if isinstance(value, str):
+        if not value.strip():
+            raise ValueError(f"'in_features' must be a non-empty source feature name, got: {value!r}")
+        return
+    if isinstance(value, list):
+        if not value:
+            raise ValueError("'in_features' must not be an empty list; it declares the source features")
+        for element in value:
+            if isinstance(element, dict):
+                raise ValueError(
+                    "'in_features' as a list holds source feature names only; a nested feature dict is supported "
+                    f"as the direct value of 'in_features', not as a list element, got: {element!r}"
+                )
+            if not isinstance(element, str) or not element.strip():
+                raise ValueError(
+                    f"'in_features' as a list holds non-empty source feature names, got element: {element!r}"
+                )
+        return
+    raise ValueError(
+        f"'in_features' must be a source feature name, a list of source feature names, or a nested feature dict, "
+        f"got: {value!r}"
+    )
+
+
+def parse_nested_feature_config(item: dict[str, Any]) -> FeatureConfig:
+    """Validate a nested in_features dict through FeatureConfig, rejecting unknown and top-level-only keys."""
+    if "name" not in item:
+        raise ValueError(f"Nested in_features must have a 'name' field, keys present: {sorted(item)}")
+
+    # An unknown key is a typo, not a misplacement: let FeatureConfig raise the native TypeError naming it,
+    # before the top-level-only check can misreport it. Both checks precede __post_init__, whose invariants
+    # are top-level semantics and would otherwise give misleading advice for a nested dict.
+    if not FEATURE_CONFIG_FIELDS.issuperset(item):
+        FeatureConfig(**item)
+
+    top_level_only = sorted(key for key in item if key not in NESTED_FIELDS)
+    if top_level_only:
+        raise ValueError(
+            f"{top_level_only} is only valid at the top level of a feature config; "
+            "a nested 'in_features' dict supports 'name', 'options', 'in_features' and 'feature_group' only"
+        )
+    return FeatureConfig(**item)
+
+
 def feature_config_schema() -> dict[str, Any]:
     """Return JSON Schema for FeatureConfig model.
 
-    Note: This provides a basic schema representation. For full JSON Schema
-    support, consider using a dedicated schema generation library.
+    FeatureConfig is the enforcement point at both levels; the schema itself is never run by a validator.
     """
     return {
         "type": "object",

@@ -15,10 +15,38 @@ from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.api.feature_config.parser import parse_json
 from mloda.core.api.feature_config.models import (
     FeatureConfig,
-    validate_feature_group_not_in_options,
-    validate_feature_group_scope,
+    parse_nested_feature_config,
+    validate_nested_in_features,
 )
 from mloda.core.abstract_plugins.components.default_options_key import DefaultOptionKeys
+
+
+def build_nested_feature(value: dict[str, Any]) -> Feature:
+    """Build a Feature from a nested in_features dict, validated through FeatureConfig.
+
+    Args:
+        value: Nested feature definition under an "in_features" key
+
+    Returns:
+        Feature object for the nested definition
+    """
+    config = parse_nested_feature_config(value)
+    validate_nested_in_features(config.in_features)
+
+    processed_nested_options = process_nested_features(config.options)
+
+    # Sibling in_features: a list of more than one source name stays a list, a 1-element list collapses to its
+    # element, a dict recurses into another nested Feature, a string is a single source name stored as-is.
+    in_features = config.in_features
+    if in_features:
+        if isinstance(in_features, list):
+            processed_nested_options["in_features"] = in_features if len(in_features) > 1 else in_features[0]
+        elif isinstance(in_features, dict):
+            processed_nested_options["in_features"] = build_nested_feature(in_features)
+        else:
+            processed_nested_options["in_features"] = in_features
+
+    return Feature(name=config.name, options=processed_nested_options, feature_group=config.feature_group)
 
 
 def process_nested_features(options: dict[str, Any]) -> dict[str, Any]:
@@ -33,38 +61,7 @@ def process_nested_features(options: dict[str, Any]) -> dict[str, Any]:
     processed: dict[str, Any] = {}
     for key, value in options.items():
         if key == "in_features" and isinstance(value, dict):
-            # This is a nested feature definition - convert it to a Feature object
-            feature_name = value.get("name")
-            if not feature_name:
-                raise ValueError(f"Nested in_features must have a 'name' field: {value}")
-
-            # Recursively process nested options
-            nested_options = value.get("options", {})
-            validate_feature_group_not_in_options(nested_options, "options")
-            processed_nested_options = process_nested_features(nested_options)
-
-            # Handle nested in_features (can also be a dict)
-            in_features = value.get("in_features")
-            if in_features:
-                if isinstance(in_features, list):
-                    # For list, convert each to string (single sources) or keep as-is
-                    processed_nested_options["in_features"] = in_features if len(in_features) > 1 else in_features[0]
-                elif isinstance(in_features, dict):
-                    # Recursively create Feature for in_features
-                    in_features = process_nested_features({"in_features": in_features})["in_features"]
-                    processed_nested_options["in_features"] = in_features
-                else:
-                    processed_nested_options["in_features"] = in_features
-
-            # The nested dict skips FeatureConfig, so validate its scope with the same rules
-            nested_feature_group = validate_feature_group_scope(value.get("feature_group"))
-
-            # Create the Feature object, keeping any nested resolution scope
-            processed[key] = Feature(
-                name=feature_name,
-                options=processed_nested_options,
-                feature_group=nested_feature_group,
-            )
+            processed[key] = build_nested_feature(value)
         elif isinstance(value, dict):
             # Recursively process nested dicts
             processed[key] = process_nested_features(value)

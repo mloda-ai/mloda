@@ -22,6 +22,17 @@ def test_feature_config_schema_structure() -> None:
     assert "name" in schema["required"], "'name' should be in required fields"
 
 
+def test_feature_config_schema_forbids_additional_properties() -> None:
+    """Test that the schema forbids unknown keys (issue #680).
+
+    FeatureConfig enforces this at the top level and, once the nested in_features
+    dict is validated through FeatureConfig too, at every nesting level.
+    """
+    schema = feature_config_schema()
+
+    assert schema["additionalProperties"] is False, "Unknown config keys must not be allowed"
+
+
 def test_feature_config_schema_includes_propagate_context_keys() -> None:
     """Test that the schema advertises the propagate_context_keys field.
 

@@ -5,7 +5,7 @@ This module provides parsers for configuration files in JSON format.
 """
 
 import json
-from mloda.core.api.feature_config.models import FeatureConfig, FeatureConfigItem
+from mloda.core.api.feature_config.models import FeatureConfig, FeatureConfigItem, validate_top_level_in_features
 
 
 def parse_json(config_str: str) -> list[FeatureConfigItem]:
@@ -27,7 +27,9 @@ def parse_json(config_str: str) -> list[FeatureConfigItem]:
         if isinstance(item, str):
             result.append(item)
         elif isinstance(item, dict):
-            result.append(FeatureConfig(**item))
+            config = FeatureConfig(**item)
+            validate_top_level_in_features(config.in_features)
+            result.append(config)
         else:
             raise ValueError(f"Invalid configuration item: {item}")
 

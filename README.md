@@ -311,7 +311,7 @@ Most plugins currently live in `mloda_plugins/` within this repository. The goal
 
 | Repository | Description |
 |------------|-------------|
-| [mloda-registry](https://github.com/mloda-ai/mloda-registry) | Official plugin packages and 40+ development guides |
+| [mloda-registry](https://github.com/mloda-ai/mloda-registry) | Official plugin packages and plugin development guides |
 | [mloda-plugin-template](https://github.com/mloda-ai/mloda-plugin-template) | Cookiecutter template for creating standalone plugins |
 
 ---
@@ -320,7 +320,7 @@ Most plugins currently live in `mloda_plugins/` within this repository. The goal
 
 We welcome contributions.
 
-**Plugin development:** see the [mloda-registry guides](https://github.com/mloda-ai/mloda-registry/tree/main/docs/guides) (40+ step-by-step), or scaffold a new package with the [mloda-plugin-template](https://github.com/mloda-ai/mloda-plugin-template).
+**Plugin development:** see the [mloda-registry guides](https://github.com/mloda-ai/mloda-registry/tree/main/docs/guides) (step-by-step), or scaffold a new package with the [mloda-plugin-template](https://github.com/mloda-ai/mloda-plugin-template).
 
 **Core framework:** start with [`good first issue`](https://github.com/mloda-ai/mloda/labels/good%20first%20issue) or [`help wanted`](https://github.com/mloda-ai/mloda/labels/help%20wanted), then:
 

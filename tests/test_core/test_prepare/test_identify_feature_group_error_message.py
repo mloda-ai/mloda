@@ -319,6 +319,77 @@ class TestNoFeatureGroupFoundErrorMessage:
         assert "Did you mean" not in error_message
 
 
+class TestResolveFeaturePointerNamesTheScope:
+    """The debug pointer must be reproducible: a scoped failure points at resolve_feature WITH the scope.
+
+    The no-match error recommends resolve_feature as the debug tool. When the failing feature carries
+    a feature-group scope, a pointer that only mentions options=... cannot reproduce the failure it is
+    recommended for (issue #693), so it must name feature_group=... as well.
+    """
+
+    def test_scoped_failure_pointer_names_feature_group(self) -> None:
+        feature = Feature("nonexistent_xyz", feature_group=KnownFeatureGroup)
+        accessible_plugins: FeatureGroupEnvironmentMapping = {
+            KnownFeatureGroup: {MockComputeFramework},
+        }
+
+        with pytest.raises(ValueError) as exc_info:
+            IdentifyFeatureGroupClass(
+                feature=feature,
+                accessible_plugins=accessible_plugins,
+                links=None,
+            )
+
+        error_message = str(exc_info.value)
+
+        assert "Scoped to feature group: 'KnownFeatureGroup'." in error_message, (
+            f"Scoped failure must call out the scope, but got: {error_message}"
+        )
+        assert "resolve_feature(name, options=..., feature_group=...)" in error_message, (
+            f"A scoped failure must point at a resolve_feature call that carries the scope, but got: {error_message}"
+        )
+
+    def test_scoped_failure_pointer_names_a_string_scope_too(self) -> None:
+        feature = Feature("nonexistent_xyz", feature_group="KnownFeatureGroup")
+        accessible_plugins: FeatureGroupEnvironmentMapping = {
+            KnownFeatureGroup: {MockComputeFramework},
+        }
+
+        with pytest.raises(ValueError) as exc_info:
+            IdentifyFeatureGroupClass(
+                feature=feature,
+                accessible_plugins=accessible_plugins,
+                links=None,
+            )
+
+        error_message = str(exc_info.value)
+
+        assert "Scoped to feature group: 'KnownFeatureGroup'." in error_message
+        assert "resolve_feature(name, options=..., feature_group=...)" in error_message
+
+    def test_unscoped_failure_pointer_omits_feature_group(self) -> None:
+        feature = Feature("nonexistent_xyz")
+        accessible_plugins: FeatureGroupEnvironmentMapping = {
+            KnownFeatureGroup: {MockComputeFramework},
+        }
+
+        with pytest.raises(ValueError) as exc_info:
+            IdentifyFeatureGroupClass(
+                feature=feature,
+                accessible_plugins=accessible_plugins,
+                links=None,
+            )
+
+        error_message = str(exc_info.value)
+
+        assert "Use resolve_feature(name, options=...) to debug feature resolution." in error_message, (
+            f"An unscoped failure must keep the plain pointer, but got: {error_message}"
+        )
+        assert "feature_group=" not in error_message, (
+            f"An unscoped failure must not advertise a scope argument, but got: {error_message}"
+        )
+
+
 class NoComputeFrameworkFeatureGroup(FeatureGroup):
     """Feature group for testing 'no compute framework' error message."""
 

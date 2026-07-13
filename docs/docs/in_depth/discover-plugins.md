@@ -41,13 +41,31 @@ result = resolve_feature("sales__sum_aggr", options=Options(group={"partition_by
 print(result.feature_group, result.supported_compute_frameworks)
 ```
 
-`options` and `plugin_collector` are keyword-only, so pass them by name.
+`options`, `feature_group` and `plugin_collector` are keyword-only, so pass them by name.
 
 When exactly one FeatureGroup resolves, `ResolvedFeature` also reports
 `subtype` (resolved from the name, the passed options, or the key's declared
 default, e.g. `"sum"` for `sales__sum_aggr`) and `subtype_family` (the
 parametric family name, `"ntile"` for `ntile_2`); both are `None` when
 nothing resolves.
+
+### Scoping to a Feature Group
+
+`feature_group` restricts resolution to one FeatureGroup, exactly as
+`Feature(..., feature_group=...)` does: a class or a class-name string, the
+string form also matching subclasses of the named class.
+
+``` python
+resolve_feature("customer_id", feature_group=PolicyReader)      # class
+resolve_feature("customer_id", feature_group="PolicyReader")    # class name
+```
+
+This reproduces a scoped engine failure. When `mloda.run_all` reports
+`Scoped to feature group: 'PolicyReader'.` for a feature, pass the same scope
+here and `resolve_feature` returns the same verdict in `result.error`, with the
+same callout, instead of raising. An invalid scope (the root `FeatureGroup`
+base, a non-FeatureGroup type) is reported in `result.error` too, while
+`Feature(...)` raises `TypeError` for it.
 
 ### Inspecting Candidates
 

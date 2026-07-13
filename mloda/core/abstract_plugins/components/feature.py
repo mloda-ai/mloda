@@ -18,6 +18,34 @@ from mloda.core.abstract_plugins.components.utils import get_all_subclasses
 from mloda.core.abstract_plugins.components.validators.feature_validator import FeatureValidator
 
 
+def normalize_feature_group_scope(feature_group: str | type[FeatureGroup] | None) -> str | type[FeatureGroup] | None:
+    """Normalize and validate a feature-group scope value, raising TypeError on an invalid one.
+
+    Shared by Feature(..., feature_group=...) and resolve_feature(..., feature_group=...), so the
+    scope means the same thing in both.
+    """
+    if feature_group is None:
+        return None
+    # Local import: feature_group.py imports this module.
+    from mloda.core.abstract_plugins.feature_group import FeatureGroup
+
+    root_rejection = "feature_group cannot be the root FeatureGroup base class; a concrete subclass is required"
+    if isinstance(feature_group, str):
+        stripped = feature_group.strip()
+        # The root names no feature group family; rejected here as in the class-object form below.
+        if stripped == FeatureGroup.get_class_name():
+            raise TypeError(root_rejection)
+        return stripped or None
+    if feature_group is FeatureGroup:
+        raise TypeError(root_rejection)
+    if isinstance(feature_group, type) and issubclass(feature_group, FeatureGroup):
+        return feature_group
+    raise TypeError(
+        f"feature_group must be a FeatureGroup subclass, a class-name string, or None, "
+        f"got {type(feature_group).__name__}"
+    )
+
+
 class Feature:
     """Represents a raw feature.
 
@@ -172,25 +200,7 @@ class Feature:
     def _set_feature_group_scope(
         self, feature_group: str | type[FeatureGroup] | None
     ) -> str | type[FeatureGroup] | None:
-        if feature_group is None:
-            return None
-        from mloda.core.abstract_plugins.feature_group import FeatureGroup
-
-        root_rejection = "feature_group cannot be the root FeatureGroup base class; a concrete subclass is required"
-        if isinstance(feature_group, str):
-            stripped = feature_group.strip()
-            # The root names no feature group family; rejected here as in the class-object form below.
-            if stripped == FeatureGroup.get_class_name():
-                raise TypeError(root_rejection)
-            return stripped or None
-        if feature_group is FeatureGroup:
-            raise TypeError(root_rejection)
-        if isinstance(feature_group, type) and issubclass(feature_group, FeatureGroup):
-            return feature_group
-        raise TypeError(
-            f"feature_group must be a FeatureGroup subclass, a class-name string, or None, "
-            f"got {type(feature_group).__name__}"
-        )
+        return normalize_feature_group_scope(feature_group)
 
     @classmethod
     def not_typed(

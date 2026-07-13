@@ -33,7 +33,12 @@ from mloda.core.prepare.accessible_plugins import (
     dedup_feature_group_subclasses,
     registry_for,
 )
-from mloda.core.prepare.identify_feature_group import split_frameworks_by_capability
+from mloda.core.abstract_plugins.components.feature import normalize_feature_group_scope
+from mloda.core.prepare.identify_feature_group import (
+    matches_feature_group_scope,
+    scope_callout,
+    split_frameworks_by_capability,
+)
 
 
 def list_registered(plugin_type: type[Any]) -> list[type[Any]]:
@@ -341,10 +346,16 @@ def get_extender_docs(
     return sorted(results, key=lambda x: x.name)
 
 
+def _with_callout(message: str, callout: Optional[str]) -> str:
+    """Append the scope callout to a failure message, so a scoped failure is legible as scoped."""
+    return f"{message} {callout}" if callout else message
+
+
 def resolve_feature(
     feature_name: str,
     *,
     options: Optional[Options] = None,
+    feature_group: str | type[FeatureGroup] | None = None,
     plugin_collector: Optional[PluginCollector] = None,
 ) -> ResolvedFeature:
     """
@@ -354,18 +365,36 @@ def resolve_feature(
     the given feature name. It applies subclass filtering to prefer more
     specific (child) classes over parent classes.
 
-    Never raises: matching errors are reported in the returned ResolvedFeature.error.
+    Never raises: matching errors, including an invalid ``feature_group`` scope, are reported in the
+    returned ResolvedFeature.error. ``Feature(..., feature_group=...)`` raises for such a scope instead;
+    that difference is deliberate, a debug API must not blow up on the input it is asked to explain.
+
+    Does not delegate to IdentifyFeatureGroupClass, and so may differ from the engine: it never raises
+    and degrades a candidate whose matching raises ValueError to "not a match" (the engine propagates it),
+    it has no run context and therefore ignores links, the data access collection and the run's compute
+    framework selection, and it does not exclude abstract bases. It shares the matching predicates
+    (match_feature_group_criteria, matches_feature_group_scope, split_frameworks_by_capability) and the
+    scope-callout renderer, which is what keeps the scope verdict aligned with the engine's.
 
     Args:
         feature_name: The name of the feature to resolve.
         options: Keyword-only. Options used for matching and capability checks. An empty or omitted Options is
             the documented default.
+        feature_group: Keyword-only. Restrict resolution to a FeatureGroup subclass or a class-name string,
+            with the same semantics as ``Feature(..., feature_group=...)``: the string form also matches
+            subclasses of the named class.
         plugin_collector: Keyword-only. Its ``allow_redefinition`` flag is threaded into deduplication.
 
     Returns:
         ResolvedFeature containing the resolved FeatureGroup (if found),
         all matching candidates, and any error message.
     """
+    try:
+        scope = normalize_feature_group_scope(feature_group)
+    except TypeError as exc:
+        return ResolvedFeature(feature_name=feature_name, feature_group=None, candidates=[], error=str(exc))
+    callout = scope_callout(scope)
+
     resolved_options = options if options is not None else Options()
     is_default_options = not resolved_options.group and not resolved_options.context
     options_caveat = "default options" if is_default_options else "the provided options"
@@ -394,6 +423,9 @@ def resolve_feature(
     feature_name_obj = FeatureName(feature_name)
 
     for fg in all_fgs:
+        # Scope first: an out-of-scope group's rejection reason must never pollute a scoped error.
+        if scope is not None and not matches_feature_group_scope(fg, scope):
+            continue
         if _match_recording_validation_errors(fg, feature_name_obj, resolved_options, validation_errors):
             candidates.append(fg)
 
@@ -405,7 +437,7 @@ def resolve_feature(
             feature_name=feature_name,
             feature_group=None,
             candidates=[],
-            error=error,
+            error=_with_callout(error, callout),
         )
 
     # Degrade a raising plugin declaration OPEN (all available declared frameworks); resolve_feature never raises.
@@ -441,10 +473,11 @@ def resolve_feature(
             feature_name=feature_name,
             feature_group=None,
             candidates=candidates,
-            error=(
+            error=_with_callout(
                 f"Feature '{feature_name}' matches {[c.get_class_name() for c in candidates]} "
                 f"but is unsupported on all installed compute frameworks "
-                f"(evaluated under {options_caveat}): {rejected_names}."
+                f"(evaluated under {options_caveat}): {rejected_names}.",
+                callout,
             ),
             supported_compute_frameworks=[],
             unsupported_compute_frameworks=rejected_names,
@@ -471,7 +504,9 @@ def resolve_feature(
         feature_name=feature_name,
         feature_group=None,
         candidates=candidates,
-        error=f"Multiple FeatureGroups match feature name '{feature_name}': {conflicting_names}",
+        error=_with_callout(
+            f"Multiple FeatureGroups match feature name '{feature_name}': {conflicting_names}", callout
+        ),
         supported_compute_frameworks=supported_names,
         unsupported_compute_frameworks=rejected_names,
     )

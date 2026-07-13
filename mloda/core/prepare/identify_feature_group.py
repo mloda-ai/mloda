@@ -59,9 +59,12 @@ def matches_feature_group_scope(feature_group: type[FeatureGroup], scope: str | 
     )
 
 
-def _scope_callout(feature: Feature) -> str | None:
-    """Render the shared scope callout, or None when the feature is unscoped."""
-    scope = feature.feature_group_scope
+def scope_callout(scope: str | type[FeatureGroup] | None) -> str | None:
+    """Render the shared scope callout, or None when there is no scope.
+
+    Takes the scope value rather than a Feature, so the engine and resolve_feature render it
+    from one place.
+    """
     if scope is None:
         return None
     scope_name = scope.get_class_name() if isinstance(scope, type) else scope
@@ -187,8 +190,8 @@ class IdentifyFeatureGroupClass:
         if len(feature_group) > 1:
             from mloda.core.abstract_plugins.feature_group import format_feature_group_classes
 
-            scope_callout = _scope_callout(feature)
-            scope_line = f"{scope_callout}\n" if scope_callout else ""
+            callout = scope_callout(feature.feature_group_scope)
+            scope_line = f"{callout}\n" if callout else ""
 
             raise ValueError(
                 f"Multiple feature groups found for feature '{feature.name}':\n"
@@ -321,26 +324,26 @@ class IdentifyFeatureGroupClass:
     def _build_no_feature_group_error(
         self, feature: Feature, accessible_plugins: FeatureGroupEnvironmentMapping
     ) -> str:
-        scope_callout = _scope_callout(feature)
+        callout = scope_callout(feature.feature_group_scope)
 
         # Capability rejections are concrete and specific; prefer them over the abstract-only fallback.
         capability_message = self._capability_rejection_message(feature)
         if capability_message is not None:
-            if scope_callout:
-                return f"{capability_message} {scope_callout}"
+            if callout:
+                return f"{capability_message} {callout}"
             return capability_message
 
         abstract_only_message = self._abstract_only_message(feature, accessible_plugins)
         if abstract_only_message is not None:
-            if scope_callout:
-                return f"{abstract_only_message} {scope_callout}"
+            if callout:
+                return f"{abstract_only_message} {callout}"
             return abstract_only_message
 
         feature_name = str(feature.name)
         msg = f"No feature groups found for feature name: '{feature_name}'."
 
-        if scope_callout:
-            msg += f" {scope_callout}"
+        if callout:
+            msg += f" {callout}"
 
         if not accessible_plugins:
             msg += "\nNo plugins are loaded. Did you call PluginLoader.all()?"
@@ -365,8 +368,12 @@ class IdentifyFeatureGroupClass:
         if similar:
             msg += f"\nDid you mean one of: {similar}?"
 
+        # A scoped failure only reproduces through a scoped resolve_feature call, so the pointer names the scope.
+        debug_call = (
+            "resolve_feature(name, options=..., feature_group=...)" if callout else "resolve_feature(name, options=...)"
+        )
         msg += (
-            "\nUse resolve_feature(name, options=...) to debug feature resolution."
+            f"\nUse {debug_call} to debug feature resolution."
             "\nFor troubleshooting guide, see: "
             "https://mloda-ai.github.io/mloda/in_depth/troubleshooting/feature-group-resolution-errors/"
         )

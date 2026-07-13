@@ -1,10 +1,20 @@
 name: CI
 
+# Explicit, not "*.md": CONTRIBUTING.md and docs/ are asserted/executed by tests (guarded by tests/test_documentation/test_ci_paths_ignore.py).
+# Safe only while CI is not a required status check on main: a skipped required check never reports, blocking docs-only PRs.
 on:
   push:
     branches: [ "main" ]
+    paths-ignore: &docs_only
+      - AGENTS.md
+      - CLAUDE.md
+      - CODE_OF_CONDUCT.md
+      - NOTICE.md
+      - README.md
+      - SECURITY.md
   pull_request:
     branches: [ "main" ]
+    paths-ignore: *docs_only
 
 permissions:
   contents: read

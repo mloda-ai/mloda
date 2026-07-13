@@ -1,6 +1,9 @@
 import importlib
 from typing import TYPE_CHECKING, Any
 
+# Version
+from mloda.core.version import get_mloda_version
+
 # API
 from mloda.core.api.request import mlodaAPI
 
@@ -53,6 +56,8 @@ from mloda.core.api.plugin_docs import (
     list_registered,
     resolve_feature,
 )
+
+__version__ = get_mloda_version()
 
 mloda = mlodaAPI
 stream_all = mlodaAPI.stream_all
@@ -126,6 +131,8 @@ def __dir__() -> list[str]:
 
 
 __all__ = [
+    # Version
+    "__version__",
     # API
     "mlodaAPI",
     "mloda",

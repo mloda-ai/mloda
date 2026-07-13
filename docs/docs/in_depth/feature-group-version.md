@@ -28,6 +28,21 @@ def version(cls) -> str:
     return BaseFeatureGroupVersion.version(cls)
 ```
 
+## Reading the mloda Package Version
+
+Three supported programmatic paths, all backed by `mloda.core.version.get_mloda_version()`:
+
+```python
+from mloda.user import __version__          # also on mloda.provider and mloda.steward
+from mloda.core.version import get_mloda_version
+from mloda.provider import BaseFeatureGroupVersion
+
+get_mloda_version()                          # memoized, "0.0.0" if not installed
+BaseFeatureGroupVersion.mloda_version()      # same value
+```
+
+There is no `mloda.__version__`: `mloda` is a PEP 420 namespace root with no `__init__.py`, so plugin packages can add subpackages under it.
+
 ## Benefits
 
 - **Change Detection**: Easily detect when a feature group implementation has changed

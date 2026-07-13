@@ -366,7 +366,10 @@ def resolve_feature(
     never-raising debug API that reports candidates, capability splits, and subtype fields and degrades
     per candidate, while IdentifyFeatureGroupClass needs an accessible-plugins environment mapping and
     raises on failure. The scope predicate (matches_feature_group_scope) and callout renderer are shared
-    so scoped semantics cannot drift between the two paths.
+    so scoped semantics cannot drift between the two paths. Beyond that the paths may still differ:
+    _filter_subclasses collapses parent/child purely by issubclass while the engine only collapses candidates
+    sharing the same supported-framework set, and the engine excludes abstract bases while resolve_feature
+    does not.
 
     Args:
         feature_name: The name of the feature to resolve.

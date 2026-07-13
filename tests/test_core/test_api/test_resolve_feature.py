@@ -857,6 +857,19 @@ class TestResolveFeatureScopedNoMatch:
         assert "Scoped to feature group: 'UnrelatedScopedResolve693FeatureGroup'." in result.error
 
 
+class TestResolveFeatureScopedCapabilityRejection:
+    """A scoped capability-rejection failure keeps the scope callout in its error (issue #693)."""
+
+    def test_scoped_all_rejected_error_carries_scope_callout(self) -> None:
+        """Scoping the all-rejected feature to its own group still fails and names the scope."""
+        result = resolve_feature(ALL_REJECTED_CAP_FEATURE, feature_group="AllRejectedCapResolveFeatureGroup")
+
+        assert result.feature_group is None
+        assert result.error is not None
+        assert "unsupported on all installed compute frameworks" in result.error
+        assert "Scoped to feature group: 'AllRejectedCapResolveFeatureGroup'." in result.error
+
+
 class TestResolveFeatureScopedAmbiguity:
     """A scope that still leaves multiple sibling matches reports a scoped ambiguity (issue #693)."""
 
@@ -876,6 +889,24 @@ class TestResolveFeatureScopeNeverRaises:
     def test_root_feature_group_scope_degrades_into_error(self) -> None:
         """Scoping to the root FeatureGroup base is rejected with a dedicated error, not an exception."""
         result = resolve_feature(SIBLING_SCOPED_FEATURE, feature_group=FeatureGroup)
+
+        assert isinstance(result, ResolvedFeature)
+        assert result.feature_group is None
+        assert result.error is not None
+        assert "root FeatureGroup base class" in result.error
+
+    def test_root_feature_group_string_scope_degrades_into_error(self) -> None:
+        """The string form 'FeatureGroup' is rejected like the class-object root scope."""
+        result = resolve_feature(SIBLING_SCOPED_FEATURE, feature_group="FeatureGroup")
+
+        assert isinstance(result, ResolvedFeature)
+        assert result.feature_group is None
+        assert result.error is not None
+        assert "root FeatureGroup base class" in result.error
+
+    def test_whitespace_padded_root_string_scope_degrades_into_error(self) -> None:
+        """The strip runs before the root check, so '  FeatureGroup  ' is rejected the same way."""
+        result = resolve_feature(SIBLING_SCOPED_FEATURE, feature_group="  FeatureGroup  ")
 
         assert isinstance(result, ResolvedFeature)
         assert result.feature_group is None

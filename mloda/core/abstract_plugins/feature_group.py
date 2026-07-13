@@ -85,22 +85,11 @@ class FeatureGroup(ABC):
 
     SUBTYPES: ClassVar[Optional[SubtypeDeclaration]] = None
     """Declarative subtype dimension of the family; ``None`` means no subtype dimension.
-    The derived accessors below are the only surface and must not be overridden.
-    Enforced at class definition time; runtime attribute assignment is not guarded."""
-
-    _DERIVED_SUBTYPE_ACCESSORS: ClassVar[tuple[str, ...]] = (
-        "subtype_universe",
-        "supported_subtypes",
-        "resolve_subtype",
-        "canonical_subtype",
-        "subtype_support_matrix",
-        "declared_option_values",
-    )
+    The derived accessors below are ``@final`` (type-checker enforced) and derived from SUBTYPES."""
 
     def __init_subclass__(cls, **kwargs: Any) -> None:
         super().__init_subclass__(**kwargs)
         FeatureChainParser.validate_property_mapping_defaults(cls.__name__, cls.PROPERTY_MAPPING)
-        cls._reject_derived_accessor_overrides()
         cls._validate_subtype_declaration()
 
     @classmethod
@@ -109,15 +98,6 @@ class FeatureGroup(ABC):
         own = getattr(getattr(cls, method_name), "__func__", None)
         base = getattr(getattr(FeatureGroup, method_name), "__func__", None)
         return own is not base
-
-    @classmethod
-    def _reject_derived_accessor_overrides(cls) -> None:
-        for method_name in cls._DERIVED_SUBTYPE_ACCESSORS:
-            if cls._overrides(method_name):
-                raise ValueError(
-                    f"{cls.__name__} overrides {method_name}(); the subtype accessors are derived from "
-                    f"SUBTYPES and must not be overridden."
-                )
 
     @classmethod
     def _validate_subtype_declaration(cls) -> None:

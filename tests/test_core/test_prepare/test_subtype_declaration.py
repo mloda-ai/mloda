@@ -242,24 +242,6 @@ class SubDeclHookMatrixPlainFG(FeatureGroup):
         return None
 
 
-def _subdecl_universe_override(cls: type[FeatureGroup]) -> frozenset[str]:
-    return frozenset({"rows_7"})
-
-
-def _subdecl_supported_override(cls: type[FeatureGroup], compute_framework: type[ComputeFramework]) -> frozenset[str]:
-    return frozenset()
-
-
-def _subdecl_resolve_override(
-    cls: type[FeatureGroup], feature_name: FeatureName | str, options: Options
-) -> Optional[str]:
-    return "rows_7"
-
-
-def _subdecl_canonical_override(cls: type[FeatureGroup], subtype: str) -> str:
-    return subtype
-
-
 class TestSubtypeDeclarationValueObject:
     """SubtypeDeclaration is a keyword-only frozen dataclass with normalized fields."""
 
@@ -692,54 +674,6 @@ class TestClassDefinitionValidation:
         assert "subdecl_bogus" in message
 
 
-class TestDerivedAccessorOverrideRejection:
-    """The declaration is the only surface: overriding a derived accessor raises at class definition."""
-
-    def test_subtype_universe_override_rejected(self) -> None:
-        with pytest.raises(ValueError) as exc_info:
-            type(
-                "SubDeclOverridesUniverseFG",
-                (FeatureGroup,),
-                {"subtype_universe": classmethod(_subdecl_universe_override)},
-            )
-        assert "SubDeclOverridesUniverseFG" in str(exc_info.value)
-
-    def test_supported_subtypes_override_rejected(self) -> None:
-        with pytest.raises(ValueError) as exc_info:
-            type(
-                "SubDeclOverridesSupportedFG",
-                (FeatureGroup,),
-                {"supported_subtypes": classmethod(_subdecl_supported_override)},
-            )
-        assert "SubDeclOverridesSupportedFG" in str(exc_info.value)
-
-    def test_resolve_subtype_override_rejected(self) -> None:
-        with pytest.raises(ValueError) as exc_info:
-            type(
-                "SubDeclOverridesResolveFG",
-                (FeatureGroup,),
-                {"resolve_subtype": classmethod(_subdecl_resolve_override)},
-            )
-        assert "SubDeclOverridesResolveFG" in str(exc_info.value)
-
-    def test_canonical_subtype_override_rejected(self) -> None:
-        with pytest.raises(ValueError) as exc_info:
-            type(
-                "SubDeclOverridesCanonicalFG",
-                (FeatureGroup,),
-                {"canonical_subtype": classmethod(_subdecl_canonical_override)},
-            )
-        assert "SubDeclOverridesCanonicalFG" in str(exc_info.value)
-
-    def test_override_rejected_even_on_declared_base(self) -> None:
-        with pytest.raises(ValueError):
-            type(
-                "SubDeclOverridesOnDeclaredFG",
-                (SubDeclWindowBaseFG,),
-                {"supported_subtypes": classmethod(_subdecl_supported_override)},
-            )
-
-
 def _subdecl_setitem(mapping: Any, key: str, value: Any) -> None:
     mapping[key] = value
 
@@ -750,14 +684,6 @@ def _subdecl_raising_resolver(feature_name: str, options: Options) -> Optional[s
 
 def _subdecl_int_resolver(feature_name: str, options: Options) -> Any:
     return 7
-
-
-def _subdecl_matrix_override(cls: type[FeatureGroup]) -> dict[str, frozenset[str]]:
-    return {}
-
-
-def _subdecl_option_values_override(cls: type[FeatureGroup], key: str) -> frozenset[str]:
-    return frozenset()
 
 
 class SubDeclRaisingResolverFG(FeatureGroup):
@@ -896,25 +822,3 @@ class TestSubDeclResolverResultStringified:
         gate = SubDeclIntResolverFG.supports_compute_framework
         assert gate("subdecl_int_feature", Options(), SubDeclFwBeta) is False
         assert gate("subdecl_int_feature", Options(), SubDeclFwAlpha) is True
-
-
-class TestSubDeclExtendedOverrideRejection:
-    """subtype_support_matrix and declared_option_values are also rejected at class definition."""
-
-    def test_subtype_support_matrix_override_rejected(self) -> None:
-        with pytest.raises(ValueError) as exc_info:
-            type(
-                "SubDeclOverridesMatrixFG",
-                (FeatureGroup,),
-                {"subtype_support_matrix": classmethod(_subdecl_matrix_override)},
-            )
-        assert "SubDeclOverridesMatrixFG" in str(exc_info.value)
-
-    def test_declared_option_values_override_rejected(self) -> None:
-        with pytest.raises(ValueError) as exc_info:
-            type(
-                "SubDeclOverridesOptionValuesFG",
-                (FeatureGroup,),
-                {"declared_option_values": classmethod(_subdecl_option_values_override)},
-            )
-        assert "SubDeclOverridesOptionValuesFG" in str(exc_info.value)

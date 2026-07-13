@@ -69,7 +69,7 @@ def _execute_command(
         if from_cfw is None:
             from_cfw = cfw_register.get_cfw_uuid(
                 command.from_framework.get_class_name(),
-                command.right_framework_uuid,
+                command.source_framework_uuid,
             )
 
     data = command.execute(cfw_register, cfw, data=data, from_cfw=from_cfw)

@@ -198,7 +198,7 @@ class ComputeFrameworkExecutor:
         """
         Prepares the right CFW for a TransformFrameworkStep.
         """
-        uuid = step.right_framework_uuid if step.right_framework_uuid else next(iter(step.required_uuids))
+        uuid = step.source_framework_uuid if step.source_framework_uuid else next(iter(step.required_uuids))
 
         cfw_uuid = self.cfw_register.get_cfw_uuid(step.from_framework.get_class_name(), uuid)
 

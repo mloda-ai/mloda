@@ -768,9 +768,9 @@ class TestJoinStepMapping:
 class TestCrossFrameworkJoinStepMapping:
     """The join sides live on different frameworks, so left/right cannot be confused.
 
-    ``ExecutionPlan.run_link`` may swap ``destination_framework``/``source_framework`` relative to
-    the link declaration, so the record's frameworks are the merge destination and the merged-in
-    source, while ``feature_group``/``source_feature_group`` stay the link's declared sides.
+    ``ExecutionPlan.run_link`` picks the merge destination, which may be the link's declared right
+    side. The record's frameworks are therefore the destination and the merged-in source, while
+    ``feature_group``/``source_feature_group`` stay the link's declared sides.
     """
 
     def test_join_step_frameworks_are_destination_and_source(self) -> None:

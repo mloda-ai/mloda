@@ -172,7 +172,7 @@ class ExecutionPlan:
             from_feature_group=from_feature_group,
             to_feature_group=to_feature_group,
             link_id=ep.link.uuid,
-            right_framework_uuids=ep.source_framework_uuids,
+            source_framework_uuids=ep.source_framework_uuids,
         )
 
     def add_tfs(
@@ -199,7 +199,7 @@ class ExecutionPlan:
                     ep.required_uuids.update(self.joinstep_collection.get_required_join_uuids(ep))
                 else:
                     # We need to do two things:
-                    # 1) right feature group of the join step needs to know of the link, so that the cfw can be used by the joinstep
+                    # 1) source feature group of the join step needs to know of the link, so that the cfw can be used by the joinstep
                     # 2) The child feature using this join needs to know which cfw to use. We use the tfs vehicle for this.
                     store_val = None
 
@@ -208,15 +208,15 @@ class ExecutionPlan:
                             # 1) We do 1 here:
                             for uuid in inner_ep.get_uuids():
                                 if uuid in ep.source_framework_uuids:
-                                    # add the link uuid to the children_if_root of the right feature group
+                                    # add the link uuid to the children_if_root of the source feature group
                                     inner_ep.add_value_to_children_if_root(ep.link.uuid)
 
-                                    # add to upload as this is the right feature group gets accessed in mp by other process
+                                    # add to upload as this source feature group gets accessed in mp by other process
                                     need_to_upload_collector.update(ep.source_framework_uuids)
                                     break
 
                                 if uuid in ep.destination_framework_uuids:
-                                    # add the link uuid to the children_if_root of the left feature group
+                                    # add the link uuid to the children_if_root of the destination feature group
 
                                     store_val = uuid
 
@@ -387,7 +387,7 @@ class ExecutionPlan:
             if not right_memory_index:
                 right_memory_index.add(js.link.right_index)
 
-            # Update the UUIDs only if the conditions are met: it is a left most index and is part of the joinstep destination framework uuid
+            # Only update when this is the left-most index and belongs to the join step's destination framework.
             if store_val == next(iter(js.destination_framework_uuids)) and left_most_index == js.link.left_index:
                 inner_ep.tfs_ids = {store_val}
                 inner_ep.features.any_uuid = store_val
@@ -570,11 +570,13 @@ class ExecutionPlan:
         # Sanity check for framework consistency
         if link_fw[1] != destination_framework:
             raise ValueError(
-                f"Left framework is not the same as the left framework of the link. {destination_framework}. This is a sanity check!"
+                f"Destination framework does not match the left framework of the link. "
+                f"{destination_framework}. This is a sanity check!"
             )
         if link_fw[2] != source_framework:
             raise ValueError(
-                f"Right framework is not the same as the right framework of the link. {source_framework}. This is a sanity check!"
+                f"Source framework does not match the right framework of the link. "
+                f"{source_framework}. This is a sanity check!"
             )
 
         return JoinStep(

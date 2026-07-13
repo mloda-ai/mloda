@@ -488,15 +488,15 @@ class TestPrepareExecuteStep:
 class TestPrepareTfsRightCfw:
     """Tests for prepare_tfs_right_cfw method."""
 
-    def test_uses_right_framework_uuid_when_available(self) -> None:
-        """Should use right_framework_uuid when set."""
+    def test_uses_source_framework_uuid_when_available(self) -> None:
+        """Should use source_framework_uuid when set."""
         cfw_register = Mock(spec=CfwManager)
         worker_manager = Mock(spec=WorkerManager)
         executor = ComputeFrameworkExecutor(cfw_register, worker_manager)
 
         step = Mock(spec=TransformFrameworkStep)
-        right_uuid = uuid4()
-        step.right_framework_uuid = right_uuid
+        source_uuid = uuid4()
+        step.source_framework_uuid = source_uuid
         step.from_framework = Mock()
         step.from_framework.get_class_name.return_value = "FromCFW"
 
@@ -506,16 +506,16 @@ class TestPrepareTfsRightCfw:
         result = executor.prepare_tfs_right_cfw(step)
 
         assert result == cfw_uuid
-        cfw_register.get_cfw_uuid.assert_called_once_with("FromCFW", right_uuid)
+        cfw_register.get_cfw_uuid.assert_called_once_with("FromCFW", source_uuid)
 
-    def test_uses_first_required_uuid_when_right_framework_uuid_is_none(self) -> None:
-        """Should use first required UUID when right_framework_uuid is None."""
+    def test_uses_first_required_uuid_when_source_framework_uuid_is_none(self) -> None:
+        """Should use first required UUID when source_framework_uuid is None."""
         cfw_register = Mock(spec=CfwManager)
         worker_manager = Mock(spec=WorkerManager)
         executor = ComputeFrameworkExecutor(cfw_register, worker_manager)
 
         step = Mock(spec=TransformFrameworkStep)
-        step.right_framework_uuid = None
+        step.source_framework_uuid = None
         required_uuid = uuid4()
         step.required_uuids = [required_uuid, uuid4()]
         step.from_framework = Mock()
@@ -536,7 +536,7 @@ class TestPrepareTfsRightCfw:
         executor = ComputeFrameworkExecutor(cfw_register, worker_manager)
 
         step = Mock(spec=TransformFrameworkStep)
-        step.right_framework_uuid = None
+        step.source_framework_uuid = None
         step.required_uuids = [uuid4()]
         step.from_framework = Mock()
         step.from_framework.get_class_name.return_value = "FromCFW"
@@ -557,7 +557,7 @@ class TestPrepareTfsAndJoinStep:
         executor = ComputeFrameworkExecutor(cfw_register, worker_manager)
 
         step = Mock(spec=TransformFrameworkStep)
-        step.right_framework_uuid = uuid4()
+        step.source_framework_uuid = uuid4()
         step.from_framework = Mock()
         step.from_framework.get_class_name.return_value = "FromCFW"
 
@@ -952,7 +952,7 @@ class TestMultiExecuteStep:
         executor = ComputeFrameworkExecutor(cfw_register, worker_manager)
 
         step = Mock(spec=TransformFrameworkStep)
-        step.right_framework_uuid = uuid4()
+        step.source_framework_uuid = uuid4()
         step.from_framework = Mock()
         step.from_framework.get_class_name.return_value = "FromCFW"
         step.required_uuids = [uuid4()]

@@ -450,6 +450,20 @@ BAD_TOP_LEVEL_IN_FEATURES: list[Any] = [
 ]
 
 
+def _assert_offender_named_without_payload(message: str, offender: Any) -> None:
+    """A dict offender is named by its keys: its repr would dump an options payload that may hold credentials.
+
+    Every other offender carries no payload and is still named by its repr.
+    """
+    if isinstance(offender, dict):
+        for key in offender:
+            assert key in message
+        for value in offender.values():
+            assert repr(value) not in message
+        return
+    assert repr(offender) in message
+
+
 @pytest.mark.parametrize("in_features, offender", BAD_TOP_LEVEL_IN_FEATURES)
 def test_load_features_rejects_in_features_element_that_is_not_a_name(in_features: list[Any], offender: Any) -> None:
     """Test that a top-level in_features element that is not a non-empty name is rejected (issue #680)."""
@@ -458,7 +472,7 @@ def test_load_features_rejects_in_features_element_that_is_not_a_name(in_feature
     with pytest.raises(ValueError, match="in_features") as exc_info:
         load_features_from_config(config_str, format="json")
 
-    assert repr(offender) in str(exc_info.value)
+    _assert_offender_named_without_payload(str(exc_info.value), offender)
 
 
 @pytest.mark.parametrize("in_features, offender", BAD_TOP_LEVEL_IN_FEATURES)
@@ -469,7 +483,7 @@ def test_load_features_rejects_in_features_element_with_group_options(in_feature
     with pytest.raises(ValueError, match="in_features") as exc_info:
         load_features_from_config(config_str, format="json")
 
-    assert repr(offender) in str(exc_info.value)
+    _assert_offender_named_without_payload(str(exc_info.value), offender)
 
 
 def test_load_features_accepts_in_features_array_of_names() -> None:

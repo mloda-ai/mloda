@@ -444,6 +444,87 @@ def test_loader_rejects_misplaced_feature_group_key_in_options() -> None:
         assert term in message
 
 
+def test_nested_in_features_rejects_misplaced_feature_group_key_in_options() -> None:
+    """A feature_group key inside the NESTED dict's 'options' is a misplaced scope and raises ValueError."""
+    options: dict[str, Any] = {
+        "in_features": {
+            "name": "shared_token",
+            "options": {"feature_group": "ConfigScopeSourceA"},
+        },
+    }
+
+    with pytest.raises(ValueError) as exc_info:
+        process_nested_features(options)
+
+    message = str(exc_info.value)
+    for term in MISPLACED_KEY_TERMS:
+        assert term in message
+
+
+def test_nested_in_features_rejects_misplaced_feature_group_key_two_levels_deep() -> None:
+    """The recursion catches a misplaced scope in the options of a nested feature's own nested feature."""
+    options: dict[str, Any] = {
+        "in_features": {
+            "name": "outer_token",
+            "options": {
+                "in_features": {
+                    "name": "inner_token",
+                    "options": {"feature_group": "ConfigScopeSourceA"},
+                },
+            },
+        },
+    }
+
+    with pytest.raises(ValueError) as exc_info:
+        process_nested_features(options)
+
+    message = str(exc_info.value)
+    for term in MISPLACED_KEY_TERMS:
+        assert term in message
+
+
+def test_nested_in_features_rejects_misplaced_feature_group_key_in_sibling_in_features_dict() -> None:
+    """The sibling in_features-as-dict path also rejects a misplaced scope in that dict's options."""
+    options: dict[str, Any] = {
+        "in_features": {
+            "name": "outer_token",
+            "in_features": {
+                "name": "inner_token",
+                "options": {"feature_group": "ConfigScopeSourceA"},
+            },
+        },
+    }
+
+    with pytest.raises(ValueError) as exc_info:
+        process_nested_features(options)
+
+    message = str(exc_info.value)
+    for term in MISPLACED_KEY_TERMS:
+        assert term in message
+
+
+def test_loader_nested_in_features_rejects_misplaced_feature_group_key_in_options() -> None:
+    """Through the JSON surface, the nested misplaced scope fails loudly instead of becoming an option."""
+    config_str = """[
+        {
+            "name": "outer",
+            "options": {
+                "in_features": {
+                    "name": "shared_token",
+                    "options": {"feature_group": "SomeSource"}
+                }
+            }
+        }
+    ]"""
+
+    with pytest.raises(ValueError) as exc_info:
+        load_features_from_config(config_str, format="json")
+
+    message = str(exc_info.value)
+    for term in MISPLACED_KEY_TERMS:
+        assert term in message
+
+
 # ---------------------------------------------------------------------------
 # Regression: configs without the field are unchanged
 # ---------------------------------------------------------------------------

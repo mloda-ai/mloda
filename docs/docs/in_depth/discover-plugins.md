@@ -43,6 +43,22 @@ print(result.feature_group, result.supported_compute_frameworks)
 
 `options` and `plugin_collector` are keyword-only, so pass them by name.
 
+### Scoping to a Feature Group
+
+When several FeatureGroups match the same name, such as the framework-specific
+`AggregatedFeatureGroup` subclasses, narrow the resolution with the keyword-only
+`feature_group` argument. It takes a FeatureGroup subclass or its class-name
+string (the string matches the named class and its subclasses), the same forms
+as `Feature(..., feature_group=...)`:
+
+``` python
+result = resolve_feature("sales__sum_aggr", feature_group="PandasAggregatedFeatureGroup")
+```
+
+Scoped failures append `Scoped to feature group: '<Name>'.` to `result.error`,
+mirroring the scoped engine error, so a scoped run can be debugged with the
+same scope.
+
 When exactly one FeatureGroup resolves, `ResolvedFeature` also reports
 `subtype` (resolved from the name, the passed options, or the key's declared
 default, e.g. `"sum"` for `sales__sum_aggr`) and `subtype_family` (the

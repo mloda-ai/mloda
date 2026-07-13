@@ -319,6 +319,49 @@ class TestNoFeatureGroupFoundErrorMessage:
         assert "Did you mean" not in error_message
 
 
+class TestScopedResolveFeaturePointerWording:
+    """The no-match debug pointer names feature_group exactly when the feature is scoped (issue #693)."""
+
+    def test_scoped_no_match_pointer_includes_feature_group(self) -> None:
+        """A scoped no-match error points at the scoped resolve_feature form."""
+        feature = Feature("nonexistent_xyz", feature_group="KnownFeatureGroup")
+        accessible_plugins: FeatureGroupEnvironmentMapping = {
+            KnownFeatureGroup: {MockComputeFramework},
+        }
+
+        with pytest.raises(ValueError) as exc_info:
+            IdentifyFeatureGroupClass(
+                feature=feature,
+                accessible_plugins=accessible_plugins,
+                links=None,
+            )
+
+        error_message = str(exc_info.value)
+        assert "Scoped to feature group: 'KnownFeatureGroup'." in error_message
+        assert "resolve_feature(name, options=..., feature_group=...)" in error_message, (
+            f"Scoped no-match errors must point at resolve_feature(name, options=..., feature_group=...), "
+            f"but got: {error_message}"
+        )
+
+    def test_unscoped_no_match_pointer_stays_unscoped(self) -> None:
+        """An unscoped no-match error keeps the plain resolve_feature pointer without feature_group."""
+        feature = Feature("nonexistent_xyz")
+        accessible_plugins: FeatureGroupEnvironmentMapping = {
+            KnownFeatureGroup: {MockComputeFramework},
+        }
+
+        with pytest.raises(ValueError) as exc_info:
+            IdentifyFeatureGroupClass(
+                feature=feature,
+                accessible_plugins=accessible_plugins,
+                links=None,
+            )
+
+        error_message = str(exc_info.value)
+        assert "resolve_feature(name, options=...)" in error_message
+        assert "feature_group=..." not in error_message
+
+
 class NoComputeFrameworkFeatureGroup(FeatureGroup):
     """Feature group for testing 'no compute framework' error message."""
 

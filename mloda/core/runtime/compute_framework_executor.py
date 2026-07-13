@@ -179,7 +179,7 @@ class ComputeFrameworkExecutor:
 
         elif isinstance(step, JoinStep):
             cfw_uuid = self.cfw_register.get_cfw_uuid(
-                step.left_framework.get_class_name(), next(iter(step.left_framework_uuids))
+                step.destination_framework.get_class_name(), next(iter(step.destination_framework_uuids))
             )
 
         if cfw_uuid is None:
@@ -198,7 +198,7 @@ class ComputeFrameworkExecutor:
         """
         Prepares the right CFW for a TransformFrameworkStep.
         """
-        uuid = step.right_framework_uuid if step.right_framework_uuid else next(iter(step.required_uuids))
+        uuid = step.source_framework_uuid if step.source_framework_uuid else next(iter(step.required_uuids))
 
         cfw_uuid = self.cfw_register.get_cfw_uuid(step.from_framework.get_class_name(), uuid)
 
@@ -218,17 +218,17 @@ class ComputeFrameworkExecutor:
             from_cfw = self.prepare_tfs_right_cfw(step)
             from_cfw = self.cfw_collection[from_cfw]
         elif isinstance(step, JoinStep):
-            # Left framework here, because it is already transformed beforehand
-            from_cfw_uuid = self.cfw_register.get_cfw_uuid(step.left_framework.get_class_name(), step.link.uuid)
+            # Destination framework here, because it is already transformed beforehand
+            from_cfw_uuid = self.cfw_register.get_cfw_uuid(step.destination_framework.get_class_name(), step.link.uuid)
 
             if from_cfw_uuid is None:
                 from_cfw_uuid = self.cfw_register.get_cfw_uuid(
-                    step.left_framework.get_class_name(), next(iter(step.right_framework_uuids))
+                    step.destination_framework.get_class_name(), next(iter(step.source_framework_uuids))
                 )
 
             if from_cfw_uuid is None:
                 raise ValueError(
-                    f"from_cfw_uuid should not be none: {step.left_framework.get_class_name()}, {step.link.uuid}"
+                    f"from_cfw_uuid should not be none: {step.destination_framework.get_class_name()}, {step.link.uuid}"
                 )
 
             from_cfw = self.cfw_collection[from_cfw_uuid]

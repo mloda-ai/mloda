@@ -29,10 +29,7 @@ class PlanStep:
 
     join: ``feature_group``/``source_feature_group`` are the link's declared left/right sides, and
     ``join_type`` its join type. ``compute_framework`` is the merge destination and
-    ``source_compute_framework`` the framework merged in. Those two are not necessarily the
-    frameworks of the declared left/right sides: ``ExecutionPlan.run_link`` swaps them for RIGHT
-    joins (and when no child needs the declared orientation), so for a RIGHT join the destination
-    framework belongs to the declared right side.
+    ``source_compute_framework`` the framework merged in.
     """
 
     step_kind: Literal["compute", "join", "transform"]
@@ -106,9 +103,9 @@ def build_plan_steps(
                     step_kind="join",
                     feature_names=(),
                     feature_group=step.link.left_feature_group,
-                    compute_framework=step.left_framework,
+                    compute_framework=step.destination_framework,
                     source_feature_group=step.link.right_feature_group,
-                    source_compute_framework=step.right_framework,
+                    source_compute_framework=step.source_framework,
                     join_type=step.link.jointype.value,
                 )
             )

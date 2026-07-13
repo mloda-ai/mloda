@@ -53,12 +53,12 @@ def _execute_command(
 ) -> Any:
     """Executes a given command based on its type."""
     if isinstance(command, JoinStep):
-        # Left framework here, because it is already transformed beforehand
-        from_cfw = cfw_register.get_cfw_uuid(command.left_framework.get_class_name(), command.link.uuid)  # type: ignore[assignment]
+        # Destination framework here, because it is already transformed beforehand
+        from_cfw = cfw_register.get_cfw_uuid(command.destination_framework.get_class_name(), command.link.uuid)  # type: ignore[assignment]
 
         if from_cfw is None:
             from_cfw = cfw_register.get_cfw_uuid(
-                command.left_framework.get_class_name(), next(iter(command.right_framework_uuids))
+                command.destination_framework.get_class_name(), next(iter(command.source_framework_uuids))
             )
 
         if from_cfw is None:
@@ -69,7 +69,7 @@ def _execute_command(
         if from_cfw is None:
             from_cfw = cfw_register.get_cfw_uuid(
                 command.from_framework.get_class_name(),
-                command.right_framework_uuid,
+                command.source_framework_uuid,
             )
 
     data = command.execute(cfw_register, cfw, data=data, from_cfw=from_cfw)

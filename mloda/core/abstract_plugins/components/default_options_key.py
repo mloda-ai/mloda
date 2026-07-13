@@ -42,10 +42,8 @@ class DefaultOptionKeys(str, Enum):
         return self.value.__format__(format_spec)
 
 
-# The SCHEMA of a PROPERTY_MAPPING spec dict: the complete set of permitted keys. A spec's
-# value space is declared under ``allowed_values``, never inferred, so every other key must be
-# one of these. ``FeatureChainParser.validate_property_mapping_defaults`` rejects any unknown
-# key at class-definition time, which is what stops a typo'd flag from being read as a value.
+# The SCHEMA of a PROPERTY_MAPPING spec dict: the complete set of permitted keys. Rejecting any
+# other key at class definition is what stops a typo'd flag from being read as an allowed value.
 PROPERTY_SPEC_KEYS: frozenset[Any] = frozenset(
     {
         "explanation",
@@ -60,8 +58,8 @@ PROPERTY_SPEC_KEYS: frozenset[Any] = frozenset(
     }
 )
 
-# Removed PROPERTY_MAPPING keys mapped to their replacement (issue #600). They are unknown keys
-# like any other; this map only gives the unknown-key error a precise remedy to name.
+# Removed keys mapped to their replacement (issue #600). They are unknown keys like any other;
+# this map only gives the unknown-key error an exact remedy to name.
 REMOVED_PROPERTY_KEYS: dict[str, DefaultOptionKeys] = {
     "validation_function": DefaultOptionKeys.element_validator,
     "type_validator": DefaultOptionKeys.match_guard,

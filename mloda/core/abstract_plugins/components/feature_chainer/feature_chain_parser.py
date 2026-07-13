@@ -201,13 +201,10 @@ class FeatureChainParser:
 
     @classmethod
     def _extract_property_values(cls, property_value: Any) -> Any:
-        """Extract a spec's declared value space.
+        """Return a spec's declared value space (``allowed_values``), or {} if it declares none.
 
-        The value space is DECLARED under ``DefaultOptionKeys.allowed_values``, never inferred.
-        A spec without it declares an EMPTY value space. Recovering the space by subtracting the
-        known keys (the retired flattened form) silently absorbed every unrecognized key as an
-        accepted value, which made a typo'd flag indistinguishable from a legitimate value.
-        A non-dict spec value is its own value space and is handed back verbatim.
+        Never inferred by subtracting the known keys: the retired flattened form did that, and it
+        absorbed every unrecognized key as an accepted value.
         """
         if isinstance(property_value, dict):
             return property_value.get(DefaultOptionKeys.allowed_values, {})
@@ -215,23 +212,11 @@ class FeatureChainParser:
 
     @classmethod
     def check_declared_default(cls, owner: str, key: str, spec: dict[str, Any]) -> None:
-        """Check one spec's declared default against its own strict-validation rules.
+        """Check a spec's declared default against its own strict-validation rules.
 
-        This is the single implementation of the default-check semantics, shared by
-        ``validate_property_mapping_defaults`` (class-definition time) and by the
-        ``property_spec`` authoring helper, so the two can never drift apart.
-
-        Under strict validation, a non-``None`` declared default must pass the key's
-        ``element_validator`` if it has one, otherwise be a member of the accepted set.
-        An ``element_validator`` that itself errors when called with the default is
-        reported as having raised (with the original exception chained as the cause),
-        which is distinct from the validator running and rejecting the default.
-        ``DefaultOptionKeys.required_when`` does NOT exempt this check: it is a
-        conditional requirement, so the default still applies on the predicate-false
-        branch. The remedies are to add the default to the accepted values or to
-        remove the default (a key with no default is required).
-
-        Raises ValueError on violation, otherwise returns None.
+        Shared by ``validate_property_mapping_defaults`` and ``property_spec`` so the two cannot
+        drift. ``required_when`` does NOT exempt the check: the default still applies on the
+        predicate-false branch.
         """
         if DefaultOptionKeys.default not in spec:
             return
@@ -274,27 +259,11 @@ class FeatureChainParser:
     def validate_property_mapping_defaults(cls, owner_name: str, property_mapping: dict[str, Any] | None) -> None:
         """Validate a PROPERTY_MAPPING at class-definition time.
 
-        Five rules, in this order:
-
-        1. A spec must BE a spec dict (``_reject_non_dict_spec``). A bare container has nowhere
-           to put a flag, so it would bypass every rule below it.
-        2. Every KEY of a spec must be in ``PROPERTY_SPEC_KEYS``, the spec schema
-           (``_reject_unknown_spec_keys``).
-        3. Every VALUE of a spec must have the right SHAPE (``_reject_malformed_spec_values``):
-           ``allowed_values`` is a Collection and never a str/bytes, the validator keys are
-           callable, and ``strict_validation`` is a real bool.
-        4. ``strict_validation: True`` needs a non-empty ``allowed_values`` or an
-           ``element_validator`` to validate against (``_reject_strict_without_value_space``).
-        5. A declared default must satisfy the spec's own rules (``check_declared_default``).
-
-        The order is load-bearing. The schema rule runs before the shape rules because a spec
-        with an unknown key is malformed, and its remaining keys cannot be trusted to mean what
-        they appear to mean; a REMOVED key in particular is the one offender with an exact
-        remedy, so it must be reported as a rename rather than as a downstream shape error. The
-        shape rules in turn run before rules 4 and 5, which read those values and would otherwise
-        mis-diagnose a malformed one: a non-callable ``element_validator`` reaching
-        ``check_declared_default`` gets blamed on the default, and a non-Collection
-        ``allowed_values`` passes rule 4's non-empty test purely on truthiness.
+        The rule ORDER below is load-bearing. Schema before shape: an unknown key means the
+        remaining keys cannot be trusted, and a removed key must be reported as a rename rather
+        than as some downstream shape error. Shape before the strict and default rules: those
+        read the values the shape rule validates, so a malformed one would be mis-diagnosed (a
+        non-callable ``element_validator`` gets blamed on the default).
         """
         if property_mapping is None:
             return
@@ -308,12 +277,7 @@ class FeatureChainParser:
 
     @classmethod
     def _reject_non_dict_spec(cls, owner_name: str, key: str, spec: Any) -> None:
-        """Fail loudly on a spec that is not a spec dict.
-
-        A bare container (``{"op": ["add", "sub"]}``) carries no keys, so every rule below it has
-        nothing to inspect and it slips through all of them. There is one authoring form, and it
-        is a dict.
-        """
+        """Reject a bare container: it carries no keys, so every rule below would skip it."""
         if isinstance(spec, dict):
             return
 
@@ -324,16 +288,10 @@ class FeatureChainParser:
 
     @classmethod
     def _reject_unknown_spec_keys(cls, owner_name: str, key: str, spec: dict[str, Any]) -> None:
-        """Fail loudly on any key that is not part of the spec schema.
+        """Reject every key outside the spec schema, reporting them all in one message.
 
-        The value space is declared under ``allowed_values``, so an unrecognized key is never a
-        value: it is an authoring mistake. This is the one rule that covers all of them, with two
-        message variants. A key that was REMOVED names its replacement; any other unknown key gets
-        the nearest known key suggested, so ``strict_validaton`` reads as a typo instead of
-        silently turning strict validation off while joining the accepted values.
-
-        EVERY unknown key is reported, so fixing one does not just reveal the next. Removed keys
-        lead, because they are the offenders with an exact remedy, but they never hide the rest.
+        Removed keys lead, because they are the offenders with an exact remedy, but they never
+        hide the rest.
         """
         unknown = [spec_key for spec_key in spec if spec_key not in PROPERTY_SPEC_KEYS]
         if not unknown:
@@ -360,20 +318,12 @@ class FeatureChainParser:
 
     @classmethod
     def _reject_malformed_spec_values(cls, owner_name: str, key: str, spec: dict[str, Any]) -> None:
-        """Fail loudly on a spec key whose VALUE has the wrong shape.
+        """Reject a spec key whose VALUE has the wrong shape.
 
-        Locking down the key names alone left the values unchecked, which reopens the same silent
-        widening one layer down. Three shapes are pinned here:
-
-        * ``allowed_values`` must be a ``Collection``, and never a ``str``/``bytes``. A forgotten
-          comma turns ``("add")`` into the str ``"add"``, and membership then silently degrades
-          into a SUBSTRING test that accepts ``"a"``, ``"ad"`` and ``""``. A generator is truthy
-          whether or not it is empty, and is consumed by the first thing that reads it, which
-          makes matching stateful; a scalar makes ``value in 5`` raise a ``TypeError`` that the
-          match path swallows into a silent reject-everything.
-        * the callable-valued keys must actually be callable, or a ``TypeError`` escapes out of
-          matching (and, with a declared default, gets mis-reported as a default problem).
-        * ``strict_validation`` must be a real ``bool``: truthiness makes ``"false"`` mean strict.
+        ``allowed_values`` must never be a ``str``/``bytes``: ``in`` would silently become a
+        SUBSTRING test. It must be a ``Collection`` at all: a generator is truthy even when empty
+        and is consumed by the first read, and a scalar makes ``value in 5`` raise a ``TypeError``
+        that the match path swallows into a silent reject-everything.
         """
         prefix = f"{owner_name}.PROPERTY_MAPPING['{key}']"
 
@@ -417,15 +367,11 @@ class FeatureChainParser:
 
     @classmethod
     def _reject_strict_without_value_space(cls, owner_name: str, key: str, spec: dict[str, Any]) -> None:
-        """Fail loudly on strict validation that has nothing to validate against.
+        """Reject strict validation with nothing to validate against: it would reject every value.
 
-        Strict with neither a non-empty ``allowed_values`` nor an ``element_validator`` accepts
-        nothing, so it rejects every value: a spec that can never match. ``property_spec``
-        already refuses to build one, so core enforces the same invariant to stay in step.
-
-        "Non-empty" is a ``len`` test, not a truthiness test. ``_reject_malformed_spec_values``
-        has already established that the value space is a ``Collection``, which is what makes it
-        checkable: a generator object is truthy even when it yields nothing.
+        "Non-empty" is a ``len`` test rather than truthiness ON PURPOSE: the shape rule has
+        already established the value space is a ``Collection``, and a generator is truthy even
+        when it yields nothing.
         """
         if not cls._is_strict_validation(spec):
             return

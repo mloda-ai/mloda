@@ -24,9 +24,8 @@ def property_spec(
     required_when: Callable[..., Any] | None = None,
     match_guard: Callable[..., Any] | None = None,
 ) -> dict[str, Any]:
-    # A str/bytes is iterable, so tuple("add") would silently build ('a', 'd', 'd'). Reject the
-    # shape before materializing it. This is about the value space itself, so it holds whether or
-    # not the spec is strict.
+    # A str/bytes is iterable, so tuple("add") would silently build ('a', 'd', 'd'): reject the
+    # shape before materializing it. Holds whether or not the spec is strict.
     if isinstance(allowed_values, (str, bytes)):
         raise ValueError(
             f"property_spec({explanation!r}): allowed_values is a {type(allowed_values).__name__} "
@@ -46,9 +45,9 @@ def property_spec(
     if match_guard is not None and not callable(match_guard):
         raise ValueError(f"property_spec({explanation!r}): match_guard must be callable.")
 
-    # element_validator really is dead without strict: _validate_property_value returns early on a
-    # non-strict spec. allowed_values is NOT: a non-strict value space is still consumed, to map a
-    # name-parsed operation_config back onto its PROPERTY_MAPPING key.
+    # Dead without strict: _validate_property_value returns early on a non-strict spec. allowed_values
+    # is NOT dead there, so it has no such rule: a non-strict value space still maps a name-parsed
+    # value back onto its PROPERTY_MAPPING key.
     if element_validator is not None and not strict:
         raise ValueError(f"property_spec({explanation!r}): element_validator is never enforced without strict=True.")
 

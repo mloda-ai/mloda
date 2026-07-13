@@ -4,6 +4,7 @@ import re
 from pathlib import Path
 from typing import Any
 
+import pytest
 import yaml
 
 
@@ -38,7 +39,11 @@ def _pattern_to_regex(pattern: str) -> re.Pattern[str]:
     i = 0
     while i < len(pattern):
         char = pattern[i]
-        if pattern.startswith("**", i):
+        if pattern.startswith("**/", i):
+            # `**/` matches zero directories too, so the slash is optional.
+            out += "(?:.*/)?"
+            i += 3
+        elif pattern.startswith("**", i):
             out += ".*"
             i += 2
         elif char == "*":
@@ -75,6 +80,58 @@ def _markdown_referenced_by_tests() -> set[str]:
 def _protected_paths() -> list[str]:
     docs = {str(p.relative_to(PROJECT_ROOT)) for p in (PROJECT_ROOT / "docs").rglob("*.md")}
     return sorted(docs | _markdown_referenced_by_tests())
+
+
+# Composed, not a bare literal: MD_LITERAL scans tests/ for markdown names and treats every one that
+# exists in the repo as content the suite depends on, which would wrongly mark the root README protected.
+ROOT_README = "README" + ".md"
+
+# Patterns paired with GitHub's own documented example matches (filter pattern cheat sheet).
+GLOBSTAR_MATCHES: list[tuple[str, str]] = [
+    ("**/README.md", ROOT_README),
+    ("**/README.md", "js/README.md"),
+    ("**/*.md", ROOT_README),
+    ("**/*-post.md", "my-post.md"),
+    ("**/*-post.md", "path/their-post.md"),
+    ("**.js", "index.js"),
+    ("**.js", "js/index.js"),
+    ("**.js", "src/js/app.js"),
+    ("*.js", "app.js"),
+    ("docs/**", "docs/README.md"),
+    ("docs/**", "docs/mona/octocat.txt"),
+    ("docs/*", "docs/README.md"),
+    ("docs/**/*.md", "docs/README.md"),
+    ("docs/**/*.md", "docs/a/markdown/file.md"),
+    ("**/docs/**", "docs/hello.md"),
+    ("**/docs/**", "dir/docs/my-file.txt"),
+]
+
+# A single `*` stops at a path separator, so the helper must not over-match either.
+GLOBSTAR_NON_MATCHES: list[tuple[str, str]] = [
+    ("*.js", "js/app.js"),
+    ("docs/*", "docs/mona/octocat.txt"),
+    ("**/README.md", "README.md.bak"),
+]
+
+
+def _case_ids(cases: list[tuple[str, str]]) -> list[str]:
+    return [f"{pattern} ~ {path}" for pattern, path in cases]
+
+
+@pytest.mark.parametrize(("pattern", "path"), GLOBSTAR_MATCHES, ids=_case_ids(GLOBSTAR_MATCHES))
+def test_pattern_matches_github_documented_example(pattern: str, path: str) -> None:
+    assert _matches(pattern, path), (
+        f"GitHub documents {path!r} as a match for {pattern!r}, but the helper produced "
+        f"{_pattern_to_regex(pattern).pattern!r}. Under-matching lets the guards pass while GitHub skips the gate."
+    )
+
+
+@pytest.mark.parametrize(("pattern", "path"), GLOBSTAR_NON_MATCHES, ids=_case_ids(GLOBSTAR_NON_MATCHES))
+def test_pattern_does_not_match_beyond_github_semantics(pattern: str, path: str) -> None:
+    assert not _matches(pattern, path), (
+        f"{pattern!r} must not match {path!r}, but the helper produced {_pattern_to_regex(pattern).pattern!r}. "
+        "Over-matching makes the guards fail on filters that are actually safe."
+    )
 
 
 def test_protected_set_is_not_stale() -> None:

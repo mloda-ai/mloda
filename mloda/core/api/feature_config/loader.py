@@ -13,7 +13,11 @@ from typing import Any
 from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.api.feature_config.parser import parse_json
-from mloda.core.api.feature_config.models import FeatureConfig, validate_feature_group_scope
+from mloda.core.api.feature_config.models import (
+    FeatureConfig,
+    validate_feature_group_not_in_options,
+    validate_feature_group_scope,
+)
 from mloda.core.abstract_plugins.components.default_options_key import DefaultOptionKeys
 
 
@@ -36,6 +40,7 @@ def process_nested_features(options: dict[str, Any]) -> dict[str, Any]:
 
             # Recursively process nested options
             nested_options = value.get("options", {})
+            validate_feature_group_not_in_options(nested_options, "options")
             processed_nested_options = process_nested_features(nested_options)
 
             # Handle nested in_features (can also be a dict)

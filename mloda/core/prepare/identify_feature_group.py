@@ -51,8 +51,10 @@ def matches_feature_group_scope(feature_group: type[FeatureGroup], scope: str | 
     """
     if isinstance(scope, type):
         return issubclass(feature_group, scope)
+    # Name first: get_class_name() is @final and just returns __name__, while issubclass() on an ABCMeta
+    # class is the expensive check, so the name gate keeps it off nearly every MRO entry.
     return any(
-        ancestor is not FeatureGroup and issubclass(ancestor, FeatureGroup) and ancestor.get_class_name() == scope
+        ancestor.__name__ == scope and ancestor is not FeatureGroup and issubclass(ancestor, FeatureGroup)
         for ancestor in feature_group.__mro__
     )
 

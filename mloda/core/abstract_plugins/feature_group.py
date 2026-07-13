@@ -136,7 +136,7 @@ class FeatureGroup(ABC):
         if not declared_values:
             raise ValueError(
                 f"{cls.__name__} declares subtype key '{declaration.key}' without an enumerable value space; "
-                f"predicate-validated keys must declare a flattened universe with a resolver instead."
+                f"predicate-validated keys must declare an explicit universe with a resolver instead."
             )
 
         colliding = declaration.family_names() & declared_values

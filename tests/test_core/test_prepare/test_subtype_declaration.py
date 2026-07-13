@@ -154,7 +154,7 @@ class SubDeclPredicateUniverseFG(FeatureGroup):
         "subdecl_pred_key": property_spec(
             "Predicate-validated subtype.",
             strict=True,
-            validation_function=_subdecl_is_positive_int,
+            element_validator=_subdecl_is_positive_int,
         ),
     }
     SUBTYPES = SubtypeDeclaration(universe={"p1", "p2"}, resolver=_subdecl_pred_resolver)
@@ -168,19 +168,19 @@ class SubDeclPredicateUniverseFG(FeatureGroup):
 
 
 class SubDeclValueSpaceFG(FeatureGroup):
-    """PROPERTY_MAPPING with spec-form, list-form, legacy flattened and predicate-only keys."""
+    """PROPERTY_MAPPING with mapping-form, list-form, numeric and predicate-only keys."""
 
     PROPERTY_MAPPING = {
         "subdecl_algo": property_spec("Algorithm.", strict=True, allowed_values={"a1": "A one", "a2": "A two"}),
         "subdecl_kind": property_spec("Kind.", strict=True, allowed_values=["x1", "x2"]),
         "subdecl_bucket": property_spec("Bucket count.", strict=True, allowed_values={2: "two", 7: "seven"}),
-        "subdecl_mode": {
-            "fast": "Fast mode",
-            "slow": "Slow mode",
-            DefaultOptionKeys.context: True,
-            DefaultOptionKeys.strict_validation: True,
-        },
-        "subdecl_n": property_spec("Predicate-only key.", strict=True, validation_function=_subdecl_is_positive_int),
+        "subdecl_mode": property_spec(
+            "Mode.",
+            strict=True,
+            context=True,
+            allowed_values={"fast": "Fast mode", "slow": "Slow mode"},
+        ),
+        "subdecl_n": property_spec("Predicate-only key.", strict=True, element_validator=_subdecl_is_positive_int),
     }
 
     def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
@@ -380,8 +380,11 @@ class TestDeclaredOptionValues:
         assert values == frozenset({"2", "7"})
         assert all(isinstance(value, str) for value in values)
 
-    def test_legacy_flattened_form_excludes_reserved_keys(self) -> None:
-        assert SubDeclValueSpaceFG.declared_option_values("subdecl_mode") == frozenset({"fast", "slow"})
+    def test_spec_flags_are_not_part_of_the_value_space(self) -> None:
+        # subdecl_mode carries context/strict_validation flags; only allowed_values is the value space.
+        values = SubDeclValueSpaceFG.declared_option_values("subdecl_mode")
+        assert values == frozenset({"fast", "slow"})
+        assert not values & {str(DefaultOptionKeys.context), str(DefaultOptionKeys.strict_validation)}
 
     def test_predicate_only_key_has_empty_value_space(self) -> None:
         assert SubDeclValueSpaceFG.declared_option_values("subdecl_n") == frozenset()
@@ -635,7 +638,7 @@ class TestClassDefinitionValidation:
                     "subdecl_pred_only_key": property_spec(
                         "Predicate-only subtype key.",
                         strict=True,
-                        validation_function=_subdecl_is_positive_int,
+                        element_validator=_subdecl_is_positive_int,
                     ),
                 }
 

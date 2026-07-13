@@ -55,6 +55,34 @@ class TestDimensionalityReductionFeatureGroup:
         with pytest.raises(ValueError):
             DimensionalityReductionFeatureGroup.parse_reduction_suffix("customer_metrics_pca_2d")
 
+    def test_umap_is_not_declared(self) -> None:
+        """umap is not implemented by any compute framework, so it must not be declared."""
+        assert "umap" not in DimensionalityReductionFeatureGroup.REDUCTION_ALGORITHMS
+
+    def test_umap_feature_does_not_match(self) -> None:
+        """A umap feature must fail at planning time, not at compute time."""
+        assert not DimensionalityReductionFeatureGroup.match_feature_group_criteria("customer__umap_2d", Options())
+
+    def test_declared_algorithms_are_dispatched_by_pandas(self) -> None:
+        """Every declared algorithm must be computable by the pandas implementation."""
+        pd = pytest.importorskip("pandas")
+
+        data = pd.DataFrame(
+            {
+                "f1": [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0],
+                "f2": [2.0, 1.0, 4.0, 3.0, 6.0, 5.0, 8.0, 7.0, 10.0, 9.0, 12.0, 11.0],
+                "f3": [5.0, 3.0, 8.0, 1.0, 9.0, 2.0, 7.0, 4.0, 6.0, 12.0, 10.0, 11.0],
+                "target": ["a", "a", "a", "a", "b", "b", "b", "b", "c", "c", "c", "c"],
+            }
+        )
+        source_features = ["f1", "f2", "f3"]
+
+        for algorithm in DimensionalityReductionFeatureGroup.REDUCTION_ALGORITHMS:
+            result = PandasDimensionalityReductionFeatureGroup._perform_reduction(
+                data, algorithm, 2, source_features, Options()
+            )
+            assert result.shape == (12, 2), f"Unexpected result shape for algorithm {algorithm}"
+
     def test_input_features(self) -> None:
         """Test the input_features method."""
         feature_group = PandasDimensionalityReductionFeatureGroup()

@@ -23,14 +23,13 @@ class DimensionalityReductionFeatureGroup(FeatureChainParserMixin, FeatureGroup)
     Base class for all dimensionality reduction feature groups.
 
     Dimensionality reduction feature groups reduce the dimensionality of feature spaces
-    using various techniques like PCA, t-SNE, UMAP, etc. They support both string-based
+    using various techniques like PCA, t-SNE, Isomap, etc. They support both string-based
     feature creation and configuration-based creation with proper group/context parameter separation.
 
     ## Supported Dimensionality Reduction Algorithms
 
     - `pca`: Principal Component Analysis
     - `tsne`: t-Distributed Stochastic Neighbor Embedding
-    - `umap`: Uniform Manifold Approximation and Projection
     - `ica`: Independent Component Analysis
     - `lda`: Linear Discriminant Analysis
     - `isomap`: Isometric Mapping
@@ -46,7 +45,7 @@ class DimensionalityReductionFeatureGroup(FeatureChainParserMixin, FeatureGroup)
     features = [
         "customer_metrics__pca_2d",      # PCA reduction to 2 dimensions
         "product_features__tsne_3d",     # t-SNE reduction to 3 dimensions
-        "sensor_readings__umap_10d"      # UMAP reduction to 10 dimensions
+        "sensor_readings__isomap_10d"    # Isomap reduction to 10 dimensions
     ]
     ```
 
@@ -106,7 +105,6 @@ class DimensionalityReductionFeatureGroup(FeatureChainParserMixin, FeatureGroup)
     REDUCTION_ALGORITHMS = {
         "pca": "Principal Component Analysis",
         "tsne": "t-Distributed Stochastic Neighbor Embedding",
-        "umap": "Uniform Manifold Approximation and Projection",
         "ica": "Independent Component Analysis",
         "lda": "Linear Discriminant Analysis",
         "isomap": "Isometric Mapping",

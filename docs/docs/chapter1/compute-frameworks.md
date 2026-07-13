@@ -173,18 +173,15 @@ A feature group running on PythonDictFramework may also return row-wise data as 
 
 #### Columnar helpers
 
-`columnar_to_rows`, `homogenize_rows`, `is_columnar`, and `rows_to_columnar` are importable from `mloda.provider` (plugin/provider code, where pivoting a columnar frame back to rows belongs) and from `mloda.user` (application code unwrapping a `run_all` result). `columnar_to_rows` is strict: it raises `ValueError` on anything that is not a valid columnar dict. Use `is_columnar` to branch first:
+`columnar_to_rows`, `homogenize_rows`, `is_columnar`, `result_rows`, and `rows_to_columnar` are importable from `mloda.provider` (plugin/provider code, where pivoting a columnar frame back to rows belongs) and from `mloda.user` (application code unwrapping a `run_all` result). `columnar_to_rows` is strict: it raises `ValueError` on anything that is not a valid columnar dict. `result_rows` is the blessed tolerant unwrapper for `run_all` output: it flattens the partition list into row dicts, and a dict that satisfies `is_columnar` is always treated as a columnar partition, never as a row.
 
 ``` python
-from mloda.provider import columnar_to_rows, is_columnar
+from mloda.user import mloda, result_rows
 
-def to_rows_lenient(data):
-    if isinstance(data, list):
-        return data
-    return columnar_to_rows(data) if is_columnar(data) else []
+rows = result_rows(mloda.run_all(...))
 ```
 
-Strictness stays in the library; forgiveness is application policy.
+Strictness stays in the library; `result_rows` packages the forgiving application-side policy.
 
 Example using Polars frameworks:
 ``` python

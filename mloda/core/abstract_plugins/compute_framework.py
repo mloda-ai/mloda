@@ -578,11 +578,11 @@ class ComputeFramework(ABC):
 
         requested = features.get_initial_requested_features()
         if requested and not self.column_names:
-            example = next(iter(requested))
+            example = ", ".join(f'"{name}": []' for name in requested)
             raise EmptyResultError(
                 f"Result carries no schema (no columns): {feature_group.get_class_name()}. "
                 "A feature must return a schema; zero rows is a valid result, zero columns is not. "
-                f'Return your feature names with empty lists (e.g. {{"{example}": []}}) '
+                f"Return your feature names with empty lists (e.g. {{{example}}}) "
                 "to express an empty result."
             )
 

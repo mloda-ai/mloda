@@ -167,6 +167,20 @@ class _FakeGuardFeatures:
         return {"a"}
 
 
+class _FakeGuardMultiFeatures:
+    """FeatureSet stand-in requesting two features.
+
+    Mirrors the real ``FeatureSet.get_initial_requested_features()``, which returns a
+    sorted tuple, so the rendered example dict has a deterministic order.
+    """
+
+    def __init__(self) -> None:
+        self.features: list[Any] = []
+
+    def get_initial_requested_features(self) -> tuple[str, ...]:
+        return ("a", "b")
+
+
 class TestPyArrowEmptyResultGuard:
     """Direct unit tests for the EmptyResultError guard on a schema-bearing framework.
 
@@ -200,6 +214,21 @@ class TestPyArrowEmptyResultGuard:
         message = str(excinfo.value)
         assert "empty list" in message
         assert '{"a": []}' in message
+
+    def test_message_lists_all_requested_feature_names(self) -> None:
+        """With several requested features, the example dict must list all of them.
+
+        Showing only the first name leads users to return a partial dict, which clears
+        this guard and then fails downstream on missing-column validation.
+        """
+        framework = PyArrowTable(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
+        framework.data = pa.table({})
+        framework.set_column_names()
+
+        with pytest.raises(EmptyResultError) as excinfo:
+            framework.run_validate_output_features(_FakeGuardFeatureGroup(), _FakeGuardMultiFeatures())
+
+        assert '{"a": [], "b": []}' in str(excinfo.value)
 
     def test_zero_rows_with_schema_does_not_raise(self) -> None:
         """A zero-row but column-bearing table is a valid result; the guard must not fire.

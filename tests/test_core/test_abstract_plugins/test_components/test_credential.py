@@ -258,6 +258,50 @@ class TestCredentialsPathRejectsHashableDict:
         self._assert_migration_error(str(excinfo.value))
 
 
+class TestTopLevelCredentialsRejectsScalarValues:
+    """Issue #675: a top-level scalar ``credentials`` value must be rejected at construction.
+
+    Before the #675 fix, the ``_normalize_credentials`` fallback treated anything not
+    ``Credential`` / ``dict`` / ``HashableDict`` as a SEQUENCE of credentials: a ``str``
+    was iterated per character into bogus auto-handles, ``bytes`` per int, and an ``int``
+    raised a cryptic ``TypeError``.
+
+    The ValueError must name the offending TYPE and the supported shapes
+    (``Credential``, dict of {handle: credential}, list of credentials), and must never
+    echo the value: it may be a secret.
+    """
+
+    SECRET = "/secret/credential/path.db"  # nosec B105
+
+    def _assert_shape_error(self, msg: str, type_name: str) -> None:
+        lowered = msg.lower()
+        assert type_name in lowered
+        assert "Credential" in msg
+        assert "dict" in lowered
+        assert "list" in lowered
+
+    def test_top_level_str_raises_value_error_naming_str_and_never_echoing_secret(self) -> None:
+        with pytest.raises(ValueError) as excinfo:
+            DataAccessCollection(credentials=self.SECRET)  # type: ignore[arg-type]
+        msg = str(excinfo.value)
+        self._assert_shape_error(msg, "str")
+        assert self.SECRET not in msg
+
+    def test_top_level_int_raises_value_error_naming_int_not_cryptic_type_error(self) -> None:
+        with pytest.raises(ValueError) as excinfo:
+            DataAccessCollection(credentials=42)  # type: ignore[arg-type]
+        msg = str(excinfo.value)
+        self._assert_shape_error(msg, "int")
+        assert "42" not in msg
+
+    def test_top_level_bytes_raises_value_error_naming_bytes_and_never_echoing_secret(self) -> None:
+        with pytest.raises(ValueError) as excinfo:
+            DataAccessCollection(credentials=self.SECRET.encode())  # type: ignore[arg-type]
+        msg = str(excinfo.value)
+        self._assert_shape_error(msg, "bytes")
+        assert self.SECRET not in msg
+
+
 class TestResolveAmbiguityRedactsCredentialValues:
     """Cycle 3, Finding A (security): the all-auto ambiguity error in ``resolve()``
     must not print stored credential values verbatim.

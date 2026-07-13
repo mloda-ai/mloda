@@ -80,6 +80,9 @@ class DataAccessCollection:
             return None
         if isinstance(credentials, Credential):
             return [credentials.data]
+        if isinstance(credentials, HashableDict):
+            # Not a dict and not iterable, so it would hit the list fallback below and raise TypeError.
+            return [cls._unwrap_credential(credentials)]
         if isinstance(credentials, dict):
             context_keys = tuple(credentials.keys())
             return {

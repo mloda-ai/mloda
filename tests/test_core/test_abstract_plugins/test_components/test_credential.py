@@ -229,6 +229,12 @@ class TestCredentialsPathRejectsHashableDict:
         assert "dict" in lowered
         assert self.SECRET not in msg
 
+    def test_top_level_form_rejects_hashable_dict(self) -> None:
+        # Issue #675: the pre-0.7 top-level shape must raise the migration ValueError, not TypeError.
+        with pytest.raises(ValueError) as excinfo:
+            DataAccessCollection(credentials=HashableDict({"sqlite": self.SECRET}))  # type: ignore[arg-type]
+        self._assert_migration_error(str(excinfo.value))
+
     def test_named_form_rejects_hashable_dict_value(self) -> None:
         with pytest.raises(ValueError) as excinfo:
             DataAccessCollection(credentials={"db": HashableDict({"sqlite": self.SECRET})})

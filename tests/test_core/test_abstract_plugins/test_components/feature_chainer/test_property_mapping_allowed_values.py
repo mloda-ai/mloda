@@ -4,15 +4,15 @@ PROPERTY_MAPPING specs historically conflated allowed-value->docstring entries,
 ``DefaultOptionKeys`` flag keys, and a magic plain-string ``"explanation"`` doc key
 in one namespace. ``FeatureChainParser._extract_property_values`` recovered the
 allowed-value set by subtracting a hardcoded blocklist. This module pins the
-additive, backward-compatible improvement:
+``DefaultOptionKeys.allowed_values`` field that replaced that:
 
-* a single ``RESERVED_PROPERTY_KEYS`` frozenset is the one source of truth for
-  spec-internal metadata keys,
-* a new ``DefaultOptionKeys.allowed_values`` member lets authors declare the
-  allowed-value mapping explicitly,
-* ``_extract_property_values`` honors ``allowed_values`` when present and falls
-  back to the legacy flattened form otherwise, so both membership validation and
-  the class-definition default invariant follow automatically.
+* authors DECLARE the accepted values under ``allowed_values``,
+* ``_extract_property_values`` returns exactly that mapping, so both membership
+  validation and the class-definition default invariant follow automatically,
+* nothing else in the spec can widen the value space.
+
+The subtraction fallback (and with it the flattened authoring form) is gone; the
+spec SCHEMA that replaces it is pinned in ``test_property_mapping_spec_schema.py``.
 
 Reject semantics: ``match_configuration_feature_chain_parser`` raises ``ValueError``
 for a strict value outside the accepted set (verified against the existing parser),
@@ -28,7 +28,6 @@ import pytest
 
 from mloda.core.abstract_plugins.components.default_options_key import (
     DefaultOptionKeys,
-    RESERVED_PROPERTY_KEYS,
 )
 from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser import (
     FeatureChainParser,
@@ -58,24 +57,12 @@ def _no_feature_group_registry_pollution() -> Any:
     assert not leaked, f"Leaked FeatureGroup subclasses from {__name__}: {[c.__name__ for c in leaked]}"
 
 
-class TestReservedPropertyKeys:
-    """``RESERVED_PROPERTY_KEYS`` is the single source of truth for metadata keys."""
+class TestAllowedValuesKey:
+    """``allowed_values`` is the field a spec declares its value space under.
 
-    def test_reserved_property_keys_importable_and_complete(self) -> None:
-        """The frozenset is importable and contains every spec-internal metadata key."""
-        assert isinstance(RESERVED_PROPERTY_KEYS, frozenset)
-        for member in (
-            DefaultOptionKeys.default,
-            DefaultOptionKeys.context,
-            DefaultOptionKeys.group,
-            DefaultOptionKeys.strict_validation,
-            DefaultOptionKeys.element_validator,
-            DefaultOptionKeys.required_when,
-            DefaultOptionKeys.match_guard,
-            DefaultOptionKeys.allowed_values,
-        ):
-            assert member in RESERVED_PROPERTY_KEYS
-        assert "explanation" in RESERVED_PROPERTY_KEYS
+    The completeness of the surrounding key set is the spec SCHEMA now, pinned as
+    ``PROPERTY_SPEC_KEYS`` in ``test_property_mapping_spec_schema.py``.
+    """
 
     def test_allowed_values_enum_member_exists(self) -> None:
         """``DefaultOptionKeys.allowed_values`` exists and stringifies to ``allowed_values``."""
@@ -84,7 +71,12 @@ class TestReservedPropertyKeys:
 
 
 class TestStrictMembershipViaAllowedValues:
-    """Strict membership flows through the explicit ``allowed_values`` field."""
+    """Strict membership flows through the explicit ``allowed_values`` field.
+
+    This is the ONLY way to declare a value space. The flattened form that once carried the
+    same values inline is retired, and is now rejected at class definition (see
+    ``test_property_mapping_spec_schema.py::TestUnknownSpecKeyFailsAtClassDefinition``).
+    """
 
     def test_allowed_values_field_accepts_and_rejects(self) -> None:
         """A spec using ``allowed_values`` accepts members and rejects non-members."""
@@ -104,37 +96,6 @@ class TestStrictMembershipViaAllowedValues:
                 return data
 
         property_mapping = AllowedValuesFeatureGroup.PROPERTY_MAPPING
-
-        assert (
-            FeatureChainParser.match_configuration_feature_chain_parser(
-                "any_feature", Options(context={"operation_type": "add"}), property_mapping
-            )
-            is True
-        )
-        with pytest.raises(ValueError, match="mul"):
-            FeatureChainParser.match_configuration_feature_chain_parser(
-                "any_feature", Options(context={"operation_type": "mul"}), property_mapping
-            )
-
-    def test_legacy_flattened_form_still_validates(self) -> None:
-        """An equivalent legacy spec (top-level entries) gives the same accept/reject results."""
-
-        class LegacyFeatureGroup(FeatureChainParserMixin, FeatureGroup):
-            PREFIX_PATTERN = r".*__([\w]+)_op$"
-            PROPERTY_MAPPING = {
-                "operation_type": {
-                    "add": "Addition",
-                    "sub": "Subtraction",
-                    DefaultOptionKeys.context: True,
-                    DefaultOptionKeys.strict_validation: True,
-                }
-            }
-
-            @classmethod
-            def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
-                return data
-
-        property_mapping = LegacyFeatureGroup.PROPERTY_MAPPING
 
         assert (
             FeatureChainParser.match_configuration_feature_chain_parser(

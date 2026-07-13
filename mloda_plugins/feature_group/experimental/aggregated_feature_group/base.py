@@ -107,9 +107,9 @@ class AggregatedFeatureGroup(FeatureChainParserMixin, FeatureGroup):
     # Property mapping for configuration-based feature creation
     PROPERTY_MAPPING = {
         AGGREGATION_TYPE: {
-            **AGGREGATION_TYPES,  # All supported aggregation types as valid values
-            DefaultOptionKeys.context: True,  # Mark as context parameter
-            DefaultOptionKeys.strict_validation: True,  # Enable strict validation
+            DefaultOptionKeys.allowed_values: AGGREGATION_TYPES,
+            DefaultOptionKeys.context: True,
+            DefaultOptionKeys.strict_validation: True,
         },
         DefaultOptionKeys.in_features: {
             "explanation": "Source feature to aggregate",

@@ -5,9 +5,12 @@ arguments, validating the invariants that previously had to be enforced by hand:
 
 * ``strict=True`` requires a non-empty ``allowed_values`` (a strict enum with no
   value space rejects everything),
-* ``allowed_values`` without ``strict`` is a silent no-op and is rejected,
 * a strict, non-``None`` ``default`` must be within the allowed set,
 * a one-shot iterable for ``allowed_values`` is materialized so it survives reuse.
+
+``allowed_values`` WITHOUT ``strict`` is legal: a non-strict value space is not
+enforced, but it is consumed, to map a name-parsed value back onto its
+PROPERTY_MAPPING key. See ``test_property_mapping_spec_shape.py``.
 """
 
 from __future__ import annotations
@@ -77,11 +80,6 @@ class TestPropertySpecInvariants:
         """``strict=True`` with no value space rejects everything, so it is illegal."""
         with pytest.raises(ValueError):
             property_spec("d", strict=True)
-
-    def test_allowed_values_without_strict_raises(self) -> None:
-        """``allowed_values`` is never enforced without ``strict`` (silent no-op), so it is rejected."""
-        with pytest.raises(ValueError):
-            property_spec("d", allowed_values={"a": "A"})
 
     def test_strict_default_outside_allowed_set_raises(self) -> None:
         """A strict, non-``None`` default must be within the allowed set."""

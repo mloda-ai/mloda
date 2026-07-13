@@ -141,12 +141,12 @@ class NodeCentralityFeatureGroup(FeatureChainParserMixin, FeatureGroup):
     PROPERTY_MAPPING = {
         # Context parameters (don't affect Feature Group resolution)
         CENTRALITY_TYPE: {
-            **CENTRALITY_TYPES,  # All supported centrality types as valid options
+            DefaultOptionKeys.allowed_values: CENTRALITY_TYPES,
             DefaultOptionKeys.context: True,
             DefaultOptionKeys.strict_validation: True,
         },
         GRAPH_TYPE: {
-            **GRAPH_TYPES,  # All supported graph types as valid options
+            DefaultOptionKeys.allowed_values: GRAPH_TYPES,
             DefaultOptionKeys.context: True,
             DefaultOptionKeys.strict_validation: True,
             DefaultOptionKeys.default: "undirected",

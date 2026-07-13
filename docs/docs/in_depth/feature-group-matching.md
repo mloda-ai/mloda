@@ -35,9 +35,11 @@ The `PROPERTY_MAPPING` defines how configuration-based features are validated:
 ```python
 PROPERTY_MAPPING = {
     "aggregation_type": {
-        "sum": "Sum aggregation",
-        "avg": "Average aggregation",
-        "max": "Maximum aggregation",
+        DefaultOptionKeys.allowed_values: {
+            "sum": "Sum aggregation",
+            "avg": "Average aggregation",
+            "max": "Maximum aggregation",
+        },
         DefaultOptionKeys.context: True,
         DefaultOptionKeys.strict_validation: True,
     },
@@ -48,6 +50,9 @@ PROPERTY_MAPPING = {
     },
 }
 ```
+
+Accepted values are declared under `allowed_values`. Any other key in a spec is an
+unknown key and raises at class definition.
 
 ### 3. Validation Modes
 

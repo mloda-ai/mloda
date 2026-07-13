@@ -122,7 +122,7 @@ class DimensionalityReductionFeatureGroup(FeatureChainParserMixin, FeatureGroup)
 
     PROPERTY_MAPPING = {
         ALGORITHM: {
-            **REDUCTION_ALGORITHMS,
+            DefaultOptionKeys.allowed_values: REDUCTION_ALGORITHMS,
             DefaultOptionKeys.context: True,
             DefaultOptionKeys.strict_validation: True,
         },
@@ -159,20 +159,24 @@ class DimensionalityReductionFeatureGroup(FeatureChainParserMixin, FeatureGroup)
             ),
         },
         TSNE_METHOD: {
-            "barnes_hut": "Barnes-Hut approximation (faster, O(n log n))",
-            "exact": "Exact method (slower, O(n^2))",
             "explanation": "t-SNE computation method",
+            DefaultOptionKeys.allowed_values: {
+                "barnes_hut": "Barnes-Hut approximation (faster, O(n log n))",
+                "exact": "Exact method (slower, O(n^2))",
+            },
             DefaultOptionKeys.context: True,
             DefaultOptionKeys.strict_validation: True,
             DefaultOptionKeys.default: "barnes_hut",
         },
         # PCA specific parameters
         PCA_SVD_SOLVER: {
-            "auto": "Automatically choose solver based on data shape",
-            "full": "Full SVD using LAPACK",
-            "arpack": "Truncated SVD using ARPACK",
-            "randomized": "Randomized SVD",
             "explanation": "SVD solver algorithm for PCA",
+            DefaultOptionKeys.allowed_values: {
+                "auto": "Automatically choose solver based on data shape",
+                "full": "Full SVD using LAPACK",
+                "arpack": "Truncated SVD using ARPACK",
+                "randomized": "Randomized SVD",
+            },
             DefaultOptionKeys.context: True,
             DefaultOptionKeys.strict_validation: True,
             DefaultOptionKeys.default: "auto",

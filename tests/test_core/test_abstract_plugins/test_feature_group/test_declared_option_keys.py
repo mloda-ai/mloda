@@ -2,9 +2,11 @@
 
 ``declared_option_keys()`` is a classmethod that returns the top-level parameter
 names declared in ``PROPERTY_MAPPING`` -- regardless of whether the mapping was
-authored as a legacy flattened dict or via the ``property_spec`` builder. It
+authored as a hand-written spec dict or via the ``property_spec`` builder. It
 never returns the inner allowed-value keys (e.g. "add"/"sub").
 """
+
+from typing import Any
 
 from mloda.provider import DefaultOptionKeys, FeatureGroup, property_spec
 
@@ -19,13 +21,12 @@ class EmptyMappingFeatureGroup(FeatureGroup):
     PROPERTY_MAPPING = {}
 
 
-class LegacyMappingFeatureGroup(FeatureGroup):
-    """Legacy flattened PROPERTY_MAPPING form with a single declared parameter."""
+class HandWrittenMappingFeatureGroup(FeatureGroup):
+    """Hand-written PROPERTY_MAPPING spec dict with a single declared parameter."""
 
     PROPERTY_MAPPING = {
         "operation_type": {
-            "add": "Addition",
-            "sub": "Subtraction",
+            DefaultOptionKeys.allowed_values: {"add": "Addition", "sub": "Subtraction"},
             DefaultOptionKeys.context: True,
             DefaultOptionKeys.strict_validation: True,
         },
@@ -45,11 +46,11 @@ class BuilderMappingFeatureGroup(FeatureGroup):
 
 
 class MultiKeyMappingFeatureGroup(FeatureGroup):
-    """Multiple declared parameters, mixing legacy and builder-form specs."""
+    """Multiple declared parameters, mixing hand-written and builder-form specs."""
 
     PROPERTY_MAPPING = {
         "operation_type": {
-            "add": "Addition",
+            DefaultOptionKeys.allowed_values: {"add": "Addition"},
             DefaultOptionKeys.context: True,
             DefaultOptionKeys.strict_validation: True,
         },
@@ -59,7 +60,7 @@ class MultiKeyMappingFeatureGroup(FeatureGroup):
             allowed_values={"sum": "Sum", "mean": "Mean"},
         ),
         "window_size": {
-            "3": "three",
+            DefaultOptionKeys.allowed_values: {"3": "three"},
             DefaultOptionKeys.context: False,
             DefaultOptionKeys.strict_validation: False,
         },
@@ -80,12 +81,12 @@ def test_declared_option_keys_returns_empty_frozenset_when_property_mapping_empt
     assert result == frozenset()
 
 
-def test_declared_option_keys_returns_top_level_keys_for_legacy_flattened_mapping() -> None:
-    """Legacy flattened form: only the top-level parameter name is returned.
+def test_declared_option_keys_returns_top_level_keys_for_hand_written_mapping() -> None:
+    """Hand-written spec dict: only the top-level parameter name is returned.
 
     Inner allowed-value keys ("add"/"sub") and metadata flags must not appear.
     """
-    result = LegacyMappingFeatureGroup.declared_option_keys()
+    result = HandWrittenMappingFeatureGroup.declared_option_keys()
 
     assert result == frozenset({"operation_type"})
     assert "add" not in result
@@ -114,7 +115,7 @@ def test_declared_option_keys_returns_all_declared_parameter_names() -> None:
 
 def test_declared_option_keys_is_callable_without_instantiation() -> None:
     """The method is a classmethod: callable directly on the class."""
-    result = LegacyMappingFeatureGroup.declared_option_keys()
+    result = HandWrittenMappingFeatureGroup.declared_option_keys()
 
     assert isinstance(result, frozenset)
 
@@ -129,7 +130,7 @@ def test_declared_option_keys_returns_frozenset_type() -> None:
 
 def test_declared_option_keys_is_immutable() -> None:
     """The returned frozenset has no mutating methods."""
-    result = LegacyMappingFeatureGroup.declared_option_keys()
+    result = HandWrittenMappingFeatureGroup.declared_option_keys()
 
     assert not hasattr(result, "add")
     assert not hasattr(result, "update")
@@ -138,9 +139,9 @@ def test_declared_option_keys_is_immutable() -> None:
 def test_declared_option_keys_snapshot_not_tied_to_underlying_dict() -> None:
     """Mutating the original PROPERTY_MAPPING dict after the call does not
     retroactively change an already-returned frozenset (unlike a dict_keys view)."""
-    mapping = {
+    mapping: dict[str, Any] = {
         "operation_type": {
-            "add": "Addition",
+            DefaultOptionKeys.allowed_values: {"add": "Addition"},
             DefaultOptionKeys.context: True,
             DefaultOptionKeys.strict_validation: True,
         },
@@ -150,7 +151,7 @@ def test_declared_option_keys_snapshot_not_tied_to_underlying_dict() -> None:
         PROPERTY_MAPPING = mapping
 
     result = MutableMappingFeatureGroup.declared_option_keys()
-    mapping["new_param"] = {"x": "X"}
+    mapping["new_param"] = {"explanation": "added after the snapshot"}
 
     assert result == frozenset({"operation_type"})
     assert "new_param" not in result

@@ -168,8 +168,7 @@ class ForwardMismatchResolveFeatureGroup(FeatureChainParserMixin, FeatureGroup):
 
     PROPERTY_MAPPING = {
         PROBE_TYPE_KEY: {
-            "median": "Median value",
-            "sum": "Sum of values",
+            DefaultOptionKeys.allowed_values: {"median": "Median value", "sum": "Sum of values"},
             DefaultOptionKeys.context: True,
             DefaultOptionKeys.strict_validation: True,
         },

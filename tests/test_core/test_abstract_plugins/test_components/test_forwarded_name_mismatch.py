@@ -47,8 +47,10 @@ class _NameMismatchChainedGroup(FeatureChainParserMixin):
     PREFIX_PATTERN = r".*__(sum|max)_namemis579$"
     PROPERTY_MAPPING = {
         OPERATION_KEY: {
-            "sum": "Sum of the in feature (namemis579 fixture)",
-            "max": "Maximum of the in feature (namemis579 fixture)",
+            DefaultOptionKeys.allowed_values: {
+                "sum": "Sum of the in feature (namemis579 fixture)",
+                "max": "Maximum of the in feature (namemis579 fixture)",
+            },
             DefaultOptionKeys.strict_validation: True,
         }
     }

@@ -2,7 +2,7 @@ from typing import Any
 
 import pytest
 
-from mloda.core.abstract_plugins.components.default_options_key import RESERVED_PROPERTY_KEYS
+from mloda.core.abstract_plugins.components.default_options_key import PROPERTY_SPEC_KEYS
 from mloda.provider import DefaultOptionKeys
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.base import AggregatedFeatureGroup
 from mloda_plugins.feature_group.experimental.clustering.base import ClusteringFeatureGroup
@@ -31,12 +31,6 @@ ALL_PLUGINS: list[type[Any]] = [
     TextCleaningFeatureGroup,
     TimeWindowFeatureGroup,
 ]
-
-# Derive from the single source of truth so this set can never drift again.
-# ``in_features`` is intentionally NOT in RESERVED_PROPERTY_KEYS (it is a property
-# NAME, not a spec-internal metadata flag), but the consistency tests still treat
-# it as metadata, so add it here.
-METADATA_KEYS: frozenset[Any] = RESERVED_PROPERTY_KEYS | {DefaultOptionKeys.in_features}
 
 DOK_VALUES: list[str] = [dok.value for dok in DefaultOptionKeys]
 
@@ -69,6 +63,25 @@ class TestPropertyMappingConsistency:
             f"DefaultOptionKeys enum members should be used: {violations}"
         )
 
+    def test_only_known_spec_keys(self, plugin_cls: type[Any]) -> None:
+        """Every key of every spec is part of the spec schema.
+
+        Derived from the single source of truth, so a plugin cannot reintroduce a bare value
+        entry (the retired flattened form) or a typo'd flag without this failing.
+        """
+        mapping: dict[str, Any] = plugin_cls.PROPERTY_MAPPING
+        violations: list[tuple[str, str]] = []
+        for prop_key, entry in mapping.items():
+            if not isinstance(entry, dict):
+                continue
+            for key in entry:
+                if key not in PROPERTY_SPEC_KEYS:
+                    violations.append((str(prop_key), str(key)))
+        assert violations == [], (
+            f"{plugin_cls.__name__} PROPERTY_MAPPING carries keys outside the spec schema "
+            f"(accepted values belong under allowed_values): {violations}"
+        )
+
     def test_enum_entries_have_strict_validation_true(self, plugin_cls: type[Any]) -> None:
         mapping: dict[str, Any] = plugin_cls.PROPERTY_MAPPING
         violations: list[str] = []
@@ -77,12 +90,8 @@ class TestPropertyMappingConsistency:
                 continue
             if DefaultOptionKeys.element_validator in entry:
                 continue
-            non_metadata_keys = [
-                k
-                for k in entry
-                if k not in METADATA_KEYS and not (k in DOK_VALUES and not isinstance(k, DefaultOptionKeys))
-            ]
-            if len(non_metadata_keys) < 2:
+            allowed_values = entry.get(DefaultOptionKeys.allowed_values) or {}
+            if len(allowed_values) < 2:
                 continue
             sv_value = entry.get(DefaultOptionKeys.strict_validation)
             if sv_value is not True:

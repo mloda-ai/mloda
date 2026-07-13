@@ -124,13 +124,13 @@ class MyFeatureGroup(FeatureChainParserMixin, FeatureGroup):
 
     PROPERTY_MAPPING = {
         "operation_type": {
-            "sum": "Sum operation",
-            "avg": "Average operation",
-            DefaultOptionKeys.mloda_context: True,
+            DefaultOptionKeys.allowed_values: {"sum": "Sum operation", "avg": "Average operation"},
+            DefaultOptionKeys.context: True,
+            DefaultOptionKeys.strict_validation: True,
         },
         DefaultOptionKeys.in_features: {
             "explanation": "Source feature",
-            DefaultOptionKeys.mloda_context: True,
+            DefaultOptionKeys.context: True,
         },
     }
 
@@ -271,9 +271,11 @@ class MyFeatureGroup(FeatureGroup):
     PROPERTY_MAPPING = {
         # Feature-specific parameter
         "operation_type": {
-            "sum": "Sum aggregation",
-            "avg": "Average aggregation", 
-            "max": "Maximum aggregation",
+            DefaultOptionKeys.allowed_values: {
+                "sum": "Sum aggregation",
+                "avg": "Average aggregation",
+                "max": "Maximum aggregation",
+            },
             DefaultOptionKeys.context: True,  # Context parameter
             DefaultOptionKeys.strict_validation: True,  # Strict validation
         },
@@ -375,13 +377,16 @@ Specify default values for optional parameters:
 ``` python
 PROPERTY_MAPPING = {
     "window_size": {
-        "7": "7-day window",
-        "30": "30-day window",
+        DefaultOptionKeys.allowed_values: {"7": "7-day window", "30": "30-day window"},
         DefaultOptionKeys.default: "7",  # Default value
         DefaultOptionKeys.context: True,
+        DefaultOptionKeys.strict_validation: True,
     },
 }
 ```
+
+Under strict validation a declared default must itself be an accepted value; that is
+checked at class definition.
 
 #### Group vs Context Classification
 
@@ -389,15 +394,13 @@ PROPERTY_MAPPING = {
 PROPERTY_MAPPING = {
     # Group parameter - affects Feature Group resolution
     "data_source": {
-        "production": "Production data",
-        "staging": "Staging data", 
+        DefaultOptionKeys.allowed_values: {"production": "Production data", "staging": "Staging data"},
         DefaultOptionKeys.group: True,  # Explicit group parameter
         DefaultOptionKeys.strict_validation: True,
     },
     # Context parameter - doesn't affect resolution
     "algorithm_type": {
-        "kmeans": "K-means clustering",
-        "dbscan": "DBSCAN clustering",
+        "explanation": "Clustering algorithm",
         DefaultOptionKeys.context: True,  # Context parameter
         DefaultOptionKeys.strict_validation: False,  # Flexible validation
     },

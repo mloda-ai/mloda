@@ -4,15 +4,17 @@ Feature chain parser for handling feature name chaining across feature groups.
 
 from __future__ import annotations
 
+import difflib
 import re
+from collections.abc import Collection
 from typing import Any, Optional
 
 from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.components.default_options_key import (
+    PROPERTY_SPEC_KEYS,
     REMOVED_PROPERTY_KEYS,
-    RESERVED_PROPERTY_KEYS,
     DefaultOptionKeys,
 )
 
@@ -199,37 +201,22 @@ class FeatureChainParser:
 
     @classmethod
     def _extract_property_values(cls, property_value: Any) -> Any:
-        """Extract a spec's declared value space.
+        """Return a spec's declared value space (``allowed_values``), or {} if it declares none.
 
-        Prefers an explicit ``DefaultOptionKeys.allowed_values`` field; otherwise
-        falls back to the legacy flattened form (all entries minus the reserved
-        metadata keys).
+        Never inferred by subtracting the known keys: the retired flattened form did that, and it
+        absorbed every unrecognized key as an accepted value.
         """
         if isinstance(property_value, dict):
-            if DefaultOptionKeys.allowed_values in property_value:
-                return property_value[DefaultOptionKeys.allowed_values]
-            return {k: v for k, v in property_value.items() if k not in RESERVED_PROPERTY_KEYS}
+            return property_value.get(DefaultOptionKeys.allowed_values, {})
         return property_value
 
     @classmethod
     def check_declared_default(cls, owner: str, key: str, spec: dict[str, Any]) -> None:
-        """Check one spec's declared default against its own strict-validation rules.
+        """Check a spec's declared default against its own strict-validation rules.
 
-        This is the single implementation of the default-check semantics, shared by
-        ``validate_property_mapping_defaults`` (class-definition time) and by the
-        ``property_spec`` authoring helper, so the two can never drift apart.
-
-        Under strict validation, a non-``None`` declared default must pass the key's
-        ``element_validator`` if it has one, otherwise be a member of the accepted set.
-        An ``element_validator`` that itself errors when called with the default is
-        reported as having raised (with the original exception chained as the cause),
-        which is distinct from the validator running and rejecting the default.
-        ``DefaultOptionKeys.required_when`` does NOT exempt this check: it is a
-        conditional requirement, so the default still applies on the predicate-false
-        branch. The remedies are to add the default to the accepted values or to
-        remove the default (a key with no default is required).
-
-        Raises ValueError on violation, otherwise returns None.
+        Shared by ``validate_property_mapping_defaults`` and ``property_spec`` so the two cannot
+        drift. ``required_when`` does NOT exempt the check: the default still applies on the
+        predicate-false branch.
         """
         if DefaultOptionKeys.default not in spec:
             return
@@ -272,33 +259,137 @@ class FeatureChainParser:
     def validate_property_mapping_defaults(cls, owner_name: str, property_mapping: dict[str, Any] | None) -> None:
         """Validate a PROPERTY_MAPPING at class-definition time.
 
-        Rejects specs that still carry a removed key (see ``REMOVED_PROPERTY_KEYS``) and
-        delegates every declared default to ``check_declared_default``.
+        The rule ORDER below is load-bearing. Schema before shape: an unknown key means the
+        remaining keys cannot be trusted, and a removed key must be reported as a rename rather
+        than as some downstream shape error. Shape before the strict and default rules: those
+        read the values the shape rule validates, so a malformed one would be mis-diagnosed (a
+        non-callable ``element_validator`` gets blamed on the default).
         """
         if property_mapping is None:
             return
 
         for key, spec in property_mapping.items():
-            if not isinstance(spec, dict):
-                continue
-            cls._reject_removed_property_keys(owner_name, key, spec)
+            cls._reject_non_dict_spec(owner_name, key, spec)
+            cls._reject_unknown_spec_keys(owner_name, key, spec)
+            cls._reject_malformed_spec_values(owner_name, key, spec)
+            cls._reject_strict_without_value_space(owner_name, key, spec)
             cls.check_declared_default(f"{owner_name}.PROPERTY_MAPPING", key, spec)
 
     @classmethod
-    def _reject_removed_property_keys(cls, owner_name: str, key: str, spec: dict[str, Any]) -> None:
-        """Fail loudly on a spec that still uses a removed PROPERTY_MAPPING key.
+    def _reject_non_dict_spec(cls, owner_name: str, key: str, spec: Any) -> None:
+        """Reject a bare container: it carries no keys, so every rule below would skip it."""
+        if isinstance(spec, dict):
+            return
 
-        The removed keys are no longer reserved metadata, so ``_extract_property_values``
-        would absorb a leftover one into a legacy flattened spec's accepted value space,
-        silently widening what the feature group matches. Rejecting the spec turns that
-        silent corruption into an actionable migration error.
+        raise ValueError(
+            f"{owner_name}.PROPERTY_MAPPING['{key}'] is a {type(spec).__name__}, not a spec dict. "
+            f"Declare the accepted values under '{DefaultOptionKeys.allowed_values.value}' inside a spec dict."
+        )
+
+    @classmethod
+    def _reject_unknown_spec_keys(cls, owner_name: str, key: str, spec: dict[str, Any]) -> None:
+        """Reject every key outside the spec schema, reporting them all in one message.
+
+        Removed keys lead, because they are the offenders with an exact remedy, but they never
+        hide the rest.
         """
-        for stale, replacement in REMOVED_PROPERTY_KEYS.items():
-            if stale in spec:
+        unknown = [spec_key for spec_key in spec if spec_key not in PROPERTY_SPEC_KEYS]
+        if not unknown:
+            return
+
+        known = sorted(str(k) for k in PROPERTY_SPEC_KEYS)
+        removed = [k for k in unknown if str(k) in REMOVED_PROPERTY_KEYS]
+        others = [k for k in unknown if str(k) not in REMOVED_PROPERTY_KEYS]
+
+        faults: list[str] = []
+        for spec_key in removed:
+            replacement = REMOVED_PROPERTY_KEYS[str(spec_key)].value
+            faults.append(f"'{spec_key}' was removed, rename it to '{replacement}' (DefaultOptionKeys.{replacement})")
+        for spec_key in others:
+            suggestion = difflib.get_close_matches(str(spec_key), known, n=1)
+            hint = f", did you mean '{suggestion[0]}'?" if suggestion else ""
+            faults.append(f"'{spec_key}' is unknown{hint}")
+
+        raise ValueError(
+            f"{owner_name}.PROPERTY_MAPPING['{key}'] has unknown spec key(s): {'; '.join(faults)}. "
+            f"A spec may only carry the keys {known}. Accepted VALUES belong "
+            f"under '{DefaultOptionKeys.allowed_values.value}'."
+        )
+
+    @classmethod
+    def _reject_malformed_spec_values(cls, owner_name: str, key: str, spec: dict[str, Any]) -> None:
+        """Reject a spec key whose VALUE has the wrong shape.
+
+        ``allowed_values`` must never be a ``str``/``bytes``: ``in`` would silently become a
+        SUBSTRING test. It must be a ``Collection`` at all: a generator is truthy even when empty
+        and is consumed by the first read, and a scalar makes ``value in 5`` raise a ``TypeError``
+        that the match path swallows into a silent reject-everything.
+        """
+        prefix = f"{owner_name}.PROPERTY_MAPPING['{key}']"
+
+        flag_key = DefaultOptionKeys.strict_validation
+        if flag_key in spec and not isinstance(spec[flag_key], bool):
+            flag = spec[flag_key]
+            raise ValueError(
+                f"{prefix} sets '{flag_key.value}' to {flag!r} ({type(flag).__name__}), "
+                f"which must be a real bool. A truthy non-bool silently enables strict validation."
+            )
+
+        if DefaultOptionKeys.allowed_values in spec:
+            allowed_values = spec[DefaultOptionKeys.allowed_values]
+            if isinstance(allowed_values, (str, bytes)):
                 raise ValueError(
-                    f"{owner_name}.PROPERTY_MAPPING['{key}'] uses the removed key '{stale}'. "
-                    f"Rename it to '{replacement.value}' (DefaultOptionKeys.{replacement.value})."
+                    f"{prefix} declares '{DefaultOptionKeys.allowed_values.value}' as a "
+                    f"{type(allowed_values).__name__} ({allowed_values!r}), which would make membership a "
+                    f"SUBSTRING test. Wrap it in a container, for example a one-element tuple: "
+                    f"({allowed_values!r},)."
                 )
+            if not isinstance(allowed_values, Collection):
+                raise ValueError(
+                    f"{prefix} declares '{DefaultOptionKeys.allowed_values.value}' as a "
+                    f"{type(allowed_values).__name__}, which is not a Collection. A value space must be "
+                    f"sized and re-iterable (a dict, tuple, list, set or frozenset); a generator is "
+                    f"consumed by the first read and a scalar has no members."
+                )
+
+        for validator_key in (
+            DefaultOptionKeys.element_validator,
+            DefaultOptionKeys.required_when,
+            DefaultOptionKeys.match_guard,
+        ):
+            if validator_key in spec and not callable(spec[validator_key]):
+                value = spec[validator_key]
+                raise ValueError(
+                    f"{prefix} declares '{validator_key.value}' as a {type(value).__name__} "
+                    f"({value!r}), which is not callable. It must be a callable taking the value "
+                    f"and returning a bool."
+                )
+
+    @classmethod
+    def _reject_strict_without_value_space(cls, owner_name: str, key: str, spec: dict[str, Any]) -> None:
+        """Reject strict validation with nothing to validate against: it would reject every value.
+
+        "Non-empty" is a ``len`` test rather than truthiness ON PURPOSE: the shape rule has
+        already established the value space is a ``Collection``, and a generator is truthy even
+        when it yields nothing.
+        """
+        if not cls._is_strict_validation(spec):
+            return
+
+        if cls._get_element_validator(spec) is not None:
+            return
+
+        allowed_values = spec.get(DefaultOptionKeys.allowed_values)
+        if allowed_values is not None and len(allowed_values) > 0:
+            return
+
+        raise ValueError(
+            f"{owner_name}.PROPERTY_MAPPING['{key}'] sets "
+            f"{DefaultOptionKeys.strict_validation.value}=True but declares no value space, "
+            f"so it would reject every value. Declare a non-empty "
+            f"'{DefaultOptionKeys.allowed_values.value}' or an "
+            f"'{DefaultOptionKeys.element_validator.value}'."
+        )
 
     @classmethod
     def _unpack_property_value(cls, found_property_value: Any) -> list[Any]:

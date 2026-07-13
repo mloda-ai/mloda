@@ -20,14 +20,12 @@ class PropagateContextFeatureGroupTest(FeatureGroup):
 
     PROPERTY_MAPPING = {
         "ident": {
-            "identifier1": "multiplier 2",
-            "identifier2": "multiplier 3",
+            DefaultOptionKeys.allowed_values: {"identifier1": "multiplier 2", "identifier2": "multiplier 3"},
             DefaultOptionKeys.context: True,
             DefaultOptionKeys.strict_validation: True,
         },
         "env": {
-            "prod": "production offset 1000",
-            "staging": "staging offset 500",
+            DefaultOptionKeys.allowed_values: {"prod": "production offset 1000", "staging": "staging offset 500"},
             DefaultOptionKeys.context: True,
             DefaultOptionKeys.strict_validation: False,
             DefaultOptionKeys.default: None,

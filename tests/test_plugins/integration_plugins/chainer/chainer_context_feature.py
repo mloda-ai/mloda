@@ -22,25 +22,24 @@ class ChainedContextFeatureGroupTest(FeatureGroup):
 
     PROPERTY_MAPPING = {
         "ident": {
-            "identifier1": "explanation",
-            "identifier2": "explanation",
-            DefaultOptionKeys.context: True,  # Mark as context parameter
-            DefaultOptionKeys.strict_validation: True,  # Enable strict validation for ident
+            DefaultOptionKeys.allowed_values: {"identifier1": "explanation", "identifier2": "explanation"},
+            DefaultOptionKeys.context: True,
+            DefaultOptionKeys.strict_validation: True,
         },
         "property2": {
-            "value1": "explanation",
-            "value2": "explanation",
-            "specific_val_3_test": "explanation",  # Special case for testing
-            DefaultOptionKeys.strict_validation: True,  # Enable strict validation for property2
-            DefaultOptionKeys.default: "value1",  # Default value
-            # Not marked as context -> defaults to group parameter
+            DefaultOptionKeys.allowed_values: {
+                "value1": "explanation",
+                "value2": "explanation",
+                "specific_val_3_test": "explanation",
+            },
+            DefaultOptionKeys.strict_validation: True,
+            DefaultOptionKeys.default: "value1",
         },
         "property3": {
-            "opt_val1": "explanation",
-            "opt_val2": "explanation",
-            DefaultOptionKeys.default: "opt_val1",  # Default value
-            DefaultOptionKeys.context: True,  # Mark as context parameter
-            DefaultOptionKeys.strict_validation: False,  # Disable strict validation for property3
+            DefaultOptionKeys.allowed_values: {"opt_val1": "explanation", "opt_val2": "explanation"},
+            DefaultOptionKeys.default: "opt_val1",
+            DefaultOptionKeys.context: True,
+            DefaultOptionKeys.strict_validation: False,
         },
         DefaultOptionKeys.in_features: {
             "explanation": "explanation",

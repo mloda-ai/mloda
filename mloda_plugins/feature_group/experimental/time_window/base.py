@@ -95,9 +95,9 @@ class TimeWindowFeatureGroup(TimeReferenceMixin, FeatureChainParserMixin, Featur
     PROPERTY_MAPPING = {
         # Window function parameter (context parameter)
         WINDOW_FUNCTION: {
-            **WINDOW_FUNCTIONS,  # Reference existing WINDOW_FUNCTIONS dict
-            DefaultOptionKeys.context: True,  # Mark as context parameter
-            DefaultOptionKeys.strict_validation: True,  # Enable strict validation
+            DefaultOptionKeys.allowed_values: WINDOW_FUNCTIONS,
+            DefaultOptionKeys.context: True,
+            DefaultOptionKeys.strict_validation: True,
         },
         # Window size parameter (context parameter)
         WINDOW_SIZE: {
@@ -110,9 +110,9 @@ class TimeWindowFeatureGroup(TimeReferenceMixin, FeatureChainParserMixin, Featur
         },
         # Time unit parameter (context parameter)
         TIME_UNIT: {
-            **TimeReferenceMixin.TIME_UNITS,  # Reference shared TIME_UNITS dict
-            DefaultOptionKeys.context: True,  # Mark as context parameter
-            DefaultOptionKeys.strict_validation: True,  # Enable strict validation
+            DefaultOptionKeys.allowed_values: TimeReferenceMixin.TIME_UNITS,
+            DefaultOptionKeys.context: True,
+            DefaultOptionKeys.strict_validation: True,
         },
         # Source feature parameter (context parameter)
         DefaultOptionKeys.in_features: {

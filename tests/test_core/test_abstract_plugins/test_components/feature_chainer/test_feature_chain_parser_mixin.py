@@ -19,8 +19,7 @@ class MockFeatureGroup(FeatureChainParserMixin):
     PREFIX_PATTERN = r".*__([\w]+)_test$"
     PROPERTY_MAPPING = {
         "operation": {
-            "op1": "Operation 1",
-            "op2": "Operation 2",
+            DefaultOptionKeys.allowed_values: {"op1": "Operation 1", "op2": "Operation 2"},
             DefaultOptionKeys.context: True,
             DefaultOptionKeys.strict_validation: True,
         }
@@ -34,8 +33,7 @@ class MockFeatureGroupCustomSeparator(FeatureChainParserMixin):
     IN_FEATURE_SEPARATOR = ","
     PROPERTY_MAPPING = {
         "operation": {
-            "op1": "Operation 1",
-            "op2": "Operation 2",
+            DefaultOptionKeys.allowed_values: {"op1": "Operation 1", "op2": "Operation 2"},
             DefaultOptionKeys.context: True,
             DefaultOptionKeys.strict_validation: True,
         }
@@ -50,7 +48,7 @@ class MockFeatureGroupWithMinMax(FeatureChainParserMixin):
     MAX_IN_FEATURES = 3
     PROPERTY_MAPPING = {
         "operation": {
-            "op1": "Operation 1",
+            DefaultOptionKeys.allowed_values: {"op1": "Operation 1"},
             DefaultOptionKeys.context: True,
             DefaultOptionKeys.strict_validation: True,
         }
@@ -75,7 +73,7 @@ class MockFeatureGroupWithoutMinMax(FeatureChainParserMixin):
     MAX_IN_FEATURES = _HiddenAttribute()
     PROPERTY_MAPPING = {
         "operation": {
-            "op1": "Operation 1",
+            DefaultOptionKeys.allowed_values: {"op1": "Operation 1"},
             DefaultOptionKeys.context: True,
             DefaultOptionKeys.strict_validation: True,
         }
@@ -88,7 +86,7 @@ class MockFeatureGroupWithValidationHook(FeatureChainParserMixin):
     PREFIX_PATTERN = r".*__([\w]+)_test$"
     PROPERTY_MAPPING = {
         "operation": {
-            "op1": "Operation 1",
+            DefaultOptionKeys.allowed_values: {"op1": "Operation 1"},
             DefaultOptionKeys.context: True,
             DefaultOptionKeys.strict_validation: True,
         }

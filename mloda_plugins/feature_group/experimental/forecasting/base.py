@@ -126,7 +126,7 @@ class ForecastingFeatureGroup(TimeReferenceMixin, FeatureChainParserMixin, Featu
     # Property mapping for configuration-based features with group/context separation
     PROPERTY_MAPPING = {
         ALGORITHM: {
-            **FORECASTING_ALGORITHMS,
+            DefaultOptionKeys.allowed_values: FORECASTING_ALGORITHMS,
             DefaultOptionKeys.context: True,
             DefaultOptionKeys.strict_validation: True,
         },
@@ -139,7 +139,7 @@ class ForecastingFeatureGroup(TimeReferenceMixin, FeatureChainParserMixin, Featu
             ),
         },
         TIME_UNIT: {
-            **TimeReferenceMixin.TIME_UNITS,
+            DefaultOptionKeys.allowed_values: TimeReferenceMixin.TIME_UNITS,
             DefaultOptionKeys.context: True,
             DefaultOptionKeys.strict_validation: True,
         },

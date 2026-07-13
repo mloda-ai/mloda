@@ -93,9 +93,9 @@ class TextCleaningFeatureGroup(FeatureChainParserMixin, FeatureGroup):
     # Property mapping for configuration-based features
     PROPERTY_MAPPING = {
         CLEANING_OPERATIONS: {
-            **SUPPORTED_OPERATIONS,  # All supported operations as valid options
-            DefaultOptionKeys.context: True,  # Mark as context parameter
-            DefaultOptionKeys.strict_validation: True,  # Enable strict validation
+            DefaultOptionKeys.allowed_values: SUPPORTED_OPERATIONS,
+            DefaultOptionKeys.context: True,
+            DefaultOptionKeys.strict_validation: True,
             # The option is a sequence of operations; core unpacks it, so this judges ONE operation.
             DefaultOptionKeys.element_validator: lambda op: op in TextCleaningFeatureGroup.SUPPORTED_OPERATIONS,
         },

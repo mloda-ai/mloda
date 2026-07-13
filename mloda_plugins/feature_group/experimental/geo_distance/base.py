@@ -104,7 +104,7 @@ class GeoDistanceFeatureGroup(FeatureChainParserMixin, FeatureGroup):
     # Property mapping for configuration-based features with group/context separation
     PROPERTY_MAPPING = {
         DISTANCE_TYPE: {
-            **DISTANCE_TYPES,
+            DefaultOptionKeys.allowed_values: DISTANCE_TYPES,
             DefaultOptionKeys.context: True,
             DefaultOptionKeys.strict_validation: True,
         },

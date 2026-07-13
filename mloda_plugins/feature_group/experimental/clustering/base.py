@@ -113,9 +113,9 @@ class ClusteringFeatureGroup(FeatureChainParserMixin, FeatureGroup):
     # Property mapping for configuration-based feature creation
     PROPERTY_MAPPING = {
         ALGORITHM: {
-            **CLUSTERING_ALGORITHMS,  # All supported algorithms as valid values
-            DefaultOptionKeys.context: True,  # Mark as context parameter
-            DefaultOptionKeys.strict_validation: True,  # Enable strict validation
+            DefaultOptionKeys.allowed_values: CLUSTERING_ALGORITHMS,
+            DefaultOptionKeys.context: True,
+            DefaultOptionKeys.strict_validation: True,
         },
         K_VALUE: {
             "explanation": "Number of clusters or 'auto' for automatic determination",

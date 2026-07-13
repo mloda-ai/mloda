@@ -6,6 +6,7 @@ override, no FeatureChainParserMixin) this raises TypeError for every feature na
 and aborts resolution for the whole run. Such a base must simply not match.
 """
 
+import inspect
 from abc import abstractmethod
 from typing import Any, Optional
 
@@ -50,6 +51,22 @@ class ConcreteRootFeatureGroup(FeatureGroup):
         return {PandasDataFrame}
 
 
+class ConcreteSubclassOfAbstractBase(AbstractBaseWithAbstractMethod):
+    """Leaf that implements the abstract method: instantiable, must match its root feature."""
+
+    @classmethod
+    def transform(cls, data: Any) -> Any:
+        return data
+
+    @classmethod
+    def input_data(cls) -> Optional[BaseInputData]:
+        return DataCreator({"issue692_subclass_root_feature"})
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return pd.DataFrame({"issue692_subclass_root_feature": [4, 5, 6]})
+
+
 class TestAbstractBaseMatcher:
     def test_abstract_base_does_not_match(self) -> None:
         """The abstract base must return False, not raise TypeError."""
@@ -70,6 +87,22 @@ class TestAbstractBaseMatcher:
         """Rootness semantics stay unchanged for concrete root feature groups."""
         assert ConcreteRootFeatureGroup.match_feature_group_criteria("issue692_root_feature", Options(), None) is True
         assert ConcreteRootFeatureGroup.match_feature_group_criteria("unrelated_name", Options(), None) is False
+
+    def test_concrete_subclass_of_abstract_base_matches(self) -> None:
+        """The check must look at the leaf class, not at the abstractness of its base."""
+        assert inspect.isabstract(AbstractBaseWithAbstractMethod) is True
+        assert inspect.isabstract(ConcreteSubclassOfAbstractBase) is False
+        assert (
+            ConcreteSubclassOfAbstractBase.match_feature_group_criteria(
+                "issue692_subclass_root_feature", Options(), None
+            )
+            is True
+        )
+
+    def test_non_abstract_feature_group_still_matches(self) -> None:
+        """Guard against strengthening the check to issubclass(cls, ABC)."""
+        assert inspect.isabstract(ConcreteRootFeatureGroup) is False
+        assert ConcreteRootFeatureGroup.match_feature_group_criteria("issue692_root_feature", Options(), None) is True
 
     def test_abstract_base_coexists_with_unrelated_features_in_run(self) -> None:
         """An abstract base in the enabled set must not break an unrelated run."""

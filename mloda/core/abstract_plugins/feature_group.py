@@ -769,7 +769,7 @@ class FeatureGroup(ABC):
         """
         Checks if the feature group is a root and matches input data.
         """
-        # Abstract classes cannot be instantiated, thus they never match.
+        # Abstract classes cannot be instantiated, so the rootness probe below would raise: they are never root.
         if inspect.isabstract(cls):
             return False
 

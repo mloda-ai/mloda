@@ -174,13 +174,17 @@ class Feature:
     ) -> str | type[FeatureGroup] | None:
         if feature_group is None:
             return None
-        if isinstance(feature_group, str):
-            stripped = feature_group.strip()
-            return stripped or None
         from mloda.core.abstract_plugins.feature_group import FeatureGroup
 
+        root_rejection = "feature_group cannot be the root FeatureGroup base class; a concrete subclass is required"
+        if isinstance(feature_group, str):
+            stripped = feature_group.strip()
+            # The root names no feature group family; rejected here as in the class-object form below.
+            if stripped == FeatureGroup.get_class_name():
+                raise TypeError(root_rejection)
+            return stripped or None
         if feature_group is FeatureGroup:
-            raise TypeError("feature_group cannot be the root FeatureGroup base class; a concrete subclass is required")
+            raise TypeError(root_rejection)
         if isinstance(feature_group, type) and issubclass(feature_group, FeatureGroup):
             return feature_group
         raise TypeError(

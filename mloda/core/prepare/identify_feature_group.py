@@ -41,6 +41,22 @@ def split_frameworks_by_capability(
     return supported, rejected
 
 
+def matches_feature_group_scope(feature_group: type[FeatureGroup], scope: str | type[FeatureGroup]) -> bool:
+    """Is the candidate inside the requested scope, for both the class-object and the string form.
+
+    The string form matches the named class and its subclasses by walking the candidate's ancestry
+    (MRO), so a config that can only carry a name keeps the same subclass-preferring semantics. The
+    root FeatureGroup base is excluded from that walk because every candidate carries it, which would
+    make it a wildcard.
+    """
+    if isinstance(scope, type):
+        return issubclass(feature_group, scope)
+    return any(
+        ancestor is not FeatureGroup and issubclass(ancestor, FeatureGroup) and ancestor.get_class_name() == scope
+        for ancestor in feature_group.__mro__
+    )
+
+
 def _scope_callout(feature: Feature) -> str | None:
     """Render the shared scope callout, or None when the feature is unscoped."""
     scope = feature.feature_group_scope
@@ -143,11 +159,7 @@ class IdentifyFeatureGroupClass:
 
     def _filter_feature_group_by_scope(self, feature_group: type[FeatureGroup], feature: Feature) -> bool:
         scope = feature.feature_group_scope
-        if scope is None:
-            return True
-        if isinstance(scope, type):
-            return issubclass(feature_group, scope)
-        return feature_group.get_class_name() == scope
+        return scope is None or matches_feature_group_scope(feature_group, scope)
 
     def _filter_feature_group_by_framework(
         self,

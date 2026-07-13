@@ -15,6 +15,7 @@ from types import ModuleType
 
 import pytest
 
+import mloda.provider
 import mloda.user
 
 # Source modules are resolved lazily so a missing optional backend fails only its own matrix row.
@@ -82,6 +83,7 @@ HELPER_EXPORT_MATRIX: list[tuple[str, str]] = [
     ("columnar_to_rows", _PYTHON_DICT_UTILS_MODULE),
     ("homogenize_rows", _PYTHON_DICT_UTILS_MODULE),
     ("is_columnar", _PYTHON_DICT_UTILS_MODULE),
+    ("rows_to_columnar", _PYTHON_DICT_UTILS_MODULE),
 ]
 
 _HELPER_MATRIX_IDS = [symbol for symbol, _source in HELPER_EXPORT_MATRIX]
@@ -102,4 +104,32 @@ class TestPythonDictHelperExportMatrix:
         assert hasattr(mloda.user, symbol), f"mloda.user must expose '{symbol}'"
         assert getattr(mloda.user, symbol) is getattr(source, symbol), (
             f"mloda.user.{symbol} must be the identical object from {source.__name__}"
+        )
+
+
+# Provider side (issue #707): pivoting a columnar frame back to rows is a provider-side
+# concern, so the same four helpers are ALSO exported from mloda.provider. Unlike the
+# lazy mloda.user exports, python_dict_utils is stdlib-only and mloda.provider already
+# imports eagerly from mloda_plugins, so these are eager exports listed in __all__.
+class TestPythonDictHelperProviderExportMatrix:
+    @pytest.mark.parametrize(("symbol", "source_module"), HELPER_EXPORT_MATRIX, ids=_HELPER_MATRIX_IDS)
+    def test_helper_importable_from_provider(self, symbol: str, source_module: str) -> None:
+        assert hasattr(mloda.provider, symbol), f"mloda.provider must expose '{symbol}'"
+
+    @pytest.mark.parametrize(("symbol", "source_module"), HELPER_EXPORT_MATRIX, ids=_HELPER_MATRIX_IDS)
+    def test_helper_listed_in_provider_all(self, symbol: str, source_module: str) -> None:
+        assert symbol in mloda.provider.__all__, f"mloda.provider.__all__ must list '{symbol}' (eager export)"
+
+    @pytest.mark.parametrize(("symbol", "source_module"), HELPER_EXPORT_MATRIX, ids=_HELPER_MATRIX_IDS)
+    def test_provider_helper_is_identical_to_source_object(self, symbol: str, source_module: str) -> None:
+        source = _source_module(source_module)
+        assert hasattr(source, symbol), f"{source.__name__} must define '{symbol}'"
+        assert getattr(mloda.provider, symbol) is getattr(source, symbol), (
+            f"mloda.provider.{symbol} must be the identical object from {source.__name__}"
+        )
+
+    @pytest.mark.parametrize(("symbol", "source_module"), HELPER_EXPORT_MATRIX, ids=_HELPER_MATRIX_IDS)
+    def test_provider_and_user_surfaces_agree(self, symbol: str, source_module: str) -> None:
+        assert getattr(mloda.provider, symbol) is getattr(mloda.user, symbol), (
+            f"mloda.provider.{symbol} and mloda.user.{symbol} must be the identical object"
         )

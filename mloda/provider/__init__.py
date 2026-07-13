@@ -85,6 +85,14 @@ from mloda.core.abstract_plugins.plugin_registry.plugin_registry import (
     register_plugin,
 )
 
+# Columnar helpers (python_dict)
+from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_utils import (
+    columnar_to_rows,
+    homogenize_rows,
+    is_columnar,
+    rows_to_columnar,
+)
+
 # Engines
 from mloda.core.filter.filter_engine import BaseFilterEngine
 from mloda.core.abstract_plugins.components.mask.base_mask_engine import BaseMaskEngine
@@ -144,6 +152,11 @@ __all__ = [
     # Plugin registry
     "PluginRegistryCollisionError",
     "register_plugin",
+    # Columnar helpers (python_dict)
+    "columnar_to_rows",
+    "homogenize_rows",
+    "is_columnar",
+    "rows_to_columnar",
     # Engines
     "BaseFilterEngine",
     "BaseMaskEngine",

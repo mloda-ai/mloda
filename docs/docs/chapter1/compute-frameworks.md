@@ -173,10 +173,10 @@ A feature group running on PythonDictFramework may also return row-wise data as 
 
 #### Columnar helpers
 
-`columnar_to_rows`, `homogenize_rows`, `is_columnar`, and `rows_to_columnar` are importable from `mloda.user`. `columnar_to_rows` is strict: it raises `ValueError` on anything that is not a valid columnar dict. Use `is_columnar` to branch first:
+`columnar_to_rows`, `homogenize_rows`, `is_columnar`, and `rows_to_columnar` are importable from `mloda.provider` (plugin/provider code, where pivoting a columnar frame back to rows belongs) and from `mloda.user` (application code unwrapping a `run_all` result). `columnar_to_rows` is strict: it raises `ValueError` on anything that is not a valid columnar dict. Use `is_columnar` to branch first:
 
 ``` python
-from mloda.user import columnar_to_rows, is_columnar
+from mloda.provider import columnar_to_rows, is_columnar
 
 def to_rows_lenient(data):
     if isinstance(data, list):

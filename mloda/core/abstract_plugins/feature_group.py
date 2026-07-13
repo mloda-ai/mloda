@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import inspect
 import logging
+from collections.abc import Collection, Mapping
 from typing import Any, ClassVar, Callable, Iterable, Optional, final
 from abc import ABC
 
@@ -151,7 +152,7 @@ class FeatureGroup(ABC):
         if cls.PROPERTY_MAPPING is None or key not in cls.PROPERTY_MAPPING:
             return frozenset()
         extracted = FeatureChainParser.extract_property_values(cls.PROPERTY_MAPPING[key])
-        if not isinstance(extracted, (dict, list, tuple, set, frozenset)):
+        if not isinstance(extracted, (Mapping, Collection)) or isinstance(extracted, (str, bytes)):
             return frozenset()
         return frozenset(str(value) for value in extracted)
 

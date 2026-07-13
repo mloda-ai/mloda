@@ -416,9 +416,14 @@ def resolve_feature(
         field=f"capability split for '{feature_name}'",
     )
     if split_result is None:
-        open_supported = {
-            cfw for candidate in candidates for cfw in candidate.compute_framework_definition() if cfw.is_available()
-        }
+        open_supported: set[type[ComputeFramework]] = set()
+        for candidate in candidates:
+            defined: set[type[ComputeFramework]] = safe_field(
+                lambda candidate=candidate: set(candidate.compute_framework_definition()),  # type: ignore[misc]
+                set(),
+                field=f"open-degrade frameworks for '{feature_name}'",
+            )
+            open_supported.update(cfw for cfw in defined if cfw.is_available())
         split_result = (open_supported, set())
     supported, rejected = split_result
     supported_names = sorted(c.get_class_name() for c in supported)

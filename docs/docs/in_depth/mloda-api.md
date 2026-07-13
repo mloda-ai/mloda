@@ -164,6 +164,22 @@ for step in mloda.explain(["sales__mean_aggr"], compute_frameworks=["PandasDataF
 
 Join semantics, honestly: for a join step the `*_feature_group` fields are the link's declared left/right sides, while `compute_framework`/`source_compute_framework` are the merge destination and the framework merged in. The planner swaps those two frameworks for `RIGHT` joins, so they are not guaranteed to be the frameworks of the declared left/right sides.
 
+##### How the engine tracks request provenance
+
+The requested/injected split above is derived from a per-feature flag, not from re-matching names against the request.
+
+- `Feature.initial_requested_data` (bool, default `False`) marks a feature that the user asked for directly.
+- `mlodaAPI._process_features` sets it to `True` on every feature of the incoming request, before resolution. Features the engine creates while resolving (input features of a FeatureGroup, link index features, global-filter features) are never marked, so they stay `False`.
+- `FeatureSet.get_initial_requested_features()` returns the sorted, deduplicated names of the flagged features in that set.
+- `PlanStep.requested_feature_names` is that accessor's output for the step's FeatureSet; `injected_feature_names` is the rest of `feature_names`.
+
+``` python
+from mloda.user import mloda
+
+for step in mloda.explain(["sales__mean_aggr"], compute_frameworks=["PandasDataFrame"]):
+    print(step.requested_feature_names, step.injected_feature_names)
+```
+
 ##### get_feature_group_docs
 
 Get documentation for feature groups with optional filtering.

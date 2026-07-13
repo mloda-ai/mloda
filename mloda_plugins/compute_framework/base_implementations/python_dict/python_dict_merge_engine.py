@@ -2,10 +2,9 @@ from dataclasses import replace
 from datetime import date, datetime, timedelta
 from typing import Any
 from mloda.core.abstract_plugins.components.contract.comparison_contract import ColumnSemantics
-from mloda.core.abstract_plugins.components.link import AsOfJoinConfig
-from mloda.provider import BaseMergeEngine
-from mloda.user import Index
-from mloda.user import JoinType
+from mloda.core.abstract_plugins.components.link import AsOfJoinConfig, JoinType
+from mloda.core.abstract_plugins.components.merge.base_merge_engine import BaseMergeEngine
+from mloda.core.abstract_plugins.components.index.index import Index
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_utils import columnar_to_rows
 from mloda_plugins.compute_framework.base_implementations.python_dict import python_dict_type_semantics
 

@@ -85,13 +85,23 @@ from mloda.core.abstract_plugins.plugin_registry.plugin_registry import (
     register_plugin,
 )
 
-# Columnar helpers (python_dict)
+# Columnar helpers (python_dict): stdlib-only module, so eager import is cycle-free.
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_utils import (
     columnar_to_rows,
     homogenize_rows,
     is_columnar,
     result_rows,
+    row_count,
     rows_to_columnar,
+    validate_columnar_dict,
+)
+
+# Eager on purpose: a module-level __getattr__ would make mypy treat every unknown attribute on
+# mloda.provider as Any, silently killing the typo guard for the whole surface.
+# Only PythonDictFramework is exported here: it is the sole dependency-free framework, the other
+# eight need optional backends and cannot be imported eagerly (they stay lazy on mloda.user).
+from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import (
+    PythonDictFramework,
 )
 
 # Engines
@@ -153,12 +163,15 @@ __all__ = [
     # Plugin registry
     "PluginRegistryCollisionError",
     "register_plugin",
-    # Columnar helpers (python_dict)
+    # Columnar helpers and framework (python_dict)
     "columnar_to_rows",
     "homogenize_rows",
     "is_columnar",
     "result_rows",
+    "row_count",
     "rows_to_columnar",
+    "validate_columnar_dict",
+    "PythonDictFramework",
     # Engines
     "BaseFilterEngine",
     "BaseMaskEngine",

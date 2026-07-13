@@ -769,6 +769,10 @@ class FeatureGroup(ABC):
         """
         Checks if the feature group is a root and matches input data.
         """
+        # Abstract classes cannot be instantiated, thus they never match.
+        if inspect.isabstract(cls):
+            return False
+
         return cls().is_root(options, feature_name) and cls._matches_input_data(
             feature_name, options, data_access_collection
         )

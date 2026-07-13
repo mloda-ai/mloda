@@ -71,6 +71,15 @@ def process_nested_features(options: dict[str, Any]) -> dict[str, Any]:
     return processed
 
 
+def validate_no_in_features_collision(container: dict[str, Any] | None, container_name: str) -> None:
+    """The top-level in_features field is written into context, so an in_features container key would collide."""
+    if container and DefaultOptionKeys.in_features in container:
+        raise ValueError(
+            f"'in_features' cannot be used both as a top-level feature config field and as a key inside "
+            f"'{container_name}'; declare the source features in one place."
+        )
+
+
 def load_features_from_config(config_str: str, format: str = "json") -> list[Feature | str]:
     """Load features from a configuration string.
 
@@ -100,13 +109,18 @@ def load_features_from_config(config_str: str, format: str = "json") -> list[Fea
             # Check if group_options or context_options exist
             if item.group_options is not None or item.context_options is not None:
                 # Use new Options architecture with group/context separation
-                context = item.context_options or {}
-                # Handle in_features if present
+                if item.in_features:
+                    validate_no_in_features_collision(item.group_options, "group_options")
+                    validate_no_in_features_collision(item.context_options, "context_options")
+
+                # Nested features are processed in both containers, as they are under the legacy 'options' key.
+                group = process_nested_features(item.group_options or {})
+                context = process_nested_features(item.context_options or {})
                 if item.in_features:
                     # Always convert to frozenset for consistency
                     context[DefaultOptionKeys.in_features] = frozenset(item.in_features)
                 options = Options(
-                    group=item.group_options or {},
+                    group=group,
                     context=context,
                     propagate_context_keys=frozenset(item.propagate_context_keys)
                     if item.propagate_context_keys

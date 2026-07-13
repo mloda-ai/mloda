@@ -200,7 +200,7 @@ class FeatureChainParser:
             return DefaultOptionKeys.group
 
     @classmethod
-    def _extract_property_values(cls, property_value: Any) -> Any:
+    def extract_property_values(cls, property_value: Any) -> Any:
         """Return a spec's declared value space (``allowed_values``), or {} if it declares none.
 
         Never inferred by subtracting the known keys: the retired flattened form did that, and it
@@ -209,6 +209,11 @@ class FeatureChainParser:
         if isinstance(property_value, dict):
             return property_value.get(DefaultOptionKeys.allowed_values, {})
         return property_value
+
+    @classmethod
+    def _extract_property_values(cls, property_value: Any) -> Any:
+        """Alias kept for existing callers."""
+        return cls.extract_property_values(property_value)
 
     @classmethod
     def check_declared_default(cls, owner: str, key: str, spec: dict[str, Any]) -> None:

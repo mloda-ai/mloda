@@ -1,4 +1,4 @@
-"""Failing tests pinning the composed SubtypeDeclaration value-object contract (issue #639)."""
+"""Pinning tests for the composed SubtypeDeclaration value-object contract (issue #639)."""
 
 import dataclasses
 from abc import abstractmethod

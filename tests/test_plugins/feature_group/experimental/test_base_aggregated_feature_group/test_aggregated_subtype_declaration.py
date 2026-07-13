@@ -1,4 +1,4 @@
-"""Failing tests pinning the SubtypeDeclaration dogfooding of AggregatedFeatureGroup (issue #639, cycle 2)."""
+"""Pinning tests for the SubtypeDeclaration dogfooding of AggregatedFeatureGroup (issue #639, cycle 2)."""
 
 import inspect
 

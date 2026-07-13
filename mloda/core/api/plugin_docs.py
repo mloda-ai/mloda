@@ -21,7 +21,7 @@ from mloda.core.abstract_plugins.components.base_feature_group_version import SO
 from mloda.core.abstract_plugins.components.subtype_declaration import SubtypeDeclaration
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.abstract_plugins.components.plugin_option.plugin_collector import PluginCollector
-from mloda.core.abstract_plugins.components.utils import get_all_subclasses, safe_field
+from mloda.core.abstract_plugins.components.utils import get_all_subclasses, safe_field, safe_field_with_error
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.function_extender import Extender
 from mloda.core.abstract_plugins.plugin_registry.plugin_registry import PluginRegistry
@@ -55,10 +55,10 @@ def _safe_version(fg_class: type[FeatureGroup]) -> str:
 
 def _subtype_support_or_error(fg_class: type[FeatureGroup]) -> tuple[dict[str, list[str]], Optional[str]]:
     """Return the sorted subtype support matrix, degrading a raising class to ({}, message)."""
-    try:
-        matrix = fg_class.subtype_support_matrix()
-    except Exception as exc:
-        return {}, str(exc)
+    empty: dict[str, frozenset[str]] = {}
+    matrix, error = safe_field_with_error(lambda: fg_class.subtype_support_matrix(), empty)
+    if error is not None:
+        return {}, error
     return {framework: sorted(supported) for framework, supported in matrix.items()}, None
 
 
@@ -408,12 +408,18 @@ def resolve_feature(
             error=error,
         )
 
-    # Degrade a raising plugin declaration to an empty split; resolve_feature never raises.
-    empty_split: tuple[set[type[ComputeFramework]], set[type[ComputeFramework]]] = (set(), set())
-    supported, rejected = safe_field(
+    # Degrade a raising plugin declaration OPEN (all available declared frameworks); resolve_feature never raises.
+    split_result: Optional[tuple[set[type[ComputeFramework]], set[type[ComputeFramework]]]] = safe_field(
         lambda: split_frameworks_by_capability(candidates, feature_name_obj, resolved_options),
-        empty_split,
+        None,
+        field=f"capability split for '{feature_name}'",
     )
+    if split_result is None:
+        open_supported = {
+            cfw for candidate in candidates for cfw in candidate.compute_framework_definition() if cfw.is_available()
+        }
+        split_result = (open_supported, set())
+    supported, rejected = split_result
     supported_names = sorted(c.get_class_name() for c in supported)
     rejected_names = sorted(c.get_class_name() for c in rejected)
     filtered = _filter_subclasses(candidates)

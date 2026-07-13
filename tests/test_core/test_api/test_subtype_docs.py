@@ -1,4 +1,4 @@
-"""Failing tests pinning the cycle-2 subtype persona surfaces of issue #639 (docs and resolve_feature)."""
+"""Pinning tests for the cycle-2 subtype persona surfaces of issue #639 (docs and resolve_feature)."""
 
 from abc import abstractmethod
 from typing import Optional

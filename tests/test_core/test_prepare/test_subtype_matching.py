@@ -1,4 +1,4 @@
-"""Failing tests pinning match-time enforcement of SubtypeDeclaration (issue #639)."""
+"""Pinning tests for match-time enforcement of SubtypeDeclaration (issue #639)."""
 
 import re
 from typing import Optional

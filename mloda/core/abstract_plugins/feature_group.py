@@ -84,7 +84,8 @@ class FeatureGroup(ABC):
 
     SUBTYPES: ClassVar[Optional[SubtypeDeclaration]] = None
     """Declarative subtype dimension of the family; ``None`` means no subtype dimension.
-    The derived accessors below are the only surface and must not be overridden."""
+    The derived accessors below are the only surface and must not be overridden.
+    Enforced at class definition time; runtime attribute assignment is not guarded."""
 
     _DERIVED_SUBTYPE_ACCESSORS: ClassVar[tuple[str, ...]] = (
         "subtype_universe",
@@ -168,7 +169,7 @@ class FeatureGroup(ABC):
         predicate-only and absent keys yield an empty set."""
         if cls.PROPERTY_MAPPING is None or key not in cls.PROPERTY_MAPPING:
             return frozenset()
-        extracted = FeatureChainParser._extract_property_values(cls.PROPERTY_MAPPING[key])
+        extracted = FeatureChainParser.extract_property_values(cls.PROPERTY_MAPPING[key])
         if not isinstance(extracted, (dict, list, tuple, set, frozenset)):
             return frozenset()
         return frozenset(str(value) for value in extracted)
@@ -266,6 +267,16 @@ class FeatureGroup(ABC):
                 f"{cls.get_class_name()} overrides supports_compute_framework, so the hand-written hook makes "
                 f"the declared subtype support matrix unverifiable; the declaration is not authoritative."
             )
+
+        declaration = cls.SUBTYPES
+        if declaration is not None and declaration.supported is not None:
+            declared_frameworks = {cfw.get_class_name() for cfw in cls.compute_framework_definition()}
+            unmatched = sorted(set(declaration.supported) - declared_frameworks)
+            if unmatched:
+                raise ValueError(
+                    f"{cls.get_class_name()} declares supported subtypes for {unmatched}, "
+                    f"which name no declared compute framework of the class."
+                )
 
         return {
             compute_framework.get_class_name(): cls.supported_subtypes(compute_framework)

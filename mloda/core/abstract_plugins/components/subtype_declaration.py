@@ -41,7 +41,7 @@ class SubtypeDeclaration:
                 self,
                 "supported",
                 MappingProxyType(
-                    {name: frozenset(str(value) for value in values) for name, values in self.supported.items()}
+                    {str(name): frozenset(str(value) for value in values) for name, values in self.supported.items()}
                 ),
             )
 
@@ -78,6 +78,12 @@ class SubtypeDeclaration:
                         f"SubtypeDeclaration: supported subtypes {sorted(overreach)} on "
                         f"{framework_name} are outside the declared universe."
                     )
+
+    def __hash__(self) -> int:
+        # MappingProxyType is unhashable; hash the mappings as frozensets of items.
+        families = frozenset((self.parametric_families or {}).items())
+        supported = frozenset((name, frozenset(values)) for name, values in (self.supported or {}).items())
+        return hash((self.key, self.universe, self.resolver, families, supported))
 
     def family_names(self) -> frozenset[str]:
         return frozenset(self.parametric_families or ())

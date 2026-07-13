@@ -156,6 +156,9 @@ passes through. Only a result that carries no columns at all is rejected.
 On the PythonDict framework, whose native representation is a columnar
 `dict[str, list]`, the schema is the set of keys: `{"col": []}` carries a
 schema, while `{}` (zero columns) is the only schema-less value and raises.
+Returning a row-oriented `[]` ("nothing to ingest": an empty source directory, a
+query with no hits) also carries no columns and therefore raises. Return
+`{"my_feature": []}` instead.
 
 If the schema-less result is genuine (a bug, missing data, wrong filter), this
 error is correct behavior: it protects callers from silently receiving output

@@ -68,7 +68,15 @@ Example_id: [[0,2,4,...]]
 
 In this example, we implemented a custom feature group, Example, that multiplies each feature value by 2. By defining a straightforward input_features method and a calculate_feature method, we were able to extend mloda's feature engineering capabilities with custom transformations. We then executed the request by simply modifying the feature names with a prefix ("Example_"), allowing mloda to handle dependencies and computations automatically.
 
-#### 5. Advanced Feature Group Topics
+#### 5. The result contract
+
+A feature group must return its **columns**, even when it has no rows. Zero rows
+is a valid result; zero columns is not, and raises `EmptyResultError`. On the
+PythonDict framework this means a row-oriented `[]` is *not* a valid empty
+result: return `{"my_feature": []}` instead, keeping the column and dropping the
+rows. See [Empty Result Handling](../in_depth/compute-framework-integration.md#empty-results).
+
+#### 6. Advanced Feature Group Topics
 
 For more in-depth information about feature groups, check out these advanced topics:
 
@@ -83,6 +91,6 @@ For more in-depth information about feature groups, check out these advanced top
 - [Mask Engine](../in_depth/mask_engine.md) - Inline masking with `features.mask_engine`
 - [Empty Result Handling](../in_depth/compute-framework-integration.md#empty-results) - Zero rows is always valid; a zero-column (schema-less) result raises `EmptyResultError`
 
-#### 6. Discovering Feature Groups
+#### 7. Discovering Feature Groups
 
 To list all available feature groups and their documentation, use the `get_feature_group_docs()` function from `mloda.steward`.

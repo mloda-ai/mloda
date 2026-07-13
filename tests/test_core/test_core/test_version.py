@@ -3,23 +3,9 @@
 from __future__ import annotations
 
 import importlib.metadata
-from collections.abc import Iterator
 from typing import Any
 
 import pytest
-
-
-@pytest.fixture
-def reset_version_cache() -> Iterator[None]:
-    """Restores the memoization cache of mloda.core.version so tests do not poison the process."""
-    import mloda.core.version as version_module
-
-    previous = version_module._mloda_version_cache
-    version_module._mloda_version_cache = None
-    try:
-        yield
-    finally:
-        version_module._mloda_version_cache = previous
 
 
 def test_get_mloda_version_matches_distribution_metadata() -> None:
@@ -28,8 +14,10 @@ def test_get_mloda_version_matches_distribution_metadata() -> None:
     assert get_mloda_version() == importlib.metadata.version("mloda")
 
 
-def test_get_mloda_version_is_memoized(reset_version_cache: None, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_get_mloda_version_is_memoized(monkeypatch: pytest.MonkeyPatch) -> None:
     import mloda.core.version as version_module
+
+    monkeypatch.setattr(version_module, "_mloda_version_cache", None)
 
     calls: list[str] = []
     real_version = importlib.metadata.version
@@ -38,7 +26,7 @@ def test_get_mloda_version_is_memoized(reset_version_cache: None, monkeypatch: p
         calls.append(name)
         return real_version(name)
 
-    monkeypatch.setattr(version_module.importlib.metadata, "version", counting_version)
+    monkeypatch.setattr(importlib.metadata, "version", counting_version)
 
     first = version_module.get_mloda_version()
     second = version_module.get_mloda_version()
@@ -48,15 +36,15 @@ def test_get_mloda_version_is_memoized(reset_version_cache: None, monkeypatch: p
     assert len(calls) == 1, f"expected metadata lookup to be memoized, got {len(calls)} lookups"
 
 
-def test_get_mloda_version_falls_back_when_distribution_missing(
-    reset_version_cache: None, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_get_mloda_version_falls_back_when_distribution_missing(monkeypatch: pytest.MonkeyPatch) -> None:
     import mloda.core.version as version_module
+
+    monkeypatch.setattr(version_module, "_mloda_version_cache", None)
 
     def raise_not_found(name: str) -> str:
         raise importlib.metadata.PackageNotFoundError(name)
 
-    monkeypatch.setattr(version_module.importlib.metadata, "version", raise_not_found)
+    monkeypatch.setattr(importlib.metadata, "version", raise_not_found)
 
     assert version_module.get_mloda_version() == "0.0.0"
 

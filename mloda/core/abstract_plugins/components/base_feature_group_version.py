@@ -27,11 +27,7 @@ _class_source_hash_cache: "weakref.WeakKeyDictionary[type[Any], str]" = weakref.
 class BaseFeatureGroupVersion(ABC):
     @classmethod
     def mloda_version(cls) -> str:
-        """
-        Retrieves the version of the 'mloda' package using importlib.metadata.
-        If retrieval fails, it returns "0.0.0" as a fallback.
-        The result (including the fallback) is memoized for the process lifetime.
-        """
+        """Returns the installed mloda version via get_mloda_version() (memoized, "0.0.0" fallback)."""
         return get_mloda_version()
 
     @classmethod

@@ -2,9 +2,6 @@
 
 from __future__ import annotations
 
-# Redundant alias form: makes ``importlib`` an explicit re-export so callers (and tests)
-# may patch ``mloda.core.version.importlib.metadata.version`` under mypy --strict.
-import importlib as importlib
 import importlib.metadata
 
 # Package metadata cannot change within a process, so the lookup is memoized:
@@ -19,6 +16,7 @@ def get_mloda_version() -> str:
         return _mloda_version_cache
     try:
         _mloda_version_cache = importlib.metadata.version("mloda")
-    except importlib.metadata.PackageNotFoundError:
+    # Broad: __version__ runs at facade import time, so any metadata error must degrade, not break the import.
+    except Exception:
         _mloda_version_cache = "0.0.0"
     return _mloda_version_cache

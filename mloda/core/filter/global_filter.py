@@ -101,7 +101,7 @@ class GlobalFilter:
         return matched_filters
 
     def unify_options(self, feat_options: Options, filter_options: Options) -> Options:
-        # Preserve each key's category so context keys do not leak into group (issue #712).
+        # Preserve each key's category so context keys do not leak into group.
         for key, value in feat_options.group.items():
             if key not in filter_options:
                 filter_options.add_to_group(key, value)

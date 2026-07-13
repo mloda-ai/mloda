@@ -4,6 +4,9 @@ Unit tests for feature configuration loader.
 This module tests the load_features_from_config function from mloda.core.api.feature_config.loader.
 """
 
+import json
+from typing import Any
+
 import pytest
 
 from mloda.user import Feature
@@ -399,6 +402,85 @@ def test_load_appends_tilde_syntax_to_name() -> None:
     # Fourth: minimal configuration
     assert isinstance(result[3], Feature)
     assert result[3].name == "embedded__description~3"
+
+
+def test_load_features_rejects_in_features_as_string() -> None:
+    """Test that a top-level in_features string is rejected instead of char-splitting (issue #680).
+
+    frozenset("age") is frozenset({'a', 'g', 'e'}), so a string in_features silently
+    becomes three one-character source features. The loader must reject it: in_features
+    is an array of source feature names.
+    """
+    config_str = '[{"name": "scale__age", "in_features": "age"}]'
+
+    with pytest.raises(ValueError, match="in_features") as exc_info:
+        load_features_from_config(config_str, format="json")
+
+    assert "array" in str(exc_info.value)
+
+
+def test_load_features_rejects_in_features_as_dict() -> None:
+    """Test that a top-level in_features dict is rejected instead of collapsing to its keys."""
+    config_str = '[{"name": "scale__age", "in_features": {"name": "age"}}]'
+
+    with pytest.raises(ValueError, match="in_features") as exc_info:
+        load_features_from_config(config_str, format="json")
+
+    assert "array" in str(exc_info.value)
+
+
+def test_load_features_rejects_empty_name() -> None:
+    """Test that an empty top-level 'name' is rejected, matching the nested in_features rule."""
+    config_str = '[{"name": ""}]'
+
+    with pytest.raises(ValueError, match="name"):
+        load_features_from_config(config_str, format="json")
+
+
+# The elements go straight into frozenset(): an int element becomes a bogus source feature and a
+# dict element dies with an internal "unhashable type: 'dict'" TypeError. Every element must be a
+# non-empty source feature name, rejected with a ValueError that names in_features and the element.
+BAD_TOP_LEVEL_IN_FEATURES: list[Any] = [
+    pytest.param([1, 2], 1, id="ints"),
+    pytest.param(["age", 7], 7, id="mixed_int"),
+    pytest.param([{"name": "age"}], {"name": "age"}, id="feature_dict"),
+    pytest.param(["age", ""], "", id="empty_string"),
+    pytest.param(["age", "   "], "   ", id="whitespace_only_string"),
+    pytest.param(["age", None], None, id="null"),
+]
+
+
+@pytest.mark.parametrize("in_features, offender", BAD_TOP_LEVEL_IN_FEATURES)
+def test_load_features_rejects_in_features_element_that_is_not_a_name(in_features: list[Any], offender: Any) -> None:
+    """Test that a top-level in_features element that is not a non-empty name is rejected (issue #680)."""
+    config_str = json.dumps([{"name": "scale__age", "in_features": in_features}])
+
+    with pytest.raises(ValueError, match="in_features") as exc_info:
+        load_features_from_config(config_str, format="json")
+
+    assert repr(offender) in str(exc_info.value)
+
+
+@pytest.mark.parametrize("in_features, offender", BAD_TOP_LEVEL_IN_FEATURES)
+def test_load_features_rejects_in_features_element_with_group_options(in_features: list[Any], offender: Any) -> None:
+    """Test that the group_options branch of the loader rejects the same bad in_features elements."""
+    config_str = json.dumps([{"name": "scale__age", "in_features": in_features, "group_options": {"threshold": 0.5}}])
+
+    with pytest.raises(ValueError, match="in_features") as exc_info:
+        load_features_from_config(config_str, format="json")
+
+    assert repr(offender) in str(exc_info.value)
+
+
+def test_load_features_accepts_in_features_array_of_names() -> None:
+    """Test that the valid top-level in_features array form keeps loading unchanged."""
+    config_str = '[{"name": "scale__age", "in_features": ["age", "weight"]}]'
+
+    result = load_features_from_config(config_str, format="json")
+
+    assert len(result) == 1
+    assert isinstance(result[0], Feature)
+    assert result[0].options.context.get(DefaultOptionKeys.in_features) == frozenset({"age", "weight"})
 
 
 def test_load_features_with_multiple_in_features() -> None:

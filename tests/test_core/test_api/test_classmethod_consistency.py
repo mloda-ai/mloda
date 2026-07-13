@@ -1,7 +1,7 @@
 """Tests that all mlodaAPI entry points use @classmethod so subclasses dispatch correctly."""
 
+import collections.abc
 import inspect
-import types
 from typing import Any, Optional
 from unittest.mock import patch
 
@@ -124,13 +124,17 @@ class TestBaseClassBehaviorUnchanged:
         assert len(result) == 1
 
     def test_stream_all_still_returns_generator(self) -> None:
+        from mloda.user import ResultStream
+
         result = mlodaAPI.stream_all(
             _features,
             compute_frameworks={PandasDataFrame},
             api_data=_api_data,
             plugin_collector=_enabled,
         )
-        assert isinstance(result, types.GeneratorType)
+        assert isinstance(result, collections.abc.Generator)
+        assert isinstance(result, ResultStream)
+        assert not isinstance(result, list)
 
     def test_mloda_alias_run_all_works(self) -> None:
         result = mloda.run_all(
@@ -143,7 +147,7 @@ class TestBaseClassBehaviorUnchanged:
         assert len(result) == 1
 
     def test_stream_all_importable_from_user_still_works(self) -> None:
-        from mloda.user import stream_all
+        from mloda.user import ResultStream, stream_all
 
         result = stream_all(
             _features,
@@ -151,6 +155,8 @@ class TestBaseClassBehaviorUnchanged:
             api_data=_api_data,
             plugin_collector=_enabled,
         )
-        assert isinstance(result, types.GeneratorType)
+        assert isinstance(result, collections.abc.Generator)
+        assert isinstance(result, ResultStream)
+        assert not isinstance(result, list)
         results = list(result)
         assert len(results) == 1

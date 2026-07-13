@@ -1,7 +1,7 @@
 """Unit tests for mlodaAPI.stream_all classmethod."""
 
+import collections.abc
 import inspect
-import types
 
 
 class TestStreamAllClassMethod:
@@ -14,7 +14,7 @@ class TestStreamAllClassMethod:
 
     def test_stream_all_returns_generator(self) -> None:
         from mloda.core.api.request import mlodaAPI
-        from mloda.user import Feature, Features, ParallelizationMode
+        from mloda.user import Feature, Features, ParallelizationMode, ResultStream
         from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 
         features = Features([Feature(name="EngineRunnerTest1", initial_requested_data=True)])
@@ -24,7 +24,9 @@ class TestStreamAllClassMethod:
             parallelization_modes={ParallelizationMode.SYNC},
         )
 
-        assert isinstance(result, types.GeneratorType)
+        assert isinstance(result, collections.abc.Generator)
+        assert isinstance(result, ResultStream)
+        assert not isinstance(result, list)
 
     def test_stream_all_accessible_via_mloda_alias(self) -> None:
         from mloda.user import mloda
@@ -41,7 +43,7 @@ class TestStreamAllImportFromUser:
         assert callable(stream_all)
 
     def test_stream_all_returns_generator_via_user_import(self) -> None:
-        from mloda.user import Feature, Features, ParallelizationMode, stream_all
+        from mloda.user import Feature, Features, ParallelizationMode, ResultStream, stream_all
         from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 
         features = Features([Feature(name="EngineRunnerTest1", initial_requested_data=True)])
@@ -51,5 +53,6 @@ class TestStreamAllImportFromUser:
             parallelization_modes={ParallelizationMode.SYNC},
         )
 
-        assert isinstance(result, types.GeneratorType)
+        assert isinstance(result, collections.abc.Generator)
+        assert isinstance(result, ResultStream)
         assert not isinstance(result, list)

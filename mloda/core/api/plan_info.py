@@ -18,8 +18,12 @@ class PlanStep:
     ``step_kind`` is "compute", "join" or "transform".
 
     compute: ``feature_names`` are the names computed by ``feature_group`` on ``compute_framework``.
-    The names include engine-injected features (link index features, global-filter features), so they
-    are not only the requested ones. ``source_*`` and ``join_type`` are None.
+    The names include engine-injected features (link index features, global-filter features):
+    ``requested_feature_names`` holds the user-requested names, ``injected_feature_names`` the
+    engine-injected/dependency remainder; both are empty for join and transform steps.
+    The split is name-based, so a name that is both user-requested and engine-injected within
+    one step counts as requested only.
+    ``source_*`` and ``join_type`` are None.
 
     transform: ``feature_group``/``compute_framework`` are the destination, ``source_*`` the origin.
 
@@ -38,6 +42,8 @@ class PlanStep:
     source_feature_group: Optional[type["FeatureGroup"]]
     source_compute_framework: Optional[type["ComputeFramework"]]
     join_type: Optional[str] = None
+    requested_feature_names: tuple[str, ...] = ()
+    injected_feature_names: tuple[str, ...] = ()
 
     @property
     def feature_group_name(self) -> Optional[str]:
@@ -68,14 +74,19 @@ def build_plan_steps(
 
     for step in execution_plan:
         if isinstance(step, FeatureGroupStep):
+            feature_names = tuple(str(name) for name in step.features.get_all_names())
+            requested = tuple(sorted(str(name) for name in step.features.get_initial_requested_features()))
+            injected = tuple(sorted(set(feature_names) - set(requested)))
             plan.append(
                 PlanStep(
                     step_kind="compute",
-                    feature_names=tuple(str(name) for name in step.features.get_all_names()),
+                    feature_names=feature_names,
                     feature_group=step.feature_group,
                     compute_framework=step.compute_framework,
                     source_feature_group=None,
                     source_compute_framework=None,
+                    requested_feature_names=requested,
+                    injected_feature_names=injected,
                 )
             )
         elif isinstance(step, TransformFrameworkStep):

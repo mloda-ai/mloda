@@ -24,6 +24,7 @@ options key), so they cannot pollute discovery in other tests.
 """
 
 import gc
+import weakref
 from typing import Any
 
 import pytest
@@ -321,13 +322,21 @@ class TestLoudValidation:
             def match_subclass_data_access(cls, data_access: Any, feature_names: list[str], options: Any = None) -> Any:
                 return None
 
+        bad_family = weakref.ref(_BadFamily)
+
         with pytest.raises(ValueError) as exc_info:
             _invoke(_BadFamily, "is_final_reader")
         assert "nonexistent_hook" in str(exc_info.value)
         assert "_BadFamily" in str(exc_info.value)
         # Drop the misconfigured local class from BaseInputData.__subclasses__ so it
         # cannot raise during discovery in sibling tests running in the same worker.
+        # The collect must happen after dropping exc_info because its captured
+        # traceback frames pin the class; the weakref assert fails loudly if the
+        # class ever becomes uncollectable again.
+        del exc_info
+        del _BadFamily
         gc.collect()
+        assert bad_family() is None
 
 
 class TestFamilyDeclarations:

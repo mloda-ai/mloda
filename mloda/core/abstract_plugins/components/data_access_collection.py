@@ -1,3 +1,4 @@
+from collections.abc import Iterable
 from typing import Any, Callable
 
 from mloda.core.abstract_plugins.components.credential import Credential
@@ -47,7 +48,8 @@ class DataAccessCollection:
             ``HashableDict`` is no longer accepted on the credentials path; the
             class itself stays for hashability-required internals (e.g. ``Options``
             hashing, ``ApiInputDataCollection``). Credentials have no ``set``
-            form (dicts are unhashable).
+            form (dicts are unhashable). Any other top-level ``credentials``
+            value (``str``, ``bytes``, ``int``, ...) raises ``ValueError``.
 
         ``column_to_file`` maps a column to either a file handle or a file path
         (paths are normalized to their handle).
@@ -86,6 +88,13 @@ class DataAccessCollection:
                 handle: cls._validated_credential_value(handle, value, context_keys)
                 for handle, value in credentials.items()
             }
+        if isinstance(credentials, (str, bytes, bytearray)) or not isinstance(credentials, Iterable):
+            # Single mis-wrapped value, not a sequence of credentials. HashableDict raises the migration error.
+            cls._unwrap_credential(credentials)
+            raise ValueError(
+                f"credentials must be a Credential, a dict of {{handle: credential}}, or a list of credentials; "
+                f"got {type(credentials).__name__}."
+            )
         return [cls._unwrap_credential(entry) for entry in credentials]
 
     @staticmethod

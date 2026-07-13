@@ -164,6 +164,22 @@ for step in mloda.explain(["sales__mean_aggr"], compute_frameworks=["PandasDataF
 
 Join semantics, honestly: for a join step the `*_feature_group` fields are the link's declared left/right sides, while `compute_framework`/`source_compute_framework` are the merge destination and the framework merged in. The planner swaps those two frameworks for `RIGHT` joins, so they are not guaranteed to be the frameworks of the declared left/right sides.
 
+##### How the engine tracks request provenance
+
+The requested/injected split above is derived from a per-feature flag, not from re-matching names against the request.
+
+- `Feature.initial_requested_data` (bool, default `False`) marks a feature that the user asked for directly. It also decides which features come back in the run result, which is why a FeatureGroup may set it on a feature it created itself.
+- `mlodaAPI._process_features` sets it to `True` on every feature of the incoming request, before resolution. Features created during resolution (input features of a FeatureGroup, link index features, global-filter features) keep the `False` default, unless a FeatureGroup opts one in explicitly: `input_features` may construct a `Feature` with `initial_requested_data=True` to surface it in the results, and then it counts as requested in the split too.
+- `FeatureSet.get_initial_requested_features()` returns the sorted, deduplicated names of the flagged features in that set.
+- `PlanStep.requested_feature_names` is that accessor's output for a compute step's FeatureSet; `injected_feature_names` is the rest of `feature_names`. Both are sorted, so they do not follow the order of `feature_names`, and both are empty on join and transform steps, which carry no FeatureSet.
+
+``` python
+from mloda.user import mloda
+
+for step in mloda.explain(["sales__mean_aggr"], compute_frameworks=["PandasDataFrame"]):
+    print(step.requested_feature_names, step.injected_feature_names)
+```
+
 ##### get_feature_group_docs
 
 Get documentation for feature groups with optional filtering.

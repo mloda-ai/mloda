@@ -101,14 +101,17 @@ class GlobalFilter:
         return matched_filters
 
     def unify_options(self, feat_options: Options, filter_options: Options) -> Options:
-        for key, value in feat_options.items():
+        # Preserve each key's category so context keys do not leak into group (issue #712).
+        for key, value in feat_options.group.items():
             if key not in filter_options:
                 filter_options.add_to_group(key, value)
-            else:
-                if filter_options[key] == value:
-                    continue
-                else:
-                    logger.warning(f"Options are not the same. {key} is different. {filter_options[key]} != {value}")
+            elif filter_options[key] != value:
+                logger.warning(f"Options are not the same. {key} is different. {filter_options[key]} != {value}")
+        for key, value in feat_options.context.items():
+            if key not in filter_options:
+                filter_options.add_to_context(key, value)
+            elif filter_options[key] != value:
+                logger.warning(f"Options are not the same. {key} is different. {filter_options[key]} != {value}")
         return filter_options
 
     def criteria(

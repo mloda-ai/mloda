@@ -346,12 +346,15 @@ class Engine:
             feature_collection.add(feature)
             return True
 
-        if child_uuid:
-            # Find the wanted_uuid in feature_collection
-            wanted_uuid = next((f.uuid for f in feature_collection if feature == f), None)
+        existing_feature = next((f for f in feature_collection if feature == f), None)
 
-            if wanted_uuid is not None:
-                self._update_feature_link_parents(child_uuid, feature.uuid, wanted_uuid, if_index_feature)
+        if existing_feature is not None:
+            # Propagate the requested flag: filter twins must not displace requested output columns (issue #712).
+            if feature.initial_requested_data and not existing_feature.initial_requested_data:
+                existing_feature.initial_requested_data = True
+
+            if child_uuid:
+                self._update_feature_link_parents(child_uuid, feature.uuid, existing_feature.uuid, if_index_feature)
 
         return False
 

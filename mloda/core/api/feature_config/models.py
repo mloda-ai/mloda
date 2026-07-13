@@ -77,6 +77,13 @@ FEATURE_CONFIG_FIELDS = frozenset(f.name for f in fields(FeatureConfig))
 NESTED_FIELDS = frozenset(f.name for f in fields(FeatureConfig) if f.metadata.get("nested"))
 
 
+def describe_offender(value: Any) -> str:
+    """Name a rejected dict by its keys: its repr would dump an options payload that may hold credentials."""
+    if isinstance(value, dict):
+        return f"a dict with keys {sorted(value)}"
+    return repr(value)
+
+
 def validate_top_level_in_features(value: Any) -> None:
     """Top-level in_features is an array of source feature names.
 
@@ -87,13 +94,13 @@ def validate_top_level_in_features(value: Any) -> None:
     if not isinstance(value, list):
         raise ValueError(
             f"'in_features' must be an array of source feature names at the top level of a feature config, got: "
-            f"{value!r}"
+            f"{describe_offender(value)}"
         )
     for element in value:
         if not isinstance(element, str) or not element.strip():
             raise ValueError(
                 f"'in_features' must be an array of non-empty source feature names at the top level of a feature "
-                f"config, got element: {element!r}"
+                f"config, got element: {describe_offender(element)}"
             )
 
 
@@ -114,16 +121,17 @@ def validate_nested_in_features(value: Any) -> None:
             if isinstance(element, dict):
                 raise ValueError(
                     "'in_features' as a list holds source feature names only; a nested feature dict is supported "
-                    f"as the direct value of 'in_features', not as a list element, got: {element!r}"
+                    f"as the direct value of 'in_features', not as a list element, got: {describe_offender(element)}"
                 )
             if not isinstance(element, str) or not element.strip():
                 raise ValueError(
-                    f"'in_features' as a list holds non-empty source feature names, got element: {element!r}"
+                    f"'in_features' as a list holds non-empty source feature names, got element: "
+                    f"{describe_offender(element)}"
                 )
         return
     raise ValueError(
         f"'in_features' must be a source feature name, a list of source feature names, or a nested feature dict, "
-        f"got: {value!r}"
+        f"got: {describe_offender(value)}"
     )
 
 

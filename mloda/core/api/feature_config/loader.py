@@ -80,6 +80,22 @@ def validate_no_in_features_collision(container: dict[str, Any] | None, containe
         )
 
 
+def validate_single_in_features_container(
+    group_options: dict[str, Any] | None, context_options: dict[str, Any] | None
+) -> None:
+    """Group and context share one key space, so the same in_features key in both would collide inside Options."""
+    if (
+        group_options
+        and context_options
+        and DefaultOptionKeys.in_features in group_options
+        and DefaultOptionKeys.in_features in context_options
+    ):
+        raise ValueError(
+            "'in_features' cannot be a key of both 'group_options' and 'context_options'; "
+            "declare the source features in one place."
+        )
+
+
 def load_features_from_config(config_str: str, format: str = "json") -> list[Feature | str]:
     """Load features from a configuration string.
 
@@ -106,13 +122,17 @@ def load_features_from_config(config_str: str, format: str = "json") -> list[Fea
             if item.column_index is not None:
                 feature_name = f"{item.name}~{item.column_index}"
 
+            # One in_features declaration per feature: the top-level field is written into context, so an
+            # in_features key in any container collides, and so does the same key in both modern containers.
+            if item.in_features:
+                validate_no_in_features_collision(item.options, "options")
+                validate_no_in_features_collision(item.group_options, "group_options")
+                validate_no_in_features_collision(item.context_options, "context_options")
+            validate_single_in_features_container(item.group_options, item.context_options)
+
             # Check if group_options or context_options exist
             if item.group_options is not None or item.context_options is not None:
                 # Use new Options architecture with group/context separation
-                if item.in_features:
-                    validate_no_in_features_collision(item.group_options, "group_options")
-                    validate_no_in_features_collision(item.context_options, "context_options")
-
                 # Nested features are processed in both containers, as they are under the legacy 'options' key.
                 group = process_nested_features(item.group_options or {})
                 context = process_nested_features(item.context_options or {})

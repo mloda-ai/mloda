@@ -14,14 +14,20 @@ empty name, feature dict as a list element), and lands in Options.group or
 Options.context according to the container it came from.
 
 They also pin the collision the parity opens up: the top-level 'in_features' field
-is injected into context by the loader, so an 'in_features' key written inside
-group_options (cryptic duplicate-key error today) or inside context_options
-(silently overwritten today) must raise one clear error naming the key and the
-container. And the loader must leave the parsed config dicts unmutated.
+is injected into context by the loader, so an 'in_features' key written inside ANY
+of the three containers must raise one clear error naming the key and the container,
+and the same clear error must cover an 'in_features' key written into BOTH modern
+containers at once. And the loader must leave the parsed config dicts unmutated.
+
+Finally they pin the consequence of the container choice: a nested source feature
+under group_options is part of Options.group, so it participates in hashing and
+Feature Group splitting, while one under context_options does not; and one engine
+run proves a config-declared nested Feature under group_options is really resolved
+into a computed dependency.
 """
 
 import json
-from typing import Any
+from typing import Any, Optional
 
 import pytest
 
@@ -29,11 +35,25 @@ from mloda.core.api.feature_config import loader as loader_module
 from mloda.core.api.feature_config.loader import load_features_from_config
 from mloda.core.api.feature_config.models import FeatureConfig, FeatureConfigItem
 from mloda.core.api.feature_config.parser import parse_json
+from mloda.provider import BaseInputData
+from mloda.provider import DataCreator
 from mloda.provider import DefaultOptionKeys
+from mloda.provider import FeatureGroup
+from mloda.provider import FeatureSet
 from mloda.user import Feature
+from mloda.user import FeatureName
+from mloda.user import Options
+from mloda.user import PluginCollector
+from mloda.user import mloda
+from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 
 
 CONTAINERS = ["group_options", "context_options"]
+
+# The collision guard covers the legacy container too: the same mistake must give the same clear error.
+COLLISION_CONTAINERS = ["options", "group_options", "context_options"]
+
+CRYPTIC_DUPLICATE_KEY_ERROR = "Keys cannot exist in both group and context"
 
 
 def _single_feature(config: dict[str, Any]) -> Feature:
@@ -299,10 +319,11 @@ def test_modern_options_nested_sibling_in_features_list_still_loads(container: s
 # Collision: the top-level 'in_features' field vs an 'in_features' container key
 #
 # The loader injects the top-level field into context[DefaultOptionKeys.in_features].
-# Combining it with an 'in_features' key inside group_options gives a cryptic
-# duplicate-key error from OptionsValidator today; inside context_options the
-# user's value is silently overwritten. One clear error must name the key and the
-# container it was written into.
+# Combining it with an 'in_features' key inside group_options or 'options' gives a
+# cryptic duplicate-key error from OptionsValidator today; inside context_options
+# the user's value is silently overwritten. One clear error must name the key and
+# the container it was written into, for all THREE containers: the mistake and the
+# remedy are identical, so the message must be too.
 # ---------------------------------------------------------------------------
 
 
@@ -313,10 +334,10 @@ COLLIDING_VALUES: list[Any] = [
 ]
 
 
-@pytest.mark.parametrize("container", CONTAINERS)
+@pytest.mark.parametrize("container", COLLISION_CONTAINERS)
 @pytest.mark.parametrize("value", COLLIDING_VALUES)
 def test_top_level_in_features_collides_with_container_in_features(container: str, value: Any) -> None:
-    """The top-level in_features field must not be combined with an in_features key in a container."""
+    """The top-level in_features field must not be combined with an in_features key in any container."""
     config: dict[str, Any] = {
         "name": "outer",
         "in_features": ["age"],
@@ -331,12 +352,46 @@ def test_top_level_in_features_collides_with_container_in_features(container: st
     assert container in str(exc_info.value)
 
 
-def test_top_level_in_features_collision_replaces_the_cryptic_duplicate_key_error() -> None:
+@pytest.mark.parametrize("container", COLLISION_CONTAINERS)
+def test_top_level_in_features_collision_replaces_the_cryptic_duplicate_key_error(container: str) -> None:
     """The collision is reported by the loader, not by the group/context duplicate-key check."""
     config: dict[str, Any] = {
         "name": "outer",
         "in_features": ["age"],
-        "group_options": {"in_features": {"name": "inner"}},
+        container: {"in_features": {"name": "inner"}},
+    }
+
+    with pytest.raises(ValueError, match="in_features") as exc_info:
+        load_features_from_config(json.dumps([config]), format="json")
+
+    message = str(exc_info.value)
+    assert container in message
+    assert CRYPTIC_DUPLICATE_KEY_ERROR not in message
+
+
+# ---------------------------------------------------------------------------
+# Collision: an 'in_features' key in BOTH modern containers
+#
+# With no top-level in_features field, neither guard fires and the same key lands
+# in group AND context, where Options.__init__ rejects it with the cryptic
+# duplicate-key error. The loader must reject it first, naming the key and both
+# containers.
+# ---------------------------------------------------------------------------
+
+
+BOTH_CONTAINER_VALUES: list[Any] = [
+    pytest.param({"name": "group_inner"}, {"name": "context_inner"}, id="nested_feature_dicts"),
+    pytest.param(["age"], ["weight"], id="lists_of_names"),
+]
+
+
+@pytest.mark.parametrize("group_value, context_value", BOTH_CONTAINER_VALUES)
+def test_in_features_key_in_both_modern_containers_is_rejected(group_value: Any, context_value: Any) -> None:
+    """One in_features key per feature: declaring it in group_options and context_options collides."""
+    config: dict[str, Any] = {
+        "name": "outer",
+        "group_options": {"in_features": group_value},
+        "context_options": {"in_features": context_value},
     }
 
     with pytest.raises(ValueError, match="in_features") as exc_info:
@@ -344,7 +399,8 @@ def test_top_level_in_features_collision_replaces_the_cryptic_duplicate_key_erro
 
     message = str(exc_info.value)
     assert "group_options" in message
-    assert "Keys cannot exist in both group and context" not in message
+    assert "context_options" in message
+    assert CRYPTIC_DUPLICATE_KEY_ERROR not in message
 
 
 # ---------------------------------------------------------------------------
@@ -515,12 +571,112 @@ def test_in_features_branch_with_options_still_loads() -> None:
 
 
 def test_options_branch_collision_with_top_level_in_features_still_raises() -> None:
-    """An in_features key in 'options' beside the top-level field stays an error on the legacy branch too."""
+    """An in_features key in 'options' beside the top-level field raises the same clear error, naming 'options'."""
     config: dict[str, Any] = {
         "name": "outer",
         "in_features": ["age"],
         "options": {"in_features": {"name": "inner"}},
     }
 
-    with pytest.raises(ValueError, match="in_features"):
+    with pytest.raises(ValueError, match="in_features") as exc_info:
         load_features_from_config(json.dumps([config]), format="json")
+
+    message = str(exc_info.value)
+    assert "options" in message
+    assert CRYPTIC_DUPLICATE_KEY_ERROR not in message
+
+
+# ---------------------------------------------------------------------------
+# Identity: the container decides whether a nested source feature splits
+#
+# A nested Feature built from group_options lands in Options.group, which is what
+# Options.__hash__/__eq__ read, so it participates in Feature Group splitting. One
+# built from context_options lands in Options.context and is invisible to both.
+# ---------------------------------------------------------------------------
+
+
+def _feature_with_nested_source(container: str, source_name: str) -> Feature:
+    """Load an 'outer' feature whose only option is a nested source feature in the given container."""
+    return _single_feature({"name": "outer", container: {"in_features": {"name": source_name}}})
+
+
+def test_nested_group_options_source_makes_options_unequal() -> None:
+    """Differing only in a nested source under group_options: the Options differ, so the features split."""
+    first = _feature_with_nested_source("group_options", "source_a")
+    second = _feature_with_nested_source("group_options", "source_b")
+
+    assert first.options != second.options
+    assert hash(first.options) != hash(second.options)
+
+
+def test_nested_context_options_source_keeps_options_equal() -> None:
+    """Differing only in a nested source under context_options: the Options compare equal and hash equal."""
+    first = _feature_with_nested_source("context_options", "source_a")
+    second = _feature_with_nested_source("context_options", "source_b")
+
+    assert first.options == second.options
+    assert hash(first.options) == hash(second.options)
+
+
+# ---------------------------------------------------------------------------
+# End to end: a config-declared nested feature is resolved by the engine
+#
+# The unit tests above stop at the loaded Feature object. This run proves the
+# nested Feature under group_options is a real computed dependency: the engine
+# resolves it, runs it, and its value reaches the outer feature's column.
+# ---------------------------------------------------------------------------
+
+
+class NestedConfigEngineSource(FeatureGroup):
+    """Root source: creates the raw column the innermost nested feature reads."""
+
+    @classmethod
+    def input_data(cls) -> Optional[BaseInputData]:
+        return DataCreator(supports_features={"cfg_nested_base"})
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return {"cfg_nested_base": [1, 2, 3]}
+
+
+class NestedConfigEngineDoubler(FeatureGroup):
+    """Doubles the single source feature declared in the options, at every chain level."""
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {"cfg_nested_doubled", "cfg_nested_outer"}
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+        return set(options.get_in_features())
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        for feature in features.features:
+            source = next(iter(feature.options.get_in_features()))
+            data[feature.name] = data[source.name] * 2
+        return data
+
+
+def test_end2end_nested_group_options_feature_is_resolved_into_a_dependency() -> None:
+    """The nested feature dict under group_options is computed, and its value flows into the outer feature."""
+    config: dict[str, Any] = {
+        "name": "cfg_nested_outer",
+        "group_options": {"in_features": {"name": "cfg_nested_doubled", "options": {"in_features": "cfg_nested_base"}}},
+    }
+
+    features = load_features_from_config(json.dumps([config]), format="json")
+    results: list[Any] = list(
+        mloda.run_all(
+            features,
+            compute_frameworks={PandasDataFrame},
+            plugin_collector=PluginCollector.enabled_feature_groups(
+                {NestedConfigEngineSource, NestedConfigEngineDoubler}
+            ),
+        )
+    )
+
+    outer = [df for df in results if "cfg_nested_outer" in df.columns]
+    assert len(outer) == 1
+    # cfg_nested_base [1, 2, 3] -> cfg_nested_doubled [2, 4, 6] -> cfg_nested_outer [4, 8, 12].
+    # The x4 is the proof: both nested levels were resolved and computed, not stored as inert dicts.
+    assert list(outer[0]["cfg_nested_outer"].values) == [4, 8, 12]

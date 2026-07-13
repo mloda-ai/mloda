@@ -433,6 +433,20 @@ BAD_TOP_LEVEL_IN_FEATURES: list[Any] = [
 ]
 
 
+def _assert_offender_named_without_payload(message: str, offender: Any) -> None:
+    """A dict offender is named by its keys: its repr would dump an options payload that may hold credentials.
+
+    Every other offender carries no payload and is still named by its repr.
+    """
+    if isinstance(offender, dict):
+        for key in offender:
+            assert key in message
+        for value in offender.values():
+            assert repr(value) not in message
+        return
+    assert repr(offender) in message
+
+
 @pytest.mark.parametrize("in_features, offender", BAD_TOP_LEVEL_IN_FEATURES)
 def test_parse_json_rejects_in_features_element_that_is_not_a_name(in_features: list[Any], offender: Any) -> None:
     """Test that every top-level in_features element must be a non-empty source feature name."""
@@ -441,7 +455,7 @@ def test_parse_json_rejects_in_features_element_that_is_not_a_name(in_features: 
     with pytest.raises(ValueError, match="in_features") as exc_info:
         parse_json(config_str)
 
-    assert repr(offender) in str(exc_info.value)
+    _assert_offender_named_without_payload(str(exc_info.value), offender)
 
 
 def test_parse_json_accepts_in_features_array_of_names() -> None:

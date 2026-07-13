@@ -220,7 +220,9 @@ Inside `options`, `group_options` or `context_options`, an `in_features` key can
 
 A nested dict supports `name`, `options`, `in_features` and `feature_group` only, in `options`, `group_options` and `context_options` alike. A nested feature built from `group_options` stays in the group options, one built from `context_options` stays in the context options. In a nested `in_features` dict, the top-level-only fields (`column_index`, `group_options`, `context_options`, `propagate_context_keys`) are rejected, and so is an unknown key. A feature dict must be the direct value of `in_features`: an `in_features` list holds source feature names, not feature dicts.
 
-The top-level `in_features` array cannot be combined with an `in_features` key inside `options`, `group_options` or `context_options`: declare the source features in one place.
+The container decides identity: a nested source feature declared under `group_options` is part of the feature's identity, so it affects Options hashing and equality and therefore Feature Group splitting, while one declared under `context_options` is not.
+
+The top-level `in_features` array cannot be combined with an `in_features` key inside `options`, `group_options` or `context_options`, and `in_features` cannot be a key of `group_options` and `context_options` at once: declare the source features in one place.
 
 ## Multi-Column Features
 

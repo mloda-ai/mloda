@@ -19,6 +19,10 @@ branch unvalidated), the top-level-only ValueError wins over the top-level
 invariants of FeatureConfig.__post_init__ while an unknown key stays a TypeError,
 and the missing-'name' error lists the keys present rather than dumping an
 options payload that may carry credentials.
+
+That last rule holds for every in_features error, not just the missing-'name' one:
+a rejected element that is a DICT is named by its KEYS, so no option VALUE ever
+reaches the message. Non-dict offenders stay repr'd: informative, payload-free.
 """
 
 import json
@@ -676,3 +680,81 @@ def test_loader_nested_sibling_in_features_rejects_invalid_value(in_features: An
 
     with pytest.raises(ValueError, match="in_features"):
         load_features_from_config(json.dumps([config]), format="json")
+
+
+# ---------------------------------------------------------------------------
+# An in_features error names an offending DICT by its keys, never by its repr
+#
+# A rejected feature dict is reported with {element!r} today, which dumps its whole
+# 'options' payload into the error: a credential written there lands in logs and in
+# an agent's context. The missing-'name' error already sets the norm by listing the
+# keys present. Every in_features error follows it: a dict offender is named by its
+# KEYS, a non-dict offender (string, int, None) is still repr'd, which is
+# informative and carries no payload.
+# ---------------------------------------------------------------------------
+
+SENSITIVE_OPTION_VALUE = "hunter2-do-not-log"
+
+# The offending element: a feature dict whose options carry a credential.
+SENSITIVE_ELEMENT: dict[str, Any] = {
+    "name": "inner_token",
+    "feature_group": "ConfigScopeSourceA",
+    "options": {"api_key": SENSITIVE_OPTION_VALUE},
+}
+
+PAYLOAD_CONTAINERS = ["options", "group_options", "context_options"]
+
+
+def _assert_names_keys_not_payload(message: str) -> None:
+    """The message names in_features and the offending element's keys, and leaks no option value."""
+    assert SENSITIVE_OPTION_VALUE not in message
+    assert "in_features" in message
+    assert "feature_group" in message
+    assert "options" in message
+
+
+@pytest.mark.parametrize("container", PAYLOAD_CONTAINERS)
+def test_nested_in_features_list_element_error_names_keys_not_payload(container: str) -> None:
+    """The rejected list element is named by its keys: its options payload stays out of the error."""
+    config: dict[str, Any] = {
+        "name": "outer",
+        container: {"in_features": {"name": "outer_token", "in_features": [SENSITIVE_ELEMENT]}},
+    }
+
+    with pytest.raises(ValueError, match="in_features") as exc_info:
+        load_features_from_config(json.dumps([config]), format="json")
+
+    _assert_names_keys_not_payload(str(exc_info.value))
+
+
+def test_nested_in_features_list_element_error_keeps_repr_for_non_dict_offender() -> None:
+    """A non-dict offender carries no payload, so it is still reported by its repr."""
+    config: dict[str, Any] = {
+        "name": "outer",
+        "options": {"in_features": {"name": "outer_token", "in_features": ["age", 7]}},
+    }
+
+    with pytest.raises(ValueError, match="in_features") as exc_info:
+        load_features_from_config(json.dumps([config]), format="json")
+
+    assert "7" in str(exc_info.value)
+
+
+def test_top_level_in_features_array_element_error_names_keys_not_payload() -> None:
+    """A feature dict inside the top-level in_features array is named by its keys too."""
+    config: dict[str, Any] = {"name": "outer", "in_features": [SENSITIVE_ELEMENT]}
+
+    with pytest.raises(ValueError, match="in_features") as exc_info:
+        load_features_from_config(json.dumps([config]), format="json")
+
+    _assert_names_keys_not_payload(str(exc_info.value))
+
+
+def test_top_level_in_features_dict_value_error_names_keys_not_payload() -> None:
+    """A feature dict written as the whole top-level in_features value leaks the same payload today."""
+    config: dict[str, Any] = {"name": "outer", "in_features": SENSITIVE_ELEMENT}
+
+    with pytest.raises(ValueError, match="in_features") as exc_info:
+        load_features_from_config(json.dumps([config]), format="json")
+
+    _assert_names_keys_not_payload(str(exc_info.value))

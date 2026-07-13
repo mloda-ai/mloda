@@ -7,7 +7,7 @@ from typing import Any
 import yaml
 
 
-PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
 CI_YAML = PROJECT_ROOT / ".github" / "workflows" / "ci.yaml"
 TRIGGERS = ("push", "pull_request")
 

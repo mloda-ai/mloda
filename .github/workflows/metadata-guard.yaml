@@ -1,0 +1,27 @@
+name: Metadata Guard
+
+# ci.yaml skips the matrix for root markdown, but README.md is packaging metadata (pyproject `readme`).
+# Always-on (no paths filters) so deleting or renaming it cannot merge green and break the sdist build.
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+permissions:
+  contents: read
+
+jobs:
+  metadata-files-exist:
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+    - name: Assert packaging metadata files exist
+      run: |
+        test -f README.md || {
+          echo "README.md is missing but pyproject.toml references it as packaging metadata (readme)."
+          echo "Restore it, or update pyproject.toml and this guard together."
+          exit 1
+        }

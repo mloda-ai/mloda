@@ -277,3 +277,43 @@ def test_zero_column_result_raises_without_flag(flight_server: Any) -> None:
             flight_server=flight_server,
         )
     assert isinstance(excinfo.value, EmptyResultError)
+
+
+def test_zero_column_error_message_states_the_remedy(flight_server: Any) -> None:
+    """The EmptyResultError must tell the user HOW to express an empty result.
+
+    Diagnosing the failure is not enough: the message has to name the fix, i.e. return the
+    requested feature names mapped to empty lists.
+    """
+    with pytest.raises(EmptyResultError) as excinfo:
+        mloda.run_all(
+            [Feature(name="columnar_zero_column_col")],
+            compute_frameworks=["PythonDictFramework"],
+            plugin_collector=_ENABLED_ZERO_COLUMN,
+            parallelization_modes={ParallelizationMode.SYNC},
+            flight_server=flight_server,
+        )
+
+    message = str(excinfo.value)
+    assert "empty list" in message
+    assert "to express an empty result" in message
+
+
+def test_zero_column_error_message_example_uses_a_requested_feature_name(flight_server: Any) -> None:
+    """The example dict must use a REAL requested feature name, not a placeholder.
+
+    The remedy is only actionable if it shows the user's own feature name, which the guard
+    can read from ``features.get_initial_requested_features()``.
+    """
+    with pytest.raises(EmptyResultError) as excinfo:
+        mloda.run_all(
+            [Feature(name="columnar_zero_column_col")],
+            compute_frameworks=["PythonDictFramework"],
+            plugin_collector=_ENABLED_ZERO_COLUMN,
+            parallelization_modes={ParallelizationMode.SYNC},
+            flight_server=flight_server,
+        )
+
+    message = str(excinfo.value)
+    assert '{"columnar_zero_column_col": []}' in message
+    assert "my_feature" not in message

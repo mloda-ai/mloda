@@ -184,6 +184,23 @@ class TestPyArrowEmptyResultGuard:
         with pytest.raises(EmptyResultError):
             framework.run_validate_output_features(_FakeGuardFeatureGroup(), _FakeGuardFeatures())
 
+    def test_message_states_the_remedy_with_a_requested_feature_name(self) -> None:
+        """The guard message must name the remedy using an actually requested feature name.
+
+        ``_FakeGuardFeatures.get_initial_requested_features()`` requests ``"a"``, so the
+        example dict in the message has to read ``{"a": []}`` rather than a placeholder.
+        """
+        framework = PyArrowTable(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
+        framework.data = pa.table({})
+        framework.set_column_names()
+
+        with pytest.raises(EmptyResultError) as excinfo:
+            framework.run_validate_output_features(_FakeGuardFeatureGroup(), _FakeGuardFeatures())
+
+        message = str(excinfo.value)
+        assert "empty list" in message
+        assert '{"a": []}' in message
+
     def test_zero_rows_with_schema_does_not_raise(self) -> None:
         """A zero-row but column-bearing table is a valid result; the guard must not fire.
 

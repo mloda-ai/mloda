@@ -1,10 +1,9 @@
-"""Red-phase tests for ComputeFramework __init__ defaults.
+"""Tests for ComputeFramework.__init__ defaults.
 
 Requirements under test:
-1. Default-constructed instances must each get a fresh uuid (currently the
-   `uuid4()` default is evaluated once at import time, so all instances share it).
-2. The base class should be no-arg constructible with mode=ParallelizationMode.SYNC
-   and children_if_root=frozenset() (currently raises TypeError).
+1. Default-constructed instances must each get a fresh uuid.
+2. The base class is no-arg constructible with mode=ParallelizationMode.SYNC
+   and children_if_root=frozenset().
 3. An explicitly passed uuid is honored.
 """
 

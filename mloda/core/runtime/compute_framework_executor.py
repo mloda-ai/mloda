@@ -71,7 +71,7 @@ class ComputeFrameworkExecutor:
         new_cfw = cf_class(
             parallelization_mode,
             frozenset(children_if_root),
-            uuid,
+            uuid or uuid4(),
             function_extender=function_extender,
         )
 

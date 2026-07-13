@@ -409,6 +409,7 @@ def resolve_feature(
         )
 
     # Degrade a raising plugin declaration OPEN (all available declared frameworks); resolve_feature never raises.
+    # The broad catch intentionally drops any partially computed rejection info; degrading open is the contract.
     split_result: Optional[tuple[set[type[ComputeFramework]], set[type[ComputeFramework]]]] = safe_field(
         lambda: split_frameworks_by_capability(candidates, feature_name_obj, resolved_options),
         None,

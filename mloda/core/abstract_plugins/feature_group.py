@@ -8,6 +8,7 @@ from abc import ABC
 from mloda.core.abstract_plugins.components.base_artifact import BaseArtifact
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.abstract_plugins.components.data_types import DataType
+from mloda.core.abstract_plugins.components.default_options_key import DefaultOptionKeys
 
 from mloda.core.abstract_plugins.components.domain import Domain
 from mloda.core.abstract_plugins.components.base_feature_group_version import BaseFeatureGroupVersion
@@ -178,12 +179,18 @@ class FeatureGroup(ABC):
     @classmethod
     def subtype_universe(cls) -> frozenset[str]:
         """Every subtype this family declares: declared values or literals plus family names."""
+        cached: frozenset[str] | None = cls.__dict__.get("_subtype_universe_cache")
+        if cached is not None:
+            return cached
         declaration = cls.SUBTYPES
         if declaration is None:
-            return frozenset()
-        if declaration.key is not None:
-            return cls.declared_option_values(declaration.key) | declaration.family_names()
-        return frozenset(declaration.universe or ()) | declaration.family_names()
+            universe: frozenset[str] = frozenset()
+        elif declaration.key is not None:
+            universe = cls.declared_option_values(declaration.key) | declaration.family_names()
+        else:
+            universe = frozenset(declaration.universe or ()) | declaration.family_names()
+        setattr(cls, "_subtype_universe_cache", universe)
+        return universe
 
     @final
     @classmethod
@@ -225,13 +232,26 @@ class FeatureGroup(ABC):
                 if isinstance(pattern, str)
             ]
             if patterns:
-                parsed, _parsed_source = FeatureChainParser.parse_feature_name(name, patterns)
+                # Malformed patterns degrade to the options fallback instead of raising.
+                parsed = safe_field(lambda: FeatureChainParser.parse_feature_name(name, patterns)[0], None)
                 if parsed is not None:
                     return parsed
 
-        value = options.get(declaration.key)
+        key = declaration.key
+        spec = (cls.PROPERTY_MAPPING or {}).get(key)
+        value = options.get(key)
+        if value is None and isinstance(spec, dict):
+            value = spec.get(DefaultOptionKeys.default)
         if value is None:
             return None
+        if spec is not None:
+            # Mirror matcher normalization: unwrap singleton containers and validate.
+            extracted = FeatureChainParser.extract_property_values(spec)
+            normalized = safe_field(
+                lambda: FeatureChainParser._process_found_property_value(value, extracted, key, spec), None
+            )
+            if normalized is not None and len(normalized) == 1:
+                return str(next(iter(normalized)))
         return str(value)
 
     @final

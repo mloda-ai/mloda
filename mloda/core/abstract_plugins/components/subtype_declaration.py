@@ -15,7 +15,10 @@ class SubtypeDeclaration:
     enumerable value space (``key``); shape B declares an explicit ``universe``
     together with a ``resolver``. ``parametric_families`` and ``supported`` are
     legal in both shapes. ``supported`` is a sparse per-framework override:
-    frameworks absent from it keep the full universe. Shape-A checks that
+    frameworks absent from it keep the full universe. A ``supported`` key naming
+    no declared framework is a silent no-op for the planning gate;
+    ``subtype_support_matrix()`` raises on it (the audit is the loud surface).
+    Shape-A checks that
     depend on ``PROPERTY_MAPPING`` run in ``FeatureGroup.__init_subclass__``.
     """
 

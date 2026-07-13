@@ -44,9 +44,10 @@ print(result.feature_group, result.supported_compute_frameworks)
 `options` and `plugin_collector` are keyword-only, so pass them by name.
 
 When exactly one FeatureGroup resolves, `ResolvedFeature` also reports
-`subtype` (resolved from the name or the passed options, e.g. `"sum"` for
-`sales__sum_aggr`) and `subtype_family` (the parametric family name, `"ntile"`
-for `ntile_2`); both are `None` when nothing resolves.
+`subtype` (resolved from the name, the passed options, or the key's declared
+default, e.g. `"sum"` for `sales__sum_aggr`) and `subtype_family` (the
+parametric family name, `"ntile"` for `ntile_2`); both are `None` when
+nothing resolves.
 
 ### Inspecting Candidates
 
@@ -77,7 +78,7 @@ fgs = get_feature_group_docs(compute_framework="PandasDataframe")
 ```
 
 Each `FeatureGroupInfo` also carries the subtype declaration: `subtype_key`
-(the `SUBTYPES.key`, `None` for flattened and undeclared families), `subtypes`
+(the `SUBTYPES.key`, `None` for shape-B and undeclared families), `subtypes`
 (the sorted universe), `parametric_subtypes`, `subtype_support` (supported
 subtypes per framework; empty for abstract bases) and `subtype_error` (set
 when the declaration is invalid). See

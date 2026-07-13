@@ -115,37 +115,39 @@ class ExecutionPlan:
         -> we add this to the required_uuids of the join step of UUID1
 
         We use two loops to make sure that we have the correct order.
-        1) We map the left framework uuid to the link uuid
+        1) We map the destination framework uuid to the link uuid
         2) We use the mapping to update the required_uuids of the join step
         """
 
-        map_left_framework_uuid_to_link_uuid: dict[UUID, set[UUID]] = defaultdict(set)
+        map_destination_framework_uuid_to_link_uuid: dict[UUID, set[UUID]] = defaultdict(set)
 
-        # Map the left framework uuid to the link uuid
+        # Map the destination framework uuid to the link uuid
         for fw in fw_execution_plan:
             if isinstance(fw, JoinStep) and fw.link.jointype in (JoinType.APPEND, JoinType.UNION):
-                if len(fw.left_framework_uuids) > 1:
+                if len(fw.destination_framework_uuids) > 1:
                     raise ValueError(
                         internal_invariant_error(
-                            "APPEND/UNION JoinStep should have exactly 1 left_framework_uuid.",
-                            f"left_framework_uuids={fw.left_framework_uuids}, link={fw.link}",
+                            "APPEND/UNION JoinStep should have exactly 1 destination_framework_uuid.",
+                            f"destination_framework_uuids={fw.destination_framework_uuids}, link={fw.link}",
                         )
                     )
-                map_left_framework_uuid_to_link_uuid[next(iter(fw.left_framework_uuids))].add(fw.link.uuid)
+                map_destination_framework_uuid_to_link_uuid[next(iter(fw.destination_framework_uuids))].add(
+                    fw.link.uuid
+                )
 
         # Use the mapping to update the required_uuids of the join step
         for fw in fw_execution_plan:
             if isinstance(fw, JoinStep) and fw.link.jointype in (JoinType.APPEND, JoinType.UNION):
-                if len(fw.right_framework_uuids) > 1:
+                if len(fw.source_framework_uuids) > 1:
                     raise ValueError(
                         internal_invariant_error(
-                            "APPEND/UNION JoinStep should have exactly 1 right_framework_uuid.",
-                            f"right_framework_uuids={fw.right_framework_uuids}, link={fw.link}",
+                            "APPEND/UNION JoinStep should have exactly 1 source_framework_uuid.",
+                            f"source_framework_uuids={fw.source_framework_uuids}, link={fw.link}",
                         )
                     )
 
-                right_framework_uuid = next(iter(fw.right_framework_uuids))
-                required = map_left_framework_uuid_to_link_uuid.get(right_framework_uuid)
+                source_framework_uuid = next(iter(fw.source_framework_uuids))
+                required = map_destination_framework_uuid_to_link_uuid.get(source_framework_uuid)
                 if required is not None:
                     fw.required_uuids.update(required)
 
@@ -164,13 +166,13 @@ class ExecutionPlan:
             to_feature_group = ep.link.left_feature_group
 
         return TransformFrameworkStep(
-            from_framework=ep.right_framework,
-            to_framework=ep.left_framework,
+            from_framework=ep.source_framework,
+            to_framework=ep.destination_framework,
             required_uuids=deepcopy(ep.required_uuids),
             from_feature_group=from_feature_group,
             to_feature_group=to_feature_group,
             link_id=ep.link.uuid,
-            right_framework_uuids=ep.right_framework_uuids,
+            right_framework_uuids=ep.source_framework_uuids,
         )
 
     def add_tfs(
@@ -183,7 +185,7 @@ class ExecutionPlan:
 
         for ep in execution_plan:
             if isinstance(ep, JoinStep):
-                if ep.left_framework != ep.right_framework:
+                if ep.destination_framework != ep.source_framework:
                     new_tfs = self.fill_tfs_by_joinstep(ep)
 
                     if new_tfs not in self.tfs_collecion:
@@ -191,7 +193,7 @@ class ExecutionPlan:
                         new_execution_plan.append(new_tfs)
                         ep.required_uuids.add(new_tfs.uuid)
 
-                    need_to_upload_collector.update(ep.right_framework_uuids)
+                    need_to_upload_collector.update(ep.source_framework_uuids)
 
                     # We are updating the required uuids after the tfs is added as this makes sure, that the TFS can run in parallel before the join.
                     ep.required_uuids.update(self.joinstep_collection.get_required_join_uuids(ep))
@@ -205,15 +207,15 @@ class ExecutionPlan:
                         if isinstance(inner_ep, FeatureGroupStep):
                             # 1) We do 1 here:
                             for uuid in inner_ep.get_uuids():
-                                if uuid in ep.right_framework_uuids:
+                                if uuid in ep.source_framework_uuids:
                                     # add the link uuid to the children_if_root of the right feature group
                                     inner_ep.add_value_to_children_if_root(ep.link.uuid)
 
                                     # add to upload as this is the right feature group gets accessed in mp by other process
-                                    need_to_upload_collector.update(ep.right_framework_uuids)
+                                    need_to_upload_collector.update(ep.source_framework_uuids)
                                     break
 
-                                if uuid in ep.left_framework_uuids:
+                                if uuid in ep.destination_framework_uuids:
                                     # add the link uuid to the children_if_root of the left feature group
 
                                     store_val = uuid
@@ -221,10 +223,10 @@ class ExecutionPlan:
                             if store_val is None:
                                 continue
 
-                            # Check if any element of ep.left_framework_uuids is in inner_ep.required_uuids
-                            # same for right framework
-                            if any(elem in inner_ep.required_uuids for elem in ep.left_framework_uuids) and any(
-                                elem in inner_ep.required_uuids for elem in ep.right_framework_uuids
+                            # Check if any element of ep.destination_framework_uuids is in inner_ep.required_uuids
+                            # same for source framework
+                            if any(elem in inner_ep.required_uuids for elem in ep.destination_framework_uuids) and any(
+                                elem in inner_ep.required_uuids for elem in ep.source_framework_uuids
                             ):
                                 if ep.link.jointype in (JoinType.APPEND, JoinType.UNION):
                                     self.set_store_value_to_left_most_index_and_update_feature_group(
@@ -309,9 +311,9 @@ class ExecutionPlan:
         #    elif isinstance(ep, JoinStep):
         #        print("JOIN")
         #        print(ep.link.uuid)
-        #        print(ep.left_framework_uuids)
-        #        print(ep.right_framework_uuids)
-        #       print(ep.right_framework.get_class_name(), " -> ", ep.left_framework.get_class_name())
+        #        print(ep.destination_framework_uuids)
+        #        print(ep.source_framework_uuids)
+        #       print(ep.source_framework.get_class_name(), " -> ", ep.destination_framework.get_class_name())
         #        print(ep.required_uuids)
         # print("###############################")
 
@@ -385,8 +387,8 @@ class ExecutionPlan:
             if not right_memory_index:
                 right_memory_index.add(js.link.right_index)
 
-            # Update the UUIDs only if the conditions are met: it is a left most index and is part of the joinstep left framework uuid
-            if store_val == next(iter(js.left_framework_uuids)) and left_most_index == js.link.left_index:
+            # Update the UUIDs only if the conditions are met: it is a left most index and is part of the joinstep destination framework uuid
+            if store_val == next(iter(js.destination_framework_uuids)) and left_most_index == js.link.left_index:
                 inner_ep.tfs_ids = {store_val}
                 inner_ep.features.any_uuid = store_val
 
@@ -406,13 +408,12 @@ class ExecutionPlan:
         pre_execution_plan: list[LinkFrameworkTrekker | FeatureGroupStep],
     ) -> JoinStep | None:
         link = link_fw[0]
-        left_framework = link_fw[1]
-        right_framework = link_fw[2]
+        destination_framework = link_fw[1]
+        source_framework = link_fw[2]
 
-        # Switch left and right index if join type is right, as the algorithm does not care about right or left.
         if link.jointype == JoinType.RIGHT:
-            left_framework = link_fw[2]
-            right_framework = link_fw[1]
+            destination_framework = link_fw[2]
+            source_framework = link_fw[1]
 
         # This gets the id of the children which needs the link to be calculated.
         children_uuids: set[UUID] = set()
@@ -423,12 +424,12 @@ class ExecutionPlan:
             # this part is not working!
 
         if len(children_uuids) == 0:
-            # This is the case if we invert right/left index.
-            left_framework = link_fw[2]
-            right_framework = link_fw[1]
+            # No child needs the declared orientation, so destination and source are the other way around.
+            destination_framework = link_fw[2]
+            source_framework = link_fw[1]
 
             for stored_links, uuids in link_trekker.data.items():
-                if (link, left_framework, right_framework) == stored_links:
+                if (link, destination_framework, source_framework) == stored_links:
                     children_uuids.update(uuids)
 
             if len(children_uuids) == 0:
@@ -442,15 +443,15 @@ class ExecutionPlan:
             required_uuids.update(graph.parent_to_children_mapping[uuid])
 
         # This filters the required_uuids to only the one with the final compute framework.
-        left_framework_uuids: set[UUID] = set()
-        right_framework_uuids: set[UUID] = set()
+        destination_framework_uuids: set[UUID] = set()
+        source_framework_uuids: set[UUID] = set()
 
         for uuid in required_uuids:
-            if graph.get_nodes()[uuid].feature.get_compute_framework() == left_framework:
-                left_framework_uuids.add(uuid)
+            if graph.get_nodes()[uuid].feature.get_compute_framework() == destination_framework:
+                destination_framework_uuids.add(uuid)
 
-            if graph.get_nodes()[uuid].feature.get_compute_framework() == right_framework:
-                right_framework_uuids.add(uuid)
+            if graph.get_nodes()[uuid].feature.get_compute_framework() == source_framework:
+                source_framework_uuids.add(uuid)
 
         # The order shows which items should be added first.
         # Thus, we need to make sure that higher ordered links are calculated first.
@@ -475,7 +476,7 @@ class ExecutionPlan:
             elif result is True:
                 pass
             else:
-                left_framework_uuids, right_framework_uuids = result
+                destination_framework_uuids, source_framework_uuids = result
 
         if link.jointype in (JoinType.APPEND, JoinType.UNION):
             js = self.create_joinstep_in_case_of_append_or_union(
@@ -483,7 +484,12 @@ class ExecutionPlan:
             )
         else:
             js = JoinStep(
-                link, left_framework, right_framework, required_uuids, left_framework_uuids, right_framework_uuids
+                link,
+                destination_framework,
+                source_framework,
+                required_uuids,
+                destination_framework_uuids,
+                source_framework_uuids,
             )
 
         # This makes sure that we do not write on the same datasets due to overlapping joins at once.
@@ -526,7 +532,7 @@ class ExecutionPlan:
         # Initialize variables for feature UUIDs and frameworks
         left_feature_uuid = None
         right_feature_uuid = None
-        left_framework, right_framework = link_fw[1], link_fw[2]
+        destination_framework, source_framework = link_fw[1], link_fw[2]
 
         # Identify the left and right feature UUIDs
         for uuid in required_uuids:
@@ -545,7 +551,7 @@ class ExecutionPlan:
             if left_index == feature_index and feature_feature_group == left_feature_group:
                 if left_feature_uuid is not None:
                     raise ValueError(f"Are the indexes for append or union set double? {left_index}")
-                left_framework = feature.get_compute_framework()
+                destination_framework = feature.get_compute_framework()
                 left_feature_uuid = uuid
 
             # Match the right index and feature group
@@ -553,7 +559,7 @@ class ExecutionPlan:
                 if right_feature_uuid is not None:
                     raise ValueError(f"Are the indexes for append or union set double? {right_index}")
                 right_feature_uuid = uuid
-                right_framework = feature.get_compute_framework()
+                source_framework = feature.get_compute_framework()
 
         # Validate that both feature UUIDs are identified
         if left_feature_uuid is None or right_feature_uuid is None:
@@ -562,22 +568,22 @@ class ExecutionPlan:
             )
 
         # Sanity check for framework consistency
-        if link_fw[1] != left_framework:
+        if link_fw[1] != destination_framework:
             raise ValueError(
-                f"Left framework is not the same as the left framework of the link. {left_framework}. This is a sanity check!"
+                f"Left framework is not the same as the left framework of the link. {destination_framework}. This is a sanity check!"
             )
-        if link_fw[2] != right_framework:
+        if link_fw[2] != source_framework:
             raise ValueError(
-                f"Right framework is not the same as the right framework of the link. {right_framework}. This is a sanity check!"
+                f"Right framework is not the same as the right framework of the link. {source_framework}. This is a sanity check!"
             )
 
         return JoinStep(
             link=link,
-            left_framework=left_framework,
-            right_framework=right_framework,
+            destination_framework=destination_framework,
+            source_framework=source_framework,
             required_uuids={left_feature_uuid, right_feature_uuid},
-            left_framework_uuids={left_feature_uuid},
-            right_framework_uuids={right_feature_uuid},
+            destination_framework_uuids={left_feature_uuid},
+            source_framework_uuids={right_feature_uuid},
         )
 
     def reduce_children_to_one_level(self, children_uuids: set[UUID], graph: Graph) -> set[UUID]:

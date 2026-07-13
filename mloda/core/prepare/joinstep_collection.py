@@ -9,7 +9,7 @@ class JoinStepCollection:
         self.collection: dict[JoinStep, set[UUID]] = defaultdict(set)
 
     def similar_dependent_joins_uuids(
-        self, left_framework: type[ComputeFramework], right_framework: type[ComputeFramework]
+        self, destination_framework: type[ComputeFramework], source_framework: type[ComputeFramework]
     ) -> set[UUID]:
         """
         This functionality makes sure that we do not write on the same datasets due to overlapping joins at once.
@@ -18,17 +18,19 @@ class JoinStepCollection:
         required_uuids = set()
         for step in self.collection:
             if (
-                step.left_framework == left_framework
-                or step.right_framework == left_framework
-                or step.left_framework == right_framework
-                or step.right_framework == right_framework
+                step.destination_framework == destination_framework
+                or step.source_framework == destination_framework
+                or step.destination_framework == source_framework
+                or step.source_framework == source_framework
             ):
                 required_uuids.update(step.get_uuids())
 
         return required_uuids
 
     def add(self, join_step: JoinStep) -> None:
-        required_join_uuids = self.similar_dependent_joins_uuids(join_step.left_framework, join_step.right_framework)
+        required_join_uuids = self.similar_dependent_joins_uuids(
+            join_step.destination_framework, join_step.source_framework
+        )
         self.collection[join_step] = required_join_uuids
 
     def get_required_join_uuids(self, join_step: JoinStep) -> set[UUID]:

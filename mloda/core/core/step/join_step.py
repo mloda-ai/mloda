@@ -13,18 +13,18 @@ class JoinStep(Step):
     def __init__(
         self,
         link: Link,
-        left_framework: type[ComputeFramework],
-        right_framework: type[ComputeFramework],
+        destination_framework: type[ComputeFramework],
+        source_framework: type[ComputeFramework],
         required_uuids: set[UUID],
-        left_framework_uuids: set[UUID],
-        right_framework_uuids: set[UUID],
+        destination_framework_uuids: set[UUID],
+        source_framework_uuids: set[UUID],
     ) -> None:
         self.link = link
-        self.left_framework = left_framework
-        self.right_framework = right_framework
+        self.destination_framework = destination_framework
+        self.source_framework = source_framework
         self.required_uuids = required_uuids
-        self.left_framework_uuids = left_framework_uuids
-        self.right_framework_uuids = right_framework_uuids
+        self.destination_framework_uuids = destination_framework_uuids
+        self.source_framework_uuids = source_framework_uuids
         self.uuid = uuid4()
         self.step_is_done = False
 
@@ -92,10 +92,10 @@ class JoinStep(Step):
         if uuid not in self.required_uuids:
             return None
 
-        if other_framework == self.left_framework:
+        if other_framework == self.destination_framework:
             return self.uuid
 
-        if other_framework == self.right_framework:
+        if other_framework == self.source_framework:
             return self.uuid
         return None
 

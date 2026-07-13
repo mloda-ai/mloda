@@ -1,13 +1,14 @@
 from __future__ import annotations
 
 import ast
-import importlib.metadata
 import inspect
 import linecache
 import hashlib
 import weakref
 from typing import Any, Final
 from abc import ABC
+
+from mloda.core.version import get_mloda_version
 
 # Exceptions inspect.getsource raises for dynamically built classes (no source backing / built-in).
 SOURCE_INTROSPECTION_ERRORS: Final = (OSError, TypeError)
@@ -22,11 +23,6 @@ SOURCE_INTROSPECTION_ERRORS: Final = (OSError, TypeError)
 # not pinned for the process lifetime and can still be garbage-collected.
 _class_source_hash_cache: "weakref.WeakKeyDictionary[type[Any], str]" = weakref.WeakKeyDictionary()
 
-# Package metadata cannot change within a process; docs enumeration calls
-# mloda_version per FeatureGroup subclass, and repeated importlib.metadata
-# parsing was a measured hot path in large test sessions.
-_mloda_version_cache: str | None = None
-
 
 class BaseFeatureGroupVersion(ABC):
     @classmethod
@@ -36,14 +32,7 @@ class BaseFeatureGroupVersion(ABC):
         If retrieval fails, it returns "0.0.0" as a fallback.
         The result (including the fallback) is memoized for the process lifetime.
         """
-        global _mloda_version_cache
-        if _mloda_version_cache is not None:
-            return _mloda_version_cache
-        try:
-            _mloda_version_cache = importlib.metadata.version("mloda")
-        except Exception:
-            _mloda_version_cache = "0.0.0"
-        return _mloda_version_cache
+        return get_mloda_version()
 
     @classmethod
     def class_source_hash(cls, target_class: type[Any]) -> str:

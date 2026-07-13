@@ -1,3 +1,6 @@
+# Version
+from mloda.core.version import get_mloda_version
+
 # Plugin inspection/metadata
 from mloda.core.api.plugin_info import FeatureGroupInfo, ComputeFrameworkInfo, ExtenderInfo, ResolvedFeature
 
@@ -29,7 +32,11 @@ from mloda.core.abstract_plugins.plugin_registry.plugin_policy import (
     PluginPolicyViolationError,
 )
 
+__version__ = get_mloda_version()
+
 __all__ = [
+    # Version
+    "__version__",
     # Plugin inspection
     "FeatureGroupInfo",
     "ComputeFrameworkInfo",

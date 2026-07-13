@@ -4,7 +4,7 @@ from typing import Any
 
 import pytest
 
-import mloda.core.abstract_plugins.components.base_feature_group_version as base_feature_group_version_module
+import mloda.core.version as version_module
 from mloda.provider import BaseFeatureGroupVersion, FeatureGroup
 from tests.test_core.test_abstract_plugins.test_abstract_feature_group import BaseTestFeatureGroup1
 
@@ -17,7 +17,7 @@ class TestBaseFeatureGroupVersion:
         # monkeypatch teardown restores both the version function and the
         # pre-test cache value, so no "1.2.3" poisoning leaks to other tests.
         monkeypatch.setattr(importlib.metadata, "version", lambda pkg: "1.2.3")
-        monkeypatch.setattr(base_feature_group_version_module, "_mloda_version_cache", None)
+        monkeypatch.setattr(version_module, "_mloda_version_cache", None)
 
         composite = BaseTestFeatureGroup1.version()
         # Expected format: "1.2.3-{module_name}-{hash}"
@@ -153,7 +153,7 @@ class TestMlodaVersionMemoization:
         # Earlier tests in the same process may already have populated the
         # memo; reset the module-level cache so this test observes the first
         # lookup. raising=False creates the attribute if it does not exist yet.
-        monkeypatch.setattr(base_feature_group_version_module, "_mloda_version_cache", None, raising=False)
+        monkeypatch.setattr(version_module, "_mloda_version_cache", None, raising=False)
 
         calls: list[str] = []
         real_metadata_version = importlib.metadata.version

@@ -21,6 +21,7 @@ from mloda.core.abstract_plugins.feature_group import FeatureGroup as FeatureGro
 
 # Versioning
 from mloda.core.abstract_plugins.components.base_feature_group_version import BaseFeatureGroupVersion
+from mloda.core.version import get_mloda_version
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework as ComputeFramework
 from mloda.core.abstract_plugins.compute_framework import EmptyResultError as EmptyResultError
 
@@ -89,7 +90,11 @@ from mloda.core.filter.filter_engine import BaseFilterEngine
 from mloda.core.abstract_plugins.components.mask.base_mask_engine import BaseMaskEngine
 from mloda.core.abstract_plugins.components.merge.base_merge_engine import BaseMergeEngine
 
+__version__ = get_mloda_version()
+
 __all__ = [
+    # Version
+    "__version__",
     # Base classes
     "FeatureGroup",
     # Versioning

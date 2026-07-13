@@ -7,6 +7,7 @@ import pytest
 from mloda.user import Feature
 from mloda.user import FeatureName
 from mloda.user import Options
+from mloda.provider import DefaultOptionKeys
 from mloda_plugins.feature_group.experimental.dimensionality_reduction.base import DimensionalityReductionFeatureGroup
 from mloda_plugins.feature_group.experimental.dimensionality_reduction.pandas import (
     PandasDimensionalityReductionFeatureGroup,
@@ -63,9 +64,21 @@ class TestDimensionalityReductionFeatureGroup:
         """A umap feature must fail at planning time, not at compute time."""
         assert not DimensionalityReductionFeatureGroup.match_feature_group_criteria("customer__umap_2d", Options())
 
+        assert not DimensionalityReductionFeatureGroup.match_feature_group_criteria(
+            "placeholder",
+            Options(
+                context={
+                    DimensionalityReductionFeatureGroup.ALGORITHM: "umap",
+                    DimensionalityReductionFeatureGroup.DIMENSION: 2,
+                    DefaultOptionKeys.in_features: "customer_metrics",
+                }
+            ),
+        )
+
     def test_declared_algorithms_are_dispatched_by_pandas(self) -> None:
         """Every declared algorithm must be computable by the pandas implementation."""
         pd = pytest.importorskip("pandas")
+        pytest.importorskip("sklearn")
 
         data = pd.DataFrame(
             {

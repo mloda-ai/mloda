@@ -62,9 +62,9 @@ class ComputeFramework(ABC):
 
     def __init__(
         self,
-        mode: ParallelizationMode,
-        children_if_root: frozenset[UUID],
-        uuid: UUID = uuid4(),
+        mode: ParallelizationMode = ParallelizationMode.SYNC,
+        children_if_root: frozenset[UUID] = frozenset(),
+        uuid: UUID | None = None,
         function_extender: Optional[set[Extender]] = None,
     ) -> None:
         """This class is initialized for step execution."""
@@ -75,7 +75,7 @@ class ComputeFramework(ABC):
         self.column_names: set[str] = set()
         self.function_extender = function_extender if function_extender is not None else set()
 
-        self.uuid = uuid
+        self.uuid = uuid or uuid4()
 
         self.transformer = ComputeFrameworkTransformer()
 

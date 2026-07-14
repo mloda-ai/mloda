@@ -328,8 +328,10 @@ class mlodaAPI:
         failures (an unknown framework name, a framework pin outside the run set,
         unsatisfiable parallelization modes): those come back as a structured report with
         ``complete=False``. The returned environment is the full pre-check build outcome,
-        whose records also cover non-survivors (e.g. collector-disabled plugins). Every
-        parameter after ``features`` is keyword-only.
+        whose records also cover non-survivors (e.g. collector-disabled plugins). Per-feature
+        outcome fingerprints are mapping-derived from the engine's snapshot and can differ
+        from the pre-check environment fingerprint. Every parameter after ``features`` is
+        keyword-only.
         """
         # Guarded: an unknown framework name or unsatisfiable modes raise ValueError here; diagnose reports them.
         try:
@@ -357,10 +359,8 @@ class mlodaAPI:
             )
         # Narrow by contract: the engine attaches the partial report to every planning-time resolution error.
         except FeatureResolutionError as err:
-            report = err.report
-            if report is not None:
-                return report
-            return ResolutionReport(environment=environment, features=(), complete=False)
+            failure_records = err.report.features if err.report is not None else ()
+            return ResolutionReport(environment=environment, features=failure_records, complete=False)
         # Guarded: prepare()'s configuration validation (e.g. a pin outside the run set) raises plain ValueError.
         except ValueError as exc:
             return cls._configuration_failure_report(exc)

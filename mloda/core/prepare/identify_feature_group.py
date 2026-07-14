@@ -14,6 +14,7 @@ from mloda.core.resolve.environment import ResolutionEnvironmentSnapshot
 from mloda.core.resolve.outcome import (
     CandidateStatus,
     FeatureResolutionError,
+    FrameworkStatus,
     RejectionReason,
     ResolutionOutcome,
     ResolutionStatus,
@@ -168,21 +169,55 @@ class IdentifyFeatureGroupClass:
         scope = feature.feature_group_scope
         return scope is None or matches_feature_group_scope(feature_group, scope)
 
-    # The hint helpers below re-invoke provider hooks on the failure path only, as
-    # post-decision enrichment; Stage 4 replaces them with structured rendering.
+    # The hint helpers below run on the failure path only, as post-decision enrichment.
+    # Capability verdicts already recorded in the outcome are reused, never re-invoked;
+    # remaining declared-basis hook calls are guarded so a raise degrades the hint.
     def _capability_rejection_message(self, feature: Feature) -> Optional[str]:
-        supported, rejected = split_frameworks_by_capability(
-            self._criteria_matched_feature_groups, feature.name, feature.options
-        )
+        supported: set[str] = set()
+        rejected: set[str] = set()
+        for candidate in self.outcome.candidates:
+            if candidate.feature_group not in self._criteria_matched_feature_groups:
+                continue
+            verdicts: dict[type[ComputeFramework], FrameworkStatus] = {
+                evaluation.framework: evaluation.status for evaluation in candidate.frameworks
+            }
+            for framework, status in verdicts.items():
+                if status is FrameworkStatus.SUPPORTED:
+                    supported.add(framework.get_class_name())
+                elif status is FrameworkStatus.CAPABILITY_REJECTED:
+                    rejected.add(framework.get_class_name())
+            # Guarded: the declared-basis enrichment below runs provider hooks on the failure path.
+            try:
+                declared = candidate.feature_group.compute_framework_definition()
+            except Exception:
+                logger.debug("Capability hint skipped a raising framework declaration of %s", candidate.identity)
+                continue
+            for framework in declared:
+                if verdicts.get(framework) in (FrameworkStatus.SUPPORTED, FrameworkStatus.CAPABILITY_REJECTED):
+                    continue
+                # Guarded: availability and capability hooks are provider code; a raise drops the framework.
+                try:
+                    if not framework.is_available():
+                        continue
+                    accepts = candidate.feature_group.supports_compute_framework(
+                        feature.name, feature.options, framework
+                    )
+                except Exception:
+                    logger.debug("Capability hint dropped a raising framework hook of %s", candidate.identity)
+                    continue
+                if accepts:
+                    supported.add(framework.get_class_name())
+                else:
+                    rejected.add(framework.get_class_name())
 
         if not rejected:
             return None
 
-        rejected_names = sorted(fw.get_class_name() for fw in rejected)
+        rejected_names = sorted(rejected)
         msg = f"Unsupported compute framework(s) for feature '{str(feature.name)}': {rejected_names}."
 
         if supported:
-            supported_names = sorted(fw.get_class_name() for fw in supported)
+            supported_names = sorted(supported)
             msg += f" Supported on: {supported_names}."
 
         msg += " Pin the feature to a supported compute framework or override supports_compute_framework."
@@ -214,20 +249,28 @@ class IdentifyFeatureGroupClass:
 
         culprits: list[type[FeatureGroup]] = []
         for feature_group in accessible_plugins:
-            if not self._filter_feature_group_by_domain(feature_group, feature):
+            # Guarded: the re-match below runs provider hooks on the failure path; a raising
+            # candidate degrades out of the hint so the no-match error survives unchanged.
+            try:
+                if not self._filter_feature_group_by_domain(feature_group, feature):
+                    continue
+                if not self._filter_feature_group_by_scope(feature_group, feature):
+                    continue
+                # A rejected VALUE the caller set HERE is not a forwarding problem: carving the key out
+                # would not fix the value, and the value-rejection hint already says what is wrong. A
+                # value that arrived by forwarding is both, and carving the key out is exactly the fix,
+                # so that candidate still earns the hint.
+                if self._value_rejection_reason(feature_group, feature) is not None and not forwarded_offenders:
+                    continue
+                accepts_bare = feature_group.match_feature_group_criteria(
+                    feature.name, bare, self._data_access_collection
+                )
+                rejects_actual = not feature_group.match_feature_group_criteria(
+                    feature.name, feature.options, self._data_access_collection
+                )
+            except Exception:
+                logger.debug("Forwarding hint dropped raising candidate %s", feature_group.get_class_name())
                 continue
-            if not self._filter_feature_group_by_scope(feature_group, feature):
-                continue
-            # A rejected VALUE the caller set HERE is not a forwarding problem: carving the key out
-            # would not fix the value, and the value-rejection hint already says what is wrong. A
-            # value that arrived by forwarding is both, and carving the key out is exactly the fix,
-            # so that candidate still earns the hint.
-            if self._value_rejection_reason(feature_group, feature) is not None and not forwarded_offenders:
-                continue
-            accepts_bare = feature_group.match_feature_group_criteria(feature.name, bare, self._data_access_collection)
-            rejects_actual = not feature_group.match_feature_group_criteria(
-                feature.name, feature.options, self._data_access_collection
-            )
             if accepts_bare and rejects_actual:
                 culprits.append(feature_group)
 
@@ -248,12 +291,18 @@ class IdentifyFeatureGroupClass:
     ) -> Optional[str]:
         reasons: list[tuple[str, str]] = []
         for feature_group in accessible_plugins:
-            if not self._filter_feature_group_by_domain(feature_group, feature):
-                continue
-            if not self._filter_feature_group_by_scope(feature_group, feature):
-                continue
+            # Guarded: domain and rejection-reason hooks are provider code on the failure path;
+            # a raising candidate degrades out of the hint.
+            try:
+                if not self._filter_feature_group_by_domain(feature_group, feature):
+                    continue
+                if not self._filter_feature_group_by_scope(feature_group, feature):
+                    continue
 
-            reason = self._value_rejection_reason(feature_group, feature)
+                reason = self._value_rejection_reason(feature_group, feature)
+            except Exception:
+                logger.debug("Value-rejection hint dropped raising candidate %s", feature_group.get_class_name())
+                continue
             if reason is not None:
                 reasons.append((feature_group.get_class_name(), reason))
 
@@ -280,8 +329,13 @@ class IdentifyFeatureGroupClass:
                 continue
             if not any(issubclass(candidate, abstract_fg) for abstract_fg in self._abstract_matched_feature_groups):
                 continue
-            for cfw in candidate.compute_framework_definition():
-                frameworks.add(cfw.get_class_name())
+            # Guarded: the framework declaration is provider code on the failure path; a raise drops the candidate.
+            try:
+                for cfw in candidate.compute_framework_definition():
+                    frameworks.add(cfw.get_class_name())
+            except Exception:
+                logger.debug("Abstract-only hint dropped raising candidate %s", candidate.get_class_name())
+                continue
 
         feature_name = str(feature.name)
         if not frameworks:
@@ -337,9 +391,14 @@ class IdentifyFeatureGroupClass:
         known_names: list[str] = []
         for fg_class in accessible_plugins:
             known_names.append(fg_class.get_class_name())
-            known_names.extend(fg_class.feature_names_supported())
-            if fg_class.prefix():
-                known_names.append(fg_class.prefix())
+            # Guarded: name and prefix declarations are provider code on the failure path; a raise drops them.
+            try:
+                known_names.extend(fg_class.feature_names_supported())
+                if fg_class.prefix():
+                    known_names.append(fg_class.prefix())
+            except Exception:
+                logger.debug("Suggestion list dropped raising candidate %s", fg_class.get_class_name())
+                continue
 
         similar = get_close_matches(feature_name, known_names, n=5, cutoff=0.5)
         if similar:

@@ -358,13 +358,20 @@ def build_resolution_environment(
 ) -> EnvironmentBuildOutcome:
     """Run the PreFilterPlugins classification pipeline, returning structured state.
 
-    Same evaluation order as PreFilterPlugins; on the conditions where it raises,
-    the outcome carries an error with the exact current message and no snapshot.
-    Availability is sampled exactly once inside this pipeline for both the
-    ``compute_frameworks=None`` ("all available frameworks") and the explicit-set
-    branch, and a raising ``is_available`` probe becomes a structured
-    availability_failure error instead of a raise.
+    On the conditions where PreFilterPlugins raises, the outcome carries an error
+    with the exact current message and no snapshot. The feature-group pipeline runs
+    BEFORE availability sampling, so a feature-group fatal (strict mode, redefinition)
+    takes precedence over an availability_failure. Availability is sampled exactly
+    once inside this pipeline for both the ``compute_frameworks=None`` ("all available
+    frameworks") and the explicit-set branch, and a raising ``is_available`` probe
+    becomes a structured availability_failure error instead of a raise.
     """
+    strict_mode = _strict_mode(plugin_collector)
+
+    feature_group_result = run_feature_group_pipeline(plugin_collector)
+    if feature_group_result.error is not None:
+        return EnvironmentBuildOutcome(snapshot=None, errors=(feature_group_result.error,))
+
     # Guarded: availability probes are third-party code; a raise must fail structurally here.
     try:
         sampled = frozenset(PreFilterPlugins.get_cfw_subclasses())
@@ -378,12 +385,7 @@ def build_resolution_environment(
     if compute_frameworks is None:
         compute_frameworks = set(sampled)
 
-    strict_mode = _strict_mode(plugin_collector)
     requested = tuple(sorted(PluginIdentity.from_class(cfw) for cfw in compute_frameworks))
-
-    feature_group_result = run_feature_group_pipeline(plugin_collector)
-    if feature_group_result.error is not None:
-        return EnvironmentBuildOutcome(snapshot=None, errors=(feature_group_result.error,))
 
     framework_result = run_compute_framework_pipeline(compute_frameworks, plugin_collector, available=sampled)
     if framework_result.error is not None:

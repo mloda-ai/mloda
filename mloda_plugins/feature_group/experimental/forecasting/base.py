@@ -19,6 +19,11 @@ from mloda_plugins.feature_group.experimental.forecasting.forecasting_artifact i
 from mloda_plugins.feature_group.experimental.time_reference_mixin import TimeReferenceMixin
 
 
+def _is_bool(value: Any) -> bool:
+    """Accept only a real bool, so 1 or "true" is rejected rather than silently coerced."""
+    return isinstance(value, bool)
+
+
 class ForecastingFeatureGroup(TimeReferenceMixin, FeatureChainParserMixin, FeatureGroup):
     """
     Base class for all forecasting feature groups.
@@ -149,11 +154,16 @@ class ForecastingFeatureGroup(TimeReferenceMixin, FeatureChainParserMixin, Featu
             context=True,
             strict_validation=False,
         ),
+        # element_validator enforces the constraint on the config-based path; match_guard is the only
+        # enforcement on the string-named path, where the PREFIX_PATTERN match short-circuits
+        # property-mapping validation and this key never appears in the feature name.
         OUTPUT_CONFIDENCE_INTERVALS: PropertySpec(
             "Whether to output confidence intervals as separate columns using ~lower and ~upper suffix pattern",
             context=True,
-            strict_validation=False,
+            strict_validation=True,
             default=False,
+            element_validator=_is_bool,
+            match_guard=_is_bool,
         ),
     }
 

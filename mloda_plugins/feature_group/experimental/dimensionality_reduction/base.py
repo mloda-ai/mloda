@@ -19,6 +19,11 @@ from mloda.provider import DefaultOptionKeys
 from mloda.provider import PropertySpec
 
 
+def _is_positive_int(value: Any) -> bool:
+    """Accept a positive int or a digit string, so 0, -5, 2.5 and "abc" are rejected."""
+    return isinstance(value, (int, str)) and str(value).isdigit() and int(value) > 0
+
+
 class DimensionalityReductionFeatureGroup(FeatureChainParserMixin, FeatureGroup):
     """
     Base class for all dimensionality reduction feature groups.
@@ -130,25 +135,33 @@ class DimensionalityReductionFeatureGroup(FeatureChainParserMixin, FeatureGroup)
             "Target dimension for the reduction (positive integer)",
             context=True,
             strict_validation=True,
-            element_validator=lambda value: isinstance(value, (int, str)) and str(value).isdigit() and int(value) > 0,
+            element_validator=_is_positive_int,
         ),
         DefaultOptionKeys.in_features: PropertySpec(
             "Source features to use for dimensionality reduction",
             context=True,
             strict_validation=False,
         ),
+        # The algorithm-specific numeric keys below carry both enforcement hooks: element_validator
+        # covers the config-based path, match_guard is the only enforcement on the string-named path,
+        # where the PREFIX_PATTERN match short-circuits property-mapping validation and none of these
+        # keys ever appears in the feature name.
         # t-SNE specific parameters
         TSNE_MAX_ITER: PropertySpec(
             "Maximum number of iterations for t-SNE optimization",
             context=True,
-            strict_validation=False,
+            strict_validation=True,
             default=250,
+            element_validator=_is_positive_int,
+            match_guard=_is_positive_int,
         ),
         TSNE_N_ITER_WITHOUT_PROGRESS: PropertySpec(
             "Maximum iterations without progress before early stopping (t-SNE)",
             context=True,
-            strict_validation=False,
+            strict_validation=True,
             default=50,
+            element_validator=_is_positive_int,
+            match_guard=_is_positive_int,
         ),
         TSNE_METHOD: PropertySpec(
             "t-SNE computation method",
@@ -177,15 +190,19 @@ class DimensionalityReductionFeatureGroup(FeatureChainParserMixin, FeatureGroup)
         ICA_MAX_ITER: PropertySpec(
             "Maximum number of iterations for ICA",
             context=True,
-            strict_validation=False,
+            strict_validation=True,
             default=200,
+            element_validator=_is_positive_int,
+            match_guard=_is_positive_int,
         ),
         # Isomap specific parameters
         ISOMAP_N_NEIGHBORS: PropertySpec(
             "Number of neighbors for Isomap",
             context=True,
-            strict_validation=False,
+            strict_validation=True,
             default=5,
+            element_validator=_is_positive_int,
+            match_guard=_is_positive_int,
         ),
     }
 

@@ -18,6 +18,11 @@ from mloda.provider import DefaultOptionKeys
 from mloda.provider import PropertySpec
 
 
+def _is_bool(value: Any) -> bool:
+    """Accept only a real bool, so 1 or "true" is rejected rather than silently coerced."""
+    return isinstance(value, bool)
+
+
 class ClusteringFeatureGroup(FeatureChainParserMixin, FeatureGroup):
     """
     Base class for all clustering feature groups.
@@ -132,11 +137,16 @@ class ClusteringFeatureGroup(FeatureChainParserMixin, FeatureGroup):
             context=True,
             strict_validation=False,
         ),
+        # element_validator enforces the constraint on the config-based path; match_guard is the only
+        # enforcement on the string-named path, where the PREFIX_PATTERN match short-circuits
+        # property-mapping validation and this key never appears in the feature name.
         OUTPUT_PROBABILITIES: PropertySpec(
             "Whether to output cluster probabilities/distances as separate columns using ~N suffix pattern",
             context=True,
-            strict_validation=False,
+            strict_validation=True,
             default=False,
+            element_validator=_is_bool,
+            match_guard=_is_bool,
         ),
     }
 

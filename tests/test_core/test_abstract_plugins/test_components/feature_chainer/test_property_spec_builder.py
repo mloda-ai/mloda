@@ -150,13 +150,14 @@ class TestPropertySpecRoundTrip:
 
 
 class TestPropertySpecDefaultOmission:
-    """A builder call with no default must NOT emit a spurious ``default`` key.
+    """OMITTING the ``default`` argument must NOT emit a spurious ``default`` key.
 
     The parser's ``_can_skip_required_check`` treats the mere PRESENCE of the
-    ``default`` key as "this option is optional". Emitting ``default=None``
-    therefore silently makes an otherwise-required strict property optional.
-    The fix is for ``property_spec`` to emit the ``default`` key only when the
-    caller passes a non-``None`` default.
+    ``default`` key as "this option is optional", so a spurious key would silently
+    make an otherwise-required property optional. The rule is keyed on the
+    ARGUMENT, not on its value: omitting ``default`` means the key is REQUIRED,
+    while an explicit ``default=None`` means optional with a ``None`` default
+    (see ``TestPropertySpecNoneDefault``, issue #733).
     """
 
     def test_builder_without_default_omits_default_key(self) -> None:
@@ -207,6 +208,120 @@ class TestPropertySpecDefaultOmission:
         spec = property_spec("op", strict=True, allowed_values={"add": "Addition"}, default="add")
 
         assert spec[DefaultOptionKeys.default] == "add"
+
+
+class TestPropertySpecNoneDefault:
+    """``default=None`` must be expressible: optional key whose default is ``None`` (issue #733).
+
+    ``None`` is a legitimate default (the shipped hand-written specs use it for
+    ``weight_column``, ``constant_value``, ``pipeline_steps``, ...), but the builder
+    used ``None`` as its own "argument omitted" marker and dropped the key. That made
+    an optional key REQUIRED on migration. A ``NO_DEFAULT`` sentinel separates the two:
+    the key is emitted whenever the caller passes ANY default, ``None`` included.
+    """
+
+    def test_default_none_emits_default_key(self) -> None:
+        """``default=None`` emits the ``default`` key carrying ``None``."""
+        spec = property_spec("d", default=None)
+
+        assert DefaultOptionKeys.default in spec
+        assert spec[DefaultOptionKeys.default] is None
+
+    def test_default_none_is_optional(self) -> None:
+        """A ``default=None`` spec is optional: the parser skips the required check."""
+        spec = property_spec("d", default=None)
+
+        assert FeatureChainParser._can_skip_required_check(spec) is True
+
+    def test_omitted_default_stays_required(self) -> None:
+        """No ``default`` argument -> no key, and the property stays REQUIRED (issue #562)."""
+        spec = property_spec("d")
+
+        assert DefaultOptionKeys.default not in spec
+        assert FeatureChainParser._can_skip_required_check(spec) is False
+
+    def test_no_default_sentinel_importable_from_provider(self) -> None:
+        """``from mloda.provider import NO_DEFAULT`` works."""
+        from mloda.provider import NO_DEFAULT as imported
+
+        assert imported is not None
+
+    def test_explicit_sentinel_behaves_like_omission(self) -> None:
+        """Passing ``NO_DEFAULT`` explicitly is exactly the same as omitting the argument."""
+        from mloda.provider import NO_DEFAULT
+
+        spec = property_spec("d", default=NO_DEFAULT)
+
+        assert spec == property_spec("d")
+        assert DefaultOptionKeys.default not in spec
+        assert FeatureChainParser._can_skip_required_check(spec) is False
+
+    def test_none_default_spec_equals_hand_written_dict(self) -> None:
+        """A ``default=None`` spec is exactly the dict a plugin author hand-writes today."""
+        built = property_spec("Column name for edge weights (optional)", default=None)
+
+        hand_written: dict[str, Any] = {
+            "explanation": "Column name for edge weights (optional)",
+            DefaultOptionKeys.context: True,
+            DefaultOptionKeys.strict_validation: False,
+            DefaultOptionKeys.default: None,
+        }
+        assert built == hand_written
+
+    def test_strict_spec_with_none_default_builds_and_is_optional(self) -> None:
+        """A STRICT spec with ``default=None`` builds and is optional (sklearn PIPELINE_NAME shape).
+
+        Core's ``check_declared_default`` exempts a ``None`` default from the membership
+        check, so the strict value space and the ``None`` default coexist.
+        """
+        spec = property_spec("d", strict=True, allowed_values={"scaling": "Feature scaling"}, default=None)
+
+        assert spec[DefaultOptionKeys.default] is None
+        assert spec[DefaultOptionKeys.strict_validation] is True
+        assert FeatureChainParser._can_skip_required_check(spec) is True
+
+    def test_absent_optional_option_still_matches_through_core(self) -> None:
+        """End to end: a builder-authored ``default=None`` key is not demanded by the matcher."""
+
+        class OptionalWeightFeatureGroup(FeatureChainParserMixin, FeatureGroup):
+            PREFIX_PATTERN = r".*__([\w]+)_centrality$"
+            PROPERTY_MAPPING = {
+                "centrality_type": property_spec(
+                    "Centrality metric",
+                    strict=True,
+                    allowed_values={"degree": "Degree", "pagerank": "PageRank"},
+                ),
+                "weight_column": property_spec("Column name for edge weights (optional)", default=None),
+            }
+
+            @classmethod
+            def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+                return data
+
+        property_mapping = OptionalWeightFeatureGroup.PROPERTY_MAPPING
+
+        # The optional key is ABSENT: the required key alone satisfies the match.
+        assert (
+            FeatureChainParser.match_configuration_feature_chain_parser(
+                "any_feature", Options(context={"centrality_type": "degree"}), property_mapping
+            )
+            is True
+        )
+        # Present is fine too, and the required key is still required.
+        assert (
+            FeatureChainParser.match_configuration_feature_chain_parser(
+                "any_feature",
+                Options(context={"centrality_type": "degree", "weight_column": "weight"}),
+                property_mapping,
+            )
+            is True
+        )
+        assert (
+            FeatureChainParser.match_configuration_feature_chain_parser(
+                "any_feature", Options(context={"weight_column": "weight"}), property_mapping
+            )
+            is False
+        )
 
 
 def _positive_int(value: Any) -> bool:

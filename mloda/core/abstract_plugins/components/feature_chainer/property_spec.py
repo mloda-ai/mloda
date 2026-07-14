@@ -13,12 +13,22 @@ from mloda.core.abstract_plugins.components.default_options_key import DefaultOp
 from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser import FeatureChainParser
 
 
+class _NoDefault:
+    """Sentinel type: ``None`` is a legitimate default, so an omitted default needs its own object."""
+
+    def __repr__(self) -> str:
+        return "NO_DEFAULT"
+
+
+NO_DEFAULT = _NoDefault()
+
+
 def property_spec(
     explanation: str,
     *,
     strict: bool = False,
     allowed_values: Mapping[Any, str] | Iterable[Any] | None = None,
-    default: Any = None,
+    default: Any = NO_DEFAULT,
     context: bool = True,
     element_validator: Callable[..., Any] | None = None,
     required_when: Callable[..., Any] | None = None,
@@ -70,7 +80,7 @@ def property_spec(
         spec[DefaultOptionKeys.match_guard] = match_guard
     spec[DefaultOptionKeys.context] = context
     spec[DefaultOptionKeys.strict_validation] = strict
-    if default is not None:
+    if default is not NO_DEFAULT:
         spec[DefaultOptionKeys.default] = default
 
     # The declared-default semantics live in core, so the builder and the

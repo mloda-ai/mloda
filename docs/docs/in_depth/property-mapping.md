@@ -162,6 +162,10 @@ when provided. Its declared-default check is not a separate implementation: it c
 the same `FeatureChainParser.check_declared_default` the class-definition hook uses,
 so the two cannot drift.
 
+Omitting `default` emits no `default` key and leaves the option **required**, while an
+explicit `default=None` emits the key and makes the option **optional** with a `None`
+default.
+
 ## Strict validation needs a value space
 
 `strict_validation: True` needs something to validate against: a non-empty

@@ -55,6 +55,21 @@ class MockFeatureGroupWithMinMax(FeatureChainParserMixin):
     }
 
 
+class MockFeatureGroupSingleInFeature(FeatureChainParserMixin):
+    """Mock Feature group that accepts exactly one in_feature."""
+
+    PREFIX_PATTERN = r".*__([\w]+)_test$"
+    MIN_IN_FEATURES = 1
+    MAX_IN_FEATURES = 1
+    PROPERTY_MAPPING = {
+        "operation": {
+            DefaultOptionKeys.allowed_values: {"op1": "Operation 1"},
+            DefaultOptionKeys.context: True,
+            DefaultOptionKeys.strict_validation: True,
+        }
+    }
+
+
 class _HiddenAttribute:
     """Descriptor that makes hasattr return False by raising AttributeError."""
 
@@ -452,6 +467,32 @@ class TestFeatureChainParserMixinMinMaxInFeatures:
         assert not hasattr(MockFeatureGroupWithoutMinMax, "MAX_IN_FEATURES")
         result = MockFeatureGroupWithoutMinMax.match_feature_group_criteria("any_name", options)
         assert result is True
+
+    def test_rejects_in_features_shape_it_cannot_count(self) -> None:
+        """Join tuples (the shape SourceInputFeature stores) are not countable in_features: a non-match.
+
+        Skipping the MIN/MAX check for an uncountable value accepts the feature, which is the one
+        answer that cannot be right: the cap says at most one in_feature.
+        """
+        options = Options(
+            context={
+                "operation": "op1",
+                "in_features": [("a", 1), ("b", 2), ("c", 3)],
+            }
+        )
+        result = MockFeatureGroupSingleInFeature.match_feature_group_criteria("any_name", options)
+        assert result is False
+
+    def test_rejects_in_features_holding_uncountable_values(self) -> None:
+        """A plain typo (in_features=[1, 2, 3]) is uncountable too, and must not slip past the cap."""
+        options = Options(
+            context={
+                "operation": "op1",
+                "in_features": [1, 2, 3],
+            }
+        )
+        result = MockFeatureGroupSingleInFeature.match_feature_group_criteria("any_name", options)
+        assert result is False
 
 
 class TestFeatureChainParserMixinListValuedOptions:

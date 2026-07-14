@@ -6,6 +6,7 @@ import pytest
 from unittest.mock import Mock, patch
 from mloda_plugins.feature_group.experimental.sklearn.pipeline.base import SklearnPipelineFeatureGroup
 from mloda_plugins.feature_group.experimental.sklearn.pipeline.pandas import PandasSklearnPipelineFeatureGroup
+from mloda.provider import DefaultOptionKeys
 from mloda.user import FeatureName
 from mloda.user import Options
 
@@ -212,3 +213,98 @@ class TestSklearnPipelineFeatureGroup:
         """Test that abstract base class cannot be instantiated directly."""
         with pytest.raises(TypeError, match="abstract method"):
             SklearnPipelineFeatureGroup()  # type: ignore[abstract]
+
+
+PIPELINE_STEPS_VALUE = frozenset({("scaler", "StandardScaler")})
+
+
+class TestSklearnPipelineRequiredWhen:
+    """The pipeline_name / pipeline_steps requirement is a required_when contract (issue #731).
+
+    SklearnPipelineFeatureGroup overrides match_feature_group_criteria, so the mixin's
+    required_when evaluation never reached it. The declared predicates must now be enforced
+    on the override too.
+    """
+
+    def test_rejects_name_that_only_contains_the_pipeline_infix(self) -> None:
+        """Issue repro: the name is not a chained pipeline feature and neither option is given."""
+        options = Options(context={DefaultOptionKeys.in_features: ["x"]})
+        assert SklearnPipelineFeatureGroup.match_feature_group_criteria("my_sklearn_pipeline_thing", options) is False
+
+    def test_accepts_string_name_inside_pipeline_types(self) -> None:
+        """A declared pipeline type maps back onto pipeline_name, so the predicate is satisfied."""
+        assert (
+            SklearnPipelineFeatureGroup.match_feature_group_criteria("x__sklearn_pipeline_scaling", Options()) is True
+        )
+
+    def test_rejects_string_name_outside_pipeline_types(self) -> None:
+        """Accepted behavior change: an undeclared pipeline name cannot map back onto pipeline_name,
+        so pipeline_name stays absent and its required_when predicate rejects the feature instead of
+        silently computing it with the default scaling pipeline."""
+        assert (
+            SklearnPipelineFeatureGroup.match_feature_group_criteria("x__sklearn_pipeline_custom", Options()) is False
+        )
+
+    def test_accepts_config_with_pipeline_name_only(self) -> None:
+        """pipeline_name present: the pipeline_steps predicate does not fire."""
+        options = Options(
+            {
+                SklearnPipelineFeatureGroup.PIPELINE_NAME: "scaling",
+                DefaultOptionKeys.in_features: "income",
+            }
+        )
+        assert SklearnPipelineFeatureGroup.match_feature_group_criteria("x", options) is True
+
+    def test_accepts_config_with_pipeline_steps_only(self) -> None:
+        """pipeline_steps present: the pipeline_name predicate does not fire."""
+        options = Options(
+            {
+                SklearnPipelineFeatureGroup.PIPELINE_STEPS: PIPELINE_STEPS_VALUE,
+                DefaultOptionKeys.in_features: "income",
+            }
+        )
+        assert SklearnPipelineFeatureGroup.match_feature_group_criteria("x", options) is True
+
+    def test_rejects_config_with_both_pipeline_name_and_steps(self) -> None:
+        """Mutual exclusivity is the one rule a spec cannot express; the override keeps it."""
+        options = Options(
+            {
+                SklearnPipelineFeatureGroup.PIPELINE_NAME: "scaling",
+                SklearnPipelineFeatureGroup.PIPELINE_STEPS: PIPELINE_STEPS_VALUE,
+                DefaultOptionKeys.in_features: "income",
+            }
+        )
+        assert SklearnPipelineFeatureGroup.match_feature_group_criteria("x", options) is False
+
+    def test_rejects_config_with_neither_pipeline_name_nor_steps(self) -> None:
+        """Each option is required when the other is absent."""
+        options = Options({DefaultOptionKeys.in_features: "income"})
+        assert SklearnPipelineFeatureGroup.match_feature_group_criteria("x", options) is False
+
+    def test_rejects_string_name_outside_pipeline_types_even_with_options(self) -> None:
+        """Regression pin for the real blast radius of the accepted behavior change.
+
+        The rejection is not limited to the no-options case: an undeclared pipeline name never maps back
+        onto pipeline_name, so ANY string-named pipeline outside PIPELINE_TYPES is rejected, options or not.
+        This returned True before the required_when guard.
+        """
+        options = Options({DefaultOptionKeys.in_features: "income"})
+        assert (
+            SklearnPipelineFeatureGroup.match_feature_group_criteria("income__sklearn_pipeline_custom", options)
+            is False
+        )
+
+    def test_rejects_pipeline_name_with_empty_pipeline_steps(self) -> None:
+        """Regression pin: mutual exclusivity is presence-based (is not None), not truthiness.
+
+        An empty pipeline_steps list is still a present pipeline_steps, so it collides with pipeline_name.
+        Truthiness let this pair through before the required_when guard.
+        """
+        options = Options(
+            {
+                SklearnPipelineFeatureGroup.PIPELINE_NAME: "scaling",
+                SklearnPipelineFeatureGroup.PIPELINE_STEPS: [],
+                DefaultOptionKeys.in_features: "income",
+            }
+        )
+        assert SklearnPipelineFeatureGroup.match_feature_group_criteria("x", options) is False

@@ -24,14 +24,19 @@ Two rules carry most of the model:
 | Class definition | `check_declared_default` | A strict, non-`None` `default` is accepted by its own key | The declared default | `ValueError` at class definition |
 | Match time (parser) | `allowed_values` membership | Each element is in the accepted set | One element | `ValueError`, surfaced to the end user |
 | Match time (parser) | `element_validator` | Each element satisfies a predicate | One element | `ValueError`, surfaced to the end user |
-| Match time (mixin) | `required_when` | A conditionally required option is present | `Options` | Non-match (`False`) |
 | Match time (mixin) | `match_guard` | The whole value has an acceptable shape | The raw value | Non-match (`False`) |
 | Match time (mixin) | `MIN/MAX_IN_FEATURES` | In-feature count is within bounds | The in-features | Non-match (`False`) |
+| Match time (guard) | `required_when` | A conditionally required option is present | `Options` | Non-match (`False`) |
 
 Match-time mechanisms run in that order. `element_validator` **replaces** membership
 rather than adding to it: when a key declares one, `allowed_values` is not consulted.
 Because the parser runs before the mixin, an element rejected by membership or by
 `element_validator` short-circuits, and `match_guard` is never reached.
+
+`required_when` is the one mechanism that does not live inside a matcher. A class that
+declares it gets its resolved `match_feature_group_criteria` wrapped at class definition,
+and the wrapper runs the predicates after that matcher returns `True`. Overriding the
+matcher therefore keeps the contract, whether the override delegates or not.
 
 The class-definition rules run in table order, and the order is load-bearing. The schema
 runs before the shape rules, because a spec with an unknown key is malformed and its
@@ -266,6 +271,16 @@ When the predicate returns `True` and the option is absent, the match fails; ent
 with `required_when` are otherwise optional. The predicate must be a pure, callable
 `(Options) -> bool` that does not raise. Non-callable values are skipped with a
 warning; non-bool truthy returns count as `True`.
+
+The enforcement is installed on the class, not on one matcher, so overriding
+`match_feature_group_criteria` does not lose it: the predicates still run after the
+override returns `True`. Nested guards (an override that delegates into an already guarded
+parent) do not stack: only the outermost one evaluates, so the predicates run exactly once
+per match call. The matcher must be a `classmethod`; a `staticmethod` matcher on a class
+that declares `required_when` is rejected at class definition.
+
+The guard is installed at class definition, so mutating `PROPERTY_MAPPING` or replacing
+`match_feature_group_criteria` after the class body escapes it.
 
 ## Migrating from the flattened form
 

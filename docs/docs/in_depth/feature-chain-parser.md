@@ -188,28 +188,19 @@ class TimeWindowFeatureGroup(FeatureChainParserMixin, FeatureGroup):
 
 #### 3. Custom `match_feature_group_criteria()` Method
 
-Override for complex pre-check logic that can't be captured by the hook:
+Override for the rules a `PROPERTY_MAPPING` spec cannot express, then delegate. Conditional
+requirements belong in `required_when` instead: it is enforced by a guard installed at class
+definition, so it still runs on an override.
 
 ``` python
 class SklearnPipelineFeatureGroup(FeatureChainParserMixin, FeatureGroup):
     @classmethod
     def match_feature_group_criteria(cls, feature_name, options, data_access_collection=None) -> bool:
-        """Custom matching with mutual exclusivity validation."""
-        has_pipeline_name = options.get(cls.PIPELINE_NAME)
-        has_pipeline_steps = options.get(cls.PIPELINE_STEPS)
-
-        # Pre-check: require pattern in name if no config provided
-        if has_pipeline_name is None and has_pipeline_steps is None:
-            if "sklearn_pipeline_" not in str(feature_name):
-                return False
-
-        # Use base matching
-        base_match = FeatureChainParser.match_configuration_feature_chain_parser(...)
-
-        # Post-check: mutual exclusivity
-        if base_match and has_pipeline_name and has_pipeline_steps:
+        """Mutual exclusivity: pipeline_name and pipeline_steps cannot both be set."""
+        if options.get(cls.PIPELINE_NAME) is not None and options.get(cls.PIPELINE_STEPS) is not None:
             return False
-        return base_match
+
+        return super().match_feature_group_criteria(feature_name, options, data_access_collection)
 ```
 
 #### 4. Operation Resolution with `_resolve_operation()`

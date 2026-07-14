@@ -59,6 +59,7 @@ from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser
     INPUT_SEPARATOR,
 )
 from mloda.core.abstract_plugins.components.default_options_key import DefaultOptionKeys
+from mloda.core.abstract_plugins.components.utils import safe_field
 
 logger = logging.getLogger(__name__)
 
@@ -77,7 +78,10 @@ class FeatureChainParserMixin:
     PROPERTY_MAPPING supports conditional requirements via ``DefaultOptionKeys.required_when``.
     Attach a predicate ``(Options) -> bool`` to any mapping entry. When the predicate returns
     True and the option value is absent, ``match_feature_group_criteria`` rejects the match.
-    When the predicate returns False, the option is treated as optional.
+    When the predicate returns False, the option is treated as optional. The predicates are
+    enforced by a guard installed on the class at definition time (see
+    ``FeatureChainParser.install_required_when_guard``), so overriding
+    ``match_feature_group_criteria`` keeps the contract.
 
     This works for both string-based and configuration-based feature creation. For
     string-based features, the operation value parsed from the feature name is merged
@@ -97,6 +101,12 @@ class FeatureChainParserMixin:
     IN_FEATURE_SEPARATOR: str = INPUT_SEPARATOR
     MIN_IN_FEATURES: int = 1
     MAX_IN_FEATURES: Optional[int] = None
+
+    def __init_subclass__(cls, **kwargs: Any) -> None:
+        # The mixin sits first in the MRO of ``class X(FeatureChainParserMixin, FeatureGroup)``,
+        # so super() is what lets FeatureGroup's own class-definition validation still run.
+        super().__init_subclass__(**kwargs)
+        FeatureChainParser.install_required_when_guard(cls)
 
     @classmethod
     def _validate_string_match(cls, _feature_name: str, _operation_config: str, _in_feature: str) -> bool:
@@ -196,6 +206,9 @@ class FeatureChainParserMixin:
         Also enforces MIN_IN_FEATURES / MAX_IN_FEATURES constraints when
         in_features is present in options.
 
+        ``required_when`` is NOT evaluated here. The guard installed at class definition
+        runs the predicates after this method (or any override of it) returns True.
+
         For string-parsed features, additionally checks consumer-forwarded option
         values against the value parsed from the feature name: if a PROPERTY_MAPPING
         key arrived via forwarding (it is in ``options.inherited_group_keys``) and its
@@ -235,9 +248,6 @@ class FeatureChainParserMixin:
                 if not cls._validate_string_match(feature_name, operation_config, source_feature):
                     return False
                 cls._validate_forwarded_name_mismatch(feature_name, operation_config, property_mapping, options)
-
-        if not cls._validate_required_when(result, feature_name, prefix_patterns, property_mapping, options):
-            return False
 
         if not cls._validate_match_guards(result, options, property_mapping):
             return False
@@ -324,43 +334,6 @@ class FeatureChainParserMixin:
         return None
 
     @classmethod
-    def _validate_required_when(
-        cls,
-        result: bool,
-        feature_name: str | FeatureName,
-        prefix_patterns: list[str],
-        property_mapping: dict[str, Any] | None,
-        options: Options,
-    ) -> bool:
-        # Enforce required_when constraints from PROPERTY_MAPPING.
-        # Build effective options by merging string-parsed operation_config into
-        # the Options object so predicates see values from both sources.
-        if result and property_mapping is not None and cls._has_required_when_predicates(property_mapping):
-            effective_options = cls._build_effective_options(feature_name, prefix_patterns, property_mapping, options)
-            for key, mapping_entry in property_mapping.items():
-                if not isinstance(mapping_entry, dict):
-                    continue
-                predicate = mapping_entry.get(DefaultOptionKeys.required_when)
-                if predicate is None:
-                    continue
-                if not callable(predicate):
-                    logger.warning(
-                        "required_when for '%s' in %s is not callable, skipping.",
-                        key,
-                        cls.__name__,
-                    )
-                    continue
-                if predicate(effective_options) and effective_options.get(key) is None:
-                    logger.debug(
-                        "Feature group %s requires option '%s' (predicate %s is satisfied) but it was not provided.",
-                        cls.__name__,
-                        key,
-                        getattr(predicate, "__name__", repr(predicate)),
-                    )
-                    return False
-        return True
-
-    @classmethod
     def _validate_match_guards(cls, result: bool, options: Options, property_mapping: dict[str, Any] | None) -> bool:
         # Enforce match_guard constraints from PROPERTY_MAPPING
         if result and property_mapping is not None:
@@ -392,7 +365,16 @@ class FeatureChainParserMixin:
                     # Present but empty: zero in_features, a non-match rather than an error.
                     count = 0
                 else:
-                    count = len(options.get_in_features())
+                    # An in_features shape this matcher cannot count (SourceInputFeature stores join
+                    # tuples there) is a NON-MATCH: a group that cannot even count the in_features
+                    # cannot consume them. Skipping MIN/MAX here would accept the feature and let the
+                    # group win a resolution its own cap says it must lose.
+                    in_features: frozenset[Feature] | None = safe_field(
+                        options.get_in_features, None, catching=(TypeError,)
+                    )
+                    if in_features is None:
+                        return False
+                    count = len(in_features)
                 if count < cls.MIN_IN_FEATURES:
                     return False
                 if cls.MAX_IN_FEATURES is not None and count > cls.MAX_IN_FEATURES:
@@ -400,14 +382,12 @@ class FeatureChainParserMixin:
         return True
 
     @classmethod
-    def _get_prefix_patterns(cls) -> list[str]:
-        """Get prefix/suffix patterns from class attributes."""
-        patterns = []
-        if hasattr(cls, "PREFIX_PATTERN"):
-            patterns.append(cls.PREFIX_PATTERN)
-        if hasattr(cls, "SUFFIX_PATTERN"):
-            patterns.append(cls.SUFFIX_PATTERN)
-        return patterns
+    def _get_prefix_patterns(cls) -> list[Any]:
+        """Get prefix/suffix patterns from class attributes.
+
+        Delegates to the guard's own collector, so matcher and guard can never see different patterns.
+        """
+        return FeatureChainParser.prefix_patterns_of(cls)
 
     @classmethod
     def _get_property_mapping(cls) -> Optional[dict[str, Any]]:
@@ -416,61 +396,16 @@ class FeatureChainParserMixin:
             return cast(dict[str, Any], cls.PROPERTY_MAPPING)
         return None
 
-    @staticmethod
-    def _has_required_when_predicates(property_mapping: dict[str, Any]) -> bool:
-        """Return True if any entry in property_mapping uses required_when."""
-        for value in property_mapping.values():
-            if isinstance(value, dict) and DefaultOptionKeys.required_when in value:
-                return True
-        return False
-
     @classmethod
     def _build_effective_options(
         cls,
         feature_name: str,
-        prefix_patterns: list[str],
+        prefix_patterns: list[Any],
         property_mapping: dict[str, Any],
         options: Options,
     ) -> Options:
-        """Build effective options by merging string-parsed values with explicit options.
-
-        When a feature is matched by string pattern, the operation_config value extracted
-        from the feature name is mapped to the corresponding PROPERTY_MAPPING key. This
-        ensures that required_when predicates see values from both sources.
-
-        If the feature is not string-based or no mapping key matches, returns the
-        original options unchanged.
-        """
-        operation_config, _source_feature = FeatureChainParser.parse_feature_name(
-            feature_name, prefix_patterns, CHAIN_SEPARATOR
-        )
-        if operation_config is None:
-            return options
-
-        # Find which property mapping key the operation_config value belongs to
-        for prop_key, prop_value in property_mapping.items():
-            if not isinstance(prop_value, dict):
-                continue
-            # Already present in options: no merge needed
-            if options.get(prop_key) is not None:
-                continue
-            # Check if operation_config is a valid value for this property
-            extracted = FeatureChainParser._extract_property_values(prop_value)
-            if operation_config in extracted:
-                category = FeatureChainParser._determine_parameter_category(prop_key, prop_value, options)
-                merged_group = dict(options.group)
-                merged_context = dict(options.context)
-                if category == DefaultOptionKeys.context:
-                    merged_context[prop_key] = operation_config
-                else:
-                    merged_group[prop_key] = operation_config
-                return Options(
-                    group=merged_group,
-                    context=merged_context,
-                    propagate_context_keys=options.propagate_context_keys,
-                )
-
-        return options
+        """Merge the value parsed from the feature name into the options the predicates see."""
+        return FeatureChainParser.build_effective_options(feature_name, prefix_patterns, property_mapping, options)
 
     @classmethod
     def _extract_source_features(cls, feature: Feature) -> list[str]:

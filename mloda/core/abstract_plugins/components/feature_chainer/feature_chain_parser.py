@@ -4,7 +4,10 @@ Feature chain parser for handling feature name chaining across feature groups.
 
 from __future__ import annotations
 
+import contextvars
 import difflib
+import functools
+import logging
 import re
 from collections.abc import Collection
 from typing import Any, Optional
@@ -17,11 +20,24 @@ from mloda.core.abstract_plugins.components.default_options_key import (
     REMOVED_PROPERTY_KEYS,
     DefaultOptionKeys,
 )
+from mloda.core.abstract_plugins.components.utils import safe_field
+
+logger = logging.getLogger(__name__)
 
 # Separator constants for feature name parsing
 CHAIN_SEPARATOR = "__"  # Separates chained transformations (source→suffix)
 COLUMN_SEPARATOR = "~"  # Separates multi-column output index
 INPUT_SEPARATOR = "&"  # Separates multiple input features
+
+# Marks a matcher that already carries the required_when guard, so it is never wrapped twice.
+REQUIRED_WHEN_GUARD_FLAG = "_mloda_required_when_guard"
+
+# How many guards the current match call is nested in. A guarded matcher that delegates via super()
+# reaches the guard of its parent, and only the outermost one may evaluate the predicates.
+# A ContextVar (not a plain global) keeps the count per thread and per async task.
+REQUIRED_WHEN_GUARD_DEPTH: contextvars.ContextVar[int] = contextvars.ContextVar(
+    "mloda_required_when_guard_depth", default=0
+)
 
 
 class FeatureChainParser:
@@ -61,10 +77,13 @@ class FeatureChainParser:
     def parse_feature_name(
         cls,
         feature_name: FeatureName | str,
-        prefix_patterns: list[str],
+        prefix_patterns: list[Any],
         pattern: str = CHAIN_SEPARATOR,
     ) -> tuple[str | None, str | None]:
-        """Internal method for parsing feature names - used by match_configuration_feature_chain_parser."""
+        """Internal method for parsing feature names - used by match_configuration_feature_chain_parser.
+
+        A prefix pattern is anything ``re.match`` accepts: a ``str`` or a compiled ``re.Pattern``.
+        """
         _feature_name: str = feature_name
 
         parts = _feature_name.rsplit(pattern, 1)
@@ -92,7 +111,7 @@ class FeatureChainParser:
     def _match_pattern_based_feature(
         cls,
         feature_name: str | FeatureName,
-        prefix_patterns: list[str],
+        prefix_patterns: list[Any],
         pattern: str = CHAIN_SEPARATOR,
     ) -> bool:
         """Internal method for matching pattern-based features - used by match_configuration_feature_chain_parser."""
@@ -110,8 +129,8 @@ class FeatureChainParser:
         Returns True when the property has a default value or uses conditional
         requirements (required_when).  In both cases the base validation loop
         should not reject the match just because the option is absent; either
-        the default will be applied later, or the required_when predicate in
-        FeatureChainParserMixin will decide.
+        the default will be applied later, or the required_when guard installed
+        at class definition will decide.
         """
         if not isinstance(property_value, dict):
             return False
@@ -487,7 +506,7 @@ class FeatureChainParser:
         feature_name: str | FeatureName,
         options: Options,
         property_mapping: Optional[dict[str, Any]] = None,
-        prefix_patterns: Optional[list[str]] = None,
+        prefix_patterns: Optional[list[Any]] = None,
         pattern: str = CHAIN_SEPARATOR,
     ) -> bool:
         """
@@ -515,6 +534,213 @@ class FeatureChainParser:
 
         # If neither pattern-based nor configuration-based matching succeeded, return False
         return False
+
+    @staticmethod
+    def has_required_when_predicates(property_mapping: dict[str, Any]) -> bool:
+        """Return True if any spec in property_mapping declares required_when."""
+        for spec in property_mapping.values():
+            if isinstance(spec, dict) and DefaultOptionKeys.required_when in spec:
+                return True
+        return False
+
+    @classmethod
+    def prefix_patterns_of(cls, owner: type[Any]) -> list[Any]:
+        """Collect the name patterns a class matches on. The single implementation the mixin uses too.
+
+        A pattern is whatever ``re.match`` accepts: a ``str`` or an already compiled ``re.Pattern``.
+        Filtering by type would hide a compiled pattern from the guard while the matcher still matches
+        on it, and the guard would then reject a feature the matcher accepted.
+        """
+        patterns: list[Any] = []
+        for attribute in ("PREFIX_PATTERN", "SUFFIX_PATTERN"):
+            pattern = getattr(owner, attribute, None)
+            if pattern is not None:
+                patterns.append(pattern)
+        return patterns
+
+    @classmethod
+    def build_effective_options(
+        cls,
+        feature_name: str | FeatureName,
+        prefix_patterns: list[Any],
+        property_mapping: dict[str, Any],
+        options: Options,
+    ) -> Options:
+        """Build effective options by merging string-parsed values with explicit options.
+
+        When a feature is matched by string pattern, the operation_config value extracted
+        from the feature name is mapped to the corresponding PROPERTY_MAPPING key. This
+        ensures that required_when predicates see values from both sources.
+
+        If the feature is not string-based or no mapping key matches, returns the
+        original options unchanged.
+        """
+        # A matcher may parse the name with its own separator, so CHAIN_SEPARATOR can leave it
+        # unparseable. That is no name-parsed value to merge, never an exception out of a matcher.
+        nothing_parsed: tuple[str | None, str | None] = (None, None)
+        operation_config, _source_feature = safe_field(
+            lambda: cls.parse_feature_name(feature_name, prefix_patterns, CHAIN_SEPARATOR),
+            nothing_parsed,
+            catching=(ValueError,),
+        )
+        if operation_config is None:
+            return options
+
+        # Find which property mapping key the operation_config value belongs to
+        for prop_key, prop_value in property_mapping.items():
+            if not isinstance(prop_value, dict):
+                continue
+            # Already present in options: no merge needed
+            if options.get(prop_key) is not None:
+                continue
+            # Check if operation_config is a valid value for this property
+            if operation_config not in cls._extract_property_values(prop_value):
+                continue
+            category = cls._determine_parameter_category(prop_key, prop_value, options)
+            merged_group = dict(options.group)
+            merged_context = dict(options.context)
+            if category == DefaultOptionKeys.context:
+                merged_context[prop_key] = operation_config
+            else:
+                merged_group[prop_key] = operation_config
+            return Options(
+                group=merged_group,
+                context=merged_context,
+                propagate_context_keys=options.propagate_context_keys,
+            )
+
+        return options
+
+    @classmethod
+    def check_required_when(
+        cls,
+        owner_name: str,
+        feature_name: str | FeatureName,
+        prefix_patterns: list[Any],
+        property_mapping: dict[str, Any] | None,
+        options: Options,
+    ) -> bool:
+        """Evaluate every required_when predicate of a mapping. False means the feature is not a match."""
+        if property_mapping is None or not cls.has_required_when_predicates(property_mapping):
+            return True
+
+        effective_options = cls.build_effective_options(feature_name, prefix_patterns, property_mapping, options)
+        for key, spec in property_mapping.items():
+            if not isinstance(spec, dict):
+                continue
+            predicate = spec.get(DefaultOptionKeys.required_when)
+            if predicate is None:
+                continue
+            if not callable(predicate):
+                logger.warning("required_when for '%s' in %s is not callable, skipping.", key, owner_name)
+                continue
+            if predicate(effective_options) and effective_options.get(key) is None:
+                logger.debug(
+                    "Feature group %s requires option '%s' (predicate %s is satisfied) but it was not provided.",
+                    owner_name,
+                    key,
+                    getattr(predicate, "__name__", repr(predicate)),
+                )
+                return False
+        return True
+
+    @staticmethod
+    def _resolve_match_arguments(args: tuple[Any, ...], kwargs: dict[str, Any]) -> tuple[str | FeatureName, Any]:
+        """Recover (feature_name, options) from a matcher call without assuming an override's parameter names."""
+        values = list(args) + list(kwargs.values())
+
+        feature_name = kwargs.get("feature_name", args[0] if args else None)
+        if not isinstance(feature_name, str):
+            feature_name = next((value for value in values if isinstance(value, str)), "")
+
+        options = kwargs.get("options")
+        if not isinstance(options, Options):
+            options = next((value for value in values if isinstance(value, Options)), None)
+
+        return feature_name, options
+
+    @classmethod
+    def _reject_staticmethod_matcher(cls, owner: type[Any]) -> None:
+        """Reject a staticmethod matcher on a class that declares required_when.
+
+        The guard is reinstalled as a classmethod, so the class would be passed as the first
+        positional argument: a staticmethod matcher would read ``cls`` as its ``feature_name`` and the
+        feature name as its ``options``, and answer a silently wrong verdict. Fail at class definition.
+        """
+        for klass in owner.__mro__:
+            descriptor = klass.__dict__.get("match_feature_group_criteria")
+            if descriptor is None:
+                continue
+            if isinstance(descriptor, staticmethod):
+                raise ValueError(
+                    f"{owner.__name__} declares required_when in its PROPERTY_MAPPING, but its "
+                    f"match_feature_group_criteria is a staticmethod. It must be a classmethod: the "
+                    f"required_when guard is installed as a classmethod and passes the class as the first "
+                    f"argument, which a staticmethod would misread as the feature name."
+                )
+            return
+
+    @classmethod
+    def install_required_when_guard(cls, owner: type[Any]) -> None:
+        """Wrap a class's RESOLVED matcher so its required_when predicates run whatever matcher it kept.
+
+        Called at class-definition time from ``FeatureGroup.__init_subclass__`` and
+        ``FeatureChainParserMixin.__init_subclass__``. The predicates cannot live inside one
+        matcher: overriding ``match_feature_group_criteria`` is supported, and an override that
+        never delegates would silently drop the declared contract. The wrapper stays a
+        classmethod, so it reads the PROPERTY_MAPPING and patterns of the class it is called on.
+
+        A class that declares no required_when is left untouched, and an already guarded matcher
+        is never wrapped again. Guards do nest (an override may delegate into a guarded parent), so
+        only the outermost one evaluates the predicates: exactly once per match call.
+
+        Class definition is the install site, so a PROPERTY_MAPPING mutated, or a matcher replaced,
+        AFTER the class body is not seen by the guard.
+        """
+        property_mapping = getattr(owner, "PROPERTY_MAPPING", None)
+        if not isinstance(property_mapping, dict) or not cls.has_required_when_predicates(property_mapping):
+            return
+
+        cls._reject_staticmethod_matcher(owner)
+
+        matcher = getattr(owner, "match_feature_group_criteria", None)
+        if matcher is None:
+            return
+
+        inner: Any = getattr(matcher, "__func__", matcher)
+        if getattr(inner, REQUIRED_WHEN_GUARD_FLAG, False):
+            return
+
+        @functools.wraps(inner)
+        def guarded(guarded_cls: type[Any], *args: Any, **kwargs: Any) -> bool:
+            # The outermost guard is the one whose class the matcher was called on, so it is the one
+            # whose PROPERTY_MAPPING decides. An inner guard, reached through a delegating super()
+            # call, only answers with its matcher's verdict.
+            outermost = REQUIRED_WHEN_GUARD_DEPTH.get() == 0
+            token = REQUIRED_WHEN_GUARD_DEPTH.set(REQUIRED_WHEN_GUARD_DEPTH.get() + 1)
+            try:
+                if not inner(guarded_cls, *args, **kwargs):
+                    return False
+
+                if not outermost:
+                    return True
+
+                feature_name, options = FeatureChainParser._resolve_match_arguments(args, kwargs)
+                if options is None:
+                    return True
+
+                return FeatureChainParser.check_required_when(
+                    guarded_cls.__name__,
+                    feature_name,
+                    FeatureChainParser.prefix_patterns_of(guarded_cls),
+                    getattr(guarded_cls, "PROPERTY_MAPPING", None),
+                    options,
+                )
+            finally:
+                REQUIRED_WHEN_GUARD_DEPTH.reset(token)
+
+        setattr(guarded, REQUIRED_WHEN_GUARD_FLAG, True)
+        setattr(owner, "match_feature_group_criteria", classmethod(guarded))
 
     @classmethod
     def extract_in_feature(cls, feature_name: str, suffix_pattern: str) -> str:

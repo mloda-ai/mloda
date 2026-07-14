@@ -17,6 +17,8 @@
 # Primary-source feature groups (no input features) subclass FeatureGroup
 # directly and implement input_features and match_feature_group_criteria.
 #
+# This module is core-only. Concrete compute frameworks come from mloda.user.<backend>.
+#
 from mloda.core.abstract_plugins.feature_group import FeatureGroup as FeatureGroup
 
 # Versioning
@@ -37,7 +39,7 @@ from mloda.core.abstract_plugins.components.input_data.base_input_data import Ba
 from mloda.core.abstract_plugins.components.input_data.file_source import FileSource
 from mloda.core.abstract_plugins.components.input_data.input_data_descriptor import InputDataDescriptor
 from mloda.core.abstract_plugins.components.input_data.api.api_input_data import ApiInputData
-from mloda_plugins.feature_group.input_data.api_data.api_data import ApiInputDataFeature
+from mloda.core.abstract_plugins.components.input_data.api.api_input_data_feature import ApiInputDataFeature
 from mloda.core.abstract_plugins.components.input_data.api.base_api_data import BaseApiData
 from mloda.core.abstract_plugins.components.input_data.api.api_input_data_collection import ApiInputDataCollection
 from mloda.core.abstract_plugins.components.input_data.creator.data_creator import DataCreator
@@ -83,25 +85,6 @@ from mloda.core.abstract_plugins.components.framework_transformer.cfw_transforme
 from mloda.core.abstract_plugins.plugin_registry.plugin_registry import (
     PluginRegistryCollisionError,
     register_plugin,
-)
-
-# Columnar helpers (python_dict): stdlib-only module, so eager import is cycle-free.
-from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_utils import (
-    columnar_to_rows,
-    homogenize_rows,
-    is_columnar,
-    result_rows,
-    row_count,
-    rows_to_columnar,
-    validate_columnar_dict,
-)
-
-# Eager on purpose: a module-level __getattr__ would make mypy treat every unknown attribute on
-# mloda.provider as Any, silently killing the typo guard for the whole surface.
-# Only PythonDictFramework is exported here: it is the sole dependency-free framework, the other
-# eight need optional backends and cannot be imported eagerly (they stay lazy on mloda.user).
-from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import (
-    PythonDictFramework,
 )
 
 # Engines
@@ -163,15 +146,6 @@ __all__ = [
     # Plugin registry
     "PluginRegistryCollisionError",
     "register_plugin",
-    # Columnar helpers and framework (python_dict)
-    "columnar_to_rows",
-    "homogenize_rows",
-    "is_columnar",
-    "result_rows",
-    "row_count",
-    "rows_to_columnar",
-    "validate_columnar_dict",
-    "PythonDictFramework",
     # Engines
     "BaseFilterEngine",
     "BaseMaskEngine",

@@ -6,7 +6,7 @@ from mloda.provider import FeatureGroup
 
 from mloda.provider import FeatureSet
 from mloda.provider import ComputeFramework
-from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
+from mloda.user.pandas import PandasDataFrame
 
 
 class InstalledPackagesFeatureGroup(FeatureGroup):

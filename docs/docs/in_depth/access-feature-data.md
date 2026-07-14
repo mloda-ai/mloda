@@ -218,7 +218,7 @@ The following example shows a simple ApiData setup.
 from typing import List
 
 from mloda.user import mloda
-from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
+from mloda.user.pandas import PandasDataFrame
 
 # Pass api_data directly as a dict - the framework handles registration internally
 result = mloda.run_all(
@@ -256,7 +256,7 @@ One could imagine that for experimenting one wants to see data. Then one could u
 ```python
 from mloda.user import mloda
 from mloda.provider import FeatureGroup, BaseInputData, FeatureSet, DataCreator
-from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
+from mloda.user.pandas import PandasDataFrame
 
 # Create a Creator FeatureGroup class, which delivers the data needed
 class AFeatureInputCreator(FeatureGroup):
@@ -367,7 +367,7 @@ When input features come from different sources (e.g., ApiData and DataCreator),
 ```python
 from mloda.user import Link, Index, Feature
 from mloda.provider import FeatureGroup, FeatureSet
-from mloda_plugins.feature_group.input_data.api_data.api_data import ApiInputDataFeature
+from mloda.provider import ApiInputDataFeature
 
 class JoinedFeature(FeatureGroup):
 

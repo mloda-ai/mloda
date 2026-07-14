@@ -59,7 +59,7 @@ Now, we run the query to the feature group to save the artifact. This example is
 
 ```python
 from mloda.user import mloda
-from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
+from mloda.user.pyarrow import PyArrowTable
 
 api = mloda(["BaseExampleArtifactFeature"], {PyArrowTable})
 api.run()
@@ -101,7 +101,7 @@ single session alternates between training (save) and inference (load).
 
 ```python
 from mloda.user import mloda
-from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
+from mloda.user.pyarrow import PyArrowTable
 
 # 1. Prepare once
 session = mloda.prepare(["BaseExampleArtifactFeature"], {PyArrowTable})

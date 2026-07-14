@@ -8,7 +8,7 @@ from typing import Any
 
 from mloda.provider import ComputeFramework
 
-from mloda_plugins.compute_framework.base_implementations.polars.lazy_dataframe import PolarsLazyDataFrame
+from mloda.user.polars import PolarsLazyDataFrame
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.base import AggregatedFeatureGroup
 
 try:

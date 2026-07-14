@@ -1,6 +1,9 @@
 from typing import Any, Optional
-from mloda.provider import FeatureGroup
-from mloda.provider import FeatureSet, ApiInputData, BaseInputData
+
+from mloda.core.abstract_plugins.feature_group import FeatureGroup
+from mloda.core.abstract_plugins.components.feature_set import FeatureSet
+from mloda.core.abstract_plugins.components.input_data.api.api_input_data import ApiInputData
+from mloda.core.abstract_plugins.components.input_data.base_input_data import BaseInputData
 
 
 class ApiInputDataFeature(FeatureGroup):
@@ -39,7 +42,7 @@ class ApiInputDataFeature(FeatureGroup):
     ```python
     from mloda.user import Feature
     from mloda.user import Options
-    from mloda.core.abstract_plugins.components.input_data.api.api_input_data import ApiInputData
+    from mloda.provider import ApiInputData
 
     feature = Feature(
         name="user_profile",
@@ -68,8 +71,6 @@ class ApiInputDataFeature(FeatureGroup):
     ### Configuration-Based with Endpoint Mapping
 
     ```python
-    from mloda.core.abstract_plugins.components.input_data.api.api_input_data import ApiInputData
-
     # Map multiple mloda response fields
     feature = Feature(
         name="customer_data",

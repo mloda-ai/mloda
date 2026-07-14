@@ -53,6 +53,10 @@ ENTRY_POINT_GROUPS: dict[str, type[Any]] = {
     "mloda.extenders": Extender,
 }
 
+# Plugin classes defined in mloda.core, not under the scanned mloda_plugins package. The loader
+# registers them explicitly so they are first-class registry entries like every bundled plugin.
+CORE_PLUGIN_MODULES: tuple[str, ...] = ("mloda.core.abstract_plugins.components.input_data.api.api_input_data_feature",)
+
 
 class PluginLoader:
     _disabled_groups: ClassVar[set[str]] = set()
@@ -260,11 +264,14 @@ class PluginLoader:
         register_module_plugins(module, source="loader")
 
     def load_all_plugins(self) -> None:
-        """Load all groups (top-level folders) and their plugins."""
+        """Load all groups (top-level folders) and their plugins, plus the core-defined plugin classes."""
         base_path = self._get_group_path("")
         for item in base_path.iterdir():
             if item.is_dir() and (item / "__init__.py").exists():
                 self.load_group(item.name)
+
+        for module_name in CORE_PLUGIN_MODULES:
+            register_module_plugins(importlib.import_module(module_name), source="loader")
 
     def _add_plugin_to_graph(self, plugin_name: str) -> None:
         """

@@ -15,7 +15,7 @@ except ImportError:
     np = None  # type: ignore
 
 from mloda.provider import CHAIN_SEPARATOR, ComputeFramework
-from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
+from mloda.user.pandas import PandasDataFrame
 from mloda_plugins.feature_group.experimental.node_centrality.base import NodeCentralityFeatureGroup
 
 

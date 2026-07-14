@@ -1,6 +1,3 @@
-import importlib
-from typing import TYPE_CHECKING, Any
-
 # Version
 from mloda.core.version import get_mloda_version
 
@@ -62,79 +59,8 @@ __version__ = get_mloda_version()
 mloda = mlodaAPI
 stream_all = mlodaAPI.stream_all
 
-# Lazy compute-framework exports (issue #649): resolved on demand so that
-# ``import mloda.user`` stays dependency-free and optional backends propagate
-# ModuleNotFoundError only at access time.
-_LAZY_COMPUTE_FRAMEWORKS: dict[str, str] = {
-    "PythonDictFramework": "mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework",
-    "PandasDataFrame": "mloda_plugins.compute_framework.base_implementations.pandas.dataframe",
-    "PolarsDataFrame": "mloda_plugins.compute_framework.base_implementations.polars.dataframe",
-    "PolarsLazyDataFrame": "mloda_plugins.compute_framework.base_implementations.polars.lazy_dataframe",
-    "PyArrowTable": "mloda_plugins.compute_framework.base_implementations.pyarrow.table",
-    "SqliteFramework": "mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_framework",
-    "DuckDBFramework": "mloda_plugins.compute_framework.base_implementations.duckdb.duckdb_framework",
-    "SparkFramework": "mloda_plugins.compute_framework.base_implementations.spark.spark_framework",
-    "IcebergFramework": "mloda_plugins.compute_framework.base_implementations.iceberg.iceberg_framework",
-}
-
-# Lazy python_dict helper exports (same PEP 562 contract as the framework classes).
-_LAZY_PYTHON_DICT_UTILS: dict[str, str] = {
-    "columnar_to_rows": "mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_utils",
-    "homogenize_rows": "mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_utils",
-    "is_columnar": "mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_utils",
-    "result_rows": "mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_utils",
-    "row_count": "mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_utils",
-    "rows_to_columnar": "mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_utils",
-    "validate_columnar_dict": "mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_utils",
-}
-
-if TYPE_CHECKING:
-    # Static re-exports for mypy/tooling; not imported at runtime.
-    from mloda_plugins.compute_framework.base_implementations.duckdb.duckdb_framework import (
-        DuckDBFramework as DuckDBFramework,
-    )
-    from mloda_plugins.compute_framework.base_implementations.iceberg.iceberg_framework import (
-        IcebergFramework as IcebergFramework,
-    )
-    from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame as PandasDataFrame
-    from mloda_plugins.compute_framework.base_implementations.polars.dataframe import PolarsDataFrame as PolarsDataFrame
-    from mloda_plugins.compute_framework.base_implementations.polars.lazy_dataframe import (
-        PolarsLazyDataFrame as PolarsLazyDataFrame,
-    )
-    from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable as PyArrowTable
-    from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import (
-        PythonDictFramework as PythonDictFramework,
-    )
-    from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_utils import (
-        columnar_to_rows as columnar_to_rows,
-        homogenize_rows as homogenize_rows,
-        is_columnar as is_columnar,
-        result_rows as result_rows,
-        row_count as row_count,
-        rows_to_columnar as rows_to_columnar,
-        validate_columnar_dict as validate_columnar_dict,
-    )
-    from mloda_plugins.compute_framework.base_implementations.spark.spark_framework import (
-        SparkFramework as SparkFramework,
-    )
-    from mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_framework import (
-        SqliteFramework as SqliteFramework,
-    )
-
-
-def __getattr__(name: str) -> Any:
-    # PEP 562 lazy resolution of optional compute-framework classes and python_dict helpers.
-    module_path = _LAZY_COMPUTE_FRAMEWORKS.get(name) or _LAZY_PYTHON_DICT_UTILS.get(name)
-    if module_path is not None:
-        module = importlib.import_module(module_path)
-        return getattr(module, name)
-    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
-
-
-def __dir__() -> list[str]:
-    # Surface the lazy names for REPL/IDE completion.
-    return sorted(set(globals()) | _LAZY_COMPUTE_FRAMEWORKS.keys() | _LAZY_PYTHON_DICT_UTILS.keys())
-
+# Core-only surface. Compute frameworks live in one module per backend: mloda.user.pandas,
+# mloda.user.python_dict, ... Importing this module needs no backend.
 
 __all__ = [
     # Version

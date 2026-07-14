@@ -23,7 +23,7 @@ from typing import Any, Optional, Set
 from mloda.user import mloda
 from mloda.provider import BaseInputData, DataCreator, FeatureGroup, FeatureSet
 from mloda.user import Options, FeatureName, Feature
-from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
+from mloda.user.pyarrow import PyArrowTable
 
 
 class DocBaseValidateInputFeaturesBase(FeatureGroup):

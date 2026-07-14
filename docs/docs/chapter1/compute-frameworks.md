@@ -86,7 +86,8 @@ In this example, we define a compute framework rule inside the feature group. Th
 import pyarrow.compute as pc
 import pyarrow as pa
 
-from mloda.user import PyArrowTable, PandasDataFrame
+from mloda.user.pyarrow import PyArrowTable
+from mloda.user.pandas import PandasDataFrame
 from mloda.provider import FeatureGroup
 
 
@@ -135,14 +136,20 @@ In this case, the feature group ExampleB will only run on the PyArrowTable frame
 
 ##### Importing a Compute Framework
 
-Every stock compute framework is importable directly from `mloda.user`, so you do not need the deep `mloda_plugins.compute_framework.base_implementations...` path:
+Every stock compute framework is published from one module per backend under `mloda.user`, so you do not need the deep `mloda_plugins.compute_framework.base_implementations...` path:
 
 ```python
-from mloda.user import PythonDictFramework, PandasDataFrame, PolarsDataFrame, PolarsLazyDataFrame
-from mloda.user import PyArrowTable, SqliteFramework, DuckDBFramework, IcebergFramework, SparkFramework
+from mloda.user.python_dict import PythonDictFramework
+from mloda.user.pandas import PandasDataFrame
+from mloda.user.polars import PolarsDataFrame, PolarsLazyDataFrame
+from mloda.user.pyarrow import PyArrowTable
+from mloda.user.sqlite import SqliteFramework
+from mloda.user.duckdb import DuckDBFramework
+from mloda.user.iceberg import IcebergFramework
+from mloda.user.spark import SparkFramework
 ```
 
-These are resolved lazily, so `import mloda.user` stays dependency-free: a framework whose backend (e.g. `pyarrow`) is not installed only raises `ModuleNotFoundError` when you actually import that class. The deep import paths keep working unchanged.
+`import mloda.user` needs no backend at all. Importing a backend module gives you the framework class whether or not its library is installed; a framework whose library is missing reports itself unavailable through `is_available()` and is excluded from discovery. The deep import paths keep working unchanged.
 
 ##### Automatic Dependency Detection
 
@@ -173,21 +180,16 @@ A feature group running on PythonDictFramework may also return row-wise data as 
 
 #### Columnar helpers
 
-`columnar_to_rows`, `homogenize_rows`, `is_columnar`, `result_rows`, `row_count`, `rows_to_columnar`, and `validate_columnar_dict` are importable from `mloda.provider` (plugin/provider code, where pivoting a columnar frame back to rows belongs) and from `mloda.user` (application code unwrapping a `run_all` result). `columnar_to_rows` is strict: it raises `ValueError` on anything that is not a valid columnar dict. `result_rows` is the blessed tolerant unwrapper for PythonDict-framework `run_all` output (columnar dicts and row-dict lists): it flattens the partition list into row dicts, and a dict that satisfies `is_columnar` is always treated as a columnar partition, never as a row. It rejects other frameworks' result objects (convert those to rows first).
+`columnar_to_rows`, `homogenize_rows`, `is_columnar`, `result_rows`, `row_count`, `rows_to_columnar`, and `validate_columnar_dict` come from `mloda.user.python_dict`, next to `PythonDictFramework` itself. `columnar_to_rows` is strict: it raises `ValueError` on anything that is not a valid columnar dict. `result_rows` is the blessed tolerant unwrapper for PythonDict-framework `run_all` output (columnar dicts and row-dict lists): it flattens the partition list into row dicts, and a dict that satisfies `is_columnar` is always treated as a columnar partition, never as a row. It rejects other frameworks' result objects (convert those to rows first).
 
 ``` python
-from mloda.user import mloda, result_rows
+from mloda.user import mloda
+from mloda.user.python_dict import result_rows
 
 rows = result_rows(mloda.run_all(...))
 ```
 
 Strictness stays in the library; `result_rows` packages the forgiving application-side policy.
-
-Plugin code can also import `PythonDictFramework` itself from `mloda.provider` instead of its deep `mloda_plugins` path:
-
-``` python
-from mloda.provider import PythonDictFramework, is_columnar, row_count
-```
 
 Example using Polars frameworks:
 ``` python

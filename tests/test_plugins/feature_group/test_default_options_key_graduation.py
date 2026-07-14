@@ -21,12 +21,9 @@ class TestDefaultOptionKeysCoreLocation:
             "in_features",
             "reference_time",
             "time_travel",
-            "default",
             "context",
             "group",
             "order_by",
-            "strict_validation",
-            "element_validator",
             "strict_type_enforcement",
         ]
         for key in expected_keys:

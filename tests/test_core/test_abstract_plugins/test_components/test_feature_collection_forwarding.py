@@ -25,7 +25,7 @@ import pytest
 from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser_mixin import (
     FeatureChainParserMixin,
 )
-from mloda.provider import DefaultOptionKeys
+from mloda.provider import DefaultOptionKeys, PropertySpec
 from mloda.user import Feature
 from mloda.user import FeatureName
 from mloda.user import Features
@@ -216,11 +216,12 @@ class _ForwardingChainedGroup(FeatureChainParserMixin):
 
     PREFIX_PATTERN = r".*__([\w]+)_fwdchain$"
     PROPERTY_MAPPING = {
-        "operation": {
-            DefaultOptionKeys.allowed_values: {"op1": "Operation 1"},
-            DefaultOptionKeys.context: True,
-            DefaultOptionKeys.strict_validation: True,
-        }
+        "operation": PropertySpec(
+            "Operation to apply",
+            allowed_values={"op1": "Operation 1"},
+            context=True,
+            strict_validation=True,
+        )
     }
 
 

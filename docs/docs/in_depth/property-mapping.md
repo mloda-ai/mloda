@@ -1,9 +1,10 @@
 # PROPERTY_MAPPING Configuration
 
-`PROPERTY_MAPPING` declares the options a feature group accepts, and how each one is
-validated. This page is the single source of truth for that model: what a spec may
-contain, which invariant is checked at which moment, what runs against end-user
-values in what order, and what each failure produces.
+`PROPERTY_MAPPING` maps every option key a feature group accepts to a `PropertySpec`: the
+typed, frozen spec that declares how that option is validated. This page is the single
+source of truth for that model: what a spec may contain, which invariant is checked at
+which moment, what runs against end-user values in what order, and what each failure
+produces.
 
 Two rules carry most of the model:
 
@@ -12,150 +13,35 @@ Two rules carry most of the model:
 2. **A rejected value is not always an error.** Some failures raise; others just mean
    "this feature group does not match", which lets a different candidate win.
 
-## The lifecycle: which invariant fires when
-
-| Moment | Mechanism | Checks | Receives | On failure |
-| --- | --- | --- | --- | --- |
-| Import time (`property_spec(...)` call) | Authoring invariants | strict needs `allowed_values` or an `element_validator`; empty `allowed_values`; `element_validator` without strict; validators are callable; `allowed_values` is not a str/bytes | The spec being built | `ValueError` at import |
-| Class definition (`FeatureGroup.__init_subclass__`) | Spec is a dict | A spec is a spec dict, not a bare container | Every spec in the mapping | `ValueError` naming the class and key |
-| Class definition | Spec schema (`PROPERTY_SPEC_KEYS`) | Every KEY of a spec is a known spec key | Every spec in the mapping | `ValueError` listing every offender |
-| Class definition | Spec shape | Every VALUE has the right shape: `allowed_values` is a Collection and not a str/bytes; validators are callable; `strict_validation` is a bool | Every spec in the mapping | `ValueError` naming the key and the real fault |
-| Class definition | Strict needs a value space | `strict_validation: True` has a non-empty `allowed_values` or an `element_validator` | Every spec in the mapping | `ValueError` at class definition |
-| Class definition | `check_declared_default` | A strict, non-`None` `default` is accepted by its own key | The declared default | `ValueError` at class definition |
-| Match time (parser) | `allowed_values` membership | Each element of a **present** option is in the accepted set | One element | `ValueError`, surfaced to the end user |
-| Match time (parser) | `element_validator` | Each element of a **present** option satisfies a predicate | One element | `ValueError`, surfaced to the end user |
-| Match time (parser) | Required presence | A key with no `default` and no `required_when` was provided | The options | Non-match (`False`), config-based path only |
-| Match time (mixin) | `match_guard` | The whole value has an acceptable shape | The raw value | Non-match (`False`) |
-| Match time (mixin) | `MIN/MAX_IN_FEATURES` | In-feature count is within bounds | The in-features | Non-match (`False`) |
-| Match time (guard) | `required_when` | A conditionally required option is present | `Options` | Non-match (`False`) |
-
-Match-time mechanisms run in that order. `element_validator` **replaces** membership
-rather than adding to it: when a key declares one, `allowed_values` is not consulted.
-Because the parser runs before the mixin, an element rejected by membership or by
-`element_validator` short-circuits, and `match_guard` is never reached.
-
-`required_when` is the one mechanism that does not live inside a matcher. A class that
-declares it gets its resolved `match_feature_group_criteria` wrapped at class definition,
-and the wrapper runs the predicates after that matcher returns `True`. Overriding the
-matcher therefore keeps the contract, whether the override delegates or not.
-
-Value validation does not depend on how the feature was created: membership and
-`element_validator` run on **both** match paths, the configuration-based one and the
-string-named one. Only required **presence** differs, enforced on the configuration-based
-path alone, because a key the feature name encodes is satisfied by the name. So
-`"income__pca_2d"` with no options at all still matches, while the same feature group with
-`pca_svd_solver="bogus"` in its options is rejected either way.
-
-The class-definition rules run in table order, and the order is load-bearing. The schema
-runs before the shape rules, because a spec with an unknown key is malformed and its
-remaining keys cannot be trusted to mean what they say (a *removed* key in particular must
-be reported as a rename, not as some downstream shape error). The shape rules run before
-the last two, which read those values: a non-callable `element_validator` reaching
-`check_declared_default` would be blamed on the default instead.
-
-## Choosing a mechanism
-
-| You want to say | Use |
-| --- | --- |
-| "This option accepts exactly these values" | `allowed_values` + `strict_validation: True` |
-| "Each value must satisfy a rule I cannot enumerate" (positive int, float in range) | `element_validator` (requires strict) |
-| "The value as a whole must have this shape" (a dict, a list of exactly 3, an ordering) | `match_guard` |
-| "This option is required only when another option says so" | `required_when` |
-
-The two callables differ on both axes, which is what their names now say:
-
-- **`element_validator`** sees **one element**, only under `strict_validation`, and a
-  falsy return **raises** `ValueError`. The user gave a value the group claims to own
-  but cannot accept, so they are told.
-- **`match_guard`** sees the **raw whole value**, with or without strict, and a falsy
-  return is a plain **non-match**. The group is saying "not mine", so resolution moves
-  on and another feature group may still take the feature.
-
-Both must be pure functions. They may be called several times during resolution (once
-per candidate feature group).
-
-## What a validator receives
-
-Container syntax is not part of the contract. For membership and `element_validator`,
-every sequence unpacks element-wise and identically:
+## The spec type
 
 ``` python
-# All four hand the element_validator exactly "a" and then "b".
-Options(context={"ops": ["a", "b"]})
-Options(context={"ops": ("a", "b")})
-Options(context={"ops": {"a", "b"}})
-Options(context={"ops": frozenset({"a", "b"})})
-```
+from mloda.provider import PropertySpec
 
-- A `str` is a **scalar**, not a sequence of characters: `"abc"` is the single element
-  `"abc"`.
-- A `dict` is **one composite value**, not a sequence of its keys. Validating its shape
-  is `match_guard`'s job.
-- Elements keep their real type: an `int` element arrives as `1`, never `"1"`.
-- An **empty** container is *present* and vacuously valid: it has no elements, so no
-  validator runs, and it still satisfies the required-presence check. This is distinct
-  from the option being absent.
-
-`match_guard` is unaffected by any of this: it always receives the raw value with its
-original container type.
-
-## Authoring a spec
-
-A spec is a plain dict whose keys all come from the schema, `PROPERTY_SPEC_KEYS`:
-`explanation`, `allowed_values`, `default`, `context`, `group`, `strict_validation`,
-`element_validator`, `required_when`, `match_guard`. Anything else is an unknown key and
-raises at class definition. There is one authoring form, plus a builder for it.
-
-**The form: accepted values go under `allowed_values`.**
-
-``` python
-"operation_type": {
-    "explanation": "Arithmetic operation",
-    DefaultOptionKeys.allowed_values: {"add": "Addition", "sub": "Subtraction"},
-    DefaultOptionKeys.context: True,
-    DefaultOptionKeys.strict_validation: True,
+PROPERTY_MAPPING = {
+    "operation_type": PropertySpec(
+        "Arithmetic operation",
+        allowed_values={"add": "Addition", "sub": "Subtraction"},
+        strict_validation=True,
+        default="add",
+    ),
 }
 ```
 
-A spec that declares no `allowed_values` declares an **empty** value space; the space is
-never inferred from the spec's other keys.
+| Field | Type | Default | Meaning |
+| --- | --- | --- | --- |
+| `explanation` | `str` | required, positional | What the option means. Also names the spec in construction errors. |
+| `allowed_values` | `Mapping[Any, str]`, any other iterable, or `None` | `None` | The declared value space. A Mapping is `{value: description}` and is kept as given; any other iterable is materialized to a tuple. |
+| `default` | `Any` | `NO_DEFAULT` | Applied when the key is absent. Leaving it at `NO_DEFAULT` declares *no default*, which makes the key required. See [Optional keys](#optional-keys). |
+| `context` | `bool` | `True` | `True`: context parameter. `False`: group parameter, which splits feature groups. |
+| `strict_validation` | `bool` | `False` | Enforce the value space at match time. |
+| `element_validator` | `Callable \| None` | `None` | Per-element predicate. Requires `strict_validation=True`. |
+| `match_guard` | `Callable \| None` | `None` | Whole-value predicate. A falsy return is a non-match. |
+| `required_when` | `Callable \| None` | `None` | `(Options) -> bool`: the key is required only when it returns truthy. |
 
-That is what makes the unknown-key rule possible, and it is the point of it. A typo'd
-flag has exactly one reading now:
-
-``` python
-"operation_type": {
-    DefaultOptionKeys.allowed_values: {"add": "Addition"},
-    "strict_validaton": True,  # ValueError: unknown spec key. Did you mean 'strict_validation'?
-}
-```
-
-## A spec has a shape, not just a key set
-
-Locking down the key names is only half the contract; the value under each key is checked
-too, all at class definition.
-
-`allowed_values` must be a **Collection**: a value-to-docstring mapping, or a tuple, list,
-set or frozenset. Three shapes raise:
-
-- a **`str` or `bytes`**, which a forgotten comma produces (`("add")` is the str `"add"`,
-  not a one-tuple). Membership would silently degrade into a substring test, accepting
-  `"a"`, `"ad"` and `""`.
-- a **generator**, which is truthy whether or not it yields anything, and is consumed by
-  the first read. It makes matching stateful, and a declared `default` burns it at class
-  definition so every later value is rejected.
-- a **scalar**, for which `value in 5` raises a `TypeError` that the match path swallows
-  into a silent reject-everything.
-
-`element_validator`, `required_when` and `match_guard` must be **callable**, and
-`strict_validation` must be a real **bool** (truthiness would make `"false"` mean strict).
-
-`allowed_values` is checked for shape whether or not the spec is strict, because a
-non-strict value space is still *consumed*: it maps a value parsed out of a feature name
-back onto its `PROPERTY_MAPPING` key. It is a mapping aid there, never an enforcement.
-
-**Builder, `property_spec`:** the same dict, with the authoring invariants checked at
-construction instead of at class definition.
+`property_spec(...)` is a thin builder over the same fields. Its keyword is `strict=`,
+which sets `strict_validation`. Both it and `PropertySpec` are exported from
+`mloda.provider`.
 
 ``` python
 from mloda.provider import property_spec
@@ -170,95 +56,234 @@ PROPERTY_MAPPING = {
 }
 ```
 
-It also takes `element_validator`, `match_guard`, and `required_when`, emitted only
-when provided. Its declared-default check is not a separate implementation: it calls
-the same `FeatureChainParser.check_declared_default` the class-definition hook uses,
-so the two cannot drift.
+The type IS the schema. A raw dict spec is rejected at class definition
+(`... is a dict, not a PropertySpec`), and a field name that does not exist is a plain
+constructor `TypeError` that mypy already flags where the spec is written. Nothing a spec
+does not understand can be absorbed silently.
 
-Omitting `default` emits no `default` key and leaves the option **required**, while an
-explicit `default=None` emits the key and makes the option **optional** with a `None`
-default. The exported `NO_DEFAULT` sentinel spells out that omission for a wrapper that
-forwards an optional default through to `property_spec`: passing `NO_DEFAULT` means "no
-default given".
+## The lifecycle: which invariant fires when
+
+| Moment | Mechanism | Checks | Receives | On failure |
+| --- | --- | --- | --- | --- |
+| Author time | `mypy --strict` | The field exists and its declared type fits: `strict_validaton=True` (typo), `strict_validation=1`, `allowed_values=5` | The constructor call | mypy error at the spec literal. Without mypy: an unknown field is a `TypeError`; a wrong type falls through to the row below |
+| Construction (`PropertySpec(...)`) | `__post_init__` | `allowed_values` is not a str/bytes and is a Mapping or an iterable; `strict_validation` is a real bool; the validators are callable; `element_validator` implies strict; strict has a non-empty value space or an `element_validator`; a strict, non-`None` `default` is accepted by the key's own rules | The spec being built | `ValueError` at import, prefixed `PropertySpec('<explanation>')` |
+| Class definition (`FeatureGroup.__init_subclass__`) | Spec type | Every spec IS a `PropertySpec` | Every value in the mapping | `ValueError` naming the class and the key |
+| Match time (parser) | `allowed_values` membership | Each element of a **present** option is in the accepted set | One element | `ValueError`, surfaced to the end user |
+| Match time (parser) | `element_validator` | Each element of a **present** option satisfies a predicate | One element | `ValueError`, surfaced to the end user |
+| Match time (parser) | Required presence | A key that declares no `default` and no `required_when` was provided | The options | Non-match (`False`), configuration-based path only |
+| Match time (mixin) | `match_guard` | The whole value has an acceptable shape | The raw value | Non-match (`False`) |
+| Match time (mixin) | `MIN/MAX_IN_FEATURES` | In-feature count is within bounds | The in-features | Non-match (`False`) |
+| Match time (guard installed at class definition) | `required_when` | A conditionally required option is present | `Options` | Non-match (`False`) |
+
+A spec is constructed inside the class body, so its own rules fire before the class exists.
+Class definition is left with exactly one rule: the type itself. Within `__post_init__` the
+declared-default check runs last, after the shape rules, because it calls the validators the
+shape rules just certified: a non-callable `element_validator` would otherwise be blamed on
+the default.
+
+Match-time mechanisms run in table order. `element_validator` **replaces** membership rather
+than adding to it: when a key declares one, `allowed_values` is not consulted. Because the
+parser runs before the mixin, an element rejected by membership or by `element_validator`
+short-circuits, and `match_guard` is never reached.
+
+Value validation does not depend on how the feature was created: membership and
+`element_validator` run on **both** match paths, the configuration-based one and the
+string-named one. Only required **presence** differs, enforced on the configuration-based
+path alone, because a key the feature name encodes is satisfied by the name. So
+`"income__pca_2d"` with no options at all still matches, while the same feature group with
+`pca_svd_solver="bogus"` in its options is rejected either way.
+
+`required_when` is the one mechanism that does not live inside a matcher. A class that
+declares it gets its resolved `match_feature_group_criteria` wrapped at class definition,
+and the wrapper runs the predicates after that matcher returns `True`. Overriding the
+matcher therefore keeps the contract, whether the override delegates or not.
+
+## Choosing a mechanism
+
+| You want to say | Use |
+| --- | --- |
+| "This option accepts exactly these values" | `allowed_values` + `strict_validation=True` |
+| "Each value must satisfy a rule I cannot enumerate" (positive int, float in range) | `element_validator` (requires strict) |
+| "The value as a whole must have this shape" (a dict, a list of exactly 3, an ordering) | `match_guard` |
+| "This option is required only when another option says so" | `required_when` |
+
+The two callables differ on both axes, which is what their names say:
+
+- **`element_validator`** sees **one element**, only under `strict_validation`, and a falsy
+  return **raises** `ValueError`. The user gave a value the group claims to own but cannot
+  accept, so they are told.
+- **`match_guard`** sees the **raw whole value**, with or without strict, and a falsy return
+  is a plain **non-match**. The group is saying "not mine", so resolution moves on and
+  another feature group may still take the feature. On a spec that also sets
+  `strict_validation=True` the guard means "this value is wrong", so its rejection is reported to
+  the user instead of failing silently.
+
+Both run on both match paths, so declaring both on one spec is about **what** is judged, not
+about where: `element_validator` judges each element and produces the message, while
+`match_guard` judges the raw container that element-wise unpacking would otherwise hide.
+
+Both must be pure functions. They may be called several times during resolution (once per
+candidate feature group).
+
+## What a validator receives
+
+Container syntax is not part of the contract. For membership and `element_validator`, every
+sequence unpacks element-wise and identically:
+
+``` python
+# All four hand the element_validator exactly "a" and then "b".
+Options(context={"ops": ["a", "b"]})
+Options(context={"ops": ("a", "b")})
+Options(context={"ops": {"a", "b"}})
+Options(context={"ops": frozenset({"a", "b"})})
+```
+
+- A `str` is a **scalar**, not a sequence of characters: `"abc"` is the single element
+  `"abc"`.
+- A `dict` is **one composite value**, not a sequence of its keys. Validating its shape is
+  `match_guard`'s job.
+- Elements keep their real type: an `int` element arrives as `1`, never `"1"`.
+- An **empty** container is *present* and vacuously valid: it has no elements, so no
+  validator runs, and it still satisfies the required-presence check. This is distinct from
+  the option being absent.
+
+`match_guard` is unaffected by any of this: it always receives the raw value with its
+original container type.
+
+## The shape of `allowed_values`
+
+A Mapping is the value-space-with-descriptions form and is kept as given. Any other iterable
+(tuple, list, set, frozenset, generator) is materialized to a **tuple** at construction, so a
+generator is consumed once, up front, and can never make matching stateful. Two shapes raise:
+
+- a **`str` or `bytes`**, which a forgotten comma produces (`("add")` is the str `"add"`, not
+  a one-tuple). Membership would silently degrade into a substring test, accepting `"a"`,
+  `"ad"` and `""`.
+- a **scalar**, for which `value in 5` raises a `TypeError` that the match path swallows into
+  a silent reject-everything.
+
+The shape is checked whether or not the spec is strict, because a non-strict value space is
+still *consumed*: it maps a value parsed out of a feature name back onto its
+`PROPERTY_MAPPING` key. It is a mapping aid there, never an enforcement.
+
+A spec that declares no `allowed_values` declares an **empty** value space; the space is never
+inferred from the spec's other fields.
 
 ## Strict validation needs a value space
 
-`strict_validation: True` needs something to validate against: a non-empty
-`allowed_values`, or an `element_validator`. With neither, the accepted set is empty and
-the key rejects every value, so the spec can never match. That is rejected at class
-definition, and `property_spec` refuses to build it.
+`strict_validation=True` needs something to validate against: a non-empty `allowed_values`, or
+an `element_validator`. With neither, the accepted set is empty and the key rejects every
+value, so the spec could never match. The constructor refuses to build it.
 
-## Parameter classification
-
-``` python
-# Context parameter: does not affect Feature Group splitting
-"aggregation_type": {
-    DefaultOptionKeys.allowed_values: {"sum": "Sum aggregation"},
-    DefaultOptionKeys.context: True,
-    DefaultOptionKeys.strict_validation: True,
-}
-
-# Group parameter: affects Feature Group splitting
-"data_source": {
-    DefaultOptionKeys.allowed_values: {"production": "Production data"},
-    DefaultOptionKeys.group: True,
-    DefaultOptionKeys.strict_validation: True,
-}
-```
+An `element_validator` **replaces** membership, so when a key declares one, `allowed_values` is
+never consulted at match time and this rule does not apply: even an empty `allowed_values` is
+inert there, because the validator, not membership, decides.
 
 ## Declared defaults must be honored
 
-Under `strict_validation: True`, a declared `default` must be a value the key accepts.
-This is enforced at class-definition time, naming the class, key, default, and accepted
-values, which closes the gap where omitting the key would apply an unrevalidated
-default.
+Under `strict_validation=True`, a declared non-`None` `default` must be a value the key
+accepts, either by membership or through the `element_validator`. This closes the gap where
+omitting the key would apply an unrevalidated default.
 
 ``` python
-# Rejected at class definition: "mul" is not accepted.
-"operation_type": {
-    DefaultOptionKeys.allowed_values: {"add": "Addition", "sub": "Subtraction"},
-    DefaultOptionKeys.strict_validation: True,
-    DefaultOptionKeys.default: "mul",
+# ValueError at construction: "mul" is not accepted.
+PropertySpec(
+    "Arithmetic operation",
+    allowed_values={"add": "Addition", "sub": "Subtraction"},
+    strict_validation=True,
+    default="mul",
+)
+```
+
+Fix it by adding the default to the accepted values, or by removing it. `required_when` does
+NOT exempt a key: when its predicate returns `False` and the key is omitted, the default still
+applies, so an unaccepted default would still slip through. A declared `default=None` applies
+no value and is always legal, and the check is a no-op when strict is off.
+
+A validator that *raises* when called with the declared default is reported distinctly from
+one that merely *rejects* it, with the original exception chained as `__cause__`.
+
+## Optional keys
+
+Optionality is the `default` field, and the three states are distinct:
+
+| Written | Meaning |
+| --- | --- |
+| `default` omitted (stays `NO_DEFAULT`) | The key declares no default and is **required**. |
+| `default=None` | The key is **optional**; no value is applied when it is absent. |
+| `default=<value>` | The key is **optional**; the value is applied when it is absent, and is checked under strict. |
+
+``` python
+from mloda.provider import PropertySpec
+
+PROPERTY_MAPPING = {
+    "pipeline_steps": PropertySpec(
+        "List of pipeline steps as (name, transformer) tuples",
+        default=None,  # optional: pipeline_name is the alternative
+    ),
 }
 ```
 
-Fix it by adding the default to the accepted values, or by removing it (a key with no
-default and no `required_when` is unconditionally required). `required_when` does NOT
-exempt a key: when its predicate returns `False` and the key is omitted, the default
-still applies, so an unaccepted default would still slip through. A `default` of `None`
-is always legal (the "unset" sentinel), and the check is a no-op when strict is off.
+`NO_DEFAULT` is a sentinel exported from `mloda.provider`; it exists because on a dataclass
+every field is always present, so a plain `None` cannot say both "no default declared" and
+"optional with no value". The retired dict form drew the same line with a *present*
+`default: None` entry. `SklearnPipelineFeatureGroup` is the in-repo example.
 
-A validator that *raises* when called with the declared default is reported distinctly
-from one that merely *rejects* it, with the original exception chained as `__cause__`.
+`required_when` is for a *conditional* requirement, not for optionality: never write a
+predicate that always returns `False` to make a key optional.
+
+## Parameter classification
+
+There is no `group` field: a group parameter is `context=False`.
+
+``` python
+PROPERTY_MAPPING = {
+    # Context parameter (the default): does not affect feature group splitting
+    "aggregation_type": PropertySpec(
+        "Aggregation to apply",
+        allowed_values={"sum": "Sum aggregation"},
+        strict_validation=True,
+    ),
+    # Group parameter: affects feature group splitting
+    "data_source": PropertySpec(
+        "Data source to read from",
+        allowed_values={"production": "Production data"},
+        context=False,
+        strict_validation=True,
+    ),
+}
+```
+
+A caller who places the key explicitly in `Options(group=...)` or `Options(context=...)`
+overrides the spec's classification.
 
 ## What the end user sees on a rejection
 
 A direct `FeatureChainParser` call raises `ValueError` immediately. Going through
-`FeatureChainParserMixin.match_feature_group_criteria` (the default for most feature
-groups) is different: it catches that `ValueError` and returns `False`, because during
-resolution one candidate's "no match" must not abort the search for another candidate
-that might still accept the feature. This holds on both paths: a bad option value on a
-string-named feature is the same non-match as on a configuration-based one.
+`FeatureChainParserMixin.match_feature_group_criteria` (the default for most feature groups)
+is different: it catches that `ValueError` and returns `False`, because during resolution one
+candidate's "no match" must not abort the search for another candidate that might still accept
+the feature. This holds on both paths: a bad option value on a string-named feature is the same
+non-match as on a configuration-based one.
 
-If every candidate rejects the feature, the final "No feature groups found" error
-collects the discarded reasons and appends them:
+If every candidate rejects the feature, the final "No feature groups found" error collects the
+discarded reasons and appends them:
 
 ```
 Feature group(s) rejected an option value while matching 'window_size_windowed':
   - WindowedFeatureGroup: Property value '14' failed validation for 'window_size'
 ```
 
-This is diagnostic only. It does not change the `True`/`False` contract, so a value
-rejected by one feature group can still match another, and multi-group fallback
-resolution keeps working. Authors get this for free.
+This is diagnostic only. It does not change the `True`/`False` contract, so a value rejected by
+one feature group can still match another, and multi-group fallback resolution keeps working.
+Authors get this for free.
 
 ## Conditional requirements with `required_when`
 
-Attach a predicate to declare an option required only under certain conditions. It
-receives an effective `Options` and returns `True` when the option is required. This
-works for config-based and string-based features alike (for the latter, the operation
-parsed from the feature name is merged in first, so predicates see values from both
-sources).
+Attach a predicate to declare an option required only under certain conditions. It receives an
+effective `Options` and returns `True` when the option is required. This works for
+config-based and string-based features alike (for the latter, the operation parsed from the
+feature name is merged in first, so predicates see values from both sources).
 
 ``` python
 _ORDER_DEPENDENT = {"first", "last"}
@@ -267,100 +292,73 @@ def _needs_order_by(options: Options) -> bool:
     return options.get("aggregation_type") in _ORDER_DEPENDENT
 
 PROPERTY_MAPPING = {
-    "aggregation_type": {
-        DefaultOptionKeys.allowed_values: {
+    "aggregation_type": PropertySpec(
+        "Aggregation to apply",
+        allowed_values={
             "sum": "Sum", "avg": "Average", "first": "First", "last": "Last",
         },
-        DefaultOptionKeys.context: True,
-        DefaultOptionKeys.strict_validation: True,
-    },
-    "order_by": {
-        "explanation": "Column to order by within each partition",
-        DefaultOptionKeys.context: True,
-        DefaultOptionKeys.required_when: _needs_order_by,
-    },
+        strict_validation=True,
+    ),
+    "order_by": PropertySpec(
+        "Column to order by within each partition",
+        required_when=_needs_order_by,
+    ),
 }
 ```
 
-When the predicate returns `True` and the option is absent, the match fails; entries
-with `required_when` are otherwise optional. The predicate must be a pure, callable
-`(Options) -> bool` that does not raise. Non-callable values are skipped with a
-warning; non-bool truthy returns count as `True`.
+When the predicate returns `True` and the option is absent, the match fails; entries with
+`required_when` are otherwise optional. The predicate must be pure and must not raise. It is
+callable by construction, and a non-bool truthy return counts as `True`.
 
 The enforcement is installed on the class, not on one matcher, so overriding
-`match_feature_group_criteria` does not lose it: the predicates still run after the
-override returns `True`. Nested guards (an override that delegates into an already guarded
-parent) do not stack: only the outermost one evaluates, so the predicates run exactly once
-per match call. The matcher must be a `classmethod`; a `staticmethod` matcher on a class
-that declares `required_when` is rejected at class definition.
+`match_feature_group_criteria` does not lose it: the predicates still run after the override
+returns `True`. Nested guards (an override that delegates into an already guarded parent) do
+not stack: only the outermost one evaluates, so the predicates run exactly once per match call.
+The matcher must be a `classmethod`; a `staticmethod` matcher on a class that declares
+`required_when` is rejected at class definition.
 
 The guard is installed at class definition, so mutating `PROPERTY_MAPPING` or replacing
 `match_feature_group_criteria` after the class body escapes it.
 
-## Migrating from the flattened form
+## Migrating from the dict form
 
-The **flattened form**, where accepted values shared one dict with the metadata flags, is
-**retired**. The parser used to recover the value space by subtracting the known keys,
-which meant any key it did not recognize was silently absorbed as an accepted *value*. A
-typo'd `strict_validaton: True` therefore turned strict validation off *and* became an
-accepted value, with nothing raised anywhere. It is unfixable while the form exists,
-because a typo'd flag and a legitimate value are written identically.
+Spec dicts are gone. Every value in a `PROPERTY_MAPPING` must be a `PropertySpec`; an
+unmigrated spec raises at class definition, naming the class, the key, and the remedy.
 
-To convert, move the bare value entries under `allowed_values` and leave the flags where
-they are:
-
-``` python
-# Before                              # After
-"operation_type": {                   "operation_type": {
-    "add": "Addition",                    DefaultOptionKeys.allowed_values: {
-    "sub": "Subtraction",                     "add": "Addition",
-    DefaultOptionKeys.context: True,          "sub": "Subtraction",
-    DefaultOptionKeys.strict_validation: True,  },
-}                                         DefaultOptionKeys.context: True,
-                                          DefaultOptionKeys.strict_validation: True,
-                                      }
-```
-
-A spec that splats a shared constant (`**AGGREGATION_TYPES`) assigns it instead:
-`DefaultOptionKeys.allowed_values: AGGREGATION_TYPES`.
-
-Nothing changes silently: an unmigrated spec raises at class definition, because its
-value entries are now unknown keys.
-
-## Migrating from the removed key names
-
-`validation_function` and `type_validator` are **removed**, with no aliases. They did
-not communicate their difference, and `type_validator` additionally collided by
-substring with the unrelated `DataTypeValidator`.
-
-| Removed | Use |
+| Retired | Now |
 | --- | --- |
+| Any spec dict, including the flattened form (accepted values sharing one dict with the flags) | `PropertySpec(...)`, with accepted values under `allowed_values` |
 | `validation_function` | `element_validator` |
 | `type_validator` | `match_guard` |
+| A present `default: None` entry marking a key optional | the `default=None` field (an omitted `default` means the key is required) |
+| `strict_validation` as a spec-dict key | the `strict_validation` field (`strict=` on `property_spec`) |
 
-Both routes fail loudly, so no spec silently changes meaning: the old enum members are
-gone (`AttributeError` at import), and a spec still carrying the old string key is an
-unknown key, so it raises at class definition. Being a *removed* key rather than an
-arbitrary one, the error names the replacement instead of guessing at it.
+Misspelled and retired field names need no dedicated machinery any more: they are keyword
+arguments that do not exist, so the constructor raises `TypeError` at the line where the spec
+is written, and mypy reports them before the code runs.
 
-One semantic change comes with the rename. `element_validator` now genuinely receives
-one element per call for every container type; previously a sequence was stringified
-and arrived as, for example, `"('a', 'b')"`. A validator written to inspect a whole
-container (`isinstance(x, list) and all(...)`) must therefore either become a
-per-element rule, or move to `match_guard` if it really is a whole-value check.
+One semantic change came with the callable renames. `element_validator` receives one element
+per call for every container type; the old `validation_function` saw a stringified sequence
+(`"('a', 'b')"`). A validator written to inspect a whole container
+(`isinstance(x, list) and all(...)`) must become a per-element rule, or move to `match_guard`
+if it really is a whole-value check.
 
 ## Where each invariant is pinned
 
 | Invariant | Test |
 | --- | --- |
-| Spec schema, unknown-key rule, strict needs a value space | `tests/.../feature_chainer/test_property_mapping_spec_schema.py` |
-| Spec shape: Collection value space, callable validators, bool flag | `tests/.../feature_chainer/test_property_mapping_spec_shape.py` |
-| Renamed keys, removed-key guard, shared default seam, precedence | `tests/.../feature_chainer/test_property_mapping_unified_model.py` |
+| `PropertySpec` construction: defaults, immutability, `allowed_values` normalization, flag and callable rules, strict needs a value space | `tests/.../feature_chainer/test_property_spec_type.py` |
+| Unknown or mistyped field caught by mypy at author time | `tests/.../feature_chainer/test_property_spec_author_time.py` |
+| `PROPERTY_MAPPING` accepts nothing but `PropertySpec`, and the pipeline behaves as before | `tests/.../feature_chainer/test_property_spec_hard_break.py` |
+| The constructor IS the schema (no key set left to curate) | `tests/.../feature_chainer/test_property_mapping_spec_schema.py` |
+| Shape rules, relocated from class definition to construction | `tests/.../feature_chainer/test_property_mapping_spec_shape.py` |
+| Declared-default invariant | `tests/test_core/test_abstract_plugins/test_property_mapping_default_invariant.py` |
 | Container invariance, no stringification, str-as-scalar, dict-as-composite, empty containers | `tests/.../feature_chainer/test_property_mapping_sequence_unpacking.py` |
+| Present option values validated on the string-named path too; required presence stays config-only | `tests/.../feature_chainer/test_name_path_validates_option_values.py` |
+| `required_when` survives an overridden matcher, runs exactly once, and demands a classmethod | `tests/.../feature_chainer/test_required_when_enforced_on_override.py` |
 | Plugin specs behave identically across containers | `tests/test_plugins/feature_group/experimental/test_property_mapping_container_invariance.py` |
-| Declared-default invariant at class definition | `tests/test_core/test_abstract_plugins/test_property_mapping_default_invariant.py` |
+| `property_spec` builder surface | `tests/.../feature_chainer/test_property_spec_builder.py` |
 | Rejection reasons surfaced to the end user | `tests/test_core/test_prepare/test_identify_feature_group_error_message.py` |
-| `property_spec` authoring invariants | `tests/.../feature_chainer/test_property_spec_builder.py` |
 
 ## Context propagation
 

@@ -41,7 +41,6 @@
 | mypy                                   | 2.1.0           | MIT                                                |
 | mypy_extensions                        | 1.1.0           | MIT                                                |
 | narwhals                               | 2.23.0          | MIT                                                |
-| nest-asyncio                           | 1.6.0           | BSD License                                        |
 | nest-asyncio2                          | 1.7.2           | BSD License                                        |
 | nltk                                   | 3.9.4           | Apache Software License                            |
 | numpy                                  | 2.5.1           | BSD-3-Clause AND 0BSD AND MIT AND Zlib AND CC0-1.0 |
@@ -99,7 +98,7 @@
 | tomli                                  | 2.4.1           | MIT                                                |
 | tomli_w                                | 1.2.0           | MIT License                                        |
 | tornado                                | 6.5.7           | Apache Software License                            |
-| tqdm                                   | 4.68.3          | MPL-2.0 AND MIT                                    |
+| tqdm                                   | 4.68.4          | MPL-2.0 AND MIT                                    |
 | traitlets                              | 5.15.1          | BSD License                                        |
 | typeguard                              | 4.5.2           | MIT                                                |
 | types-PyYAML                           | 6.0.12.20260518 | Apache-2.0                                         |

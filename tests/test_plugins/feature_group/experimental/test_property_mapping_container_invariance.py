@@ -79,8 +79,9 @@ class TestTextCleaningOperationsAreValidatedPerElement:
         element. This is what lets the plugin's lambda collapse to a membership check.
         """
         spec = TextCleaningFeatureGroup.PROPERTY_MAPPING[TextCleaningFeatureGroup.CLEANING_OPERATIONS]
-        validator = spec[DefaultOptionKeys.element_validator]
+        validator = spec.element_validator
 
+        assert validator is not None
         assert validator("normalize") is True
         assert validator("bogus_operation") is False
 

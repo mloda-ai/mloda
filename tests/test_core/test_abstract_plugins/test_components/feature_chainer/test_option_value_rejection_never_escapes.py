@@ -21,6 +21,7 @@ from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser
 from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser_mixin import (
     FeatureChainParserMixin,
 )
+from mloda.core.abstract_plugins.components.feature_chainer.property_spec import PropertySpec
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
@@ -58,12 +59,13 @@ class DirectParserOverrideFeatureGroup(FeatureChainParserMixin, FeatureGroup):
     PREFIX_PATTERN = r".*__esc732_pipeline_([\w]+)$"
 
     PROPERTY_MAPPING = {
-        PIPELINE_KEY: {
-            DefaultOptionKeys.allowed_values: {"scaling": "Scaling", "imputation": "Imputation"},
-            DefaultOptionKeys.context: True,
-            DefaultOptionKeys.strict_validation: True,
-            DefaultOptionKeys.default: None,
-        }
+        PIPELINE_KEY: PropertySpec(
+            "Pipeline to apply (esc732 fixture)",
+            allowed_values={"scaling": "Scaling", "imputation": "Imputation"},
+            context=True,
+            strict_validation=True,
+            default=None,
+        )
     }
 
     @classmethod
@@ -111,17 +113,18 @@ class RaisingTypeErrorValidatorFeatureGroup(FeatureChainParserMixin, FeatureGrou
     PREFIX_PATTERN = r".*__cleaned_esc732$"
 
     PROPERTY_MAPPING = {
-        OPERATIONS_KEY: {
-            DefaultOptionKeys.allowed_values: SUPPORTED_OPERATIONS_ESC732,
-            DefaultOptionKeys.context: True,
-            DefaultOptionKeys.strict_validation: True,
-            DefaultOptionKeys.element_validator: lambda op: op in SUPPORTED_OPERATIONS_ESC732,
-        },
-        DefaultOptionKeys.in_features: {
-            "explanation": "Source feature (esc732 fixture)",
-            DefaultOptionKeys.context: True,
-            DefaultOptionKeys.strict_validation: False,
-        },
+        OPERATIONS_KEY: PropertySpec(
+            "Operations to apply (esc732 fixture)",
+            allowed_values=SUPPORTED_OPERATIONS_ESC732,
+            context=True,
+            strict_validation=True,
+            element_validator=lambda op: op in SUPPORTED_OPERATIONS_ESC732,
+        ),
+        DefaultOptionKeys.in_features: PropertySpec(
+            "Source feature (esc732 fixture)",
+            context=True,
+            strict_validation=False,
+        ),
     }
 
     def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
@@ -134,12 +137,12 @@ class RaisingAttributeErrorValidatorFeatureGroup(FeatureChainParserMixin, Featur
     PREFIX_PATTERN = r".*__prefixed_esc732$"
 
     PROPERTY_MAPPING = {
-        PREFIX_KEY: {
-            "explanation": "Value must start with 'ok' (esc732 fixture)",
-            DefaultOptionKeys.context: True,
-            DefaultOptionKeys.strict_validation: True,
-            DefaultOptionKeys.element_validator: lambda value: value.startswith("ok"),
-        }
+        PREFIX_KEY: PropertySpec(
+            "Value must start with 'ok' (esc732 fixture)",
+            context=True,
+            strict_validation=True,
+            element_validator=lambda value: value.startswith("ok"),
+        )
     }
 
     def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:

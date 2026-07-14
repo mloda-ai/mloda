@@ -1,14 +1,14 @@
 """Tests for FeatureGroup.declared_option_keys() (issue #603).
 
 ``declared_option_keys()`` is a classmethod that returns the top-level parameter
-names declared in ``PROPERTY_MAPPING`` -- regardless of whether the mapping was
-authored as a hand-written spec dict or via the ``property_spec`` builder. It
+names declared in ``PROPERTY_MAPPING`` -- regardless of whether the specs were
+constructed directly as ``PropertySpec`` or via the ``property_spec`` builder. It
 never returns the inner allowed-value keys (e.g. "add"/"sub").
 """
 
 from typing import Any
 
-from mloda.provider import DefaultOptionKeys, FeatureGroup, property_spec
+from mloda.provider import FeatureGroup, PropertySpec, property_spec
 
 
 class DefaultMappingFeatureGroup(FeatureGroup):
@@ -22,14 +22,15 @@ class EmptyMappingFeatureGroup(FeatureGroup):
 
 
 class HandWrittenMappingFeatureGroup(FeatureGroup):
-    """Hand-written PROPERTY_MAPPING spec dict with a single declared parameter."""
+    """Directly-constructed PropertySpec with a single declared parameter."""
 
     PROPERTY_MAPPING = {
-        "operation_type": {
-            DefaultOptionKeys.allowed_values: {"add": "Addition", "sub": "Subtraction"},
-            DefaultOptionKeys.context: True,
-            DefaultOptionKeys.strict_validation: True,
-        },
+        "operation_type": PropertySpec(
+            "the operation to apply",
+            allowed_values={"add": "Addition", "sub": "Subtraction"},
+            context=True,
+            strict_validation=True,
+        ),
     }
 
 
@@ -46,24 +47,26 @@ class BuilderMappingFeatureGroup(FeatureGroup):
 
 
 class MultiKeyMappingFeatureGroup(FeatureGroup):
-    """Multiple declared parameters, mixing hand-written and builder-form specs."""
+    """Multiple declared parameters, mixing directly-constructed and builder-form specs."""
 
     PROPERTY_MAPPING = {
-        "operation_type": {
-            DefaultOptionKeys.allowed_values: {"add": "Addition"},
-            DefaultOptionKeys.context: True,
-            DefaultOptionKeys.strict_validation: True,
-        },
+        "operation_type": PropertySpec(
+            "the operation to apply",
+            allowed_values={"add": "Addition"},
+            context=True,
+            strict_validation=True,
+        ),
         "aggregation_type": property_spec(
             "the aggregation to apply",
             strict=True,
             allowed_values={"sum": "Sum", "mean": "Mean"},
         ),
-        "window_size": {
-            DefaultOptionKeys.allowed_values: {"3": "three"},
-            DefaultOptionKeys.context: False,
-            DefaultOptionKeys.strict_validation: False,
-        },
+        "window_size": PropertySpec(
+            "the window size",
+            allowed_values={"3": "three"},
+            context=False,
+            strict_validation=False,
+        ),
     }
 
 
@@ -82,7 +85,7 @@ def test_declared_option_keys_returns_empty_frozenset_when_property_mapping_empt
 
 
 def test_declared_option_keys_returns_top_level_keys_for_hand_written_mapping() -> None:
-    """Hand-written spec dict: only the top-level parameter name is returned.
+    """Directly-constructed spec: only the top-level parameter name is returned.
 
     Inner allowed-value keys ("add"/"sub") and metadata flags must not appear.
     """
@@ -140,18 +143,19 @@ def test_declared_option_keys_snapshot_not_tied_to_underlying_dict() -> None:
     """Mutating the original PROPERTY_MAPPING dict after the call does not
     retroactively change an already-returned frozenset (unlike a dict_keys view)."""
     mapping: dict[str, Any] = {
-        "operation_type": {
-            DefaultOptionKeys.allowed_values: {"add": "Addition"},
-            DefaultOptionKeys.context: True,
-            DefaultOptionKeys.strict_validation: True,
-        },
+        "operation_type": PropertySpec(
+            "the operation to apply",
+            allowed_values={"add": "Addition"},
+            context=True,
+            strict_validation=True,
+        ),
     }
 
     class MutableMappingFeatureGroup(FeatureGroup):
         PROPERTY_MAPPING = mapping
 
     result = MutableMappingFeatureGroup.declared_option_keys()
-    mapping["new_param"] = {"explanation": "added after the snapshot"}
+    mapping["new_param"] = PropertySpec("added after the snapshot")
 
     assert result == frozenset({"operation_type"})
     assert "new_param" not in result

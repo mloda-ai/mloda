@@ -113,7 +113,7 @@ The `FeatureChainParserMixin` provides default implementations for common featur
 
 ``` python
 from mloda.provider import FeatureGroup, FeatureChainParserMixin
-from mloda.provider import DefaultOptionKeys
+from mloda.provider import DefaultOptionKeys, PropertySpec
 
 class MyFeatureGroup(FeatureChainParserMixin, FeatureGroup):
     PREFIX_PATTERN = r".*__my_operation$"
@@ -123,15 +123,12 @@ class MyFeatureGroup(FeatureChainParserMixin, FeatureGroup):
     MAX_IN_FEATURES = 1  # Or None for unlimited
 
     PROPERTY_MAPPING = {
-        "operation_type": {
-            DefaultOptionKeys.allowed_values: {"sum": "Sum operation", "avg": "Average operation"},
-            DefaultOptionKeys.context: True,
-            DefaultOptionKeys.strict_validation: True,
-        },
-        DefaultOptionKeys.in_features: {
-            "explanation": "Source feature",
-            DefaultOptionKeys.context: True,
-        },
+        "operation_type": PropertySpec(
+            "Operation to apply",
+            allowed_values={"sum": "Sum operation", "avg": "Average operation"},
+            strict_validation=True,
+        ),
+        DefaultOptionKeys.in_features: PropertySpec("Source feature"),
     }
 
     # input_features() inherited from FeatureChainParserMixin
@@ -143,7 +140,7 @@ class MyFeatureGroup(FeatureChainParserMixin, FeatureGroup):
 | Attribute | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `PREFIX_PATTERN` | `str` | Required | Regex pattern for matching feature names |
-| `PROPERTY_MAPPING` | `dict` | Required | Parameter validation configuration |
+| `PROPERTY_MAPPING` | `dict[str, PropertySpec]` | Required | Parameter validation configuration |
 | `MIN_IN_FEATURES` | `int` | `1` | Minimum required in_features |
 | `MAX_IN_FEATURES` | `int \| None` | `None` | Maximum allowed in_features (None = unlimited) |
 | `IN_FEATURE_SEPARATOR` | `str` | `"&"` | Separator for multiple in_features |
@@ -223,7 +220,7 @@ The three-arg form `cls._resolve_operation(feature_name, options, config_key)` i
 
 #### 5. Whole-Value Validation with `match_guard`
 
-Add a `DefaultOptionKeys.match_guard` callable to a PROPERTY_MAPPING entry to validate the shape of the raw option value. The mixin calls it after basic matching succeeds, and a falsy return makes `match_feature_group_criteria` return False (a non-match, not an error).
+Give a spec a `match_guard` callable to validate the shape of the raw option value. The mixin calls it after basic matching succeeds, and a falsy return makes `match_feature_group_criteria` return False (a non-match, not an error).
 
 Reach for `match_guard` when the constraint is about the value as a whole (a list of strings, a dict, an ordering). Reach for `element_validator` with `strict_validation=True` when the constraint is about each element on its own.
 
@@ -233,11 +230,10 @@ def _is_list_of_strings(value):
 
 class GroupAggregation(FeatureChainParserMixin, FeatureGroup):
     PROPERTY_MAPPING = {
-        "partition_by": {
-            DefaultOptionKeys.context: True,
-            DefaultOptionKeys.strict_validation: False,
-            DefaultOptionKeys.match_guard: _is_list_of_strings,
-        },
+        "partition_by": PropertySpec(
+            "Columns to partition by",
+            match_guard=_is_list_of_strings,
+        ),
     }
 ```
 
@@ -254,28 +250,28 @@ The modern approach uses `PROPERTY_MAPPING` to define parameter validation and c
 ``` python
 from mloda.provider import FeatureGroup
 from mloda.user import FeatureName
-from mloda.provider import DefaultOptionKeys
+from mloda.provider import DefaultOptionKeys, PropertySpec
 
 class MyFeatureGroup(FeatureGroup):
     PREFIX_PATTERN = r"__([a-zA-Z_]+)_operation$"
 
     PROPERTY_MAPPING = {
         # Feature-specific parameter
-        "operation_type": {
-            DefaultOptionKeys.allowed_values: {
+        "operation_type": PropertySpec(
+            "Operation to apply",
+            allowed_values={
                 "sum": "Sum aggregation",
                 "avg": "Average aggregation",
                 "max": "Maximum aggregation",
             },
-            DefaultOptionKeys.context: True,  # Context parameter
-            DefaultOptionKeys.strict_validation: True,  # Strict validation
-        },
+            context=True,  # Context parameter (the default)
+            strict_validation=True,  # Strict validation
+        ),
         # Source feature parameter
-        DefaultOptionKeys.in_features: {
-            "explanation": "Source feature for the operation",
-            DefaultOptionKeys.context: True,  # Context parameter
-            DefaultOptionKeys.strict_validation: False,  # Flexible validation
-        },
+        DefaultOptionKeys.in_features: PropertySpec(
+            "Source feature for the operation",
+            strict_validation=False,  # Flexible validation
+        ),
     }
 ```
 
@@ -349,12 +345,11 @@ For per-element rules that a fixed value list cannot express:
 
 ``` python
 PROPERTY_MAPPING = {
-    "dimension": {
-        "explanation": "Number of dimensions for reduction",
-        DefaultOptionKeys.context: True,
-        DefaultOptionKeys.strict_validation: True,
-        DefaultOptionKeys.element_validator: lambda x: isinstance(x, int) and x > 0,
-    },
+    "dimension": PropertySpec(
+        "Number of dimensions for reduction",
+        strict_validation=True,
+        element_validator=lambda x: isinstance(x, int) and x > 0,
+    ),
 }
 ```
 
@@ -364,34 +359,39 @@ Specify default values for optional parameters:
 
 ``` python
 PROPERTY_MAPPING = {
-    "window_size": {
-        DefaultOptionKeys.allowed_values: {"7": "7-day window", "30": "30-day window"},
-        DefaultOptionKeys.default: "7",  # Default value
-        DefaultOptionKeys.context: True,
-        DefaultOptionKeys.strict_validation: True,
-    },
+    "window_size": PropertySpec(
+        "Rolling window length in days",
+        allowed_values={"7": "7-day window", "30": "30-day window"},
+        default="7",  # Default value
+        strict_validation=True,
+    ),
 }
 ```
 
 Under strict validation a declared default must itself be an accepted value; that is
-checked at class definition.
+checked when the `PropertySpec` is constructed. Omitting `default` makes the key required;
+`default=None` makes it optional with no value to apply. See
+[Optional keys](property-mapping.md#optional-keys).
 
 #### Group vs Context Classification
+
+There is no `group` field: a group parameter is `context=False`.
 
 ``` python
 PROPERTY_MAPPING = {
     # Group parameter - affects Feature Group resolution
-    "data_source": {
-        DefaultOptionKeys.allowed_values: {"production": "Production data", "staging": "Staging data"},
-        DefaultOptionKeys.group: True,  # Explicit group parameter
-        DefaultOptionKeys.strict_validation: True,
-    },
+    "data_source": PropertySpec(
+        "Data source to read from",
+        allowed_values={"production": "Production data", "staging": "Staging data"},
+        context=False,  # Group parameter
+        strict_validation=True,
+    ),
     # Context parameter - doesn't affect resolution
-    "algorithm_type": {
-        "explanation": "Clustering algorithm",
-        DefaultOptionKeys.context: True,  # Context parameter
-        DefaultOptionKeys.strict_validation: False,  # Flexible validation
-    },
+    "algorithm_type": PropertySpec(
+        "Clustering algorithm",
+        context=True,  # Context parameter (the default)
+        strict_validation=False,  # Flexible validation
+    ),
 }
 ```
 

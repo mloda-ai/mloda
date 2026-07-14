@@ -15,6 +15,7 @@ from mloda.provider import (
     FeatureChainParserMixin,
 )
 from mloda.provider import DefaultOptionKeys
+from mloda.provider import PropertySpec
 from mloda.provider import SubtypeDeclaration
 
 
@@ -110,16 +111,17 @@ class AggregatedFeatureGroup(FeatureChainParserMixin, FeatureGroup):
 
     # Property mapping for configuration-based feature creation
     PROPERTY_MAPPING = {
-        AGGREGATION_TYPE: {
-            DefaultOptionKeys.allowed_values: AGGREGATION_TYPES,
-            DefaultOptionKeys.context: True,
-            DefaultOptionKeys.strict_validation: True,
-        },
-        DefaultOptionKeys.in_features: {
-            "explanation": "Source feature to aggregate",
-            DefaultOptionKeys.context: True,  # Mark as context parameter
-            DefaultOptionKeys.strict_validation: False,  # Flexible validation
-        },
+        AGGREGATION_TYPE: PropertySpec(
+            "Type of aggregation to perform",
+            allowed_values=AGGREGATION_TYPES,
+            context=True,
+            strict_validation=True,
+        ),
+        DefaultOptionKeys.in_features: PropertySpec(
+            "Source feature to aggregate",
+            context=True,
+            strict_validation=False,
+        ),
     }
 
     @classmethod

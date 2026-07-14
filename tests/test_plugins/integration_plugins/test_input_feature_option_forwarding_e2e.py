@@ -31,6 +31,7 @@ from mloda.provider import DefaultOptionKeys
 from mloda.provider import FeatureChainParserMixin
 from mloda.provider import FeatureGroup
 from mloda.provider import FeatureSet
+from mloda.provider import PropertySpec
 from mloda.user import DataAccessCollection
 from mloda.user import Feature
 from mloda.user import FeatureName
@@ -178,15 +179,13 @@ class ForwardingE2EChainedGroup(FeatureChainParserMixin, FeatureGroup):
 
     PREFIX_PATTERN = r".*__([\w]+)_e2echain579fwd$"
     PROPERTY_MAPPING = {
-        "operation": {
-            DefaultOptionKeys.allowed_values: {"double": "Doubles the source values"},
-            DefaultOptionKeys.context: True,
-            DefaultOptionKeys.strict_validation: True,
-        },
-        DefaultOptionKeys.in_features: {
-            "explanation": "Source features",
-            DefaultOptionKeys.context: True,
-        },
+        "operation": PropertySpec(
+            "Operation applied to the source values",
+            allowed_values={"double": "Doubles the source values"},
+            context=True,
+            strict_validation=True,
+        ),
+        DefaultOptionKeys.in_features: PropertySpec("Source features", context=True),
     }
 
     @classmethod

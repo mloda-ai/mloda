@@ -10,13 +10,13 @@ from typing import Any
 
 import pytest
 
-from mloda.core.abstract_plugins.components.default_options_key import DefaultOptionKeys
 from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser import (
     FeatureChainParser,
 )
 from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser_mixin import (
     FeatureChainParserMixin,
 )
+from mloda.core.abstract_plugins.components.feature_chainer.property_spec import PropertySpec
 from mloda.core.abstract_plugins.components.options import Options
 
 
@@ -35,31 +35,34 @@ class NamePathFeatureGroup(FeatureChainParserMixin):
 
     PREFIX_PATTERN = r".*__([\w]+)_(\d+)d$"
 
-    PROPERTY_MAPPING: dict[str, dict[Any, Any]] = {
-        "algorithm": {
-            DefaultOptionKeys.allowed_values: {"pca": "PCA", "tsne": "t-SNE"},
-            DefaultOptionKeys.context: True,
-            DefaultOptionKeys.strict_validation: True,
-        },
-        "solver": {
-            "explanation": "strict, allowed_values, never encoded in the name",
-            DefaultOptionKeys.allowed_values: {"auto": "Auto", "arpack": "ARPACK"},
-            DefaultOptionKeys.context: True,
-            DefaultOptionKeys.strict_validation: True,
-            DefaultOptionKeys.default: "auto",
-        },
-        "size": {
-            "explanation": "strict, element_validator, never encoded in the name",
-            DefaultOptionKeys.context: True,
-            DefaultOptionKeys.strict_validation: True,
-            DefaultOptionKeys.element_validator: _is_positive_int,
-        },
-        "notes": {
-            "explanation": "non-strict, so no value space is enforced",
-            DefaultOptionKeys.context: True,
-            DefaultOptionKeys.strict_validation: False,
-            DefaultOptionKeys.default: "",
-        },
+    PROPERTY_MAPPING: dict[str, PropertySpec] = {
+        # No declared default: the key is REQUIRED on the config path.
+        "algorithm": PropertySpec(
+            "strict, allowed_values, encoded in the name",
+            allowed_values={"pca": "PCA", "tsne": "t-SNE"},
+            context=True,
+            strict_validation=True,
+        ),
+        "solver": PropertySpec(
+            "strict, allowed_values, never encoded in the name",
+            allowed_values={"auto": "Auto", "arpack": "ARPACK"},
+            context=True,
+            strict_validation=True,
+            default="auto",
+        ),
+        # No declared default: the key is REQUIRED on the config path.
+        "size": PropertySpec(
+            "strict, element_validator, never encoded in the name",
+            context=True,
+            strict_validation=True,
+            element_validator=_is_positive_int,
+        ),
+        "notes": PropertySpec(
+            "non-strict, so no value space is enforced",
+            context=True,
+            strict_validation=False,
+            default="",
+        ),
     }
 
 
@@ -68,13 +71,13 @@ class GuardedNamePathFeatureGroup(FeatureChainParserMixin):
 
     PREFIX_PATTERN = r".*__([\w]+)_guarded$"
 
-    PROPERTY_MAPPING: dict[str, dict[Any, Any]] = {
-        "columns": {
-            "explanation": "guarded, non-strict: the guard sees the raw whole value",
-            DefaultOptionKeys.context: True,
-            DefaultOptionKeys.strict_validation: False,
-            DefaultOptionKeys.match_guard: _is_list_of_str,
-        }
+    PROPERTY_MAPPING: dict[str, PropertySpec] = {
+        "columns": PropertySpec(
+            "guarded, non-strict: the guard sees the raw whole value",
+            context=True,
+            strict_validation=False,
+            match_guard=_is_list_of_str,
+        )
     }
 
 
@@ -83,13 +86,14 @@ class MalformedNameFeatureGroup(FeatureChainParserMixin):
 
     PREFIX_PATTERN = r"^orphan_(\w+)$"
 
-    PROPERTY_MAPPING: dict[str, dict[Any, Any]] = {
-        "solver": {
-            DefaultOptionKeys.allowed_values: {"auto": "Auto", "arpack": "ARPACK"},
-            DefaultOptionKeys.context: True,
-            DefaultOptionKeys.strict_validation: True,
-            DefaultOptionKeys.default: "auto",
-        }
+    PROPERTY_MAPPING: dict[str, PropertySpec] = {
+        "solver": PropertySpec(
+            "strict, allowed_values, with a default",
+            allowed_values={"auto": "Auto", "arpack": "ARPACK"},
+            context=True,
+            strict_validation=True,
+            default="auto",
+        )
     }
 
 

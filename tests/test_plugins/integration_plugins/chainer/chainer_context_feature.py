@@ -14,6 +14,7 @@ from mloda.provider import FeatureSet
 from mloda.user import Options
 from mloda.provider import FeatureChainParser
 from mloda.provider import DefaultOptionKeys
+from mloda.provider import PropertySpec
 
 
 class ChainedContextFeatureGroupTest(FeatureGroup):
@@ -21,31 +22,35 @@ class ChainedContextFeatureGroupTest(FeatureGroup):
     OPERATION_ID = "chainer_"  # Used for constructing feature names
 
     PROPERTY_MAPPING = {
-        "ident": {
-            DefaultOptionKeys.allowed_values: {"identifier1": "explanation", "identifier2": "explanation"},
-            DefaultOptionKeys.context: True,
-            DefaultOptionKeys.strict_validation: True,
-        },
-        "property2": {
-            DefaultOptionKeys.allowed_values: {
+        "ident": PropertySpec(
+            "Identifier selecting the chainer operation variant",
+            allowed_values={"identifier1": "explanation", "identifier2": "explanation"},
+            context=True,
+            strict_validation=True,
+        ),
+        "property2": PropertySpec(
+            "Group-categorized property with a default",
+            allowed_values={
                 "value1": "explanation",
                 "value2": "explanation",
                 "specific_val_3_test": "explanation",
             },
-            DefaultOptionKeys.strict_validation: True,
-            DefaultOptionKeys.default: "value1",
-        },
-        "property3": {
-            DefaultOptionKeys.allowed_values: {"opt_val1": "explanation", "opt_val2": "explanation"},
-            DefaultOptionKeys.default: "opt_val1",
-            DefaultOptionKeys.context: True,
-            DefaultOptionKeys.strict_validation: False,
-        },
-        DefaultOptionKeys.in_features: {
-            "explanation": "explanation",
-            DefaultOptionKeys.context: True,  # Mark as context parameter
+            default="value1",
+            context=False,
+            strict_validation=True,
+        ),
+        "property3": PropertySpec(
+            "Optional context property with a default",
+            allowed_values={"opt_val1": "explanation", "opt_val2": "explanation"},
+            default="opt_val1",
+            context=True,
+            strict_validation=False,
+        ),
+        DefaultOptionKeys.in_features: PropertySpec(
+            "explanation",
+            context=True,  # Mark as context parameter
             # No strict validation for source feature -> defaults to flexible
-        },
+        ),
     }
 
     @classmethod

@@ -4,17 +4,19 @@ from mloda.user import FeatureName, Options
 from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser_mixin import (
     FeatureChainParserMixin,
 )
-from mloda.provider import DefaultOptionKeys
+from mloda.provider import PropertySpec
 
 
 class BaseMode(FeatureChainParserMixin):
     """Base class with strict validation on 'mode' key."""
 
     PROPERTY_MAPPING = {
-        "mode": {
-            DefaultOptionKeys.allowed_values: {"mode_a": "Mode A", "mode_b": "Mode B"},
-            DefaultOptionKeys.strict_validation: True,
-        }
+        "mode": PropertySpec(
+            "Mode of operation",
+            allowed_values={"mode_a": "Mode A", "mode_b": "Mode B"},
+            context=False,
+            strict_validation=True,
+        )
     }
 
 
@@ -22,7 +24,12 @@ class SubGroupA(BaseMode):
     """Subclass that only accepts mode_a."""
 
     PROPERTY_MAPPING = {
-        "mode": {DefaultOptionKeys.allowed_values: {"mode_a": "Mode A"}, DefaultOptionKeys.strict_validation: True}
+        "mode": PropertySpec(
+            "Mode of operation",
+            allowed_values={"mode_a": "Mode A"},
+            context=False,
+            strict_validation=True,
+        )
     }
 
 
@@ -30,7 +37,12 @@ class SubGroupB(BaseMode):
     """Subclass that only accepts mode_b."""
 
     PROPERTY_MAPPING = {
-        "mode": {DefaultOptionKeys.allowed_values: {"mode_b": "Mode B"}, DefaultOptionKeys.strict_validation: True}
+        "mode": PropertySpec(
+            "Mode of operation",
+            allowed_values={"mode_b": "Mode B"},
+            context=False,
+            strict_validation=True,
+        )
     }
 
 
@@ -38,10 +50,12 @@ class SubGroupWithElementValidator(BaseMode):
     """Subclass with a custom element validator."""
 
     PROPERTY_MAPPING = {
-        "mode": {
-            DefaultOptionKeys.strict_validation: True,
-            DefaultOptionKeys.element_validator: lambda v: v.startswith("valid_"),
-        }
+        "mode": PropertySpec(
+            "Mode of operation",
+            context=False,
+            strict_validation=True,
+            element_validator=lambda v: v.startswith("valid_"),
+        )
     }
 
 

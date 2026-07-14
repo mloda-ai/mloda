@@ -14,7 +14,7 @@ from mloda.core.abstract_plugins.components.options import Options
 from mloda.provider import ComputeFramework, FeatureGroup
 from mloda.user import Feature, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
-from mloda.provider import DefaultOptionKeys
+from mloda.provider import PropertySpec
 
 from tests.test_plugins.integration_plugins.test_data_creator import ATestDataCreator
 
@@ -46,17 +46,18 @@ class MockWithTypeConstraint(FeatureChainParserMixin):
     PARTITION_BY = "partition_by"
 
     PROPERTY_MAPPING = {
-        "operation": {
-            DefaultOptionKeys.allowed_values: {"sum": "Sum of values", "avg": "Average of values"},
-            DefaultOptionKeys.context: True,
-            DefaultOptionKeys.strict_validation: True,
-        },
-        "partition_by": {
-            "explanation": "List of columns to partition by",
-            DefaultOptionKeys.context: True,
-            DefaultOptionKeys.strict_validation: False,
-            DefaultOptionKeys.match_guard: _is_list_of_strings,
-        },
+        "operation": PropertySpec(
+            "Operation to apply",
+            allowed_values={"sum": "Sum of values", "avg": "Average of values"},
+            context=True,
+            strict_validation=True,
+        ),
+        "partition_by": PropertySpec(
+            "List of columns to partition by",
+            context=True,
+            strict_validation=False,
+            match_guard=_is_list_of_strings,
+        ),
     }
 
 
@@ -66,12 +67,13 @@ class MockStrictWithMatchGuard(FeatureChainParserMixin):
     PREFIX_PATTERN = r".*__([\w]+)_strict$"
 
     PROPERTY_MAPPING = {
-        "mode": {
-            DefaultOptionKeys.allowed_values: {"fast": "Fast mode", "slow": "Slow mode"},
-            DefaultOptionKeys.context: True,
-            DefaultOptionKeys.strict_validation: True,
-            DefaultOptionKeys.match_guard: lambda v: isinstance(v, str),
-        },
+        "mode": PropertySpec(
+            "Execution mode",
+            allowed_values={"fast": "Fast mode", "slow": "Slow mode"},
+            context=True,
+            strict_validation=True,
+            match_guard=lambda v: isinstance(v, str),
+        ),
     }
 
 
@@ -86,12 +88,13 @@ class MockStrictWithOrthogonalMatchGuard(FeatureChainParserMixin):
     PREFIX_PATTERN = r".*__([\w]+)_ortho$"
 
     PROPERTY_MAPPING = {
-        "mode": {
-            DefaultOptionKeys.allowed_values: {"fast": "Fast mode", "slow": "Slow mode", "ok": "OK mode"},
-            DefaultOptionKeys.context: True,
-            DefaultOptionKeys.strict_validation: True,
-            DefaultOptionKeys.match_guard: _max_length_3,
-        },
+        "mode": PropertySpec(
+            "Execution mode",
+            allowed_values={"fast": "Fast mode", "slow": "Slow mode", "ok": "OK mode"},
+            context=True,
+            strict_validation=True,
+            match_guard=_max_length_3,
+        ),
     }
 
 
@@ -101,12 +104,12 @@ class MockWithRaisingValidator(FeatureChainParserMixin):
     PREFIX_PATTERN = r".*__([\w]+)_raise$"
 
     PROPERTY_MAPPING = {
-        "items": {
-            "explanation": "A list of items",
-            DefaultOptionKeys.context: True,
-            DefaultOptionKeys.strict_validation: False,
-            DefaultOptionKeys.match_guard: _raising_validator,
-        },
+        "items": PropertySpec(
+            "A list of items",
+            context=True,
+            strict_validation=False,
+            match_guard=_raising_validator,
+        ),
     }
 
 
@@ -116,11 +119,12 @@ class MockWithoutTypeConstraint(FeatureChainParserMixin):
     PREFIX_PATTERN = r".*__([\w]+)_typed$"
 
     PROPERTY_MAPPING = {
-        "operation": {
-            DefaultOptionKeys.allowed_values: {"sum": "Sum of values"},
-            DefaultOptionKeys.context: True,
-            DefaultOptionKeys.strict_validation: True,
-        },
+        "operation": PropertySpec(
+            "Operation to apply",
+            allowed_values={"sum": "Sum of values"},
+            context=True,
+            strict_validation=True,
+        ),
     }
 
 
@@ -247,17 +251,18 @@ class MatchGuardedAggregation(FeatureChainParserMixin, FeatureGroup):
     MAX_IN_FEATURES = 1
 
     PROPERTY_MAPPING = {
-        "aggregation_type": {
-            DefaultOptionKeys.allowed_values: {"sum": "Sum of values"},
-            DefaultOptionKeys.context: True,
-            DefaultOptionKeys.strict_validation: True,
-        },
-        "partition_by": {
-            "explanation": "List of columns to partition by",
-            DefaultOptionKeys.context: True,
-            DefaultOptionKeys.strict_validation: False,
-            DefaultOptionKeys.match_guard: _is_list_of_strings,
-        },
+        "aggregation_type": PropertySpec(
+            "Aggregation to apply",
+            allowed_values={"sum": "Sum of values"},
+            context=True,
+            strict_validation=True,
+        ),
+        "partition_by": PropertySpec(
+            "List of columns to partition by",
+            context=True,
+            strict_validation=False,
+            match_guard=_is_list_of_strings,
+        ),
     }
 
     @classmethod

@@ -164,7 +164,9 @@ so the two cannot drift.
 
 Omitting `default` emits no `default` key and leaves the option **required**, while an
 explicit `default=None` emits the key and makes the option **optional** with a `None`
-default.
+default. The exported `NO_DEFAULT` sentinel spells out that omission for a wrapper that
+forwards an optional default through to `property_spec`: passing `NO_DEFAULT` means "no
+default given".
 
 ## Strict validation needs a value space
 

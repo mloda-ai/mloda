@@ -15,7 +15,9 @@ PROPERTY_MAPPING key. See ``test_property_mapping_spec_shape.py``.
 
 from __future__ import annotations
 
+import copy
 import gc
+import pickle
 from typing import Any
 
 import pytest
@@ -27,6 +29,7 @@ from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser
 from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser_mixin import (
     FeatureChainParserMixin,
 )
+from mloda.core.abstract_plugins.components.feature_chainer.property_spec import NO_DEFAULT, _NoDefault
 from mloda.core.abstract_plugins.components.feature_set import FeatureSet
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.components.utils import get_all_subclasses
@@ -241,15 +244,13 @@ class TestPropertySpecNoneDefault:
         assert FeatureChainParser._can_skip_required_check(spec) is False
 
     def test_no_default_sentinel_importable_from_provider(self) -> None:
-        """``from mloda.provider import NO_DEFAULT`` works."""
+        """The provider re-exports THE sentinel, not merely some object of the same name."""
         from mloda.provider import NO_DEFAULT as imported
 
-        assert imported is not None
+        assert imported is NO_DEFAULT
 
     def test_explicit_sentinel_behaves_like_omission(self) -> None:
         """Passing ``NO_DEFAULT`` explicitly is exactly the same as omitting the argument."""
-        from mloda.provider import NO_DEFAULT
-
         spec = property_spec("d", default=NO_DEFAULT)
 
         assert spec == property_spec("d")
@@ -284,7 +285,10 @@ class TestPropertySpecNoneDefault:
         """End to end: a builder-authored ``default=None`` key is not demanded by the matcher."""
 
         class OptionalWeightFeatureGroup(FeatureChainParserMixin, FeatureGroup):
-            PREFIX_PATTERN = r".*__([\w]+)_centrality$"
+            # A pattern unique to this module: a test FeatureGroup joins the global
+            # get_all_subclasses discovery pool, so reusing the shipped
+            # NodeCentralityFeatureGroup shape would make it a competing match.
+            PREFIX_PATTERN = r".*__([\w]+)_optweight$"
             PROPERTY_MAPPING = {
                 "centrality_type": property_spec(
                     "Centrality metric",
@@ -322,6 +326,53 @@ class TestPropertySpecNoneDefault:
             )
             is False
         )
+
+
+class TestNoDefaultSentinelIdentity:
+    """A round-tripped ``NO_DEFAULT`` must still mean "no default" (issue #733).
+
+    A deepcopy, a pickle round trip, or a second import of the module (editable install plus
+    site-packages, ``importlib.reload``) all yield a ``_NoDefault`` instance that is a DIFFERENT
+    object than the module-level ``NO_DEFAULT``. If the builder recognizes the sentinel by
+    identity, such a copy slips through the "argument omitted" test and lands IN the spec as a
+    bogus ``default`` VALUE, which silently flips a REQUIRED key to optional: exactly the bug
+    class #733 exists to kill.
+    """
+
+    def test_deepcopy_returns_the_same_sentinel(self) -> None:
+        """``copy.deepcopy`` must not clone the sentinel."""
+        assert copy.deepcopy(NO_DEFAULT) is NO_DEFAULT
+
+    def test_pickle_round_trip_returns_the_same_sentinel(self) -> None:
+        """A pickle round trip must resolve back to the one sentinel object."""
+        assert pickle.loads(pickle.dumps(NO_DEFAULT)) is NO_DEFAULT
+
+    def test_deepcopied_sentinel_behaves_like_omission(self) -> None:
+        """A deepcopied sentinel emits no ``default`` key and leaves the property REQUIRED."""
+        spec = property_spec("d", default=copy.deepcopy(NO_DEFAULT))
+
+        assert DefaultOptionKeys.default not in spec
+        assert FeatureChainParser._can_skip_required_check(spec) is False
+        assert spec == property_spec("d")
+
+    def test_pickled_sentinel_behaves_like_omission(self) -> None:
+        """A pickle round-tripped sentinel emits no ``default`` key and stays REQUIRED."""
+        spec = property_spec("d", default=pickle.loads(pickle.dumps(NO_DEFAULT)))
+
+        assert DefaultOptionKeys.default not in spec
+        assert FeatureChainParser._can_skip_required_check(spec) is False
+        assert spec == property_spec("d")
+
+    def test_second_sentinel_instance_behaves_like_omission(self) -> None:
+        """A separately constructed ``_NoDefault`` (a second imported copy) means "no default" too."""
+        spec = property_spec("d", default=_NoDefault())
+
+        assert DefaultOptionKeys.default not in spec
+        assert FeatureChainParser._can_skip_required_check(spec) is False
+
+    def test_sentinel_repr_is_readable(self) -> None:
+        """The sentinel keeps its readable repr for error messages and docs."""
+        assert repr(NO_DEFAULT) == "NO_DEFAULT"
 
 
 def _positive_int(value: Any) -> bool:

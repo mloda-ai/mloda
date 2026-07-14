@@ -19,6 +19,10 @@ class _NoDefault:
     def __repr__(self) -> str:
         return "NO_DEFAULT"
 
+    def __reduce__(self) -> str:
+        # Pickle and deepcopy resolve back to the module-level singleton instead of cloning it.
+        return "NO_DEFAULT"
+
 
 NO_DEFAULT = _NoDefault()
 
@@ -34,6 +38,7 @@ def property_spec(
     required_when: Callable[..., Any] | None = None,
     match_guard: Callable[..., Any] | None = None,
 ) -> dict[str, Any]:
+    """Build a spec dict: omitting ``default`` keeps the key required, ``default=None`` makes it optional with ``None``."""
     # A str/bytes is iterable, so tuple("add") would silently build ('a', 'd', 'd'): reject the
     # shape before materializing it. Holds whether or not the spec is strict.
     if isinstance(allowed_values, (str, bytes)):
@@ -80,7 +85,9 @@ def property_spec(
         spec[DefaultOptionKeys.match_guard] = match_guard
     spec[DefaultOptionKeys.context] = context
     spec[DefaultOptionKeys.strict_validation] = strict
-    if default is not NO_DEFAULT:
+    # Type test, not identity: a second imported copy of this module (editable install plus
+    # site-packages, importlib.reload) has its own sentinel object.
+    if not isinstance(default, _NoDefault):
         spec[DefaultOptionKeys.default] = default
 
     # The declared-default semantics live in core, so the builder and the

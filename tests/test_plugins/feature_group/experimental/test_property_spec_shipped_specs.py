@@ -73,6 +73,10 @@ _ALL_BUILT: list[tuple[str, dict[str, Any]]] = [(case_id, built) for case_id, bu
     ("sklearn_pipeline.pipeline_name", _PIPELINE_NAME_BUILT)
 ]
 
+_ALL_SHIPPED: list[tuple[str, dict[str, Any]]] = [(case_id, shipped) for case_id, _, shipped in _EXACT_CASES] + [
+    ("sklearn_pipeline.pipeline_name", _PIPELINE_NAME_SHIPPED)
+]
+
 
 class TestShippedOptionalSpecsAreBuildable:
     """Every shipped optional-with-``None``-default spec is expressible with ``property_spec``."""
@@ -102,3 +106,16 @@ class TestShippedOptionalSpecsAreBuildable:
     def test_built_spec_is_optional(self, built: dict[str, Any]) -> None:
         """Each built spec stays OPTIONAL: migration must not make the option required."""
         assert FeatureChainParser._can_skip_required_check(built) is True
+
+    @pytest.mark.parametrize(
+        "shipped",
+        [pytest.param(shipped, id=case_id) for case_id, shipped in _ALL_SHIPPED],
+    )
+    def test_shipped_spec_is_optional(self, shipped: dict[str, Any]) -> None:
+        """Each SHIPPED spec is OPTIONAL: the invariant #723 broke, pinned on what plugins declare.
+
+        ``test_built_spec_is_optional`` only checks specs this test builds. Once these plugins
+        migrate to the builder, ``built == shipped`` degrades into comparing builder output with
+        builder output, so the shipped side needs its own pin.
+        """
+        assert FeatureChainParser._can_skip_required_check(shipped) is True

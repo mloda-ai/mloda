@@ -20,6 +20,8 @@ from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.components.plugin_option.plugin_collector import PluginCollector
 from mloda.core.api.plugin_info import ResolvedFeature
 from mloda.core.api.plugin_docs import resolve_feature
+from mloda.core.prepare.accessible_plugins import FeatureGroupEnvironmentMapping
+from mloda.core.prepare.identify_feature_group import IdentifyFeatureGroupClass
 from mloda.user import PluginLoader
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import (
@@ -36,6 +38,10 @@ ALLOW_PYTHON_DICT_KEY = "allow_python_dict"
 
 PROBE_TYPE_KEY = "resolve_probe_type"
 PROBE_FEATURE = "value__median_resolveprobe"
+
+SIBLING_SCOPED_FEATURE = "SiblingScopedResolve693"
+LONE_CHILD_SCOPED_FEATURE = "LoneChildScopedResolve693"
+UNRELATED_SCOPED_FEATURE = "UnrelatedScopedResolve693"
 
 
 class SplitCapResolveFeatureGroup(FeatureGroup):
@@ -177,6 +183,93 @@ class ForwardMismatchResolveFeatureGroup(FeatureChainParserMixin, FeatureGroup):
     @classmethod
     def compute_framework_rule(cls) -> set[type[ComputeFramework]] | None:
         return {PandasDataFrame, PythonDictFramework}
+
+
+class ScopedResolveFamilyBase693(FeatureGroup):
+    """Shared base of the scoped-resolve fixture family; never matches a feature name itself."""
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]] | None:
+        return {PandasDataFrame, PythonDictFramework}
+
+    @classmethod
+    def match_feature_group_criteria(
+        cls,
+        feature_name: FeatureName | str,
+        options: Options,
+        data_access_collection: Optional[DataAccessCollection] = None,
+    ) -> bool:
+        return False
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+        return None
+
+
+class ScopedResolveSiblingOne693(ScopedResolveFamilyBase693):
+    """First concrete sibling; matches the shared sibling feature name."""
+
+    @classmethod
+    def match_feature_group_criteria(
+        cls,
+        feature_name: FeatureName | str,
+        options: Options,
+        data_access_collection: Optional[DataAccessCollection] = None,
+    ) -> bool:
+        if isinstance(feature_name, FeatureName):
+            feature_name = str(feature_name)
+        return feature_name == SIBLING_SCOPED_FEATURE
+
+
+class ScopedResolveSiblingTwo693(ScopedResolveFamilyBase693):
+    """Second concrete sibling; matches the same shared sibling feature name."""
+
+    @classmethod
+    def match_feature_group_criteria(
+        cls,
+        feature_name: FeatureName | str,
+        options: Options,
+        data_access_collection: Optional[DataAccessCollection] = None,
+    ) -> bool:
+        if isinstance(feature_name, FeatureName):
+            feature_name = str(feature_name)
+        return feature_name == SIBLING_SCOPED_FEATURE
+
+
+class ScopedResolveLoneChild693(ScopedResolveFamilyBase693):
+    """Third family member; the only class matching its own unique feature name."""
+
+    @classmethod
+    def match_feature_group_criteria(
+        cls,
+        feature_name: FeatureName | str,
+        options: Options,
+        data_access_collection: Optional[DataAccessCollection] = None,
+    ) -> bool:
+        if isinstance(feature_name, FeatureName):
+            feature_name = str(feature_name)
+        return feature_name == LONE_CHILD_SCOPED_FEATURE
+
+
+class UnrelatedScopedResolve693FeatureGroup(FeatureGroup):
+    """Unrelated scope target: matches only its own distinct feature name, never the sibling one."""
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]] | None:
+        return {PandasDataFrame, PythonDictFramework}
+
+    @classmethod
+    def match_feature_group_criteria(
+        cls,
+        feature_name: FeatureName | str,
+        options: Options,
+        data_access_collection: Optional[DataAccessCollection] = None,
+    ) -> bool:
+        if isinstance(feature_name, FeatureName):
+            feature_name = str(feature_name)
+        return feature_name == UNRELATED_SCOPED_FEATURE
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+        return None
 
 
 @pytest.fixture(scope="module", autouse=True)
@@ -702,3 +795,169 @@ class TestResolveFeatureKeywordOnlyArguments:
 
         assert result.feature_group is OptionGatedResolveFeatureGroup
         assert result.error is None
+
+
+class TestResolveFeatureScopedResolve:
+    """resolve_feature accepts a keyword-only feature_group scope that disambiguates siblings (issue #693)."""
+
+    def test_unscoped_sibling_feature_is_ambiguous(self) -> None:
+        """Premise guard: unscoped, the two sibling matches stay ambiguous."""
+        result = resolve_feature(SIBLING_SCOPED_FEATURE)
+
+        assert result.feature_group is None
+        assert result.error is not None
+        assert "Multiple FeatureGroups match" in result.error
+
+    def test_sibling_class_name_string_scope_resolves_that_sibling(self) -> None:
+        """A class-name string scope narrows the ambiguous siblings to exactly the named one."""
+        result = resolve_feature(SIBLING_SCOPED_FEATURE, feature_group="ScopedResolveSiblingOne693")
+
+        assert result.feature_group is ScopedResolveSiblingOne693
+        assert result.error is None
+        assert ScopedResolveSiblingOne693 in result.candidates
+        assert ScopedResolveSiblingTwo693 not in result.candidates
+
+    def test_sibling_class_object_scope_resolves_that_sibling(self) -> None:
+        """A class-object scope narrows the ambiguous siblings via issubclass."""
+        result = resolve_feature(SIBLING_SCOPED_FEATURE, feature_group=ScopedResolveSiblingTwo693)
+
+        assert result.feature_group is ScopedResolveSiblingTwo693
+        assert result.error is None
+        assert ScopedResolveSiblingOne693 not in result.candidates
+
+    def test_base_name_string_scope_resolves_lone_concrete_subclass(self) -> None:
+        """A base-name string scope reaches the only matching concrete subclass through the MRO walk."""
+        result = resolve_feature(LONE_CHILD_SCOPED_FEATURE, feature_group="ScopedResolveFamilyBase693")
+
+        assert result.feature_group is ScopedResolveLoneChild693
+        assert result.error is None
+
+
+class TestResolveFeatureScopedNoMatch:
+    """A scope that excludes every name match degrades into a scoped no-match error (issue #693)."""
+
+    def test_string_scope_excluding_all_matches_reports_scoped_no_match(self) -> None:
+        """Scoping the sibling name to an unrelated class name yields no match plus the scope callout."""
+        result = resolve_feature(SIBLING_SCOPED_FEATURE, feature_group="UnrelatedScopedResolve693FeatureGroup")
+
+        assert result.feature_group is None
+        assert result.candidates == []
+        assert result.error is not None
+        assert "No FeatureGroup found" in result.error
+        assert "Scoped to feature group: 'UnrelatedScopedResolve693FeatureGroup'." in result.error
+
+    def test_class_object_scope_excluding_all_matches_reports_scoped_no_match(self) -> None:
+        """The class-object scope form produces the same scoped no-match callout."""
+        result = resolve_feature(SIBLING_SCOPED_FEATURE, feature_group=UnrelatedScopedResolve693FeatureGroup)
+
+        assert result.feature_group is None
+        assert result.candidates == []
+        assert result.error is not None
+        assert "No FeatureGroup found" in result.error
+        assert "Scoped to feature group: 'UnrelatedScopedResolve693FeatureGroup'." in result.error
+
+
+class TestResolveFeatureScopedCapabilityRejection:
+    """A scoped capability-rejection failure keeps the scope callout in its error (issue #693)."""
+
+    def test_scoped_all_rejected_error_carries_scope_callout(self) -> None:
+        """Scoping the all-rejected feature to its own group still fails and names the scope."""
+        result = resolve_feature(ALL_REJECTED_CAP_FEATURE, feature_group="AllRejectedCapResolveFeatureGroup")
+
+        assert result.feature_group is None
+        assert result.error is not None
+        assert "unsupported on all installed compute frameworks" in result.error
+        assert "Scoped to feature group: 'AllRejectedCapResolveFeatureGroup'." in result.error
+
+
+class TestResolveFeatureScopedAmbiguity:
+    """A scope that still leaves multiple sibling matches reports a scoped ambiguity (issue #693)."""
+
+    def test_base_name_scope_keeping_both_siblings_reports_scoped_ambiguity(self) -> None:
+        """Scoping to the shared base name keeps both siblings, so the ambiguity error names the scope."""
+        result = resolve_feature(SIBLING_SCOPED_FEATURE, feature_group="ScopedResolveFamilyBase693")
+
+        assert result.feature_group is None
+        assert result.error is not None
+        assert "Multiple FeatureGroups match" in result.error
+        assert "Scoped to feature group: 'ScopedResolveFamilyBase693'." in result.error
+
+
+class TestResolveFeatureScopeNeverRaises:
+    """Invalid scopes degrade into ResolvedFeature.error instead of raising (issue #693)."""
+
+    def test_root_feature_group_scope_degrades_into_error(self) -> None:
+        """Scoping to the root FeatureGroup base is rejected with a dedicated error, not an exception."""
+        result = resolve_feature(SIBLING_SCOPED_FEATURE, feature_group=FeatureGroup)
+
+        assert isinstance(result, ResolvedFeature)
+        assert result.feature_group is None
+        assert result.error is not None
+        assert "root FeatureGroup base class" in result.error
+
+    def test_root_feature_group_string_scope_degrades_into_error(self) -> None:
+        """The string form 'FeatureGroup' is rejected like the class-object root scope."""
+        result = resolve_feature(SIBLING_SCOPED_FEATURE, feature_group="FeatureGroup")
+
+        assert isinstance(result, ResolvedFeature)
+        assert result.feature_group is None
+        assert result.error is not None
+        assert "root FeatureGroup base class" in result.error
+
+    def test_whitespace_padded_root_string_scope_degrades_into_error(self) -> None:
+        """The strip runs before the root check, so '  FeatureGroup  ' is rejected the same way."""
+        result = resolve_feature(SIBLING_SCOPED_FEATURE, feature_group="  FeatureGroup  ")
+
+        assert isinstance(result, ResolvedFeature)
+        assert result.feature_group is None
+        assert result.error is not None
+        assert "root FeatureGroup base class" in result.error
+
+    def test_wrong_type_scope_degrades_into_error(self) -> None:
+        """A non-str, non-class scope is rejected with a type-explaining error, not an exception."""
+        invalid_scope: Any = 42
+
+        result = resolve_feature(SIBLING_SCOPED_FEATURE, feature_group=invalid_scope)
+
+        assert isinstance(result, ResolvedFeature)
+        assert result.feature_group is None
+        assert result.error is not None
+        assert "feature_group must be" in result.error
+
+    def test_whitespace_only_scope_behaves_like_unscoped(self) -> None:
+        """A whitespace-only scope string is treated exactly like feature_group=None."""
+        for feature_name in (SIBLING_SCOPED_FEATURE, LONE_CHILD_SCOPED_FEATURE):
+            unscoped = resolve_feature(feature_name)
+            blank_scoped = resolve_feature(feature_name, feature_group="   ")
+
+            assert blank_scoped.feature_group is unscoped.feature_group, feature_name
+            assert blank_scoped.candidates == unscoped.candidates, feature_name
+            assert blank_scoped.error == unscoped.error, feature_name
+
+
+class TestResolveFeatureScopedEngineParity:
+    """A scoped engine failure reproduces through resolve_feature with the same scope (issue #693)."""
+
+    def test_engine_scoped_no_match_reproduces_through_resolve_feature(self) -> None:
+        """The engine's scoped no-match callout reappears in the scoped resolve_feature error."""
+        accessible_plugins: FeatureGroupEnvironmentMapping = {
+            ScopedResolveSiblingOne693: {PandasDataFrame},
+            ScopedResolveSiblingTwo693: {PandasDataFrame},
+        }
+        feature = Feature(SIBLING_SCOPED_FEATURE, feature_group="UnrelatedScopedResolve693FeatureGroup")
+
+        with pytest.raises(ValueError) as exc_info:
+            IdentifyFeatureGroupClass(
+                feature=feature,
+                accessible_plugins=accessible_plugins,
+                links=None,
+                data_access_collection=None,
+            )
+        engine_message = str(exc_info.value)
+        assert "Scoped to feature group: 'UnrelatedScopedResolve693FeatureGroup'." in engine_message
+
+        result = resolve_feature(SIBLING_SCOPED_FEATURE, feature_group="UnrelatedScopedResolve693FeatureGroup")
+
+        assert result.feature_group is None
+        assert result.error is not None
+        assert "Scoped to feature group: 'UnrelatedScopedResolve693FeatureGroup'." in result.error

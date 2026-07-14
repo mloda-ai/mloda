@@ -1238,3 +1238,65 @@ case25 flush-left line at column zero
     # from FeatureGroup.__subclasses__() and cannot leak into later tests.
     del MyFG_NestedFlushLeft25
     gc.collect()
+
+
+# ---------------------------------------------------------------------------
+# Case 26 (issue 693): scoped resolve_feature during a redefinition conflict.
+# The dedup-conflict branch must filter the returned candidates by the
+# feature_group scope AND append the scope callout to the conflict error.
+# ---------------------------------------------------------------------------
+def test_resolve_feature_excluding_scope_empties_conflict_candidates_and_error_keeps_callout() -> None:
+    """A scope excluding the conflicting classes empties candidates while the error keeps conflict and callout."""
+    qualname = "MyFG_Test26_Scope"
+    feature_name = "case26_feature_unique_xyz"
+    src_v1 = _make_fg_source(qualname, feature_name)
+    src_v2 = _make_fg_source(
+        qualname,
+        feature_name,
+        extra_body="    def extra_method(self):\n        return 26\n",
+    )
+
+    v1 = _exec_fg_in_main(qualname, src_v1, "cell-test26-v1")
+    v2 = _exec_fg_in_main(qualname, src_v2, "cell-test26-v2")
+    _REF_STORE.extend([v1, v2])
+
+    # DocsCatalogAnchorFG is unrelated to the exec'd classes, so the scope excludes them.
+    result = resolve_feature(feature_name, feature_group="DocsCatalogAnchorFG")
+
+    assert result.feature_group is None
+    assert result.candidates == [], (
+        f"conflicting classes outside the scope must be filtered from candidates, got: {result.candidates}"
+    )
+    assert result.error is not None
+    assert any(token in result.error for token in (qualname, "redefined", "set_allow_redefinition")), (
+        f"error must still report the redefinition conflict; got: {result.error!r}"
+    )
+    assert "Scoped to feature group: 'DocsCatalogAnchorFG'." in result.error
+
+
+def test_resolve_feature_matching_scope_keeps_conflict_candidates_and_error_keeps_callout() -> None:
+    """A scope naming the conflicting class keeps both versions in candidates and appends the callout."""
+    qualname = "MyFG_Test26_ScopeKeep"
+    feature_name = "case26_keep_feature_unique_xyz"
+    src_v1 = _make_fg_source(qualname, feature_name)
+    src_v2 = _make_fg_source(
+        qualname,
+        feature_name,
+        extra_body="    def extra_method(self):\n        return 262\n",
+    )
+
+    v1 = _exec_fg_in_main(qualname, src_v1, "cell-test26-keep-v1")
+    v2 = _exec_fg_in_main(qualname, src_v2, "cell-test26-keep-v2")
+    _REF_STORE.extend([v1, v2])
+
+    result = resolve_feature(feature_name, feature_group=qualname)
+
+    assert result.feature_group is None
+    assert v1 in result.candidates, f"v1 matches scope and feature name, so it must stay; got: {result.candidates}"
+    assert v2 in result.candidates, f"v2 matches scope and feature name, so it must stay; got: {result.candidates}"
+    assert all(c.__name__ == qualname for c in result.candidates), (
+        f"only in-scope classes may appear in candidates, got: {result.candidates}"
+    )
+    assert result.error is not None
+    assert "set_allow_redefinition" in result.error, f"error must report the conflict; got: {result.error!r}"
+    assert f"Scoped to feature group: '{qualname}'." in result.error

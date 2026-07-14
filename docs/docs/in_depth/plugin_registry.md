@@ -114,7 +114,7 @@ Three behavioral notes:
 Strict mode covers all three plugin kinds:
 
 - **FeatureGroups**: resolution filtering as described above; this behavior is unchanged.
-- **ComputeFrameworks**: requested frameworks must be registered; under `"strict"` unregistered ones are dropped (the run fails if none survive). Frameworks bundled in `mloda_plugins` ship with mloda and are exempt as infrastructure, like abstract classes.
+- **ComputeFrameworks**: requested frameworks must be registered; under `"strict"` unregistered ones are dropped (the run fails if none survive). Frameworks that ship in the mloda wheel (package root `mloda` or `mloda_plugins`, both ship together) are exempt as infrastructure, like abstract classes; third-party packages installed into the shared `mloda.*` namespace (`mloda.community`, `mloda.enterprise`, `mloda.registry`, `mloda.testing`) are not in the wheel, so they get no exemption and stay registry-gated.
 - **Extenders**: function-extender instances passed into the runner must have registered classes; under `"strict"` unregistered ones are dropped with a warning naming them, under `"warn"` they are logged once per process.
 
 Recommended rollout for deployments: stay on `"off"`, switch CI or staging to `"warn"` and watch the logs for "not registered" warnings, then move to `"strict"` once they are gone. Packages that declare [entry points](plugin-loader.md#entry-points) register automatically, so the usual path is: add entry-point manifests to your installed plugin packages, watch the warn logs go quiet, then ramp to strict. This repository's own CI (tox) runs with `MLODA_PLUGIN_REGISTRY_STRICT=warn`.

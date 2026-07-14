@@ -14,6 +14,7 @@ from mloda.core.abstract_plugins.components.plugin_option.plugin_collector impor
     PluginCollector,
     strict_mode_from_env,
 )
+from mloda.core.abstract_plugins.plugin_registry.plugin_policy import _module_matches_prefix
 from mloda.core.abstract_plugins.plugin_registry.plugin_registry import PluginRegistry
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
@@ -36,9 +37,31 @@ def registry_for(plugin_collector: PluginCollector | None) -> PluginRegistry:
     return PluginRegistry.default()
 
 
+# The wheel owns both roots (pyproject packages: mloda*, mloda_plugins*), minus the namespaces below that
+# are reserved for third-party distributions.
+_FIRST_PARTY_ROOTS = frozenset({"mloda", "mloda_plugins"})
+
+# ``mloda`` is a shared PEP 420 namespace: pyproject keeps these out of the wheel and other distributions
+# (mloda-registry) ship into them ([tool.setuptools.packages.find] exclude).
+_THIRD_PARTY_NAMESPACES = frozenset({"mloda.community", "mloda.enterprise", "mloda.registry", "mloda.testing"})
+
+
 def _is_bundled_plugin(cls: type[Any]) -> bool:
-    """True for classes shipped in the bundled plugin distribution (mloda_plugins)."""
-    return cls.__module__.split(".", 1)[0] == "mloda_plugins"
+    """True for classes shipped in the mloda wheel (package root ``mloda`` or ``mloda_plugins``).
+
+    ComputeFrameworks are the only kind with this bypass. FeatureGroups and Extenders cannot get one:
+    registry membership is their sole strict-mode gate, and bundled ones already earn an entry by being
+    loaded (``PluginLoader`` scans ``mloda_plugins``) or listed in ``CORE_PLUGIN_MODULES``. Exempting them
+    by package root instead would gut the gate the registry exists to provide; the first-party registration
+    guard test is what keeps that list honest.
+
+    ``_THIRD_PARTY_NAMESPACES`` is excluded: those are shared-namespace third-party packages, not in the
+    wheel, so they stay registry-gated.
+    """
+    module = cls.__module__
+    if module.split(".", 1)[0] not in _FIRST_PARTY_ROOTS:
+        return False
+    return not any(_module_matches_prefix(module, namespace) for namespace in _THIRD_PARTY_NAMESPACES)
 
 
 def filter_extenders_by_strict_mode(

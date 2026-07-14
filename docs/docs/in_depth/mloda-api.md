@@ -115,9 +115,13 @@ print(f"Candidates: {[fg.__name__ for fg in result.candidates]}")
 
 **Parameters:**
 
-- **feature_name** (`str`): The name of the feature to resolve.
-- **options** (`Options | None`, keyword-only): Options used for matching and for the compute framework capability split. Defaults to empty `Options`. Required to resolve FeatureGroups that gate matching on an option.
-- **plugin_collector** (`PluginCollector | None`, keyword-only): Restricts the FeatureGroups considered, and threads its `allow_redefinition` flag into deduplication.
+- **feature** (`str | Feature`): The feature name, or a `Feature` object carrying its own options, domain, scope, and compute-framework pin. A `Feature` cannot be combined with `options` or `feature_group`.
+- **options** (`Options | None`, keyword-only, name form only): Options used for matching and for the compute framework capability split. Defaults to empty `Options`. Required to resolve FeatureGroups that gate matching on an option.
+- **plugin_collector** (`PluginCollector | None`, keyword-only): Threaded into the standalone environment build: applicability, registry strict mode, and `allow_redefinition`.
+- **feature_group** (`str | type[FeatureGroup] | None`, keyword-only, name form only): Scopes resolution to a FeatureGroup subclass or its class-name string.
+- **links** (`set[Link] | None`, keyword-only): The run's links; a candidate declaring an index no link carries is excluded.
+- **data_access_collection** (`DataAccessCollection | None`, keyword-only): Threaded into matching, exactly like the engine threads it.
+- **compute_frameworks** (`set[type[ComputeFramework]] | None`, keyword-only): Restricts the standalone environment to the given frameworks, like `mlodaAPI(compute_frameworks=...)`; `None` keeps every available framework.
 
 **Returns:** `ResolvedFeature` dataclass with fields:
 
@@ -125,6 +129,7 @@ print(f"Candidates: {[fg.__name__ for fg in result.candidates]}")
 - **feature_group** (`Type[FeatureGroup] | None`): The resolved FeatureGroup class, or None if resolution failed.
 - **candidates** (`List[Type[FeatureGroup]]`): All FeatureGroups that matched before subclass filtering.
 - **error** (`str | None`): Error message if resolution failed (no match or multiple conflicts).
+- **mode** (`str`): Always `"standalone"`, the diagnostics-mode label; use `mlodaAPI.diagnose(...)` or `session.resolution_report()` for exact-run diagnostics.
 
 ##### explain and resolved_plan
 

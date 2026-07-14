@@ -59,3 +59,5 @@ class ResolvedFeature:
     subtype: Optional[str] = None
     # Family name only when the subtype is a parametric instance (e.g. "ntile" for "ntile_2"), else None.
     subtype_family: Optional[str] = None
+    # Diagnostics-mode label: resolve_feature always resolves against the standalone environment.
+    mode: str = "standalone"

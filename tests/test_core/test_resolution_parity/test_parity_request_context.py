@@ -1,25 +1,24 @@
-"""Paired engine/diagnostic tests for issue #722 (request context), flipped to the Stage 3b target.
+"""Paired engine/diagnostic tests for issue #722 (request context), flipped to the Stage 4 target.
 
-Stage 3b rewires resolve_feature onto the same FeatureGroupResolver as the engine with a
-standalone request carrying only feature_name, options, and scope. The div-11 debug test
-below asserts the TARGET CONTRACT and FAILS until that rewire lands. Divergences #5, #6,
-#7, and #10 remain standalone request differences (domain, links, framework pin, and data
-access collection stay unexpressible until Stage 4's request redesign); #12, #14, and #15
-remain presentation-only rendering differences.
+Stage 3b rewired resolve_feature onto the same FeatureGroupResolver as the engine; Stage 4
+makes the standalone request fully expressible (Feature objects carrying domain, scope, and
+framework pin, plus links and data_access_collection parameters). The debug halves of
+divergences #5, #6, #7, and #10 below assert the TARGET CONTRACT and FAIL until Stage 4
+lands. #12, #14, and #15 remain presentation-only rendering differences.
 
 Index (divergence -> engine test / resolve_feature test):
-- #5 domain (standalone request difference, Stage 4):
+- #5 domain (TARGET CONTRACT, Stage 4 Feature-object request):
     test_engine_domain_disambiguates_shared_name
-    test_resolve_feature_has_no_domain_parameter_reports_false_conflict
-- #6 links/index (standalone request difference, Stage 4):
+    test_resolve_feature_feature_object_domain_disambiguates_shared_name
+- #6 links/index (TARGET CONTRACT, Stage 4 links parameter):
     test_engine_links_filter_excludes_unsupported_index_probe
-    test_resolve_feature_has_no_links_parameter_resolves_phantom
-- #7 compute-framework pin (standalone request difference, Stage 4):
+    test_resolve_feature_links_parameter_excludes_unsupported_index_probe
+- #7 compute-framework pin (TARGET CONTRACT, Stage 4 Feature-object pin):
     test_engine_compute_framework_pin_disambiguates_siblings
-    test_resolve_feature_has_no_framework_pin_reports_conflict
-- #10 data access collection (standalone request difference, Stage 4):
+    test_resolve_feature_feature_object_pin_disambiguates_siblings
+- #10 data access collection (TARGET CONTRACT, Stage 4 parameter):
     test_engine_data_access_collection_enables_reader_probe
-    test_resolve_feature_hardcodes_none_data_access_collection
+    test_resolve_feature_data_access_collection_parameter_enables_reader_probe
 - #11 ValueError from matching (TARGET CONTRACT, fail-closed on both paths):
     test_engine_matching_value_error_propagates_despite_clean_winner
     test_resolve_feature_fails_closed_on_matching_value_error
@@ -163,19 +162,22 @@ def test_engine_domain_disambiguates_shared_name() -> None:
     assert resolved is ProbeDomainA722B
 
 
-def test_resolve_feature_has_no_domain_parameter_reports_false_conflict() -> None:
-    """resolve_feature cannot express the run's domain, so it reports a conflict."""
+def test_resolve_feature_feature_object_domain_disambiguates_shared_name() -> None:
+    """A Feature object carries its domain into resolve_feature, matching the engine verdict."""
     collector = PluginCollector.enabled_feature_groups({ProbeDomainA722B, ProbeDomainB722B})
 
-    result = resolve_feature(DOMAIN_FEATURE, plugin_collector=collector)
+    # Premise guard: without a domain both probes survive, exactly like the engine.
+    undomained = resolve_feature(DOMAIN_FEATURE, plugin_collector=collector)
+    assert undomained.feature_group is None
+    assert undomained.error is not None
+    assert "Multiple FeatureGroups match" in undomained.error
 
-    # STANDALONE REQUEST DIFFERENCE (#5, Stage 4): the domain stays unexpressible in the
-    # standalone request until Stage 4's request redesign, so both probes survive here.
-    assert result.feature_group is None
-    assert result.error is not None
-    assert "Multiple FeatureGroups match" in result.error
-    assert "ProbeDomainA722B" in result.error
-    assert "ProbeDomainB722B" in result.error
+    result = resolve_feature(Feature(DOMAIN_FEATURE, domain=DOMAIN_A), plugin_collector=collector)
+
+    # TARGET CONTRACT (#5, Stage 4): a Feature object expresses the run's domain, so
+    # resolve_feature resolves the domain-A probe exactly like the engine.
+    assert result.feature_group is ProbeDomainA722B
+    assert result.error is None
 
 
 # ---------------------------------------------------------------------------
@@ -236,16 +238,21 @@ def test_engine_links_filter_excludes_unsupported_index_probe() -> None:
         )
 
 
-def test_resolve_feature_has_no_links_parameter_resolves_phantom() -> None:
-    """resolve_feature cannot express the run's links, so the probe resolves cleanly."""
+def test_resolve_feature_links_parameter_excludes_unsupported_index_probe() -> None:
+    """The links parameter carries the run's links, so the indexed probe stops resolving."""
     collector = PluginCollector.enabled_feature_groups({ProbeIndexed722B})
 
-    result = resolve_feature(INDEXED_FEATURE, plugin_collector=collector)
+    # Premise guard: without links the probe resolves, exactly like the engine.
+    unlinked = resolve_feature(INDEXED_FEATURE, plugin_collector=collector)
+    assert unlinked.feature_group is ProbeIndexed722B
+    assert unlinked.error is None
 
-    # STANDALONE REQUEST DIFFERENCE (#6, Stage 4): the run's links stay unexpressible in the
-    # standalone request until Stage 4's request redesign, so the probe resolves cleanly.
-    assert result.feature_group is ProbeIndexed722B
-    assert result.error is None
+    result = resolve_feature(INDEXED_FEATURE, links={_foreign_link()}, plugin_collector=collector)
+
+    # TARGET CONTRACT (#6, Stage 4): the run's links are expressible, so the probe whose
+    # index no link carries is reported as not resolvable, exactly like the engine.
+    assert result.feature_group is None
+    assert result.error is not None
 
 
 # ---------------------------------------------------------------------------
@@ -315,19 +322,25 @@ def test_engine_compute_framework_pin_disambiguates_siblings() -> None:
     assert compute_frameworks == {CfwPinX722B}
 
 
-def test_resolve_feature_has_no_framework_pin_reports_conflict() -> None:
-    """resolve_feature cannot express a framework pin, so the siblings stay ambiguous."""
+def test_resolve_feature_feature_object_pin_disambiguates_siblings() -> None:
+    """A framework pin on the Feature object resolves the sibling ambiguity, like the engine."""
     collector = PluginCollector.enabled_feature_groups({ProbePinX722B, ProbePinY722B})
 
-    result = resolve_feature(PIN_FEATURE, plugin_collector=collector)
+    # Premise guard: unpinned, the siblings stay ambiguous, exactly like the engine.
+    unpinned = resolve_feature(PIN_FEATURE, plugin_collector=collector)
+    assert unpinned.feature_group is None
+    assert unpinned.error is not None
+    assert "Multiple FeatureGroups match" in unpinned.error
 
-    # STANDALONE REQUEST DIFFERENCE (#7, Stage 4): a framework pin stays unexpressible in the
-    # standalone request until Stage 4's request redesign, so the siblings stay ambiguous.
-    assert result.feature_group is None
-    assert result.error is not None
-    assert "Multiple FeatureGroups match" in result.error
-    assert "ProbePinX722B" in result.error
-    assert "ProbePinY722B" in result.error
+    result = resolve_feature(
+        Feature(PIN_FEATURE, compute_framework=CfwPinX722B.get_class_name()), plugin_collector=collector
+    )
+
+    # TARGET CONTRACT (#7, Stage 4): the Feature's framework pin is expressible, so
+    # resolve_feature resolves the pinned sibling exactly like the engine.
+    assert result.feature_group is ProbePinX722B
+    assert result.error is None
+    assert result.supported_compute_frameworks == [CfwPinX722B.get_class_name()]
 
 
 # ---------------------------------------------------------------------------
@@ -370,17 +383,26 @@ def test_engine_data_access_collection_enables_reader_probe() -> None:
     assert resolved is ProbeDac722B
 
 
-def test_resolve_feature_hardcodes_none_data_access_collection() -> None:
-    """resolve_feature always passes data_access_collection=None into matching."""
+def test_resolve_feature_data_access_collection_parameter_enables_reader_probe() -> None:
+    """The data_access_collection parameter reaches matching, exactly like the engine threads it."""
     collector = PluginCollector.enabled_feature_groups({ProbeDac722B})
 
-    result = resolve_feature(DAC_FEATURE, plugin_collector=collector)
+    # Premise guard: without a collection the probe does not match, exactly like the engine.
+    without = resolve_feature(DAC_FEATURE, plugin_collector=collector)
+    assert without.feature_group is None
+    assert without.error is not None
+    assert "No FeatureGroup found" in without.error
 
-    # STANDALONE REQUEST DIFFERENCE (#10, Stage 4): a data access collection stays unexpressible
-    # in the standalone request until Stage 4's request redesign, so reader probes never match.
-    assert result.feature_group is None
-    assert result.error is not None
-    assert "No FeatureGroup found" in result.error
+    result = resolve_feature(
+        DAC_FEATURE,
+        data_access_collection=DataAccessCollection(files={"probe722b": "probe722b.csv"}),
+        plugin_collector=collector,
+    )
+
+    # TARGET CONTRACT (#10, Stage 4): the run's data access collection is expressible, so
+    # resolve_feature resolves the reader probe exactly like the engine.
+    assert result.feature_group is ProbeDac722B
+    assert result.error is None
 
 
 # ---------------------------------------------------------------------------

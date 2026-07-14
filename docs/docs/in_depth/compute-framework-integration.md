@@ -56,6 +56,9 @@ The debug inspector `resolve_feature(name)` reflects the hook too: its
 pass `options=`, see [Discover Plugins](discover-plugins.md)), and a feature
 that matches a group but is unsupported on every installed framework resolves
 to `feature_group=None` with a capability error rather than appearing runnable.
+Framework availability applies the same way: a feature whose only declared
+framework is not installed resolves to `feature_group=None` on the debug path
+too, exactly like the engine refuses to run it.
 
 ### Declaring capability per subtype
 

@@ -2,11 +2,14 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.resolve.identity import PluginIdentity
+
+if TYPE_CHECKING:
+    from mloda.core.resolve.report import ResolutionReport
 
 
 class ResolutionStatus(Enum):
@@ -171,3 +174,5 @@ class FeatureResolutionError(ValueError):
     def __init__(self, message: str, outcome: ResolutionOutcome) -> None:
         super().__init__(message)
         self.outcome = outcome
+        # Attached by the engine when this error escapes planning; None everywhere else.
+        self.report: ResolutionReport | None = None

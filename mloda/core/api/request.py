@@ -12,6 +12,9 @@ from mloda.core.api.plan_info import PlanStep, build_plan_steps
 from mloda.core.api.run_result import ResultStream, RunResult
 from mloda.core.api.prepare.setup_compute_framework import SetupComputeFramework
 from mloda.core.prepare.accessible_plugins import filter_extenders_by_strict_mode
+from mloda.core.resolve.environment import build_resolution_environment
+from mloda.core.resolve.outcome import FeatureResolutionError
+from mloda.core.resolve.report import ResolutionReport
 from mloda.core.filter.global_filter import GlobalFilter
 from mloda.core.runtime.run import ExecutionOrchestrator
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
@@ -298,6 +301,61 @@ class mlodaAPI:
             parallelization_modes=parallelization_modes,
         )
         return session.resolved_plan()
+
+    @classmethod
+    def diagnose(
+        cls,
+        features: Features | list[Feature | str],
+        *,
+        compute_frameworks: set[type[ComputeFramework]] | Optional[list[str]] = None,
+        links: Optional[set[Link]] = None,
+        data_access_collection: Optional[DataAccessCollection] = None,
+        global_filter: Optional[GlobalFilter] = None,
+        api_data: Optional[dict[str, dict[str, Any]]] = None,
+        plugin_collector: Optional[PluginCollector] = None,
+        copy_features: bool = True,
+        strict_type_enforcement: bool = False,
+        column_ordering: Optional[str] = None,
+        parallelization_modes: Optional[set[ParallelizationMode]] = None,
+    ) -> ResolutionReport:
+        """Resolve the whole request into a ``ResolutionReport`` without executing anything.
+
+        Non-raising for resolution and environment failures: those come back as a structured
+        report with ``complete=False``. Every parameter after ``features`` is keyword-only.
+        """
+        framework_set = SetupComputeFramework(
+            compute_frameworks, Features([]), parallelization_modes=parallelization_modes
+        ).compute_frameworks
+        environment = build_resolution_environment(framework_set, plugin_collector)
+        if environment.errors:
+            return ResolutionReport(environment=environment, features=(), complete=False)
+        # Narrow by contract: the engine attaches the partial report to every planning-time resolution error.
+        try:
+            session = cls.prepare(
+                features,
+                compute_frameworks,
+                links,
+                data_access_collection,
+                global_filter,
+                api_data=api_data,
+                plugin_collector=plugin_collector,
+                copy_features=copy_features,
+                strict_type_enforcement=strict_type_enforcement,
+                column_ordering=column_ordering,
+                parallelization_modes=parallelization_modes,
+            )
+        except FeatureResolutionError as err:
+            report = err.report
+            if report is not None:
+                return report
+            return ResolutionReport(environment=environment, features=(), complete=False)
+        return session.resolution_report()
+
+    def resolution_report(self) -> ResolutionReport:
+        """Whole-request report from this session's planning pass; nothing is re-resolved."""
+        if self.engine is None:
+            raise ValueError("Internal error: engine not initialized. This is likely a bug in mloda.")
+        return self.engine.resolution_report()
 
     def resolved_plan(self) -> list[PlanStep]:
         """Return the resolved execution plan of this session as ``PlanStep`` records.

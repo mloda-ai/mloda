@@ -1,6 +1,6 @@
 # Feature Group Resolution Contract
 
-Status: this contract was decided under issue #722 (Stage 1). The engine matcher (`IdentifyFeatureGroupClass`) and the debug matcher (`resolve_feature`) still diverge today; the known divergences are pinned by `tests/test_core/test_resolution_parity/`. Stages 2-4 of #722 implement this contract; nothing below is implemented yet unless a parity test says otherwise. Input-data reader selection (issue #727) and GlobalFilter (issue #728) are out-of-scope follow-ups.
+Status: this contract was decided under issue #722 (Stage 1); Stages 2-4 are implemented. The engine matcher (`IdentifyFeatureGroupClass`) and the debug matcher (`resolve_feature`) resolve through the same `FeatureGroupResolver`, and `tests/test_core/test_resolution_parity/` expresses the target contract, except the documented presentation-only rendering differences (divergences 12, 14, and 15). Input-data reader selection (issue #727) and GlobalFilter (issue #728) remain out-of-scope follow-ups.
 
 ## Boundary model
 
@@ -64,7 +64,7 @@ The new order runs cheap structural exclusions first and never invokes hooks for
 
 ## Subclass policy
 
-Framework-aware preference, the engine's current semantics: a child shadows its parent only when both survived all prior steps and their supported framework sets are equal. Shadowing records the shadowed candidate as SHADOWED. Pure-issubclass collapse (what `resolve_feature` does today) is rejected because it hides real ambiguity that the engine reports.
+Framework-aware preference, the engine's current semantics: a child shadows its parent only when both survived all prior steps and their supported framework sets are equal. Shadowing records the shadowed candidate as SHADOWED. Pure-issubclass collapse (what `resolve_feature` did before #722) is rejected because it hides real ambiguity that the engine reports.
 
 ## Failure precedence
 
@@ -80,7 +80,7 @@ FAILED (a decision-relevant provider or environment error) beats AMBIGUOUS, whic
 | Unexpected provider exception | FAILED, fail closed, never degraded open, never converted to a non-match or an empty framework list | FAILED, fail closed |
 | Environment or policy failure | FAILED at environment construction | FAILED at environment construction |
 
-Recorded per failure: plugin identity, hook or stage, exception category, safe message. Never retained: traceback objects. The current `resolve_feature` behavior of degrading a raising capability hook open is explicitly rejected.
+Recorded per failure: plugin identity, hook or stage, exception category, safe message. Never retained: traceback objects. The pre-#722 `resolve_feature` behavior of degrading a raising capability hook open is explicitly rejected.
 
 ## Projections
 

@@ -22,6 +22,15 @@ This is useful for:
 - Understanding which plugin handles a feature
 - Identifying conflicts when multiple FeatureGroups match
 
+`resolve_feature` also accepts a `Feature` object carrying its own options, domain,
+scope, and compute-framework pin (do not combine it with `options=` or
+`feature_group=`), plus the keyword-only `links`, `data_access_collection`, and
+`compute_frameworks` parameters to express the remaining run context. The
+standalone environment applies collector applicability, registry strict mode, and
+framework availability exactly like the engine, and every result carries
+`mode == "standalone"`. For the exact configuration of a run, use
+`mlodaAPI.diagnose(...)` or `session.resolution_report()`.
+
 ### Option-Gated Feature Groups
 
 Matching and the compute framework split both run under the options you pass.
@@ -41,7 +50,7 @@ result = resolve_feature("sales__sum_aggr", options=Options(group={"partition_by
 print(result.feature_group, result.supported_compute_frameworks)
 ```
 
-`options` and `plugin_collector` are keyword-only, so pass them by name.
+Every parameter after the first is keyword-only, so pass it by name.
 
 ### Scoping to a Feature Group
 

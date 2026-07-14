@@ -18,6 +18,8 @@ Example:
 from typing import Any, Optional
 
 from mloda.core.abstract_plugins.components.base_feature_group_version import SOURCE_INTROSPECTION_ERRORS
+from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
+from mloda.core.abstract_plugins.components.link import Link
 from mloda.core.abstract_plugins.components.subtype_declaration import SubtypeDeclaration
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.abstract_plugins.components.plugin_option.plugin_collector import PluginCollector
@@ -25,7 +27,7 @@ from mloda.core.abstract_plugins.components.utils import get_all_subclasses, saf
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.function_extender import Extender
 from mloda.core.abstract_plugins.plugin_registry.plugin_registry import PluginRegistry
-from mloda.core.abstract_plugins.components.feature import normalize_feature_group_scope
+from mloda.core.abstract_plugins.components.feature import Feature, normalize_feature_group_scope
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.api.plugin_info import ComputeFrameworkInfo, ExtenderInfo, FeatureGroupInfo, ResolvedFeature
@@ -34,10 +36,7 @@ from mloda.core.prepare.accessible_plugins import (
     dedup_feature_group_subclasses,
     registry_for,
 )
-from mloda.core.prepare.identify_feature_group import (
-    matches_feature_group_scope,
-    scope_callout,
-)
+from mloda.core.prepare.identify_feature_group import scope_callout
 from mloda.core.resolve.environment import (
     EnvironmentBuildError,
     EnvironmentProvenance,
@@ -52,7 +51,7 @@ from mloda.core.resolve.outcome import (
     ResolutionStatus,
 )
 from mloda.core.resolve.request import ResolutionRequestSnapshot
-from mloda.core.resolve.resolver import FeatureGroupResolver
+from mloda.core.resolve.resolver import FeatureGroupResolver, matching_conflict_candidates
 
 
 def list_registered(plugin_type: type[Any]) -> list[type[Any]]:
@@ -103,27 +102,6 @@ def _dedup_degrading_on_conflict(
         return dedup_feature_group_subclasses(feature_groups, allow_redefinition=allow_redefinition)
     except RedefinitionConflictError:
         return dedup_feature_group_subclasses(feature_groups, allow_redefinition=True)
-
-
-def _match_recording_validation_errors(
-    fg_class: type[FeatureGroup],
-    feature_name: FeatureName,
-    options: Options,
-    validation_errors: list[str],
-) -> bool:
-    """Match a feature group, degrading a validation ValueError into "not a match" and recording its message.
-
-    resolve_feature is a non-throwing debug API, but matching can raise ValueError once caller
-    options reach the feature chain parser (e.g. a forwarded option contradicting the feature name).
-    Such a candidate is not a match, and the reason is recorded so it can be surfaced in the error.
-    """
-    try:
-        return fg_class.match_feature_group_criteria(feature_name, options, None)
-    except ValueError as exc:
-        message = str(exc)
-        if message not in validation_errors:
-            validation_errors.append(message)
-        return False
 
 
 def get_feature_group_docs(
@@ -361,69 +339,101 @@ def get_extender_docs(
 
 
 def resolve_feature(
-    feature_name: str,
+    feature: str | Feature,
     *,
     options: Optional[Options] = None,
     plugin_collector: Optional[PluginCollector] = None,
     feature_group: str | type[FeatureGroup] | None = None,
+    links: Optional[set[Link]] = None,
+    data_access_collection: Optional[DataAccessCollection] = None,
+    compute_frameworks: Optional[set[type[ComputeFramework]]] = None,
 ) -> ResolvedFeature:
     """
-    Resolve a feature name to its matching FeatureGroup class.
+    Resolve a feature name or Feature object to its matching FeatureGroup class.
 
     Never raises: matching errors are reported in the returned ResolvedFeature.error.
 
     Design note: resolve_feature delegates to the shared FeatureGroupResolver against a standalone
-    default environment (collector applicability, strict mode, dedup, and framework availability applied
-    exactly like the engine). The remaining differences from the engine are request expressibility
-    (domain, links, framework pin, data access) until Stage 4.
+    environment (collector applicability, strict mode, dedup, and framework availability applied
+    exactly like the engine). Every result carries ``mode == "standalone"``; for the exact
+    configuration of a run use ``mlodaAPI.diagnose(...)`` or ``session.resolution_report()``.
 
     Args:
-        feature_name: The name of the feature to resolve.
-        options: Keyword-only. Options used for matching and capability checks. An empty or omitted Options is
-            the documented default.
+        feature: The feature name, or a Feature object carrying its own options, domain, scope,
+            and compute-framework pin. A Feature cannot be combined with the ``options`` or
+            ``feature_group`` keyword.
+        options: Keyword-only, name form only. Options used for matching and capability checks.
+            An empty or omitted Options is the documented default.
         plugin_collector: Keyword-only. Threaded into the standalone environment build (applicability,
             strict mode, ``allow_redefinition``).
-        feature_group: Keyword-only. Scope resolution to a FeatureGroup subclass or a class-name string,
-            same forms and semantics as ``Feature(..., feature_group=...)``: the string form matches the
-            named class and its subclasses; None (or a whitespace-only string) means unscoped.
+        feature_group: Keyword-only, name form only. Scope resolution to a FeatureGroup subclass or a
+            class-name string, same forms and semantics as ``Feature(..., feature_group=...)``: the string
+            form matches the named class and its subclasses; None (or a whitespace-only string) means unscoped.
+        links: Keyword-only. The run's links; a candidate declaring an index no link carries is
+            excluded, exactly like the engine's links filter.
+        data_access_collection: Keyword-only. Threaded into matching, exactly like the engine threads it.
+        compute_frameworks: Keyword-only. Restricts the standalone environment to the given frameworks,
+            exactly like ``mlodaAPI(compute_frameworks=...)`` restricts the engine's run set. None keeps
+            every available framework, the standalone default.
 
     Returns:
         ResolvedFeature containing the resolved FeatureGroup (if found),
         all matching candidates, and any error message.
     """
-    try:
-        scope = normalize_feature_group_scope(feature_group)
-    except TypeError as exc:
-        return ResolvedFeature(
-            feature_name=feature_name,
-            feature_group=None,
-            candidates=[],
-            error=str(exc),
+    if isinstance(feature, Feature):
+        if options is not None or feature_group is not None:
+            return ResolvedFeature(
+                feature_name=str(feature.name),
+                feature_group=None,
+                candidates=[],
+                error=(
+                    "Cannot combine a Feature object with the 'options' or 'feature_group' keyword: "
+                    "a Feature carries its own options, domain, scope, and framework pin."
+                ),
+            )
+        feature_name = str(feature.name)
+        scope = feature.feature_group_scope
+        resolved_options = feature.options
+        request = ResolutionRequestSnapshot.from_feature(
+            feature, links=links, data_access_collection=data_access_collection
         )
+    else:
+        try:
+            scope = normalize_feature_group_scope(feature_group)
+        except TypeError as exc:
+            return ResolvedFeature(
+                feature_name=feature,
+                feature_group=None,
+                candidates=[],
+                error=str(exc),
+            )
+        feature_name = feature
+        resolved_options = options if options is not None else Options()
+        request = ResolutionRequestSnapshot(
+            feature_name=feature_name,
+            domain=None,
+            feature_group_scope=scope,
+            framework_pin=None,
+            pinned_frameworks=(),
+            group_option_keys=frozenset(resolved_options.group),
+            context_option_keys=frozenset(resolved_options.context),
+            inherited_group_keys=resolved_options.inherited_group_keys,
+            dependency_path=(),
+            links=tuple(links) if links else (),
+            data_access_collection=data_access_collection,
+            options=resolved_options,
+        )
+
     callout = scope_callout(scope)
     scope_suffix = f" {callout}" if callout else ""
-    resolved_options = options if options is not None else Options()
 
-    # compute_frameworks=None: the factory samples availability exactly once, guarded.
-    build = build_resolution_environment(compute_frameworks=None, plugin_collector=plugin_collector)
+    # compute_frameworks=None keeps the all-available standalone default (availability sampled
+    # exactly once, guarded); a set restricts exactly like the engine's run set.
+    build = build_resolution_environment(compute_frameworks=compute_frameworks, plugin_collector=plugin_collector)
     snapshot = build.snapshot
     if snapshot is None:
         return _environment_error_result(build.errors[0], feature_name, scope, scope_suffix, resolved_options)
 
-    request = ResolutionRequestSnapshot(
-        feature_name=feature_name,
-        domain=None,
-        feature_group_scope=scope,
-        framework_pin=None,
-        pinned_frameworks=(),
-        group_option_keys=frozenset(resolved_options.group),
-        context_option_keys=frozenset(resolved_options.context),
-        inherited_group_keys=resolved_options.inherited_group_keys,
-        dependency_path=(),
-        links=(),
-        data_access_collection=None,
-        options=resolved_options,
-    )
     outcome = FeatureGroupResolver().resolve(request, snapshot)
     return _project_outcome(outcome, feature_name, resolved_options, scope_suffix)
 
@@ -438,14 +448,7 @@ def _environment_error_result(
     """Project a failed standalone environment build; only a redefinition conflict carries candidates."""
     if error.category == EnvironmentProvenance.REDEFINITION_CONFLICT.value:
         raw_conflicts = list(getattr(error.as_exception(), "conflicts", []))
-        feature_name_obj = FeatureName(feature_name)
-        validation_errors: list[str] = []
-        matching_conflicts = [
-            fg
-            for fg in raw_conflicts
-            if (scope is None or matches_feature_group_scope(fg, scope))
-            and _match_recording_validation_errors(fg, feature_name_obj, options, validation_errors)
-        ]
+        matching_conflicts = matching_conflict_candidates(raw_conflicts, FeatureName(feature_name), options, scope)
         return ResolvedFeature(
             feature_name=feature_name,
             feature_group=None,
@@ -630,6 +633,20 @@ def _not_found_result(
         )
 
     names = [c.get_class_name() for c in candidates]
+    if all(
+        any(rejection.reason is RejectionReason.LINK_INDEX for rejection in evaluation.rejections)
+        for evaluation in matched
+    ):
+        return ResolvedFeature(
+            feature_name=feature_name,
+            feature_group=None,
+            candidates=candidates,
+            error=(
+                f"Feature '{feature_name}' matches {names} but none of them supports "
+                f"an index carried by the request's links.{scope_suffix}"
+            ),
+        )
+
     return ResolvedFeature(
         feature_name=feature_name,
         feature_group=None,

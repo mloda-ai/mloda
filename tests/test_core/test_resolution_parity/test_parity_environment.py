@@ -1,17 +1,17 @@
-"""Paired engine/diagnostic tests for issue #722 (environment-level), flipped to the Stage 3b target.
+"""Paired engine/diagnostic tests for issue #722 (environment-level), flipped to the Stage 4 target.
 
-Stage 3b rewires resolve_feature onto a standalone environment built by
-build_resolution_environment with all available compute frameworks, so the debug-side
-tests below assert the TARGET CONTRACT and FAIL until that rewire lands. Where a
-difference legitimately remains it is marked as a standalone request difference (Stage 4).
+Stage 3b rewired resolve_feature onto a standalone environment built by
+build_resolution_environment with all available compute frameworks; Stage 4 adds the
+compute_frameworks parameter that restricts that environment to a run's exact framework
+set. The div-8 debug test below asserts the TARGET CONTRACT and FAILS until Stage 4 lands.
 
 Index (divergence number in issue #722 -> test names):
 - #2 (unavailable-framework honesty):
     test_engine_unavailable_only_framework_raises_no_feature_groups (TARGET CONTRACT)
     test_resolve_feature_unavailable_only_framework_reports_not_runnable (TARGET CONTRACT)
-- #8 (run framework set, standalone request difference until Stage 4):
+- #8 (run framework set, TARGET CONTRACT via the Stage 4 compute_frameworks parameter):
     test_engine_resolution_limited_to_run_framework_set (TARGET CONTRACT)
-    test_resolve_feature_reports_frameworks_outside_run_set (standalone difference, Stage 4)
+    test_resolve_feature_compute_frameworks_parameter_limits_run_set (TARGET CONTRACT)
 - #9 (registry strict mode now shared):
     test_engine_strict_mode_with_empty_registry_raises (TARGET CONTRACT)
     test_resolve_feature_applies_collector_strict_mode (TARGET CONTRACT)
@@ -251,17 +251,24 @@ def test_engine_resolution_limited_to_run_framework_set() -> None:
     assert frameworks == {CfwEnabled722C}
 
 
-def test_resolve_feature_reports_frameworks_outside_run_set() -> None:
-    """resolve_feature has no notion of a run set and reports every installed declared framework."""
+def test_resolve_feature_compute_frameworks_parameter_limits_run_set() -> None:
+    """The compute_frameworks parameter restricts the standalone environment to the run's set."""
     collector = PluginCollector.enabled_feature_groups({ProbeTwoFw722C})
-    result = resolve_feature("probe722c_twofw", plugin_collector=collector)
+
+    # Premise guard: without a run set the standalone default reports every installed
+    # declared framework, exactly like an all-frameworks engine environment.
+    unrestricted = resolve_feature("probe722c_twofw", plugin_collector=collector)
+    assert unrestricted.feature_group is ProbeTwoFw722C
+    assert unrestricted.supported_compute_frameworks == ["CfwEnabled722C", "CfwOther722C"]
+
+    result = resolve_feature("probe722c_twofw", compute_frameworks={CfwEnabled722C}, plugin_collector=collector)
 
     assert result.feature_group is ProbeTwoFw722C
     assert result.error is None
-    # STANDALONE REQUEST DIFFERENCE (#8, Stage 4): the standalone environment legitimately enables
-    # every available framework; a run's exact framework set stays unexpressible here until the
-    # Stage 4 exact-run mode, so CfwOther722C is honestly reported alongside CfwEnabled722C.
-    assert result.supported_compute_frameworks == ["CfwEnabled722C", "CfwOther722C"]
+    # TARGET CONTRACT (#8, Stage 4): compute_frameworks restricts the standalone environment
+    # exactly like mlodaAPI(compute_frameworks=...) restricts the engine's run set, so only
+    # the enabled framework is reported.
+    assert result.supported_compute_frameworks == ["CfwEnabled722C"]
     assert result.unsupported_compute_frameworks == []
 
 

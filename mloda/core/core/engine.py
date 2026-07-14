@@ -23,7 +23,9 @@ from mloda.core.prepare.resolve_graph import ResolveGraph
 from mloda.core.runtime.run import ExecutionOrchestrator
 from mloda.core.prepare import identify_feature_group
 from mloda.core.prepare.identify_feature_group import IdentifyFeatureGroupClass
-from mloda.core.resolve.outcome import ResolutionOutcome
+from mloda.core.resolve.environment import EnvironmentBuildOutcome
+from mloda.core.resolve.outcome import FeatureResolutionError, ResolutionOutcome
+from mloda.core.resolve.report import FeatureResolutionRecord, ResolutionReport
 from mloda.core.runtime.flight.runner_flight_server import ParallelRunnerFlightServer
 from mloda.core.abstract_plugins.feature_group import FeatureGroup, format_feature_group_class
 from mloda.core.abstract_plugins.components.feature import Feature
@@ -78,9 +80,17 @@ class Engine:
         # One (dependency_path, outcome) entry per successful identification call, in planning
         # order; a feature reached via multiple parents is retained once per occurrence.
         self.resolution_outcomes: list[tuple[tuple[str, ...], ResolutionOutcome]] = []
+        # Path of the identification currently in flight; consulted only on a planning failure.
+        self._pending_identification_path: tuple[str, ...] = ()
         # Built at most once per Engine: every identification shares this mapping-derived snapshot.
         self.resolution_environment = identify_feature_group.snapshot_from_mapping(self.accessible_plugins)
-        self.execution_planner = self.create_setup_execution_plan(features)
+        self.environment_build_outcome = EnvironmentBuildOutcome(snapshot=self.resolution_environment, errors=())
+        # Narrow re-raise of the same object: planning failures carry the partial report for diagnose().
+        try:
+            self.execution_planner = self.create_setup_execution_plan(features)
+        except FeatureResolutionError as err:
+            err.report = self._failure_resolution_report(err)
+            raise
         self.tfs_connection_map = self._resolve_tfs_connection_map()
 
     def _resolve_tfs_connection_map(self) -> dict[type[ComputeFramework], Any]:
@@ -224,6 +234,7 @@ class Engine:
         self, feature: Feature, dependency_path: tuple[str, ...] = ()
     ) -> tuple[type[FeatureGroup], set[type[ComputeFramework]]]:
         """Identifies the feature group class and compute frameworks for a given feature."""
+        self._pending_identification_path = dependency_path
         identifier = IdentifyFeatureGroupClass(
             feature,
             self.accessible_plugins,
@@ -234,6 +245,28 @@ class Engine:
         )
         self.resolution_outcomes.append((dependency_path, identifier.outcome))
         return identifier.get()
+
+    def resolution_report(self) -> ResolutionReport:
+        """Whole-request report over the memoized planning outcomes; nothing is re-resolved."""
+        return ResolutionReport(
+            environment=self.environment_build_outcome,
+            features=self._resolution_records(),
+            complete=True,
+        )
+
+    def _resolution_records(self) -> tuple[FeatureResolutionRecord, ...]:
+        return tuple(
+            FeatureResolutionRecord(dependency_path=path, outcome=outcome) for path, outcome in self.resolution_outcomes
+        )
+
+    def _failure_resolution_report(self, error: FeatureResolutionError) -> ResolutionReport:
+        """Partial report for a planning failure: successful records first, the failing one last."""
+        failing = FeatureResolutionRecord(dependency_path=self._pending_identification_path, outcome=error.outcome)
+        return ResolutionReport(
+            environment=self.environment_build_outcome,
+            features=self._resolution_records() + (failing,),
+            complete=False,
+        )
 
     def _add_index_feature(
         self,

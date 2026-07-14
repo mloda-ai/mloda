@@ -110,7 +110,7 @@ If both versions of the class have **identical** source code (e.g., re-running a
 
 For rapid iteration in notebooks, opt in to "newest wins" using the builder method on `PluginCollector`:
 
-**Option A** — set the override flag on a fresh collector:
+**Option A**: set the override flag on a fresh collector:
 
 ```python
 from mloda.provider import FeatureGroup
@@ -124,7 +124,7 @@ class SomeFG(FeatureGroup):
 plugin_collector = PluginCollector().set_allow_redefinition()
 ```
 
-**Option B** — compose with disable/enable filters:
+**Option B**: compose with disable/enable filters:
 
 ```python
 plugin_collector = (
@@ -196,6 +196,21 @@ group rather than the final result, are never subject to `EmptyResultError`.
 
 For full details on how the guard works and the schema-presence gate, see
 [Empty Results](../compute-framework-integration.md#empty-results).
+
+## Debugging Resolution
+
+`resolve_feature` is the standalone diagnostics mode: it resolves one feature against a fresh
+default environment under the same rules as the engine (collector applicability, registry strict
+mode, redefinition dedup, framework availability). It accepts a `Feature` object or a feature
+name; a `Feature` carries its own options, domain, scope, and compute-framework pin. The
+keyword-only parameters `links`, `data_access_collection`, and `compute_frameworks` express the
+remaining run context; `compute_frameworks` restricts the environment exactly like
+`mlodaAPI(compute_frameworks=...)`. It never raises; failures land in `result.error`, and every
+result carries `mode == "standalone"`.
+
+For the exact configuration of a run, use `mlodaAPI.diagnose(...)` or
+`session.resolution_report()` instead: they capture the resolution outcomes of a real planning
+pass rather than a fresh standalone environment.
 
 ## Related Documentation
 

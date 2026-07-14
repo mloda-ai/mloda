@@ -37,7 +37,7 @@ class ExecutionPlan:
         global_filter: Optional[GlobalFilter] = None,
         api_input_data_collection: Optional[ApiInputDataCollection] = None,
     ) -> None:
-        self.tfs_collecion: set[TransformFrameworkStep] = set()
+        self.tfs_collection: set[TransformFrameworkStep] = set()
         self.joinstep_collection = JoinStepCollection()
         self.global_filter = global_filter
         self.api_input_data_collection = api_input_data_collection
@@ -188,8 +188,8 @@ class ExecutionPlan:
                 if ep.destination_framework != ep.source_framework:
                     new_tfs = self.fill_tfs_by_joinstep(ep)
 
-                    if new_tfs not in self.tfs_collecion:
-                        self.tfs_collecion.add(new_tfs)
+                    if new_tfs not in self.tfs_collection:
+                        self.tfs_collection.add(new_tfs)
                         new_execution_plan.append(new_tfs)
                         ep.required_uuids.add(new_tfs.uuid)
 
@@ -271,8 +271,8 @@ class ExecutionPlan:
                             from_feature_group=parent_node_property.feature_group_class,
                             to_feature_group=ep.feature_group,
                         )
-                        if new_tfs not in self.tfs_collecion:
-                            self.tfs_collecion.add(new_tfs)
+                        if new_tfs not in self.tfs_collection:
+                            self.tfs_collection.add(new_tfs)
                             new_execution_plan.append(new_tfs)
                             ep.required_uuids.add(new_tfs.uuid)
 

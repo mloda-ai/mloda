@@ -85,6 +85,11 @@ than adding to it: when a key declares one, `allowed_values` is not consulted. B
 parser runs before the mixin, an element rejected by membership or by `element_validator`
 short-circuits, and `match_guard` is never reached.
 
+That short-circuit holds only when the feature name does **not** match a `PREFIX_PATTERN`. On a
+name match the parser short-circuits the other way (to a match, without consulting the property
+mapping at all), so `match_guard` is the only hook that runs on the string-named path. A key that
+must be enforced on both paths therefore declares both callables, usually with the same predicate.
+
 ## Choosing a mechanism
 
 | You want to say | Use |
@@ -101,7 +106,12 @@ The two callables differ on both axes, which is what their names say:
   accept, so they are told.
 - **`match_guard`** sees the **raw whole value**, with or without strict, and a falsy return
   is a plain **non-match**. The group is saying "not mine", so resolution moves on and
-  another feature group may still take the feature.
+  another feature group may still take the feature. On a spec that also sets
+  `strict_validation=True` the guard means "this value is wrong", so its rejection is reported to
+  the user instead of failing silently.
+
+Declaring both on one spec is the way to enforce a key on both paths: `element_validator` cannot
+run on the string-named path, and `match_guard` alone gives no message on a non-strict spec.
 
 Both must be pure functions. They may be called several times during resolution (once per
 candidate feature group).

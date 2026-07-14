@@ -35,7 +35,15 @@ When both are present on the same spec, ``element_validator`` runs
 first (during property mapping validation) on each parsed element, then
 ``match_guard`` runs on the raw value. If ``element_validator`` rejects an
 element, the match fails with a ``ValueError`` before ``match_guard`` is
-reached.
+reached. That ordering holds only when the feature name does NOT match a
+PREFIX_PATTERN: on a name match the parser short-circuits to a match and
+``match_guard`` is the only hook that runs, which is why a key that must be
+enforced on both paths declares both hooks.
+
+A guard rejection on a spec that also sets ``strict_validation=True`` is
+reportable: ``_strict_validation_rejection_reason`` turns it into a message so
+the feature group does not vanish silently. A guard on a non-strict spec keeps
+its "not mine" meaning and reports nothing.
 
 Validators must be pure functions with no side effects. They may be called
 multiple times during feature group resolution (once per candidate feature
@@ -250,33 +258,57 @@ class FeatureChainParserMixin:
 
     @classmethod
     def _strict_validation_rejection_reason(cls, feature_name: str | FeatureName, options: Options) -> str | None:
-        """Return the ValueError message that match_feature_group_criteria discards, if any.
+        """Return the rejection message that match_feature_group_criteria discards, if any.
 
-        Only surfaces ValueErrors raised by property-mapping validation (genuine
-        strict_validation rejections). A ValueError raised while parsing a
-        PREFIX_PATTERN match (malformed feature name, no chain separator) is a
-        parse error, not an option-value rejection, and is treated as nothing to
-        report. Returns None when nothing was rejected (match succeeded, or the
-        candidate is unrelated). Diagnostic-only: does not affect
+        Reports two kinds of value rejection, both gated on the feature group OTHERWISE matching
+        the feature:
+
+        1. A ValueError raised by property-mapping validation (a strict_validation rejection).
+        2. A match_guard rejection on a spec that also declares strict_validation. On the
+           string-named path the PREFIX_PATTERN match short-circuits property-mapping validation,
+           so the guard is the only enforcement there and would otherwise reject in silence.
+
+        A guard on a non-strict spec means "this feature group does not match", not "this value is
+        wrong", so it stays unreported. A ValueError raised while parsing a PREFIX_PATTERN match
+        (malformed feature name, no chain separator) is a parse error, not an option-value
+        rejection, and is likewise nothing to report. Returns None when nothing was rejected (the
+        match succeeded, or the candidate is unrelated). Diagnostic-only: does not affect
         match_feature_group_criteria's behavior.
         """
-        prefix_patterns = cls._get_prefix_patterns()
-        if prefix_patterns:
-            try:
-                if FeatureChainParser._match_pattern_based_feature(feature_name, prefix_patterns, CHAIN_SEPARATOR):
-                    return None
-            except ValueError:
-                return None
-
         property_mapping = cls._get_property_mapping()
         if property_mapping is None:
             return None
 
-        try:
-            FeatureChainParser._validate_options_against_property_mapping(options, property_mapping)
-        except ValueError as exc:
-            return str(exc)
-        return None
+        prefix_patterns = cls._get_prefix_patterns()
+        name_matches = False
+        if prefix_patterns:
+            try:
+                name_matches = FeatureChainParser._match_pattern_based_feature(
+                    feature_name, prefix_patterns, CHAIN_SEPARATOR
+                )
+            except ValueError:
+                return None
+
+        if not name_matches:
+            try:
+                matches_mapping = FeatureChainParser._validate_options_against_property_mapping(
+                    options, property_mapping
+                )
+            except ValueError as exc:
+                return str(exc)
+            # Neither the name nor the option set relates this feature group to the feature: its
+            # guards are none of the feature's business.
+            if not matches_mapping:
+                return None
+
+        rejection = cls._first_rejecting_guard(options, property_mapping)
+        if rejection is None:
+            return None
+
+        key, value = rejection
+        if not property_mapping[key].strict_validation:
+            return None
+        return f"Property value '{value}' rejected by match_guard for '{key}'"
 
     @classmethod
     def _validate_forwarded_name_mismatch(
@@ -351,26 +383,49 @@ class FeatureChainParserMixin:
         return True
 
     @classmethod
+    def _first_rejecting_guard(
+        cls, options: Options, property_mapping: dict[str, PropertySpec] | None
+    ) -> tuple[str, Any] | None:
+        """Return the (key, value) of the first match_guard that rejects its option value, or None.
+
+        A guard rejects by returning a falsy value or by raising. Shared by the match decision
+        (_validate_match_guards) and the diagnostic (_strict_validation_rejection_reason), so the
+        two can never disagree on what a guard rejected.
+        """
+        if property_mapping is None:
+            return None
+
+        for key, mapping_entry in property_mapping.items():
+            guard = mapping_entry.match_guard
+            if guard is None:
+                continue
+            value = options.get(key)
+            if value is None:
+                continue
+            try:
+                rejected = not guard(value)
+            except (TypeError, ValueError, AttributeError) as exc:
+                logger.debug("match_guard for '%s' raised %s for value %r", key, exc, value)
+                rejected = True
+            if rejected:
+                return key, value
+        return None
+
+    @classmethod
     def _validate_match_guards(
         cls, result: bool, options: Options, property_mapping: dict[str, PropertySpec] | None
     ) -> bool:
         # Enforce match_guard constraints from PROPERTY_MAPPING
-        if result and property_mapping is not None:
-            for key, mapping_entry in property_mapping.items():
-                guard = mapping_entry.match_guard
-                if guard is None:
-                    continue
-                value = options.get(key)
-                if value is None:
-                    continue
-                try:
-                    if not guard(value):
-                        logger.debug("match_guard for '%s' rejected value %r", key, value)
-                        return False
-                except (TypeError, ValueError, AttributeError) as exc:
-                    logger.debug("match_guard for '%s' raised %s for value %r", key, exc, value)
-                    return False
-        return True
+        if not result:
+            return True
+
+        rejection = cls._first_rejecting_guard(options, property_mapping)
+        if rejection is None:
+            return True
+
+        key, value = rejection
+        logger.debug("match_guard for '%s' rejected value %r", key, value)
+        return False
 
     @classmethod
     def _validate_in_features(cls, result: bool, options: Options) -> bool:

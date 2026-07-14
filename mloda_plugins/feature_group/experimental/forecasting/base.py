@@ -154,9 +154,10 @@ class ForecastingFeatureGroup(TimeReferenceMixin, FeatureChainParserMixin, Featu
             context=True,
             strict_validation=False,
         ),
-        # element_validator enforces the constraint on the config-based path; match_guard is the only
-        # enforcement on the string-named path, where the PREFIX_PATTERN match short-circuits
-        # property-mapping validation and this key never appears in the feature name.
+        # Both hooks share _is_bool: on the config-based path both run, and element_validator is what
+        # produces the rejection message (and checks the declared default at construction); on the
+        # string-named path the PREFIX_PATTERN match short-circuits property-mapping validation, so
+        # match_guard is the only hook left to enforce the value.
         OUTPUT_CONFIDENCE_INTERVALS: PropertySpec(
             "Whether to output confidence intervals as separate columns using ~lower and ~upper suffix pattern",
             context=True,

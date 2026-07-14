@@ -221,6 +221,14 @@ class IdentifyFeatureGroupClass:
         msg += " Pin the feature to a supported compute framework or override supports_compute_framework."
         return msg
 
+    def _value_rejection_reason(self, feature_group: type[FeatureGroup], feature: Feature) -> Optional[str]:
+        """The candidate's own message for rejecting an option VALUE, if it has one."""
+        rejection_check = getattr(feature_group, "_strict_validation_rejection_reason", None)
+        if rejection_check is None:
+            return None
+        reason: Optional[str] = rejection_check(feature.name, feature.options)
+        return reason
+
     def _input_feature_forwarding_hint(
         self, feature: Feature, accessible_plugins: FeatureGroupEnvironmentMapping
     ) -> Optional[str]:
@@ -239,6 +247,10 @@ class IdentifyFeatureGroupClass:
             if not self._filter_feature_group_by_domain(feature_group, feature):
                 continue
             if not self._filter_feature_group_by_scope(feature_group, feature):
+                continue
+            # A rejected VALUE is not a forwarding problem: dropping the key would not fix it, and
+            # the value-rejection hint already says what is wrong.
+            if self._value_rejection_reason(feature_group, feature) is not None:
                 continue
             accepts_bare = feature_group.match_feature_group_criteria(feature.name, bare, self._data_access_collection)
             rejects_actual = not feature_group.match_feature_group_criteria(
@@ -269,11 +281,7 @@ class IdentifyFeatureGroupClass:
             if not self._filter_feature_group_by_scope(feature_group, feature):
                 continue
 
-            rejection_check = getattr(feature_group, "_strict_validation_rejection_reason", None)
-            if rejection_check is None:
-                continue
-
-            reason = rejection_check(feature.name, feature.options)
+            reason = self._value_rejection_reason(feature_group, feature)
             if reason is not None:
                 reasons.append((feature_group.get_class_name(), reason))
 

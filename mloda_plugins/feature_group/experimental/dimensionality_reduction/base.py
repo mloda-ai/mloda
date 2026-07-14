@@ -4,6 +4,7 @@ Base implementation for dimensionality reduction feature groups.
 
 from __future__ import annotations
 
+import numbers
 from abc import abstractmethod
 from typing import Any, Optional
 
@@ -20,8 +21,12 @@ from mloda.provider import PropertySpec
 
 
 def _is_positive_int(value: Any) -> bool:
-    """Accept a positive int or a digit string, so 0, -5, 2.5 and "abc" are rejected."""
-    return isinstance(value, (int, str)) and str(value).isdigit() and int(value) > 0
+    """Accept any positive integer (int, numpy int, decimal string), so bool, 0, -5, 2.5, "abc" and "²" are rejected."""
+    if isinstance(value, bool):
+        return False
+    if isinstance(value, numbers.Integral):
+        return int(value) > 0
+    return isinstance(value, str) and value.isdecimal() and int(value) > 0
 
 
 class DimensionalityReductionFeatureGroup(FeatureChainParserMixin, FeatureGroup):
@@ -142,10 +147,11 @@ class DimensionalityReductionFeatureGroup(FeatureChainParserMixin, FeatureGroup)
             context=True,
             strict_validation=False,
         ),
-        # The algorithm-specific numeric keys below carry both enforcement hooks: element_validator
-        # covers the config-based path, match_guard is the only enforcement on the string-named path,
-        # where the PREFIX_PATTERN match short-circuits property-mapping validation and none of these
-        # keys ever appears in the feature name.
+        # The algorithm-specific numeric keys below share _is_positive_int across both hooks: on the
+        # config-based path both run, and element_validator is what produces the rejection message
+        # (and checks the declared default at construction); on the string-named path the
+        # PREFIX_PATTERN match short-circuits property-mapping validation, so match_guard is the only
+        # hook left to enforce the value.
         # t-SNE specific parameters
         TSNE_MAX_ITER: PropertySpec(
             "Maximum number of iterations for t-SNE optimization",

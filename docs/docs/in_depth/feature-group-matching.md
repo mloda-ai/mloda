@@ -33,31 +33,33 @@ def match_feature_group_criteria(cls, feature_name, options, data_access_collect
 The `PROPERTY_MAPPING` defines how configuration-based features are validated:
 
 ```python
+from mloda.provider import PropertySpec
+
 PROPERTY_MAPPING = {
-    "aggregation_type": {
-        DefaultOptionKeys.allowed_values: {
+    "aggregation_type": PropertySpec(
+        "Aggregation to apply",
+        allowed_values={
             "sum": "Sum aggregation",
             "avg": "Average aggregation",
             "max": "Maximum aggregation",
         },
-        DefaultOptionKeys.context: True,
-        DefaultOptionKeys.strict_validation: True,
-    },
-    DefaultOptionKeys.in_features: {
-        "explanation": "Source feature for aggregation",
-        DefaultOptionKeys.context: True,
-        DefaultOptionKeys.strict_validation: False,
-    },
+        strict_validation=True,
+    ),
+    DefaultOptionKeys.in_features: PropertySpec(
+        "Source feature for aggregation",
+        strict_validation=False,
+    ),
 }
 ```
 
-Accepted values are declared under `allowed_values`. Any other key in a spec is an
-unknown key and raises at class definition.
+Every value in the mapping is a `PropertySpec`; accepted values go under `allowed_values`.
+A raw dict spec raises at class definition, and an unknown field is a constructor
+`TypeError`. See [PROPERTY_MAPPING Configuration](property-mapping.md) for the full model.
 
 ### 3. Validation Modes
 
 #### Strict Validation
-When `mloda_strict_validation: True`, parameter values must be in the mapping:
+With `strict_validation=True`, parameter values must be in the value space:
 
 ```python
 # This will match
@@ -68,7 +70,7 @@ options = Options(context={"aggregation_type": "custom"})  # "custom" not in map
 ```
 
 #### Flexible Validation
-When `mloda_strict_validation: False` (default), any value is accepted:
+With `strict_validation=False` (the default), any value is accepted:
 
 ```python
 # Both will match
@@ -81,12 +83,11 @@ For complex validation beyond simple value lists:
 
 ```python
 PROPERTY_MAPPING = {
-    "window_size": {
-        "explanation": "Size of the time window",
-        DefaultOptionKeys.context: True,
-        DefaultOptionKeys.strict_validation: True,
-        DefaultOptionKeys.element_validator: lambda x: isinstance(x, int) and x > 0,
-    },
+    "window_size": PropertySpec(
+        "Size of the time window",
+        strict_validation=True,
+        element_validator=lambda x: isinstance(x, int) and x > 0,
+    ),
 }
 ```
 

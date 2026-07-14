@@ -17,9 +17,12 @@ class PropertySpec:
     """Typed, frozen PROPERTY_MAPPING spec. Construction enforces the spec invariants."""
 
     explanation: str
-    # Accepts any iterable (tuple, list, set, frozenset, generator); normalized to a tuple. A
-    # Mapping is the value-space-with-descriptions form and is kept as given.
-    allowed_values: Mapping[Any, str] | Iterable[Any] | None = None
+    # The declared type lists the container shapes so a bare str/bytes (the forgotten-comma bug) is
+    # an author-time type error rather than a silent substring value space. The runtime is
+    # deliberately more lenient: __post_init__ materializes ANY non-Mapping iterable (a generator,
+    # a range) to a tuple, and keeps the str/bytes ValueError as the backstop for unchecked callers.
+    # A Mapping is the value-space-with-descriptions form and is kept as given.
+    allowed_values: Mapping[Any, str] | tuple[Any, ...] | list[Any] | set[Any] | frozenset[Any] | None = None
     default: Any = None
     context: bool = True
     strict_validation: bool = False
@@ -113,9 +116,13 @@ def property_spec(
     match_guard: Callable[..., Any] | None = None,
 ) -> PropertySpec:
     """Build a ``PropertySpec``; the ``strict=`` keyword sets the ``strict_validation`` field."""
+    # The builder's authoring surface stays any-iterable (a generator, a range) because
+    # PropertySpec.__post_init__ materializes those to a tuple; the field's declared type only lists
+    # the container shapes. An untyped seam forwards the wider value to the narrower field.
+    values: Any = allowed_values
     return PropertySpec(
         explanation,
-        allowed_values=allowed_values,
+        allowed_values=values,
         default=default,
         context=context,
         strict_validation=strict,

@@ -53,7 +53,7 @@ def _no_feature_group_registry_pollution() -> Any:
 def _spec(*args: Any, **kwargs: Any) -> PropertySpec:
     """Build a ``PropertySpec`` through an untyped seam.
 
-    The type-invalid constructions below (scalar value space, non-bool flag, non-callable
+    The type-invalid constructions below (str/scalar value space, non-bool flag, non-callable
     validators) must stay runtime tests; routing them through ``Any`` keeps the module
     mypy --strict clean.
     """
@@ -149,7 +149,7 @@ class TestShapeRulesFireInsideTheClassBody:
 
             class Shape694PrefixFeatureGroup(FeatureChainParserMixin, FeatureGroup):
                 PROPERTY_MAPPING = {
-                    "shape694_operation": PropertySpec(
+                    "shape694_operation": _spec(
                         "The arithmetic operation to apply",
                         allowed_values="add",
                         strict_validation=True,

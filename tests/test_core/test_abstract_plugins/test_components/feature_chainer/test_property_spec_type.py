@@ -98,7 +98,7 @@ class TestAllowedValuesNormalization:
     def test_generator_is_materialized_and_reiterable(self) -> None:
         """A one-shot generator is consumed once and stored re-iterable."""
         generator = (value for value in ("a", "b"))
-        spec = PropertySpec("x", allowed_values=generator)
+        spec = _spec("x", allowed_values=generator)
 
         values = spec.allowed_values
         assert values is not None

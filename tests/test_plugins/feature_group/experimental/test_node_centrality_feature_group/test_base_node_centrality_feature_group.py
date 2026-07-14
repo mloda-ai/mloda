@@ -7,6 +7,7 @@ import pytest
 from mloda.user import Feature
 from mloda.user import FeatureName
 from mloda.user import Options
+from mloda.provider import DefaultOptionKeys
 from mloda_plugins.feature_group.experimental.node_centrality.base import NodeCentralityFeatureGroup
 from mloda_plugins.feature_group.experimental.node_centrality.pandas import PandasNodeCentralityFeatureGroup
 
@@ -25,6 +26,18 @@ class TestNodeCentralityFeatureGroup:
 
         # Invalid feature names
         assert not NodeCentralityFeatureGroup.match_feature_group_criteria("centrality_degree__user", Options())
+
+    def test_match_feature_group_criteria_configuration_without_weight_column(self) -> None:
+        """Configuration-based matching must succeed when the optional weight_column is omitted."""
+        options = Options(
+            context={
+                NodeCentralityFeatureGroup.CENTRALITY_TYPE: "degree",
+                NodeCentralityFeatureGroup.GRAPH_TYPE: "undirected",
+                DefaultOptionKeys.in_features: "source",
+            }
+        )
+
+        assert NodeCentralityFeatureGroup.match_feature_group_criteria("placeholder", options)
 
     def test_parse_centrality_prefix(self) -> None:
         """Test the parse_centrality_prefix method."""

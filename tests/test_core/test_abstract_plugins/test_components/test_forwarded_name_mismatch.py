@@ -29,7 +29,7 @@ import pytest
 from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser_mixin import (
     FeatureChainParserMixin,
 )
-from mloda.provider import DefaultOptionKeys
+from mloda.provider import PropertySpec
 from mloda.user import Options
 
 
@@ -40,19 +40,21 @@ STRING_FEATURE_NAME = "sales__sum_namemis579"
 class _NameMismatchChainedGroup(FeatureChainParserMixin):
     """Minimal chainer subclass following the existing mixin test fixture style.
 
-    The operation key is group-categorized on purpose (no DefaultOptionKeys.context
-    mark): only group options flow through consumer forwarding.
+    The operation key is group-categorized on purpose (context=False): only group
+    options flow through consumer forwarding.
     """
 
     PREFIX_PATTERN = r".*__(sum|max)_namemis579$"
     PROPERTY_MAPPING = {
-        OPERATION_KEY: {
-            DefaultOptionKeys.allowed_values: {
+        OPERATION_KEY: PropertySpec(
+            "Operation of the namemis579 fixture",
+            allowed_values={
                 "sum": "Sum of the in feature (namemis579 fixture)",
                 "max": "Maximum of the in feature (namemis579 fixture)",
             },
-            DefaultOptionKeys.strict_validation: True,
-        }
+            context=False,
+            strict_validation=True,
+        )
     }
 
 

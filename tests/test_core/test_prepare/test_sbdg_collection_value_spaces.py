@@ -18,12 +18,22 @@ membership trap), so no legal spec can carry a str value space; no string pin ne
 """
 
 from types import MappingProxyType
+from typing import Any
 
-from mloda.provider import FeatureGroup, SubtypeDeclaration, property_spec
+from mloda.provider import FeatureGroup, PropertySpec, SubtypeDeclaration, property_spec
 
 
 SBDG_SIZE_KEY = "sbdg_size"
 SBDG_PROXY_VALUES = MappingProxyType({2: "two", 3: "three", 4: "four"})
+
+
+def _build(*args: Any, **kwargs: Any) -> PropertySpec:
+    """Call ``property_spec`` through an untyped seam.
+
+    The builder's declared ``allowed_values`` type lists the container shapes; a ``range`` is one
+    of the iterables its runtime materializes but its type deliberately does not name.
+    """
+    return property_spec(*args, **kwargs)
 
 
 class SbdgProxyValuesFG(FeatureGroup):
@@ -47,7 +57,7 @@ class TestSbdgDeclaredOptionValuesAcceptsMappingProxy:
         # so a range-backed spec is already enumerable.
         class SbdgRangeValuesFG(FeatureGroup):
             PROPERTY_MAPPING = {
-                "sbdg_range_size": property_spec(
+                "sbdg_range_size": _build(
                     "Size from a range.",
                     strict=True,
                     allowed_values=range(2, 5),

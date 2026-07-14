@@ -1,12 +1,14 @@
 """Tests for the ``property_spec`` authoring helper (issue #543).
 
-``property_spec`` builds a conventional PROPERTY_MAPPING entry from explicit
-arguments, validating the invariants that previously had to be enforced by hand:
+``property_spec`` is a thin builder over ``PropertySpec`` (issue #694): it returns a
+``PropertySpec`` instance and maps its ``strict=`` keyword onto the ``strict_validation``
+field. All spec invariants live in ``PropertySpec.__post_init__`` (pinned in
+``test_property_spec_type.py``); this module pins the builder surface:
 
-* ``strict=True`` requires a non-empty ``allowed_values`` (a strict enum with no
-  value space rejects everything),
-* a strict, non-``None`` ``default`` must be within the allowed set,
-* a one-shot iterable for ``allowed_values`` is materialized so it survives reuse.
+* the return value IS a ``PropertySpec``,
+* ``strict=`` maps to ``strict_validation=``,
+* every rejection still fires through the builder,
+* built specs equal their directly-constructed counterparts.
 
 ``allowed_values`` WITHOUT ``strict`` is legal: a non-strict value space is not
 enforced, but it is consumed, to map a name-parsed value back onto its
@@ -22,19 +24,28 @@ from typing import Any
 
 import pytest
 
-from mloda.core.abstract_plugins.components.default_options_key import DefaultOptionKeys
 from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser import (
     FeatureChainParser,
 )
 from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser_mixin import (
     FeatureChainParserMixin,
 )
-from mloda.core.abstract_plugins.components.feature_chainer.property_spec import NO_DEFAULT, _NoDefault
+from mloda.core.abstract_plugins.components.feature_chainer.property_spec import _NoDefault, is_no_default
 from mloda.core.abstract_plugins.components.feature_set import FeatureSet
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.components.utils import get_all_subclasses
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
-from mloda.provider import property_spec
+from mloda.provider import NO_DEFAULT, PropertySpec, property_spec
+
+
+def _build(*args: Any, **kwargs: Any) -> PropertySpec:
+    """Call ``property_spec`` through an untyped seam.
+
+    The builder's declared ``allowed_values`` type lists the container shapes so a bare str is an
+    author-time error. Its runtime is deliberately more lenient (any iterable is materialized), and
+    the leniency tests below exercise exactly the shapes the type does not name.
+    """
+    return property_spec(*args, **kwargs)
 
 
 @pytest.fixture(autouse=True)
@@ -63,21 +74,22 @@ class TestPropertySpecImport:
 
 
 class TestPropertySpecEmission:
-    """A valid call emits a conventional spec dict."""
+    """A valid call returns a ``PropertySpec`` with the expected field values."""
 
-    def test_emits_conventional_spec_dict(self) -> None:
-        """All conventional keys are present with the expected values."""
+    def test_returns_property_spec_with_expected_fields(self) -> None:
+        """The builder returns a ``PropertySpec``; ``strict=`` sets ``strict_validation``."""
         spec = property_spec("desc", strict=True, allowed_values={"add": "Addition"}, default="add")
 
-        assert spec["explanation"] == "desc"
-        assert spec[DefaultOptionKeys.allowed_values] == {"add": "Addition"}
-        assert spec[DefaultOptionKeys.strict_validation] is True
-        assert spec[DefaultOptionKeys.context] is True
-        assert spec[DefaultOptionKeys.default] == "add"
+        assert isinstance(spec, PropertySpec)
+        assert spec.explanation == "desc"
+        assert spec.allowed_values == {"add": "Addition"}
+        assert spec.strict_validation is True
+        assert spec.context is True
+        assert spec.default == "add"
 
 
 class TestPropertySpecInvariants:
-    """Invalid combinations raise ``ValueError``."""
+    """Invalid combinations still raise ``ValueError`` through the builder."""
 
     def test_strict_without_allowed_values_raises(self) -> None:
         """``strict=True`` with no value space rejects everything, so it is illegal."""
@@ -93,7 +105,12 @@ class TestPropertySpecInvariants:
         """An omitted/``None`` default is always legal under strict validation."""
         spec = property_spec("d", strict=True, allowed_values={"add": "A"})
 
-        assert spec[DefaultOptionKeys.allowed_values] == {"add": "A"}
+        assert spec.allowed_values == {"add": "A"}
+
+    def test_builder_errors_carry_the_property_spec_prefix(self) -> None:
+        """Rejections fire in ``PropertySpec.__post_init__``, so the prefix names the type."""
+        with pytest.raises(ValueError, match=r"PropertySpec\('d'\)"):
+            property_spec("d", strict=True)
 
 
 class TestPropertySpecIterableAllowedValues:
@@ -103,16 +120,16 @@ class TestPropertySpecIterableAllowedValues:
         """A tuple of allowed values is accepted with strict validation."""
         spec = property_spec("d", strict=True, allowed_values=("add", "sub"), default="add")
 
-        emitted = spec[DefaultOptionKeys.allowed_values]
-        assert set(emitted) == {"add", "sub"}
+        assert spec.allowed_values is not None
+        assert set(spec.allowed_values) == {"add", "sub"}
 
     def test_one_shot_generator_is_materialized(self) -> None:
         """A generator must be materialized so the emitted allowed_values is re-iterable."""
-        spec = property_spec("d", strict=True, allowed_values=(x for x in ("add", "sub")), default="add")
+        spec = _build("d", strict=True, allowed_values=(x for x in ("add", "sub")), default="add")
 
-        emitted = spec[DefaultOptionKeys.allowed_values]
-        first = list(emitted)
-        second = list(emitted)
+        assert spec.allowed_values is not None
+        first = list(spec.allowed_values)
+        second = list(spec.allowed_values)
         assert first == second
         assert set(first) == {"add", "sub"}
 
@@ -153,28 +170,35 @@ class TestPropertySpecRoundTrip:
 
 
 class TestPropertySpecDefaultOmission:
-    """OMITTING the ``default`` argument must NOT emit a spurious ``default`` key.
+    """A builder call with no default must leave the ``default`` field at ``NO_DEFAULT``.
 
-    The parser's ``_can_skip_required_check`` treats the mere PRESENCE of the
-    ``default`` key as "this option is optional", so a spurious key would silently
-    make an otherwise-required property optional. The rule is keyed on the
-    ARGUMENT, not on its value: omitting ``default`` means the key is REQUIRED,
-    while an explicit ``default=None`` means optional with a ``None`` default
+    The parser's ``_can_skip_required_check`` treats a DECLARED default as "this option is
+    optional". ``NO_DEFAULT`` means no default was declared, so an otherwise-required strict
+    property stays required; a declared ``default=None`` is the optional-with-no-value form
     (see ``TestPropertySpecNoneDefault``, issue #733).
     """
 
-    def test_builder_without_default_omits_default_key(self) -> None:
-        """No default argument -> the spec carries no ``default`` key at all."""
+    def test_builder_without_default_leaves_default_at_the_sentinel(self) -> None:
+        """No default argument -> the spec's ``default`` field is ``NO_DEFAULT``."""
         spec = property_spec("op", strict=True, allowed_values={"add": "Addition", "sub": "Subtraction"})
 
-        assert DefaultOptionKeys.default not in spec
+        assert spec.default is NO_DEFAULT
+
+    def test_builder_with_declared_none_default_makes_the_key_optional(self) -> None:
+        """``default=None`` through the builder marks the key optional: an absent option matches."""
+        property_mapping = {"weight_column": property_spec("Optional weight column", default=None)}
+
+        assert (
+            FeatureChainParser.match_configuration_feature_chain_parser(
+                "any_feature", Options(context={}), property_mapping
+            )
+            is True
+        )
 
     def test_builder_without_default_makes_strict_property_required(self) -> None:
         """A defaultless strict property is REQUIRED: absent option -> no match.
 
-        With the spurious ``default`` key the parser wrongly skips the required
-        check, so an absent option matches. After the fix the option is required,
-        so an absent option yields False while a present, valid option yields True.
+        An absent option yields False while a present, valid option yields True.
         """
 
         class RequiredOpFeatureGroup(FeatureChainParserMixin, FeatureGroup):
@@ -206,29 +230,29 @@ class TestPropertySpecDefaultOmission:
             is True
         )
 
-    def test_builder_with_explicit_default_keeps_default_key(self) -> None:
+    def test_builder_with_explicit_default_keeps_default(self) -> None:
         """An explicit, valid default is preserved (we did not over-correct)."""
         spec = property_spec("op", strict=True, allowed_values={"add": "Addition"}, default="add")
 
-        assert spec[DefaultOptionKeys.default] == "add"
+        assert spec.default == "add"
 
 
 class TestPropertySpecNoneDefault:
     """``default=None`` must be expressible: optional key whose default is ``None`` (issue #733).
 
-    ``None`` is a legitimate default (the shipped hand-written specs use it for
-    ``weight_column``, ``constant_value``, ``pipeline_steps``, ...), but the builder
-    used ``None`` as its own "argument omitted" marker and dropped the key. That made
-    an optional key REQUIRED on migration. A ``NO_DEFAULT`` sentinel separates the two:
-    the key is emitted whenever the caller passes ANY default, ``None`` included.
+    ``None`` is a legitimate default (the shipped specs use it for ``weight_column``,
+    ``constant_value``, ``pipeline_steps``, ...), but the builder once used ``None`` as its own
+    "argument omitted" marker and dropped the key. That made an optional key REQUIRED on
+    migration. The ``NO_DEFAULT`` sentinel separates the two: a declared default is whatever the
+    caller passed, ``None`` included, while ``NO_DEFAULT`` means none was declared.
     """
 
-    def test_default_none_emits_default_key(self) -> None:
-        """``default=None`` emits the ``default`` key carrying ``None``."""
+    def test_default_none_is_a_declared_default(self) -> None:
+        """``default=None`` lands on the field as a DECLARED ``None``, not as ``NO_DEFAULT``."""
         spec = property_spec("d", default=None)
 
-        assert DefaultOptionKeys.default in spec
-        assert spec[DefaultOptionKeys.default] is None
+        assert spec.default is None
+        assert not is_no_default(spec.default)
 
     def test_default_none_is_optional(self) -> None:
         """A ``default=None`` spec is optional: the parser skips the required check."""
@@ -237,10 +261,10 @@ class TestPropertySpecNoneDefault:
         assert FeatureChainParser._can_skip_required_check(spec) is True
 
     def test_omitted_default_stays_required(self) -> None:
-        """No ``default`` argument -> no key, and the property stays REQUIRED (issue #562)."""
+        """No ``default`` argument -> ``NO_DEFAULT``, and the property stays REQUIRED (issue #562)."""
         spec = property_spec("d")
 
-        assert DefaultOptionKeys.default not in spec
+        assert is_no_default(spec.default)
         assert FeatureChainParser._can_skip_required_check(spec) is False
 
     def test_no_default_sentinel_importable_from_provider(self) -> None:
@@ -254,31 +278,31 @@ class TestPropertySpecNoneDefault:
         spec = property_spec("d", default=NO_DEFAULT)
 
         assert spec == property_spec("d")
-        assert DefaultOptionKeys.default not in spec
+        assert is_no_default(spec.default)
         assert FeatureChainParser._can_skip_required_check(spec) is False
 
-    def test_none_default_spec_equals_hand_written_dict(self) -> None:
-        """A ``default=None`` spec is exactly the dict a plugin author hand-writes today."""
+    def test_none_default_spec_equals_direct_construction(self) -> None:
+        """A ``default=None`` spec is exactly the ``PropertySpec`` a plugin author constructs."""
         built = property_spec("Column name for edge weights (optional)", default=None)
 
-        hand_written: dict[str, Any] = {
-            "explanation": "Column name for edge weights (optional)",
-            DefaultOptionKeys.context: True,
-            DefaultOptionKeys.strict_validation: False,
-            DefaultOptionKeys.default: None,
-        }
-        assert built == hand_written
+        hand_constructed = PropertySpec(
+            "Column name for edge weights (optional)",
+            context=True,
+            strict_validation=False,
+            default=None,
+        )
+        assert built == hand_constructed
 
     def test_strict_spec_with_none_default_builds_and_is_optional(self) -> None:
         """A STRICT spec with ``default=None`` builds and is optional (sklearn PIPELINE_NAME shape).
 
-        Core's ``check_declared_default`` exempts a ``None`` default from the membership
+        ``PropertySpec._check_declared_default`` exempts a ``None`` default from the membership
         check, so the strict value space and the ``None`` default coexist.
         """
         spec = property_spec("d", strict=True, allowed_values={"scaling": "Feature scaling"}, default=None)
 
-        assert spec[DefaultOptionKeys.default] is None
-        assert spec[DefaultOptionKeys.strict_validation] is True
+        assert spec.default is None
+        assert spec.strict_validation is True
         assert FeatureChainParser._can_skip_required_check(spec) is True
 
     def test_absent_optional_option_still_matches_through_core(self) -> None:
@@ -333,10 +357,9 @@ class TestNoDefaultSentinelIdentity:
 
     A deepcopy, a pickle round trip, or a second import of the module (editable install plus
     site-packages, ``importlib.reload``) all yield a ``_NoDefault`` instance that is a DIFFERENT
-    object than the module-level ``NO_DEFAULT``. If the builder recognizes the sentinel by
-    identity, such a copy slips through the "argument omitted" test and lands IN the spec as a
-    bogus ``default`` VALUE, which silently flips a REQUIRED key to optional: exactly the bug
-    class #733 exists to kill.
+    object than the module-level ``NO_DEFAULT``. If the sentinel is recognized by identity, such a
+    copy reads as a DECLARED ``default`` VALUE, which silently flips a REQUIRED key to optional:
+    exactly the bug class #733 exists to kill. ``is_no_default`` is a type test for that reason.
     """
 
     def test_deepcopy_returns_the_same_sentinel(self) -> None:
@@ -348,26 +371,30 @@ class TestNoDefaultSentinelIdentity:
         assert pickle.loads(pickle.dumps(NO_DEFAULT)) is NO_DEFAULT
 
     def test_deepcopied_sentinel_behaves_like_omission(self) -> None:
-        """A deepcopied sentinel emits no ``default`` key and leaves the property REQUIRED."""
+        """A deepcopied sentinel declares no default and leaves the property REQUIRED."""
         spec = property_spec("d", default=copy.deepcopy(NO_DEFAULT))
 
-        assert DefaultOptionKeys.default not in spec
+        assert is_no_default(spec.default)
         assert FeatureChainParser._can_skip_required_check(spec) is False
         assert spec == property_spec("d")
 
     def test_pickled_sentinel_behaves_like_omission(self) -> None:
-        """A pickle round-tripped sentinel emits no ``default`` key and stays REQUIRED."""
+        """A pickle round-tripped sentinel declares no default and stays REQUIRED."""
         spec = property_spec("d", default=pickle.loads(pickle.dumps(NO_DEFAULT)))
 
-        assert DefaultOptionKeys.default not in spec
+        assert is_no_default(spec.default)
         assert FeatureChainParser._can_skip_required_check(spec) is False
         assert spec == property_spec("d")
 
     def test_second_sentinel_instance_behaves_like_omission(self) -> None:
-        """A separately constructed ``_NoDefault`` (a second imported copy) means "no default" too."""
+        """A separately constructed ``_NoDefault`` (a second imported copy) means "no default" too.
+
+        It is NOT the module-level object, so only the type test can recognize it.
+        """
         spec = property_spec("d", default=_NoDefault())
 
-        assert DefaultOptionKeys.default not in spec
+        assert spec.default is not NO_DEFAULT
+        assert is_no_default(spec.default)
         assert FeatureChainParser._can_skip_required_check(spec) is False
 
     def test_sentinel_repr_is_readable(self) -> None:
@@ -416,10 +443,10 @@ class TestPropertySpecElementValidator:
         """``strict=True`` plus an ``element_validator`` needs no ``allowed_values``."""
         spec = property_spec("d", strict=True, element_validator=_positive_int)
 
-        assert spec["explanation"] == "d"
-        assert spec[DefaultOptionKeys.element_validator] is _positive_int
-        assert spec[DefaultOptionKeys.strict_validation] is True
-        assert spec[DefaultOptionKeys.context] is True
+        assert spec.explanation == "d"
+        assert spec.element_validator is _positive_int
+        assert spec.strict_validation is True
+        assert spec.context is True
 
     def test_element_validator_without_strict_raises(self) -> None:
         """A ``element_validator`` is never enforced without ``strict`` (silent no-op)."""
@@ -436,16 +463,15 @@ class TestPropertySpecElementValidator:
 class TestPropertySpecElementValidatorDefault:
     """Strict defaults are checked via the ``element_validator`` when present (issue #536).
 
-    Mirrors ``FeatureChainParser.validate_property_mapping_defaults``: when a spec
-    carries an ``element_validator``, the strict default check uses it, taking
-    precedence over membership in ``allowed_values``.
+    When a spec carries an ``element_validator``, the strict default check uses it,
+    taking precedence over membership in ``allowed_values``.
     """
 
     def test_strict_default_accepted_by_element_validator(self) -> None:
         """A default the ``element_validator`` accepts is legal without ``allowed_values``."""
         spec = property_spec("d", strict=True, element_validator=_positive_int, default=5)
 
-        assert spec[DefaultOptionKeys.default] == 5
+        assert spec.default == 5
 
     def test_strict_default_rejected_by_element_validator_raises(self) -> None:
         """A default the ``element_validator`` rejects is illegal."""
@@ -456,9 +482,9 @@ class TestPropertySpecElementValidatorDefault:
         """With both present, the default is checked via the ``element_validator``, not membership."""
         spec = property_spec("d", strict=True, allowed_values={"add": "A"}, element_validator=_is_mul, default="mul")
 
-        assert spec[DefaultOptionKeys.default] == "mul"
-        assert spec[DefaultOptionKeys.allowed_values] == {"add": "A"}
-        assert spec[DefaultOptionKeys.element_validator] is _is_mul
+        assert spec.default == "mul"
+        assert spec.allowed_values == {"add": "A"}
+        assert spec.element_validator is _is_mul
 
 
 class TestPropertySpecRequiredWhen:
@@ -469,11 +495,11 @@ class TestPropertySpecRequiredWhen:
     """
 
     def test_required_when_emitted_without_strict(self) -> None:
-        """The predicate is emitted under ``DefaultOptionKeys.required_when`` without ``strict``."""
+        """The predicate lands on the ``required_when`` field without ``strict``."""
         spec = property_spec("d", required_when=_always_required)
 
-        assert spec[DefaultOptionKeys.required_when] is _always_required
-        assert spec[DefaultOptionKeys.strict_validation] is False
+        assert spec.required_when is _always_required
+        assert spec.strict_validation is False
 
     def test_non_callable_required_when_raises(self) -> None:
         """A non-callable ``required_when`` is rejected up front."""
@@ -491,11 +517,11 @@ class TestPropertySpecMatchGuard:
     """
 
     def test_match_guard_emitted_without_strict(self) -> None:
-        """The validator is emitted under ``DefaultOptionKeys.match_guard`` without ``strict``."""
+        """The validator lands on the ``match_guard`` field without ``strict``."""
         spec = property_spec("d", match_guard=_is_list_of_strings)
 
-        assert spec[DefaultOptionKeys.match_guard] is _is_list_of_strings
-        assert spec[DefaultOptionKeys.strict_validation] is False
+        assert spec.match_guard is _is_list_of_strings
+        assert spec.strict_validation is False
 
     def test_non_callable_match_guard_raises(self) -> None:
         """A non-callable ``match_guard`` is rejected up front."""
@@ -505,38 +531,38 @@ class TestPropertySpecMatchGuard:
 
 
 class TestPropertySpecPassthroughOmission:
-    """Omitted passthroughs never appear in the emitted dict (issue #536).
+    """Omitted passthroughs stay at their ``None`` defaults (issue #536).
 
-    Emitting ``None``-valued passthrough keys would change core behavior (e.g.
-    ``_can_skip_required_check`` keys off the mere PRESENCE of
-    ``required_when``), so an omitted passthrough must be absent, not ``None``.
+    ``None`` is the documented "not declared" sentinel: core keys off
+    ``required_when is not None`` (and friends), so an omitted passthrough must
+    be ``None``, never a truthy placeholder.
     """
 
-    def test_omitted_passthroughs_are_absent(self) -> None:
-        """Only explicitly passed passthrough keys are emitted; the rest are absent."""
+    def test_omitted_passthroughs_are_none(self) -> None:
+        """Only explicitly passed passthroughs are set; the rest stay ``None``."""
         plain = property_spec("d")
-        assert DefaultOptionKeys.element_validator not in plain
-        assert DefaultOptionKeys.required_when not in plain
-        assert DefaultOptionKeys.match_guard not in plain
+        assert plain.element_validator is None
+        assert plain.required_when is None
+        assert plain.match_guard is None
 
         with_required_when = property_spec("d", required_when=_always_required)
-        assert DefaultOptionKeys.element_validator not in with_required_when
-        assert DefaultOptionKeys.match_guard not in with_required_when
+        assert with_required_when.element_validator is None
+        assert with_required_when.match_guard is None
 
         with_match_guard = property_spec("d", match_guard=_is_list_of_strings)
-        assert DefaultOptionKeys.element_validator not in with_match_guard
-        assert DefaultOptionKeys.required_when not in with_match_guard
+        assert with_match_guard.element_validator is None
+        assert with_match_guard.required_when is None
 
 
 class TestPropertySpecElementValidatorRoundTrip:
     """A strict ``element_validator`` spec matches core semantics end to end (issue #536)."""
 
     def test_class_definition_accepts_element_validator_default(self) -> None:
-        """The built entry defines without error and equals the hand-written dict.
+        """The built entry defines without error and equals the direct construction.
 
-        Core's class-definition check (``validate_property_mapping_defaults``)
-        accepts a strict default via the ``element_validator``; the helper must
-        emit exactly the dict an author would hand-write for that spec.
+        The builder must produce exactly the ``PropertySpec`` an author would
+        construct by hand for that spec, and both pass the class-definition check
+        (``validate_property_mapping_defaults``).
         """
 
         class WindowFeatureGroup(FeatureChainParserMixin, FeatureGroup):
@@ -556,28 +582,27 @@ class TestPropertySpecElementValidatorRoundTrip:
 
         built = WindowFeatureGroup.PROPERTY_MAPPING["window_size"]
 
-        hand_written: dict[str, Any] = {
-            "explanation": "Size of time window",
-            DefaultOptionKeys.element_validator: _positive_int,
-            DefaultOptionKeys.context: True,
-            DefaultOptionKeys.strict_validation: True,
-            DefaultOptionKeys.default: 5,
-        }
-        assert built == hand_written
+        hand_constructed = PropertySpec(
+            "Size of time window",
+            element_validator=_positive_int,
+            context=True,
+            strict_validation=True,
+            default=5,
+        )
+        assert built == hand_constructed
 
         FeatureChainParser.validate_property_mapping_defaults("Built", {"window_size": built})
-        FeatureChainParser.validate_property_mapping_defaults("HandWritten", {"window_size": hand_written})
+        FeatureChainParser.validate_property_mapping_defaults("HandConstructed", {"window_size": hand_constructed})
 
 
 class TestPropertySpecRaisingElementValidator:
     """A ``element_validator`` that raises on the default is wrapped (issue #536).
 
-    Mirrors core's ``FeatureChainParser.validate_property_mapping_defaults``, which
-    distinguishes "the element_validator raised when called with the default"
-    from "the element_validator ran and rejected the default": both surface as
-    ``ValueError``, with the original exception chained as ``__cause__`` in the
-    raising case. The builder's strict-default check must behave the same way
-    instead of letting the author's exception propagate raw.
+    ``PropertySpec`` distinguishes "the element_validator raised when called with
+    the default" from "the element_validator ran and rejected the default": both
+    surface as ``ValueError``, with the original exception chained as
+    ``__cause__`` in the raising case. The builder must surface the same
+    behavior instead of letting the author's exception propagate raw.
     """
 
     def test_raising_element_validator_wraps_as_value_error_with_cause(self) -> None:
@@ -589,19 +614,25 @@ class TestPropertySpecRaisingElementValidator:
 
 
 class TestPropertySpecEmptyAllowedValues:
-    """An explicitly empty ``allowed_values`` is always an authoring mistake (issue #536).
+    """An empty ``allowed_values`` only rejects when membership is what decides.
 
-    Even when an ``element_validator`` is present (so the spec would still be
-    enforceable), an explicitly empty allowed set is dead configuration: core's
-    ``_extract_property_values`` would surface it as an empty accepted set. The
-    builder must reject it up front instead of silently emitting a dead, empty
-    ``allowed_values`` key.
+    The value-space rules exist because an empty accepted set would reject every value. With an
+    ``element_validator`` the validator, not membership, decides: ``allowed_values`` is never
+    consulted, so an empty one rejects nothing and the rules do not fire. Without a validator an
+    empty (or absent) value space is still the reject-everything spec, and is refused.
     """
 
-    def test_empty_allowed_values_with_element_validator_raises(self) -> None:
-        """``strict=True`` with ``allowed_values=[]`` raises even though a validator is present."""
-        with pytest.raises(ValueError):
-            property_spec("d", strict=True, element_validator=_positive_int, allowed_values=[])
+    def test_empty_allowed_values_with_element_validator_is_accepted(self) -> None:
+        """``strict=True`` with ``allowed_values=[]`` is legal while a validator is present."""
+        spec = property_spec("d", strict=True, element_validator=_positive_int, allowed_values=[])
+
+        assert spec.element_validator is _positive_int
+        assert spec.allowed_values == ()
+
+    def test_empty_allowed_values_without_element_validator_raises(self) -> None:
+        """Without a validator, an empty accepted set would reject every value."""
+        with pytest.raises(ValueError, match="(?i)empty allowed_values"):
+            property_spec("d", strict=True, allowed_values=[])
 
 
 class TestPropertySpecPassthroughRegressionGuards:
@@ -623,26 +654,26 @@ class TestPropertySpecPassthroughRegressionGuards:
                 default="add",
             )
 
-    def test_required_when_spec_equals_hand_written_dict(self) -> None:
-        """A ``required_when`` spec is exactly the dict an author would hand-write."""
+    def test_required_when_spec_equals_direct_construction(self) -> None:
+        """A ``required_when`` spec is exactly the ``PropertySpec`` an author would construct."""
         built = property_spec("d", required_when=_always_required)
 
-        hand_written: dict[str, Any] = {
-            "explanation": "d",
-            DefaultOptionKeys.context: True,
-            DefaultOptionKeys.strict_validation: False,
-            DefaultOptionKeys.required_when: _always_required,
-        }
-        assert built == hand_written
+        hand_constructed = PropertySpec(
+            "d",
+            context=True,
+            strict_validation=False,
+            required_when=_always_required,
+        )
+        assert built == hand_constructed
 
-    def test_match_guard_spec_equals_hand_written_dict(self) -> None:
-        """A ``match_guard`` spec is exactly the dict an author would hand-write."""
+    def test_match_guard_spec_equals_direct_construction(self) -> None:
+        """A ``match_guard`` spec is exactly the ``PropertySpec`` an author would construct."""
         built = property_spec("d", match_guard=_is_list_of_strings)
 
-        hand_written: dict[str, Any] = {
-            "explanation": "d",
-            DefaultOptionKeys.context: True,
-            DefaultOptionKeys.strict_validation: False,
-            DefaultOptionKeys.match_guard: _is_list_of_strings,
-        }
-        assert built == hand_written
+        hand_constructed = PropertySpec(
+            "d",
+            context=True,
+            strict_validation=False,
+            match_guard=_is_list_of_strings,
+        )
+        assert built == hand_constructed

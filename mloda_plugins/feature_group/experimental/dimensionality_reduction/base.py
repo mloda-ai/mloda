@@ -4,6 +4,7 @@ Base implementation for dimensionality reduction feature groups.
 
 from __future__ import annotations
 
+import numbers
 from abc import abstractmethod
 from typing import Any, Optional
 
@@ -16,6 +17,16 @@ from mloda.provider import (
 from mloda.provider import FeatureSet
 from mloda.user import Options
 from mloda.provider import DefaultOptionKeys
+from mloda.provider import PropertySpec
+
+
+def _is_positive_int(value: Any) -> bool:
+    """Accept any positive integer (int, numpy int, decimal string), so bool, 0, -5, 2.5, "abc" and "²" are rejected."""
+    if isinstance(value, bool):
+        return False
+    if isinstance(value, numbers.Integral):
+        return int(value) > 0
+    return isinstance(value, str) and value.isdecimal() and int(value) > 0
 
 
 class DimensionalityReductionFeatureGroup(FeatureChainParserMixin, FeatureGroup):
@@ -119,86 +130,85 @@ class DimensionalityReductionFeatureGroup(FeatureChainParserMixin, FeatureGroup)
     MAX_IN_FEATURES = None
 
     PROPERTY_MAPPING = {
-        ALGORITHM: {
-            DefaultOptionKeys.allowed_values: REDUCTION_ALGORITHMS,
-            DefaultOptionKeys.context: True,
-            DefaultOptionKeys.strict_validation: True,
-        },
-        DIMENSION: {
-            "explanation": "Target dimension for the reduction (positive integer)",
-            DefaultOptionKeys.context: True,
-            DefaultOptionKeys.strict_validation: True,
-            DefaultOptionKeys.element_validator: lambda value: (
-                isinstance(value, (int, str)) and str(value).isdigit() and int(value) > 0
-            ),
-        },
-        DefaultOptionKeys.in_features: {
-            "explanation": "Source features to use for dimensionality reduction",
-            DefaultOptionKeys.context: True,
-            DefaultOptionKeys.strict_validation: False,
-        },
+        ALGORITHM: PropertySpec(
+            "Dimensionality reduction algorithm to use",
+            allowed_values=REDUCTION_ALGORITHMS,
+            context=True,
+            strict_validation=True,
+        ),
+        DIMENSION: PropertySpec(
+            "Target dimension for the reduction (positive integer)",
+            context=True,
+            strict_validation=True,
+            element_validator=_is_positive_int,
+        ),
+        DefaultOptionKeys.in_features: PropertySpec(
+            "Source features to use for dimensionality reduction",
+            context=True,
+            strict_validation=False,
+        ),
+        # The algorithm-specific numeric keys below share _is_positive_int across both hooks.
+        # element_validator produces the rejection message and checks the declared default at
+        # construction; it runs on BOTH match paths, so it alone enforces the value space. match_guard
+        # additionally judges the raw, un-unpacked value.
         # t-SNE specific parameters
-        TSNE_MAX_ITER: {
-            "explanation": "Maximum number of iterations for t-SNE optimization",
-            DefaultOptionKeys.context: True,
-            DefaultOptionKeys.strict_validation: False,
-            DefaultOptionKeys.default: 250,
-            DefaultOptionKeys.element_validator: lambda value: (
-                isinstance(value, (int, str)) and str(value).isdigit() and int(value) > 0
-            ),
-        },
-        TSNE_N_ITER_WITHOUT_PROGRESS: {
-            "explanation": "Maximum iterations without progress before early stopping (t-SNE)",
-            DefaultOptionKeys.context: True,
-            DefaultOptionKeys.strict_validation: False,
-            DefaultOptionKeys.default: 50,
-            DefaultOptionKeys.element_validator: lambda value: (
-                isinstance(value, (int, str)) and str(value).isdigit() and int(value) > 0
-            ),
-        },
-        TSNE_METHOD: {
-            "explanation": "t-SNE computation method",
-            DefaultOptionKeys.allowed_values: {
+        TSNE_MAX_ITER: PropertySpec(
+            "Maximum number of iterations for t-SNE optimization",
+            context=True,
+            strict_validation=True,
+            default=250,
+            element_validator=_is_positive_int,
+            match_guard=_is_positive_int,
+        ),
+        TSNE_N_ITER_WITHOUT_PROGRESS: PropertySpec(
+            "Maximum iterations without progress before early stopping (t-SNE)",
+            context=True,
+            strict_validation=True,
+            default=50,
+            element_validator=_is_positive_int,
+            match_guard=_is_positive_int,
+        ),
+        TSNE_METHOD: PropertySpec(
+            "t-SNE computation method",
+            allowed_values={
                 "barnes_hut": "Barnes-Hut approximation (faster, O(n log n))",
                 "exact": "Exact method (slower, O(n^2))",
             },
-            DefaultOptionKeys.context: True,
-            DefaultOptionKeys.strict_validation: True,
-            DefaultOptionKeys.default: "barnes_hut",
-        },
+            context=True,
+            strict_validation=True,
+            default="barnes_hut",
+        ),
         # PCA specific parameters
-        PCA_SVD_SOLVER: {
-            "explanation": "SVD solver algorithm for PCA",
-            DefaultOptionKeys.allowed_values: {
+        PCA_SVD_SOLVER: PropertySpec(
+            "SVD solver algorithm for PCA",
+            allowed_values={
                 "auto": "Automatically choose solver based on data shape",
                 "full": "Full SVD using LAPACK",
                 "arpack": "Truncated SVD using ARPACK",
                 "randomized": "Randomized SVD",
             },
-            DefaultOptionKeys.context: True,
-            DefaultOptionKeys.strict_validation: True,
-            DefaultOptionKeys.default: "auto",
-        },
+            context=True,
+            strict_validation=True,
+            default="auto",
+        ),
         # ICA specific parameters
-        ICA_MAX_ITER: {
-            "explanation": "Maximum number of iterations for ICA",
-            DefaultOptionKeys.context: True,
-            DefaultOptionKeys.strict_validation: False,
-            DefaultOptionKeys.default: 200,
-            DefaultOptionKeys.element_validator: lambda value: (
-                isinstance(value, (int, str)) and str(value).isdigit() and int(value) > 0
-            ),
-        },
+        ICA_MAX_ITER: PropertySpec(
+            "Maximum number of iterations for ICA",
+            context=True,
+            strict_validation=True,
+            default=200,
+            element_validator=_is_positive_int,
+            match_guard=_is_positive_int,
+        ),
         # Isomap specific parameters
-        ISOMAP_N_NEIGHBORS: {
-            "explanation": "Number of neighbors for Isomap",
-            DefaultOptionKeys.context: True,
-            DefaultOptionKeys.strict_validation: False,
-            DefaultOptionKeys.default: 5,
-            DefaultOptionKeys.element_validator: lambda value: (
-                isinstance(value, (int, str)) and str(value).isdigit() and int(value) > 0
-            ),
-        },
+        ISOMAP_N_NEIGHBORS: PropertySpec(
+            "Number of neighbors for Isomap",
+            context=True,
+            strict_validation=True,
+            default=5,
+            element_validator=_is_positive_int,
+            match_guard=_is_positive_int,
+        ),
     }
 
     @classmethod

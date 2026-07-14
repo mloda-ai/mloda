@@ -103,11 +103,18 @@ class TestNamePathElementValidatorAndPresence:
         """Required-PRESENCE stays off on the name path: the name carries algorithm and dimension."""
         assert DimensionalityReductionFeatureGroup.match_feature_group_criteria("f0__pca_2d", Options()) is True
 
-    def test_non_strict_key_with_bad_looking_value_is_accepted(self) -> None:
-        """isomap_n_neighbors is strict_validation=False, so no value space is enforced."""
+    def test_isomap_n_neighbors_bad_value_is_rejected_on_the_name_path(self) -> None:
+        """isomap_n_neighbors is strict + element_validator, so its value IS enforced (issue #724).
+
+        This key used to declare an element_validator WITHOUT strict_validation, which never ran:
+        dead config, so a bad value was accepted. ``PropertySpec`` now rejects that combination at
+        construction and the key was made strict, which is what #724 pins. The guard against
+        OVER-rejecting a genuinely unconstrained key lives in the core suite, on a purpose-built
+        non-strict key (``test_name_path_validates_option_values.py::test_non_strict_key_accepts_any_value``).
+        """
         options = Options(context={DimensionalityReductionFeatureGroup.ISOMAP_N_NEIGHBORS: "not_a_number"})
 
-        assert DimensionalityReductionFeatureGroup.match_feature_group_criteria("f0__isomap_2d", options) is True
+        assert DimensionalityReductionFeatureGroup.match_feature_group_criteria("f0__isomap_2d", options) is False
 
 
 def _forwarded_child_options(algorithm: str) -> Options:

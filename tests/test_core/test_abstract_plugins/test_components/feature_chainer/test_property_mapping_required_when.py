@@ -21,7 +21,7 @@ from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.provider import DataCreator
 from mloda.user import Feature, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
-from mloda.provider import DefaultOptionKeys
+from mloda.provider import PropertySpec
 
 
 _ORDER_DEPENDENT = {"first", "last"}
@@ -39,22 +39,23 @@ class MockWithConditionalRequired(FeatureChainParserMixin):
     PREFIX_PATTERN = r".*__([\w]+)_windowed$"
 
     PROPERTY_MAPPING = {
-        "aggregation_type": {
-            DefaultOptionKeys.allowed_values: {
+        "aggregation_type": PropertySpec(
+            "Aggregation to apply",
+            allowed_values={
                 "sum": "Sum of values",
                 "avg": "Average of values",
                 "first": "First value (requires order_by)",
                 "last": "Last value (requires order_by)",
             },
-            DefaultOptionKeys.context: True,
-            DefaultOptionKeys.strict_validation: True,
-        },
-        "order_by": {
-            "explanation": "Column to order by within each partition",
-            DefaultOptionKeys.context: True,
-            DefaultOptionKeys.strict_validation: False,
-            DefaultOptionKeys.required_when: _needs_order_by,
-        },
+            context=True,
+            strict_validation=True,
+        ),
+        "order_by": PropertySpec(
+            "Column to order by within each partition",
+            context=True,
+            strict_validation=False,
+            required_when=_needs_order_by,
+        ),
     }
 
 
@@ -86,73 +87,66 @@ class TestRequiredWhenUnit:
         assert result is True
 
     def test_extract_property_values_strips_required_when(self) -> None:
-        """required_when callable must be stripped from extracted property values."""
-        mapping_entry = {
-            "explanation": "Column to order by within each partition",
-            DefaultOptionKeys.context: True,
-            DefaultOptionKeys.strict_validation: False,
-            DefaultOptionKeys.required_when: _needs_order_by,
-        }
+        """required_when is spec metadata and never leaks into the extracted value space."""
+        mapping_entry = PropertySpec(
+            "Column to order by within each partition",
+            context=True,
+            strict_validation=False,
+            required_when=_needs_order_by,
+        )
         extracted = FeatureChainParser._extract_property_values(mapping_entry)
-        assert DefaultOptionKeys.required_when not in extracted
-        assert "explanation" not in extracted
+        assert extracted == {}
 
     def test_extract_property_values_strips_explanation(self) -> None:
-        """'explanation' is documentation metadata and must be stripped from extracted property values."""
-        mapping_entry = {
-            "explanation": "Column to order by within each partition",
-            DefaultOptionKeys.context: True,
-            DefaultOptionKeys.strict_validation: False,
-        }
+        """The explanation is documentation metadata and never leaks into the extracted value space."""
+        mapping_entry = PropertySpec(
+            "Column to order by within each partition",
+            context=True,
+            strict_validation=False,
+        )
         extracted = FeatureChainParser._extract_property_values(mapping_entry)
-        assert "explanation" not in extracted
+        assert extracted == {}
 
     def test_can_skip_required_check_with_required_when(self) -> None:
         """Properties with required_when should be skippable in the base required check."""
-        prop_with_required_when = {
-            "explanation": "test",
-            DefaultOptionKeys.required_when: _needs_order_by,
-        }
+        prop_with_required_when = PropertySpec(
+            "test",
+            context=False,
+            required_when=_needs_order_by,
+        )
         assert FeatureChainParser._can_skip_required_check(prop_with_required_when) is True
 
     def test_can_skip_required_check_with_default(self) -> None:
         """Properties with default should be skippable in the base required check."""
-        prop_with_default = {
-            "val1": "desc",
-            DefaultOptionKeys.default: "val1",
-        }
+        prop_with_default = PropertySpec(
+            "Value with a default",
+            allowed_values={"val1": "desc"},
+            default="val1",
+            context=False,
+        )
         assert FeatureChainParser._can_skip_required_check(prop_with_default) is True
 
     def test_can_skip_required_check_without_either(self) -> None:
         """Properties without default or required_when are required."""
-        prop_required = {
-            "val1": "desc",
-            DefaultOptionKeys.strict_validation: True,
-        }
+        prop_required = PropertySpec(
+            "Value without default",
+            allowed_values={"val1": "desc"},
+            context=False,
+            strict_validation=True,
+        )
         assert FeatureChainParser._can_skip_required_check(prop_required) is False
 
-    def test_non_callable_required_when_is_skipped(self) -> None:
-        """A non-callable required_when value should not crash; the option is treated as optional."""
-
-        class MockWithBadPredicate(FeatureChainParserMixin):
-            PREFIX_PATTERN = r".*__([\w]+)_windowed$"
-            PROPERTY_MAPPING = {
-                "aggregation_type": {
-                    DefaultOptionKeys.allowed_values: {"sum": "Sum"},
-                    DefaultOptionKeys.context: True,
-                    DefaultOptionKeys.strict_validation: True,
-                },
-                "order_by": {
-                    "explanation": "sort column",
-                    DefaultOptionKeys.context: True,
-                    DefaultOptionKeys.strict_validation: False,
-                    DefaultOptionKeys.required_when: "not_a_callable",
-                },
-            }
-
-        options = Options(context={"aggregation_type": "sum"})
-        result = MockWithBadPredicate.match_feature_group_criteria("my_feature", options)
-        assert result is True
+    def test_non_callable_required_when_rejected_at_construction(self) -> None:
+        """A non-callable required_when is rejected when the spec is built, so a
+        mapping can never carry one (the old parser-level tolerance is gone)."""
+        not_callable: Any = "not_a_callable"
+        with pytest.raises(ValueError, match="required_when must be callable"):
+            PropertySpec(
+                "sort column",
+                context=True,
+                strict_validation=False,
+                required_when=not_callable,
+            )
 
     def test_required_when_with_default_value_interaction(self) -> None:
         """When a property has both required_when and default, default takes effect in base parser.
@@ -167,18 +161,19 @@ class TestRequiredWhenUnit:
         class MockWithBothDefaultAndRequiredWhen(FeatureChainParserMixin):
             PREFIX_PATTERN = r".*__([\w]+)_windowed$"
             PROPERTY_MAPPING = {
-                "aggregation_type": {
-                    DefaultOptionKeys.allowed_values: {"sum": "Sum", "first": "First"},
-                    DefaultOptionKeys.context: True,
-                    DefaultOptionKeys.strict_validation: True,
-                },
-                "order_by": {
-                    "explanation": "sort column",
-                    DefaultOptionKeys.context: True,
-                    DefaultOptionKeys.strict_validation: False,
-                    DefaultOptionKeys.default: "id",
-                    DefaultOptionKeys.required_when: _always_required,
-                },
+                "aggregation_type": PropertySpec(
+                    "Aggregation to apply",
+                    allowed_values={"sum": "Sum", "first": "First"},
+                    context=True,
+                    strict_validation=True,
+                ),
+                "order_by": PropertySpec(
+                    "sort column",
+                    context=True,
+                    strict_validation=False,
+                    default="id",
+                    required_when=_always_required,
+                ),
             }
 
         # The property has a default, but required_when predicate always returns True.
@@ -255,17 +250,18 @@ class ConditionalRequiredFeatureGroup(FeatureChainParserMixin, FeatureGroup):
     PREFIX_PATTERN = r".*__([\w]+)_windowed$"
 
     PROPERTY_MAPPING = {
-        "aggregation_type": {
-            DefaultOptionKeys.allowed_values: {"sum": "Sum of values", "first": "First value (requires order_by)"},
-            DefaultOptionKeys.context: True,
-            DefaultOptionKeys.strict_validation: True,
-        },
-        "order_by": {
-            "explanation": "Column to order by within each partition",
-            DefaultOptionKeys.context: True,
-            DefaultOptionKeys.strict_validation: False,
-            DefaultOptionKeys.required_when: _run_all_needs_order_by,
-        },
+        "aggregation_type": PropertySpec(
+            "Aggregation to apply",
+            allowed_values={"sum": "Sum of values", "first": "First value (requires order_by)"},
+            context=True,
+            strict_validation=True,
+        ),
+        "order_by": PropertySpec(
+            "Column to order by within each partition",
+            context=True,
+            strict_validation=False,
+            required_when=_run_all_needs_order_by,
+        ),
     }
 
     @classmethod

@@ -14,8 +14,14 @@ from mloda.provider import CHAIN_SEPARATOR, FeatureChainParser, FeatureChainPars
 from mloda.user import FeatureName
 from mloda.user import Options
 from mloda.provider import DefaultOptionKeys
+from mloda.provider import PropertySpec
 from mloda_plugins.feature_group.experimental.forecasting.forecasting_artifact import ForecastingArtifact
 from mloda_plugins.feature_group.experimental.time_reference_mixin import TimeReferenceMixin
+
+
+def _is_bool(value: Any) -> bool:
+    """Accept only a real bool, so 1 or "true" is rejected rather than silently coerced."""
+    return isinstance(value, bool)
 
 
 class ForecastingFeatureGroup(TimeReferenceMixin, FeatureChainParserMixin, FeatureGroup):
@@ -125,36 +131,40 @@ class ForecastingFeatureGroup(TimeReferenceMixin, FeatureChainParserMixin, Featu
 
     # Property mapping for configuration-based features with group/context separation
     PROPERTY_MAPPING = {
-        ALGORITHM: {
-            DefaultOptionKeys.allowed_values: FORECASTING_ALGORITHMS,
-            DefaultOptionKeys.context: True,
-            DefaultOptionKeys.strict_validation: True,
-        },
-        HORIZON: {
-            "explanation": "Forecast horizon (number of time units to predict)",
-            DefaultOptionKeys.context: True,
-            DefaultOptionKeys.strict_validation: True,
-            DefaultOptionKeys.element_validator: lambda x: (
-                (isinstance(x, int) or (isinstance(x, str) and x.isdigit())) and int(x) > 0
-            ),
-        },
-        TIME_UNIT: {
-            DefaultOptionKeys.allowed_values: TimeReferenceMixin.TIME_UNITS,
-            DefaultOptionKeys.context: True,
-            DefaultOptionKeys.strict_validation: True,
-        },
-        DefaultOptionKeys.in_features: {
-            "explanation": "Source feature to generate forecasts for",
-            DefaultOptionKeys.context: True,
-            DefaultOptionKeys.strict_validation: False,
-        },
-        OUTPUT_CONFIDENCE_INTERVALS: {
-            "explanation": "Whether to output confidence intervals as separate columns using ~lower and ~upper suffix pattern",
-            DefaultOptionKeys.context: True,
-            DefaultOptionKeys.strict_validation: False,
-            DefaultOptionKeys.default: False,  # Default is False (don't output confidence intervals)
-            DefaultOptionKeys.element_validator: lambda value: isinstance(value, bool),
-        },
+        ALGORITHM: PropertySpec(
+            "Forecasting algorithm to use",
+            allowed_values=FORECASTING_ALGORITHMS,
+            context=True,
+            strict_validation=True,
+        ),
+        HORIZON: PropertySpec(
+            "Forecast horizon (number of time units to predict)",
+            context=True,
+            strict_validation=True,
+            element_validator=lambda x: (isinstance(x, int) or (isinstance(x, str) and x.isdigit())) and int(x) > 0,
+        ),
+        TIME_UNIT: PropertySpec(
+            "Time unit of the forecast horizon",
+            allowed_values=TimeReferenceMixin.TIME_UNITS,
+            context=True,
+            strict_validation=True,
+        ),
+        DefaultOptionKeys.in_features: PropertySpec(
+            "Source feature to generate forecasts for",
+            context=True,
+            strict_validation=False,
+        ),
+        # Both hooks share _is_bool. element_validator produces the rejection message and checks the
+        # declared default at construction; it runs on BOTH match paths, so it alone enforces the
+        # value space. match_guard additionally judges the raw, un-unpacked value.
+        OUTPUT_CONFIDENCE_INTERVALS: PropertySpec(
+            "Whether to output confidence intervals as separate columns using ~lower and ~upper suffix pattern",
+            context=True,
+            strict_validation=True,
+            default=False,
+            element_validator=_is_bool,
+            match_guard=_is_bool,
+        ),
     }
 
     @staticmethod

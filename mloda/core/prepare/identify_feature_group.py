@@ -229,6 +229,14 @@ class IdentifyFeatureGroupClass:
         msg += " Pin the feature to a supported compute framework or override supports_compute_framework."
         return msg
 
+    def _value_rejection_reason(self, feature_group: type[FeatureGroup], feature: Feature) -> Optional[str]:
+        """The candidate's own message for rejecting an option VALUE, if it has one."""
+        rejection_check = getattr(feature_group, "_strict_validation_rejection_reason", None)
+        if rejection_check is None:
+            return None
+        reason: Optional[str] = rejection_check(feature.name, feature.options)
+        return reason
+
     def _input_feature_forwarding_hint(
         self, feature: Feature, accessible_plugins: FeatureGroupEnvironmentMapping
     ) -> Optional[str]:
@@ -236,6 +244,9 @@ class IdentifyFeatureGroupClass:
         offending = sorted(str(k) for k in feature.options.group if k not in reserved)
         if not offending:
             return None
+
+        # Did any offending key arrive BY forwarding, rather than being set on this feature directly?
+        forwarded_offenders = [key for key in offending if key in feature.options.inherited_group_keys]
 
         bare = Options(
             context=dict(feature.options.context),
@@ -247,6 +258,12 @@ class IdentifyFeatureGroupClass:
             if not self._filter_feature_group_by_domain(feature_group, feature):
                 continue
             if not self._filter_feature_group_by_scope(feature_group, feature):
+                continue
+            # A rejected VALUE the caller set HERE is not a forwarding problem: carving the key out
+            # would not fix the value, and the value-rejection hint already says what is wrong. A
+            # value that arrived by forwarding is both, and carving the key out is exactly the fix,
+            # so that candidate still earns the hint.
+            if self._value_rejection_reason(feature_group, feature) is not None and not forwarded_offenders:
                 continue
             accepts_bare = feature_group.match_feature_group_criteria(feature.name, bare, self._data_access_collection)
             rejects_actual = not feature_group.match_feature_group_criteria(
@@ -277,11 +294,7 @@ class IdentifyFeatureGroupClass:
             if not self._filter_feature_group_by_scope(feature_group, feature):
                 continue
 
-            rejection_check = getattr(feature_group, "_strict_validation_rejection_reason", None)
-            if rejection_check is None:
-                continue
-
-            reason = rejection_check(feature.name, feature.options)
+            reason = self._value_rejection_reason(feature_group, feature)
             if reason is not None:
                 reasons.append((feature_group.get_class_name(), reason))
 

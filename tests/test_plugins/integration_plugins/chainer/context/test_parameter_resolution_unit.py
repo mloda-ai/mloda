@@ -6,6 +6,7 @@ from mloda.user import Feature
 from mloda.user import Options
 from mloda.provider import FeatureChainParser
 from mloda.provider import DefaultOptionKeys
+from mloda.provider import PropertySpec
 from tests.test_plugins.integration_plugins.chainer.chainer_context_feature import (
     ChainedContextFeatureGroupTest,
 )
@@ -25,26 +26,30 @@ class TestParameterResolutionUnit:
         """Test proper error handling when required parameters are missing."""
 
         property_mapping = {
-            "ident": {
-                DefaultOptionKeys.allowed_values: {"identifier1": "explanation", "identifier2": "explanation"},
-                DefaultOptionKeys.context: True,
-            },
-            "property2": {
-                DefaultOptionKeys.allowed_values: {
+            "ident": PropertySpec(
+                "Required identifier",
+                allowed_values={"identifier1": "explanation", "identifier2": "explanation"},
+                context=True,
+            ),
+            "property2": PropertySpec(
+                "Required group property",
+                allowed_values={
                     "value1": "explanation",
                     "value2": "explanation",
                     "specific_val_3_test": "explanation",
-                }
-            },
-            "property3": {
-                DefaultOptionKeys.allowed_values: {"opt_val1": "explanation", "opt_val2": "explanation"},
-                DefaultOptionKeys.default: "opt_val1",
-                DefaultOptionKeys.context: True,
-            },
-            DefaultOptionKeys.in_features: {
-                "explanation": "explanation",
-                DefaultOptionKeys.context: True,  # Mark as context parameter
-            },
+                },
+                context=False,
+            ),
+            "property3": PropertySpec(
+                "Optional property with a default",
+                allowed_values={"opt_val1": "explanation", "opt_val2": "explanation"},
+                default="opt_val1",
+                context=True,
+            ),
+            DefaultOptionKeys.in_features: PropertySpec(
+                "explanation",
+                context=True,  # Mark as context parameter
+            ),
         }
 
         # Test: Missing required context parameter 'ident'
@@ -265,29 +270,25 @@ class TestParameterResolutionUnit:
 
     def test_parameter_extraction_logic(self) -> None:
         """Test the _extract_property_values logic."""
-        # Test: the declared value space is returned, the metadata keys around it are not
-        property_value_with_default = {
-            DefaultOptionKeys.allowed_values: {"opt_val1": "explanation", "opt_val2": "explanation"},
-            DefaultOptionKeys.default: "opt_val1",
-            DefaultOptionKeys.context: True,
-        }
+        # Test: the declared value space is returned, the fields around it are not
+        spec_with_default = PropertySpec(
+            "Optional property with a default",
+            allowed_values={"opt_val1": "explanation", "opt_val2": "explanation"},
+            default="opt_val1",
+            context=True,
+        )
 
-        extracted = FeatureChainParser._extract_property_values(property_value_with_default)
+        extracted = FeatureChainParser._extract_property_values(spec_with_default)
         expected = {"opt_val1": "explanation", "opt_val2": "explanation"}
         assert extracted == expected, "Should return exactly the declared allowed_values"
 
-        # Test: a spec that declares no allowed_values declares an EMPTY value space. It is
-        # never recovered by subtracting the known keys, which is what used to absorb an
-        # unrecognized key as an accepted value.
-        property_value_without_allowed_values = {"value1": "explanation", "value2": "explanation"}
+        # Test: a spec that declares no allowed_values declares an EMPTY value space.
+        # (The retired dict form used to absorb unrecognized keys as accepted values;
+        # PropertySpec has no such fallback.)
+        spec_without_allowed_values = PropertySpec("Spec without a declared value space")
 
-        extracted = FeatureChainParser._extract_property_values(property_value_without_allowed_values)
+        extracted = FeatureChainParser._extract_property_values(spec_without_allowed_values)
         assert extracted == {}, "Should declare an empty value space when allowed_values is absent"
-
-        # Test: Extract values from non-dict
-        property_value_non_dict = "simple_value"
-        extracted = FeatureChainParser._extract_property_values(property_value_non_dict)
-        assert extracted == property_value_non_dict, "Should return unchanged for non-dict values"
 
     def test_validation_final_properties(self) -> None:
         """Test the _validate_final_properties logic."""
@@ -332,21 +333,19 @@ class TestParameterResolutionUnit:
 
         # Test property mapping with mixed strict/flexible validation
         property_mapping_mixed = {
-            "strict_param": {
-                DefaultOptionKeys.allowed_values: {"allowed_value1": "explanation", "allowed_value2": "explanation"},
-                DefaultOptionKeys.strict_validation: True,
-                DefaultOptionKeys.context: True,
-            },
-            "flexible_param": {
-                DefaultOptionKeys.strict_validation: False,  # Explicit flexible validation
-                DefaultOptionKeys.context: True,
-            },
-            "default_flexible_param": {
-                DefaultOptionKeys.context: True,
-            },
-            DefaultOptionKeys.in_features: {
-                DefaultOptionKeys.context: True,
-            },
+            "strict_param": PropertySpec(
+                "Strictly validated parameter",
+                allowed_values={"allowed_value1": "explanation", "allowed_value2": "explanation"},
+                context=True,
+                strict_validation=True,
+            ),
+            "flexible_param": PropertySpec(
+                "Explicitly flexible parameter",
+                context=True,
+                strict_validation=False,  # Explicit flexible validation
+            ),
+            "default_flexible_param": PropertySpec("Parameter without a validation flag", context=True),
+            DefaultOptionKeys.in_features: PropertySpec("Source features", context=True),
         }
 
         # Test: All parameters with valid values should pass
@@ -427,68 +426,71 @@ class TestParameterResolutionUnit:
     def test_strict_validation_helper_methods(self) -> None:
         """Test the _is_strict_validation helper method with default non-strict behavior."""
 
-        # Test: Property with explicit strict validation = True
-        strict_property = {
-            "value1": "explanation",
-            DefaultOptionKeys.strict_validation: True,
-        }
-        assert FeatureChainParser._is_strict_validation(strict_property) is True, (
-            "Should identify strict validation = True"
+        # Test: Spec with explicit strict validation = True
+        strict_spec = PropertySpec(
+            "Strict spec",
+            allowed_values={"value1": "explanation"},
+            strict_validation=True,
         )
+        assert FeatureChainParser._is_strict_validation(strict_spec) is True, "Should identify strict validation = True"
 
-        # Test: Property with explicit strict validation = False
-        flexible_property = {
-            "value1": "explanation",
-            DefaultOptionKeys.strict_validation: False,
-        }
-        assert FeatureChainParser._is_strict_validation(flexible_property) is False, (
+        # Test: Spec with explicit strict validation = False
+        flexible_spec = PropertySpec(
+            "Flexible spec",
+            allowed_values={"value1": "explanation"},
+            strict_validation=False,
+        )
+        assert FeatureChainParser._is_strict_validation(flexible_spec) is False, (
             "Should identify strict validation = False"
         )
 
-        # Test: Property without strict validation flag (defaults to False)
-        default_property = {
-            "value1": "explanation",
-            DefaultOptionKeys.context: True,
-        }
-        assert FeatureChainParser._is_strict_validation(default_property) is False, (
+        # Test: Spec without an explicit strict validation flag (defaults to False)
+        default_spec = PropertySpec(
+            "Spec without a validation flag",
+            allowed_values={"value1": "explanation"},
+            context=True,
+        )
+        assert FeatureChainParser._is_strict_validation(default_spec) is False, (
             "Should default to strict validation = False"
         )
 
-        # Test: Non-dict property (should default to False)
-        non_dict_property = "simple_value"
-        assert FeatureChainParser._is_strict_validation(non_dict_property) is False, (
-            "Should default to strict validation = False for non-dict"
-        )
-
-        # Test: Empty dict (should default to False)
-        empty_dict_property = {}  # type: ignore
-        assert FeatureChainParser._is_strict_validation(empty_dict_property) is False, (
-            "Should default to strict validation = False for empty dict"
+        # Test: Minimal spec (explanation only) defaults to False. The non-spec inputs
+        # the old helper tolerated (bare strings, empty dicts) are rejected at class
+        # definition now, so PropertySpec instances are the only shapes left to test.
+        minimal_spec = PropertySpec("Minimal spec")
+        assert FeatureChainParser._is_strict_validation(minimal_spec) is False, (
+            "Should default to strict validation = False for a minimal spec"
         )
 
     def test_mixed_validation_scenarios(self) -> None:
         """Test complex scenarios with mixed strict and flexible validation."""
 
         property_mapping_complex = {
-            "algorithm_type": {
-                DefaultOptionKeys.allowed_values: {"sum": "explanation", "avg": "explanation"},
-                DefaultOptionKeys.context: True,
-            },
-            "data_source": {
-                DefaultOptionKeys.allowed_values: {"production": "explanation", "staging": "explanation"},
-                DefaultOptionKeys.strict_validation: True,
-                DefaultOptionKeys.group: True,
-            },
-            "debug_mode": {
-                DefaultOptionKeys.allowed_values: {"true": "explanation", "false": "explanation"},
-                DefaultOptionKeys.strict_validation: False,
-                DefaultOptionKeys.context: True,
-            },
-            DefaultOptionKeys.in_features: {
-                "explanation": "explanation",
+            "algorithm_type": PropertySpec(
+                "Flexible algorithm selector",
+                allowed_values={"sum": "explanation", "avg": "explanation"},
+                context=True,
+            ),
+            # The retired dict spec also carried a DefaultOptionKeys.group key here; it was
+            # dead (core never read it, group is simply context=False) and PropertySpec has
+            # no such field, so it is dropped.
+            "data_source": PropertySpec(
+                "Strictly validated group parameter",
+                allowed_values={"production": "explanation", "staging": "explanation"},
+                context=False,
+                strict_validation=True,
+            ),
+            "debug_mode": PropertySpec(
+                "Explicitly flexible debug flag",
+                allowed_values={"true": "explanation", "false": "explanation"},
+                context=True,
+                strict_validation=False,
+            ),
+            DefaultOptionKeys.in_features: PropertySpec(
+                "explanation",
                 # No strict_validation flag -> defaults to False (flexible)
-                DefaultOptionKeys.context: True,
-            },
+                context=True,
+            ),
         }
 
         # Test: Valid combination should pass

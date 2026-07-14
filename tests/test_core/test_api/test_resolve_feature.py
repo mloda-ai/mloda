@@ -10,10 +10,10 @@ import pytest
 from typing import Any, Optional
 
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
-from mloda.core.abstract_plugins.components.default_options_key import DefaultOptionKeys
 from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser_mixin import FeatureChainParserMixin
+from mloda.core.abstract_plugins.components.feature_chainer.property_spec import property_spec
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
@@ -173,11 +173,12 @@ class ForwardMismatchResolveFeatureGroup(FeatureChainParserMixin, FeatureGroup):
     PREFIX_PATTERN = r".*__([\w]+)_resolveprobe$"
 
     PROPERTY_MAPPING = {
-        PROBE_TYPE_KEY: {
-            DefaultOptionKeys.allowed_values: {"median": "Median value", "sum": "Sum of values"},
-            DefaultOptionKeys.context: True,
-            DefaultOptionKeys.strict_validation: True,
-        },
+        PROBE_TYPE_KEY: property_spec(
+            "Probe operation subtype.",
+            strict=True,
+            allowed_values={"median": "Median value", "sum": "Sum of values"},
+            context=True,
+        ),
     }
 
     @classmethod

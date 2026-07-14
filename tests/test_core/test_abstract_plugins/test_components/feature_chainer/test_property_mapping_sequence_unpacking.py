@@ -23,7 +23,7 @@ import pytest
 
 from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser_mixin import FeatureChainParserMixin
 from mloda.core.abstract_plugins.components.options import Options
-from mloda.provider import DefaultOptionKeys
+from mloda.provider import PropertySpec
 
 
 class _Recorder:
@@ -43,12 +43,12 @@ def _strict_element_validator_group(validator: Any) -> type[FeatureChainParserMi
 
     class ElementFeatureGroup(FeatureChainParserMixin):
         PROPERTY_MAPPING = {
-            "ops": {
-                "explanation": "Operations to apply",
-                DefaultOptionKeys.context: True,
-                DefaultOptionKeys.strict_validation: True,
-                DefaultOptionKeys.element_validator: validator,
-            }
+            "ops": PropertySpec(
+                "Operations to apply",
+                context=True,
+                strict_validation=True,
+                element_validator=validator,
+            )
         }
 
     return ElementFeatureGroup
@@ -59,12 +59,12 @@ def _strict_membership_group() -> type[FeatureChainParserMixin]:
 
     class MembershipFeatureGroup(FeatureChainParserMixin):
         PROPERTY_MAPPING = {
-            "ops": {
-                "explanation": "Operations to apply",
-                DefaultOptionKeys.allowed_values: {"a": "A", "b": "B"},
-                DefaultOptionKeys.context: True,
-                DefaultOptionKeys.strict_validation: True,
-            }
+            "ops": PropertySpec(
+                "Operations to apply",
+                allowed_values={"a": "A", "b": "B"},
+                context=True,
+                strict_validation=True,
+            )
         }
 
     return MembershipFeatureGroup
@@ -75,12 +75,12 @@ def _match_guard_group(guard: Any) -> type[FeatureChainParserMixin]:
 
     class GuardedFeatureGroup(FeatureChainParserMixin):
         PROPERTY_MAPPING = {
-            "ops": {
-                "explanation": "Operations to apply",
-                DefaultOptionKeys.context: True,
-                DefaultOptionKeys.strict_validation: False,
-                DefaultOptionKeys.match_guard: guard,
-            }
+            "ops": PropertySpec(
+                "Operations to apply",
+                context=True,
+                strict_validation=False,
+                match_guard=guard,
+            )
         }
 
     return GuardedFeatureGroup
@@ -271,13 +271,13 @@ class TestMatchGuardSeesTheRawValue:
 
         class BothFeatureGroup(FeatureChainParserMixin):
             PROPERTY_MAPPING = {
-                "ops": {
-                    "explanation": "Operations to apply",
-                    DefaultOptionKeys.context: True,
-                    DefaultOptionKeys.strict_validation: True,
-                    DefaultOptionKeys.element_validator: validator,
-                    DefaultOptionKeys.match_guard: guard,
-                }
+                "ops": PropertySpec(
+                    "Operations to apply",
+                    context=True,
+                    strict_validation=True,
+                    element_validator=validator,
+                    match_guard=guard,
+                )
             }
 
         value = ("a", "b")

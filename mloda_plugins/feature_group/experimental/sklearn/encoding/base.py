@@ -19,6 +19,7 @@ from mloda.provider import (
 )
 from mloda.provider import BaseArtifact
 from mloda.provider import DefaultOptionKeys
+from mloda.provider import PropertySpec
 from mloda_plugins.feature_group.experimental.sklearn.sklearn_artifact import SklearnArtifact
 
 
@@ -178,16 +179,17 @@ class EncodingFeatureGroup(FeatureChainParserMixin, FeatureGroup):
 
     # Property mapping for new configuration-based approach
     PROPERTY_MAPPING = {
-        ENCODER_TYPE: {
-            DefaultOptionKeys.allowed_values: SUPPORTED_ENCODERS,
-            DefaultOptionKeys.context: True,
-            DefaultOptionKeys.strict_validation: True,
-        },
-        DefaultOptionKeys.in_features: {
-            "explanation": "Source feature to encode",
-            DefaultOptionKeys.context: True,  # Context parameter
-            DefaultOptionKeys.strict_validation: False,  # Flexible validation
-        },
+        ENCODER_TYPE: PropertySpec(
+            "Type of encoder to apply",
+            allowed_values=SUPPORTED_ENCODERS,
+            context=True,
+            strict_validation=True,
+        ),
+        DefaultOptionKeys.in_features: PropertySpec(
+            "Source feature to encode",
+            context=True,
+            strict_validation=False,
+        ),
     }
 
     @staticmethod

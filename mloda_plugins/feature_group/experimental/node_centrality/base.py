@@ -15,6 +15,7 @@ from mloda.provider import (
 )
 from mloda.provider import FeatureSet
 from mloda.provider import DefaultOptionKeys
+from mloda.provider import PropertySpec
 
 
 class NodeCentralityFeatureGroup(FeatureChainParserMixin, FeatureGroup):
@@ -140,28 +141,30 @@ class NodeCentralityFeatureGroup(FeatureChainParserMixin, FeatureGroup):
     # Property mapping for configuration-based feature creation
     PROPERTY_MAPPING = {
         # Context parameters (don't affect Feature Group resolution)
-        CENTRALITY_TYPE: {
-            DefaultOptionKeys.allowed_values: CENTRALITY_TYPES,
-            DefaultOptionKeys.context: True,
-            DefaultOptionKeys.strict_validation: True,
-        },
-        GRAPH_TYPE: {
-            DefaultOptionKeys.allowed_values: GRAPH_TYPES,
-            DefaultOptionKeys.context: True,
-            DefaultOptionKeys.strict_validation: True,
-            DefaultOptionKeys.default: "undirected",
-        },
-        WEIGHT_COLUMN: {
-            "explanation": "Column name for edge weights (optional)",
-            DefaultOptionKeys.context: True,
-            DefaultOptionKeys.strict_validation: False,
-            DefaultOptionKeys.default: None,
-        },
-        DefaultOptionKeys.in_features: {
-            "explanation": "Source feature representing the nodes for centrality calculation",
-            DefaultOptionKeys.context: True,
-            DefaultOptionKeys.strict_validation: False,
-        },
+        CENTRALITY_TYPE: PropertySpec(
+            "Centrality metric to calculate",
+            allowed_values=CENTRALITY_TYPES,
+            context=True,
+            strict_validation=True,
+        ),
+        GRAPH_TYPE: PropertySpec(
+            "Type of graph (directed or undirected)",
+            allowed_values=GRAPH_TYPES,
+            context=True,
+            strict_validation=True,
+            default="undirected",
+        ),
+        WEIGHT_COLUMN: PropertySpec(
+            "Column name for edge weights (optional)",
+            context=True,
+            strict_validation=False,
+            default=None,  # Optional: no default weight column (unweighted)
+        ),
+        DefaultOptionKeys.in_features: PropertySpec(
+            "Source feature representing the nodes for centrality calculation",
+            context=True,
+            strict_validation=False,
+        ),
     }
 
     @classmethod

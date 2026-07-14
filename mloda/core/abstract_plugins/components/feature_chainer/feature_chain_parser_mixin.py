@@ -4,16 +4,16 @@ Mixin class providing default implementations for feature chain parsing.
 Validation Design: ``element_validator`` vs ``match_guard``
 ==========================================================
 
-PROPERTY_MAPPING supports two callable-valued keys that validate option values.
+``PropertySpec`` carries two callable-valued fields that validate option values.
 They serve different purposes and run at different points in the pipeline.
 
-``element_validator`` (``DefaultOptionKeys.element_validator``)
-  - Requires ``strict_validation: True`` on the same mapping entry.
+``element_validator`` (``PropertySpec.element_validator``)
+  - Requires ``strict_validation=True`` on the same spec.
   - Runs inside ``FeatureChainParser._validate_property_value`` on **both** match paths,
     the configuration-based one and the string-named one. Only required *presence* is
     config-based only, because a key encoded in the feature name is satisfied by the name.
   - Receives **individual parsed elements** after list unpacking
-    (``_process_found_property_value`` converts lists to frozensets and
+    (``_process_found_property_value`` unpacks a sequence value into a list and
     iterates over each element).
   - On failure: raises ``PropertyValueRejection`` (a ``ValueError``) with an actionable
     message identifying the property name and the rejected element value. A validator that
@@ -21,7 +21,7 @@ They serve different purposes and run at different points in the pipeline.
   - Use case: validating that each individual element satisfies a constraint
     (e.g., ``lambda x: isinstance(x, int) and x > 0``).
 
-``match_guard`` (``DefaultOptionKeys.match_guard``)
+``match_guard`` (``PropertySpec.match_guard``)
   - Does **not** require ``strict_validation``.
   - Runs inside ``FeatureChainParserMixin.match_feature_group_criteria``
     **after** basic matching succeeds (pattern + property mapping validation).
@@ -33,11 +33,16 @@ They serve different purposes and run at different points in the pipeline.
   - Use case: validating the shape or composite type of the whole value
     (e.g., ``lambda v: isinstance(v, list) and all(isinstance(i, str) for i in v)``).
 
-When both are present on the same mapping entry, ``element_validator`` runs
+When both are present on the same spec, ``element_validator`` runs
 first (during property mapping validation) on each parsed element, then
 ``match_guard`` runs on the raw value. If ``element_validator`` rejects an
 element, the match fails with a ``ValueError`` before ``match_guard`` is
 reached.
+
+A guard rejection on a spec that also sets ``strict_validation=True`` is
+reportable: ``_strict_validation_rejection_reason`` turns it into a message so
+the feature group does not vanish silently. A guard on a non-strict spec keeps
+its "not mine" meaning and reports nothing.
 
 Validators must be pure functions with no side effects. They may be called
 multiple times during feature group resolution (once per candidate feature
@@ -60,6 +65,7 @@ from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser
     CHAIN_SEPARATOR,
     INPUT_SEPARATOR,
 )
+from mloda.core.abstract_plugins.components.feature_chainer.property_spec import PropertySpec
 from mloda.core.abstract_plugins.components.default_options_key import DefaultOptionKeys
 from mloda.core.abstract_plugins.components.utils import safe_field
 
@@ -77,8 +83,8 @@ class FeatureChainParserMixin:
     - MIN_IN_FEATURES: Optional minimum in_feature count (default: 1)
     - MAX_IN_FEATURES: Optional maximum in_feature count (default: None)
 
-    PROPERTY_MAPPING supports conditional requirements via ``DefaultOptionKeys.required_when``.
-    Attach a predicate ``(Options) -> bool`` to any mapping entry. When the predicate returns
+    PROPERTY_MAPPING supports conditional requirements via ``PropertySpec.required_when``.
+    Attach a predicate ``(Options) -> bool`` to any spec. When the predicate returns
     True and the option value is absent, ``match_feature_group_criteria`` rejects the match.
     When the predicate returns False, the option is treated as optional. The predicates are
     enforced by a guard installed on the class at definition time (see
@@ -92,7 +98,7 @@ class FeatureChainParserMixin:
 
     Predicate contract:
     - Signature: ``(Options) -> bool``
-    - Must be callable (non-callable values are skipped with a warning)
+    - Must be callable (enforced at ``PropertySpec`` construction)
     - Must not raise exceptions
     - Must be a pure function (no side effects)
     - Non-bool truthy return values are treated as True
@@ -198,8 +204,8 @@ class FeatureChainParserMixin:
         Delegates to match_parser_criteria() and optionally calls _validate_string_match() for custom validation.
 
         After basic matching succeeds, enforces ``match_guard`` constraints from
-        PROPERTY_MAPPING entries. For each entry that defines a
-        ``DefaultOptionKeys.match_guard`` callable, the guard is called with the raw
+        PROPERTY_MAPPING entries. For each spec that defines a
+        ``PropertySpec.match_guard`` callable, the guard is called with the raw
         option value. Returning a falsy value causes this method to return False. If
         the guard raises an exception, it is caught and the value is treated as
         invalid. See the module docstring for the full validation design.
@@ -268,10 +274,22 @@ class FeatureChainParserMixin:
 
     @classmethod
     def _strict_validation_rejection_reason(cls, feature_name: str | FeatureName, options: Options) -> str | None:
-        """Return the option-value rejection message that match_feature_group_criteria discards, if any.
+        """Return the rejection message that match_feature_group_criteria discards, if any.
 
-        None when nothing was rejected, and also for a parse error on a malformed name, which is not an
-        option-value rejection. Diagnostic-only: does not affect match_feature_group_criteria's behavior.
+        Reports two kinds of value rejection, both gated on the feature group OTHERWISE matching
+        the feature:
+
+        1. A ValueError raised by option-value validation (a strict_validation rejection). Present
+           option values are validated on both match paths, the string-named one included.
+        2. A match_guard rejection on a spec that also declares strict_validation, which the match
+           path turns into a silent non-match.
+
+        A guard on a non-strict spec means "this feature group does not match", not "this value is
+        wrong", so it stays unreported. A ValueError raised while parsing a PREFIX_PATTERN match
+        (malformed feature name, no chain separator) is a parse error, not an option-value
+        rejection, and is likewise nothing to report. Returns None when nothing was rejected (the
+        match succeeded, or the candidate is unrelated). Diagnostic-only: does not affect
+        match_feature_group_criteria's behavior.
         """
         property_mapping = cls._get_property_mapping()
         if property_mapping is None:
@@ -289,19 +307,35 @@ class FeatureChainParserMixin:
 
         try:
             if name_matched:
+                # The name relates the feature group to the feature, so only the values of the
+                # present options are judged; required presence is the config path's business.
                 FeatureChainParser._validate_present_option_values(options, property_mapping)
             else:
-                FeatureChainParser._validate_options_against_property_mapping(options, property_mapping)
+                matches_mapping = FeatureChainParser._validate_options_against_property_mapping(
+                    options, property_mapping
+                )
+                # Neither the name nor the option set relates this feature group to the feature: its
+                # guards are none of the feature's business.
+                if not matches_mapping:
+                    return None
         except ValueError as exc:
             return str(exc)
-        return None
+
+        rejection = cls._first_rejecting_guard(options, property_mapping)
+        if rejection is None:
+            return None
+
+        key, value = rejection
+        if not property_mapping[key].strict_validation:
+            return None
+        return f"Property value '{value}' rejected by match_guard for '{key}'"
 
     @classmethod
     def _validate_forwarded_name_mismatch(
         cls,
         feature_name: str | FeatureName,
         operation_config: str,
-        property_mapping: dict[str, Any] | None,
+        property_mapping: dict[str, PropertySpec] | None,
         options: Options,
     ) -> None:
         """Reject consumer-forwarded option values that contradict the name-parsed value.
@@ -332,37 +366,58 @@ class FeatureChainParserMixin:
         raise ValueError(message)
 
     @staticmethod
-    def _find_property_key_for_value(property_mapping: dict[str, Any], operation_config: str) -> str | None:
+    def _find_property_key_for_value(property_mapping: dict[str, PropertySpec], operation_config: str) -> str | None:
         """Return the PROPERTY_MAPPING key whose values contain operation_config, if any."""
         for prop_key, prop_value in property_mapping.items():
-            if not isinstance(prop_value, dict):
-                continue
             extracted = FeatureChainParser._extract_property_values(prop_value)
             if operation_config in extracted:
                 return prop_key
         return None
 
     @classmethod
-    def _validate_match_guards(cls, result: bool, options: Options, property_mapping: dict[str, Any] | None) -> bool:
+    def _first_rejecting_guard(
+        cls, options: Options, property_mapping: dict[str, PropertySpec] | None
+    ) -> tuple[str, Any] | None:
+        """Return the (key, value) of the first match_guard that rejects its option value, or None.
+
+        A guard rejects by returning a falsy value or by raising. Shared by the match decision
+        (_validate_match_guards) and the diagnostic (_strict_validation_rejection_reason), so the
+        two can never disagree on what a guard rejected.
+        """
+        if property_mapping is None:
+            return None
+
+        for key, mapping_entry in property_mapping.items():
+            guard = mapping_entry.match_guard
+            if guard is None:
+                continue
+            value = options.get(key)
+            if value is None:
+                continue
+            try:
+                rejected = not guard(value)
+            except (TypeError, ValueError, AttributeError) as exc:
+                logger.debug("match_guard for '%s' raised %s for value %r", key, exc, value)
+                rejected = True
+            if rejected:
+                return key, value
+        return None
+
+    @classmethod
+    def _validate_match_guards(
+        cls, result: bool, options: Options, property_mapping: dict[str, PropertySpec] | None
+    ) -> bool:
         # Enforce match_guard constraints from PROPERTY_MAPPING
-        if result and property_mapping is not None:
-            for key, mapping_entry in property_mapping.items():
-                if not isinstance(mapping_entry, dict):
-                    continue
-                guard = mapping_entry.get(DefaultOptionKeys.match_guard)
-                if guard is None:
-                    continue
-                value = options.get(key)
-                if value is None:
-                    continue
-                try:
-                    if not guard(value):
-                        logger.debug("match_guard for '%s' rejected value %r", key, value)
-                        return False
-                except (TypeError, ValueError, AttributeError) as exc:
-                    logger.debug("match_guard for '%s' raised %s for value %r", key, exc, value)
-                    return False
-        return True
+        if not result:
+            return True
+
+        rejection = cls._first_rejecting_guard(options, property_mapping)
+        if rejection is None:
+            return True
+
+        key, value = rejection
+        logger.debug("match_guard for '%s' rejected value %r", key, value)
+        return False
 
     @classmethod
     def _validate_in_features(cls, result: bool, options: Options) -> bool:
@@ -399,10 +454,10 @@ class FeatureChainParserMixin:
         return FeatureChainParser.prefix_patterns_of(cls)
 
     @classmethod
-    def _get_property_mapping(cls) -> Optional[dict[str, Any]]:
+    def _get_property_mapping(cls) -> Optional[dict[str, PropertySpec]]:
         """Get property mapping from class attribute."""
         if hasattr(cls, "PROPERTY_MAPPING"):
-            return cast(dict[str, Any], cls.PROPERTY_MAPPING)
+            return cast(Optional[dict[str, PropertySpec]], cls.PROPERTY_MAPPING)
         return None
 
     @classmethod
@@ -410,7 +465,7 @@ class FeatureChainParserMixin:
         cls,
         feature_name: str,
         prefix_patterns: list[Any],
-        property_mapping: dict[str, Any],
+        property_mapping: dict[str, PropertySpec],
         options: Options,
     ) -> Options:
         """Merge the value parsed from the feature name into the options the predicates see."""

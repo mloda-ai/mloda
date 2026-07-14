@@ -32,6 +32,7 @@ from mloda.provider import ComputeFramework
 from mloda.provider import DataCreator
 from mloda.provider import FeatureGroup
 from mloda.provider import FeatureSet
+from mloda.provider import PropertySpec
 from mloda.user import DataAccessCollection
 from mloda.user import Feature
 from mloda.user import FeatureName
@@ -51,9 +52,7 @@ class DualWarn579SourceGroup(FeatureGroup):
     """Upstream root group that declares the mode key and records resolved options."""
 
     PROPERTY_MAPPING = {
-        MODE_KEY: {
-            "explanation": "Execution mode consumed by the dualwarn579 source group",
-        },
+        MODE_KEY: PropertySpec("Execution mode consumed by the dualwarn579 source group", context=False),
     }
 
     seen_options: ClassVar[list[dict[str, dict[str, Any]]]] = []
@@ -130,9 +129,7 @@ class DualWarn579ConsumerGroup(_DualWarn579ConsumerBase):
 
     FEATURE_NAME = "dualwarn579_consumer"
     PROPERTY_MAPPING = {
-        MODE_KEY: {
-            "explanation": "Execution mode consumed by the dualwarn579 consumer group",
-        },
+        MODE_KEY: PropertySpec("Execution mode consumed by the dualwarn579 consumer group", context=False),
     }
 
     def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
@@ -149,9 +146,7 @@ class DualWarn579StringConsumerGroup(_DualWarn579ConsumerBase):
 
     FEATURE_NAME = "dualwarn579_string_consumer"
     PROPERTY_MAPPING = {
-        MODE_KEY: {
-            "explanation": "Execution mode consumed by the dualwarn579 string consumer group",
-        },
+        MODE_KEY: PropertySpec("Execution mode consumed by the dualwarn579 string consumer group", context=False),
     }
 
     def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Any]]:
@@ -164,9 +159,7 @@ class DualWarn579RepeatConsumerGroup(_DualWarn579ConsumerBase):
     FEATURE_NAME = "dualwarn579_repeat_consumer_a"
     SECOND_FEATURE_NAME: ClassVar[str] = "dualwarn579_repeat_consumer_b"
     PROPERTY_MAPPING = {
-        MODE_KEY: {
-            "explanation": "Execution mode consumed by the dualwarn579 repeat consumer group",
-        },
+        MODE_KEY: PropertySpec("Execution mode consumed by the dualwarn579 repeat consumer group", context=False),
     }
 
     @classmethod
@@ -188,9 +181,7 @@ class DualWarn579CleanConsumerGroup(_DualWarn579ConsumerBase):
     FEATURE_NAME = "dualwarn579_clean_consumer"
     SOURCE_COLUMN = CLEAN_SOURCE_NAME
     PROPERTY_MAPPING = {
-        MODE_KEY: {
-            "explanation": "Execution mode consumed by the dualwarn579 clean consumer group",
-        },
+        MODE_KEY: PropertySpec("Execution mode consumed by the dualwarn579 clean consumer group", context=False),
     }
 
     def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
@@ -202,9 +193,7 @@ class DualWarn579ExcludeConsumerGroup(_DualWarn579ConsumerBase):
 
     FEATURE_NAME = "dualwarn579_exclude_consumer"
     PROPERTY_MAPPING = {
-        MODE_KEY: {
-            "explanation": "Execution mode consumed by the dualwarn579 exclude consumer group",
-        },
+        MODE_KEY: PropertySpec("Execution mode consumed by the dualwarn579 exclude consumer group", context=False),
     }
 
     def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
@@ -222,9 +211,7 @@ class DualWarn579SharedConsumerAGroup(_DualWarn579ConsumerBase):
 
     FEATURE_NAME = "dualwarn579_shared_consumer_a"
     PROPERTY_MAPPING = {
-        MODE_KEY: {
-            "explanation": "Execution mode consumed by the dualwarn579 shared consumer A group",
-        },
+        MODE_KEY: PropertySpec("Execution mode consumed by the dualwarn579 shared consumer A group", context=False),
     }
 
     def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
@@ -236,9 +223,7 @@ class DualWarn579SharedConsumerBGroup(_DualWarn579ConsumerBase):
 
     FEATURE_NAME = "dualwarn579_shared_consumer_b"
     PROPERTY_MAPPING = {
-        MODE_KEY: {
-            "explanation": "Execution mode consumed by the dualwarn579 shared consumer B group",
-        },
+        MODE_KEY: PropertySpec("Execution mode consumed by the dualwarn579 shared consumer B group", context=False),
     }
 
     def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:

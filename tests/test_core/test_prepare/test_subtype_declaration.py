@@ -366,7 +366,7 @@ class TestDeclaredOptionValues:
         # subdecl_mode carries context/strict_validation flags; only allowed_values is the value space.
         values = SubDeclValueSpaceFG.declared_option_values("subdecl_mode")
         assert values == frozenset({"fast", "slow"})
-        assert not values & {str(DefaultOptionKeys.context), str(DefaultOptionKeys.strict_validation)}
+        assert not values & {str(DefaultOptionKeys.context), "strict_validation"}
 
     def test_predicate_only_key_has_empty_value_space(self) -> None:
         assert SubDeclValueSpaceFG.declared_option_values("subdecl_n") == frozenset()

@@ -23,7 +23,7 @@ from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
-from mloda.provider import DefaultOptionKeys
+from mloda.provider import PropertySpec
 
 OP_TYPE = "op_type"
 ORDER_BY = "order_by"
@@ -55,20 +55,21 @@ class CountingPredicate:
         return bool(options.get(OP_TYPE) == "first")
 
 
-def _mapping(predicate: CountingPredicate) -> dict[str, Any]:
+def _mapping(predicate: CountingPredicate) -> dict[str, PropertySpec]:
     """PROPERTY_MAPPING with a conditionally required order_by. op_type stays unconditionally required."""
     return {
-        OP_TYPE: {
-            DefaultOptionKeys.allowed_values: {"sum": "Sum of values", "first": "First value (requires order_by)"},
-            DefaultOptionKeys.context: True,
-            DefaultOptionKeys.strict_validation: True,
-        },
-        ORDER_BY: {
-            "explanation": "Column to order by",
-            DefaultOptionKeys.context: True,
-            DefaultOptionKeys.strict_validation: False,
-            DefaultOptionKeys.required_when: predicate,
-        },
+        OP_TYPE: PropertySpec(
+            "Operation to apply",
+            allowed_values={"sum": "Sum of values", "first": "First value (requires order_by)"},
+            context=True,
+            strict_validation=True,
+        ),
+        ORDER_BY: PropertySpec(
+            "Column to order by",
+            context=True,
+            strict_validation=False,
+            required_when=predicate,
+        ),
     }
 
 
@@ -83,15 +84,16 @@ class NameSuppliedPredicate:
         return options.get(ORDER_BY) is None
 
 
-def _name_supplied_mapping(predicate: NameSuppliedPredicate) -> dict[str, Any]:
+def _name_supplied_mapping(predicate: NameSuppliedPredicate) -> dict[str, PropertySpec]:
     """PROPERTY_MAPPING whose conditionally required key is the one the feature name parses into."""
     return {
-        OP_TYPE: {
-            DefaultOptionKeys.allowed_values: {"sum": "Sum of values", "first": "First value"},
-            DefaultOptionKeys.context: True,
-            DefaultOptionKeys.strict_validation: True,
-            DefaultOptionKeys.required_when: predicate,
-        },
+        OP_TYPE: PropertySpec(
+            "Operation to apply",
+            allowed_values={"sum": "Sum of values", "first": "First value"},
+            context=True,
+            strict_validation=True,
+            required_when=predicate,
+        ),
     }
 
 
@@ -262,11 +264,12 @@ class TestGuardInstallation:
         class NoRequiredWhen(FeatureChainParserMixin, FeatureGroup):
             PREFIX_PATTERN = GUARDED_PATTERN
             PROPERTY_MAPPING = {
-                OP_TYPE: {
-                    DefaultOptionKeys.allowed_values: {"sum": "Sum of values"},
-                    DefaultOptionKeys.context: True,
-                    DefaultOptionKeys.strict_validation: True,
-                },
+                OP_TYPE: PropertySpec(
+                    "Operation to apply",
+                    allowed_values={"sum": "Sum of values"},
+                    context=True,
+                    strict_validation=True,
+                ),
             }
 
         assert "match_feature_group_criteria" not in NoRequiredWhen.__dict__
@@ -341,11 +344,12 @@ class TestStaticMethodMatcherRejected:
         class StaticMatcherNoContract(FeatureChainParserMixin, FeatureGroup):
             PREFIX_PATTERN = GUARDED_PATTERN
             PROPERTY_MAPPING = {
-                OP_TYPE: {
-                    DefaultOptionKeys.allowed_values: {"sum": "Sum of values"},
-                    DefaultOptionKeys.context: True,
-                    DefaultOptionKeys.strict_validation: True,
-                },
+                OP_TYPE: PropertySpec(
+                    "Operation to apply",
+                    allowed_values={"sum": "Sum of values"},
+                    context=True,
+                    strict_validation=True,
+                ),
             }
 
             @staticmethod

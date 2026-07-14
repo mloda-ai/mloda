@@ -17,6 +17,7 @@ from mloda.provider import (
     FeatureChainParserMixin,
 )
 from mloda.provider import DefaultOptionKeys
+from mloda.provider import PropertySpec
 
 
 class GeoDistanceFeatureGroup(FeatureChainParserMixin, FeatureGroup):
@@ -103,19 +104,20 @@ class GeoDistanceFeatureGroup(FeatureChainParserMixin, FeatureGroup):
 
     # Property mapping for configuration-based features with group/context separation
     PROPERTY_MAPPING = {
-        DISTANCE_TYPE: {
-            DefaultOptionKeys.allowed_values: DISTANCE_TYPES,
-            DefaultOptionKeys.context: True,
-            DefaultOptionKeys.strict_validation: True,
-        },
-        DefaultOptionKeys.in_features: {
-            "explanation": "Source features (exactly 2 point features required)",
-            DefaultOptionKeys.context: True,
-            DefaultOptionKeys.strict_validation: True,
+        DISTANCE_TYPE: PropertySpec(
+            "Type of distance calculation to perform",
+            allowed_values=DISTANCE_TYPES,
+            context=True,
+            strict_validation=True,
+        ),
+        DefaultOptionKeys.in_features: PropertySpec(
+            "Source features (exactly 2 point features required)",
+            context=True,
+            strict_validation=True,
             # Core unpacks the sequence, so this judges ONE point feature name.
             # The arity (exactly 2) is enforced by MIN_IN_FEATURES / MAX_IN_FEATURES.
-            DefaultOptionKeys.element_validator: lambda point: isinstance(point, str),
-        },
+            element_validator=lambda point: isinstance(point, str),
+        ),
     }
 
     def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:

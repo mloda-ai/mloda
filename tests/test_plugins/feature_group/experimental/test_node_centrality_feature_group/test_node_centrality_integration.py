@@ -179,6 +179,56 @@ class TestNodeCentralityPandasIntegration:
         # Validate the node centrality features
         validate_node_centrality_features(centrality_df, ["placeholder1", "placeholder2"])
 
+    def test_node_centrality_with_configuration_without_weight_column(self) -> None:
+        """
+        Test node centrality features using the configuration-based approach on an unweighted graph.
+
+        weight_column is optional: a user with an unweighted graph simply omits the key.
+        The feature group must still match and compute.
+        """
+        # Enable the necessary feature groups
+        plugin_collector = PluginCollector.enabled_feature_groups(
+            {NodeCentralityTestDataCreator, PandasNodeCentralityFeatureGroup}
+        )
+
+        # Create a degree centrality feature WITHOUT the optional weight_column option
+        degree_feature = Feature(
+            "placeholder1",
+            Options(
+                context={
+                    NodeCentralityFeatureGroup.CENTRALITY_TYPE: "degree",
+                    DefaultOptionKeys.in_features: "source",
+                    NodeCentralityFeatureGroup.GRAPH_TYPE: "undirected",
+                }
+            ),
+        )
+
+        # Run the mloda with the configured feature
+        result = mloda.run_all(
+            [
+                "source",  # Source node feature
+                "target",  # Target node feature
+                degree_feature,
+            ],
+            compute_frameworks={PandasDataFrame},
+            plugin_collector=plugin_collector,
+        )
+
+        # Verify the results
+        assert len(result) > 0, "No results returned from mloda"
+
+        # Find the DataFrame with the node centrality feature
+        centrality_df = None
+        for df in result:
+            if "placeholder1" in df.columns:
+                centrality_df = df
+                break
+
+        assert centrality_df is not None, "DataFrame with node centrality features not found"
+
+        # Validate the node centrality feature
+        validate_node_centrality_features(centrality_df, ["placeholder1"])
+
     def test_directed_vs_undirected_graph(self) -> None:
         """Test node centrality features with different graph types."""
 

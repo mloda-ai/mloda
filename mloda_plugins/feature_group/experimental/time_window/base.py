@@ -17,6 +17,7 @@ from mloda.user import FeatureName
 from mloda.provider import FeatureSet
 from mloda.user import Options
 from mloda.provider import DefaultOptionKeys
+from mloda.provider import PropertySpec
 from mloda_plugins.feature_group.experimental.time_reference_mixin import TimeReferenceMixin
 
 
@@ -93,33 +94,31 @@ class TimeWindowFeatureGroup(TimeReferenceMixin, FeatureChainParserMixin, Featur
 
     # Define PROPERTY_MAPPING for the new unified parser approach
     PROPERTY_MAPPING = {
-        # Window function parameter (context parameter)
-        WINDOW_FUNCTION: {
-            DefaultOptionKeys.allowed_values: WINDOW_FUNCTIONS,
-            DefaultOptionKeys.context: True,
-            DefaultOptionKeys.strict_validation: True,
-        },
-        # Window size parameter (context parameter)
-        WINDOW_SIZE: {
-            "explanation": "Size of the time window (must be positive integer)",
-            DefaultOptionKeys.context: True,  # Mark as context parameter
-            DefaultOptionKeys.strict_validation: True,  # Enable strict validation
-            DefaultOptionKeys.element_validator: lambda x: (
+        WINDOW_FUNCTION: PropertySpec(
+            "Window function to apply over the time window",
+            allowed_values=WINDOW_FUNCTIONS,
+            context=True,
+            strict_validation=True,
+        ),
+        WINDOW_SIZE: PropertySpec(
+            "Size of the time window (must be positive integer)",
+            context=True,
+            strict_validation=True,
+            element_validator=lambda x: (
                 (isinstance(x, int) and x > 0) or (isinstance(x, str) and x.isdigit() and int(x) > 0)
             ),
-        },
-        # Time unit parameter (context parameter)
-        TIME_UNIT: {
-            DefaultOptionKeys.allowed_values: TimeReferenceMixin.TIME_UNITS,
-            DefaultOptionKeys.context: True,
-            DefaultOptionKeys.strict_validation: True,
-        },
-        # Source feature parameter (context parameter)
-        DefaultOptionKeys.in_features: {
-            "explanation": "Source feature to apply time window operation to",
-            DefaultOptionKeys.context: True,  # Mark as context parameter
-            DefaultOptionKeys.strict_validation: False,  # Flexible validation
-        },
+        ),
+        TIME_UNIT: PropertySpec(
+            "Time unit of the window size",
+            allowed_values=TimeReferenceMixin.TIME_UNITS,
+            context=True,
+            strict_validation=True,
+        ),
+        DefaultOptionKeys.in_features: PropertySpec(
+            "Source feature to apply time window operation to",
+            context=True,
+            strict_validation=False,
+        ),
     }
 
     # Define the regex pattern for this feature group

@@ -1,5 +1,4 @@
 from enum import Enum
-from typing import Any
 
 
 class DefaultOptionKeys(str, Enum):
@@ -24,43 +23,13 @@ class DefaultOptionKeys(str, Enum):
     in_features = "in_features"
     reference_time = "reference_time"
     time_travel = "time_travel"
-    allowed_values = "allowed_values"
-    default = "default"
     context = "context"
     group = "group"
     order_by = "order_by"
-    strict_validation = "strict_validation"
-    element_validator = "element_validator"
     strict_type_enforcement = "strict_type_enforcement"
-    required_when = "required_when"
-    match_guard = "match_guard"
 
     def __str__(self) -> str:
         return self.value
 
     def __format__(self, format_spec: str) -> str:
         return self.value.__format__(format_spec)
-
-
-# The SCHEMA of a PROPERTY_MAPPING spec dict: the complete set of permitted keys. Rejecting any
-# other key at class definition is what stops a typo'd flag from being read as an allowed value.
-PROPERTY_SPEC_KEYS: frozenset[Any] = frozenset(
-    {
-        "explanation",
-        DefaultOptionKeys.allowed_values,
-        DefaultOptionKeys.default,
-        DefaultOptionKeys.context,
-        DefaultOptionKeys.group,
-        DefaultOptionKeys.strict_validation,
-        DefaultOptionKeys.element_validator,
-        DefaultOptionKeys.required_when,
-        DefaultOptionKeys.match_guard,
-    }
-)
-
-# Removed keys mapped to their replacement (issue #600). They are unknown keys like any other;
-# this map only gives the unknown-key error an exact remedy to name.
-REMOVED_PROPERTY_KEYS: dict[str, DefaultOptionKeys] = {
-    "validation_function": DefaultOptionKeys.element_validator,
-    "type_validator": DefaultOptionKeys.match_guard,
-}

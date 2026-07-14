@@ -15,7 +15,7 @@ import pytest
 
 from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser import FeatureChainParser
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
-from mloda.provider import property_spec
+from mloda.provider import DefaultOptionKeys, property_spec
 from mloda_plugins.feature_group.experimental.data_quality.missing_value.base import MissingValueFeatureGroup
 from mloda_plugins.feature_group.experimental.node_centrality.base import NodeCentralityFeatureGroup
 from mloda_plugins.feature_group.experimental.sklearn.pipeline.base import SklearnPipelineFeatureGroup
@@ -27,6 +27,18 @@ def _shipped(feature_group: type[FeatureGroup], key: str) -> dict[str, Any]:
     assert mapping is not None, f"{feature_group.__name__} declares no PROPERTY_MAPPING"
     spec: dict[str, Any] = mapping[key]
     return spec
+
+
+# PIPELINE_NAME and PIPELINE_STEPS each carry a required_when predicate ("required only when the
+# other is absent"). Two separately written lambdas are never ``==``, so a rebuilt spec can only
+# equal the shipped one if the builder is handed the SAME callable object: read the predicate off
+# the shipped spec and thread it through by identity.
+_PIPELINE_NAME_SHIPPED: dict[str, Any] = _shipped(
+    SklearnPipelineFeatureGroup, SklearnPipelineFeatureGroup.PIPELINE_NAME
+)
+_PIPELINE_STEPS_SHIPPED: dict[str, Any] = _shipped(
+    SklearnPipelineFeatureGroup, SklearnPipelineFeatureGroup.PIPELINE_STEPS
+)
 
 
 # Shipped specs the builder must reproduce EXACTLY: (id, built, shipped).
@@ -48,8 +60,12 @@ _EXACT_CASES: list[tuple[str, dict[str, Any], dict[str, Any]]] = [
     ),
     (
         "sklearn_pipeline.pipeline_steps",
-        property_spec("List of pipeline steps as (name, transformer) tuples", default=None),
-        _shipped(SklearnPipelineFeatureGroup, SklearnPipelineFeatureGroup.PIPELINE_STEPS),
+        property_spec(
+            "List of pipeline steps as (name, transformer) tuples",
+            default=None,
+            required_when=_PIPELINE_STEPS_SHIPPED[DefaultOptionKeys.required_when],
+        ),
+        _PIPELINE_STEPS_SHIPPED,
     ),
     (
         "sklearn_pipeline.pipeline_params",
@@ -64,9 +80,7 @@ _PIPELINE_NAME_BUILT: dict[str, Any] = property_spec(
     strict=True,
     allowed_values=SklearnPipelineFeatureGroup.PIPELINE_TYPES,
     default=None,
-)
-_PIPELINE_NAME_SHIPPED: dict[str, Any] = _shipped(
-    SklearnPipelineFeatureGroup, SklearnPipelineFeatureGroup.PIPELINE_NAME
+    required_when=_PIPELINE_NAME_SHIPPED[DefaultOptionKeys.required_when],
 )
 
 _ALL_BUILT: list[tuple[str, dict[str, Any]]] = [(case_id, built) for case_id, built, _ in _EXACT_CASES] + [

@@ -68,7 +68,7 @@ Test that your feature group works correctly with the mloda API.
 **Example:**
 ``` python
 from mloda.user import mloda
-from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
+from mloda.user.pandas import PandasDataFrame
 
 features = ["source_feature", "source_feature__my_operation"]
 result = mloda.run_all(features, compute_frameworks={PandasDataFrame})

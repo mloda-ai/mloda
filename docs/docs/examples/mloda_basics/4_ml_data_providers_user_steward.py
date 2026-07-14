@@ -60,7 +60,7 @@ def _():
     from mloda.user import mloda
     from mloda.user import Feature, DataAccessCollection, PluginLoader
     from mloda_plugins.feature_group.input_data.read_dbs.sqlite import SQLITEReader
-    from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
+    from mloda.user.pyarrow import PyArrowTable
 
     plugin_loader = PluginLoader.all()
 

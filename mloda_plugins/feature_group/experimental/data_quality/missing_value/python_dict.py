@@ -10,8 +10,7 @@ from typing import Any, Optional
 
 from mloda.provider import ComputeFramework
 
-from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
-from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_utils import row_count
+from mloda.user.python_dict import PythonDictFramework, row_count
 from mloda_plugins.feature_group.experimental.data_quality.missing_value.base import MissingValueFeatureGroup
 
 

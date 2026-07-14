@@ -7,7 +7,7 @@ from __future__ import annotations
 from typing import Any, TYPE_CHECKING, cast
 
 from mloda.provider import ComputeFramework, DefaultOptionKeys
-from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
+from mloda.user.pandas import PandasDataFrame
 from mloda_plugins.feature_group.experimental.dimensionality_reduction.base import DimensionalityReductionFeatureGroup
 
 if TYPE_CHECKING:

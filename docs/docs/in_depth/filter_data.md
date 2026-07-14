@@ -113,7 +113,7 @@ Further, the feature is a data creator, so we create the data here itself.
 from mloda.user import mloda
 from mloda.provider import FeatureGroup, FeatureSet, ComputeFramework, BaseInputData, DataCreator
 from typing import Any, Union, Set, Type, Optional
-from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
+from mloda.user.pyarrow import PyArrowTable
 
 class ExampleOrderFilter(FeatureGroup):
     @classmethod

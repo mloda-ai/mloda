@@ -135,7 +135,7 @@ def _(
 ):
     # Step 3: Request Data Using the Defined Access Collection and Desired Features
     from mloda.user import mloda
-    from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
+    from mloda.user.pyarrow import PyArrowTable
 
     all_features = order_features + payment_features + location_features + categorical_features
     _result = mloda.run_all(
@@ -151,7 +151,7 @@ def _(
 @app.cell
 def _(all_features, data_access_collection, mloda):
     # The data is initially loaded as a Pyarrow table. However, we can easily load it also as a PandasDataFrame.
-    from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
+    from mloda.user.pandas import PandasDataFrame
 
     _result = mloda.run_all(
         all_features, data_access_collection=data_access_collection, compute_frameworks={PandasDataFrame}

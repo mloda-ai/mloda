@@ -26,7 +26,7 @@ except ImportError:
 
 
 from mloda.provider import ComputeFramework
-from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
+from mloda.user.pandas import PandasDataFrame
 from mloda_plugins.feature_group.experimental.text_cleaning.base import TextCleaningFeatureGroup
 
 

@@ -21,6 +21,10 @@ from tests.test_plugins.compute_framework.base_implementations.empty_result_test
 
 class TestSqliteFrameworkBasics:
     def test_is_available(self) -> None:
+        """No longer a tautology (issue #736): pyarrow decides sqlite availability, and it is installed
+        here only because the test extra ships it (this module imports pyarrow at module level and would
+        not even collect without it). The pyarrow-blocked case is pinned in test_backend_import_policy.py.
+        """
         assert SqliteFramework.is_available() is True
 
     def test_expected_data_framework(self) -> None:

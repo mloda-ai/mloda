@@ -129,7 +129,7 @@ In this case, the feature group ExampleB will only run on the PyArrowTable frame
 | **PyArrowTable** | Apache Arrow Tables | Memory-efficient, high performance, columnar format | Production, big data, interoperability | pyarrow |
 | **PolarsDataFrame** | Polars DataFrame | Fast, memory-efficient, eager evaluation | Development, immediate results | polars |
 | **PolarsLazyDataFrame** | Polars LazyFrame | Query optimization, lazy evaluation | Large datasets, performance optimization | polars |
-| **DuckDBFramework** | DuckDB Relations | SQL interface, fast analytics, OLAP queries | Analytical workloads, SQL-based transformations, data warehousing | duckdb |
+| **DuckDBFramework** | DuckDB Relations | SQL interface, fast analytics, OLAP queries | Analytical workloads, SQL-based transformations, data warehousing | duckdb, pyarrow |
 | **SqliteFramework** | SQLite relations | SQL interface, embedded, no server | Local databases, small SQL workloads | sqlite3 (stdlib), pyarrow |
 | **IcebergFramework** | Apache Iceberg Tables | Schema evolution, time travel, data lake management | Data lake scenarios, versioned datasets, large-scale analytics | pyiceberg, pyarrow |
 | **SparkFramework** | Apache Spark DataFrames | Distributed processing, scalability, fault tolerance | Big data, distributed computing, production clusters | pyspark, Java 8+ |
@@ -157,7 +157,7 @@ One policy for every backend: importing `mloda.user.<backend>` never fails becau
 Why it works this way:
 
 - mloda core declares zero hard dependencies; every backend is an optional extra (`pip install mloda[polars]`), so you install only what your use case needs and can deploy in minimal environments.
-- A framework that is importable but unavailable stays visible in the plugin catalogue, where `is_available()` tells you to install the extra, instead of vanishing entirely from discovery.
+- A framework that is importable but unavailable stays visible in the plugin catalogue, where `is_available()` reports it as unavailable, instead of vanishing entirely from discovery. The table above says which libraries an extra installs.
 
 For example, without `polars` installed, `from mloda.user.polars import PolarsDataFrame` still works, `PolarsDataFrame.is_available()` returns `False`, and mloda plans with the remaining frameworks.
 

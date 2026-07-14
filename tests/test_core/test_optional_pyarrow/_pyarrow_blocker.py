@@ -39,9 +39,6 @@ def blocker_preamble(module: str = "pyarrow") -> str:
     return _PREAMBLE_TEMPLATE.format(module=module)
 
 
-BLOCKER_PREAMBLE: str = blocker_preamble()
-
-
 def run_blocked(body: str, module: str = "pyarrow", timeout: int = 30) -> "subprocess.CompletedProcess[str]":
     """Run *body* in a subprocess where *module* is blocked by a sys.meta_path finder.
 

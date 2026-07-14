@@ -1,8 +1,11 @@
 from typing import Any
 
-import pyarrow as pa
-
 from mloda.provider import BaseTransformer
+
+try:
+    import pyarrow as pa
+except ImportError:
+    pa = None  # type: ignore[assignment]
 
 
 class FileSourcePyArrowTransformer(BaseTransformer):
@@ -16,6 +19,8 @@ class FileSourcePyArrowTransformer(BaseTransformer):
 
     @classmethod
     def other_framework(cls) -> Any:
+        if pa is None:
+            return NotImplementedError
         return pa.Table
 
     @classmethod

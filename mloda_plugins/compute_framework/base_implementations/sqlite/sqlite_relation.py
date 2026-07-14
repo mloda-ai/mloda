@@ -593,6 +593,11 @@ class SqliteRelation(SqlBaseRelation):
 
     @classmethod
     def from_dict(cls, connection: sqlite3.Connection, data: dict[str, list[Any]]) -> "SqliteRelation":
+        if pa is None:
+            raise ImportError(
+                "pyarrow is required to build a SQLite relation from a dict. "
+                "Install it with: pip install 'mloda[sqlite]'"
+            )
         table_name = _next_table_name()
         cols = list(data.keys())
 

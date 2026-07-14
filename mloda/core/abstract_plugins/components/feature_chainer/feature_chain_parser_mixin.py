@@ -9,34 +9,27 @@ They serve different purposes and run at different points in the pipeline.
 
 ``element_validator`` (``DefaultOptionKeys.element_validator``)
   - Requires ``strict_validation: True`` on the same mapping entry.
-  - Runs inside ``FeatureChainParser._validate_property_value`` on **both** match
-    paths: the configuration-based one (``_validate_options_against_property_mapping``)
-    and the string-named one (``_validate_present_option_values``). Value validation
-    (membership and ``element_validator``) never depends on how the feature was named.
-    The paths differ on required PRESENCE only, which stays off on the string-named
-    path because a key encoded in the feature name is satisfied by the name.
+  - Runs inside ``FeatureChainParser._validate_property_value`` on **both** match paths,
+    the configuration-based one and the string-named one. Only required *presence* is
+    config-based only, because a key encoded in the feature name is satisfied by the name.
   - Receives **individual parsed elements** after list unpacking
     (``_process_found_property_value`` converts lists to frozensets and
     iterates over each element).
   - On failure: raises ``PropertyValueRejection`` (a ``ValueError``) with an actionable
-    message identifying the property name and the rejected element value. A validator
-    that RAISES instead of returning False (membership against a dict raises TypeError on
-    an unhashable element) cannot judge the value, which is the same rejection.
+    message identifying the property name and the rejected element value. A validator that
+    raises rather than returning falsy cannot judge the value and is a rejection too.
   - Use case: validating that each individual element satisfies a constraint
     (e.g., ``lambda x: isinstance(x, int) and x > 0``).
 
 ``match_guard`` (``DefaultOptionKeys.match_guard``)
   - Does **not** require ``strict_validation``.
   - Runs inside ``FeatureChainParserMixin.match_feature_group_criteria``
-    **after** the parser has matched and validated the present option values.
-  - Receives the **raw whole option value** exactly as stored in Options, before any
-    list unpacking or element iteration. This is its first distinctive power: it can
-    check the SHAPE of a container whose elements each pass their own validation
-    (e.g., a list of exactly three strings).
-  - On failure: logs a debug message and returns ``False`` (non-match). This is its
-    second distinctive power: a falsy return is a plain "not mine", not an error, so
-    another feature group can still take the feature. If the guard raises an exception,
-    the exception is caught, logged, and the value is treated as invalid.
+    **after** basic matching succeeds (pattern + property mapping validation).
+  - Receives the **raw option value** exactly as stored in Options, before any
+    list unpacking or element iteration.
+  - On failure: logs a debug message and returns ``False`` (non-match). If the
+    guard raises an exception, the exception is caught, logged, and the value is
+    treated as invalid.
   - Use case: validating the shape or composite type of the whole value
     (e.g., ``lambda v: isinstance(v, list) and all(isinstance(i, str) for i in v)``).
 
@@ -202,8 +195,7 @@ class FeatureChainParserMixin:
         """
         Match feature against criteria using pattern-based or config-based parsing.
 
-        Delegates to match_parser_criteria() (the parser, with a rejected option value turned
-        into a non-match) and optionally calls _validate_string_match() hook for custom validation.
+        Delegates to match_parser_criteria() and optionally calls _validate_string_match() for custom validation.
 
         After basic matching succeeds, enforces ``match_guard`` constraints from
         PROPERTY_MAPPING entries. For each entry that defines a
@@ -259,12 +251,10 @@ class FeatureChainParserMixin:
 
     @classmethod
     def match_parser_criteria(cls, feature_name: str | FeatureName, options: Options) -> bool:
-        """Call the parser and turn its rejections into the non-match verdict, never an exception.
+        """Call the parser, turning a rejected option value or a malformed name into a non-match, never an exception.
 
-        The ONLY safe way to reach ``match_configuration_feature_chain_parser`` from an overridden
-        ``match_feature_group_criteria``: the parser raises on a rejected option value, and an
-        exception out of a match hook takes down the identification of the feature for every
-        candidate, not just this one. Shared with the mixin's own hook so the two cannot drift.
+        The only safe way to reach the parser from an overridden ``match_feature_group_criteria``: an exception out
+        of a match hook aborts the identification of the feature for every candidate, not just this one.
         """
         try:
             return FeatureChainParser.match_configuration_feature_chain_parser(
@@ -274,21 +264,14 @@ class FeatureChainParserMixin:
                 prefix_patterns=cls._get_prefix_patterns(),
             )
         except ValueError:
-            # PropertyValueRejection (a rejected value) and a malformed name that matched a
-            # prefix pattern are both non-matches, not errors.
             return False
 
     @classmethod
     def _strict_validation_rejection_reason(cls, feature_name: str | FeatureName, options: Options) -> str | None:
-        """Return the ValueError message that match_feature_group_criteria discards, if any.
+        """Return the option-value rejection message that match_feature_group_criteria discards, if any.
 
-        Mirrors the parser: a name match reports rejected option VALUES (presence is
-        carried by the name), the configuration-based path reports value rejections too.
-        A ValueError raised while parsing a PREFIX_PATTERN match (malformed feature name,
-        no chain separator) is a parse error, not an option-value rejection, and is
-        treated as nothing to report. Returns None when nothing was rejected (match
-        succeeded, or the candidate is unrelated). Diagnostic-only: does not affect
-        match_feature_group_criteria's behavior.
+        None when nothing was rejected, and also for a parse error on a malformed name, which is not an
+        option-value rejection. Diagnostic-only: does not affect match_feature_group_criteria's behavior.
         """
         property_mapping = cls._get_property_mapping()
         if property_mapping is None:

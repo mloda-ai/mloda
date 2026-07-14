@@ -23,7 +23,7 @@ def match_feature_group_criteria(cls, feature_name, options, data_access_collect
     return cls.match_parser_criteria(feature_name, options)
 ```
 
-Do not call `FeatureChainParser.match_configuration_feature_chain_parser` directly from a match hook: it raises on an option value the `PROPERTY_MAPPING` rejects, and an exception out of the hook aborts feature identification for every candidate, not just yours. `match_parser_criteria` turns that rejection into the non-match verdict the engine expects, and the reason still reaches the user in the "No feature groups found" error.
+Do not call `FeatureChainParser.match_configuration_feature_chain_parser` directly from a match hook: it raises on an option value the `PROPERTY_MAPPING` rejects, and an exception out of the hook aborts feature identification for every candidate, not just yours. `match_parser_criteria` turns that rejection into a non-match, and the reason still reaches the user in the "No feature groups found" error.
 
 ### 2. PROPERTY_MAPPING Configuration
 

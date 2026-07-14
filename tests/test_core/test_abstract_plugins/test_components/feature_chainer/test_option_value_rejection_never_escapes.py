@@ -1,24 +1,9 @@
-"""An option-value rejection is a NON-MATCH, and it never escapes into the engine (issue #732).
+"""A value the mapping rejects, however it is rejected, is a non-match with an actionable reason.
 
-Validating the values of the options that are present on the string-named path (58b0d6d) turned
-two previously silent inputs into escaping exceptions:
+This holds for a feature group that overrides the match hook and calls the parser directly, and for an
+``element_validator`` that raises instead of returning falsy. Nothing escapes the filter loop as an exception.
 
-1. A feature group that OVERRIDES ``match_feature_group_criteria`` and calls
-   ``FeatureChainParser.match_configuration_feature_chain_parser`` DIRECTLY has no ValueError
-   swallow of its own (``SklearnPipelineFeatureGroup`` is the shipped example). The parser's
-   rejection therefore travels straight through ``IdentifyFeatureGroupClass``, out of the whole
-   run: no "No feature groups found", no hint, and every candidate in the filter loop is exposed
-   to it, so ONE bad option poisons the identification of the feature entirely.
-2. An ``element_validator`` that RAISES instead of returning False (membership against a dict with
-   an unhashable element raises TypeError) escapes the mixin, whose swallow only catches
-   ValueError, and escapes the error-message builder too.
-
-The contract pinned here: a value the mapping rejects, however it is rejected, is a non-match with
-an actionable reason naming the key and the value. Nothing reaches the caller as an exception from
-the filter loop.
-
-All fixture names carry an "esc732" marker so they cannot collide with other tests in the global
-plugin registry.
+All fixture names carry an "esc732" marker so they cannot collide with other tests in the global plugin registry.
 """
 
 from __future__ import annotations
@@ -66,10 +51,8 @@ class MockComputeFrameworkEsc732(ComputeFramework):
 
 
 class DirectParserOverrideFeatureGroup(FeatureChainParserMixin, FeatureGroup):
-    """Mirrors SklearnPipelineFeatureGroup: overrides the match hook, calls the parser directly.
-
-    No try/except of its own, exactly like the shipped plugin. The strict key is never encoded in
-    the feature name, which is the shape the string-named path now validates.
+    """Mirrors SklearnPipelineFeatureGroup: overrides the match hook and calls the parser directly, with no
+    ValueError swallow of its own. The strict key is never encoded in the feature name.
     """
 
     PREFIX_PATTERN = r".*__esc732_pipeline_([\w]+)$"
@@ -121,9 +104,8 @@ class NeighborFeatureGroup(FeatureGroup):
 
 
 class RaisingTypeErrorValidatorFeatureGroup(FeatureChainParserMixin, FeatureGroup):
-    """Mirrors TextCleaningFeatureGroup: element_validator is membership against a dict.
-
-    An unhashable element makes the validator itself raise TypeError, rather than returning False.
+    """Mirrors TextCleaningFeatureGroup: element_validator is membership against a dict, so an unhashable
+    element makes the validator itself raise TypeError instead of returning False.
     """
 
     PREFIX_PATTERN = r".*__cleaned_esc732$"
@@ -211,11 +193,7 @@ class TestRaisingElementValidatorIsARejection:
         assert result is False
 
     def test_parser_reports_a_raising_validator_as_a_value_rejection(self) -> None:
-        """The parser converts the validator's own exception into the standard ValueError.
-
-        ValueError is the single signal both the mixin's swallow and the reason builder read; a
-        TypeError from inside the validator bypasses them and escapes.
-        """
+        """The parser converts the validator's own exception into the ValueError its callers read."""
         with pytest.raises(ValueError) as exc_info:
             FeatureChainParser.match_configuration_feature_chain_parser(
                 OPERATIONS_FEATURE,
@@ -300,11 +278,7 @@ class TestRejectionNeverEscapesTheEngine:
     """The filter loop must never leak a rejection as an exception, whoever calls the parser."""
 
     def test_direct_parser_caller_yields_the_standard_no_match_error(self) -> None:
-        """A feature group that calls the parser directly cannot break feature identification.
-
-        The user must get mloda's normal "No feature groups found" error, carrying the rejection
-        reason, rather than the parser's bare ValueError out of the engine.
-        """
+        """A direct parser caller yields the normal "No feature groups found" error carrying the reason."""
         feature = Feature(PIPELINE_FEATURE, Options(context={PIPELINE_KEY: "custom"}))
         accessible_plugins: FeatureGroupEnvironmentMapping = {
             DirectParserOverrideFeatureGroup: {MockComputeFrameworkEsc732},
@@ -322,11 +296,7 @@ class TestRejectionNeverEscapesTheEngine:
         assert "custom" in message
 
     def test_direct_parser_caller_does_not_poison_other_candidates(self) -> None:
-        """One rejecting candidate must not take the whole filter loop down with it.
-
-        The loop consults every accessible plugin, so a raising candidate would deny the feature
-        to the feature group that legitimately owns it.
-        """
+        """One rejecting candidate must not deny the feature to the group that legitimately owns it."""
         feature = Feature(PIPELINE_FEATURE, Options(context={PIPELINE_KEY: "custom"}))
         accessible_plugins: FeatureGroupEnvironmentMapping = {
             DirectParserOverrideFeatureGroup: {MockComputeFrameworkEsc732},
@@ -372,10 +342,10 @@ class TestRejectionNeverEscapesTheEngine:
 
 
 class TestParserContractUnchangedForOrdinaryRejections:
-    """The ordinary membership rejection keeps raising ValueError from the parser (58b0d6d)."""
+    """The ordinary membership rejection keeps raising ValueError from the parser."""
 
     def test_parser_raises_valueerror_for_a_direct_caller(self) -> None:
-        """The parser signals a rejected value; the CALLER is what must not let it escape."""
+        """The parser signals a rejected value; the caller is what must not let it escape."""
         with pytest.raises(ValueError) as exc_info:
             FeatureChainParser.match_configuration_feature_chain_parser(
                 PIPELINE_FEATURE,

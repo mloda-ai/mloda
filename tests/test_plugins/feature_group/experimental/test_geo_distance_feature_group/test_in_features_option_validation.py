@@ -1,8 +1,6 @@
-"""geo_distance's strict in_features spec is enforced on the string-named path too (issue #732).
+"""geo_distance's strict ``in_features`` spec (each point must be a str) is enforced on both match paths.
 
-``in_features`` declares strict_validation=True with an ``element_validator`` (each point must be a
-str), and the string-named path now validates the option values that are present. A non-str point
-is a non-match with an actionable reason, never an exception.
+A non-str point is a non-match with an actionable reason, never an exception.
 """
 
 from __future__ import annotations

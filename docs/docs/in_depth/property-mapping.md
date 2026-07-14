@@ -39,13 +39,12 @@ declares it gets its resolved `match_feature_group_criteria` wrapped at class de
 and the wrapper runs the predicates after that matcher returns `True`. Overriding the
 matcher therefore keeps the contract, whether the override delegates or not.
 
-Value validation does not depend on how the feature was created. Membership and
-`element_validator` run on **both** match paths: the configuration-based one (options
-only) and the string-named one (the feature name matches a `PREFIX_PATTERN`). Only
-required **presence** differs: it is enforced on the configuration-based path alone,
-because a key the feature name encodes (the operation) is satisfied by the name, not by
-an option. So `"income__pca_2d"` with no options at all still matches, while the same
-feature group with `pca_svd_solver="bogus"` in its options is rejected either way.
+Value validation does not depend on how the feature was created: membership and
+`element_validator` run on **both** match paths, the configuration-based one and the
+string-named one. Only required **presence** differs, enforced on the configuration-based
+path alone, because a key the feature name encodes is satisfied by the name. So
+`"income__pca_2d"` with no options at all still matches, while the same feature group with
+`pca_svd_solver="bogus"` in its options is rejected either way.
 
 The class-definition rules run in table order, and the order is load-bearing. The schema
 runs before the shape rules, because a spec with an unknown key is malformed and its

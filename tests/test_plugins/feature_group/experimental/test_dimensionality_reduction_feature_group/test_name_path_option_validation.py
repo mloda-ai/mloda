@@ -1,9 +1,7 @@
-"""Options-only algorithm parameters are validated on the string-named path too (issue #732).
+"""Options-only algorithm parameters are validated on both match paths.
 
-``pca_svd_solver`` and ``tsne_method`` are strict_validation keys with an ``allowed_values``
-space, and neither is ever encoded in the feature name. The config-based path rejected a bogus
-value for them; the string-named path accepted it, because a PREFIX_PATTERN match short-circuited
-before the options were ever read. Both paths must reach the same verdict.
+``pca_svd_solver`` and ``tsne_method`` are strict keys with an ``allowed_values`` space that the feature name
+never encodes, so a name match must reach the same verdict as the config-based one.
 """
 
 from __future__ import annotations
@@ -25,10 +23,10 @@ from mloda_plugins.feature_group.experimental.dimensionality_reduction.pandas im
 
 
 class TestPcaSvdSolverValidatedOnBothPaths:
-    """The reproduction from issue #732."""
+    """pca_svd_solver: strict, allowed_values, options-only."""
 
     def test_config_path_rejects_bogus_solver(self) -> None:
-        """Config-based path already rejects a solver outside allowed_values."""
+        """The config-based path rejects a solver outside allowed_values."""
         options = Options(
             context={
                 DimensionalityReductionFeatureGroup.ALGORITHM: "pca",
@@ -41,7 +39,7 @@ class TestPcaSvdSolverValidatedOnBothPaths:
         assert DimensionalityReductionFeatureGroup.match_feature_group_criteria("placeholder", options) is False
 
     def test_name_path_rejects_bogus_solver(self) -> None:
-        """String-named path must reject the same solver value, instead of waving it through."""
+        """The string-named path rejects the same solver value."""
         options = Options(context={DimensionalityReductionFeatureGroup.PCA_SVD_SOLVER: "bogus"})
 
         assert DimensionalityReductionFeatureGroup.match_feature_group_criteria("f0,f1,f2__pca_2d", options) is False
@@ -80,7 +78,7 @@ class TestTsneMethodValidatedOnBothPaths:
         assert DimensionalityReductionFeatureGroup.match_feature_group_criteria("placeholder", options) is False
 
     def test_name_path_rejects_bogus_method(self) -> None:
-        """String-named path must reject the same t-SNE method value."""
+        """The string-named path rejects the same t-SNE method value."""
         options = Options(context={DimensionalityReductionFeatureGroup.TSNE_METHOD: "bogus"})
 
         assert DimensionalityReductionFeatureGroup.match_feature_group_criteria("f0__tsne_2d", options) is False
@@ -120,13 +118,9 @@ def _forwarded_child_options(algorithm: str) -> Options:
 
 
 class TestForwardedAlgorithmOutsideTheChildValueSpace:
-    """``algorithm`` is shared across feature group families with DIFFERENT value spaces.
-
-    A consumer forwarding algorithm='kmeans' (a clustering algorithm) onto the child 'f0__pca_2d'
-    used to hit ``_validate_forwarded_name_mismatch`` and raise the forward_group_exclude error.
-    The forwarded value is now outside the child's OWN value space, so the parser's value rejection
-    fires first and the verdict is a non-match: the same verdict shape as every other rejected
-    value. Pin which message wins, so it cannot silently change again.
+    """``algorithm`` is shared across feature group families with different value spaces. A forwarded value
+    outside the child's own space is rejected as a value before the forwarded-name mismatch check sees it, so
+    the verdict is a non-match. Pins which of the two messages wins.
     """
 
     def test_forwarded_out_of_space_value_is_a_non_match(self) -> None:

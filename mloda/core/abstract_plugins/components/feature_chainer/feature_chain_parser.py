@@ -41,11 +41,9 @@ REQUIRED_WHEN_GUARD_DEPTH: contextvars.ContextVar[int] = contextvars.ContextVar(
 
 
 class PropertyValueRejection(ValueError):
-    """A present option value that the PROPERTY_MAPPING rejects: a VERDICT, not a crash.
-
-    A ValueError subclass, so every existing ``except ValueError`` keeps working, and a distinct
-    type, so a caller can treat it as a non-match without also swallowing the deliberate
-    ValueErrors that carry actionable guidance (the forwarded-name mismatch).
+    """An option value the PROPERTY_MAPPING rejects: a verdict, not a crash. Subclasses ValueError so
+    existing ``except ValueError`` handlers keep working, while the distinct type lets a caller treat it as a
+    non-match without also swallowing the ValueErrors that carry actionable guidance.
     """
 
 
@@ -177,9 +175,7 @@ class FeatureChainParser:
         element_validator = cls._get_element_validator(original_property_config)
 
         if element_validator is not None:
-            # A validator that RAISES cannot judge the value, which is a rejection, not a crash:
-            # a membership-style validator raises TypeError on an unhashable element, and a
-            # str-only one raises AttributeError on an int. Same exceptions as _validate_match_guards.
+            # A validator that raises cannot judge the value, so the value is rejected, not the run.
             try:
                 verdict = element_validator(found_property_val)
             except (TypeError, ValueError, AttributeError):
@@ -486,12 +482,7 @@ class FeatureChainParser:
     def _collect_option_value(
         cls, options: Options, property_name: str, property_mapping: dict[str, Any]
     ) -> list[Any] | None:
-        """Validate the VALUE of one option and return its elements, or None when it is absent.
-
-        The per-key work both validation paths share, so they cannot drift. Raises
-        PropertyValueRejection when a present value is outside the key's declared value space or
-        is rejected by its element_validator.
-        """
+        """Validate one option value and return its elements, or None when the option is absent."""
         found_property_value = options.get(property_name)
         if found_property_value is None:
             return None
@@ -503,25 +494,13 @@ class FeatureChainParser:
 
     @classmethod
     def _validate_present_option_values(cls, options: Options, property_mapping: dict[str, Any]) -> None:
-        """Validate the values of the options that are present, without enforcing presence.
-
-        Used on the string-named path, where a key like the operation is carried by the feature
-        name rather than by the options: an absent option is skipped instead of rejected. Raises
-        PropertyValueRejection on a bad value.
-        """
+        """Validate the values of the present options, without enforcing presence of the absent ones."""
         for property_name in property_mapping:
             cls._collect_option_value(options, property_name, property_mapping)
 
     @classmethod
     def _validate_options_against_property_mapping(cls, options: Options, property_mapping: dict[str, Any]) -> bool:
-        """Validate present option values AND enforce required presence (configuration-based path).
-
-        Args:
-            options: Options object containing the parameters to validate
-            property_mapping: Property mapping with validation rules
-
-        Returns:
-            True if validation passes, False when a required option is absent
+        """Validate present option values and enforce required presence. False when a required option is absent.
 
         Raises:
             PropertyValueRejection: If a present option carries a value the mapping rejects
@@ -545,14 +524,9 @@ class FeatureChainParser:
         """
         Unified method for matching features using either configuration-based or pattern-based parsing.
 
-        Both paths validate the VALUES of the options that are present. They differ on required
-        PRESENCE only: a name match satisfies the keys the name carries, so presence is enforced
-        on the configuration-based path alone.
-
-        This method RAISES on a rejected value, so a caller that overrides
-        ``match_feature_group_criteria`` must not call it bare: use
-        ``FeatureChainParserMixin.match_parser_criteria``, which turns the rejection into the
-        non-match verdict the engine expects.
+        Both paths validate the values of the present options; only required presence is enforced on the
+        configuration-based path alone. This raises on a rejected value, so an overridden
+        ``match_feature_group_criteria`` must reach it through ``FeatureChainParserMixin.match_parser_criteria``.
 
         Args:
             feature_name: The feature name to match
@@ -563,11 +537,6 @@ class FeatureChainParser:
 
         Returns:
             True if the feature matches either pattern-based or configuration-based parsing, False otherwise
-
-        Raises:
-            PropertyValueRejection: If a present option carries a value the property mapping rejects
-            ValueError: If the feature name matches a prefix pattern but is malformed (no source
-                feature), raised by parse_feature_name
         """
 
         # string based matching

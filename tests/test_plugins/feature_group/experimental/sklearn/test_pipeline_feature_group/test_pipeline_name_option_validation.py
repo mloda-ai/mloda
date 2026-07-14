@@ -1,14 +1,7 @@
-"""A rejected pipeline_name is a non-match, not an exception (issue #732 regression).
+"""A pipeline_name outside PIPELINE_TYPES is a non-match on both paths, not an exception.
 
-``SklearnPipelineFeatureGroup`` overrides ``match_feature_group_criteria`` and calls
-``FeatureChainParser.match_configuration_feature_chain_parser`` directly, without the mixin's
-ValueError swallow. Its PIPELINE_NAME spec is strict_validation=True with allowed_values=
-PIPELINE_TYPES and is never encoded in the feature name, which is exactly the shape the
-string-named path now validates: a bogus value raises ValueError straight out of the override, and
-straight out of the engine's filter loop with it.
-
-A value outside PIPELINE_TYPES must be a NON-MATCH on both paths, with the standard
-"No feature groups found" error and the rejection reason naming the key and the value.
+``SklearnPipelineFeatureGroup`` overrides the match hook and calls the parser directly, so it is the case where
+a rejection could escape the engine. The user gets "No feature groups found" with the reason instead.
 """
 
 from __future__ import annotations
@@ -37,7 +30,7 @@ class TestBogusPipelineNameIsANonMatch:
         assert BOGUS_PIPELINE_NAME not in SklearnPipelineFeatureGroup.PIPELINE_TYPES
 
     def test_name_path_bogus_pipeline_name_returns_false(self) -> None:
-        """The reproduction: a string-named pipeline feature with a bogus pipeline_name."""
+        """A string-named pipeline feature carrying a bogus pipeline_name does not match."""
         options = Options(context={SklearnPipelineFeatureGroup.PIPELINE_NAME: BOGUS_PIPELINE_NAME})
 
         result = SklearnPipelineFeatureGroup.match_feature_group_criteria(BOGUS_FEATURE, options)

@@ -289,7 +289,7 @@ def match_feature_group_criteria(cls, feature_name, options, data_access_collect
     return cls.match_parser_criteria(feature_name, options)
 ```
 
-`match_parser_criteria` calls `FeatureChainParser.match_configuration_feature_chain_parser` with the class's `PROPERTY_MAPPING` and patterns, and turns a rejected option value into a non-match. Calling the parser directly from a match hook lets that rejection escape as an exception and abort feature identification for every candidate.
+`match_parser_criteria` calls the parser with the class's `PROPERTY_MAPPING` and patterns and turns a rejected option value into a non-match. Calling `FeatureChainParser` directly from a match hook lets that rejection escape as an exception and abort feature identification for every candidate.
 
 ### 3. Modernize input_features Method
 

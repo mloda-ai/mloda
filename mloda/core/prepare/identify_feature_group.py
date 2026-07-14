@@ -154,13 +154,9 @@ class IdentifyFeatureGroupClass:
         feature: Feature,
         data_access_collection: Optional[DataAccessCollection],
     ) -> bool:
-        """A rejected option value is a non-match, whoever calls the parser.
-
-        Guards every candidate, including a third-party feature group that overrides the match
-        hook and calls FeatureChainParser directly: without this, one rejecting candidate would
-        take the whole filter loop down and deny the feature to the group that legitimately owns
-        it. Only the rejection is caught; a plain ValueError (the forwarded-name-mismatch
-        guidance) still reaches the user.
+        """A rejected option value is a non-match, whoever calls the parser: a candidate that overrides the match
+        hook and calls FeatureChainParser directly must not take the whole filter loop down. Only the rejection is
+        caught, so a plain ValueError (the forwarded-name-mismatch guidance) still reaches the user.
         """
         try:
             return feature_group.match_feature_group_criteria(feature.name, feature.options, data_access_collection)

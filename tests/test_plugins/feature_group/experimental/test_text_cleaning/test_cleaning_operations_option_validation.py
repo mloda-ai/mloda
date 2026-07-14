@@ -1,13 +1,7 @@
-"""An element_validator that raises is a rejection, not an escape (issue #732 regression).
+"""A value the element_validator cannot accept is a non-match, whether the validator returns falsy or raises.
 
-``TextCleaningFeatureGroup`` ships ``element_validator: lambda op: op in SUPPORTED_OPERATIONS``, a
-membership test against a dict. An unhashable element (a dict) makes the validator itself raise
-TypeError. The parser calls the validator unguarded, the mixin's swallow only catches ValueError,
-and the error-message builder only catches ValueError, so the TypeError escapes both the match and
-the engine.
-
-A value the validator cannot accept is a NON-MATCH, whether the validator returns False or raises,
-with the same actionable reason naming the key and the value.
+``TextCleaningFeatureGroup`` ships ``element_validator: lambda op: op in SUPPORTED_OPERATIONS``, a membership
+test against a dict, so an unhashable element makes the validator itself raise TypeError.
 """
 
 from __future__ import annotations
@@ -45,7 +39,7 @@ def _config_path_options(operations: object) -> Options:
 
 class TestUnhashableOperationIsANonMatch:
     def test_name_path_unhashable_operation_returns_false(self) -> None:
-        """The reproduction: the validator raises TypeError; the verdict must be a non-match."""
+        """The validator raises TypeError on the name path; the verdict is a non-match."""
         result = TextCleaningFeatureGroup.match_feature_group_criteria(
             CLEANED_FEATURE, _name_path_options([UNHASHABLE_OPERATION])
         )
@@ -61,7 +55,7 @@ class TestUnhashableOperationIsANonMatch:
         assert result is False
 
     def test_rejection_reason_names_key_and_value_on_name_path(self) -> None:
-        """The reason builder is diagnostic-only: it reports the rejection, it never raises."""
+        """The reason builder reports the rejection instead of raising the validator's TypeError."""
         reason = TextCleaningFeatureGroup._strict_validation_rejection_reason(
             CLEANED_FEATURE, _name_path_options([UNHASHABLE_OPERATION])
         )

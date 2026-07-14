@@ -1,25 +1,7 @@
-"""The string-named path validates the option values it carries (issue #732).
+"""The string-named match path validates the option values that are present.
 
-``match_configuration_feature_chain_parser`` returned True as soon as the feature name
-matched a PREFIX_PATTERN and never looked at ``options``. Every PROPERTY_MAPPING key that
-is NOT encoded in the name (a solver, a method, a size) therefore went unvalidated on the
-string-named path, including keys declaring ``strict_validation=True``.
-
-What this module pins:
-
-* On a name match, the option values that ARE present are validated exactly as on the
-  config-based path: membership against ``allowed_values``, or the ``element_validator``
-  when the spec declares one.
-* Required-PRESENCE stays OFF on the name path. A key the name carries (the operation) is
-  satisfied by the name, so a name-matched feature with no options at all still matches.
-  The config-based path keeps enforcing presence.
-* The verdict is a non-match, not a hard raise: the parser raises ``ValueError`` and
-  ``match_feature_group_criteria`` swallows it into ``False``, the same as on the
-  config-based path.
-* ``_strict_validation_rejection_reason`` surfaces that discarded message for a name-matched
-  feature, naming the key and the rejected value.
-* ``match_guard`` semantics are untouched: raw whole value, no ``strict_validation``
-  requirement, falsy verdict is a plain non-match with nothing to report.
+Only required presence differs from the config-based path: a key the name carries is satisfied by the
+name. A rejected value is a non-match, and the parser's message is still available as the reason.
 """
 
 from __future__ import annotations

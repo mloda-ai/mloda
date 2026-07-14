@@ -32,7 +32,17 @@ from mloda.core.abstract_plugins.components.feature_set import FeatureSet
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.components.utils import get_all_subclasses
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
-from mloda.provider import PropertySpec, property_spec
+from mloda.provider import NO_DEFAULT, PropertySpec, property_spec
+
+
+def _build(*args: Any, **kwargs: Any) -> PropertySpec:
+    """Call ``property_spec`` through an untyped seam.
+
+    The builder's declared ``allowed_values`` type lists the container shapes so a bare str is an
+    author-time error. Its runtime is deliberately more lenient (any iterable is materialized), and
+    the leniency tests below exercise exactly the shapes the type does not name.
+    """
+    return property_spec(*args, **kwargs)
 
 
 @pytest.fixture(autouse=True)
@@ -112,7 +122,7 @@ class TestPropertySpecIterableAllowedValues:
 
     def test_one_shot_generator_is_materialized(self) -> None:
         """A generator must be materialized so the emitted allowed_values is re-iterable."""
-        spec = property_spec("d", strict=True, allowed_values=(x for x in ("add", "sub")), default="add")
+        spec = _build("d", strict=True, allowed_values=(x for x in ("add", "sub")), default="add")
 
         assert spec.allowed_values is not None
         first = list(spec.allowed_values)
@@ -157,18 +167,29 @@ class TestPropertySpecRoundTrip:
 
 
 class TestPropertySpecDefaultOmission:
-    """A builder call with no default must leave the ``default`` field at ``None``.
+    """A builder call with no default must leave the ``default`` field at ``NO_DEFAULT``.
 
-    The parser's ``_can_skip_required_check`` treats a non-``None`` ``default`` as
-    "this option is optional". ``default=None`` means NO default, so an
-    otherwise-required strict property stays required.
+    The parser's ``_can_skip_required_check`` treats a DECLARED default as "this option is
+    optional". ``NO_DEFAULT`` means no default was declared, so an otherwise-required strict
+    property stays required; a declared ``default=None`` is the optional-with-no-value form.
     """
 
-    def test_builder_without_default_leaves_default_none(self) -> None:
-        """No default argument -> the spec's ``default`` field is ``None``."""
+    def test_builder_without_default_leaves_default_at_the_sentinel(self) -> None:
+        """No default argument -> the spec's ``default`` field is ``NO_DEFAULT``."""
         spec = property_spec("op", strict=True, allowed_values={"add": "Addition", "sub": "Subtraction"})
 
-        assert spec.default is None
+        assert spec.default is NO_DEFAULT
+
+    def test_builder_with_declared_none_default_makes_the_key_optional(self) -> None:
+        """``default=None`` through the builder marks the key optional: an absent option matches."""
+        property_mapping = {"weight_column": property_spec("Optional weight column", default=None)}
+
+        assert (
+            FeatureChainParser.match_configuration_feature_chain_parser(
+                "any_feature", Options(context={}), property_mapping
+            )
+            is True
+        )
 
     def test_builder_without_default_makes_strict_property_required(self) -> None:
         """A defaultless strict property is REQUIRED: absent option -> no match.
@@ -424,19 +445,25 @@ class TestPropertySpecRaisingElementValidator:
 
 
 class TestPropertySpecEmptyAllowedValues:
-    """An explicitly empty ``allowed_values`` is always an authoring mistake (issue #536).
+    """An empty ``allowed_values`` only rejects when membership is what decides.
 
-    Even when an ``element_validator`` is present (so the spec would still be
-    enforceable), an explicitly empty allowed set is dead configuration: core's
-    ``_extract_property_values`` would surface it as an empty accepted set. The
-    builder must reject it up front instead of silently carrying a dead, empty
-    ``allowed_values``.
+    The value-space rules exist because an empty accepted set would reject every value. With an
+    ``element_validator`` the validator, not membership, decides: ``allowed_values`` is never
+    consulted, so an empty one rejects nothing and the rules do not fire. Without a validator an
+    empty (or absent) value space is still the reject-everything spec, and is refused.
     """
 
-    def test_empty_allowed_values_with_element_validator_raises(self) -> None:
-        """``strict=True`` with ``allowed_values=[]`` raises even though a validator is present."""
-        with pytest.raises(ValueError):
-            property_spec("d", strict=True, element_validator=_positive_int, allowed_values=[])
+    def test_empty_allowed_values_with_element_validator_is_accepted(self) -> None:
+        """``strict=True`` with ``allowed_values=[]`` is legal while a validator is present."""
+        spec = property_spec("d", strict=True, element_validator=_positive_int, allowed_values=[])
+
+        assert spec.element_validator is _positive_int
+        assert spec.allowed_values == ()
+
+    def test_empty_allowed_values_without_element_validator_raises(self) -> None:
+        """Without a validator, an empty accepted set would reject every value."""
+        with pytest.raises(ValueError, match="(?i)empty allowed_values"):
+            property_spec("d", strict=True, allowed_values=[])
 
 
 class TestPropertySpecPassthroughRegressionGuards:

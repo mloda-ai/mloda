@@ -9,7 +9,6 @@ from typing import Any, Optional
 
 from mloda.provider import FeatureGroup
 from mloda.user import Feature
-from mloda.user import Options
 from mloda.provider import CHAIN_SEPARATOR, FeatureChainParser
 from mloda.provider import (
     FeatureChainParserMixin,
@@ -17,12 +16,6 @@ from mloda.provider import (
 from mloda.provider import FeatureSet
 from mloda.provider import DefaultOptionKeys
 from mloda.provider import PropertySpec
-
-
-def _never_required(options: Options) -> bool:
-    """The retired dict spec marked these keys optional via a present default-None key;
-    the PropertySpec equivalent is a required_when predicate that never fires."""
-    return False
 
 
 class NodeCentralityFeatureGroup(FeatureChainParserMixin, FeatureGroup):
@@ -165,8 +158,7 @@ class NodeCentralityFeatureGroup(FeatureChainParserMixin, FeatureGroup):
             "Column name for edge weights (optional)",
             context=True,
             strict_validation=False,
-            default=None,  # Default is None (unweighted)
-            required_when=_never_required,  # preserves the old dict-form default: None optional semantics
+            default=None,  # Optional: no default weight column (unweighted)
         ),
         DefaultOptionKeys.in_features: PropertySpec(
             "Source feature representing the nodes for centrality calculation",

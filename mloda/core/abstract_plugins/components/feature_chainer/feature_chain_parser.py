@@ -12,7 +12,7 @@ from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.components.default_options_key import DefaultOptionKeys
-from mloda.core.abstract_plugins.components.feature_chainer.property_spec import PropertySpec
+from mloda.core.abstract_plugins.components.feature_chainer.property_spec import NO_DEFAULT, PropertySpec
 
 # Separator constants for feature name parsing
 CHAIN_SEPARATOR = "__"  # Separates chained transformations (source→suffix)
@@ -103,13 +103,13 @@ class FeatureChainParser:
     def _can_skip_required_check(cls, spec: PropertySpec) -> bool:
         """Check if the base parser should treat this property as optional.
 
-        Returns True when the spec has a default value or uses conditional
-        requirements (required_when).  In both cases the base validation loop
-        should not reject the match just because the option is absent; either
-        the default will be applied later, or the required_when predicate in
-        FeatureChainParserMixin will decide.
+        Returns True when the spec DECLARES a default (``NO_DEFAULT`` means it declares none,
+        while a declared ``default=None`` marks the key optional with no value to apply) or uses
+        conditional requirements (required_when). In both cases the base validation loop should
+        not reject the match just because the option is absent; either the default will be applied
+        later, or the required_when predicate in FeatureChainParserMixin will decide.
         """
-        return spec.default is not None or spec.required_when is not None
+        return spec.default is not NO_DEFAULT or spec.required_when is not None
 
     @classmethod
     def _is_context_parameter(cls, spec: PropertySpec) -> bool:
@@ -204,6 +204,23 @@ class FeatureChainParser:
         return cls.extract_property_values(spec)
 
     @classmethod
+    def _require_spec(cls, owner_name: str, key: str, spec: Any) -> PropertySpec:
+        """Reject anything that is not a ``PropertySpec``.
+
+        The parser entry point is public and takes a mapping straight from a caller, so the type
+        rule cannot live at class-definition time alone: an unmigrated dict would otherwise die
+        with an AttributeError deep in the match path instead of this ValueError.
+        """
+        if isinstance(spec, PropertySpec):
+            return spec
+
+        raise ValueError(
+            f"{owner_name}.PROPERTY_MAPPING['{key}'] is a {type(spec).__name__}, not a PropertySpec. "
+            f"Raw dict specs are no longer accepted; construct PropertySpec(...) or use the "
+            f"property_spec(...) helper."
+        )
+
+    @classmethod
     def validate_property_mapping_defaults(cls, owner_name: str, property_mapping: dict[str, Any] | None) -> None:
         """Validate a PROPERTY_MAPPING at class-definition time.
 
@@ -214,12 +231,7 @@ class FeatureChainParser:
             return
 
         for key, spec in property_mapping.items():
-            if not isinstance(spec, PropertySpec):
-                raise ValueError(
-                    f"{owner_name}.PROPERTY_MAPPING['{key}'] is a {type(spec).__name__}, not a PropertySpec. "
-                    f"Raw dict specs are no longer accepted; construct PropertySpec(...) or use the "
-                    f"property_spec(...) helper."
-                )
+            cls._require_spec(owner_name, key, spec)
 
     @classmethod
     def _unpack_property_value(cls, found_property_value: Any) -> list[Any]:
@@ -285,7 +297,10 @@ class FeatureChainParser:
         """
         # None marks an absent option; a list (possibly empty) marks a present one.
         property_tracker: dict[str, list[Any] | None] = {}
-        for key in property_mapping:
+        for key, spec in property_mapping.items():
+            # The entry point is public: a caller may hand over an unmigrated mapping that never
+            # passed the class-definition check.
+            cls._require_spec(cls.__name__, key, spec)
             property_tracker[key] = None
 
         # Process each property in the mapping

@@ -9,7 +9,6 @@ from typing import Any, Optional
 
 from mloda.provider import FeatureGroup
 from mloda.user import Feature
-from mloda.user import Options
 from mloda.provider import FeatureChainParser
 from mloda.provider import (
     FeatureChainParserMixin,
@@ -17,12 +16,6 @@ from mloda.provider import (
 from mloda.provider import FeatureSet
 from mloda.provider import DefaultOptionKeys
 from mloda.provider import PropertySpec
-
-
-def _never_required(options: Options) -> bool:
-    """The retired dict spec marked these keys optional via a present default-None key;
-    the PropertySpec equivalent is a required_when predicate that never fires."""
-    return False
 
 
 class MissingValueFeatureGroup(FeatureChainParserMixin, FeatureGroup):
@@ -188,15 +181,13 @@ class MissingValueFeatureGroup(FeatureChainParserMixin, FeatureGroup):
             "Constant value to use for constant imputation method",
             context=True,
             strict_validation=False,
-            default=None,  # Default is None, required only for constant method
-            required_when=_never_required,  # preserves the old dict-form default: None optional semantics
+            default=None,  # Optional: only the constant method uses it
         ),
         "group_by_features": PropertySpec(
             "Optional list of features to group by before imputation",
             context=True,
             strict_validation=False,
-            default=None,  # Default is None (no grouping)
-            required_when=_never_required,  # preserves the old dict-form default: None optional semantics
+            default=None,  # Optional: no grouping
         ),
     }
 

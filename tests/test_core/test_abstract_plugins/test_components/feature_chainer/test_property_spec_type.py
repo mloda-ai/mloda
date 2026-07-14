@@ -3,8 +3,9 @@
 ``PropertySpec`` is the frozen dataclass replacing PROPERTY_MAPPING spec dicts. This module
 tests the type in isolation: construction defaults, immutability, ``allowed_values``
 normalization, the flag and callable shape rules, the strict-needs-a-value-space invariant,
-and the declared-default rule (issue #530 semantics). Consumers (parser, mixin, FeatureGroup)
-are covered elsewhere and deliberately not touched here.
+the ``NO_DEFAULT`` optionality sentinel and the declared-default rule (issue #530 semantics).
+The one consumer touched here is the type rule itself: the public parser entry point must
+reject a spec that is not a ``PropertySpec``.
 """
 
 from __future__ import annotations
@@ -14,7 +15,9 @@ from typing import Any
 
 import pytest
 
-from mloda.core.abstract_plugins.components.feature_chainer.property_spec import PropertySpec
+from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser import FeatureChainParser
+from mloda.core.abstract_plugins.components.feature_chainer.property_spec import NO_DEFAULT, PropertySpec
+from mloda.core.abstract_plugins.components.options import Options
 
 
 def _spec(*args: Any, **kwargs: Any) -> PropertySpec:
@@ -43,7 +46,7 @@ class TestConstructionAndFields:
 
         assert spec.explanation == "Some explanation"
         assert spec.allowed_values is None
-        assert spec.default is None
+        assert spec.default is NO_DEFAULT
         assert spec.context is True
         assert spec.strict_validation is False
         assert spec.element_validator is None
@@ -179,6 +182,70 @@ class TestStrictNeedsAValueSpace:
         assert spec.element_validator is _is_int
         assert spec.allowed_values is None
 
+    def test_strict_with_element_validator_ignores_an_empty_allowed_values(self) -> None:
+        """An ``element_validator`` decides instead of membership, so an empty value space is inert.
+
+        The value-space rules do not fire at all when a validator is present: nothing is rejected
+        by an empty ``allowed_values`` the match path never consults.
+        """
+        spec = PropertySpec("x", strict_validation=True, element_validator=_is_int, allowed_values=[])
+
+        assert spec.allowed_values == ()
+        assert spec.element_validator is _is_int
+
+
+class TestNoDefaultSentinel:
+    """``NO_DEFAULT`` (no declared default) vs a DECLARED ``default=None`` (optional, no value)."""
+
+    def test_omitted_default_is_the_sentinel_and_makes_the_key_required(self) -> None:
+        """A spec with no declared default is required: the parser may not skip it."""
+        spec = PropertySpec("x")
+
+        assert spec.default is NO_DEFAULT
+        assert FeatureChainParser._can_skip_required_check(spec) is False
+
+    def test_declared_none_default_makes_the_key_optional(self) -> None:
+        """``default=None`` declares an optional key with no value to apply."""
+        spec = PropertySpec("x", default=None)
+
+        assert spec.default is None
+        assert FeatureChainParser._can_skip_required_check(spec) is True
+
+    def test_declared_none_default_matches_when_the_option_is_absent(self) -> None:
+        """The optional key is not required at match time, which is what the plugins rely on."""
+        property_mapping = {"weight_column": PropertySpec("Optional weight column", default=None)}
+
+        assert (
+            FeatureChainParser.match_configuration_feature_chain_parser(
+                "any_feature", Options(context={}), property_mapping
+            )
+            is True
+        )
+
+    def test_sentinel_repr_names_itself(self) -> None:
+        """The sentinel is readable in a spec repr and in an assertion diff."""
+        assert repr(NO_DEFAULT) == "NO_DEFAULT"
+
+
+class TestParserEntryPointRequiresPropertySpec:
+    """The public parser entry point enforces the type rule, not just class definition."""
+
+    def test_match_configuration_rejects_a_dict_spec(self) -> None:
+        """A raw dict spec handed straight to the matcher is a ValueError, never an AttributeError."""
+        property_mapping: Any = {"operation_type": {"add": "Addition"}}
+
+        with pytest.raises(ValueError, match="not a PropertySpec"):
+            FeatureChainParser.match_configuration_feature_chain_parser(
+                "any_feature", Options(context={"operation_type": "add"}), property_mapping
+            )
+
+    def test_validate_property_mapping_defaults_rejects_a_dict_spec(self) -> None:
+        """The class-definition check and the entry point share one rule and one message."""
+        property_mapping: Any = {"operation_type": {"add": "Addition"}}
+
+        with pytest.raises(ValueError, match="not a PropertySpec"):
+            FeatureChainParser.validate_property_mapping_defaults("SomeOwner", property_mapping)
+
 
 class TestDeclaredDefault:
     """The declared-default rule (issue #530 semantics) applies only under strict."""
@@ -226,3 +293,18 @@ class TestDeclaredDefault:
         """Under strict, a default outside the Mapping's KEYS raises."""
         with pytest.raises(ValueError, match="(?i)default"):
             PropertySpec("x", allowed_values={"a": "A"}, strict_validation=True, default="z")
+
+    @pytest.mark.parametrize("unhashable_default", [{"a": 1}, ["a"], (["a"],)])
+    def test_unhashable_default_against_a_mapping_raises_value_error(self, unhashable_default: Any) -> None:
+        """An unhashable default can never be a Mapping key: a clean ValueError, never a TypeError.
+
+        ``(["a"],)`` is the sharp case: a tuple IS an instance of ``Hashable``, but hashing it
+        raises because it contains a list. Only the membership test itself can tell.
+        """
+        with pytest.raises(ValueError, match="(?i)default"):
+            PropertySpec("x", allowed_values={"a": "A"}, strict_validation=True, default=unhashable_default)
+
+    def test_unhashable_default_against_a_tuple_value_space_raises_value_error(self) -> None:
+        """The same holds for a non-Mapping value space: membership decides, and it rejects."""
+        with pytest.raises(ValueError, match="(?i)default"):
+            PropertySpec("x", allowed_values=("a",), strict_validation=True, default={"a": 1})

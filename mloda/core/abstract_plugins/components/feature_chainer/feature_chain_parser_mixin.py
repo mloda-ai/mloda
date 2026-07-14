@@ -4,22 +4,22 @@ Mixin class providing default implementations for feature chain parsing.
 Validation Design: ``element_validator`` vs ``match_guard``
 ==========================================================
 
-PROPERTY_MAPPING supports two callable-valued keys that validate option values.
+``PropertySpec`` carries two callable-valued fields that validate option values.
 They serve different purposes and run at different points in the pipeline.
 
-``element_validator`` (``DefaultOptionKeys.element_validator``)
-  - Requires ``strict_validation: True`` on the same mapping entry.
+``element_validator`` (``PropertySpec.element_validator``)
+  - Requires ``strict_validation=True`` on the same spec.
   - Runs inside ``FeatureChainParser._validate_property_value`` during
     ``_validate_options_against_property_mapping``.
   - Receives **individual parsed elements** after list unpacking
-    (``_process_found_property_value`` converts lists to frozensets and
+    (``_process_found_property_value`` unpacks a sequence value into a list and
     iterates over each element).
   - On failure: raises ``ValueError`` with an actionable message identifying
     the property name and the rejected element value.
   - Use case: validating that each individual element satisfies a constraint
     (e.g., ``lambda x: isinstance(x, int) and x > 0``).
 
-``match_guard`` (``DefaultOptionKeys.match_guard``)
+``match_guard`` (``PropertySpec.match_guard``)
   - Does **not** require ``strict_validation``.
   - Runs inside ``FeatureChainParserMixin.match_feature_group_criteria``
     **after** basic matching succeeds (pattern + property mapping validation).
@@ -31,7 +31,7 @@ They serve different purposes and run at different points in the pipeline.
   - Use case: validating the shape or composite type of the whole value
     (e.g., ``lambda v: isinstance(v, list) and all(isinstance(i, str) for i in v)``).
 
-When both are present on the same mapping entry, ``element_validator`` runs
+When both are present on the same spec, ``element_validator`` runs
 first (during property mapping validation) on each parsed element, then
 ``match_guard`` runs on the raw value. If ``element_validator`` rejects an
 element, the match fails with a ``ValueError`` before ``match_guard`` is
@@ -75,8 +75,8 @@ class FeatureChainParserMixin:
     - MIN_IN_FEATURES: Optional minimum in_feature count (default: 1)
     - MAX_IN_FEATURES: Optional maximum in_feature count (default: None)
 
-    PROPERTY_MAPPING supports conditional requirements via ``DefaultOptionKeys.required_when``.
-    Attach a predicate ``(Options) -> bool`` to any mapping entry. When the predicate returns
+    PROPERTY_MAPPING supports conditional requirements via ``PropertySpec.required_when``.
+    Attach a predicate ``(Options) -> bool`` to any spec. When the predicate returns
     True and the option value is absent, ``match_feature_group_criteria`` rejects the match.
     When the predicate returns False, the option is treated as optional.
 
@@ -188,8 +188,8 @@ class FeatureChainParserMixin:
         optionally calls _validate_string_match() hook for custom validation.
 
         After basic matching succeeds, enforces ``match_guard`` constraints from
-        PROPERTY_MAPPING entries. For each entry that defines a
-        ``DefaultOptionKeys.match_guard`` callable, the guard is called with the raw
+        PROPERTY_MAPPING entries. For each spec that defines a
+        ``PropertySpec.match_guard`` callable, the guard is called with the raw
         option value. Returning a falsy value causes this method to return False. If
         the guard raises an exception, it is caught and the value is treated as
         invalid. See the module docstring for the full validation design.

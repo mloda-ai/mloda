@@ -23,16 +23,10 @@ class DefaultOptionKeys(str, Enum):
     in_features = "in_features"
     reference_time = "reference_time"
     time_travel = "time_travel"
-    allowed_values = "allowed_values"
-    default = "default"
     context = "context"
     group = "group"
     order_by = "order_by"
-    strict_validation = "strict_validation"
-    element_validator = "element_validator"
     strict_type_enforcement = "strict_type_enforcement"
-    required_when = "required_when"
-    match_guard = "match_guard"
 
     def __str__(self) -> str:
         return self.value

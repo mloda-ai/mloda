@@ -27,7 +27,7 @@ from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser
 from mloda.core.abstract_plugins.components.feature_set import FeatureSet
 from mloda.core.abstract_plugins.components.utils import get_all_subclasses
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
-from mloda.provider import PropertySpec
+from mloda.provider import NO_DEFAULT, PropertySpec
 
 
 @pytest.fixture(autouse=True)
@@ -455,4 +455,4 @@ class TestNoDefaultDeclared:
             def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
                 return data
 
-        assert NoDefaultFeatureGroup.PROPERTY_MAPPING["operation_type"].default is None
+        assert NoDefaultFeatureGroup.PROPERTY_MAPPING["operation_type"].default is NO_DEFAULT

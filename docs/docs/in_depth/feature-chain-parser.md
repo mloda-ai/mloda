@@ -381,8 +381,9 @@ PROPERTY_MAPPING = {
 ```
 
 Under strict validation a declared default must itself be an accepted value; that is
-checked when the `PropertySpec` is constructed. `default=None` means *no default*, not
-"optional": make a key optional with a `required_when` predicate that never fires.
+checked when the `PropertySpec` is constructed. Omitting `default` makes the key required;
+`default=None` makes it optional with no value to apply. See
+[Optional keys](property-mapping.md#optional-keys).
 
 #### Group vs Context Classification
 

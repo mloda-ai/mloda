@@ -52,16 +52,6 @@ def _no_feature_group_registry_pollution() -> Any:
     assert not leaked, f"Leaked FeatureGroup subclasses from {__name__}: {[c.__name__ for c in leaked]}"
 
 
-def _build_spec(*args: Any, **kwargs: Any) -> Any:
-    """Call ``property_spec`` through an untyped seam.
-
-    Before the flip the builder is annotated as returning a dict; the tests below assert
-    the NEW return type at runtime, and this seam keeps the module mypy --strict clean on
-    both sides of the flip.
-    """
-    return property_spec(*args, **kwargs)
-
-
 def _hardbreak694_needs_order_column(options: Options) -> bool:
     """Predicate: the order column is required when the aggregation is order-dependent."""
     return options.get("hardbreak694_agg") in {"first", "last"}
@@ -293,14 +283,14 @@ class TestPropertySpecBuilderReturnsPropertySpec:
 
     def test_property_spec_returns_a_property_spec_instance(self) -> None:
         """``property_spec("x")`` returns a PropertySpec, not a dict."""
-        spec = _build_spec("x")
+        spec = property_spec("x")
 
         assert isinstance(spec, PropertySpec)
         assert spec.explanation == "x"
 
     def test_property_spec_maps_strict_keyword_to_strict_validation_field(self) -> None:
         """The builder keyword stays ``strict=``; the field it sets is ``strict_validation``."""
-        spec = _build_spec("x", strict=True, allowed_values=("a",))
+        spec = property_spec("x", strict=True, allowed_values=("a",))
 
         assert isinstance(spec, PropertySpec)
         assert spec.strict_validation is True
@@ -308,8 +298,10 @@ class TestPropertySpecBuilderReturnsPropertySpec:
 
     def test_property_spec_authoring_rejections_still_fire(self) -> None:
         """Spot check: a str ``allowed_values`` is still rejected as a substring trap."""
+        substring_trap: Any = "add"  # the forgotten-comma bug: a bare str, not a container
+
         with pytest.raises(ValueError, match="(?i)substring"):
-            _build_spec("x", allowed_values="add")
+            property_spec("x", allowed_values=substring_trap)
 
 
 class TestProviderExportsPropertySpec:

@@ -1,10 +1,10 @@
 """Tests for the allowed_values-aware PROPERTY_MAPPING extractor/validator (issue #543).
 
 PROPERTY_MAPPING specs historically conflated allowed-value->docstring entries,
-``DefaultOptionKeys`` flag keys, and a magic plain-string ``"explanation"`` doc key
-in one namespace. ``FeatureChainParser._extract_property_values`` recovered the
-allowed-value set by subtracting a hardcoded blocklist. This module pins the
-``DefaultOptionKeys.allowed_values`` field that replaced that:
+flag keys, and a magic plain-string ``"explanation"`` doc key in one namespace.
+``FeatureChainParser._extract_property_values`` recovered the allowed-value set by
+subtracting a hardcoded blocklist. This module pins the ``PropertySpec.allowed_values``
+field that replaced that:
 
 * authors DECLARE the accepted values under ``allowed_values``,
 * ``_extract_property_values`` returns exactly that mapping, so both membership
@@ -26,9 +26,6 @@ from typing import Any
 
 import pytest
 
-from mloda.core.abstract_plugins.components.default_options_key import (
-    DefaultOptionKeys,
-)
 from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser import (
     FeatureChainParser,
 )
@@ -56,19 +53,6 @@ def _no_feature_group_registry_pollution() -> Any:
     gc.collect()
     leaked = [c for c in get_all_subclasses(FeatureGroup) if c.__module__ == __name__]
     assert not leaked, f"Leaked FeatureGroup subclasses from {__name__}: {[c.__name__ for c in leaked]}"
-
-
-class TestAllowedValuesKey:
-    """``allowed_values`` is the field a spec declares its value space under.
-
-    The completeness of the surrounding key set is the spec SCHEMA now, pinned as
-    ``PROPERTY_SPEC_KEYS`` in ``test_property_mapping_spec_schema.py``.
-    """
-
-    def test_allowed_values_enum_member_exists(self) -> None:
-        """``DefaultOptionKeys.allowed_values`` exists and stringifies to ``allowed_values``."""
-        assert str(DefaultOptionKeys.allowed_values) == "allowed_values"
-        assert DefaultOptionKeys.allowed_values.value == "allowed_values"
 
 
 class TestStrictMembershipViaAllowedValues:

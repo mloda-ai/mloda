@@ -23,12 +23,6 @@ from mloda.provider import PropertySpec
 from mloda_plugins.feature_group.experimental.sklearn.sklearn_artifact import SklearnArtifact
 
 
-def _never_required(options: Options) -> bool:
-    """The retired dict spec marked these keys optional via a present default-None key;
-    the PropertySpec equivalent is a required_when predicate that never fires."""
-    return False
-
-
 class SklearnPipelineFeatureGroup(FeatureChainParserMixin, FeatureGroup):
     """
     Base class for scikit-learn pipeline feature groups.
@@ -102,22 +96,19 @@ class SklearnPipelineFeatureGroup(FeatureChainParserMixin, FeatureGroup):
             allowed_values=PIPELINE_TYPES,
             context=True,
             strict_validation=True,
-            default=None,
-            required_when=_never_required,  # preserves the old dict-form default: None optional semantics
+            default=None,  # Optional: pipeline_steps is the alternative
         ),
         PIPELINE_STEPS: PropertySpec(
             "List of pipeline steps as (name, transformer) tuples",
             context=True,
             strict_validation=False,
-            default=None,  # Default is None as pipeline_types also work
-            required_when=_never_required,  # preserves the old dict-form default: None optional semantics
+            default=None,  # Optional: pipeline_name is the alternative
         ),
         PIPELINE_PARAMS: PropertySpec(
             "Pipeline parameters dictionary",
             context=True,
             strict_validation=False,
-            default=None,  # Default is None as pipeline_types also work
-            required_when=_never_required,  # preserves the old dict-form default: None optional semantics
+            default=None,  # Optional: pipeline_types also work
         ),
         DefaultOptionKeys.in_features: PropertySpec(
             "Source features for sklearn pipeline (comma-separated)",

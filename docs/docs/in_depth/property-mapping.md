@@ -32,7 +32,7 @@ PROPERTY_MAPPING = {
 | --- | --- | --- | --- |
 | `explanation` | `str` | required, positional | What the option means. Also names the spec in construction errors. |
 | `allowed_values` | `Mapping[Any, str]`, any other iterable, or `None` | `None` | The declared value space. A Mapping is `{value: description}` and is kept as given; any other iterable is materialized to a tuple. |
-| `default` | `Any` | `None` | Applied when the key is absent. `None` means *no default*. |
+| `default` | `Any` | `NO_DEFAULT` | Applied when the key is absent. Leaving it at `NO_DEFAULT` declares *no default*, which makes the key required. See [Optional keys](#optional-keys). |
 | `context` | `bool` | `True` | `True`: context parameter. `False`: group parameter, which splits feature groups. |
 | `strict_validation` | `bool` | `False` | Enforce the value space at match time. |
 | `element_validator` | `Callable \| None` | `None` | Per-element predicate. Requires `strict_validation=True`. |
@@ -156,6 +156,10 @@ inferred from the spec's other fields.
 an `element_validator`. With neither, the accepted set is empty and the key rejects every
 value, so the spec could never match. The constructor refuses to build it.
 
+An `element_validator` **replaces** membership, so when a key declares one, `allowed_values` is
+never consulted at match time and this rule does not apply: even an empty `allowed_values` is
+inert there, because the validator, not membership, decides.
+
 ## Declared defaults must be honored
 
 Under `strict_validation=True`, a declared non-`None` `default` must be a value the key
@@ -174,33 +178,40 @@ PropertySpec(
 
 Fix it by adding the default to the accepted values, or by removing it. `required_when` does
 NOT exempt a key: when its predicate returns `False` and the key is omitted, the default still
-applies, so an unaccepted default would still slip through. A `default` of `None` is always
-legal, and the check is a no-op when strict is off.
+applies, so an unaccepted default would still slip through. A declared `default=None` applies
+no value and is always legal, and the check is a no-op when strict is off.
 
 A validator that *raises* when called with the declared default is reported distinctly from
 one that merely *rejects* it, with the original exception chained as `__cause__`.
 
 ## Optional keys
 
-`default=None` means "no default", not "optional". A key with no default and no
-`required_when` is unconditionally required. To declare an optional key, give it a
-`required_when` predicate that never fires:
+Optionality is the `default` field, and the three states are distinct:
+
+| Written | Meaning |
+| --- | --- |
+| `default` omitted (stays `NO_DEFAULT`) | The key declares no default and is **required**. |
+| `default=None` | The key is **optional**; no value is applied when it is absent. |
+| `default=<value>` | The key is **optional**; the value is applied when it is absent, and is checked under strict. |
 
 ``` python
-def _never_required(options: Options) -> bool:
-    return False
+from mloda.provider import PropertySpec
 
 PROPERTY_MAPPING = {
     "pipeline_steps": PropertySpec(
         "List of pipeline steps as (name, transformer) tuples",
-        required_when=_never_required,
+        default=None,  # optional: pipeline_name is the alternative
     ),
 }
 ```
 
-The retired dict form said this with a *present* `default: None` entry, a distinction a
-dataclass cannot make (every field is always present). `SklearnPipelineFeatureGroup` is the
-in-repo example.
+`NO_DEFAULT` is a sentinel exported from `mloda.provider`; it exists because on a dataclass
+every field is always present, so a plain `None` cannot say both "no default declared" and
+"optional with no value". The retired dict form drew the same line with a *present*
+`default: None` entry. `SklearnPipelineFeatureGroup` is the in-repo example.
+
+`required_when` is for a *conditional* requirement, not for optionality: never write a
+predicate that always returns `False` to make a key optional.
 
 ## Parameter classification
 
@@ -289,7 +300,7 @@ unmigrated spec raises at class definition, naming the class, the key, and the r
 | Any spec dict, including the flattened form (accepted values sharing one dict with the flags) | `PropertySpec(...)`, with accepted values under `allowed_values` |
 | `validation_function` | `element_validator` |
 | `type_validator` | `match_guard` |
-| A present `default: None` entry marking a key optional | a `required_when` predicate that never fires |
+| A present `default: None` entry marking a key optional | the `default=None` field (an omitted `default` means the key is required) |
 | `strict_validation` as a spec-dict key | the `strict_validation` field (`strict=` on `property_spec`) |
 
 Misspelled and retired field names need no dedicated machinery any more: they are keyword

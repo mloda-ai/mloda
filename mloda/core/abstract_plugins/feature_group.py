@@ -16,7 +16,7 @@ from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser
     CHAIN_SEPARATOR,
     FeatureChainParser,
 )
-from mloda.core.abstract_plugins.components.feature_chainer.property_spec import PropertySpec
+from mloda.core.abstract_plugins.components.feature_chainer.property_spec import NO_DEFAULT, PropertySpec
 from mloda.core.abstract_plugins.components.subtype_declaration import SubtypeDeclaration
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.components.input_data.api.api_input_data import ApiInputData
@@ -220,7 +220,7 @@ class FeatureGroup(ABC):
         key = declaration.key
         spec = (cls.PROPERTY_MAPPING or {}).get(key)
         value = options.get(key)
-        if value is None and spec is not None:
+        if value is None and spec is not None and spec.default is not NO_DEFAULT:
             value = spec.default
         if value is None:
             return None

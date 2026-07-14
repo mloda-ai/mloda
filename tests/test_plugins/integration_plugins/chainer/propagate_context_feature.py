@@ -15,12 +15,6 @@ from mloda.provider import DefaultOptionKeys
 from mloda.provider import PropertySpec
 
 
-def _env_is_never_required(options: Options) -> bool:
-    """The retired dict spec marked env optional via a present default-None key;
-    the PropertySpec equivalent is a required_when predicate that never fires."""
-    return False
-
-
 class PropagateContextFeatureGroupTest(FeatureGroup):
     SUFFIX_PATTERN = [r".*__propctx_([\w]+)$"]
     OPERATION_ID = "propctx_"
@@ -37,7 +31,7 @@ class PropagateContextFeatureGroupTest(FeatureGroup):
             allowed_values={"prod": "production offset 1000", "staging": "staging offset 500"},
             context=True,
             strict_validation=False,
-            required_when=_env_is_never_required,
+            default=None,  # Optional: features without env fall back to offset 0
         ),
         DefaultOptionKeys.in_features: PropertySpec("explanation", context=True),
     }

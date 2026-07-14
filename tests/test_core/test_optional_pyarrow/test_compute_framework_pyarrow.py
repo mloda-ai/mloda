@@ -1,4 +1,4 @@
-"""Test that _require_pyarrow() raises ImportError mentioning pyarrow when pyarrow is absent."""
+"""Test that _pyarrow() raises ImportError mentioning pyarrow when pyarrow is absent."""
 
 from __future__ import annotations
 
@@ -10,13 +10,13 @@ _BODY: str = """
 import sys
 
 try:
-    from mloda.core.abstract_plugins.compute_framework import _require_pyarrow
+    from mloda.core.abstract_plugins.compute_framework import _pyarrow
 except ImportError:
     print("NO_FUNCTION")
     sys.exit(0)
 
 try:
-    _require_pyarrow()
+    _pyarrow()
     print("NO_RAISE")
 except ImportError as e:
     if "pyarrow" in str(e).lower():
@@ -29,8 +29,8 @@ except Exception as e:
 
 
 @pytest.mark.timeout(30)
-def test_require_pyarrow_raises_import_error_without_pyarrow() -> None:
-    """_require_pyarrow() must raise ImportError mentioning pyarrow when pyarrow is absent."""
+def test_pyarrow_raises_import_error_without_pyarrow() -> None:
+    """_pyarrow() must raise ImportError mentioning pyarrow when pyarrow is absent."""
     result = run_blocked(_BODY)
     assert result.returncode == 0, f"Body crashed unexpectedly.\nstderr:\n{result.stderr}"
     assert "IMPORTERROR" in result.stdout, (

@@ -32,10 +32,6 @@ def _pyarrow() -> Any:
         raise ImportError("pyarrow is required for this operation. Install it with: pip install 'mloda[pyarrow]'")
 
 
-def _require_pyarrow() -> None:
-    _pyarrow()
-
-
 class EmptyResultError(ValueError):
     """Raised when a final requested feature's result carries no schema (zero columns);
     zero rows with a schema is valid."""
@@ -777,9 +773,14 @@ Available join types:
     @final
     @classmethod
     def convert_flight_server_data_back(cls, data: Any, transformer: ComputeFrameworkTransformer) -> Any:
-        # Hot path: never import pyarrow here. If it is not imported yet, data cannot be a pa.Table.
-        pa = sys.modules.get("pyarrow")
-        if pa is None or not isinstance(data, pa.Table):
+        # Hot path: never import pyarrow if it is absent. If it is not in sys.modules, data cannot be a pa.Table.
+        # The import is a dict hit once present, and unlike a raw sys.modules read it waits out a concurrent first import.
+        if sys.modules.get("pyarrow") is None:
+            return data
+
+        import pyarrow as pa
+
+        if not isinstance(data, pa.Table):
             return data
         if isinstance(data, cls.expected_data_framework()):
             return data

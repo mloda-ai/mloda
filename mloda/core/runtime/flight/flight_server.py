@@ -1,4 +1,3 @@
-import functools
 from collections.abc import Callable
 from typing import Any
 from uuid import uuid4
@@ -31,15 +30,17 @@ def _require_pyarrow_flight() -> None:
     _flight()
 
 
-@functools.cache
-def _serving_class() -> type:
-    """FlightServerBase is only needed to serve: resolving it here keeps the module import pyarrow-free."""
-    flight = _flight()
+_SERVING_CLASSES: dict[type, type] = {}
 
-    class _ServingFlightServer(FlightServer, flight.FlightServerBase):  # type: ignore[misc, name-defined]
-        pass
 
-    return _ServingFlightServer
+def _serving_class(base: type) -> type:
+    """FlightServerBase is only needed to serve: mixing it in here keeps the module import pyarrow-free."""
+    cached = _SERVING_CLASSES.get(base)
+    if cached is None:
+        flight = _flight()
+        cached = type(f"_Serving{base.__name__}", (base, flight.FlightServerBase), {})
+        _SERVING_CLASSES[base] = cached
+    return cached
 
 
 class FlightServer:
@@ -49,12 +50,11 @@ class FlightServer:
     shutdown: Callable[[], None]
 
     def __new__(cls, *args: Any, **kwargs: Any) -> Any:
-        if cls is FlightServer:
-            cls = _serving_class()
+        if not issubclass(cls, _flight().FlightServerBase):
+            cls = _serving_class(cls)
         return super().__new__(cls)
 
     def __init__(self, location: Any = create_location()) -> None:
-        _require_pyarrow_flight()
         self.tables: dict[str, Any] = {}  # Dictionary to store tables
         self.location = location
 

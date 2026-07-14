@@ -83,12 +83,14 @@ class DataType(Enum):
         elif isinstance(value, decimal.Decimal):
             return cls.DECIMAL
 
-        # Hot path: never import pyarrow here. If it is not imported yet, value cannot be a pyarrow object.
-        loaded_pa = sys.modules.get("pyarrow")
-        if loaded_pa is not None:
-            if isinstance(value, loaded_pa.Date32Scalar) or isinstance(value, loaded_pa.Date32Array):
+        # Hot path: never import pyarrow if it is absent. If it is not in sys.modules, value cannot be a pyarrow object.
+        # The import is a dict hit once present, and unlike a raw sys.modules read it waits out a concurrent first import.
+        if sys.modules.get("pyarrow") is not None:
+            import pyarrow as pa
+
+            if isinstance(value, pa.Date32Scalar) or isinstance(value, pa.Date32Array):
                 return cls.DATE
-            if isinstance(value, loaded_pa.TimestampScalar) or isinstance(value, loaded_pa.TimestampArray):
+            if isinstance(value, pa.TimestampScalar) or isinstance(value, pa.TimestampArray):
                 return cls.TIMESTAMP_MICROS
 
         raise ValueError(f"Unsupported data type: {type(value)}")

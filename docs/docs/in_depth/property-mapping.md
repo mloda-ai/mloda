@@ -22,8 +22,9 @@ Two rules carry most of the model:
 | Class definition | Spec shape | Every VALUE has the right shape: `allowed_values` is a Collection and not a str/bytes; validators are callable; `strict_validation` is a bool | Every spec in the mapping | `ValueError` naming the key and the real fault |
 | Class definition | Strict needs a value space | `strict_validation: True` has a non-empty `allowed_values` or an `element_validator` | Every spec in the mapping | `ValueError` at class definition |
 | Class definition | `check_declared_default` | A strict, non-`None` `default` is accepted by its own key | The declared default | `ValueError` at class definition |
-| Match time (parser) | `allowed_values` membership | Each element is in the accepted set | One element | `ValueError`, surfaced to the end user |
-| Match time (parser) | `element_validator` | Each element satisfies a predicate | One element | `ValueError`, surfaced to the end user |
+| Match time (parser) | `allowed_values` membership | Each element of a **present** option is in the accepted set | One element | `ValueError`, surfaced to the end user |
+| Match time (parser) | `element_validator` | Each element of a **present** option satisfies a predicate | One element | `ValueError`, surfaced to the end user |
+| Match time (parser) | Required presence | A key with no `default` and no `required_when` was provided | The options | Non-match (`False`), config-based path only |
 | Match time (mixin) | `match_guard` | The whole value has an acceptable shape | The raw value | Non-match (`False`) |
 | Match time (mixin) | `MIN/MAX_IN_FEATURES` | In-feature count is within bounds | The in-features | Non-match (`False`) |
 | Match time (guard) | `required_when` | A conditionally required option is present | `Options` | Non-match (`False`) |
@@ -37,6 +38,14 @@ Because the parser runs before the mixin, an element rejected by membership or b
 declares it gets its resolved `match_feature_group_criteria` wrapped at class definition,
 and the wrapper runs the predicates after that matcher returns `True`. Overriding the
 matcher therefore keeps the contract, whether the override delegates or not.
+
+Value validation does not depend on how the feature was created. Membership and
+`element_validator` run on **both** match paths: the configuration-based one (options
+only) and the string-named one (the feature name matches a `PREFIX_PATTERN`). Only
+required **presence** differs: it is enforced on the configuration-based path alone,
+because a key the feature name encodes (the operation) is satisfied by the name, not by
+an option. So `"income__pca_2d"` with no options at all still matches, while the same
+feature group with `pca_svd_solver="bogus"` in its options is rejected either way.
 
 The class-definition rules run in table order, and the order is load-bearing. The schema
 runs before the shape rules, because a spec with an unknown key is malformed and its
@@ -229,7 +238,8 @@ A direct `FeatureChainParser` call raises `ValueError` immediately. Going throug
 `FeatureChainParserMixin.match_feature_group_criteria` (the default for most feature
 groups) is different: it catches that `ValueError` and returns `False`, because during
 resolution one candidate's "no match" must not abort the search for another candidate
-that might still accept the feature.
+that might still accept the feature. This holds on both paths: a bad option value on a
+string-named feature is the same non-match as on a configuration-based one.
 
 If every candidate rejects the feature, the final "No feature groups found" error
 collects the discarded reasons and appends them:

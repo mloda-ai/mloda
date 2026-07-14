@@ -9,8 +9,12 @@ They serve different purposes and run at different points in the pipeline.
 
 ``element_validator`` (``DefaultOptionKeys.element_validator``)
   - Requires ``strict_validation: True`` on the same mapping entry.
-  - Runs inside ``FeatureChainParser._validate_property_value`` during
-    ``_validate_options_against_property_mapping``.
+  - Runs inside ``FeatureChainParser._validate_property_value`` on **both** match
+    paths: the configuration-based one (``_validate_options_against_property_mapping``)
+    and the string-named one (``_validate_present_option_values``). Value validation
+    (membership and ``element_validator``) never depends on how the feature was named.
+    The paths differ on required PRESENCE only, which stays off on the string-named
+    path because a key encoded in the feature name is satisfied by the name.
   - Receives **individual parsed elements** after list unpacking
     (``_process_found_property_value`` converts lists to frozensets and
     iterates over each element).
@@ -22,12 +26,15 @@ They serve different purposes and run at different points in the pipeline.
 ``match_guard`` (``DefaultOptionKeys.match_guard``)
   - Does **not** require ``strict_validation``.
   - Runs inside ``FeatureChainParserMixin.match_feature_group_criteria``
-    **after** basic matching succeeds (pattern + property mapping validation).
-  - Receives the **raw option value** exactly as stored in Options, before any
-    list unpacking or element iteration.
-  - On failure: logs a debug message and returns ``False`` (non-match). If the
-    guard raises an exception, the exception is caught, logged, and the value is
-    treated as invalid.
+    **after** the parser has matched and validated the present option values.
+  - Receives the **raw whole option value** exactly as stored in Options, before any
+    list unpacking or element iteration. This is its first distinctive power: it can
+    check the SHAPE of a container whose elements each pass their own validation
+    (e.g., a list of exactly three strings).
+  - On failure: logs a debug message and returns ``False`` (non-match). This is its
+    second distinctive power: a falsy return is a plain "not mine", not an error, so
+    another feature group can still take the feature. If the guard raises an exception,
+    the exception is caught, logged, and the value is treated as invalid.
   - Use case: validating the shape or composite type of the whole value
     (e.g., ``lambda v: isinstance(v, list) and all(isinstance(i, str) for i in v)``).
 
@@ -261,28 +268,33 @@ class FeatureChainParserMixin:
     def _strict_validation_rejection_reason(cls, feature_name: str | FeatureName, options: Options) -> str | None:
         """Return the ValueError message that match_feature_group_criteria discards, if any.
 
-        Only surfaces ValueErrors raised by property-mapping validation (genuine
-        strict_validation rejections). A ValueError raised while parsing a
-        PREFIX_PATTERN match (malformed feature name, no chain separator) is a
-        parse error, not an option-value rejection, and is treated as nothing to
-        report. Returns None when nothing was rejected (match succeeded, or the
-        candidate is unrelated). Diagnostic-only: does not affect
+        Mirrors the parser: a name match reports rejected option VALUES (presence is
+        carried by the name), the configuration-based path reports value rejections too.
+        A ValueError raised while parsing a PREFIX_PATTERN match (malformed feature name,
+        no chain separator) is a parse error, not an option-value rejection, and is
+        treated as nothing to report. Returns None when nothing was rejected (match
+        succeeded, or the candidate is unrelated). Diagnostic-only: does not affect
         match_feature_group_criteria's behavior.
         """
-        prefix_patterns = cls._get_prefix_patterns()
-        if prefix_patterns:
-            try:
-                if FeatureChainParser._match_pattern_based_feature(feature_name, prefix_patterns, CHAIN_SEPARATOR):
-                    return None
-            except ValueError:
-                return None
-
         property_mapping = cls._get_property_mapping()
         if property_mapping is None:
             return None
 
+        name_matched = False
+        prefix_patterns = cls._get_prefix_patterns()
+        if prefix_patterns:
+            try:
+                name_matched = FeatureChainParser._match_pattern_based_feature(
+                    feature_name, prefix_patterns, CHAIN_SEPARATOR
+                )
+            except ValueError:
+                return None
+
         try:
-            FeatureChainParser._validate_options_against_property_mapping(options, property_mapping)
+            if name_matched:
+                FeatureChainParser._validate_present_option_values(options, property_mapping)
+            else:
+                FeatureChainParser._validate_options_against_property_mapping(options, property_mapping)
         except ValueError as exc:
             return str(exc)
         return None

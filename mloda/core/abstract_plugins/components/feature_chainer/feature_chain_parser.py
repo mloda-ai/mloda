@@ -464,40 +464,54 @@ class FeatureChainParser:
         return True
 
     @classmethod
-    def _validate_options_against_property_mapping(cls, options: Options, property_mapping: dict[str, Any]) -> bool:
+    def _collect_option_value(
+        cls, options: Options, property_name: str, property_mapping: dict[str, Any]
+    ) -> list[Any] | None:
+        """Validate the VALUE of one option and return its elements, or None when it is absent.
+
+        The per-key work both validation paths share, so they cannot drift. Raises ValueError
+        when a present value is outside the key's declared value space or is rejected by its
+        element_validator.
         """
-        Shared validation logic for both string-based and configuration-based approaches.
+        found_property_value = options.get(property_name)
+        if found_property_value is None:
+            return None
+
+        property_config = property_mapping[property_name]
+        return cls._process_found_property_value(
+            found_property_value, cls._extract_property_values(property_config), property_name, property_config
+        )
+
+    @classmethod
+    def _validate_present_option_values(cls, options: Options, property_mapping: dict[str, Any]) -> None:
+        """Validate the values of the options that are present, without enforcing presence.
+
+        Used on the string-named path, where a key like the operation is carried by the feature
+        name rather than by the options: an absent option is skipped instead of rejected. Raises
+        ValueError on a bad value.
+        """
+        for property_name in property_mapping:
+            cls._collect_option_value(options, property_name, property_mapping)
+
+    @classmethod
+    def _validate_options_against_property_mapping(cls, options: Options, property_mapping: dict[str, Any]) -> bool:
+        """Validate present option values AND enforce required presence (configuration-based path).
 
         Args:
             options: Options object containing the parameters to validate
             property_mapping: Property mapping with validation rules
 
         Returns:
-            True if validation passes, False otherwise
+            True if validation passes, False when a required option is absent
+
+        Raises:
+            ValueError: If a present option carries a value the mapping rejects
         """
         # None marks an absent option; a list (possibly empty) marks a present one.
-        property_tracker: dict[str, list[Any] | None] = {}
-        for key in property_mapping:
-            property_tracker[key] = None
-
-        # Process each property in the mapping
-        for property_name, property_value in property_mapping.items():
-            found_property_value = options.get(property_name)
-            property_value = cls._extract_property_values(property_value)
-
-            # Handle missing properties: leave the tracker at None, so the final check
-            # decides whether the option was required.
-            if found_property_value is None:
-                continue
-
-            collected_property_value = cls._process_found_property_value(
-                found_property_value, property_value, property_name, property_mapping[property_name]
-            )
-
-            if property_tracker[property_name] is not None:
-                raise ValueError(f"Feature name has duplicate values for property '{property_name}'.")
-
-            property_tracker[property_name] = collected_property_value
+        property_tracker: dict[str, list[Any] | None] = {
+            property_name: cls._collect_option_value(options, property_name, property_mapping)
+            for property_name in property_mapping
+        }
         return cls._validate_final_properties(property_tracker, property_mapping)
 
     @classmethod
@@ -512,6 +526,10 @@ class FeatureChainParser:
         """
         Unified method for matching features using either configuration-based or pattern-based parsing.
 
+        Both paths validate the VALUES of the options that are present. They differ on required
+        PRESENCE only: a name match satisfies the keys the name carries, so presence is enforced
+        on the configuration-based path alone.
+
         Args:
             feature_name: The feature name to match
             options: Options object containing configuration
@@ -521,11 +539,16 @@ class FeatureChainParser:
 
         Returns:
             True if the feature matches either pattern-based or configuration-based parsing, False otherwise
+
+        Raises:
+            ValueError: If a present option carries a value the property mapping rejects
         """
 
         # string based matching
         if prefix_patterns is not None:
             if cls._match_pattern_based_feature(feature_name, prefix_patterns, pattern):
+                if property_mapping is not None:
+                    cls._validate_present_option_values(options, property_mapping)
                 return True
 
         # configuration-based

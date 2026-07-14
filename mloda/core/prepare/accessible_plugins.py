@@ -1,9 +1,7 @@
 from __future__ import annotations
 
-import inspect
 import logging
 import sys
-from copy import deepcopy
 from typing import Any, Optional, cast
 
 from mloda.core.abstract_plugins.components.base_feature_group_version import (
@@ -302,106 +300,28 @@ class PreFilterPlugins:
         return self.accessible_plugins
 
     def _set_feature_groups(self, plugin_collector: Optional[PluginCollector] = None) -> set[type[FeatureGroup]]:
-        accessible_feature_groups = self.get_featuregroup_subclasses()
+        """Adapter over the resolve pipeline; raises exactly what the absorbed inline logic raised."""
+        # Imported inside the method: mloda.core.resolve.environment imports helpers from this module.
+        from mloda.core.resolve.environment import run_feature_group_pipeline
 
-        if plugin_collector:
-            for accessible_fg in deepcopy(accessible_feature_groups):
-                if not plugin_collector.applicable_feature_group_class(accessible_fg):
-                    accessible_feature_groups.remove(accessible_fg)
-
-        allow_redefinition = plugin_collector.allow_redefinition if plugin_collector is not None else False
-        strict_mode = plugin_collector.strict_mode if plugin_collector is not None else strict_mode_from_env()
-
-        registered: set[type[Any]] = set()
-        if strict_mode != "off":
-            registered = registry_for(plugin_collector).registered_classes()
-
-        if strict_mode == "strict":
-            before_strict = accessible_feature_groups
-            accessible_feature_groups = {
-                fg for fg in accessible_feature_groups if fg in registered or inspect.isabstract(fg)
-            }
-            if plugin_collector is not None:
-                dropped_enabled = sorted(
-                    f"{fg.__module__}:{fg.__qualname__}"
-                    for fg in before_strict - accessible_feature_groups
-                    if fg in plugin_collector.enabled_feature_group_classes
-                )
-                if dropped_enabled:
-                    logger.warning(
-                        "Explicitly enabled FeatureGroups were dropped by strict mode because they are "
-                        "not registered in the plugin registry: %s.",
-                        ", ".join(dropped_enabled),
-                    )
-            had_concrete = any(not inspect.isabstract(fg) for fg in before_strict)
-            has_concrete = any(not inspect.isabstract(fg) for fg in accessible_feature_groups)
-            if had_concrete and not has_concrete:
-                raise ValueError(
-                    "Strict mode filtered out all FeatureGroups: none of the accessible FeatureGroups "
-                    "are registered in the plugin registry. Register them via mloda.user.register_plugin() or "
-                    "relax MLODA_PLUGIN_REGISTRY_STRICT to disable strict mode."
-                )
-
-        accessible_feature_groups = dedup_feature_group_subclasses(
-            accessible_feature_groups, allow_redefinition=allow_redefinition
-        )
-
-        if strict_mode == "warn":
-            unregistered = sorted(
-                f"{fg.__module__}:{fg.__qualname__}"
-                for fg in accessible_feature_groups
-                if fg not in registered
-                and not inspect.isabstract(fg)
-                and f"{fg.__module__}:{fg.__qualname__}" not in _warned_unregistered
-            )
-            if unregistered:
-                _warned_unregistered.update(unregistered)
-                logger.warning(
-                    "FeatureGroups not registered in the plugin registry: %s.",
-                    ", ".join(unregistered),
-                )
-
-        if len(accessible_feature_groups) == 0:
-            raise ValueError("No feature groups are loaded. Did you call PluginLoader.all()?")
-        return accessible_feature_groups
+        result = run_feature_group_pipeline(plugin_collector)
+        if result.error is not None:
+            raise result.error.as_exception()
+        return set(result.survivors)
 
     def _set_compute_frameworks(
         self,
         compute_frameworks: set[type[ComputeFramework]],
         plugin_collector: Optional[PluginCollector] = None,
     ) -> set[type[ComputeFramework]]:
-        compute_frameworks = compute_frameworks.intersection(self.get_cfw_subclasses())
+        """Adapter over the resolve pipeline; raises exactly what the absorbed inline logic raised."""
+        # Imported inside the method: mloda.core.resolve.environment imports helpers from this module.
+        from mloda.core.resolve.environment import run_compute_framework_pipeline
 
-        strict_mode = plugin_collector.strict_mode if plugin_collector is not None else strict_mode_from_env()
-        if strict_mode == "off":
-            return compute_frameworks
-
-        registered = registry_for(plugin_collector).registered_classes()
-        # Bundled plugin frameworks ship with mloda, like abstract classes: never filtered or flagged.
-        unregistered = {
-            cfw
-            for cfw in compute_frameworks
-            if cfw not in registered and not inspect.isabstract(cfw) and not _is_bundled_plugin(cfw)
-        }
-        unregistered_names = sorted(f"{cfw.__module__}:{cfw.__qualname__}" for cfw in unregistered)
-
-        if strict_mode == "warn":
-            new_names = [name for name in unregistered_names if name not in _warned_unregistered]
-            if new_names:
-                _warned_unregistered.update(new_names)
-                logger.warning("ComputeFrameworks not registered in the plugin registry: %s.", ", ".join(new_names))
-            return compute_frameworks
-
-        surviving = compute_frameworks - unregistered
-        had_concrete = any(not inspect.isabstract(cfw) for cfw in compute_frameworks)
-        has_concrete = any(not inspect.isabstract(cfw) for cfw in surviving)
-        if had_concrete and not has_concrete:
-            raise ValueError(
-                "Strict mode filtered out all ComputeFrameworks: none of the requested ComputeFrameworks "
-                "are registered in the plugin registry. Register them via mloda.user.register_plugin() or "
-                "relax MLODA_PLUGIN_REGISTRY_STRICT to disable strict mode."
-            )
-        return surviving
+        result = run_compute_framework_pipeline(compute_frameworks, plugin_collector)
+        if result.error is not None:
+            raise result.error.as_exception()
+        return set(result.enabled)
 
     def resolve_feature_group_compute_framework_limitations(
         self, feature_groups: set[type[FeatureGroup]], compute_frameworks: set[type[ComputeFramework]]

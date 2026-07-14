@@ -1,4 +1,3 @@
-import sys
 from abc import ABC
 from collections.abc import Sequence
 from typing import Any, Optional, final
@@ -19,17 +18,10 @@ from mloda.core.abstract_plugins.components.input_data.input_data_descriptor imp
 from mloda.core.abstract_plugins.components.parallelization_modes import ParallelizationMode
 from mloda.core.filter.filter_engine import BaseFilterEngine
 from mloda.core.abstract_plugins.components.mask.base_mask_engine import BaseMaskEngine
+from mloda.core.optional_dependency import loaded, require
 from mloda.core.runtime.flight.flight_server import FlightServer
 
-
-def _pyarrow() -> Any:
-    """pyarrow is an optional backend: import it at the point of use, never at module import."""
-    try:
-        import pyarrow
-
-        return pyarrow
-    except ImportError:
-        raise ImportError("pyarrow is required for this operation. Install it with: pip install 'mloda[pyarrow]'")
+_PYARROW_REASON = "this operation"
 
 
 class EmptyResultError(ValueError):
@@ -752,7 +744,7 @@ Available join types:
 
     @final
     def upload_table(self, location: str, object_id: Optional[UUID] = None) -> str:
-        pa = _pyarrow()
+        pa = require("pyarrow", _PYARROW_REASON)
         if object_id is None:
             object_id = uuid4()
         _object_id = str(object_id)
@@ -773,12 +765,10 @@ Available join types:
     @final
     @classmethod
     def convert_flight_server_data_back(cls, data: Any, transformer: ComputeFrameworkTransformer) -> Any:
-        # Hot path: never import pyarrow if it is absent. If it is not in sys.modules, data cannot be a pa.Table.
-        # The import is a dict hit once present, and unlike a raw sys.modules read it waits out a concurrent first import.
-        if sys.modules.get("pyarrow") is None:
+        # Hot path: if pyarrow is not already loaded, data cannot be a pa.Table, so never import it.
+        pa = loaded("pyarrow")
+        if pa is None:
             return data
-
-        import pyarrow as pa
 
         if not isinstance(data, pa.Table):
             return data

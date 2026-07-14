@@ -6,24 +6,19 @@ import os
 
 import logging
 
+from mloda.core.optional_dependency import require
+
 logger = logging.getLogger(__name__)
+
+_FLIGHT_REASON = "Flight-based (multiprocessing/distributed) data transport"
+
+
+def _flight() -> Any:
+    return require("pyarrow.flight", _FLIGHT_REASON)
 
 
 def create_location(host: str = "127.0.0.1") -> str:
     return f"grpc://{host}:0"
-
-
-def _flight() -> Any:
-    """pyarrow is an optional backend: import it at the point of use, never at module import."""
-    try:
-        from pyarrow import flight
-
-        return flight
-    except ImportError:
-        raise ImportError(
-            "pyarrow is required for Flight-based (multiprocessing/distributed) data transport. "
-            "Install it with: pip install 'mloda[pyarrow]'"
-        )
 
 
 def _require_pyarrow_flight() -> None:
@@ -144,8 +139,7 @@ class FlightServer:
 
     def list_flights(self, context: Any, criteria: Any) -> Any:
         """List the available datasets (keys of the tables)."""
-        import pyarrow as pa
-
+        pa = require("pyarrow", _FLIGHT_REASON)
         flight = _flight()
 
         for key in self.tables.keys():

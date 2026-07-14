@@ -2,24 +2,15 @@ from __future__ import annotations
 
 import datetime
 import decimal
-import sys
 from enum import Enum
 from typing import TYPE_CHECKING, Any, Optional
+
+from mloda.core.optional_dependency import loaded, require
 
 if TYPE_CHECKING:
     import pyarrow as pa
 
-
-def _pyarrow() -> Any:
-    """pyarrow is an optional backend: import it at the point of use, never at module import."""
-    try:
-        import pyarrow
-
-        return pyarrow
-    except ImportError:
-        raise ImportError(
-            "pyarrow is required for Arrow type conversions. Install it with: pip install 'mloda[pyarrow]'"
-        )
+_PYARROW_REASON = "Arrow type conversions"
 
 
 class DataType(Enum):
@@ -83,14 +74,12 @@ class DataType(Enum):
         elif isinstance(value, decimal.Decimal):
             return cls.DECIMAL
 
-        # Hot path: never import pyarrow if it is absent. If it is not in sys.modules, value cannot be a pyarrow object.
-        # The import is a dict hit once present, and unlike a raw sys.modules read it waits out a concurrent first import.
-        if sys.modules.get("pyarrow") is not None:
-            import pyarrow as pa
-
-            if isinstance(value, pa.Date32Scalar) or isinstance(value, pa.Date32Array):
+        # Hot path: if pyarrow is not already loaded, value cannot be a pyarrow object, so never import it.
+        pyarrow = loaded("pyarrow")
+        if pyarrow is not None:
+            if isinstance(value, pyarrow.Date32Scalar) or isinstance(value, pyarrow.Date32Array):
                 return cls.DATE
-            if isinstance(value, pa.TimestampScalar) or isinstance(value, pa.TimestampArray):
+            if isinstance(value, pyarrow.TimestampScalar) or isinstance(value, pyarrow.TimestampArray):
                 return cls.TIMESTAMP_MICROS
 
         raise ValueError(f"Unsupported data type: {type(value)}")
@@ -106,7 +95,7 @@ class DataType(Enum):
         Returns:
             pa.DataType: The corresponding PyArrow DataType.
         """
-        pa = _pyarrow()
+        pa = require("pyarrow", _PYARROW_REASON)
         mapping = {
             cls.INT32: pa.int32(),
             cls.INT64: pa.int64(),
@@ -128,7 +117,7 @@ class DataType(Enum):
 
     @classmethod
     def _arrow_type_to_dtype_or_none(cls, arrow_type: pa.DataType) -> Optional["DataType"]:
-        pa = _pyarrow()
+        pa = require("pyarrow", _PYARROW_REASON)
         if pa.types.is_int32(arrow_type):
             return cls.INT32
         elif pa.types.is_int64(arrow_type):

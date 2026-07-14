@@ -1,5 +1,6 @@
 """Shared helper for testing compute framework availability."""
 
+import builtins
 from typing import Any
 from unittest.mock import patch
 
@@ -14,11 +15,15 @@ def assert_unavailable_when_import_blocked(
         framework_class: The framework class to test (must have is_available() static method)
         modules_to_block: List of module names that should raise ImportError
     """
+    # Bind the real import before patching: inside the patch, the bare name __import__ resolves to the
+    # mock, so a passthrough would recurse. Frameworks that import an unblocked module first (DuckDB
+    # imports duckdb before pyarrow) take that branch.
+    real_import = builtins.__import__
 
     def side_effect(name: str, *args: Any, **kwargs: Any) -> Any:
         if any(name == module or name.startswith(f"{module}.") for module in modules_to_block):
             raise ImportError(f"No module named '{name}'")
-        return __import__(name, *args, **kwargs)
+        return real_import(name, *args, **kwargs)
 
     with patch("builtins.__import__", side_effect=side_effect):
         assert framework_class.is_available() is False

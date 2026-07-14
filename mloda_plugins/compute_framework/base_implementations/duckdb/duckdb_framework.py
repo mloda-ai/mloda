@@ -82,10 +82,11 @@ class DuckDBFramework(ComputeFramework):
 
     @staticmethod
     def is_available() -> bool:
-        """Check if DuckDB is installed and available."""
-
+        """duckdb alone is not enough: data only enters the framework through Arrow (transform() from a
+        dict and every framework transformer), so pyarrow decides availability too."""
         try:
             import duckdb  # noqa: F401
+            import pyarrow  # noqa: F401
 
             return True
         except ImportError:

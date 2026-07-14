@@ -1,9 +1,13 @@
 from typing import Any
 
-import pyarrow as pa
-import pyarrow.compute as pc
-
 from mloda.core.abstract_plugins.components.mask.base_mask_engine import BaseMaskEngine
+
+try:
+    import pyarrow as pa
+    import pyarrow.compute as pc
+except ImportError:
+    pa = None  # type: ignore[assignment]
+    pc = None
 
 
 class PyArrowMaskEngine(BaseMaskEngine):

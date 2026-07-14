@@ -1,5 +1,5 @@
-# Spark compute framework. Importing this module works without pyspark installed;
-# the framework then reports itself unavailable via is_available().
+# Spark compute framework. Backend: pyspark (install: mloda[spark]; the extra also pulls pyarrow, which
+# only the pyarrow transformer needs, so is_available() checks pyspark alone).
 from mloda_plugins.compute_framework.base_implementations.spark.spark_framework import (
     SparkFramework as SparkFramework,
 )

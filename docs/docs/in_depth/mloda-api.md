@@ -213,10 +213,10 @@ Get documentation for compute frameworks with optional filtering.
 ``` python
 from mloda.steward import get_compute_framework_docs
 
-# List every framework (is_available flags whether each is importable)
+# List every framework (is_available flags whether its backend library is installed)
 frameworks = get_compute_framework_docs()
 
-# Only frameworks whose backing library is importable
+# Only frameworks whose backend library is installed
 available_frameworks = get_compute_framework_docs(available_only=True)
 ```
 
@@ -224,7 +224,7 @@ available_frameworks = get_compute_framework_docs(available_only=True)
 
 - **name** (`str`, optional): Filter by name (case-insensitive partial match).
 - **search** (`str`, optional): Search in description (case-insensitive partial match).
-- **available_only** (`bool`, default `False`): By default all frameworks are listed (with `is_available` as the flag); set `available_only=True` to filter to importable frameworks only.
+- **available_only** (`bool`, default `False`): By default all frameworks are listed (with `is_available` as the flag); set `available_only=True` to filter to available frameworks only.
 
 **Returns:** `List[ComputeFrameworkInfo]` sorted by name.
 

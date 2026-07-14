@@ -107,10 +107,10 @@ Get documentation for compute frameworks:
 ``` python
 from mloda.steward import get_compute_framework_docs
 
-# List every framework (is_available flags whether each is importable)
+# List every framework (is_available flags whether its backend library is installed)
 frameworks = get_compute_framework_docs()
 
-# Filter to importable frameworks only
+# Filter to available frameworks only
 available_frameworks = get_compute_framework_docs(available_only=True)
 ```
 

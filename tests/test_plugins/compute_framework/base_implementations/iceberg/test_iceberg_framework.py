@@ -69,6 +69,19 @@ _ICEBERG_TYPE_MAP: dict[DataType, Any] = (
 )
 
 
+class TestIcebergFrameworkAvailability:
+    """Owns the is_available() contract of IcebergFramework: it needs pyiceberg AND pyarrow."""
+
+    def test_is_available_when_pyiceberg_not_installed(self) -> None:
+        """Test that is_available() returns False when pyiceberg import fails."""
+        assert_unavailable_when_import_blocked(IcebergFramework, ["pyiceberg"])
+
+    def test_is_available_when_pyarrow_not_installed(self) -> None:
+        """pyiceberg alone is not enough: PyArrow is the interchange format the framework reads and
+        writes, so a missing pyarrow makes it unavailable even with pyiceberg installed (issue #736)."""
+        assert_unavailable_when_import_blocked(IcebergFramework, ["pyarrow"])
+
+
 @pytest.mark.skipif(
     pyiceberg is None or pa is None, reason="PyIceberg or PyArrow is not installed. Skipping this test."
 )
@@ -168,11 +181,8 @@ class TestIcebergFrameworkComputeFramework:
     pyiceberg is not None and pa is not None, reason="PyIceberg and PyArrow are installed. Skipping unavailable test."
 )
 class TestIcebergFrameworkUnavailable:
-    """Test behavior when PyIceberg is not available."""
-
-    def test_is_available_false_when_not_installed(self) -> None:
-        """Test that is_available returns False when dependencies are not installed."""
-        assert_unavailable_when_import_blocked(IcebergFramework, ["pyiceberg"])
+    """Test behavior when PyIceberg is not available. is_available() itself is owned by
+    TestIcebergFrameworkAvailability above, which runs whether or not the libraries are installed."""
 
     def test_expected_data_framework_raises_when_not_installed(self) -> None:
         """Test that expected_data_framework raises ImportError when PyIceberg is not installed."""

@@ -8,6 +8,9 @@ from mloda.user import DataType, FeatureName, ParallelizationMode
 from mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_framework import SqliteFramework, _regexp
 from mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_relation import SqliteRelation
 from tests.test_plugins.compute_framework.test_tooling.dataframe_test_base import DataFrameTestBase
+from tests.test_plugins.compute_framework.test_tooling.availability_test_helper import (
+    assert_unavailable_when_import_blocked,
+)
 from tests.test_plugins.compute_framework.base_implementations.datatype_validator_test_mixin import (
     DataTypeValidatorFrameworkTestMixin,
 )
@@ -19,8 +22,20 @@ from tests.test_plugins.compute_framework.base_implementations.empty_result_test
 )
 
 
+class TestSqliteFrameworkAvailability:
+    def test_is_available_when_pyarrow_not_installed(self) -> None:
+        """sqlite3 is stdlib, but the relation and merge engine speak Arrow, so a missing pyarrow
+        makes the framework unavailable (issue #736)."""
+        assert_unavailable_when_import_blocked(SqliteFramework, ["pyarrow"])
+
+
 class TestSqliteFrameworkBasics:
     def test_is_available(self) -> None:
+        """No longer a tautology (issue #736): pyarrow decides sqlite availability, and it is installed
+        here only because the test extra ships it (this module imports pyarrow at module level and would
+        not even collect without it). The pyarrow-blocked case is pinned in TestSqliteFrameworkAvailability
+        above and in test_backend_import_policy.py.
+        """
         assert SqliteFramework.is_available() is True
 
     def test_expected_data_framework(self) -> None:

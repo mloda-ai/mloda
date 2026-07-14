@@ -1,10 +1,11 @@
+# Annotations stay strings so the pa.DataType signature below does not dereference pa at import time.
+from __future__ import annotations
+
 import sqlite3
 from collections.abc import Sequence
 from dataclasses import replace
 from datetime import timedelta
 from typing import Any
-
-import pyarrow as pa
 
 from mloda.core.abstract_plugins.components.contract.comparison_contract import ColumnSemantics
 from mloda.core.abstract_plugins.components.index.index import Index
@@ -14,6 +15,11 @@ from mloda_plugins.compute_framework.base_implementations.sql.sql_base_merge_eng
 from mloda_plugins.compute_framework.base_implementations.sql.sql_utils import is_ordered_arrow_type, quote_ident
 from mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_relation import SqliteRelation, _next_table_name
 from mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_value_sample import sample_string_values
+
+try:
+    import pyarrow as pa
+except ImportError:
+    pa = None  # type: ignore[assignment]
 
 
 class SqliteMergeEngine(SqlBaseMergeEngine):

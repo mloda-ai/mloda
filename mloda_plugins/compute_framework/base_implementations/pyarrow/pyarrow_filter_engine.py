@@ -1,11 +1,16 @@
 from typing import Any
-import pyarrow as pa
-import pyarrow.compute as pc
 
 from mloda.core.abstract_plugins.components.contract.comparison_contract import ColumnSemantics
 from mloda.provider import BaseFilterEngine
 from mloda.user import SingleFilter
 from mloda_plugins.compute_framework.base_implementations.pyarrow import pyarrow_type_semantics
+
+try:
+    import pyarrow as pa
+    import pyarrow.compute as pc
+except ImportError:
+    pa = None  # type: ignore[assignment]
+    pc = None
 
 
 class PyArrowFilterEngine(BaseFilterEngine):

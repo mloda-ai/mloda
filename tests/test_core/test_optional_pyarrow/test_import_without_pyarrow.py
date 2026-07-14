@@ -56,15 +56,14 @@ from mloda.user import mloda, Feature, PluginCollector
 # blocked, because PythonDict needs no optional backend.
 from mloda.user.python_dict import PythonDictFramework
 
-# A pyarrow-backed backend module must fail cleanly and only when it is imported,
-# raising ModuleNotFoundError (pyarrow blocked), not eagerly on ``import mloda.user``
-# above.
-_pyarrow_import_blocked = False
-try:
-    importlib.import_module("mloda.user.pyarrow")
-except ModuleNotFoundError:
-    _pyarrow_import_blocked = True
-assert _pyarrow_import_blocked, "import mloda.user.pyarrow must raise ModuleNotFoundError while pyarrow is blocked"
+assert PythonDictFramework.is_available() is True, "PythonDictFramework must stay available without pyarrow"
+
+# A pyarrow-backed backend module still imports with pyarrow blocked (issue #736): the framework
+# class is always importable and reports the missing library through is_available().
+_pyarrow_module = importlib.import_module("mloda.user.pyarrow")
+assert _pyarrow_module.PyArrowTable.is_available() is False, (
+    "PyArrowTable.is_available() must be False while pyarrow is blocked"
+)
 
 from mloda.provider import FeatureGroup, FeatureSet, DataCreator, BaseInputData
 

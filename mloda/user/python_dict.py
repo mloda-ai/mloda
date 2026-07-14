@@ -1,4 +1,4 @@
-# PythonDict compute framework and its columnar helpers. Needs no optional backend.
+# PythonDict compute framework and its columnar helpers. Backend: none (Python stdlib only).
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import (
     PythonDictFramework as PythonDictFramework,
 )

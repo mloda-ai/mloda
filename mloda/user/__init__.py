@@ -1,3 +1,12 @@
+"""Core-only user surface. Importing this module needs no optional backend.
+
+Backend import policy (the one place it is stated; backend modules only name their library):
+each compute framework is published from one module per backend (mloda.user.pandas,
+mloda.user.polars, ...). Importing a backend module always works, whether or not its library
+is installed; a framework whose library is missing reports itself unavailable through
+is_available() and is excluded from discovery.
+"""
+
 # Version
 from mloda.core.version import get_mloda_version
 
@@ -58,9 +67,6 @@ __version__ = get_mloda_version()
 
 mloda = mlodaAPI
 stream_all = mlodaAPI.stream_all
-
-# Core-only surface. Compute frameworks live in one module per backend: mloda.user.pandas,
-# mloda.user.python_dict, ... Importing this module needs no backend.
 
 __all__ = [
     # Version

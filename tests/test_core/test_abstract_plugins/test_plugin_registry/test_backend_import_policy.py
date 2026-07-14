@@ -1,4 +1,4 @@
-"""Uniform import policy for the mloda.user backend modules (issue #736).
+"""Uniform import policy for the mloda.user backend modules, and what core discovery does with it (issue #736).
 
 Policy: importing ``mloda.user.<backend>`` NEVER raises ModuleNotFoundError because an optional
 backend library is missing. The framework class always imports; a framework whose library is
@@ -6,6 +6,13 @@ missing reports itself unavailable through ``is_available()``, and core discover
 (``PreFilterPlugins.get_cfw_subclasses``) excludes it. This is what
 ``docs/docs/chapter1/compute-frameworks.md`` already promises and what the registry guide
 documents (guarded module-level import plus ``is_available()``).
+
+This file owns two facts per backend: the module imports and exports its classes with the library
+blocked, and core discovery then includes or excludes those classes. It does NOT own
+``is_available()`` per framework: that contract belongs to each framework's own test through
+``assert_unavailable_when_import_blocked``
+(``tests/test_plugins/compute_framework/test_tooling/availability_test_helper.py``), so do not
+re-add is_available() assertions here.
 
 The test lives next to the other mloda.user backend-module contracts (``test_compute_framework_exports``)
 rather than in ``tests/test_core/test_optional_pyarrow/``: the policy spans pandas, polars, duckdb,
@@ -29,7 +36,7 @@ from tests.test_core.test_optional_pyarrow._pyarrow_blocker import run_blocked
 
 
 class Backend(NamedTuple):
-    """A mloda.user backend module, the library to block, and the availability that must follow."""
+    """A mloda.user backend module, the library to block, and whether core discovery must still find its classes."""
 
     module: str
     library: str
@@ -38,11 +45,13 @@ class Backend(NamedTuple):
 
 
 # python_dict has no optional backend, so nothing of its own can be blocked: pyarrow stands in as an
-# unrelated library, and blocking it must leave PythonDictFramework available.
+# unrelated library, and blocking it must leave PythonDictFramework discoverable. That "stays
+# discoverable" case has no owner elsewhere, because the per-framework helper can only express
+# "becomes unavailable".
 # sqlite is backed by the stdlib sqlite3, but its extra declares pyarrow (the relation and merge
-# engine need it), so pyarrow is the library that decides its availability.
+# engine need it), so pyarrow is the library that decides its discovery.
 # duckdb gets two rows: data only reaches the framework through Arrow, so pyarrow decides its
-# availability as much as duckdb does, and both must be blockable to False.
+# discovery as much as duckdb does, and both must be blockable to excluded.
 # Every mloda.user backend module needs at least one row here; the set is pinned against the
 # directory below, so a new backend cannot land without a policy row.
 BACKENDS: list[Backend] = [
@@ -57,16 +66,16 @@ BACKENDS: list[Backend] = [
     Backend("mloda.user.python_dict", "pyarrow", ("PythonDictFramework",), True),
 ]
 
-_AVAILABILITY_IDS = [f"{backend.module}:no-{backend.library}" for backend in BACKENDS]
+_DISCOVERY_IDS = [f"{backend.module}:no-{backend.library}" for backend in BACKENDS]
 
 # One import case per module: the pyarrow-blocked import check does not depend on which library a row blocks.
 _IMPORT_CASES: list[Backend] = list({backend.module: backend for backend in BACKENDS}.values())
 
 _PYARROW_IDS = [backend.module for backend in _IMPORT_CASES]
 
-# Imports the backend module, then pins is_available() and core discovery membership for every
-# class it exports. A missing library must surface here, never as an import error.
-_AVAILABILITY_BODY: str = """
+# Imports the backend module, then pins core discovery membership for every class it exports.
+# A missing library must surface here, never as an import error.
+_DISCOVERY_BODY: str = """
 import importlib
 
 from mloda.core.prepare.accessible_plugins import PreFilterPlugins
@@ -78,11 +87,6 @@ discovered = PreFilterPlugins.get_cfw_subclasses()
 for name in {classes}:
     cls = getattr(module, name, None)
     assert cls is not None, "{module} must export " + name
-
-    available = cls.is_available()
-    assert available is {available}, (
-        name + ".is_available() must be {available} while {library} is blocked, got " + repr(available)
-    )
 
     assert (cls in discovered) is {available}, (
         "core discovery must " + ("include " if {available} else "exclude ") + name
@@ -105,10 +109,10 @@ print("OK")
 
 
 @pytest.mark.timeout(30)
-@pytest.mark.parametrize("backend", BACKENDS, ids=_AVAILABILITY_IDS)
-def test_backend_module_imports_and_reports_availability_without_its_library(backend: Backend) -> None:
-    """With the library blocked: the module imports, exports its classes, and is_available() decides."""
-    body = _AVAILABILITY_BODY.format(
+@pytest.mark.parametrize("backend", BACKENDS, ids=_DISCOVERY_IDS)
+def test_backend_module_imports_and_core_discovery_follows_without_its_library(backend: Backend) -> None:
+    """With the library blocked: the module imports, exports its classes, and core discovery filters them."""
+    body = _DISCOVERY_BODY.format(
         module=backend.module,
         classes=repr(list(backend.classes)),
         library=backend.library,
@@ -116,10 +120,11 @@ def test_backend_module_imports_and_reports_availability_without_its_library(bac
     )
     result = run_blocked(body, module=backend.library)
 
+    membership = "include" if backend.available else "exclude"
     assert result.returncode == 0, (
         f"import {backend.module} must not raise while '{backend.library}' is missing: a framework whose "
-        f"library is absent stays importable and reports is_available() == {backend.available}; core "
-        f"discovery filters it out.\n"
+        f"library is absent stays importable, and core discovery must {membership} its classes "
+        f"({backend.module} exports {', '.join(backend.classes)}).\n"
         f"--- stdout ---\n{result.stdout}\n"
         f"--- stderr ---\n{result.stderr}"
     )
@@ -162,7 +167,7 @@ def test_every_shipped_backend_module_is_covered_by_the_policy() -> None:
     shipped = _shipped_backend_modules()
 
     assert shipped == covered, (
-        f"Every mloda.user backend module needs a BACKENDS row stating which library decides its "
-        f"availability. Missing rows: {sorted(shipped - covered)}. Rows for modules that do not exist: "
+        f"Every mloda.user backend module needs a BACKENDS row stating which library decides whether core "
+        f"discovery finds it. Missing rows: {sorted(shipped - covered)}. Rows for modules that do not exist: "
         f"{sorted(covered - shipped)}."
     )

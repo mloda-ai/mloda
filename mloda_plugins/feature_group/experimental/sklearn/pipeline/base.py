@@ -95,12 +95,20 @@ class SklearnPipelineFeatureGroup(FeatureChainParserMixin, FeatureGroup):
             DefaultOptionKeys.context: True,
             DefaultOptionKeys.strict_validation: True,
             DefaultOptionKeys.default: None,
+            # Required only when the other is absent.
+            DefaultOptionKeys.required_when: (
+                lambda options: options.get(SklearnPipelineFeatureGroup.PIPELINE_STEPS) is None
+            ),
         },
         PIPELINE_STEPS: {
             "explanation": "List of pipeline steps as (name, transformer) tuples",
             DefaultOptionKeys.context: True,
             DefaultOptionKeys.strict_validation: False,
             DefaultOptionKeys.default: None,  # Default is None as pipeline_types also work
+            # Required only when the other is absent.
+            DefaultOptionKeys.required_when: (
+                lambda options: options.get(SklearnPipelineFeatureGroup.PIPELINE_NAME) is None
+            ),
         },
         PIPELINE_PARAMS: {
             "explanation": "Pipeline parameters dictionary",
@@ -155,8 +163,6 @@ class SklearnPipelineFeatureGroup(FeatureChainParserMixin, FeatureGroup):
         # The regex already extracts just the pipeline name (e.g., "scaling" from "income__sklearn_pipeline_scaling")
         return prefix_part
 
-    # Note: Custom match_feature_group_criteria() required instead of inheriting from mixin
-    # because this feature group has unique pre-check logic (PIPELINE_NAME vs PIPELINE_STEPS mutual exclusivity)
     @classmethod
     def match_feature_group_criteria(
         cls,
@@ -164,32 +170,15 @@ class SklearnPipelineFeatureGroup(FeatureChainParserMixin, FeatureGroup):
         options: Options,
         data_access_collection: Optional[Any] = None,
     ) -> bool:
-        """Check if feature name matches the expected pattern using unified parser with custom validation."""
-        # First, try the unified parser
+        """Reject the one rule a spec cannot express: PIPELINE_NAME and PIPELINE_STEPS are mutually exclusive.
 
-        has_pipeline_name = options.get(cls.PIPELINE_NAME)
-        has_pipeline_steps = options.get(cls.PIPELINE_STEPS)
-
-        feature_name = str(feature_name) if isinstance(feature_name, FeatureName) else str(feature_name)
-
-        if has_pipeline_name is None and has_pipeline_steps is None:
-            if "sklearn_pipeline_" not in feature_name:
-                return False
-
-        base_match = FeatureChainParser.match_configuration_feature_chain_parser(
-            feature_name,
-            options,
-            property_mapping=cls.PROPERTY_MAPPING,
-            prefix_patterns=[cls.PREFIX_PATTERN],
-        )
-
-        if not base_match:
+        Their conditional presence is a required_when contract on PROPERTY_MAPPING, enforced by the
+        guard installed at class definition, so the rest of the matching is the mixin's.
+        """
+        if options.get(cls.PIPELINE_NAME) is not None and options.get(cls.PIPELINE_STEPS) is not None:
             return False
 
-        # For configuration-based features, must have exactly one of PIPELINE_NAME or PIPELINE_STEPS
-        if has_pipeline_name and has_pipeline_steps:
-            return False
-        return True
+        return super().match_feature_group_criteria(feature_name, options, data_access_collection)
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:

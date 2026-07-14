@@ -59,7 +59,8 @@ jobs:
       env:
         PYTEST_WORKERS: 2
       run: tox ${{ matrix.toxenv }}
-      timeout-minutes: 3
+      # 3 minutes started killing green full-tox legs once #722 grew the suite past 6600 tests.
+      timeout-minutes: 5
 
   notebooks:
     # Runs the marimo example notebooks; slower than the unit-test matrix.

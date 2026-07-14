@@ -1,7 +1,7 @@
-from typing import Any, cast
+# Annotations stay strings so the pa.Table signatures below do not dereference pa at import time.
+from __future__ import annotations
 
-import pyarrow as pa
-import pyarrow.compute as pc
+from typing import Any, cast
 
 from mloda.core.abstract_plugins.components.contract.comparison_contract import ColumnSemantics
 from mloda.core.abstract_plugins.components.link import AsOfJoinConfig
@@ -13,6 +13,13 @@ from mloda_plugins.compute_framework.base_implementations.sql.sql_utils import (
     is_ordered_arrow_type,
     pick_helper_column_name,
 )
+
+try:
+    import pyarrow as pa
+    import pyarrow.compute as pc
+except ImportError:
+    pa = None  # type: ignore[assignment]
+    pc = None
 
 
 class PyArrowMergeEngine(BaseMergeEngine):

@@ -1,3 +1,6 @@
+# Annotations stay strings so the pa.DataType signatures below do not dereference pa at import time.
+from __future__ import annotations
+
 import datetime
 import re
 import sqlite3
@@ -5,11 +8,14 @@ import uuid
 from collections.abc import Sequence
 from typing import Any, Optional
 
-import pyarrow as pa
-
 from mloda_plugins.compute_framework.base_implementations.sql.sql_base_relation import SqlBaseRelation
 from mloda_plugins.compute_framework.base_implementations.sql.sql_utils import quote_ident
 from mloda_plugins.compute_framework.base_implementations.sql.sql_window import OrderBy
+
+try:
+    import pyarrow as pa
+except ImportError:
+    pa = None  # type: ignore[assignment]
 
 
 # Python 3.12 deprecated the built-in sqlite3 datetime adapters; explicit ISO-format

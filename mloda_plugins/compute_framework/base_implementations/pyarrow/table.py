@@ -8,11 +8,14 @@ from mloda_plugins.compute_framework.base_implementations.pyarrow.pyarrow_filter
 from mloda_plugins.compute_framework.base_implementations.pyarrow.pyarrow_mask_engine import (
     PyArrowMaskEngine,
 )
-import pyarrow as pa
 
 from mloda.user import FeatureName
 from mloda.provider import ComputeFramework
 
+try:
+    import pyarrow as pa
+except ImportError:
+    pa = None  # type: ignore[assignment]
 
 try:
     import pandas as pd

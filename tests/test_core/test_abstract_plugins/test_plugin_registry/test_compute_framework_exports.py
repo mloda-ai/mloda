@@ -42,78 +42,68 @@ _FACADES: list[str] = ["mloda.provider", "mloda.steward", "mloda.user"]
 
 _UNKNOWN_SYMBOL = "DefinitelyNotAnExportedSymbol"
 
-# (backend module under mloda.user, exported symbol, canonical mloda_plugins source module,
-#  library the plugin module imports EAGERLY; None means the row runs unconditionally)
+# (backend module under mloda.user, exported symbol, canonical mloda_plugins source module)
 #
-# Only pandas and pyarrow import their backend at module level. The polars, duckdb, spark and
-# iceberg plugin modules guard their backend import in a try/except, so importing their
-# mloda.user module (and asserting the export identity) works without the library installed.
-# Skip-gating those rows would make them vacuous in the default tox env, which ships no pyspark.
-BACKEND_EXPORT_MATRIX: list[tuple[str, str, str, str | None]] = [
-    ("mloda.user.python_dict", "PythonDictFramework", _PYTHON_DICT_FRAMEWORK_MODULE, None),
-    ("mloda.user.python_dict", "columnar_to_rows", _PYTHON_DICT_UTILS_MODULE, None),
-    ("mloda.user.python_dict", "homogenize_rows", _PYTHON_DICT_UTILS_MODULE, None),
-    ("mloda.user.python_dict", "is_columnar", _PYTHON_DICT_UTILS_MODULE, None),
-    ("mloda.user.python_dict", "result_rows", _PYTHON_DICT_UTILS_MODULE, None),
-    ("mloda.user.python_dict", "row_count", _PYTHON_DICT_UTILS_MODULE, None),
-    ("mloda.user.python_dict", "rows_to_columnar", _PYTHON_DICT_UTILS_MODULE, None),
-    ("mloda.user.python_dict", "validate_columnar_dict", _PYTHON_DICT_UTILS_MODULE, None),
-    ("mloda.user.pandas", "PandasDataFrame", _PANDAS_DATAFRAME_MODULE, "pandas"),
+# No row is skip-gated on its backend library (issue #736): every plugin module guards its
+# module-level backend import, so importing the mloda.user module and asserting the export
+# identity works with the library absent. A framework whose library is missing says so through
+# is_available(). Skip-gating the rows would make them vacuous in envs that ship no pyspark.
+BACKEND_EXPORT_MATRIX: list[tuple[str, str, str]] = [
+    ("mloda.user.python_dict", "PythonDictFramework", _PYTHON_DICT_FRAMEWORK_MODULE),
+    ("mloda.user.python_dict", "columnar_to_rows", _PYTHON_DICT_UTILS_MODULE),
+    ("mloda.user.python_dict", "homogenize_rows", _PYTHON_DICT_UTILS_MODULE),
+    ("mloda.user.python_dict", "is_columnar", _PYTHON_DICT_UTILS_MODULE),
+    ("mloda.user.python_dict", "result_rows", _PYTHON_DICT_UTILS_MODULE),
+    ("mloda.user.python_dict", "row_count", _PYTHON_DICT_UTILS_MODULE),
+    ("mloda.user.python_dict", "rows_to_columnar", _PYTHON_DICT_UTILS_MODULE),
+    ("mloda.user.python_dict", "validate_columnar_dict", _PYTHON_DICT_UTILS_MODULE),
+    ("mloda.user.pandas", "PandasDataFrame", _PANDAS_DATAFRAME_MODULE),
     (
         "mloda.user.polars",
         "PolarsDataFrame",
         "mloda_plugins.compute_framework.base_implementations.polars.dataframe",
-        None,
     ),
     (
         "mloda.user.polars",
         "PolarsLazyDataFrame",
         "mloda_plugins.compute_framework.base_implementations.polars.lazy_dataframe",
-        None,
     ),
     (
         "mloda.user.pyarrow",
         "PyArrowTable",
         "mloda_plugins.compute_framework.base_implementations.pyarrow.table",
-        "pyarrow",
     ),
     (
         "mloda.user.duckdb",
         "DuckDBFramework",
         "mloda_plugins.compute_framework.base_implementations.duckdb.duckdb_framework",
-        None,
     ),
     (
         "mloda.user.sqlite",
         "SqliteFramework",
         "mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_framework",
-        None,
     ),
     (
         "mloda.user.spark",
         "SparkFramework",
         "mloda_plugins.compute_framework.base_implementations.spark.spark_framework",
-        None,
     ),
     (
         "mloda.user.iceberg",
         "IcebergFramework",
         "mloda_plugins.compute_framework.base_implementations.iceberg.iceberg_framework",
-        None,
     ),
 ]
 
-_BACKEND_MATRIX_IDS = [f"{backend}:{symbol}" for backend, symbol, _source, _dependency in BACKEND_EXPORT_MATRIX]
+_BACKEND_MATRIX_IDS = [f"{backend}:{symbol}" for backend, symbol, _source in BACKEND_EXPORT_MATRIX]
 
 # Every symbol that used to live on the facades themselves (#649 lazy user exports, #707/#716
 # eager provider exports). None of them may be a facade attribute any more.
-_FORMER_FACADE_SYMBOLS: list[str] = sorted({symbol for _backend, symbol, _source, _dependency in BACKEND_EXPORT_MATRIX})
+_FORMER_FACADE_SYMBOLS: list[str] = sorted({symbol for _backend, symbol, _source in BACKEND_EXPORT_MATRIX})
 
 
-def _import_backend(backend_module: str, dependency: str | None) -> ModuleType:
-    """Import a mloda.user backend module, skipping only rows whose plugin imports its library eagerly."""
-    if dependency is not None:
-        pytest.importorskip(dependency)
+def _import_backend(backend_module: str) -> ModuleType:
+    """Import a mloda.user backend module. No backend library may be needed for that."""
     return importlib.import_module(backend_module)
 
 
@@ -175,7 +165,7 @@ class TestFacadesArePluginFree:
             f"{facade} must NOT define a module-level __getattr__: mypy honors it as a catch-all, so every "
             f"unknown attribute type-checks as Any and the typo guard disappears for the whole surface. "
             f"Optional backends are reached through their own module (import mloda.user.pandas), which "
-            f"raises ModuleNotFoundError on its own."
+            f"imports whether or not the library is installed and reports it via is_available()."
         )
 
     @pytest.mark.parametrize("facade", _FACADES)
@@ -187,12 +177,10 @@ class TestFacadesArePluginFree:
 
 class TestBackendExportMatrix:
     @pytest.mark.parametrize(
-        ("backend_module", "symbol", "source_module", "dependency"), BACKEND_EXPORT_MATRIX, ids=_BACKEND_MATRIX_IDS
+        ("backend_module", "symbol", "source_module"), BACKEND_EXPORT_MATRIX, ids=_BACKEND_MATRIX_IDS
     )
-    def test_symbol_is_identical_to_source_object(
-        self, backend_module: str, symbol: str, source_module: str, dependency: str | None
-    ) -> None:
-        backend = _import_backend(backend_module, dependency)
+    def test_symbol_is_identical_to_source_object(self, backend_module: str, symbol: str, source_module: str) -> None:
+        backend = _import_backend(backend_module)
         source = importlib.import_module(source_module)
         assert hasattr(source, symbol), f"{source_module} must define '{symbol}'"
         assert hasattr(backend, symbol), f"{backend_module} must export '{symbol}'"
@@ -201,12 +189,10 @@ class TestBackendExportMatrix:
         )
 
     @pytest.mark.parametrize(
-        ("backend_module", "symbol", "source_module", "dependency"), BACKEND_EXPORT_MATRIX, ids=_BACKEND_MATRIX_IDS
+        ("backend_module", "symbol", "source_module"), BACKEND_EXPORT_MATRIX, ids=_BACKEND_MATRIX_IDS
     )
-    def test_symbol_listed_in_backend_all(
-        self, backend_module: str, symbol: str, source_module: str, dependency: str | None
-    ) -> None:
-        backend = _import_backend(backend_module, dependency)
+    def test_symbol_listed_in_backend_all(self, backend_module: str, symbol: str, source_module: str) -> None:
+        backend = _import_backend(backend_module)
         assert hasattr(backend, "__all__"), f"{backend_module} must define __all__"
         assert symbol in backend.__all__, f"{backend_module}.__all__ must list '{symbol}'"
 
@@ -328,35 +314,28 @@ class TestFacadeImportIsDependencyFree:
         assert result.stdout.strip() == "ok"
 
 
-# (backend module under mloda.user, canonical plugin module, symbol, optional library)
-_CYCLE_CASES: list[tuple[str, str, str, str | None]] = [
-    ("mloda.user.python_dict", _PYTHON_DICT_FRAMEWORK_MODULE, "PythonDictFramework", None),
-    ("mloda.user.pandas", _PANDAS_DATAFRAME_MODULE, "PandasDataFrame", "pandas"),
+# (backend module under mloda.user, canonical plugin module, symbol)
+_CYCLE_CASES: list[tuple[str, str, str]] = [
+    ("mloda.user.python_dict", _PYTHON_DICT_FRAMEWORK_MODULE, "PythonDictFramework"),
+    ("mloda.user.pandas", _PANDAS_DATAFRAME_MODULE, "PandasDataFrame"),
 ]
 
 _IMPORT_ORDERS: list[str] = ["plugin_module_first", "backend_module_first"]
 
-_CYCLE_PARAMS: list[tuple[str, str, str, str | None, str]] = [
-    (backend, deep, symbol, dependency, order)
-    for backend, deep, symbol, dependency in _CYCLE_CASES
-    for order in _IMPORT_ORDERS
+_CYCLE_PARAMS: list[tuple[str, str, str, str]] = [
+    (backend, deep, symbol, order) for backend, deep, symbol in _CYCLE_CASES for order in _IMPORT_ORDERS
 ]
 
-_CYCLE_IDS = [f"{backend}:{order}" for backend, _deep, _symbol, _dependency, order in _CYCLE_PARAMS]
+_CYCLE_IDS = [f"{backend}:{order}" for backend, _deep, _symbol, order in _CYCLE_PARAMS]
 
 
 class TestImportOrderCycleGuard:
     @pytest.mark.timeout(30)
-    @pytest.mark.parametrize(
-        ("backend_module", "deep_module", "symbol", "dependency", "order"), _CYCLE_PARAMS, ids=_CYCLE_IDS
-    )
+    @pytest.mark.parametrize(("backend_module", "deep_module", "symbol", "order"), _CYCLE_PARAMS, ids=_CYCLE_IDS)
     def test_both_import_orders_resolve_the_same_class(
-        self, backend_module: str, deep_module: str, symbol: str, dependency: str | None, order: str
+        self, backend_module: str, deep_module: str, symbol: str, order: str
     ) -> None:
         """Neither import order may raise ImportError on a mloda.user.<backend> <-> plugin-module cycle."""
-        if dependency is not None:
-            pytest.importorskip(dependency)
-
         deep_import = f"import {deep_module} as deep\n"
         backend_import = f"import {backend_module} as backend\n"
         imports = deep_import + backend_import if order == "plugin_module_first" else backend_import + deep_import
@@ -445,8 +424,8 @@ def _backend_module_exports() -> dict[str, list[str]]:
 class TestBackendModulesCoverEveryShippedFramework:
     def test_every_concrete_framework_is_published_from_exactly_one_backend_module(self) -> None:
         """Completeness: a new framework without a mloda.user backend module is unreachable for users."""
-        # Loading the group skips plugins whose eager backend import is missing, so absent classes
-        # never demand a backend module import here. The conftest fixture restores the registry.
+        # Every compute-framework plugin imports regardless of its backend library (issue #736), so the
+        # group exposes all shipped frameworks here. The conftest fixture restores the registry.
         PluginLoader().load_group("compute_framework")
 
         frameworks = _shipped_concrete_frameworks()

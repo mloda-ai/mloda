@@ -1,8 +1,11 @@
 from typing import Any
 
-import pandas as pd
-
 from mloda.core.abstract_plugins.components.mask.base_mask_engine import BaseMaskEngine
+
+try:
+    import pandas as pd
+except ImportError:
+    pd = None
 
 
 class PandasMaskEngine(BaseMaskEngine):

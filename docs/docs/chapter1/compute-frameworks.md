@@ -130,6 +130,7 @@ In this case, the feature group ExampleB will only run on the PyArrowTable frame
 | **PolarsDataFrame** | Polars DataFrame | Fast, memory-efficient, eager evaluation | Development, immediate results | polars |
 | **PolarsLazyDataFrame** | Polars LazyFrame | Query optimization, lazy evaluation | Large datasets, performance optimization | polars |
 | **DuckDBFramework** | DuckDB Relations | SQL interface, fast analytics, OLAP queries | Analytical workloads, SQL-based transformations, data warehousing | duckdb |
+| **SqliteFramework** | SQLite relations | SQL interface, embedded, no server | Local databases, small SQL workloads | sqlite3 (stdlib), pyarrow |
 | **IcebergFramework** | Apache Iceberg Tables | Schema evolution, time travel, data lake management | Data lake scenarios, versioned datasets, large-scale analytics | pyiceberg, pyarrow |
 | **SparkFramework** | Apache Spark DataFrames | Distributed processing, scalability, fault tolerance | Big data, distributed computing, production clusters | pyspark, Java 8+ |
 | **PythonDictFramework** | dict[str, list[Any]] (columnar) | Zero dependencies, simple, lightweight | Minimal environments, education, prototyping | None (Python stdlib only) |
@@ -149,18 +150,18 @@ from mloda.user.iceberg import IcebergFramework
 from mloda.user.spark import SparkFramework
 ```
 
-`import mloda.user` needs no backend at all. Importing a backend module gives you the framework class whether or not its library is installed; a framework whose library is missing reports itself unavailable through `is_available()` and is excluded from discovery. The deep import paths keep working unchanged.
+##### Backend Import and Availability Policy
 
-##### Automatic Dependency Detection
+One policy for every backend: importing `mloda.user.<backend>` never fails because the backend library is missing. `import mloda.user` needs no backend at all, importing a backend module always gives you the framework class, and a framework whose library is missing reports itself unavailable through `is_available()`. Discovery filters on `is_available()`, so an unavailable framework is never selected. The deep import paths keep working unchanged.
 
-mloda automatically detects which compute frameworks are available based on installed dependencies. If a required dependency (like `pandas` or `pyarrow`) is not installed, the corresponding compute framework will be automatically excluded from discovery, preventing runtime errors.
+Why it works this way:
 
-This means you can:
-- Install only the dependencies you need for your specific use case
-- Deploy mloda in minimal environments without all compute framework dependencies
-- Avoid import errors when optional dependencies are missing
+- mloda core declares zero hard dependencies; every backend is an optional extra (`pip install mloda[polars]`), so you install only what your use case needs and can deploy in minimal environments.
+- A framework that is importable but unavailable stays visible in the plugin catalogue, where `is_available()` tells you to install the extra, instead of vanishing entirely from discovery.
 
-For example, if `polars` is not installed, `PolarsDataFrame` will not be available as a compute framework option, and mloda will automatically work with the remaining available frameworks.
+For example, without `polars` installed, `from mloda.user.polars import PolarsDataFrame` still works, `PolarsDataFrame.is_available()` returns `False`, and mloda plans with the remaining frameworks.
+
+##### Framework Examples
 
 Example using PythonDictFramework:
 ``` python

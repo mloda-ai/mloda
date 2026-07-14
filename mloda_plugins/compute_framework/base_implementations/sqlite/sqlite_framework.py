@@ -44,7 +44,13 @@ class SqliteFramework(ComputeFramework):
 
     @staticmethod
     def is_available() -> bool:
-        return True
+        """sqlite3 is stdlib, but the relation and merge engine speak Arrow, so pyarrow decides."""
+        try:
+            import pyarrow  # noqa: F401
+
+            return True
+        except ImportError:
+            return False
 
     @classmethod
     def expected_data_framework(cls) -> Any:

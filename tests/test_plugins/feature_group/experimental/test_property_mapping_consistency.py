@@ -11,6 +11,7 @@ from typing import Any
 
 import pytest
 
+from mloda.core.abstract_plugins.components.feature_chainer.property_spec import is_no_default
 from mloda.provider import DefaultOptionKeys, FeatureChainParser, PropertySpec
 from mloda.user import Options
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.base import AggregatedFeatureGroup
@@ -105,8 +106,10 @@ REQUIRED_SAMPLES: dict[tuple[type[Any], str], Any] = {
     (TimeWindowFeatureGroup, TimeWindowFeatureGroup.WINDOW_SIZE): 3,
 }
 
-# What each plugin declares UNCONDITIONALLY optional today. Spec derivation alone cannot catch a
-# key flipping optional -> required: the case would just disappear from the sweep.
+# What each plugin declares UNCONDITIONALLY optional today. This pin is an INPUT to the builder
+# (see builder_optional_keys), not a mirror of the specs: the builder keeps omitting a pinned key
+# even once its spec turns it required, which is what makes the sweep fail instead of quietly
+# supplying the key and healing the regression it exists to catch.
 EXPECTED_OPTIONAL_KEYS: dict[type[Any], frozenset[str]] = {
     AggregatedFeatureGroup: frozenset(),
     ClusteringFeatureGroup: frozenset({ClusteringFeatureGroup.OUTPUT_PROBABILITIES}),
@@ -139,26 +142,43 @@ def key_name(key: Any) -> str:
     return key.value if isinstance(key, DefaultOptionKeys) else str(key)
 
 
-def is_optional(spec: Any) -> bool:
-    """Unconditionally optional: carries a default and no predicate. Omitting it must still match."""
-    return isinstance(spec, dict) and DefaultOptionKeys.default in spec and DefaultOptionKeys.required_when not in spec
+def _frozenset_literal(keys: frozenset[str]) -> str:
+    """The source line a failing message tells the reader to paste into EXPECTED_OPTIONAL_KEYS."""
+    if not keys:
+        return "frozenset()"
+    return "frozenset({" + ", ".join(repr(key) for key in sorted(keys)) + "})"
 
 
-def is_conditional(spec: Any) -> bool:
+def is_optional(spec: PropertySpec) -> bool:
+    """Unconditionally optional: declares a default and no predicate.
+
+    A declared ``default=None`` is optional; ``NO_DEFAULT`` is the spec declaring no default at all
+    (issue #694), which is what the retired dict form expressed by leaving the key out.
+    """
+    return not is_no_default(spec.default) and spec.required_when is None
+
+
+def is_conditional(spec: PropertySpec) -> bool:
     """Required only when its required_when predicate fires."""
-    return isinstance(spec, dict) and DefaultOptionKeys.required_when in spec
-
-
-def is_required(spec: Any) -> bool:
-    """The base parser's own verdict, so the sweep cannot drift from what matching enforces."""
-    return not FeatureChainParser._can_skip_required_check(spec)
+    return spec.required_when is not None
 
 
 def optional_keys(plugin_cls: type[Any]) -> frozenset[str]:
+    """Optional according to the spec, i.e. what FeatureChainParser._can_skip_required_check waves through."""
     return frozenset(key_name(key) for key, spec in plugin_cls.PROPERTY_MAPPING.items() if is_optional(spec))
 
 
-def sample_value(plugin_cls: type[Any], key: Any, spec: dict[str, Any]) -> Any:
+def builder_optional_keys(plugin_cls: type[Any]) -> frozenset[str]:
+    """The keys the builder leaves out: optional per the PIN or per the SPEC.
+
+    The union is what makes the sweep catch a flip: a key the pin calls optional stays omitted even
+    after its spec quietly turns it required, so matching fails instead of the builder silently
+    supplying it. The spec side means a newly optional key joins the sweep before anyone pins it.
+    """
+    return EXPECTED_OPTIONAL_KEYS.get(plugin_cls, frozenset()) | optional_keys(plugin_cls)
+
+
+def sample_value(plugin_cls: type[Any], key: Any, spec: PropertySpec) -> Any:
     """Derive a valid value for a key from its own spec, or NOT_CONSTRUCTIBLE."""
     if key == DefaultOptionKeys.in_features:
         return [f"in_feature_{i}" for i in range(plugin_cls.MIN_IN_FEATURES)]
@@ -167,72 +187,80 @@ def sample_value(plugin_cls: type[Any], key: Any, spec: dict[str, Any]) -> Any:
     if declared is not NOT_CONSTRUCTIBLE:
         return declared
 
-    default = spec.get(DefaultOptionKeys.default)
-    if default is not None:
-        return default
+    if not is_no_default(spec.default) and spec.default is not None:
+        return spec.default
 
-    allowed_values = spec.get(DefaultOptionKeys.allowed_values)
-    if allowed_values:
-        return sorted(allowed_values, key=repr)[0]
+    if spec.allowed_values:
+        return sorted(spec.allowed_values, key=repr)[0]
+
+    if not spec.strict_validation:
+        # A key whose default is None and whose value space is free-form (e.g. weight_column).
+        # A non-strict spec runs no validation, so any value is legal, and only a value that is
+        # really in the option set makes omitting it observable.
+        return f"sample_{key_name(key)}"
 
     return NOT_CONSTRUCTIBLE
 
 
-def build_options(plugin_cls: type[Any], include_optional: bool, omit: Any = None) -> Options:
-    """Build the options a configuration-based feature of this plugin would carry.
+def _build(plugin_cls: type[Any], include_optional: bool, omit: Any = None) -> tuple[Options, list[Any]]:
+    """The options a configuration-based feature would carry, plus the keys the builder supplied.
 
-    A key goes to context when its spec says so, else to group; Options.get() searches both.
+    Both are returned from one pass so build_options and needed_keys cannot disagree about which
+    conditionals fire. A key goes to context when its spec says so, else to group; Options.get()
+    searches both. A supplied key without a sample stays in the key list and out of the Options:
+    that gap is what test_every_needed_option_is_constructible reports.
     """
     mapping: dict[str, Any] = plugin_cls.PROPERTY_MAPPING
+    leave_out = builder_optional_keys(plugin_cls)
     group: dict[str, Any] = {}
     context: dict[str, Any] = {}
+    supplied: list[Any] = []
 
-    def add(key: Any, spec: dict[str, Any]) -> None:
+    def add(key: Any, spec: PropertySpec) -> None:
         if key == omit:
             return
+        supplied.append(key)
         value = sample_value(plugin_cls, key, spec)
         if value is NOT_CONSTRUCTIBLE:
             return
-        target = context if spec.get(DefaultOptionKeys.context) else group
+        target = context if spec.context else group
         target[key] = value
 
     for key, spec in mapping.items():
-        if is_required(spec):
-            add(key, spec)
-
-    # A conditional key is supplied only when its predicate fires against what is present so far.
-    # This is what resolves a mutually exclusive pair down to exactly one key.
-    for key, spec in mapping.items():
-        if is_conditional(spec) and spec[DefaultOptionKeys.required_when](
-            Options(group=dict(group), context=dict(context))
-        ):
+        if key_name(key) not in leave_out and not is_conditional(spec):
             add(key, spec)
 
     if include_optional:
         for key, spec in mapping.items():
-            if is_optional(spec):
+            if key_name(key) in leave_out:
                 add(key, spec)
 
-    return Options(group=group, context=context)
+    # Conditionals last, so their predicate reads everything else the builder supplies, as
+    # production's predicate reads complete Options. Evaluated one at a time against the growing
+    # set: that is what resolves a mutually exclusive pair down to exactly one key.
+    for key, spec in mapping.items():
+        if key_name(key) in leave_out or not is_conditional(spec):
+            continue
+        if spec.required_when is not None and spec.required_when(Options(group=dict(group), context=dict(context))):
+            add(key, spec)
+
+    return Options(group=group, context=context), supplied
+
+
+def build_options(plugin_cls: type[Any], include_optional: bool, omit: Any = None) -> Options:
+    return _build(plugin_cls, include_optional, omit)[0]
 
 
 def needed_keys(plugin_cls: type[Any]) -> list[Any]:
-    """The keys the builder must supply: every required key, plus the conditionals that fire."""
-    supplied = build_options(plugin_cls, include_optional=False)
-    mapping: dict[str, Any] = plugin_cls.PROPERTY_MAPPING
-
-    needed = [key for key, spec in mapping.items() if is_required(spec)]
-    needed += [
-        key for key, spec in mapping.items() if is_conditional(spec) and spec[DefaultOptionKeys.required_when](supplied)
-    ]
-    return needed
+    """The keys the builder supplies: everything it does not leave out, plus the conditionals that fire."""
+    return _build(plugin_cls, include_optional=False)[1]
 
 
 OPTIONAL_CASES: list[tuple[type[Any], Any]] = [
     (plugin_cls, key)
     for plugin_cls in ALL_PLUGINS
-    for key, spec in plugin_cls.PROPERTY_MAPPING.items()
-    if is_optional(spec)
+    for key in plugin_cls.PROPERTY_MAPPING
+    if key_name(key) in builder_optional_keys(plugin_cls)
 ]
 
 OPTIONAL_CASE_IDS: list[str] = [f"{plugin_cls.__name__}-{key_name(key)}" for plugin_cls, key in OPTIONAL_CASES]
@@ -241,8 +269,8 @@ OPTIONAL_CASE_IDS: list[str] = [f"{plugin_cls.__name__}-{key_name(key)}" for plu
 class TestOptionalOptionOmission:
     """A configuration-based feature that omits an OPTIONAL option still matches its feature group.
 
-    The cases are derived from the PROPERTY_MAPPING specs themselves, so a new plugin or a new
-    optional key joins the sweep without anyone remembering to add a test.
+    The cases come from the pin unioned with the specs, so a new optional key joins the sweep on its
+    own, while a key that quietly turns required stays omitted and fails matching here.
     """
 
     @pytest.mark.parametrize("plugin_cls", ALL_PLUGINS, ids=lambda c: c.__name__)
@@ -256,11 +284,7 @@ class TestOptionalOptionOmission:
 
     @pytest.mark.parametrize("plugin_cls", ALL_PLUGINS, ids=lambda c: c.__name__)
     def test_every_needed_option_is_constructible(self, plugin_cls: type[Any]) -> None:
-        """Every key the builder must supply has a sample, so an unmatched feature means a real bug.
-
-        This fires when an optional key silently becomes required: it has no default left to
-        sample and no declared value space, so the sweep can no longer build a valid feature.
-        """
+        """Every key the builder supplies has a sample, so an unmatched feature below means a real bug."""
         mapping: dict[str, Any] = plugin_cls.PROPERTY_MAPPING
         missing = [
             key_name(key)
@@ -268,27 +292,35 @@ class TestOptionalOptionOmission:
             if sample_value(plugin_cls, key, mapping[key]) is NOT_CONSTRUCTIBLE
         ]
         assert missing == [], (
-            f"{plugin_cls.__name__} requires option(s) {missing} for which no value can be derived from the spec "
-            f"(no default, no allowed_values). Either the key should be optional, or add an entry to "
-            f"REQUIRED_SAMPLES keyed by (plugin_cls, key)."
+            f"{plugin_cls.__name__} needs option(s) {missing} for which no value can be derived from the spec "
+            f"(no default, no allowed_values, strict validation). Either the key should be optional, or add an "
+            f"entry to REQUIRED_SAMPLES keyed by (plugin_cls, key)."
         )
 
     @pytest.mark.parametrize("plugin_cls", ALL_PLUGINS, ids=lambda c: c.__name__)
     def test_config_feature_matches_with_every_optional_option_omitted(self, plugin_cls: type[Any]) -> None:
-        """Supplying only the required options is enough to match."""
+        """Supplying only the non-optional options is enough to match."""
         options = build_options(plugin_cls, include_optional=False)
         supplied = sorted(key_name(key) for key in options.keys())
         absent = sorted(key_name(key) for key in plugin_cls.PROPERTY_MAPPING if key_name(key) not in supplied)
 
         assert plugin_cls.match_feature_group_criteria(CONFIG_FEATURE_NAME, options), (
-            f"{plugin_cls.__name__} rejects a configuration-based feature that supplies every required option "
+            f"{plugin_cls.__name__} rejects a configuration-based feature that supplies every non-optional option "
             f"and omits every optional one. Supplied: {supplied}. Absent: {absent}. "
-            f"Optional keys omitted on purpose: {sorted(optional_keys(plugin_cls))}."
+            f"Optional keys omitted on purpose: {sorted(builder_optional_keys(plugin_cls))}. "
+            f"If one of those keys just became required, it is the regression: a configuration-based user who "
+            f"omits it no longer matches."
         )
 
     @pytest.mark.parametrize(("plugin_cls", "optional_key"), OPTIONAL_CASES, ids=OPTIONAL_CASE_IDS)
     def test_optional_option_can_be_omitted(self, plugin_cls: type[Any], optional_key: Any) -> None:
         """Each optional key, one at a time, can be left out while every other option is present."""
+        full = build_options(plugin_cls, include_optional=True)
+        assert full.get(optional_key) is not None, (
+            f"{plugin_cls.__name__} option '{key_name(optional_key)}' has no sample value, so it is not in the "
+            f"option set to begin with and omitting it asserts nothing. Give sample_value a way to build it."
+        )
+
         options = build_options(plugin_cls, include_optional=True, omit=optional_key)
 
         assert plugin_cls.match_feature_group_criteria(CONFIG_FEATURE_NAME, options), (
@@ -300,15 +332,19 @@ class TestOptionalOptionOmission:
     def test_optional_options_match_the_declared_inventory(self, plugin_cls: type[Any]) -> None:
         """The spec-derived optional keys are the ones the inventory pins.
 
-        Derivation alone cannot see a key that stops being optional: the case simply vanishes from
-        the sweep. The inventory is what turns that silent drop into a failure.
+        The pin is what turns a key silently becoming required into a failure here, and it keeps the
+        builder omitting that key so the matching sweep above fails too.
         """
         derived = optional_keys(plugin_cls)
-        expected = EXPECTED_OPTIONAL_KEYS[plugin_cls]
+        expected = EXPECTED_OPTIONAL_KEYS.get(plugin_cls)
 
+        assert expected is not None, (
+            f"{plugin_cls.__name__} has no optional-option inventory. Add this line to EXPECTED_OPTIONAL_KEYS: "
+            f"{plugin_cls.__name__}: {_frozenset_literal(derived)},"
+        )
         assert derived == expected, (
             f"{plugin_cls.__name__} optional-option inventory drifted. "
             f"Newly optional: {sorted(derived - expected)}. No longer optional: {sorted(expected - derived)}. "
             f"A key that stopped being optional breaks configuration-based features that omit it; "
-            f"a newly optional key needs a line in EXPECTED_OPTIONAL_KEYS."
+            f"a newly optional key needs its line updated to {_frozenset_literal(derived)}."
         )

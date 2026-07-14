@@ -1,14 +1,12 @@
-"""Failing tests pinning louder degradation of the subtype surfaces (issue #639 follow-up).
+"""Target-contract tests for the failure surfaces of the subtype personas (issue #722 Stage 3b).
 
-Pins: a raising supports_compute_framework override degrades the resolve_feature
-capability split OPEN (all declared frameworks supported) with a warning, and a
-bogus 'supported' framework name surfaces as subtype_error in the docs.
+Pins: a raising supports_compute_framework override is a fail-closed provider failure in
+the rewired resolve_feature (feature_group=None, error names the plugin and carries the
+original hook message; no open-degrade), and a bogus 'supported' framework name surfaces
+as subtype_error in the docs.
 """
 
-import logging
 from typing import Optional
-
-import pytest
 
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.abstract_plugins.components.feature import Feature
@@ -85,22 +83,25 @@ def _sbfix_doc_for(name: str) -> FeatureGroupInfo:
     return exact[0]
 
 
-class TestSbfixRaisingHookDegradesOpen:
-    """A raising capability hook degrades the split OPEN, not empty, and warns."""
+class TestSbfixRaisingHookFailsClosed:
+    """A raising capability hook is a fail-closed provider failure, never an open-degrade."""
 
-    def test_resolves_with_all_declared_frameworks_supported(self) -> None:
+    def test_fails_closed_with_provider_error(self) -> None:
         result = resolve_feature(SBFIX_HOOK_FEATURE)
-        assert result.feature_group is SbfixRaisingHookFG
-        assert result.error is None
-        assert result.supported_compute_frameworks == ["PythonDictFramework"]
-        assert result.unsupported_compute_frameworks == []
+        # TARGET CONTRACT (#722 Stage 3b): the broken hook makes resolution FAIL instead of
+        # reading as runnable everywhere; the matching candidate stays visible.
+        assert result.feature_group is None
+        assert result.error is not None
+        assert "sbfix hook exploded" in result.error
+        assert "SbfixRaisingHookFG" in result.error
+        assert SbfixRaisingHookFG in result.candidates
 
-    def test_degradation_is_logged_as_warning(self, caplog: pytest.LogCaptureFixture) -> None:
-        with caplog.at_level(logging.WARNING):
-            result = resolve_feature(SBFIX_HOOK_FEATURE)
-        assert result.feature_group is SbfixRaisingHookFG
-        assert "degraded" in caplog.text.lower()
-        assert "sbfix hook exploded" in caplog.text
+    def test_failure_reports_no_fabricated_capability_split(self) -> None:
+        result = resolve_feature(SBFIX_HOOK_FEATURE)
+        # TARGET CONTRACT (#722 Stage 3b): no framework is claimed as supported when the
+        # capability hook itself failed; resolve_feature still never raises.
+        assert result.feature_group is None
+        assert result.supported_compute_frameworks == []
 
 
 class TestSbfixBogusSupportedSurfacedInDocs:

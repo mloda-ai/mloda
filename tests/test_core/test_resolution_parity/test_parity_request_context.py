@@ -1,33 +1,35 @@
-"""Paired engine/diagnostic characterization tests for issue #722 Stage 1.
+"""Paired engine/diagnostic tests for issue #722 (request context), flipped to the Stage 3b target.
 
-Every test PASSES against current code: each pair pins one divergence between the
-engine resolution path (IdentifyFeatureGroupClass) and the debug resolution path
-(resolve_feature). Assertions marked "PINS CURRENT DIVERGENCE" pin behavior that
-Stage 3/4 will change; assertions marked "TARGET CONTRACT" pin behavior to keep.
+Stage 3b rewires resolve_feature onto the same FeatureGroupResolver as the engine with a
+standalone request carrying only feature_name, options, and scope. The div-11 debug test
+below asserts the TARGET CONTRACT and FAILS until that rewire lands. Divergences #5, #6,
+#7, and #10 remain standalone request differences (domain, links, framework pin, and data
+access collection stay unexpressible until Stage 4's request redesign); #12, #14, and #15
+remain presentation-only rendering differences.
 
 Index (divergence -> engine test / resolve_feature test):
-- #5 domain:
+- #5 domain (standalone request difference, Stage 4):
     test_engine_domain_disambiguates_shared_name
     test_resolve_feature_has_no_domain_parameter_reports_false_conflict
-- #6 links/index:
+- #6 links/index (standalone request difference, Stage 4):
     test_engine_links_filter_excludes_unsupported_index_probe
     test_resolve_feature_has_no_links_parameter_resolves_phantom
-- #7 compute-framework pin:
+- #7 compute-framework pin (standalone request difference, Stage 4):
     test_engine_compute_framework_pin_disambiguates_siblings
     test_resolve_feature_has_no_framework_pin_reports_conflict
-- #10 data access collection:
+- #10 data access collection (standalone request difference, Stage 4):
     test_engine_data_access_collection_enables_reader_probe
     test_resolve_feature_hardcodes_none_data_access_collection
-- #11 ValueError from matching:
+- #11 ValueError from matching (TARGET CONTRACT, fail-closed on both paths):
     test_engine_matching_value_error_propagates_despite_clean_winner
-    test_resolve_feature_hides_matching_value_error_behind_clean_winner
-- #12 option-aware hints:
+    test_resolve_feature_fails_closed_on_matching_value_error
+- #12 option-aware hints (presentation-only, Stage 4 rendering):
     test_engine_no_match_error_carries_extra_group_option_hint
     test_resolve_feature_no_match_error_lacks_group_option_hint
-- #14 multiple-match text:
+- #14 multiple-match text (presentation-only, Stage 4 rendering):
     test_engine_multiple_match_error_carries_module_paths_and_url
     test_resolve_feature_multiple_match_error_bare_names_only
-- #15 not-found text:
+- #15 not-found text (presentation-only, Stage 4 rendering):
     test_engine_not_found_error_carries_suggestions_and_url
     test_resolve_feature_not_found_error_is_single_bare_line
 """
@@ -167,7 +169,8 @@ def test_resolve_feature_has_no_domain_parameter_reports_false_conflict() -> Non
 
     result = resolve_feature(DOMAIN_FEATURE, plugin_collector=collector)
 
-    # PINS CURRENT DIVERGENCE (#5): debug reports a conflict the run does not have.
+    # STANDALONE REQUEST DIFFERENCE (#5, Stage 4): the domain stays unexpressible in the
+    # standalone request until Stage 4's request redesign, so both probes survive here.
     assert result.feature_group is None
     assert result.error is not None
     assert "Multiple FeatureGroups match" in result.error
@@ -239,7 +242,8 @@ def test_resolve_feature_has_no_links_parameter_resolves_phantom() -> None:
 
     result = resolve_feature(INDEXED_FEATURE, plugin_collector=collector)
 
-    # PINS CURRENT DIVERGENCE (#6): phantom resolution; the links filter is unexpressible here.
+    # STANDALONE REQUEST DIFFERENCE (#6, Stage 4): the run's links stay unexpressible in the
+    # standalone request until Stage 4's request redesign, so the probe resolves cleanly.
     assert result.feature_group is ProbeIndexed722B
     assert result.error is None
 
@@ -317,7 +321,8 @@ def test_resolve_feature_has_no_framework_pin_reports_conflict() -> None:
 
     result = resolve_feature(PIN_FEATURE, plugin_collector=collector)
 
-    # PINS CURRENT DIVERGENCE (#7): the documented remedy (a framework pin) is unexpressible here.
+    # STANDALONE REQUEST DIFFERENCE (#7, Stage 4): a framework pin stays unexpressible in the
+    # standalone request until Stage 4's request redesign, so the siblings stay ambiguous.
     assert result.feature_group is None
     assert result.error is not None
     assert "Multiple FeatureGroups match" in result.error
@@ -371,7 +376,8 @@ def test_resolve_feature_hardcodes_none_data_access_collection() -> None:
 
     result = resolve_feature(DAC_FEATURE, plugin_collector=collector)
 
-    # PINS CURRENT DIVERGENCE (#10): reader/input_data groups fail to resolve in the debug tool.
+    # STANDALONE REQUEST DIFFERENCE (#10, Stage 4): a data access collection stays unexpressible
+    # in the standalone request until Stage 4's request redesign, so reader probes never match.
     assert result.feature_group is None
     assert result.error is not None
     assert "No FeatureGroup found" in result.error
@@ -426,7 +432,8 @@ def test_engine_matching_value_error_propagates_despite_clean_winner() -> None:
     )
     assert identifier.get()[0] is ProbeWinner722B
 
-    # PINS CURRENT DIVERGENCE (#11): the run aborts even though another candidate matched.
+    # TARGET CONTRACT (#11): a plain ValueError from any candidate's matching is fail-closed on
+    # the engine path; a clean rival never hides a decision-relevant provider failure.
     with pytest.raises(ValueError, match="boom 722b"):
         IdentifyFeatureGroupClass(
             feature=Feature(BOOM_FEATURE),
@@ -435,16 +442,18 @@ def test_engine_matching_value_error_propagates_despite_clean_winner() -> None:
         )
 
 
-def test_resolve_feature_hides_matching_value_error_behind_clean_winner() -> None:
-    """resolve_feature degrades the raising candidate to a non-match and crowns the winner."""
+def test_resolve_feature_fails_closed_on_matching_value_error() -> None:
+    """resolve_feature fails closed on the raising candidate; the clean winner cannot hide it."""
     collector = PluginCollector.enabled_feature_groups({ProbeBoom722B, ProbeWinner722B})
 
     result = resolve_feature(BOOM_FEATURE, plugin_collector=collector)
 
-    # PINS CURRENT DIVERGENCE (#11): debug reports a clean winner while the engine crashes.
-    assert result.feature_group is ProbeWinner722B
-    assert result.error is None
-    assert ProbeBoom722B not in result.candidates
+    # TARGET CONTRACT (#11): a plain ValueError from matching is a decision-relevant provider
+    # failure on both paths; the error names the failing plugin and its original message.
+    assert result.feature_group is None
+    assert result.error is not None
+    assert "boom 722b" in result.error
+    assert "ProbeBoom722B" in result.error
 
 
 # ---------------------------------------------------------------------------
@@ -490,7 +499,8 @@ def test_resolve_feature_no_match_error_lacks_group_option_hint() -> None:
     result = resolve_feature(PICKY_FEATURE, options=Options(group={"junk722b": 1}), plugin_collector=collector)
 
     assert result.feature_group is None
-    # PINS CURRENT DIVERGENCE (#12): the engine's option hints cannot be reproduced by the debug tool.
+    # PRESENTATION-ONLY DIFFERENCE (#12, Stage 4 rendering): both paths project the same
+    # no-match outcome; the engine's renderer adds option hints the debug renderer does not.
     assert result.error == f"No FeatureGroup found for feature name: {PICKY_FEATURE}"
     assert "extra group option(s)" not in result.error
 
@@ -553,7 +563,8 @@ def test_resolve_feature_multiple_match_error_bare_names_only() -> None:
     assert "Multiple FeatureGroups match feature name" in result.error
     assert "ProbeMultiA722B" in result.error
     assert "ProbeMultiB722B" in result.error
-    # PINS CURRENT DIVERGENCE (#14): no module paths and no troubleshooting URL in the debug error.
+    # PRESENTATION-ONLY DIFFERENCE (#14, Stage 4 rendering): both paths project the same
+    # ambiguous outcome; the engine's renderer adds module paths and the troubleshooting URL.
     assert MODULE_PATH not in result.error
     assert TROUBLESHOOTING_URL not in result.error
 
@@ -605,7 +616,8 @@ def test_resolve_feature_not_found_error_is_single_bare_line() -> None:
 
     assert result.feature_group is None
     assert result.error is not None
-    # PINS CURRENT DIVERGENCE (#15): the engine points users at a tool returning strictly less information.
+    # PRESENTATION-ONLY DIFFERENCE (#15, Stage 4 rendering): both paths project the same
+    # not-found outcome; the engine's renderer adds suggestions and the troubleshooting URL.
     assert result.error == f"No FeatureGroup found for feature name: {NEEDLE_TYPO}"
     assert "Did you mean" not in result.error
     assert TROUBLESHOOTING_URL not in result.error

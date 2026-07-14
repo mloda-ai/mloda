@@ -22,6 +22,8 @@ from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.prepare.accessible_plugins import FeatureGroupEnvironmentMapping
 from mloda.core.prepare.identify_feature_group import IdentifyFeatureGroupClass
+from mloda.core.resolve.identity import PluginIdentity
+from mloda.core.resolve.outcome import CandidateStatus, FeatureResolutionError, RejectionReason
 
 
 class MockComputeFramework(ComputeFramework):
@@ -382,129 +384,57 @@ class NoComputeFrameworkFeatureGroup(FeatureGroup):
 
 
 class TestNoComputeFrameworkErrorMessageFormat:
-    """Tests for the error message format when a feature group has no compute framework.
+    """Tests for the failure shape when a matched feature group has no compute framework.
 
-    The 'no compute framework' error is raised in the validate() method when a
-    single feature group is found but its compute_frameworks set is empty.
-
-    We use unittest.mock to patch the _filter_loop method to return a feature
-    group with empty compute_frameworks, since the normal filtering logic
-    excludes feature groups with no frameworks.
+    The old dedicated 'has no compute framework' ValueError lived in a validate()
+    branch that was only reachable by mocking the internal _filter_loop method.
+    The authoritative resolver (issue #722 Stage 3a) rejects such a candidate
+    structurally instead: the candidate is visible in the outcome as REJECTED with
+    NO_ACCESSIBLE_FRAMEWORK, and the raised error is the regular no-match message.
     """
 
-    def test_no_compute_framework_error_contains_module_path(self) -> None:
-        """Test that the 'no compute framework' error includes module path.
-
-        The error message should contain the module path in parentheses like:
-          NoComputeFrameworkFeatureGroup (tests.test_core.test_prepare.test_identify_feature_group_error_message)
-        """
-        from unittest.mock import patch
-
+    def _raise_for_empty_framework_set(self) -> FeatureResolutionError:
         feature = Feature("no_compute_framework_test_feature")
 
         accessible_plugins: FeatureGroupEnvironmentMapping = {
-            NoComputeFrameworkFeatureGroup: {MockComputeFramework},
+            NoComputeFrameworkFeatureGroup: set(),
         }
 
-        def mock_filter_loop(
-            self: IdentifyFeatureGroupClass, *args: object, **kwargs: object
-        ) -> FeatureGroupEnvironmentMapping:
-            return {NoComputeFrameworkFeatureGroup: set()}
+        with pytest.raises(FeatureResolutionError) as exc_info:
+            IdentifyFeatureGroupClass(
+                feature=feature,
+                accessible_plugins=accessible_plugins,
+                links=None,
+                data_access_collection=None,
+            )
+        return exc_info.value
 
-        with patch.object(IdentifyFeatureGroupClass, "_filter_loop", mock_filter_loop):
-            with pytest.raises(ValueError) as exc_info:
-                IdentifyFeatureGroupClass(
-                    feature=feature,
-                    accessible_plugins=accessible_plugins,
-                    links=None,
-                    data_access_collection=None,
-                )
+    def test_empty_framework_set_raises_no_match_error(self) -> None:
+        """An empty framework set surfaces through the regular no-match error."""
+        error = self._raise_for_empty_framework_set()
 
-        error_message = str(exc_info.value)
+        assert "No feature groups found" in str(error)
 
-        assert "no compute framework" in error_message.lower(), (
-            f"Error should be about 'no compute framework', but got: {error_message}"
+    def test_empty_framework_set_is_structured_rejection(self) -> None:
+        """The candidate stays visible as REJECTED with NO_ACCESSIBLE_FRAMEWORK."""
+        error = self._raise_for_empty_framework_set()
+
+        identity = PluginIdentity.from_class(NoComputeFrameworkFeatureGroup)
+        matches = [candidate for candidate in error.outcome.candidates if candidate.identity == identity]
+        assert len(matches) == 1
+        candidate = matches[0]
+        assert candidate.status is CandidateStatus.REJECTED
+        assert RejectionReason.NO_ACCESSIBLE_FRAMEWORK in {rejection.reason for rejection in candidate.rejections}
+
+    def test_empty_framework_set_candidate_identity_names_class_and_module(self) -> None:
+        """The structured record carries the class name and module path the old text carried."""
+        error = self._raise_for_empty_framework_set()
+
+        rendered = [candidate.identity.render() for candidate in error.outcome.candidates]
+        expected = (
+            "tests.test_core.test_prepare.test_identify_feature_group_error_message:NoComputeFrameworkFeatureGroup"
         )
-        assert "(tests.test_core.test_prepare.test_identify_feature_group_error_message)" in error_message, (
-            f"Error message should contain module path in parentheses, but got: {error_message}"
-        )
-
-    def test_no_compute_framework_error_contains_class_name(self) -> None:
-        """Test that the 'no compute framework' error includes the class name.
-
-        The error message should contain the class name.
-        """
-        from unittest.mock import patch
-
-        feature = Feature("no_compute_framework_test_feature")
-
-        accessible_plugins: FeatureGroupEnvironmentMapping = {
-            NoComputeFrameworkFeatureGroup: {MockComputeFramework},
-        }
-
-        def mock_filter_loop(
-            self: IdentifyFeatureGroupClass, *args: object, **kwargs: object
-        ) -> FeatureGroupEnvironmentMapping:
-            return {NoComputeFrameworkFeatureGroup: set()}
-
-        with patch.object(IdentifyFeatureGroupClass, "_filter_loop", mock_filter_loop):
-            with pytest.raises(ValueError) as exc_info:
-                IdentifyFeatureGroupClass(
-                    feature=feature,
-                    accessible_plugins=accessible_plugins,
-                    links=None,
-                    data_access_collection=None,
-                )
-
-        error_message = str(exc_info.value)
-
-        assert "no compute framework" in error_message.lower(), (
-            f"Error should be about 'no compute framework', but got: {error_message}"
-        )
-        assert "NoComputeFrameworkFeatureGroup" in error_message, (
-            f"Error message should contain class name 'NoComputeFrameworkFeatureGroup', but got: {error_message}"
-        )
-
-    def test_no_compute_framework_error_uses_formatted_pattern(self) -> None:
-        """Test that the error uses the 'ClassName (module.path)' format.
-
-        The error should use format_feature_group_class() which returns:
-          ClassName (module.path)
-        """
-        from unittest.mock import patch
-
-        feature = Feature("no_compute_framework_test_feature")
-
-        accessible_plugins: FeatureGroupEnvironmentMapping = {
-            NoComputeFrameworkFeatureGroup: {MockComputeFramework},
-        }
-
-        def mock_filter_loop(
-            self: IdentifyFeatureGroupClass, *args: object, **kwargs: object
-        ) -> FeatureGroupEnvironmentMapping:
-            return {NoComputeFrameworkFeatureGroup: set()}
-
-        with patch.object(IdentifyFeatureGroupClass, "_filter_loop", mock_filter_loop):
-            with pytest.raises(ValueError) as exc_info:
-                IdentifyFeatureGroupClass(
-                    feature=feature,
-                    accessible_plugins=accessible_plugins,
-                    links=None,
-                    data_access_collection=None,
-                )
-
-        error_message = str(exc_info.value)
-
-        assert "no compute framework" in error_message.lower(), (
-            f"Error should be about 'no compute framework', but got: {error_message}"
-        )
-
-        expected_pattern = (
-            "NoComputeFrameworkFeatureGroup (tests.test_core.test_prepare.test_identify_feature_group_error_message)"
-        )
-        assert expected_pattern in error_message, (
-            f"Error message should contain formatted class '{expected_pattern}', but got: {error_message}"
-        )
+        assert expected in rendered
 
 
 class KnowledgeGraphLikeFeatureGroup(FeatureGroup):

@@ -1,17 +1,16 @@
-"""Failing test pinning resolve_feature's never-raises contract against a broken
-compute_framework_definition (sbdg defect 1).
+"""Target-contract tests for resolve_feature against a broken compute_framework_rule
+(issue #722 Stage 3b).
 
-The capability split in mloda/core/api/plugin_docs.py (around lines 411-425) is
-safe_field-guarded, but the open-degrade fallback then calls
-candidate.compute_framework_definition() UNGUARDED. A FeatureGroup whose
-compute_framework_rule() raises therefore fails the split (degrading it to None),
-and the fallback re-raises the very exception the guard just swallowed.
-
-Expected failure today: resolve_feature propagates RuntimeError("sbdg rule exploded")
-instead of returning a ResolvedFeature.
+The rewired resolve_feature shares the engine's standalone environment build
+(build_resolution_environment). A FeatureGroup whose compute_framework_rule() raises
+fails that build with an invalid-declaration error, exactly like the same declaration
+kills every engine run today. resolve_feature stays never-raising: the environment
+error is returned as ResolvedFeature.error with feature_group=None instead of the old
+open-degraded resolution that named the broken class as the winner.
 
 The broken class is scoped per test (del + gc.collect(), same pattern as
-test_plugin_docs.py) so it does not leak into the session-wide subclass registry.
+test_plugin_docs.py) so it does not leak into the session-wide subclass registry and
+poison other standalone environment builds.
 """
 
 import gc
@@ -56,7 +55,7 @@ def _make_broken_rule_fg() -> type[FeatureGroup]:
 
 
 class TestSbdgResolveFeatureBrokenRule:
-    """resolve_feature never raises, even when the open-degrade fallback path is hit."""
+    """resolve_feature never raises; a broken declaration fails the environment build instead."""
 
     def test_resolve_feature_does_not_propagate_the_rule_exception(self) -> None:
         broken_fg = _make_broken_rule_fg()
@@ -68,14 +67,18 @@ class TestSbdgResolveFeatureBrokenRule:
             del broken_fg
             gc.collect()
 
-    def test_degenerate_resolution_still_names_the_matching_group(self) -> None:
+    def test_broken_rule_fails_the_environment_build_with_an_error(self) -> None:
         broken_fg = _make_broken_rule_fg()
         try:
             result = resolve_feature(SBDG_BROKEN_RULE_FEATURE)
             assert result.feature_name == SBDG_BROKEN_RULE_FEATURE
-            assert broken_fg in result.candidates
-            # Degenerate path: capability info may be empty, but the resolution itself survives.
-            assert result.feature_group is broken_fg
+            # TARGET CONTRACT: the invalid declaration fails the standalone environment build,
+            # so there is no winner and no fabricated candidate list; the error carries the
+            # original declaration failure message.
+            assert result.feature_group is None
+            assert result.error is not None
+            assert "sbdg rule exploded" in result.error
+            assert result.candidates == []
             del result
         finally:
             del broken_fg

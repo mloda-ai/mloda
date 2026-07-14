@@ -4,17 +4,44 @@ from typing import Iterable, Optional
 
 from mloda.core.prepare.accessible_plugins import FeatureGroupEnvironmentMapping
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
-from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser import PropertyValueRejection
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.components.options import NON_FORWARDED_KEYS, Options
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
-from mloda.core.abstract_plugins.feature_group import FeatureGroup, format_feature_group_class
+from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.link import Link
+from mloda.core.resolve.outcome import (
+    CandidateStatus,
+    FeatureResolutionError,
+    RejectionReason,
+    ResolutionOutcome,
+    ResolutionStatus,
+)
+from mloda.core.resolve.request import ResolutionRequestSnapshot
+from mloda.core.resolve.resolver import FeatureGroupResolver, matches_feature_group_scope, snapshot_from_mapping
 
 import logging
 
 logger = logging.getLogger(__name__)
+
+
+__all__ = [
+    "IdentifyFeatureGroupClass",
+    "matches_feature_group_scope",
+    "scope_callout",
+    "split_frameworks_by_capability",
+]
+
+
+# Rejections a candidate can only collect after passing scope, domain, criteria, and abstract.
+_FRAMEWORK_STAGE_REASONS = frozenset(
+    {
+        RejectionReason.NO_ACCESSIBLE_FRAMEWORK,
+        RejectionReason.FRAMEWORK_PIN,
+        RejectionReason.LINK_INDEX,
+        RejectionReason.CAPABILITY,
+    }
+)
 
 
 def split_frameworks_by_capability(
@@ -42,24 +69,6 @@ def split_frameworks_by_capability(
     return supported, rejected
 
 
-def matches_feature_group_scope(feature_group: type[FeatureGroup], scope: str | type[FeatureGroup]) -> bool:
-    """Is the candidate inside the requested scope, for both the class-object and the string form.
-
-    The string form matches the named class and its subclasses by walking the candidate's ancestry
-    (MRO), so a config that can only carry a name keeps the same subclass-preferring semantics. The
-    root FeatureGroup base is excluded from that walk because every candidate carries it, which would
-    make it a wildcard.
-    """
-    if isinstance(scope, type):
-        return issubclass(feature_group, scope)
-    # Name first: get_class_name() is @final and just returns __name__, while issubclass() on an ABCMeta
-    # class is the expensive check, so the name gate keeps it off nearly every MRO entry.
-    return any(
-        ancestor.__name__ == scope and ancestor is not FeatureGroup and issubclass(ancestor, FeatureGroup)
-        for ancestor in feature_group.__mro__
-    )
-
-
 def scope_callout(scope: str | type[FeatureGroup] | None) -> str | None:
     """Render the shared scope callout, or None when the scope is unset."""
     if scope is None:
@@ -69,100 +78,85 @@ def scope_callout(scope: str | type[FeatureGroup] | None) -> str | None:
 
 
 class IdentifyFeatureGroupClass:
+    """Engine adapter over the authoritative FeatureGroupResolver.
+
+    Resolution decisions live in the resolver; this class projects the structured
+    outcome into the engine's mapping shape and the established error message texts.
+    """
+
     def __init__(
         self,
         feature: Feature,
         accessible_plugins: FeatureGroupEnvironmentMapping,
         links: Optional[set[Link]],
         data_access_collection: Optional[DataAccessCollection] = None,
+        dependency_path: tuple[str, ...] = (),
     ):
-        self._criteria_matched_feature_groups: set[type[FeatureGroup]] = set()
-        self._abstract_matched_feature_groups: set[type[FeatureGroup]] = set()
-
-        feature_group = self._filter_loop(feature, accessible_plugins, links, data_access_collection)
-
+        request = ResolutionRequestSnapshot.from_feature(
+            feature,
+            links=links,
+            data_access_collection=data_access_collection,
+            dependency_path=dependency_path,
+        )
+        self.outcome: ResolutionOutcome = FeatureGroupResolver().resolve(
+            request, snapshot_from_mapping(accessible_plugins)
+        )
         self._data_access_collection = data_access_collection
-        self.validate(feature_group, feature, accessible_plugins)
-        self.feature_group_compute_framework_mapping = feature_group
 
-    def _filter_loop(
-        self,
-        feature: Feature,
-        accessible_plugins: FeatureGroupEnvironmentMapping,
-        links: Optional[set[Link]],
-        data_access_collection: Optional[DataAccessCollection] = None,
-    ) -> FeatureGroupEnvironmentMapping:
-        _identified_feature_groups: FeatureGroupEnvironmentMapping = {}
+        self._criteria_matched_feature_groups: set[type[FeatureGroup]] = {
+            candidate.feature_group
+            for candidate in self.outcome.candidates
+            if candidate.status is CandidateStatus.REJECTED
+            and {rejection.reason for rejection in candidate.rejections} <= _FRAMEWORK_STAGE_REASONS
+        }
+        self._abstract_matched_feature_groups: set[type[FeatureGroup]] = {
+            candidate.feature_group
+            for candidate in self.outcome.candidates
+            if any(rejection.reason is RejectionReason.ABSTRACT for rejection in candidate.rejections)
+        }
 
-        for feature_group, compute_frameworks in accessible_plugins.items():
-            if not self._filter_feature_group_by_criteria(feature_group, feature, data_access_collection):
-                continue
-
-            if not self._filter_feature_group_by_domain(feature_group, feature):
-                continue
-
-            if not self._filter_feature_group_by_scope(feature_group, feature):
-                continue
-
-            # Abstract bases can match name+domain+scope but cannot be instantiated; never let one win.
-            if inspect.isabstract(feature_group):
-                self._abstract_matched_feature_groups.add(feature_group)
-                continue
-
-            self._criteria_matched_feature_groups.add(feature_group)
-
-            supported_frameworks = {
-                cfw
-                for cfw in compute_frameworks
-                if feature_group.supports_compute_framework(feature.name, feature.options, cfw)
+        winner = self.outcome.winner
+        if winner is not None:
+            self.feature_group_compute_framework_mapping: FeatureGroupEnvironmentMapping = {
+                winner.feature_group: set(winner.compute_frameworks)
             }
+            return
 
-            if not self._filter_feature_group_by_framework(supported_frameworks, feature):
-                continue
+        if self.outcome.status is ResolutionStatus.FAILED:
+            raise FeatureResolutionError(self._build_failed_error(feature), self.outcome)
 
-            if not self._filter_feature_group_by_links(feature_group, links):
-                continue
+        if self.outcome.status is ResolutionStatus.AMBIGUOUS:
+            raise FeatureResolutionError(self._build_multiple_error(feature), self.outcome)
 
-            if supported_frameworks:
-                _identified_feature_groups[feature_group] = supported_frameworks
+        raise FeatureResolutionError(self._build_no_feature_group_error(feature, accessible_plugins), self.outcome)
 
-        _identified_feature_groups = self.filter_subclasses(_identified_feature_groups)
-        return _identified_feature_groups
+    def get(self) -> tuple[type[FeatureGroup], set[type[ComputeFramework]]]:
+        return next(iter(self.feature_group_compute_framework_mapping.items()))
 
-    def _filter_feature_group_by_links(self, feature_group: type[FeatureGroup], links: Optional[set[Link]]) -> bool:
-        # Case index columns not given, so no validation possible
-        if feature_group.index_columns() is None:
-            return True
+    def _build_failed_error(self, feature: Feature) -> str:
+        details = "\n".join(
+            f"  - {failure.plugin.render()} [{failure.stage}] {failure.category}: {failure.message}"
+            for failure in self.outcome.failures
+        )
+        return f"Feature group resolution failed for feature '{feature.name}':\n{details}"
 
-        # Case no links given, so no validation possible
-        if links is None:
-            return True
+    def _build_multiple_error(self, feature: Feature) -> str:
+        from mloda.core.abstract_plugins.feature_group import format_feature_group_classes
 
-        # Validate that at least one index is supported by the feature group
-        for link in links:
-            if feature_group.supports_index(link.left_index):
-                return True
+        ambiguous = [
+            candidate.feature_group
+            for candidate in self.outcome.candidates
+            if candidate.status is CandidateStatus.SURVIVOR
+        ]
+        callout = scope_callout(feature.feature_group_scope)
+        scope_line = f"{callout}\n" if callout else ""
 
-            if feature_group.supports_index(link.right_index):
-                return True
-
-        return False
-
-    def _filter_feature_group_by_criteria(
-        self,
-        feature_group: type[FeatureGroup],
-        feature: Feature,
-        data_access_collection: Optional[DataAccessCollection],
-    ) -> bool:
-        """A rejected option value is a non-match, whoever calls the parser: a candidate that overrides the match
-        hook and calls FeatureChainParser directly must not take the whole filter loop down. Only the rejection is
-        caught, so a plain ValueError (the forwarded-name-mismatch guidance) still reaches the user.
-        """
-        try:
-            return feature_group.match_feature_group_criteria(feature.name, feature.options, data_access_collection)
-        except PropertyValueRejection as exc:
-            logger.debug("%s rejected an option value while matching '%s': %s", feature_group, feature.name, exc)
-            return False
+        return (
+            f"Multiple feature groups found for feature '{feature.name}':\n"
+            f"{format_feature_group_classes(ambiguous, include_domain=True)}\n"
+            f"{scope_line}"
+            "For troubleshooting guide, see: https://mloda-ai.github.io/mloda/in_depth/troubleshooting/feature-group-resolution-errors/"
+        )
 
     def _filter_feature_group_by_domain(self, feature_group: type[FeatureGroup], feature: Feature) -> bool:
         return not feature.domain or feature_group.get_domain() == feature.domain
@@ -171,46 +165,8 @@ class IdentifyFeatureGroupClass:
         scope = feature.feature_group_scope
         return scope is None or matches_feature_group_scope(feature_group, scope)
 
-    def _filter_feature_group_by_framework(
-        self,
-        compute_frameworks: set[type[ComputeFramework]],
-        feature: Feature,
-    ) -> bool:
-        if feature.compute_frameworks is None:
-            return True
-
-        if len(feature.compute_frameworks) > 1:
-            raise ValueError(f"Feature should only have one compute framework when set by user {feature.name}.")
-
-        return feature.get_compute_framework() in compute_frameworks
-
-    def validate(
-        self,
-        feature_group: FeatureGroupEnvironmentMapping,
-        feature: Feature,
-        accessible_plugins: FeatureGroupEnvironmentMapping,
-    ) -> None:
-        if not feature_group or len(feature_group) == 0:
-            raise ValueError(self._build_no_feature_group_error(feature, accessible_plugins))
-        if len(feature_group) > 1:
-            from mloda.core.abstract_plugins.feature_group import format_feature_group_classes
-
-            callout = scope_callout(feature.feature_group_scope)
-            scope_line = f"{callout}\n" if callout else ""
-
-            raise ValueError(
-                f"Multiple feature groups found for feature '{feature.name}':\n"
-                f"{format_feature_group_classes(feature_group.keys(), include_domain=True)}\n"
-                f"{scope_line}"
-                "For troubleshooting guide, see: https://mloda-ai.github.io/mloda/in_depth/troubleshooting/feature-group-resolution-errors/"
-            )
-
-        feature_group_class, compute_frameworks = next(iter(feature_group.items()))
-        if not compute_frameworks:
-            raise ValueError(
-                f"Feature {feature.name} {format_feature_group_class(feature_group_class)} has no compute framework."
-            )
-
+    # The hint helpers below re-invoke provider hooks on the failure path only, as
+    # post-decision enrichment; Stage 4 replaces them with structured rendering.
     def _capability_rejection_message(self, feature: Feature) -> Optional[str]:
         supported, rejected = split_frameworks_by_capability(
             self._criteria_matched_feature_groups, feature.name, feature.options
@@ -393,30 +349,3 @@ class IdentifyFeatureGroupClass:
             "https://mloda-ai.github.io/mloda/in_depth/troubleshooting/feature-group-resolution-errors/"
         )
         return msg
-
-    def get(self) -> tuple[type[FeatureGroup], set[type[ComputeFramework]]]:
-        return next(iter(self.feature_group_compute_framework_mapping.items()))
-
-    def filter_subclasses(
-        self, _identified_feature_groups: FeatureGroupEnvironmentMapping
-    ) -> FeatureGroupEnvironmentMapping:
-        """
-        This functionality ensures that only subclass feature groups are kept.
-        """
-        fgs_to_pop: set[type[FeatureGroup]] = set()
-
-        for i_feature_group, i_compute_frameworks in _identified_feature_groups.items():
-            for o_feature_group, o_compute_frameworks in _identified_feature_groups.items():
-                if i_compute_frameworks != o_compute_frameworks:
-                    continue
-
-                if i_feature_group == o_feature_group:
-                    continue
-
-                if issubclass(i_feature_group, o_feature_group):
-                    fgs_to_pop.add(o_feature_group)
-
-        for fg in fgs_to_pop:
-            _identified_feature_groups.pop(fg)
-
-        return _identified_feature_groups

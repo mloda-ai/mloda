@@ -1,23 +1,24 @@
-"""Paired engine/diagnostic characterization tests for issue #722 Stage 1 (environment-level divergences).
+"""Paired engine/diagnostic tests for issue #722 (environment-level), flipped to the Stage 3b target.
 
-Every test PASSES against current code, pinning today's behavior. Assertions marked
-"PINS CURRENT DIVERGENCE (#N)" pin behavior that later stages of #722 will change.
-Assertions marked "TARGET CONTRACT" pin engine behavior that stays authoritative.
+Stage 3b rewires resolve_feature onto a standalone environment built by
+build_resolution_environment with all available compute frameworks, so the debug-side
+tests below assert the TARGET CONTRACT and FAIL until that rewire lands. Where a
+difference legitimately remains it is marked as a standalone request difference (Stage 4).
 
 Index (divergence number in issue #722 -> test names):
-- #2 (unavailable-framework false positive):
+- #2 (unavailable-framework honesty):
     test_engine_unavailable_only_framework_raises_no_feature_groups (TARGET CONTRACT)
-    test_resolve_feature_unavailable_only_framework_reads_as_runnable (PINS #2)
-- #8 (run framework set ignored by debug):
+    test_resolve_feature_unavailable_only_framework_reports_not_runnable (TARGET CONTRACT)
+- #8 (run framework set, standalone request difference until Stage 4):
     test_engine_resolution_limited_to_run_framework_set (TARGET CONTRACT)
-    test_resolve_feature_reports_frameworks_outside_run_set (PINS #8)
-- #9 (registry strict mode ignored by debug):
+    test_resolve_feature_reports_frameworks_outside_run_set (standalone difference, Stage 4)
+- #9 (registry strict mode now shared):
     test_engine_strict_mode_with_empty_registry_raises (TARGET CONTRACT)
-    test_resolve_feature_never_applies_strict_mode (PINS #9)
-- #13 (redefinition conflict, three semantics):
-    test_engine_redefinition_conflict_raises (PINS #13)
-    test_resolve_feature_redefinition_conflict_reports_error_with_candidates (PINS #13)
-    test_get_feature_group_docs_redefinition_conflict_degrades_silently (PINS #13)
+    test_resolve_feature_applies_collector_strict_mode (TARGET CONTRACT)
+- #13 (redefinition conflict, shared environment outcome):
+    test_engine_redefinition_conflict_raises (TARGET CONTRACT)
+    test_resolve_feature_redefinition_conflict_reports_error_with_candidates (TARGET CONTRACT)
+    test_get_feature_group_docs_redefinition_conflict_degrades_silently (docs surface, unchanged)
 """
 
 from __future__ import annotations
@@ -206,20 +207,19 @@ def test_engine_unavailable_only_framework_raises_no_feature_groups() -> None:
         )
 
 
-def test_resolve_feature_unavailable_only_framework_reads_as_runnable() -> None:
-    """resolve_feature reports success for a feature the engine can never run."""
+def test_resolve_feature_unavailable_only_framework_reports_not_runnable() -> None:
+    """resolve_feature is honest about a feature the engine can never run."""
     assert CfwUnavailable722C.is_available() is False  # premise guard
 
     collector = PluginCollector.enabled_feature_groups({ProbeUnavailable722C})
     result = resolve_feature("probe722c_unavailable", plugin_collector=collector)
 
-    # PINS CURRENT DIVERGENCE (#2): a feature whose only framework is not installed reads as runnable.
-    assert result.feature_group is ProbeUnavailable722C
-    assert result.error is None
-    # PINS CURRENT DIVERGENCE (#2): the capability split skips unavailable frameworks entirely, so both
-    # sides are empty and the all-rejected guard never fires.
+    # TARGET CONTRACT (#2): the standalone environment drops unavailable frameworks exactly like
+    # the engine's, so the probe has no accessible framework and the feature is reported as not
+    # runnable on any available framework instead of silently runnable.
+    assert result.feature_group is None
+    assert result.error is not None
     assert result.supported_compute_frameworks == []
-    assert result.unsupported_compute_frameworks == []
 
 
 # ---------------------------------------------------------------------------
@@ -258,8 +258,9 @@ def test_resolve_feature_reports_frameworks_outside_run_set() -> None:
 
     assert result.feature_group is ProbeTwoFw722C
     assert result.error is None
-    # PINS CURRENT DIVERGENCE (#8): debug resolves against every installed framework, not the run's set;
-    # CfwOther722C shows up although no run enabled it.
+    # STANDALONE REQUEST DIFFERENCE (#8, Stage 4): the standalone environment legitimately enables
+    # every available framework; a run's exact framework set stays unexpressible here until the
+    # Stage 4 exact-run mode, so CfwOther722C is honestly reported alongside CfwEnabled722C.
     assert result.supported_compute_frameworks == ["CfwEnabled722C", "CfwOther722C"]
     assert result.unsupported_compute_frameworks == []
 
@@ -283,15 +284,16 @@ def test_engine_strict_mode_with_empty_registry_raises() -> None:
         PreFilterPlugins(compute_frameworks={CfwStrictRun722C}, plugin_collector=collector)
 
 
-def test_resolve_feature_never_applies_strict_mode() -> None:
-    """resolve_feature honors only the collector's enable set and allow_redefinition, never strict mode."""
+def test_resolve_feature_applies_collector_strict_mode() -> None:
+    """resolve_feature honors the collector's strict mode through the shared environment build."""
     collector = _strict_collector_with_empty_registry()
     result = resolve_feature("probe722c_strict", plugin_collector=collector)
 
-    # PINS CURRENT DIVERGENCE (#9): debug cannot reproduce strict-mode reality even with the same collector.
-    assert result.feature_group is ProbeStrict722C
-    assert result.error is None
-    assert result.supported_compute_frameworks == ["CfwStrictRun722C"]
+    # TARGET CONTRACT (#9): the standalone environment applies strict mode exactly like the
+    # engine's; with an empty registry the build fails and the environment error is returned.
+    assert result.feature_group is None
+    assert result.error is not None
+    assert "Strict mode filtered out all FeatureGroups" in result.error
 
 
 # ---------------------------------------------------------------------------
@@ -303,7 +305,8 @@ def test_engine_redefinition_conflict_raises() -> None:
     """Engine semantic: dedup raises RedefinitionConflictError (a ValueError) and construction dies."""
     v1, v2 = _make_conflicting_pair("ProbeRedefDedup722C", "probe722c_redef")
 
-    # PINS CURRENT DIVERGENCE (#13): one conflict, three different semantics; the engine RAISES.
+    # TARGET CONTRACT (#13): the engine environment build keeps raising on a genuine conflict;
+    # both paths project the same environment build outcome, the engine as a raise.
     with pytest.raises(RedefinitionConflictError) as exc_info:
         dedup_feature_group_subclasses({v1, v2}, allow_redefinition=False)
     assert "redefined with different source code" in str(exc_info.value)
@@ -322,7 +325,8 @@ def test_resolve_feature_redefinition_conflict_reports_error_with_candidates() -
 
     result = resolve_feature("probe722c_redef", plugin_collector=collector)
 
-    # PINS CURRENT DIVERGENCE (#13): one conflict, three different semantics; debug returns an error field.
+    # TARGET CONTRACT (#13): both paths project the same environment build outcome; the debug
+    # path returns it as an error field with the scope- and name-matching conflicting candidates.
     assert result.feature_group is None
     assert result.error is not None
     assert "redefined with different source code" in result.error
@@ -338,6 +342,7 @@ def test_get_feature_group_docs_redefinition_conflict_degrades_silently() -> Non
     with pytest.raises(RedefinitionConflictError):
         dedup_feature_group_subclasses({v1, v2}, allow_redefinition=False)
 
-    # PINS CURRENT DIVERGENCE (#13): one conflict, three different semantics; docs degrade, NO raise.
+    # DOCS SURFACE (#13, unchanged by Stage 3b): get_feature_group_docs deliberately degrades a
+    # conflict to the live class; only the engine and resolve_feature share the environment outcome.
     result = get_feature_group_docs(plugin_collector=collector)
     assert isinstance(result, list)

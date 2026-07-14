@@ -22,6 +22,7 @@ from mloda.core.prepare.graph.build_graph import BuildGraph
 from mloda.core.prepare.resolve_graph import ResolveGraph
 from mloda.core.runtime.run import ExecutionOrchestrator
 from mloda.core.prepare.identify_feature_group import IdentifyFeatureGroupClass
+from mloda.core.resolve.outcome import ResolutionOutcome
 from mloda.core.runtime.flight.runner_flight_server import ParallelRunnerFlightServer
 from mloda.core.abstract_plugins.feature_group import FeatureGroup, format_feature_group_class
 from mloda.core.abstract_plugins.components.feature import Feature
@@ -73,6 +74,8 @@ class Engine:
         self.request_feature_order: list[str] = [str(f.name) for f in features]
         self._dual_consumption_warned: set[tuple[str, str, frozenset[str]]] = set()
         self._property_mapping_keys_cache: dict[type[FeatureGroup], frozenset[str]] = {}
+        # One (dependency_path, outcome) entry per successful feature identification, in planning order.
+        self.resolution_outcomes: list[tuple[tuple[str, ...], ResolutionOutcome]] = []
         self.execution_planner = self.create_setup_execution_plan(features)
         self.tfs_connection_map = self._resolve_tfs_connection_map()
 
@@ -131,14 +134,15 @@ class Engine:
         execution_planner.create_execution_plan(planned_queue, graph, resolver.resolver_links.get_link_trekker())
         return execution_planner
 
-    def setup_features_recursion(self, features: Features) -> None:
+    def setup_features_recursion(self, features: Features, dependency_path: tuple[str, ...] = ()) -> None:
         for feature in features:
-            self._process_feature(feature, features)
+            self._process_feature(feature, features, dependency_path)
 
-    def _process_feature(self, feature: Feature, features: Features) -> None:
+    def _process_feature(self, feature: Feature, features: Features, dependency_path: tuple[str, ...] = ()) -> None:
         """Processes a single feature by delegating tasks to helper methods."""
 
-        feature_group_class, compute_frameworks = self._identify_feature_group_and_frameworks(feature)
+        feature_path = dependency_path + (str(feature.name),)
+        feature_group_class, compute_frameworks = self._identify_feature_group_and_frameworks(feature, feature_path)
         self._warn_on_dual_option_consumption(feature, feature_group_class)
         feature_group = feature_group_class()
 
@@ -150,7 +154,12 @@ class Engine:
         if added:
             parent_domain = feature.domain.name if feature.domain else None
             self._handle_input_features_recursion(
-                feature_group_class, feature.uuid, feature.options, feature.name, parent_domain=parent_domain
+                feature_group_class,
+                feature.uuid,
+                feature.options,
+                feature.name,
+                parent_domain=parent_domain,
+                dependency_path=feature_path,
             )
 
         if self.global_filter:
@@ -208,12 +217,13 @@ class Engine:
             )
 
     def _identify_feature_group_and_frameworks(
-        self, feature: Feature
+        self, feature: Feature, dependency_path: tuple[str, ...] = ()
     ) -> tuple[type[FeatureGroup], set[type[ComputeFramework]]]:
         """Identifies the feature group class and compute frameworks for a given feature."""
         identifier = IdentifyFeatureGroupClass(
-            feature, self.accessible_plugins, self.links, self.data_access_collection
+            feature, self.accessible_plugins, self.links, self.data_access_collection, dependency_path=dependency_path
         )
+        self.resolution_outcomes.append((dependency_path, identifier.outcome))
         return identifier.get()
 
     def _add_index_feature(
@@ -376,6 +386,7 @@ class Engine:
         options: Options,
         feature_name: FeatureName,
         parent_domain: Optional[str] = None,
+        dependency_path: tuple[str, ...] = (),
     ) -> None:
         """Handles recursion for input features of a feature group."""
         feature_group = feature_group_class()
@@ -399,7 +410,7 @@ class Engine:
             if features.child_uuid is None:
                 raise ValueError(f"Features {features} has no parent uuid although it should have one.")
             self.feature_link_parents[features.child_uuid] = features.parent_uuids
-            self.setup_features_recursion(features)
+            self.setup_features_recursion(features, dependency_path)
 
     def set_compute_framework(self, feature: Feature, compute_frameworks: set[type[ComputeFramework]]) -> Feature:
         """

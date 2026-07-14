@@ -1,25 +1,26 @@
-"""Paired engine/diagnostic characterization tests for issue #722 Stage 1.
+"""Paired engine/diagnostic tests for issue #722, flipped to the Stage 3b target contract.
 
 Each covered divergence between the engine path (IdentifyFeatureGroupClass) and the
-diagnostic path (resolve_feature) is pinned by a pair of tests sharing one probe family.
-Assertions marked "PINS CURRENT DIVERGENCE" pin behavior that Stage 3 will change;
-assertions marked "TARGET CONTRACT" already express the final contract.
+diagnostic path (resolve_feature) is covered by a pair of tests sharing one probe family.
+Stage 3b rewires resolve_feature onto the same FeatureGroupResolver as the engine, so the
+debug-side tests below now assert the TARGET CONTRACT and FAIL until that rewire lands.
+Where a difference legitimately remains it is marked as presentation-only or Stage 4.
 
 Index (divergence -> tests):
 - #1  lone abstract match:
-      test_engine_rejects_lone_abstract_match / test_resolve_feature_returns_lone_abstract_match
+      test_engine_rejects_lone_abstract_match / test_resolve_feature_rejects_lone_abstract_match
 - #3  framework attribution:
       test_engine_parent_child_differing_framework_sets_stays_ambiguous /
-      test_resolve_feature_parent_child_unions_framework_attribution
+      test_resolve_feature_parent_child_attributes_no_union_framework_set
 - #4  subclass collapse:
       test_engine_parent_child_differing_framework_sets_stays_ambiguous /
-      test_resolve_feature_parent_child_collapses_by_subclass; parity case:
+      test_resolve_feature_parent_child_differing_framework_sets_is_ambiguous; parity case:
       test_engine_prefers_child_when_framework_sets_are_identical /
       test_resolve_feature_prefers_child_when_framework_sets_are_identical
 - #16 raising capability hook:
       test_engine_propagates_capability_hook_runtime_error /
-      test_resolve_feature_degrades_capability_hook_error_open
-- #17 PropertyValueRejection visibility:
+      test_resolve_feature_fails_closed_on_capability_hook_error
+- #17 PropertyValueRejection visibility (presentation-only difference):
       test_property_value_rejection_is_a_value_error (premise),
       test_engine_swallows_property_value_rejection_silently /
       test_resolve_feature_surfaces_property_value_rejection
@@ -237,16 +238,18 @@ def test_engine_rejects_lone_abstract_match() -> None:
     assert "Only abstract feature group base(s) matched" in str(exc_info.value)
 
 
-def test_resolve_feature_returns_lone_abstract_match() -> None:
-    """resolve_feature resolves the same lone abstract base cleanly."""
+def test_resolve_feature_rejects_lone_abstract_match() -> None:
+    """resolve_feature refuses the same lone abstract base and says why."""
     assert inspect.isabstract(AbstractOnlyProbe722A), "fixture must be abstract"
 
     collector = PluginCollector.enabled_feature_groups({AbstractOnlyProbe722A})
     result = resolve_feature(ABSTRACT_ONLY_FEATURE, plugin_collector=collector)
 
-    # PINS CURRENT DIVERGENCE (#1): the uninstantiable abstract base wins; target is no abstract winner.
-    assert result.feature_group is AbstractOnlyProbe722A
-    assert result.error is None
+    # TARGET CONTRACT (#1): an abstract base never wins on either path; the error mentions that
+    # only abstract base(s) matched while the rejected candidate stays visible in candidates.
+    assert result.feature_group is None
+    assert result.error is not None
+    assert "abstract" in result.error.lower()
     assert result.candidates == [AbstractOnlyProbe722A]
 
 
@@ -275,28 +278,32 @@ def test_engine_parent_child_differing_framework_sets_stays_ambiguous() -> None:
     assert "ChildProbe722A" in message
 
 
-def test_resolve_feature_parent_child_collapses_by_subclass() -> None:
-    """resolve_feature collapses the same parent/child pair the engine calls ambiguous."""
+def test_resolve_feature_parent_child_differing_framework_sets_is_ambiguous() -> None:
+    """resolve_feature reports the same parent/child pair ambiguous, exactly like the engine."""
     collector = PluginCollector.enabled_feature_groups({ParentProbe722A, ChildProbe722A})
     result = resolve_feature(PARENT_CHILD_FEATURE, plugin_collector=collector)
 
-    # PINS CURRENT DIVERGENCE (#4): _filter_subclasses collapses purely by issubclass; the engine stays ambiguous.
-    assert result.feature_group is ChildProbe722A
-    assert result.error is None
+    # TARGET CONTRACT (#4): framework-aware shadowing only collapses equal supported sets, so
+    # the differing-set pair stays ambiguous on both paths; no pure-issubclass collapse.
+    assert result.feature_group is None
+    assert result.error is not None
+    assert "Multiple FeatureGroups match" in result.error
+    assert "ParentProbe722A" in result.error
+    assert "ChildProbe722A" in result.error
     assert set(result.candidates) == {ParentProbe722A, ChildProbe722A}
 
 
-def test_resolve_feature_parent_child_unions_framework_attribution() -> None:
-    """resolve_feature attributes the parent-only framework to the child winner."""
+def test_resolve_feature_parent_child_attributes_no_union_framework_set() -> None:
+    """resolve_feature no longer credits anyone with the union of all candidates' frameworks."""
     collector = PluginCollector.enabled_feature_groups({ParentProbe722A, ChildProbe722A})
     result = resolve_feature(PARENT_CHILD_FEATURE, plugin_collector=collector)
 
-    assert result.feature_group is ChildProbe722A
-    # PINS CURRENT DIVERGENCE (#3): the capability split is unioned across ALL candidates, so
-    # CfwQ722A is reported as supported although the winner ChildProbe722A never declares it.
-    assert CfwP722A.get_class_name() in result.supported_compute_frameworks
-    assert CfwQ722A.get_class_name() in result.supported_compute_frameworks
-    assert result.unsupported_compute_frameworks == []
+    # TARGET CONTRACT (#3): framework attribution is per-winner only. The differing-set pair has
+    # no winner (see divergence #4 above), so no candidate is credited with CfwQ722A here; the
+    # positive per-winner pin lives in tests/test_core/test_resolve/test_resolve_feature_rewire.py
+    # (probe722g_attribution).
+    assert result.feature_group is None
+    assert result.error is not None
 
 
 # ---------------------------------------------------------------------------
@@ -341,15 +348,15 @@ def test_resolve_feature_prefers_child_when_framework_sets_are_identical() -> No
 
 
 def test_engine_propagates_capability_hook_runtime_error() -> None:
-    """A raising capability hook aborts the engine with the raw provider error."""
+    """A raising capability hook fails the engine closed with a structured ValueError."""
     feature = Feature(CAPABILITY_RAISES_FEATURE)
     accessible_plugins: FeatureGroupEnvironmentMapping = {
         CapabilityRaisesProbe722A: {CfwCapOne722A, CfwCapTwo722A},
     }
 
-    # PINS CURRENT DIVERGENCE (#16): the raw RuntimeError propagates and aborts the run;
-    # target is a fail-closed structured provider failure.
-    with pytest.raises(RuntimeError, match=CAPABILITY_ERROR_TEXT):
+    # TARGET CONTRACT (#16 engine side): provider failure is fail-closed and structured,
+    # no longer a raw propagated RuntimeError; FeatureResolutionError is a ValueError.
+    with pytest.raises(ValueError, match=CAPABILITY_ERROR_TEXT):
         IdentifyFeatureGroupClass(
             feature=feature,
             accessible_plugins=accessible_plugins,
@@ -358,20 +365,20 @@ def test_engine_propagates_capability_hook_runtime_error() -> None:
         )
 
 
-def test_resolve_feature_degrades_capability_hook_error_open() -> None:
-    """resolve_feature degrades the same raising hook OPEN and reports a clean resolution."""
+def test_resolve_feature_fails_closed_on_capability_hook_error() -> None:
+    """resolve_feature fails the same raising hook closed with the provider's message."""
     collector = PluginCollector.enabled_feature_groups({CapabilityRaisesProbe722A})
     result = resolve_feature(CAPABILITY_RAISES_FEATURE, plugin_collector=collector)
 
-    # PINS CURRENT DIVERGENCE (#16): safe_field degrades the capability split open, so the broken
-    # declaration reads as runnable everywhere; target is a fail-closed structured provider failure.
-    assert result.feature_group is CapabilityRaisesProbe722A
-    assert result.error is None
-    assert set(result.supported_compute_frameworks) == {
-        CfwCapOne722A.get_class_name(),
-        CfwCapTwo722A.get_class_name(),
-    }
-    assert result.unsupported_compute_frameworks == []
+    # TARGET CONTRACT (#16): a raising capability hook is a fail-closed provider failure on both
+    # paths; no open-degrade, no fabricated runnable-everywhere claim. The error names the
+    # failing plugin and carries the original provider message.
+    assert result.feature_group is None
+    assert result.error is not None
+    assert CAPABILITY_ERROR_TEXT in result.error
+    assert "CapabilityRaisesProbe722A" in result.error
+    assert result.supported_compute_frameworks == []
+    assert CapabilityRaisesProbe722A in result.candidates
 
 
 # ---------------------------------------------------------------------------
@@ -397,7 +404,8 @@ def test_engine_swallows_property_value_rejection_silently() -> None:
             data_access_collection=None,
         )
     message = str(exc_info.value)
-    # PINS CURRENT DIVERGENCE (#17): the rejection reason is invisible on the engine path.
+    # PRESENTATION-ONLY DIFFERENCE (#17): both paths consume the same VALUE_REJECTION outcome;
+    # the engine's error renderer omits the rejection detail while the debug renderer surfaces it.
     assert PROPERTY_REJECTION_TEXT not in message
 
 
@@ -409,6 +417,7 @@ def test_resolve_feature_surfaces_property_value_rejection() -> None:
     assert result.feature_group is None
     assert result.candidates == []
     assert result.error is not None
-    # PINS CURRENT DIVERGENCE (#17): the same rejection is an error string on the diagnostic path.
+    # PRESENTATION-ONLY DIFFERENCE (#17): both paths consume the same VALUE_REJECTION outcome;
+    # the debug renderer keeps surfacing the rejection detail the engine renderer omits.
     assert PROPERTY_REJECTION_TEXT in result.error
     assert "Rejected during matching" in result.error

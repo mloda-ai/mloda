@@ -30,6 +30,7 @@ from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.api.plugin_info import ComputeFrameworkInfo, ExtenderInfo, FeatureGroupInfo, ResolvedFeature
 from mloda.core.prepare.accessible_plugins import (
+    PreFilterPlugins,
     RedefinitionConflictError,
     dedup_feature_group_subclasses,
     registry_for,
@@ -37,8 +38,22 @@ from mloda.core.prepare.accessible_plugins import (
 from mloda.core.prepare.identify_feature_group import (
     matches_feature_group_scope,
     scope_callout,
-    split_frameworks_by_capability,
 )
+from mloda.core.resolve.environment import (
+    EnvironmentBuildError,
+    EnvironmentProvenance,
+    build_resolution_environment,
+)
+from mloda.core.resolve.outcome import (
+    CandidateEvaluation,
+    CandidateStatus,
+    FrameworkStatus,
+    RejectionReason,
+    ResolutionOutcome,
+    ResolutionStatus,
+)
+from mloda.core.resolve.request import ResolutionRequestSnapshot
+from mloda.core.resolve.resolver import FeatureGroupResolver
 
 
 def list_registered(plugin_type: type[Any]) -> list[type[Any]]:
@@ -356,26 +371,19 @@ def resolve_feature(
     """
     Resolve a feature name to its matching FeatureGroup class.
 
-    This function searches all loaded FeatureGroups to find those that match
-    the given feature name. It applies subclass filtering to prefer more
-    specific (child) classes over parent classes.
-
     Never raises: matching errors are reported in the returned ResolvedFeature.error.
 
-    Design note: resolve_feature intentionally does NOT delegate to IdentifyFeatureGroupClass. It is a
-    never-raising debug API that reports candidates, capability splits, and subtype fields and degrades
-    per candidate, while IdentifyFeatureGroupClass needs an accessible-plugins environment mapping and
-    raises on failure. The scope predicate (matches_feature_group_scope) and callout renderer are shared
-    so scoped semantics cannot drift between the two paths. Beyond that the paths may still differ:
-    _filter_subclasses collapses parent/child purely by issubclass while the engine only collapses candidates
-    sharing the same supported-framework set, and the engine excludes abstract bases while resolve_feature
-    does not.
+    Design note: resolve_feature delegates to the shared FeatureGroupResolver against a standalone
+    default environment (collector applicability, strict mode, dedup, and framework availability applied
+    exactly like the engine). The remaining differences from the engine are request expressibility
+    (domain, links, framework pin, data access) until Stage 4.
 
     Args:
         feature_name: The name of the feature to resolve.
         options: Keyword-only. Options used for matching and capability checks. An empty or omitted Options is
             the documented default.
-        plugin_collector: Keyword-only. Its ``allow_redefinition`` flag is threaded into deduplication.
+        plugin_collector: Keyword-only. Threaded into the standalone environment build (applicability,
+            strict mode, ``allow_redefinition``).
         feature_group: Keyword-only. Scope resolution to a FeatureGroup subclass or a class-name string,
             same forms and semantics as ``Feature(..., feature_group=...)``: the string form matches the
             named class and its subclasses; None (or a whitespace-only string) means unscoped.
@@ -396,43 +404,174 @@ def resolve_feature(
     callout = scope_callout(scope)
     scope_suffix = f" {callout}" if callout else ""
     resolved_options = options if options is not None else Options()
-    is_default_options = not resolved_options.group and not resolved_options.context
-    options_caveat = "default options" if is_default_options else "the provided options"
-    allow_redefinition = plugin_collector.allow_redefinition if plugin_collector is not None else False
-    validation_errors: list[str] = []
-    fg_classes: set[type[FeatureGroup]] = get_all_subclasses(FeatureGroup)
-    if plugin_collector is not None:
-        fg_classes = {fg for fg in fg_classes if plugin_collector.applicable_feature_group_class(fg)}
-    try:
-        all_fgs = list(dedup_feature_group_subclasses(fg_classes, allow_redefinition=allow_redefinition))
-    except ValueError as exc:
-        raw_conflicts = list(getattr(exc, "conflicts", []))
+
+    build = build_resolution_environment(
+        compute_frameworks=PreFilterPlugins.get_cfw_subclasses(), plugin_collector=plugin_collector
+    )
+    snapshot = build.snapshot
+    if snapshot is None:
+        return _environment_error_result(build.errors[0], feature_name, scope, scope_suffix, resolved_options)
+
+    request = ResolutionRequestSnapshot(
+        feature_name=feature_name,
+        domain=None,
+        feature_group_scope=scope,
+        framework_pin=None,
+        pinned_frameworks=(),
+        group_option_keys=frozenset(resolved_options.group),
+        context_option_keys=frozenset(resolved_options.context),
+        inherited_group_keys=resolved_options.inherited_group_keys,
+        dependency_path=(),
+        links=(),
+        data_access_collection=None,
+        options=resolved_options,
+    )
+    outcome = FeatureGroupResolver().resolve(request, snapshot)
+    return _project_outcome(outcome, feature_name, resolved_options, scope_suffix)
+
+
+def _environment_error_result(
+    error: EnvironmentBuildError,
+    feature_name: str,
+    scope: str | type[FeatureGroup] | None,
+    scope_suffix: str,
+    options: Options,
+) -> ResolvedFeature:
+    """Project a failed standalone environment build; only a redefinition conflict carries candidates."""
+    if error.category == EnvironmentProvenance.REDEFINITION_CONFLICT.value:
+        raw_conflicts = list(getattr(error.as_exception(), "conflicts", []))
         feature_name_obj = FeatureName(feature_name)
+        validation_errors: list[str] = []
         matching_conflicts = [
             fg
             for fg in raw_conflicts
             if (scope is None or matches_feature_group_scope(fg, scope))
-            and _match_recording_validation_errors(fg, feature_name_obj, resolved_options, validation_errors)
+            and _match_recording_validation_errors(fg, feature_name_obj, options, validation_errors)
         ]
         return ResolvedFeature(
             feature_name=feature_name,
             feature_group=None,
             candidates=matching_conflicts,
-            error=f"{exc}{scope_suffix}",
+            error=f"{error.message}{scope_suffix}",
         )
-    candidates: list[type[FeatureGroup]] = []
+    return ResolvedFeature(
+        feature_name=feature_name,
+        feature_group=None,
+        candidates=[],
+        error=f"{error.message}{scope_suffix}",
+    )
+
+
+# Rejections recorded before a candidate matched name, scope, and criteria; such candidates are not reported.
+_CANDIDATE_STAGE_EXCLUSIONS = frozenset(
+    {
+        RejectionReason.SCOPE,
+        RejectionReason.DOMAIN,
+        RejectionReason.CRITERIA,
+        RejectionReason.VALUE_REJECTION,
+    }
+)
+
+
+def _matched_candidate_evaluations(outcome: ResolutionOutcome) -> list[CandidateEvaluation]:
+    """Evaluations that matched name, scope, and criteria, in the outcome's deterministic order."""
+    return [
+        evaluation
+        for evaluation in outcome.candidates
+        if not any(rejection.reason in _CANDIDATE_STAGE_EXCLUSIONS for rejection in evaluation.rejections)
+    ]
+
+
+def _framework_names(evaluation: CandidateEvaluation, status: FrameworkStatus) -> list[str]:
+    """Sorted class names of the evaluation's frameworks carrying the given status."""
+    return sorted(
+        framework_evaluation.framework.get_class_name()
+        for framework_evaluation in evaluation.frameworks
+        if framework_evaluation.status is status
+    )
+
+
+def _value_rejection_details(outcome: ResolutionOutcome) -> list[str]:
+    """Distinct VALUE_REJECTION details in outcome order."""
+    details: list[str] = []
+    for evaluation in outcome.candidates:
+        for rejection in evaluation.rejections:
+            if rejection.reason is not RejectionReason.VALUE_REJECTION:
+                continue
+            if rejection.detail and rejection.detail not in details:
+                details.append(rejection.detail)
+    return details
+
+
+def _project_outcome(
+    outcome: ResolutionOutcome,
+    feature_name: str,
+    options: Options,
+    scope_suffix: str,
+) -> ResolvedFeature:
+    """Project a structured resolution outcome into the debug ResolvedFeature shape."""
     feature_name_obj = FeatureName(feature_name)
+    matched = _matched_candidate_evaluations(outcome)
+    candidates = [evaluation.feature_group for evaluation in matched]
 
-    for fg in all_fgs:
-        if scope is not None and not matches_feature_group_scope(fg, scope):
-            continue
-        if _match_recording_validation_errors(fg, feature_name_obj, resolved_options, validation_errors):
-            candidates.append(fg)
+    if outcome.status is ResolutionStatus.RESOLVED:
+        winner = next(evaluation for evaluation in outcome.candidates if evaluation.status is CandidateStatus.WINNER)
+        subtype, subtype_family = _resolved_subtype_fields(winner.feature_group, feature_name_obj, options)
+        return ResolvedFeature(
+            feature_name=feature_name,
+            feature_group=winner.feature_group,
+            candidates=candidates,
+            error=None,
+            supported_compute_frameworks=_framework_names(winner, FrameworkStatus.SUPPORTED),
+            unsupported_compute_frameworks=_framework_names(winner, FrameworkStatus.CAPABILITY_REJECTED),
+            subtype=subtype,
+            subtype_family=subtype_family,
+        )
 
-    if not candidates:
+    if outcome.status is ResolutionStatus.FAILED:
+        details = " | ".join(
+            f"{failure.plugin.qualname.rsplit('.', 1)[-1]} [{failure.stage}] {failure.category}: {failure.message}"
+            for failure in outcome.failures
+        )
+        return ResolvedFeature(
+            feature_name=feature_name,
+            feature_group=None,
+            candidates=candidates,
+            error=f"Feature group resolution failed for feature '{feature_name}': {details}{scope_suffix}",
+        )
+
+    if outcome.status is ResolutionStatus.AMBIGUOUS:
+        survivor_names = [
+            evaluation.feature_group.__name__
+            for evaluation in outcome.candidates
+            if evaluation.status is CandidateStatus.SURVIVOR
+        ]
+        return ResolvedFeature(
+            feature_name=feature_name,
+            feature_group=None,
+            candidates=candidates,
+            error=f"Multiple FeatureGroups match feature name '{feature_name}': {survivor_names}{scope_suffix}",
+        )
+
+    return _not_found_result(outcome, feature_name, feature_name_obj, matched, options, scope_suffix)
+
+
+def _not_found_result(
+    outcome: ResolutionOutcome,
+    feature_name: str,
+    feature_name_obj: FeatureName,
+    matched: list[CandidateEvaluation],
+    options: Options,
+    scope_suffix: str,
+) -> ResolvedFeature:
+    """Project a NOT_FOUND outcome: no match, abstract-only, all-capability-rejected, or not runnable."""
+    candidates = [evaluation.feature_group for evaluation in matched]
+
+    if not matched:
         error = f"No FeatureGroup found for feature name: {feature_name}{scope_suffix}"
-        if validation_errors:
-            error = f"{error} Rejected during matching: {' | '.join(validation_errors)}"
+        details = _value_rejection_details(outcome)
+        if details:
+            error = f"{error} Rejected during matching: {' | '.join(details)}"
         return ResolvedFeature(
             feature_name=feature_name,
             feature_group=None,
@@ -440,35 +579,35 @@ def resolve_feature(
             error=error,
         )
 
-    # Degrade a raising plugin declaration OPEN (all available declared frameworks); resolve_feature never raises.
-    # The broad catch intentionally drops any partially computed rejection info; degrading open is the contract.
-    split_result: Optional[tuple[set[type[ComputeFramework]], set[type[ComputeFramework]]]] = safe_field(
-        lambda: split_frameworks_by_capability(candidates, feature_name_obj, resolved_options),
-        None,
-        field=f"capability split for '{feature_name}'",
-    )
-    if split_result is None:
-        open_supported: set[type[ComputeFramework]] = set()
-        for candidate in candidates:
-            defined: set[type[ComputeFramework]] = safe_field(
-                lambda candidate=candidate: set(candidate.compute_framework_definition()),  # type: ignore[misc]
-                set(),
-                field=f"open-degrade frameworks for '{feature_name}'",
-            )
-            open_supported.update(cfw for cfw in defined if cfw.is_available())
-        split_result = (open_supported, set())
-    supported, rejected = split_result
-    supported_names = sorted(c.get_class_name() for c in supported)
-    rejected_names = sorted(c.get_class_name() for c in rejected)
-    filtered = _filter_subclasses(candidates)
+    if all(
+        any(rejection.reason is RejectionReason.ABSTRACT for rejection in evaluation.rejections)
+        for evaluation in matched
+    ):
+        abstract_names = [evaluation.feature_group.get_class_name() for evaluation in matched]
+        return ResolvedFeature(
+            feature_name=feature_name,
+            feature_group=None,
+            candidates=candidates,
+            error=(
+                f"Feature '{feature_name}' matches only abstract FeatureGroup base(s) {abstract_names}, "
+                f"which cannot be instantiated.{scope_suffix}"
+            ),
+        )
 
-    if not supported and rejected:
-        subtype_unsupported: Optional[str] = None
-        subtype_family_unsupported: Optional[str] = None
-        if len(filtered) == 1:
-            subtype_unsupported, subtype_family_unsupported = _resolved_subtype_fields(
-                filtered[0], feature_name_obj, resolved_options
-            )
+    rejected_names = sorted(
+        {
+            framework_evaluation.framework.get_class_name()
+            for evaluation in matched
+            for framework_evaluation in evaluation.frameworks
+            if framework_evaluation.status is FrameworkStatus.CAPABILITY_REJECTED
+        }
+    )
+    if rejected_names:
+        options_caveat = "default options" if not options.group and not options.context else "the provided options"
+        subtype: Optional[str] = None
+        subtype_family: Optional[str] = None
+        if len(matched) == 1:
+            subtype, subtype_family = _resolved_subtype_fields(matched[0].feature_group, feature_name_obj, options)
         return ResolvedFeature(
             feature_name=feature_name,
             feature_group=None,
@@ -480,44 +619,17 @@ def resolve_feature(
             ),
             supported_compute_frameworks=[],
             unsupported_compute_frameworks=rejected_names,
-            subtype=subtype_unsupported,
-            subtype_family=subtype_family_unsupported,
-        )
-
-    if len(filtered) == 1:
-        resolved = filtered[0]
-        subtype, subtype_family = _resolved_subtype_fields(resolved, feature_name_obj, resolved_options)
-        return ResolvedFeature(
-            feature_name=feature_name,
-            feature_group=resolved,
-            candidates=candidates,
-            error=None,
-            supported_compute_frameworks=supported_names,
-            unsupported_compute_frameworks=rejected_names,
             subtype=subtype,
             subtype_family=subtype_family,
         )
 
-    conflicting_names = [fg.__name__ for fg in filtered]
+    names = [c.get_class_name() for c in candidates]
     return ResolvedFeature(
         feature_name=feature_name,
         feature_group=None,
         candidates=candidates,
-        error=f"Multiple FeatureGroups match feature name '{feature_name}': {conflicting_names}{scope_suffix}",
-        supported_compute_frameworks=supported_names,
-        unsupported_compute_frameworks=rejected_names,
+        error=(
+            f"Feature '{feature_name}' matches {names} but is not runnable on any "
+            f"available compute framework.{scope_suffix}"
+        ),
     )
-
-
-def _filter_subclasses(feature_groups: list[type[FeatureGroup]]) -> list[type[FeatureGroup]]:
-    """Prefer more specific (child) classes over parent classes."""
-    fgs_to_pop: set[type[FeatureGroup]] = set()
-
-    for i_fg in feature_groups:
-        for o_fg in feature_groups:
-            if i_fg == o_fg:
-                continue
-            if issubclass(i_fg, o_fg):
-                fgs_to_pop.add(o_fg)
-
-    return [fg for fg in feature_groups if fg not in fgs_to_pop]

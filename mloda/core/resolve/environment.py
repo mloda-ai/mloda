@@ -360,22 +360,22 @@ def build_resolution_environment(
 
     Same evaluation order as PreFilterPlugins; on the conditions where it raises,
     the outcome carries an error with the exact current message and no snapshot.
-    ``compute_frameworks=None`` means "all available frameworks": availability is
-    sampled exactly once inside this pipeline, and a raising ``is_available`` probe
-    becomes a structured availability_failure error instead of a raise.
+    Availability is sampled exactly once inside this pipeline for both the
+    ``compute_frameworks=None`` ("all available frameworks") and the explicit-set
+    branch, and a raising ``is_available`` probe becomes a structured
+    availability_failure error instead of a raise.
     """
-    sampled: frozenset[type[ComputeFramework]] | None = None
+    # Guarded: availability probes are third-party code; a raise must fail structurally here.
+    try:
+        sampled = frozenset(PreFilterPlugins.get_cfw_subclasses())
+    except Exception as exc:
+        error = EnvironmentBuildError(
+            category="availability_failure",
+            message=str(exc),
+            exception=exc.with_traceback(None),
+        )
+        return EnvironmentBuildOutcome(snapshot=None, errors=(error,))
     if compute_frameworks is None:
-        # Guarded: availability probes are third-party code; a raise must fail structurally here.
-        try:
-            sampled = frozenset(PreFilterPlugins.get_cfw_subclasses())
-        except Exception as exc:
-            error = EnvironmentBuildError(
-                category="availability_failure",
-                message=str(exc),
-                exception=exc.with_traceback(None),
-            )
-            return EnvironmentBuildOutcome(snapshot=None, errors=(error,))
         compute_frameworks = set(sampled)
 
     strict_mode = _strict_mode(plugin_collector)

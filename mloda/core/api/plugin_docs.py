@@ -603,26 +603,39 @@ def _not_found_result(
             ),
         )
 
+    # The capability clause covers only candidates with a capability-rejected framework; a
+    # candidate rejected earlier (e.g. by the links filter) never appears in this error.
+    capability_matched = [
+        evaluation
+        for evaluation in matched
+        if any(
+            framework_evaluation.status is FrameworkStatus.CAPABILITY_REJECTED
+            for framework_evaluation in evaluation.frameworks
+        )
+    ]
     rejected_names = sorted(
         {
             framework_evaluation.framework.get_class_name()
-            for evaluation in matched
+            for evaluation in capability_matched
             for framework_evaluation in evaluation.frameworks
             if framework_evaluation.status is FrameworkStatus.CAPABILITY_REJECTED
         }
     )
     if rejected_names:
+        capability_names = [evaluation.feature_group.get_class_name() for evaluation in capability_matched]
         options_caveat = "default options" if not options.group and not options.context else "the provided options"
         subtype: Optional[str] = None
         subtype_family: Optional[str] = None
-        if len(matched) == 1:
-            subtype, subtype_family = _resolved_subtype_fields(matched[0].feature_group, feature_name_obj, options)
+        if len(capability_matched) == 1:
+            subtype, subtype_family = _resolved_subtype_fields(
+                capability_matched[0].feature_group, feature_name_obj, options
+            )
         return ResolvedFeature(
             feature_name=feature_name,
             feature_group=None,
-            candidates=candidates,
+            candidates=[evaluation.feature_group for evaluation in capability_matched],
             error=(
-                f"Feature '{feature_name}' matches {[c.get_class_name() for c in candidates]} "
+                f"Feature '{feature_name}' matches {capability_names} "
                 f"but is unsupported on all installed compute frameworks "
                 f"(evaluated under {options_caveat}): {rejected_names}.{scope_suffix}"
             ),

@@ -131,6 +131,26 @@ print(f"Candidates: {[fg.__name__ for fg in result.candidates]}")
 - **error** (`str | None`): Error message if resolution failed (no match or multiple conflicts).
 - **mode** (`str`): Always `"standalone"`, the diagnostics-mode label; use `mlodaAPI.diagnose(...)` or `session.resolution_report()` for exact-run diagnostics.
 
+##### diagnose and resolution_report
+
+Whole-request diagnostics. `mlodaAPI.diagnose(features, ...)` takes the same signature family as `prepare` (every parameter after `features` is keyword-only) and resolves the request into a `ResolutionReport` without executing anything. It is non-raising for resolution, environment, and resolution-relevant configuration failures (an unknown framework name, a framework pin outside the run set, unsatisfiable parallelization modes); those come back as a report with `complete=False`. `session.resolution_report()` returns the same report shape for a prepared session, taken from its planning pass; nothing is re-resolved.
+
+`ResolutionReport` fields, mirrored by `to_payload()` as plain JSON data:
+
+- **environment** (`EnvironmentBuildOutcome | None`): The plugin-environment build; for `diagnose` this is the full pre-check outcome, whose records also cover non-survivors (e.g. collector-disabled plugins), while `session.resolution_report()` synthesizes it from the engine's accessible survivors.
+- **features** (`tuple[FeatureResolutionRecord, ...]`): One record per identification in planning order, each carrying its dependency path and structured outcome.
+- **complete** (`bool`): True only when the environment built and every feature resolved.
+
+Labeling: `resolve_feature` answers "what would this feature resolve to" against a standalone environment (`mode == "standalone"`); `diagnose` and `resolution_report` describe the exact configuration of a run.
+
+``` python
+from mloda.core.api.request import mlodaAPI
+
+report = mlodaAPI.diagnose(["sales__mean_aggr"], compute_frameworks=["PandasDataFrame"])
+print(report.complete)
+print(report.to_payload())
+```
+
 ##### explain and resolved_plan
 
 The runtime counterpart to `resolve_feature`: `mlodaAPI.explain(...)` builds the execution plan for a request without running it, and `session.resolved_plan()` returns the same records for a prepared session (before or after `run()`). Both return a `list[PlanStep]` in execution-plan order. Every `explain` parameter after `features` is keyword-only.

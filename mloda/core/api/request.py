@@ -12,7 +12,11 @@ from mloda.core.api.plan_info import PlanStep, build_plan_steps
 from mloda.core.api.run_result import ResultStream, RunResult
 from mloda.core.api.prepare.setup_compute_framework import SetupComputeFramework
 from mloda.core.prepare.accessible_plugins import filter_extenders_by_strict_mode
-from mloda.core.resolve.environment import build_resolution_environment
+from mloda.core.resolve.environment import (
+    EnvironmentBuildError,
+    EnvironmentBuildOutcome,
+    build_resolution_environment,
+)
 from mloda.core.resolve.outcome import FeatureResolutionError
 from mloda.core.resolve.report import ResolutionReport
 from mloda.core.filter.global_filter import GlobalFilter
@@ -320,16 +324,23 @@ class mlodaAPI:
     ) -> ResolutionReport:
         """Resolve the whole request into a ``ResolutionReport`` without executing anything.
 
-        Non-raising for resolution and environment failures: those come back as a structured
-        report with ``complete=False``. Every parameter after ``features`` is keyword-only.
+        Non-raising for resolution, environment, and resolution-relevant configuration
+        failures (an unknown framework name, a framework pin outside the run set,
+        unsatisfiable parallelization modes): those come back as a structured report with
+        ``complete=False``. The returned environment is the full pre-check build outcome,
+        whose records also cover non-survivors (e.g. collector-disabled plugins). Every
+        parameter after ``features`` is keyword-only.
         """
-        framework_set = SetupComputeFramework(
-            compute_frameworks, Features([]), parallelization_modes=parallelization_modes
-        ).compute_frameworks
+        # Guarded: an unknown framework name or unsatisfiable modes raise ValueError here; diagnose reports them.
+        try:
+            framework_set = SetupComputeFramework(
+                compute_frameworks, Features([]), parallelization_modes=parallelization_modes
+            ).compute_frameworks
+        except ValueError as exc:
+            return cls._configuration_failure_report(exc)
         environment = build_resolution_environment(framework_set, plugin_collector)
         if environment.errors:
             return ResolutionReport(environment=environment, features=(), complete=False)
-        # Narrow by contract: the engine attaches the partial report to every planning-time resolution error.
         try:
             session = cls.prepare(
                 features,
@@ -344,15 +355,33 @@ class mlodaAPI:
                 column_ordering=column_ordering,
                 parallelization_modes=parallelization_modes,
             )
+        # Narrow by contract: the engine attaches the partial report to every planning-time resolution error.
         except FeatureResolutionError as err:
             report = err.report
             if report is not None:
                 return report
             return ResolutionReport(environment=environment, features=(), complete=False)
-        return session.resolution_report()
+        # Guarded: prepare()'s configuration validation (e.g. a pin outside the run set) raises plain ValueError.
+        except ValueError as exc:
+            return cls._configuration_failure_report(exc)
+        return ResolutionReport(environment=environment, features=session.resolution_report().features, complete=True)
+
+    @classmethod
+    def _configuration_failure_report(cls, exc: ValueError) -> ResolutionReport:
+        """complete=False report over a run-configuration ValueError; the environment carries the error entry."""
+        error = EnvironmentBuildError(
+            category="configuration_failure", message=str(exc), exception=exc.with_traceback(None)
+        )
+        return ResolutionReport(
+            environment=EnvironmentBuildOutcome(snapshot=None, errors=(error,)), features=(), complete=False
+        )
 
     def resolution_report(self) -> ResolutionReport:
-        """Whole-request report from this session's planning pass; nothing is re-resolved."""
+        """Whole-request report from this session's planning pass; nothing is re-resolved.
+
+        The report's environment is synthesized from the engine's accessible-plugin mapping,
+        so its records cover accessible survivors only.
+        """
         if self.engine is None:
             raise ValueError("Internal error: engine not initialized. This is likely a bug in mloda.")
         return self.engine.resolution_report()

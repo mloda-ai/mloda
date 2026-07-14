@@ -59,15 +59,24 @@ class RejectionReason(Enum):
     SUBCLASS_SHADOWED = "subclass_shadowed"
 
 
+# Reasons whose detail carries raw provider text; the payload drops it, the field keeps it.
+_RAW_DETAIL_REASONS = frozenset({RejectionReason.VALUE_REJECTION, RejectionReason.PROVIDER_FAILURE})
+
+
 @dataclass(frozen=True)
 class Rejection:
-    """One structured rejection: a reason plus optional safe detail text."""
+    """One structured rejection: a reason plus optional detail text.
+
+    ``detail`` stays raw in memory (rendered errors depend on it); ``to_payload()``
+    redacts it for the reasons that carry raw provider text.
+    """
 
     reason: RejectionReason
     detail: str = ""
 
     def to_payload(self) -> dict[str, Any]:
-        return {"reason": self.reason.value, "detail": self.detail}
+        detail = "" if self.reason in _RAW_DETAIL_REASONS else self.detail
+        return {"reason": self.reason.value, "detail": detail}
 
 
 @dataclass(frozen=True)

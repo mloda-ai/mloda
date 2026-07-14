@@ -27,15 +27,19 @@ def render_user_view(outcome: ResolutionOutcome) -> str:
         lines.append("Next step: narrow the request with a feature_group scope, a domain, or a framework pin.")
     elif outcome.status is ResolutionStatus.FAILED:
         failing = ", ".join(sorted({failure.plugin.qualname for failure in outcome.failures}))
-        lines.append(f"Failing plugin: {failing}")
-        lines.append("Next step: fix or disable the failing plugin; a provider hook raised during resolution.")
+        if all(failure.stage == "validate_request" for failure in outcome.failures):
+            lines.append(f"Failing request validation: {failing}")
+            lines.append("Next step: fix the request; keep at most one compute framework pin per feature.")
+        else:
+            lines.append(f"Failing plugin: {failing}")
+            lines.append("Next step: fix or disable the failing plugin; a provider hook raised during resolution.")
     else:
         lines.append("Next step: check the feature name and load the providing plugin (PluginLoader.all()).")
     return "\n".join(lines)
 
 
 def render_provider_view(outcome: ResolutionOutcome) -> str:
-    """Per-candidate provider detail: identity, verdict, and every per-framework status."""
+    """Per-candidate provider detail: identity, verdict, per-framework status, and failure metadata."""
     lines = [f"Status: {outcome.status.value}"]
     for candidate in outcome.candidates:
         lines.append(f"{candidate.identity.render()}: {candidate.status.value}")
@@ -43,6 +47,10 @@ def render_provider_view(outcome: ResolutionOutcome) -> str:
             lines.append(f"  {evaluation.identity.render()}: {evaluation.status.value}")
         for rejection in candidate.rejections:
             lines.append(f"  rejection: {rejection.reason.value}")
+        if candidate.failure is not None:
+            lines.append(f"  failure: {candidate.failure.stage} ({candidate.failure.category})")
+    for failure in outcome.failures:
+        lines.append(f"failure: {failure.plugin.render()} {failure.stage} ({failure.category})")
     return "\n".join(lines)
 
 

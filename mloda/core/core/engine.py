@@ -83,7 +83,15 @@ class Engine:
         # Path of the identification currently in flight; consulted only on a planning failure.
         self._pending_identification_path: tuple[str, ...] = ()
         # Built at most once per Engine: every identification shares this mapping-derived snapshot.
-        self.resolution_environment = identify_feature_group.snapshot_from_mapping(self.accessible_plugins)
+        # The collector's strict mode is the only run configuration threaded in; without a collector
+        # the metadata stays "off" so the snapshot never consults the strict-mode env (pinned).
+        strict_mode = plugin_collector.strict_mode if plugin_collector is not None else "off"
+        if strict_mode == "off":
+            self.resolution_environment = identify_feature_group.snapshot_from_mapping(self.accessible_plugins)
+        else:
+            self.resolution_environment = identify_feature_group.snapshot_from_mapping(
+                self.accessible_plugins, strict_mode
+            )
         self.environment_build_outcome = EnvironmentBuildOutcome(snapshot=self.resolution_environment, errors=())
         # Narrow re-raise of the same object: planning failures carry the partial report for diagnose().
         try:

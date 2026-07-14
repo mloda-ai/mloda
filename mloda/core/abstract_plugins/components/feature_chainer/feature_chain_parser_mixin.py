@@ -334,22 +334,6 @@ class FeatureChainParserMixin:
         return None
 
     @classmethod
-    def _validate_required_when(
-        cls,
-        result: bool,
-        feature_name: str | FeatureName,
-        prefix_patterns: list[str],
-        property_mapping: dict[str, Any] | None,
-        options: Options,
-    ) -> bool:
-        """Evaluate the required_when predicates. The class-definition guard is the enforcement site."""
-        if not result:
-            return True
-        return FeatureChainParser.check_required_when(
-            cls.__name__, feature_name, prefix_patterns, property_mapping, options
-        )
-
-    @classmethod
     def _validate_match_guards(cls, result: bool, options: Options, property_mapping: dict[str, Any] | None) -> bool:
         # Enforce match_guard constraints from PROPERTY_MAPPING
         if result and property_mapping is not None:
@@ -382,13 +366,14 @@ class FeatureChainParserMixin:
                     count = 0
                 else:
                     # An in_features shape this matcher cannot count (SourceInputFeature stores join
-                    # tuples there) is a foreign feature, not a count violation: a matcher answers
-                    # True/False, so leave the verdict to the other rules instead of raising.
+                    # tuples there) is a NON-MATCH: a group that cannot even count the in_features
+                    # cannot consume them. Skipping MIN/MAX here would accept the feature and let the
+                    # group win a resolution its own cap says it must lose.
                     in_features: frozenset[Feature] | None = safe_field(
                         options.get_in_features, None, catching=(TypeError,)
                     )
                     if in_features is None:
-                        return True
+                        return False
                     count = len(in_features)
                 if count < cls.MIN_IN_FEATURES:
                     return False
@@ -397,14 +382,12 @@ class FeatureChainParserMixin:
         return True
 
     @classmethod
-    def _get_prefix_patterns(cls) -> list[str]:
-        """Get prefix/suffix patterns from class attributes."""
-        patterns = []
-        if hasattr(cls, "PREFIX_PATTERN"):
-            patterns.append(cls.PREFIX_PATTERN)
-        if hasattr(cls, "SUFFIX_PATTERN"):
-            patterns.append(cls.SUFFIX_PATTERN)
-        return patterns
+    def _get_prefix_patterns(cls) -> list[Any]:
+        """Get prefix/suffix patterns from class attributes.
+
+        Delegates to the guard's own collector, so matcher and guard can never see different patterns.
+        """
+        return FeatureChainParser.prefix_patterns_of(cls)
 
     @classmethod
     def _get_property_mapping(cls) -> Optional[dict[str, Any]]:
@@ -413,16 +396,11 @@ class FeatureChainParserMixin:
             return cast(dict[str, Any], cls.PROPERTY_MAPPING)
         return None
 
-    @staticmethod
-    def _has_required_when_predicates(property_mapping: dict[str, Any]) -> bool:
-        """Return True if any entry in property_mapping uses required_when."""
-        return FeatureChainParser.has_required_when_predicates(property_mapping)
-
     @classmethod
     def _build_effective_options(
         cls,
         feature_name: str,
-        prefix_patterns: list[str],
+        prefix_patterns: list[Any],
         property_mapping: dict[str, Any],
         options: Options,
     ) -> Options:

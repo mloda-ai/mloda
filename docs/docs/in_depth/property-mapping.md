@@ -274,7 +274,13 @@ warning; non-bool truthy returns count as `True`.
 
 The enforcement is installed on the class, not on one matcher, so overriding
 `match_feature_group_criteria` does not lose it: the predicates still run after the
-override returns `True`. They are evaluated exactly once per match call.
+override returns `True`. Nested guards (an override that delegates into an already guarded
+parent) do not stack: only the outermost one evaluates, so the predicates run exactly once
+per match call. The matcher must be a `classmethod`; a `staticmethod` matcher on a class
+that declares `required_when` is rejected at class definition.
+
+The guard is installed at class definition, so mutating `PROPERTY_MAPPING` or replacing
+`match_feature_group_criteria` after the class body escapes it.
 
 ## Migrating from the flattened form
 

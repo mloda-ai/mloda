@@ -280,3 +280,31 @@ class TestSklearnPipelineRequiredWhen:
         """Each option is required when the other is absent."""
         options = Options({DefaultOptionKeys.in_features: "income"})
         assert SklearnPipelineFeatureGroup.match_feature_group_criteria("x", options) is False
+
+    def test_rejects_string_name_outside_pipeline_types_even_with_options(self) -> None:
+        """Regression pin for the real blast radius of the accepted behavior change.
+
+        The rejection is not limited to the no-options case: an undeclared pipeline name never maps back
+        onto pipeline_name, so ANY string-named pipeline outside PIPELINE_TYPES is rejected, options or not.
+        This returned True before the required_when guard.
+        """
+        options = Options({DefaultOptionKeys.in_features: "income"})
+        assert (
+            SklearnPipelineFeatureGroup.match_feature_group_criteria("income__sklearn_pipeline_custom", options)
+            is False
+        )
+
+    def test_rejects_pipeline_name_with_empty_pipeline_steps(self) -> None:
+        """Regression pin: mutual exclusivity is presence-based (is not None), not truthiness.
+
+        An empty pipeline_steps list is still a present pipeline_steps, so it collides with pipeline_name.
+        Truthiness let this pair through before the required_when guard.
+        """
+        options = Options(
+            {
+                SklearnPipelineFeatureGroup.PIPELINE_NAME: "scaling",
+                SklearnPipelineFeatureGroup.PIPELINE_STEPS: [],
+                DefaultOptionKeys.in_features: "income",
+            }
+        )
+        assert SklearnPipelineFeatureGroup.match_feature_group_criteria("x", options) is False

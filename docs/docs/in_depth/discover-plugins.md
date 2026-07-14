@@ -60,12 +60,20 @@ resolve_feature("customer_id", feature_group=PolicyReader)      # class
 resolve_feature("customer_id", feature_group="PolicyReader")    # class name
 ```
 
-This reproduces a scoped engine failure. When `mloda.run_all` reports
+Use this to investigate a scoped engine failure. When `mloda.run_all` reports
 `Scoped to feature group: 'PolicyReader'.` for a feature, pass the same scope
-here and `resolve_feature` returns the same verdict in `result.error`, with the
-same callout, instead of raising. An invalid scope (the root `FeatureGroup`
-base, a non-FeatureGroup type) is reported in `result.error` too, while
-`Feature(...)` raises `TypeError` for it.
+here and `resolve_feature` reports the failure in `result.error`, with the same
+callout, instead of raising. An invalid scope (the root `FeatureGroup` base, a
+non-FeatureGroup type) is reported in `result.error` too, while `Feature(...)`
+raises `TypeError` for it.
+
+The two apply the same matching rules (name and scope matching, capability
+split, abstract bases, subclass preference), but `resolve_feature` has no run
+context, so its verdict can still differ where the run does: it ignores links
+and the data access collection, evaluates every available compute framework
+rather than the run's selection, and applies no plugin-registry filter (under
+`MLODA_PLUGIN_REGISTRY_STRICT=strict` the engine drops unregistered feature
+groups, `resolve_feature` does not).
 
 ### Inspecting Candidates
 

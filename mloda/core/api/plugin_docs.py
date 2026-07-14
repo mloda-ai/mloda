@@ -15,11 +15,12 @@ Example:
     docs = get_feature_group_docs()
 """
 
+import inspect
 from typing import Any, Optional
 
 from mloda.core.abstract_plugins.components.base_feature_group_version import SOURCE_INTROSPECTION_ERRORS
 from mloda.core.abstract_plugins.components.subtype_declaration import SubtypeDeclaration
-from mloda.core.abstract_plugins.feature_group import FeatureGroup
+from mloda.core.abstract_plugins.feature_group import FeatureGroup, format_feature_group_class
 from mloda.core.abstract_plugins.components.plugin_option.plugin_collector import PluginCollector
 from mloda.core.abstract_plugins.components.utils import get_all_subclasses, safe_field, safe_field_with_error
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
@@ -35,9 +36,9 @@ from mloda.core.prepare.accessible_plugins import (
 )
 from mloda.core.abstract_plugins.components.feature import normalize_feature_group_scope
 from mloda.core.prepare.identify_feature_group import (
+    frameworks_by_capability,
     matches_feature_group_scope,
     scope_callout,
-    split_frameworks_by_capability,
 )
 
 
@@ -351,6 +352,30 @@ def _with_callout(message: str, callout: Optional[str]) -> str:
     return f"{message} {callout}" if callout else message
 
 
+def _candidate_frameworks(
+    candidate: type[FeatureGroup], feature_name: FeatureName, options: Options
+) -> tuple[set[type[ComputeFramework]], set[type[ComputeFramework]]]:
+    """Split ONE candidate's available declared frameworks into (supported, rejected).
+
+    Degrades a raising declaration OPEN (every available declared framework counts as supported):
+    resolve_feature never raises, so a plugin that cannot answer must not fail the whole call.
+    """
+    split: Optional[tuple[set[type[ComputeFramework]], set[type[ComputeFramework]]]] = safe_field(
+        lambda: frameworks_by_capability(candidate, feature_name, options),
+        None,
+        field=f"capability split for '{feature_name}' on {candidate.__name__}",
+    )
+    if split is not None:
+        return split
+
+    open_supported: set[type[ComputeFramework]] = safe_field(
+        lambda: {cfw for cfw in candidate.compute_framework_definition() if cfw.is_available()},
+        set(),
+        field=f"open-degrade frameworks for '{feature_name}' on {candidate.__name__}",
+    )
+    return open_supported, set()
+
+
 def resolve_feature(
     feature_name: str,
     *,
@@ -372,9 +397,11 @@ def resolve_feature(
     Does not delegate to IdentifyFeatureGroupClass, and so may differ from the engine: it never raises
     and degrades a candidate whose matching raises ValueError to "not a match" (the engine propagates it),
     it has no run context and therefore ignores links, the data access collection and the run's compute
-    framework selection, and it does not exclude abstract bases. It shares the matching predicates
-    (match_feature_group_criteria, matches_feature_group_scope, split_frameworks_by_capability) and the
-    scope-callout renderer, which is what keeps the scope verdict aligned with the engine's.
+    framework selection, and it applies no plugin-registry filter (under
+    MLODA_PLUGIN_REGISTRY_STRICT=strict the engine drops unregistered feature groups, this does not).
+    It shares the matching predicates (match_feature_group_criteria, matches_feature_group_scope,
+    frameworks_by_capability), the abstract-base and subclass-filter rules, and the scope-callout
+    renderer, which is what keeps its verdict aligned with the engine's.
 
     Args:
         feature_name: The name of the feature to resolve.
@@ -406,31 +433,46 @@ def resolve_feature(
     try:
         all_fgs = list(dedup_feature_group_subclasses(fg_classes, allow_redefinition=allow_redefinition))
     except ValueError as exc:
+        # The conflict is reported even when every conflicting class is out of scope: the engine dedups the
+        # whole class universe BEFORE scoping (PreFilterPlugins._set_feature_groups), so it raises there too.
         raw_conflicts = list(getattr(exc, "conflicts", []))
         feature_name_obj = FeatureName(feature_name)
         matching_conflicts = [
             fg
             for fg in raw_conflicts
-            if _match_recording_validation_errors(fg, feature_name_obj, resolved_options, validation_errors)
+            if (scope is None or matches_feature_group_scope(fg, scope))
+            and _match_recording_validation_errors(fg, feature_name_obj, resolved_options, validation_errors)
         ]
         return ResolvedFeature(
             feature_name=feature_name,
             feature_group=None,
             candidates=matching_conflicts,
-            error=str(exc),
+            error=_with_callout(str(exc), callout),
         )
     candidates: list[type[FeatureGroup]] = []
+    abstract_matches: list[type[FeatureGroup]] = []
     feature_name_obj = FeatureName(feature_name)
 
     for fg in all_fgs:
         # Scope first: an out-of-scope group's rejection reason must never pollute a scoped error.
         if scope is not None and not matches_feature_group_scope(fg, scope):
             continue
-        if _match_recording_validation_errors(fg, feature_name_obj, resolved_options, validation_errors):
-            candidates.append(fg)
+        if not _match_recording_validation_errors(fg, feature_name_obj, resolved_options, validation_errors):
+            continue
+        # Abstract bases cannot be instantiated, so they are never an answer; the engine skips them too.
+        if inspect.isabstract(fg):
+            abstract_matches.append(fg)
+            continue
+        candidates.append(fg)
 
     if not candidates:
         error = f"No FeatureGroup found for feature name: {feature_name}"
+        if abstract_matches:
+            abstract_names = sorted(format_feature_group_class(fg) for fg in abstract_matches)
+            error = (
+                f"{error}. Only abstract feature group base(s) matched, which cannot be "
+                f"instantiated: {abstract_names}. No concrete implementation matched."
+            )
         if validation_errors:
             error = f"{error} Rejected during matching: {' | '.join(validation_errors)}"
         return ResolvedFeature(
@@ -440,27 +482,17 @@ def resolve_feature(
             error=_with_callout(error, callout),
         )
 
-    # Degrade a raising plugin declaration OPEN (all available declared frameworks); resolve_feature never raises.
-    # The broad catch intentionally drops any partially computed rejection info; degrading open is the contract.
-    split_result: Optional[tuple[set[type[ComputeFramework]], set[type[ComputeFramework]]]] = safe_field(
-        lambda: split_frameworks_by_capability(candidates, feature_name_obj, resolved_options),
-        None,
-        field=f"capability split for '{feature_name}'",
-    )
-    if split_result is None:
-        open_supported: set[type[ComputeFramework]] = set()
-        for candidate in candidates:
-            defined: set[type[ComputeFramework]] = safe_field(
-                lambda candidate=candidate: set(candidate.compute_framework_definition()),  # type: ignore[misc]
-                set(),
-                field=f"open-degrade frameworks for '{feature_name}'",
-            )
-            open_supported.update(cfw for cfw in defined if cfw.is_available())
-        split_result = (open_supported, set())
-    supported, rejected = split_result
+    candidate_frameworks = {
+        candidate: _candidate_frameworks(candidate, feature_name_obj, resolved_options) for candidate in candidates
+    }
+    supported: set[type[ComputeFramework]] = set()
+    rejected: set[type[ComputeFramework]] = set()
+    for candidate_supported, candidate_rejected in candidate_frameworks.values():
+        supported.update(candidate_supported)
+        rejected.update(candidate_rejected)
     supported_names = sorted(c.get_class_name() for c in supported)
     rejected_names = sorted(c.get_class_name() for c in rejected)
-    filtered = _filter_subclasses(candidates)
+    filtered = _filter_subclasses(candidates, {fg: split[0] for fg, split in candidate_frameworks.items()})
 
     if not supported and rejected:
         subtype_unsupported: Optional[str] = None
@@ -499,7 +531,9 @@ def resolve_feature(
             subtype_family=subtype_family,
         )
 
-    conflicting_names = [fg.__name__ for fg in filtered]
+    # Name + module (format_feature_group_class): two same-named classes from different modules are exactly
+    # the case a name scope cannot disambiguate, so bare names would render the error useless.
+    conflicting_names = sorted(format_feature_group_class(fg) for fg in filtered)
     return ResolvedFeature(
         feature_name=feature_name,
         feature_group=None,
@@ -512,12 +546,22 @@ def resolve_feature(
     )
 
 
-def _filter_subclasses(feature_groups: list[type[FeatureGroup]]) -> list[type[FeatureGroup]]:
-    """Prefer more specific (child) classes over parent classes."""
+def _filter_subclasses(
+    feature_groups: list[type[FeatureGroup]],
+    supported_frameworks: dict[type[FeatureGroup], set[type[ComputeFramework]]],
+) -> list[type[FeatureGroup]]:
+    """Prefer more specific (child) classes over parent classes, but only on EQUAL framework support.
+
+    Mirrors IdentifyFeatureGroupClass.filter_subclasses: a parent supporting frameworks its child does not
+    is a distinct answer to the engine and stays in the running, so dropping it here would resolve a feature
+    that the engine reports as ambiguous.
+    """
     fgs_to_pop: set[type[FeatureGroup]] = set()
 
     for i_fg in feature_groups:
         for o_fg in feature_groups:
+            if supported_frameworks[i_fg] != supported_frameworks[o_fg]:
+                continue
             if i_fg == o_fg:
                 continue
             if issubclass(i_fg, o_fg):

@@ -16,28 +16,41 @@ import logging
 logger = logging.getLogger(__name__)
 
 
+def frameworks_by_capability(
+    feature_group: type[FeatureGroup],
+    feature_name: FeatureName | str,
+    options: Options,
+) -> tuple[set[type[ComputeFramework]], set[type[ComputeFramework]]]:
+    """Split ONE feature group's available frameworks into (supported, rejected)
+    by the match-time capability hook.
+
+    Considers the frameworks it declares via compute_framework_definition() that are
+    currently available (ComputeFramework.is_available()), and partitions them by
+    supports_compute_framework(feature_name, options, cfw)."""
+    supported: set[type[ComputeFramework]] = set()
+    rejected: set[type[ComputeFramework]] = set()
+    for cfw in feature_group.compute_framework_definition():
+        if not cfw.is_available():
+            continue
+        if feature_group.supports_compute_framework(feature_name, options, cfw):
+            supported.add(cfw)
+        else:
+            rejected.add(cfw)
+    return supported, rejected
+
+
 def split_frameworks_by_capability(
     feature_groups: Iterable[type[FeatureGroup]],
     feature_name: FeatureName | str,
     options: Options,
 ) -> tuple[set[type[ComputeFramework]], set[type[ComputeFramework]]]:
-    """Split each feature group's available frameworks into (supported, rejected)
-    by the match-time capability hook.
-
-    For each feature group, considers the frameworks it declares via
-    compute_framework_definition() that are currently available
-    (ComputeFramework.is_available()), and partitions them by
-    supports_compute_framework(feature_name, options, cfw)."""
+    """Union of frameworks_by_capability over several feature groups."""
     supported: set[type[ComputeFramework]] = set()
     rejected: set[type[ComputeFramework]] = set()
     for fg in feature_groups:
-        for cfw in fg.compute_framework_definition():
-            if not cfw.is_available():
-                continue
-            if fg.supports_compute_framework(feature_name, options, cfw):
-                supported.add(cfw)
-            else:
-                rejected.add(cfw)
+        fg_supported, fg_rejected = frameworks_by_capability(fg, feature_name, options)
+        supported.update(fg_supported)
+        rejected.update(fg_rejected)
     return supported, rejected
 
 

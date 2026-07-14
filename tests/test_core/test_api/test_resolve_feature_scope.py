@@ -18,6 +18,7 @@ Probe feature groups and feature names are prefixed 'Scoped693' / 'scoped_probe_
 FeatureGroup subclass in the process is globally visible to matching under pytest-xdist.
 """
 
+import inspect
 from typing import Any, Optional
 
 import pytest
@@ -398,6 +399,20 @@ class TestScopedMatchingStaysNonThrowing:
             f"Error must carry the scope callout, got: {result.error}"
         )
 
+    def test_out_of_scope_rejection_reason_never_pollutes_a_scoped_result(self) -> None:
+        """Scope first: an out-of-scope group is never even asked to match, so it cannot report a reason.
+
+        Scoped to the safe group, the raising group sits outside the scope. Its rejection reason must
+        not surface anywhere in the scoped result, which is the invariant the scope-first ordering in
+        resolve_feature exists for.
+        """
+        result = resolve_feature(RAISING_FEATURE, feature_group=Scoped693SafeSource)
+
+        assert result.feature_group is Scoped693SafeSource
+        assert RAISING_REASON not in (result.error or ""), (
+            f"An out-of-scope group's rejection reason must not appear in a scoped error, got: {result.error}"
+        )
+
 
 class TestScopedEngineParity:
     """The failure the engine reports for a scoped Feature reproduces through resolve_feature (#693)."""
@@ -468,12 +483,18 @@ class TestUnscopedBehaviourUnchanged:
 class TestFeatureGroupIsKeywordOnly:
     """The new scope argument is keyword-only, like options and plugin_collector."""
 
-    def test_positional_scope_raises_type_error(self) -> None:
-        """resolve_feature(name, Scoped693PolicyReader) must raise TypeError instead of binding."""
-        resolve_feature_untyped: Any = resolve_feature
+    def test_feature_group_parameter_is_declared_keyword_only(self) -> None:
+        """feature_group must sit behind the '*' in the signature, so it can never bind positionally.
 
-        with pytest.raises(TypeError):
-            resolve_feature_untyped(SHARED_FEATURE, Scoped693PolicyReader)
+        Asserting on the parameter kind, not on a TypeError from a two-positional call: the second
+        positional slot already raised before feature_group existed (options was keyword-only), so
+        such a call proves nothing about this parameter.
+        """
+        parameter = inspect.signature(resolve_feature).parameters["feature_group"]
+
+        assert parameter.kind is inspect.Parameter.KEYWORD_ONLY, (
+            f"feature_group must be keyword-only, got kind: {parameter.kind}"
+        )
 
     def test_scope_combines_with_options_and_plugin_collector(self) -> None:
         """All three keyword arguments can be combined."""

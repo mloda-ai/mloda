@@ -37,7 +37,10 @@ class ChainedFeatureGroupTest(ChainedContextFeatureGroupTest):
         elif has_suffix_configuration == "identifier2":
             val = 1
         else:
-            raise ValueError("Invalid suffix configuration")
+            # Name the offending suffix: this group owns the feature, so this is the only
+            # place the bad suffix is reported. It used to surface as the parser rejection
+            # that leaked out of matching the UNRELATED source feature 'Sales' (issue #732).
+            raise ValueError(f"Invalid suffix configuration: {has_suffix_configuration}")
 
         data[f"{source_feature}__{cls.OPERATION_ID}{has_suffix_configuration}"] = data[source_feature] * 2 + val
         return data

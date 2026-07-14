@@ -4,6 +4,7 @@ from typing import Iterable, Optional
 
 from mloda.core.prepare.accessible_plugins import FeatureGroupEnvironmentMapping
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
+from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser import PropertyValueRejection
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.components.options import NON_FORWARDED_KEYS, Options
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
@@ -153,7 +154,19 @@ class IdentifyFeatureGroupClass:
         feature: Feature,
         data_access_collection: Optional[DataAccessCollection],
     ) -> bool:
-        return feature_group.match_feature_group_criteria(feature.name, feature.options, data_access_collection)
+        """A rejected option value is a non-match, whoever calls the parser.
+
+        Guards every candidate, including a third-party feature group that overrides the match
+        hook and calls FeatureChainParser directly: without this, one rejecting candidate would
+        take the whole filter loop down and deny the feature to the group that legitimately owns
+        it. Only the rejection is caught; a plain ValueError (the forwarded-name-mismatch
+        guidance) still reaches the user.
+        """
+        try:
+            return feature_group.match_feature_group_criteria(feature.name, feature.options, data_access_collection)
+        except PropertyValueRejection as exc:
+            logger.debug("%s rejected an option value while matching '%s': %s", feature_group, feature.name, exc)
+            return False
 
     def _filter_feature_group_by_domain(self, feature_group: type[FeatureGroup], feature: Feature) -> bool:
         return not feature.domain or feature_group.get_domain() == feature.domain

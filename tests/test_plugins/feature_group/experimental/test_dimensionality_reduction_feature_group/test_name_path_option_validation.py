@@ -8,10 +8,19 @@ before the options were ever read. Both paths must reach the same verdict.
 
 from __future__ import annotations
 
+import pytest
+
+from mloda.core.abstract_plugins.components.feature import Feature
+from mloda.core.prepare.accessible_plugins import FeatureGroupEnvironmentMapping
+from mloda.core.prepare.identify_feature_group import IdentifyFeatureGroupClass
 from mloda.provider import DefaultOptionKeys
 from mloda.user import Options
+from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.feature_group.experimental.dimensionality_reduction.base import (
     DimensionalityReductionFeatureGroup,
+)
+from mloda_plugins.feature_group.experimental.dimensionality_reduction.pandas import (
+    PandasDimensionalityReductionFeatureGroup,
 )
 
 
@@ -101,3 +110,99 @@ class TestNamePathElementValidatorAndPresence:
         options = Options(context={DimensionalityReductionFeatureGroup.ISOMAP_N_NEIGHBORS: "not_a_number"})
 
         assert DimensionalityReductionFeatureGroup.match_feature_group_criteria("f0__isomap_2d", options) is True
+
+
+def _forwarded_child_options(algorithm: str) -> Options:
+    """Child options as the engine builds them: the consumer's group option flows onto the child."""
+    child = Options()
+    child.inherit_from(Options(group={DimensionalityReductionFeatureGroup.ALGORITHM: algorithm}))
+    return child
+
+
+class TestForwardedAlgorithmOutsideTheChildValueSpace:
+    """``algorithm`` is shared across feature group families with DIFFERENT value spaces.
+
+    A consumer forwarding algorithm='kmeans' (a clustering algorithm) onto the child 'f0__pca_2d'
+    used to hit ``_validate_forwarded_name_mismatch`` and raise the forward_group_exclude error.
+    The forwarded value is now outside the child's OWN value space, so the parser's value rejection
+    fires first and the verdict is a non-match: the same verdict shape as every other rejected
+    value. Pin which message wins, so it cannot silently change again.
+    """
+
+    def test_forwarded_out_of_space_value_is_a_non_match(self) -> None:
+        """A non-match, not a raise: the value rejection precedes the mismatch check."""
+        child_options = _forwarded_child_options("kmeans")
+        assert child_options.inherited_group_keys == frozenset(
+            {DimensionalityReductionFeatureGroup.ALGORITHM}
+        )  # precondition
+
+        result = DimensionalityReductionFeatureGroup.match_feature_group_criteria("f0__pca_2d", child_options)
+
+        assert result is False
+
+    def test_rejection_reason_names_key_and_value(self) -> None:
+        """The strict-validation reason explains WHICH key and WHICH value were rejected."""
+        reason = DimensionalityReductionFeatureGroup._strict_validation_rejection_reason(
+            "f0__pca_2d", _forwarded_child_options("kmeans")
+        )
+
+        assert reason is not None
+        assert DimensionalityReductionFeatureGroup.ALGORITHM in reason
+        assert "kmeans" in reason
+
+    def test_engine_error_keeps_naming_forward_group_exclude(self) -> None:
+        """End-to-end the user still gets the actionable guidance, via the group-option hint."""
+        feature = Feature("f0__pca_2d", _forwarded_child_options("kmeans"))
+        accessible_plugins: FeatureGroupEnvironmentMapping = {
+            PandasDimensionalityReductionFeatureGroup: {PandasDataFrame},
+        }
+
+        with pytest.raises(ValueError) as exc_info:
+            IdentifyFeatureGroupClass(
+                feature=feature,
+                accessible_plugins=accessible_plugins,
+                links=None,
+                data_access_collection=None,
+            )
+
+        message = str(exc_info.value)
+        assert "No feature groups found" in message
+        assert "forward_group_exclude" in message
+        assert DimensionalityReductionFeatureGroup.ALGORITHM in message
+        assert "kmeans" in message
+
+
+class TestForwardedAlgorithmInsideTheChildValueSpace:
+    """A forwarded value the child DOES accept still contradicts the name: that stays a hard error."""
+
+    def test_forwarded_in_space_value_still_raises_the_mismatch_error(self) -> None:
+        """'tsne' is a valid dimensionality reduction algorithm, but the name parses to 'pca'."""
+        child_options = _forwarded_child_options("tsne")
+
+        with pytest.raises(ValueError) as exc_info:
+            DimensionalityReductionFeatureGroup.match_feature_group_criteria("f0__pca_2d", child_options)
+
+        message = str(exc_info.value)
+        assert "forward_group_exclude" in message
+        assert DimensionalityReductionFeatureGroup.ALGORITHM in message
+        assert "tsne" in message
+        assert "pca" in message
+
+    def test_engine_surfaces_actionable_guidance_for_the_in_space_mismatch(self) -> None:
+        """However the engine reports it, the user is told to carve the key out."""
+        feature = Feature("f0__pca_2d", _forwarded_child_options("tsne"))
+        accessible_plugins: FeatureGroupEnvironmentMapping = {
+            PandasDimensionalityReductionFeatureGroup: {PandasDataFrame},
+        }
+
+        with pytest.raises(ValueError) as exc_info:
+            IdentifyFeatureGroupClass(
+                feature=feature,
+                accessible_plugins=accessible_plugins,
+                links=None,
+                data_access_collection=None,
+            )
+
+        message = str(exc_info.value)
+        assert "forward_group_exclude" in message
+        assert DimensionalityReductionFeatureGroup.ALGORITHM in message

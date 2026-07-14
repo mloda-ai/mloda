@@ -1,13 +1,16 @@
-"""Red-phase tests for the ``columnar_to_rows`` and ``homogenize_rows`` python_dict_utils helpers (issue 648)."""
+"""Red-phase tests for the ``columnar_to_rows``, ``homogenize_rows`` (issue 648) and ``result_rows``
+(issue 717) python_dict_utils helpers."""
 
 from typing import Any
 
 import pytest
 
+from mloda.user import RunResult
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_utils import (
     columnar_to_rows,
     homogenize_rows,
     is_columnar,
+    result_rows,
     rows_to_columnar,
     validate_columnar_dict,
 )
@@ -157,3 +160,139 @@ class TestValidateColumnarDict:
     def test_non_list_value_raises(self) -> None:
         with pytest.raises(ValueError):
             validate_columnar_dict({"a": 5})
+
+
+class TestResultRows:
+    def test_none_returns_empty_list(self) -> None:
+        """``None`` (no result at all) yields no rows."""
+        assert result_rows(None) == []
+
+    def test_empty_list_returns_empty_list(self) -> None:
+        """An empty partition list yields no rows."""
+        assert result_rows([]) == []
+
+    def test_empty_dict_returns_empty_list(self) -> None:
+        """The schema-less ``{}`` yields no rows."""
+        assert result_rows({}) == []
+
+    def test_bare_columnar_dict_pivots_to_rows(self) -> None:
+        """A bare columnar dict pivots into a list of row dicts."""
+        data: dict[str, list[Any]] = {"a": [1, 2], "b": ["x", "y"]}
+        assert result_rows(data) == [{"a": 1, "b": "x"}, {"a": 2, "b": "y"}]
+
+    def test_schema_bearing_zero_row_dict_returns_empty_list(self) -> None:
+        """A schema-bearing zero-row columnar dict yields no rows."""
+        assert result_rows({"a": []}) == []
+
+    def test_list_of_columnar_partitions_concatenates_in_order(self) -> None:
+        """Columnar partitions are pivoted and concatenated in list order."""
+        assert result_rows([{"a": [1]}, {"a": [2]}]) == [{"a": 1}, {"a": 2}]
+
+    def test_single_wrapped_columnar_partition_pivots(self) -> None:
+        """A dict element satisfying ``is_columnar`` is a partition, never a row; this precedence is intentional."""
+        assert result_rows([{"a": [1, 2]}]) == [{"a": 1}, {"a": 2}]
+
+    def test_row_wise_list_passes_through(self) -> None:
+        """Non-columnar dict elements are rows and pass through unchanged."""
+        rows: list[dict[str, Any]] = [{"a": 1}, {"a": 2}]
+        assert result_rows(rows) == [{"a": 1}, {"a": 2}]
+
+    def test_row_wise_list_returns_a_new_list_object(self) -> None:
+        """The pass-through returns a NEW list object, not the input object."""
+        rows: list[dict[str, Any]] = [{"a": 1}, {"a": 2}]
+        result = result_rows(rows)
+        assert result == rows
+        assert result is not rows
+
+    def test_mixed_partition_list_flattens_in_order(self) -> None:
+        """A list element is a partition of row dicts and is extended in order."""
+        assert result_rows([{"a": [1]}, [{"a": 2}, {"a": 3}]]) == [{"a": 1}, {"a": 2}, {"a": 3}]
+
+    def test_none_elements_inside_a_list_are_skipped(self) -> None:
+        """``None`` elements contribute no rows and do not raise."""
+        assert result_rows([None, {"a": [1]}, None]) == [{"a": 1}]
+
+    def test_empty_dict_elements_contribute_no_rows(self) -> None:
+        """An empty dict element is a schema-less partition with zero rows."""
+        assert result_rows([{}, {"a": [1]}]) == [{"a": 1}]
+
+    def test_nested_row_list_with_non_dict_raises(self) -> None:
+        """A nested row-list element must contain only dicts."""
+        with pytest.raises(ValueError):
+            result_rows([[{"a": 1}, 5]])
+
+    def test_int_input_raises(self) -> None:
+        with pytest.raises(ValueError):
+            result_rows(5)
+
+    def test_string_input_raises(self) -> None:
+        with pytest.raises(ValueError):
+            result_rows("text")
+
+    def test_top_level_non_columnar_dict_raises(self) -> None:
+        """A bare non-columnar dict at TOP LEVEL is ambiguous garbage and raises."""
+        with pytest.raises(ValueError):
+            result_rows({"a": 5})
+
+    def test_non_columnar_dict_element_is_a_row(self) -> None:
+        """INSIDE a list the same non-columnar dict is a row and is appended."""
+        assert result_rows([{"a": 5}]) == [{"a": 5}]
+
+    def test_scalar_list_element_raises(self) -> None:
+        with pytest.raises(ValueError):
+            result_rows([5])
+
+    def test_string_list_element_raises(self) -> None:
+        with pytest.raises(ValueError):
+            result_rows(["text"])
+
+    def test_ragged_columnar_looking_dict_raises(self) -> None:
+        """A ragged columnar-looking dict fails ``is_columnar`` and raises via the ambiguous-dict branch."""
+        with pytest.raises(ValueError):
+            result_rows({"a": [1, 2], "b": [1]})
+
+    def test_run_result_is_unwrapped_like_a_list(self) -> None:
+        """``RunResult`` subclasses ``list`` and is unwrapped like any partition list."""
+        assert result_rows(RunResult([{"a": [1]}], [])) == [{"a": 1}]
+
+    def test_pivot_preserves_key_insertion_order(self) -> None:
+        """A pivoted partition keeps the columnar dict's key insertion order."""
+        result = result_rows({"b": [1], "a": [2]})
+        assert result == [{"b": 1, "a": 2}]
+        assert [list(row.keys()) for row in result] == [["b", "a"]]
+
+    def test_passthrough_rows_are_fresh_dict_objects(self) -> None:
+        """Passed-through row dicts are fresh copies, never aliases of the input dicts."""
+        rows: list[dict[str, Any]] = [{"a": 1}]
+        result = result_rows(rows)
+        assert result == rows
+        assert result[0] is not rows[0]
+
+    def test_nested_row_list_rows_are_fresh_dict_objects(self) -> None:
+        """Row dicts taken from a nested row list are fresh copies, never aliases."""
+        inner: dict[str, Any] = {"a": 2}
+        result = result_rows([[inner]])
+        assert result == [{"a": 2}]
+        assert result[0] is not inner
+
+    def test_unsupported_element_error_names_the_pythondict_scope(self) -> None:
+        """The unsupported-element error names PythonDict so other frameworks' users know to convert first."""
+        with pytest.raises(ValueError, match="PythonDict"):
+            result_rows([object()])
+
+    def test_unsupported_top_level_error_names_the_pythondict_scope(self) -> None:
+        """The unsupported-top-level error names PythonDict so other frameworks' users know to convert first."""
+        with pytest.raises(ValueError, match="PythonDict"):
+            result_rows(("not", "a", "list"))
+
+    def test_mixed_columnar_and_bare_row_dict_elements(self) -> None:
+        """A columnar partition pivots while a non-columnar dict element is a row, in one list."""
+        assert result_rows([{"a": [1]}, {"a": 2}]) == [{"a": 1}, {"a": 2}]
+
+    def test_ragged_dict_element_is_a_row_not_a_partition(self) -> None:
+        """A ragged dict fails ``is_columnar``, so inside a list it is a row; real partitions are never ragged."""
+        assert result_rows([{"a": [1, 2], "b": [1]}]) == [{"a": [1, 2], "b": [1]}]
+
+    def test_columnar_dict_inside_nested_list_is_a_row(self) -> None:
+        """Nested lists are row partitions; their columnar-looking dicts are rows, never pivoted recursively."""
+        assert result_rows([[{"a": [1]}]]) == [{"a": [1]}]

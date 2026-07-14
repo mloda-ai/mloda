@@ -83,6 +83,7 @@ HELPER_EXPORT_MATRIX: list[tuple[str, str]] = [
     ("columnar_to_rows", _PYTHON_DICT_UTILS_MODULE),
     ("homogenize_rows", _PYTHON_DICT_UTILS_MODULE),
     ("is_columnar", _PYTHON_DICT_UTILS_MODULE),
+    ("result_rows", _PYTHON_DICT_UTILS_MODULE),
     ("rows_to_columnar", _PYTHON_DICT_UTILS_MODULE),
 ]
 
@@ -108,7 +109,7 @@ class TestPythonDictHelperExportMatrix:
 
 
 # Provider side (issue #707): pivoting a columnar frame back to rows is a provider-side
-# concern, so the same four helpers are ALSO exported from mloda.provider. Unlike the
+# concern, so the same helpers are ALSO exported from mloda.provider. Unlike the
 # lazy mloda.user exports, python_dict_utils is stdlib-only and mloda.provider already
 # imports eagerly from mloda_plugins, so these are eager exports listed in __all__.
 class TestPythonDictHelperProviderExportMatrix:

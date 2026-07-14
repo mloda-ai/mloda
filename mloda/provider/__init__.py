@@ -90,6 +90,7 @@ from mloda_plugins.compute_framework.base_implementations.python_dict.python_dic
     columnar_to_rows,
     homogenize_rows,
     is_columnar,
+    result_rows,
     rows_to_columnar,
 )
 
@@ -156,6 +157,7 @@ __all__ = [
     "columnar_to_rows",
     "homogenize_rows",
     "is_columnar",
+    "result_rows",
     "rows_to_columnar",
     # Engines
     "BaseFilterEngine",

@@ -57,6 +57,44 @@ def columnar_to_rows(data: dict[str, Any]) -> list[dict[str, Any]]:
     return [{key: data[key][i] for key in data} for i in range(row_count(data))]
 
 
+def result_rows(result: Any) -> list[dict[str, Any]]:
+    """Unwrap PythonDict ``run_all`` output to rows; an ``is_columnar`` dict is always a partition, never a row."""
+    if result is None:
+        return []
+
+    if isinstance(result, dict):
+        if is_columnar(result):
+            return columnar_to_rows(result)
+        raise ValueError(f"Ambiguous top-level dict is not columnar: {result!r}")
+
+    if not isinstance(result, list):
+        raise ValueError(
+            f"result_rows only unwraps PythonDict-framework output (columnar dicts and row dicts), got {type(result)};"
+            " convert other compute frameworks' results (e.g. DataFrame or Table objects) to rows first"
+        )
+
+    rows: list[dict[str, Any]] = []
+    for i, element in enumerate(result):
+        if element is None:
+            continue
+        if is_columnar(element):
+            rows.extend(columnar_to_rows(element))
+        elif isinstance(element, dict):
+            rows.append(dict(element))
+        elif isinstance(element, list):
+            for j, item in enumerate(element):
+                if not isinstance(item, dict):
+                    raise ValueError(f"Nested row list at index {i} contains non-dict at index {j}: {type(item)}")
+            rows.extend(dict(item) for item in element)
+        else:
+            raise ValueError(
+                f"Unsupported result element at index {i}: {type(element)}; result_rows only unwraps"
+                " PythonDict-framework output (columnar dicts and row dicts), convert other compute frameworks'"
+                " results (e.g. DataFrame or Table objects) to rows first"
+            )
+    return rows
+
+
 def homogenize_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Return new row dicts carrying the union of keys in first-occurrence order, missing keys as ``None``."""
     keys: list[str] = []

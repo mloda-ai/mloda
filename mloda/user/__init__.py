@@ -83,7 +83,9 @@ _LAZY_PYTHON_DICT_UTILS: dict[str, str] = {
     "homogenize_rows": "mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_utils",
     "is_columnar": "mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_utils",
     "result_rows": "mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_utils",
+    "row_count": "mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_utils",
     "rows_to_columnar": "mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_utils",
+    "validate_columnar_dict": "mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_utils",
 }
 
 if TYPE_CHECKING:
@@ -108,7 +110,9 @@ if TYPE_CHECKING:
         homogenize_rows as homogenize_rows,
         is_columnar as is_columnar,
         result_rows as result_rows,
+        row_count as row_count,
         rows_to_columnar as rows_to_columnar,
+        validate_columnar_dict as validate_columnar_dict,
     )
     from mloda_plugins.compute_framework.base_implementations.spark.spark_framework import (
         SparkFramework as SparkFramework,

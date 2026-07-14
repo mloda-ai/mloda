@@ -3,13 +3,14 @@ import decimal
 from collections.abc import Sequence
 from typing import Any, Optional
 from mloda.core.abstract_plugins.components.data_types import DataType
-from mloda.provider import BaseMergeEngine
+from mloda.core.abstract_plugins.components.merge.base_merge_engine import BaseMergeEngine
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_merge_engine import (
     PythonDictMergeEngine,
 )
-from mloda.user import FeatureName
-from mloda.provider import ComputeFramework
-from mloda.provider import BaseFilterEngine, BaseMaskEngine
+from mloda.core.abstract_plugins.components.feature_name import FeatureName
+from mloda.core.abstract_plugins.compute_framework import ComputeFramework
+from mloda.core.filter.filter_engine import BaseFilterEngine
+from mloda.core.abstract_plugins.components.mask.base_mask_engine import BaseMaskEngine
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_filter_engine import (
     PythonDictFilterEngine,
 )

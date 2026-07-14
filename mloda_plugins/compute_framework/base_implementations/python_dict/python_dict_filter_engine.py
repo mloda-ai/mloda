@@ -1,8 +1,8 @@
 import re
 from typing import Any, Callable, cast
 from mloda.core.abstract_plugins.components.contract.comparison_contract import ColumnSemantics
-from mloda.provider import BaseFilterEngine
-from mloda.user import SingleFilter
+from mloda.core.filter.filter_engine import BaseFilterEngine
+from mloda.core.filter.single_filter import SingleFilter
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_utils import rows_to_columnar
 from mloda_plugins.compute_framework.base_implementations.python_dict import python_dict_type_semantics
 

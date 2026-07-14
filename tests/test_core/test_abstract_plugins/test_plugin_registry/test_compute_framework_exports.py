@@ -259,11 +259,8 @@ class TestApiInputDataFeatureIsCore:
             importlib.import_module(_OLD_API_DATA_MODULE)
 
 
-# Fresh-interpreter guard: importing a facade must pull in neither plugins nor optional backends.
-# pyarrow is exempt: core's mloda/core/abstract_plugins/components/data_types.py imports it at module
-# level when installed, so tests/test_core/test_optional_pyarrow/ (pyarrow blocked in a subprocess) is
-# what proves the import stays optional.
-_FORBIDDEN_LIBRARIES: list[str] = ["pandas", "polars", "duckdb"]
+# Fresh-interpreter guard: importing a facade must pull in no plugin and no backend library at all.
+_FORBIDDEN_LIBRARIES: list[str] = ["pandas", "polars", "duckdb", "pyarrow"]
 
 _NO_PLUGIN_SCRIPT = """
 import sys

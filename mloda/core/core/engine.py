@@ -21,6 +21,7 @@ from mloda.core.prepare.execution_plan import ExecutionPlan
 from mloda.core.prepare.graph.build_graph import BuildGraph
 from mloda.core.prepare.resolve_graph import ResolveGraph
 from mloda.core.runtime.run import ExecutionOrchestrator
+from mloda.core.prepare import identify_feature_group
 from mloda.core.prepare.identify_feature_group import IdentifyFeatureGroupClass
 from mloda.core.resolve.outcome import ResolutionOutcome
 from mloda.core.runtime.flight.runner_flight_server import ParallelRunnerFlightServer
@@ -74,8 +75,11 @@ class Engine:
         self.request_feature_order: list[str] = [str(f.name) for f in features]
         self._dual_consumption_warned: set[tuple[str, str, frozenset[str]]] = set()
         self._property_mapping_keys_cache: dict[type[FeatureGroup], frozenset[str]] = {}
-        # One (dependency_path, outcome) entry per successful feature identification, in planning order.
+        # One (dependency_path, outcome) entry per successful identification call, in planning
+        # order; a feature reached via multiple parents is retained once per occurrence.
         self.resolution_outcomes: list[tuple[tuple[str, ...], ResolutionOutcome]] = []
+        # Built at most once per Engine: every identification shares this mapping-derived snapshot.
+        self.resolution_environment = identify_feature_group.snapshot_from_mapping(self.accessible_plugins)
         self.execution_planner = self.create_setup_execution_plan(features)
         self.tfs_connection_map = self._resolve_tfs_connection_map()
 
@@ -221,7 +225,12 @@ class Engine:
     ) -> tuple[type[FeatureGroup], set[type[ComputeFramework]]]:
         """Identifies the feature group class and compute frameworks for a given feature."""
         identifier = IdentifyFeatureGroupClass(
-            feature, self.accessible_plugins, self.links, self.data_access_collection, dependency_path=dependency_path
+            feature,
+            self.accessible_plugins,
+            self.links,
+            self.data_access_collection,
+            dependency_path=dependency_path,
+            environment=self.resolution_environment,
         )
         self.resolution_outcomes.append((dependency_path, identifier.outcome))
         return identifier.get()

@@ -7,7 +7,6 @@ from dataclasses import dataclass, field
 from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser import PropertyValueRejection
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.components.link import Link
-from mloda.core.abstract_plugins.components.plugin_option.plugin_collector import strict_mode_from_env
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.prepare.accessible_plugins import FeatureGroupEnvironmentMapping
@@ -55,11 +54,15 @@ def matches_feature_group_scope(feature_group: type[FeatureGroup], scope: str | 
     )
 
 
-def snapshot_from_mapping(mapping: FeatureGroupEnvironmentMapping) -> ResolutionEnvironmentSnapshot:
+def snapshot_from_mapping(
+    mapping: FeatureGroupEnvironmentMapping, strict_mode: str = "off"
+) -> ResolutionEnvironmentSnapshot:
     """Accessible-only snapshot over an engine mapping.
 
     Enabled and requested frameworks are the union of the mapping's framework sets; every
     record carries ACCESSIBLE provenance because the engine mapping only holds survivors.
+    ``strict_mode`` is caller-provided metadata; the mapping already encodes the survivors
+    of any strict filtering, so the snapshot never re-reads run configuration from the env.
     """
     accessible_entries: list[tuple[type[FeatureGroup], tuple[type[ComputeFramework], ...]]] = []
     records: list[FeatureGroupRecord] = []
@@ -82,7 +85,6 @@ def snapshot_from_mapping(mapping: FeatureGroupEnvironmentMapping) -> Resolution
             )
         )
     enabled = tuple(sorted(PluginIdentity.from_class(framework) for framework in framework_union))
-    strict_mode = strict_mode_from_env()
     record_tuple = tuple(records)
     return ResolutionEnvironmentSnapshot(
         records=record_tuple,
@@ -215,9 +217,14 @@ class FeatureGroupResolver:
         # reason keeps meaning "a genuine match that can never be instantiated".
         is_abstract = inspect.isabstract(feature_group)
 
-        if request.domain is not None and feature_group.get_domain().name != request.domain:
-            state.rejections.append(Rejection(RejectionReason.DOMAIN))
-            return state
+        if request.domain is not None:
+            try:
+                domain_name = feature_group.get_domain().name
+            except Exception as exc:  # Fail closed: a raising domain hook is decision-relevant.
+                return self._fail_state(state, "get_domain", exc)
+            if domain_name != request.domain:
+                state.rejections.append(Rejection(RejectionReason.DOMAIN))
+                return state
 
         try:
             matched = feature_group.match_feature_group_criteria(
@@ -228,16 +235,7 @@ class FeatureGroupResolver:
             state.rejections.append(Rejection(RejectionReason.VALUE_REJECTION, detail=str(exc)))
             return state
         except Exception as exc:  # Fail closed: any provider exception is decision-relevant.
-            failure = PluginFailure(
-                plugin=state.identity,
-                stage="match_feature_group_criteria",
-                category=type(exc).__name__,
-                message=str(exc),
-            )
-            state.status = CandidateStatus.FAILED
-            state.failure = failure
-            state.failures = (failure,)
-            return state
+            return self._fail_state(state, "match_feature_group_criteria", exc)
         if not matched:
             state.rejections.append(Rejection(RejectionReason.CRITERIA))
             return state
@@ -269,15 +267,19 @@ class FeatureGroupResolver:
                 state.rejections.append(Rejection(RejectionReason.FRAMEWORK_PIN))
                 return state
 
-        if not self._supports_request_links(feature_group, request.links):
+        links_supported, link_failure = self._supports_request_links(feature_group, request.links, state.identity)
+        if link_failure is not None:
+            state.frameworks = tuple(evaluations)
+            return self._record_failure(state, link_failure)
+        if not links_supported:
             # Capability is never consulted for a link-rejected candidate; the surviving
-            # frameworks were accessible and pin-compatible, which SUPPORTED records here.
+            # frameworks carry NOT_EVALUATED because they never reached that evaluation.
             for framework in remaining:
                 evaluations.append(
                     FrameworkEvaluation(
                         framework=framework,
                         identity=PluginIdentity.from_class(framework),
-                        status=FrameworkStatus.SUPPORTED,
+                        status=FrameworkStatus.NOT_EVALUATED,
                     )
                 )
             state.frameworks = tuple(evaluations)
@@ -334,17 +336,51 @@ class FeatureGroupResolver:
         state.status = CandidateStatus.SURVIVOR
         return state
 
-    def _supports_request_links(self, feature_group: type[FeatureGroup], links: tuple[Link, ...]) -> bool:
-        if feature_group.index_columns() is None:
-            return True
+    def _fail_state(self, state: _CandidateState, stage: str, exc: Exception) -> _CandidateState:
+        """Freeze a raising provider hook into the candidate's fail-closed FAILED state."""
+        failure = PluginFailure(
+            plugin=state.identity,
+            stage=stage,
+            category=type(exc).__name__,
+            message=str(exc),
+        )
+        return self._record_failure(state, failure)
+
+    def _record_failure(self, state: _CandidateState, failure: PluginFailure) -> _CandidateState:
+        state.status = CandidateStatus.FAILED
+        state.failure = failure
+        state.failures = (failure,)
+        return state
+
+    def _supports_request_links(
+        self, feature_group: type[FeatureGroup], links: tuple[Link, ...], identity: PluginIdentity
+    ) -> tuple[bool, PluginFailure | None]:
+        """Link/index compatibility verdict, plus a failure when an index hook raised.
+
+        index_columns() runs BEFORE the empty-links short-circuit on purpose: a raising
+        index declaration fails closed even for a link-less request.
+        """
+        try:
+            index_columns = feature_group.index_columns()
+        except Exception as exc:  # Fail closed: a raising index declaration is decision-relevant.
+            return False, PluginFailure(
+                plugin=identity, stage="index_columns", category=type(exc).__name__, message=str(exc)
+            )
+        if index_columns is None:
+            return True, None
         if not links:
-            return True
+            return True, None
         for link in links:
-            if feature_group.supports_index(link.left_index):
-                return True
-            if feature_group.supports_index(link.right_index):
-                return True
-        return False
+            for index in (link.left_index, link.right_index):
+                try:
+                    supported = feature_group.supports_index(index)
+                except Exception as exc:  # Fail closed: a raising index capability hook is decision-relevant.
+                    return False, PluginFailure(
+                        plugin=identity, stage="supports_index", category=type(exc).__name__, message=str(exc)
+                    )
+                if supported:
+                    return True, None
+        return False, None
 
     def _apply_shadowing(self, states: list[_CandidateState]) -> None:
         """Framework-aware subclass preference: a child shadows its parent only when both

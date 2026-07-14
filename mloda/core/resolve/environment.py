@@ -275,12 +275,15 @@ def run_feature_group_pipeline(plugin_collector: PluginCollector | None = None) 
 def run_compute_framework_pipeline(
     compute_frameworks: set[type[ComputeFramework]],
     plugin_collector: PluginCollector | None = None,
+    available: frozenset[type[ComputeFramework]] | None = None,
 ) -> ComputeFrameworkPipelineResult:
     """Intersect the requested frameworks with the available ones and apply strict mode.
 
     Mirrors the absorbed PreFilterPlugins._set_compute_frameworks step for step.
+    ``available`` reuses a caller-side availability sampling; None samples here.
     """
-    available = frozenset(PreFilterPlugins.get_cfw_subclasses())
+    if available is None:
+        available = frozenset(PreFilterPlugins.get_cfw_subclasses())
     enabled = compute_frameworks.intersection(available)
 
     strict_mode = _strict_mode(plugin_collector)
@@ -350,14 +353,31 @@ def _fingerprint(
 
 
 def build_resolution_environment(
-    compute_frameworks: set[type[ComputeFramework]],
+    compute_frameworks: set[type[ComputeFramework]] | None = None,
     plugin_collector: PluginCollector | None = None,
 ) -> EnvironmentBuildOutcome:
     """Run the PreFilterPlugins classification pipeline, returning structured state.
 
     Same evaluation order as PreFilterPlugins; on the conditions where it raises,
     the outcome carries an error with the exact current message and no snapshot.
+    ``compute_frameworks=None`` means "all available frameworks": availability is
+    sampled exactly once inside this pipeline, and a raising ``is_available`` probe
+    becomes a structured availability_failure error instead of a raise.
     """
+    sampled: frozenset[type[ComputeFramework]] | None = None
+    if compute_frameworks is None:
+        # Guarded: availability probes are third-party code; a raise must fail structurally here.
+        try:
+            sampled = frozenset(PreFilterPlugins.get_cfw_subclasses())
+        except Exception as exc:
+            error = EnvironmentBuildError(
+                category="availability_failure",
+                message=str(exc),
+                exception=exc.with_traceback(None),
+            )
+            return EnvironmentBuildOutcome(snapshot=None, errors=(error,))
+        compute_frameworks = set(sampled)
+
     strict_mode = _strict_mode(plugin_collector)
     requested = tuple(sorted(PluginIdentity.from_class(cfw) for cfw in compute_frameworks))
 
@@ -365,7 +385,7 @@ def build_resolution_environment(
     if feature_group_result.error is not None:
         return EnvironmentBuildOutcome(snapshot=None, errors=(feature_group_result.error,))
 
-    framework_result = run_compute_framework_pipeline(compute_frameworks, plugin_collector)
+    framework_result = run_compute_framework_pipeline(compute_frameworks, plugin_collector, available=sampled)
     if framework_result.error is not None:
         return EnvironmentBuildOutcome(snapshot=None, errors=(framework_result.error,))
 

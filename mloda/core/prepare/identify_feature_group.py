@@ -10,6 +10,7 @@ from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.link import Link
+from mloda.core.resolve.environment import ResolutionEnvironmentSnapshot
 from mloda.core.resolve.outcome import (
     CandidateStatus,
     FeatureResolutionError,
@@ -29,6 +30,7 @@ __all__ = [
     "IdentifyFeatureGroupClass",
     "matches_feature_group_scope",
     "scope_callout",
+    "snapshot_from_mapping",
     "split_frameworks_by_capability",
 ]
 
@@ -91,6 +93,7 @@ class IdentifyFeatureGroupClass:
         links: Optional[set[Link]],
         data_access_collection: Optional[DataAccessCollection] = None,
         dependency_path: tuple[str, ...] = (),
+        environment: Optional[ResolutionEnvironmentSnapshot] = None,
     ):
         request = ResolutionRequestSnapshot.from_feature(
             feature,
@@ -98,9 +101,9 @@ class IdentifyFeatureGroupClass:
             data_access_collection=data_access_collection,
             dependency_path=dependency_path,
         )
-        self.outcome: ResolutionOutcome = FeatureGroupResolver().resolve(
-            request, snapshot_from_mapping(accessible_plugins)
-        )
+        if environment is None:
+            environment = snapshot_from_mapping(accessible_plugins)
+        self.outcome: ResolutionOutcome = FeatureGroupResolver().resolve(request, environment)
         self._data_access_collection = data_access_collection
 
         self._criteria_matched_feature_groups: set[type[FeatureGroup]] = {

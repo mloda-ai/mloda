@@ -37,6 +37,7 @@ class FrameworkStatus(Enum):
     PIN_EXCLUDED = "pin_excluded"
     CAPABILITY_REJECTED = "capability_rejected"
     HOOK_FAILED = "hook_failed"
+    NOT_EVALUATED = "not_evaluated"
 
 
 class RejectionReason(Enum):
@@ -68,7 +69,11 @@ class Rejection:
 
 @dataclass(frozen=True)
 class PluginFailure:
-    """One provider failure as plain data; never carries the exception object."""
+    """One provider failure as plain data; never carries the exception object.
+
+    ``message`` keeps the raw provider text for the rendered user-facing errors;
+    ``to_payload()`` redacts it and carries only identity, stage, and category.
+    """
 
     plugin: PluginIdentity
     stage: str
@@ -80,7 +85,6 @@ class PluginFailure:
             "plugin": self.plugin.render(),
             "stage": self.stage,
             "category": self.category,
-            "message": self.message,
         }
 
 

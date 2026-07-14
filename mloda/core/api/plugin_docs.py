@@ -30,7 +30,6 @@ from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.api.plugin_info import ComputeFrameworkInfo, ExtenderInfo, FeatureGroupInfo, ResolvedFeature
 from mloda.core.prepare.accessible_plugins import (
-    PreFilterPlugins,
     RedefinitionConflictError,
     dedup_feature_group_subclasses,
     registry_for,
@@ -405,9 +404,8 @@ def resolve_feature(
     scope_suffix = f" {callout}" if callout else ""
     resolved_options = options if options is not None else Options()
 
-    build = build_resolution_environment(
-        compute_frameworks=PreFilterPlugins.get_cfw_subclasses(), plugin_collector=plugin_collector
-    )
+    # compute_frameworks=None: the factory samples availability exactly once, guarded.
+    build = build_resolution_environment(compute_frameworks=None, plugin_collector=plugin_collector)
     snapshot = build.snapshot
     if snapshot is None:
         return _environment_error_result(build.errors[0], feature_name, scope, scope_suffix, resolved_options)
@@ -514,16 +512,24 @@ def _project_outcome(
     matched = _matched_candidate_evaluations(outcome)
     candidates = [evaluation.feature_group for evaluation in matched]
 
-    if outcome.status is ResolutionStatus.RESOLVED:
-        winner = next(evaluation for evaluation in outcome.candidates if evaluation.status is CandidateStatus.WINNER)
+    winner = outcome.winner
+    if outcome.status is ResolutionStatus.RESOLVED and winner is not None:
+        winner_evaluation = next(
+            (evaluation for evaluation in outcome.candidates if evaluation.status is CandidateStatus.WINNER),
+            None,
+        )
         subtype, subtype_family = _resolved_subtype_fields(winner.feature_group, feature_name_obj, options)
         return ResolvedFeature(
             feature_name=feature_name,
             feature_group=winner.feature_group,
             candidates=candidates,
             error=None,
-            supported_compute_frameworks=_framework_names(winner, FrameworkStatus.SUPPORTED),
-            unsupported_compute_frameworks=_framework_names(winner, FrameworkStatus.CAPABILITY_REJECTED),
+            supported_compute_frameworks=sorted(framework.get_class_name() for framework in winner.compute_frameworks),
+            unsupported_compute_frameworks=(
+                _framework_names(winner_evaluation, FrameworkStatus.CAPABILITY_REJECTED)
+                if winner_evaluation is not None
+                else []
+            ),
             subtype=subtype,
             subtype_family=subtype_family,
         )

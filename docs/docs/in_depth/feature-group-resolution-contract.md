@@ -26,8 +26,8 @@ Environment provenance distinguishes: not discovered, disabled by collector, rej
 ## Statuses and invariants
 
 - `ResolutionStatus`: RESOLVED, NOT_FOUND, AMBIGUOUS, FAILED.
-- `CandidateResolutionStatus`: WINNER, SURVIVOR (passed every filter, did not win: ambiguous or failed outcome), SHADOWED, REJECTED, FAILED.
-- `FrameworkResolutionStatus`: SUPPORTED, NOT_ENABLED, UNAVAILABLE, PIN_EXCLUDED, CAPABILITY_REJECTED, HOOK_FAILED.
+- `CandidateStatus`: WINNER, SURVIVOR (passed every filter, did not win: ambiguous or failed outcome), SHADOWED, REJECTED, FAILED.
+- `FrameworkStatus`: SUPPORTED, NOT_ENABLED, UNAVAILABLE, PIN_EXCLUDED, CAPABILITY_REJECTED, HOOK_FAILED, NOT_EVALUATED (never reached capability evaluation).
 
 Invariants:
 

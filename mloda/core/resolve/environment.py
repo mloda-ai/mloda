@@ -42,6 +42,7 @@ _NO_FEATURE_GROUPS_MESSAGE = "No feature groups are loaded. Did you call PluginL
 class EnvironmentProvenance(Enum):
     """Why a plugin ended up in, or out of, the resolution environment."""
 
+    # Reserved for the Stage 3 full-universe candidate records.
     DISCOVERED = "discovered"
     DISABLED_BY_COLLECTOR = "disabled_by_collector"
     POLICY_REJECTED = "policy_rejected"
@@ -89,12 +90,20 @@ class EnvironmentBuildError:
         return ValueError(self.message)
 
     def to_payload(self) -> dict[str, Any]:
-        """Plain-data projection; the carried exception never appears."""
-        return {
+        """Plain-data projection, redacted: raw provider text never appears.
+
+        Errors carrying an exception name only its type; errors without one carry
+        mloda-generated safe text, so their message stays.
+        """
+        payload: dict[str, Any] = {
             "category": self.category,
-            "message": self.message,
             "conflict_identities": [identity.render() for identity in self.conflict_identities],
         }
+        if self.exception is not None:
+            payload["exception_type"] = type(self.exception).__name__
+        else:
+            payload["message"] = self.message
+        return payload
 
 
 @dataclass(frozen=True)
@@ -166,10 +175,14 @@ class FeatureGroupPipelineResult:
 
 @dataclass(frozen=True)
 class ComputeFrameworkPipelineResult:
-    """Enabled frameworks after intersection and strict filtering, or a fatal error."""
+    """Enabled frameworks after intersection and strict filtering, or a fatal error.
+
+    ``available`` is the single per-build availability sampling; classification reuses it.
+    """
 
     enabled: frozenset[type[ComputeFramework]]
     error: EnvironmentBuildError | None
+    available: frozenset[type[ComputeFramework]] = frozenset()
 
 
 def _strict_mode(plugin_collector: PluginCollector | None) -> str:
@@ -229,10 +242,10 @@ def run_feature_group_pipeline(plugin_collector: PluginCollector | None = None) 
         working = dedup_feature_group_subclasses(working, allow_redefinition=allow_redefinition)
     except RedefinitionConflictError as exc:
         error = EnvironmentBuildError(
-            category="redefinition_conflict",
+            category=EnvironmentProvenance.REDEFINITION_CONFLICT.value,
             message=str(exc),
-            conflict_identities=tuple(sorted(PluginIdentity.from_class(cls) for cls in exc.conflicts)),
-            exception=exc,
+            conflict_identities=tuple(sorted({PluginIdentity.from_class(cls) for cls in exc.conflicts})),
+            exception=exc.with_traceback(None),
         )
         return FeatureGroupPipelineResult(survivors=(), dropped=tuple(dropped), error=error)
 
@@ -267,11 +280,12 @@ def run_compute_framework_pipeline(
 
     Mirrors the absorbed PreFilterPlugins._set_compute_frameworks step for step.
     """
-    enabled = compute_frameworks.intersection(PreFilterPlugins.get_cfw_subclasses())
+    available = frozenset(PreFilterPlugins.get_cfw_subclasses())
+    enabled = compute_frameworks.intersection(available)
 
     strict_mode = _strict_mode(plugin_collector)
     if strict_mode == "off":
-        return ComputeFrameworkPipelineResult(enabled=frozenset(enabled), error=None)
+        return ComputeFrameworkPipelineResult(enabled=frozenset(enabled), error=None, available=available)
 
     registered = registry_for(plugin_collector).registered_classes()
     # Bundled plugin frameworks ship with mloda, like abstract classes: never filtered or flagged.
@@ -289,7 +303,7 @@ def run_compute_framework_pipeline(
             _prefilter.logger.warning(
                 "ComputeFrameworks not registered in the plugin registry: %s.", ", ".join(new_names)
             )
-        return ComputeFrameworkPipelineResult(enabled=frozenset(enabled), error=None)
+        return ComputeFrameworkPipelineResult(enabled=frozenset(enabled), error=None, available=available)
 
     surviving = enabled - unregistered
     had_concrete = any(not inspect.isabstract(cfw) for cfw in enabled)
@@ -298,8 +312,15 @@ def run_compute_framework_pipeline(
         error = EnvironmentBuildError(
             category="strict_mode_compute_frameworks", message=_STRICT_MODE_COMPUTE_FRAMEWORKS_MESSAGE
         )
-        return ComputeFrameworkPipelineResult(enabled=frozenset(), error=error)
-    return ComputeFrameworkPipelineResult(enabled=frozenset(surviving), error=None)
+        return ComputeFrameworkPipelineResult(enabled=frozenset(), error=error, available=available)
+    return ComputeFrameworkPipelineResult(enabled=frozenset(surviving), error=None, available=available)
+
+
+def _member_identity(member: Any) -> PluginIdentity:
+    """Identity of a declared rule member, defensive: junk members may lack module/qualname."""
+    module = getattr(member, "__module__", type(member).__module__)
+    qualname = getattr(member, "__qualname__", type(member).__qualname__)
+    return PluginIdentity(module=str(module), qualname=str(qualname))
 
 
 def _fingerprint(
@@ -349,6 +370,8 @@ def build_resolution_environment(
         return EnvironmentBuildOutcome(snapshot=None, errors=(framework_result.error,))
 
     enabled_classes = framework_result.enabled
+    # Classification reuses the pipeline's one availability sampling; is_available never runs again.
+    available_classes = framework_result.available
     enabled = tuple(sorted(PluginIdentity.from_class(cfw) for cfw in enabled_classes))
 
     records_by_identity: dict[PluginIdentity, FeatureGroupRecord] = {}
@@ -363,13 +386,27 @@ def build_resolution_environment(
         try:
             declared = feature_group.compute_framework_definition()
         except Exception as exc:
-            error = EnvironmentBuildError(category="invalid_declaration", message=str(exc), exception=exc)
+            error = EnvironmentBuildError(
+                category=EnvironmentProvenance.INVALID_DECLARATION.value,
+                message=str(exc),
+                exception=exc.with_traceback(None),
+            )
             return EnvironmentBuildOutcome(snapshot=None, errors=(error,))
 
         framework_records: list[FrameworkRecord] = []
         accessible_frameworks: list[type[ComputeFramework]] = []
-        for framework in sorted(declared, key=PluginIdentity.from_class):
-            if not framework.is_available():
+        # The declared type lies for junk members (anything a provider put in the rule set).
+        members: list[Any] = sorted(declared, key=_member_identity)
+        for member in members:
+            identity_record = _member_identity(member)
+            if not (isinstance(member, type) and issubclass(member, ComputeFramework)):
+                # Junk members are recorded, never fatal; PreFilterPlugins keeps dropping them silently.
+                framework_records.append(
+                    FrameworkRecord(identity=identity_record, provenance=EnvironmentProvenance.INVALID_DECLARATION)
+                )
+                continue
+            framework: type[ComputeFramework] = member
+            if framework not in available_classes:
                 framework_provenance = EnvironmentProvenance.UNAVAILABLE
             elif framework in enabled_classes:
                 framework_provenance = EnvironmentProvenance.ACCESSIBLE
@@ -378,9 +415,7 @@ def build_resolution_environment(
                 framework_provenance = EnvironmentProvenance.POLICY_REJECTED
             else:
                 framework_provenance = EnvironmentProvenance.NOT_ENABLED
-            framework_records.append(
-                FrameworkRecord(identity=PluginIdentity.from_class(framework), provenance=framework_provenance)
-            )
+            framework_records.append(FrameworkRecord(identity=identity_record, provenance=framework_provenance))
 
         records_by_identity[identity] = FeatureGroupRecord(
             identity=identity, provenance=EnvironmentProvenance.ACCESSIBLE, frameworks=tuple(framework_records)

@@ -14,9 +14,11 @@ from mloda.core.resolve.identity import PluginIdentity
 
 @dataclass(frozen=True)
 class ResolutionRequestSnapshot:
-    """Immutable capture of one feature request as per-feature matching consumes it.
+    """Capture of one feature request as per-feature matching consumes it.
 
-    ``options`` is the SAME Options object as the feature: an opaque hook input the resolver never mutates.
+    The matching-decision fields and the payload are immutable captures. ``options`` (the SAME
+    Options object as the feature) and ``data_access_collection`` are retained live as opaque
+    hook inputs the resolver never mutates.
     """
 
     feature_name: str

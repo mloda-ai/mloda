@@ -8,10 +8,12 @@ happens to be installed.
 
 The target framework here is a dummy type with no registered transformer, so a
 ``FileSource`` cannot be materialized into it via any chain and the "no chain" branch fires
-regardless of whether pyarrow is installed. The pyarrow-availability seam is the module-
-level ``pa`` symbol in ``mloda.core.abstract_plugins.compute_framework``; the tests toggle
-it with monkeypatch instead of depending on the tox env, so they are portable across the
-pyarrow and no-pyarrow envs and can pin the message under both states.
+regardless of whether pyarrow is installed. Core resolves pyarrow lazily, so ABSENCE is
+simulated portably through the seam the lazy code consults: ``None`` in
+``sys.modules["pyarrow"]`` makes ``import pyarrow`` raise and ``sys.modules.get`` return
+None, in either tox env. PRESENCE is the ambient env, never a stub (a fake pyarrow object
+in ``sys.modules`` is global and would be picked up by real plugin imports): the default
+tox env ships pyarrow, and in the nopyarrow env those tests simply run without it.
 
 Contract:
 
@@ -26,9 +28,10 @@ Contract:
 
 from __future__ import annotations
 
+import sys
+
 import pytest
 
-import mloda.core.abstract_plugins.compute_framework as compute_framework
 from mloda.core.abstract_plugins.components.input_data.file_source import FileSource
 from mloda.provider import ComputeFramework
 from mloda.user import ParallelizationMode
@@ -53,7 +56,8 @@ def test_no_chain_message_is_backend_neutral_without_pyarrow(monkeypatch: pytest
     """pyarrow absent: the message does NOT blame pyarrow; it states the missing pair and
     the generic remedy.
     """
-    monkeypatch.setattr(compute_framework, "pa", None)
+    # None in sys.modules: import pyarrow raises ImportError, sys.modules.get returns None.
+    monkeypatch.setitem(sys.modules, "pyarrow", None)
 
     fw = _no_chain_framework()
     source = FileSource(path="/nonexistent.csv", format="csv", columns=("A", "B"))
@@ -69,11 +73,9 @@ def test_no_chain_message_is_backend_neutral_without_pyarrow(monkeypatch: pytest
     assert "transformer" in message, message
 
 
-def test_no_chain_message_is_backend_neutral_with_pyarrow(monkeypatch: pytest.MonkeyPatch) -> None:
-    """pyarrow present: the message is identical in spirit, still backend-neutral, naming
-    the source framework and the generic remedy."""
-    monkeypatch.setattr(compute_framework, "pa", object())
-
+def test_no_chain_message_is_backend_neutral_with_pyarrow() -> None:
+    """Ambient pyarrow (installed in the default tox env): the message is identical in
+    spirit, still backend-neutral, naming the source framework and the generic remedy."""
     fw = _no_chain_framework()
     source = FileSource(path="/nonexistent.csv", format="csv", columns=("A", "B"))
 
@@ -89,10 +91,8 @@ def test_no_chain_message_is_backend_neutral_with_pyarrow(monkeypatch: pytest.Mo
     assert _Unmaterializable.__name__ in message, message
 
 
-def test_no_chain_renders_target_by_class_name(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_no_chain_renders_target_by_class_name() -> None:
     """The target framework is rendered by ``__name__``, not a raw class repr."""
-    monkeypatch.setattr(compute_framework, "pa", object())
-
     fw = _no_chain_framework()
     source = FileSource(path="/nonexistent.csv", format="csv", columns=("A", "B"))
 
@@ -114,19 +114,17 @@ def _none_target_framework() -> ComputeFramework:
     return _NoneTargetFramework(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
 
 
-def test_none_target_framework_raises_value_error_not_attribute_error(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def test_none_target_framework_raises_value_error_not_attribute_error() -> None:
     """A framework whose expected_data_framework() returns a non-type value (None, the
     documented default) still raises ValueError, not AttributeError, and still names the
     source framework.
     """
-    monkeypatch.setattr(compute_framework, "pa", object())
-
     fw = _none_target_framework()
     source = FileSource(path="/nonexistent.csv", format="csv", columns=("A", "B"))
 
     with pytest.raises(ValueError) as excinfo:
         fw.transform(source, ["A", "B"])
 
-    assert "FileSource" in str(excinfo.value), str(excinfo.value)
+    message = str(excinfo.value)
+    assert "FileSource" in message, message
+    assert "pyarrow" not in message.lower(), message

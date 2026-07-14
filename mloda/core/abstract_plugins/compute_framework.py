@@ -18,17 +18,10 @@ from mloda.core.abstract_plugins.components.input_data.input_data_descriptor imp
 from mloda.core.abstract_plugins.components.parallelization_modes import ParallelizationMode
 from mloda.core.filter.filter_engine import BaseFilterEngine
 from mloda.core.abstract_plugins.components.mask.base_mask_engine import BaseMaskEngine
+from mloda.core.optional_dependency import loaded, require
 from mloda.core.runtime.flight.flight_server import FlightServer
 
-try:
-    import pyarrow as pa
-except ImportError:
-    pa = None  # type: ignore[assignment]
-
-
-def _require_pyarrow() -> None:
-    if pa is None:
-        raise ImportError("pyarrow is required for this operation. Install it with: pip install 'mloda[pyarrow]'")
+_PYARROW_REASON = "this operation"
 
 
 class EmptyResultError(ValueError):
@@ -751,13 +744,13 @@ Available join types:
 
     @final
     def upload_table(self, location: str, object_id: Optional[UUID] = None) -> str:
-        _require_pyarrow()
+        pa = require("pyarrow", _PYARROW_REASON)
         if object_id is None:
             object_id = uuid4()
         _object_id = str(object_id)
 
         # transform to pa.Table for better parquet support
-        if pa is None or not isinstance(self.data, pa.Table):
+        if not isinstance(self.data, pa.Table):
             _from_fw = type(self.data)
             _to_fw = pa.Table
 
@@ -772,7 +765,12 @@ Available join types:
     @final
     @classmethod
     def convert_flight_server_data_back(cls, data: Any, transformer: ComputeFrameworkTransformer) -> Any:
-        if pa is None or not isinstance(data, pa.Table):
+        # Hot path: if pyarrow is not already loaded, data cannot be a pa.Table, so never import it.
+        pa = loaded("pyarrow")
+        if pa is None:
+            return data
+
+        if not isinstance(data, pa.Table):
             return data
         if isinstance(data, cls.expected_data_framework()):
             return data

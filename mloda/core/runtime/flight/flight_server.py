@@ -1,17 +1,20 @@
+from collections.abc import Callable
 from typing import Any
 from uuid import uuid4
 
-try:
-    from pyarrow import flight
-    import pyarrow as pa
-except ImportError:
-    flight = None
-    pa = None  # type: ignore[assignment]
 import os
 
 import logging
 
+from mloda.core.optional_dependency import require
+
 logger = logging.getLogger(__name__)
+
+_FLIGHT_REASON = "Flight-based (multiprocessing/distributed) data transport"
+
+
+def _flight() -> Any:
+    return require("pyarrow.flight", _FLIGHT_REASON)
 
 
 def create_location(host: str = "127.0.0.1") -> str:
@@ -19,19 +22,34 @@ def create_location(host: str = "127.0.0.1") -> str:
 
 
 def _require_pyarrow_flight() -> None:
-    if flight is None:
-        raise ImportError(
-            "pyarrow is required for Flight-based (multiprocessing/distributed) data transport. "
-            "Install it with: pip install 'mloda[pyarrow]'"
-        )
+    _flight()
 
 
-_FlightServerBase: Any = flight.FlightServerBase if flight is not None else object
+_SERVING_CLASSES: dict[type, type] = {}
 
 
-class FlightServer(_FlightServerBase):  # type: ignore[misc]
+def _serving_class(base: type) -> type:
+    """FlightServerBase is only needed to serve: mixing it in here keeps the module import pyarrow-free."""
+    cached = _SERVING_CLASSES.get(base)
+    if cached is None:
+        flight = _flight()
+        cached = type(f"_Serving{base.__name__}", (base, flight.FlightServerBase), {})
+        _SERVING_CLASSES[base] = cached
+    return cached
+
+
+class FlightServer:
+    # Provided by flight.FlightServerBase, which is mixed in on instantiation.
+    port: int
+    serve: Callable[[], None]
+    shutdown: Callable[[], None]
+
+    def __new__(cls, *args: Any, **kwargs: Any) -> Any:
+        if not issubclass(cls, _flight().FlightServerBase):
+            cls = _serving_class(cls)
+        return super().__new__(cls)
+
     def __init__(self, location: Any = create_location()) -> None:
-        _require_pyarrow_flight()
         self.tables: dict[str, Any] = {}  # Dictionary to store tables
         self.location = location
 
@@ -39,7 +57,7 @@ class FlightServer(_FlightServerBase):  # type: ignore[misc]
         os.environ["GRPC_ARG_MAX_RECEIVE_MESSAGE_LENGTH"] = str(1024 * 1024 * 10)  # 10 MB
         os.environ["GRPC_ARG_SEND_MESSAGE_LENGTH"] = str(1024 * 1024 * 10)  # 10 MB
 
-        super().__init__(
+        super().__init__(  # type: ignore[call-arg]
             self.location,
         )
         location_prefix = str(self.location).rsplit(":", 1)[0]
@@ -58,7 +76,7 @@ class FlightServer(_FlightServerBase):  # type: ignore[misc]
 
     @staticmethod
     def upload_table(location: str, table: Any, table_key: str) -> None:
-        _require_pyarrow_flight()
+        flight = _flight()
         with flight.FlightClient(location) as client:
             descriptor = flight.FlightDescriptor.for_path(table_key)
             writer, _ = client.do_put(descriptor, table.schema)
@@ -78,12 +96,12 @@ class FlightServer(_FlightServerBase):  # type: ignore[misc]
 
         key = ticket.ticket
         if key in self.tables:
-            return flight.RecordBatchStream(self.tables[key])
+            return _flight().RecordBatchStream(self.tables[key])
         raise KeyError(f"Table with key {key} not found")
 
     @staticmethod
     def download_table(location: str, table_key: Any) -> Any:
-        _require_pyarrow_flight()
+        flight = _flight()
         with flight.FlightClient(location) as client:
             ticket = flight.Ticket(table_key.encode("utf-8"))
             reader = client.do_get(ticket)
@@ -104,7 +122,7 @@ class FlightServer(_FlightServerBase):  # type: ignore[misc]
 
     @staticmethod
     def drop_tables(location: str, table_key: set[str]) -> None:
-        _require_pyarrow_flight()
+        flight = _flight()
         with flight.FlightClient(location) as client:
             for key in table_key:
                 action = flight.Action("drop_table", key.encode("utf-8"))
@@ -113,7 +131,7 @@ class FlightServer(_FlightServerBase):  # type: ignore[misc]
 
     @staticmethod
     def sent_shutdown_signal(location: str) -> None:
-        _require_pyarrow_flight()
+        flight = _flight()
         with flight.FlightClient(location) as client:
             action = flight.Action("shutdown", b"")
             for _ in client.do_action(action):
@@ -121,6 +139,9 @@ class FlightServer(_FlightServerBase):  # type: ignore[misc]
 
     def list_flights(self, context: Any, criteria: Any) -> Any:
         """List the available datasets (keys of the tables)."""
+        pa = require("pyarrow", _FLIGHT_REASON)
+        flight = _flight()
+
         for key in self.tables.keys():
             descriptor = flight.FlightDescriptor.for_path(key)
             endpoint = flight.FlightEndpoint(key, [self.location])
@@ -130,7 +151,7 @@ class FlightServer(_FlightServerBase):  # type: ignore[misc]
 
     @staticmethod
     def list_flight_infos(location: str) -> set[str]:
-        _require_pyarrow_flight()
+        flight = _flight()
         with flight.FlightClient(location) as client:
             flight_infos = {x.descriptor.path[0] for x in client.list_flights()}
         client.close()

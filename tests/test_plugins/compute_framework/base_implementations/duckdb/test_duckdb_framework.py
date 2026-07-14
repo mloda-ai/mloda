@@ -38,6 +38,11 @@ class TestDuckDBFrameworkAvailability:
         """Test that is_available() returns False when duckdb import fails."""
         assert_unavailable_when_import_blocked(DuckDBFramework, ["duckdb"])
 
+    def test_is_available_when_pyarrow_not_installed(self) -> None:
+        """duckdb alone is not enough: data only enters the framework through Arrow, so a missing
+        pyarrow makes it unavailable even with duckdb installed (issue #736)."""
+        assert_unavailable_when_import_blocked(DuckDBFramework, ["pyarrow"])
+
 
 class TestDuckDBInstallation:
     @pytest.mark.skipif(

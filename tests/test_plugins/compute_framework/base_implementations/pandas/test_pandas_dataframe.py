@@ -5,6 +5,9 @@ from mloda_plugins.compute_framework.base_implementations.pandas.dataframe impor
 from mloda.user import FeatureName
 from mloda.user import ParallelizationMode
 from tests.test_plugins.compute_framework.test_tooling.dataframe_test_base import DataFrameTestBase
+from tests.test_plugins.compute_framework.test_tooling.availability_test_helper import (
+    assert_unavailable_when_import_blocked,
+)
 from tests.test_plugins.compute_framework.base_implementations.datatype_validator_test_mixin import (
     DataTypeValidatorFrameworkTestMixin,
 )
@@ -24,6 +27,12 @@ try:
 except ImportError:
     logger.warning("Pandas is not installed. Some tests will be skipped.")
     pd = None
+
+
+class TestPandasDataFrameAvailability:
+    def test_is_available_when_pandas_not_installed(self) -> None:
+        """Test that is_available() returns False when pandas import fails."""
+        assert_unavailable_when_import_blocked(PandasDataFrame, ["pandas"])
 
 
 @pytest.mark.skipif(pd is None, reason="Pandas is not installed. Skipping this test.")

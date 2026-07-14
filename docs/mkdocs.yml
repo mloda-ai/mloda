@@ -37,6 +37,7 @@ nav:
       - Feature Configuration: in_depth/feature-config.md
       - Feature Chain Parser: in_depth/feature-chain-parser.md
       - Feature Group Matching: in_depth/feature-group-matching.md
+      - Feature Group Resolution Contract: in_depth/feature-group-resolution-contract.md
       - PROPERTY_MAPPING: in_depth/property-mapping.md
       - Feature Group Testing: in_depth/feature-group-testing.md
       - Feature Group Versioning: in_depth/feature-group-version.md

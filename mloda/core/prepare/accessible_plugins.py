@@ -36,9 +36,21 @@ def registry_for(plugin_collector: PluginCollector | None) -> PluginRegistry:
     return PluginRegistry.default()
 
 
+# Both roots ship in the same wheel (pyproject packages: mloda*, mloda_plugins*), so a bundled class keeps
+# its exemption wherever it lives.
+_FIRST_PARTY_ROOTS = frozenset({"mloda", "mloda_plugins"})
+
+
 def _is_bundled_plugin(cls: type[Any]) -> bool:
-    """True for classes shipped in the bundled plugin distribution (mloda_plugins)."""
-    return cls.__module__.split(".", 1)[0] == "mloda_plugins"
+    """True for classes shipped in the mloda wheel (package root ``mloda`` or ``mloda_plugins``).
+
+    ComputeFrameworks are the only kind with this bypass. FeatureGroups and Extenders cannot get one:
+    registry membership is their sole strict-mode gate, and bundled ones already earn an entry by being
+    loaded (``PluginLoader`` scans ``mloda_plugins``) or listed in ``CORE_PLUGIN_MODULES``. Exempting them
+    by package root instead would gut the gate the registry exists to provide; the first-party registration
+    guard test is what keeps that list honest.
+    """
+    return cls.__module__.split(".", 1)[0] in _FIRST_PARTY_ROOTS
 
 
 def filter_extenders_by_strict_mode(

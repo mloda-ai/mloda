@@ -281,18 +281,15 @@ class MyFeatureGroup(FeatureGroup):
 
 ### 2. Update match_feature_group_criteria
 
-Replace old pattern-only matching with unified parser:
+`FeatureChainParserMixin` already implements this; override it only to add your own checks, and reach the parser through `cls.match_parser_criteria`:
 
 ``` python
 @classmethod
 def match_feature_group_criteria(cls, feature_name, options, data_access_collection=None):
-    return FeatureChainParser.match_configuration_feature_chain_parser(
-        feature_name,
-        options,
-        property_mapping=cls.PROPERTY_MAPPING,
-        prefix_patterns=[cls.PREFIX_PATTERN],
-    )
+    return cls.match_parser_criteria(feature_name, options)
 ```
+
+`match_parser_criteria` calls the parser with the class's `PROPERTY_MAPPING` and patterns and turns a rejected option value into a non-match. Calling `FeatureChainParser` directly from a match hook lets that rejection escape as an exception and abort feature identification for every candidate.
 
 ### 3. Modernize input_features Method
 

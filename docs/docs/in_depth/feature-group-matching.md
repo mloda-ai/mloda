@@ -10,7 +10,7 @@ When a feature is requested, the system checks all available feature groups to f
 
 ## Modern Unified Matching
 
-The recommended approach uses `FeatureChainParser.match_configuration_feature_chain_parser` which provides:
+The recommended approach uses `FeatureChainParserMixin`, whose default `match_feature_group_criteria` already does this. Override it only to add your own checks, and reach the parser through `cls.match_parser_criteria`, which reads `PROPERTY_MAPPING` (configuration-based matching) and `PREFIX_PATTERN` / `SUFFIX_PATTERN` (string-based matching) off the class:
 
 ### 1. Dual Approach Support
 
@@ -20,13 +20,10 @@ from mloda.user import Options
 
 @classmethod
 def match_feature_group_criteria(cls, feature_name, options, data_access_collection=None):
-    return FeatureChainParser.match_configuration_feature_chain_parser(
-        feature_name,
-        options,
-        property_mapping=cls.PROPERTY_MAPPING,  # Configuration-based matching
-        prefix_patterns=[cls.PREFIX_PATTERN],   # String-based matching (pattern defaults to CHAIN_SEPARATOR)
-    )
+    return cls.match_parser_criteria(feature_name, options)
 ```
+
+Do not call `FeatureChainParser.match_configuration_feature_chain_parser` directly from a match hook: it raises on an option value the `PROPERTY_MAPPING` rejects, and an exception out of the hook aborts feature identification for every candidate, not just yours. `match_parser_criteria` turns that rejection into a non-match, and the reason still reaches the user in the "No feature groups found" error.
 
 ### 2. PROPERTY_MAPPING Configuration
 

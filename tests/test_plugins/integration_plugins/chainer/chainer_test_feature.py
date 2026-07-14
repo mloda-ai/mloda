@@ -37,7 +37,7 @@ class ChainedFeatureGroupTest(ChainedContextFeatureGroupTest):
         elif has_suffix_configuration == "identifier2":
             val = 1
         else:
-            raise ValueError("Invalid suffix configuration")
+            raise ValueError(f"Invalid suffix configuration: {has_suffix_configuration}")
 
         data[f"{source_feature}__{cls.OPERATION_ID}{has_suffix_configuration}"] = data[source_feature] * 2 + val
         return data

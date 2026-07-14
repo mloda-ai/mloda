@@ -40,6 +40,13 @@ REQUIRED_WHEN_GUARD_DEPTH: contextvars.ContextVar[int] = contextvars.ContextVar(
 )
 
 
+class PropertyValueRejection(ValueError):
+    """An option value the PROPERTY_MAPPING rejects: a verdict, not a crash. Subclasses ValueError so
+    existing ``except ValueError`` handlers keep working, while the distinct type lets a caller treat it as a
+    non-match without also swallowing the ValueErrors that carry actionable guidance.
+    """
+
+
 class FeatureChainParser:
     """
     Mixin class for parsing feature names with chaining support.
@@ -160,7 +167,7 @@ class FeatureChainParser:
         """
         Unified validation: if strict validation -> apply the element_validator OR check membership.
 
-        Raises ValueError if validation fails, otherwise returns None.
+        Raises PropertyValueRejection if validation fails, otherwise returns None.
         """
         if not cls._is_strict_validation(original_property_config):
             return  # No validation needed
@@ -168,9 +175,15 @@ class FeatureChainParser:
         element_validator = cls._get_element_validator(original_property_config)
 
         if element_validator is not None:
-            # Use the element validator if available
-            if not element_validator(found_property_val):
-                raise ValueError(f"Property value '{found_property_val}' failed validation for '{property_name}'")
+            # A validator that raises cannot judge the value, so the value is rejected, not the run.
+            try:
+                verdict = element_validator(found_property_val)
+            except (TypeError, ValueError, AttributeError):
+                verdict = False
+            if not verdict:
+                raise PropertyValueRejection(
+                    f"Property value '{found_property_val}' failed validation for '{property_name}'"
+                )
         else:
             # Fallback to membership check. An unhashable element (e.g. a dict) can never be
             # a member of the accepted set, so it is a clean rejection, not a TypeError.
@@ -179,7 +192,9 @@ class FeatureChainParser:
             except TypeError:
                 is_member = False
             if not is_member:
-                raise ValueError(f"Property value '{found_property_val}' not found in mapping for '{property_name}'")
+                raise PropertyValueRejection(
+                    f"Property value '{found_property_val}' not found in mapping for '{property_name}'"
+                )
 
     @classmethod
     def _determine_parameter_category(cls, property_name: str, property_value: Any, options: Options) -> str:
@@ -464,40 +479,37 @@ class FeatureChainParser:
         return True
 
     @classmethod
+    def _collect_option_value(
+        cls, options: Options, property_name: str, property_mapping: dict[str, Any]
+    ) -> list[Any] | None:
+        """Validate one option value and return its elements, or None when the option is absent."""
+        found_property_value = options.get(property_name)
+        if found_property_value is None:
+            return None
+
+        property_config = property_mapping[property_name]
+        return cls._process_found_property_value(
+            found_property_value, cls._extract_property_values(property_config), property_name, property_config
+        )
+
+    @classmethod
+    def _validate_present_option_values(cls, options: Options, property_mapping: dict[str, Any]) -> None:
+        """Validate the values of the present options, without enforcing presence of the absent ones."""
+        for property_name in property_mapping:
+            cls._collect_option_value(options, property_name, property_mapping)
+
+    @classmethod
     def _validate_options_against_property_mapping(cls, options: Options, property_mapping: dict[str, Any]) -> bool:
-        """
-        Shared validation logic for both string-based and configuration-based approaches.
+        """Validate present option values and enforce required presence. False when a required option is absent.
 
-        Args:
-            options: Options object containing the parameters to validate
-            property_mapping: Property mapping with validation rules
-
-        Returns:
-            True if validation passes, False otherwise
+        Raises:
+            PropertyValueRejection: If a present option carries a value the mapping rejects
         """
         # None marks an absent option; a list (possibly empty) marks a present one.
-        property_tracker: dict[str, list[Any] | None] = {}
-        for key in property_mapping:
-            property_tracker[key] = None
-
-        # Process each property in the mapping
-        for property_name, property_value in property_mapping.items():
-            found_property_value = options.get(property_name)
-            property_value = cls._extract_property_values(property_value)
-
-            # Handle missing properties: leave the tracker at None, so the final check
-            # decides whether the option was required.
-            if found_property_value is None:
-                continue
-
-            collected_property_value = cls._process_found_property_value(
-                found_property_value, property_value, property_name, property_mapping[property_name]
-            )
-
-            if property_tracker[property_name] is not None:
-                raise ValueError(f"Feature name has duplicate values for property '{property_name}'.")
-
-            property_tracker[property_name] = collected_property_value
+        property_tracker: dict[str, list[Any] | None] = {
+            property_name: cls._collect_option_value(options, property_name, property_mapping)
+            for property_name in property_mapping
+        }
         return cls._validate_final_properties(property_tracker, property_mapping)
 
     @classmethod
@@ -511,6 +523,10 @@ class FeatureChainParser:
     ) -> bool:
         """
         Unified method for matching features using either configuration-based or pattern-based parsing.
+
+        Both paths validate the values of the present options; only required presence is enforced on the
+        configuration-based path alone. This raises on a rejected value, so an overridden
+        ``match_feature_group_criteria`` must reach it through ``FeatureChainParserMixin.match_parser_criteria``.
 
         Args:
             feature_name: The feature name to match
@@ -526,6 +542,8 @@ class FeatureChainParser:
         # string based matching
         if prefix_patterns is not None:
             if cls._match_pattern_based_feature(feature_name, prefix_patterns, pattern):
+                if property_mapping is not None:
+                    cls._validate_present_option_values(options, property_mapping)
                 return True
 
         # configuration-based

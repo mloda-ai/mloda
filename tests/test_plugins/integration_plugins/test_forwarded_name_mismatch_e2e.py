@@ -25,9 +25,9 @@ from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser
 from mloda.provider import BaseInputData
 from mloda.provider import ComputeFramework
 from mloda.provider import DataCreator
-from mloda.provider import DefaultOptionKeys
 from mloda.provider import FeatureGroup
 from mloda.provider import FeatureSet
+from mloda.provider import PropertySpec
 from mloda.user import Feature
 from mloda.user import FeatureName
 from mloda.user import Options
@@ -64,13 +64,15 @@ class NameMis579ChainedGroup(FeatureChainParserMixin, FeatureGroup):
 
     PREFIX_PATTERN = r".*__(sum|max)_namemis579$"
     PROPERTY_MAPPING = {
-        OPERATION_KEY: {
-            DefaultOptionKeys.allowed_values: {
+        OPERATION_KEY: PropertySpec(
+            "Aggregation operation applied to the in feature (namemis579 fixture)",
+            allowed_values={
                 "sum": "Sum of the in feature (namemis579 fixture)",
                 "max": "Maximum of the in feature (namemis579 fixture)",
             },
-            DefaultOptionKeys.strict_validation: True,
-        }
+            context=False,
+            strict_validation=True,
+        )
     }
 
     @classmethod

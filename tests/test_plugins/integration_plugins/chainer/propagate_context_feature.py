@@ -12,6 +12,13 @@ from mloda.provider import FeatureSet
 from mloda.user import Options
 from mloda.provider import FeatureChainParser
 from mloda.provider import DefaultOptionKeys
+from mloda.provider import PropertySpec
+
+
+def _env_is_never_required(options: Options) -> bool:
+    """The retired dict spec marked env optional via a present default-None key;
+    the PropertySpec equivalent is a required_when predicate that never fires."""
+    return False
 
 
 class PropagateContextFeatureGroupTest(FeatureGroup):
@@ -19,21 +26,20 @@ class PropagateContextFeatureGroupTest(FeatureGroup):
     OPERATION_ID = "propctx_"
 
     PROPERTY_MAPPING = {
-        "ident": {
-            DefaultOptionKeys.allowed_values: {"identifier1": "multiplier 2", "identifier2": "multiplier 3"},
-            DefaultOptionKeys.context: True,
-            DefaultOptionKeys.strict_validation: True,
-        },
-        "env": {
-            DefaultOptionKeys.allowed_values: {"prod": "production offset 1000", "staging": "staging offset 500"},
-            DefaultOptionKeys.context: True,
-            DefaultOptionKeys.strict_validation: False,
-            DefaultOptionKeys.default: None,
-        },
-        DefaultOptionKeys.in_features: {
-            "explanation": "explanation",
-            DefaultOptionKeys.context: True,
-        },
+        "ident": PropertySpec(
+            "Identifier selecting the multiplier",
+            allowed_values={"identifier1": "multiplier 2", "identifier2": "multiplier 3"},
+            context=True,
+            strict_validation=True,
+        ),
+        "env": PropertySpec(
+            "Environment selecting the offset",
+            allowed_values={"prod": "production offset 1000", "staging": "staging offset 500"},
+            context=True,
+            strict_validation=False,
+            required_when=_env_is_never_required,
+        ),
+        DefaultOptionKeys.in_features: PropertySpec("explanation", context=True),
     }
 
     @classmethod

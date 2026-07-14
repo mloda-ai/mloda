@@ -12,6 +12,7 @@ from mloda.provider import FeatureGroup
 from mloda.provider import FeatureSet
 from mloda.provider import DataCreator
 from mloda.provider import BaseInputData
+from mloda.provider import PropertySpec
 from mloda.user import Feature
 from mloda.user import FeatureName
 from mloda.user import Options
@@ -54,15 +55,12 @@ class ListValuedFeatureGroup(FeatureGroup):
     """
 
     PROPERTY_MAPPING = {
-        "columns": {
-            "explanation": "List of columns to combine in order",
-            DefaultOptionKeys.context: True,
-            DefaultOptionKeys.strict_validation: False,
-        },
-        DefaultOptionKeys.in_features: {
-            "explanation": "Source features",
-            DefaultOptionKeys.context: True,
-        },
+        "columns": PropertySpec(
+            "List of columns to combine in order",
+            context=True,
+            strict_validation=False,
+        ),
+        DefaultOptionKeys.in_features: PropertySpec("Source features", context=True),
     }
 
     @classmethod

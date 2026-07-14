@@ -19,7 +19,7 @@
 | duckdb                                 | 1.5.4           | MIT License                                        |
 | execnet                                | 2.1.2           | MIT License                                        |
 | executing                              | 2.2.1           | MIT License                                        |
-| filelock                               | 3.29.5          | MIT License                                        |
+| filelock                               | 3.29.6          | MIT License                                        |
 | fsspec                                 | 2026.6.0        | BSD-3-Clause                                       |
 | idna                                   | 3.18            | BSD-3-Clause                                       |
 | iniconfig                              | 2.3.0           | MIT                                                |

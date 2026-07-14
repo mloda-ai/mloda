@@ -15,6 +15,7 @@ from mloda.provider import (
 )
 from mloda.provider import FeatureSet
 from mloda.provider import DefaultOptionKeys
+from mloda.provider import PropertySpec
 
 
 class TextCleaningFeatureGroup(FeatureChainParserMixin, FeatureGroup):
@@ -92,18 +93,19 @@ class TextCleaningFeatureGroup(FeatureChainParserMixin, FeatureGroup):
 
     # Property mapping for configuration-based features
     PROPERTY_MAPPING = {
-        CLEANING_OPERATIONS: {
-            DefaultOptionKeys.allowed_values: SUPPORTED_OPERATIONS,
-            DefaultOptionKeys.context: True,
-            DefaultOptionKeys.strict_validation: True,
+        CLEANING_OPERATIONS: PropertySpec(
+            "Sequence of text cleaning operations to apply",
+            allowed_values=SUPPORTED_OPERATIONS,
+            context=True,
+            strict_validation=True,
             # The option is a sequence of operations; core unpacks it, so this judges ONE operation.
-            DefaultOptionKeys.element_validator: lambda op: op in TextCleaningFeatureGroup.SUPPORTED_OPERATIONS,
-        },
-        DefaultOptionKeys.in_features: {
-            "explanation": "Source feature to apply text cleaning operations to",
-            DefaultOptionKeys.context: True,
-            DefaultOptionKeys.strict_validation: False,
-        },
+            element_validator=lambda op: op in TextCleaningFeatureGroup.SUPPORTED_OPERATIONS,
+        ),
+        DefaultOptionKeys.in_features: PropertySpec(
+            "Source feature to apply text cleaning operations to",
+            context=True,
+            strict_validation=False,
+        ),
     }
 
     @classmethod

@@ -58,6 +58,7 @@ from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser
     CHAIN_SEPARATOR,
     INPUT_SEPARATOR,
 )
+from mloda.core.abstract_plugins.components.feature_chainer.property_spec import PropertySpec
 from mloda.core.abstract_plugins.components.default_options_key import DefaultOptionKeys
 
 logger = logging.getLogger(__name__)
@@ -86,7 +87,7 @@ class FeatureChainParserMixin:
 
     Predicate contract:
     - Signature: ``(Options) -> bool``
-    - Must be callable (non-callable values are skipped with a warning)
+    - Must be callable (enforced at ``PropertySpec`` construction)
     - Must not raise exceptions
     - Must be a pure function (no side effects)
     - Non-bool truthy return values are treated as True
@@ -282,7 +283,7 @@ class FeatureChainParserMixin:
         cls,
         feature_name: str | FeatureName,
         operation_config: str,
-        property_mapping: dict[str, Any] | None,
+        property_mapping: dict[str, PropertySpec] | None,
         options: Options,
     ) -> None:
         """Reject consumer-forwarded option values that contradict the name-parsed value.
@@ -313,11 +314,9 @@ class FeatureChainParserMixin:
         raise ValueError(message)
 
     @staticmethod
-    def _find_property_key_for_value(property_mapping: dict[str, Any], operation_config: str) -> str | None:
+    def _find_property_key_for_value(property_mapping: dict[str, PropertySpec], operation_config: str) -> str | None:
         """Return the PROPERTY_MAPPING key whose values contain operation_config, if any."""
         for prop_key, prop_value in property_mapping.items():
-            if not isinstance(prop_value, dict):
-                continue
             extracted = FeatureChainParser._extract_property_values(prop_value)
             if operation_config in extracted:
                 return prop_key
@@ -329,7 +328,7 @@ class FeatureChainParserMixin:
         result: bool,
         feature_name: str | FeatureName,
         prefix_patterns: list[str],
-        property_mapping: dict[str, Any] | None,
+        property_mapping: dict[str, PropertySpec] | None,
         options: Options,
     ) -> bool:
         # Enforce required_when constraints from PROPERTY_MAPPING.
@@ -338,17 +337,8 @@ class FeatureChainParserMixin:
         if result and property_mapping is not None and cls._has_required_when_predicates(property_mapping):
             effective_options = cls._build_effective_options(feature_name, prefix_patterns, property_mapping, options)
             for key, mapping_entry in property_mapping.items():
-                if not isinstance(mapping_entry, dict):
-                    continue
-                predicate = mapping_entry.get(DefaultOptionKeys.required_when)
+                predicate = mapping_entry.required_when
                 if predicate is None:
-                    continue
-                if not callable(predicate):
-                    logger.warning(
-                        "required_when for '%s' in %s is not callable, skipping.",
-                        key,
-                        cls.__name__,
-                    )
                     continue
                 if predicate(effective_options) and effective_options.get(key) is None:
                     logger.debug(
@@ -361,13 +351,13 @@ class FeatureChainParserMixin:
         return True
 
     @classmethod
-    def _validate_match_guards(cls, result: bool, options: Options, property_mapping: dict[str, Any] | None) -> bool:
+    def _validate_match_guards(
+        cls, result: bool, options: Options, property_mapping: dict[str, PropertySpec] | None
+    ) -> bool:
         # Enforce match_guard constraints from PROPERTY_MAPPING
         if result and property_mapping is not None:
             for key, mapping_entry in property_mapping.items():
-                if not isinstance(mapping_entry, dict):
-                    continue
-                guard = mapping_entry.get(DefaultOptionKeys.match_guard)
+                guard = mapping_entry.match_guard
                 if guard is None:
                     continue
                 value = options.get(key)
@@ -410,17 +400,17 @@ class FeatureChainParserMixin:
         return patterns
 
     @classmethod
-    def _get_property_mapping(cls) -> Optional[dict[str, Any]]:
+    def _get_property_mapping(cls) -> Optional[dict[str, PropertySpec]]:
         """Get property mapping from class attribute."""
         if hasattr(cls, "PROPERTY_MAPPING"):
-            return cast(dict[str, Any], cls.PROPERTY_MAPPING)
+            return cast(Optional[dict[str, PropertySpec]], cls.PROPERTY_MAPPING)
         return None
 
     @staticmethod
-    def _has_required_when_predicates(property_mapping: dict[str, Any]) -> bool:
+    def _has_required_when_predicates(property_mapping: dict[str, PropertySpec]) -> bool:
         """Return True if any entry in property_mapping uses required_when."""
         for value in property_mapping.values():
-            if isinstance(value, dict) and DefaultOptionKeys.required_when in value:
+            if value.required_when is not None:
                 return True
         return False
 
@@ -429,7 +419,7 @@ class FeatureChainParserMixin:
         cls,
         feature_name: str,
         prefix_patterns: list[str],
-        property_mapping: dict[str, Any],
+        property_mapping: dict[str, PropertySpec],
         options: Options,
     ) -> Options:
         """Build effective options by merging string-parsed values with explicit options.
@@ -449,8 +439,6 @@ class FeatureChainParserMixin:
 
         # Find which property mapping key the operation_config value belongs to
         for prop_key, prop_value in property_mapping.items():
-            if not isinstance(prop_value, dict):
-                continue
             # Already present in options: no merge needed
             if options.get(prop_key) is not None:
                 continue

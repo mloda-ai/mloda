@@ -10,7 +10,7 @@ from mloda.user import Options
 from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser_mixin import (
     FeatureChainParserMixin,
 )
-from mloda.provider import DefaultOptionKeys
+from mloda.provider import DefaultOptionKeys, PropertySpec
 
 
 class MockFeatureGroup(FeatureChainParserMixin):
@@ -18,11 +18,12 @@ class MockFeatureGroup(FeatureChainParserMixin):
 
     PREFIX_PATTERN = r".*__([\w]+)_test$"
     PROPERTY_MAPPING = {
-        "operation": {
-            DefaultOptionKeys.allowed_values: {"op1": "Operation 1", "op2": "Operation 2"},
-            DefaultOptionKeys.context: True,
-            DefaultOptionKeys.strict_validation: True,
-        }
+        "operation": PropertySpec(
+            "Operation to apply",
+            allowed_values={"op1": "Operation 1", "op2": "Operation 2"},
+            context=True,
+            strict_validation=True,
+        )
     }
 
 
@@ -32,11 +33,12 @@ class MockFeatureGroupCustomSeparator(FeatureChainParserMixin):
     PREFIX_PATTERN = r".*__([\w]+)_test$"
     IN_FEATURE_SEPARATOR = ","
     PROPERTY_MAPPING = {
-        "operation": {
-            DefaultOptionKeys.allowed_values: {"op1": "Operation 1", "op2": "Operation 2"},
-            DefaultOptionKeys.context: True,
-            DefaultOptionKeys.strict_validation: True,
-        }
+        "operation": PropertySpec(
+            "Operation to apply",
+            allowed_values={"op1": "Operation 1", "op2": "Operation 2"},
+            context=True,
+            strict_validation=True,
+        )
     }
 
 
@@ -47,11 +49,12 @@ class MockFeatureGroupWithMinMax(FeatureChainParserMixin):
     MIN_IN_FEATURES = 2
     MAX_IN_FEATURES = 3
     PROPERTY_MAPPING = {
-        "operation": {
-            DefaultOptionKeys.allowed_values: {"op1": "Operation 1"},
-            DefaultOptionKeys.context: True,
-            DefaultOptionKeys.strict_validation: True,
-        }
+        "operation": PropertySpec(
+            "Operation to apply",
+            allowed_values={"op1": "Operation 1"},
+            context=True,
+            strict_validation=True,
+        )
     }
 
 
@@ -72,11 +75,12 @@ class MockFeatureGroupWithoutMinMax(FeatureChainParserMixin):
     MIN_IN_FEATURES = _HiddenAttribute()  # type: ignore[assignment]
     MAX_IN_FEATURES = _HiddenAttribute()
     PROPERTY_MAPPING = {
-        "operation": {
-            DefaultOptionKeys.allowed_values: {"op1": "Operation 1"},
-            DefaultOptionKeys.context: True,
-            DefaultOptionKeys.strict_validation: True,
-        }
+        "operation": PropertySpec(
+            "Operation to apply",
+            allowed_values={"op1": "Operation 1"},
+            context=True,
+            strict_validation=True,
+        )
     }
 
 
@@ -85,11 +89,12 @@ class MockFeatureGroupWithValidationHook(FeatureChainParserMixin):
 
     PREFIX_PATTERN = r".*__([\w]+)_test$"
     PROPERTY_MAPPING = {
-        "operation": {
-            DefaultOptionKeys.allowed_values: {"op1": "Operation 1"},
-            DefaultOptionKeys.context: True,
-            DefaultOptionKeys.strict_validation: True,
-        }
+        "operation": PropertySpec(
+            "Operation to apply",
+            allowed_values={"op1": "Operation 1"},
+            context=True,
+            strict_validation=True,
+        )
     }
 
     @classmethod
@@ -462,11 +467,11 @@ class TestFeatureChainParserMixinListValuedOptions:
 
         class ListValuedFeatureGroup(FeatureChainParserMixin):
             PROPERTY_MAPPING = {
-                "partition_by": {
-                    "explanation": "List of columns to partition by",
-                    DefaultOptionKeys.context: True,
-                    DefaultOptionKeys.strict_validation: False,
-                },
+                "partition_by": PropertySpec(
+                    "List of columns to partition by",
+                    context=True,
+                    strict_validation=False,
+                ),
             }
 
         options = Options(context={"partition_by": ["region", "category"]})
@@ -478,11 +483,11 @@ class TestFeatureChainParserMixinListValuedOptions:
 
         class TupleValuedFeatureGroup(FeatureChainParserMixin):
             PROPERTY_MAPPING = {
-                "partition_by": {
-                    "explanation": "Columns to partition by",
-                    DefaultOptionKeys.context: True,
-                    DefaultOptionKeys.strict_validation: False,
-                },
+                "partition_by": PropertySpec(
+                    "Columns to partition by",
+                    context=True,
+                    strict_validation=False,
+                ),
             }
 
         options = Options(context={"partition_by": ("region", "category")})
@@ -494,10 +499,11 @@ class TestFeatureChainParserMixinListValuedOptions:
         from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser import FeatureChainParser
 
         property_mapping = {
-            "partition_by": {
-                DefaultOptionKeys.context: True,
-                DefaultOptionKeys.strict_validation: False,
-            },
+            "partition_by": PropertySpec(
+                "Columns to partition by",
+                context=True,
+                strict_validation=False,
+            ),
         }
         options = Options(context={"partition_by": ["col1", "col2", "col3"]})
         result = FeatureChainParser._validate_options_against_property_mapping(options, property_mapping)

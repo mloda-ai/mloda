@@ -153,7 +153,11 @@ class TestPropertySpecValidationFunctionE2E:
 
     def test_author_side_default_rejected_at_call_site(self) -> None:
         """A default rejected by the element_validator fails at the property_spec call."""
-        with pytest.raises(ValueError, match=r"default 14 .*rejected by the key's element_validator"):
+        with pytest.raises(
+            ValueError,
+            match=r"PropertySpec\('Size of the time window, at most 13'\): "
+            r"default 14 is rejected by the element_validator",
+        ):
             property_spec(
                 "Size of the time window, at most 13",
                 strict=True,

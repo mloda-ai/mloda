@@ -9,7 +9,6 @@ from abc import ABC
 from mloda.core.abstract_plugins.components.base_artifact import BaseArtifact
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.abstract_plugins.components.data_types import DataType
-from mloda.core.abstract_plugins.components.default_options_key import DefaultOptionKeys
 
 from mloda.core.abstract_plugins.components.domain import Domain
 from mloda.core.abstract_plugins.components.base_feature_group_version import BaseFeatureGroupVersion
@@ -17,6 +16,7 @@ from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser
     CHAIN_SEPARATOR,
     FeatureChainParser,
 )
+from mloda.core.abstract_plugins.components.feature_chainer.property_spec import PropertySpec
 from mloda.core.abstract_plugins.components.subtype_declaration import SubtypeDeclaration
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.components.input_data.api.api_input_data import ApiInputData
@@ -42,17 +42,16 @@ class FeatureGroup(ABC):
     ``PROPERTY_MAPPING`` validation, and provides a default ``input_features``
     implementation::
 
-        from mloda.provider import FeatureChainParserMixin, FeatureGroup, DefaultOptionKeys
+        from mloda.provider import FeatureChainParserMixin, FeatureGroup, PropertySpec
 
         class MyFeatureGroup(FeatureChainParserMixin, FeatureGroup):
             PREFIX_PATTERN = r".*__([\\w]+)_my_op$"
             PROPERTY_MAPPING = {
-                "operation_type": {
-                    "add": "Addition",
-                    "sub": "Subtraction",
-                    DefaultOptionKeys.context: True,
-                    DefaultOptionKeys.strict_validation: True,
-                },
+                "operation_type": PropertySpec(
+                    "Operation to apply.",
+                    allowed_values={"add": "Addition", "sub": "Subtraction"},
+                    strict_validation=True,
+                ),
             }
 
             @classmethod
@@ -75,13 +74,13 @@ class FeatureGroup(ABC):
     for the full PROPERTY_MAPPING reference.
     """
 
-    PROPERTY_MAPPING: ClassVar[Optional[dict[str, Any]]] = None
+    PROPERTY_MAPPING: ClassVar[Optional[dict[str, PropertySpec]]] = None
     """Override in subclasses to declare configurable parameters.
 
-    Each key is a parameter name. Each value is a dict containing valid
-    values, metadata flags (``DefaultOptionKeys.context``,
-    ``DefaultOptionKeys.strict_validation``, etc.), and optional validators.
-    See ``docs/in_depth/property-mapping.md`` for the full specification.
+    Each key is a parameter name. Each value is a ``PropertySpec`` carrying the
+    explanation, the value space (``allowed_values``), flags (``context``,
+    ``strict_validation``), and optional validators. See
+    ``docs/in_depth/property-mapping.md`` for the full specification.
     """
 
     SUBTYPES: ClassVar[Optional[SubtypeDeclaration]] = None
@@ -221,8 +220,8 @@ class FeatureGroup(ABC):
         key = declaration.key
         spec = (cls.PROPERTY_MAPPING or {}).get(key)
         value = options.get(key)
-        if value is None and isinstance(spec, dict):
-            value = spec.get(DefaultOptionKeys.default)
+        if value is None and spec is not None:
+            value = spec.default
         if value is None:
             return None
         if spec is not None:

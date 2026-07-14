@@ -19,7 +19,14 @@ from mloda.provider import (
 )
 from mloda.provider import BaseArtifact
 from mloda.provider import DefaultOptionKeys
+from mloda.provider import PropertySpec
 from mloda_plugins.feature_group.experimental.sklearn.sklearn_artifact import SklearnArtifact
+
+
+def _never_required(options: Options) -> bool:
+    """The retired dict spec marked these keys optional via a present default-None key;
+    the PropertySpec equivalent is a required_when predicate that never fires."""
+    return False
 
 
 class SklearnPipelineFeatureGroup(FeatureChainParserMixin, FeatureGroup):
@@ -90,29 +97,33 @@ class SklearnPipelineFeatureGroup(FeatureChainParserMixin, FeatureGroup):
 
     # Property mapping for new configuration-based approach
     PROPERTY_MAPPING = {
-        PIPELINE_NAME: {
-            DefaultOptionKeys.allowed_values: PIPELINE_TYPES,
-            DefaultOptionKeys.context: True,
-            DefaultOptionKeys.strict_validation: True,
-            DefaultOptionKeys.default: None,
-        },
-        PIPELINE_STEPS: {
-            "explanation": "List of pipeline steps as (name, transformer) tuples",
-            DefaultOptionKeys.context: True,
-            DefaultOptionKeys.strict_validation: False,
-            DefaultOptionKeys.default: None,  # Default is None as pipeline_types also work
-        },
-        PIPELINE_PARAMS: {
-            "explanation": "Pipeline parameters dictionary",
-            DefaultOptionKeys.context: True,
-            DefaultOptionKeys.strict_validation: False,
-            DefaultOptionKeys.default: None,  # Default is None as pipeline_types also work
-        },
-        DefaultOptionKeys.in_features: {
-            "explanation": "Source features for sklearn pipeline (comma-separated)",
-            DefaultOptionKeys.context: True,
-            DefaultOptionKeys.strict_validation: False,
-        },
+        PIPELINE_NAME: PropertySpec(
+            "Name of the predefined pipeline type to apply",
+            allowed_values=PIPELINE_TYPES,
+            context=True,
+            strict_validation=True,
+            default=None,
+            required_when=_never_required,  # preserves the old dict-form default: None optional semantics
+        ),
+        PIPELINE_STEPS: PropertySpec(
+            "List of pipeline steps as (name, transformer) tuples",
+            context=True,
+            strict_validation=False,
+            default=None,  # Default is None as pipeline_types also work
+            required_when=_never_required,  # preserves the old dict-form default: None optional semantics
+        ),
+        PIPELINE_PARAMS: PropertySpec(
+            "Pipeline parameters dictionary",
+            context=True,
+            strict_validation=False,
+            default=None,  # Default is None as pipeline_types also work
+            required_when=_never_required,  # preserves the old dict-form default: None optional semantics
+        ),
+        DefaultOptionKeys.in_features: PropertySpec(
+            "Source features for sklearn pipeline (comma-separated)",
+            context=True,
+            strict_validation=False,
+        ),
     }
 
     PREFIX_PATTERN = r".*__sklearn_pipeline_([\w]+)$"

@@ -16,6 +16,7 @@ from mloda.provider import (
 from mloda.provider import FeatureSet
 from mloda.user import Options
 from mloda.provider import DefaultOptionKeys
+from mloda.provider import PropertySpec
 
 
 class DimensionalityReductionFeatureGroup(FeatureChainParserMixin, FeatureGroup):
@@ -119,86 +120,73 @@ class DimensionalityReductionFeatureGroup(FeatureChainParserMixin, FeatureGroup)
     MAX_IN_FEATURES = None
 
     PROPERTY_MAPPING = {
-        ALGORITHM: {
-            DefaultOptionKeys.allowed_values: REDUCTION_ALGORITHMS,
-            DefaultOptionKeys.context: True,
-            DefaultOptionKeys.strict_validation: True,
-        },
-        DIMENSION: {
-            "explanation": "Target dimension for the reduction (positive integer)",
-            DefaultOptionKeys.context: True,
-            DefaultOptionKeys.strict_validation: True,
-            DefaultOptionKeys.element_validator: lambda value: (
-                isinstance(value, (int, str)) and str(value).isdigit() and int(value) > 0
-            ),
-        },
-        DefaultOptionKeys.in_features: {
-            "explanation": "Source features to use for dimensionality reduction",
-            DefaultOptionKeys.context: True,
-            DefaultOptionKeys.strict_validation: False,
-        },
+        ALGORITHM: PropertySpec(
+            "Dimensionality reduction algorithm to use",
+            allowed_values=REDUCTION_ALGORITHMS,
+            context=True,
+            strict_validation=True,
+        ),
+        DIMENSION: PropertySpec(
+            "Target dimension for the reduction (positive integer)",
+            context=True,
+            strict_validation=True,
+            element_validator=lambda value: isinstance(value, (int, str)) and str(value).isdigit() and int(value) > 0,
+        ),
+        DefaultOptionKeys.in_features: PropertySpec(
+            "Source features to use for dimensionality reduction",
+            context=True,
+            strict_validation=False,
+        ),
         # t-SNE specific parameters
-        TSNE_MAX_ITER: {
-            "explanation": "Maximum number of iterations for t-SNE optimization",
-            DefaultOptionKeys.context: True,
-            DefaultOptionKeys.strict_validation: False,
-            DefaultOptionKeys.default: 250,
-            DefaultOptionKeys.element_validator: lambda value: (
-                isinstance(value, (int, str)) and str(value).isdigit() and int(value) > 0
-            ),
-        },
-        TSNE_N_ITER_WITHOUT_PROGRESS: {
-            "explanation": "Maximum iterations without progress before early stopping (t-SNE)",
-            DefaultOptionKeys.context: True,
-            DefaultOptionKeys.strict_validation: False,
-            DefaultOptionKeys.default: 50,
-            DefaultOptionKeys.element_validator: lambda value: (
-                isinstance(value, (int, str)) and str(value).isdigit() and int(value) > 0
-            ),
-        },
-        TSNE_METHOD: {
-            "explanation": "t-SNE computation method",
-            DefaultOptionKeys.allowed_values: {
+        TSNE_MAX_ITER: PropertySpec(
+            "Maximum number of iterations for t-SNE optimization",
+            context=True,
+            strict_validation=False,
+            default=250,
+        ),
+        TSNE_N_ITER_WITHOUT_PROGRESS: PropertySpec(
+            "Maximum iterations without progress before early stopping (t-SNE)",
+            context=True,
+            strict_validation=False,
+            default=50,
+        ),
+        TSNE_METHOD: PropertySpec(
+            "t-SNE computation method",
+            allowed_values={
                 "barnes_hut": "Barnes-Hut approximation (faster, O(n log n))",
                 "exact": "Exact method (slower, O(n^2))",
             },
-            DefaultOptionKeys.context: True,
-            DefaultOptionKeys.strict_validation: True,
-            DefaultOptionKeys.default: "barnes_hut",
-        },
+            context=True,
+            strict_validation=True,
+            default="barnes_hut",
+        ),
         # PCA specific parameters
-        PCA_SVD_SOLVER: {
-            "explanation": "SVD solver algorithm for PCA",
-            DefaultOptionKeys.allowed_values: {
+        PCA_SVD_SOLVER: PropertySpec(
+            "SVD solver algorithm for PCA",
+            allowed_values={
                 "auto": "Automatically choose solver based on data shape",
                 "full": "Full SVD using LAPACK",
                 "arpack": "Truncated SVD using ARPACK",
                 "randomized": "Randomized SVD",
             },
-            DefaultOptionKeys.context: True,
-            DefaultOptionKeys.strict_validation: True,
-            DefaultOptionKeys.default: "auto",
-        },
+            context=True,
+            strict_validation=True,
+            default="auto",
+        ),
         # ICA specific parameters
-        ICA_MAX_ITER: {
-            "explanation": "Maximum number of iterations for ICA",
-            DefaultOptionKeys.context: True,
-            DefaultOptionKeys.strict_validation: False,
-            DefaultOptionKeys.default: 200,
-            DefaultOptionKeys.element_validator: lambda value: (
-                isinstance(value, (int, str)) and str(value).isdigit() and int(value) > 0
-            ),
-        },
+        ICA_MAX_ITER: PropertySpec(
+            "Maximum number of iterations for ICA",
+            context=True,
+            strict_validation=False,
+            default=200,
+        ),
         # Isomap specific parameters
-        ISOMAP_N_NEIGHBORS: {
-            "explanation": "Number of neighbors for Isomap",
-            DefaultOptionKeys.context: True,
-            DefaultOptionKeys.strict_validation: False,
-            DefaultOptionKeys.default: 5,
-            DefaultOptionKeys.element_validator: lambda value: (
-                isinstance(value, (int, str)) and str(value).isdigit() and int(value) > 0
-            ),
-        },
+        ISOMAP_N_NEIGHBORS: PropertySpec(
+            "Number of neighbors for Isomap",
+            context=True,
+            strict_validation=False,
+            default=5,
+        ),
     }
 
     @classmethod

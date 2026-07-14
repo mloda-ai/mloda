@@ -15,6 +15,7 @@ from mloda.provider import (
 )
 from mloda.provider import FeatureSet
 from mloda.provider import DefaultOptionKeys
+from mloda.provider import PropertySpec
 
 
 class ClusteringFeatureGroup(FeatureChainParserMixin, FeatureGroup):
@@ -112,31 +113,31 @@ class ClusteringFeatureGroup(FeatureChainParserMixin, FeatureGroup):
 
     # Property mapping for configuration-based feature creation
     PROPERTY_MAPPING = {
-        ALGORITHM: {
-            DefaultOptionKeys.allowed_values: CLUSTERING_ALGORITHMS,
-            DefaultOptionKeys.context: True,
-            DefaultOptionKeys.strict_validation: True,
-        },
-        K_VALUE: {
-            "explanation": "Number of clusters or 'auto' for automatic determination",
-            DefaultOptionKeys.context: True,  # Mark as context parameter
-            DefaultOptionKeys.strict_validation: True,  # Enable strict validation
-            DefaultOptionKeys.element_validator: lambda value: (
+        ALGORITHM: PropertySpec(
+            "Clustering algorithm to use",
+            allowed_values=CLUSTERING_ALGORITHMS,
+            context=True,
+            strict_validation=True,
+        ),
+        K_VALUE: PropertySpec(
+            "Number of clusters or 'auto' for automatic determination",
+            context=True,
+            strict_validation=True,
+            element_validator=lambda value: (
                 value == "auto" or (isinstance(value, (int, str)) and str(value).isdigit() and int(value) > 0)
             ),
-        },
-        DefaultOptionKeys.in_features: {
-            "explanation": "Source features to use for clustering",
-            DefaultOptionKeys.context: True,  # Mark as context parameter
-            DefaultOptionKeys.strict_validation: False,  # Flexible validation
-        },
-        OUTPUT_PROBABILITIES: {
-            "explanation": "Whether to output cluster probabilities/distances as separate columns using ~N suffix pattern",
-            DefaultOptionKeys.context: True,  # Mark as context parameter
-            DefaultOptionKeys.strict_validation: False,  # Flexible validation
-            DefaultOptionKeys.default: False,  # Default is False (don't output probabilities)
-            DefaultOptionKeys.element_validator: lambda value: isinstance(value, bool),
-        },
+        ),
+        DefaultOptionKeys.in_features: PropertySpec(
+            "Source features to use for clustering",
+            context=True,
+            strict_validation=False,
+        ),
+        OUTPUT_PROBABILITIES: PropertySpec(
+            "Whether to output cluster probabilities/distances as separate columns using ~N suffix pattern",
+            context=True,
+            strict_validation=False,
+            default=False,
+        ),
     }
 
     @classmethod

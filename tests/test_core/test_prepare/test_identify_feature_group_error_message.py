@@ -15,6 +15,7 @@ from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser_mixin import (
     FeatureChainParserMixin,
 )
+from mloda.core.abstract_plugins.components.feature_chainer.property_spec import property_spec
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
@@ -651,12 +652,13 @@ class StrictWindowFeatureGroup(FeatureChainParserMixin, FeatureGroup):
     """
 
     PROPERTY_MAPPING = {
-        "window_size": {
-            "explanation": "Size of window",
-            DefaultOptionKeys.strict_validation: True,
-            DefaultOptionKeys.element_validator: lambda v: isinstance(v, int) and 0 < v <= 13,
-        },
-        DefaultOptionKeys.in_features: {"explanation": "source", DefaultOptionKeys.context: True},
+        "window_size": property_spec(
+            "Size of window",
+            strict=True,
+            context=False,
+            element_validator=lambda v: isinstance(v, int) and 0 < v <= 13,
+        ),
+        DefaultOptionKeys.in_features: property_spec("source", context=True),
     }
 
     def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
@@ -670,12 +672,13 @@ class StrictMaxWindowFeatureGroup(FeatureChainParserMixin, FeatureGroup):
     """
 
     PROPERTY_MAPPING = {
-        "max_window": {
-            "explanation": "Maximum window size",
-            DefaultOptionKeys.strict_validation: True,
-            DefaultOptionKeys.element_validator: lambda v: isinstance(v, int) and 0 < v <= 13,
-        },
-        DefaultOptionKeys.in_features: {"explanation": "source", DefaultOptionKeys.context: True},
+        "max_window": property_spec(
+            "Maximum window size",
+            strict=True,
+            context=False,
+            element_validator=lambda v: isinstance(v, int) and 0 < v <= 13,
+        ),
+        DefaultOptionKeys.in_features: property_spec("source", context=True),
     }
 
     def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:

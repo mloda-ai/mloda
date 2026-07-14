@@ -35,6 +35,7 @@ from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser
 from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser_mixin import (
     FeatureChainParserMixin,
 )
+from mloda.core.abstract_plugins.components.feature_chainer.property_spec import PropertySpec
 from mloda.core.abstract_plugins.components.feature_set import FeatureSet
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.components.utils import get_all_subclasses
@@ -84,11 +85,12 @@ class TestStrictMembershipViaAllowedValues:
         class AllowedValuesFeatureGroup(FeatureChainParserMixin, FeatureGroup):
             PREFIX_PATTERN = r".*__([\w]+)_op$"
             PROPERTY_MAPPING = {
-                "operation_type": {
-                    DefaultOptionKeys.allowed_values: {"add": "Addition", "sub": "Subtraction"},
-                    DefaultOptionKeys.context: True,
-                    DefaultOptionKeys.strict_validation: True,
-                }
+                "operation_type": PropertySpec(
+                    "Arithmetic operation",
+                    allowed_values={"add": "Addition", "sub": "Subtraction"},
+                    context=True,
+                    strict_validation=True,
+                )
             }
 
             @classmethod
@@ -110,7 +112,11 @@ class TestStrictMembershipViaAllowedValues:
 
 
 class TestClassDefinitionDefaultInvariantHonorsAllowedValues:
-    """The class-definition default invariant reads accepted values from ``allowed_values``."""
+    """The default invariant reads accepted values from ``allowed_values``.
+
+    The invariant fires at ``PropertySpec`` construction, which for a class-level
+    PROPERTY_MAPPING is during class definition: the class body never finishes.
+    """
 
     def test_rejects_strict_default_outside_allowed_values(self) -> None:
         """A strict default outside the ``allowed_values`` set rejects at class definition."""
@@ -119,12 +125,13 @@ class TestClassDefinitionDefaultInvariantHonorsAllowedValues:
             class BadAllowedValuesDefault(FeatureChainParserMixin, FeatureGroup):
                 PREFIX_PATTERN = r".*__([\w]+)_op$"
                 PROPERTY_MAPPING = {
-                    "operation_type": {
-                        DefaultOptionKeys.allowed_values: {"add": "Addition", "sub": "Subtraction"},
-                        DefaultOptionKeys.context: True,
-                        DefaultOptionKeys.strict_validation: True,
-                        DefaultOptionKeys.default: "mul",
-                    }
+                    "operation_type": PropertySpec(
+                        "Arithmetic operation",
+                        allowed_values={"add": "Addition", "sub": "Subtraction"},
+                        context=True,
+                        strict_validation=True,
+                        default="mul",
+                    )
                 }
 
                 @classmethod
@@ -133,11 +140,9 @@ class TestClassDefinitionDefaultInvariantHonorsAllowedValues:
 
         message = str(exc_info.value)
         del exc_info
-        assert "BadAllowedValuesDefault" in message
-        assert "operation_type" in message
+        assert "PropertySpec" in message
         assert "mul" in message
-        assert "add" in message
-        assert "sub" in message
+        assert "allowed_values" in message
 
     def test_accepts_strict_default_in_allowed_values(self) -> None:
         """A strict default inside the ``allowed_values`` set defines without error."""
@@ -145,45 +150,46 @@ class TestClassDefinitionDefaultInvariantHonorsAllowedValues:
         class GoodAllowedValuesDefault(FeatureChainParserMixin, FeatureGroup):
             PREFIX_PATTERN = r".*__([\w]+)_op$"
             PROPERTY_MAPPING = {
-                "operation_type": {
-                    DefaultOptionKeys.allowed_values: {"add": "Addition", "sub": "Subtraction"},
-                    DefaultOptionKeys.context: True,
-                    DefaultOptionKeys.strict_validation: True,
-                    DefaultOptionKeys.default: "add",
-                }
+                "operation_type": PropertySpec(
+                    "Arithmetic operation",
+                    allowed_values={"add": "Addition", "sub": "Subtraction"},
+                    context=True,
+                    strict_validation=True,
+                    default="add",
+                )
             }
 
             @classmethod
             def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
                 return data
 
-        assert GoodAllowedValuesDefault.PROPERTY_MAPPING["operation_type"][DefaultOptionKeys.default] == "add"
+        assert GoodAllowedValuesDefault.PROPERTY_MAPPING["operation_type"].default == "add"
 
 
 class TestNoSilentWidening:
-    """An extra top-level doc key is never promoted to an allowed value."""
+    """The spec's documentation text is never promoted to an allowed value."""
 
-    def test_extra_doc_key_not_treated_as_allowed_value(self) -> None:
+    def test_explanation_not_treated_as_allowed_value(self) -> None:
         """When ``allowed_values`` is present, extraction returns exactly that mapping."""
-        spec = {
-            DefaultOptionKeys.allowed_values: {"add": "Addition"},
-            "explanation": "operation_type chooses the arithmetic operation",
-            DefaultOptionKeys.context: True,
-            DefaultOptionKeys.strict_validation: True,
-        }
+        spec = PropertySpec(
+            "operation_type chooses the arithmetic operation",
+            allowed_values={"add": "Addition"},
+            context=True,
+            strict_validation=True,
+        )
 
         extracted = FeatureChainParser._extract_property_values(spec)
         assert extracted == {"add": "Addition"}
 
     def test_doc_key_name_rejected_by_strict_validation(self) -> None:
-        """The doc key name (``explanation``) is not a member, so strict validation rejects it."""
+        """The doc field name (``explanation``) is not a member, so strict validation rejects it."""
         property_mapping = {
-            "operation_type": {
-                DefaultOptionKeys.allowed_values: {"add": "Addition"},
-                "explanation": "operation_type chooses the arithmetic operation",
-                DefaultOptionKeys.context: True,
-                DefaultOptionKeys.strict_validation: True,
-            }
+            "operation_type": PropertySpec(
+                "operation_type chooses the arithmetic operation",
+                allowed_values={"add": "Addition"},
+                context=True,
+                strict_validation=True,
+            )
         }
 
         assert (

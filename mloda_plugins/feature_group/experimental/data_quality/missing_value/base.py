@@ -9,12 +9,20 @@ from typing import Any, Optional
 
 from mloda.provider import FeatureGroup
 from mloda.user import Feature
+from mloda.user import Options
 from mloda.provider import FeatureChainParser
 from mloda.provider import (
     FeatureChainParserMixin,
 )
 from mloda.provider import FeatureSet
 from mloda.provider import DefaultOptionKeys
+from mloda.provider import PropertySpec
+
+
+def _never_required(options: Options) -> bool:
+    """The retired dict spec marked these keys optional via a present default-None key;
+    the PropertySpec equivalent is a required_when predicate that never fires."""
+    return False
 
 
 class MissingValueFeatureGroup(FeatureChainParserMixin, FeatureGroup):
@@ -165,28 +173,31 @@ class MissingValueFeatureGroup(FeatureChainParserMixin, FeatureGroup):
     MAX_IN_FEATURES = 1
 
     PROPERTY_MAPPING = {
-        IMPUTATION_METHOD: {
-            DefaultOptionKeys.allowed_values: IMPUTATION_METHODS,
-            DefaultOptionKeys.context: True,
-            DefaultOptionKeys.strict_validation: True,
-        },
-        DefaultOptionKeys.in_features: {
-            "explanation": "Source feature to impute missing values",
-            DefaultOptionKeys.context: True,
-            DefaultOptionKeys.strict_validation: False,
-        },
-        "constant_value": {
-            "explanation": "Constant value to use for constant imputation method",
-            DefaultOptionKeys.context: True,
-            DefaultOptionKeys.strict_validation: False,
-            DefaultOptionKeys.default: None,  # Default is None, required only for constant method
-        },
-        "group_by_features": {
-            "explanation": "Optional list of features to group by before imputation",
-            DefaultOptionKeys.context: True,
-            DefaultOptionKeys.strict_validation: False,
-            DefaultOptionKeys.default: None,  # Default is None (no grouping)
-        },
+        IMPUTATION_METHOD: PropertySpec(
+            "Imputation method to apply",
+            allowed_values=IMPUTATION_METHODS,
+            context=True,
+            strict_validation=True,
+        ),
+        DefaultOptionKeys.in_features: PropertySpec(
+            "Source feature to impute missing values",
+            context=True,
+            strict_validation=False,
+        ),
+        "constant_value": PropertySpec(
+            "Constant value to use for constant imputation method",
+            context=True,
+            strict_validation=False,
+            default=None,  # Default is None, required only for constant method
+            required_when=_never_required,  # preserves the old dict-form default: None optional semantics
+        ),
+        "group_by_features": PropertySpec(
+            "Optional list of features to group by before imputation",
+            context=True,
+            strict_validation=False,
+            default=None,  # Default is None (no grouping)
+            required_when=_never_required,  # preserves the old dict-form default: None optional semantics
+        ),
     }
 
     @classmethod

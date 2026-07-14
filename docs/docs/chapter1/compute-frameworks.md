@@ -173,7 +173,7 @@ A feature group running on PythonDictFramework may also return row-wise data as 
 
 #### Columnar helpers
 
-`columnar_to_rows`, `homogenize_rows`, `is_columnar`, `result_rows`, and `rows_to_columnar` are importable from `mloda.provider` (plugin/provider code, where pivoting a columnar frame back to rows belongs) and from `mloda.user` (application code unwrapping a `run_all` result). `columnar_to_rows` is strict: it raises `ValueError` on anything that is not a valid columnar dict. `result_rows` is the blessed tolerant unwrapper for `run_all` output: it flattens the partition list into row dicts, and a dict that satisfies `is_columnar` is always treated as a columnar partition, never as a row.
+`columnar_to_rows`, `homogenize_rows`, `is_columnar`, `result_rows`, and `rows_to_columnar` are importable from `mloda.provider` (plugin/provider code, where pivoting a columnar frame back to rows belongs) and from `mloda.user` (application code unwrapping a `run_all` result). `columnar_to_rows` is strict: it raises `ValueError` on anything that is not a valid columnar dict. `result_rows` is the blessed tolerant unwrapper for PythonDict-framework `run_all` output (columnar dicts and row-dict lists): it flattens the partition list into row dicts, and a dict that satisfies `is_columnar` is always treated as a columnar partition, never as a row. It rejects other frameworks' result objects (convert those to rows first).
 
 ``` python
 from mloda.user import mloda, result_rows

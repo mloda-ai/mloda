@@ -58,7 +58,7 @@ def columnar_to_rows(data: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 def result_rows(result: Any) -> list[dict[str, Any]]:
-    """Tolerantly unwrap ``run_all`` output to rows; an ``is_columnar`` dict is always a partition, never a row."""
+    """Unwrap PythonDict ``run_all`` output to rows; an ``is_columnar`` dict is always a partition, never a row."""
     if result is None:
         return []
 
@@ -68,7 +68,10 @@ def result_rows(result: Any) -> list[dict[str, Any]]:
         raise ValueError(f"Ambiguous top-level dict is not columnar: {result!r}")
 
     if not isinstance(result, list):
-        raise ValueError(f"Expected None, a columnar dict, or a list of partitions, got {type(result)}")
+        raise ValueError(
+            f"result_rows only unwraps PythonDict-framework output (columnar dicts and row dicts), got {type(result)};"
+            " convert other compute frameworks' results (e.g. DataFrame or Table objects) to rows first"
+        )
 
     rows: list[dict[str, Any]] = []
     for i, element in enumerate(result):
@@ -77,14 +80,18 @@ def result_rows(result: Any) -> list[dict[str, Any]]:
         if is_columnar(element):
             rows.extend(columnar_to_rows(element))
         elif isinstance(element, dict):
-            rows.append(element)
+            rows.append(dict(element))
         elif isinstance(element, list):
             for j, item in enumerate(element):
                 if not isinstance(item, dict):
                     raise ValueError(f"Nested row list at index {i} contains non-dict at index {j}: {type(item)}")
-            rows.extend(element)
+            rows.extend(dict(item) for item in element)
         else:
-            raise ValueError(f"Unsupported result element at index {i}: {type(element)}")
+            raise ValueError(
+                f"Unsupported result element at index {i}: {type(element)}; result_rows only unwraps"
+                " PythonDict-framework output (columnar dicts and row dicts), convert other compute frameworks'"
+                " results (e.g. DataFrame or Table objects) to rows first"
+            )
     return rows
 
 

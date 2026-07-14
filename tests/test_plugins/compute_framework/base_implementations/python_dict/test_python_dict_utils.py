@@ -247,7 +247,7 @@ class TestResultRows:
             result_rows(["text"])
 
     def test_ragged_columnar_looking_dict_raises(self) -> None:
-        """A ragged columnar-looking dict at top level raises via the strict pivot."""
+        """A ragged columnar-looking dict fails ``is_columnar`` and raises via the ambiguous-dict branch."""
         with pytest.raises(ValueError):
             result_rows({"a": [1, 2], "b": [1]})
 
@@ -260,3 +260,39 @@ class TestResultRows:
         result = result_rows({"b": [1], "a": [2]})
         assert result == [{"b": 1, "a": 2}]
         assert [list(row.keys()) for row in result] == [["b", "a"]]
+
+    def test_passthrough_rows_are_fresh_dict_objects(self) -> None:
+        """Passed-through row dicts are fresh copies, never aliases of the input dicts."""
+        rows: list[dict[str, Any]] = [{"a": 1}]
+        result = result_rows(rows)
+        assert result == rows
+        assert result[0] is not rows[0]
+
+    def test_nested_row_list_rows_are_fresh_dict_objects(self) -> None:
+        """Row dicts taken from a nested row list are fresh copies, never aliases."""
+        inner: dict[str, Any] = {"a": 2}
+        result = result_rows([[inner]])
+        assert result == [{"a": 2}]
+        assert result[0] is not inner
+
+    def test_unsupported_element_error_names_the_pythondict_scope(self) -> None:
+        """The unsupported-element error names PythonDict so other frameworks' users know to convert first."""
+        with pytest.raises(ValueError, match="PythonDict"):
+            result_rows([object()])
+
+    def test_unsupported_top_level_error_names_the_pythondict_scope(self) -> None:
+        """The unsupported-top-level error names PythonDict so other frameworks' users know to convert first."""
+        with pytest.raises(ValueError, match="PythonDict"):
+            result_rows(("not", "a", "list"))
+
+    def test_mixed_columnar_and_bare_row_dict_elements(self) -> None:
+        """A columnar partition pivots while a non-columnar dict element is a row, in one list."""
+        assert result_rows([{"a": [1]}, {"a": 2}]) == [{"a": 1}, {"a": 2}]
+
+    def test_ragged_dict_element_is_a_row_not_a_partition(self) -> None:
+        """A ragged dict fails ``is_columnar``, so inside a list it is a row; real partitions are never ragged."""
+        assert result_rows([{"a": [1, 2], "b": [1]}]) == [{"a": [1, 2], "b": [1]}]
+
+    def test_columnar_dict_inside_nested_list_is_a_row(self) -> None:
+        """Nested lists are row partitions; their columnar-looking dicts are rows, never pivoted recursively."""
+        assert result_rows([[{"a": [1]}]]) == [{"a": [1]}]

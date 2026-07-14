@@ -132,7 +132,9 @@ class ProbeStrict722C(FeatureGroup):
 # (construction pattern mirrors tests/test_core/test_prepare/test_feature_group_dedup.py)
 # ---------------------------------------------------------------------------
 
-# Keeps exec'd classes alive across assertions, like IPython's Out[N] history.
+# Keeps exec'd classes alive across assertions, like IPython's Out[N] history. Leaking them for the process
+# lifetime is safe: the autouse cleanup unbinds them from __main__, so they are no longer live-in-module and
+# dedup preserves instead of re-raising, and they only match the unique name probe722c_redef.
 _REF_STORE: list[Any] = []
 
 
@@ -331,6 +333,10 @@ def test_get_feature_group_docs_redefinition_conflict_degrades_silently() -> Non
     """Docs semantic: same conflict is silently collapsed to the live class; the call does not raise."""
     v1, v2 = _make_conflicting_pair("ProbeRedefDocs722C", "probe722c_redef")
     collector = PluginCollector.enabled_feature_groups({v1, v2})
+
+    # Premise guard: dedup raises on this fixture, proving the degrade path below handles a genuine conflict.
+    with pytest.raises(RedefinitionConflictError):
+        dedup_feature_group_subclasses({v1, v2}, allow_redefinition=False)
 
     # PINS CURRENT DIVERGENCE (#13): one conflict, three different semantics; docs degrade, NO raise.
     result = get_feature_group_docs(plugin_collector=collector)

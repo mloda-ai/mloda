@@ -418,6 +418,14 @@ def test_engine_matching_value_error_propagates_despite_clean_winner() -> None:
         ProbeBoom722B: {CfwParity722B},
     }
 
+    # Premise guard: on its own the winner probe resolves cleanly, so the ValueError overrides a clean winner.
+    identifier = IdentifyFeatureGroupClass(
+        feature=Feature(BOOM_FEATURE),
+        accessible_plugins={ProbeWinner722B: {CfwParity722B}},
+        links=None,
+    )
+    assert identifier.get()[0] is ProbeWinner722B
+
     # PINS CURRENT DIVERGENCE (#11): the run aborts even though another candidate matched.
     with pytest.raises(ValueError, match="boom 722b"):
         IdentifyFeatureGroupClass(

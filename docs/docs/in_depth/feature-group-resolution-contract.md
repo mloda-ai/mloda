@@ -107,4 +107,6 @@ Two labelled modes:
 - Standalone (default): a fresh default environment, exploratory. It records its origin and does not claim to reproduce a run.
 - Exact-run (preflight): the same configuration as `prepare()`, or the stored outcome of an actual planning pass.
 
+Standalone mode runs the authoritative resolver exactly once against its fresh default environment to build its captured outcome. The hook-free guarantee applies to inspecting and projecting an already captured outcome, not to that single build pass.
+
 A session exposes its captured report; inspecting a report never re-matches. `mlodaAPI.explain` and `session.resolved_plan` stay plan-based.

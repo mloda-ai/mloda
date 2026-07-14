@@ -110,3 +110,15 @@ Two labelled modes:
 Standalone mode runs the authoritative resolver exactly once against its fresh default environment to build its captured outcome. The hook-free guarantee applies to inspecting and projecting an already captured outcome, not to that single build pass.
 
 A session exposes its captured report; inspecting a report never re-matches. `mlodaAPI.explain` and `session.resolved_plan` stay plan-based.
+
+## Reusable boundaries for follow-ups
+
+Issue #728 (GlobalFilter evaluation) and issue #727 (input-data reader selection) reuse these seams without adding matcher logic to `FeatureGroupResolver`:
+
+- the normalized `ResolutionRequestSnapshot` (links and the data-access collection already ride on it),
+- the environment factory (`build_resolution_environment`) and `ResolutionEnvironmentSnapshot`,
+- the structured evaluation records (`Rejection`, `PluginFailure`, candidate and framework statuses),
+- the report layer (`ResolutionReport`, `diagnose`, `resolution_report`),
+- the renderers.
+
+Their matcher-specific evaluation and integration stay out of this contract and are implemented under their own issues. `mlodaAPI.explain` and `session.resolved_plan` remain plan-based projections of the resolved plan and never re-match.

@@ -10,9 +10,14 @@ from typing import Any, Optional
 
 
 def validate_feature_group_scope(value: Any) -> Optional[str]:
-    """Config scope is a non-empty class-name string; the class-object form is Python-only."""
-    # Local import: feature_group pulls in the plugin machinery, which this data-model module stays free of.
-    from mloda.core.abstract_plugins.feature_group import FeatureGroup
+    """Config scope is a non-empty class-name string; the class-object form is Python-only.
+
+    The string semantics (root FeatureGroup base-name rejection, strip-to-nothing) delegate to the
+    canonical ``normalize_feature_group_scope``; only the config-specific concerns stay local: configs
+    accept strings only, and every rejection is a ValueError in the config validation style.
+    """
+    # Local import: feature pulls in the plugin machinery, which this data-model module stays free of.
+    from mloda.core.abstract_plugins.components.feature import normalize_feature_group_scope
 
     if value is None:
         return None
@@ -21,14 +26,17 @@ def validate_feature_group_scope(value: Any) -> Optional[str]:
             "'feature_group' must be a feature group class-name string; "
             "the class-object form is only available in Python, not in a config"
         )
-    stripped = value.strip()
-    if not stripped:
-        raise ValueError("'feature_group' must be a non-empty feature group class-name string")
-    if stripped == FeatureGroup.get_class_name():
+    # Boundary conversion: for a string, the canonical helper raises TypeError only for the root base name.
+    try:
+        normalized = normalize_feature_group_scope(value)
+    except TypeError as exc:
         raise ValueError(
             "'feature_group' cannot be the root FeatureGroup base class name; it names no feature group family, "
             "so a concrete subclass name is required"
-        )
+        ) from exc
+    # The canonical helper strips an empty string to None; a config must reject it instead of dropping the scope.
+    if normalized is None:
+        raise ValueError("'feature_group' must be a non-empty feature group class-name string")
     return value
 
 

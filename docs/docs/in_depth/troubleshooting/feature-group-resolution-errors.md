@@ -1,5 +1,27 @@
 # Feature Group Resolution Errors
 
+Resolution runs inside a full `mloda` request, but you do not need to build one
+to reproduce a resolution error. `resolve_feature` (from `mloda.steward`) runs
+the **same matcher over the same candidate universe** as a run and reports what a
+run would, without raising: the failure lands in `result.error` instead of an
+exception, so the message below is the message you get back.
+
+``` python
+from mloda.steward import resolve_feature
+
+result = resolve_feature("my_feature")  # or resolve_feature(Feature(...)) for a full request
+if result.error:
+    print(result.error)  # the same message a run raises
+    print([fg.__name__ for fg in result.candidates])
+```
+
+Its environment is a standalone default (`result.environment` is
+`"standalone-default"`), not a replay of a specific run. Pass a `Feature`,
+`options`, `plugin_collector`, `links`, `data_access_collection`, or
+`compute_frameworks` (a run that restricts its frameworks needs this to mirror)
+to reproduce the run you are debugging. See
+[Discover Plugins](../discover-plugins.md) for the full signature.
+
 ## Multiple Feature Groups Error
 
 ### The Problem
@@ -110,7 +132,7 @@ If both versions of the class have **identical** source code (e.g., re-running a
 
 For rapid iteration in notebooks, opt in to "newest wins" using the builder method on `PluginCollector`:
 
-**Option A** — set the override flag on a fresh collector:
+**Option A**: set the override flag on a fresh collector:
 
 ```python
 from mloda.provider import FeatureGroup
@@ -124,7 +146,7 @@ class SomeFG(FeatureGroup):
 plugin_collector = PluginCollector().set_allow_redefinition()
 ```
 
-**Option B** — compose with disable/enable filters:
+**Option B**: compose with disable/enable filters:
 
 ```python
 plugin_collector = (

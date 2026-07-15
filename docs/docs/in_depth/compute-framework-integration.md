@@ -50,12 +50,25 @@ hook over raising a generic error from inside `calculate_feature`: the
 rejection happens during planning rather than at compute time, and the message
 is built for you.
 
-The debug inspector `resolve_feature(name)` reflects the hook too: its
-`ResolvedFeature` result carries `supported_compute_frameworks` and
-`unsupported_compute_frameworks` (evaluated under default options unless you
-pass `options=`, see [Discover Plugins](discover-plugins.md)), and a feature
-that matches a group but is unsupported on every installed framework resolves
-to `feature_group=None` with a capability error rather than appearing runnable.
+The debug inspector `resolve_feature(name)` reflects the hook too, because it
+runs the **same matcher over the same candidate universe as the engine** (it
+delegates to `IdentifyFeatureGroupClass`). Its `ResolvedFeature` result carries
+`supported_compute_frameworks` and `unsupported_compute_frameworks` (evaluated
+under default options unless you pass `options=`, see
+[Discover Plugins](discover-plugins.md)).
+
+Two distinct gaps both resolve to `feature_group=None` rather than appearing
+runnable:
+
+- **Unsupported on every framework.** The feature matches a group, but
+  `supports_compute_framework` rejects every installed framework. Resolution
+  fails with the capability error above.
+- **Uninstalled framework.** The only framework a matching group declares is not
+  installed (its backend library is absent, so `is_available()` is `False`). The
+  candidate universe drops unavailable frameworks before matching, so the group
+  maps to an empty framework set and resolution fails closed with the ordinary
+  `No feature groups found for feature name: '<name>'.` error. It does **not**
+  read as runnable on a framework you cannot actually run.
 
 ### Declaring capability per subtype
 

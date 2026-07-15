@@ -35,6 +35,14 @@ REQUIRED_WHEN_GUARD_DEPTH: contextvars.ContextVar[int] = contextvars.ContextVar(
     "mloda_required_when_guard_depth", default=0
 )
 
+# Exception classes a user callable raises when it merely cannot judge a value.
+_EXPECTED_JUDGMENT_ERRORS: tuple[type[Exception], ...] = (TypeError, ValueError, AttributeError)
+
+
+def _contained_raise_log_level(exc: BaseException) -> int:
+    """DEBUG for expected judgment failures, WARNING for classes that suggest a broken callable."""
+    return logging.DEBUG if isinstance(exc, _EXPECTED_JUDGMENT_ERRORS) else logging.WARNING
+
 
 class PropertyValueRejection(ValueError):
     """An option value the PROPERTY_MAPPING rejects: a verdict, not a crash. Subclasses ValueError so
@@ -168,20 +176,23 @@ class FeatureChainParser:
 
         if element_validator is not None:
             # A validator that raises cannot judge the value, so the value is rejected, not the run.
+            raised: Exception | None = None
             try:
                 verdict = element_validator(found_property_val)
             except Exception as exc:
-                logger.debug(
+                logger.log(
+                    _contained_raise_log_level(exc),
                     "element_validator for '%s' raised %s for value %r; treating value as rejected.",
                     property_name,
                     exc,
                     found_property_val,
                 )
+                raised = exc
                 verdict = False
             if not verdict:
                 raise PropertyValueRejection(
                     f"Property value '{found_property_val}' failed validation for '{property_name}'"
-                )
+                ) from raised
         else:
             # Fallback to membership check. An unhashable element (e.g. a dict) can never be
             # a member of the accepted set, so it is a clean rejection, not a TypeError.
@@ -500,10 +511,12 @@ class FeatureChainParser:
         # Building effective options may itself raise, so a raise here is contained as a non-match too.
         try:
             effective_options = cls.build_effective_options(feature_name, prefix_patterns, property_mapping, options)
-        except Exception:
-            logger.debug(
-                "building effective options for required_when on %s raised; treating feature group as a non-match.",
+        except Exception as exc:
+            logger.log(
+                _contained_raise_log_level(exc),
+                "building effective options for required_when on %s raised %s; treating feature group as a non-match.",
                 owner_name,
+                exc,
             )
             return False
         for key, spec in property_mapping.items():
@@ -516,11 +529,13 @@ class FeatureChainParser:
             # A predicate that raises cannot judge the value, so the feature group is a non-match, not the run.
             try:
                 is_required = bool(predicate(effective_options))
-            except Exception:
-                logger.debug(
-                    "required_when predicate %s for '%s' raised; treating feature group %s as a non-match.",
+            except Exception as exc:
+                logger.log(
+                    _contained_raise_log_level(exc),
+                    "required_when predicate %s for '%s' raised %s; treating feature group %s as a non-match.",
                     getattr(predicate, "__name__", repr(predicate)),
                     key,
+                    exc,
                     owner_name,
                 )
                 return False

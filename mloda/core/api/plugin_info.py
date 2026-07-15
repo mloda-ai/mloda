@@ -59,3 +59,6 @@ class ResolvedFeature:
     subtype: Optional[str] = None
     # Family name only when the subtype is a parametric instance (e.g. "ntile" for "ntile_2"), else None.
     subtype_family: Optional[str] = None
+    # Candidate universe built from a standalone default environment (PreFilterPlugins over installed
+    # plugins), not a captured live run.
+    environment: str = "standalone-default"

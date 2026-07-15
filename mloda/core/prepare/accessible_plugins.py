@@ -290,12 +290,15 @@ class PreFilterPlugins:
         self,
         compute_frameworks: set[type[ComputeFramework]],
         plugin_collector: Optional[PluginCollector] = None,
+        *,
+        degrade_on_error: bool = False,
     ) -> None:
+        self._degrade_on_error = degrade_on_error
         feature_groups = self._set_feature_groups(plugin_collector)
         compute_frameworks = self._set_compute_frameworks(compute_frameworks, plugin_collector)
 
         self.accessible_plugins = self.resolve_feature_group_compute_framework_limitations(
-            feature_groups, compute_frameworks
+            feature_groups, compute_frameworks, degrade_on_error=degrade_on_error
         )
 
     def get_accessible_plugins(self) -> FeatureGroupEnvironmentMapping:
@@ -404,15 +407,23 @@ class PreFilterPlugins:
         return surviving
 
     def resolve_feature_group_compute_framework_limitations(
-        self, feature_groups: set[type[FeatureGroup]], compute_frameworks: set[type[ComputeFramework]]
+        self,
+        feature_groups: set[type[FeatureGroup]],
+        compute_frameworks: set[type[ComputeFramework]],
+        *,
+        degrade_on_error: bool = False,
     ) -> FeatureGroupEnvironmentMapping:
         accessible_plugins: FeatureGroupEnvironmentMapping = {}
         for feature_group in feature_groups:
-            new_set_of_compute_frameworks = set()
-            for cp_fg in feature_group.compute_framework_definition():
-                if cp_fg in compute_frameworks:
-                    new_set_of_compute_frameworks.add(cp_fg)
-
+            if degrade_on_error:
+                definition: set[type[ComputeFramework]] = safe_field(
+                    lambda fg=feature_group: fg.compute_framework_definition(),  # type: ignore[misc]
+                    set(),
+                    field=f"compute_framework_definition of {feature_group.__module__}:{feature_group.__qualname__}",
+                )
+            else:
+                definition = feature_group.compute_framework_definition()
+            new_set_of_compute_frameworks = {cp_fg for cp_fg in definition if cp_fg in compute_frameworks}
             accessible_plugins[feature_group] = new_set_of_compute_frameworks
 
         return accessible_plugins

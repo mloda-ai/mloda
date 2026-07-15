@@ -16,6 +16,7 @@ import pytest
 from typing import Any, Optional
 
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
+from mloda.core.abstract_plugins.components.domain import Domain
 from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser_mixin import FeatureChainParserMixin
@@ -1081,3 +1082,74 @@ class TestResolveFeatureRaisingMatchDuringConflict:
         assert isinstance(result, ResolvedFeature)
         assert result.feature_group is None
         assert result.error is not None
+
+
+def _domain_conflict_source(qualname: str, feature_name: str, domain: str, extra_body: str = "") -> str:
+    """Source for a conflicting FeatureGroup that matches by name and declares a specific domain.
+
+    Non-raising, name-based match; ``get_domain`` returns a concrete ``Domain`` so the engine's domain
+    filter (``_filter_feature_group_by_domain``) governs whether the class reaches ``criteria_matched``.
+    """
+    return f"""
+from mloda.core.abstract_plugins.feature_group import FeatureGroup as _FG_BASE_
+from mloda.core.abstract_plugins.components.domain import Domain as _DOMAIN_
+
+
+class {qualname}(_FG_BASE_):
+    @classmethod
+    def feature_names_supported(cls):
+        return {{"{feature_name}"}}
+
+    @classmethod
+    def match_feature_group_criteria(cls, feature_name, options, data_access_collection=None):
+        return str(feature_name) == "{feature_name}"
+
+    @classmethod
+    def get_domain(cls):
+        return _DOMAIN_("{domain}")
+{extra_body}
+"""
+
+
+class TestResolveFeatureConflictBranchDomainParity:
+    """The redefinition-conflict branch must apply the feature's domain when building candidates (#756).
+
+    The engine adds a class to ``criteria_matched`` (which ``ResolvedFeature.candidates`` mirrors) only
+    AFTER it passes ``_filter_feature_group_by_domain``. The conflict branch of resolve_feature filters
+    conflicts by scope and match criteria only, omitting the domain, so a conflicting class whose domain
+    does not match the feature's domain is wrongly kept as a candidate.
+    """
+
+    def test_conflict_branch_excludes_nonmatching_domain_candidate(self, _cleanup_main_after: Any) -> None:
+        """A conflicting class whose domain differs from the feature's domain must not be a candidate."""
+        qualname = "DomainConflictResolveFG756"
+        feature_name = "domain_conflict_resolve_feature_756_xyz"
+        conflict_domain = "conflict_domain_756"
+        other_domain = "a_different_domain_than_the_conflict_class_756"
+
+        src_v1 = _domain_conflict_source(qualname, feature_name, conflict_domain)
+        src_v2 = _domain_conflict_source(
+            qualname,
+            feature_name,
+            conflict_domain,
+            extra_body="    def extra_method(self):\n        return 756\n",
+        )
+
+        _exec_conflict_fg(qualname, src_v1, "cell-domain-conflict-756-v1")
+        conflict_cls = _exec_conflict_fg(qualname, src_v2, "cell-domain-conflict-756-v2")
+
+        # Sanity: the exec'd conflict class declares the conflict domain.
+        assert conflict_cls.get_domain() == Domain(conflict_domain)
+
+        # Domain mismatch: the feature carries a domain the conflict class does not declare. The engine
+        # would exclude it, so the conflict branch must too. Today it is wrongly kept in candidates.
+        mismatch = resolve_feature(Feature(feature_name, domain=other_domain))
+
+        assert mismatch.feature_group is None
+        assert mismatch.error is not None
+        assert conflict_cls not in mismatch.candidates
+
+        # Guard proving the exclusion is domain-driven, not always-empty: a matching domain keeps the class.
+        match = resolve_feature(Feature(feature_name, domain=conflict_domain))
+
+        assert conflict_cls in match.candidates

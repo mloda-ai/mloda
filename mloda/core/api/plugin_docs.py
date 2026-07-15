@@ -25,8 +25,11 @@ from mloda.core.abstract_plugins.components.utils import get_all_subclasses, saf
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.function_extender import Extender
 from mloda.core.abstract_plugins.plugin_registry.plugin_registry import PluginRegistry
+from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
+from mloda.core.abstract_plugins.components.domain import Domain
 from mloda.core.abstract_plugins.components.feature import Feature, normalize_feature_group_scope
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
+from mloda.core.abstract_plugins.components.link import Link
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.api.plugin_info import ComputeFrameworkInfo, ExtenderInfo, FeatureGroupInfo, ResolvedFeature
 from mloda.core.prepare.accessible_plugins import (
@@ -92,14 +95,27 @@ def _dedup_degrading_on_conflict(
         return dedup_feature_group_subclasses(feature_groups, allow_redefinition=True)
 
 
-def _matches_criteria_guarded(fg_class: type[FeatureGroup], feature_name: FeatureName, options: Options) -> bool:
+def _matches_criteria_guarded(
+    fg_class: type[FeatureGroup],
+    feature_name: FeatureName,
+    options: Options,
+    data_access_collection: Optional[DataAccessCollection] = None,
+) -> bool:
     """Match a feature group for the redefinition-conflict branch, treating any raise as 'not a match'.
 
     resolve_feature is a non-throwing debug API: a conflicting candidate whose match hook raises must
     not take the whole call down.
     """
     try:
-        return fg_class.match_feature_group_criteria(feature_name, options, None)
+        return fg_class.match_feature_group_criteria(feature_name, options, data_access_collection)
+    except Exception:  # noqa: BLE001  (never-raising debug API)
+        return False
+
+
+def _matches_domain_guarded(fg_class: type[FeatureGroup], feature_domain: Optional[Domain]) -> bool:
+    """Domain gate for the conflict branch, mirroring the engine; a raising get_domain() is 'not a match'."""
+    try:
+        return feature_domain is None or fg_class.get_domain() == feature_domain
     except Exception:  # noqa: BLE001  (never-raising debug API)
         return False
 
@@ -339,51 +355,79 @@ def get_extender_docs(
 
 
 def resolve_feature(
-    feature_name: str,
+    feature: str | Feature,
     *,
     options: Optional[Options] = None,
     plugin_collector: Optional[PluginCollector] = None,
     feature_group: str | type[FeatureGroup] | None = None,
+    links: Optional[set[Link]] = None,
+    data_access_collection: Optional[DataAccessCollection] = None,
 ) -> ResolvedFeature:
     """
-    Resolve a feature name to its matching FeatureGroup class.
+    Resolve a feature name (or a Feature object) to its matching FeatureGroup class.
 
     This function searches all loaded FeatureGroups to find those that match
     the given feature name. It applies subclass filtering to prefer more
     specific (child) classes over parent classes.
 
-    Never raises: matching errors are reported in the returned ResolvedFeature.error.
+    Never raises for matching errors: those are reported in the returned ResolvedFeature.error.
+    Signature misuse (options/feature_group alongside a Feature) is a programmer error and raises TypeError.
 
     Design note: resolve_feature DELEGATES matching to the #754 evaluation seam
     IdentifyFeatureGroupClass.evaluate. It only builds the accessible-plugins environment locally
     (applicability filter, dedup/redefinition-conflict handling) and degrades to never raise; the seam
     owns name/domain/scope/abstract/subclass filtering, the winner, candidates, and the failure texts.
 
+    Engine inputs now covered: name, options, domain and compute-framework pin (carried on the Feature),
+    scope (via the Feature's feature_group_scope or the feature_group argument for the string form), and
+    the ``links`` / ``data_access_collection`` arguments threaded into the seam. No engine input is left out.
+
     Args:
-        feature_name: The name of the feature to resolve.
-        options: Keyword-only. Options used for matching and capability checks. An empty or omitted Options is
-            the documented default.
+        feature: A feature name string, or a Feature object used directly as the single source of truth for
+            name, options, domain, compute-framework pin and scope.
+        options: Keyword-only. Options used for matching and capability checks (string form only). An empty or
+            omitted Options is the documented default. Passing it alongside a Feature raises TypeError.
         plugin_collector: Keyword-only. Its ``allow_redefinition`` flag is threaded into deduplication.
-        feature_group: Keyword-only. Scope resolution to a FeatureGroup subclass or a class-name string,
-            same forms and semantics as ``Feature(..., feature_group=...)``: the string form matches the
-            named class and its subclasses; None (or a whitespace-only string) means unscoped.
+        feature_group: Keyword-only. Scope resolution to a FeatureGroup subclass or a class-name string
+            (string form only), same forms and semantics as ``Feature(..., feature_group=...)``: the string
+            form matches the named class and its subclasses; None (or a whitespace-only string) means unscoped.
+            Passing it alongside a Feature raises TypeError.
+        links: Keyword-only. Threaded to the seam's link filter.
+        data_access_collection: Keyword-only. Threaded to the seam so reader / input-data groups can resolve.
 
     Returns:
         ResolvedFeature containing the resolved FeatureGroup (if found),
         all matching candidates, and any error message.
     """
-    try:
-        scope = normalize_feature_group_scope(feature_group)
-    except TypeError as exc:
-        return ResolvedFeature(
-            feature_name=feature_name,
-            feature_group=None,
-            candidates=[],
-            error=str(exc),
-        )
+    if isinstance(feature, Feature):
+        if options is not None or feature_group is not None:
+            raise TypeError(
+                "resolve_feature(Feature(...)) is the single source of truth for name, options and scope; "
+                "set them on the Feature, do not also pass 'options' or 'feature_group'"
+            )
+        feature_obj: Optional[Feature] = feature
+        feature_name = str(feature.name)
+        scope = feature.feature_group_scope
+        resolved_options = feature.options
+        feature_domain: Optional[Domain] = feature.domain
+    else:
+        feature_obj = None
+        feature_name = feature
+        try:
+            scope = normalize_feature_group_scope(feature_group)
+        except TypeError as exc:
+            return ResolvedFeature(
+                feature_name=feature_name,
+                feature_group=None,
+                candidates=[],
+                error=str(exc),
+            )
+        resolved_options = options if options is not None else Options()
+        raw_domain = resolved_options.get("domain")
+        feature_domain = Domain(raw_domain) if raw_domain else None
+
     callout = scope_callout(scope)
     scope_suffix = f" {callout}" if callout else ""
-    resolved_options = options if options is not None else Options()
     allow_redefinition = plugin_collector.allow_redefinition if plugin_collector is not None else False
     fg_classes: set[type[FeatureGroup]] = get_all_subclasses(FeatureGroup)
     if plugin_collector is not None:
@@ -397,7 +441,8 @@ def resolve_feature(
             fg
             for fg in raw_conflicts
             if (scope is None or matches_feature_group_scope(fg, scope))
-            and _matches_criteria_guarded(fg, feature_name_obj, resolved_options)
+            and _matches_criteria_guarded(fg, feature_name_obj, resolved_options, data_access_collection)
+            and _matches_domain_guarded(fg, feature_domain)
         ]
         return ResolvedFeature(
             feature_name=feature_name,
@@ -406,12 +451,13 @@ def resolve_feature(
             error=f"{exc}{scope_suffix}",
         )
     feature_name_obj = FeatureName(feature_name)
-    feature, feature_error = safe_field_with_error(
-        lambda: Feature(feature_name, options=resolved_options, feature_group=scope),
-        None,
-    )
-    if feature is None:
-        return ResolvedFeature(feature_name, None, [], error=f"{feature_error}{scope_suffix}")
+    if feature_obj is None:
+        feature_obj, feature_error = safe_field_with_error(
+            lambda: Feature(feature_name, options=resolved_options, feature_group=scope),
+            None,
+        )
+        if feature_obj is None:
+            return ResolvedFeature(feature_name, None, [], error=f"{feature_error}{scope_suffix}")
 
     # Full environment, mirroring PreFilterPlugins: every applicable group mapped to its available declared
     # frameworks. Guard a raising declaration to an empty set so resolve_feature never raises here.
@@ -427,7 +473,7 @@ def resolve_feature(
     # resolve_feature must not, so degrade any raise into an error result (never-raising contract).
     evaluation = safe_field_with_error(
         lambda: IdentifyFeatureGroupClass.evaluate(
-            feature, accessible_plugins, links=None, data_access_collection=None
+            feature_obj, accessible_plugins, links=links, data_access_collection=data_access_collection
         ),
         None,
     )
@@ -454,7 +500,9 @@ def resolve_feature(
             subtype_family=subtype_family,
         )
 
-    error = _engine_failure_message(feature, accessible_plugins, feature_name, scope_suffix)
+    error = _engine_failure_message(
+        feature_obj, accessible_plugins, feature_name, scope_suffix, links, data_access_collection
+    )
     return ResolvedFeature(feature_name, None, candidates, error=error)
 
 
@@ -463,6 +511,8 @@ def _engine_failure_message(
     accessible_plugins: FeatureGroupEnvironmentMapping,
     feature_name: str,
     scope_suffix: str,
+    links: Optional[set[Link]],
+    data_access_collection: Optional[DataAccessCollection],
 ) -> str:
     """Return the engine's failure message for these inputs.
 
@@ -472,7 +522,9 @@ def _engine_failure_message(
     """
     generic = f"No feature groups found for feature name: '{feature_name}'.{scope_suffix}"
     try:
-        IdentifyFeatureGroupClass(feature, accessible_plugins, links=None, data_access_collection=None)
+        IdentifyFeatureGroupClass(
+            feature, accessible_plugins, links=links, data_access_collection=data_access_collection
+        )
     except ValueError as exc:
         return str(exc)
     except Exception:  # noqa: BLE001  (broken plugin declaration inside the builder; degrade)

@@ -12,7 +12,7 @@ from typing import Any, Optional
 def validate_feature_group_scope(value: Any) -> Optional[str]:
     """Config scope is a non-empty class-name string; the class-object form is Python-only."""
     # Local import: feature_group pulls in the plugin machinery, which this data-model module stays free of.
-    from mloda.core.abstract_plugins.feature_group import FeatureGroup
+    from mloda.core.abstract_plugins.components.feature import normalize_feature_group_scope
 
     if value is None:
         return None
@@ -24,11 +24,13 @@ def validate_feature_group_scope(value: Any) -> Optional[str]:
     stripped = value.strip()
     if not stripped:
         raise ValueError("'feature_group' must be a non-empty feature group class-name string")
-    if stripped == FeatureGroup.get_class_name():
+    # Delegate the root-base-name rejection to the canonical predicate; translate its TypeError to a config ValueError.
+    try:
+        normalize_feature_group_scope(stripped)
+    except TypeError:
         raise ValueError(
-            "'feature_group' cannot be the root FeatureGroup base class name; it names no feature group family, "
-            "so a concrete subclass name is required"
-        )
+            "'feature_group' cannot be the root FeatureGroup base class name; a concrete subclass name is required"
+        ) from None
     return value
 
 

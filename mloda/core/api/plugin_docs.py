@@ -34,6 +34,7 @@ from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.api.plugin_info import ComputeFrameworkInfo, ExtenderInfo, FeatureGroupInfo, ResolvedFeature
 from mloda.core.prepare.accessible_plugins import (
     FeatureGroupEnvironmentMapping,
+    PreFilterPlugins,
     RedefinitionConflictError,
     dedup_feature_group_subclasses,
     registry_for,
@@ -362,6 +363,7 @@ def resolve_feature(
     feature_group: str | type[FeatureGroup] | None = None,
     links: Optional[set[Link]] = None,
     data_access_collection: Optional[DataAccessCollection] = None,
+    compute_frameworks: Optional[set[type[ComputeFramework]]] = None,
 ) -> ResolvedFeature:
     """
     Resolve a feature name (or a Feature object) to its matching FeatureGroup class.
@@ -394,6 +396,7 @@ def resolve_feature(
             Passing it alongside a Feature raises TypeError.
         links: Keyword-only. Threaded to the seam's link filter.
         data_access_collection: Keyword-only. Threaded to the seam so reader / input-data groups can resolve.
+        compute_frameworks: Keyword-only. Restrict the candidate universe's compute-framework set (default: all available frameworks).
 
     Returns:
         ResolvedFeature containing the resolved FeatureGroup (if found),
@@ -428,29 +431,31 @@ def resolve_feature(
 
     callout = scope_callout(scope)
     scope_suffix = f" {callout}" if callout else ""
-    allow_redefinition = plugin_collector.allow_redefinition if plugin_collector is not None else False
-    fg_classes: set[type[FeatureGroup]] = get_all_subclasses(FeatureGroup)
-    if plugin_collector is not None:
-        fg_classes = {fg for fg in fg_classes if plugin_collector.applicable_feature_group_class(fg)}
+    feature_name_obj = FeatureName(feature_name)
+
+    restricted_frameworks = (
+        compute_frameworks if compute_frameworks is not None else get_all_subclasses(ComputeFramework)
+    )
     try:
-        all_fgs = list(dedup_feature_group_subclasses(fg_classes, allow_redefinition=allow_redefinition))
-    except ValueError as exc:
-        raw_conflicts = list(getattr(exc, "conflicts", []))
-        feature_name_obj = FeatureName(feature_name)
+        accessible_plugins: FeatureGroupEnvironmentMapping = PreFilterPlugins(
+            restricted_frameworks, plugin_collector, degrade_on_error=True
+        ).get_accessible_plugins()
+    except RedefinitionConflictError as exc:
         matching_conflicts = [
             fg
-            for fg in raw_conflicts
+            for fg in exc.conflicts
             if (scope is None or matches_feature_group_scope(fg, scope))
             and _matches_criteria_guarded(fg, feature_name_obj, resolved_options, data_access_collection)
             and _matches_domain_guarded(fg, feature_domain)
         ]
+        return ResolvedFeature(feature_name, None, matching_conflicts, error=f"{exc}{scope_suffix}")
+    except ValueError as exc:
+        return ResolvedFeature(feature_name, None, [], error=f"{exc}{scope_suffix}")
+    except Exception:  # noqa: BLE001  (never-raising debug API; broken plugin while building the environment)
         return ResolvedFeature(
-            feature_name=feature_name,
-            feature_group=None,
-            candidates=matching_conflicts,
-            error=f"{exc}{scope_suffix}",
+            feature_name, None, [], error=f"No feature groups found for feature name: '{feature_name}'.{scope_suffix}"
         )
-    feature_name_obj = FeatureName(feature_name)
+
     if feature_obj is None:
         feature_obj, feature_error = safe_field_with_error(
             lambda: Feature(feature_name, options=resolved_options, feature_group=scope),
@@ -458,16 +463,6 @@ def resolve_feature(
         )
         if feature_obj is None:
             return ResolvedFeature(feature_name, None, [], error=f"{feature_error}{scope_suffix}")
-
-    # Full environment, mirroring PreFilterPlugins: every applicable group mapped to its available declared
-    # frameworks. Guard a raising declaration to an empty set so resolve_feature never raises here.
-    accessible_plugins: FeatureGroupEnvironmentMapping = {}
-    for fg in all_fgs:
-        accessible_plugins[fg] = safe_field(
-            lambda fg=fg: {cfw for cfw in fg.compute_framework_definition() if cfw.is_available()},  # type: ignore[misc]
-            set(),
-            field=f"framework environment for '{feature_name}'",
-        )
 
     # The seam does the name/domain/scope/abstract/subclass filtering. Matching or a capability hook can raise;
     # resolve_feature must not, so degrade any raise into an error result (never-raising contract).

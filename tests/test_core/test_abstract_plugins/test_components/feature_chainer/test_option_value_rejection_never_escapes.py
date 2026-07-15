@@ -8,7 +8,8 @@ All fixture names carry an "esc732" marker so they cannot collide with other tes
 
 from __future__ import annotations
 
-from typing import Optional
+import logging
+from typing import Any, Optional
 
 import pytest
 
@@ -17,6 +18,7 @@ from mloda.core.abstract_plugins.components.default_options_key import DefaultOp
 from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser import (
     FeatureChainParser,
+    PropertyValueRejection,
 )
 from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser_mixin import (
     FeatureChainParserMixin,
@@ -45,6 +47,75 @@ SUPPORTED_OPERATIONS_ESC732: dict[str, str] = {
     "normalize": "Normalize the text (esc732 fixture)",
     "strip": "Strip the text (esc732 fixture)",
 }
+
+
+# The esc763 fixtures pin issue #763: a user callable that raises a NON-(TypeError/ValueError/AttributeError)
+# exception (here KeyError) means "cannot judge this value" = a rejection, never an escape that aborts the
+# identification of the OTHER candidate feature groups. Fresh marker so these cannot collide in the registry.
+VALIDATOR_KEY_ESC763 = "validator_key_esc763"
+GUARD_KEY_ESC763 = "guard_key_esc763"
+REQUIRED_WHEN_KEY_ESC763 = "required_when_key_esc763"
+DRIVER_KEY_ESC763 = "required_when_driver_esc763"
+
+VALIDATOR_FEATURE_ESC763 = "text__validated_esc763"
+GUARD_FEATURE_ESC763 = "text__guarded_esc763"
+REQUIRED_WHEN_FEATURE_ESC763 = "text__required_esc763"
+
+# A value the callables cannot judge: looking at it raises KeyError, exactly the class the containment misses today.
+POISON_VALUE_ESC763 = "poison_esc763"
+# A value the callables CAN judge and accept: proves the fix does not over-reject.
+GOOD_VALUE_ESC763 = "good_esc763"
+# required_when driver modes: "needs" makes the key required, "optional" leaves it optional.
+NEEDS_MODE_ESC763 = "needs_esc763"
+OPTIONAL_MODE_ESC763 = "optional_esc763"
+
+# The tier763 markers pin the two-tier logging contract on the same containment sites: an expected judgment
+# failure (TypeError, ValueError, AttributeError) stays at DEBUG, while any other exception class means the
+# callable itself looks broken and must surface at WARNING. Containment (reject / non-match) is unchanged.
+TYPE_POISON_VALUE_TIER763 = "type_poison_tier763"
+CAUSE_KEY_TIER763 = "cause_key_tier763"
+
+# Both modules create their logger via logging.getLogger(__name__), so the class's module IS the logger name.
+PARSER_LOGGER_NAME = FeatureChainParser.__module__
+MIXIN_LOGGER_NAME = FeatureChainParserMixin.__module__
+
+
+def _keyerror_element_validator_esc763(value: Any) -> bool:
+    """Judge one element; the poison value raises KeyError (broken-looking), the tier value TypeError (expected)."""
+    if value == POISON_VALUE_ESC763:
+        raise KeyError("esc763 element_validator cannot judge the poison value")
+    if value == TYPE_POISON_VALUE_TIER763:
+        raise TypeError("tier763 element_validator expected judgment failure")
+    return bool(value == GOOD_VALUE_ESC763)
+
+
+def _keyerror_match_guard_esc763(value: Any) -> bool:
+    """Guard the raw value; the poison value raises KeyError (broken-looking), the tier value TypeError (expected)."""
+    if value == POISON_VALUE_ESC763:
+        raise KeyError("esc763 match_guard cannot judge the poison value")
+    if value == TYPE_POISON_VALUE_TIER763:
+        raise TypeError("tier763 match_guard expected judgment failure")
+    return bool(value == GOOD_VALUE_ESC763)
+
+
+def _keyerror_required_when_esc763(options: Options) -> bool:
+    """Decide if the guarded key is required; a poison driver raises KeyError, the tier driver TypeError."""
+    driver = options.get(DRIVER_KEY_ESC763)
+    if driver == POISON_VALUE_ESC763:
+        raise KeyError("esc763 required_when cannot judge the poison driver value")
+    if driver == TYPE_POISON_VALUE_TIER763:
+        raise TypeError("tier763 required_when expected judgment failure")
+    return bool(driver == NEEDS_MODE_ESC763)
+
+
+def _raise_build_effective_options_esc763(cls: Any, *args: Any, **kwargs: Any) -> Options:
+    """Force build_effective_options to raise a plain ValueError: the escape #763 must contain."""
+    raise ValueError("esc763 build_effective_options boom")
+
+
+def _raise_keyerror_build_effective_options_tier763(cls: Any, *args: Any, **kwargs: Any) -> Options:
+    """Force build_effective_options to raise KeyError: a broken-looking class that must surface at WARNING."""
+    raise KeyError("tier763 build_effective_options boom")
 
 
 class MockComputeFrameworkEsc732(ComputeFramework):
@@ -149,6 +220,98 @@ class RaisingAttributeErrorValidatorFeatureGroup(FeatureChainParserMixin, Featur
         return None
 
 
+class RaisingKeyErrorValidatorFeatureGroupEsc763(FeatureChainParserMixin, FeatureGroup):
+    """element_validator raises KeyError (not a caught TypeError/ValueError/AttributeError) on a poison value."""
+
+    PREFIX_PATTERN = r".*__validated_esc763$"
+
+    PROPERTY_MAPPING = {
+        VALIDATOR_KEY_ESC763: PropertySpec(
+            "A value the validator cannot judge raises KeyError (esc763 fixture)",
+            context=True,
+            strict_validation=True,
+            element_validator=_keyerror_element_validator_esc763,
+        )
+    }
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+        return None
+
+
+class RaisingKeyErrorGuardFeatureGroupEsc763(FeatureChainParserMixin, FeatureGroup):
+    """match_guard raises KeyError (not a caught class) on a poison value; needs no strict_validation."""
+
+    PREFIX_PATTERN = r".*__guarded_esc763$"
+
+    PROPERTY_MAPPING = {
+        GUARD_KEY_ESC763: PropertySpec(
+            "A value the guard cannot judge raises KeyError (esc763 fixture)",
+            context=True,
+            match_guard=_keyerror_match_guard_esc763,
+        )
+    }
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+        return None
+
+
+class RaisingKeyErrorRequiredWhenFeatureGroupEsc763(FeatureChainParserMixin, FeatureGroup):
+    """required_when predicate raises KeyError (not a caught class) on a poison driver value.
+
+    Its single required_when key is skippable, so an unscoped matcher would claim any feature whose
+    options omit the driver and pollute the global registry. The gated override below scopes it to its
+    own feature; the class-definition guard still wraps the override, so the raising predicate runs.
+    """
+
+    PREFIX_PATTERN = r".*__required_esc763$"
+
+    PROPERTY_MAPPING = {
+        REQUIRED_WHEN_KEY_ESC763: PropertySpec(
+            "Guarded by a required_when predicate that can raise KeyError (esc763 fixture)",
+            context=True,
+            required_when=_keyerror_required_when_esc763,
+        )
+    }
+
+    @classmethod
+    def match_feature_group_criteria(
+        cls,
+        feature_name: FeatureName | str,
+        options: Options,
+        data_access_collection: Optional[DataAccessCollection] = None,
+    ) -> bool:
+        name = str(feature_name)
+        # Classmethod is mandatory: required_when forbids a staticmethod matcher. Claim only this
+        # fixture's own feature so the auto-registered class never owns an unrelated feature.
+        if name != REQUIRED_WHEN_FEATURE_ESC763 and options.get(DRIVER_KEY_ESC763) is None:
+            return False
+        return FeatureChainParser.match_configuration_feature_chain_parser(
+            name,
+            options,
+            property_mapping=cls.PROPERTY_MAPPING,
+            prefix_patterns=[cls.PREFIX_PATTERN],
+        )
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+        return None
+
+
+class RequiredWhenNeighborFeatureGroupEsc763(FeatureGroup):
+    """Claims REQUIRED_WHEN_FEATURE_ESC763 and accepts any options: the valid owner the raising candidate must not deny."""
+
+    @classmethod
+    def match_feature_group_criteria(
+        cls,
+        feature_name: FeatureName | str,
+        options: Options,
+        data_access_collection: Optional[DataAccessCollection] = None,
+    ) -> bool:
+        return str(feature_name) == REQUIRED_WHEN_FEATURE_ESC763
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+        return None
+
+
 def _identify(feature: Feature, accessible_plugins: FeatureGroupEnvironmentMapping) -> IdentifyFeatureGroupClass:
     return IdentifyFeatureGroupClass(
         feature=feature,
@@ -156,6 +319,16 @@ def _identify(feature: Feature, accessible_plugins: FeatureGroupEnvironmentMappi
         links=None,
         data_access_collection=None,
     )
+
+
+def _records_at_or_above(caplog: pytest.LogCaptureFixture, logger_name: str, levelno: int) -> list[logging.LogRecord]:
+    """Records the named logger emitted at or above the given level."""
+    return [record for record in caplog.records if record.name == logger_name and record.levelno >= levelno]
+
+
+def _records_at_exactly(caplog: pytest.LogCaptureFixture, logger_name: str, levelno: int) -> list[logging.LogRecord]:
+    """Records the named logger emitted at exactly the given level."""
+    return [record for record in caplog.records if record.name == logger_name and record.levelno == levelno]
 
 
 class TestRaisingElementValidatorIsARejection:
@@ -360,3 +533,420 @@ class TestParserContractUnchangedForOrdinaryRejections:
         message = str(exc_info.value)
         assert PIPELINE_KEY in message
         assert "custom" in message
+
+
+class TestKeyErrorElementValidatorIsARejection:
+    """issue #763: a validator raising a non-(TypeError/ValueError/AttributeError) is a rejection, not an escape."""
+
+    def test_keyerror_validator_on_name_path_is_a_non_match(self) -> None:
+        """A validator that raises KeyError is a non-match, not an exception out of the matcher."""
+        options = Options(context={VALIDATOR_KEY_ESC763: [POISON_VALUE_ESC763]})
+
+        result = RaisingKeyErrorValidatorFeatureGroupEsc763.match_feature_group_criteria(
+            VALIDATOR_FEATURE_ESC763, options
+        )
+
+        assert result is False
+
+    def test_parser_reports_a_keyerror_validator_as_a_value_rejection(self) -> None:
+        """The parser converts the validator's KeyError into the PropertyValueRejection its callers read."""
+        with pytest.raises(PropertyValueRejection) as exc_info:
+            FeatureChainParser.match_configuration_feature_chain_parser(
+                VALIDATOR_FEATURE_ESC763,
+                Options(context={VALIDATOR_KEY_ESC763: [POISON_VALUE_ESC763]}),
+                property_mapping=RaisingKeyErrorValidatorFeatureGroupEsc763.PROPERTY_MAPPING,
+                prefix_patterns=[RaisingKeyErrorValidatorFeatureGroupEsc763.PREFIX_PATTERN],
+            )
+
+        message = str(exc_info.value)
+        assert VALIDATOR_KEY_ESC763 in message
+        assert POISON_VALUE_ESC763 in message
+
+    def test_reason_for_keyerror_validator_is_reported_not_raised(self) -> None:
+        """_strict_validation_rejection_reason reports the KeyError rejection; it never raises."""
+        options = Options(context={VALIDATOR_KEY_ESC763: [POISON_VALUE_ESC763]})
+
+        reason = RaisingKeyErrorValidatorFeatureGroupEsc763._strict_validation_rejection_reason(
+            VALIDATOR_FEATURE_ESC763, options
+        )
+
+        assert reason is not None
+        assert VALIDATOR_KEY_ESC763 in reason
+        assert POISON_VALUE_ESC763 in reason
+
+
+class TestKeyErrorMatchGuardIsARejection:
+    """A match_guard raising a non-caught exception is a non-match, not an escape."""
+
+    def test_keyerror_guard_is_a_non_match(self) -> None:
+        """A guard that raises KeyError rejects the value; it does not blow up the match."""
+        options = Options(context={GUARD_KEY_ESC763: POISON_VALUE_ESC763})
+
+        result = RaisingKeyErrorGuardFeatureGroupEsc763.match_feature_group_criteria(GUARD_FEATURE_ESC763, options)
+
+        assert result is False
+
+
+class TestKeyErrorRequiredWhenPredicateIsARejection:
+    """A required_when predicate raising a non-caught exception is a non-match, not an escape."""
+
+    def test_keyerror_required_when_predicate_is_a_non_match(self) -> None:
+        """A predicate that raises KeyError is a non-match, not an exception out of the matcher."""
+        options = Options(context={DRIVER_KEY_ESC763: POISON_VALUE_ESC763})
+
+        result = RaisingKeyErrorRequiredWhenFeatureGroupEsc763.match_feature_group_criteria(
+            REQUIRED_WHEN_FEATURE_ESC763, options
+        )
+
+        assert result is False
+
+
+class TestKeyErrorRejectionNeverEscapesTheEngine:
+    """The definition-time required_when guard must never leak a KeyError out of the filter loop."""
+
+    def test_keyerror_required_when_yields_the_standard_no_match_error(self) -> None:
+        """A required_when predicate that raises must be a non-match, not an exception out of the engine."""
+        feature = Feature(REQUIRED_WHEN_FEATURE_ESC763, Options(context={DRIVER_KEY_ESC763: POISON_VALUE_ESC763}))
+        accessible_plugins: FeatureGroupEnvironmentMapping = {
+            RaisingKeyErrorRequiredWhenFeatureGroupEsc763: {MockComputeFrameworkEsc732},
+        }
+
+        with pytest.raises(ValueError) as exc_info:
+            _identify(feature, accessible_plugins)
+
+        message = str(exc_info.value)
+        assert "No feature groups found" in message, (
+            f"A predicate that raises must be a non-match, not an exception out of the engine, but got: {message}"
+        )
+
+    def test_keyerror_required_when_does_not_poison_other_candidates(self) -> None:
+        """One raising candidate must not deny the feature to the group that legitimately owns it."""
+        feature = Feature(REQUIRED_WHEN_FEATURE_ESC763, Options(context={DRIVER_KEY_ESC763: POISON_VALUE_ESC763}))
+        accessible_plugins: FeatureGroupEnvironmentMapping = {
+            RaisingKeyErrorRequiredWhenFeatureGroupEsc763: {MockComputeFrameworkEsc732},
+            RequiredWhenNeighborFeatureGroupEsc763: {MockComputeFrameworkEsc732},
+        }
+
+        identified = _identify(feature, accessible_plugins)
+
+        feature_group, _frameworks = identified.get()
+        assert feature_group is RequiredWhenNeighborFeatureGroupEsc763
+
+
+class TestKeyErrorPathsDoNotOverReject:
+    """Guard against over-rejecting: a value the callables CAN judge and accept still matches (passes pre-fix)."""
+
+    def test_valid_value_through_keyerror_validator_matches(self) -> None:
+        options = Options(context={VALIDATOR_KEY_ESC763: [GOOD_VALUE_ESC763]})
+
+        assert (
+            RaisingKeyErrorValidatorFeatureGroupEsc763.match_feature_group_criteria(VALIDATOR_FEATURE_ESC763, options)
+            is True
+        )
+
+    def test_valid_value_through_keyerror_guard_matches(self) -> None:
+        options = Options(context={GUARD_KEY_ESC763: GOOD_VALUE_ESC763})
+
+        assert (
+            RaisingKeyErrorGuardFeatureGroupEsc763.match_feature_group_criteria(GUARD_FEATURE_ESC763, options) is True
+        )
+
+    def test_untriggered_required_when_predicate_still_matches(self) -> None:
+        """When the predicate returns False (option not required), the feature still matches."""
+        options = Options(context={DRIVER_KEY_ESC763: OPTIONAL_MODE_ESC763})
+
+        assert (
+            RaisingKeyErrorRequiredWhenFeatureGroupEsc763.match_feature_group_criteria(
+                REQUIRED_WHEN_FEATURE_ESC763, options
+            )
+            is True
+        )
+
+    def test_triggered_required_when_with_option_present_still_matches(self) -> None:
+        """When the predicate returns True but the required option is present, the feature still matches."""
+        options = Options(
+            context={DRIVER_KEY_ESC763: NEEDS_MODE_ESC763, REQUIRED_WHEN_KEY_ESC763: GOOD_VALUE_ESC763},
+        )
+
+        assert (
+            RaisingKeyErrorRequiredWhenFeatureGroupEsc763.match_feature_group_criteria(
+                REQUIRED_WHEN_FEATURE_ESC763, options
+            )
+            is True
+        )
+
+
+class TestBuildEffectiveOptionsRaiseIsContained:
+    """issue #763: a raise from build_effective_options inside the required_when guard is a non-match, not an escape.
+
+    The driver is OPTIONAL_MODE_ESC763, so the predicate itself returns False (would match True): the monkeypatched
+    build_effective_options, called before the predicate loop and outside its try/except, is the sole raise source.
+    """
+
+    def test_build_effective_options_raise_is_a_non_match(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """A ValueError from build_effective_options is contained as a non-match, not an escape out of the matcher."""
+        monkeypatch.setattr(
+            FeatureChainParser,
+            "build_effective_options",
+            classmethod(_raise_build_effective_options_esc763),
+        )
+        options = Options(context={DRIVER_KEY_ESC763: OPTIONAL_MODE_ESC763})
+
+        result = RaisingKeyErrorRequiredWhenFeatureGroupEsc763.match_feature_group_criteria(
+            REQUIRED_WHEN_FEATURE_ESC763, options
+        )
+
+        assert result is False
+
+    def test_build_effective_options_raise_yields_the_standard_no_match_error(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The engine turns that contained raise into the standard no-match error, not a bare escape."""
+        monkeypatch.setattr(
+            FeatureChainParser,
+            "build_effective_options",
+            classmethod(_raise_build_effective_options_esc763),
+        )
+        feature = Feature(REQUIRED_WHEN_FEATURE_ESC763, Options(context={DRIVER_KEY_ESC763: OPTIONAL_MODE_ESC763}))
+        accessible_plugins: FeatureGroupEnvironmentMapping = {
+            RaisingKeyErrorRequiredWhenFeatureGroupEsc763: {MockComputeFrameworkEsc732},
+        }
+
+        with pytest.raises(ValueError) as exc_info:
+            _identify(feature, accessible_plugins)
+
+        message = str(exc_info.value)
+        assert "No feature groups found" in message, (
+            f"A build_effective_options raise must be a non-match, not an exception out of the engine, but got: {message}"
+        )
+
+
+class TestContainedRaiseLogTiers:
+    """Two-tier logging for contained raises: an expected judgment failure (TypeError, ValueError,
+    AttributeError) stays at DEBUG, any other exception class looks like a broken callable and must
+    surface at WARNING. Containment itself (reject / non-match, never escape) is unchanged either way.
+    """
+
+    def test_keyerror_validator_raise_logs_at_warning(self, caplog: pytest.LogCaptureFixture) -> None:
+        """A validator raising KeyError still rejects the value, but the containment surfaces at WARNING."""
+        caplog.set_level(logging.DEBUG, logger=PARSER_LOGGER_NAME)
+
+        with pytest.raises(PropertyValueRejection):
+            FeatureChainParser.match_configuration_feature_chain_parser(
+                VALIDATOR_FEATURE_ESC763,
+                Options(context={VALIDATOR_KEY_ESC763: [POISON_VALUE_ESC763]}),
+                property_mapping=RaisingKeyErrorValidatorFeatureGroupEsc763.PROPERTY_MAPPING,
+                prefix_patterns=[RaisingKeyErrorValidatorFeatureGroupEsc763.PREFIX_PATTERN],
+            )
+
+        warnings = _records_at_or_above(caplog, PARSER_LOGGER_NAME, logging.WARNING)
+        assert warnings, "a KeyError-raising validator looks broken and must log at WARNING"
+        assert any(VALIDATOR_KEY_ESC763 in record.getMessage() for record in warnings)
+        # The exception text stays for triage; the option value itself is redacted at WARNING (production-visible).
+        assert any("element_validator cannot judge the poison value" in record.getMessage() for record in warnings)
+        assert all(POISON_VALUE_ESC763 not in record.getMessage() for record in warnings), (
+            "option values may carry secrets and must not appear in WARNING-tier containment messages"
+        )
+
+    def test_typeerror_validator_raise_logs_at_debug_only(self, caplog: pytest.LogCaptureFixture) -> None:
+        """A validator raising TypeError is an expected judgment failure: contained at DEBUG, never WARNING."""
+        caplog.set_level(logging.DEBUG, logger=PARSER_LOGGER_NAME)
+
+        with pytest.raises(PropertyValueRejection):
+            FeatureChainParser.match_configuration_feature_chain_parser(
+                VALIDATOR_FEATURE_ESC763,
+                Options(context={VALIDATOR_KEY_ESC763: [TYPE_POISON_VALUE_TIER763]}),
+                property_mapping=RaisingKeyErrorValidatorFeatureGroupEsc763.PROPERTY_MAPPING,
+                prefix_patterns=[RaisingKeyErrorValidatorFeatureGroupEsc763.PREFIX_PATTERN],
+            )
+
+        assert _records_at_or_above(caplog, PARSER_LOGGER_NAME, logging.WARNING) == []
+        debug_records = _records_at_exactly(caplog, PARSER_LOGGER_NAME, logging.DEBUG)
+        assert debug_records, "the contained TypeError must still log its rejection at DEBUG"
+        # DEBUG is the debugging tier: the containment record keeps both the key and the value visible.
+        assert any(
+            VALIDATOR_KEY_ESC763 in record.getMessage() and TYPE_POISON_VALUE_TIER763 in record.getMessage()
+            for record in debug_records
+        ), "the DEBUG containment record must name the property key and keep the rejected value visible"
+
+    def test_keyerror_guard_raise_logs_at_warning(self, caplog: pytest.LogCaptureFixture) -> None:
+        """A guard raising KeyError is still a non-match, but the containment surfaces at WARNING."""
+        caplog.set_level(logging.DEBUG, logger=MIXIN_LOGGER_NAME)
+        options = Options(context={GUARD_KEY_ESC763: POISON_VALUE_ESC763})
+
+        result = RaisingKeyErrorGuardFeatureGroupEsc763.match_feature_group_criteria(GUARD_FEATURE_ESC763, options)
+
+        assert result is False
+        warnings = _records_at_or_above(caplog, MIXIN_LOGGER_NAME, logging.WARNING)
+        assert warnings, "a KeyError-raising guard looks broken and must log at WARNING"
+        assert any(GUARD_KEY_ESC763 in record.getMessage() for record in warnings)
+        # The exception text stays for triage; the option value itself is redacted at WARNING (production-visible).
+        assert any("match_guard cannot judge the poison value" in record.getMessage() for record in warnings)
+        assert all(POISON_VALUE_ESC763 not in record.getMessage() for record in warnings), (
+            "option values may carry secrets and must not appear in WARNING-tier containment messages"
+        )
+
+    def test_typeerror_guard_raise_logs_at_debug_only(self, caplog: pytest.LogCaptureFixture) -> None:
+        """A guard raising TypeError is an expected judgment failure: contained at DEBUG, never WARNING."""
+        caplog.set_level(logging.DEBUG, logger=MIXIN_LOGGER_NAME)
+        options = Options(context={GUARD_KEY_ESC763: TYPE_POISON_VALUE_TIER763})
+
+        result = RaisingKeyErrorGuardFeatureGroupEsc763.match_feature_group_criteria(GUARD_FEATURE_ESC763, options)
+
+        assert result is False
+        assert _records_at_or_above(caplog, MIXIN_LOGGER_NAME, logging.WARNING) == []
+        debug_records = _records_at_exactly(caplog, MIXIN_LOGGER_NAME, logging.DEBUG)
+        assert debug_records, "the contained TypeError must still log its rejection at DEBUG"
+        # DEBUG is the debugging tier: the containment record keeps both the key and the value visible.
+        assert any(
+            GUARD_KEY_ESC763 in record.getMessage() and TYPE_POISON_VALUE_TIER763 in record.getMessage()
+            for record in debug_records
+        ), "the DEBUG containment record must name the option key and keep the rejected value visible"
+
+    def test_keyerror_required_when_raise_logs_at_warning(self, caplog: pytest.LogCaptureFixture) -> None:
+        """A predicate raising KeyError is still a non-match, but the containment surfaces at WARNING."""
+        caplog.set_level(logging.DEBUG, logger=PARSER_LOGGER_NAME)
+        options = Options(context={DRIVER_KEY_ESC763: POISON_VALUE_ESC763})
+
+        result = RaisingKeyErrorRequiredWhenFeatureGroupEsc763.match_feature_group_criteria(
+            REQUIRED_WHEN_FEATURE_ESC763, options
+        )
+
+        assert result is False
+        warnings = _records_at_or_above(caplog, PARSER_LOGGER_NAME, logging.WARNING)
+        assert warnings, "a KeyError-raising predicate looks broken and must log at WARNING"
+        owner = RaisingKeyErrorRequiredWhenFeatureGroupEsc763.__name__
+        assert any(
+            owner in record.getMessage() or REQUIRED_WHEN_KEY_ESC763 in record.getMessage() for record in warnings
+        )
+
+    def test_typeerror_required_when_raise_logs_at_debug_only(self, caplog: pytest.LogCaptureFixture) -> None:
+        """A predicate raising TypeError is an expected judgment failure: contained at DEBUG, never WARNING."""
+        caplog.set_level(logging.DEBUG, logger=PARSER_LOGGER_NAME)
+        options = Options(context={DRIVER_KEY_ESC763: TYPE_POISON_VALUE_TIER763})
+
+        result = RaisingKeyErrorRequiredWhenFeatureGroupEsc763.match_feature_group_criteria(
+            REQUIRED_WHEN_FEATURE_ESC763, options
+        )
+
+        assert result is False
+        assert _records_at_or_above(caplog, PARSER_LOGGER_NAME, logging.WARNING) == []
+        debug_records = _records_at_exactly(caplog, PARSER_LOGGER_NAME, logging.DEBUG)
+        assert debug_records, "the contained TypeError must still log its rejection at DEBUG"
+        owner = RaisingKeyErrorRequiredWhenFeatureGroupEsc763.__name__
+        assert any(
+            REQUIRED_WHEN_KEY_ESC763 in record.getMessage() or owner in record.getMessage() for record in debug_records
+        ), "the DEBUG containment record must name the guarded key or the owning feature group"
+
+    def test_keyerror_build_effective_options_raise_logs_at_warning(
+        self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """build_effective_options raising KeyError is still a non-match, but the containment surfaces at WARNING."""
+        caplog.set_level(logging.DEBUG, logger=PARSER_LOGGER_NAME)
+        monkeypatch.setattr(
+            FeatureChainParser,
+            "build_effective_options",
+            classmethod(_raise_keyerror_build_effective_options_tier763),
+        )
+        options = Options(context={DRIVER_KEY_ESC763: OPTIONAL_MODE_ESC763})
+
+        result = RaisingKeyErrorRequiredWhenFeatureGroupEsc763.match_feature_group_criteria(
+            REQUIRED_WHEN_FEATURE_ESC763, options
+        )
+
+        assert result is False
+        warnings = _records_at_or_above(caplog, PARSER_LOGGER_NAME, logging.WARNING)
+        assert warnings, "a KeyError out of build_effective_options looks broken and must log at WARNING"
+        owner = RaisingKeyErrorRequiredWhenFeatureGroupEsc763.__name__
+        assert any(owner in record.getMessage() for record in warnings)
+
+    def test_valueerror_build_effective_options_raise_logs_at_debug_only(
+        self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """build_effective_options raising ValueError is an expected failure: contained at DEBUG, never WARNING."""
+        caplog.set_level(logging.DEBUG, logger=PARSER_LOGGER_NAME)
+        monkeypatch.setattr(
+            FeatureChainParser,
+            "build_effective_options",
+            classmethod(_raise_build_effective_options_esc763),
+        )
+        options = Options(context={DRIVER_KEY_ESC763: OPTIONAL_MODE_ESC763})
+
+        result = RaisingKeyErrorRequiredWhenFeatureGroupEsc763.match_feature_group_criteria(
+            REQUIRED_WHEN_FEATURE_ESC763, options
+        )
+
+        assert result is False
+        assert _records_at_or_above(caplog, PARSER_LOGGER_NAME, logging.WARNING) == []
+        debug_records = _records_at_exactly(caplog, PARSER_LOGGER_NAME, logging.DEBUG)
+        assert debug_records, "the contained ValueError must still log its rejection at DEBUG"
+        owner = RaisingKeyErrorRequiredWhenFeatureGroupEsc763.__name__
+        assert any(owner in record.getMessage() for record in debug_records), (
+            "the DEBUG containment record must name the feature group whose match was denied"
+        )
+
+
+class TestValidatorCauseChaining:
+    """The PropertyValueRejection a raising validator produces chains the validator's own raise as __cause__.
+
+    The inline mapping records the exact exception instance the validator raised, so the tests assert
+    identity, not just class and message. No FeatureGroup class is defined, so nothing enters the registry.
+    """
+
+    def test_keyerror_validator_cause_is_the_original_exception(self) -> None:
+        """The rejection's __cause__ is the very KeyError instance the validator raised."""
+        raised: list[KeyError] = []
+
+        def validator(value: Any) -> bool:
+            exc = KeyError("tier763 validator cannot judge this value")
+            raised.append(exc)
+            raise exc
+
+        mapping = {
+            CAUSE_KEY_TIER763: PropertySpec(
+                "Raise whose instance must become __cause__ (tier763 fixture)",
+                context=True,
+                strict_validation=True,
+                element_validator=validator,
+            )
+        }
+
+        with pytest.raises(PropertyValueRejection) as exc_info:
+            FeatureChainParser.match_configuration_feature_chain_parser(
+                VALIDATOR_FEATURE_ESC763,
+                Options(context={CAUSE_KEY_TIER763: [POISON_VALUE_ESC763]}),
+                property_mapping=mapping,
+                prefix_patterns=[RaisingKeyErrorValidatorFeatureGroupEsc763.PREFIX_PATTERN],
+            )
+
+        assert len(raised) == 1
+        assert exc_info.value.__cause__ is raised[0]
+
+    def test_typeerror_validator_cause_is_the_original_exception(self) -> None:
+        """The rejection's __cause__ is the very TypeError instance the validator raised."""
+        raised: list[TypeError] = []
+
+        def validator(value: Any) -> bool:
+            exc = TypeError("tier763 validator expected judgment failure")
+            raised.append(exc)
+            raise exc
+
+        mapping = {
+            CAUSE_KEY_TIER763: PropertySpec(
+                "Raise whose instance must become __cause__ (tier763 fixture)",
+                context=True,
+                strict_validation=True,
+                element_validator=validator,
+            )
+        }
+
+        with pytest.raises(PropertyValueRejection) as exc_info:
+            FeatureChainParser.match_configuration_feature_chain_parser(
+                VALIDATOR_FEATURE_ESC763,
+                Options(context={CAUSE_KEY_TIER763: [TYPE_POISON_VALUE_TIER763]}),
+                property_mapping=mapping,
+                prefix_patterns=[RaisingKeyErrorValidatorFeatureGroupEsc763.PREFIX_PATTERN],
+            )
+
+        assert len(raised) == 1
+        assert exc_info.value.__cause__ is raised[0]

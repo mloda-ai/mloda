@@ -64,6 +64,7 @@ from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser
     FeatureChainParser,
     CHAIN_SEPARATOR,
     INPUT_SEPARATOR,
+    _contained_raise_log_level,
 )
 from mloda.core.abstract_plugins.components.feature_chainer.property_spec import PropertySpec
 from mloda.core.abstract_plugins.components.default_options_key import DefaultOptionKeys
@@ -99,7 +100,8 @@ class FeatureChainParserMixin:
     Predicate contract:
     - Signature: ``(Options) -> bool``
     - Must be callable (enforced at ``PropertySpec`` construction)
-    - Must not raise exceptions
+    - A predicate that raises is contained: the feature group is treated as a non-match
+      (unexpected exception classes log a warning)
     - Must be a pure function (no side effects)
     - Non-bool truthy return values are treated as True
 
@@ -396,8 +398,13 @@ class FeatureChainParserMixin:
                 continue
             try:
                 rejected = not guard(value)
-            except (TypeError, ValueError, AttributeError) as exc:
-                logger.debug("match_guard for '%s' raised %s for value %r", key, exc, value)
+            except Exception as exc:
+                level = _contained_raise_log_level(exc)
+                if level == logging.DEBUG:
+                    logger.debug("match_guard for '%s' raised %s for value %r", key, exc, value)
+                else:
+                    # The raw value stays out of WARNING logs; rerun with debug logging to see it.
+                    logger.warning("match_guard for '%s' raised %s", key, exc)
                 rejected = True
             if rejected:
                 return key, value

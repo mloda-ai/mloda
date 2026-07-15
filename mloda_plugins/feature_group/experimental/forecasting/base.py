@@ -335,10 +335,8 @@ class ForecastingFeatureGroup(TimeReferenceMixin, FeatureChainParserMixin, Featu
                     raise ValueError("No artifact to load although it was requested.")
 
             # Check if we should output confidence intervals
-            output_confidence_intervals = (
-                feature.options.get(cls.OUTPUT_CONFIDENCE_INTERVALS)
-                if feature.options.get(cls.OUTPUT_CONFIDENCE_INTERVALS) is not None
-                else False
+            output_confidence_intervals = cls.options_with_defaults(feature.options).get(
+                cls.OUTPUT_CONFIDENCE_INTERVALS
             )
 
             # Perform forecasting using the original clean data

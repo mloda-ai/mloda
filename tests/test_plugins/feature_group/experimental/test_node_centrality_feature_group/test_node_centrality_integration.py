@@ -229,6 +229,39 @@ class TestNodeCentralityPandasIntegration:
         # Validate the node centrality feature
         validate_node_centrality_features(centrality_df, ["placeholder1"])
 
+    def test_graph_type_default_applied_at_compute(self) -> None:
+        """Omitting graph_type computes the same centrality as graph_type='undirected'.
+
+        End-to-end proof that the declared 'undirected' default is materialized at compute
+        (via options_with_defaults inside calculate_feature) rather than required from the user (#766).
+        """
+        plugin_collector = PluginCollector.enabled_feature_groups(
+            {NodeCentralityTestDataCreator, PandasNodeCentralityFeatureGroup}
+        )
+
+        base_context: dict[str, Any] = {
+            NodeCentralityFeatureGroup.CENTRALITY_TYPE: "degree",
+            DefaultOptionKeys.in_features: "source",
+            NodeCentralityFeatureGroup.WEIGHT_COLUMN: "weight",
+        }
+
+        def run_centrality(context: dict[str, Any]) -> list[float]:
+            result = mloda.run_all(
+                ["source", "target", "weight", Feature("placeholder1", Options(context=context))],
+                compute_frameworks={PandasDataFrame},
+                plugin_collector=plugin_collector,
+            )
+            for df in result:
+                if "placeholder1" in df.columns:
+                    return list(df["placeholder1"])
+            raise AssertionError("DataFrame with placeholder1 centrality feature not found")
+
+        omitted = run_centrality(dict(base_context))
+        explicit = run_centrality({**base_context, NodeCentralityFeatureGroup.GRAPH_TYPE: "undirected"})
+
+        assert len(omitted) > 0, "No centrality values were computed"
+        assert omitted == explicit, "Omitting graph_type did not match the explicit 'undirected' default at compute"
+
     def test_directed_vs_undirected_graph(self) -> None:
         """Test node centrality features with different graph types."""
 

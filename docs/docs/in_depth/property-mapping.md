@@ -32,7 +32,7 @@ PROPERTY_MAPPING = {
 | --- | --- | --- | --- |
 | `explanation` | `str` | required, positional | What the option means. Also names the spec in construction errors. |
 | `allowed_values` | `Mapping[Any, str]`, any other iterable, or `None` | `None` | The declared value space. A Mapping is `{value: description}` and is kept as given; any other iterable is materialized to a tuple. |
-| `default` | `Any` | `NO_DEFAULT` | Applied when the key is absent. Leaving it at `NO_DEFAULT` declares *no default*, which makes the key required. See [Optional keys](#optional-keys). |
+| `default` | `Any` | `NO_DEFAULT` | Materialized into runtime options when the key is absent (see [Applying declared defaults](#applying-declared-defaults)). Leaving it at `NO_DEFAULT` declares *no default*, which makes the key required. See [Optional keys](#optional-keys). |
 | `context` | `bool` | `True` | `True`: context parameter. `False`: group parameter, which splits feature groups. |
 | `strict_validation` | `bool` | `False` | Enforce the value space at match time. |
 | `element_validator` | `Callable \| None` | `None` | Per-element predicate. Requires `strict_validation=True`. |
@@ -211,7 +211,7 @@ Optionality is the `default` field, and the three states are distinct:
 | --- | --- |
 | `default` omitted (stays `NO_DEFAULT`) | The key declares no default and is **required**. |
 | `default=None` | The key is **optional**; no value is applied when it is absent. |
-| `default=<value>` | The key is **optional**; the value is applied when it is absent, and is checked under strict. |
+| `default=<value>` | The key is **optional**; the value is materialized when it is absent (see [Applying declared defaults](#applying-declared-defaults)), and is checked under strict. |
 
 ``` python
 from mloda.provider import PropertySpec
@@ -231,6 +231,21 @@ every field is always present, so a plain `None` cannot say both "no default dec
 
 `required_when` is for a *conditional* requirement, not for optionality: never write a
 predicate that always returns `False` to make a key optional.
+
+## Applying declared defaults
+
+A declared default is metadata until the resolved feature group materializes it.
+`FeatureGroup.options_with_defaults(options)` returns an `Options` view where every absent key
+with a concrete declared default is filled from its spec (into context or group per the spec),
+so compute reads see it. A present value is never overridden, even a falsy `0`/`False`/`""`.
+`NO_DEFAULT` and `default=None` fill nothing. A strict default is already validated at
+construction, so the materialized value is not re-checked. The view is applied *after*
+resolution, so it never changes matching or FeatureSet splitting.
+
+``` python
+opts = MyFeatureGroup.options_with_defaults(feature.options)
+graph_type = opts.get("graph_type")  # the declared default when the caller omitted it
+```
 
 ## Parameter classification
 
@@ -353,6 +368,7 @@ if it really is a whole-value check.
 | The constructor IS the schema (no key set left to curate) | `tests/.../feature_chainer/test_property_mapping_spec_schema.py` |
 | Shape rules, relocated from class definition to construction | `tests/.../feature_chainer/test_property_mapping_spec_shape.py` |
 | Declared-default invariant | `tests/test_core/test_abstract_plugins/test_property_mapping_default_invariant.py` |
+| Declared defaults materialized into runtime options | `tests/test_core/test_abstract_plugins/test_options_with_defaults.py` |
 | Container invariance, no stringification, str-as-scalar, dict-as-composite, empty containers | `tests/.../feature_chainer/test_property_mapping_sequence_unpacking.py` |
 | Present option values validated on the string-named path too; required presence stays config-only | `tests/.../feature_chainer/test_name_path_validates_option_values.py` |
 | `required_when` survives an overridden matcher, runs exactly once, and demands a classmethod | `tests/.../feature_chainer/test_required_when_enforced_on_override.py` |

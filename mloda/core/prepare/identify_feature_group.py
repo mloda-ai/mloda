@@ -28,6 +28,7 @@ class EvaluationResult:
 
     @property
     def failure_kind(self) -> Optional[str]:
+        # "none" means no winner in the identified mapping, not that nothing matched: an all-rejected concrete group still yields "none" with a non-empty criteria_matched.
         n = len(self.identified)
         if n == 1:
             return None

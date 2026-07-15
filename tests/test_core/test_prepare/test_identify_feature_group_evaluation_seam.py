@@ -4,8 +4,8 @@ The engine wrapper ``IdentifyFeatureGroupClass(...)`` validates and RAISES ``Val
 any unresolved / ambiguous match. This suite pins a parallel, non-raising classmethod
 ``IdentifyFeatureGroupClass.evaluate(feature, accessible_plugins, links, data_access_collection=None)``
 that runs the same matching/filter logic but returns a structured ``EvaluationResult`` instead of
-raising. Both symbols are imported from ``mloda.core.prepare.identify_feature_group`` and do not
-exist yet, so these tests FAIL at import until the seam is implemented.
+raising. Both symbols are imported from ``mloda.core.prepare.identify_feature_group``; the seam is
+implemented, and these tests pin its non-raising contract.
 """
 
 from abc import abstractmethod

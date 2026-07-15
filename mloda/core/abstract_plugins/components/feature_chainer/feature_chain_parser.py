@@ -180,13 +180,19 @@ class FeatureChainParser:
             try:
                 verdict = element_validator(found_property_val)
             except Exception as exc:
-                logger.log(
-                    _contained_raise_log_level(exc),
-                    "element_validator for '%s' raised %s for value %r; treating value as rejected.",
-                    property_name,
-                    exc,
-                    found_property_val,
-                )
+                level = _contained_raise_log_level(exc)
+                if level == logging.DEBUG:
+                    logger.debug(
+                        "element_validator for '%s' raised %s for value %r; treating value as rejected.",
+                        property_name,
+                        exc,
+                        found_property_val,
+                    )
+                else:
+                    # The raw value stays out of WARNING logs; rerun with debug logging to see it.
+                    logger.warning(
+                        "element_validator for '%s' raised %s; treating value as rejected.", property_name, exc
+                    )
                 raised = exc
                 verdict = False
             if not verdict:

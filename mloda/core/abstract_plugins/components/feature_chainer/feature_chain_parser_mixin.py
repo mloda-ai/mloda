@@ -399,9 +399,12 @@ class FeatureChainParserMixin:
             try:
                 rejected = not guard(value)
             except Exception as exc:
-                logger.log(
-                    _contained_raise_log_level(exc), "match_guard for '%s' raised %s for value %r", key, exc, value
-                )
+                level = _contained_raise_log_level(exc)
+                if level == logging.DEBUG:
+                    logger.debug("match_guard for '%s' raised %s for value %r", key, exc, value)
+                else:
+                    # The raw value stays out of WARNING logs; rerun with debug logging to see it.
+                    logger.warning("match_guard for '%s' raised %s", key, exc)
                 rejected = True
             if rejected:
                 return key, value

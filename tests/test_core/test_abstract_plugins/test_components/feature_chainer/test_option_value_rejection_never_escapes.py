@@ -742,6 +742,11 @@ class TestContainedRaiseLogTiers:
         warnings = _records_at_or_above(caplog, PARSER_LOGGER_NAME, logging.WARNING)
         assert warnings, "a KeyError-raising validator looks broken and must log at WARNING"
         assert any(VALIDATOR_KEY_ESC763 in record.getMessage() for record in warnings)
+        # The exception text stays for triage; the option value itself is redacted at WARNING (production-visible).
+        assert any("element_validator cannot judge the poison value" in record.getMessage() for record in warnings)
+        assert all(POISON_VALUE_ESC763 not in record.getMessage() for record in warnings), (
+            "option values may carry secrets and must not appear in WARNING-tier containment messages"
+        )
 
     def test_typeerror_validator_raise_logs_at_debug_only(self, caplog: pytest.LogCaptureFixture) -> None:
         """A validator raising TypeError is an expected judgment failure: contained at DEBUG, never WARNING."""
@@ -758,6 +763,11 @@ class TestContainedRaiseLogTiers:
         assert _records_at_or_above(caplog, PARSER_LOGGER_NAME, logging.WARNING) == []
         debug_records = _records_at_exactly(caplog, PARSER_LOGGER_NAME, logging.DEBUG)
         assert debug_records, "the contained TypeError must still log its rejection at DEBUG"
+        # DEBUG is the debugging tier: the containment record keeps both the key and the value visible.
+        assert any(
+            VALIDATOR_KEY_ESC763 in record.getMessage() and TYPE_POISON_VALUE_TIER763 in record.getMessage()
+            for record in debug_records
+        ), "the DEBUG containment record must name the property key and keep the rejected value visible"
 
     def test_keyerror_guard_raise_logs_at_warning(self, caplog: pytest.LogCaptureFixture) -> None:
         """A guard raising KeyError is still a non-match, but the containment surfaces at WARNING."""
@@ -770,6 +780,11 @@ class TestContainedRaiseLogTiers:
         warnings = _records_at_or_above(caplog, MIXIN_LOGGER_NAME, logging.WARNING)
         assert warnings, "a KeyError-raising guard looks broken and must log at WARNING"
         assert any(GUARD_KEY_ESC763 in record.getMessage() for record in warnings)
+        # The exception text stays for triage; the option value itself is redacted at WARNING (production-visible).
+        assert any("match_guard cannot judge the poison value" in record.getMessage() for record in warnings)
+        assert all(POISON_VALUE_ESC763 not in record.getMessage() for record in warnings), (
+            "option values may carry secrets and must not appear in WARNING-tier containment messages"
+        )
 
     def test_typeerror_guard_raise_logs_at_debug_only(self, caplog: pytest.LogCaptureFixture) -> None:
         """A guard raising TypeError is an expected judgment failure: contained at DEBUG, never WARNING."""
@@ -782,6 +797,11 @@ class TestContainedRaiseLogTiers:
         assert _records_at_or_above(caplog, MIXIN_LOGGER_NAME, logging.WARNING) == []
         debug_records = _records_at_exactly(caplog, MIXIN_LOGGER_NAME, logging.DEBUG)
         assert debug_records, "the contained TypeError must still log its rejection at DEBUG"
+        # DEBUG is the debugging tier: the containment record keeps both the key and the value visible.
+        assert any(
+            GUARD_KEY_ESC763 in record.getMessage() and TYPE_POISON_VALUE_TIER763 in record.getMessage()
+            for record in debug_records
+        ), "the DEBUG containment record must name the option key and keep the rejected value visible"
 
     def test_keyerror_required_when_raise_logs_at_warning(self, caplog: pytest.LogCaptureFixture) -> None:
         """A predicate raising KeyError is still a non-match, but the containment surfaces at WARNING."""
@@ -813,6 +833,10 @@ class TestContainedRaiseLogTiers:
         assert _records_at_or_above(caplog, PARSER_LOGGER_NAME, logging.WARNING) == []
         debug_records = _records_at_exactly(caplog, PARSER_LOGGER_NAME, logging.DEBUG)
         assert debug_records, "the contained TypeError must still log its rejection at DEBUG"
+        owner = RaisingKeyErrorRequiredWhenFeatureGroupEsc763.__name__
+        assert any(
+            REQUIRED_WHEN_KEY_ESC763 in record.getMessage() or owner in record.getMessage() for record in debug_records
+        ), "the DEBUG containment record must name the guarded key or the owning feature group"
 
     def test_keyerror_build_effective_options_raise_logs_at_warning(
         self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
@@ -856,6 +880,10 @@ class TestContainedRaiseLogTiers:
         assert _records_at_or_above(caplog, PARSER_LOGGER_NAME, logging.WARNING) == []
         debug_records = _records_at_exactly(caplog, PARSER_LOGGER_NAME, logging.DEBUG)
         assert debug_records, "the contained ValueError must still log its rejection at DEBUG"
+        owner = RaisingKeyErrorRequiredWhenFeatureGroupEsc763.__name__
+        assert any(owner in record.getMessage() for record in debug_records), (
+            "the DEBUG containment record must name the feature group whose match was denied"
+        )
 
 
 class TestValidatorCauseChaining:

@@ -19,6 +19,8 @@ MATCH_KEY = "subdeclm_window_function"
 MATCH_WINDOW_UNIVERSE = frozenset({"median", "sum", "lag", "ntile"})
 MATCH_BETA_SUPPORTED = frozenset({"sum", "lag"})
 MATCH_PLAIN_FEATURE = "subdeclm_plain_feature"
+COMPILED_KEY = "subdeclmc_window_function"
+COMPILED_BETA_SUPPORTED = frozenset({"sum", "lag"})
 RANK_UNIVERSE = frozenset({"dense", "ordinal", "ntile"})
 FRAME_LITERALS = frozenset({"rows_1", "rows_7"})
 FRAME_UNIVERSE = FRAME_LITERALS | {"rows"}
@@ -43,6 +45,28 @@ class SubDeclMatchWindowFG(FeatureChainParserMixin, FeatureGroup):
     PREFIX_PATTERN = r".*__([\w]+)_subdeclmw$"
     PROPERTY_MAPPING = {
         MATCH_KEY: property_spec(
+            "Window function subtype.",
+            strict=True,
+            allowed_values={"median": "Median", "sum": "Sum", "lag": "Lag"},
+        ),
+    }
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]] | None:
+        return {SubDeclMatchFwAlpha, SubDeclMatchFwBeta}
+
+
+class SubDeclMatchCompiledWindowFG(FeatureChainParserMixin, FeatureGroup):
+    """Compiled-pattern twin of SubDeclMatchWindowFG; a compiled PREFIX_PATTERN must resolve like a str one."""
+
+    SUBTYPES = SubtypeDeclaration(
+        key=COMPILED_KEY,
+        parametric_families={"ntile": "N-tile bucketing"},
+        supported={SubDeclMatchFwBeta.get_class_name(): COMPILED_BETA_SUPPORTED},
+    )
+    PREFIX_PATTERN = re.compile(r".*__([\w]+)_subdeclmcompiled$")
+    PROPERTY_MAPPING = {
+        COMPILED_KEY: property_spec(
             "Window function subtype.",
             strict=True,
             allowed_values={"median": "Median", "sum": "Sum", "lag": "Lag"},
@@ -316,3 +340,42 @@ class TestSubDeclMatchPlanningNeverRaises:
         )
         assert supported == {SubDeclMatchFwAlpha, SubDeclMatchFwBeta}
         assert rejected == set()
+
+
+class TestCompiledPrefixPatternParity:
+    """A compiled PREFIX_PATTERN must resolve and route exactly like its string sibling (issue #765)."""
+
+    def test_compiled_pattern_resolves_same_subtype_as_string_sibling(self) -> None:
+        # The matcher accepts the feature on both forms; resolution must not fail open on the compiled one.
+        assert SubDeclMatchCompiledWindowFG.match_feature_group_criteria("value__median_subdeclmcompiled", Options())
+        string_subtype = SubDeclMatchWindowFG.resolve_subtype("value__median_subdeclmw", Options())
+        compiled_subtype = SubDeclMatchCompiledWindowFG.resolve_subtype("value__median_subdeclmcompiled", Options())
+        assert string_subtype == "median"
+        assert compiled_subtype == string_subtype, (
+            f"A compiled PREFIX_PATTERN must resolve the subtype like the string form '{string_subtype}'; "
+            f"the guard drops the re.Pattern and returns {compiled_subtype}."
+        )
+
+    def test_unsupported_subtype_routes_around_incapable_framework(self) -> None:
+        feature = Feature("value__median_subdeclmcompiled")
+        accessible_plugins: FeatureGroupEnvironmentMapping = {
+            SubDeclMatchCompiledWindowFG: {SubDeclMatchFwAlpha, SubDeclMatchFwBeta},
+        }
+
+        feature_group_class, compute_frameworks = _identify(feature, accessible_plugins).get()
+        assert feature_group_class is SubDeclMatchCompiledWindowFG
+        assert compute_frameworks == {SubDeclMatchFwAlpha}, (
+            f"'median' is unsupported on SubDeclMatchFwBeta and must be routed around even when PREFIX_PATTERN "
+            f"is compiled; the dropped pattern fails open and keeps {compute_frameworks}"
+        )
+
+    def test_supported_subtype_runs_on_both_frameworks(self) -> None:
+        feature = Feature("value__sum_subdeclmcompiled")
+        accessible_plugins: FeatureGroupEnvironmentMapping = {
+            SubDeclMatchCompiledWindowFG: {SubDeclMatchFwAlpha, SubDeclMatchFwBeta},
+        }
+
+        _, compute_frameworks = _identify(feature, accessible_plugins).get()
+        assert compute_frameworks == {SubDeclMatchFwAlpha, SubDeclMatchFwBeta}, (
+            f"'sum' is supported on SubDeclMatchFwBeta and must run on both frameworks; got {compute_frameworks}"
+        )

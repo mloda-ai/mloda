@@ -1,5 +1,6 @@
 import copy
 from copy import deepcopy
+from typing import Any
 
 import pytest
 from mloda.user import Options
@@ -381,3 +382,55 @@ class TestOptionsNestedStructureHashing:
         )
         result = hash(options)
         assert isinstance(result, int)
+
+
+class TestOptionsGetDefault:
+    """Options.get accepts a dict-style default returned only for absent keys (#767)."""
+
+    def test_absent_key_returns_call_site_default(self) -> None:
+        """An absent key returns the call-site default."""
+        assert Options(group={"a": 1}).get("missing", "d") == "d"
+
+    def test_single_arg_absent_key_still_returns_none(self) -> None:
+        """Single-argument get on an absent key still returns None (unchanged)."""
+        assert Options(group={"a": 1}).get("missing") is None
+
+    def test_present_group_key_ignores_default(self) -> None:
+        """A present group key returns its stored value; the default is ignored."""
+        assert Options(group={"a": 1}).get("a", "d") == 1
+
+    def test_present_context_key_ignores_default(self) -> None:
+        """A present context key returns its stored value; the default is ignored."""
+        assert Options(context={"a": 1}).get("a", "d") == 1
+
+    @pytest.mark.parametrize("falsy", [0, "", False])
+    def test_present_falsy_group_value_returned_not_default(self, falsy: Any) -> None:
+        """A present falsy group value (0/""/False) is returned as-is, never the default."""
+        result = Options(group={"a": falsy}).get("a", "sentinel_default")
+        assert result == falsy
+        assert type(result) is type(falsy)
+        assert result != "sentinel_default"
+
+    @pytest.mark.parametrize("falsy", [0, "", False])
+    def test_present_falsy_context_value_returned_not_default(self, falsy: Any) -> None:
+        """A present falsy context value (0/""/False) is returned as-is, never the default."""
+        result = Options(context={"a": falsy}).get("a", "sentinel_default")
+        assert result == falsy
+        assert type(result) is type(falsy)
+        assert result != "sentinel_default"
+
+    def test_present_none_group_value_returns_none_not_default(self) -> None:
+        """A group key stored as None returns None (presence-based), never the default."""
+        assert Options(group={"a": None}).get("a", "d") is None
+
+    def test_present_none_context_value_returns_none_not_default(self) -> None:
+        """A context key stored as None returns None (presence-based), never the default."""
+        assert Options(context={"a": None}).get("a", "d") is None
+
+    def test_default_passed_positionally(self) -> None:
+        """The default is accepted as a positional second argument."""
+        assert Options().get("m", "d") == "d"
+
+    def test_default_passed_by_keyword(self) -> None:
+        """The default is accepted as a keyword argument."""
+        assert Options().get("m", default="d") == "d"

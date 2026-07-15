@@ -277,3 +277,32 @@ class TestMutableDefaultIsolation:
         assert _options_with_defaults(MutableDefaultFeatureGroup, Options()).get("items") == [], (
             "a later call saw the leak"
         )
+
+
+class TestOptionsGetDefaultPrecedence:
+    """get(key, call_site_default) on the materialized view honors explicit > spec default > call-site (#767).
+
+    Each test binds only the materialized ``Options`` to a local (a non-asserted assignment pytest never
+    rewrites), so the throwaway probe FeatureGroup stays a transient and the module's autouse no-leak guard
+    still passes even when an assert fails.
+    """
+
+    def test_spec_default_beats_call_site_default(self) -> None:
+        """An absent key that declares a concrete default resolves to that default, not the call-site default."""
+        view = _options_with_defaults(_make_probe_fg(), Options())
+        assert view.get(CTX_KEY, "callsite") == "ctx_val"
+
+    def test_explicit_value_beats_both_defaults(self) -> None:
+        """An explicit value beats both the spec default and the call-site default."""
+        view = _options_with_defaults(_make_probe_fg(), Options(context={CTX_KEY: "explicit"}))
+        assert view.get(CTX_KEY, "callsite") == "explicit"
+
+    def test_call_site_default_is_last_resort(self) -> None:
+        """With neither explicit value nor spec default (REQ_KEY is NO_DEFAULT), the call-site default is returned."""
+        view = _options_with_defaults(_make_probe_fg(), Options())
+        assert view.get(REQ_KEY, "callsite") == "callsite"
+
+    def test_explicit_none_is_overwritten_by_spec_default(self) -> None:
+        """An explicit None is unset to options_with_defaults, so the concrete spec default still applies."""
+        view = _options_with_defaults(_make_probe_fg(), Options(context={CTX_KEY: None}))
+        assert view.get(CTX_KEY, "callsite") == "ctx_val"

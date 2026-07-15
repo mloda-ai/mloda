@@ -247,6 +247,19 @@ opts = MyFeatureGroup.options_with_defaults(feature.options)
 graph_type = opts.get("graph_type")  # the declared default when the caller omitted it
 ```
 
+`Options.get(key, default)` reads dict-style: a present key returns its stored value (even a falsy
+`0`/`False`/`""`), and the call-site `default` is returned only when the key is absent from both
+group and context. Because `options_with_defaults` has already materialized any declared default
+into the view, reading it back gives a three-level precedence, an explicit caller value first, then
+the declared spec default, then the call-site `default`. (Subtlety: `options_with_defaults` fills any
+key whose value `is None`, so an explicit `None` is replaced by a concrete spec default, while the
+other falsy values `0`/`False`/`""` are kept.)
+
+``` python
+opts = MyFeatureGroup.options_with_defaults(feature.options)
+graph_type = opts.get("graph_type", "spring")  # explicit value; else the spec default; else "spring"
+```
+
 ## Parameter classification
 
 There is no `group` field: a group parameter is `context=False`.

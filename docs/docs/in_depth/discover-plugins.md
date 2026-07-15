@@ -22,6 +22,53 @@ This is useful for:
 - Understanding which plugin handles a feature
 - Identifying conflicts when multiple FeatureGroups match
 
+`resolve_feature` runs the **same matcher over the same candidate universe as a
+run**: it delegates to the engine's `IdentifyFeatureGroupClass` and builds its
+plugin universe the way the engine does (availability, strict-registry mode, and
+`PluginCollector` policy all apply). So the error it reports for an unresolvable
+feature is the error a run would raise, and a feature it resolves is one a run
+resolves. The remaining differences are presentation-only: `resolve_feature`
+never raises (matching failures land in `result.error`, not an exception), and
+it returns a structured `ResolvedFeature` instead of a plan.
+
+One behavioral exception to the parity: a plugin that raises while declaring its
+frameworks (a broken `compute_framework_rule` / `compute_framework_definition`)
+aborts a real run, but on the debug path it degrades to an empty framework set,
+so it stays a listed candidate that never wins instead of taking the call down.
+The debug tool keeps reporting; the run fails fast.
+
+Its environment is a **standalone default**, not a replay of a specific run:
+`ResolvedFeature.environment` reads `"standalone-default"`. The candidate
+universe defaults to every installed compute framework unless you narrow it (see
+[Expressing the full request](#expressing-the-full-request)).
+
+### Expressing the full request
+
+A run resolves a `Feature`, not just a name, so `resolve_feature` accepts one
+too. Pass a `Feature` as the single source of truth for name, `options`, domain,
+compute-framework pin, and scope; passing `options` or `feature_group` alongside
+a `Feature` raises `TypeError`.
+
+``` python
+from mloda.user import Feature, Options
+
+result = resolve_feature(Feature("sales__sum_aggr", options=Options(group={"partition_by": ["customer_id"]})))
+```
+
+Every engine input is expressible, either on the `Feature` or as a keyword-only
+argument to `resolve_feature`:
+
+- `options`, domain, compute-framework pin, scope: on the `Feature` (or, for the
+  string form, `options=` and `feature_group=`).
+- `links`: a set of `Link` objects, threaded to the matcher so link-gated groups
+  resolve.
+- `data_access_collection`: threaded to the matcher so reader / input-data groups
+  resolve.
+- `plugin_collector`: restricts the FeatureGroups considered and threads its
+  `allow_redefinition` flag into deduplication.
+- `compute_frameworks`: restricts the candidate universe's framework set
+  (default: all installed frameworks).
+
 ### Option-Gated Feature Groups
 
 Matching and the compute framework split both run under the options you pass.
@@ -41,7 +88,9 @@ result = resolve_feature("sales__sum_aggr", options=Options(group={"partition_by
 print(result.feature_group, result.supported_compute_frameworks)
 ```
 
-`options` and `plugin_collector` are keyword-only, so pass them by name.
+Every argument after `feature` (`options`, `plugin_collector`, `feature_group`,
+`links`, `data_access_collection`, `compute_frameworks`) is keyword-only, so
+pass them by name.
 
 ### Scoping to a Feature Group
 

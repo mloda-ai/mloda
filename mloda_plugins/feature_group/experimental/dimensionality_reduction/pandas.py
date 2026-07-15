@@ -137,52 +137,25 @@ class PandasDimensionalityReductionFeatureGroup(DimensionalityReductionFeatureGr
                 f"Target dimension ({dimension}) must be less than the number of source features ({X_scaled.shape[1]})"
             )
 
+        # Materialize declared defaults so each branch reads the spec-backed value (#766)
+        options = DimensionalityReductionFeatureGroup.options_with_defaults(options)
+
         # Perform dimensionality reduction based on the algorithm
         if algorithm == "pca":
             svd_solver = options.get(DimensionalityReductionFeatureGroup.PCA_SVD_SOLVER)
-            if svd_solver is None:
-                svd_solver = DimensionalityReductionFeatureGroup.PROPERTY_MAPPING[
-                    DimensionalityReductionFeatureGroup.PCA_SVD_SOLVER
-                ].default
             return cls._perform_pca_reduction(X_scaled, dimension, svd_solver)
         elif algorithm == "tsne":
-            max_iter_val = options.get(DimensionalityReductionFeatureGroup.TSNE_MAX_ITER)
-            if max_iter_val is None:
-                max_iter_val = DimensionalityReductionFeatureGroup.PROPERTY_MAPPING[
-                    DimensionalityReductionFeatureGroup.TSNE_MAX_ITER
-                ].default
-            max_iter = int(max_iter_val)
-
-            n_iter_without_progress_val = options.get(DimensionalityReductionFeatureGroup.TSNE_N_ITER_WITHOUT_PROGRESS)
-            if n_iter_without_progress_val is None:
-                n_iter_without_progress_val = DimensionalityReductionFeatureGroup.PROPERTY_MAPPING[
-                    DimensionalityReductionFeatureGroup.TSNE_N_ITER_WITHOUT_PROGRESS
-                ].default
-            n_iter_without_progress = int(n_iter_without_progress_val)
-
+            max_iter = int(options.get(DimensionalityReductionFeatureGroup.TSNE_MAX_ITER))
+            n_iter_without_progress = int(options.get(DimensionalityReductionFeatureGroup.TSNE_N_ITER_WITHOUT_PROGRESS))
             method = options.get(DimensionalityReductionFeatureGroup.TSNE_METHOD)
-            if method is None:
-                method = DimensionalityReductionFeatureGroup.PROPERTY_MAPPING[
-                    DimensionalityReductionFeatureGroup.TSNE_METHOD
-                ].default
             return cls._perform_tsne_reduction(X_scaled, dimension, max_iter, n_iter_without_progress, method)
         elif algorithm == "ica":
-            max_iter_val = options.get(DimensionalityReductionFeatureGroup.ICA_MAX_ITER)
-            if max_iter_val is None:
-                max_iter_val = DimensionalityReductionFeatureGroup.PROPERTY_MAPPING[
-                    DimensionalityReductionFeatureGroup.ICA_MAX_ITER
-                ].default
-            max_iter = int(max_iter_val)
+            max_iter = int(options.get(DimensionalityReductionFeatureGroup.ICA_MAX_ITER))
             return cls._perform_ica_reduction(X_scaled, dimension, max_iter)
         elif algorithm == "lda":
             return cls._perform_lda_reduction(X_scaled, dimension, df)
         elif algorithm == "isomap":
-            n_neighbors_val = options.get(DimensionalityReductionFeatureGroup.ISOMAP_N_NEIGHBORS)
-            if n_neighbors_val is None:
-                n_neighbors_val = DimensionalityReductionFeatureGroup.PROPERTY_MAPPING[
-                    DimensionalityReductionFeatureGroup.ISOMAP_N_NEIGHBORS
-                ].default
-            n_neighbors = int(n_neighbors_val)
+            n_neighbors = int(options.get(DimensionalityReductionFeatureGroup.ISOMAP_N_NEIGHBORS))
             return cls._perform_isomap_reduction(X_scaled, dimension, n_neighbors)
         else:
             raise ValueError(f"Unsupported dimensionality reduction algorithm: {algorithm}")

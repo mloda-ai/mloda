@@ -314,11 +314,7 @@ class ClusteringFeatureGroup(FeatureChainParserMixin, FeatureGroup):
             cls._check_source_features_exist(data, resolved_features)
 
             # Check if we should output probabilities
-            output_probabilities = (
-                feature.options.get(cls.OUTPUT_PROBABILITIES)
-                if feature.options.get(cls.OUTPUT_PROBABILITIES) is not None
-                else False
-            )
+            output_probabilities = cls.options_with_defaults(feature.options).get(cls.OUTPUT_PROBABILITIES)
 
             # Perform clustering
             if output_probabilities:

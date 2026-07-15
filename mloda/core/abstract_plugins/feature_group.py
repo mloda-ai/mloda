@@ -26,7 +26,7 @@ from mloda.core.abstract_plugins.components.match_data.match_data import MatchDa
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.feature_set import FeatureSet
-from mloda.core.abstract_plugins.components.options import Options
+from mloda.core.abstract_plugins.components.options import Options, _isolate_forwarded_value
 from mloda.core.abstract_plugins.components.index.index import Index
 from mloda.core.abstract_plugins.components.utils import get_all_subclasses, safe_field
 
@@ -216,9 +216,7 @@ class FeatureGroup(ABC):
 
         key = declaration.key
         spec = (cls.PROPERTY_MAPPING or {}).get(key)
-        value = options.get(key)
-        if value is None and spec is not None and not is_no_default(spec.default):
-            value = spec.default
+        value = cls.options_with_defaults(options).get(key)
         if value is None:
             return None
         if spec is not None:
@@ -230,6 +228,44 @@ class FeatureGroup(ABC):
             if normalized is not None and len(normalized) == 1:
                 return str(next(iter(normalized)))
         return str(value)
+
+    @final
+    @classmethod
+    def options_with_defaults(cls, options: Options) -> Options:
+        """Return an Options with every absent PROPERTY_MAPPING key that declares a concrete default
+        materialized from its spec (context or group per the spec); present values are never overridden (#766)."""
+        mapping = cls.PROPERTY_MAPPING or {}
+        memo: dict[int, Any] = {}
+        fills_group: dict[str, Any] = {}
+        fills_context: dict[str, Any] = {}
+        for key, spec in mapping.items():
+            if options.get(key) is not None:
+                continue
+            if is_no_default(spec.default) or spec.default is None:
+                continue
+            # Isolate the class-level default so a compute-time mutation cannot corrupt the spec (mirrors
+            # inherit_from). Fill where the key already sits (present-as-None), else per the spec's
+            # classification, so the constructed Options never lands the same key in both group and context.
+            value = _isolate_forwarded_value(spec.default, memo)
+            if key in options.group:
+                fills_group[key] = value
+            elif key in options.context:
+                fills_context[key] = value
+            elif spec.context:
+                fills_context[key] = value
+            else:
+                fills_group[key] = value
+        if not fills_group and not fills_context:
+            return options
+        result = Options(
+            group={**options.group, **fills_group},
+            context={**options.context, **fills_context},
+            propagate_context_keys=options.propagate_context_keys,
+        )
+        result.inherited_group_keys = options.inherited_group_keys
+        result.inherited_context_keys = options.inherited_context_keys
+        result.last_forwarded_group_keys = options.last_forwarded_group_keys
+        return result
 
     @final
     @classmethod

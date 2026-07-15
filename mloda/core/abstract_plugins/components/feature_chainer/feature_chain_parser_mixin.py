@@ -352,7 +352,12 @@ class FeatureChainParserMixin:
         if prop_key is None or prop_key not in options.inherited_group_keys:
             return
         inherited_value = options.get(prop_key)
-        if inherited_value is None or str(inherited_value) == operation_config:
+        if inherited_value is None:
+            return
+        # A singleton collection equals its sole element, exactly as _unpack_property_value treats it
+        # everywhere else; only a differing or multi-value forward is a real mismatch.
+        unpacked = FeatureChainParser._unpack_property_value(inherited_value)
+        if len(unpacked) == 1 and str(unpacked[0]) == operation_config:
             return
         message = (
             f"Feature '{feature_name}': option '{prop_key}' was forwarded from a consumer with value "

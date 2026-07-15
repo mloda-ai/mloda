@@ -2,9 +2,10 @@
 
 Each of the three verified user-visible false positives between the engine matcher
 (IdentifyFeatureGroupClass) and the debug API (resolve_feature) is pinned by a pair of tests
-sharing one probe family: one engine assertion, one resolve_feature assertion. Every assertion
-here PASSES against current code. Assertions marked "PINS CURRENT DIVERGENCE (#755)" pin behavior
-that #755 (resolve_feature delegates to the engine seam) will flip to the target contract.
+sharing one probe family: one engine assertion, one resolve_feature assertion. The engine-side
+assertions pass against current code. The three resolve_feature-side tests now assert the post-#755
+target (resolve_feature delegates to the engine seam), so they FAIL against the current, still-diverging
+implementation until the delegation lands and engine and debug agree.
 
 This is deliberately NOT the full 17-way divergence matrix from #722: the presentation-only
 divergences are erased wholesale when resolve_feature delegates, so they need no individual pins.
@@ -148,18 +149,20 @@ def test_engine_rejects_lone_abstract_match() -> None:
     assert "Only abstract feature group base(s) matched" in str(exc_info.value)
 
 
-def test_resolve_feature_returns_lone_abstract_match() -> None:
-    """resolve_feature resolves the same uninstantiable abstract base as the winner."""
+def test_resolve_feature_rejects_lone_abstract_match() -> None:
+    """resolve_feature refuses a lone abstract base, matching the engine's abstract-only rejection."""
     assert inspect.isabstract(AbstractOnlyProbe753), "fixture must be abstract"
 
     collector = PluginCollector.enabled_feature_groups({AbstractOnlyProbe753})
     result = resolve_feature(ABSTRACT_ONLY_FEATURE, plugin_collector=collector)
 
-    # PINS CURRENT DIVERGENCE (#755): the uninstantiable abstract base wins on the debug path while
-    # the engine refuses it; #755 makes resolve_feature reject the abstract winner too.
-    assert result.feature_group is AbstractOnlyProbe753
-    assert result.error is None
-    assert result.candidates == [AbstractOnlyProbe753]
+    # #755 target: resolve_feature delegates to the engine seam, which excludes abstract bases from the
+    # winners and reports the abstract-only error. The uninstantiable base no longer wins on the debug path.
+    assert result.feature_group is None
+    assert result.error is not None
+    assert "Only abstract feature group base(s) matched" in result.error
+    # Abstract-only matches are not concrete candidates: criteria_matched is empty.
+    assert result.candidates == []
 
 
 # ---------------------------------------------------------------------------
@@ -189,20 +192,19 @@ def test_engine_unavailable_only_framework_raises_no_feature_groups() -> None:
         )
 
 
-def test_resolve_feature_unavailable_only_framework_reads_as_runnable() -> None:
-    """resolve_feature reports success for a feature the engine can never run."""
+def test_resolve_feature_unavailable_only_framework_fails_closed() -> None:
+    """resolve_feature fails closed for a feature whose only declared framework is not installed."""
     assert CfwUnavailable753.is_available() is False  # premise guard
 
     collector = PluginCollector.enabled_feature_groups({UnavailableOnlyProbe753})
     result = resolve_feature(UNAVAILABLE_FEATURE, plugin_collector=collector)
 
-    # PINS CURRENT DIVERGENCE (#755): a feature whose only framework is not installed reads as
-    # runnable. The capability split skips unavailable frameworks, so supported and rejected are
-    # both empty and the "if not supported and rejected" guard never fires. #755 makes this fail closed.
-    assert result.feature_group is UnavailableOnlyProbe753
-    assert result.error is None
+    # #755 target: the sole declared framework is unavailable, so the engine seam yields no winner and
+    # resolve_feature fails closed instead of reading as runnable.
+    assert result.feature_group is None
+    assert result.error is not None
+    assert "No feature groups found for feature name: 'probe753_unavailable'" in result.error
     assert result.supported_compute_frameworks == []
-    assert result.unsupported_compute_frameworks == []
 
 
 # ---------------------------------------------------------------------------
@@ -230,17 +232,19 @@ def test_engine_parent_child_differing_framework_sets_stays_ambiguous() -> None:
     assert "ChildProbe753" in message
 
 
-def test_resolve_feature_parent_child_unions_framework_attribution() -> None:
-    """resolve_feature credits the child winner with the parent-only framework it never declares."""
+def test_resolve_feature_parent_child_stays_ambiguous() -> None:
+    """resolve_feature keeps the differing-framework-set parent/child pair ambiguous, like the engine."""
     collector = PluginCollector.enabled_feature_groups({ParentProbe753, ChildProbe753})
     result = resolve_feature(PARENT_CHILD_FEATURE, plugin_collector=collector)
 
-    # PINS CURRENT DIVERGENCE (#755): _filter_subclasses collapses purely by issubclass so the child
-    # wins, and the capability split is unioned across ALL candidates, so CfwQ753 is reported as
-    # supported although the winner ChildProbe753 never declares it. #755 attributes per winner only.
-    assert result.feature_group is ChildProbe753
-    assert result.error is None
+    # #755 target: resolve_feature delegates to the engine seam. The parent and child declare differing
+    # framework sets ({CfwP753, CfwQ753} vs {CfwP753}), which blocks the seam's subclass collapse, so the
+    # pair stays ambiguous. The debug path no longer collapses to the child nor unions CfwQ753 (the
+    # parent-only framework) into the winner's attribution. Framework credit is per winner only.
+    assert result.feature_group is None
+    assert result.error is not None
+    assert "Multiple feature groups found" in result.error
+    assert "ParentProbe753" in result.error
+    assert "ChildProbe753" in result.error
     assert set(result.candidates) == {ParentProbe753, ChildProbe753}
-    assert CfwP753.get_class_name() in result.supported_compute_frameworks
-    assert CfwQ753.get_class_name() in result.supported_compute_frameworks
-    assert result.unsupported_compute_frameworks == []
+    assert CfwQ753.get_class_name() not in result.supported_compute_frameworks

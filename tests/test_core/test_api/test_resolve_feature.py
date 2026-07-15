@@ -561,9 +561,9 @@ class TestResolveFeatureCapabilityAware:
     def test_all_rejected_resolution_fails_with_capability_error(self) -> None:
         """When every framework in the definition rejects the op, resolution fails.
 
-        feature_group is None, error names the unsupported framework(s) and includes
-        the 'default options' caveat, and the split lists both frameworks as
-        unsupported with none supported.
+        After #755 the error is the engine's capability-rejection message: it names the
+        unsupported framework(s) and points at supports_compute_framework, with no concept
+        of a 'default options' caveat.
         """
         result = resolve_feature(ALL_REJECTED_CAP_FEATURE)
 
@@ -574,15 +574,16 @@ class TestResolveFeatureCapabilityAware:
         assert "unsupported" in lowered, f"Error must signal 'unsupported', got: {result.error}"
         assert "PandasDataFrame" in result.error, f"Error must name PandasDataFrame, got: {result.error}"
         assert "PythonDictFramework" in result.error, f"Error must name PythonDictFramework, got: {result.error}"
-        assert "default options" in result.error, (
-            f"Error must include the 'default options' caveat, got: {result.error}"
+        # Engine wording: names the capability hook and drops the debug-only phrasings.
+        assert "Pin the feature to a supported compute framework" in result.error, (
+            f"Error must carry the engine's capability-rejection guidance, got: {result.error}"
         )
-
-        # The split lists both frameworks as unsupported and none as supported (subset membership only).
-        assert "PythonDictFramework" in result.unsupported_compute_frameworks
-        assert "PandasDataFrame" in result.unsupported_compute_frameworks
-        assert "PandasDataFrame" not in result.supported_compute_frameworks
-        assert "PythonDictFramework" not in result.supported_compute_frameworks
+        assert "default options" not in result.error, (
+            f"Engine error has no 'default options' caveat, got: {result.error}"
+        )
+        assert "unsupported on all installed compute frameworks" not in result.error, (
+            f"Engine error does not use the debug-only phrasing, got: {result.error}"
+        )
 
 
 class TestResolveFeatureWithOptions:
@@ -662,22 +663,27 @@ class TestResolveFeatureWithOptions:
         assert result.candidates == [OptionGatedResolveFeatureGroup]
         assert result.error is None
 
-    def test_all_rejected_error_keeps_default_options_caveat_without_options(self) -> None:
-        """Without caller options, the all-rejected error still names the default-options caveat."""
+    def test_all_rejected_error_names_frameworks_without_options(self) -> None:
+        """Without caller options, the all-rejected error names the frameworks and has no default-options caveat."""
         result = resolve_feature(ALL_REJECTED_CAP_FEATURE)
 
         assert result.feature_group is None
         assert result.error is not None
-        assert "default options" in result.error
+        # After #755 the engine builds the message; it has no 'default options' concept.
+        assert "default options" not in result.error, (
+            f"Engine error has no 'default options' caveat, got: {result.error}"
+        )
+        assert "PandasDataFrame" in result.error
+        assert "PythonDictFramework" in result.error
 
-    def test_all_rejected_error_drops_default_options_caveat_with_options(self) -> None:
-        """With caller options, the all-rejected error must not claim it evaluated default options."""
+    def test_all_rejected_error_names_frameworks_with_options(self) -> None:
+        """With caller options, the all-rejected error names the frameworks and still has no default-options caveat."""
         result = resolve_feature(ALL_REJECTED_CAP_FEATURE, options=Options(group={PARTITION_BY_KEY: ["id"]}))
 
         assert result.feature_group is None
         assert result.error is not None
         assert "default options" not in result.error, (
-            f"Error must not claim default options when the caller supplied options, got: {result.error}"
+            f"Engine error has no 'default options' caveat, got: {result.error}"
         )
         assert "PandasDataFrame" in result.error
         assert "PythonDictFramework" in result.error
@@ -731,23 +737,28 @@ class TestResolveFeatureOptionsNoneEqualsEmpty:
             f"vs {implicit.error!r}"
         )
 
-    def test_explicit_empty_options_keeps_default_options_caveat(self) -> None:
-        """An explicitly-passed empty Options is the documented default, so it keeps the default-options caveat."""
+    def test_explicit_empty_options_error_names_frameworks(self) -> None:
+        """An explicitly-passed empty Options yields the engine message: frameworks named, no caveat."""
         result = resolve_feature(ALL_REJECTED_CAP_FEATURE, options=Options())
 
         assert result.error is not None
-        assert "default options" in result.error, (
-            f"An empty Options is the default, so the caveat must stay, got: {result.error}"
+        # After #755 the engine builds the message; it has no 'default options' concept.
+        assert "default options" not in result.error, (
+            f"Engine error has no 'default options' caveat, got: {result.error}"
         )
+        assert "PandasDataFrame" in result.error
+        assert "PythonDictFramework" in result.error
 
-    def test_non_empty_options_still_drops_default_options_caveat(self) -> None:
-        """Only a non-empty Options drops the default-options wording."""
+    def test_non_empty_options_error_names_frameworks(self) -> None:
+        """A non-empty Options yields the same engine message: frameworks named, no caveat."""
         result = resolve_feature(ALL_REJECTED_CAP_FEATURE, options=Options(group={PARTITION_BY_KEY: ["id"]}))
 
         assert result.error is not None
         assert "default options" not in result.error, (
-            f"Non-empty caller options must drop the default-options caveat, got: {result.error}"
+            f"Engine error has no 'default options' caveat, got: {result.error}"
         )
+        assert "PandasDataFrame" in result.error
+        assert "PythonDictFramework" in result.error
 
 
 class TestResolveFeatureKeywordOnlyArguments:
@@ -807,7 +818,7 @@ class TestResolveFeatureScopedResolve:
 
         assert result.feature_group is None
         assert result.error is not None
-        assert "Multiple FeatureGroups match" in result.error
+        assert "Multiple feature groups found" in result.error
 
     def test_sibling_class_name_string_scope_resolves_that_sibling(self) -> None:
         """A class-name string scope narrows the ambiguous siblings to exactly the named one."""
@@ -844,7 +855,7 @@ class TestResolveFeatureScopedNoMatch:
         assert result.feature_group is None
         assert result.candidates == []
         assert result.error is not None
-        assert "No FeatureGroup found" in result.error
+        assert "No feature groups found for feature name" in result.error
         assert "Scoped to feature group: 'UnrelatedScopedResolve693FeatureGroup'." in result.error
 
     def test_class_object_scope_excluding_all_matches_reports_scoped_no_match(self) -> None:
@@ -854,7 +865,7 @@ class TestResolveFeatureScopedNoMatch:
         assert result.feature_group is None
         assert result.candidates == []
         assert result.error is not None
-        assert "No FeatureGroup found" in result.error
+        assert "No feature groups found for feature name" in result.error
         assert "Scoped to feature group: 'UnrelatedScopedResolve693FeatureGroup'." in result.error
 
 
@@ -867,7 +878,10 @@ class TestResolveFeatureScopedCapabilityRejection:
 
         assert result.feature_group is None
         assert result.error is not None
-        assert "unsupported on all installed compute frameworks" in result.error
+        # After #755 the engine builds the capability-rejection message; the scope callout is retained.
+        assert "Pin the feature to a supported compute framework" in result.error
+        assert "PandasDataFrame" in result.error
+        assert "PythonDictFramework" in result.error
         assert "Scoped to feature group: 'AllRejectedCapResolveFeatureGroup'." in result.error
 
 
@@ -880,7 +894,7 @@ class TestResolveFeatureScopedAmbiguity:
 
         assert result.feature_group is None
         assert result.error is not None
-        assert "Multiple FeatureGroups match" in result.error
+        assert "Multiple feature groups found" in result.error
         assert "Scoped to feature group: 'ScopedResolveFamilyBase693'." in result.error
 
 

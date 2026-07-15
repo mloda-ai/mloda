@@ -1,7 +1,7 @@
 import inspect
 from dataclasses import dataclass, field
 from difflib import get_close_matches
-from typing import Iterable, Optional
+from typing import Iterable, Literal, Optional
 
 from mloda.core.prepare.accessible_plugins import FeatureGroupEnvironmentMapping
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
@@ -27,8 +27,9 @@ class EvaluationResult:
     abstract_matched: set[type[FeatureGroup]] = field(default_factory=set)
 
     @property
-    def failure_kind(self) -> Optional[str]:
-        # "none" means no winner in the identified mapping, not that nothing matched: an all-rejected concrete group still yields "none" with a non-empty criteria_matched.
+    def failure_kind(self) -> Literal["multiple", "abstract_only", "none"] | None:
+        # "none" means no winner in the identified mapping, not that nothing matched: an all-rejected
+        # concrete group still yields "none" with a non-empty criteria_matched.
         n = len(self.identified)
         if n == 1:
             return None

@@ -207,11 +207,7 @@ class FeatureGroup(ABC):
 
         source, separator, _ = name.rpartition(CHAIN_SEPARATOR)
         if separator and source:
-            patterns = [
-                pattern
-                for pattern in (getattr(cls, "PREFIX_PATTERN", None), getattr(cls, "SUFFIX_PATTERN", None))
-                if isinstance(pattern, str)
-            ]
+            patterns = FeatureChainParser.prefix_patterns_of(cls)
             if patterns:
                 # Malformed patterns degrade to the options fallback instead of raising.
                 parsed = safe_field(lambda: FeatureChainParser.parse_feature_name(name, patterns)[0], None)

@@ -21,6 +21,8 @@ MATCH_BETA_SUPPORTED = frozenset({"sum", "lag"})
 MATCH_PLAIN_FEATURE = "subdeclm_plain_feature"
 COMPILED_KEY = "subdeclmc_window_function"
 COMPILED_BETA_SUPPORTED = frozenset({"sum", "lag"})
+COMPILED_SUFFIX_KEY = "subdeclmcs_window_function"
+COMPILED_SUFFIX_BETA_SUPPORTED = frozenset({"sum", "lag"})
 RANK_UNIVERSE = frozenset({"dense", "ordinal", "ntile"})
 FRAME_LITERALS = frozenset({"rows_1", "rows_7"})
 FRAME_UNIVERSE = FRAME_LITERALS | {"rows"}
@@ -67,6 +69,28 @@ class SubDeclMatchCompiledWindowFG(FeatureChainParserMixin, FeatureGroup):
     PREFIX_PATTERN = re.compile(r".*__([\w]+)_subdeclmcompiled$")
     PROPERTY_MAPPING = {
         COMPILED_KEY: property_spec(
+            "Window function subtype.",
+            strict=True,
+            allowed_values={"median": "Median", "sum": "Sum", "lag": "Lag"},
+        ),
+    }
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]] | None:
+        return {SubDeclMatchFwAlpha, SubDeclMatchFwBeta}
+
+
+class SubDeclMatchCompiledSuffixFG(FeatureChainParserMixin, FeatureGroup):
+    """Compiled-SUFFIX_PATTERN twin: prefix_patterns_of gathers SUFFIX_PATTERN too, so it must resolve alike."""
+
+    SUBTYPES = SubtypeDeclaration(
+        key=COMPILED_SUFFIX_KEY,
+        parametric_families={"ntile": "N-tile bucketing"},
+        supported={SubDeclMatchFwBeta.get_class_name(): COMPILED_SUFFIX_BETA_SUPPORTED},
+    )
+    SUFFIX_PATTERN = re.compile(r".*__([\w]+)_subdeclmsuffix$")
+    PROPERTY_MAPPING = {
+        COMPILED_SUFFIX_KEY: property_spec(
             "Window function subtype.",
             strict=True,
             allowed_values={"median": "Median", "sum": "Sum", "lag": "Lag"},
@@ -376,6 +400,24 @@ class TestCompiledPrefixPatternParity:
         }
 
         _, compute_frameworks = _identify(feature, accessible_plugins).get()
+        # Pin resolution directly: pre-fix the dropped compiled pattern returns None, so routing merely fails open.
+        assert SubDeclMatchCompiledWindowFG.resolve_subtype("value__sum_subdeclmcompiled", Options()) == "sum"
         assert compute_frameworks == {SubDeclMatchFwAlpha, SubDeclMatchFwBeta}, (
             f"'sum' is supported on SubDeclMatchFwBeta and must run on both frameworks; got {compute_frameworks}"
+        )
+
+    def test_compiled_suffix_pattern_resolves_and_routes_like_prefix(self) -> None:
+        # resolve_subtype gathers SUFFIX_PATTERN via prefix_patterns_of, so a compiled suffix must resolve alike.
+        assert SubDeclMatchCompiledSuffixFG.resolve_subtype("value__median_subdeclmsuffix", Options()) == "median"
+
+        feature = Feature("value__median_subdeclmsuffix")
+        accessible_plugins: FeatureGroupEnvironmentMapping = {
+            SubDeclMatchCompiledSuffixFG: {SubDeclMatchFwAlpha, SubDeclMatchFwBeta},
+        }
+
+        feature_group_class, compute_frameworks = _identify(feature, accessible_plugins).get()
+        assert feature_group_class is SubDeclMatchCompiledSuffixFG
+        assert compute_frameworks == {SubDeclMatchFwAlpha}, (
+            f"'median' is unsupported on SubDeclMatchFwBeta and must be routed around even when the compiled "
+            f"pattern is a SUFFIX_PATTERN; the dropped pattern fails open and keeps {compute_frameworks}"
         )

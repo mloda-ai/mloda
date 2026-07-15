@@ -8,7 +8,7 @@ All fixture names carry an "esc732" marker so they cannot collide with other tes
 
 from __future__ import annotations
 
-from typing import Optional
+from typing import Any, Optional
 
 import pytest
 
@@ -17,6 +17,7 @@ from mloda.core.abstract_plugins.components.default_options_key import DefaultOp
 from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser import (
     FeatureChainParser,
+    PropertyValueRejection,
 )
 from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser_mixin import (
     FeatureChainParserMixin,
@@ -45,6 +46,54 @@ SUPPORTED_OPERATIONS_ESC732: dict[str, str] = {
     "normalize": "Normalize the text (esc732 fixture)",
     "strip": "Strip the text (esc732 fixture)",
 }
+
+
+# The esc763 fixtures pin issue #763: a user callable that raises a NON-(TypeError/ValueError/AttributeError)
+# exception (here KeyError) means "cannot judge this value" = a rejection, never an escape that aborts the
+# identification of the OTHER candidate feature groups. Fresh marker so these cannot collide in the registry.
+VALIDATOR_KEY_ESC763 = "validator_key_esc763"
+GUARD_KEY_ESC763 = "guard_key_esc763"
+REQUIRED_WHEN_KEY_ESC763 = "required_when_key_esc763"
+DRIVER_KEY_ESC763 = "required_when_driver_esc763"
+
+VALIDATOR_FEATURE_ESC763 = "text__validated_esc763"
+GUARD_FEATURE_ESC763 = "text__guarded_esc763"
+REQUIRED_WHEN_FEATURE_ESC763 = "text__required_esc763"
+
+# A value the callables cannot judge: looking at it raises KeyError, exactly the class the containment misses today.
+POISON_VALUE_ESC763 = "poison_esc763"
+# A value the callables CAN judge and accept: proves the fix does not over-reject.
+GOOD_VALUE_ESC763 = "good_esc763"
+# required_when driver modes: "needs" makes the key required, "optional" leaves it optional.
+NEEDS_MODE_ESC763 = "needs_esc763"
+OPTIONAL_MODE_ESC763 = "optional_esc763"
+
+
+def _keyerror_element_validator_esc763(value: Any) -> bool:
+    """Judge one element; the poison value cannot be judged, so raise KeyError (an uncaught class)."""
+    if value == POISON_VALUE_ESC763:
+        raise KeyError("esc763 element_validator cannot judge the poison value")
+    return bool(value == GOOD_VALUE_ESC763)
+
+
+def _keyerror_match_guard_esc763(value: Any) -> bool:
+    """Guard the raw value; the poison value cannot be judged, so raise KeyError (an uncaught class)."""
+    if value == POISON_VALUE_ESC763:
+        raise KeyError("esc763 match_guard cannot judge the poison value")
+    return bool(value == GOOD_VALUE_ESC763)
+
+
+def _keyerror_required_when_esc763(options: Options) -> bool:
+    """Decide if the guarded key is required; a poison driver cannot be judged, so raise KeyError."""
+    driver = options.get(DRIVER_KEY_ESC763)
+    if driver == POISON_VALUE_ESC763:
+        raise KeyError("esc763 required_when cannot judge the poison driver value")
+    return bool(driver == NEEDS_MODE_ESC763)
+
+
+def _raise_build_effective_options_esc763(cls: Any, *args: Any, **kwargs: Any) -> Options:
+    """Force build_effective_options to raise a plain ValueError: the escape #763 must contain."""
+    raise ValueError("esc763 build_effective_options boom")
 
 
 class MockComputeFrameworkEsc732(ComputeFramework):
@@ -144,6 +193,98 @@ class RaisingAttributeErrorValidatorFeatureGroup(FeatureChainParserMixin, Featur
             element_validator=lambda value: value.startswith("ok"),
         )
     }
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+        return None
+
+
+class RaisingKeyErrorValidatorFeatureGroupEsc763(FeatureChainParserMixin, FeatureGroup):
+    """element_validator raises KeyError (not a caught TypeError/ValueError/AttributeError) on a poison value."""
+
+    PREFIX_PATTERN = r".*__validated_esc763$"
+
+    PROPERTY_MAPPING = {
+        VALIDATOR_KEY_ESC763: PropertySpec(
+            "A value the validator cannot judge raises KeyError (esc763 fixture)",
+            context=True,
+            strict_validation=True,
+            element_validator=_keyerror_element_validator_esc763,
+        )
+    }
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+        return None
+
+
+class RaisingKeyErrorGuardFeatureGroupEsc763(FeatureChainParserMixin, FeatureGroup):
+    """match_guard raises KeyError (not a caught class) on a poison value; needs no strict_validation."""
+
+    PREFIX_PATTERN = r".*__guarded_esc763$"
+
+    PROPERTY_MAPPING = {
+        GUARD_KEY_ESC763: PropertySpec(
+            "A value the guard cannot judge raises KeyError (esc763 fixture)",
+            context=True,
+            match_guard=_keyerror_match_guard_esc763,
+        )
+    }
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+        return None
+
+
+class RaisingKeyErrorRequiredWhenFeatureGroupEsc763(FeatureChainParserMixin, FeatureGroup):
+    """required_when predicate raises KeyError (not a caught class) on a poison driver value.
+
+    Its single required_when key is skippable, so an unscoped matcher would claim any feature whose
+    options omit the driver and pollute the global registry. The gated override below scopes it to its
+    own feature; the class-definition guard still wraps the override, so the raising predicate runs.
+    """
+
+    PREFIX_PATTERN = r".*__required_esc763$"
+
+    PROPERTY_MAPPING = {
+        REQUIRED_WHEN_KEY_ESC763: PropertySpec(
+            "Guarded by a required_when predicate that can raise KeyError (esc763 fixture)",
+            context=True,
+            required_when=_keyerror_required_when_esc763,
+        )
+    }
+
+    @classmethod
+    def match_feature_group_criteria(
+        cls,
+        feature_name: FeatureName | str,
+        options: Options,
+        data_access_collection: Optional[DataAccessCollection] = None,
+    ) -> bool:
+        name = str(feature_name)
+        # Classmethod is mandatory: required_when forbids a staticmethod matcher. Claim only this
+        # fixture's own feature so the auto-registered class never owns an unrelated feature.
+        if name != REQUIRED_WHEN_FEATURE_ESC763 and options.get(DRIVER_KEY_ESC763) is None:
+            return False
+        return FeatureChainParser.match_configuration_feature_chain_parser(
+            name,
+            options,
+            property_mapping=cls.PROPERTY_MAPPING,
+            prefix_patterns=[cls.PREFIX_PATTERN],
+        )
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+        return None
+
+
+class RequiredWhenNeighborFeatureGroupEsc763(FeatureGroup):
+    """Claims REQUIRED_WHEN_FEATURE_ESC763 and accepts any options: the valid owner the raising candidate must not deny."""
+
+    @classmethod
+    def match_feature_group_criteria(
+        cls,
+        feature_name: FeatureName | str,
+        options: Options,
+        data_access_collection: Optional[DataAccessCollection] = None,
+    ) -> bool:
+        return str(feature_name) == REQUIRED_WHEN_FEATURE_ESC763
 
     def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
         return None
@@ -360,3 +501,189 @@ class TestParserContractUnchangedForOrdinaryRejections:
         message = str(exc_info.value)
         assert PIPELINE_KEY in message
         assert "custom" in message
+
+
+class TestKeyErrorElementValidatorIsARejection:
+    """issue #763: a validator raising a non-(TypeError/ValueError/AttributeError) is a rejection, not an escape."""
+
+    def test_keyerror_validator_on_name_path_is_a_non_match(self) -> None:
+        """A validator that raises KeyError is a non-match, not an exception out of the matcher."""
+        options = Options(context={VALIDATOR_KEY_ESC763: [POISON_VALUE_ESC763]})
+
+        result = RaisingKeyErrorValidatorFeatureGroupEsc763.match_feature_group_criteria(
+            VALIDATOR_FEATURE_ESC763, options
+        )
+
+        assert result is False
+
+    def test_parser_reports_a_keyerror_validator_as_a_value_rejection(self) -> None:
+        """The parser converts the validator's KeyError into the PropertyValueRejection its callers read."""
+        with pytest.raises(PropertyValueRejection) as exc_info:
+            FeatureChainParser.match_configuration_feature_chain_parser(
+                VALIDATOR_FEATURE_ESC763,
+                Options(context={VALIDATOR_KEY_ESC763: [POISON_VALUE_ESC763]}),
+                property_mapping=RaisingKeyErrorValidatorFeatureGroupEsc763.PROPERTY_MAPPING,
+                prefix_patterns=[RaisingKeyErrorValidatorFeatureGroupEsc763.PREFIX_PATTERN],
+            )
+
+        message = str(exc_info.value)
+        assert VALIDATOR_KEY_ESC763 in message
+        assert POISON_VALUE_ESC763 in message
+
+    def test_reason_for_keyerror_validator_is_reported_not_raised(self) -> None:
+        """_strict_validation_rejection_reason reports the KeyError rejection; it never raises."""
+        options = Options(context={VALIDATOR_KEY_ESC763: [POISON_VALUE_ESC763]})
+
+        reason = RaisingKeyErrorValidatorFeatureGroupEsc763._strict_validation_rejection_reason(
+            VALIDATOR_FEATURE_ESC763, options
+        )
+
+        assert reason is not None
+        assert VALIDATOR_KEY_ESC763 in reason
+        assert POISON_VALUE_ESC763 in reason
+
+
+class TestKeyErrorMatchGuardIsARejection:
+    """A match_guard raising a non-caught exception is a non-match, not an escape."""
+
+    def test_keyerror_guard_is_a_non_match(self) -> None:
+        """A guard that raises KeyError rejects the value; it does not blow up the match."""
+        options = Options(context={GUARD_KEY_ESC763: POISON_VALUE_ESC763})
+
+        result = RaisingKeyErrorGuardFeatureGroupEsc763.match_feature_group_criteria(GUARD_FEATURE_ESC763, options)
+
+        assert result is False
+
+
+class TestKeyErrorRequiredWhenPredicateIsARejection:
+    """A required_when predicate raising a non-caught exception is a non-match, not an escape."""
+
+    def test_keyerror_required_when_predicate_is_a_non_match(self) -> None:
+        """A predicate that raises KeyError is a non-match, not an exception out of the matcher."""
+        options = Options(context={DRIVER_KEY_ESC763: POISON_VALUE_ESC763})
+
+        result = RaisingKeyErrorRequiredWhenFeatureGroupEsc763.match_feature_group_criteria(
+            REQUIRED_WHEN_FEATURE_ESC763, options
+        )
+
+        assert result is False
+
+
+class TestKeyErrorRejectionNeverEscapesTheEngine:
+    """The definition-time required_when guard must never leak a KeyError out of the filter loop."""
+
+    def test_keyerror_required_when_yields_the_standard_no_match_error(self) -> None:
+        """A required_when predicate that raises must be a non-match, not an exception out of the engine."""
+        feature = Feature(REQUIRED_WHEN_FEATURE_ESC763, Options(context={DRIVER_KEY_ESC763: POISON_VALUE_ESC763}))
+        accessible_plugins: FeatureGroupEnvironmentMapping = {
+            RaisingKeyErrorRequiredWhenFeatureGroupEsc763: {MockComputeFrameworkEsc732},
+        }
+
+        with pytest.raises(ValueError) as exc_info:
+            _identify(feature, accessible_plugins)
+
+        message = str(exc_info.value)
+        assert "No feature groups found" in message, (
+            f"A predicate that raises must be a non-match, not an exception out of the engine, but got: {message}"
+        )
+
+    def test_keyerror_required_when_does_not_poison_other_candidates(self) -> None:
+        """One raising candidate must not deny the feature to the group that legitimately owns it."""
+        feature = Feature(REQUIRED_WHEN_FEATURE_ESC763, Options(context={DRIVER_KEY_ESC763: POISON_VALUE_ESC763}))
+        accessible_plugins: FeatureGroupEnvironmentMapping = {
+            RaisingKeyErrorRequiredWhenFeatureGroupEsc763: {MockComputeFrameworkEsc732},
+            RequiredWhenNeighborFeatureGroupEsc763: {MockComputeFrameworkEsc732},
+        }
+
+        identified = _identify(feature, accessible_plugins)
+
+        feature_group, _frameworks = identified.get()
+        assert feature_group is RequiredWhenNeighborFeatureGroupEsc763
+
+
+class TestKeyErrorPathsDoNotOverReject:
+    """Guard against over-rejecting: a value the callables CAN judge and accept still matches (passes pre-fix)."""
+
+    def test_valid_value_through_keyerror_validator_matches(self) -> None:
+        options = Options(context={VALIDATOR_KEY_ESC763: [GOOD_VALUE_ESC763]})
+
+        assert (
+            RaisingKeyErrorValidatorFeatureGroupEsc763.match_feature_group_criteria(VALIDATOR_FEATURE_ESC763, options)
+            is True
+        )
+
+    def test_valid_value_through_keyerror_guard_matches(self) -> None:
+        options = Options(context={GUARD_KEY_ESC763: GOOD_VALUE_ESC763})
+
+        assert (
+            RaisingKeyErrorGuardFeatureGroupEsc763.match_feature_group_criteria(GUARD_FEATURE_ESC763, options) is True
+        )
+
+    def test_untriggered_required_when_predicate_still_matches(self) -> None:
+        """When the predicate returns False (option not required), the feature still matches."""
+        options = Options(context={DRIVER_KEY_ESC763: OPTIONAL_MODE_ESC763})
+
+        assert (
+            RaisingKeyErrorRequiredWhenFeatureGroupEsc763.match_feature_group_criteria(
+                REQUIRED_WHEN_FEATURE_ESC763, options
+            )
+            is True
+        )
+
+    def test_triggered_required_when_with_option_present_still_matches(self) -> None:
+        """When the predicate returns True but the required option is present, the feature still matches."""
+        options = Options(
+            context={DRIVER_KEY_ESC763: NEEDS_MODE_ESC763, REQUIRED_WHEN_KEY_ESC763: GOOD_VALUE_ESC763},
+        )
+
+        assert (
+            RaisingKeyErrorRequiredWhenFeatureGroupEsc763.match_feature_group_criteria(
+                REQUIRED_WHEN_FEATURE_ESC763, options
+            )
+            is True
+        )
+
+
+class TestBuildEffectiveOptionsRaiseIsContained:
+    """issue #763: a raise from build_effective_options inside the required_when guard is a non-match, not an escape.
+
+    The driver is OPTIONAL_MODE_ESC763, so the predicate itself returns False (would match True): the monkeypatched
+    build_effective_options, called before the predicate loop and outside its try/except, is the sole raise source.
+    """
+
+    def test_build_effective_options_raise_is_a_non_match(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """A ValueError from build_effective_options is contained as a non-match, not an escape out of the matcher."""
+        monkeypatch.setattr(
+            FeatureChainParser,
+            "build_effective_options",
+            classmethod(_raise_build_effective_options_esc763),
+        )
+        options = Options(context={DRIVER_KEY_ESC763: OPTIONAL_MODE_ESC763})
+
+        result = RaisingKeyErrorRequiredWhenFeatureGroupEsc763.match_feature_group_criteria(
+            REQUIRED_WHEN_FEATURE_ESC763, options
+        )
+
+        assert result is False
+
+    def test_build_effective_options_raise_yields_the_standard_no_match_error(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The engine turns that contained raise into the standard no-match error, not a bare escape."""
+        monkeypatch.setattr(
+            FeatureChainParser,
+            "build_effective_options",
+            classmethod(_raise_build_effective_options_esc763),
+        )
+        feature = Feature(REQUIRED_WHEN_FEATURE_ESC763, Options(context={DRIVER_KEY_ESC763: OPTIONAL_MODE_ESC763}))
+        accessible_plugins: FeatureGroupEnvironmentMapping = {
+            RaisingKeyErrorRequiredWhenFeatureGroupEsc763: {MockComputeFrameworkEsc732},
+        }
+
+        with pytest.raises(ValueError) as exc_info:
+            _identify(feature, accessible_plugins)
+
+        message = str(exc_info.value)
+        assert "No feature groups found" in message, (
+            f"A build_effective_options raise must be a non-match, not an exception out of the engine, but got: {message}"
+        )

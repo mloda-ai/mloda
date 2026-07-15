@@ -170,7 +170,13 @@ class FeatureChainParser:
             # A validator that raises cannot judge the value, so the value is rejected, not the run.
             try:
                 verdict = element_validator(found_property_val)
-            except (TypeError, ValueError, AttributeError):
+            except Exception as exc:
+                logger.debug(
+                    "element_validator for '%s' raised %s for value %r; treating value as rejected.",
+                    property_name,
+                    exc,
+                    found_property_val,
+                )
                 verdict = False
             if not verdict:
                 raise PropertyValueRejection(
@@ -491,7 +497,15 @@ class FeatureChainParser:
         if property_mapping is None or not cls.has_required_when_predicates(property_mapping):
             return True
 
-        effective_options = cls.build_effective_options(feature_name, prefix_patterns, property_mapping, options)
+        # Building effective options may itself raise, so a raise here is contained as a non-match too.
+        try:
+            effective_options = cls.build_effective_options(feature_name, prefix_patterns, property_mapping, options)
+        except Exception:
+            logger.debug(
+                "building effective options for required_when on %s raised; treating feature group as a non-match.",
+                owner_name,
+            )
+            return False
         for key, spec in property_mapping.items():
             if not isinstance(spec, PropertySpec):
                 continue
@@ -499,7 +513,18 @@ class FeatureChainParser:
             predicate = spec.required_when
             if predicate is None:
                 continue
-            if predicate(effective_options) and effective_options.get(key) is None:
+            # A predicate that raises cannot judge the value, so the feature group is a non-match, not the run.
+            try:
+                is_required = bool(predicate(effective_options))
+            except Exception:
+                logger.debug(
+                    "required_when predicate %s for '%s' raised; treating feature group %s as a non-match.",
+                    getattr(predicate, "__name__", repr(predicate)),
+                    key,
+                    owner_name,
+                )
+                return False
+            if is_required and effective_options.get(key) is None:
                 logger.debug(
                     "Feature group %s requires option '%s' (predicate %s is satisfied) but it was not provided.",
                     owner_name,

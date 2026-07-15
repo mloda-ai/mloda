@@ -99,7 +99,7 @@ class FeatureChainParserMixin:
     Predicate contract:
     - Signature: ``(Options) -> bool``
     - Must be callable (enforced at ``PropertySpec`` construction)
-    - Must not raise exceptions
+    - A predicate that raises is contained: the feature group is treated as a non-match
     - Must be a pure function (no side effects)
     - Non-bool truthy return values are treated as True
 
@@ -396,7 +396,7 @@ class FeatureChainParserMixin:
                 continue
             try:
                 rejected = not guard(value)
-            except (TypeError, ValueError, AttributeError) as exc:
+            except Exception as exc:
                 logger.debug("match_guard for '%s' raised %s for value %r", key, exc, value)
                 rejected = True
             if rejected:

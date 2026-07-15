@@ -96,7 +96,7 @@ class Options:
     - Options(group={...}, context={...}) - Both specified
 
     Common Methods:
-    - .get(key) - Read value (searches group, then context)
+    - .get(key[, default]) - Read value (searches group, then context; default when absent)
     - .set(key, value) - Write value (auto-placement)
     - .items() / .keys() - Iterate over all options
     - key in options - Check existence
@@ -186,16 +186,18 @@ class Options:
             return False
         return self.group == other.group
 
-    def get(self, key: str) -> Any:
-        """
-        Get a value from options, searching group first, then context.
+    def get(self, key: str, default: Any = None) -> Any:
+        """Get a value, searching group then context; return ``default`` only when the key is absent from both.
 
-        This is the recommended way to access option values when you don't need
-        to distinguish between group and context parameters.
+        Dict-style like ``dict.get``: a present key returns its stored value even when falsy
+        (``0``, ``""``, ``False``, ``None``); ``default`` is used only for an absent key. Single-argument
+        ``get(key)`` returns ``None`` for an absent key, unchanged.
         """
         if key in self.group:
             return self.group[key]
-        return self.context.get(key, None)
+        if key in self.context:
+            return self.context[key]
+        return default
 
     def __getitem__(self, key: str) -> Any:
         return self.get(key)

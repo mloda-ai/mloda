@@ -6,6 +6,11 @@ to its matching FeatureGroup class, with support for subclass filtering
 and candidate tracking.
 """
 
+import gc
+import linecache
+import sys
+import textwrap
+
 import pytest
 from typing import Any, Optional
 
@@ -722,6 +727,25 @@ class TestResolveFeatureIsNonThrowing:
         assert result.feature_group is ForwardMismatchResolveFeatureGroup
         assert result.error is None
 
+    def test_unknown_compute_framework_option_does_not_raise(self) -> None:
+        """A bad compute_framework option makes the internal Feature() raise ValueError; it must not escape.
+
+        resolve_feature builds Feature(feature_name, options=..., feature_group=scope) internally. When the
+        caller's options name a non-existent compute framework, the Feature constructor raises ValueError
+        before any matching guard runs. The never-raising debug contract requires that error to surface in
+        ResolvedFeature.error, not propagate.
+        """
+        bad_options = Options(group={"compute_framework": "NoSuchFrameworkXYZ"})
+
+        result = resolve_feature(SPLIT_CAP_FEATURE, options=bad_options)
+
+        assert isinstance(result, ResolvedFeature)
+        assert result.feature_group is None
+        assert result.error is not None
+        assert "NoSuchFrameworkXYZ" in result.error, (
+            f"Error must surface the unknown compute framework reason, got: {result.error}"
+        )
+
 
 class TestResolveFeatureOptionsNoneEqualsEmpty:
     """options=None and options=Options() are indistinguishable, including in error wording."""
@@ -976,3 +1000,82 @@ class TestResolveFeatureScopedEngineParity:
         assert result.feature_group is None
         assert result.error is not None
         assert "Scoped to feature group: 'UnrelatedScopedResolve693FeatureGroup'." in result.error
+
+
+def _exec_conflict_fg(class_name: str, body: str, cell_label: str) -> type[FeatureGroup]:
+    """Exec a FeatureGroup subclass into ``__main__``, registering source in linecache.
+
+    Mirrors the established redefinition-conflict pattern in test_feature_group_dedup.py: the exec'd
+    class reports ``__module__ == "__main__"`` and ``inspect.getsource`` succeeds because the source
+    text is registered in linecache. Re-running with different source under the same qualname produces
+    the (module, qualname) redefinition conflict dedup raises on.
+    """
+    main_mod = sys.modules["__main__"]
+    src = textwrap.dedent(body)
+    filename = f"<{cell_label}>"
+    linecache.cache[filename] = (len(src), None, src.splitlines(keepends=True), filename)
+    exec(compile(src, filename, "exec"), main_mod.__dict__)  # nosec B102
+    return main_mod.__dict__[class_name]  # type: ignore[no-any-return]
+
+
+def _raising_match_conflict_source(qualname: str, feature_name: str, extra_body: str = "") -> str:
+    """Source for a conflicting FeatureGroup whose match hook raises a NON-ValueError (RuntimeError)."""
+    return f"""
+from mloda.core.abstract_plugins.feature_group import FeatureGroup as _FG_BASE_
+
+
+class {qualname}(_FG_BASE_):
+    @classmethod
+    def feature_names_supported(cls):
+        return {{"{feature_name}"}}
+
+    @classmethod
+    def match_feature_group_criteria(cls, feature_name, options, data_access_collection=None):
+        raise RuntimeError("raising match hook during redefinition conflict")
+{extra_body}
+"""
+
+
+@pytest.fixture()
+def _cleanup_main_after() -> Any:
+    """Snapshot ``__main__`` attributes and pop any test-added keys afterwards, even on failure.
+
+    Guarantees the exec'd conflict classes cannot leak into ``FeatureGroup.__subclasses__()`` for
+    later tests on the same xdist worker: the yield teardown runs after the test frame unwinds (so
+    local class refs are gone), pops the newly-bound ``__main__`` keys, and collects.
+    """
+    main_mod = sys.modules["__main__"]
+    snapshot = set(main_mod.__dict__.keys())
+    yield
+    for key in set(main_mod.__dict__.keys()) - snapshot:
+        main_mod.__dict__.pop(key, None)
+    gc.collect()
+
+
+class TestResolveFeatureRaisingMatchDuringConflict:
+    """A conflicting class whose match hook raises a non-ValueError must not escape resolve_feature."""
+
+    def test_raising_match_hook_during_redef_conflict_does_not_raise(self, _cleanup_main_after: Any) -> None:
+        """A RuntimeError from match_feature_group_criteria on a conflicting class must surface as an error.
+
+        The redefinition-conflict branch filters conflicts with a helper that today catches only
+        ValueError, so a conflicting class whose match hook raises RuntimeError propagates out of
+        resolve_feature. The never-raising debug contract requires it to surface in ResolvedFeature.error.
+        """
+        qualname = "RaiseMatchConflictResolveFG755"
+        feature_name = "raise_match_conflict_resolve_feature_755_xyz"
+        src_v1 = _raising_match_conflict_source(qualname, feature_name)
+        src_v2 = _raising_match_conflict_source(
+            qualname,
+            feature_name,
+            extra_body="    def extra_method(self):\n        return 755\n",
+        )
+
+        _exec_conflict_fg(qualname, src_v1, "cell-raise-match-755-v1")
+        _exec_conflict_fg(qualname, src_v2, "cell-raise-match-755-v2")
+
+        result = resolve_feature(feature_name)
+
+        assert isinstance(result, ResolvedFeature)
+        assert result.feature_group is None
+        assert result.error is not None

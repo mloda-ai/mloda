@@ -92,24 +92,15 @@ def _dedup_degrading_on_conflict(
         return dedup_feature_group_subclasses(feature_groups, allow_redefinition=True)
 
 
-def _match_recording_validation_errors(
-    fg_class: type[FeatureGroup],
-    feature_name: FeatureName,
-    options: Options,
-    validation_errors: list[str],
-) -> bool:
-    """Match a feature group, degrading a validation ValueError into "not a match" and recording its message.
+def _matches_criteria_guarded(fg_class: type[FeatureGroup], feature_name: FeatureName, options: Options) -> bool:
+    """Match a feature group for the redefinition-conflict branch, treating any raise as 'not a match'.
 
-    resolve_feature is a non-throwing debug API, but matching can raise ValueError once caller
-    options reach the feature chain parser (e.g. a forwarded option contradicting the feature name).
-    Such a candidate is not a match, and the reason is recorded so it can be surfaced in the error.
+    resolve_feature is a non-throwing debug API: a conflicting candidate whose match hook raises must
+    not take the whole call down.
     """
     try:
         return fg_class.match_feature_group_criteria(feature_name, options, None)
-    except ValueError as exc:
-        message = str(exc)
-        if message not in validation_errors:
-            validation_errors.append(message)
+    except Exception:  # noqa: BLE001  (never-raising debug API)
         return False
 
 
@@ -394,7 +385,6 @@ def resolve_feature(
     scope_suffix = f" {callout}" if callout else ""
     resolved_options = options if options is not None else Options()
     allow_redefinition = plugin_collector.allow_redefinition if plugin_collector is not None else False
-    validation_errors: list[str] = []
     fg_classes: set[type[FeatureGroup]] = get_all_subclasses(FeatureGroup)
     if plugin_collector is not None:
         fg_classes = {fg for fg in fg_classes if plugin_collector.applicable_feature_group_class(fg)}
@@ -407,7 +397,7 @@ def resolve_feature(
             fg
             for fg in raw_conflicts
             if (scope is None or matches_feature_group_scope(fg, scope))
-            and _match_recording_validation_errors(fg, feature_name_obj, resolved_options, validation_errors)
+            and _matches_criteria_guarded(fg, feature_name_obj, resolved_options)
         ]
         return ResolvedFeature(
             feature_name=feature_name,
@@ -416,7 +406,12 @@ def resolve_feature(
             error=f"{exc}{scope_suffix}",
         )
     feature_name_obj = FeatureName(feature_name)
-    feature = Feature(feature_name, options=resolved_options, feature_group=scope)
+    feature, feature_error = safe_field_with_error(
+        lambda: Feature(feature_name, options=resolved_options, feature_group=scope),
+        None,
+    )
+    if feature is None:
+        return ResolvedFeature(feature_name, None, [], error=f"{feature_error}{scope_suffix}")
 
     # Full environment, mirroring PreFilterPlugins: every applicable group mapped to its available declared
     # frameworks. Guard a raising declaration to an empty set so resolve_feature never raises here.
@@ -469,12 +464,17 @@ def _engine_failure_message(
     feature_name: str,
     scope_suffix: str,
 ) -> str:
-    """Return the engine's failure message for these inputs, degrading to a generic message if the
-    engine's own builders touch a broken plugin declaration (resolve_feature never raises)."""
-    _, error = safe_field_with_error(
-        lambda: IdentifyFeatureGroupClass(feature, accessible_plugins, links=None, data_access_collection=None),
-        None,
-    )
-    if error is not None:
-        return error
-    return f"No feature groups found for feature name: '{feature_name}'.{scope_suffix}"
+    """Return the engine's failure message for these inputs.
+
+    The engine builders raise a ValueError carrying the failure text (already including any scope
+    callout); a broken plugin declaration touched while building that text degrades to a generic
+    message so resolve_feature never raises.
+    """
+    generic = f"No feature groups found for feature name: '{feature_name}'.{scope_suffix}"
+    try:
+        IdentifyFeatureGroupClass(feature, accessible_plugins, links=None, data_access_collection=None)
+    except ValueError as exc:
+        return str(exc)
+    except Exception:  # noqa: BLE001  (broken plugin declaration inside the builder; degrade)
+        return generic
+    return generic

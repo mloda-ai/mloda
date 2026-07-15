@@ -1,6 +1,7 @@
 import inspect
+from dataclasses import dataclass, field
 from difflib import get_close_matches
-from typing import Iterable, Optional
+from typing import Iterable, Literal, Optional
 
 from mloda.core.prepare.accessible_plugins import FeatureGroupEnvironmentMapping
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
@@ -8,13 +9,35 @@ from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.components.options import NON_FORWARDED_KEYS, Options
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
-from mloda.core.abstract_plugins.feature_group import FeatureGroup, format_feature_group_class
+from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.link import Link
 
 import logging
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class EvaluationResult:
+    """Non-raising result of matching a feature against accessible plugins."""
+
+    identified: FeatureGroupEnvironmentMapping
+    criteria_matched: set[type[FeatureGroup]] = field(default_factory=set)
+    abstract_matched: set[type[FeatureGroup]] = field(default_factory=set)
+
+    @property
+    def failure_kind(self) -> Literal["multiple", "abstract_only", "none"] | None:
+        # "none" means no winner in the identified mapping, not that nothing matched: an all-rejected
+        # concrete group still yields "none" with a non-empty criteria_matched.
+        n = len(self.identified)
+        if n == 1:
+            return None
+        if n > 1:
+            return "multiple"
+        if self.abstract_matched:
+            return "abstract_only"
+        return "none"
 
 
 def split_frameworks_by_capability(
@@ -69,6 +92,10 @@ def scope_callout(scope: str | type[FeatureGroup] | None) -> str | None:
 
 
 class IdentifyFeatureGroupClass:
+    _criteria_matched_feature_groups: set[type[FeatureGroup]]
+    _abstract_matched_feature_groups: set[type[FeatureGroup]]
+    _data_access_collection: Optional[DataAccessCollection]
+
     def __init__(
         self,
         feature: Feature,
@@ -76,14 +103,32 @@ class IdentifyFeatureGroupClass:
         links: Optional[set[Link]],
         data_access_collection: Optional[DataAccessCollection] = None,
     ):
-        self._criteria_matched_feature_groups: set[type[FeatureGroup]] = set()
-        self._abstract_matched_feature_groups: set[type[FeatureGroup]] = set()
-
-        feature_group = self._filter_loop(feature, accessible_plugins, links, data_access_collection)
-
+        result = self.evaluate(feature, accessible_plugins, links, data_access_collection)
+        self._criteria_matched_feature_groups = result.criteria_matched
+        self._abstract_matched_feature_groups = result.abstract_matched
         self._data_access_collection = data_access_collection
-        self.validate(feature_group, feature, accessible_plugins)
-        self.feature_group_compute_framework_mapping = feature_group
+        self.validate(result.identified, feature, accessible_plugins)
+        self.feature_group_compute_framework_mapping = result.identified
+
+    @classmethod
+    def evaluate(
+        cls,
+        feature: Feature,
+        accessible_plugins: FeatureGroupEnvironmentMapping,
+        links: Optional[set[Link]],
+        data_access_collection: Optional[DataAccessCollection] = None,
+    ) -> EvaluationResult:
+        """Run the matching/filter logic without raising, returning a structured result."""
+        self = cls.__new__(cls)
+        self._criteria_matched_feature_groups = set()
+        self._abstract_matched_feature_groups = set()
+        self._data_access_collection = data_access_collection
+        identified = self._filter_loop(feature, accessible_plugins, links, data_access_collection)
+        return EvaluationResult(
+            identified=identified,
+            criteria_matched=self._criteria_matched_feature_groups,
+            abstract_matched=self._abstract_matched_feature_groups,
+        )
 
     def _filter_loop(
         self,
@@ -203,12 +248,6 @@ class IdentifyFeatureGroupClass:
                 f"{format_feature_group_classes(feature_group.keys(), include_domain=True)}\n"
                 f"{scope_line}"
                 "For troubleshooting guide, see: https://mloda-ai.github.io/mloda/in_depth/troubleshooting/feature-group-resolution-errors/"
-            )
-
-        feature_group_class, compute_frameworks = next(iter(feature_group.items()))
-        if not compute_frameworks:
-            raise ValueError(
-                f"Feature {feature.name} {format_feature_group_class(feature_group_class)} has no compute framework."
             )
 
     def _capability_rejection_message(self, feature: Feature) -> Optional[str]:

@@ -379,26 +379,37 @@ class TestSubDeclDocContractCResolvedFeatureSubtype:
 
 
 class TestSubDeclDocContractDUnsupportedEverywhere:
-    """Contract D: the unsupported-everywhere branch still reports the resolved subtype."""
+    """Contract D: the unsupported-everywhere failure surfaces the rejected frameworks via the engine's
+    error text, not via structured split fields or a resolved subtype.
 
-    def test_unsupported_everywhere_still_reports_subtype(self) -> None:
+    After #755 resolve_feature delegates the all-rejected failure to the engine, whose error names the
+    frameworks. The delegated failure path carries no structured capability split and no resolved subtype.
+    """
+
+    def test_unsupported_everywhere_surfaces_engine_error(self) -> None:
         result = resolve_feature("value__median_sbddr4")
         assert result.feature_group is None
         assert result.candidates == [SubDeclDocR4RejectingFG]
         assert result.error is not None
-        assert "unsupported" in result.error
+        # Engine wording names the frameworks and the capability hook.
+        assert "Unsupported compute framework(s)" in result.error
+        assert "PythonDictFramework" in result.error
+        assert "Pin the feature to a supported compute framework" in result.error
+        # The delegated failure path returns the ResolvedFeature defaults: no structured split, no subtype.
         assert result.supported_compute_frameworks == []
-        assert result.unsupported_compute_frameworks == ["PythonDictFramework"]
-        assert result.subtype == "median"
+        assert result.unsupported_compute_frameworks == []
+        assert result.subtype is None
         assert result.subtype_family is None
 
-    def test_unsupported_everywhere_parametric_instance_reports_family(self) -> None:
+    def test_unsupported_everywhere_parametric_instance_surfaces_engine_error(self) -> None:
         result = resolve_feature("value__ntile_3_sbddr4")
         assert result.feature_group is None
         assert result.error is not None
-        assert "unsupported" in result.error
-        assert result.subtype == "ntile_3"
-        assert result.subtype_family == "ntile"
+        assert "Unsupported compute framework(s)" in result.error
+        assert "PythonDictFramework" in result.error
+        # No structured subtype on the delegated failure path.
+        assert result.subtype is None
+        assert result.subtype_family is None
 
 
 class TestSubDeclDocContractERaisingResolverDegrades:

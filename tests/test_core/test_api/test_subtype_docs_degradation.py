@@ -1,8 +1,10 @@
-"""Failing tests pinning louder degradation of the subtype surfaces (issue #639 follow-up).
+"""Tests for the subtype surfaces around resolve_feature and the docs (issue #639 follow-up).
 
-Pins: a raising supports_compute_framework override degrades the resolve_feature
-capability split OPEN (all declared frameworks supported) with a warning, and a
-bogus 'supported' framework name surfaces as subtype_error in the docs.
+After #755 resolve_feature delegates matching to the engine seam, which does not guard
+supports_compute_framework: a raising hook propagates out of evaluate. resolve_feature catches it to
+preserve its never-raises contract and fails closed (no winner, error carries the hook's failure
+text). The old "degrade OPEN + warn" behavior is gone. A bogus 'supported' framework name still
+surfaces as subtype_error in the docs.
 """
 
 import logging
@@ -85,22 +87,23 @@ def _sbfix_doc_for(name: str) -> FeatureGroupInfo:
     return exact[0]
 
 
-class TestSbfixRaisingHookDegradesOpen:
-    """A raising capability hook degrades the split OPEN, not empty, and warns."""
+class TestSbfixRaisingHookFailsClosed:
+    """A raising capability hook fails closed: no winner, error carries the hook text, no raise."""
 
-    def test_resolves_with_all_declared_frameworks_supported(self) -> None:
+    def test_raising_hook_fails_closed_without_raising(self) -> None:
+        # The seam does not guard supports_compute_framework, so the hook raises from inside evaluate.
+        # resolve_feature catches it: no winner, and the hook's failure text surfaces in the error.
         result = resolve_feature(SBFIX_HOOK_FEATURE)
-        assert result.feature_group is SbfixRaisingHookFG
-        assert result.error is None
-        assert result.supported_compute_frameworks == ["PythonDictFramework"]
-        assert result.unsupported_compute_frameworks == []
+        assert result.feature_group is None
+        assert result.error is not None
+        assert "sbfix hook exploded" in result.error
 
-    def test_degradation_is_logged_as_warning(self, caplog: pytest.LogCaptureFixture) -> None:
+    def test_raising_hook_is_surfaced_not_logged_as_degradation(self, caplog: pytest.LogCaptureFixture) -> None:
         with caplog.at_level(logging.WARNING):
             result = resolve_feature(SBFIX_HOOK_FEATURE)
-        assert result.feature_group is SbfixRaisingHookFG
-        assert "degraded" in caplog.text.lower()
-        assert "sbfix hook exploded" in caplog.text
+        assert result.feature_group is None
+        assert result.error is not None
+        assert "sbfix hook exploded" in result.error
 
 
 class TestSbfixBogusSupportedSurfacedInDocs:

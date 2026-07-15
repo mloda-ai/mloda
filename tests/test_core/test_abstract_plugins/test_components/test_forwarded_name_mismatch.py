@@ -23,6 +23,7 @@ other tests in the global plugin registry.
 from __future__ import annotations
 
 import logging
+from typing import Any
 
 import pytest
 
@@ -58,7 +59,7 @@ class _NameMismatchChainedGroup(FeatureChainParserMixin):
     }
 
 
-def _inherited_child_options(consumer_group: dict[str, str]) -> Options:
+def _inherited_child_options(consumer_group: dict[str, Any]) -> Options:
     """Build child options exactly like the engine does: inherit_from the consumer."""
     child_options = Options()
     child_options.inherit_from(Options(group=consumer_group))
@@ -146,3 +147,69 @@ class TestForwardedNameMismatch:
         result = _NameMismatchChainedGroup.match_feature_group_criteria(STRING_FEATURE_NAME, child_options)
 
         assert result is True
+
+
+class TestForwardedSingletonUnpack:
+    """Issue #764: a forwarded SINGLETON collection whose sole element equals the name-parsed
+    value must match, because _unpack_property_value treats ['sum'] and 'sum' as equivalent
+    everywhere else. A genuine mismatch, and a non-singleton collection, must still raise.
+    """
+
+    def test_forwarded_singleton_list_equal_value_matches(self) -> None:
+        """A forwarded one-element list equal to the name value unpacks to it and matches."""
+        child_options = _inherited_child_options({OPERATION_KEY: ["sum"]})
+        assert child_options.inherited_group_keys == frozenset({OPERATION_KEY})  # precondition
+
+        result = _NameMismatchChainedGroup.match_feature_group_criteria(STRING_FEATURE_NAME, child_options)
+
+        assert result is True
+
+    def test_forwarded_singleton_tuple_equal_value_matches(self) -> None:
+        """A forwarded one-element tuple equal to the name value unpacks to it and matches."""
+        child_options = _inherited_child_options({OPERATION_KEY: ("sum",)})
+        assert child_options.inherited_group_keys == frozenset({OPERATION_KEY})  # precondition
+
+        result = _NameMismatchChainedGroup.match_feature_group_criteria(STRING_FEATURE_NAME, child_options)
+
+        assert result is True
+
+    def test_forwarded_singleton_set_equal_value_matches(self) -> None:
+        """A forwarded one-element set equal to the name value unpacks to it and matches."""
+        child_options = _inherited_child_options({OPERATION_KEY: {"sum"}})
+        assert child_options.inherited_group_keys == frozenset({OPERATION_KEY})  # precondition
+
+        result = _NameMismatchChainedGroup.match_feature_group_criteria(STRING_FEATURE_NAME, child_options)
+
+        assert result is True
+
+    def test_forwarded_singleton_list_differing_value_still_raises(self) -> None:
+        """A forwarded one-element list contradicting the name value stays a genuine mismatch."""
+        child_options = _inherited_child_options({OPERATION_KEY: ["max"]})
+        assert child_options.inherited_group_keys == frozenset({OPERATION_KEY})  # precondition
+
+        with pytest.raises(ValueError) as exc_info:
+            _NameMismatchChainedGroup.match_feature_group_criteria(STRING_FEATURE_NAME, child_options)
+
+        message = str(exc_info.value)
+        assert "max" in message
+        assert "forward_group_exclude" in message
+
+    def test_forwarded_multi_element_list_still_raises(self) -> None:
+        """A multi-element forwarded list is not a singleton and contradicts the scalar name value."""
+        child_options = _inherited_child_options({OPERATION_KEY: ["sum", "max"]})
+        assert child_options.inherited_group_keys == frozenset({OPERATION_KEY})  # precondition
+
+        with pytest.raises(ValueError) as exc_info:
+            _NameMismatchChainedGroup.match_feature_group_criteria(STRING_FEATURE_NAME, child_options)
+
+        assert "forward_group_exclude" in str(exc_info.value)
+
+    def test_forwarded_empty_collection_still_raises(self) -> None:
+        """An empty forwarded collection unpacks to length 0, not a singleton, so it still raises."""
+        child_options = _inherited_child_options({OPERATION_KEY: []})
+        assert child_options.inherited_group_keys == frozenset({OPERATION_KEY})  # precondition
+
+        with pytest.raises(ValueError) as exc_info:
+            _NameMismatchChainedGroup.match_feature_group_criteria(STRING_FEATURE_NAME, child_options)
+
+        assert "forward_group_exclude" in str(exc_info.value)

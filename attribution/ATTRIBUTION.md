@@ -9,7 +9,7 @@
 | bandit                                 | 1.9.4           | Apache-2.0                                         |
 | cachetools                             | 6.2.6           | MIT                                                |
 | certifi                                | 2026.6.17       | Mozilla Public License 2.0 (MPL 2.0)               |
-| charset-normalizer                     | 3.4.7           | MIT                                                |
+| charset-normalizer                     | 3.4.9           | MIT                                                |
 | click                                  | 8.4.2           | BSD-3-Clause                                       |
 | comm                                   | 0.2.3           | BSD License                                        |
 | cyclonedx-python-lib                   | 11.11.0         | Apache Software License                            |
@@ -19,7 +19,7 @@
 | duckdb                                 | 1.5.4           | MIT License                                        |
 | execnet                                | 2.1.2           | MIT License                                        |
 | executing                              | 2.2.1           | MIT License                                        |
-| filelock                               | 3.29.6          | MIT License                                        |
+| filelock                               | 3.29.7          | MIT License                                        |
 | fsspec                                 | 2026.6.0        | BSD-3-Clause                                       |
 | idna                                   | 3.18            | BSD-3-Clause                                       |
 | iniconfig                              | 2.3.0           | MIT                                                |
@@ -30,7 +30,7 @@
 | joblib                                 | 1.5.3           | BSD-3-Clause                                       |
 | jupyter_client                         | 8.9.1           | BSD License                                        |
 | jupyter_core                           | 5.9.1           | BSD-3-Clause                                       |
-| librt                                  | 0.12.0          | MIT                                                |
+| librt                                  | 0.13.0          | MIT                                                |
 | markdown-it-py                         | 4.2.0           | MIT License                                        |
 | matplotlib-inline                      | 0.2.2           | BSD-3-Clause                                       |
 | mdurl                                  | 0.1.2           | MIT License                                        |
@@ -38,11 +38,11 @@
 | mloda                                  | 0.10.0          | Apache-2.0                                         |
 | mmh3                                   | 5.2.1           | MIT License                                        |
 | msgpack                                | 1.2.1           | Apache-2.0                                         |
-| mypy                                   | 2.1.0           | MIT                                                |
+| mypy                                   | 2.2.0           | MIT                                                |
 | mypy_extensions                        | 1.1.0           | MIT                                                |
 | narwhals                               | 2.23.0          | MIT                                                |
 | nest-asyncio2                          | 1.7.2           | BSD License                                        |
-| nltk                                   | 3.9.4           | Apache Software License                            |
+| nltk                                   | 3.10.0          | Apache Software License                            |
 | numpy                                  | 2.5.1           | BSD-3-Clause AND 0BSD AND MIT AND Zlib AND CC0-1.0 |
 | opentelemetry-api                      | 1.43.0          | Apache-2.0                                         |
 | opentelemetry-instrumentation          | 0.64b0          | Apache Software License                            |

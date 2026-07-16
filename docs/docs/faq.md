@@ -8,11 +8,11 @@ mloda is designed for AI agents, ML pipelines, data scientists, and data practit
 
 #### What problems does mloda solve?
 
-mloda tackles redundant data work, complex feature dependencies, and inconsistent data management. It provides AI agents with safe, deterministic data access through a declarative API - agents describe WHAT they need, mloda resolves HOW to get it.
+mloda tackles redundant data work, complex feature dependencies, and inconsistent data management. It provides AI agents with safe, deterministic data access through a declarative API. Agents describe WHAT they need, mloda resolves HOW to get it.
 
 #### How does mloda differ from traditional data engineering frameworks?
 
-Unlike traditional tools, mloda focuses on defining transformations rather than managing static states. This approach allows you to share data transformations or pipeline steps without exposing sensitive data, as the true value lies in the state of the data—which remains protected.
+Unlike traditional tools, mloda focuses on defining transformations rather than managing static states. This approach allows you to share data transformations or pipeline steps without exposing sensitive data, as the true value lies in the state of the data which remains protected.
 
 ## AI and Agent Integration
 
@@ -38,7 +38,7 @@ Installation is straightforward via pip or by cloning the repository. [Installat
 
 #### What are the prerequisites for using mloda? 
 
-You'll need Python and a bit of time to understand the framework. mloda introduces a different way of thinking compared to standard approaches, but it builds on standard practices while bridging multiple disciplines—data engineering, software engineering, data science, machine learning, and business analysis. 
+You'll need Python and a bit of time to understand the framework. mloda introduces a different way of thinking compared to standard approaches, but it builds on standard practices while bridging multiple disciplines such as data engineering, software engineering, data science, machine learning, and business analysis. 
 
 You'll learn a lot along the way!
 
@@ -50,7 +50,7 @@ Feature Groups define dependencies and calculations. To create your first Featur
 
 #### What are Feature Groups in mloda and why are they important?
 
-Feature Groups are inspired by the concept of feature stores, where they represent logical groupings of reusable features. With mloda, Feature Groups define how features are calculated rather than stored, enabling hierarchical relationships between features that are resolved automatically—simplifying both creation and use.
+Feature Groups are inspired by the concept of feature stores, where they represent logical groupings of reusable features. With mloda, Feature Groups define how features are calculated rather than stored, enabling hierarchical relationships between features that are resolved automatically, simplifying both creation and use.
 
 #### How does mloda handle feature dependencies?
 

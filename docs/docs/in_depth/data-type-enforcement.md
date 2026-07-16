@@ -10,27 +10,27 @@ Use typed constructors to declare the expected data type:
 from typing import Any, Optional
 from mloda.user import Feature
 
-# Typed features - will be validated at runtime
+# Typed features: Will be validated at runtime
 feature_int = Feature.int32_of("user_count")
 feature_double = Feature.double_of("price")
 feature_str = Feature.str_of("name")
 
-# Untyped feature - no validation
+# Untyped feature: No validation
 feature_any = Feature.not_typed("legacy_column")
 ```
 
 Available typed constructors:
-- `int32_of()`, `int64_of()` - Integer types
-- `float_of()`, `double_of()` - Floating point types
-- `str_of()` - String type
-- `boolean_of()` - Boolean type
-- `date_of()`, `timestamp_millis_of()`, `timestamp_micros_of()` - Date/time types
-- `decimal_of()`, `binary_of()` - Other types
+- `int32_of()`, `int64_of()`: Integer types
+- `float_of()`, `double_of()`: Floating point types
+- `str_of()`: String type
+- `boolean_of()`: Boolean type
+- `date_of()`, `timestamp_millis_of()`, `timestamp_micros_of()`: Date/time types
+- `decimal_of()`, `binary_of()`: Other types
 
 ## Declaring a Feature Group's Output Type
 
 The section above is the *data user* declaring a type on a `Feature`. A *feature group* can also
-declare the type it produces, via `return_data_type_rule` — the provider-side counterpart. mloda
+declare the type it produces, via `return_data_type_rule`, the provider-side counterpart. mloda
 reconciles the two at planning time.
 
 ```python
@@ -46,8 +46,8 @@ class UserCount(FeatureGroup):
 
 The rule returns either:
 
-- a concrete `DataType` — the group always emits this type;
-- `None` (the default) — no fixed type / polymorphic.
+- a concrete `DataType`: the group always emits this type;
+- `None` (the default): no fixed type / polymorphic.
 
 Reconciliation with the user's declared type, at planning:
 
@@ -62,7 +62,7 @@ a concrete declared type flows through to runtime checking against the actual co
 
 `return_data_type_rule` runs *after* the feature group has been selected for the feature, so a rule
 that raises is a failure of a committed component, not a non-applicable candidate. mloda does **not**
-catch it — the exception propagates and fails planning. If your rule does work that can legitimately
+catch it, the exception propagates and fails planning. If your rule does work that can legitimately
 fail to determine a type, return `None` for that case rather than letting it raise.
 
 ## Validation Behavior

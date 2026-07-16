@@ -48,7 +48,7 @@ def _(mo):
 
     In this scenario, embedding data specifics into the process prevents sharing or adapting it for other tasks, leading to repeated rewrites and wasted effort.
 
-    mloda addresses this issue by decoupling data and process definitions - the features. Instead of combining them in a single process, data and the features are treated as separate entities that come together only during calculation time. The following code snippet of mloda brings together data and features:
+    mloda addresses this issue by decoupling data and process definitions, the features. Instead of combining them in a single process, data and the features are treated as separate entities that come together only during calculation time. The following code snippet of mloda brings together data and features:
 
     ```python
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
@@ -82,7 +82,7 @@ def _(mo):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    In current systems, data processes are tightly coupled with the technologies used at specific lifecycle stages—ETL systems for batch pipelines, streaming platforms for real-time applications, and ML frameworks for training. This rigid coupling makes it challenging to adapt to changing technologies or switch between processing modes.
+    In current systems, data processes are tightly coupled with the technologies used at specific lifecycle stages i.e. ETL systems for batch pipelines, streaming platforms for real-time applications, and ML frameworks for training. This rigid coupling makes it challenging to adapt to changing technologies or switch between processing modes.
 
     Metadata management further complicates the situation, it is kept fragmented across separate tools:
 

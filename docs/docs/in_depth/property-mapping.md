@@ -32,7 +32,7 @@ PROPERTY_MAPPING = {
 | --- | --- | --- | --- |
 | `explanation` | `str` | required, positional | What the option means. Also names the spec in construction errors. |
 | `allowed_values` | `Mapping[Any, str]`, any other iterable, or `None` | `None` | The declared value space. A Mapping is `{value: description}` and is kept as given; any other iterable is materialized to a tuple. |
-| `default` | `Any` | `NO_DEFAULT` | Materialized into runtime options when the key is absent (see [Applying declared defaults](#applying-declared-defaults)). Leaving it at `NO_DEFAULT` declares *no default*, which makes the key required. See [Optional keys](#optional-keys). |
+| `default` | `Any` | `NO_DEFAULT` | Materialized into runtime options when the key is absent (see [Applying declared defaults](#applying-declared-defaults)). Leaving it at `NO_DEFAULT` declares *no default*, which makes the key required. See [Optional keys](#optional-keys). A caller's explicit `None` is treated as absent, so this default replaces it, unless the key sets `allow_explicit_none=True`. |
 | `context` | `bool` | `True` | `True`: context parameter. `False`: group parameter, which splits feature groups. |
 | `strict_validation` | `bool` | `False` | Enforce the value space at match time. |
 | `element_validator` | `Callable \| None` | `None` | Per-element predicate. Requires `strict_validation=True`. |

@@ -40,9 +40,9 @@ Streaming operates at **feature-group granularity**.  Each yielded value is a **
 
 ## What is not supported
 
-- **Row-by-row streaming** -- individual rows are not yielded as they are computed.
-- **Partial results** -- you cannot observe a feature group's output before it has fully completed.
-- **Chunked input** -- a single feature group's computation is not split into smaller streaming chunks.
+- **Row-by-row streaming**: individual rows are not yielded as they are computed.
+- **Partial results**: you cannot observe a feature group's output before it has fully completed.
+- **Chunked input**: a single feature group's computation is not split into smaller streaming chunks.
 
 ## When to use `stream_all`
 

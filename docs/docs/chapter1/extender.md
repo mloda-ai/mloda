@@ -58,7 +58,7 @@ ERROR    test_getting_started:test_getting_started.py:29 Time taken: 0.001033782
 
 #### 3. Summary
 
-With this simple extender, you can easily log and monitor the execution time of any functionality within feature groups. By extending the Extender class, you can wrap additional behavior—such as performance monitoring, logging, or auditing—around critical functions to enhance observability and traceability in your data processing workflows.
+With this simple extender, you can easily log and monitor the execution time of any functionality within feature groups. By extending the Extender class, you can wrap additional behavior such as performance monitoring, logging, or auditing around critical functions to enhance observability and traceability in your data processing workflows.
 
 When multiple extenders are provided, they are automatically chained and executed in priority order (lower values first).
 

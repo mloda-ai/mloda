@@ -4,7 +4,7 @@
 
 mloda is pre-1.0 and ships frequently. Security fixes are applied to the
 latest released version on [PyPI](https://pypi.org/project/mloda/) and the
-`main` branch. We do not backport fixes to older releases — please upgrade to
+`main` branch. We do not backport fixes to older releases. Please upgrade to
 the latest version before reporting.
 
 | Version        | Supported          |
@@ -20,11 +20,11 @@ prepared.
 
 Instead, use one of these private channels:
 
-1. **GitHub Private Vulnerability Reporting** (preferred) — open the
+1. **GitHub Private Vulnerability Reporting** (preferred): Open the
    [Security tab](https://github.com/mloda-ai/mloda/security/advisories/new)
    and click **Report a vulnerability**. This keeps the report, discussion, and
    coordinated disclosure in one place.
-2. **Email** — write to **security@mloda.ai**.
+2. **Email**: Write to **security@mloda.ai**.
 
 Please include as much of the following as you can:
 

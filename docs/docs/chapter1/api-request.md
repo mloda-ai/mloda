@@ -1,8 +1,8 @@
 ### API Request Example
 
-This example demonstrates a simple request to the mloda API. You describe WHAT data you need - mloda resolves HOW to get it.
+This example demonstrates a simple request to the mloda API. You describe WHAT data you need, mloda resolves HOW to get it.
 
-> **Tip:** For AI agents or quick prototyping, you can also use inline data with `api_data` - see the [30-second example](installation.md#4-quick-start).
+> **Tip:** For AI agents or quick prototyping, you can also use inline data with `api_data`, see the [30-second example](installation.md#4-quick-start).
 
 In this example, mloda automatically determines that a **CsvReader** feature group will fulfill the request and respond with the resulting DataFrame.
 
@@ -57,9 +57,9 @@ batch jobs, but in latency-sensitive scenarios the repeated planning overhead ma
 
 Typical examples where this applies:
 
-- **ML model serving** — a prediction endpoint computes the same derived features for every incoming request; only the raw input row changes.
-- **Streaming / event-driven pipelines** — each incoming event needs the same feature transformations applied in real time.
-- **Interactive applications** — a dashboard or API recalculates features on every user action with fresh parameters.
+- **ML model serving**: A prediction endpoint computes the same derived features for every incoming request; only the raw input row changes.
+- **Streaming / event-driven pipelines**: Each incoming event needs the same feature transformations applied in real time.
+- **Interactive applications**: A dashboard or API recalculates features on every user action with fresh parameters.
 
 The two-phase API lets you pay the planning cost once at startup and then execute
 cheaply per request:
@@ -72,7 +72,7 @@ session = mloda.prepare(feature_list, compute_frameworks=["PyArrowTable"], data_
 result = session.run(api_data={"MyKey": {"col": [1, 2]}})
 ```
 
-See [mloda API — Two-Phase Execution](../in_depth/mloda-api.md#two-phase-execution-prepare-run) for details.
+See [mloda API: Two-Phase Execution](../in_depth/mloda-api.md#two-phase-execution-prepare-run) for details.
 
 #### For AI Agents: JSON-Based Requests
 

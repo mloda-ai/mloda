@@ -677,3 +677,28 @@ class TestPropertySpecPassthroughRegressionGuards:
             match_guard=_is_list_of_strings,
         )
         assert built == hand_constructed
+
+
+class TestPropertySpecAllowExplicitNone:
+    """``allow_explicit_none`` passthrough (issue #768).
+
+    The opt-in flag defaults to ``False`` and rides through the builder onto the field; a built
+    spec equals the ``PropertySpec`` an author constructs by hand.
+    """
+
+    def test_allow_explicit_none_emitted_through_builder(self) -> None:
+        """``allow_explicit_none=True`` lands on the field; omitting it leaves the default ``False``."""
+        assert property_spec("d", allow_explicit_none=True).allow_explicit_none is True
+        assert property_spec("d").allow_explicit_none is False
+
+    def test_allow_explicit_none_spec_equals_direct_construction(self) -> None:
+        """An ``allow_explicit_none`` spec is exactly the ``PropertySpec`` an author would construct."""
+        built = property_spec("d", allow_explicit_none=True)
+
+        hand_constructed = PropertySpec(
+            "d",
+            context=True,
+            strict_validation=False,
+            allow_explicit_none=True,
+        )
+        assert built == hand_constructed

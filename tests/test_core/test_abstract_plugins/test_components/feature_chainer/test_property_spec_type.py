@@ -52,6 +52,7 @@ class TestConstructionAndFields:
         assert spec.element_validator is None
         assert spec.match_guard is None
         assert spec.required_when is None
+        assert spec.allow_explicit_none is False
 
     def test_explanation_is_required(self) -> None:
         """``PropertySpec()`` without an explanation raises TypeError."""
@@ -80,6 +81,16 @@ class TestConstructionAndFields:
         assert not hasattr(spec, "strict")
         with pytest.raises(TypeError):
             _spec("x", strict=True)
+
+    def test_allow_explicit_none_constructs_and_composes(self) -> None:
+        """``allow_explicit_none=True`` stores the flag and composes with strict and a declared None (#768)."""
+        assert PropertySpec("x", allow_explicit_none=True).allow_explicit_none is True
+
+        strict_spec = PropertySpec("x", allowed_values=("a",), strict_validation=True, allow_explicit_none=True)
+        assert strict_spec.allow_explicit_none is True
+
+        none_default_spec = PropertySpec("x", default=None, allow_explicit_none=True)
+        assert none_default_spec.allow_explicit_none is True
 
 
 class TestAllowedValuesNormalization:
@@ -138,6 +149,12 @@ class TestFlagAndCallableShapeRules:
         """A truthy non-bool under ``strict_validation`` raises, naming the expected type."""
         with pytest.raises(ValueError, match="(?i)bool"):
             _spec("x", allowed_values=("a",), strict_validation=bad_flag)
+
+    @pytest.mark.parametrize("bad_flag", ["false", 1])
+    def test_allow_explicit_none_must_be_a_real_bool(self, bad_flag: Any) -> None:
+        """A truthy non-bool under ``allow_explicit_none`` raises, mirroring ``strict_validation`` (#768)."""
+        with pytest.raises(ValueError, match="(?i)bool"):
+            _spec("x", allow_explicit_none=bad_flag)
 
     def test_non_callable_element_validator_raises(self) -> None:
         """``element_validator`` must be callable."""

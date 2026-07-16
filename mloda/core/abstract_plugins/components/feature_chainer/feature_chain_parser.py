@@ -343,11 +343,11 @@ class FeatureChainParser:
         cls, options: Options, property_name: str, property_mapping: dict[str, PropertySpec]
     ) -> list[Any] | None:
         """Validate one option value and return its elements, or None when the option is absent."""
-        found_property_value = options.get(property_name)
-        if found_property_value is None:
-            return None
-
         property_config = property_mapping[property_name]
+        found_property_value = options.get(property_name)
+        # An opted-in spec treats a present-as-None value as PRESENT, so it flows through validation (#768).
+        if found_property_value is None and not (property_config.allow_explicit_none and property_name in options):
+            return None
         return cls._process_found_property_value(
             found_property_value, cls._extract_property_values(property_config), property_name, property_config
         )
@@ -545,7 +545,12 @@ class FeatureChainParser:
                     owner_name,
                 )
                 return False
-            if is_required and effective_options.get(key) is None:
+            # An opted-in key present as an explicit None counts as present, so the requirement is met (#768).
+            if (
+                is_required
+                and effective_options.get(key) is None
+                and not (spec.allow_explicit_none and key in effective_options)
+            ):
                 logger.debug(
                     "Feature group %s requires option '%s' (predicate %s is satisfied) but it was not provided.",
                     owner_name,

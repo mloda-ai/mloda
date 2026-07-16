@@ -38,6 +38,7 @@ PROPERTY_MAPPING = {
 | `element_validator` | `Callable \| None` | `None` | Per-element predicate. Requires `strict_validation=True`. |
 | `match_guard` | `Callable \| None` | `None` | Whole-value predicate. A falsy return is a non-match. |
 | `required_when` | `Callable \| None` | `None` | `(Options) -> bool`: the key is required only when it returns truthy. |
+| `allow_explicit_none` | `bool` | `False` | Opt-in so an explicit `None` is honored (not treated as absent) and flows through validation. |
 
 `property_spec(...)` is a thin builder over the same fields. Its keyword is `strict=`,
 which sets `strict_validation`. Both it and `PropertySpec` are exported from
@@ -253,7 +254,12 @@ group and context. Because `options_with_defaults` has already materialized any 
 into the view, reading it back gives a three-level precedence, an explicit caller value first, then
 the declared spec default, then the call-site `default`. (Subtlety: `options_with_defaults` fills any
 key whose value `is None`, so an explicit `None` is replaced by a concrete spec default, while the
-other falsy values `0`/`False`/`""` are kept.)
+other falsy values `0`/`False`/`""` are kept. That "None means absent" rule is the default; a spec
+opts a single key out with `allow_explicit_none=True`, after which an explicit `None` overrides even a
+concrete default and is honored across the match-time value mechanisms: it counts as present for the
+required-presence and `required_when` checks and is seen by membership, `element_validator`, and
+`match_guard`, while every flagless spec is unchanged. The flag defaults to `False`, so the existing
+`is not None` presence tests keep working.)
 
 ``` python
 opts = MyFeatureGroup.options_with_defaults(feature.options)

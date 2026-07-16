@@ -399,7 +399,8 @@ class FeatureChainParserMixin:
             if guard is None:
                 continue
             value = options.get(key)
-            if value is None:
+            # An opted-in explicit None reaches the guard; every flagless spec still skips a None (#768).
+            if value is None and not (mapping_entry.allow_explicit_none and key in options):
                 continue
             try:
                 rejected = not guard(value)

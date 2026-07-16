@@ -99,6 +99,27 @@ def _make_probe_fg() -> type[FeatureGroup]:
     return ProbeDefaultsFeatureGroup
 
 
+# A unique key for the explicit-None opt-in suite (#768), so it never collides with the probe above.
+EN_KEY = "owd_explicit_none_optin"  # context concrete default that opts into honoring an explicit None
+
+
+def _make_explicit_none_probe_fg() -> type[FeatureGroup]:
+    """A throwaway FeatureGroup whose one key opts into honoring an explicit None (#768)."""
+
+    class ExplicitNoneProbeFeatureGroup(FeatureGroup):
+        PROPERTY_MAPPING = {
+            EN_KEY: PropertySpec(
+                "Opted-in: an explicit None is honored.", context=True, default="ctx_val", allow_explicit_none=True
+            ),
+        }
+
+        @classmethod
+        def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+            return data
+
+    return ExplicitNoneProbeFeatureGroup
+
+
 class TestOptionsWithDefaultsMechanism:
     """FeatureGroup.options_with_defaults fills declared concrete defaults into runtime Options."""
 
@@ -306,3 +327,23 @@ class TestOptionsGetDefaultPrecedence:
         """An explicit None is unset to options_with_defaults, so the concrete spec default still applies."""
         view = _options_with_defaults(_make_probe_fg(), Options(context={CTX_KEY: None}))
         assert view.get(CTX_KEY, "callsite") == "ctx_val"
+
+
+class TestOptionsWithDefaultsHonorsExplicitNone:
+    """options_with_defaults honors an explicit None only when the spec opts in (#768).
+
+    Twin of ``test_explicit_none_is_overwritten_by_spec_default`` above: the flagless spec lets the
+    concrete default overwrite an explicit None, while the opted-in spec keeps the None. Each test
+    binds only the materialized ``Options`` to a local, so the throwaway probe FeatureGroup stays a
+    transient and the module's autouse no-leak guard still passes even when an assert fails.
+    """
+
+    def test_opted_in_explicit_none_survives_the_default(self) -> None:
+        """B1: an opted-in key present as an explicit None keeps the None; the concrete default does not overwrite it."""
+        view = _options_with_defaults(_make_explicit_none_probe_fg(), Options(context={EN_KEY: None}))
+        assert view.get(EN_KEY, "callsite") is None
+
+    def test_opted_in_absent_key_still_materializes_the_default(self) -> None:
+        """B3: absent stays absent; an opted-in key that is not present at all still gets its concrete default."""
+        view = _options_with_defaults(_make_explicit_none_probe_fg(), Options())
+        assert view.get(EN_KEY, "callsite") == "ctx_val"

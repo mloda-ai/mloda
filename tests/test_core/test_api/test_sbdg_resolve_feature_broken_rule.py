@@ -1,11 +1,13 @@
 """resolve_feature's never-raises + fail-closed contract against a broken compute_framework_rule.
 
-After #755 resolve_feature builds accessible_plugins = {fg: {available declared frameworks}},
-guarding a raising compute_framework_definition() so it degrades to an EMPTY framework set, then
-delegates matching to IdentifyFeatureGroupClass.evaluate(...). A FeatureGroup whose
-compute_framework_rule() raises therefore maps to an empty set: it still matches name+domain+scope
-(so it stays in candidates), but the seam never adds it to the winners because it has no supported
-framework. resolve_feature never raises and the broken group fails closed (does not win).
+resolve_feature builds accessible_plugins = {fg: {available declared frameworks}} via PreFilterPlugins,
+then delegates matching to IdentifyFeatureGroupClass.evaluate(...). Building that environment is
+fail-closed (#790): a FeatureGroup whose compute_framework_definition() raises aborts the build, exactly
+as it does for the engine. resolve_feature keeps its never-raising contract by projecting that provider
+failure into ResolvedFeature.error. Matching is never reached, so the broken group is not a candidate.
+
+Engine/debug parity for this failure is pinned in
+tests/test_core/test_resolution_parity/test_environment_build_failure_parity.py.
 
 The broken class is scoped per test (del + gc.collect(), same pattern as
 test_plugin_docs.py) so it does not leak into the session-wide subclass registry.
@@ -24,6 +26,7 @@ from mloda.steward import ResolvedFeature, resolve_feature
 
 
 SBDG_BROKEN_RULE_FEATURE = "sbdg_broken_rule_feature"
+SBDG_BROKEN_RULE_MESSAGE = "sbdg rule exploded"
 
 
 def _make_broken_rule_fg() -> type[FeatureGroup]:
@@ -35,7 +38,7 @@ def _make_broken_rule_fg() -> type[FeatureGroup]:
 
         @classmethod
         def compute_framework_rule(cls) -> set[type[ComputeFramework]] | None:
-            raise RuntimeError("sbdg rule exploded")
+            raise RuntimeError(SBDG_BROKEN_RULE_MESSAGE)
 
         @classmethod
         def match_feature_group_criteria(
@@ -53,7 +56,7 @@ def _make_broken_rule_fg() -> type[FeatureGroup]:
 
 
 class TestSbdgResolveFeatureBrokenRule:
-    """resolve_feature never raises, and a broken-rule group fails closed instead of winning."""
+    """resolve_feature never raises, and a broken-rule group fails the environment build closed."""
 
     def test_resolve_feature_does_not_propagate_the_rule_exception(self) -> None:
         broken_fg = _make_broken_rule_fg()
@@ -65,17 +68,26 @@ class TestSbdgResolveFeatureBrokenRule:
             del broken_fg
             gc.collect()
 
-    def test_broken_rule_group_is_candidate_but_does_not_win(self) -> None:
+    def test_broken_rule_group_aborts_the_build_and_is_not_a_candidate(self) -> None:
         broken_fg = _make_broken_rule_fg()
+        # Read the result into plain strings inside the scope: a retained ResolvedFeature (or a failing
+        # assert's frame) would pin the broken class past the del below and break unrelated tests.
         try:
             result = resolve_feature(SBDG_BROKEN_RULE_FEATURE)
-            assert result.feature_name == SBDG_BROKEN_RULE_FEATURE
-            # Still a criteria match (name+domain+scope), so it stays in candidates.
-            assert broken_fg in result.candidates
-            # But its rule raises -> empty framework set -> no supported framework -> fails closed.
-            assert result.feature_group is None
-            assert result.error is not None
+            feature_name = result.feature_name
+            winner_name = result.feature_group.get_class_name() if result.feature_group is not None else None
+            error = result.error
+            candidate_names = [candidate.get_class_name() for candidate in result.candidates]
             del result
         finally:
             del broken_fg
             gc.collect()
+
+        assert feature_name == SBDG_BROKEN_RULE_FEATURE
+        # Its rule raises while the environment is built, so the build aborts: no winner, no candidates.
+        assert winner_name is None
+        assert error is not None
+        # The error names the real provider failure instead of a generic no-match. The exact format is
+        # pinned once, in test_environment_build_failure_parity.py.
+        assert SBDG_BROKEN_RULE_MESSAGE in error
+        assert candidate_names == []

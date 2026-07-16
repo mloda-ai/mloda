@@ -290,15 +290,12 @@ class PreFilterPlugins:
         self,
         compute_frameworks: set[type[ComputeFramework]],
         plugin_collector: Optional[PluginCollector] = None,
-        *,
-        degrade_on_error: bool = False,
     ) -> None:
-        self._degrade_on_error = degrade_on_error
         feature_groups = self._set_feature_groups(plugin_collector)
         compute_frameworks = self._set_compute_frameworks(compute_frameworks, plugin_collector)
 
         self.accessible_plugins = self.resolve_feature_group_compute_framework_limitations(
-            feature_groups, compute_frameworks, degrade_on_error=degrade_on_error
+            feature_groups, compute_frameworks
         )
 
     def get_accessible_plugins(self) -> FeatureGroupEnvironmentMapping:
@@ -410,19 +407,11 @@ class PreFilterPlugins:
         self,
         feature_groups: set[type[FeatureGroup]],
         compute_frameworks: set[type[ComputeFramework]],
-        *,
-        degrade_on_error: bool = False,
     ) -> FeatureGroupEnvironmentMapping:
+        # Fail closed: a provider that raises while declaring its frameworks aborts the build, raw and unwrapped.
         accessible_plugins: FeatureGroupEnvironmentMapping = {}
         for feature_group in feature_groups:
-            if degrade_on_error:
-                definition: set[type[ComputeFramework]] = safe_field(
-                    lambda fg=feature_group: fg.compute_framework_definition(),  # type: ignore[misc]
-                    set(),
-                    field=f"compute_framework_definition of {feature_group.__module__}:{feature_group.__qualname__}",
-                )
-            else:
-                definition = feature_group.compute_framework_definition()
+            definition = feature_group.compute_framework_definition()
             new_set_of_compute_frameworks = {cp_fg for cp_fg in definition if cp_fg in compute_frameworks}
             accessible_plugins[feature_group] = new_set_of_compute_frameworks
 

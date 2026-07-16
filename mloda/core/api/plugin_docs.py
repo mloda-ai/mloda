@@ -377,7 +377,8 @@ def resolve_feature(
 
     Design note: resolve_feature DELEGATES matching to the #754 evaluation seam
     IdentifyFeatureGroupClass.evaluate. It only builds the accessible-plugins environment locally
-    (applicability filter, dedup/redefinition-conflict handling) and degrades to never raise; the seam
+    (applicability filter, dedup/redefinition-conflict handling), fail-closed exactly as the engine does:
+    a build failure is projected into ``error`` rather than raised, so no candidates are reported; the seam
     owns name/domain/scope/abstract/subclass filtering, the winner, candidates, and the failure texts.
 
     Engine inputs now covered: name, options, domain and compute-framework pin (carried on the Feature),
@@ -438,7 +439,7 @@ def resolve_feature(
     )
     try:
         accessible_plugins: FeatureGroupEnvironmentMapping = PreFilterPlugins(
-            restricted_frameworks, plugin_collector, degrade_on_error=True
+            restricted_frameworks, plugin_collector
         ).get_accessible_plugins()
     except RedefinitionConflictError as exc:
         matching_conflicts = [
@@ -451,9 +452,12 @@ def resolve_feature(
         return ResolvedFeature(feature_name, None, matching_conflicts, error=f"{exc}{scope_suffix}")
     except ValueError as exc:
         return ResolvedFeature(feature_name, None, [], error=f"{exc}{scope_suffix}")
-    except Exception:  # noqa: BLE001  (never-raising debug API; broken plugin while building the environment)
+    except Exception as exc:  # noqa: BLE001  (never-raising debug API; projects a broken plugin's build failure)
         return ResolvedFeature(
-            feature_name, None, [], error=f"No feature groups found for feature name: '{feature_name}'.{scope_suffix}"
+            feature_name,
+            None,
+            [],
+            error=f"Failed to build the plugin environment: {type(exc).__name__}: {exc}{scope_suffix}",
         )
 
     if feature_obj is None:

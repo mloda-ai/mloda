@@ -33,6 +33,7 @@ from mloda.core.abstract_plugins.components.link import Link
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.api.plugin_info import ComputeFrameworkInfo, ExtenderInfo, FeatureGroupInfo, ResolvedFeature
 from mloda.core.prepare.accessible_plugins import (
+    EnvironmentPreconditionError,
     FeatureGroupEnvironmentMapping,
     PreFilterPlugins,
     RedefinitionConflictError,
@@ -450,7 +451,8 @@ def resolve_feature(
             and _matches_domain_guarded(fg, feature_domain)
         ]
         return ResolvedFeature(feature_name, None, matching_conflicts, error=f"{exc}{scope_suffix}")
-    except ValueError as exc:
+    except EnvironmentPreconditionError as exc:
+        # mloda's own precondition: already a complete sentence, and no plugin is to blame. Project it bare.
         return ResolvedFeature(feature_name, None, [], error=f"{exc}{scope_suffix}")
     except Exception as exc:  # noqa: BLE001  (never-raising debug API; projects a broken plugin's build failure)
         return ResolvedFeature(

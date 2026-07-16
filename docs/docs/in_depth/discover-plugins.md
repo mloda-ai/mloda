@@ -235,6 +235,25 @@ resolution paths again differ:
   returns `feature_group=None` with the provider's failure in `error` and no
   candidates, the same failure a run raises.
 
+Failing closed is process-wide, not group-local: the build declares every
+FeatureGroup's frameworks, so one broken plugin fails *every* resolution and run,
+including features it has nothing to do with. The way out is to scope it out of
+the universe. Both filters below drop the class before its declaration is ever
+consulted, so the build succeeds and the feature is an ordinary no-match:
+
+``` python
+# One broken third-party plugin, and every call reports its failure:
+resolve_feature("timestamp_unix").error
+# "Failed to build the plugin environment: RuntimeError: ..."
+
+# Scope it out, and resolution works again:
+resolve_feature("timestamp_unix", plugin_collector=PluginCollector().disabled_feature_groups({BrokenFG}))
+```
+
+Strict mode is the other filter: an unregistered broken plugin is dropped before
+its declaration is read. Both apply identically to a run, so a scope that rescues
+`resolve_feature` rescues the run too.
+
 ### Shared helper
 
 The annotate tier is a single shared helper,

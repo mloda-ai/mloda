@@ -6,6 +6,10 @@ fail-closed for both callers: the engine lets the provider's exception propagate
 keeps its never-raising contract by projecting the same failure into ResolvedFeature.error. Since the build
 aborts before matching, a broken group is not a listed candidate.
 
+That projection has two shapes, split by who is at fault rather than by which exception type a plugin
+happens to raise: a PLUGIN's failure is attributed ("Failed to build the plugin environment: <type>: <msg>"),
+while mloda's own environment preconditions are already complete user-facing sentences and stay bare.
+
 The broken class is built per test by a factory and dropped in a finally (del + gc.collect(), same pattern as
 test_sbdg_resolve_feature_broken_rule.py). This matters more than usual here: under fail-closed semantics a
 leaked broken class aborts the environment build of every unrelated resolve_feature/engine test in the same
@@ -20,16 +24,22 @@ from typing import Optional
 
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.abstract_plugins.components.feature import Feature
+from mloda.core.abstract_plugins.components.feature_collection import Features
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.components.options import Options
+from mloda.core.abstract_plugins.components.plugin_option.plugin_collector import PluginCollector
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
+from mloda.core.abstract_plugins.plugin_registry.plugin_registry import PluginRegistry
 from mloda.core.api.plugin_docs import resolve_feature
+from mloda.core.core.engine import Engine
 from mloda.core.prepare.accessible_plugins import PreFilterPlugins
 
 
 ENV_BUILD_FAILURE_FEATURE = "probe790_env_build_failure"
 ENV_BUILD_FAILURE_MESSAGE = "probe790 compute_framework_rule exploded"
+ENV_BUILD_VALUE_ERROR_FEATURE = "probe790_env_build_value_error"
+ENV_BUILD_VALUE_ERROR_MESSAGE = "probe790 compute_framework_rule rejected its own declaration"
 
 
 def _make_broken_rule_fg() -> type[FeatureGroup]:
@@ -59,25 +69,59 @@ def _make_broken_rule_fg() -> type[FeatureGroup]:
     return EnvBuildFailureProbe790
 
 
+def _make_value_error_rule_fg() -> type[FeatureGroup]:
+    """Build a fresh probe whose compute_framework_rule raises ValueError while the environment is built.
+
+    ValueError is not an exotic shape for this failure: FeatureGroup.compute_framework_definition raises it
+    itself when compute_framework_rule() returns a non-set, the classic plugin-author mistake. It is also
+    the shape mloda uses for its OWN environment preconditions, which is what makes the two easy to confuse.
+    """
+    # Class objects are cyclic; collect leftovers from earlier tests before defining a twin.
+    gc.collect()
+
+    class EnvBuildValueErrorProbe790(FeatureGroup):
+        """Matches a unique feature name, but its compute_framework_rule rejects itself when consulted."""
+
+        @classmethod
+        def compute_framework_rule(cls) -> set[type[ComputeFramework]] | None:
+            raise ValueError(ENV_BUILD_VALUE_ERROR_MESSAGE)
+
+        @classmethod
+        def match_feature_group_criteria(
+            cls,
+            feature_name: FeatureName | str,
+            options: Options,
+            data_access_collection: Optional[DataAccessCollection] = None,
+        ) -> bool:
+            return str(feature_name) == ENV_BUILD_VALUE_ERROR_FEATURE
+
+        def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+            return None
+
+    return EnvBuildValueErrorProbe790
+
+
 def _capture_engine_build_failure() -> Optional[str]:
-    """Run the engine's exact environment build and return the raised message, or None if it did not raise.
+    """Drive a real Engine and return the message its environment build raised, or None if it did not raise.
 
-    Engine.__init__ builds PreFilterPlugins(compute_frameworks, plugin_collector); with the process-wide
-    framework set and no collector this is that call.
+    The Engine itself is under test here, not a stand-in: asserting in prose that PreFilterPlugins is what
+    engine.py builds would keep this file green if the engine ever wrapped that build in a try/except, which
+    is the exact drift these paired tests exist to catch. Engine.__init__ reaches its environment build
+    before any planning work, so this raises in well under a millisecond and constructs nothing else.
 
-    An unbound 'except' plus a transient sys.exc_info() read: a bound 'except ... as exc' keeps a traceback
-    that pins the broken class through the PreFilterPlugins frame. Only the message string escapes here, so
-    no traceback outlives the block.
+    An unbound 'except' plus a transient sys.exc_info() read: a bound 'except ... as exc' (or pytest.raises)
+    keeps a traceback that pins the broken class through the Engine frame. Only the message string escapes
+    here, so no traceback outlives the block.
     """
     try:
-        PreFilterPlugins(PreFilterPlugins.get_cfw_subclasses(), None)
+        Engine(Features([Feature(ENV_BUILD_FAILURE_FEATURE)]), PreFilterPlugins.get_cfw_subclasses(), None)
     except RuntimeError:
         return str(sys.exc_info()[1])
     return None
 
 
 def test_engine_environment_build_fails_fast_on_broken_rule() -> None:
-    """The engine's environment build propagates the provider's failure raw. Passes today: this side stays."""
+    """The engine aborts the run: the provider's failure propagates raw out of Engine construction."""
     broken_fg = _make_broken_rule_fg()
     try:
         message = _capture_engine_build_failure()
@@ -85,7 +129,7 @@ def test_engine_environment_build_fails_fast_on_broken_rule() -> None:
         del broken_fg
         gc.collect()
 
-    assert message is not None, "PreFilterPlugins must not swallow a raising compute_framework_rule"
+    assert message is not None, "the engine must not swallow a raising compute_framework_rule"
     assert ENV_BUILD_FAILURE_MESSAGE in message
 
 
@@ -129,3 +173,61 @@ def test_engine_and_resolve_feature_report_the_same_provider_failure() -> None:
     assert engine_message is not None
     assert resolve_error is not None
     assert engine_message in resolve_error
+
+
+def test_resolve_feature_attributes_a_plugin_raised_value_error() -> None:
+    """A plugin's ValueError is attributed to the build like any other exception type it may raise.
+
+    The exception type a plugin happens to raise must not decide whether the caller learns that a plugin
+    broke. Unattributed, this failure is indistinguishable from an ordinary no-match: the reader sees a
+    bare sentence and hunts for a feature-name typo that does not exist.
+    """
+    broken_fg = _make_value_error_rule_fg()
+    try:
+        result = resolve_feature(ENV_BUILD_VALUE_ERROR_FEATURE)
+        winner_name = result.feature_group.get_class_name() if result.feature_group is not None else None
+        error = result.error
+        candidate_names = [candidate.get_class_name() for candidate in result.candidates]
+        del result
+    finally:
+        del broken_fg
+        gc.collect()
+
+    assert winner_name is None
+    assert error is not None
+    assert "Failed to build the plugin environment" in error
+    assert "ValueError" in error
+    assert ENV_BUILD_VALUE_ERROR_MESSAGE in error
+    assert candidate_names == []
+
+
+def test_own_environment_precondition_is_projected_bare() -> None:
+    """mloda's OWN environment preconditions stay unprefixed: no plugin is to blame for them.
+
+    "Strict mode filtered out all FeatureGroups: ..." is already a complete, user-facing sentence naming
+    its own fix. Prefixing it with "Failed to build the plugin environment" would blame a plugin for
+    mloda's own policy. This is the counterweight to the attribution above: the two must stay distinct
+    types, not distinct exception classes-of-the-day, so this test guards the split from either side.
+
+    The precondition fires while the universe is assembled, before any declaration is consulted, so the
+    broken probe alive here is never touched. It is present only to guarantee the precondition's premise:
+    at least one concrete FeatureGroup existed before strict mode filtered them all out.
+    """
+    broken_fg = _make_broken_rule_fg()
+    try:
+        # An injected empty registry, not PluginRegistry.default().clear(): no global state is mutated,
+        # so this stays independent of whatever else ran in this worker.
+        collector = PluginCollector().set_strict_mode("strict").set_registry(PluginRegistry())
+        result = resolve_feature(ENV_BUILD_FAILURE_FEATURE, plugin_collector=collector)
+        error = result.error
+        candidate_names = [candidate.get_class_name() for candidate in result.candidates]
+        del result
+    finally:
+        del broken_fg
+        gc.collect()
+
+    assert error is not None
+    assert "Strict mode filtered out all FeatureGroups" in error
+    assert "Failed to build the plugin environment" not in error
+    assert ENV_BUILD_FAILURE_MESSAGE not in error
+    assert candidate_names == []

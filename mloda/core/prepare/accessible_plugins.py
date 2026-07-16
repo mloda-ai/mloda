@@ -95,6 +95,16 @@ def filter_extenders_by_strict_mode(
     return extenders - unregistered
 
 
+class EnvironmentPreconditionError(ValueError):
+    """Raised when one of mloda's OWN preconditions for building the environment fails.
+
+    Marks mloda's policy failing (nothing loaded, strict mode filtering everything out) as opposed to a
+    plugin failing, which propagates raw so callers can attribute it to that plugin. Each message is
+    already a complete user-facing sentence naming its own fix, so callers project it as-is. Subclasses
+    ``ValueError`` so existing ``except ValueError:`` callers stay compatible.
+    """
+
+
 class RedefinitionConflictError(ValueError):
     """Raised by dedup when same-key FG classes differ in source.
 
@@ -336,7 +346,7 @@ class PreFilterPlugins:
             had_concrete = any(not inspect.isabstract(fg) for fg in before_strict)
             has_concrete = any(not inspect.isabstract(fg) for fg in accessible_feature_groups)
             if had_concrete and not has_concrete:
-                raise ValueError(
+                raise EnvironmentPreconditionError(
                     "Strict mode filtered out all FeatureGroups: none of the accessible FeatureGroups "
                     "are registered in the plugin registry. Register them via mloda.user.register_plugin() or "
                     "relax MLODA_PLUGIN_REGISTRY_STRICT to disable strict mode."
@@ -362,7 +372,7 @@ class PreFilterPlugins:
                 )
 
         if len(accessible_feature_groups) == 0:
-            raise ValueError("No feature groups are loaded. Did you call PluginLoader.all()?")
+            raise EnvironmentPreconditionError("No feature groups are loaded. Did you call PluginLoader.all()?")
         return accessible_feature_groups
 
     def _set_compute_frameworks(
@@ -396,7 +406,7 @@ class PreFilterPlugins:
         had_concrete = any(not inspect.isabstract(cfw) for cfw in compute_frameworks)
         has_concrete = any(not inspect.isabstract(cfw) for cfw in surviving)
         if had_concrete and not has_concrete:
-            raise ValueError(
+            raise EnvironmentPreconditionError(
                 "Strict mode filtered out all ComputeFrameworks: none of the requested ComputeFrameworks "
                 "are registered in the plugin registry. Register them via mloda.user.register_plugin() or "
                 "relax MLODA_PLUGIN_REGISTRY_STRICT to disable strict mode."

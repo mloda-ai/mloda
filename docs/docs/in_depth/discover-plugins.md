@@ -31,11 +31,12 @@ resolves. The remaining differences are presentation-only: `resolve_feature`
 never raises (matching failures land in `result.error`, not an exception), and
 it returns a structured `ResolvedFeature` instead of a plan.
 
-One behavioral exception to the parity: a plugin that raises while declaring its
-frameworks (a broken `compute_framework_rule` / `compute_framework_definition`)
-aborts a real run, but on the debug path it degrades to an empty framework set,
-so it stays a listed candidate that never wins instead of taking the call down.
-The debug tool keeps reporting; the run fails fast.
+This covers a broken framework declaration too: a plugin that raises while
+declaring its frameworks (`compute_framework_rule` /
+`compute_framework_definition`) aborts the environment build on both paths. A run
+raises that failure; `resolve_feature` reports the same failure in `result.error`
+with no candidates, because the build never reaches matching. The difference stays
+presentation-only.
 
 Its environment is a **standalone default**, not a replay of a specific run:
 `ResolvedFeature.environment` reads `"standalone-default"`. The candidate
@@ -219,6 +220,39 @@ and resolution paths intentionally differ:
   must be unambiguous to be safe, so it returns `feature_group=None` with the
   conflict described in `error` and the conflicting classes that match the
   requested feature name in `candidates` rather than silently picking one.
+
+### Broken framework declarations
+
+When a FeatureGroup raises while declaring its frameworks
+(`compute_framework_rule` / `compute_framework_definition`), the catalog and
+resolution paths again differ:
+
+- **`get_*_docs` degrade.** Listing is a read-only view, so the class stays a
+  catalog entry with `compute_frameworks=[]`. This is the annotate tier's
+  `safe_field` guard on that one field.
+- **`resolve_feature` fails closed.** Resolution feeds execution, so it builds its
+  environment the way a run does: the broken declaration aborts the build. It
+  returns `feature_group=None` with the provider's failure in `error` and no
+  candidates, the same failure a run raises.
+
+Failing closed is process-wide, not group-local: the build declares every
+FeatureGroup's frameworks, so one broken plugin fails *every* resolution and run,
+including features it has nothing to do with. The way out is to scope it out of
+the universe. Both filters below drop the class before its declaration is ever
+consulted, so the build succeeds and the feature is an ordinary no-match:
+
+``` python
+# One broken third-party plugin, and every call reports its failure:
+resolve_feature("timestamp_unix").error
+# "Failed to build the plugin environment: RuntimeError: ..."
+
+# Scope it out, and resolution works again:
+resolve_feature("timestamp_unix", plugin_collector=PluginCollector().disabled_feature_groups({BrokenFG}))
+```
+
+Strict mode is the other filter: an unregistered broken plugin is dropped before
+its declaration is read. Both apply identically to a run, so a scope that rescues
+`resolve_feature` rescues the run too.
 
 ### Shared helper
 

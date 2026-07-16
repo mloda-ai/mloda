@@ -95,6 +95,16 @@ def filter_extenders_by_strict_mode(
     return extenders - unregistered
 
 
+class EnvironmentPreconditionError(ValueError):
+    """Raised when one of mloda's OWN preconditions for building the environment fails.
+
+    Marks mloda's policy failing (nothing loaded, strict mode filtering everything out) as opposed to a
+    plugin failing, which propagates raw so callers can attribute it to that plugin. Each message is
+    already a complete user-facing sentence naming its own fix, so callers project it as-is. Subclasses
+    ``ValueError`` so existing ``except ValueError:`` callers stay compatible.
+    """
+
+
 class RedefinitionConflictError(ValueError):
     """Raised by dedup when same-key FG classes differ in source.
 
@@ -290,15 +300,12 @@ class PreFilterPlugins:
         self,
         compute_frameworks: set[type[ComputeFramework]],
         plugin_collector: Optional[PluginCollector] = None,
-        *,
-        degrade_on_error: bool = False,
     ) -> None:
-        self._degrade_on_error = degrade_on_error
         feature_groups = self._set_feature_groups(plugin_collector)
         compute_frameworks = self._set_compute_frameworks(compute_frameworks, plugin_collector)
 
         self.accessible_plugins = self.resolve_feature_group_compute_framework_limitations(
-            feature_groups, compute_frameworks, degrade_on_error=degrade_on_error
+            feature_groups, compute_frameworks
         )
 
     def get_accessible_plugins(self) -> FeatureGroupEnvironmentMapping:
@@ -339,7 +346,7 @@ class PreFilterPlugins:
             had_concrete = any(not inspect.isabstract(fg) for fg in before_strict)
             has_concrete = any(not inspect.isabstract(fg) for fg in accessible_feature_groups)
             if had_concrete and not has_concrete:
-                raise ValueError(
+                raise EnvironmentPreconditionError(
                     "Strict mode filtered out all FeatureGroups: none of the accessible FeatureGroups "
                     "are registered in the plugin registry. Register them via mloda.user.register_plugin() or "
                     "relax MLODA_PLUGIN_REGISTRY_STRICT to disable strict mode."
@@ -365,7 +372,7 @@ class PreFilterPlugins:
                 )
 
         if len(accessible_feature_groups) == 0:
-            raise ValueError("No feature groups are loaded. Did you call PluginLoader.all()?")
+            raise EnvironmentPreconditionError("No feature groups are loaded. Did you call PluginLoader.all()?")
         return accessible_feature_groups
 
     def _set_compute_frameworks(
@@ -399,7 +406,7 @@ class PreFilterPlugins:
         had_concrete = any(not inspect.isabstract(cfw) for cfw in compute_frameworks)
         has_concrete = any(not inspect.isabstract(cfw) for cfw in surviving)
         if had_concrete and not has_concrete:
-            raise ValueError(
+            raise EnvironmentPreconditionError(
                 "Strict mode filtered out all ComputeFrameworks: none of the requested ComputeFrameworks "
                 "are registered in the plugin registry. Register them via mloda.user.register_plugin() or "
                 "relax MLODA_PLUGIN_REGISTRY_STRICT to disable strict mode."
@@ -410,19 +417,11 @@ class PreFilterPlugins:
         self,
         feature_groups: set[type[FeatureGroup]],
         compute_frameworks: set[type[ComputeFramework]],
-        *,
-        degrade_on_error: bool = False,
     ) -> FeatureGroupEnvironmentMapping:
+        # Fail closed: a provider that raises while declaring its frameworks aborts the build, raw and unwrapped.
         accessible_plugins: FeatureGroupEnvironmentMapping = {}
         for feature_group in feature_groups:
-            if degrade_on_error:
-                definition: set[type[ComputeFramework]] = safe_field(
-                    lambda fg=feature_group: fg.compute_framework_definition(),  # type: ignore[misc]
-                    set(),
-                    field=f"compute_framework_definition of {feature_group.__module__}:{feature_group.__qualname__}",
-                )
-            else:
-                definition = feature_group.compute_framework_definition()
+            definition = feature_group.compute_framework_definition()
             new_set_of_compute_frameworks = {cp_fg for cp_fg in definition if cp_fg in compute_frameworks}
             accessible_plugins[feature_group] = new_set_of_compute_frameworks
 

@@ -4,16 +4,22 @@ Resolution runs inside a full `mloda` request, but you do not need to build one
 to reproduce a resolution error. `resolve_feature` (from `mloda.steward`) runs
 the **same matcher over the same candidate universe** as a run and reports what a
 run would, without raising: the failure lands in `result.error` instead of an
-exception, so the message below is the message you get back.
+exception, so for the matching failures on this page the message below is the
+message you get back.
 
 ``` python
 from mloda.steward import resolve_feature
 
 result = resolve_feature("my_feature")  # or resolve_feature(Feature(...)) for a full request
 if result.error:
-    print(result.error)  # the same message a run raises
+    print(result.error)  # for a matching failure, the same message a run raises
     print([fg.__name__ for fg in result.candidates])
 ```
+
+One failure is reported rather than echoed: a plugin that raises while declaring
+its frameworks fails the environment build, which `resolve_feature` prefixes with
+`Failed to build the plugin environment:` where a run raises it bare. See
+[Broken framework declarations](../discover-plugins.md#broken-framework-declarations).
 
 Its environment is a standalone default (`result.environment` is
 `"standalone-default"`), not a replay of a specific run. Pass a `Feature`,

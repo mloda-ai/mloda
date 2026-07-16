@@ -1,5 +1,5 @@
 import inspect
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from difflib import get_close_matches
 from typing import Iterable, Literal, Optional
 
@@ -19,12 +19,36 @@ logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
+class CandidateFrameworks:
+    """One candidate's own accessible frameworks, split by the match-time capability hook."""
+
+    supported: frozenset[type[ComputeFramework]] = frozenset()
+    rejected: frozenset[type[ComputeFramework]] = frozenset()
+
+
+@dataclass(frozen=True)
+class RenderFacts:
+    """Facts captured during the decision pass so rendering needs no provider hook.
+
+    The empty instance is the success value: the winning path captures nothing.
+    """
+
+    environment_empty: bool = False
+    domains: dict[type[FeatureGroup], str] = field(default_factory=dict)
+    concrete_frameworks: tuple[str, ...] = ()
+    value_rejections: tuple[tuple[str, str], ...] = ()
+    known_names: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
 class EvaluationResult:
     """Non-raising result of matching a feature against accessible plugins."""
 
     identified: FeatureGroupEnvironmentMapping
     criteria_matched: set[type[FeatureGroup]] = field(default_factory=set)
     abstract_matched: set[type[FeatureGroup]] = field(default_factory=set)
+    candidate_frameworks: dict[type[FeatureGroup], CandidateFrameworks] = field(default_factory=dict)
+    facts: RenderFacts = field(default_factory=RenderFacts)
 
     @property
     def failure_kind(self) -> Literal["multiple", "abstract_only", "none"] | None:
@@ -91,9 +115,120 @@ def scope_callout(scope: str | type[FeatureGroup] | None) -> str | None:
     return f"Scoped to feature group: '{scope_name}'."
 
 
+TROUBLESHOOTING_URL = "https://mloda-ai.github.io/mloda/in_depth/troubleshooting/feature-group-resolution-errors/"
+
+
+def _render_multiple(result: EvaluationResult, feature: Feature, callout: str | None) -> str:
+    lines = "\n".join(
+        f"  - {fg.__name__} ({fg.__module__}) [domain: {domain}]"
+        for fg, domain in sorted(result.facts.domains.items(), key=lambda item: item[0].__name__)
+    )
+    scope_line = f"{callout}\n" if callout else ""
+    return (
+        f"Multiple feature groups found for feature '{str(feature.name)}':\n"
+        f"{lines}\n"
+        f"{scope_line}"
+        f"For troubleshooting guide, see: {TROUBLESHOOTING_URL}"
+    )
+
+
+def _render_capability(result: EvaluationResult, feature: Feature) -> str | None:
+    """One line per candidate that rejects a framework, each naming only its OWN frameworks."""
+    rejecting = {fg: cfw for fg, cfw in result.candidate_frameworks.items() if cfw.rejected}
+    if not rejecting:
+        return None
+
+    lines = []
+    for fg in sorted(rejecting, key=lambda candidate: candidate.__name__):
+        candidate_frameworks = rejecting[fg]
+        rejected_names = sorted(fw.get_class_name() for fw in candidate_frameworks.rejected)
+        line = f"  - {fg.__name__}: {rejected_names}."
+        if candidate_frameworks.supported:
+            supported_names = sorted(fw.get_class_name() for fw in candidate_frameworks.supported)
+            line += f" Supported on: {supported_names}."
+        lines.append(line)
+
+    body = "\n".join(lines)
+    return (
+        f"Unsupported compute framework(s) for feature '{str(feature.name)}':\n"
+        f"{body}\n"
+        "Pin the feature to a supported compute framework or override supports_compute_framework."
+    )
+
+
+def _render_abstract_only(result: EvaluationResult, feature: Feature) -> str:
+    feature_name = str(feature.name)
+    if not result.facts.concrete_frameworks:
+        return (
+            f"No feature groups found for feature name: '{feature_name}'. "
+            f"Only abstract feature group base(s) matched, which cannot be instantiated; "
+            f"no concrete implementation is available or enabled."
+        )
+
+    framework_names = sorted(result.facts.concrete_frameworks)
+    return (
+        f"No feature groups found for feature name: '{feature_name}'. "
+        f"Its concrete implementations require compute framework(s) {framework_names}, "
+        f"none of which are available or enabled for this run."
+    )
+
+
+def _render_none(result: EvaluationResult, feature: Feature, callout: str | None) -> str:
+    feature_name = str(feature.name)
+    msg = f"No feature groups found for feature name: '{feature_name}'."
+
+    if callout:
+        msg += f" {callout}"
+
+    if result.facts.environment_empty:
+        return msg + "\nNo plugins are loaded. Did you call PluginLoader.all()?"
+
+    if result.facts.value_rejections:
+        lines = "\n".join(f"  - {class_name}: {reason}" for class_name, reason in sorted(result.facts.value_rejections))
+        msg += f"\nFeature group(s) rejected an option value while matching '{feature_name}':\n{lines}"
+
+    similar = get_close_matches(feature_name, list(result.facts.known_names), n=5, cutoff=0.5)
+    if similar:
+        msg += f"\nDid you mean one of: {similar}?"
+
+    pointer_args = "name, options=..., feature_group=..." if callout else "name, options=..."
+    msg += (
+        f"\nUse resolve_feature({pointer_args}) to debug feature resolution."
+        f"\nFor troubleshooting guide, see: {TROUBLESHOOTING_URL}"
+    )
+    return msg
+
+
+def render_resolution_failure(result: EvaluationResult, feature: Feature) -> str | None:
+    """Project a failed EvaluationResult into its message. Pure: reads only the result and the Feature.
+
+    Calls no provider-overridable hook, so every fact it needs was captured by evaluate(). The
+    forwarding hint is dropped: it needs a speculative second match, which is not a projection.
+    """
+    kind = result.failure_kind
+    if kind is None:
+        return None
+
+    callout = scope_callout(feature.feature_group_scope)
+
+    if kind == "multiple":
+        return _render_multiple(result, feature, callout)
+
+    capability_message = _render_capability(result, feature)
+    if capability_message is not None:
+        return f"{capability_message} {callout}" if callout else capability_message
+
+    if result.abstract_matched:
+        abstract_message = _render_abstract_only(result, feature)
+        return f"{abstract_message} {callout}" if callout else abstract_message
+
+    return _render_none(result, feature, callout)
+
+
 class IdentifyFeatureGroupClass:
     _criteria_matched_feature_groups: set[type[FeatureGroup]]
     _abstract_matched_feature_groups: set[type[FeatureGroup]]
+    _candidate_frameworks: dict[type[FeatureGroup], CandidateFrameworks]
     _data_access_collection: Optional[DataAccessCollection]
 
     def __init__(
@@ -122,13 +257,93 @@ class IdentifyFeatureGroupClass:
         self = cls.__new__(cls)
         self._criteria_matched_feature_groups = set()
         self._abstract_matched_feature_groups = set()
+        self._candidate_frameworks = {}
         self._data_access_collection = data_access_collection
         identified = self._filter_loop(feature, accessible_plugins, links, data_access_collection)
-        return EvaluationResult(
+        result = EvaluationResult(
             identified=identified,
             criteria_matched=self._criteria_matched_feature_groups,
             abstract_matched=self._abstract_matched_feature_groups,
+            candidate_frameworks=self._candidate_frameworks,
         )
+        if result.failure_kind is None:
+            return result
+        return replace(result, facts=self._capture_render_facts(result, feature, accessible_plugins))
+
+    def _capture_render_facts(
+        self,
+        result: EvaluationResult,
+        feature: Feature,
+        accessible_plugins: FeatureGroupEnvironmentMapping,
+    ) -> RenderFacts:
+        """Capture what rendering needs, following the branch precedence the message builders use today.
+
+        Only reached when the pass has no single winner, so the success path stays hook-free.
+        """
+        environment_empty = not accessible_plugins
+
+        if result.failure_kind == "multiple":
+            return RenderFacts(
+                environment_empty=environment_empty,
+                domains={fg: fg.get_domain().name for fg in result.identified},
+            )
+
+        # Capability rejections win over the abstract-only fallback, and both over the ordinary none.
+        if any(candidate.rejected for candidate in result.candidate_frameworks.values()):
+            return RenderFacts(environment_empty=environment_empty)
+
+        if result.abstract_matched:
+            return RenderFacts(
+                environment_empty=environment_empty,
+                concrete_frameworks=self._concrete_implementation_frameworks(accessible_plugins),
+            )
+
+        if not accessible_plugins:
+            return RenderFacts(environment_empty=environment_empty)
+
+        return RenderFacts(
+            environment_empty=environment_empty,
+            value_rejections=self._capture_value_rejections(feature, accessible_plugins),
+            known_names=self._capture_known_names(accessible_plugins),
+        )
+
+    def _concrete_implementation_frameworks(
+        self, accessible_plugins: FeatureGroupEnvironmentMapping
+    ) -> tuple[str, ...]:
+        """Frameworks declared by the accessible concrete subclasses of an abstract-matched base."""
+        frameworks: set[str] = set()
+        for candidate in accessible_plugins:
+            if inspect.isabstract(candidate):
+                continue
+            if not any(issubclass(candidate, abstract_fg) for abstract_fg in self._abstract_matched_feature_groups):
+                continue
+            for cfw in candidate.compute_framework_definition():
+                frameworks.add(cfw.get_class_name())
+        return tuple(sorted(frameworks))
+
+    def _capture_value_rejections(
+        self, feature: Feature, accessible_plugins: FeatureGroupEnvironmentMapping
+    ) -> tuple[tuple[str, str], ...]:
+        reasons: list[tuple[str, str]] = []
+        for feature_group in accessible_plugins:
+            if not self._filter_feature_group_by_domain(feature_group, feature):
+                continue
+            if not self._filter_feature_group_by_scope(feature_group, feature):
+                continue
+
+            reason = self._value_rejection_reason(feature_group, feature)
+            if reason is not None:
+                reasons.append((feature_group.get_class_name(), reason))
+        return tuple(sorted(reasons))
+
+    def _capture_known_names(self, accessible_plugins: FeatureGroupEnvironmentMapping) -> tuple[str, ...]:
+        known_names: list[str] = []
+        for fg_class in accessible_plugins:
+            known_names.append(fg_class.get_class_name())
+            known_names.extend(fg_class.feature_names_supported())
+            if fg_class.prefix():
+                known_names.append(fg_class.prefix())
+        return tuple(known_names)
 
     def _filter_loop(
         self,
@@ -161,6 +376,13 @@ class IdentifyFeatureGroupClass:
                 for cfw in compute_frameworks
                 if feature_group.supports_compute_framework(feature.name, feature.options, cfw)
             }
+
+            # Free correlation: the split this candidate's own accessible frameworks just produced.
+            # frozenset() first: callers may pass any iterable of frameworks, not only a set.
+            self._candidate_frameworks[feature_group] = CandidateFrameworks(
+                supported=frozenset(supported_frameworks),
+                rejected=frozenset(compute_frameworks) - frozenset(supported_frameworks),
+            )
 
             if not self._filter_feature_group_by_framework(supported_frameworks, feature):
                 continue

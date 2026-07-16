@@ -11,8 +11,8 @@ All names are suffixed ``_791`` because test feature groups become global subcla
 """
 
 from abc import abstractmethod
-from collections.abc import Callable
-from typing import ClassVar, Optional
+from collections.abc import Callable, Iterator
+from typing import Any, ClassVar, Optional, cast
 
 import pytest
 
@@ -25,8 +25,10 @@ from mloda.core.abstract_plugins.components.feature_chainer.property_spec import
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.components.index.index import Index
 from mloda.core.abstract_plugins.components.options import Options
+from mloda.core.abstract_plugins.components.plugin_option.plugin_collector import PluginCollector
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
+from mloda.core.api.plugin_docs import resolve_feature
 from mloda.core.prepare.accessible_plugins import FeatureGroupEnvironmentMapping
 from mloda.core.prepare.identify_feature_group import (
     CandidateFrameworks,
@@ -46,6 +48,19 @@ TYPO_FEATURE_791 = "renderer_knwon_feature_791"
 SCOPED_NO_MATCH_FEATURE_791 = "renderer_scoped_no_match_791"
 EMPTY_ENV_FEATURE_791 = "renderer_empty_env_791"
 FORWARDING_FEATURE_791 = "renderer_forwarding_791"
+RAISING_DOMAIN_FEATURE_791 = "renderer_raising_domain_791"
+RAISING_ABSTRACT_FEATURE_791 = "renderer_raising_abstract_791"
+NARROW_ENABLED_FEATURE_791 = "renderer_narrow_enabled_791"
+NONE_ENABLED_FEATURE_791 = "renderer_none_enabled_791"
+TIE_FEATURE_791 = "renderer_tie_791"
+TIE_CAPABILITY_FEATURE_791 = "renderer_tie_capability_791"
+
+HEALTHY_DOMAIN_791 = "renderer_healthy_domain_791"
+BOOM_SUPPORTED_NAME_791 = "renderer_boom_supported_name_791"
+
+# Same-named tie candidates get an explicit __module__ so only the module can break the sort tie.
+TIE_MODULE_A_791 = "tests.renderer_tie_module_a_791"
+TIE_MODULE_B_791 = "tests.renderer_tie_module_b_791"
 
 TROUBLESHOOTING_LINE = (
     "For troubleshooting guide, see: "
@@ -55,11 +70,21 @@ TROUBLESHOOTING_LINE = (
 # Call counters for every provider-overridable hook, keyed "<ClassName>.<hook>". Reset per test.
 HOOK_CALLS: dict[str, int] = {}
 
+# supports_compute_framework calls keyed by the (candidate, framework) PAIR it was asked about.
+# HOOK_CALLS only knows the hook name, so it cannot see a pair being asked twice. Reset per test.
+PAIR_CALLS: dict[tuple[str, str], int] = {}
+
 
 def _record(class_name: str, hook: str) -> None:
     """Count one call of a provider-overridable hook."""
     key = f"{class_name}.{hook}"
     HOOK_CALLS[key] = HOOK_CALLS.get(key, 0) + 1
+
+
+def _record_pair(class_name: str, framework_name: str) -> None:
+    """Count one capability-hook call for a single (candidate, framework) pair."""
+    key = (class_name, framework_name)
+    PAIR_CALLS[key] = PAIR_CALLS.get(key, 0) + 1
 
 
 class RendererFwOne791(ComputeFramework):
@@ -113,6 +138,7 @@ class CountingFeatureGroup791(FeatureGroup):
         compute_framework: type[ComputeFramework],
     ) -> bool:
         _record(cls.get_class_name(), "supports_compute_framework")
+        _record_pair(cls.get_class_name(), compute_framework.get_class_name())
         if cls.SUPPORTED_FRAMEWORKS is None:
             return True
         return compute_framework.get_class_name() in cls.SUPPORTED_FRAMEWORKS
@@ -302,6 +328,228 @@ class RendererStrictFG791(FeatureChainParserMixin, FeatureGroup):
 
 WINDOW_REJECTION_REASON = "Property value '14' failed validation for 'window_size'"
 
+
+class RendererNarrowEnabledFG791(CountingFeatureGroup791):
+    """Declares two available frameworks; the run enables only the one this candidate rejects."""
+
+    MATCHES = frozenset({NARROW_ENABLED_FEATURE_791})
+    FRAMEWORK_RULE = {RendererFwOne791, RendererFwTwo791}
+    SUPPORTED_FRAMEWORKS = frozenset({"RendererFwTwo791"})
+
+
+class RendererNoneEnabledFG791(CountingFeatureGroup791):
+    """Declares two available frameworks; the run enables neither of them."""
+
+    MATCHES = frozenset({NONE_ENABLED_FEATURE_791})
+    FRAMEWORK_RULE = {RendererFwOne791, RendererFwTwo791}
+    SUPPORTED_FRAMEWORKS = frozenset({"RendererFwTwo791"})
+
+
+class RendererDomainBoom791(RuntimeError):
+    """Raised by a provider's get_domain() hook."""
+
+
+class RendererPrefixBoom791(RuntimeError):
+    """Raised by a provider's prefix() hook."""
+
+
+class RendererNamesBoom791(RuntimeError):
+    """Raised by a provider's feature_names_supported() hook."""
+
+
+class RendererRejectionBoom791(RuntimeError):
+    """Raised by a provider's _strict_validation_rejection_reason() hook."""
+
+
+class RendererFrameworkRuleBoom791(RuntimeError):
+    """Raised by a provider's compute_framework_rule() hook."""
+
+
+class RaisingHookGroup791(CountingFeatureGroup791):
+    """Base for the groups whose fact-capture hook raises. Its subclasses are ALWAYS built inside a function.
+
+    ``ARMED`` is what makes that safe. A group built per test still outlives it: pytest keeps a failing
+    test's traceback, and that traceback keeps the builder's frame (and so the class) alive and globally
+    visible in ``FeatureGroup.__subclasses__()``. A group whose declaration hook raised forever would then
+    take down every later test in the worker that enumerates the plugin universe -- ``PreFilterPlugins``
+    fails closed on a raising ``compute_framework_definition()``. The autouse fixture disarms every group
+    it built, so a leaked class is inert.
+    """
+
+    ARMED: ClassVar[bool] = True
+
+
+RAISING_GROUPS_BUILT: list[type[RaisingHookGroup791]] = []
+
+
+def _armed(group: type[RaisingHookGroup791]) -> type[RaisingHookGroup791]:
+    """Track a freshly built raising group so the autouse fixture can disarm it after the test."""
+    RAISING_GROUPS_BUILT.append(group)
+    return group
+
+
+def _build_raising_domain_groups() -> tuple[type[CountingFeatureGroup791], type[CountingFeatureGroup791]]:
+    """Build a (raising get_domain, healthy get_domain) pair that both match the same feature name."""
+
+    class RendererRaisingDomainFG791(RaisingHookGroup791):
+        """Candidate whose get_domain() hook raises."""
+
+        MATCHES = frozenset({RAISING_DOMAIN_FEATURE_791})
+        FRAMEWORK_RULE = {RendererFwOne791}
+
+        @classmethod
+        def get_domain(cls) -> Domain:
+            _record(cls.get_class_name(), "get_domain")
+            if cls.ARMED:
+                raise RendererDomainBoom791("get_domain exploded 791")
+            return Domain.get_default_domain()
+
+    class RendererHealthyDomainFG791(CountingFeatureGroup791):
+        """Candidate whose get_domain() hook works, standing next to the raising one."""
+
+        MATCHES = frozenset({RAISING_DOMAIN_FEATURE_791})
+        DOMAIN_NAME = HEALTHY_DOMAIN_791
+        FRAMEWORK_RULE = {RendererFwOne791}
+
+    return _armed(RendererRaisingDomainFG791), RendererHealthyDomainFG791
+
+
+def _build_raising_prefix_group() -> type[CountingFeatureGroup791]:
+    """Build a catalog group whose prefix() hook raises."""
+
+    class RendererRaisingPrefixFG791(RaisingHookGroup791):
+        """Catalog candidate whose prefix() hook raises."""
+
+        FRAMEWORK_RULE = {RendererFwOne791}
+
+        @classmethod
+        def prefix(cls) -> str:
+            _record(cls.get_class_name(), "prefix")
+            if cls.ARMED:
+                raise RendererPrefixBoom791("prefix exploded 791")
+            return f"{cls.get_class_name()}_"
+
+    return _armed(RendererRaisingPrefixFG791)
+
+
+def _build_raising_names_group() -> type[CountingFeatureGroup791]:
+    """Build a catalog group whose feature_names_supported() hook raises."""
+
+    class RendererRaisingNamesFG791(RaisingHookGroup791):
+        """Catalog candidate whose feature_names_supported() hook raises."""
+
+        FRAMEWORK_RULE = {RendererFwOne791}
+        SUPPORTED_NAMES = frozenset({BOOM_SUPPORTED_NAME_791})
+
+        @classmethod
+        def feature_names_supported(cls) -> set[str]:
+            _record(cls.get_class_name(), "feature_names_supported")
+            if cls.ARMED:
+                raise RendererNamesBoom791("feature_names_supported exploded 791")
+            return set()
+
+    return _armed(RendererRaisingNamesFG791)
+
+
+def _build_raising_rejection_group() -> type[CountingFeatureGroup791]:
+    """Build a group whose _strict_validation_rejection_reason() hook raises."""
+
+    class RendererRaisingRejectionFG791(RaisingHookGroup791):
+        """Candidate whose value-rejection diagnostic hook raises."""
+
+        FRAMEWORK_RULE = {RendererFwOne791}
+
+        @classmethod
+        def _strict_validation_rejection_reason(cls, feature_name: str | FeatureName, options: Options) -> str | None:
+            _record(cls.get_class_name(), "_strict_validation_rejection_reason")
+            if cls.ARMED:
+                raise RendererRejectionBoom791("_strict_validation_rejection_reason exploded 791")
+            return None
+
+    return _armed(RendererRaisingRejectionFG791)
+
+
+def _build_raising_framework_rule_groups() -> tuple[type[CountingFeatureGroup791], type[CountingFeatureGroup791]]:
+    """Build an abstract base plus a concrete subclass whose compute_framework_rule() hook raises."""
+
+    class RendererRaisingAbstractBaseFG791(RaisingHookGroup791):
+        """Abstract base that matches the name but can never be instantiated."""
+
+        MATCHES = frozenset({RAISING_ABSTRACT_FEATURE_791})
+        FRAMEWORK_RULE = {RendererFwOne791}
+
+        @classmethod
+        @abstractmethod
+        def _renderer_raising_abstract_hook_791(cls) -> str:
+            """Abstract hook that keeps this base uninstantiable."""
+
+    class RendererRaisingConcreteSubFG791(RendererRaisingAbstractBaseFG791):
+        """Concrete implementation whose framework declaration raises."""
+
+        MATCHES = frozenset({RAISING_ABSTRACT_FEATURE_791})
+
+        @classmethod
+        def compute_framework_rule(cls) -> set[type[ComputeFramework]] | None:
+            _record(cls.get_class_name(), "compute_framework_rule")
+            if cls.ARMED:
+                raise RendererFrameworkRuleBoom791("compute_framework_rule exploded 791")
+            return cls.FRAMEWORK_RULE
+
+        @classmethod
+        def _renderer_raising_abstract_hook_791(cls) -> str:
+            return "concrete"
+
+    return RendererRaisingAbstractBaseFG791, _armed(RendererRaisingConcreteSubFG791)
+
+
+def _make_tie_group(module: str, namespace: dict[str, Any]) -> type[CountingFeatureGroup791]:
+    """Build a candidate named RendererTieFG791 in the given module, so only __module__ breaks the sort tie."""
+    created: Any = type("RendererTieFG791", (CountingFeatureGroup791,), {"__module__": module, **namespace})
+    return cast(type[CountingFeatureGroup791], created)
+
+
+def _build_tie_domain_groups() -> tuple[type[CountingFeatureGroup791], type[CountingFeatureGroup791]]:
+    """Build two same-named 'multiple' candidates that differ only in module and domain."""
+    group_a = _make_tie_group(
+        TIE_MODULE_A_791,
+        {
+            "MATCHES": frozenset({TIE_FEATURE_791}),
+            "DOMAIN_NAME": "renderer_tie_domain_a_791",
+            "FRAMEWORK_RULE": {RendererFwOne791},
+        },
+    )
+    group_b = _make_tie_group(
+        TIE_MODULE_B_791,
+        {
+            "MATCHES": frozenset({TIE_FEATURE_791}),
+            "DOMAIN_NAME": "renderer_tie_domain_b_791",
+            "FRAMEWORK_RULE": {RendererFwOne791},
+        },
+    )
+    return group_a, group_b
+
+
+def _build_tie_capability_groups() -> tuple[type[CountingFeatureGroup791], type[CountingFeatureGroup791]]:
+    """Build two same-named capability candidates that differ only in module and supported framework."""
+    group_a = _make_tie_group(
+        TIE_MODULE_A_791,
+        {
+            "MATCHES": frozenset({TIE_CAPABILITY_FEATURE_791}),
+            "FRAMEWORK_RULE": {RendererFwOne791, RendererFwTwo791},
+            "SUPPORTED_FRAMEWORKS": frozenset({"RendererFwOne791"}),
+        },
+    )
+    group_b = _make_tie_group(
+        TIE_MODULE_B_791,
+        {
+            "MATCHES": frozenset({TIE_CAPABILITY_FEATURE_791}),
+            "FRAMEWORK_RULE": {RendererFwOne791, RendererFwTwo791},
+            "SUPPORTED_FRAMEWORKS": frozenset({"RendererFwTwo791"}),
+        },
+    )
+    return group_a, group_b
+
+
 Scenario = tuple[Feature, FeatureGroupEnvironmentMapping]
 
 
@@ -362,6 +610,53 @@ def empty_environment_scenario() -> Scenario:
     return Feature(EMPTY_ENV_FEATURE_791), {}
 
 
+def capability_narrow_enabled_scenario() -> Scenario:
+    """Shape A: two declared frameworks, only the rejected one is enabled for this run."""
+    return Feature(NARROW_ENABLED_FEATURE_791), {RendererNarrowEnabledFG791: {RendererFwOne791}}
+
+
+def capability_none_enabled_scenario() -> Scenario:
+    """Shape B: two declared frameworks, none enabled for this run."""
+    return Feature(NONE_ENABLED_FEATURE_791), {RendererNoneEnabledFG791: set()}
+
+
+def raising_domain_multiple_scenario() -> Scenario:
+    """A 'multiple' failure where one identified candidate's get_domain() raises. The request has no domain."""
+    raising, healthy = _build_raising_domain_groups()
+    return Feature(RAISING_DOMAIN_FEATURE_791), {raising: {RendererFwOne791}, healthy: {RendererFwOne791}}
+
+
+def raising_prefix_none_scenario() -> Scenario:
+    """An ordinary-none failure where one catalog group's prefix() raises."""
+    return (
+        Feature(TYPO_FEATURE_791),
+        {_build_raising_prefix_group(): {RendererFwOne791}, RendererKnownNamesFG791: {RendererFwOne791}},
+    )
+
+
+def raising_names_none_scenario() -> Scenario:
+    """An ordinary-none failure where one catalog group's feature_names_supported() raises."""
+    return (
+        Feature(TYPO_FEATURE_791),
+        {_build_raising_names_group(): {RendererFwOne791}, RendererKnownNamesFG791: {RendererFwOne791}},
+    )
+
+
+def raising_rejection_none_scenario() -> Scenario:
+    """An ordinary-none failure where one candidate's value-rejection diagnostic raises."""
+    feature = Feature(
+        TYPO_FEATURE_791,
+        Options(context={DefaultOptionKeys.in_features: "src", "window_size": 14}),
+    )
+    return feature, {_build_raising_rejection_group(): {RendererFwOne791}, RendererStrictFG791: {RendererFwOne791}}
+
+
+def raising_framework_rule_abstract_scenario() -> Scenario:
+    """An abstract-only failure where the concrete subclass's compute_framework_rule() raises."""
+    base, concrete = _build_raising_framework_rule_groups()
+    return Feature(RAISING_ABSTRACT_FEATURE_791), {base: {RendererFwOne791}, concrete: set()}
+
+
 FAILING_SCENARIOS: dict[str, Callable[[], Scenario]] = {
     "multiple": multiple_scenario,
     "capability": capability_scenario,
@@ -369,6 +664,33 @@ FAILING_SCENARIOS: dict[str, Callable[[], Scenario]] = {
     "abstract_bare": abstract_bare_scenario,
     "ordinary_none": ordinary_none_scenario,
     "scoped_none": scoped_none_scenario,
+    "capability_narrow_enabled": capability_narrow_enabled_scenario,
+    "capability_none_enabled": capability_none_enabled_scenario,
+    "raising_domain_multiple": raising_domain_multiple_scenario,
+    "raising_prefix_none": raising_prefix_none_scenario,
+    "raising_names_none": raising_names_none_scenario,
+    "raising_rejection_none": raising_rejection_none_scenario,
+    "raising_framework_rule_abstract": raising_framework_rule_abstract_scenario,
+}
+
+# Every (candidate, framework) pair the capability hook may be asked about during one evaluate(), and how
+# often: exactly once. The decision loop splits the ENABLED frameworks, capture only adds the pairs it did
+# not cover, so the union is the candidate's declared+available frameworks and nothing is asked twice.
+CAPABILITY_PAIR_EXPECTATIONS: dict[str, dict[tuple[str, str], int]] = {
+    "capability": {
+        ("RendererCapabilityAFG791", "RendererFwOne791"): 1,
+        ("RendererCapabilityAFG791", "RendererFwTwo791"): 1,
+        ("RendererCapabilityBFG791", "RendererFwOne791"): 1,
+        ("RendererCapabilityBFG791", "RendererFwTwo791"): 1,
+    },
+    "capability_narrow_enabled": {
+        ("RendererNarrowEnabledFG791", "RendererFwOne791"): 1,
+        ("RendererNarrowEnabledFG791", "RendererFwTwo791"): 1,
+    },
+    "capability_none_enabled": {
+        ("RendererNoneEnabledFG791", "RendererFwOne791"): 1,
+        ("RendererNoneEnabledFG791", "RendererFwTwo791"): 1,
+    },
 }
 
 
@@ -385,9 +707,14 @@ def _render(scenario: Scenario) -> str:
 
 
 @pytest.fixture(autouse=True)
-def reset_hook_calls() -> None:
-    """Counter state must not leak between tests."""
+def reset_hook_calls() -> Iterator[None]:
+    """Counter state must not leak between tests, and no raising hook may outlive the test that built it."""
     HOOK_CALLS.clear()
+    PAIR_CALLS.clear()
+    yield
+    for group in RAISING_GROUPS_BUILT:
+        group.ARMED = False
+    RAISING_GROUPS_BUILT.clear()
 
 
 class TestRenderResolutionFailureMessages:
@@ -627,3 +954,201 @@ class TestFactsCapturedDuringEvaluate:
         assert result.failure_kind == "none"
         assert result.facts.environment_empty
         assert result.facts.known_names == ()
+
+
+class TestFactCaptureNeverTakesEvaluateDown:
+    """Fact capture is best-effort rendering data, never a decision input.
+
+    evaluate() now calls hooks its decision pass never called (get_domain on a domain-less request,
+    prefix, feature_names_supported, _strict_validation_rejection_reason, compute_framework_definition).
+    A provider whose hook raises must degrade that one fact only: evaluate() still returns its result and
+    the renderer still returns a message, exactly as the guarded message builders behaved before #791.
+    """
+
+    def test_raising_get_domain_still_lists_both_candidates(self) -> None:
+        """A degraded domain drops only the '[domain: ...]' suffix of its own candidate line."""
+        scenario = raising_domain_multiple_scenario()
+        feature, accessible_plugins = scenario
+        raising, healthy = list(accessible_plugins)
+        module = raising.__module__
+
+        result = _evaluate(scenario)
+
+        assert result.failure_kind == "multiple"
+        assert render_resolution_failure(result, feature) == (
+            f"Multiple feature groups found for feature '{RAISING_DOMAIN_FEATURE_791}':\n"
+            f"  - {healthy.__name__} ({module}) [domain: {HEALTHY_DOMAIN_791}]\n"
+            f"  - {raising.__name__} ({module})\n"
+            f"{TROUBLESHOOTING_LINE}"
+        )
+
+    def test_raising_prefix_only_costs_that_group_its_prefix(self) -> None:
+        """A raising prefix() contributes no name; the healthy group next to it still contributes its own."""
+        scenario = raising_prefix_none_scenario()
+        feature, _ = scenario
+
+        result = _evaluate(scenario)
+
+        assert result.failure_kind == "none"
+        assert "RendererRaisingPrefixFG791_" not in result.facts.known_names
+        assert KNOWN_FEATURE_791 in result.facts.known_names
+        assert "RendererKnownNamesFG791_" in result.facts.known_names
+
+        message = render_resolution_failure(result, feature)
+        assert message is not None
+        assert f"'{KNOWN_FEATURE_791}'" in message
+
+    def test_raising_feature_names_supported_only_costs_that_group_its_names(self) -> None:
+        """A raising feature_names_supported() contributes no name, and the catalog still renders."""
+        scenario = raising_names_none_scenario()
+        feature, _ = scenario
+
+        result = _evaluate(scenario)
+
+        assert result.failure_kind == "none"
+        assert BOOM_SUPPORTED_NAME_791 not in result.facts.known_names
+        assert KNOWN_FEATURE_791 in result.facts.known_names
+
+        message = render_resolution_failure(result, feature)
+        assert message is not None
+        assert f"'{KNOWN_FEATURE_791}'" in message
+
+    def test_raising_value_rejection_reason_keeps_the_healthy_rejection_line(self) -> None:
+        """A raising diagnostic contributes no rejection line; the healthy rejecting candidate still does."""
+        scenario = raising_rejection_none_scenario()
+        feature, _ = scenario
+
+        result = _evaluate(scenario)
+
+        assert result.failure_kind == "none"
+        assert result.facts.value_rejections == (("RendererStrictFG791", WINDOW_REJECTION_REASON),)
+
+        message = render_resolution_failure(result, feature)
+        assert message is not None
+        assert f"  - RendererStrictFG791: {WINDOW_REJECTION_REASON}" in message
+        assert "RendererRaisingRejectionFG791:" not in message
+
+    def test_raising_compute_framework_rule_falls_back_to_the_bare_abstract_message(self) -> None:
+        """No framework name could be captured, so the abstract-only message takes its bare variant."""
+        scenario = raising_framework_rule_abstract_scenario()
+        feature, _ = scenario
+
+        result = _evaluate(scenario)
+
+        assert result.failure_kind == "abstract_only"
+        assert result.facts.concrete_frameworks == ()
+        assert render_resolution_failure(result, feature) == (
+            f"No feature groups found for feature name: '{RAISING_ABSTRACT_FEATURE_791}'. "
+            "Only abstract feature group base(s) matched, which cannot be instantiated; "
+            "no concrete implementation is available or enabled."
+        )
+
+    def test_resolve_feature_still_reports_candidates_when_get_domain_raises(self) -> None:
+        """End-to-end parity: a raising capture hook must not empty resolve_feature's candidates."""
+        raising, healthy = _build_raising_domain_groups()
+        enabled: set[type[FeatureGroup]] = {raising, healthy}
+
+        result = resolve_feature(
+            Feature(RAISING_DOMAIN_FEATURE_791),
+            plugin_collector=PluginCollector.enabled_feature_groups(enabled),
+        )
+
+        assert result.feature_group is None
+        assert set(result.candidates) == enabled
+        assert result.error is not None
+
+
+class TestCapabilityRenderingUniverse:
+    """The capability message keeps today's universe: the candidate's DECLARED frameworks that are available.
+
+    ``candidate_frameworks`` is the decision fact and stays the run's own (narrower) split of the
+    frameworks that were enabled. Rendering must not inherit that narrowing, or a candidate loses the
+    'Supported on' clause it has today, and an all-disabled candidate flips to the ordinary-none message.
+    """
+
+    def test_not_enabled_framework_still_renders_as_supported(self) -> None:
+        """Shape A: the supported framework is available but not enabled, and must still be named."""
+        scenario = capability_narrow_enabled_scenario()
+        feature, _ = scenario
+
+        result = _evaluate(scenario)
+
+        # The decision fact stays the run's own split: only RendererFwOne791 was enabled, and it was rejected.
+        assert result.candidate_frameworks == {
+            RendererNarrowEnabledFG791: CandidateFrameworks(
+                supported=frozenset(), rejected=frozenset({RendererFwOne791})
+            )
+        }
+        assert render_resolution_failure(result, feature) == (
+            f"Unsupported compute framework(s) for feature '{NARROW_ENABLED_FEATURE_791}':\n"
+            "  - RendererNarrowEnabledFG791: ['RendererFwOne791']. Supported on: ['RendererFwTwo791'].\n"
+            "Pin the feature to a supported compute framework or override supports_compute_framework."
+        )
+
+    def test_no_enabled_framework_still_renders_the_capability_message(self) -> None:
+        """Shape B: an empty accessible set must not flip the failure to the ordinary-none message."""
+        scenario = capability_none_enabled_scenario()
+        feature, _ = scenario
+
+        result = _evaluate(scenario)
+
+        # Nothing was enabled, so the decision loop split nothing: the decision fact is empty on both sides.
+        assert result.candidate_frameworks == {
+            RendererNoneEnabledFG791: CandidateFrameworks(supported=frozenset(), rejected=frozenset())
+        }
+        message = render_resolution_failure(result, feature)
+
+        assert message == (
+            f"Unsupported compute framework(s) for feature '{NONE_ENABLED_FEATURE_791}':\n"
+            "  - RendererNoneEnabledFG791: ['RendererFwOne791']. Supported on: ['RendererFwTwo791'].\n"
+            "Pin the feature to a supported compute framework or override supports_compute_framework."
+        )
+        assert "No feature groups found" not in message
+
+    @pytest.mark.parametrize("scenario_name", sorted(CAPABILITY_PAIR_EXPECTATIONS))
+    def test_capability_hook_is_asked_once_per_candidate_framework_pair(self, scenario_name: str) -> None:
+        """The decision loop already split the enabled frameworks; capture may only ask about the rest."""
+        _evaluate(FAILING_SCENARIOS[scenario_name]())
+
+        repeated = sorted(pair for pair, count in PAIR_CALLS.items() if count != 1)
+        assert not repeated, f"the capability hook was asked more than once for {repeated}"
+        assert PAIR_CALLS == CAPABILITY_PAIR_EXPECTATIONS[scenario_name]
+
+
+class TestSortTiesAreStable:
+    """Two candidates sharing a __name__ across modules must not fall back to insertion order."""
+
+    def test_multiple_tie_sorts_by_module_and_ignores_insertion_order(self) -> None:
+        """Same-named 'multiple' candidates render module-sorted, whichever way they were inserted."""
+        group_a, group_b = _build_tie_domain_groups()
+        feature = Feature(TIE_FEATURE_791)
+        a_first: FeatureGroupEnvironmentMapping = {group_a: {RendererFwOne791}, group_b: {RendererFwOne791}}
+        b_first: FeatureGroupEnvironmentMapping = {group_b: {RendererFwOne791}, group_a: {RendererFwOne791}}
+
+        expected = (
+            f"Multiple feature groups found for feature '{TIE_FEATURE_791}':\n"
+            f"  - RendererTieFG791 ({TIE_MODULE_A_791}) [domain: renderer_tie_domain_a_791]\n"
+            f"  - RendererTieFG791 ({TIE_MODULE_B_791}) [domain: renderer_tie_domain_b_791]\n"
+            f"{TROUBLESHOOTING_LINE}"
+        )
+
+        assert _render((feature, a_first)) == expected
+        assert _render((feature, b_first)) == expected
+
+    def test_capability_tie_sorts_by_module_and_ignores_insertion_order(self) -> None:
+        """Same-named capability candidates render module-sorted, whichever way they were inserted."""
+        group_a, group_b = _build_tie_capability_groups()
+        feature = Feature(TIE_CAPABILITY_FEATURE_791, compute_framework="RendererFwThree791")
+        both = {RendererFwOne791, RendererFwTwo791}
+        a_first: FeatureGroupEnvironmentMapping = {group_a: set(both), group_b: set(both)}
+        b_first: FeatureGroupEnvironmentMapping = {group_b: set(both), group_a: set(both)}
+
+        expected = (
+            f"Unsupported compute framework(s) for feature '{TIE_CAPABILITY_FEATURE_791}':\n"
+            "  - RendererTieFG791: ['RendererFwTwo791']. Supported on: ['RendererFwOne791'].\n"
+            "  - RendererTieFG791: ['RendererFwOne791']. Supported on: ['RendererFwTwo791'].\n"
+            "Pin the feature to a supported compute framework or override supports_compute_framework."
+        )
+
+        assert _render((feature, a_first)) == expected
+        assert _render((feature, b_first)) == expected

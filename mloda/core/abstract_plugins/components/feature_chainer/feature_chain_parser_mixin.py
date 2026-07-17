@@ -246,11 +246,16 @@ class FeatureChainParserMixin:
         effective_options = options
         if result:
             parsed = FeatureChainParser.parse_name(feature_name, prefix_patterns, CHAIN_SEPARATOR)
-            operation_config = FeatureChainParser._legacy_operation_config(parsed) if parsed.matched else None
-            if operation_config is not None and parsed.source_feature is not None:
-                if not cls._validate_string_match(feature_name, operation_config, parsed.source_feature):
-                    return False
+            if FeatureChainParser._name_identifies_group(parsed, property_mapping):
+                # Bound once and reused: the merge and the guards must see the name-derived value even
+                # when the legacy operation value is absent (a named-optional-first pattern).
                 bindings = FeatureChainParser.bind_name_captures(parsed, property_mapping or {})
+                operation_config = FeatureChainParser._legacy_operation_config(parsed)
+                # _validate_string_match needs a str operation, so it stays behind its own gate; the
+                # merge and forwarded-mismatch protection do not.
+                if operation_config is not None and parsed.source_feature is not None:
+                    if not cls._validate_string_match(feature_name, operation_config, parsed.source_feature):
+                        return False
                 effective_options = FeatureChainParser._merge_bindings(options, bindings, property_mapping)
                 cls._validate_forwarded_name_mismatch(feature_name, bindings, options)
 
@@ -310,7 +315,7 @@ class FeatureChainParserMixin:
                 parsed = FeatureChainParser.parse_name(feature_name, prefix_patterns, CHAIN_SEPARATOR)
             except ValueError:
                 return None
-            name_matched = parsed.matched
+            name_matched = FeatureChainParser._name_identifies_group(parsed, property_mapping)
             if name_matched:
                 bindings = FeatureChainParser.bind_name_captures(parsed, property_mapping)
                 effective_options = FeatureChainParser._merge_bindings(options, bindings, property_mapping)

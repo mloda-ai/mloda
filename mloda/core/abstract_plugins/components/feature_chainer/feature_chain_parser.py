@@ -447,7 +447,7 @@ class FeatureChainParser:
         # containment site that knows the owner (see build_effective_options / TestBuildEffectiveOptionsRaiseIsContained).
         if prefix_patterns is not None:
             parsed = cls.parse_name(feature_name, prefix_patterns, pattern)
-            if parsed.matched:
+            if cls._name_identifies_group(parsed, property_mapping):
                 if property_mapping is not None:
                     bindings = cls.bind_name_captures(parsed, property_mapping)
                     effective_options = cls._merge_bindings(options, bindings, property_mapping)
@@ -516,6 +516,22 @@ class FeatureChainParser:
             if legacy_value in cls._extract_property_values(spec):
                 return {key: legacy_value}
         return {}
+
+    @classmethod
+    def _name_identifies_group(cls, parsed: ParsedFeatureName, property_mapping: dict[str, Any] | None) -> bool:
+        """True when a matched name string-identifies this group for matching.
+
+        A legacy positional pattern whose only capture is an absent optional first group does NOT
+        identify the group: reproduce the pre-#770 gate so required presence still guards it on the
+        config path (#769 owns changing that). A named capture that binds a mapping key identifies the
+        group even when the legacy operation value is absent, so a named-optional-first pattern gets
+        full binding, guard, and forwarded-mismatch visibility.
+        """
+        if not parsed.matched:
+            return False
+        if property_mapping and cls.bind_name_captures(parsed, property_mapping):
+            return True
+        return cls._legacy_operation_config(parsed) is not None
 
     @classmethod
     def _merge_bindings(
@@ -594,6 +610,21 @@ class FeatureChainParser:
         return frozenset(compiled.groupindex), compiled.groups
 
     @classmethod
+    def _flatten_patterns(cls, patterns: list[Any]) -> list[Any]:
+        """Flatten one level so a list/tuple pattern attribute contributes its elements as concrete patterns.
+
+        Mirrors how a ``SUFFIX_PATTERN = [regex]`` fixture passes the list straight to ``parse_name`` at
+        runtime. A compiled ``re.Pattern`` and a ``str`` stay as-is.
+        """
+        flattened: list[Any] = []
+        for pattern in patterns:
+            if isinstance(pattern, (list, tuple)):
+                flattened.extend(pattern)
+            else:
+                flattened.append(pattern)
+        return flattened
+
+    @classmethod
     def _str_reachable_values(cls, spec: PropertySpec) -> set[str]:
         """The str members of a spec's value space; only a str can be reverse-looked-up from a capture."""
         reachable: set[str] = set()
@@ -606,10 +637,13 @@ class FeatureChainParser:
     def validate_name_binding(cls, owner: type[Any]) -> None:
         """Reject an order-dependent legacy positional binding at class-definition time.
 
-        Fires only when the class relies on the legacy fallback: it declares a capture group, no
-        pattern declares a named group, and two keys share a reachable (str) allowed value. Named
-        captures make binding explicit, so they are exempt; a captureless pattern has nothing to
-        misbind. Called from both FeatureGroup and FeatureChainParserMixin at class definition.
+        The check is PER CONCRETE PATTERN: a list/tuple pattern attribute is flattened to its
+        elements first. A pattern needs the overlap check only when it declares a capture group
+        (``total >= 1``) AND no named group, so it relies on the legacy positional fallback. If any
+        such positional-only pattern exists and two keys share a reachable (str) allowed value, the
+        binding is order-dependent and rejected. A named-capture pattern is exempt (binding is
+        explicit for it); a captureless one has nothing to misbind. Called from both FeatureGroup and
+        FeatureChainParserMixin at class definition.
         """
         property_mapping = getattr(owner, "PROPERTY_MAPPING", None)
         if not isinstance(property_mapping, dict):
@@ -619,14 +653,13 @@ class FeatureChainParser:
         if not patterns:
             return
 
-        has_capture_group = False
-        declares_named = False
-        for pattern in patterns:
+        needs_overlap_check = False
+        for pattern in cls._flatten_patterns(patterns):
             named, total = cls._pattern_named_and_total_groups(pattern)
-            has_capture_group = has_capture_group or total >= 1
-            declares_named = declares_named or bool(named)
+            if total >= 1 and not named:
+                needs_overlap_check = True
 
-        if not has_capture_group or declares_named:
+        if not needs_overlap_check:
             return
 
         reachable = {

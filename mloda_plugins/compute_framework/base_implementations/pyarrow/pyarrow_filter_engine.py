@@ -9,7 +9,7 @@ try:
     import pyarrow as pa
     import pyarrow.compute as pc
 except ImportError:
-    pa = None  # type: ignore[assignment]
+    pa = None  # type: ignore[assignment, unused-ignore]
     pc = None
 
 

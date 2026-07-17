@@ -15,7 +15,7 @@ from mloda.provider import ComputeFramework
 try:
     import pyarrow as pa
 except ImportError:
-    pa = None  # type: ignore[assignment]
+    pa = None  # type: ignore[assignment, unused-ignore]
 
 try:
     import pandas as pd

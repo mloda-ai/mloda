@@ -15,7 +15,7 @@ from mloda_plugins.compute_framework.base_implementations.sql.sql_window import 
 try:
     import pyarrow as pa
 except ImportError:
-    pa = None  # type: ignore[assignment]
+    pa = None  # type: ignore[assignment, unused-ignore]
 
 
 # Python 3.12 deprecated the built-in sqlite3 datetime adapters; explicit ISO-format

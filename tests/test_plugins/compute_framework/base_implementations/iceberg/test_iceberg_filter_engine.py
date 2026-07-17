@@ -18,7 +18,7 @@ try:
 except ImportError:
     logger.warning("PyIceberg or PyArrow is not installed. Some tests will be skipped.")
     pyiceberg = None  # type: ignore
-    pa = None  # type: ignore[assignment]
+    pa = None  # type: ignore[assignment, unused-ignore]
     IcebergTable = None  # type: ignore
     GreaterThan = None  # type: ignore
     LessThan = None  # type: ignore

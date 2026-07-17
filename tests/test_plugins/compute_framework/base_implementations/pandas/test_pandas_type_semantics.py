@@ -22,7 +22,7 @@ try:
 except ImportError:
     logger.warning("Pandas or PyArrow is not installed. Some tests will be skipped.")
     pd = None
-    pa = None  # type: ignore[assignment]
+    pa = None  # type: ignore[assignment, unused-ignore]
 
 
 @pytest.mark.skipif(pd is None, reason="Pandas is not installed. Skipping this test.")

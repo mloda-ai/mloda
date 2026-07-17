@@ -19,7 +19,7 @@ from mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_value_sa
 try:
     import pyarrow as pa
 except ImportError:
-    pa = None  # type: ignore[assignment]
+    pa = None  # type: ignore[assignment, unused-ignore]
 
 
 class SqliteMergeEngine(SqlBaseMergeEngine):

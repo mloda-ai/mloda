@@ -21,7 +21,7 @@ try:
     import pyarrow as pa
 except ImportError:
     logger.warning("PyArrow is not installed. Some tests will be skipped.")
-    pa = None  # type: ignore[assignment]
+    pa = None  # type: ignore[assignment, unused-ignore]
 
 
 def _spy_on_sample_string_values(monkeypatch: pytest.MonkeyPatch) -> list[str]:

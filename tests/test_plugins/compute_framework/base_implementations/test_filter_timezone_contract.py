@@ -64,7 +64,7 @@ try:
     PYARROW_AVAILABLE = True
 except ImportError:
     logger.warning("PyArrow is not installed. PyArrow framework cases will not be parametrized.")
-    pa = None  # type: ignore
+    pa = None  # type: ignore[assignment, unused-ignore]
     PyArrowFilterEngine = None  # type: ignore
     PYARROW_AVAILABLE = False
 

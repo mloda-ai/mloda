@@ -38,7 +38,7 @@ except ImportError:
     StringType = None  # type: ignore[assignment,misc]
     TimestampType = None  # type: ignore[assignment,misc]
     TimestamptzType = None  # type: ignore[assignment,misc]
-    pa = None  # type: ignore[assignment]
+    pa = None  # type: ignore[assignment, unused-ignore]
 
 
 class IcebergFramework(ComputeFramework):

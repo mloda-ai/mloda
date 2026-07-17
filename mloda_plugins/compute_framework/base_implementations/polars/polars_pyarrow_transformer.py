@@ -10,7 +10,7 @@ except ImportError:
 try:
     import pyarrow as pa
 except ImportError:
-    pa = None  # type: ignore[assignment]
+    pa = None  # type: ignore[assignment, unused-ignore]
 
 
 class PolarsPyArrowTransformer(BaseTransformer):

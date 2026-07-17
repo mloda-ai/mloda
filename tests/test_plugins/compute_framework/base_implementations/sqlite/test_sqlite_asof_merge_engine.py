@@ -28,7 +28,7 @@ try:
     import pyarrow as pa
 except ImportError:
     logger.warning("PyArrow is not installed. Some tests will be skipped.")
-    pa = None  # type: ignore[assignment]
+    pa = None  # type: ignore[assignment, unused-ignore]
 
 
 @pytest.mark.skipif(pa is None, reason="PyArrow is not installed. Skipping this test.")

@@ -64,7 +64,7 @@ try:
     import pyarrow as pa
 except ImportError:
     logger.warning("PyArrow is not installed. Some tests will be skipped.")
-    pa = None  # type: ignore[assignment]
+    pa = None  # type: ignore[assignment, unused-ignore]
 
 
 # Test data for Spark integration tests

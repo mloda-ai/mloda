@@ -216,10 +216,11 @@ and resolution paths intentionally differ:
 - **`get_*_docs` degrade.** Documentation is a best-effort read-only view, so a
   conflict collapses to the most recently defined (live) class and listing
   continues. There is nothing to execute, so ambiguity is harmless.
-- **`resolve_feature` surfaces the conflict.** Resolution feeds execution, which
-  must be unambiguous to be safe, so it returns `feature_group=None` with the
-  conflict described in `error` and the conflicting classes that match the
-  requested feature name in `candidates` rather than silently picking one.
+- **`resolve_feature` fails closed.** Resolution feeds execution, so the
+  conflict fails closed like any other environment-build failure: it returns
+  `feature_group=None` with the conflict described in `error` and no
+  candidates. The failure is projected from the build error itself, which names
+  the conflicting classes in the message, and no matching runs.
 
 ### Broken framework declarations
 

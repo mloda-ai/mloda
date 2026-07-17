@@ -26,7 +26,6 @@ from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.function_extender import Extender
 from mloda.core.abstract_plugins.plugin_registry.plugin_registry import PluginRegistry
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
-from mloda.core.abstract_plugins.components.domain import Domain
 from mloda.core.abstract_plugins.components.feature import Feature, normalize_feature_group_scope
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.components.link import Link
@@ -42,7 +41,6 @@ from mloda.core.prepare.accessible_plugins import (
 )
 from mloda.core.prepare.identify_feature_group import (
     IdentifyFeatureGroupClass,
-    matches_feature_group_scope,
     render_resolution_failure,
     scope_callout,
 )
@@ -96,31 +94,6 @@ def _dedup_degrading_on_conflict(
         return dedup_feature_group_subclasses(feature_groups, allow_redefinition=allow_redefinition)
     except RedefinitionConflictError:
         return dedup_feature_group_subclasses(feature_groups, allow_redefinition=True)
-
-
-def _matches_criteria_guarded(
-    fg_class: type[FeatureGroup],
-    feature_name: FeatureName,
-    options: Options,
-    data_access_collection: Optional[DataAccessCollection] = None,
-) -> bool:
-    """Match a feature group for the redefinition-conflict branch, treating any raise as 'not a match'.
-
-    resolve_feature is a non-throwing debug API: a conflicting candidate whose match hook raises must
-    not take the whole call down.
-    """
-    try:
-        return fg_class.match_feature_group_criteria(feature_name, options, data_access_collection)
-    except Exception:  # noqa: BLE001  (never-raising debug API)
-        return False
-
-
-def _matches_domain_guarded(fg_class: type[FeatureGroup], feature_domain: Optional[Domain]) -> bool:
-    """Domain gate for the conflict branch, mirroring the engine; a raising get_domain() is 'not a match'."""
-    try:
-        return feature_domain is None or fg_class.get_domain() == feature_domain
-    except Exception:  # noqa: BLE001  (never-raising debug API)
-        return False
 
 
 def get_feature_group_docs(
@@ -377,11 +350,12 @@ def resolve_feature(
     Never raises for matching errors: those are reported in the returned ResolvedFeature.error.
     Signature misuse (options/feature_group alongside a Feature) is a programmer error and raises TypeError.
 
-    Design note: resolve_feature DELEGATES matching to the #754 evaluation seam
-    IdentifyFeatureGroupClass.evaluate. It only builds the accessible-plugins environment locally
-    (applicability filter, dedup/redefinition-conflict handling), fail-closed exactly as the engine does:
-    a build failure is projected into ``error`` rather than raised, so no candidates are reported; the seam
-    owns name/domain/scope/abstract/subclass filtering, the winner, candidates, and the failure texts.
+    Design note: resolve_feature is a thin adapter. It only normalizes the standalone request, builds the
+    canonical accessible-plugins environment once, delegates one evaluation to
+    IdentifyFeatureGroupClass.evaluate, and projects the result. ANY environment-build failure (including
+    redefinition conflicts) is projected fail-closed from the failure itself into ``error`` with no
+    candidates and no re-matching; the seam owns name/domain/scope/abstract/subclass filtering, the
+    winner, candidates, and the failure texts.
 
     Engine inputs now covered: name, options, domain and compute-framework pin (carried on the Feature),
     scope (via the Feature's feature_group_scope or the feature_group argument for the string form), and
@@ -415,7 +389,6 @@ def resolve_feature(
         feature_name = str(feature.name)
         scope = feature.feature_group_scope
         resolved_options = feature.options
-        feature_domain: Optional[Domain] = feature.domain
     else:
         feature_obj = None
         feature_name = feature
@@ -429,8 +402,6 @@ def resolve_feature(
                 error=str(exc),
             )
         resolved_options = options if options is not None else Options()
-        raw_domain = resolved_options.get("domain")
-        feature_domain = Domain(raw_domain) if raw_domain else None
 
     callout = scope_callout(scope)
     scope_suffix = f" {callout}" if callout else ""
@@ -443,17 +414,8 @@ def resolve_feature(
         accessible_plugins: FeatureGroupEnvironmentMapping = PreFilterPlugins(
             restricted_frameworks, plugin_collector
         ).get_accessible_plugins()
-    except RedefinitionConflictError as exc:
-        matching_conflicts = [
-            fg
-            for fg in exc.conflicts
-            if (scope is None or matches_feature_group_scope(fg, scope))
-            and _matches_criteria_guarded(fg, feature_name_obj, resolved_options, data_access_collection)
-            and _matches_domain_guarded(fg, feature_domain)
-        ]
-        return ResolvedFeature(feature_name, None, matching_conflicts, error=f"{exc}{scope_suffix}")
-    except EnvironmentPreconditionError as exc:
-        # mloda's own precondition: already a complete sentence, and no plugin is to blame. Project it bare.
+    except (RedefinitionConflictError, EnvironmentPreconditionError) as exc:
+        # mloda's own environment failure: already a complete sentence. Project it bare, no candidates.
         return ResolvedFeature(feature_name, None, [], error=f"{exc}{scope_suffix}")
     except Exception as exc:  # noqa: BLE001  (never-raising debug API; projects a broken plugin's build failure)
         return ResolvedFeature(

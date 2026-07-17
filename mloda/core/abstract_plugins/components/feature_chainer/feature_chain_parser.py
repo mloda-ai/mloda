@@ -15,6 +15,7 @@ from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.components.default_options_key import DefaultOptionKeys
+from mloda.core.abstract_plugins.components.feature_chainer.parsed_feature_name import ParsedFeatureName
 from mloda.core.abstract_plugins.components.feature_chainer.property_spec import PropertySpec, is_no_default
 from mloda.core.abstract_plugins.components.utils import safe_field
 
@@ -85,15 +86,17 @@ class FeatureChainParser:
         return CHAIN_SEPARATOR in feature_name
 
     @classmethod
-    def parse_feature_name(
+    def parse_name(
         cls,
         feature_name: FeatureName | str,
         prefix_patterns: list[Any],
         pattern: str = CHAIN_SEPARATOR,
-    ) -> tuple[str | None, str | None]:
-        """Internal method for parsing feature names - used by match_configuration_feature_chain_parser.
+    ) -> ParsedFeatureName:
+        """Parse a feature name into structured facts, keeping today's matching semantics.
 
         A prefix pattern is anything ``re.match`` accepts: a ``str`` or a compiled ``re.Pattern``.
+        A matched pattern with nothing before the separator raises the historical ValueError;
+        ``match_parser_criteria`` and ``_strict_validation_rejection_reason`` depend on that raise.
         """
         _feature_name: str = feature_name
 
@@ -102,21 +105,48 @@ class FeatureChainParser:
         operation_part = parts[1] if len(parts) > 1 else parts[0]
 
         for suffix_pattern in prefix_patterns:
-            if re.match(suffix_pattern, _feature_name) is None:
+            match = re.match(suffix_pattern, _feature_name)
+            if match is None:
                 continue
 
             if len(parts) == 1 or not source_feature:
                 raise ValueError(f"Matches the pattern {pattern}, but has no source feature: {_feature_name}")
 
-            match = re.match(suffix_pattern, _feature_name)
-            if match and match.groups():
-                operation_config = match.group(1)
-            else:
-                operation_config = operation_part.split("_")[0]
+            return ParsedFeatureName(
+                matched=True,
+                source_feature=source_feature,
+                operation_part=operation_part,
+                named_captures=match.groupdict(),
+                positional_captures=match.groups(),
+            )
 
-            return operation_config, source_feature
+        return ParsedFeatureName.no_match()
 
-        return None, None
+    @classmethod
+    def _legacy_operation_config(cls, parsed: ParsedFeatureName) -> str | None:
+        """The value the retired reverse-lookup binding consumes. #772 removes the fabrication."""
+        if parsed.positional_captures:
+            return parsed.positional_captures[0]
+        if parsed.operation_part is None:
+            return None
+        return parsed.operation_part.split("_")[0]  # fabrication, retired by #772
+
+    @classmethod
+    def parse_feature_name(
+        cls,
+        feature_name: FeatureName | str,
+        prefix_patterns: list[Any],
+        pattern: str = CHAIN_SEPARATOR,
+    ) -> tuple[str | None, str | None]:
+        """Legacy adapter over ``parse_name``: returns ``(operation_config, source_feature)``.
+
+        Public API (mloda_plugins call sites and documented examples), so the tuple stays
+        byte-for-byte identical to today, including the captureless fabrication and the ValueError.
+        """
+        parsed = cls.parse_name(feature_name, prefix_patterns, pattern)
+        if not parsed.matched:
+            return None, None
+        return cls._legacy_operation_config(parsed), parsed.source_feature
 
     @classmethod
     def _match_pattern_based_feature(
@@ -411,11 +441,17 @@ class FeatureChainParser:
             True if the feature matches either pattern-based or configuration-based parsing, False otherwise
         """
 
-        # string based matching
+        # string based matching. parse_name raises the no-source ValueError exactly as before, contained by
+        # match_parser_criteria. Effective options are built from the parse facts here, NOT via the
+        # monkeypatchable build_effective_options: a build raise stays owned by check_required_when, the one
+        # containment site that knows the owner (see build_effective_options / TestBuildEffectiveOptionsRaiseIsContained).
         if prefix_patterns is not None:
-            if cls._match_pattern_based_feature(feature_name, prefix_patterns, pattern):
+            parsed = cls.parse_name(feature_name, prefix_patterns, pattern)
+            if parsed.matched:
                 if property_mapping is not None:
-                    cls._validate_present_option_values(options, property_mapping)
+                    bindings = cls.bind_name_captures(parsed, property_mapping)
+                    effective_options = cls._merge_bindings(options, bindings, property_mapping)
+                    cls._validate_present_option_values(effective_options, property_mapping)
                 return True
 
         # configuration-based
@@ -449,6 +485,80 @@ class FeatureChainParser:
         return patterns
 
     @classmethod
+    def bind_name_captures(cls, parsed: ParsedFeatureName, property_mapping: dict[str, Any]) -> dict[str, str]:
+        """Turn parse facts into PROPERTY_MAPPING bindings by name; documented and deterministic.
+
+        Named captures bind EXCLUSIVELY by name: a capture whose name is a mapping key binds to that
+        key, an unmapped name binds nothing, a non-participating (None) capture binds nothing. Only
+        when the matched pattern declares no named capture at all does the legacy positional fallback
+        bind ``_legacy_operation_config`` to the single key whose ``allowed_values`` already contain
+        it (transitional compatibility for unmigrated positional patterns; retired by #772 /
+        mloda-registry#327). The fallback binds only a value already accepted, so it never fails strict
+        validation.
+        """
+        if not parsed.matched:
+            return {}
+
+        if parsed.named_captures:
+            bindings: dict[str, str] = {}
+            for name, value in parsed.named_captures.items():
+                if value is None or name not in property_mapping:
+                    continue
+                bindings[name] = value
+            return bindings
+
+        legacy_value = cls._legacy_operation_config(parsed)
+        if legacy_value is None:
+            return {}
+        for key, spec in property_mapping.items():
+            if not isinstance(spec, PropertySpec):
+                continue
+            if legacy_value in cls._extract_property_values(spec):
+                return {key: legacy_value}
+        return {}
+
+    @classmethod
+    def _merge_bindings(
+        cls, options: Options, bindings: dict[str, str], property_mapping: dict[str, Any] | None
+    ) -> Options:
+        """Merge name-derived bindings into options; a present option wins, nothing to merge is identity.
+
+        Provenance (inherited_group_keys / inherited_context_keys) and propagate_context_keys survive
+        the rebuild, so forwarded-mismatch protection still reads it off the effective options.
+        """
+        if property_mapping is None or not bindings:
+            return options
+
+        merged_group = dict(options.group)
+        merged_context = dict(options.context)
+        changed = False
+        for key, value in bindings.items():
+            spec = property_mapping.get(key)
+            if not isinstance(spec, PropertySpec):
+                continue
+            # An explicit option (including an opted-in explicit None, #768) is never overwritten.
+            if options.get(key) is not None or (spec.allow_explicit_none and key in options):
+                continue
+            if cls._determine_parameter_category(key, spec, options) == DefaultOptionKeys.context:
+                merged_context[key] = value
+            else:
+                merged_group[key] = value
+            changed = True
+
+        if not changed:
+            return options
+
+        effective = Options(
+            group=merged_group,
+            context=merged_context,
+            propagate_context_keys=options.propagate_context_keys,
+        )
+        effective.inherited_group_keys = options.inherited_group_keys
+        effective.inherited_context_keys = options.inherited_context_keys
+        effective.last_forwarded_group_keys = options.last_forwarded_group_keys
+        return effective
+
+    @classmethod
     def build_effective_options(
         cls,
         feature_name: str | FeatureName,
@@ -456,50 +566,84 @@ class FeatureChainParser:
         property_mapping: dict[str, Any],
         options: Options,
     ) -> Options:
-        """Build effective options by merging string-parsed values with explicit options.
+        """Merge every name-derived binding into options so predicates and validation see them.
 
-        When a feature is matched by string pattern, the operation_config value extracted
-        from the feature name is mapped to the corresponding PROPERTY_MAPPING key. This
-        ensures that required_when predicates see values from both sources.
-
-        If the feature is not string-based or no mapping key matches, returns the
-        original options unchanged.
+        Binding is by name (``bind_name_captures``): all captures merge at once, not just the first key.
+        A matcher may parse the name with its own separator, so CHAIN_SEPARATOR can leave it unparseable;
+        that is no name-parsed value to merge, never an exception out of a matcher. If nothing matches or
+        nothing binds, the original options come back by identity.
         """
-        # A matcher may parse the name with its own separator, so CHAIN_SEPARATOR can leave it
-        # unparseable. That is no name-parsed value to merge, never an exception out of a matcher.
-        nothing_parsed: tuple[str | None, str | None] = (None, None)
-        operation_config, _source_feature = safe_field(
-            lambda: cls.parse_feature_name(feature_name, prefix_patterns, CHAIN_SEPARATOR),
-            nothing_parsed,
+        parsed = safe_field(
+            lambda: cls.parse_name(feature_name, prefix_patterns, CHAIN_SEPARATOR),
+            ParsedFeatureName.no_match(),
             catching=(ValueError,),
         )
-        if operation_config is None:
+        if not parsed.matched:
             return options
+        bindings = cls.bind_name_captures(parsed, property_mapping)
+        return cls._merge_bindings(options, bindings, property_mapping)
 
-        # Find which property mapping key the operation_config value belongs to
-        for prop_key, prop_value in property_mapping.items():
-            if not isinstance(prop_value, PropertySpec):
-                continue
-            # Already present in options: no merge needed
-            if options.get(prop_key) is not None:
-                continue
-            # Check if operation_config is a valid value for this property
-            if operation_config not in cls._extract_property_values(prop_value):
-                continue
-            category = cls._determine_parameter_category(prop_key, prop_value, options)
-            merged_group = dict(options.group)
-            merged_context = dict(options.context)
-            if category == DefaultOptionKeys.context:
-                merged_context[prop_key] = operation_config
-            else:
-                merged_group[prop_key] = operation_config
-            return Options(
-                group=merged_group,
-                context=merged_context,
-                propagate_context_keys=options.propagate_context_keys,
-            )
+    @classmethod
+    def _pattern_named_and_total_groups(cls, pattern: Any) -> tuple[frozenset[str], int]:
+        """The named group names and total group count of a pattern; an uncompilable pattern reports neither."""
+        if isinstance(pattern, re.Pattern):
+            return frozenset(pattern.groupindex), pattern.groups
+        compiled: re.Pattern[str] | None = safe_field(lambda: re.compile(pattern), None, catching=(re.error, TypeError))
+        if compiled is None:
+            return frozenset(), 0
+        return frozenset(compiled.groupindex), compiled.groups
 
-        return options
+    @classmethod
+    def _str_reachable_values(cls, spec: PropertySpec) -> set[str]:
+        """The str members of a spec's value space; only a str can be reverse-looked-up from a capture."""
+        reachable: set[str] = set()
+        for value in cls._extract_property_values(spec):
+            if isinstance(value, str):
+                reachable.add(value)
+        return reachable
+
+    @classmethod
+    def validate_name_binding(cls, owner: type[Any]) -> None:
+        """Reject an order-dependent legacy positional binding at class-definition time.
+
+        Fires only when the class relies on the legacy fallback: it declares a capture group, no
+        pattern declares a named group, and two keys share a reachable (str) allowed value. Named
+        captures make binding explicit, so they are exempt; a captureless pattern has nothing to
+        misbind. Called from both FeatureGroup and FeatureChainParserMixin at class definition.
+        """
+        property_mapping = getattr(owner, "PROPERTY_MAPPING", None)
+        if not isinstance(property_mapping, dict):
+            return
+
+        patterns = cls.prefix_patterns_of(owner)
+        if not patterns:
+            return
+
+        has_capture_group = False
+        declares_named = False
+        for pattern in patterns:
+            named, total = cls._pattern_named_and_total_groups(pattern)
+            has_capture_group = has_capture_group or total >= 1
+            declares_named = declares_named or bool(named)
+
+        if not has_capture_group or declares_named:
+            return
+
+        reachable = {
+            key: cls._str_reachable_values(spec)
+            for key, spec in property_mapping.items()
+            if isinstance(spec, PropertySpec)
+        }
+        keys = list(reachable)
+        for i, left in enumerate(keys):
+            for right in keys[i + 1 :]:
+                overlap = reachable[left] & reachable[right]
+                if overlap:
+                    raise ValueError(
+                        f"{owner.__name__}: PROPERTY_MAPPING keys '{left}' and '{right}' share reachable "
+                        f"allowed value(s) {sorted(overlap)}, so a legacy positional capture cannot bind "
+                        f"unambiguously. Use named capture groups (?P<key>...) so binding is explicit."
+                    )
 
     @classmethod
     def check_required_when(

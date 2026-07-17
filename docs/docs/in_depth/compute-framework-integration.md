@@ -41,8 +41,14 @@ feature only**:
   the rejected one silently (no error).
 - If the only remaining candidate is the rejected framework (for example, the
   user pinned the feature to it), resolution fails with a dedicated,
-  actionable error that names the unsupported and supported frameworks, e.g.
-  `Unsupported compute framework(s) for feature 'X': ['SQLiteFramework']. Supported on: ['DuckDBFramework', 'PandasDataFrame'].`
+  actionable error listing one line per rejecting feature group, each naming
+  only that group's own unsupported and supported frameworks, e.g.
+
+```
+Unsupported compute framework(s) for feature 'X':
+  - MedianFeatureGroup: ['SQLiteFramework']. Supported on: ['DuckDBFramework', 'PandasDataFrame'].
+Pin the feature to a supported compute framework or override supports_compute_framework.
+```
 
 This is distinct from the "no feature group found" error, so an unsupported
 operation is no longer indistinguishable from an unknown feature. Prefer this

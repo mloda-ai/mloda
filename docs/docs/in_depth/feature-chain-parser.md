@@ -491,11 +491,11 @@ does not).
 Because forwarding is the default, the consumer's query-specific group keys (for
 example `query_text`, `top_k`) land on the child unless you opt out. If the child's
 matcher (its `match_feature_group_criteria` / `PROPERTY_MAPPING`) does not accept those
-extra keys, resolution fails with `No feature groups found ...`. When a feature group
-would match the bare name but rejects it because of extra group options, the error
-names the offending keys, notes that group options flow onto input features by
-default, and suggests keeping them off the child with `forward_group_exclude`, an
-allowlist, or `forward_group=False`.
+extra keys, resolution fails with `No feature groups found ...`. A key whose *value* was
+rejected is named in the error's value-rejection lines; a key rejected merely for being
+present is not called out, because identifying it would need a second, speculative match
+pass. If a feature resolves without its forwarded group options but not with them, keep
+them off the child with `forward_group_exclude`, an allowlist, or `forward_group=False`.
 
 ### Upstream feature deduplication
 

@@ -43,6 +43,7 @@ from mloda.core.prepare.accessible_plugins import (
 from mloda.core.prepare.identify_feature_group import (
     IdentifyFeatureGroupClass,
     matches_feature_group_scope,
+    render_resolution_failure,
     scope_callout,
 )
 
@@ -501,33 +502,7 @@ def resolve_feature(
             subtype_family=subtype_family,
         )
 
-    error = _engine_failure_message(
-        feature_obj, accessible_plugins, feature_name, scope_suffix, links, data_access_collection
-    )
+    # A projection of the evaluation already in hand: the same result the engine renders from, and the
+    # renderer emits the scope callout itself, so scope_suffix must not be appended a second time.
+    error = render_resolution_failure(result, feature_obj)
     return ResolvedFeature(feature_name, None, candidates, error=error)
-
-
-def _engine_failure_message(
-    feature: Feature,
-    accessible_plugins: FeatureGroupEnvironmentMapping,
-    feature_name: str,
-    scope_suffix: str,
-    links: Optional[set[Link]],
-    data_access_collection: Optional[DataAccessCollection],
-) -> str:
-    """Return the engine's failure message for these inputs.
-
-    The engine builders raise a ValueError carrying the failure text (already including any scope
-    callout); a broken plugin declaration touched while building that text degrades to a generic
-    message so resolve_feature never raises.
-    """
-    generic = f"No feature groups found for feature name: '{feature_name}'.{scope_suffix}"
-    try:
-        IdentifyFeatureGroupClass(
-            feature, accessible_plugins, links=links, data_access_collection=data_access_collection
-        )
-    except ValueError as exc:
-        return str(exc)
-    except Exception:  # noqa: BLE001  (broken plugin declaration inside the builder; degrade)
-        return generic
-    return generic

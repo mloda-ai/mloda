@@ -10,6 +10,8 @@ All fixture names carry an ``_809`` suffix: test feature groups become global su
 runs in parallel, so a shared name would leak into another module's candidate universe.
 """
 
+import copy
+import pickle  # nosec B403
 from typing import Optional
 
 import pytest
@@ -91,6 +93,21 @@ class ResolutionErrorSiblingBFG_809(FeatureGroup):
 def _no_match_accessible_plugins() -> FeatureGroupEnvironmentMapping:
     """One candidate that matches only its own known name: any other name yields failure_kind 'none'."""
     return {ResolutionErrorKnownFG_809: {ResolutionErrorFw_809}}
+
+
+def _raised_resolution_error_809() -> FeatureResolutionError:
+    """Catch and return the typed error the raising seam produces for the no-match fixture."""
+    feature = Feature(NO_MATCH_FEATURE_809)
+
+    with pytest.raises(FeatureResolutionError) as exc_info:
+        IdentifyFeatureGroupClass(
+            feature=feature,
+            accessible_plugins=_no_match_accessible_plugins(),
+            links=None,
+            data_access_collection=None,
+        )
+
+    return exc_info.value
 
 
 class TestFeatureResolutionErrorAtTheSeam:
@@ -182,6 +199,37 @@ class TestFeatureResolutionErrorEndToEnd:
                 compute_frameworks={ResolutionErrorFw_809},
                 plugin_collector=PluginCollector.enabled_feature_groups({ResolutionErrorKnownFG_809}),
             )
+
+
+class TestFeatureResolutionErrorTransport:
+    """The typed error survives the transport boundaries the engine uses: pickle and deepcopy.
+
+    ``BaseException.__reduce__`` reconstructs an exception from ``self.args``, which here is only the
+    rendered message. Without a ``__reduce__`` override the round trips below raise ``TypeError`` for
+    the two missing constructor arguments instead of returning an equivalent error.
+    """
+
+    def test_pickle_round_trip_preserves_message_name_and_result(self) -> None:
+        """pickle.loads(pickle.dumps(error)) yields an equal FeatureResolutionError."""
+        original = _raised_resolution_error_809()
+
+        restored = pickle.loads(pickle.dumps(original))  # nosec B301
+
+        assert isinstance(restored, FeatureResolutionError)
+        assert str(restored) == str(original)
+        assert restored.feature_name == original.feature_name
+        assert restored.result.failure_kind == original.result.failure_kind
+
+    def test_deepcopy_round_trip_preserves_message_name_and_result(self) -> None:
+        """copy.deepcopy(error) yields an equal FeatureResolutionError."""
+        original = _raised_resolution_error_809()
+
+        duplicate = copy.deepcopy(original)
+
+        assert isinstance(duplicate, FeatureResolutionError)
+        assert str(duplicate) == str(original)
+        assert duplicate.feature_name == original.feature_name
+        assert duplicate.result.failure_kind == original.result.failure_kind
 
 
 class TestFeatureResolutionErrorImportSurfaces:

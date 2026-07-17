@@ -75,6 +75,10 @@ class FeatureResolutionError(ValueError):
         self.feature_name = feature_name
         self.result = result
 
+    def __reduce__(self) -> tuple[type["FeatureResolutionError"], tuple[str, str, EvaluationResult]]:
+        # The default reduction reconstructs from args=(message,) and drops the two extra constructor arguments.
+        return type(self), (str(self), self.feature_name, self.result)
+
 
 def matches_feature_group_scope(feature_group: type[FeatureGroup], scope: str | type[FeatureGroup]) -> bool:
     """Is the candidate inside the requested scope, for both the class-object and the string form.

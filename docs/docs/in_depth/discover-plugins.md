@@ -117,7 +117,10 @@ nothing resolves.
 
 ### Inspecting Candidates
 
-When resolution fails due to conflicts, check the candidates:
+When resolution reached matching but ended ambiguous (multiple FeatureGroups
+matched), `candidates` lists the classes that matched. When the environment
+build itself failed (for example a redefinition conflict), no matching runs,
+so `candidates` is empty and the error text carries the details:
 
 ``` python
 result = resolve_feature("my_feature")

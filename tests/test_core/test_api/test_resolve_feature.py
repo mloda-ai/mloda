@@ -1024,7 +1024,7 @@ def _exec_conflict_fg(class_name: str, body: str, cell_label: str) -> type[Featu
 
 
 def _raising_match_conflict_source(qualname: str, feature_name: str, extra_body: str = "") -> str:
-    """Source for a conflicting FeatureGroup whose match hook raises a NON-ValueError (RuntimeError)."""
+    """Source for a conflicting FeatureGroup whose match hook raises RuntimeError."""
     return f"""
 from mloda.core.abstract_plugins.feature_group import FeatureGroup as _FG_BASE_
 
@@ -1058,14 +1058,13 @@ def _cleanup_main_after() -> Any:
 
 
 class TestResolveFeatureRaisingMatchDuringConflict:
-    """A conflicting class whose match hook raises a non-ValueError must not escape resolve_feature."""
+    """A redefinition conflict is projected before matching, so a raising match hook cannot escape."""
 
     def test_raising_match_hook_during_redef_conflict_does_not_raise(self, _cleanup_main_after: Any) -> None:
-        """A RuntimeError from match_feature_group_criteria on a conflicting class must surface as an error.
+        """A conflicting class with a raising match hook must still yield a ResolvedFeature with an error.
 
-        The redefinition-conflict branch filters conflicts with a helper that today catches only
-        ValueError, so a conflicting class whose match hook raises RuntimeError propagates out of
-        resolve_feature. The never-raising debug contract requires it to surface in ResolvedFeature.error.
+        The redefinition conflict is projected fail-closed before any matching runs, so the raising
+        match_feature_group_criteria hook is never invoked and cannot take resolve_feature down.
         """
         qualname = "RaiseMatchConflictResolveFG755"
         feature_name = "raise_match_conflict_resolve_feature_755_xyz"

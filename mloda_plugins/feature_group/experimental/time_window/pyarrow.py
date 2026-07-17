@@ -112,6 +112,10 @@ class PyArrowTimeWindowFeatureGroup(TimeWindowFeatureGroup):
         # Get the time column
         time_column = data.column(time_filter_feature)
 
+        # A null/NaT reference time has no position on the timeline; fail explicitly.
+        if time_column.null_count > 0:
+            cls._raise_null_reference_time(time_filter_feature)
+
         # Get the source columns
         source_columns = [data.column(name) for name in in_features]
 
@@ -123,9 +127,13 @@ class PyArrowTimeWindowFeatureGroup(TimeWindowFeatureGroup):
         sorted_sources = [pc.take(col, sorted_indices) for col in source_columns]
 
         # Time-based (not row-count) window: include rows in (t - span, t].
-        # Sorted times bound each window; span comes from the shared base helper.
-        sorted_times = pc.take(time_column, sorted_indices).to_pylist()
+        # Bound each window by ABSOLUTE integer nanoseconds (not Python datetimes):
+        # wall-clock datetime subtraction is wrong across a DST transition, whereas
+        # int64 ns since epoch is DST-safe, unit-uniform, and works for tz-aware
+        # timestamps and date32/date64 too.
+        sorted_times_ns = pc.take(time_column, sorted_indices).cast(pa.timestamp("ns")).cast(pa.int64()).to_pylist()
         span = cls._get_time_delta(window_size, time_unit)
+        span_ns = span.days * 86_400_000_000_000 + span.seconds * 1_000_000_000 + span.microseconds * 1_000
 
         # Create a list to store the results
         results = []
@@ -135,11 +143,11 @@ class PyArrowTimeWindowFeatureGroup(TimeWindowFeatureGroup):
             # Rows are time-sorted ascending, so the window is a contiguous slice
             # ending at i. bisect_right of (t_i - span) gives the first index strictly
             # greater than the lower bound, implementing the left-open boundary.
-            start_idx = bisect.bisect_right(sorted_times, sorted_times[i] - span)
-            window_indices = pa.array(range(start_idx, i + 1))
+            start_idx = bisect.bisect_right(sorted_times_ns, sorted_times_ns[i] - span_ns)
+            length = i - start_idx + 1
 
-            # Get window values for all columns
-            all_window_values = [pc.take(col, window_indices) for col in sorted_sources]
+            # Zero-copy slice of each sorted source column for the current window.
+            all_window_values = [col.slice(start_idx, length) for col in sorted_sources]
 
             # Apply the window function
             if len(all_window_values[0]) == 0:
@@ -202,9 +210,11 @@ class PyArrowTimeWindowFeatureGroup(TimeWindowFeatureGroup):
                     # Single column: use the result directly
                     results.append(column_results[0])
 
-        # We need to reorder the results to match the original order
-        # Create a mapping from sorted indices to original indices
-        reordered_results = [results[sorted_indices.to_pylist().index(i)] for i in range(len(results))]
+        # Scatter results back to original row order via the inverse permutation (O(n)).
+        sorted_idx_list = sorted_indices.to_pylist()
+        reordered_results: list[Any] = [None] * len(results)
+        for k, orig_pos in enumerate(sorted_idx_list):
+            reordered_results[orig_pos] = results[k]
 
         # Convert the results to a PyArrow array
         return pa.array(reordered_results)

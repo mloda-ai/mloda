@@ -316,6 +316,14 @@ class TimeWindowFeatureGroup(TimeReferenceMixin, FeatureChainParserMixin, Featur
         else:
             raise ValueError(f"Unsupported time unit: {time_unit}")
 
+    @classmethod
+    def _raise_null_reference_time(cls, reference_time_column: str) -> None:
+        """Raise a uniform ValueError when the reference time column contains null/NaT values."""
+        raise ValueError(
+            f"Reference time column '{reference_time_column}' contains null values. "
+            f"Time window operations require non-null reference times."
+        )
+
     # match_feature_group_criteria() inherited from FeatureChainParserMixin
 
     @classmethod

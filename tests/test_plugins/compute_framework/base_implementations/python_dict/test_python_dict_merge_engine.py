@@ -72,11 +72,11 @@ class TestPythonDictMergeEngine:
         }
 
     def test_merge_union(self, left_data: Any, right_data: Any, index_obj: Any) -> None:
-        """Test union operation (removes duplicates)."""
+        """Test union operation (dedupes by full row, not by join key)."""
         engine = PythonDictMergeEngine()
         result = engine.merge_union(left_data, right_data, index_obj, index_obj)
 
-        assert result == {"idx": [1, 3, 2], "col1": ["a", "b", None], "col2": [None, None, "z"]}
+        assert result == {"idx": [1, 3, 1, 2], "col1": ["a", "b", None, None], "col2": [None, None, "x", "z"]}
 
     def test_merge_with_different_join_columns(self) -> None:
         """Test merge with different column names for join."""
@@ -206,6 +206,104 @@ class TestPythonDictEquiJoinTimezoneGuard:
 
         result = engine.merge(left_data, right_data, link)
         assert result == {"k": ["a"], "lv": [1], "rv": [2]}
+
+
+class TestPythonDictMergeEngineOneToMany:
+    """One-to-many / many-to-many join semantics pinned against pandas/polars.
+
+    Expected values were cross-checked by running the equivalent join through
+    PandasMergeEngine. Row order follows the natural nested-loop order: for each
+    left row in order, each matching right row in order.
+    """
+
+    def test_inner_one_to_many_expands_duplicate_right_keys(self) -> None:
+        """Inner join must emit one row per (left, matching-right) pair, not collapse to the last right row."""
+        engine = PythonDictMergeEngine()
+        idx = Index(("user_id",))
+        left = {"user_id": [1, 2], "name": ["ann", "bob"]}
+        right = {"user_id": [1, 1, 2, 2], "amount": [10, 20, 30, 40]}
+
+        result = engine.merge_inner(left, right, idx, idx)
+
+        assert result == {
+            "user_id": [1, 1, 2, 2],
+            "name": ["ann", "ann", "bob", "bob"],
+            "amount": [10, 20, 30, 40],
+        }
+
+    def test_left_one_to_many_expands_and_null_fills_unmatched(self) -> None:
+        """Left join must expand duplicate right matches and null-fill the unmatched left row."""
+        engine = PythonDictMergeEngine()
+        idx = Index(("user_id",))
+        left = {"user_id": [1, 2, 3], "name": ["ann", "bob", "cat"]}
+        right = {"user_id": [1, 1, 2, 2], "amount": [10, 20, 30, 40]}
+
+        result = engine.merge_left(left, right, idx, idx)
+
+        assert result == {
+            "user_id": [1, 1, 2, 2, 3],
+            "name": ["ann", "ann", "bob", "bob", "cat"],
+            "amount": [10, 20, 30, 40, None],
+        }
+
+    def test_right_one_to_many_expands_duplicate_left_keys(self) -> None:
+        """Right join must emit one row per (matching-left, right) pair, not collapse to the last left row."""
+        engine = PythonDictMergeEngine()
+        idx = Index(("user_id",))
+        left = {"user_id": [1, 1, 2, 2], "amount": [10, 20, 30, 40]}
+        right = {"user_id": [1, 2], "name": ["ann", "bob"]}
+
+        result = engine.merge_right(left, right, idx, idx)
+
+        assert result == {
+            "user_id": [1, 1, 2, 2],
+            "name": ["ann", "ann", "bob", "bob"],
+            "amount": [10, 20, 30, 40],
+        }
+
+    def test_outer_one_to_many_expands_duplicate_matching_keys(self) -> None:
+        """Outer join must expand matched duplicate keys into the full row product."""
+        engine = PythonDictMergeEngine()
+        idx = Index(("user_id",))
+        left = {"user_id": [1, 2], "name": ["ann", "bob"]}
+        right = {"user_id": [1, 1, 2, 2], "amount": [10, 20, 30, 40]}
+
+        result = engine.merge_full_outer(left, right, idx, idx)
+
+        assert result == {
+            "user_id": [1, 1, 2, 2],
+            "name": ["ann", "ann", "bob", "bob"],
+            "amount": [10, 20, 30, 40],
+        }
+
+    def test_inner_many_to_many_produces_cartesian_product(self) -> None:
+        """Many-to-many inner join must produce the full Cartesian product per shared key."""
+        engine = PythonDictMergeEngine()
+        idx = Index(("k",))
+        left = {"k": [1, 1], "l": ["l1", "l2"]}
+        right = {"k": [1, 1], "r": ["r1", "r2"]}
+
+        result = engine.merge_inner(left, right, idx, idx)
+
+        assert result == {
+            "k": [1, 1, 1, 1],
+            "l": ["l1", "l1", "l2", "l2"],
+            "r": ["r1", "r2", "r1", "r2"],
+        }
+
+    def test_union_dedupes_by_full_row_not_join_key(self) -> None:
+        """Union must keep distinct rows sharing a join key and collapse only fully identical rows."""
+        engine = PythonDictMergeEngine()
+        idx = Index(("user_id",))
+        left = {"user_id": [1, 1, 2], "name": ["ann", "amy", "bob"]}
+        right = {"user_id": [1, 2, 3], "name": ["ann", "bob", "cat"]}
+
+        result = engine.merge_union(left, right, idx, idx)
+
+        assert result == {
+            "user_id": [1, 1, 2, 3],
+            "name": ["ann", "amy", "bob", "cat"],
+        }
 
 
 class TestPythonDictMergeEngineMultiIndex(MultiIndexMergeEngineTestBase):

@@ -14,7 +14,7 @@ from mloda.user import PluginLoader
 try:
     import pyarrow as pa
 except ImportError:
-    pa = None  # type: ignore[assignment]
+    pa = None  # type: ignore[assignment, unused-ignore]
 
 
 # Load plugins once at module import time

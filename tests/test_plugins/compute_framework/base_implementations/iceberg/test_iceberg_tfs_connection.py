@@ -19,7 +19,7 @@ try:
 except ImportError:
     pyiceberg = None  # type: ignore[assignment]
     Catalog = None  # type: ignore[assignment,misc]
-    pa = None  # type: ignore[assignment]
+    pa = None  # type: ignore[assignment, unused-ignore]
     pc = None
 
 from mloda.user import Feature, DataAccessCollection

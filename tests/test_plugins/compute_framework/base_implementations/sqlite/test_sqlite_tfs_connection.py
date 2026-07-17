@@ -8,7 +8,7 @@ import pytest
 try:
     import pyarrow as pa
 except ImportError:
-    pa = None  # type: ignore[assignment]
+    pa = None  # type: ignore[assignment, unused-ignore]
 
 from mloda.user import Feature, DataAccessCollection
 from mloda.provider import FeatureGroup, ComputeFramework, FeatureSet, MatchData

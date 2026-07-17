@@ -71,7 +71,7 @@
 | ptyprocess                             | 0.7.0           | ISC License (ISCL)                                 |
 | pure_eval                              | 0.2.3           | MIT License                                        |
 | py-serializable                        | 2.1.0           | Apache Software License                            |
-| pyarrow                                | 24.0.0          | Apache-2.0                                         |
+| pyarrow                                | 25.0.0          | Apache-2.0                                         |
 | pydantic                               | 2.13.4          | MIT                                                |
 | pydantic_core                          | 2.46.4          | MIT                                                |
 | pyiceberg                              | 0.11.1          | Apache-2.0                                         |

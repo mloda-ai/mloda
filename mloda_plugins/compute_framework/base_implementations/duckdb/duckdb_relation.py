@@ -11,7 +11,7 @@ except ImportError:
 try:
     import pyarrow as pa
 except ImportError:
-    pa = None  # type: ignore[assignment]
+    pa = None  # type: ignore[assignment, unused-ignore]
 
 from mloda_plugins.compute_framework.base_implementations.sql.sql_base_relation import SqlBaseRelation
 from mloda_plugins.compute_framework.base_implementations.sql.sql_utils import (

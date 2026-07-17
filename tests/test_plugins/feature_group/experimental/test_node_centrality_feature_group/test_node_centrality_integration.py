@@ -233,7 +233,7 @@ class TestNodeCentralityPandasIntegration:
         """Omitting graph_type computes the same centrality as graph_type='undirected'.
 
         End-to-end proof that the declared 'undirected' default is materialized at compute
-        (via options_with_defaults inside calculate_feature) rather than required from the user (#766).
+        (centrally at the run_calculate_feature boundary, #796) rather than required from the user (#766).
         """
         plugin_collector = PluginCollector.enabled_feature_groups(
             {NodeCentralityTestDataCreator, PandasNodeCentralityFeatureGroup}

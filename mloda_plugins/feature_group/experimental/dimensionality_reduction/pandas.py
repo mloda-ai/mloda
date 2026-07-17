@@ -137,9 +137,6 @@ class PandasDimensionalityReductionFeatureGroup(DimensionalityReductionFeatureGr
                 f"Target dimension ({dimension}) must be less than the number of source features ({X_scaled.shape[1]})"
             )
 
-        # Materialize declared defaults so each branch reads the spec-backed value (#766)
-        options = DimensionalityReductionFeatureGroup.options_with_defaults(options)
-
         # Perform dimensionality reduction based on the algorithm
         if algorithm == "pca":
             svd_solver = options.get(DimensionalityReductionFeatureGroup.PCA_SVD_SOLVER)

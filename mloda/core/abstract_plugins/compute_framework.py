@@ -668,6 +668,12 @@ class ComputeFramework(ABC):
 
     @final
     def run_calculate_feature(self, feature_group: Any, features: Any) -> Any:
+        # Local import: feature_set -> feature -> compute_framework would cycle at module level.
+        from mloda.core.abstract_plugins.components.feature_set import FeatureSet
+
+        # Tests pass non-FeatureSet stand-ins for features; only a real FeatureSet is materialized (#796).
+        if isinstance(features, FeatureSet):
+            features.materialize_option_defaults(feature_group)
         extender = self.get_function_extender(ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE)
 
         try:

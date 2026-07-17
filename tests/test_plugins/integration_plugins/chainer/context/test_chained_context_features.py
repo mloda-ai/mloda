@@ -46,7 +46,7 @@ class TestChainedFeatures:
                 context={
                     DefaultOptionKeys.in_features: feature1,
                     "ident": "identifier1",  # Different context parameter (shouldn't affect resolution)
-                    # property3 omitted (optional context parameter)
+                    # property3 omitted: the declared default "opt_val1" materializes at the compute boundary (#796)
                 },
             ),
         )
@@ -76,7 +76,7 @@ class TestChainedFeatures:
                 context={
                     DefaultOptionKeys.in_features: frozenset([feature2]),
                     "ident": "identifier2",  # Context parameter
-                    # property3 omitted (optional)
+                    # property3 omitted: observes the declared default "opt_val1" at runtime (#796)
                 },
             ),
         )
@@ -121,7 +121,7 @@ class TestChainedFeatures:
                 context={
                     DefaultOptionKeys.in_features: frozenset([feature2]),
                     "ident": "identifier1",  # Context parameter
-                    # property3 omitted (optional)
+                    # property3 omitted: observes the declared default "opt_val1" at runtime (#796)
                 },
             ),
         )

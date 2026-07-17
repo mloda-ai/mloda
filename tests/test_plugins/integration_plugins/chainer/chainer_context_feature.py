@@ -202,8 +202,14 @@ def assert_propert2_is_set(feature: Feature) -> None:
 
 def assert_property3_is_set(feature: Feature) -> None:
     """
-    Assert that the 'property3' is set correctly for features that should have it,
-    and is absent for features that should not have it (demonstrating optional behavior).
+    Assert 'property3' follows the #796 contract: declared PropertySpec defaults materialize
+    at the compute boundary, so levels that omit the key observe the declared default
+    'opt_val1' at runtime, while explicit values win. Absence at runtime remains only for
+    keys without a concrete default; 'property3' declares one.
+
+    Cross-level isolation: placeholder2 omits 'property3' while its consumer placeholder3
+    explicitly sets 'opt_val2'. placeholder2 must observe its own default 'opt_val1',
+    never a value from another chain level.
 
     This is a utility function for testing chainer context features with optional properties.
 
@@ -212,26 +218,26 @@ def assert_property3_is_set(feature: Feature) -> None:
 
     val = feature.options.get("property3")
 
-    # Define which features should have property3 and their expected values
+    # Explicit values win; omitted levels observe the declared default (#796).
     expected_values = {
-        "placeholder1": "opt_val1",  # Should have property3
-        "placeholder2": None,  # Should NOT have property3 (optional)
-        "placeholder3": "opt_val2",  # Should have property3
-        "placeholder4": None,  # Should NOT have property3 (optional)
-        "placeholder4_5": None,  # Should NOT have property3 (optional)
-        "placeholder4_6": None,  # Should NOT have property3 (optional)
+        "placeholder1": "opt_val1",  # Explicit
+        "placeholder2": "opt_val1",  # Omitted -> declared default
+        "placeholder3": "opt_val2",  # Explicit
+        "placeholder4": "opt_val1",  # Omitted -> declared default
+        "placeholder4_5": "opt_val1",  # Omitted -> declared default
+        "placeholder4_6": "opt_val1",  # Omitted -> declared default
     }
 
     expected = expected_values.get(feature.name)
 
-    if expected is None and feature.name not in expected_values:
+    if expected is None:
         raise ValueError(f"Unknown feature name: {feature.name}. Cannot assert 'property3' value.")
 
-    # For features that should NOT have property3
-    if expected is None:
-        if val is not None:
-            raise ValueError(f"Property 'property3' for {feature.name} should be None (absent), but got '{val}'")
-    # For features that should have property3
-    else:
-        if val != expected:
-            raise ValueError(f"Property 'property3' for {feature.name} should be '{expected}', but got '{val}'")
+    if feature.name == "placeholder2" and val == "opt_val2":
+        raise ValueError(
+            "Cross-level isolation broken: placeholder2 observed 'opt_val2' leaked from another chain level "
+            "instead of its own declared default 'opt_val1'"
+        )
+
+    if val != expected:
+        raise ValueError(f"Property 'property3' for {feature.name} should be '{expected}', but got '{val}'")

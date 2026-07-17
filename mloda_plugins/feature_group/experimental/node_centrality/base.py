@@ -229,9 +229,8 @@ class NodeCentralityFeatureGroup(FeatureChainParserMixin, FeatureGroup):
             centrality_type, source_feature_str = cls._extract_centrality_and_source_feature(feature)
 
             # Common parameter extraction (works for both approaches)
-            opts = cls.options_with_defaults(feature.options)
-            graph_type = opts.get(cls.GRAPH_TYPE)
-            weight_column = opts.get(cls.WEIGHT_COLUMN)
+            graph_type = feature.options.get(cls.GRAPH_TYPE)
+            weight_column = feature.options.get(cls.WEIGHT_COLUMN)
 
             # Validate graph type
             if graph_type not in cls.GRAPH_TYPES:

@@ -45,6 +45,14 @@ class PythonDictMergeEngine(BaseMergeEngine):
                     ordered.append(col)
         return ordered
 
+    @staticmethod
+    def _group_by_key(rows: list[dict[str, Any]], cols: tuple[str, ...]) -> dict[tuple[Any, ...], list[dict[str, Any]]]:
+        # Maps each join key to every matching row so duplicate keys fan out instead of collapsing.
+        groups: dict[tuple[Any, ...], list[dict[str, Any]]] = {}
+        for row in rows:
+            groups.setdefault(tuple(row.get(col) for col in cols), []).append(row)
+        return groups
+
     def merge_inner(self, left_data: Any, right_data: Any, left_index: Index, right_index: Index) -> Any:
         return self.join_logic("inner", left_data, right_data, left_index, right_index, JoinType.INNER)
 
@@ -237,27 +245,27 @@ class PythonDictMergeEngine(BaseMergeEngine):
     def _inner_join(
         self, left_data: Any, right_data: Any, left_cols: tuple[str, ...], right_cols: tuple[str, ...]
     ) -> Any:
-        """Performs inner join."""
+        """Performs inner join, emitting one row per (left, matching-right) pair."""
         left_rows = self._to_rows(left_data)
         right_rows = self._to_rows(right_data)
-        right_index_map = {tuple(r.get(col) for col in right_cols): r for r in right_rows}
+        right_groups = self._group_by_key(right_rows, right_cols)
 
         out_columns = self._ordered_columns(left_data.keys(), right_data.keys())
         result = []
         for left in left_rows:
             key = tuple(left.get(col) for col in left_cols)
-            if key in right_index_map:
-                result.append({**left, **right_index_map[key]})
+            for right in right_groups.get(key, []):
+                result.append({**left, **right})
 
         return self._to_columnar(result, out_columns)
 
     def _left_join(
         self, left_data: Any, right_data: Any, left_cols: tuple[str, ...], right_cols: tuple[str, ...]
     ) -> Any:
-        """Performs left join."""
+        """Performs left join, fanning out matches and null-filling unmatched left rows."""
         left_rows = self._to_rows(left_data)
         right_rows = self._to_rows(right_data)
-        right_index_map = {tuple(r.get(col) for col in right_cols): r for r in right_rows}
+        right_groups = self._group_by_key(right_rows, right_cols)
 
         out_columns = self._ordered_columns(left_data.keys(), right_data.keys())
         right_columns = [col for col in right_data.keys() if col not in set(right_cols) and col not in left_data]
@@ -265,8 +273,10 @@ class PythonDictMergeEngine(BaseMergeEngine):
         result = []
         for left in left_rows:
             key = tuple(left.get(col) for col in left_cols)
-            if key in right_index_map:
-                result.append({**left, **right_index_map[key]})
+            matches = right_groups.get(key)
+            if matches:
+                for right in matches:
+                    result.append({**left, **right})
             else:
                 merged = {**left}
                 for col in right_columns:
@@ -278,21 +288,23 @@ class PythonDictMergeEngine(BaseMergeEngine):
     def _right_join(
         self, left_data: Any, right_data: Any, left_cols: tuple[str, ...], right_cols: tuple[str, ...]
     ) -> Any:
-        """Performs right join."""
+        """Performs right join, fanning out matches and null-filling unmatched right rows."""
         left_rows = self._to_rows(left_data)
         right_rows = self._to_rows(right_data)
-        left_index_map = {tuple(left.get(col) for col in left_cols): left for left in left_rows}
+        left_groups = self._group_by_key(left_rows, left_cols)
 
         out_columns = self._ordered_columns(right_data.keys(), left_data.keys())
         left_columns = [col for col in left_data.keys() if col not in set(left_cols) and col not in right_data]
 
         result = []
-        for r in right_rows:
-            key = tuple(r.get(col) for col in right_cols)
-            if key in left_index_map:
-                result.append({**left_index_map[key], **r})
+        for right in right_rows:
+            key = tuple(right.get(col) for col in right_cols)
+            matches = left_groups.get(key)
+            if matches:
+                for left in matches:
+                    result.append({**left, **right})
             else:
-                merged = {**r}
+                merged = {**right}
                 for col in left_columns:
                     merged[col] = None
                 result.append(merged)
@@ -302,26 +314,34 @@ class PythonDictMergeEngine(BaseMergeEngine):
     def _outer_join(
         self, left_data: Any, right_data: Any, left_cols: tuple[str, ...], right_cols: tuple[str, ...]
     ) -> Any:
-        """Performs outer join."""
+        """Performs outer join, fanning out matched keys into the full row product."""
         left_rows = self._to_rows(left_data)
         right_rows = self._to_rows(right_data)
-        left_index_map = {tuple(left.get(col) for col in left_cols): left for left in left_rows}
-        right_index_map = {tuple(r.get(col) for col in right_cols): r for r in right_rows}
-
-        all_keys = list(left_index_map.keys())
-        for key in right_index_map.keys():
-            if key not in left_index_map:
-                all_keys.append(key)
+        left_groups = self._group_by_key(left_rows, left_cols)
+        right_groups = self._group_by_key(right_rows, right_cols)
 
         left_columns = list(left_data.keys())
         right_columns = list(right_data.keys())
         out_columns = self._ordered_columns(left_columns, right_columns)
 
-        result = []
-        for key in all_keys:
-            left_row = left_index_map.get(key, {})
-            right_row = right_index_map.get(key, {})
+        # Each left row fans out over its right matches (or one null-filled row when unmatched);
+        # then every right row whose key has no left match emits one null-filled row.
+        no_row: dict[str, Any] = {}
+        pairs: list[tuple[tuple[Any, ...], dict[str, Any], dict[str, Any]]] = []
+        for left in left_rows:
+            key = tuple(left.get(col) for col in left_cols)
+            matches = right_groups.get(key)
+            if matches:
+                pairs.extend((key, left, right) for right in matches)
+            else:
+                pairs.append((key, left, no_row))
+        for right in right_rows:
+            key = tuple(right.get(col) for col in right_cols)
+            if key not in left_groups:
+                pairs.append((key, no_row, right))
 
+        result = []
+        for key, left_row, right_row in pairs:
             merged: dict[str, Any] = {}
 
             # Start with the key values
@@ -329,10 +349,10 @@ class PythonDictMergeEngine(BaseMergeEngine):
                 for i, col in enumerate(left_cols):
                     merged[col] = key[i]
             else:
-                if key in left_index_map:
+                if key in left_groups:
                     for i, col in enumerate(left_cols):
                         merged[col] = key[i]
-                if key in right_index_map:
+                if key in right_groups:
                     for i, col in enumerate(right_cols):
                         merged[col] = key[i]
 
@@ -351,24 +371,18 @@ class PythonDictMergeEngine(BaseMergeEngine):
     def _union_join(
         self, left_data: Any, right_data: Any, left_cols: tuple[str, ...], right_cols: tuple[str, ...]
     ) -> Any:
-        """Performs union (removes duplicates based on join columns)."""
+        """Performs union, dropping rows that fully duplicate an earlier row over the output columns."""
         left_rows = self._to_rows(left_data)
         right_rows = self._to_rows(right_data)
         out_columns = self._ordered_columns(left_data.keys(), right_data.keys())
 
-        seen_keys: set[Any] = set()
-        result = []
+        seen: set[tuple[Any, ...]] = set()
+        result: list[dict[str, Any]] = []
 
-        for row in left_rows:
-            key = tuple(row.get(col) for col in left_cols)
-            if key not in seen_keys:
-                seen_keys.add(key)
-                result.append(row)
-
-        for row in right_rows:
-            key = tuple(row.get(col) for col in right_cols)
-            if key not in seen_keys:
-                seen_keys.add(key)
+        for row in left_rows + right_rows:
+            signature = tuple(row.get(col) for col in out_columns)
+            if signature not in seen:
+                seen.add(signature)
                 result.append(row)
 
         return self._to_columnar(result, out_columns)

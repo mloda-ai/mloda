@@ -4,6 +4,7 @@ Base implementation for time window feature groups.
 
 from __future__ import annotations
 
+import datetime
 from abc import abstractmethod
 from typing import Any, Optional
 
@@ -289,6 +290,31 @@ class TimeWindowFeatureGroup(TimeReferenceMixin, FeatureChainParserMixin, Featur
     def get_time_unit(cls, feature_name: str) -> str:
         """Extract the time unit from the feature name."""
         return cls.parse_time_window_prefix(feature_name)[2]
+
+    @classmethod
+    def _get_time_delta(cls, window_size: int, time_unit: str) -> datetime.timedelta:
+        """
+        Convert window size and time unit into the window span as a timedelta.
+
+        Shared by both backends so the time-based window is IDENTICAL across them.
+        week/month/year use fixed day approximations (7 / 30 / 365 days).
+        """
+        if time_unit == "second":
+            return datetime.timedelta(seconds=window_size)
+        elif time_unit == "minute":
+            return datetime.timedelta(minutes=window_size)
+        elif time_unit == "hour":
+            return datetime.timedelta(hours=window_size)
+        elif time_unit == "day":
+            return datetime.timedelta(days=window_size)
+        elif time_unit == "week":
+            return datetime.timedelta(weeks=window_size)
+        elif time_unit == "month":
+            return datetime.timedelta(days=30 * window_size)
+        elif time_unit == "year":
+            return datetime.timedelta(days=365 * window_size)
+        else:
+            raise ValueError(f"Unsupported time unit: {time_unit}")
 
     # match_feature_group_criteria() inherited from FeatureChainParserMixin
 

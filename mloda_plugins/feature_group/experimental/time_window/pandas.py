@@ -112,7 +112,11 @@ class PandasTimeWindowFeatureGroup(TimeWindowFeatureGroup):
             # Multiple columns: keep as DataFrame
             selected_data = df_with_time_index[in_features]
 
-        rolling_window = selected_data.rolling(window=window_size, min_periods=1)
+        # Time-based (not row-count) window: include rows in (t - span, t].
+        # Pass a Timedelta, not an offset string: aliases like "3M"/"3Y" raise
+        # "passed window 3M is not compatible with a datetimelike index".
+        span = pd.Timedelta(cls._get_time_delta(window_size, time_unit))
+        rolling_window = selected_data.rolling(window=span, min_periods=1, closed="right")
 
         if window_function == "sum":
             result = rolling_window.sum()

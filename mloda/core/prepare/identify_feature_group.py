@@ -67,6 +67,15 @@ class EvaluationResult:
         return "none"
 
 
+class FeatureResolutionError(ValueError):
+    """Typed resolution failure carrying the feature name and the EvaluationResult of its single pass."""
+
+    def __init__(self, message: str, feature_name: str, result: EvaluationResult) -> None:
+        super().__init__(message)
+        self.feature_name = feature_name
+        self.result = result
+
+
 def matches_feature_group_scope(feature_group: type[FeatureGroup], scope: str | type[FeatureGroup]) -> bool:
     """Is the candidate inside the requested scope, for both the class-object and the string form.
 
@@ -267,7 +276,7 @@ class IdentifyFeatureGroupClass:
         # The message is a projection of the pass that just ran: no second evaluation, no re-asked hook.
         message = render_resolution_failure(result, feature)
         if message is not None:
-            raise ValueError(message)
+            raise FeatureResolutionError(message, str(feature.name), result)
         self.feature_group_compute_framework_mapping = result.identified
 
     @classmethod

@@ -49,7 +49,7 @@ class TestChainedFeatures:
                 DefaultOptionKeys.in_features: feature1,
                 "ident": "identifier2",
                 "property2": "value2",
-                # property3 omitted - should still work since it's optional
+                # property3 omitted: the declared default "opt_val1" materializes at the compute boundary (#796)
             },
         )
 
@@ -69,7 +69,7 @@ class TestChainedFeatures:
                 DefaultOptionKeys.in_features: frozenset([feature2]),
                 "ident": "identifier2",
                 "property2": "value1",
-                # property3 omitted - should still work since it's optional
+                # property3 omitted: the declared default "opt_val1" materializes at the compute boundary (#796)
             },
         )
 

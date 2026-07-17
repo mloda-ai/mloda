@@ -41,6 +41,7 @@
 | mypy                                   | 2.2.0           | MIT                                                |
 | mypy_extensions                        | 1.1.0           | MIT                                                |
 | narwhals                               | 2.23.0          | MIT                                                |
+| nest-asyncio                           | 1.6.0           | BSD License                                        |
 | nest-asyncio2                          | 1.7.2           | BSD License                                        |
 | nltk                                   | 3.10.0          | Apache Software License                            |
 | numpy                                  | 2.5.1           | BSD-3-Clause AND 0BSD AND MIT AND Zlib AND CC0-1.0 |
@@ -85,7 +86,7 @@
 | regex                                  | 2026.6.28       | Apache-2.0 AND CNRI-Python                         |
 | requests                               | 2.34.2          | Apache Software License                            |
 | rich                                   | 14.3.4          | MIT License                                        |
-| ruff                                   | 0.15.20         | MIT                                                |
+| ruff                                   | 0.15.21         | MIT                                                |
 | scikit-learn                           | 1.9.0           | BSD-3-Clause                                       |
 | scipy                                  | 1.18.0          | BSD License                                        |
 | six                                    | 1.17.0          | MIT License                                        |

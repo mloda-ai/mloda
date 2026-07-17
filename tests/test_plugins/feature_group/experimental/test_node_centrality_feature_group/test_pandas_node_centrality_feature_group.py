@@ -215,6 +215,9 @@ class TestPandasNodeCentralityFeatureGroup:
         feature_set = FeatureSet()
         feature_set.add(Feature("source__degree_centrality"))
 
+        # Direct call bypasses run_calculate_feature, so mirror its default materialization (#796)
+        feature_set.materialize_option_defaults(PandasNodeCentralityFeatureGroup)
+
         # Calculate the feature
         result = PandasNodeCentralityFeatureGroup.calculate_feature(sample_data, feature_set)
 
@@ -236,6 +239,9 @@ class TestPandasNodeCentralityFeatureGroup:
         ]
         for feature in features:
             feature_set.add(feature)
+
+        # Direct call bypasses run_calculate_feature, so mirror its default materialization (#796)
+        feature_set.materialize_option_defaults(PandasNodeCentralityFeatureGroup)
 
         # Calculate the features
         result = PandasNodeCentralityFeatureGroup.calculate_feature(sample_data, feature_set)

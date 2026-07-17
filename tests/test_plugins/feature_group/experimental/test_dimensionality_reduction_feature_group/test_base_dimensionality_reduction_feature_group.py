@@ -90,9 +90,11 @@ class TestDimensionalityReductionFeatureGroup:
         )
         source_features = ["f1", "f2", "f3"]
 
+        # _perform_reduction receives boundary-materialized options at runtime (#796); mirror that here.
+        options = PandasDimensionalityReductionFeatureGroup.options_with_defaults(Options())
         for algorithm in DimensionalityReductionFeatureGroup.REDUCTION_ALGORITHMS:
             result = PandasDimensionalityReductionFeatureGroup._perform_reduction(
-                data, algorithm, 2, source_features, Options()
+                data, algorithm, 2, source_features, options
             )
             assert result.shape == (12, 2), f"Unexpected result shape for algorithm {algorithm}"
 

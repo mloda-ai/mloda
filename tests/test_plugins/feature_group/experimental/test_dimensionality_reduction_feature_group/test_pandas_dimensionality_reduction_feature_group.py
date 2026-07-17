@@ -174,6 +174,9 @@ class TestPandasDimensionalityReductionFeatureGroup:
         feature_set = FeatureSet()
         feature_set.add(Feature("feature0,feature1,feature2__pca_2d"))
 
+        # Direct call bypasses run_calculate_feature, so mirror its default materialization (#796)
+        feature_set.materialize_option_defaults(PandasDimensionalityReductionFeatureGroup)
+
         # Calculate the feature
         result = PandasDimensionalityReductionFeatureGroup.calculate_feature(sample_data, feature_set)
 
@@ -202,6 +205,9 @@ class TestPandasDimensionalityReductionFeatureGroup:
         feature_set = FeatureSet()
         feature_set.add(Feature("feature0,feature1,feature2__pca_2d"))
         feature_set.add(Feature("feature0,feature1,feature2__ica_2d"))
+
+        # Direct call bypasses run_calculate_feature, so mirror its default materialization (#796)
+        feature_set.materialize_option_defaults(PandasDimensionalityReductionFeatureGroup)
 
         # Calculate the features
         result = PandasDimensionalityReductionFeatureGroup.calculate_feature(small_sample, feature_set)

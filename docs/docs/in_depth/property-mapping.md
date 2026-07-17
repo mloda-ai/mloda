@@ -237,23 +237,28 @@ predicate that always returns `False` to make a key optional.
 
 A declared default is metadata until the resolved feature group materializes it.
 `FeatureGroup.options_with_defaults(options)` returns an `Options` view where every absent key
-with a concrete declared default is filled from its spec (into context or group per the spec),
-so compute reads see it. A present value is never overridden, even a falsy `0`/`False`/`""`.
-`NO_DEFAULT` and `default=None` fill nothing. A strict default is already validated at
-construction, so the materialized value is not re-checked. The view is applied *after*
-resolution, so it never changes matching or FeatureSet splitting.
+with a concrete declared default is filled from its spec (into context or group per the spec).
+A present value is never overridden, even a falsy `0`/`False`/`""`. `NO_DEFAULT` and
+`default=None` fill nothing. A strict default is already validated at construction, so the
+materialized value is not re-checked.
+
+The framework applies this centrally at the compute boundary: `run_calculate_feature`
+materializes the declared defaults into the `FeatureSet` before `calculate_feature` and any
+calculate-feature extender run, so a plugin reads `feature.options` directly.
+`options_with_defaults` remains for pre-materialization contexts (e.g. `resolve_subtype`
+internals). Materialization happens *after* resolution, so it never changes matching or
+FeatureSet splitting.
 
 ``` python
-opts = MyFeatureGroup.options_with_defaults(feature.options)
-graph_type = opts.get("graph_type")  # the declared default when the caller omitted it
+graph_type = feature.options.get("graph_type")  # the declared default when the caller omitted it
 ```
 
 `Options.get(key, default)` reads dict-style: a present key returns its stored value (even a falsy
 `0`/`False`/`""`), and the call-site `default` is returned only when the key is absent from both
-group and context. Because `options_with_defaults` has already materialized any declared default
-into the view, reading it back gives a three-level precedence, an explicit caller value first, then
-the declared spec default, then the call-site `default`. (Subtlety: `options_with_defaults` fills any
-key whose value `is None`, so an explicit `None` is replaced by a concrete spec default, while the
+group and context. Because the framework has already materialized any declared default before
+`calculate_feature` runs, reading it back gives a three-level precedence, an explicit caller value
+first, then the declared spec default, then the call-site `default`. (Subtlety: materialization fills
+any key whose value `is None`, so an explicit `None` is replaced by a concrete spec default, while the
 other falsy values `0`/`False`/`""` are kept. That "None means absent" rule is the default; a spec
 opts a single key out with `allow_explicit_none=True`, after which an explicit `None` overrides even a
 concrete default and is honored across the match-time value mechanisms: it counts as present for the
@@ -262,8 +267,7 @@ required-presence and `required_when` checks and is seen by membership, `element
 `is not None` presence tests keep working.)
 
 ``` python
-opts = MyFeatureGroup.options_with_defaults(feature.options)
-graph_type = opts.get("graph_type", "spring")  # explicit value; else the spec default; else "spring"
+graph_type = feature.options.get("graph_type", "spring")  # explicit value; else the spec default; else "spring"
 ```
 
 ## Parameter classification
@@ -388,6 +392,7 @@ if it really is a whole-value check.
 | Shape rules, relocated from class definition to construction | `tests/.../feature_chainer/test_property_mapping_spec_shape.py` |
 | Declared-default invariant | `tests/test_core/test_abstract_plugins/test_property_mapping_default_invariant.py` |
 | Declared defaults materialized into runtime options | `tests/test_core/test_abstract_plugins/test_options_with_defaults.py` |
+| Declared defaults materialized at the compute boundary | `tests/test_core/test_abstract_plugins/test_materialize_defaults_boundary.py` |
 | Container invariance, no stringification, str-as-scalar, dict-as-composite, empty containers | `tests/.../feature_chainer/test_property_mapping_sequence_unpacking.py` |
 | Present option values validated on the string-named path too; required presence stays config-only | `tests/.../feature_chainer/test_name_path_validates_option_values.py` |
 | `required_when` survives an overridden matcher, runs exactly once, and demands a classmethod | `tests/.../feature_chainer/test_required_when_enforced_on_override.py` |

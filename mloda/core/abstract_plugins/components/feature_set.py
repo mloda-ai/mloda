@@ -1,4 +1,5 @@
-from typing import Any, Iterable, Optional
+from collections import Counter
+from typing import TYPE_CHECKING, Any, Iterable, Optional
 from uuid import UUID
 
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
@@ -8,6 +9,9 @@ from mloda.core.abstract_plugins.components.validators.feature_set_validator imp
 from mloda.core.filter.filter_engine import BaseFilterEngine
 from mloda.core.abstract_plugins.components.mask.base_mask_engine import BaseMaskEngine
 from mloda.core.filter.single_filter import SingleFilter
+
+if TYPE_CHECKING:
+    from mloda.core.abstract_plugins.feature_group import FeatureGroup
 
 
 class FeatureSet:
@@ -69,6 +73,44 @@ class FeatureSet:
 
     def remove(self, feature: Feature) -> None:
         self.features.discard(feature)
+
+    def materialize_option_defaults(self, feature_group: "type[FeatureGroup]") -> None:
+        """Rebind every feature's options (and self.options) through feature_group.options_with_defaults,
+        memoized by Options identity so aliases stay aliased; identity no-op without concrete defaults (#796).
+        Precondition: same-named features distinguished only by an explicitly-set default value collapse
+        when the default fills their twin, and that raises."""
+        # The memo holds a strong reference to each source Options so its id cannot be recycled mid-loop.
+        memo: dict[int, tuple[Options, Options]] = {}
+        rebound = False
+        for feature in self.features:
+            source = feature.options
+            entry = memo.get(id(source))
+            if entry is None:
+                entry = (source, feature_group.options_with_defaults(source))
+                memo[id(source)] = entry
+            if entry[1] is not source:
+                feature.options = entry[1]
+                rebound = True
+        if rebound:
+            # Only GROUP fills change Feature hashes (Options.__hash__ is group-only); a comprehension rehashes,
+            # set(self.features) would reuse stale stored hashes. The rebuild also surfaces twin collapses loudly.
+            rebuilt = {feature for feature in self.features}
+            if len(rebuilt) < len(self.features):
+                names = sorted(
+                    name for name, count in Counter(str(feature.name) for feature in self.features).items() if count > 1
+                )
+                raise ValueError(
+                    "Materializing declared defaults collapsed duplicate features (same name, previously "
+                    "distinguished only by an explicitly-set default value now filled on its twin). "
+                    f"Deduplicate the request or set the key explicitly on all twins. Affected: {names}"
+                )
+            self.features = rebuilt
+        if self.options is not None:
+            entry_for_options = memo.get(id(self.options))
+            if entry_for_options is not None:
+                self.options = entry_for_options[1]
+            else:
+                self.options = feature_group.options_with_defaults(self.options)
 
     def get_all_feature_ids(self) -> set[UUID]:
         return {feature.uuid for feature in self.features}

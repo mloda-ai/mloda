@@ -482,9 +482,9 @@ def test_resolve_feature_after_jupyter_redefinition_succeeds() -> None:
 # Case 9: resolve_feature must not raise on redefinition conflict
 # ---------------------------------------------------------------------------
 def test_resolve_feature_returns_error_for_redef_conflict_does_not_raise() -> None:
-    """``resolve_feature`` is a non-throwing debug API: when ``dedup_feature_group_subclasses``
-    detects a different-content redefinition conflict, the error must surface in
-    ``ResolvedFeature.error`` rather than as an unhandled ``ValueError``.
+    """``resolve_feature`` is a non-throwing debug API: a different-content redefinition
+    conflict surfaces in ``ResolvedFeature.error`` and is projected fail-closed with no
+    candidates (#792), never as an unhandled exception.
     """
     qualname = "MyFG_Test9"
     feature_name = "case9_feature_unique_xyz"
@@ -510,9 +510,8 @@ def test_resolve_feature_returns_error_for_redef_conflict_does_not_raise() -> No
         f"error must mention the qualname, 'redefined', or 'set_allow_redefinition'; got: {result.error!r}"
     )
 
-    # candidates must surface the conflicting classes so callers can inspect them programmatically.
-    assert v1 in result.candidates, f"v1 must be in candidates on conflict, got: {result.candidates}"
-    assert v2 in result.candidates, f"v2 must be in candidates on conflict, got: {result.candidates}"
+    # Fail-closed projection (#792): conflicting classes are never re-matched into candidates.
+    assert result.candidates == [], f"candidates must be empty on conflict, got: {result.candidates}"
 
 
 # ---------------------------------------------------------------------------
@@ -1242,11 +1241,13 @@ case25 flush-left line at column zero
 
 # ---------------------------------------------------------------------------
 # Case 26 (issue 693): scoped resolve_feature during a redefinition conflict.
-# The dedup-conflict branch must filter the returned candidates by the
-# feature_group scope AND append the scope callout to the conflict error.
+# The conflict is projected fail-closed with no candidates (#792); the scope
+# callout must still be appended to the conflict error.
 # ---------------------------------------------------------------------------
 def test_resolve_feature_excluding_scope_empties_conflict_candidates_and_error_keeps_callout() -> None:
-    """A scope excluding the conflicting classes empties candidates while the error keeps conflict and callout."""
+    """A scope excluding the conflicting classes yields no candidates (fail-closed, #792);
+    the error keeps conflict and callout.
+    """
     qualname = "MyFG_Test26_Scope"
     feature_name = "case26_feature_unique_xyz"
     src_v1 = _make_fg_source(qualname, feature_name)
@@ -1265,7 +1266,7 @@ def test_resolve_feature_excluding_scope_empties_conflict_candidates_and_error_k
 
     assert result.feature_group is None
     assert result.candidates == [], (
-        f"conflicting classes outside the scope must be filtered from candidates, got: {result.candidates}"
+        f"conflict is projected fail-closed, so candidates must be empty, got: {result.candidates}"
     )
     assert result.error is not None
     assert any(token in result.error for token in (qualname, "redefined", "set_allow_redefinition")), (
@@ -1274,8 +1275,10 @@ def test_resolve_feature_excluding_scope_empties_conflict_candidates_and_error_k
     assert "Scoped to feature group: 'DocsCatalogAnchorFG'." in result.error
 
 
-def test_resolve_feature_matching_scope_keeps_conflict_candidates_and_error_keeps_callout() -> None:
-    """A scope naming the conflicting class keeps both versions in candidates and appends the callout."""
+def test_resolve_feature_matching_scope_projects_no_candidates_and_error_keeps_callout() -> None:
+    """Even a scope naming the conflicting class is projected fail-closed with no candidates (#792);
+    the error keeps the conflict and the scope callout.
+    """
     qualname = "MyFG_Test26_ScopeKeep"
     feature_name = "case26_keep_feature_unique_xyz"
     src_v1 = _make_fg_source(qualname, feature_name)
@@ -1292,10 +1295,8 @@ def test_resolve_feature_matching_scope_keeps_conflict_candidates_and_error_keep
     result = resolve_feature(feature_name, feature_group=qualname)
 
     assert result.feature_group is None
-    assert v1 in result.candidates, f"v1 matches scope and feature name, so it must stay; got: {result.candidates}"
-    assert v2 in result.candidates, f"v2 matches scope and feature name, so it must stay; got: {result.candidates}"
-    assert all(c.__name__ == qualname for c in result.candidates), (
-        f"only in-scope classes may appear in candidates, got: {result.candidates}"
+    assert result.candidates == [], (
+        f"conflict is projected fail-closed, so candidates must be empty even in scope, got: {result.candidates}"
     )
     assert result.error is not None
     assert "set_allow_redefinition" in result.error, f"error must report the conflict; got: {result.error!r}"

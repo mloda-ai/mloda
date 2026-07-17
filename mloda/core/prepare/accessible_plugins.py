@@ -106,17 +106,11 @@ class EnvironmentPreconditionError(ValueError):
 
 
 class RedefinitionConflictError(ValueError):
-    """Raised by dedup when same-key FG classes differ in source.
+    """Raised by dedup when same-key FeatureGroup classes differ in source.
 
-    Carries the full list of conflicting classes via ``.conflicts`` so callers
-    (e.g. ``resolve_feature``) can populate ``ResolvedFeature.candidates``
-    instead of leaving it empty. Subclasses ``ValueError`` so existing
-    ``except ValueError:`` callers stay compatible.
+    The message is a complete user-facing text that callers project as-is. Subclasses ``ValueError``
+    so existing ``except ValueError:`` callers stay compatible.
     """
-
-    def __init__(self, message: str, conflicts: list[type[FeatureGroup]]) -> None:
-        super().__init__(message)
-        self.conflicts = conflicts
 
 
 def _running_in_zmq_shell() -> bool:
@@ -218,8 +212,7 @@ def dedup_feature_group_subclasses(
         conflicts.append((key, list(zip(members, hashes_str))))
 
     if conflicts:
-        all_conflicting_classes = [_cls for _, hashed in conflicts for _cls, _ in hashed]
-        raise RedefinitionConflictError(_build_conflict_error(conflicts), all_conflicting_classes)
+        raise RedefinitionConflictError(_build_conflict_error(conflicts))
 
     return survivors
 
@@ -232,7 +225,7 @@ def _pick_survivor(members: list[type[FeatureGroup]]) -> type[FeatureGroup]:
     ``_is_live_in_module``. And ``_is_live_in_module`` checks
     ``getattr(module, cls.__name__, None) is cls``, which is single-valued: at most
     one member can match because the module attribute resolves to exactly one
-    class object. The for-loop is therefore fully deterministic — set-iteration
+    class object. The for-loop is therefore fully deterministic: set-iteration
     order does not affect which class is returned.
 
     The ``return members[-1]`` fallback is only theoretically reachable in
@@ -263,7 +256,7 @@ def _cell_label(cls: type[FeatureGroup]) -> Optional[str]:
 
     Returns ``None`` for classes whose methods all live in real source files.
     Mirrors the synthetic-filename detection in ``_linecache_source_for_class``
-    but stops at the first match — sufficient for "where was this class defined"
+    but stops at the first match, sufficient for "where was this class defined"
     in the redef-conflict error message.
     """
     for value in cls.__dict__.values():

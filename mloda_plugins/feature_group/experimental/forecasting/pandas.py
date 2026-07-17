@@ -96,18 +96,17 @@ class PandasForecastingFeatureGroup(ForecastingFeatureGroup):
 
     @classmethod
     def _add_result_to_data(cls, data: pd.DataFrame, feature_name: str, result: pd.Series) -> pd.DataFrame:
-        """
-        Add the forecast result to the DataFrame.
-
-        Args:
-            data: The pandas DataFrame
-            feature_name: The name of the feature to add
-            result: The forecast result to add
-
-        Returns:
-            The updated DataFrame
-        """
-        data[feature_name] = result
+        """Add the forecast result, growing the frame to the longest forecast horizon (never shrinking)."""
+        # result is indexed by the forecast datetime axis (history + horizon) and never aligns with
+        # data's positional index; align by position, grow the frame to hold the horizon, and never
+        # shrink it so a shorter forecast cannot truncate a longer one already in the frame.
+        values = result.reset_index(drop=True).to_numpy()
+        new_len = max(len(data), len(values))
+        if len(data) != new_len:
+            data = data.reset_index(drop=True).reindex(range(new_len))
+        if len(values) < new_len:
+            values = np.concatenate([values, np.full(new_len - len(values), np.nan)])
+        data[feature_name] = values
         return data
 
     @classmethod
@@ -218,18 +217,14 @@ class PandasForecastingFeatureGroup(ForecastingFeatureGroup):
         # Generate forecasts
         forecasts = model.predict(future_features_scaled)
 
-        # Create a Series with the forecasts
-        forecast_series = pd.Series(
-            index=future_timestamps,
-            data=forecasts,
+        # Historical actuals in the ORIGINAL row order, then the horizon forecasts; positionally
+        # aligned so _add_result_to_data extends the frame without relying on a datetime-index join.
+        historical = cast(pd.DataFrame, data)[source_feature_name].to_numpy()
+        result = pd.Series(
+            np.concatenate([historical, forecasts]),
+            dtype=float,
             name=f"{algorithm}_forecast_{horizon}{time_unit}__{source_feature_name}",
         )
-
-        # Combine with the original data's time index
-        combined_index = list(df[time_filter_feature]) + future_timestamps
-        result = pd.Series(index=combined_index, dtype=float)
-        result.loc[df[time_filter_feature]] = df[source_feature_name].values
-        result.loc[future_timestamps] = forecast_series.values
 
         return result, artifact
 
@@ -632,42 +627,11 @@ class PandasForecastingFeatureGroup(ForecastingFeatureGroup):
             lower_bound_values = forecasts - margin
             upper_bound_values = forecasts + margin
 
-        # Create Series for forecasts and confidence bounds
-        forecast_series = pd.Series(
-            index=future_timestamps,
-            data=forecasts,
-            name=f"{algorithm}_forecast_{horizon}{time_unit}__{source_feature_name}",
-        )
-
-        lower_bound_series = pd.Series(
-            index=future_timestamps,
-            data=lower_bound_values,
-            name=f"{algorithm}_forecast_{horizon}{time_unit}__{source_feature_name}~lower",
-        )
-
-        upper_bound_series = pd.Series(
-            index=future_timestamps,
-            data=upper_bound_values,
-            name=f"{algorithm}_forecast_{horizon}{time_unit}__{source_feature_name}~upper",
-        )
-
-        # Combine with the original data's time index
-        combined_index = list(df[time_filter_feature]) + future_timestamps
-
-        # Create result series for point forecast
-        result = pd.Series(index=combined_index, dtype=float)
-        result.loc[df[time_filter_feature]] = df[source_feature_name].values
-        result.loc[future_timestamps] = forecast_series.values
-
-        # Create result series for lower bound
-        lower_bound = pd.Series(index=combined_index, dtype=float)
-        lower_bound.loc[df[time_filter_feature]] = df[source_feature_name].values
-        lower_bound.loc[future_timestamps] = lower_bound_series.values
-
-        # Create result series for upper bound
-        upper_bound = pd.Series(index=combined_index, dtype=float)
-        upper_bound.loc[df[time_filter_feature]] = df[source_feature_name].values
-        upper_bound.loc[future_timestamps] = upper_bound_series.values
+        # Historical actuals (original row order) then the horizon values, positionally aligned.
+        historical = cast(pd.DataFrame, data)[source_feature_name].to_numpy()
+        result = pd.Series(np.concatenate([historical, forecasts]), dtype=float)
+        lower_bound = pd.Series(np.concatenate([historical, lower_bound_values]), dtype=float)
+        upper_bound = pd.Series(np.concatenate([historical, upper_bound_values]), dtype=float)
 
         return result, lower_bound, upper_bound, artifact
 

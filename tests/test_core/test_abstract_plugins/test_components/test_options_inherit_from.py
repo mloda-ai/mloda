@@ -1668,9 +1668,10 @@ class TestNonForwardedKeysConstant:
     """
     Test suite for the shared never-forwarded key set (NEW SPEC).
 
-    The hardcoded {DefaultOptionKeys.in_features} exclusion set (duplicated in
-    Options.inherit_from and identify_feature_group._input_feature_forwarding_hint)
-    becomes a public module-level constant NON_FORWARDED_KEYS in options.py.
+    The hardcoded {DefaultOptionKeys.in_features} exclusion set, once duplicated across
+    Options.inherit_from and the resolution-failure forwarding hint, becomes a public
+    module-level constant NON_FORWARDED_KEYS in options.py. The hint itself is gone
+    (#791/#782); Options.inherit_from is now the only consumer of the constant.
     """
 
     def test_constant_is_importable_frozenset_containing_in_features(self) -> None:

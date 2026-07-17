@@ -11,7 +11,7 @@ from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.prepare.accessible_plugins import FeatureGroupEnvironmentMapping
-from mloda.core.prepare.identify_feature_group import IdentifyFeatureGroupClass, split_frameworks_by_capability
+from mloda.core.prepare.identify_feature_group import CandidateFrameworks, IdentifyFeatureGroupClass
 from mloda.provider import FeatureChainParserMixin, FeatureGroup, SubtypeDeclaration, property_spec
 
 
@@ -357,13 +357,18 @@ class TestSubDeclMatchPlanningNeverRaises:
     """A raising resolver must not crash the planning path; the family degrades open."""
 
     def test_raising_resolver_degrades_open_in_split(self) -> None:
-        supported, rejected = split_frameworks_by_capability(
-            [SubDeclMatchRaisingResolverFG],
-            FeatureName("subdeclm_raising_feature"),
-            Options(),
+        """Both frameworks stay supported: the split the evaluation seam records keeps neither rejected."""
+        feature = Feature(SubDeclMatchRaisingResolverFG.get_class_name())
+        accessible_plugins: FeatureGroupEnvironmentMapping = {
+            SubDeclMatchRaisingResolverFG: {SubDeclMatchFwAlpha, SubDeclMatchFwBeta},
+        }
+
+        result = IdentifyFeatureGroupClass.evaluate(feature=feature, accessible_plugins=accessible_plugins, links=None)
+
+        assert result.candidate_frameworks[SubDeclMatchRaisingResolverFG] == CandidateFrameworks(
+            supported=frozenset({SubDeclMatchFwAlpha, SubDeclMatchFwBeta}),
+            rejected=frozenset(),
         )
-        assert supported == {SubDeclMatchFwAlpha, SubDeclMatchFwBeta}
-        assert rejected == set()
 
 
 class TestCompiledPrefixPatternParity:

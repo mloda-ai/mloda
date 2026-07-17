@@ -125,38 +125,18 @@ class RejectAllCapabilityFeatureGroup(FeatureGroup):
         return None
 
 
-class PandasLikeFG(FeatureGroup):
-    """Declares only CapabilityFwA and supports the op on it (default hook).
+class DualDeclaringFG_782(FeatureGroup):
+    """Declares BOTH frameworks, supports the op on CapabilityFwA only, and rejects CapabilityFwB.
 
-    Mirrors an installed/declared backend whose framework may or may not be
-    enabled for a particular run.
+    One candidate declaring both is what makes "declared but not enabled" observable per candidate.
+    An earlier fixture split the two frameworks across two feature groups and relied on the message
+    pooling supported/rejected across candidates; #791 removed that union, so each line now names only
+    its OWN candidate's frameworks.
     """
 
     @classmethod
     def compute_framework_rule(cls) -> set[type[ComputeFramework]] | None:
-        return {CapabilityFwA}
-
-    @classmethod
-    def match_feature_group_criteria(
-        cls,
-        feature_name: FeatureName | str,
-        options: Options,
-        data_access_collection: Optional[DataAccessCollection] = None,
-    ) -> bool:
-        if isinstance(feature_name, FeatureName):
-            feature_name = str(feature_name)
-        return feature_name == CAPABILITY_FEATURE
-
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
-        return None
-
-
-class SqliteLikeFG(FeatureGroup):
-    """Declares only CapabilityFwB and rejects the op on it."""
-
-    @classmethod
-    def compute_framework_rule(cls) -> set[type[ComputeFramework]] | None:
-        return {CapabilityFwB}
+        return {CapabilityFwA, CapabilityFwB}
 
     @classmethod
     def match_feature_group_criteria(
@@ -341,19 +321,18 @@ class TestComputeFrameworkCapabilityHook:
     def test_supported_list_includes_declared_but_not_enabled_framework(self) -> None:
         """A declared+available+supporting framework appears in 'Supported on' even if not enabled this run.
 
-        Change B: the 'Supported on' list must be derived from each criteria-matched
-        feature group's ``compute_framework_definition()`` intersected with availability
-        and ``supports_compute_framework``, NOT from the run-enabled set. Here CapabilityFwA
-        is declared by ``PandasLikeFG`` and available, but is NOT enabled for this run
-        (its accessible_plugins value is an empty set). It must still show up as supported.
+        The 'Supported on' list is derived from the candidate's OWN
+        ``compute_framework_definition()`` intersected with availability and
+        ``supports_compute_framework``, NOT from the run-enabled set. Here CapabilityFwA is declared by
+        ``DualDeclaringFG_782`` and available, but only CapabilityFwB is enabled for this run. FwA must
+        still show up as supported on that candidate's line.
         """
         feature = Feature(CAPABILITY_FEATURE)
         feature.compute_frameworks = {CapabilityFwB}
 
-        # FwA declared by PandasLikeFG but NOT enabled (empty set); FwB enabled for SqliteLikeFG.
+        # Only FwB is enabled for the run, and it is exactly the framework this candidate rejects.
         accessible_plugins: FeatureGroupEnvironmentMapping = {
-            PandasLikeFG: set(),
-            SqliteLikeFG: {CapabilityFwB},
+            DualDeclaringFG_782: {CapabilityFwB},
         }
 
         with pytest.raises(ValueError) as exc_info:

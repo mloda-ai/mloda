@@ -319,7 +319,11 @@ class TestRejectedValueNamedInResolutionError:
 
 
 class TestRejectedValueIsNotAForwardingProblem:
-    """A rejected VALUE in group options must not be reported as an extra-group-option problem."""
+    """A rejected VALUE in group options must not be reported as an extra-group-option problem.
+
+    Since #791/#782 the extra-group-option hint does not exist at all: the pure renderer never
+    speculatively re-matches. These assertions therefore pin the message's shape, not a branch choice.
+    """
 
     def test_group_placed_bad_value_names_the_value_not_forwarding(self) -> None:
         """ica_max_iter=-1 in group options is a bad value; forward_group_exclude would not fix it."""

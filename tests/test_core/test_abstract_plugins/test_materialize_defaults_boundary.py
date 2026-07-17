@@ -147,6 +147,21 @@ def _make_unit_group_default_fg() -> type[FeatureGroup]:
     return MdbUnitGroupDefaultFeatureGroup
 
 
+def _make_unit_context_default_fg() -> type[FeatureGroup]:
+    """A throwaway FeatureGroup with a single context concrete default, for the collapse unit test."""
+
+    class MdbUnitContextDefaultFeatureGroup(FeatureGroup):
+        PROPERTY_MAPPING = {
+            MDB_CTX_KEY: PropertySpec("A context concrete default.", context=True, default=CTX_DEFAULT),
+        }
+
+        @classmethod
+        def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+            return data
+
+    return MdbUnitContextDefaultFeatureGroup
+
+
 def _make_unit_no_defaults_fg() -> type[FeatureGroup]:
     """A throwaway FeatureGroup declaring no concrete defaults (NO_DEFAULT only)."""
 
@@ -323,3 +338,23 @@ class TestFeatureSetMaterializeOptionDefaults:
 
         assert MDB_GRP_KEY not in original.group, "the input Options was mutated"
         assert MDB_GRP_KEY not in original.context, "the input Options was mutated"
+
+    def test_collapse_of_same_name_twins_raises_actionable_duplicate_message(self) -> None:
+        """Filling a context default on one twin of a same-name pair collapses the set: the ValueError
+        must name the duplicate-feature cause and list the affected names, not blame an upstream invariant."""
+        twin_name = "mdb_unit_twin_feature"
+        explicit = Feature(twin_name, Options(context={MDB_CTX_KEY: CTX_DEFAULT}))
+        absent = Feature(twin_name, Options())
+        feature_set = FeatureSet([explicit, absent])
+        # Precondition: group-only hash plus context-aware eq lets the twins coexist before the fill.
+        assert len(feature_set.features) == 2
+
+        with pytest.raises(ValueError) as excinfo:
+            _materialize(feature_set, _make_unit_context_default_fg)
+
+        message = str(excinfo.value)
+        # Drop the captured traceback before the message asserts: a failing assert would otherwise carry the
+        # probe class through teardown via excinfo and trip this module's no-leak guard.
+        del excinfo
+        assert "collapsed duplicate features" in message, f"message must name the duplicate-collapse cause: {message}"
+        assert twin_name in message, f"message must list the affected duplicate name: {message}"

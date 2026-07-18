@@ -1,3 +1,4 @@
+import inspect
 from typing import Any
 
 from mloda.core.abstract_plugins.components.contract.comparison_contract import ColumnSemantics
@@ -11,6 +12,8 @@ try:
     import polars as pl
 except ImportError:
     pl = None  # type: ignore[assignment]
+
+_JOIN_SUPPORTS_COALESCE = pl is not None and "coalesce" in inspect.signature(pl.DataFrame.join).parameters
 
 
 class PolarsMergeEngine(BaseMergeEngine):
@@ -157,22 +160,22 @@ class PolarsMergeEngine(BaseMergeEngine):
         if empty_result is not None:
             return empty_result
 
+        # For differing single-key names, keep both keys via coalesce=False (correct null semantics).
+        # Only pass coalesce when the installed polars supports it; older versions degrade to legacy behavior.
+        different_single_key = isinstance(left_idx, str) and isinstance(right_idx, str) and left_idx != right_idx
+        join_kwargs: dict[str, Any] = {"left_on": left_idx, "right_on": right_idx, "how": join_type}
+        if different_single_key and _JOIN_SUPPORTS_COALESCE:
+            join_kwargs["coalesce"] = False
+
         # Perform the join with nulls_equal=True to match null values (updated parameter name)
         try:
-            result = left_data.join(right_data, left_on=left_idx, right_on=right_idx, how=join_type, nulls_equal=True)
+            result = left_data.join(right_data, nulls_equal=True, **join_kwargs)
         except TypeError:
             # Fallback for older polars versions
-            result = left_data.join(right_data, left_on=left_idx, right_on=right_idx, how=join_type, join_nulls=True)
+            result = left_data.join(right_data, join_nulls=True, **join_kwargs)
 
         # Single-index specific post-processing
         if isinstance(left_idx, str) and isinstance(right_idx, str):
-            # For different join column names, add the right join column manually
-            # because Polars drops it when column names are different
-            if left_idx != right_idx:
-                # Add the right join column by copying the left join column values
-                # This works because the join ensures they have matching values
-                result = result.with_columns(pl.col(left_idx).alias(right_idx))
-
             # Handle duplicate join columns only for full outer joins when column names are the same
             right_col_name = f"{right_idx}_right"
             if self.column_exists_in_result(result, right_col_name) and join_type == "full" and left_idx == right_idx:

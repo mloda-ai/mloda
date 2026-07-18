@@ -28,7 +28,10 @@ from typing import Any
 
 import pytest
 
-from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser import FeatureChainParser
+from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser import (
+    FeatureChainParser,
+    _UNIVERSAL_MATCHER_PROBE_NAME,
+)
 from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser_mixin import FeatureChainParserMixin
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.components.options import Options
@@ -366,7 +369,10 @@ class TestUniversalMatcherDoesNotWarn:
                     options: Options,
                     data_access_collection: Any = None,
                 ) -> bool:
-                    raise RuntimeError("boom_u771n")
+                    # Leaked into the global subclass registry: stay inert for all but the definition-time probe.
+                    if str(feature_name) == _UNIVERSAL_MATCHER_PROBE_NAME:
+                        raise RuntimeError("boom_u771n")
+                    return False
 
             # The class body completes: the probe exception did not escape class definition.
             assert "opt_u771n" in _RaisingMatcherU771n.PROPERTY_MAPPING

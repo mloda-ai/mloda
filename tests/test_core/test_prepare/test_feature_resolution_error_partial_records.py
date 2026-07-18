@@ -15,7 +15,7 @@ leak into another module's candidate universe in the parallel suite.
 """
 
 import inspect
-import pickle
+import pickle  # nosec B403
 from typing import Any, Optional
 
 import pandas as pd
@@ -168,7 +168,7 @@ class TestFeatureResolutionErrorPickleRoundTrip:
         records = [_record("pickled_836pr_a", result), _record("pickled_836pr_b", result)]
         error = FeatureResolutionError("pickle boom 836pr", UNKNOWN_FEATURE_836PR, result, partial_records=records)
 
-        restored = pickle.loads(pickle.dumps(error))
+        restored = pickle.loads(pickle.dumps(error))  # nosec B301
 
         assert str(restored) == "pickle boom 836pr"
         assert restored.feature_name == UNKNOWN_FEATURE_836PR

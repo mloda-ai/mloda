@@ -58,33 +58,39 @@ class mlodaAPI:
         column_ordering: Optional[str] = None,
         parallelization_modes: Optional[set[ParallelizationMode]] = None,
     ) -> None:
-        if column_ordering is not None and column_ordering not in ("alphabetical", "request_order"):
-            raise SetupConfigurationError(
-                f"column_ordering must be None, 'alphabetical', or 'request_order', got '{column_ordering}'"
-            )
-        self.column_ordering = column_ordering
-        # The features object is potentially changed during the run, so we need to deepcopy it by default, so that follow up runs with the same object are not affected.
-        # Set copy_features=False to disable deep copying for use cases where features contain non-copyable objects.
-        _requested_features = deepcopy(requested_features) if copy_features else requested_features
+        # Setup boundary: any invalid request argument surfaces as the typed error before planning.
+        try:
+            if column_ordering is not None and column_ordering not in ("alphabetical", "request_order"):
+                raise SetupConfigurationError(
+                    f"column_ordering must be None, 'alphabetical', or 'request_order', got '{column_ordering}'"
+                )
+            self.column_ordering = column_ordering
+            # The features object is potentially changed during the run, so we need to deepcopy it by default, so that follow up runs with the same object are not affected.
+            # Set copy_features=False to disable deep copying for use cases where features contain non-copyable objects.
+            _requested_features = deepcopy(requested_features) if copy_features else requested_features
 
-        # Handle api_data: create ApiInputDataCollection if api_data provided
-        api_input_data_collection: Optional[ApiInputDataCollection] = None
-        if api_data is not None and len(api_data) > 0:
-            api_input_data_collection = ApiInputDataCollection()
-            for key_name, key_data in api_data.items():
-                api_input_data_collection.setup_key_class(key_name, list(key_data.keys()))
+            # Handle api_data: create ApiInputDataCollection if api_data provided
+            api_input_data_collection: Optional[ApiInputDataCollection] = None
+            if api_data is not None and len(api_data) > 0:
+                api_input_data_collection = ApiInputDataCollection()
+                for key_name, key_data in api_data.items():
+                    api_input_data_collection.setup_key_class(key_name, list(key_data.keys()))
 
-        self.strict_type_enforcement = strict_type_enforcement
-        self.features = self._process_features(_requested_features, api_input_data_collection)
-        self.compute_framework = SetupComputeFramework(
-            compute_frameworks, self.features, parallelization_modes=parallelization_modes
-        ).compute_frameworks
-        self.links = links
-        self.data_access_collection = data_access_collection
-        self.global_filter = global_filter
-        self.api_input_data_collection = api_input_data_collection
-        self.api_data = api_data
-        self.plugin_collector = plugin_collector
+            self.strict_type_enforcement = strict_type_enforcement
+            self.features = self._process_features(_requested_features, api_input_data_collection)
+            self.compute_framework = SetupComputeFramework(
+                compute_frameworks, self.features, parallelization_modes=parallelization_modes
+            ).compute_frameworks
+            self.links = links
+            self.data_access_collection = data_access_collection
+            self.global_filter = global_filter
+            self.api_input_data_collection = api_input_data_collection
+            self.api_data = api_data
+            self.plugin_collector = plugin_collector
+        except SetupConfigurationError:
+            raise
+        except ValueError as error:
+            raise SetupConfigurationError(str(error)) from error
 
         self.runner: None | ExecutionOrchestrator = None
         self.engine: None | Engine = None
@@ -330,8 +336,9 @@ class mlodaAPI:
         records equals resolution_report() with complete True; on a resolution failure records holds the
         features resolved before the failing one (from the error payload, capped at PARTIAL_RECORDS_CAP on
         huge requests) plus that feature's EvaluationResult and rendered message. A SetupConfigurationError
-        (for example an invalid column_ordering) yields only the message; any other error propagates. Every
-        parameter after features is keyword-only.
+        (any invalid request argument caught during session setup, before planning, for example an invalid
+        column_ordering or an unknown compute framework name) yields only the message; any other error
+        propagates. Every parameter after features is keyword-only.
         """
         try:
             session = cls(

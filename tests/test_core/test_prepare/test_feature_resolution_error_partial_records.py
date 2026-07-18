@@ -21,6 +21,7 @@ from typing import Any, Optional
 import pandas as pd
 import pytest
 
+from mloda.core.api.request import SetupConfigurationError
 from mloda.core.core.engine import Engine
 from mloda.core.prepare.identify_feature_group import (
     EvaluationResult,
@@ -263,3 +264,47 @@ class TestDiagnoseRecordsComeFromTheErrorPayload:
         error = _raised_failure_error()
 
         assert diagnosis.records == list(error.partial_records)
+
+
+# ---------------------------------------------------------------------------
+# Pre-planning setup errors surface as SetupConfigurationError
+# ---------------------------------------------------------------------------
+
+DUPLICATE_FEATURE_836PR = "diag_dup_836pr"
+UNKNOWN_FRAMEWORK_836PR = "NotAFramework_836pr"
+
+
+class TestPrePlanningSetupErrorsAreConfigurationErrors:
+    """Every ValueError raised during setup BEFORE engine planning surfaces as SetupConfigurationError."""
+
+    def test_duplicate_string_feature_raises_setup_configuration_error(self) -> None:
+        with pytest.raises(SetupConfigurationError) as exc_info:
+            mloda.prepare([DUPLICATE_FEATURE_836PR, DUPLICATE_FEATURE_836PR], compute_frameworks={PandasDataFrame})
+
+        assert str(exc_info.value) == f"You are adding same feature as string twice: {DUPLICATE_FEATURE_836PR}"
+
+    def test_unknown_framework_name_raises_setup_configuration_error(self) -> None:
+        with pytest.raises(SetupConfigurationError):
+            mloda.prepare([DUPLICATE_FEATURE_836PR], compute_frameworks=[UNKNOWN_FRAMEWORK_836PR])
+
+    def test_diagnose_projects_the_unknown_framework_error_as_message_only(self) -> None:
+        diagnosis = mloda.diagnose([DUPLICATE_FEATURE_836PR], compute_frameworks=[UNKNOWN_FRAMEWORK_836PR])
+
+        with pytest.raises(ValueError) as exc_info:
+            mloda.prepare([DUPLICATE_FEATURE_836PR], compute_frameworks=[UNKNOWN_FRAMEWORK_836PR])
+
+        assert diagnosis.complete is False
+        assert diagnosis.records == []
+        assert diagnosis.feature_name is None
+        assert diagnosis.failed_result is None
+        assert diagnosis.message == str(exc_info.value)
+
+    def test_pickle_preserves_class_bearing_identified_mappings(self) -> None:
+        """Pins current behavior: a partial record whose EvaluationResult maps a FeatureGroup class survives pickle."""
+        result = EvaluationResult(identified={PartialRecordsSource_836pr: {PandasDataFrame}})
+        record = ResolutionRecord(feature_name="pinned_836pr", requested=True, result=result)
+        error = FeatureResolutionError("pin boom 836pr", UNKNOWN_FEATURE_836PR, result, partial_records=[record])
+
+        restored = pickle.loads(pickle.dumps(error))  # nosec B301
+
+        assert PartialRecordsSource_836pr in restored.partial_records[0].result.identified

@@ -86,7 +86,7 @@ class SklearnPipelineFeatureGroup(FeatureChainParserMixin, FeatureGroup):
         "preprocessing": "Standard preprocessing pipeline with imputation and scaling",
         "scaling": "Feature scaling pipeline",
         "imputation": "Missing value imputation pipeline",
-        "feature_engineering": "Feature engineering pipeline",
+        "feature_engineering": "Degree-2 polynomial and interaction feature generation, followed by scaling",
     }
 
     # Property mapping for new configuration-based approach
@@ -432,10 +432,11 @@ class SklearnPipelineFeatureGroup(FeatureChainParserMixin, FeatureGroup):
         components = {}
 
         try:
-            from sklearn.preprocessing import StandardScaler
+            from sklearn.preprocessing import PolynomialFeatures, StandardScaler
             from sklearn.pipeline import Pipeline
 
             components["StandardScaler"] = StandardScaler
+            components["PolynomialFeatures"] = PolynomialFeatures
             components["Pipeline"] = Pipeline
 
             # Try to import SimpleImputer from different locations depending on sklearn version
@@ -468,21 +469,52 @@ class SklearnPipelineFeatureGroup(FeatureChainParserMixin, FeatureGroup):
 
         Returns:
             Default pipeline configuration
+
+        Raises:
+            ValueError: If the pipeline type has no dispatch branch.
+            ImportError: If a component the pipeline type needs is unavailable.
         """
         sklearn_components = cls._import_sklearn_components()
         StandardScaler = sklearn_components["StandardScaler"]
         SimpleImputer = sklearn_components.get("SimpleImputer")
+        PolynomialFeatures = sklearn_components.get("PolynomialFeatures")
 
-        # Define common pipeline configurations
-        if pipeline_name == "preprocessing" and SimpleImputer:
-            return {"steps": [("imputer", SimpleImputer(strategy="mean")), ("scaler", StandardScaler())], "params": {}}
-        elif pipeline_name == "scaling":
+        def _require(component: Any, name: str) -> Any:
+            # A declared type must fail loudly when its component is missing rather
+            # than quietly degrading to a different pipeline than the one requested.
+            if component is None:
+                raise ImportError(
+                    f"The '{pipeline_name}' pipeline requires {name}, which is not available in the "
+                    "installed scikit-learn version."
+                )
+            return component
+
+        if pipeline_name == "scaling":
             return {"steps": [("scaler", StandardScaler())], "params": {}}
-        elif pipeline_name == "imputation" and SimpleImputer:
-            return {"steps": [("imputer", SimpleImputer(strategy="mean"))], "params": {}}
-        else:
-            # Default to simple scaling
-            return {"steps": [("scaler", StandardScaler())], "params": {}}
+
+        if pipeline_name == "preprocessing":
+            imputer = _require(SimpleImputer, "SimpleImputer")
+            return {"steps": [("imputer", imputer(strategy="mean")), ("scaler", StandardScaler())], "params": {}}
+
+        if pipeline_name == "imputation":
+            imputer = _require(SimpleImputer, "SimpleImputer")
+            return {"steps": [("imputer", imputer(strategy="mean"))], "params": {}}
+
+        if pipeline_name == "feature_engineering":
+            poly = _require(PolynomialFeatures, "PolynomialFeatures")
+            return {
+                "steps": [
+                    ("poly", poly(degree=2, include_bias=False)),
+                    ("scaler", StandardScaler()),
+                ],
+                "params": {},
+            }
+
+        # Every value in PIPELINE_TYPES is dispatched above. Anything else is a
+        # declaration/dispatch mismatch and must not silently become scaling.
+        raise ValueError(
+            f"Unsupported pipeline type {pipeline_name!r}; supported types are {sorted(cls.PIPELINE_TYPES)}."
+        )
 
     @classmethod
     def _pipeline_matches_config(cls, fitted_pipeline: Any, config: dict[str, Any]) -> bool:

@@ -19,10 +19,13 @@ from typing import Any
 
 import pytest
 
+from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser import FeatureChainParser
 from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser_mixin import FeatureChainParserMixin
+from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.components.options import Options
-from mloda.provider import PropertySpec
+from mloda.core.abstract_plugins.feature_group import FeatureGroup
+from mloda.provider import DefaultOptionKeys, PropertySpec
 from mloda_plugins.feature_group.experimental.text_cleaning.base import TextCleaningFeatureGroup
 
 CLEANED_TEXT_NAME = "x__cleaned_text"
@@ -32,6 +35,27 @@ FEATURE_CHAIN_PARSER_LOGGER = "mloda.core.abstract_plugins.components.feature_ch
 # "cleaned" is exactly the token the retired code fabricated from ``__cleaned_text``.
 FABRICATED_TOKEN = "cleaned"  # nosec B105
 OPERATION_KEY_C772 = "operation_c772"
+
+# Defect A fixture: an OPTIONAL-FIRST positional group. When the optional group is absent the name has a
+# lone None positional capture, so it does NOT identify the group (#769 owns that case, unchanged by #772).
+# input_features / _extract_source_features must therefore fall back to options, not extract the name source.
+OPTFIRST_MARKER = "rf772a"
+OPTFIRST_PATTERN = rf".*__(?:(pca|tsne)_)?optfirst_{OPTFIRST_MARKER}$"
+OPTFIRST_ABSENT_NAME = f"x__optfirst_{OPTFIRST_MARKER}"
+OPTFIRST_PRESENT_NAME = f"x__pca_optfirst_{OPTFIRST_MARKER}"
+ALGORITHM_KEY_RF772A = f"algorithm_{OPTFIRST_MARKER}"
+OPTFIRST_MAPPING: dict[str, PropertySpec] = {
+    ALGORITHM_KEY_RF772A: PropertySpec(
+        "Algorithm of the rf772a fixture", allowed_values=("pca", "tsne"), context=True, strict_validation=True
+    ),
+}
+
+
+class _OptionalFirstAbsentMixinRf772a(FeatureChainParserMixin):
+    """A positional optional-first pattern: when the optional group is absent the name is non-identifying."""
+
+    PREFIX_PATTERN = OPTFIRST_PATTERN
+    PROPERTY_MAPPING = OPTFIRST_MAPPING
 
 
 def _inherited_child_options(consumer_group: dict[str, Any]) -> Options:
@@ -186,3 +210,118 @@ class TestTextCleaningMigration:
     def test_recognition_only_pattern_is_true(self) -> None:
         """TextCleaningFeatureGroup opts in to the recognition-only form."""
         assert TextCleaningFeatureGroup.RECOGNITION_ONLY_PATTERN is True
+
+
+class TestOptionalFirstAbsentUsesOptions:
+    """When an optional-first positional group is absent, the name does not identify the group (#769).
+
+    Both string-parse source paths (input_features / _extract_source_features) must then fall back to
+    options, not extract the source from the name. #772 wrongly regated these on "a source exists".
+    """
+
+    def test_absent_optional_first_does_not_identify_group(self) -> None:
+        """Boundary: an absent optional-first positional capture leaves the name NON-identifying (#769)."""
+        parsed = FeatureChainParser.parse_name(OPTFIRST_ABSENT_NAME, [OPTFIRST_PATTERN])
+
+        assert parsed.positional_captures == (None,)  # precondition: one positional group, absent
+        assert FeatureChainParser._name_identifies_group(parsed, OPTFIRST_MAPPING) is False
+
+    def test_present_optional_first_identifies_group(self) -> None:
+        """Boundary: with the optional-first capture present, the name identifies the group."""
+        parsed = FeatureChainParser.parse_name(OPTFIRST_PRESENT_NAME, [OPTFIRST_PATTERN])
+
+        assert parsed.positional_captures == ("pca",)  # precondition: the optional group participated
+        assert FeatureChainParser._name_identifies_group(parsed, OPTFIRST_MAPPING) is True
+
+    def test_input_features_absent_optional_first_falls_back_to_options(self) -> None:
+        """input_features must take the source from options when the name does not identify the group."""
+        instance = _OptionalFirstAbsentMixinRf772a()
+        options = Options(context={DefaultOptionKeys.in_features: "from_options"})
+
+        result = instance.input_features(options, FeatureName(OPTFIRST_ABSENT_NAME))
+
+        assert result is not None
+        assert {feature.name for feature in result} == {"from_options"}
+
+    def test_input_features_present_optional_first_uses_name_source(self) -> None:
+        """Guard: with the optional group present the name identifies the group, so the source is the name."""
+        instance = _OptionalFirstAbsentMixinRf772a()
+        options = Options(context={DefaultOptionKeys.in_features: "from_options"})
+
+        result = instance.input_features(options, FeatureName(OPTFIRST_PRESENT_NAME))
+
+        assert result is not None
+        assert {feature.name for feature in result} == {"x"}
+
+    def test_extract_source_features_absent_optional_first_falls_back_to_options(self) -> None:
+        """_extract_source_features must take the source from options when the name is non-identifying."""
+        feature = Feature(
+            name=OPTFIRST_ABSENT_NAME,
+            options=Options(context={DefaultOptionKeys.in_features: "from_options"}),
+        )
+
+        result = _OptionalFirstAbsentMixinRf772a._extract_source_features(feature)
+
+        assert result == ["from_options"]
+
+    def test_extract_source_features_present_optional_first_uses_name_source(self) -> None:
+        """Guard: with the optional group present, the name identifies the group and the source is the name."""
+        feature = Feature(
+            name=OPTFIRST_PRESENT_NAME,
+            options=Options(context={DefaultOptionKeys.in_features: "from_options"}),
+        )
+
+        result = _OptionalFirstAbsentMixinRf772a._extract_source_features(feature)
+
+        assert result == ["x"]
+
+
+class TestDiagnosticEmittedOnce:
+    """The captureless-without-binding diagnostic fires exactly once per class definition.
+
+    ``warn_captureless_without_binding`` is wired into BOTH FeatureGroup.__init_subclass__ and
+    FeatureChainParserMixin.__init_subclass__, so the standard ``class X(FeatureChainParserMixin,
+    FeatureGroup)`` shape currently logs the SAME warning twice. Exactly one is intended.
+    """
+
+    def test_standard_inheritance_shape_warns_exactly_once(self, caplog: pytest.LogCaptureFixture) -> None:
+        """class X(FeatureChainParserMixin, FeatureGroup) must emit ONE warning, not one per hook."""
+        with caplog.at_level(logging.WARNING):
+
+            class _X_rf772b(FeatureChainParserMixin, FeatureGroup):
+                PREFIX_PATTERN = r".*__recognize_rf772b$"
+                PROPERTY_MAPPING = {
+                    "op_rf772b": PropertySpec(
+                        "op", allowed_values=("normalize",), context=True, strict_validation=True
+                    ),
+                }
+
+            assert _X_rf772b.PREFIX_PATTERN.endswith("__recognize_rf772b$")
+
+        warnings = [
+            record
+            for record in caplog.records
+            if record.name == FEATURE_CHAIN_PARSER_LOGGER and "RECOGNITION_ONLY_PATTERN" in record.getMessage()
+        ]
+        assert len(warnings) == 1
+
+    def test_mixin_only_shape_still_warns_exactly_once(self, caplog: pytest.LogCaptureFixture) -> None:
+        """Guard against over-suppression: the single-hook shape keeps its one legitimate warning."""
+        with caplog.at_level(logging.WARNING):
+
+            class _Y_rf772b(FeatureChainParserMixin):
+                PREFIX_PATTERN = r".*__recognize2_rf772b$"
+                PROPERTY_MAPPING = {
+                    "op_rf772b": PropertySpec(
+                        "op", allowed_values=("normalize",), context=True, strict_validation=True
+                    ),
+                }
+
+            assert _Y_rf772b.PREFIX_PATTERN.endswith("__recognize2_rf772b$")
+
+        warnings = [
+            record
+            for record in caplog.records
+            if record.name == FEATURE_CHAIN_PARSER_LOGGER and "RECOGNITION_ONLY_PATTERN" in record.getMessage()
+        ]
+        assert len(warnings) == 1

@@ -29,6 +29,10 @@ INPUT_SEPARATOR = "&"  # Separates multiple input features
 # Marks a matcher that already carries the required_when guard, so it is never wrapped twice.
 REQUIRED_WHEN_GUARD_FLAG = "_mloda_required_when_guard"
 
+# Marks a class whose captureless diagnostic already ran, so the two __init_subclass__ hooks
+# emit it at most once. Checked on the class's OWN dict so a subclass still evaluates fresh.
+CAPTURELESS_DIAGNOSTIC_FLAG = "_mloda_captureless_diagnostic_emitted"
+
 # How many guards the current match call is nested in. A guarded matcher that delegates via super()
 # reaches the guard of its parent, and only the outermost one may evaluate the predicates.
 # A ContextVar (not a plain global) keeps the count per thread and per async task.
@@ -692,6 +696,8 @@ class FeatureChainParser:
         named capture (?P<key>...); if the pattern is only a recognition predicate, set
         RECOGNITION_ONLY_PATTERN = True to declare that intent and silence this diagnostic.
         """
+        if owner.__dict__.get(CAPTURELESS_DIAGNOSTIC_FLAG, False):
+            return
         if getattr(owner, "RECOGNITION_ONLY_PATTERN", False):
             return
         property_mapping = getattr(owner, "PROPERTY_MAPPING", None)
@@ -703,6 +709,7 @@ class FeatureChainParser:
         for pattern in cls._flatten_patterns(patterns):
             _named, total = cls._pattern_named_and_total_groups(pattern)
             if total == 0:
+                setattr(owner, CAPTURELESS_DIAGNOSTIC_FLAG, True)
                 logger.warning(
                     "%s declares a captureless PREFIX_PATTERN/SUFFIX_PATTERN together with a PROPERTY_MAPPING. "
                     "A captureless pattern binds no key from the feature name. Add a named capture "

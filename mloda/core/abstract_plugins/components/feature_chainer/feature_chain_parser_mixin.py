@@ -161,14 +161,14 @@ class FeatureChainParserMixin:
             ValueError: If in_feature constraints are violated
         """
         prefix_patterns = self._get_prefix_patterns()
-        _operation_config, in_feature = FeatureChainParser.parse_feature_name(
-            feature_name, prefix_patterns, CHAIN_SEPARATOR
-        )
+        property_mapping = self._get_property_mapping()
+        parsed = FeatureChainParser.parse_name(feature_name, prefix_patterns, CHAIN_SEPARATOR)
 
-        # String-based parsing succeeded. A captureless match yields no operation but still a source
-        # feature, so the gate keys off the source alone (#772).
-        if in_feature is not None and in_feature:
-            in_features = in_feature.split(self.IN_FEATURE_SEPARATOR)
+        # The name is authoritative only when it identifies this group (a captureless recognition match
+        # or a participating capture). An optional-first positional group that did not participate does
+        # not identify the group, so its source comes from options, not the name (#772 / #769).
+        if FeatureChainParser._name_identifies_group(parsed, property_mapping) and parsed.source_feature:
+            in_features = parsed.source_feature.split(self.IN_FEATURE_SEPARATOR)
             self._validate_in_feature_count(in_features, feature_name)
             return {Feature(f) for f in in_features}
 
@@ -509,15 +509,14 @@ class FeatureChainParserMixin:
             List of source feature names
         """
         prefix_patterns = cls._get_prefix_patterns()
+        property_mapping = cls._get_property_mapping()
 
-        _operation_config, source_feature = FeatureChainParser.parse_feature_name(
-            feature.name, prefix_patterns, CHAIN_SEPARATOR
-        )
+        parsed = FeatureChainParser.parse_name(feature.name, prefix_patterns, CHAIN_SEPARATOR)
 
-        # String-based parsing succeeded. A captureless match yields no operation but still a source
-        # feature, so the gate keys off the source alone (#772).
-        if source_feature is not None and source_feature:
-            return source_feature.split(cls.IN_FEATURE_SEPARATOR)
+        # Same identification gate as input_features: the name owns the source only when it identifies
+        # the group (#772 / #769).
+        if FeatureChainParser._name_identifies_group(parsed, property_mapping) and parsed.source_feature:
+            return parsed.source_feature.split(cls.IN_FEATURE_SEPARATOR)
 
         # Configuration-based fallback using get_in_features()
         in_features_set = feature.options.get_in_features()

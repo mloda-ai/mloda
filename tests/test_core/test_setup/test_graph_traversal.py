@@ -1,16 +1,14 @@
 """Traversal-behavior tests for mloda.core.prepare.graph.graph.Graph.
 
-These tests pin the observable outputs of the Graph traversal helpers and
-define three requirements the current recursive implementation does not meet:
+These pin the observable outputs of the Graph traversal helpers and guard three
+requirements:
 
-1. dfs / iterate_nodes_and_edges must survive deep (long) feature chains
-   without RecursionError.
-2. set_direct_parents_for_each_child + set_all_parents_for_each_child must
-   survive deep chains without RecursionError and must not be exponential on
-   diamond-shaped DAGs.
-3. The existing outputs (roots, queue order, parents_by_direct_,
-   parent_to_children_mapping, child_with_root) must stay byte-for-byte the
-   same as they are today (regression guard).
+1. dfs / iterate_nodes_and_edges handles deep (long) feature chains without
+   RecursionError.
+2. set_direct_parents_for_each_child + set_all_parents_for_each_child handle deep
+   chains without RecursionError and stay polynomial on diamond-shaped DAGs.
+3. The observable outputs (roots, queue order, parents_by_direct_,
+   parent_to_children_mapping, child_with_root) are stable (regression guard).
 
 Graphs are built manually so node-insertion order and edge order are fully
 controlled. BuildGraph is intentionally avoided because it stores nodes/edges
@@ -43,11 +41,11 @@ def build_graph(node_ids: list[int], edges: list[tuple[int, int]]) -> Graph:
 
 class TestGraphTraversal:
     def test_regression_seven_node_golden_values(self) -> None:
-        """Characterization / regression guard.
+        """Characterization / regression guard for the exact traversal outputs.
 
-        Passes on the current implementation and must keep passing after any
-        refactor. Every asserted value was captured from today's recursive
-        implementation, including the load-bearing dfs pre-order in `queue`.
+        Pins roots, the load-bearing dfs pre-order in `queue`, parents_by_direct_,
+        parent_to_children_mapping, and child_with_root so any future refactor
+        keeps them identical.
         """
         node_ids = [0, 1, 2, 3, 4, 5, 6]
         edges = [(0, 1), (0, 2), (1, 3), (2, 3), (3, 4), (0, 5), (5, 6)]
@@ -84,10 +82,11 @@ class TestGraphTraversal:
             assert g.child_with_root[_u(i)] == {_u(0)}
 
     def test_deep_chain_dfs_no_recursion_error(self) -> None:
-        """Deep linear chain must not blow the Python recursion limit in dfs.
+        """dfs handles a chain deeper than the CPython recursion limit.
 
-        RED: today `dfs` recurses once per chain link, so a 2000-node chain
-        raises RecursionError inside iterate_nodes_and_edges.
+        A 2000-node linear chain exceeds the default recursion limit;
+        iterate_nodes_and_edges completes without RecursionError. A naive
+        recursive dfs would raise here.
         """
         node_ids = list(range(2000))
         edges = [(i, i + 1) for i in range(1999)]
@@ -99,11 +98,11 @@ class TestGraphTraversal:
         assert g.queue[:3] == [_u(0), _u(1), _u(2)]
 
     def test_deep_chain_ancestors_no_recursion_error(self) -> None:
-        """Ancestor computation must not blow the recursion limit on deep chains.
+        """Ancestor computation handles a chain deeper than the recursion limit.
 
-        RED: today `set_direct_parents_for_each_child` recurses once per chain
-        link, so a 2000-node chain raises RecursionError before we ever reach
-        set_all_parents_for_each_child.
+        set_direct_parents_for_each_child + set_all_parents_for_each_child resolve
+        a 2000-node chain without RecursionError. A naive recursive walk would
+        raise here.
         """
         node_ids = list(range(2000))
         edges = [(i, i + 1) for i in range(1999)]
@@ -116,17 +115,13 @@ class TestGraphTraversal:
         assert len(g.parent_to_children_mapping[_u(1999)]) == 1999
 
     def test_diamond_dag_not_exponential(self) -> None:
-        """Chained diamonds must be traversed in polynomial (not exponential) time.
+        """Chained diamonds are traversed in polynomial (not exponential) time.
 
         The graph is `entry -> {a, b} -> exit`, chained DIAMONDS times, so the
-        number of distinct root-to-leaf paths is 2**DIAMONDS.
-
-        RED: today `set_direct_parents_for_each_child` (and
-        set_all_parents_for_each_child) re-walk every path with no memoization,
-        making this O(2**DIAMONDS). With DIAMONDS=30 that is ~1e9 calls and the
-        method never finishes; the global pytest `--timeout=10` (or the outer
-        wall-clock cap used to validate the RED state) trips instead. After a
-        memoized/iterative fix this completes in milliseconds.
+        number of distinct root-to-leaf paths is 2**DIAMONDS. A per-path walk
+        without memoization would be O(2**DIAMONDS): at DIAMONDS=30 (~1e9 paths)
+        it would exceed the global pytest `--timeout=10`. The memoized traversal
+        completes in milliseconds.
         """
         diamonds = 30
 
@@ -150,7 +145,7 @@ class TestGraphTraversal:
         # Shallow dfs (depth ~60) mirrors the production call order and is fine.
         g.iterate_nodes_and_edges()
 
-        # Current recursive, unmemoized implementation is exponential here.
+        # Memoized ancestor closure: polynomial regardless of path count.
         g.set_direct_parents_for_each_child()
         g.set_all_parents_for_each_child()
 

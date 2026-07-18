@@ -4,7 +4,6 @@ import tempfile
 from typing import Any
 
 import pyarrow as pa
-import pyarrow.feather as pyarrow_feather
 import pyarrow.orc as pyarrow_orc
 import pyarrow.parquet as pyarrow_parquet
 
@@ -59,7 +58,9 @@ class TestDeterministicColumnOrder:
         table = pa.Table.from_pydict({"c1": [1, 2, 3], "a1": [4, 5, 6], "b1": [7, 8, 9]})
 
         cls.feather_file = f"{cls.base_path}/test.feather"
-        pyarrow_feather.write_feather(table, cls.feather_file)
+        with pa.OSFile(cls.feather_file, "wb") as sink:
+            with pa.ipc.new_file(sink, table.schema) as writer:
+                writer.write_table(table)
 
         cls.json_file = f"{cls.base_path}/test.json"
         with open(cls.json_file, "w") as f:

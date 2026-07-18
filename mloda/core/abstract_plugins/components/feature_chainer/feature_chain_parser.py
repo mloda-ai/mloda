@@ -124,12 +124,11 @@ class FeatureChainParser:
 
     @classmethod
     def _legacy_operation_config(cls, parsed: ParsedFeatureName) -> str | None:
-        """The value the retired reverse-lookup binding consumes. #772 removes the fabrication."""
+        """The value the legacy positional reverse-lookup binding consumes: the first positional
+        capture, or None. A captureless match fabricates nothing (#772)."""
         if parsed.positional_captures:
             return parsed.positional_captures[0]
-        if parsed.operation_part is None:
-            return None
-        return parsed.operation_part.split("_")[0]  # fabrication, retired by #772
+        return None
 
     @classmethod
     def parse_feature_name(
@@ -525,12 +524,19 @@ class FeatureChainParser:
         identify the group: reproduce the pre-#770 gate so required presence still guards it on the
         config path (#769 owns changing that). A named capture that binds a mapping key identifies the
         group even when the legacy operation value is absent, so a named-optional-first pattern gets
-        full binding, guard, and forwarded-mismatch visibility.
+        full binding, guard, and forwarded-mismatch visibility. A captureless match is a recognition
+        predicate (#772): it identifies the group and binds nothing.
         """
         if not parsed.matched:
             return False
         if property_mapping and cls.bind_name_captures(parsed, property_mapping):
             return True
+        if not parsed.positional_captures:
+            # Captureless pattern: zero declared groups. It identifies the group as a recognition
+            # predicate and binds nothing. #772 stopped fabricating a token here.
+            return True
+        # A positional group that did not participate (optional-first) still does not identify;
+        # #769 owns changing that.
         return cls._legacy_operation_config(parsed) is not None
 
     @classmethod
@@ -677,6 +683,35 @@ class FeatureChainParser:
                         f"allowed value(s) {sorted(overlap)}, so a legacy positional capture cannot bind "
                         f"unambiguously. Use named capture groups (?P<key>...) so binding is explicit."
                     )
+
+    @classmethod
+    def warn_captureless_without_binding(cls, owner: type[Any]) -> None:
+        """Nudge authors of a captureless pattern that carries a PROPERTY_MAPPING (#772).
+
+        A captureless pattern binds no key from the name. If a key must come from the name, add a
+        named capture (?P<key>...); if the pattern is only a recognition predicate, set
+        RECOGNITION_ONLY_PATTERN = True to declare that intent and silence this diagnostic.
+        """
+        if getattr(owner, "RECOGNITION_ONLY_PATTERN", False):
+            return
+        property_mapping = getattr(owner, "PROPERTY_MAPPING", None)
+        if not isinstance(property_mapping, dict) or not property_mapping:
+            return
+        patterns = cls.prefix_patterns_of(owner)
+        if not patterns:
+            return
+        for pattern in cls._flatten_patterns(patterns):
+            _named, total = cls._pattern_named_and_total_groups(pattern)
+            if total == 0:
+                logger.warning(
+                    "%s declares a captureless PREFIX_PATTERN/SUFFIX_PATTERN together with a PROPERTY_MAPPING. "
+                    "A captureless pattern binds no key from the feature name. Add a named capture "
+                    "(?P<key>...) if a mapping key must be populated from the name, or set "
+                    "RECOGNITION_ONLY_PATTERN = True to declare the pattern a recognition-only predicate "
+                    "and silence this warning.",
+                    owner.__name__,
+                )
+                return
 
     @classmethod
     def check_required_when(

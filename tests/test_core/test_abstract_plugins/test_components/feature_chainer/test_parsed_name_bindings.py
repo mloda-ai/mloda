@@ -269,9 +269,9 @@ class TestLegacyParseFeatureNameAdapter:
             "f0",
         )
 
-    def test_captureless_fabrication_unchanged(self) -> None:
-        """A captureless pattern still fabricates the first underscore-token of the suffix (#772 retires it)."""
-        assert FeatureChainParser.parse_feature_name("x__cleaned_text", [r".*__cleaned_text$"]) == ("cleaned", "x")
+    def test_captureless_no_longer_fabricates(self) -> None:
+        """#772: a captureless match no longer fabricates a token; operation_config is None, the source stays."""
+        assert FeatureChainParser.parse_feature_name("x__cleaned_text", [r".*__cleaned_text$"]) == (None, "x")
 
     def test_miss_tuple_unchanged(self) -> None:
         """No pattern match is still (None, None)."""
@@ -651,8 +651,8 @@ class TestShippedPluginsUnchanged:
 
         assert parsed == (None, None)
 
-    def test_text_cleaning_feature_group_keeps_its_fabricated_token(self) -> None:
-        """The only captureless shipped pattern: the fabrication survives this PR (#772 retires it)."""
+    def test_text_cleaning_captureless_no_longer_fabricates(self) -> None:
+        """The only captureless shipped pattern: #772 retires the fabrication, so operation_config is None."""
         parsed = FeatureChainParser.parse_feature_name("text__cleaned_text", [TextCleaningFeatureGroup.PREFIX_PATTERN])
 
-        assert parsed == ("cleaned", "text")
+        assert parsed == (None, "text")

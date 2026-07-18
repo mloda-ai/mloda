@@ -83,6 +83,8 @@ class FeatureChainParserMixin:
     - IN_FEATURE_SEPARATOR: Optional custom separator (default: "&")
     - MIN_IN_FEATURES: Optional minimum in_feature count (default: 1)
     - MAX_IN_FEATURES: Optional maximum in_feature count (default: None)
+    - RECOGNITION_ONLY_PATTERN: Optional marker for a recognition-only pattern that binds no key
+      from the name (all values come from options); default False (#772)
 
     PROPERTY_MAPPING supports conditional requirements via ``PropertySpec.required_when``.
     Attach a predicate ``(Options) -> bool`` to any spec. When the predicate returns
@@ -111,12 +113,15 @@ class FeatureChainParserMixin:
     IN_FEATURE_SEPARATOR: str = INPUT_SEPARATOR
     MIN_IN_FEATURES: int = 1
     MAX_IN_FEATURES: Optional[int] = None
+    # A recognition-only pattern binds no key from the name; all values come from options (#772).
+    RECOGNITION_ONLY_PATTERN: bool = False
 
     def __init_subclass__(cls, **kwargs: Any) -> None:
         # The mixin sits first in the MRO of ``class X(FeatureChainParserMixin, FeatureGroup)``,
         # so super() is what lets FeatureGroup's own class-definition validation still run.
         super().__init_subclass__(**kwargs)
         FeatureChainParser.validate_name_binding(cls)
+        FeatureChainParser.warn_captureless_without_binding(cls)
         FeatureChainParser.install_required_when_guard(cls)
 
     @classmethod
@@ -156,12 +161,13 @@ class FeatureChainParserMixin:
             ValueError: If in_feature constraints are violated
         """
         prefix_patterns = self._get_prefix_patterns()
-        operation_config, in_feature = FeatureChainParser.parse_feature_name(
+        _operation_config, in_feature = FeatureChainParser.parse_feature_name(
             feature_name, prefix_patterns, CHAIN_SEPARATOR
         )
 
-        # String-based parsing succeeded
-        if operation_config is not None and in_feature is not None and in_feature:
+        # String-based parsing succeeded. A captureless match yields no operation but still a source
+        # feature, so the gate keys off the source alone (#772).
+        if in_feature is not None and in_feature:
             in_features = in_feature.split(self.IN_FEATURE_SEPARATOR)
             self._validate_in_feature_count(in_features, feature_name)
             return {Feature(f) for f in in_features}
@@ -504,12 +510,13 @@ class FeatureChainParserMixin:
         """
         prefix_patterns = cls._get_prefix_patterns()
 
-        operation_config, source_feature = FeatureChainParser.parse_feature_name(
+        _operation_config, source_feature = FeatureChainParser.parse_feature_name(
             feature.name, prefix_patterns, CHAIN_SEPARATOR
         )
 
-        # String-based parsing succeeded
-        if operation_config is not None and source_feature is not None and source_feature:
+        # String-based parsing succeeded. A captureless match yields no operation but still a source
+        # feature, so the gate keys off the source alone (#772).
+        if source_feature is not None and source_feature:
             return source_feature.split(cls.IN_FEATURE_SEPARATOR)
 
         # Configuration-based fallback using get_in_features()

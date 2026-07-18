@@ -249,6 +249,20 @@ class FilterEngineTestMixin:
         assert self.result_row_count(result) == 1
         self._assert_values_equal(self.get_column_values(result, "id"), [1])
 
+    def test_do_categorical_inclusion_only_none_keeps_only_nulls(
+        self, filter_engine: Any, nullable_category_sample_data: Any
+    ) -> None:
+        """An allowed-values list of only [None] keeps exactly the null rows."""
+        feature = Feature("category")
+        filter_type = FilterType.CATEGORICAL_INCLUSION
+        parameter = {"values": [None]}
+        single_filter = SingleFilter(feature, filter_type, parameter)
+
+        result = filter_engine.do_categorical_inclusion_filter(nullable_category_sample_data, single_filter)
+
+        assert self.result_row_count(result) == 2
+        self._assert_values_equal(self.get_column_values(result, "id"), [2, 4])
+
     def test_apply_filters(self, filter_engine: Any, sample_data: Any) -> None:
         """Test applying multiple filters."""
         feature = Feature("age")

@@ -78,6 +78,7 @@ does not understand can be absorbed silently.
 | Match time (mixin) | `match_guard` | The whole value has an acceptable shape | The raw value | Non-match (`False`) |
 | Match time (mixin) | `MIN/MAX_IN_FEATURES` | In-feature count is within bounds | The in-features | Non-match (`False`) |
 | Match time (guard installed at class definition) | `required_when` | A conditionally required option is present | `Options` | Non-match (`False`) |
+| Class definition (mixin) | Universal-matcher diagnostic | An all-optional `PROPERTY_MAPPING` inherits the configuration matcher, so it matches any name with empty options | The class | `logger.warning`, unless `ALLOW_UNIVERSAL_MATCHER = True` |
 
 A spec is constructed inside the class body, so its own rules fire before the class exists.
 Class definition is left with exactly one rule: the type itself. Within `__post_init__` the
@@ -414,6 +415,24 @@ The matcher must be a `classmethod`; a `staticmethod` matcher on a class that de
 The guard is installed at class definition, so mutating `PROPERTY_MAPPING` or replacing
 `match_feature_group_criteria` after the class body escapes it.
 
+## Guarding against a universal configuration matcher
+
+A key is unconditionally required only when it declares no `default` and no `required_when`. A
+`PROPERTY_MAPPING` whose every key is optional or conditional has no such key, so on the
+configuration path it matches any feature name with empty options. A feature group that inherits
+the mixin's `match_feature_group_criteria` and declares such a mapping is a universal matcher: it
+claims features it was never meant to.
+
+At class definition the mixin warns about this, naming the class and the escape hatch. It fires
+only when the mapping has zero unconditionally required keys AND the resolved matcher still accepts
+an unrelated name with empty options. So a genuinely discriminating `match_feature_group_criteria`,
+or a `required_when` predicate that fires for empty options, is not warned, while a pass-through
+override that only delegates to the base still is.
+
+Set `ALLOW_UNIVERSAL_MATCHER = True` on the class to declare the universal match intentional and
+silence the warning. Otherwise give one key no `default` (making it unconditionally required), or a
+`required_when` predicate that fires when the option is absent.
+
 ## Migrating from the dict form
 
 Spec dicts are gone. Every value in a `PROPERTY_MAPPING` must be a `PropertySpec`; an
@@ -455,6 +474,7 @@ if it really is a whole-value check.
 | Plugin specs behave identically across containers | `tests/test_plugins/feature_group/experimental/test_property_mapping_container_invariance.py` |
 | `property_spec` builder surface | `tests/.../feature_chainer/test_property_spec_builder.py` |
 | Rejection reasons surfaced to the end user | `tests/test_core/test_prepare/test_identify_feature_group_error_message.py` |
+| The all-optional universal-matcher diagnostic and its `ALLOW_UNIVERSAL_MATCHER` escape hatch | `tests/.../feature_chainer/test_universal_optional_matcher.py` |
 
 ## Context propagation
 

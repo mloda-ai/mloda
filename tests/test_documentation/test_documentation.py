@@ -1,3 +1,4 @@
+from collections.abc import Sequence
 from pathlib import Path
 import re
 import subprocess  # nosec B404
@@ -43,35 +44,45 @@ from pathlib import Path
 from mloda.user import PluginLoader
 from mktestdocs import check_md_file
 PluginLoader.all()
-check_md_file(fpath=Path(sys.argv[1]), memory=True)
+for path in sys.argv[1:]:
+    print(f"CHECKING {path}", flush=True)
+    check_md_file(fpath=Path(path), memory=True)
 """
 
 
-def run_md_file_isolated(fpath: Path) -> None:
-    """Run a markdown file's python snippets in a fresh interpreter.
+def run_md_files_isolated(fpaths: Sequence[Path]) -> None:
+    """Run the python snippets of markdown files in one fresh interpreter.
 
     In-process execution lets FeatureGroup subclasses leaked by other tests
-    pollute doc-snippet feature resolution (issue #828). A fresh interpreter
-    sees only the plugins seeded by PluginLoader.all().
+    pollute doc-snippet feature resolution (issue #828). One seeded child for
+    the whole doc set keeps resolution isolated from that leakage while paying
+    the plugin-load cost once; docs sharing one interpreter matches the
+    pre-isolation semantics. The last CHECKING line attributes a failure.
     """
-    text = fpath.read_text(encoding="utf-8")
-    if "```python" not in text:
+    kept_paths = [fpath for fpath in fpaths if "```python" in fpath.read_text(encoding="utf-8")]
+    if not kept_paths:
         return
-    # Safe: fixed argv (sys.executable, constant driver, file path), no shell, no user input.
+    # Safe: fixed argv (sys.executable, constant driver, file paths), no shell, no user input.
     result = subprocess.run(  # nosec B603
-        [sys.executable, "-c", _DOC_CHECK_DRIVER, str(fpath)],
+        [sys.executable, "-c", _DOC_CHECK_DRIVER, *map(str, kept_paths)],
         capture_output=True,
         text=True,
+        timeout=110,
     )
+    stdout_tail = "\n".join(result.stdout.splitlines()[-50:])
     assert result.returncode == 0, (
-        f"Doc snippet check failed for {fpath}\nstdout:\n{result.stdout}\nstderr:\n{result.stderr}"
+        f"Doc snippet check failed (last CHECKING line names the file)\n"
+        f"stdout (last 50 lines):\n{stdout_tail}\nstderr:\n{result.stderr}"
     )
 
 
-@pytest.mark.timeout(60)
-@pytest.mark.parametrize("fpath", Path("docs").glob("**/*.md"), ids=str)
-def test_files_good(fpath: Any) -> None:
-    run_md_file_isolated(fpath)
+def run_md_file_isolated(fpath: Path) -> None:
+    run_md_files_isolated([fpath])
+
+
+@pytest.mark.timeout(120)
+def test_files_good() -> None:
+    run_md_files_isolated(sorted(Path("docs").glob("**/*.md")))
 
 
 CODE_BLOCK_PATTERN = re.compile(r"```python\n(.*?)```", re.DOTALL)

@@ -111,7 +111,7 @@ class TestReadFilesImplementations:
 
     def test_implementations_read(self) -> None:
         test_cases = [
-            (FeatherReader, self.feather_file, pyarrow_feather.read_table),
+            (FeatherReader, self.feather_file, lambda source, columns=None: pa.ipc.open_file(source).read_all().select(columns)),
             (JsonReader, self.json_file, pyarrow_json.read_json),
             (CsvReader, self.csv_file, pyarrow_csv.read_csv),
             (OrcReader, self.orc_file, pyarrow_orc.read_table),

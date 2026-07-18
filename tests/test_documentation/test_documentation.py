@@ -1,8 +1,9 @@
 from pathlib import Path
 import re
-import pytest
+import subprocess  # nosec B404
+import sys
 
-from mktestdocs import check_md_file
+import pytest
 
 
 from typing import Any
@@ -36,9 +37,41 @@ class DokuValidateInputFeatureExtender(Extender):
         return result
 
 
+_DOC_CHECK_DRIVER = """\
+import sys
+from pathlib import Path
+from mloda.user import PluginLoader
+from mktestdocs import check_md_file
+PluginLoader.all()
+check_md_file(fpath=Path(sys.argv[1]), memory=True)
+"""
+
+
+def run_md_file_isolated(fpath: Path) -> None:
+    """Run a markdown file's python snippets in a fresh interpreter.
+
+    In-process execution lets FeatureGroup subclasses leaked by other tests
+    pollute doc-snippet feature resolution (issue #828). A fresh interpreter
+    sees only the plugins seeded by PluginLoader.all().
+    """
+    text = fpath.read_text(encoding="utf-8")
+    if "```python" not in text:
+        return
+    # Safe: fixed argv (sys.executable, constant driver, file path), no shell, no user input.
+    result = subprocess.run(  # nosec B603
+        [sys.executable, "-c", _DOC_CHECK_DRIVER, str(fpath)],
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, (
+        f"Doc snippet check failed for {fpath}\nstdout:\n{result.stdout}\nstderr:\n{result.stderr}"
+    )
+
+
+@pytest.mark.timeout(60)
 @pytest.mark.parametrize("fpath", Path("docs").glob("**/*.md"), ids=str)
 def test_files_good(fpath: Any) -> None:
-    check_md_file(fpath=fpath, memory=True)
+    run_md_file_isolated(fpath)
 
 
 CODE_BLOCK_PATTERN = re.compile(r"```python\n(.*?)```", re.DOTALL)

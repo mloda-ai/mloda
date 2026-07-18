@@ -23,6 +23,7 @@ diagnostic in scope is the universal-matcher warning, never the captureless one.
 
 from __future__ import annotations
 
+import gc
 import logging
 from typing import Any
 
@@ -32,6 +33,7 @@ from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser
 from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser_mixin import FeatureChainParserMixin
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.components.options import Options
+from mloda.core.abstract_plugins.components.utils import get_all_subclasses
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.provider import PropertySpec
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.base import AggregatedFeatureGroup
@@ -65,6 +67,22 @@ def _universal_matcher_warnings(
     if class_name is not None:
         records = [record for record in records if class_name in record.getMessage()]
     return records
+
+
+@pytest.fixture(autouse=True)
+def _no_feature_group_registry_pollution() -> Any:
+    """Guarantee this module never leaks throwaway FeatureGroup subclasses.
+
+    Its tests define local FeatureGroup subclasses (some whose matcher raises or matches any name). Those
+    class objects sit in reference cycles, lingering in FeatureGroup.__subclasses__() until a GC cycle runs;
+    while they linger, other tests that enumerate via get_all_subclasses(FeatureGroup) (e.g. test_resolve_feature)
+    trip over them. Force a collection and assert none of this module's classes remain.
+    """
+    yield
+    gc.collect()
+    gc.collect()
+    leaked = [c for c in get_all_subclasses(FeatureGroup) if c.__module__ == __name__]
+    assert not leaked, f"Leaked FeatureGroup subclasses from {__name__}: {[c.__name__ for c in leaked]}"
 
 
 class TestUniversalMatcherWarns:
@@ -374,6 +392,96 @@ class TestUniversalMatcherDoesNotWarn:
         assert not _universal_matcher_warnings(caplog, "_RaisingMatcherU771n"), (
             "a probe exception is contained, so the class is not warned as universal"
         )
+
+    def test_contained_probe_logs_str_not_exception(self, caplog: pytest.LogCaptureFixture) -> None:
+        """The contained-probe debug record stores str(exc), never the exception object.
+
+        A record holding the exception pins its traceback, frame and the probed class, defeating the
+        registry-pollution cleanup under DEBUG logging (the utils.safe_field discipline).
+        """
+        with caplog.at_level(logging.DEBUG, logger=FEATURE_CHAIN_PARSER_LOGGER):
+
+            class _DebugRaiserU771y(FeatureChainParserMixin, FeatureGroup):
+                PROPERTY_MAPPING = {"opt_u771y": PropertySpec("optional", default=None)}
+
+                @classmethod
+                def match_feature_group_criteria(
+                    cls,
+                    feature_name: str | FeatureName,
+                    options: Options,
+                    data_access_collection: Any = None,
+                ) -> bool:
+                    raise RuntimeError("boom_u771y")
+
+            assert "opt_u771y" in _DebugRaiserU771y.PROPERTY_MAPPING
+
+        records = [
+            record
+            for record in caplog.records
+            if "universal-matcher probe" in record.getMessage() and "_DebugRaiserU771y" in record.getMessage()
+        ]
+        assert records, "expected the contained-probe debug record"
+        assert all(not isinstance(arg, BaseException) for record in records for arg in record.args or ()), (
+            "the contained-probe record must store str(exc), not the exception, so it cannot pin the class"
+        )
+
+    def test_probe_exception_with_failing_str_is_contained(self, caplog: pytest.LogCaptureFixture) -> None:
+        """A probe exception whose __str__ also raises is still contained: class creation must not abort.
+
+        str(exc) is a log argument evaluated eagerly regardless of level, so a failing __str__ would escape
+        containment even with DEBUG off. The diagnostic degrades to the exception type name instead.
+        """
+
+        class _FailingStrErrorU771x(Exception):
+            def __str__(self) -> str:
+                raise RuntimeError("str_boom_u771x")
+
+        with caplog.at_level(logging.WARNING):
+
+            class _FailingStrMatcherU771x(FeatureChainParserMixin, FeatureGroup):
+                PROPERTY_MAPPING = {"opt_u771x": PropertySpec("optional", default=None)}
+
+                @classmethod
+                def match_feature_group_criteria(
+                    cls,
+                    feature_name: str | FeatureName,
+                    options: Options,
+                    data_access_collection: Any = None,
+                ) -> bool:
+                    raise _FailingStrErrorU771x()
+
+            # The class body completes: neither the probe exception nor its failing __str__ escaped.
+            assert "opt_u771x" in _FailingStrMatcherU771x.PROPERTY_MAPPING
+
+    def test_probe_exception_with_hostile_getattribute_is_contained(self, caplog: pytest.LogCaptureFixture) -> None:
+        """A probe exception whose instance __getattribute__ rejects __str__ is still contained.
+
+        str(exc) uses type-level __str__ lookup, bypassing a hostile __getattribute__; an explicit exc.__str__
+        lookup would raise before the guard and abort class creation.
+        """
+
+        class _HostileGetattrErrorU771w(Exception):
+            def __getattribute__(self, name: str) -> Any:
+                if name == "__str__":
+                    raise RuntimeError("getattr_boom_u771w")
+                return super().__getattribute__(name)
+
+        with caplog.at_level(logging.WARNING):
+
+            class _HostileGetattrMatcherU771w(FeatureChainParserMixin, FeatureGroup):
+                PROPERTY_MAPPING = {"opt_u771w": PropertySpec("optional", default=None)}
+
+                @classmethod
+                def match_feature_group_criteria(
+                    cls,
+                    feature_name: str | FeatureName,
+                    options: Options,
+                    data_access_collection: Any = None,
+                ) -> bool:
+                    raise _HostileGetattrErrorU771w()
+
+            # The class body completes: the hostile attribute lookup did not escape.
+            assert "opt_u771w" in _HostileGetattrMatcherU771w.PROPERTY_MAPPING
 
 
 class TestUniversalMatcherMotivation:

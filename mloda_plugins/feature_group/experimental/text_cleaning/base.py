@@ -104,6 +104,7 @@ class TextCleaningFeatureGroup(FeatureChainParserMixin, FeatureGroup):
             strict_validation=True,
             # The option is a sequence of operations; core unpacks it, so this judges ONE operation.
             element_validator=lambda op: op in TextCleaningFeatureGroup.SUPPORTED_OPERATIONS,
+            deferred_binding=True,  # parsed from the name by this group, not a framework-bound capture (#769)
         ),
         DefaultOptionKeys.in_features: PropertySpec(
             "Source feature to apply text cleaning operations to",

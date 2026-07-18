@@ -84,6 +84,10 @@ class PropertySpec:
     match_guard: Callable[[Any], Any] | None = None
     required_when: Callable[[Any], Any] | None = None
     allow_explicit_none: bool = False
+    # Exempts a NO_DEFAULT key from the name-path required-presence check (#769): its value is bound
+    # outside match-time name capture (parsed from the name by the plugin, or supplied downstream).
+    # It does NOT change config-path requiredness.
+    deferred_binding: bool = False
 
     def __post_init__(self) -> None:
         prefix = f"PropertySpec({self.explanation!r})"
@@ -114,6 +118,9 @@ class PropertySpec:
             raise ValueError(
                 f"{prefix}: allow_explicit_none must be a bool, got {type(self.allow_explicit_none).__name__}."
             )
+
+        if not isinstance(self.deferred_binding, bool):
+            raise ValueError(f"{prefix}: deferred_binding must be a bool, got {type(self.deferred_binding).__name__}.")
 
         if self.element_validator is not None and not callable(self.element_validator):
             raise ValueError(f"{prefix}: element_validator must be callable.")
@@ -191,6 +198,7 @@ def property_spec(
     required_when: Callable[[Any], Any] | None = None,
     match_guard: Callable[[Any], Any] | None = None,
     allow_explicit_none: bool = False,
+    deferred_binding: bool = False,
 ) -> PropertySpec:
     """Build a ``PropertySpec``; the ``strict=`` keyword sets the ``strict_validation`` field."""
     return PropertySpec(
@@ -203,4 +211,5 @@ def property_spec(
         match_guard=match_guard,
         required_when=required_when,
         allow_explicit_none=allow_explicit_none,
+        deferred_binding=deferred_binding,
     )

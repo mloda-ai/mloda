@@ -106,12 +106,14 @@ class TimeWindowFeatureGroup(TimeReferenceMixin, FeatureChainParserMixin, Featur
             context=True,
             strict_validation=True,
             element_validator=is_positive_int,
+            deferred_binding=True,  # parsed from the name by this group, not a framework-bound capture (#769)
         ),
         TIME_UNIT: PropertySpec(
             "Time unit of the window size",
             allowed_values=TimeReferenceMixin.TIME_UNITS,
             context=True,
             strict_validation=True,
+            deferred_binding=True,
         ),
         DefaultOptionKeys.in_features: PropertySpec(
             "Source feature to apply time window operation to",

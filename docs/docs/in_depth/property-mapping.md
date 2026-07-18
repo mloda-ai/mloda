@@ -39,6 +39,7 @@ PROPERTY_MAPPING = {
 | `match_guard` | `Callable \| None` | `None` | Whole-value predicate. A falsy return is a non-match. |
 | `required_when` | `Callable \| None` | `None` | `(Options) -> bool`: the key is required only when it returns truthy. |
 | `allow_explicit_none` | `bool` | `False` | Opt-in so an explicit `None` is honored (not treated as absent) and flows through validation. |
+| `deferred_binding` | `bool` | `False` | Exempts a required key from the string-named path presence check only; its value is bound outside match-time name capture. Not optionality: the key stays required on the config path. See [Required presence on the string-named path](#required-presence-on-the-string-named-path). |
 
 **`property_spec(...)` is the authoring path to reach for.** It is a thin builder over the
 same fields, its keyword is `strict=` (which sets `strict_validation`), and it keeps the
@@ -74,7 +75,8 @@ does not understand can be absorbed silently.
 | Class definition (`FeatureGroup.__init_subclass__`) | Spec type | Every spec IS a `PropertySpec` | Every value in the mapping | `ValueError` naming the class and the key |
 | Match time (parser) | `allowed_values` membership | Each element of a **present** option is in the accepted set | One element | `ValueError`, surfaced to the end user |
 | Match time (parser) | `element_validator` | Each element of a **present** option satisfies a predicate | One element | `ValueError`, surfaced to the end user |
-| Match time (parser) | Required presence | A key that declares no `default` and no `required_when` was provided | The options | Non-match (`False`), configuration-based path only |
+| Match time (parser) | Required presence (config path) | A key that declares no `default` and no `required_when` was provided | The options | Non-match (`False`) |
+| Match time (parser) | Required presence (string-named path) | Same, after declared defaults and name bindings resolve; `deferred_binding=True` and the source (`in_features`) key are exempt | The effective options | Warn or non-match per `MLODA_NAME_PATH_REQUIRED_PRESENCE` (`warn` default / `enforce` / `off`) |
 | Match time (mixin) | `match_guard` | The whole value has an acceptable shape | The raw value | Non-match (`False`) |
 | Match time (mixin) | `MIN/MAX_IN_FEATURES` | In-feature count is within bounds | The in-features | Non-match (`False`) |
 | Match time (guard installed at class definition) | `required_when` | A conditionally required option is present | `Options` | Non-match (`False`) |
@@ -93,10 +95,14 @@ short-circuits, and `match_guard` is never reached.
 
 Value validation does not depend on how the feature was created: membership and
 `element_validator` run on **both** match paths, the configuration-based one and the
-string-named one. Only required **presence** differs, enforced on the configuration-based
-path alone, because a key the feature name encodes is satisfied by the name. So
-`"income__pca_2d"` with no options at all still matches, while the same feature group with
-`pca_svd_solver="bogus"` in its options is rejected either way.
+string-named one. Required **presence** now runs on both too, differing only in strength: the
+configuration path rejects a missing required key outright, while the string-named path is
+warn-by-default and becomes a non-match only under `MLODA_NAME_PATH_REQUIRED_PRESENCE=enforce`
+(see [Required presence on the string-named path](#required-presence-on-the-string-named-path)).
+A key the name encodes, a `deferred_binding=True` key, a declared-default key, and the source
+(`in_features`) key are never falsely reported missing. So `"income__pca_2d"` with no options at
+all still matches, while the same feature group with `pca_svd_solver="bogus"` in its options is
+rejected either way.
 
 `required_when` is the one mechanism that does not live inside a matcher. A class that
 declares it gets its resolved `match_feature_group_criteria` wrapped at class definition,
@@ -279,6 +285,10 @@ check would read that copy's sentinel as a *declared* default.
 `required_when` is for a *conditional* requirement, not for optionality: never write a
 predicate that always returns `False` to make a key optional.
 
+`deferred_binding` is not optionality either: the key stays required on the configuration path,
+and the flag only defers its string-named path presence check (see
+[Required presence on the string-named path](#required-presence-on-the-string-named-path)).
+
 ## Applying declared defaults
 
 A declared default is metadata until the resolved feature group materializes it.
@@ -351,6 +361,42 @@ groups falls back to the legacy rule of binding the first capture to the single 
 `allowed_values` already contain it. That fallback is transitional (retired by #772); a positional
 pattern whose keys share a reachable value is rejected at class-definition time, so migrate such a
 pattern to named capture groups.
+
+## Required presence on the string-named path
+
+Required presence is checked when a feature matches by its name, not on the configuration path
+alone. A key is flagged when it declares no `default`, no `required_when`, and
+`deferred_binding=False`, and is still absent after declared defaults and name captures are
+resolved. Exempt from the check: a declared default, a `required_when` key, a
+`deferred_binding=True` key, and the source key (`in_features`), whose presence the name prefix
+supplies and whose count `MIN/MAX_IN_FEATURES` enforces.
+
+`MLODA_NAME_PATH_REQUIRED_PRESENCE` selects the mode (case-insensitive; unset or invalid means
+`warn`):
+
+| Value | Effect |
+| --- | --- |
+| `warn` (default) | Logs a warning naming the group and the missing key(s), still **matches**. The migration default. |
+| `enforce` | The missing key makes it a **non-match**. |
+| `off` | The check is skipped. |
+
+Two migrations remove the warning for a flagged key. Give the pattern a named capture
+`(?P<key>...)` so the framework binds the key from the name; or, for a key bound outside
+match-time name capture (parsed by the plugin from the name, or supplied downstream), set
+`deferred_binding=True`, which exempts it from this check only and leaves it required on the
+config path. `TimeWindowFeatureGroup` marks its name-parsed `window_size` and `time_unit` keys
+this way:
+
+``` python
+from mloda.provider import PropertySpec
+
+PROPERTY_MAPPING = {
+    "window_size": PropertySpec(
+        "Window size parsed from the feature name by the plugin",
+        deferred_binding=True,  # exempt from the string-named presence check only
+    ),
+}
+```
 
 ## What the end user sees on a rejection
 
@@ -470,7 +516,8 @@ if it really is a whole-value check.
 | Declared defaults materialized into runtime options | `tests/test_core/test_abstract_plugins/test_options_with_defaults.py` |
 | Declared defaults materialized at the compute boundary | `tests/test_core/test_abstract_plugins/test_materialize_defaults_boundary.py` |
 | Container invariance, no stringification, str-as-scalar, dict-as-composite, empty containers | `tests/.../feature_chainer/test_property_mapping_sequence_unpacking.py` |
-| Present option values validated on the string-named path too; required presence stays config-only | `tests/.../feature_chainer/test_name_path_validates_option_values.py` |
+| Present option values validated on the string-named path too | `tests/.../feature_chainer/test_name_path_validates_option_values.py` |
+| Required presence on the string-named path: warn/enforce/off modes, and the `deferred_binding` / `in_features` exemptions | `tests/.../feature_chainer/test_name_path_required_presence.py` |
 | `required_when` survives an overridden matcher, runs exactly once, and demands a classmethod | `tests/.../feature_chainer/test_required_when_enforced_on_override.py` |
 | Plugin specs behave identically across containers | `tests/test_plugins/feature_group/experimental/test_property_mapping_container_invariance.py` |
 | `property_spec` builder surface | `tests/.../feature_chainer/test_property_spec_builder.py` |

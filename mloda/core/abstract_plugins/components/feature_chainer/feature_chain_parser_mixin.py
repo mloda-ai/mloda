@@ -292,6 +292,7 @@ class FeatureChainParserMixin:
                 options,
                 property_mapping=cls._get_property_mapping(),
                 prefix_patterns=cls._get_prefix_patterns(),
+                owner_name=cls.__name__,
             )
         except ValueError:
             return False

@@ -7,6 +7,7 @@ from __future__ import annotations
 import contextvars
 import functools
 import logging
+import os
 import re
 from collections.abc import Callable
 from typing import Any, Optional
@@ -48,6 +49,15 @@ REQUIRED_WHEN_GUARD_DEPTH: contextvars.ContextVar[int] = contextvars.ContextVar(
 
 # Exception classes a user callable raises when it merely cannot judge a value.
 _EXPECTED_JUDGMENT_ERRORS: tuple[type[Exception], ...] = (TypeError, ValueError, AttributeError)
+
+# Name-path required-presence migration (#769): warn (default) / enforce / off.
+_NAME_PATH_PRESENCE_ENV = "MLODA_NAME_PATH_REQUIRED_PRESENCE"
+
+
+def _name_path_presence_mode() -> str:
+    """Read the #769 migration mode from the env var, defaulting to ``"warn"`` on any invalid value."""
+    mode = os.environ.get(_NAME_PATH_PRESENCE_ENV, "warn").strip().lower()
+    return mode if mode in ("off", "warn", "enforce") else "warn"
 
 
 def _contained_raise_log_level(exc: BaseException) -> int:
@@ -424,6 +434,75 @@ class FeatureChainParser:
         return cls._validate_final_properties(property_tracker, property_mapping)
 
     @classmethod
+    def _name_path_missing_required_keys(
+        cls, effective_options: Options, property_mapping: dict[str, PropertySpec]
+    ) -> list[str]:
+        """Missing required keys on the name path, in mapping order (#769).
+
+        The source key is name-provided (its count is enforced by MIN/MAX_IN_FEATURES), so
+        ``in_features`` is excluded. A declared-default or ``required_when`` key is skippable
+        (``_can_skip_required_check``); ``deferred_binding`` is the #769 opt-out. A key is absent
+        exactly as ``_collect_option_value`` / ``check_required_when`` read absence.
+        """
+        missing: list[str] = []
+        for key, spec in property_mapping.items():
+            if not isinstance(spec, PropertySpec):
+                continue
+            if key == DefaultOptionKeys.in_features:
+                continue
+            if cls._can_skip_required_check(spec) is not False:
+                continue
+            if spec.deferred_binding is not False:
+                continue
+            absent = effective_options.get(key) is None and not (spec.allow_explicit_none and key in effective_options)
+            if absent:
+                missing.append(key)
+        return missing
+
+    @classmethod
+    def _check_name_path_required_presence(
+        cls,
+        owner_name: str | None,
+        feature_name: str | FeatureName,
+        effective_options: Options,
+        property_mapping: dict[str, PropertySpec],
+    ) -> bool:
+        """Warn-then-enforce the name-path required-presence rule (#769). False means non-match."""
+        mode = _name_path_presence_mode()
+        if mode == "off":
+            return True
+
+        missing = cls._name_path_missing_required_keys(effective_options, property_mapping)
+        if not missing:
+            return True
+
+        owner = owner_name or "A feature group"
+        keys = ", ".join(sorted(missing))
+        if mode == "enforce":
+            logger.warning(
+                "%s did not match feature '%s': required option(s) %s are absent after declared defaults and "
+                "name bindings (%s=enforce). Provide the option(s), add a named capture (?P<key>...), or set "
+                "deferred_binding=True on each key bound outside the name.",
+                owner,
+                feature_name,
+                keys,
+                _NAME_PATH_PRESENCE_ENV,
+            )
+            return False
+
+        logger.warning(
+            "%s matched feature '%s' on its name, but required option(s) %s are absent after declared defaults "
+            "and name bindings; they will become a non-match once %s=enforce. Add a named capture (?P<key>...) "
+            "so the name binds them, provide the option(s), or set deferred_binding=True on each key intentionally "
+            "bound outside the name.",
+            owner,
+            feature_name,
+            keys,
+            _NAME_PATH_PRESENCE_ENV,
+        )
+        return True
+
+    @classmethod
     def match_configuration_feature_chain_parser(
         cls,
         feature_name: str | FeatureName,
@@ -431,6 +510,7 @@ class FeatureChainParser:
         property_mapping: Optional[dict[str, PropertySpec]] = None,
         prefix_patterns: Optional[list[Any]] = None,
         pattern: str = CHAIN_SEPARATOR,
+        owner_name: str | None = None,
     ) -> bool:
         """
         Unified method for matching features using either configuration-based or pattern-based parsing.
@@ -461,6 +541,10 @@ class FeatureChainParser:
                     bindings = cls.bind_name_captures(parsed, property_mapping)
                     effective_options = cls._merge_bindings(options, bindings, property_mapping)
                     cls._validate_present_option_values(effective_options, property_mapping)
+                    if not cls._check_name_path_required_presence(
+                        owner_name, feature_name, effective_options, property_mapping
+                    ):
+                        return False
                 return True
 
         # configuration-based

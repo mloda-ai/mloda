@@ -37,6 +37,11 @@ class TestPandasFilterEngine(FilterEngineTestMixin, TimeRangeFilterEngineTestMix
             }
         )
 
+    @pytest.fixture
+    def nullable_category_sample_data(self) -> Any:
+        """Create a sample pandas DataFrame with null categories for testing."""
+        return pd.DataFrame({"id": [1, 2, 3, 4, 5], "category": ["A", None, "B", None, "C"]})
+
     def get_column_values(self, result: Any, column: str) -> list[Any]:
         """Extract column values from pandas DataFrame."""
         return result[column].tolist()  # type: ignore[no-any-return]

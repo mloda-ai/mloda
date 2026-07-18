@@ -95,7 +95,7 @@ class PythonDictFilterEngine(BaseFilterEngine):
 
         compiled_pattern = re.compile(value)
 
-        return cls._apply_keep(data, column_name, lambda v: v is not None and bool(compiled_pattern.match(str(v))))
+        return cls._apply_keep(data, column_name, lambda v: v is not None and bool(compiled_pattern.search(str(v))))
 
     @classmethod
     def do_categorical_inclusion_filter(cls, data: Any, filter_feature: SingleFilter) -> Any:

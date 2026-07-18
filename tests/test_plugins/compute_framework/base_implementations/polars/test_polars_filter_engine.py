@@ -49,6 +49,11 @@ class TestPolarsFilterEngine(FilterEngineTestMixin, TimeRangeFilterEngineTestMix
             }
         )
 
+    @pytest.fixture
+    def nullable_category_sample_data(self) -> Any:
+        """Create a sample Polars DataFrame with null categories for testing."""
+        return pl.DataFrame({"id": [1, 2, 3, 4, 5], "category": ["A", None, "B", None, "C"]})
+
     def get_column_values(self, result: Any, column: str) -> list[Any]:
         """Extract column values from Polars DataFrame."""
         return result[column].to_list()  # type: ignore[no-any-return]

@@ -110,8 +110,12 @@ class PyArrowFilterEngine(BaseFilterEngine):
         if values is None:
             raise ValueError(f"Filter parameter 'values' not found in {filter_feature.parameter}")
 
-        # Create PyArrow array from the values
-        values_array = pa.array(values)
-        # Apply is_in filter
+        non_null = [v for v in values if v is not None]
+        if non_null:
+            values_array = pa.array(values)
+        else:
+            column_type = data[column_name].type
+            target_type = column_type.value_type if pa.types.is_dictionary(column_type) else column_type
+            values_array = pa.array(values, type=target_type)
         mask = pc.is_in(data[column_name], values_array)
         return data.filter(mask)

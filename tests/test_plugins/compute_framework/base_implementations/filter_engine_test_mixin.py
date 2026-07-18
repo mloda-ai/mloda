@@ -45,6 +45,18 @@ class FilterEngineTestMixin:
         """
         raise NotImplementedError
 
+    @pytest.fixture
+    @abstractmethod
+    def nullable_category_sample_data(self) -> Any:
+        """Return framework-specific sample data with null categories.
+
+        Override in framework-specific test class.
+        Data should contain columns:
+            id: [1, 2, 3, 4, 5]
+            category: ["A", None, "B", None, "C"]
+        """
+        raise NotImplementedError
+
     @abstractmethod
     def get_column_values(self, result: Any, column: str) -> list[Any]:
         """Extract column values as a list from the result.
@@ -157,6 +169,25 @@ class FilterEngineTestMixin:
         assert self.get_column_values(result, "name")[0] == "Alice"
         assert self.get_column_values(result, "id")[0] == 1
 
+    def test_do_regex_filter_is_unanchored(self, filter_engine: Any, sample_data: Any) -> None:
+        """REGEX filter must use unanchored (substring / re.search) semantics.
+
+        The pattern ``"li"`` appears inside ``"Alice"`` and ``"Charlie"`` but neither
+        name STARTS with ``"li"``. With unanchored matching (the contract shared by all
+        compute frameworks) exactly those two rows survive. Anchored matching
+        (``Series.str.match`` / ``re.match``) would return 0 rows.
+        """
+        feature = Feature("name")
+        filter_type = FilterType.REGEX
+        parameter = {"value": "li"}
+        single_filter = SingleFilter(feature, filter_type, parameter)
+
+        result = filter_engine.do_regex_filter(sample_data, single_filter)
+
+        assert self.result_row_count(result) == 2
+        self._assert_values_equal(self.get_column_values(result, "name"), ["Alice", "Charlie"])
+        self._assert_values_equal(self.get_column_values(result, "id"), [1, 3])
+
     def test_do_categorical_inclusion_filter(self, filter_engine: Any, sample_data: Any) -> None:
         """Test categorical inclusion filter."""
         feature = Feature("category")
@@ -169,6 +200,68 @@ class FilterEngineTestMixin:
         assert self.result_row_count(result) == 4
         assert set(self.get_column_values(result, "category")) == {"A", "B"}
         assert set(self.get_column_values(result, "id")) == {1, 2, 3, 5}
+
+    def test_do_categorical_inclusion_empty_values(self, filter_engine: Any, sample_data: Any) -> None:
+        """An empty allowed-values list must yield an empty result across all frameworks."""
+        feature = Feature("category")
+        filter_type = FilterType.CATEGORICAL_INCLUSION
+        parameter: dict[str, Any] = {"values": []}
+        single_filter = SingleFilter(feature, filter_type, parameter)
+
+        result = filter_engine.do_categorical_inclusion_filter(sample_data, single_filter)
+
+        assert self.result_row_count(result) == 0
+
+    def test_do_categorical_inclusion_keeps_null_when_none_present(
+        self, filter_engine: Any, nullable_category_sample_data: Any
+    ) -> None:
+        """When None is in the allowed-values list, null rows must be KEPT.
+
+        Data: id=[1,2,3,4,5], category=["A", None, "B", None, "C"].
+        With values ["A", None], keep category == "A" OR category is null -> ids {1, 2, 4}.
+        Asserting on the id column avoids NaN/None comparison issues on the category column.
+        """
+        feature = Feature("category")
+        filter_type = FilterType.CATEGORICAL_INCLUSION
+        parameter = {"values": ["A", None]}
+        single_filter = SingleFilter(feature, filter_type, parameter)
+
+        result = filter_engine.do_categorical_inclusion_filter(nullable_category_sample_data, single_filter)
+
+        assert self.result_row_count(result) == 3
+        self._assert_values_equal(self.get_column_values(result, "id"), [1, 2, 4])
+
+    def test_do_categorical_inclusion_drops_null_when_none_absent(
+        self, filter_engine: Any, nullable_category_sample_data: Any
+    ) -> None:
+        """When None is absent from the allowed-values list, null rows must be DROPPED.
+
+        Data: id=[1,2,3,4,5], category=["A", None, "B", None, "C"].
+        With values ["A"], keep only category == "A"; nulls dropped -> id {1}.
+        """
+        feature = Feature("category")
+        filter_type = FilterType.CATEGORICAL_INCLUSION
+        parameter = {"values": ["A"]}
+        single_filter = SingleFilter(feature, filter_type, parameter)
+
+        result = filter_engine.do_categorical_inclusion_filter(nullable_category_sample_data, single_filter)
+
+        assert self.result_row_count(result) == 1
+        self._assert_values_equal(self.get_column_values(result, "id"), [1])
+
+    def test_do_categorical_inclusion_only_none_keeps_only_nulls(
+        self, filter_engine: Any, nullable_category_sample_data: Any
+    ) -> None:
+        """An allowed-values list of only [None] keeps exactly the null rows."""
+        feature = Feature("category")
+        filter_type = FilterType.CATEGORICAL_INCLUSION
+        parameter = {"values": [None]}
+        single_filter = SingleFilter(feature, filter_type, parameter)
+
+        result = filter_engine.do_categorical_inclusion_filter(nullable_category_sample_data, single_filter)
+
+        assert self.result_row_count(result) == 2
+        self._assert_values_equal(self.get_column_values(result, "id"), [2, 4])
 
     def test_apply_filters(self, filter_engine: Any, sample_data: Any) -> None:
         """Test applying multiple filters."""

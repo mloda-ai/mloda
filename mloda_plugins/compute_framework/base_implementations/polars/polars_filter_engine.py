@@ -94,4 +94,8 @@ class PolarsFilterEngine(BaseFilterEngine):
         if values is None:
             raise ValueError(f"Filter parameter 'values' not found in {filter_feature.parameter}")
 
-        return data.filter(pl.col(column_name).is_in(values))
+        non_null = [v for v in values if v is not None]
+        mask = pl.col(column_name).is_in(non_null)
+        if len(non_null) != len(values):
+            mask = mask | pl.col(column_name).is_null()
+        return data.filter(mask)

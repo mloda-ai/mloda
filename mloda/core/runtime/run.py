@@ -144,6 +144,9 @@ class ExecutionOrchestrator:
                 if isinstance(original, BaseException):
                     raise original
                 raise MlodaRunError(self.cfw_register.get_error_msg())
+            dead = self.worker_manager.find_dead_workers()
+            if dead:
+                raise MlodaRunError(f"Worker process(es) died unexpectedly: {dead}")
             return False
         return True
 

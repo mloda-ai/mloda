@@ -1,4 +1,5 @@
 from collections import defaultdict
+from collections.abc import Iterator
 from copy import copy
 from uuid import UUID
 
@@ -39,13 +40,18 @@ class Graph:
         if node in self.visited:
             return
         self.visited.add(node)
-
-        # Iterate through dependent edges
-        for child in self.adjacency_list[node]:
-            if child not in self.visited:
+        stack: list[tuple[UUID, Iterator[UUID]]] = [(node, iter(self.adjacency_list[node]))]
+        while stack:
+            _, children = stack[-1]
+            for child in children:
+                if child in self.visited:
+                    continue
                 self.queue.append(child)
-
-            self.dfs(child)
+                self.visited.add(child)
+                stack.append((child, iter(self.adjacency_list[child])))
+                break
+            else:
+                stack.pop()
 
     def iterate_nodes_and_edges(self) -> None:
         self.visited: set[UUID] = set()
@@ -66,31 +72,42 @@ class Graph:
                 in_degree[child] += 1
         return in_degree
 
-    def get_direct_parents_for_each_child(self, parent: UUID, children: list[UUID]) -> None:
-        for child in children:
-            self.parents_by_direct_[child].add(parent)
-            self.get_direct_parents_for_each_child(child, self.adjacency_list[child])
-
     def set_direct_parents_for_each_child(self) -> None:
         for parent, children in self.adjacency_list.items():
-            self.get_direct_parents_for_each_child(parent, children)
-
-    def get_all_parents_for_each_child(self, child: UUID, parents: set[UUID]) -> set[UUID]:
-        if not parents:
-            return parents
-
-        result_set: set[UUID] = set()
-
-        for parent in parents:
-            parents_of_parent = self.parents_by_direct_[parent]
-            result_set = result_set.union(self.get_all_parents_for_each_child(child, parents_of_parent))
-
-        return parents.union(result_set)
+            for child in children:
+                self.parents_by_direct_[child].add(parent)
 
     def set_all_parents_for_each_child(self) -> None:
-        for child, parents in self.parents_by_direct_.copy().items():
-            result_set = self.get_all_parents_for_each_child(child, parents)
-            self.parent_to_children_mapping[child] = result_set.union(parents)
+        memo: dict[UUID, set[UUID]] = {}
+        direct = self.parents_by_direct_
+        for start in list(direct):
+            if start in memo:
+                continue
+            stack: list[UUID] = [start]
+            on_path: set[UUID] = set()
+            while stack:
+                cur = stack[-1]
+                if cur in memo:
+                    stack.pop()
+                    continue
+                # .get, not direct[cur]: indexing the defaultdict would insert spurious root keys
+                parents = direct.get(cur, set())
+                unresolved = [p for p in parents if p not in memo]
+                if unresolved:
+                    if cur in on_path:
+                        raise ValueError(f"cycle detected in feature graph at {cur}")
+                    on_path.add(cur)
+                    stack.extend(unresolved)
+                    continue
+                ancestors: set[UUID] = set()
+                for p in parents:
+                    ancestors.add(p)
+                    ancestors |= memo[p]
+                memo[cur] = ancestors
+                on_path.discard(cur)
+                stack.pop()
+        for child in direct:
+            self.parent_to_children_mapping[child] = memo[child]
 
     def set_root_parents_by_direct_(self) -> None:
         for child, parents in self.parent_to_children_mapping.items():

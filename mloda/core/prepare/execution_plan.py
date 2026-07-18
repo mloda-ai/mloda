@@ -255,8 +255,7 @@ class ExecutionPlan:
                             match.add(found)
                             break
                     if match:
-                        # We add the uuid of the joinstep to the required_uuids of the feature group.
-                        ep.required_uuids.union(match)
+                        # parent is served by a join step; the consumer is already ordered after it via the link uuid
                         continue
 
                     # We only want to add TFS for direct parents and not for parent parents.

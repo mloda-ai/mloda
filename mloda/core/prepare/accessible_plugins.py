@@ -429,7 +429,9 @@ class PreFilterPlugins:
         feature_groups: set[type[FeatureGroup]],
         compute_frameworks: set[type[ComputeFramework]],
     ) -> FeatureGroupEnvironmentMapping:
-        # Fail closed: a provider that raises while declaring its frameworks aborts the build, raw and unwrapped.
+        # Fail closed: a provider that raises while declaring its frameworks aborts the build. The engine
+        # build (flag off) propagates it raw and unwrapped (#790); resolve_feature (flag on) attributes it
+        # to the culprit FeatureGroup as FrameworkDeclarationError.
         accessible_plugins: FeatureGroupEnvironmentMapping = {}
         for feature_group in feature_groups:
             if self.attribute_declaration_failures:

@@ -7,8 +7,9 @@ keeps its never-raising contract by projecting the same failure into ResolvedFea
 aborts before matching, a broken group is not a listed candidate.
 
 That projection has two shapes, split by who is at fault rather than by which exception type a plugin
-happens to raise: a PLUGIN's failure is attributed ("Failed to build the plugin environment: <type>: <msg>"),
-while mloda's own environment preconditions are already complete user-facing sentences and stay bare.
+happens to raise: a PLUGIN's failure is attributed ("Failed to build the plugin environment: <type>: <msg>
+(raised by <module:qualname> while declaring its compute frameworks)"), while mloda's own environment
+preconditions are already complete user-facing sentences and stay bare.
 
 The broken class is built per test by a factory and dropped in a finally (del + gc.collect(), same pattern as
 test_sbdg_resolve_feature_broken_rule.py). This matters more than usual here: under fail-closed semantics a
@@ -176,6 +177,8 @@ def test_resolve_feature_names_the_broken_plugin_for_an_unrelated_feature() -> N
     assert winner_name is None
     assert error is not None
     assert "Failed to build the plugin environment" in error
+    assert "RuntimeError" in error
+    assert ENV_BUILD_FAILURE_MESSAGE in error
     # #794: the fail-closed error must name the culprit class, not just the raised exception.
     assert identity in error
     assert candidate_names == []

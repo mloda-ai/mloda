@@ -4,6 +4,10 @@ Every merge engine must produce the same result for the same input. The expected
 frames below are the cross-framework contract, verified against pandas as the
 reference. They are compared as an order-independent, null-normalized multiset of
 rows (see ``test_merge_conformance``), so column/row order and 1 vs 1.0 do not matter.
+
+Scope: this suite covers SINGLE-key equi-joins (same and differing key names);
+multi-column differing-key-name joins are a known cross-framework divergence (pyarrow,
+polars) that is NOT yet covered or fixed here.
 """
 
 from typing import Any, TypedDict

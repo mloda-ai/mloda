@@ -213,6 +213,8 @@ class PyArrowMergeEngine(BaseMergeEngine):
         )
 
         if helper_columns:
-            left_data = left_data.select([c for c in left_data.column_names if c not in helper_columns])
+            # Drop helpers by index: a shared non-key column name would make a name-based select ambiguous.
+            keep = [i for i, name in enumerate(left_data.column_names) if name not in helper_columns]
+            left_data = left_data.select(keep)
 
         return left_data

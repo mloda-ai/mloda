@@ -106,7 +106,11 @@ _PARAMS = [
 
 
 def _norm(value: Any) -> Any:
-    """None stays None; float NaN collapses to None so nullable-int widening never matters."""
+    """None stays None; float NaN collapses to None so nullable-int widening never matters.
+
+    Tuned for the current numeric/string scenario data: boolean and temporal values would need
+    ``_norm`` revisited before being added (Python treats ``True == 1``, so bools would collide).
+    """
     if isinstance(value, float) and math.isnan(value):
         return None
     return value

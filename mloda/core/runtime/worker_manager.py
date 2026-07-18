@@ -59,13 +59,27 @@ class WorkerManager:
         command_queue.put(command)
 
     def poll_result_queues(self) -> None:
-        """Non-blocking poll all result queues, add UUIDs to result_uuids_collection."""
+        """Non-blocking poll all result queues, collect step-UUID strings.
+
+        The result queue also carries ("DROP_COMPLETE", cfw_uuid) control tuples;
+        skip non-str messages rather than pass them to UUID().
+        """
         for r_queue in self.result_queues_collection:
             try:
-                result_uuid = r_queue.get(block=False)
-                self.result_uuids_collection.add(UUID(result_uuid))
+                msg = r_queue.get(block=False)
             except queue.Empty:
                 continue
+            if isinstance(msg, str):
+                self.result_uuids_collection.add(UUID(msg))
+
+    def find_dead_workers(self) -> list[tuple[UUID, int]]:
+        """Return (cfw_uuid, exitcode) for workers that died abnormally (exitcode not in {None, 0})."""
+        dead: list[tuple[UUID, int]] = []
+        for cfw_uuid, (process, _, _) in self.process_register.items():
+            exitcode = process.exitcode
+            if exitcode is not None and exitcode != 0:
+                dead.append((cfw_uuid, exitcode))
+        return dead
 
     def is_step_done(self, step_uuid: UUID) -> bool:
         """Return step_uuid in result_uuids_collection."""

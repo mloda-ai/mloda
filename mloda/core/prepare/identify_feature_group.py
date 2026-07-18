@@ -76,6 +76,23 @@ class ResolutionRecord:
     result: EvaluationResult
 
 
+@dataclass(frozen=True)
+class ResolutionDiagnosis:
+    """Non-raising outcome of mlodaAPI.diagnose, a whole-request resolution preflight.
+
+    complete is True iff the whole request resolved; then records equals session.resolution_report() and
+    feature_name/failed_result/message are None. On a resolution failure records holds the features resolved
+    before the failing one, feature_name/failed_result carry that feature's failed evaluation, and message is
+    its rendered text. On a configuration error records is empty and only message is set.
+    """
+
+    records: list[ResolutionRecord]
+    complete: bool
+    feature_name: str | None = None
+    failed_result: EvaluationResult | None = None
+    message: str | None = None
+
+
 class FeatureResolutionError(ValueError):
     """Typed resolution failure carrying the feature name and the EvaluationResult of its single pass."""
 

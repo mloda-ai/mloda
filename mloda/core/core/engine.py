@@ -49,6 +49,7 @@ class Engine:
         api_input_data_collection: Optional[ApiInputDataCollection] = None,
         plugin_collector: Optional[PluginCollector] = None,
         column_ordering: Optional[str] = None,
+        auto_plan: bool = True,
     ) -> None:
         # setup variables which track the primary sources and the compute platforms
         self.feature_group_collection: dict[type[FeatureGroup], set[Feature]] = defaultdict(set)
@@ -78,7 +79,18 @@ class Engine:
         self._dual_consumption_warned: set[tuple[str, str, frozenset[str]]] = set()
         self._property_mapping_keys_cache: dict[type[FeatureGroup], frozenset[str]] = {}
         self.resolution_records: list[ResolutionRecord] = []
-        self.execution_planner = self.create_setup_execution_plan(features)
+        self.features = features
+        if auto_plan:
+            self.plan()
+
+    def plan(self) -> None:
+        """Run the eager planning pass: build the execution plan and resolve the TFS connection map.
+
+        Split from __init__ so mlodaAPI.diagnose can retain the engine, and the records captured before a
+        FeatureResolutionError, when planning fails. Meant to run once per engine: it appends to
+        resolution_records and mutates the feature collections, so a second call would double-count.
+        """
+        self.execution_planner = self.create_setup_execution_plan(self.features)
         self.tfs_connection_map = self._resolve_tfs_connection_map()
 
     def _resolve_tfs_connection_map(self) -> dict[type[ComputeFramework], Any]:

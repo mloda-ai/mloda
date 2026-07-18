@@ -9,7 +9,11 @@ from mloda.core.abstract_plugins.components.plugin_option.plugin_collector impor
 # Explicit alias re-exports Engine under no_implicit_reexport so tests can patch mloda.core.api.request.Engine.
 from mloda.core.core.engine import Engine as Engine
 from mloda.core.api.plan_info import PlanStep, build_plan_steps
-from mloda.core.prepare.identify_feature_group import ResolutionRecord
+from mloda.core.prepare.identify_feature_group import (
+    FeatureResolutionError,
+    ResolutionDiagnosis,
+    ResolutionRecord,
+)
 from mloda.core.api.run_result import ResultStream, RunResult
 from mloda.core.api.prepare.setup_compute_framework import SetupComputeFramework
 from mloda.core.prepare.accessible_plugins import filter_extenders_by_strict_mode
@@ -49,6 +53,7 @@ class mlodaAPI:
         strict_type_enforcement: bool = False,
         column_ordering: Optional[str] = None,
         parallelization_modes: Optional[set[ParallelizationMode]] = None,
+        _defer_planning: bool = False,
     ) -> None:
         if column_ordering is not None and column_ordering not in ("alphabetical", "request_order"):
             raise ValueError(
@@ -81,6 +86,7 @@ class mlodaAPI:
         self.runner: None | ExecutionOrchestrator = None
         self.engine: None | Engine = None
 
+        self._defer_planning = _defer_planning
         self.engine = self._create_engine()
 
     def _process_features(
@@ -300,6 +306,67 @@ class mlodaAPI:
         )
         return session.resolved_plan()
 
+    @classmethod
+    def diagnose(
+        cls,
+        features: Features | list[Feature | str],
+        *,
+        compute_frameworks: set[type[ComputeFramework]] | Optional[list[str]] = None,
+        links: Optional[set[Link]] = None,
+        data_access_collection: Optional[DataAccessCollection] = None,
+        global_filter: Optional[GlobalFilter] = None,
+        api_data: Optional[dict[str, dict[str, Any]]] = None,
+        plugin_collector: Optional[PluginCollector] = None,
+        copy_features: bool = True,
+        strict_type_enforcement: bool = False,
+        column_ordering: Optional[str] = None,
+        parallelization_modes: Optional[set[ParallelizationMode]] = None,
+    ) -> ResolutionDiagnosis:
+        """Non-raising whole-request resolution preflight.
+
+        Runs the same eager planning as prepare() but projects the outcome instead of raising: on success
+        records equals resolution_report() with complete True; on a resolution failure records holds the
+        features resolved before the failing one plus that feature's EvaluationResult and rendered message.
+        A configuration error raised while building the session (for example an invalid column_ordering)
+        yields only the message; any other error raised during the planning pass propagates. Every parameter
+        after features is keyword-only.
+        """
+        try:
+            session = cls(
+                features,
+                compute_frameworks,
+                links,
+                data_access_collection,
+                global_filter,
+                api_data=api_data,
+                plugin_collector=plugin_collector,
+                copy_features=copy_features,
+                strict_type_enforcement=strict_type_enforcement,
+                column_ordering=column_ordering,
+                parallelization_modes=parallelization_modes,
+                _defer_planning=True,
+            )
+        except ValueError as error:
+            # Setup-phase configuration error (e.g. bad column_ordering); no feature was resolved yet.
+            return ResolutionDiagnosis(records=[], complete=False, message=str(error))
+
+        engine = session.engine
+        if engine is None:
+            raise ValueError("Internal error: engine not initialized. This is likely a bug in mloda.")
+
+        try:
+            engine.plan()
+        except FeatureResolutionError as error:
+            return ResolutionDiagnosis(
+                records=deepcopy(engine.resolution_records),
+                complete=False,
+                feature_name=error.feature_name,
+                failed_result=deepcopy(error.result),
+                message=str(error),
+            )
+
+        return ResolutionDiagnosis(records=session.resolution_report(), complete=True)
+
     def resolved_plan(self) -> list[PlanStep]:
         """Return the resolved execution plan of this session as ``PlanStep`` records.
 
@@ -423,6 +490,7 @@ class mlodaAPI:
             self.api_input_data_collection,
             self.plugin_collector,
             column_ordering=self.column_ordering,
+            auto_plan=not self._defer_planning,
         )
         if not isinstance(engine, Engine):
             raise ValueError("Engine initialization failed.")

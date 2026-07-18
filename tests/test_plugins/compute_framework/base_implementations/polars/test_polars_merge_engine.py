@@ -6,10 +6,10 @@ from mloda.user import Index
 from mloda.provider import BaseMergeEngine
 from mloda_plugins.compute_framework.base_implementations.polars.polars_merge_engine import PolarsMergeEngine
 from mloda_plugins.compute_framework.base_implementations.polars.polars_lazy_merge_engine import PolarsLazyMergeEngine
-from tests.test_plugins.compute_framework.test_tooling.merge_conformance.merge_conformance_test_base import (
-    MergeConformanceTestBase,
-)
 from tests.test_plugins.compute_framework.test_tooling.merge_link import make_merge_link
+from tests.test_plugins.compute_framework.test_tooling.multi_index.multi_index_test_base import (
+    MultiIndexMergeEngineTestBase,
+)
 
 import logging
 
@@ -309,8 +309,8 @@ class TestPolarsMergeEngine:
 
 
 @pytest.mark.skipif(pl is None, reason="Polars is not installed. Skipping this test.")
-class TestPolarsMergeConformance(MergeConformanceTestBase):
-    """Cross-framework merge conformance for PolarsMergeEngine."""
+class TestPolarsMergeEngineMultiIndex(MultiIndexMergeEngineTestBase):
+    """Test PolarsMergeEngine using shared multi-index + conformance scenarios."""
 
     @classmethod
     def merge_engine_class(cls) -> type[BaseMergeEngine]:

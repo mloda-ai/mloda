@@ -7,9 +7,6 @@ from mloda.core.abstract_plugins.components.link import AsOfJoinConfig
 from mloda.provider import BaseMergeEngine
 from mloda_plugins.compute_framework.base_implementations.duckdb.duckdb_merge_engine import DuckDBMergeEngine
 from mloda_plugins.compute_framework.base_implementations.duckdb.duckdb_relation import DuckdbRelation
-from tests.test_plugins.compute_framework.test_tooling.merge_conformance.merge_conformance_test_base import (
-    MergeConformanceTestBase,
-)
 from tests.test_plugins.compute_framework.test_tooling.merge_link import make_merge_link
 from tests.test_plugins.compute_framework.test_tooling.multi_index.multi_index_test_base import (
     MultiIndexMergeEngineTestBase,
@@ -434,29 +431,6 @@ class TestDuckDBEquiJoinTimezoneGuard:
 @pytest.mark.skipif(duckdb is None or pa is None, reason="DuckDB or PyArrow is not installed. Skipping this test.")
 class TestDuckDBMergeEngineMultiIndex(MultiIndexMergeEngineTestBase):
     """Test DuckDBMergeEngine multi-index support using shared test scenarios."""
-
-    @classmethod
-    def merge_engine_class(cls) -> type[BaseMergeEngine]:
-        """Return the DuckDBMergeEngine class."""
-        return DuckDBMergeEngine
-
-    @classmethod
-    def framework_type(cls) -> type[Any]:
-        """Return DuckDB relation type."""
-        if duckdb is None:
-            raise ImportError("DuckDB is not installed")
-        return DuckdbRelation
-
-    def get_connection(self) -> Optional[Any]:
-        """DuckDB requires a connection object."""
-        if not hasattr(self, "_connection"):
-            self._connection = duckdb.connect()
-        return self._connection
-
-
-@pytest.mark.skipif(duckdb is None or pa is None, reason="DuckDB or PyArrow is not installed. Skipping this test.")
-class TestDuckDBMergeConformance(MergeConformanceTestBase):
-    """Cross-framework merge conformance for DuckDBMergeEngine."""
 
     @classmethod
     def merge_engine_class(cls) -> type[BaseMergeEngine]:

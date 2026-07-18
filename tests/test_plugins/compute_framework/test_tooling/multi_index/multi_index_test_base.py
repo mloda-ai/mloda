@@ -5,6 +5,8 @@ This module provides a reusable base class that implements common test logic
 for multi-index merge operations across all compute frameworks.
 """
 
+import collections
+import math
 from abc import ABC, abstractmethod
 from typing import Any, Callable, Optional
 import logging
@@ -15,12 +17,32 @@ from mloda.user import Index
 from mloda.provider import BaseMergeEngine
 from mloda.core.abstract_plugins.components.link import JoinType
 
+from tests.test_plugins.compute_framework.test_tooling.merge_conformance.merge_conformance_scenarios import (
+    JOIN_TYPE_NAMES,
+    MERGE_CONFORMANCE_SCENARIOS,
+)
 from tests.test_plugins.compute_framework.test_tooling.merge_link import make_merge_link
 
 from .test_scenarios import SCENARIOS, MergeScenario
 from .test_data_converter import DataConverter
 
 logger = logging.getLogger(__name__)
+
+
+def _norm(value: Any) -> Any:
+    """None stays None; float NaN collapses to None so nullable-int widening never matters.
+
+    Tuned for the current numeric/string scenario data: boolean and temporal values would need
+    ``_norm`` revisited before being added (Python treats ``True == 1``, so bools would collide).
+    """
+    if isinstance(value, float) and math.isnan(value):
+        return None
+    return value
+
+
+def _multiset(rows: list[dict[str, Any]]) -> collections.Counter[frozenset[tuple[str, Any]]]:
+    """Order- and column-order-independent, null-normalized bag of rows (1 == 1.0)."""
+    return collections.Counter(frozenset((col, _norm(val)) for col, val in row.items()) for row in rows)
 
 
 class MultiIndexMergeEngineTestBase(ABC):
@@ -129,8 +151,6 @@ class MultiIndexMergeEngineTestBase(ABC):
 
     def _assert_has_null_values(self, result: list[dict[str, Any]], column: str) -> bool:
         """Check if any row has null value in specified column."""
-        import math
-
         for row in result:
             value = row.get(column)
             if value is None:
@@ -213,3 +233,28 @@ class MultiIndexMergeEngineTestBase(ABC):
 
         with pytest.raises(ValueError):
             engine.merge(left_data, right_data, make_merge_link(JoinType.INNER, left_index, right_index))
+
+    @pytest.mark.parametrize("scenario_key", list(MERGE_CONFORMANCE_SCENARIOS))
+    @pytest.mark.parametrize("join_name", JOIN_TYPE_NAMES)
+    def test_merge_conformance(self, scenario_key: str, join_name: str) -> None:
+        """Cross-framework conformance: every engine returns ONE canonical result.
+
+        Single-key equi-joins (same and differing key names), compared as an
+        order-independent, column-order-independent, null-normalized multiset of rows.
+        """
+        scenario = MERGE_CONFORMANCE_SCENARIOS[scenario_key]
+        join_type = JoinType[join_name]
+
+        left = self.convert_dict_to_framework(scenario["left"])
+        right = self.convert_dict_to_framework(scenario["right"])
+        link = make_merge_link(join_type, Index(scenario["left_index"]), Index(scenario["right_index"]))
+
+        connection = self.get_connection()
+        engine = self.merge_engine_class()(connection) if connection else self.merge_engine_class()()
+        result = engine.merge(left, right, link)
+        actual = self.convert_framework_to_dict(result)
+
+        expected = scenario["expected"][join_name]
+        assert _multiset(actual) == _multiset(expected), (
+            f"Merge conformance mismatch [{scenario_key} / {join_name}]:\n  expected={expected}\n  actual={actual}"
+        )

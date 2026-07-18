@@ -22,9 +22,12 @@ from mloda.core.prepare.graph.build_graph import BuildGraph
 from mloda.core.prepare.resolve_graph import ResolveGraph
 from mloda.core.runtime.run import ExecutionOrchestrator
 from mloda.core.prepare.identify_feature_group import (
+    PARTIAL_RECORDS_CAP,
     EvaluationResult,
+    FeatureResolutionError,
     IdentifyFeatureGroupClass,
     ResolutionRecord,
+    render_resolution_failure,
 )
 from mloda.core.runtime.flight.runner_flight_server import ParallelRunnerFlightServer
 from mloda.core.abstract_plugins.feature_group import FeatureGroup, format_feature_group_class
@@ -216,12 +219,21 @@ class Engine:
     def _identify_feature_group_and_frameworks(
         self, feature: Feature
     ) -> tuple[type[FeatureGroup], set[type[ComputeFramework]], EvaluationResult]:
-        """Identifies the feature group class, compute frameworks, and the EvaluationResult for a feature."""
-        identifier = IdentifyFeatureGroupClass(
+        """Identify the winning feature group via the non-raising seam; on failure raise the enriched error."""
+        result = IdentifyFeatureGroupClass.evaluate(
             feature, self.accessible_plugins, self.links, self.data_access_collection
         )
-        feature_group_class, compute_frameworks = identifier.get()
-        return feature_group_class, compute_frameworks, identifier.result
+        message = render_resolution_failure(result, feature)
+        if message is not None:
+            # Slice before deepcopy so the attached payload stays bounded.
+            raise FeatureResolutionError(
+                message,
+                str(feature.name),
+                result,
+                partial_records=deepcopy(self.resolution_records[-PARTIAL_RECORDS_CAP:]),
+            )
+        feature_group_class, compute_frameworks = next(iter(result.identified.items()))
+        return feature_group_class, compute_frameworks, result
 
     def _add_index_feature(
         self,

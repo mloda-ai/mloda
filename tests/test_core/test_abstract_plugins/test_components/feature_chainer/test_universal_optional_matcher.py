@@ -23,12 +23,17 @@ diagnostic in scope is the universal-matcher warning, never the captureless one.
 
 from __future__ import annotations
 
+import gc
 import logging
+from collections.abc import Iterator
 from typing import Any
 
 import pytest
 
-from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser import FeatureChainParser
+from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser import (
+    FeatureChainParser,
+    _UNIVERSAL_MATCHER_PROBE_NAME,
+)
 from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser_mixin import FeatureChainParserMixin
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.components.options import Options
@@ -45,6 +50,13 @@ UNRELATED_NAME_U771 = "some_unrelated_feature_u771"
 # pattern): each is required only when the other is absent, so EMPTY options leaves both required.
 COND_KEY_A_U771 = "pipe_a_u771e"
 COND_KEY_B_U771 = "pipe_b_u771e"
+
+
+@pytest.fixture(autouse=True, scope="module")
+def _collect_leaked_local_feature_groups() -> Iterator[None]:
+    """Function-local FeatureGroup subclasses are cyclic garbage; collect them before the next module runs."""
+    yield
+    gc.collect()
 
 
 def _universal_matcher_warnings(
@@ -366,7 +378,10 @@ class TestUniversalMatcherDoesNotWarn:
                     options: Options,
                     data_access_collection: Any = None,
                 ) -> bool:
-                    raise RuntimeError("boom_u771n")
+                    # Leaked into the global subclass registry: stay inert for all but the definition-time probe.
+                    if str(feature_name) == _UNIVERSAL_MATCHER_PROBE_NAME:
+                        raise RuntimeError("boom_u771n")
+                    return False
 
             # The class body completes: the probe exception did not escape class definition.
             assert "opt_u771n" in _RaisingMatcherU771n.PROPERTY_MAPPING

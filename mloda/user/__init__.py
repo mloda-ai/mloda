@@ -52,7 +52,11 @@ from mloda.core.abstract_plugins.plugin_registry.plugin_registry import (
 )
 
 # Feature resolution
-from mloda.core.prepare.identify_feature_group import FeatureResolutionError, ResolutionRecord
+from mloda.core.prepare.identify_feature_group import (
+    FeatureResolutionError,
+    ResolutionDiagnosis,
+    ResolutionRecord,
+)
 
 # Config loading
 from mloda.core.api.feature_config.loader import load_features_from_config
@@ -111,6 +115,7 @@ __all__ = [
     # Feature resolution
     "FeatureResolutionError",
     "ResolutionRecord",
+    "ResolutionDiagnosis",
     # Streaming API
     "stream_all",
     # Config loading

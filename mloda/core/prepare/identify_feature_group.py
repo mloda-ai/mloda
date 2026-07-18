@@ -1,4 +1,5 @@
 import inspect
+from collections.abc import Sequence
 from dataclasses import dataclass, field, replace
 from difflib import get_close_matches
 from typing import Any, Literal, Optional
@@ -76,17 +77,49 @@ class ResolutionRecord:
     result: EvaluationResult
 
 
-class FeatureResolutionError(ValueError):
-    """Typed resolution failure carrying the feature name and the EvaluationResult of its single pass."""
+# Cap on records attached to a FeatureResolutionError so the copy stays bounded on huge requests.
+PARTIAL_RECORDS_CAP = 1000
 
-    def __init__(self, message: str, feature_name: str, result: EvaluationResult) -> None:
+
+@dataclass(frozen=True)
+class ResolutionDiagnosis:
+    """Non-raising outcome of mlodaAPI.diagnose, a whole-request resolution preflight.
+
+    complete is True iff the whole request resolved; then records equals session.resolution_report() and
+    feature_name/failed_result/message are None. On a resolution failure records holds the features resolved
+    before the failing one (capped at PARTIAL_RECORDS_CAP on huge requests), feature_name/failed_result carry
+    that feature's failed evaluation, and message is its rendered text. On a configuration error records is
+    empty and only message is set.
+    """
+
+    records: list[ResolutionRecord]
+    complete: bool
+    feature_name: str | None = None
+    failed_result: EvaluationResult | None = None
+    message: str | None = None
+
+
+class FeatureResolutionError(ValueError):
+    """Typed resolution failure carrying the feature name, the EvaluationResult of its single pass,
+    and the records resolved before the failure, capped at PARTIAL_RECORDS_CAP."""
+
+    def __init__(
+        self,
+        message: str,
+        feature_name: str,
+        result: EvaluationResult,
+        partial_records: Sequence[ResolutionRecord] = (),
+    ) -> None:
         super().__init__(message)
         self.feature_name = feature_name
         self.result = result
+        self.partial_records: tuple[ResolutionRecord, ...] = tuple(partial_records[-PARTIAL_RECORDS_CAP:])
 
-    def __reduce__(self) -> tuple[type["FeatureResolutionError"], tuple[str, str, EvaluationResult]]:
-        # The default reduction reconstructs from args=(message,) and drops the two extra constructor arguments.
-        return type(self), (str(self), self.feature_name, self.result)
+    def __reduce__(
+        self,
+    ) -> tuple[type["FeatureResolutionError"], tuple[str, str, EvaluationResult, tuple[ResolutionRecord, ...]]]:
+        # The default reduction reconstructs from args=(message,) and drops the extra constructor arguments.
+        return type(self), (str(self), self.feature_name, self.result, self.partial_records)
 
 
 def matches_feature_group_scope(feature_group: type[FeatureGroup], scope: str | type[FeatureGroup]) -> bool:

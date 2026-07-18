@@ -248,11 +248,13 @@ consulted, so the build succeeds and the feature is an ordinary no-match:
 ``` python
 # One broken third-party plugin, and every call reports its failure:
 resolve_feature("timestamp_unix").error
-# "Failed to build the plugin environment: RuntimeError: ..."
+# "Failed to build the plugin environment: RuntimeError: ... (raised by pkg.module:BrokenFG while declaring its compute frameworks)"
 
 # Scope it out, and resolution works again:
 resolve_feature("timestamp_unix", plugin_collector=PluginCollector().disabled_feature_groups({BrokenFG}))
 ```
+
+`resolve_feature` names the culprit class as `module:qualname` in the error, so you know exactly which plugin to scope out.
 
 Strict mode is the other filter: an unregistered broken plugin is dropped before
 its declaration is read. Both apply identically to a run, so a scope that rescues

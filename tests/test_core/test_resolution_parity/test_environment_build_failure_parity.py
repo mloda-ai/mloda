@@ -158,6 +158,29 @@ def test_resolve_feature_projects_the_environment_build_failure() -> None:
     assert environment == "standalone-default"
 
 
+def test_resolve_feature_names_the_broken_plugin_for_an_unrelated_feature() -> None:
+    """An unrelated feature still surfaces the broken plugin, named as module:qualname (#794)."""
+    broken_fg = _make_broken_rule_fg()
+    identity = f"{broken_fg.__module__}:{broken_fg.__qualname__}"
+    try:
+        result = resolve_feature("unrelated_probe794_feature")
+        winner_name = result.feature_group.get_class_name() if result.feature_group is not None else None
+        error = result.error
+        candidate_names = [candidate.get_class_name() for candidate in result.candidates]
+        del result
+    finally:
+        del broken_fg
+        gc.collect()
+
+    # The broken plugin declares EVERY group's frameworks, so it aborts the build of an unrelated feature too.
+    assert winner_name is None
+    assert error is not None
+    assert "Failed to build the plugin environment" in error
+    # #794: the fail-closed error must name the culprit class, not just the raised exception.
+    assert identity in error
+    assert candidate_names == []
+
+
 def test_engine_and_resolve_feature_report_the_same_provider_failure() -> None:
     """Parity: both paths surface the SAME provider failure, not two independently drifting strings."""
     broken_fg = _make_broken_rule_fg()

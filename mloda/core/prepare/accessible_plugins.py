@@ -113,6 +113,22 @@ class RedefinitionConflictError(ValueError):
     """
 
 
+class FrameworkDeclarationError(ValueError):
+    """A FeatureGroup raised while declaring its compute frameworks; carries the culprit's identity.
+
+    resolve_feature builds the environment with attribution on so it can name the broken plugin; the engine
+    builds with it off and keeps propagating the provider exception raw (#790). The message is a complete
+    user-facing sentence that callers project as-is. Subclasses ``ValueError`` like the sibling build errors.
+    """
+
+    def __init__(self, feature_group_identity: str, original: BaseException) -> None:
+        self.feature_group_identity = feature_group_identity
+        super().__init__(
+            f"Failed to build the plugin environment: {type(original).__name__}: {original} "
+            f"(raised by {feature_group_identity} while declaring its compute frameworks)"
+        )
+
+
 def _running_in_zmq_shell() -> bool:
     """Detect IPython kernel (Jupyter) environment for the kernel-restart hint."""
     try:
@@ -293,7 +309,9 @@ class PreFilterPlugins:
         self,
         compute_frameworks: set[type[ComputeFramework]],
         plugin_collector: Optional[PluginCollector] = None,
+        attribute_declaration_failures: bool = False,
     ) -> None:
+        self.attribute_declaration_failures = attribute_declaration_failures
         feature_groups = self._set_feature_groups(plugin_collector)
         compute_frameworks = self._set_compute_frameworks(compute_frameworks, plugin_collector)
 
@@ -414,7 +432,14 @@ class PreFilterPlugins:
         # Fail closed: a provider that raises while declaring its frameworks aborts the build, raw and unwrapped.
         accessible_plugins: FeatureGroupEnvironmentMapping = {}
         for feature_group in feature_groups:
-            definition = feature_group.compute_framework_definition()
+            if self.attribute_declaration_failures:
+                try:
+                    definition = feature_group.compute_framework_definition()
+                except Exception as exc:  # noqa: BLE001  attribute the culprit, then re-raise typed
+                    identity = f"{feature_group.__module__}:{feature_group.__qualname__}"
+                    raise FrameworkDeclarationError(identity, exc) from exc
+            else:
+                definition = feature_group.compute_framework_definition()
             new_set_of_compute_frameworks = {cp_fg for cp_fg in definition if cp_fg in compute_frameworks}
             accessible_plugins[feature_group] = new_set_of_compute_frameworks
 

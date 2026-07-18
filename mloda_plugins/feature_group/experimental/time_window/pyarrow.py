@@ -5,7 +5,7 @@ PyArrow implementation for time window feature groups.
 from __future__ import annotations
 
 from typing import Any, Optional
-import datetime
+import bisect
 
 import pyarrow as pa
 import pyarrow.compute as pc
@@ -112,6 +112,10 @@ class PyArrowTimeWindowFeatureGroup(TimeWindowFeatureGroup):
         # Get the time column
         time_column = data.column(time_filter_feature)
 
+        # A null/NaT reference time has no position on the timeline; fail explicitly.
+        if time_column.null_count > 0:
+            cls._raise_null_reference_time(time_filter_feature)
+
         # Get the source columns
         source_columns = [data.column(name) for name in in_features]
 
@@ -122,18 +126,28 @@ class PyArrowTimeWindowFeatureGroup(TimeWindowFeatureGroup):
         # Get the sorted source values for each column
         sorted_sources = [pc.take(col, sorted_indices) for col in source_columns]
 
+        # Time-based (not row-count) window: include rows in (t - span, t].
+        # Bound each window by ABSOLUTE integer nanoseconds (not Python datetimes):
+        # wall-clock datetime subtraction is wrong across a DST transition, whereas
+        # int64 ns since epoch is DST-safe, unit-uniform, and works for tz-aware
+        # timestamps and date32/date64 too.
+        sorted_times_ns = pc.take(time_column, sorted_indices).cast(pa.timestamp("ns")).cast(pa.int64()).to_pylist()
+        span = cls._get_time_delta(window_size, time_unit)
+        span_ns = span.days * 86_400_000_000_000 + span.seconds * 1_000_000_000 + span.microseconds * 1_000
+
         # Create a list to store the results
         results = []
 
-        # For each row, calculate the window operation using a fixed-size window
-        # This matches the pandas implementation which uses rolling(window=window_size, min_periods=1)
+        # For each row, calculate the window operation over the time-based window
         for i in range(len(sorted_sources[0])):
-            # Get the window values (current and previous values up to window_size)
-            start_idx = max(0, i - window_size + 1)
-            window_indices = pa.array(range(start_idx, i + 1))
+            # Rows are time-sorted ascending, so the window is a contiguous slice
+            # ending at i. bisect_right of (t_i - span) gives the first index strictly
+            # greater than the lower bound, implementing the left-open boundary.
+            start_idx = bisect.bisect_right(sorted_times_ns, sorted_times_ns[i] - span_ns)
+            length = i - start_idx + 1
 
-            # Get window values for all columns
-            all_window_values = [pc.take(col, window_indices) for col in sorted_sources]
+            # Zero-copy slice of each sorted source column for the current window.
+            all_window_values = [col.slice(start_idx, length) for col in sorted_sources]
 
             # Apply the window function
             if len(all_window_values[0]) == 0:
@@ -196,40 +210,11 @@ class PyArrowTimeWindowFeatureGroup(TimeWindowFeatureGroup):
                     # Single column: use the result directly
                     results.append(column_results[0])
 
-        # We need to reorder the results to match the original order
-        # Create a mapping from sorted indices to original indices
-        reordered_results = [results[sorted_indices.to_pylist().index(i)] for i in range(len(results))]
+        # Scatter results back to original row order via the inverse permutation (O(n)).
+        sorted_idx_list = sorted_indices.to_pylist()
+        reordered_results: list[Any] = [None] * len(results)
+        for k, orig_pos in enumerate(sorted_idx_list):
+            reordered_results[orig_pos] = results[k]
 
         # Convert the results to a PyArrow array
         return pa.array(reordered_results)
-
-    @classmethod
-    def _get_time_delta(cls, window_size: int, time_unit: str) -> datetime.timedelta:
-        """
-        Convert window size and time unit to a timedelta.
-
-        Args:
-            window_size: The size of the window
-            time_unit: The time unit for the window
-
-        Returns:
-            A timedelta representing the window size
-        """
-        if time_unit == "second":
-            return datetime.timedelta(seconds=window_size)
-        elif time_unit == "minute":
-            return datetime.timedelta(minutes=window_size)
-        elif time_unit == "hour":
-            return datetime.timedelta(hours=window_size)
-        elif time_unit == "day":
-            return datetime.timedelta(days=window_size)
-        elif time_unit == "week":
-            return datetime.timedelta(weeks=window_size)
-        elif time_unit == "month":
-            # Approximate a month as 30 days
-            return datetime.timedelta(days=30 * window_size)
-        elif time_unit == "year":
-            # Approximate a year as 365 days
-            return datetime.timedelta(days=365 * window_size)
-        else:
-            raise ValueError(f"Unsupported time unit: {time_unit}")

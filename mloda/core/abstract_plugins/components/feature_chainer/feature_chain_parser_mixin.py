@@ -116,6 +116,7 @@ class FeatureChainParserMixin:
         # The mixin sits first in the MRO of ``class X(FeatureChainParserMixin, FeatureGroup)``,
         # so super() is what lets FeatureGroup's own class-definition validation still run.
         super().__init_subclass__(**kwargs)
+        FeatureChainParser.validate_name_binding(cls)
         FeatureChainParser.install_required_when_guard(cls)
 
     @classmethod
@@ -239,17 +240,26 @@ class FeatureChainParserMixin:
 
         result = cls.match_parser_criteria(feature_name, options)
 
-        # If basic match succeeded and it's a string-based feature, call validation hook
+        # On a string match the guards see the EFFECTIVE options (name-derived bindings merged in), so a
+        # name-carried value is as visible to match_guard as an explicit one. A no-source ValueError cannot
+        # reach here: it would already have made match_parser_criteria a non-match.
+        effective_options = options
         if result:
-            operation_config, source_feature = FeatureChainParser.parse_feature_name(
-                feature_name, prefix_patterns, CHAIN_SEPARATOR
-            )
-            if operation_config is not None and source_feature is not None:
-                if not cls._validate_string_match(feature_name, operation_config, source_feature):
-                    return False
-                cls._validate_forwarded_name_mismatch(feature_name, operation_config, property_mapping, options)
+            parsed = FeatureChainParser.parse_name(feature_name, prefix_patterns, CHAIN_SEPARATOR)
+            if FeatureChainParser._name_identifies_group(parsed, property_mapping):
+                # Bound once and reused: the merge and the guards must see the name-derived value even
+                # when the legacy operation value is absent (a named-optional-first pattern).
+                bindings = FeatureChainParser.bind_name_captures(parsed, property_mapping or {})
+                operation_config = FeatureChainParser._legacy_operation_config(parsed)
+                # _validate_string_match needs a str operation, so it stays behind its own gate; the
+                # merge and forwarded-mismatch protection do not.
+                if operation_config is not None and parsed.source_feature is not None:
+                    if not cls._validate_string_match(feature_name, operation_config, parsed.source_feature):
+                        return False
+                effective_options = FeatureChainParser._merge_bindings(options, bindings, property_mapping)
+                cls._validate_forwarded_name_mismatch(feature_name, bindings, options)
 
-        if not cls._validate_match_guards(result, options, property_mapping):
+        if not cls._validate_match_guards(result, effective_options, property_mapping):
             return False
 
         if not cls._validate_in_features(result, options):
@@ -298,20 +308,24 @@ class FeatureChainParserMixin:
             return None
 
         name_matched = False
+        effective_options = options
         prefix_patterns = cls._get_prefix_patterns()
         if prefix_patterns:
             try:
-                name_matched = FeatureChainParser._match_pattern_based_feature(
-                    feature_name, prefix_patterns, CHAIN_SEPARATOR
-                )
+                parsed = FeatureChainParser.parse_name(feature_name, prefix_patterns, CHAIN_SEPARATOR)
             except ValueError:
                 return None
+            name_matched = FeatureChainParser._name_identifies_group(parsed, property_mapping)
+            if name_matched:
+                bindings = FeatureChainParser.bind_name_captures(parsed, property_mapping)
+                effective_options = FeatureChainParser._merge_bindings(options, bindings, property_mapping)
 
         try:
             if name_matched:
-                # The name relates the feature group to the feature, so only the values of the
-                # present options are judged; required presence is the config path's business.
-                FeatureChainParser._validate_present_option_values(options, property_mapping)
+                # The name relates the feature group to the feature, so only the values of the present
+                # options (name-derived bindings included) are judged; required presence is the config
+                # path's business. Judging the effective options keeps the replay in step with the match.
+                FeatureChainParser._validate_present_option_values(effective_options, property_mapping)
             else:
                 matches_mapping = FeatureChainParser._validate_options_against_property_mapping(
                     options, property_mapping
@@ -323,7 +337,7 @@ class FeatureChainParserMixin:
         except ValueError as exc:
             return str(exc)
 
-        rejection = cls._first_rejecting_guard(options, property_mapping)
+        rejection = cls._first_rejecting_guard(effective_options, property_mapping)
         if rejection is None:
             return None
 
@@ -336,50 +350,40 @@ class FeatureChainParserMixin:
     def _validate_forwarded_name_mismatch(
         cls,
         feature_name: str | FeatureName,
-        operation_config: str,
-        property_mapping: dict[str, PropertySpec] | None,
+        bindings: dict[str, str],
         options: Options,
     ) -> None:
-        """Reject consumer-forwarded option values that contradict the name-parsed value.
+        """Reject consumer-forwarded option values that contradict a name-derived binding.
 
-        The name-parsed value takes precedence, so a differing forwarded value would be
-        silently ignored. Raises ValueError unless MLODA_ALLOW_FORWARDED_NAME_MISMATCH
-        downgrades the error to a warning.
+        Iterates every binding, so a secondary capture is protected exactly like the first one. The
+        name-parsed value takes precedence, so a differing forwarded value would be silently ignored.
+        Raises ValueError unless MLODA_ALLOW_FORWARDED_NAME_MISMATCH downgrades the error to a warning.
         """
-        if property_mapping is None or not options.inherited_group_keys:
+        if not options.inherited_group_keys or not bindings:
             return
-        prop_key = cls._find_property_key_for_value(property_mapping, operation_config)
-        if prop_key is None or prop_key not in options.inherited_group_keys:
-            return
-        inherited_value = options.get(prop_key)
-        if inherited_value is None:
-            return
-        # A singleton collection equals its sole element, exactly as _unpack_property_value treats it
-        # everywhere else; only a differing or multi-value forward is a real mismatch.
-        unpacked = FeatureChainParser._unpack_property_value(inherited_value)
-        if len(unpacked) == 1 and str(unpacked[0]) == operation_config:
-            return
-        message = (
-            f"Feature '{feature_name}': option '{prop_key}' was forwarded from a consumer with value "
-            f"'{inherited_value}', but the feature name parses to '{operation_config}'. The name-parsed value "
-            f"takes precedence, so the forwarded value would be silently ignored. Carve the key out with "
-            f"forward_group_exclude={{'{prop_key}'}} on the child in the consumer's input_features, or use an "
-            f"allowlist / forward_group=False. Set MLODA_ALLOW_FORWARDED_NAME_MISMATCH=1 to downgrade this "
-            f"error to a warning."
-        )
-        if os.environ.get("MLODA_ALLOW_FORWARDED_NAME_MISMATCH", "").lower() in ("1", "true"):
-            logger.warning(message)
-            return
-        raise ValueError(message)
-
-    @staticmethod
-    def _find_property_key_for_value(property_mapping: dict[str, PropertySpec], operation_config: str) -> str | None:
-        """Return the PROPERTY_MAPPING key whose values contain operation_config, if any."""
-        for prop_key, prop_value in property_mapping.items():
-            extracted = FeatureChainParser._extract_property_values(prop_value)
-            if operation_config in extracted:
-                return prop_key
-        return None
+        for prop_key, name_value in bindings.items():
+            if prop_key not in options.inherited_group_keys:
+                continue
+            inherited_value = options.get(prop_key)
+            if inherited_value is None:
+                continue
+            # A singleton collection equals its sole element, exactly as _unpack_property_value treats it
+            # everywhere else; only a differing or multi-value forward is a real mismatch.
+            unpacked = FeatureChainParser._unpack_property_value(inherited_value)
+            if len(unpacked) == 1 and str(unpacked[0]) == name_value:
+                continue
+            message = (
+                f"Feature '{feature_name}': option '{prop_key}' was forwarded from a consumer with value "
+                f"'{inherited_value}', but the feature name parses to '{name_value}'. The name-parsed value "
+                f"takes precedence, so the forwarded value would be silently ignored. Carve the key out with "
+                f"forward_group_exclude={{'{prop_key}'}} on the child in the consumer's input_features, or use an "
+                f"allowlist / forward_group=False. Set MLODA_ALLOW_FORWARDED_NAME_MISMATCH=1 to downgrade this "
+                f"error to a warning."
+            )
+            if os.environ.get("MLODA_ALLOW_FORWARDED_NAME_MISMATCH", "").lower() in ("1", "true"):
+                logger.warning(message)
+                continue
+            raise ValueError(message)
 
     @classmethod
     def _first_rejecting_guard(

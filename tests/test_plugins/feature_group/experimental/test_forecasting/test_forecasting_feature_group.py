@@ -177,6 +177,63 @@ class TestForecastingFeatureGroup:
         # Check that the result contains the forecast feature
         assert feature_name in result_df2.columns
 
+    def test_calculate_feature_populates_forecast_values(self) -> None:
+        """Forecast values must survive: N+horizon rows, no NaN, historical actuals preserved."""
+        feature_name = "sales__linear_forecast_7day"
+
+        feature_set = FeatureSet()
+        feature_set.add(Feature(feature_name, self.options))
+        feature_set.artifact_to_save = feature_name
+
+        result_df = PandasForecastingFeatureGroup.calculate_feature(self.df.copy(), feature_set)
+
+        assert feature_name in result_df.columns
+        assert len(result_df) == 37
+        assert result_df[feature_name].notna().all()
+
+        forecast_values = result_df[feature_name].to_numpy()
+        assert np.allclose(forecast_values[:30], self.df["sales"].to_numpy())
+        assert np.isfinite(forecast_values[30:]).all()
+
+    def test_calculate_feature_unsorted_input_preserves_row_alignment(self) -> None:
+        """Unsorted input must keep each row's historical forecast value aligned to its own source value."""
+        df_unsorted = self.df.iloc[::-1].reset_index(drop=True)  # reverse-chronological, default RangeIndex
+        feature_name = "sales__linear_forecast_7day"
+
+        feature_set = FeatureSet()
+        feature_set.add(Feature(feature_name, self.options))
+        feature_set.artifact_to_save = feature_name
+
+        result_df = PandasForecastingFeatureGroup.calculate_feature(df_unsorted.copy(), feature_set)
+
+        assert len(result_df) == 37
+        assert feature_name in result_df.columns
+
+        forecast_values = result_df[feature_name].to_numpy()
+        assert np.allclose(forecast_values[:30], df_unsorted["sales"].to_numpy())
+        assert np.isfinite(forecast_values[30:]).all()
+
+    def test_calculate_feature_multiple_horizons_not_truncated(self) -> None:
+        """Requesting two horizons together must not truncate the longer forecast; the shorter is NaN-padded."""
+        feature_set = FeatureSet()
+        feature_set.add(Feature("sales__linear_forecast_7day", self.options))
+        feature_set.add(Feature("sales__linear_forecast_14day", self.options))
+
+        result_df = PandasForecastingFeatureGroup.calculate_feature(self.df.copy(), feature_set)
+
+        assert len(result_df) == 44
+        assert "sales__linear_forecast_7day" in result_df.columns
+        assert "sales__linear_forecast_14day" in result_df.columns
+
+        assert result_df["sales__linear_forecast_14day"].notna().all()
+        assert len(result_df["sales__linear_forecast_14day"]) == 44
+
+        assert result_df["sales__linear_forecast_7day"].iloc[:37].notna().all()
+        assert result_df["sales__linear_forecast_7day"].iloc[37:].isna().all()
+
+        assert np.allclose(result_df["sales__linear_forecast_14day"].to_numpy()[:30], self.df["sales"].to_numpy())
+        assert np.allclose(result_df["sales__linear_forecast_7day"].to_numpy()[:30], self.df["sales"].to_numpy())
+
     def test_get_reference_time_column_default(self) -> None:
         """Test get_reference_time_column method returns default column name when no options provided."""
         # Test with no options - should return default column name

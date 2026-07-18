@@ -6,6 +6,8 @@ from __future__ import annotations
 
 from typing import Any, Optional
 
+import numpy as np
+
 from mloda.provider import ComputeFramework
 from mloda_plugins.compute_framework.base_implementations.pandas import pandas_type_semantics
 from mloda.user.pandas import PandasDataFrame
@@ -100,19 +102,32 @@ class PandasTimeWindowFeatureGroup(TimeWindowFeatureGroup):
         if time_filter_feature is None:
             time_filter_feature = cls.get_reference_time_column()
 
-        # Create a copy of the DataFrame with the time filter feature as the index
-        # This is necessary for time-based rolling operations
-        df_with_time_index = data.set_index(time_filter_feature).sort_index()
+        # Coerce the reference column to a proper datetime index (handles arrow
+        # date32/date64 columns and keeps tz-awareness). A null/NaT reference time
+        # has no position on the timeline, so fail explicitly.
+        times = pd.to_datetime(data[time_filter_feature])
+        if times.isna().any():
+            cls._raise_null_reference_time(time_filter_feature)
 
-        # Select the columns to perform window operation on
+        # Sort STABLY by absolute time, remembering original positions, so the
+        # rolled result can be scattered back to the ORIGINAL (possibly unsorted)
+        # row order. to_numpy() on a tz-aware column yields absolute UTC instants.
+        order = np.argsort(times.to_numpy(), kind="stable")
+        sorted_index = pd.DatetimeIndex(times.to_numpy()[order])
+
+        # Select the columns to perform window operation on, in time-sorted order.
         if len(in_features) == 1:
             # Single column: extract as Series for simpler window operation
-            selected_data = df_with_time_index[in_features[0]]
+            selected_data = pd.Series(data[in_features[0]].to_numpy()[order], index=sorted_index)
         else:
             # Multiple columns: keep as DataFrame
-            selected_data = df_with_time_index[in_features]
+            selected_data = pd.DataFrame({c: data[c].to_numpy()[order] for c in in_features}, index=sorted_index)
 
-        rolling_window = selected_data.rolling(window=window_size, min_periods=1)
+        # Time-based (not row-count) window: include rows in (t - span, t].
+        # Pass a Timedelta, not an offset string: aliases like "3M"/"3Y" raise
+        # "passed window 3M is not compatible with a datetimelike index".
+        span = pd.Timedelta(cls._get_time_delta(window_size, time_unit))
+        rolling_window = selected_data.rolling(window=span, min_periods=1, closed="right")
 
         if window_function == "sum":
             result = rolling_window.sum()
@@ -159,34 +174,8 @@ class PandasTimeWindowFeatureGroup(TimeWindowFeatureGroup):
                 # For first/last, already computed on each column, now aggregate across columns
                 result = result.mean(axis=1)  # Use mean as aggregation for first/last
 
-        # Convert to numpy array to avoid type issues
-        return result.values
-
-    @classmethod
-    def _get_pandas_freq(cls, window_size: int, time_unit: str) -> str:
-        """
-        Convert window size and time unit to a pandas-compatible frequency string.
-
-        Args:
-            window_size: The size of the window
-            time_unit: The time unit for the window
-
-        Returns:
-            A pandas-compatible frequency string
-        """
-        # Map time units to pandas frequency aliases
-        time_unit_map = {
-            "second": "S",
-            "minute": "T",
-            "hour": "H",
-            "day": "D",
-            "week": "W",
-            "month": "M",
-            "year": "Y",
-        }
-
-        if time_unit not in time_unit_map:
-            raise ValueError(f"Unsupported time unit: {time_unit}")
-
-        # Construct the frequency string
-        return f"{window_size}{time_unit_map[time_unit]}"
+        # Scatter the time-sorted results back to the ORIGINAL row order.
+        sorted_values = np.asarray(result)
+        out = np.empty(len(sorted_values), dtype=sorted_values.dtype)
+        out[order] = sorted_values
+        return out

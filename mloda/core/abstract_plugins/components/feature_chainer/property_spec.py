@@ -7,9 +7,30 @@ its ``strict=`` keyword maps to the ``strict_validation=`` field.
 
 from __future__ import annotations
 
+import numbers
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
 from typing import Any
+
+
+def is_positive_int(value: Any) -> bool:
+    """Element validator for positive-integer options.
+
+    Accepts Python ints, numpy integers, and decimal strings. Rejects ``bool`` (which
+    would otherwise pass ``isinstance(value, int)`` and let ``horizon=True`` through),
+    zero, negatives, non-integers, and non-decimal digit strings such as ``"²"``, which
+    satisfy ``str.isdigit()`` but raise in ``int()``.
+
+    Use this instead of hand-rolling the check, so every plugin agrees on what a
+    positive integer is::
+
+        WINDOW_SIZE: PropertySpec("...", element_validator=is_positive_int)
+    """
+    if isinstance(value, bool):
+        return False
+    if isinstance(value, numbers.Integral):
+        return int(value) > 0
+    return isinstance(value, str) and value.isdecimal() and int(value) > 0
 
 
 class _NoDefault:

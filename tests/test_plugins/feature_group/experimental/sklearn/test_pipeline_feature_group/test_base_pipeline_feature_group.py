@@ -151,22 +151,19 @@ class TestSklearnPipelineFeatureGroup:
         assert "imputer" in step_names
 
     def test_create_default_pipeline_config_unknown(self) -> None:
-        """Test default pipeline configuration for unknown pipeline name."""
+        """An unknown pipeline name is rejected rather than silently scaled.
+
+        This previously asserted the opposite: any undispatched name fell through to the
+        scaling pipeline, which is what hid the missing feature_engineering branch (#797).
+        """
         # Skip test if sklearn not available
         try:
             SklearnPipelineFeatureGroup._import_sklearn_components()
         except ImportError:
             pytest.skip("scikit-learn not available")
 
-        config = SklearnPipelineFeatureGroup._create_default_pipeline_config("unknown_pipeline")
-
-        assert "steps" in config
-        assert "params" in config
-        assert len(config["steps"]) == 1
-
-        # Should default to scaling
-        step_names = [step[0] for step in config["steps"]]
-        assert "scaler" in step_names
+        with pytest.raises(ValueError, match="Unsupported pipeline type"):
+            SklearnPipelineFeatureGroup._create_default_pipeline_config("unknown_pipeline")
 
     def test_create_default_pipeline_config_missing_sklearn(self) -> None:
         """Test default pipeline configuration when sklearn is not available."""
@@ -308,3 +305,42 @@ class TestSklearnPipelineRequiredWhen:
             }
         )
         assert SklearnPipelineFeatureGroup.match_feature_group_criteria("x", options) is False
+
+
+class TestDefaultPipelineConfigDispatch:
+    """Every declared pipeline type must reach its own dispatch branch (see #797)."""
+
+    @staticmethod
+    def _step_names(pipeline_name: str) -> list[str]:
+        config = SklearnPipelineFeatureGroup._create_default_pipeline_config(pipeline_name)
+        return [name for name, _ in config["steps"]]
+
+    def test_every_declared_type_is_dispatched(self) -> None:
+        """No declared type may fall through to the scaling default."""
+        expected = {
+            "preprocessing": ["imputer", "scaler"],
+            "scaling": ["scaler"],
+            "imputation": ["imputer"],
+            "feature_engineering": ["poly", "scaler"],
+        }
+        assert set(expected) == set(SklearnPipelineFeatureGroup.PIPELINE_TYPES), (
+            "PIPELINE_TYPES changed; update this test so the declaration stays pinned to dispatch"
+        )
+        for pipeline_name, steps in expected.items():
+            assert self._step_names(pipeline_name) == steps, f"'{pipeline_name}' produced the wrong pipeline"
+
+    def test_feature_engineering_is_distinct_from_scaling(self) -> None:
+        """The defect in #797: feature_engineering silently produced the scaling pipeline."""
+        assert self._step_names("feature_engineering") != self._step_names("scaling")
+
+    def test_feature_engineering_generates_polynomial_features(self) -> None:
+        """feature_engineering must actually derive new features, not just rescale existing ones."""
+        config = SklearnPipelineFeatureGroup._create_default_pipeline_config("feature_engineering")
+        poly = dict(config["steps"])["poly"]
+        assert poly.degree == 2
+        assert poly.include_bias is False
+
+    def test_unknown_pipeline_type_raises(self) -> None:
+        """An undispatched type must fail loudly instead of becoming scaling."""
+        with pytest.raises(ValueError, match="Unsupported pipeline type"):
+            SklearnPipelineFeatureGroup._create_default_pipeline_config("not_a_real_type")

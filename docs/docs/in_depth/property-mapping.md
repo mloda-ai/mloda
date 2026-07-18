@@ -111,6 +111,33 @@ matcher therefore keeps the contract, whether the override delegates or not.
 | "The value as a whole must have this shape" (a dict, a list of exactly 3, an ordering) | `match_guard` |
 | "This option is required only when another option says so" | `required_when` |
 
+### Positive-integer options: use the shared predicate
+
+Do not hand-roll a positive-integer check. Python bools satisfy `isinstance(value, int)`, so
+the obvious predicate accepts `horizon=True`; and `str.isdigit()` accepts `"²"`, which then
+raises in `int()`. `mloda.provider` exports one predicate that gets both right, and accepts
+numpy integers and decimal strings:
+
+```python
+from mloda.provider import PropertySpec, is_positive_int
+
+WINDOW_SIZE: PropertySpec(
+    "Size of the time window (must be positive integer)",
+    context=True,
+    strict_validation=True,
+    element_validator=is_positive_int,
+)
+```
+
+It accepts positive Python ints, numpy integers and decimal strings, and rejects `bool`,
+zero, negatives, and non-integers. Shipped plugins (`window_size`, `horizon`, `k_value`,
+`dimension`) all use it, so the value space stays consistent across feature groups. If a key
+allows an extra sentinel, compose rather than fork it, as clustering does for `"auto"`:
+
+```python
+element_validator=lambda value: value == "auto" or is_positive_int(value),
+```
+
 The two callables differ on both axes, which is what their names say:
 
 - **`element_validator`** sees **one element**, only under `strict_validation`, and a falsy
@@ -312,6 +339,17 @@ PROPERTY_MAPPING = {
 
 A caller who places the key explicitly in `Options(group=...)` or `Options(context=...)`
 overrides the spec's classification.
+
+## How a name-parsed value binds to a key
+
+A value captured from the feature name binds to a PROPERTY_MAPPING key by name: a named capture
+group `(?P<key>...)` binds to the key of the same name, so a secondary capture and an
+`element_validator`-only spec (one with no `allowed_values`) both receive their value. When a
+pattern declares any named group, binding is exclusively by name. A pattern with only positional
+groups falls back to the legacy rule of binding the first capture to the single key whose
+`allowed_values` already contain it. That fallback is transitional (retired by #772); a positional
+pattern whose keys share a reachable value is rejected at class-definition time, so migrate such a
+pattern to named capture groups.
 
 ## What the end user sees on a rejection
 

@@ -4,6 +4,7 @@ Base implementation for time window feature groups.
 
 from __future__ import annotations
 
+import datetime
 from abc import abstractmethod
 from typing import Any, Optional
 
@@ -17,7 +18,7 @@ from mloda.user import FeatureName
 from mloda.provider import FeatureSet
 from mloda.user import Options
 from mloda.provider import DefaultOptionKeys
-from mloda.provider import PropertySpec
+from mloda.provider import PropertySpec, is_positive_int
 from mloda_plugins.feature_group.experimental.time_reference_mixin import TimeReferenceMixin
 
 
@@ -104,9 +105,7 @@ class TimeWindowFeatureGroup(TimeReferenceMixin, FeatureChainParserMixin, Featur
             "Size of the time window (must be positive integer)",
             context=True,
             strict_validation=True,
-            element_validator=lambda x: (
-                (isinstance(x, int) and x > 0) or (isinstance(x, str) and x.isdigit() and int(x) > 0)
-            ),
+            element_validator=is_positive_int,
         ),
         TIME_UNIT: PropertySpec(
             "Time unit of the window size",
@@ -289,6 +288,39 @@ class TimeWindowFeatureGroup(TimeReferenceMixin, FeatureChainParserMixin, Featur
     def get_time_unit(cls, feature_name: str) -> str:
         """Extract the time unit from the feature name."""
         return cls.parse_time_window_prefix(feature_name)[2]
+
+    @classmethod
+    def _get_time_delta(cls, window_size: int, time_unit: str) -> datetime.timedelta:
+        """
+        Convert window size and time unit into the window span as a timedelta.
+
+        Shared by both backends so the time-based window is IDENTICAL across them.
+        week/month/year use fixed day approximations (7 / 30 / 365 days).
+        """
+        if time_unit == "second":
+            return datetime.timedelta(seconds=window_size)
+        elif time_unit == "minute":
+            return datetime.timedelta(minutes=window_size)
+        elif time_unit == "hour":
+            return datetime.timedelta(hours=window_size)
+        elif time_unit == "day":
+            return datetime.timedelta(days=window_size)
+        elif time_unit == "week":
+            return datetime.timedelta(weeks=window_size)
+        elif time_unit == "month":
+            return datetime.timedelta(days=30 * window_size)
+        elif time_unit == "year":
+            return datetime.timedelta(days=365 * window_size)
+        else:
+            raise ValueError(f"Unsupported time unit: {time_unit}")
+
+    @classmethod
+    def _raise_null_reference_time(cls, reference_time_column: str) -> None:
+        """Raise a uniform ValueError when the reference time column contains null/NaT values."""
+        raise ValueError(
+            f"Reference time column '{reference_time_column}' contains null values. "
+            f"Time window operations require non-null reference times."
+        )
 
     # match_feature_group_criteria() inherited from FeatureChainParserMixin
 

@@ -72,10 +72,12 @@ from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser
     INPUT_SEPARATOR,
 )
 from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser_mixin import FeatureChainParserMixin
+from mloda.core.abstract_plugins.components.feature_chainer.parsed_feature_name import ParsedFeatureName
 from mloda.core.abstract_plugins.components.feature_chainer.property_spec import (
     NO_DEFAULT,
     PropertySpec,
     is_no_default,
+    is_positive_int,
     property_spec,
 )
 
@@ -142,8 +144,10 @@ __all__ = [
     "COLUMN_SEPARATOR",
     "INPUT_SEPARATOR",
     "FeatureChainParserMixin",
+    "ParsedFeatureName",
     "PropertySpec",
     "is_no_default",
+    "is_positive_int",
     "property_spec",
     "NO_DEFAULT",
     # Subtype declaration

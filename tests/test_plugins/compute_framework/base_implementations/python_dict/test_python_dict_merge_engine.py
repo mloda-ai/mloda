@@ -8,6 +8,9 @@ from mloda.provider import BaseMergeEngine
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_merge_engine import (
     PythonDictMergeEngine,
 )
+from tests.test_plugins.compute_framework.test_tooling.merge_conformance.merge_conformance_test_base import (
+    MergeConformanceTestBase,
+)
 from tests.test_plugins.compute_framework.test_tooling.merge_link import make_merge_link
 from tests.test_plugins.compute_framework.test_tooling.multi_index.multi_index_test_base import (
     MultiIndexMergeEngineTestBase,
@@ -308,6 +311,24 @@ class TestPythonDictMergeEngineOneToMany:
 
 class TestPythonDictMergeEngineMultiIndex(MultiIndexMergeEngineTestBase):
     """Test PythonDictMergeEngine multi-index support using shared test scenarios."""
+
+    @classmethod
+    def merge_engine_class(cls) -> type[BaseMergeEngine]:
+        """Return the PythonDictMergeEngine class."""
+        return PythonDictMergeEngine
+
+    @classmethod
+    def framework_type(cls) -> type[Any]:
+        """Return dict type (PythonDict uses a columnar dict)."""
+        return dict
+
+    def get_connection(self) -> Optional[Any]:
+        """PythonDict does not require a connection object."""
+        return None
+
+
+class TestPythonDictMergeConformance(MergeConformanceTestBase):
+    """Cross-framework merge conformance for PythonDictMergeEngine."""
 
     @classmethod
     def merge_engine_class(cls) -> type[BaseMergeEngine]:

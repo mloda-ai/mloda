@@ -4,6 +4,9 @@ import pytest
 from mloda.provider import BaseMergeEngine
 from mloda.user import Index, JoinType
 from mloda_plugins.compute_framework.base_implementations.pyarrow.pyarrow_merge_engine import PyArrowMergeEngine
+from tests.test_plugins.compute_framework.test_tooling.merge_conformance.merge_conformance_test_base import (
+    MergeConformanceTestBase,
+)
 from tests.test_plugins.compute_framework.test_tooling.merge_link import make_merge_link
 from tests.test_plugins.compute_framework.test_tooling.multi_index.multi_index_test_base import (
     MultiIndexMergeEngineTestBase,
@@ -90,3 +93,26 @@ class TestPyArrowMergeEngineMultiIndex(MultiIndexMergeEngineTestBase):
     def test_merge_union_with_multi_index(self) -> None:
         """Skip UNION test for PyArrow as it's not supported."""
         pass
+
+
+@pytest.mark.skipif(pa is None, reason="PyArrow is not installed. Skipping this test.")
+class TestPyArrowMergeConformance(MergeConformanceTestBase):
+    """Cross-framework merge conformance for PyArrowMergeEngine."""
+
+    @classmethod
+    def merge_engine_class(cls) -> type[BaseMergeEngine]:
+        """Return the PyArrowMergeEngine class."""
+        return PyArrowMergeEngine
+
+    @classmethod
+    def framework_type(cls) -> type[Any]:
+        """Return pyarrow Table type."""
+        if pa is None:
+            raise ImportError("PyArrow is not installed")
+        # mypy can't infer pa.Table type correctly
+        table_type: type[Any] = pa.Table
+        return table_type
+
+    def get_connection(self) -> Optional[Any]:
+        """PyArrow does not require a connection object."""
+        return None

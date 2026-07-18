@@ -67,6 +67,15 @@ class EvaluationResult:
         return "none"
 
 
+@dataclass(frozen=True)
+class ResolutionRecord:
+    """One feature's identification during planning: its name, whether it was requested, and its EvaluationResult."""
+
+    feature_name: str
+    requested: bool
+    result: EvaluationResult
+
+
 class FeatureResolutionError(ValueError):
     """Typed resolution failure carrying the feature name and the EvaluationResult of its single pass."""
 
@@ -268,6 +277,7 @@ class IdentifyFeatureGroupClass:
     # they are scoped to one resolution attempt and never cache across runs.
     _domain_outcomes: dict[type[FeatureGroup], tuple[Optional[Domain], Optional[Exception]]]
     _declared_frameworks: dict[type[FeatureGroup], frozenset[type[ComputeFramework]]]
+    result: EvaluationResult
 
     def __init__(
         self,
@@ -282,6 +292,7 @@ class IdentifyFeatureGroupClass:
         if message is not None:
             raise FeatureResolutionError(message, str(feature.name), result)
         self.feature_group_compute_framework_mapping = result.identified
+        self.result = result
 
     @classmethod
     def evaluate(

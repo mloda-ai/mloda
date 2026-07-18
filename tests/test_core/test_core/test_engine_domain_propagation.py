@@ -9,6 +9,7 @@ from uuid import uuid4
 
 
 from mloda.core.core.engine import Engine
+from mloda.core.prepare.identify_feature_group import EvaluationResult
 from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.feature_collection import Features
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
@@ -112,9 +113,13 @@ class TestEngineDomainPropagation:
                 patch.object(engine, "add_feature_to_collection", return_value=True),
                 patch.object(engine, "_handle_input_features_recursion") as mock_recursion,
             ):
-                mock_identify.return_value = (BaseTestFeatureGroup1, {BaseTestComputeFramework1})
+                mock_identify.return_value = (
+                    BaseTestFeatureGroup1,
+                    {BaseTestComputeFramework1},
+                    EvaluationResult(identified={BaseTestFeatureGroup1: {BaseTestComputeFramework1}}),
+                )
 
-                engine._process_feature(test_feature, mock_features)
+                engine._process_feature(test_feature, mock_features, True)
 
                 mock_recursion.assert_called_once()
                 call_args = mock_recursion.call_args
@@ -163,9 +168,13 @@ class TestEngineDomainPropagation:
                 patch.object(engine, "add_feature_to_collection", return_value=True),
                 patch.object(engine, "_handle_input_features_recursion") as mock_recursion,
             ):
-                mock_identify.return_value = (BaseTestFeatureGroup1, {BaseTestComputeFramework1})
+                mock_identify.return_value = (
+                    BaseTestFeatureGroup1,
+                    {BaseTestComputeFramework1},
+                    EvaluationResult(identified={BaseTestFeatureGroup1: {BaseTestComputeFramework1}}),
+                )
 
-                engine._process_feature(test_feature, mock_features)
+                engine._process_feature(test_feature, mock_features, True)
 
                 mock_recursion.assert_called_once()
                 call_args = mock_recursion.call_args

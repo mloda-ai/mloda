@@ -9,6 +9,7 @@ from mloda.core.abstract_plugins.components.plugin_option.plugin_collector impor
 # Explicit alias re-exports Engine under no_implicit_reexport so tests can patch mloda.core.api.request.Engine.
 from mloda.core.core.engine import Engine as Engine
 from mloda.core.api.plan_info import PlanStep, build_plan_steps
+from mloda.core.prepare.identify_feature_group import ResolutionRecord
 from mloda.core.api.run_result import ResultStream, RunResult
 from mloda.core.api.prepare.setup_compute_framework import SetupComputeFramework
 from mloda.core.prepare.accessible_plugins import filter_extenders_by_strict_mode
@@ -307,6 +308,15 @@ class mlodaAPI:
         if self.engine is None:
             raise ValueError("Internal error: engine not initialized. This is likely a bug in mloda.")
         return build_plan_steps(self.engine.execution_planner)
+
+    def resolution_report(self) -> list[ResolutionRecord]:
+        """Return this session's per-feature resolution records, captured during planning.
+
+        Available after ``prepare()`` and unchanged by ``run()``. Mirrors ``resolved_plan()``.
+        """
+        if self.engine is None:
+            raise ValueError("Internal error: engine not initialized. This is likely a bug in mloda.")
+        return deepcopy(self.engine.resolution_records)
 
     def run(
         self,

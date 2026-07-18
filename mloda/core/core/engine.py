@@ -21,7 +21,11 @@ from mloda.core.prepare.execution_plan import ExecutionPlan
 from mloda.core.prepare.graph.build_graph import BuildGraph
 from mloda.core.prepare.resolve_graph import ResolveGraph
 from mloda.core.runtime.run import ExecutionOrchestrator
-from mloda.core.prepare.identify_feature_group import IdentifyFeatureGroupClass
+from mloda.core.prepare.identify_feature_group import (
+    EvaluationResult,
+    IdentifyFeatureGroupClass,
+    ResolutionRecord,
+)
 from mloda.core.runtime.flight.runner_flight_server import ParallelRunnerFlightServer
 from mloda.core.abstract_plugins.feature_group import FeatureGroup, format_feature_group_class
 from mloda.core.abstract_plugins.components.feature import Feature
@@ -73,6 +77,7 @@ class Engine:
         self.request_feature_order: list[str] = [str(f.name) for f in features]
         self._dual_consumption_warned: set[tuple[str, str, frozenset[str]]] = set()
         self._property_mapping_keys_cache: dict[type[FeatureGroup], frozenset[str]] = {}
+        self.resolution_records: list[ResolutionRecord] = []
         self.execution_planner = self.create_setup_execution_plan(features)
         self.tfs_connection_map = self._resolve_tfs_connection_map()
 
@@ -131,14 +136,15 @@ class Engine:
         execution_planner.create_execution_plan(planned_queue, graph, resolver.resolver_links.get_link_trekker())
         return execution_planner
 
-    def setup_features_recursion(self, features: Features) -> None:
+    def setup_features_recursion(self, features: Features, requested: bool = True) -> None:
         for feature in features:
-            self._process_feature(feature, features)
+            self._process_feature(feature, features, requested)
 
-    def _process_feature(self, feature: Feature, features: Features) -> None:
+    def _process_feature(self, feature: Feature, features: Features, requested: bool) -> None:
         """Processes a single feature by delegating tasks to helper methods."""
 
-        feature_group_class, compute_frameworks = self._identify_feature_group_and_frameworks(feature)
+        feature_group_class, compute_frameworks, result = self._identify_feature_group_and_frameworks(feature)
+        self.resolution_records.append(ResolutionRecord(str(feature.name), requested, result))
         self._warn_on_dual_option_consumption(feature, feature_group_class)
         feature_group = feature_group_class()
 
@@ -209,12 +215,13 @@ class Engine:
 
     def _identify_feature_group_and_frameworks(
         self, feature: Feature
-    ) -> tuple[type[FeatureGroup], set[type[ComputeFramework]]]:
-        """Identifies the feature group class and compute frameworks for a given feature."""
+    ) -> tuple[type[FeatureGroup], set[type[ComputeFramework]], EvaluationResult]:
+        """Identifies the feature group class, compute frameworks, and the EvaluationResult for a feature."""
         identifier = IdentifyFeatureGroupClass(
             feature, self.accessible_plugins, self.links, self.data_access_collection
         )
-        return identifier.get()
+        feature_group_class, compute_frameworks = identifier.get()
+        return feature_group_class, compute_frameworks, identifier.result
 
     def _add_index_feature(
         self,
@@ -399,7 +406,7 @@ class Engine:
             if features.child_uuid is None:
                 raise ValueError(f"Features {features} has no parent uuid although it should have one.")
             self.feature_link_parents[features.child_uuid] = features.parent_uuids
-            self.setup_features_recursion(features)
+            self.setup_features_recursion(features, requested=False)
 
     def set_compute_framework(self, feature: Feature, compute_frameworks: set[type[ComputeFramework]]) -> Feature:
         """

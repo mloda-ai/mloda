@@ -75,6 +75,7 @@ from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser
 from mloda.core.abstract_plugins.components.feature_chainer.property_spec import (
     NO_DEFAULT,
     PropertySpec,
+    is_no_default,
     property_spec,
 )
 
@@ -142,6 +143,7 @@ __all__ = [
     "INPUT_SEPARATOR",
     "FeatureChainParserMixin",
     "PropertySpec",
+    "is_no_default",
     "property_spec",
     "NO_DEFAULT",
     # Subtype declaration

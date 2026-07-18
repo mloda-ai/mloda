@@ -40,9 +40,12 @@ PROPERTY_MAPPING = {
 | `required_when` | `Callable \| None` | `None` | `(Options) -> bool`: the key is required only when it returns truthy. |
 | `allow_explicit_none` | `bool` | `False` | Opt-in so an explicit `None` is honored (not treated as absent) and flows through validation. |
 
-`property_spec(...)` is a thin builder over the same fields. Its keyword is `strict=`,
-which sets `strict_validation`. Both it and `PropertySpec` are exported from
-`mloda.provider`.
+**`property_spec(...)` is the authoring path to reach for.** It is a thin builder over the
+same fields, its keyword is `strict=` (which sets `strict_validation`), and it keeps the
+declaration readable. `PropertySpec` is the lower-level form: it is the type the builder
+returns and the type the schema is validated against, so reach for it directly when you need
+the class itself (subclassing, `isinstance` checks, or constructing a spec programmatically).
+Both are exported from `mloda.provider`.
 
 ``` python
 from mloda.provider import property_spec
@@ -256,6 +259,21 @@ PROPERTY_MAPPING = {
 every field is always present, so a plain `None` cannot say both "no default declared" and
 "optional with no value". The retired dict form drew the same line with a *present*
 `default: None` entry. `SklearnPipelineFeatureGroup` is the in-repo example.
+
+To ask whether a spec declares a default, use `is_no_default`, also exported from
+`mloda.provider`:
+
+``` python
+from mloda.provider import is_no_default
+
+if is_no_default(spec.default):
+    ...  # the key declares no default, so it is required
+```
+
+Do **not** write `spec.default is NO_DEFAULT`. `is_no_default` is a type test rather than an
+identity test on purpose: a second imported copy of the module (an editable install alongside
+site-packages, or an `importlib.reload`) carries its own sentinel object, and an identity
+check would read that copy's sentinel as a *declared* default.
 
 `required_when` is for a *conditional* requirement, not for optionality: never write a
 predicate that always returns `False` to make a key optional.

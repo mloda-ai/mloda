@@ -292,30 +292,6 @@ class ExecutionPlan:
                     if _ep.features.any_uuid in need_to_upload_collector:
                         _ep.need_to_upload = True
 
-        # 1.7.2024
-        # print()
-        # for ep in new_execution_plan:
-        #    print("--------")
-        #    if isinstance(ep, FeatureGroupStep):
-        #        print("FGS", ep.feature_group.get_class_name(), ep.features.get_all_feature_ids())
-        #        print(ep.features.get_all_names())
-        #        print(ep.children_if_root)
-        #        # print(next(iter(ep.features.features)).compute_frameworks)
-        #        print(ep.required_uuids)
-        #    elif isinstance(ep, TransformFrameworkStep):
-        #        print("TFS")
-        #        print(ep.from_feature_group.get_class_name(), " -> ", ep.to_feature_group.get_class_name())
-        #        print(ep.from_framework.get_class_name(), " -> ", ep.to_framework.get_class_name())
-        #        print(ep.required_uuids)
-        #    elif isinstance(ep, JoinStep):
-        #        print("JOIN")
-        #        print(ep.link.uuid)
-        #        print(ep.destination_framework_uuids)
-        #        print(ep.source_framework_uuids)
-        #       print(ep.source_framework.get_class_name(), " -> ", ep.destination_framework.get_class_name())
-        #        print(ep.required_uuids)
-        # print("###############################")
-
         return new_execution_plan
 
     def set_store_value_to_left_most_index_and_update_feature_group(

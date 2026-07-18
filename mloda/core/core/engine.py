@@ -71,7 +71,6 @@ class Engine:
         # set api input collection if relevant
         self.api_input_data_collection = api_input_data_collection
 
-        # TODO
         self.plugin_collector = plugin_collector
         self.copy_compute_frameworks = deepcopy(compute_frameworks)
 

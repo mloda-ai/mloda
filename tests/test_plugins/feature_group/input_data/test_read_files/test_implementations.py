@@ -22,6 +22,12 @@ from mloda_plugins.feature_group.input_data.read_files.orc import OrcReader
 from mloda_plugins.feature_group.input_data.read_files.parquet import ParquetReader
 
 
+def _read_feather_ipc(path: Any) -> Any:
+    """Read a Feather V2 / Arrow IPC file without the deprecated feather.read_table API."""
+    with pa.ipc.open_file(path) as reader:
+        return reader.read_all()
+
+
 class FeatureSet:
     def __init__(self, columns: list[str]) -> None:
         self.columns = columns
@@ -80,7 +86,7 @@ class TestReadFilesImplementations:
         if cls is CsvReader:
             result = FileSourcePyArrowTransformer.transform_fw_to_other_fw(result)
 
-        if cls in (CsvReader, JsonReader):
+        if cls in (CsvReader, JsonReader, FeatherReader):
             expected = reader(path).select(self.columns)
         else:
             expected = reader(source=path, columns=self.columns)
@@ -111,7 +117,7 @@ class TestReadFilesImplementations:
 
     def test_implementations_read(self) -> None:
         test_cases = [
-            (FeatherReader, self.feather_file, pyarrow_feather.read_table),
+            (FeatherReader, self.feather_file, _read_feather_ipc),
             (JsonReader, self.json_file, pyarrow_json.read_json),
             (CsvReader, self.csv_file, pyarrow_csv.read_csv),
             (OrcReader, self.orc_file, pyarrow_orc.read_table),

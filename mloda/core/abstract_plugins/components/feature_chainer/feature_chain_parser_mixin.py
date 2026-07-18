@@ -350,6 +350,11 @@ class FeatureChainParserMixin:
         except ValueError as exc:
             return str(exc)
 
+        if name_matched:
+            reason = FeatureChainParser.name_path_presence_rejection_reason(effective_options, property_mapping)
+            if reason is not None:
+                return reason
+
         rejection = cls._first_rejecting_guard(effective_options, property_mapping)
         if rejection is None:
             return None

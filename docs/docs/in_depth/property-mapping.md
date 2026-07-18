@@ -378,7 +378,9 @@ supplies and whose count `MIN/MAX_IN_FEATURES` enforces.
 | --- | --- |
 | `warn` (default) | Logs a warning naming the group and the missing key(s), still **matches**. The migration default. |
 | `enforce` | The missing key makes it a **non-match**. |
-| `off` | The check is skipped. |
+| `off` (or `0`, `false`, `no`) | The check is skipped. |
+
+Under `enforce`, the resolution-failure report also names the missing key(s), not only the log.
 
 Two migrations remove the warning for a flagged key. Give the pattern a named capture
 `(?P<key>...)` so the framework binds the key from the name; or, for a key bound outside

@@ -55,9 +55,13 @@ _NAME_PATH_PRESENCE_ENV = "MLODA_NAME_PATH_REQUIRED_PRESENCE"
 
 
 def _name_path_presence_mode() -> str:
-    """Read the #769 migration mode from the env var, defaulting to ``"warn"`` on any invalid value."""
+    """Read the #769 migration mode from the env var; off/0/false/no disable it, else warn (default) or enforce."""
     mode = os.environ.get(_NAME_PATH_PRESENCE_ENV, "warn").strip().lower()
-    return mode if mode in ("off", "warn", "enforce") else "warn"
+    if mode in ("off", "0", "false", "no"):
+        return "off"
+    if mode == "enforce":
+        return "enforce"
+    return "warn"
 
 
 def _contained_raise_log_level(exc: BaseException) -> int:
@@ -437,7 +441,7 @@ class FeatureChainParser:
     def _name_path_missing_required_keys(
         cls, effective_options: Options, property_mapping: dict[str, PropertySpec]
     ) -> list[str]:
-        """Missing required keys on the name path, in mapping order (#769).
+        """The missing required keys on the name path (#769).
 
         The source key is name-provided (its count is enforced by MIN/MAX_IN_FEATURES), so
         ``in_features`` is excluded. A declared-default or ``required_when`` key is skippable
@@ -450,9 +454,9 @@ class FeatureChainParser:
                 continue
             if key == DefaultOptionKeys.in_features:
                 continue
-            if cls._can_skip_required_check(spec) is not False:
+            if cls._can_skip_required_check(spec):
                 continue
-            if spec.deferred_binding is not False:
+            if spec.deferred_binding:
                 continue
             absent = effective_options.get(key) is None and not (spec.allow_explicit_none and key in effective_options)
             if absent:
@@ -501,6 +505,25 @@ class FeatureChainParser:
             _NAME_PATH_PRESENCE_ENV,
         )
         return True
+
+    @classmethod
+    def name_path_presence_rejection_reason(
+        cls, effective_options: Options, property_mapping: dict[str, PropertySpec]
+    ) -> str | None:
+        """Enforce-mode reason a name-path candidate was rejected for missing presence (#769); else None.
+
+        Diagnostic-only: mirrors the enforce branch of _check_name_path_required_presence so the
+        resolution-failure report explains the same non-match the matcher produced.
+        """
+        if _name_path_presence_mode() != "enforce":
+            return None
+        missing = cls._name_path_missing_required_keys(effective_options, property_mapping)
+        if not missing:
+            return None
+        return (
+            f"required option(s) {', '.join(sorted(missing))} are absent after declared defaults and name "
+            f"bindings ({_NAME_PATH_PRESENCE_ENV}=enforce)"
+        )
 
     @classmethod
     def match_configuration_feature_chain_parser(

@@ -41,6 +41,7 @@
 | mypy                                   | 2.2.0           | MIT                                                |
 | mypy_extensions                        | 1.1.0           | MIT                                                |
 | narwhals                               | 2.23.0          | MIT                                                |
+| nest-asyncio                           | 1.6.0           | BSD License                                        |
 | nest-asyncio2                          | 1.7.2           | BSD License                                        |
 | nltk                                   | 3.10.0          | Apache Software License                            |
 | numpy                                  | 2.5.1           | BSD-3-Clause AND 0BSD AND MIT AND Zlib AND CC0-1.0 |
@@ -82,7 +83,7 @@
 | pytest-xdist                           | 3.8.0           | MIT                                                |
 | python-dateutil                        | 2.9.0.post0     | Apache Software License; BSD License               |
 | pyzmq                                  | 27.1.0          | BSD License                                        |
-| regex                                  | 2026.6.28       | Apache-2.0 AND CNRI-Python                         |
+| regex                                  | 2026.7.10       | Apache-2.0 AND CNRI-Python                         |
 | requests                               | 2.34.2          | Apache Software License                            |
 | rich                                   | 14.3.4          | MIT License                                        |
 | ruff                                   | 0.15.21         | MIT                                                |

@@ -111,7 +111,7 @@ class PyArrowFilterEngine(BaseFilterEngine):
             raise ValueError(f"Filter parameter 'values' not found in {filter_feature.parameter}")
 
         # Create PyArrow array from the values
-        values_array = pa.array(values)
+        values_array = pa.array(values, type=data[column_name].type)
         # Apply is_in filter
         mask = pc.is_in(data[column_name], values_array)
         return data.filter(mask)

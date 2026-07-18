@@ -37,6 +37,11 @@ class TestSqliteFilterEngine(FilterEngineTestMixin, TimeRangeFilterEngineTestMix
         )
         return SqliteRelation.from_arrow(connection, arrow_table)
 
+    @pytest.fixture
+    def nullable_category_sample_data(self, connection: sqlite3.Connection) -> Any:
+        arrow_table = pa.Table.from_pydict({"id": [1, 2, 3, 4, 5], "category": ["A", None, "B", None, "C"]})
+        return SqliteRelation.from_arrow(connection, arrow_table)
+
     def get_column_values(self, result: Any, column: str) -> list[Any]:
         values: list[Any] = result.df()[column].tolist()
         return values

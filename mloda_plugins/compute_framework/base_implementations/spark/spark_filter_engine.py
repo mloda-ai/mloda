@@ -100,4 +100,8 @@ class SparkFilterEngine(BaseFilterEngine):
             raise ValueError(f"Filter parameter 'values' not found in {filter_feature.parameter}")
 
         # Use Spark's isin function for categorical inclusion
-        return data.filter(F.col(column_name).isin(values))
+        non_null = [v for v in values if v is not None]
+        condition = F.col(column_name).isin(non_null)
+        if len(non_null) != len(values):
+            condition = condition | F.col(column_name).isNull()
+        return data.filter(condition)

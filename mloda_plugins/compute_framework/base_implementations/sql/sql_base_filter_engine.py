@@ -97,9 +97,17 @@ class SqlBaseFilterEngine(BaseFilterEngine):
         if values is None:
             raise ValueError(f"Filter parameter 'values' not found in {filter_feature.parameter}")
 
-        if not values:
-            raise ValueError(f"Filter parameter 'values' must not be empty in {filter_feature.parameter}")
+        non_null = [v for v in values if v is not None]
+        has_null = len(non_null) != len(values)
 
-        placeholders = ", ".join("?" for _ in values)
-        condition = f"{quote_ident(column_name)} IN ({placeholders})"
-        return cls._apply_filter(data, condition, tuple(values))
+        conditions: list[str] = []
+        params: list[Any] = []
+        if non_null:
+            placeholders = ", ".join("?" for _ in non_null)
+            conditions.append(f"{quote_ident(column_name)} IN ({placeholders})")
+            params.extend(non_null)
+        if has_null:
+            conditions.append(f"{quote_ident(column_name)} IS NULL")
+
+        condition = " OR ".join(conditions) if conditions else "1 = 0"
+        return cls._apply_filter(data, condition, tuple(params))

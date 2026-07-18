@@ -32,6 +32,11 @@ class TestPyArrowFilterEngine(FilterEngineTestMixin):
             }
         )
 
+    @pytest.fixture
+    def nullable_category_sample_data(self) -> Any:
+        """Create a sample PyArrow table with null categories for testing."""
+        return pa.Table.from_pydict({"id": [1, 2, 3, 4, 5], "category": ["A", None, "B", None, "C"]})
+
     def get_column_values(self, result: Any, column: str) -> list[Any]:
         """Extract column values from PyArrow table."""
         return result[column].to_pylist()  # type: ignore[no-any-return]

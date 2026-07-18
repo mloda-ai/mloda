@@ -39,6 +39,11 @@ class TestPythonDictFilterEngine(FilterEngineTestMixin, TimeRangeFilterEngineTes
             "category": ["A", "B", "A", "C", "B"],
         }
 
+    @pytest.fixture
+    def nullable_category_sample_data(self) -> Any:
+        """Create a sample columnar dict with null categories for testing."""
+        return {"id": [1, 2, 3, 4, 5], "category": ["A", None, "B", None, "C"]}
+
     def result_row_count(self, result: Any) -> int:
         """A columnar dict's row count is the length of any of its columns."""
         for column in result.values():

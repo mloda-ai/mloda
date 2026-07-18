@@ -85,6 +85,8 @@ class FeatureChainParserMixin:
     - MAX_IN_FEATURES: Optional maximum in_feature count (default: None)
     - RECOGNITION_ONLY_PATTERN: Optional marker for a recognition-only pattern that binds no key
       from the name (all values come from options); default False (#772)
+    - ALLOW_UNIVERSAL_MATCHER: Optional opt-in marking an all-optional PROPERTY_MAPPING as an
+      intentional universal configuration matcher; default False (#771)
 
     PROPERTY_MAPPING supports conditional requirements via ``PropertySpec.required_when``.
     Attach a predicate ``(Options) -> bool`` to any spec. When the predicate returns
@@ -115,6 +117,9 @@ class FeatureChainParserMixin:
     MAX_IN_FEATURES: Optional[int] = None
     # A recognition-only pattern binds no key from the name; all values come from options (#772).
     RECOGNITION_ONLY_PATTERN: bool = False
+    # An all-optional PROPERTY_MAPPING that inherits the config matcher matches any feature name with
+    # empty options; set True to declare that universal match intentional and silence the #771 warning.
+    ALLOW_UNIVERSAL_MATCHER: bool = False
 
     def __init_subclass__(cls, **kwargs: Any) -> None:
         # The mixin sits first in the MRO of ``class X(FeatureChainParserMixin, FeatureGroup)``,
@@ -123,6 +128,7 @@ class FeatureChainParserMixin:
         FeatureChainParser.validate_name_binding(cls)
         FeatureChainParser.warn_captureless_without_binding(cls)
         FeatureChainParser.install_required_when_guard(cls)
+        FeatureChainParser.warn_universal_optional_matcher(cls)
 
     @classmethod
     def _validate_string_match(cls, _feature_name: str, _operation_config: str, _in_feature: str) -> bool:

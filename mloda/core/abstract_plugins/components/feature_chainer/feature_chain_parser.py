@@ -33,6 +33,12 @@ REQUIRED_WHEN_GUARD_FLAG = "_mloda_required_when_guard"
 # emit it at most once. Checked on the class's OWN dict so a subclass still evaluates fresh.
 CAPTURELESS_DIAGNOSTIC_FLAG = "_mloda_captureless_diagnostic_emitted"
 
+# An unrelated feature name used to probe whether a matcher is universal: does it accept a name it
+# has no business matching, with empty options? It carries NO chain separator, so no
+# PREFIX_PATTERN/SUFFIX_PATTERN can capture it and the resolved matcher falls through to the
+# configuration path, where the universal-matcher problem actually lives.
+_UNIVERSAL_MATCHER_PROBE_NAME = "mloda_universal_matcher_probe"
+
 # How many guards the current match call is nested in. A guarded matcher that delegates via super()
 # reaches the guard of its parent, and only the outermost one may evaluate the predicates.
 # A ContextVar (not a plain global) keeps the count per thread and per async task.
@@ -719,6 +725,56 @@ class FeatureChainParser:
                     owner.__name__,
                 )
                 return
+
+    @classmethod
+    def warn_universal_optional_matcher(cls, owner: type[Any]) -> None:
+        """Nudge authors whose all-optional PROPERTY_MAPPING inherits the universal configuration matcher (#771).
+
+        With zero unconditionally required keys, the configuration path matches any feature name given
+        empty options. Warn unless the class opts in with ALLOW_UNIVERSAL_MATCHER = True. A key that is
+        unconditionally required, or conditionally required via required_when, gates the match, so the
+        mapping is not warned. Universality is confirmed behaviorally: the resolved matcher is called
+        with an unrelated, separator-free name and empty options, which exempts a genuine custom matcher
+        while still catching a pass-through override that delegates to the universal base.
+        """
+        if getattr(owner, "ALLOW_UNIVERSAL_MATCHER", False):
+            return
+        property_mapping = getattr(owner, "PROPERTY_MAPPING", None)
+        # A None mapping is not a configuration matcher; an EMPTY dict is the strongest universal
+        # matcher (it validates vacuously), so it stays in scope.
+        if not isinstance(property_mapping, dict):
+            return
+        for spec in property_mapping.values():
+            if not isinstance(spec, PropertySpec):
+                continue
+            # A required_when key gates the match with a runtime predicate, so the mapping is not a
+            # blanket universal matcher. It is also left unprobed: the predicate may reference the
+            # class being defined, which is not yet bound to its name during __init_subclass__, so
+            # probing it would raise (#771).
+            if spec.required_when is not None:
+                return
+            # A key that declares no default (and, per the check above, no required_when) is
+            # unconditionally required and already discriminates on the configuration path.
+            if not cls._can_skip_required_check(spec):
+                return
+        matcher = getattr(owner, "match_feature_group_criteria", None)
+        if matcher is None:
+            return
+        # A matcher that raises on the probe is doing custom work, so it is not treated as universal.
+        try:
+            universal = bool(matcher(_UNIVERSAL_MATCHER_PROBE_NAME, Options()))
+        except Exception as exc:
+            logger.debug("universal-matcher probe for %s raised %s; treating it as non-universal.", owner.__name__, exc)
+            return
+        if not universal:
+            return
+        logger.warning(
+            "%s declares a PROPERTY_MAPPING with no unconditionally required key and inherits the "
+            "universal configuration matcher: with empty options it matches any feature name. Add a "
+            "required key (a PropertySpec with no default, or a required_when predicate that fires), or "
+            "set ALLOW_UNIVERSAL_MATCHER = True to declare the universal match intentional.",
+            owner.__name__,
+        )
 
     @classmethod
     def check_required_when(

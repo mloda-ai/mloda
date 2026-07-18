@@ -87,6 +87,10 @@ class TextCleaningFeatureGroup(FeatureChainParserMixin, FeatureGroup):
     # Define prefix pattern
     PREFIX_PATTERN = r".*__cleaned_text$"
 
+    # The cleaning operations come from options, so the pattern is recognition-only and binds
+    # nothing from the name (#772).
+    RECOGNITION_ONLY_PATTERN = True
+
     # In-feature configuration for FeatureChainParserMixin
     MIN_IN_FEATURES = 1
     MAX_IN_FEATURES = 1

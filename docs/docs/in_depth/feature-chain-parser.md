@@ -144,6 +144,26 @@ class MyFeatureGroup(FeatureChainParserMixin, FeatureGroup):
 | `MIN_IN_FEATURES` | `int` | `1` | Minimum required in_features |
 | `MAX_IN_FEATURES` | `int \| None` | `None` | Maximum allowed in_features (None = unlimited) |
 | `IN_FEATURE_SEPARATOR` | `str` | `"&"` | Separator for multiple in_features |
+| `RECOGNITION_ONLY_PATTERN` | `bool` | `False` | Declares a captureless pattern as recognition-only (binds no key from the name) |
+
+### Captureless Patterns and Name Binding
+
+A captureless `PREFIX_PATTERN` (one with no capture group, e.g. `r".*__cleaned_text$"`) binds no
+`PROPERTY_MAPPING` key from the feature name. The name identifies the feature group, but every value
+comes from options. The old behavior of fabricating an operation token from the suffix text has been
+retired.
+
+- To bind a key **from the name**, use a named capture: `r".*__(?P<operation>pca|tsne)_reduce$"`.
+- For a **recognition-only** pattern (the name identifies the group but all values come from
+  options), set `RECOGNITION_ONLY_PATTERN = True`:
+
+``` python
+RECOGNITION_ONLY_PATTERN = True
+```
+
+Deprecation note: a captureless pattern that also carries a non-empty `PROPERTY_MAPPING` keeps
+working, but logs a definition-time warning until it either adds a named capture or sets
+`RECOGNITION_ONLY_PATTERN = True`.
 
 ### Customization Hooks
 

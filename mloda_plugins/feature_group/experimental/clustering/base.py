@@ -15,7 +15,7 @@ from mloda.provider import (
 )
 from mloda.provider import FeatureSet
 from mloda.provider import DefaultOptionKeys
-from mloda.provider import PropertySpec
+from mloda.provider import PropertySpec, is_positive_int
 
 
 def _is_bool(value: Any) -> bool:
@@ -128,9 +128,7 @@ class ClusteringFeatureGroup(FeatureChainParserMixin, FeatureGroup):
             "Number of clusters or 'auto' for automatic determination",
             context=True,
             strict_validation=True,
-            element_validator=lambda value: (
-                value == "auto" or (isinstance(value, (int, str)) and str(value).isdigit() and int(value) > 0)
-            ),
+            element_validator=lambda value: value == "auto" or is_positive_int(value),
         ),
         DefaultOptionKeys.in_features: PropertySpec(
             "Source features to use for clustering",

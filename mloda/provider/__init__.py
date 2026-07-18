@@ -76,6 +76,7 @@ from mloda.core.abstract_plugins.components.feature_chainer.parsed_feature_name 
 from mloda.core.abstract_plugins.components.feature_chainer.property_spec import (
     NO_DEFAULT,
     PropertySpec,
+    is_positive_int,
     property_spec,
 )
 
@@ -144,6 +145,7 @@ __all__ = [
     "FeatureChainParserMixin",
     "ParsedFeatureName",
     "PropertySpec",
+    "is_positive_int",
     "property_spec",
     "NO_DEFAULT",
     # Subtype declaration

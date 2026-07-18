@@ -108,6 +108,33 @@ matcher therefore keeps the contract, whether the override delegates or not.
 | "The value as a whole must have this shape" (a dict, a list of exactly 3, an ordering) | `match_guard` |
 | "This option is required only when another option says so" | `required_when` |
 
+### Positive-integer options: use the shared predicate
+
+Do not hand-roll a positive-integer check. Python bools satisfy `isinstance(value, int)`, so
+the obvious predicate accepts `horizon=True`; and `str.isdigit()` accepts `"²"`, which then
+raises in `int()`. `mloda.provider` exports one predicate that gets both right, and accepts
+numpy integers and decimal strings:
+
+```python
+from mloda.provider import PropertySpec, is_positive_int
+
+WINDOW_SIZE: PropertySpec(
+    "Size of the time window (must be positive integer)",
+    context=True,
+    strict_validation=True,
+    element_validator=is_positive_int,
+)
+```
+
+It accepts positive Python ints, numpy integers and decimal strings, and rejects `bool`,
+zero, negatives, and non-integers. Shipped plugins (`window_size`, `horizon`, `k_value`,
+`dimension`) all use it, so the value space stays consistent across feature groups. If a key
+allows an extra sentinel, compose rather than fork it, as clustering does for `"auto"`:
+
+```python
+element_validator=lambda value: value == "auto" or is_positive_int(value),
+```
+
 The two callables differ on both axes, which is what their names say:
 
 - **`element_validator`** sees **one element**, only under `strict_validation`, and a falsy

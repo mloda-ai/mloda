@@ -18,7 +18,7 @@ from mloda.user import FeatureName
 from mloda.provider import FeatureSet
 from mloda.user import Options
 from mloda.provider import DefaultOptionKeys
-from mloda.provider import PropertySpec
+from mloda.provider import PropertySpec, is_positive_int
 from mloda_plugins.feature_group.experimental.time_reference_mixin import TimeReferenceMixin
 
 
@@ -105,9 +105,7 @@ class TimeWindowFeatureGroup(TimeReferenceMixin, FeatureChainParserMixin, Featur
             "Size of the time window (must be positive integer)",
             context=True,
             strict_validation=True,
-            element_validator=lambda x: (
-                (isinstance(x, int) and x > 0) or (isinstance(x, str) and x.isdigit() and int(x) > 0)
-            ),
+            element_validator=is_positive_int,
         ),
         TIME_UNIT: PropertySpec(
             "Time unit of the window size",

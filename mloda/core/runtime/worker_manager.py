@@ -86,7 +86,7 @@ class WorkerManager:
 
     def join_all(self) -> None:
         """Terminate processes (not threads), join all tasks, raise Exception if any fail."""
-        failed = False
+        failures: list[str] = []
         for task in self.tasks:
             try:
                 if isinstance(task, BaseProcess):
@@ -94,7 +94,9 @@ class WorkerManager:
                 task.join()
             except Exception as e:
                 logger.error(f"Error joining task: {e}")
-                failed = True
+                failures.append(f"{getattr(task, 'name', None) or task}: {e}")
 
-        if failed:
-            raise Exception("Error while joining tasks")
+        if failures:
+            raise Exception(
+                f"Error while joining tasks: {len(failures)} of {len(self.tasks)} failed ({'; '.join(failures)})"
+            )

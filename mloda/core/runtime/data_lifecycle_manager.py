@@ -155,7 +155,10 @@ class DataLifecycleManager:
             ValueError: If no results have been collected.
         """
         if not self.result_data_collection:
-            raise ValueError("No results found")
+            raise ValueError(
+                f"No results found: {self.__class__.__name__} has an empty result collection, "
+                "so no step produced a result to return"
+            )
 
         return list(self.result_data_collection.values())
 

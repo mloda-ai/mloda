@@ -806,7 +806,7 @@ Available join types:
     @final
     def get_uuid(self) -> UUID:
         if self.uuid is None:
-            raise ValueError("UUID is not set")
+            raise ValueError(f"UUID is not set on compute framework {self.__class__.__name__}")
         return self.uuid
 
     @final

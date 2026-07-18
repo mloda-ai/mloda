@@ -30,7 +30,7 @@ class FeatureSetValidator:
     @staticmethod
     def validate_filters_not_set(filters: Any) -> None:
         if filters is not None:
-            raise ValueError("Filters already set")
+            raise ValueError(f"Filters already set to {filters}; they can only be assigned once per feature set")
 
     @staticmethod
     def validate_filters_is_set_type(filters: Any) -> None:

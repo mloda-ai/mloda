@@ -114,7 +114,7 @@ class FlightServer:
             path = action.body.to_pybytes()
             self.drop_table(path)
         else:
-            raise ValueError("Unsupported action")
+            raise ValueError(f"Unsupported action {action.type!r}; this server only handles 'drop_table'")
 
     def drop_table(self, table_key: Any) -> None:
         if table_key in self.tables:

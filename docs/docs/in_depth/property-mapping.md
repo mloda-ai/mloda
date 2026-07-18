@@ -295,6 +295,17 @@ PROPERTY_MAPPING = {
 A caller who places the key explicitly in `Options(group=...)` or `Options(context=...)`
 overrides the spec's classification.
 
+## How a name-parsed value binds to a key
+
+A value captured from the feature name binds to a PROPERTY_MAPPING key by name: a named capture
+group `(?P<key>...)` binds to the key of the same name, so a secondary capture and an
+`element_validator`-only spec (one with no `allowed_values`) both receive their value. When a
+pattern declares any named group, binding is exclusively by name. A pattern with only positional
+groups falls back to the legacy rule of binding the first capture to the single key whose
+`allowed_values` already contain it. That fallback is transitional (retired by #772); a positional
+pattern whose keys share a reachable value is rejected at class-definition time, so migrate such a
+pattern to named capture groups.
+
 ## What the end user sees on a rejection
 
 A direct `FeatureChainParser` call raises `ValueError` immediately. Going through

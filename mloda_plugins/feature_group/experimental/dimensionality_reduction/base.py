@@ -4,7 +4,6 @@ Base implementation for dimensionality reduction feature groups.
 
 from __future__ import annotations
 
-import numbers
 from abc import abstractmethod
 from typing import Any, Optional
 
@@ -17,16 +16,7 @@ from mloda.provider import (
 from mloda.provider import FeatureSet
 from mloda.user import Options
 from mloda.provider import DefaultOptionKeys
-from mloda.provider import PropertySpec
-
-
-def _is_positive_int(value: Any) -> bool:
-    """Accept any positive integer (int, numpy int, decimal string), so bool, 0, -5, 2.5, "abc" and "²" are rejected."""
-    if isinstance(value, bool):
-        return False
-    if isinstance(value, numbers.Integral):
-        return int(value) > 0
-    return isinstance(value, str) and value.isdecimal() and int(value) > 0
+from mloda.provider import PropertySpec, is_positive_int
 
 
 class DimensionalityReductionFeatureGroup(FeatureChainParserMixin, FeatureGroup):
@@ -140,14 +130,14 @@ class DimensionalityReductionFeatureGroup(FeatureChainParserMixin, FeatureGroup)
             "Target dimension for the reduction (positive integer)",
             context=True,
             strict_validation=True,
-            element_validator=_is_positive_int,
+            element_validator=is_positive_int,
         ),
         DefaultOptionKeys.in_features: PropertySpec(
             "Source features to use for dimensionality reduction",
             context=True,
             strict_validation=False,
         ),
-        # The algorithm-specific numeric keys below share _is_positive_int across both hooks.
+        # The algorithm-specific numeric keys below share is_positive_int across both hooks.
         # element_validator produces the rejection message and checks the declared default at
         # construction; it runs on BOTH match paths, so it alone enforces the value space. match_guard
         # additionally judges the raw, un-unpacked value.
@@ -157,16 +147,16 @@ class DimensionalityReductionFeatureGroup(FeatureChainParserMixin, FeatureGroup)
             context=True,
             strict_validation=True,
             default=250,
-            element_validator=_is_positive_int,
-            match_guard=_is_positive_int,
+            element_validator=is_positive_int,
+            match_guard=is_positive_int,
         ),
         TSNE_N_ITER_WITHOUT_PROGRESS: PropertySpec(
             "Maximum iterations without progress before early stopping (t-SNE)",
             context=True,
             strict_validation=True,
             default=50,
-            element_validator=_is_positive_int,
-            match_guard=_is_positive_int,
+            element_validator=is_positive_int,
+            match_guard=is_positive_int,
         ),
         TSNE_METHOD: PropertySpec(
             "t-SNE computation method",
@@ -197,8 +187,8 @@ class DimensionalityReductionFeatureGroup(FeatureChainParserMixin, FeatureGroup)
             context=True,
             strict_validation=True,
             default=200,
-            element_validator=_is_positive_int,
-            match_guard=_is_positive_int,
+            element_validator=is_positive_int,
+            match_guard=is_positive_int,
         ),
         # Isomap specific parameters
         ISOMAP_N_NEIGHBORS: PropertySpec(
@@ -206,8 +196,8 @@ class DimensionalityReductionFeatureGroup(FeatureChainParserMixin, FeatureGroup)
             context=True,
             strict_validation=True,
             default=5,
-            element_validator=_is_positive_int,
-            match_guard=_is_positive_int,
+            element_validator=is_positive_int,
+            match_guard=is_positive_int,
         ),
     }
 

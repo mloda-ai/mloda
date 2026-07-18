@@ -5,12 +5,18 @@ import tempfile
 from typing import Any
 
 import pyarrow as pa
-import pyarrow.feather as pyarrow_feather
 import pyarrow.json as pyarrow_json
 import pyarrow.csv as pyarrow_csv
 import pyarrow.orc as pyarrow_orc
 import pyarrow.parquet as pyarrow_parquet
 import pytest
+
+
+def _read_feather_ipc(source: Any, columns: list[str] | None = None) -> Any:
+    """Non-deprecated Feather V2 reader used as the test comparison oracle."""
+    with pa.ipc.open_file(source) as reader:
+        table = reader.read_all()
+    return table.select(columns) if columns is not None else table
 
 from mloda_plugins.compute_framework.base_implementations.pyarrow.pyarrow_file_source_transformer import (
     FileSourcePyArrowTransformer,
@@ -50,7 +56,9 @@ class TestReadFilesImplementations:
 
         # Save datasets in different formats
         cls.feather_file = "test.feather"
-        pyarrow_feather.write_feather(cls.table, cls.feather_file)
+        with pa.OSFile(cls.feather_file, "wb") as sink:
+            with pa.ipc.new_file(sink, cls.table.schema) as writer:
+                writer.write_table(cls.table)
 
         cls.json_file = "test.json"
         with open(cls.json_file, "w") as f:
@@ -111,7 +119,7 @@ class TestReadFilesImplementations:
 
     def test_implementations_read(self) -> None:
         test_cases = [
-            (FeatherReader, self.feather_file, pyarrow_feather.read_table),
+            (FeatherReader, self.feather_file, _read_feather_ipc),
             (JsonReader, self.json_file, pyarrow_json.read_json),
             (CsvReader, self.csv_file, pyarrow_csv.read_csv),
             (OrcReader, self.orc_file, pyarrow_orc.read_table),

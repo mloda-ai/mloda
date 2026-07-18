@@ -34,9 +34,10 @@ REQUIRED_WHEN_GUARD_FLAG = "_mloda_required_when_guard"
 CAPTURELESS_DIAGNOSTIC_FLAG = "_mloda_captureless_diagnostic_emitted"
 
 # An unrelated feature name used to probe whether a matcher is universal: does it accept a name it
-# has no business matching, with empty options? Contains a chain separator so it reaches the
-# configuration path cleanly.
-_UNIVERSAL_MATCHER_PROBE_NAME = "mloda_universal_matcher_probe_source__mloda_universal_matcher_probe"
+# has no business matching, with empty options? It carries NO chain separator, so no
+# PREFIX_PATTERN/SUFFIX_PATTERN can capture it and the resolved matcher falls through to the
+# configuration path, where the universal-matcher problem actually lives.
+_UNIVERSAL_MATCHER_PROBE_NAME = "mloda_universal_matcher_probe"
 
 # How many guards the current match call is nested in. A guarded matcher that delegates via super()
 # reaches the guard of its parent, and only the outermost one may evaluate the predicates.
@@ -730,21 +731,31 @@ class FeatureChainParser:
         """Nudge authors whose all-optional PROPERTY_MAPPING inherits the universal configuration matcher (#771).
 
         With zero unconditionally required keys, the configuration path matches any feature name given
-        empty options. Warn unless the class opts in with ALLOW_UNIVERSAL_MATCHER = True. A single
-        unconditionally required key already discriminates, so it is not warned. Universality is
-        confirmed behaviorally: the resolved matcher is called with an unrelated name and empty options,
-        which exempts a genuine custom matcher and a required_when that fires for empty options, while
-        still catching a pass-through override that delegates to the universal base.
+        empty options. Warn unless the class opts in with ALLOW_UNIVERSAL_MATCHER = True. A key that is
+        unconditionally required, or conditionally required via required_when, gates the match, so the
+        mapping is not warned. Universality is confirmed behaviorally: the resolved matcher is called
+        with an unrelated, separator-free name and empty options, which exempts a genuine custom matcher
+        while still catching a pass-through override that delegates to the universal base.
         """
         if getattr(owner, "ALLOW_UNIVERSAL_MATCHER", False):
             return
         property_mapping = getattr(owner, "PROPERTY_MAPPING", None)
-        if not isinstance(property_mapping, dict) or not property_mapping:
+        # A None mapping is not a configuration matcher; an EMPTY dict is the strongest universal
+        # matcher (it validates vacuously), so it stays in scope.
+        if not isinstance(property_mapping, dict):
             return
-        # A key that declares no default and no required_when is unconditionally required and already
-        # discriminates on the configuration path, so the mapping is not universal.
         for spec in property_mapping.values():
-            if isinstance(spec, PropertySpec) and not cls._can_skip_required_check(spec):
+            if not isinstance(spec, PropertySpec):
+                continue
+            # A required_when key gates the match with a runtime predicate, so the mapping is not a
+            # blanket universal matcher. It is also left unprobed: the predicate may reference the
+            # class being defined, which is not yet bound to its name during __init_subclass__, so
+            # probing it would raise (#771).
+            if spec.required_when is not None:
+                return
+            # A key that declares no default (and, per the check above, no required_when) is
+            # unconditionally required and already discriminates on the configuration path.
+            if not cls._can_skip_required_check(spec):
                 return
         matcher = getattr(owner, "match_feature_group_criteria", None)
         if matcher is None:
@@ -752,7 +763,8 @@ class FeatureChainParser:
         # A matcher that raises on the probe is doing custom work, so it is not treated as universal.
         try:
             universal = bool(matcher(_UNIVERSAL_MATCHER_PROBE_NAME, Options()))
-        except Exception:
+        except Exception as exc:
+            logger.debug("universal-matcher probe for %s raised %s; treating it as non-universal.", owner.__name__, exc)
             return
         if not universal:
             return

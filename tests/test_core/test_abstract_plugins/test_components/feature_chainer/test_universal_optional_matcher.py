@@ -132,6 +132,66 @@ class TestUniversalMatcherWarns:
         warnings = _universal_matcher_warnings(caplog, "_PassThroughU771d")
         assert warnings, "a pass-through override is still a universal matcher and must warn"
 
+    def test_named_capture_optional_pattern_warns(self, caplog: pytest.LogCaptureFixture) -> None:
+        """Case 10: a named-capture pattern plus an all-optional mapping is universal via config -> WARNS.
+
+        An unrelated name WITHOUT a chain separator reaches the configuration path, where the sole key is
+        optional, so the class matches it with empty options: it is a universal matcher. The definition-time
+        probe must confirm universality on a name the pattern does NOT capture. Today's ``__``-bearing probe
+        IS captured by the pattern, the captured value fails strict validation, the match returns False, and
+        no warning fires. Fixed once the probe stops using a name that contains the chain separator.
+        """
+        with caplog.at_level(logging.WARNING):
+
+            class _NamedOptionalPatternU771j(FeatureChainParserMixin, FeatureGroup):
+                PREFIX_PATTERN = r".*__(?P<mode_u771j>\w+)$"
+                PROPERTY_MAPPING = {
+                    "mode_u771j": PropertySpec(
+                        "mode", allowed_values=("special_u771j",), default=None, strict_validation=True
+                    ),
+                }
+
+            # Precondition (holds now and after the fix): a name with NO chain separator reaches the config
+            # path, where the optional key lets the class match with empty options -> universal.
+            assert _NamedOptionalPatternU771j.match_feature_group_criteria("plainunrelatedu771j", Options()) is True
+
+        warnings = _universal_matcher_warnings(caplog, "_NamedOptionalPatternU771j")
+        assert warnings, "a named-capture pattern with an all-optional mapping is still a universal matcher"
+
+    def test_empty_mapping_warns(self, caplog: pytest.LogCaptureFixture) -> None:
+        """Case 11: an explicit empty PROPERTY_MAPPING validates vacuously -> universal matcher -> WARNS.
+
+        An empty mapping enforces nothing, so with empty options it matches any feature name: it is the most
+        universal shape there is. Today the guard early-returns on the empty dict and stays silent; it must
+        warn once that early return is removed.
+        """
+        with caplog.at_level(logging.WARNING):
+
+            class _EmptyMappingU771k(FeatureChainParserMixin, FeatureGroup):
+                PROPERTY_MAPPING = {}
+
+            # Precondition: an empty mapping validates vacuously, so an unrelated name matches -> universal.
+            assert _EmptyMappingU771k.match_feature_group_criteria("unrelatedu771k", Options()) is True
+
+        warnings = _universal_matcher_warnings(caplog, "_EmptyMappingU771k")
+        assert warnings, "an empty PROPERTY_MAPPING is vacuously universal and must warn"
+
+    def test_warns_exactly_once(self, caplog: pytest.LogCaptureFixture) -> None:
+        """Case 15 (pin, once-count): the definition-time warning fires exactly once per class.
+
+        Only ``FeatureChainParserMixin.__init_subclass__`` runs this diagnostic. Mirrors the captureless
+        suite's once-count and guards against a future regression that also wires the guard into
+        ``FeatureGroup.__init_subclass__``, which would double the warning through the super() chain.
+        """
+        with caplog.at_level(logging.WARNING):
+
+            class _OnceCountU771o(FeatureChainParserMixin, FeatureGroup):
+                PROPERTY_MAPPING = {"opt_u771o": PropertySpec("optional", default=None)}
+
+            assert "opt_u771o" in _OnceCountU771o.PROPERTY_MAPPING
+
+        assert len(_universal_matcher_warnings(caplog, "_OnceCountU771o")) == 1
+
 
 class TestUniversalMatcherDoesNotWarn:
     """The guard stays quiet whenever the class is NOT a universal matcher, or opts out explicitly."""
@@ -211,6 +271,109 @@ class TestUniversalMatcherDoesNotWarn:
             assert _EscapeHatchU771g.ALLOW_UNIVERSAL_MATCHER is True
 
         assert not _universal_matcher_warnings(caplog), "the escape hatch must silence the diagnostic"
+
+    def test_self_referential_required_when_no_spurious_warning(self, caplog: pytest.LogCaptureFixture) -> None:
+        """Case 12: a self-referential required_when must NOT trigger a spurious class-definition warning.
+
+        An all-conditional mapping whose ``required_when`` references the class's own not-yet-bound name is a
+        common authoring style (sklearn's pipeline uses
+        ``lambda o: o.get(SklearnPipelineFeatureGroup.KEY) is None``). During ``__init_subclass__`` the class
+        name is unbound, so calling the predicate raises NameError. Today the universal-matcher probe runs the
+        installed guard, which triggers the predicate; ``check_required_when`` catches the NameError and logs a
+        misleading "required_when predicate ... raised ..." warning. A conditional mapping is not a universal
+        matcher and must not be probed at class-definition time.
+        """
+        with caplog.at_level(logging.WARNING):
+
+            class _SelfRefConditionalU771l(FeatureChainParserMixin, FeatureGroup):
+                COND_KEY_U771L = "cond_u771l"
+                OTHER_KEY_U771L = "other_u771l"
+                PROPERTY_MAPPING = {
+                    "cond_u771l": PropertySpec(
+                        "cond",
+                        default=None,
+                        required_when=(lambda o: o.get(_SelfRefConditionalU771l.OTHER_KEY_U771L) is None),
+                    ),
+                    "other_u771l": PropertySpec(
+                        "other",
+                        default=None,
+                        required_when=(lambda o: o.get(_SelfRefConditionalU771l.COND_KEY_U771L) is None),
+                    ),
+                }
+
+            assert "cond_u771l" in _SelfRefConditionalU771l.PROPERTY_MAPPING
+
+        # 1) A conditional mapping is not warned as a universal matcher (holds now and after the fix).
+        assert not _universal_matcher_warnings(caplog, "_SelfRefConditionalU771l")
+        # 2) The probe must not run the required_when predicate at class-definition time. Doing so today
+        # raises NameError (the class name is unbound during __init_subclass__) and logs this spurious record.
+        spurious = [
+            record
+            for record in caplog.records
+            if record.name == FEATURE_CHAIN_PARSER_LOGGER
+            and "required_when" in record.getMessage()
+            and "raised" in record.getMessage()
+        ]
+        assert not spurious, "the guard's probe must not run required_when predicates at class definition"
+
+    def test_required_key_with_always_true_matcher_no_warn(self, caplog: pytest.LogCaptureFixture) -> None:
+        """Case 13 (pin): an unconditionally-required key keeps the class out of scope even when a custom
+        matcher returns True for everything.
+
+        The diagnostic is scoped to the MAPPING SHAPE (all-optional), not "is this matcher universal in
+        general". A required key means the class is out of #771 scope, whatever the matcher answers, so the
+        probe is never even reached.
+        """
+        with caplog.at_level(logging.WARNING):
+
+            class _RequiredKeyCustomTrueU771m(FeatureChainParserMixin, FeatureGroup):
+                PROPERTY_MAPPING = {
+                    "req_u771m": PropertySpec("required", allowed_values=("v_u771m",), strict_validation=True),
+                }
+
+                @classmethod
+                def match_feature_group_criteria(
+                    cls,
+                    feature_name: str | FeatureName,
+                    options: Options,
+                    data_access_collection: Any = None,
+                ) -> bool:
+                    return True
+
+            # Precondition: the key is unconditionally required, so the mapping shape is not universal.
+            required_spec = _RequiredKeyCustomTrueU771m.PROPERTY_MAPPING["req_u771m"]
+            assert FeatureChainParser._can_skip_required_check(required_spec) is False
+
+        assert not _universal_matcher_warnings(caplog, "_RequiredKeyCustomTrueU771m"), (
+            "a required key keeps the class out of scope even if the matcher returns True for everything"
+        )
+
+    def test_probe_exception_contained_no_warn(self, caplog: pytest.LogCaptureFixture) -> None:
+        """Case 14 (pin): a matcher that raises on the probe is contained -> no warning, no crash.
+
+        The class-definition probe must never let a matcher exception escape and abort the class body, and a
+        raising matcher is not treated as universal.
+        """
+        with caplog.at_level(logging.WARNING):
+
+            class _RaisingMatcherU771n(FeatureChainParserMixin, FeatureGroup):
+                PROPERTY_MAPPING = {"opt_u771n": PropertySpec("optional", default=None)}
+
+                @classmethod
+                def match_feature_group_criteria(
+                    cls,
+                    feature_name: str | FeatureName,
+                    options: Options,
+                    data_access_collection: Any = None,
+                ) -> bool:
+                    raise RuntimeError("boom_u771n")
+
+            # The class body completes: the probe exception did not escape class definition.
+            assert "opt_u771n" in _RaisingMatcherU771n.PROPERTY_MAPPING
+
+        assert not _universal_matcher_warnings(caplog, "_RaisingMatcherU771n"), (
+            "a probe exception is contained, so the class is not warned as universal"
+        )
 
 
 class TestUniversalMatcherMotivation:

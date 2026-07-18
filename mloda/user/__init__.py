@@ -51,6 +51,9 @@ from mloda.core.abstract_plugins.plugin_registry.plugin_registry import (
     register_plugin,
 )
 
+# Feature resolution
+from mloda.core.prepare.identify_feature_group import FeatureResolutionError
+
 # Config loading
 from mloda.core.api.feature_config.loader import load_features_from_config
 
@@ -105,6 +108,8 @@ __all__ = [
     # Plugin registry
     "PluginRegistryCollisionError",
     "register_plugin",
+    # Feature resolution
+    "FeatureResolutionError",
     # Streaming API
     "stream_all",
     # Config loading

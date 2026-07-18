@@ -316,7 +316,7 @@ class mlodaAPI:
         """
         if self.engine is None:
             raise ValueError("Internal error: engine not initialized. This is likely a bug in mloda.")
-        return list(self.engine.resolution_records)
+        return deepcopy(self.engine.resolution_records)
 
     def run(
         self,

@@ -286,6 +286,19 @@ class TestResolutionReportFreshListAndRunInvariance:
         assert len(results) == 1
         assert "ResReportConsumer_811" in results[0].columns
 
+    def test_mutating_a_returned_records_nested_result_does_not_affect_a_later_call(self) -> None:
+        """Clearing a returned record's mutable EvaluationResult must not corrupt a fresh report."""
+        session = _prepare_session()
+
+        report = session.resolution_report()
+        target_name = report[0].feature_name
+        report[0].result.identified.clear()
+        report[0].result.criteria_matched.clear()
+
+        fresh_record = next(r for r in session.resolution_report() if r.feature_name == target_name)
+        assert fresh_record.result.identified, "a later report must not reflect the caller's mutation"
+        assert fresh_record.result.failure_kind is None
+
 
 # ---------------------------------------------------------------------------
 # resolution_report() does not re-match

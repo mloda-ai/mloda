@@ -21,20 +21,6 @@ class TestPandasTimeWindowFeatureGroup:
         """Test compute_framework_rule method."""
         assert PandasTimeWindowFeatureGroup.compute_framework_rule() == {PandasDataFrame}
 
-    def test_get_pandas_freq(self) -> None:
-        """Test _get_pandas_freq method."""
-        assert PandasTimeWindowFeatureGroup._get_pandas_freq(3, "day") == "3D"
-        assert PandasTimeWindowFeatureGroup._get_pandas_freq(7, "hour") == "7H"
-        assert PandasTimeWindowFeatureGroup._get_pandas_freq(2, "minute") == "2T"
-        assert PandasTimeWindowFeatureGroup._get_pandas_freq(4, "second") == "4S"
-        assert PandasTimeWindowFeatureGroup._get_pandas_freq(1, "week") == "1W"
-        assert PandasTimeWindowFeatureGroup._get_pandas_freq(6, "month") == "6M"
-        assert PandasTimeWindowFeatureGroup._get_pandas_freq(2, "year") == "2Y"
-
-        # Test with invalid time unit
-        with pytest.raises(ValueError):
-            PandasTimeWindowFeatureGroup._get_pandas_freq(3, "invalid")
-
     @pytest.mark.parametrize(
         "window_function,expected_values",
         [

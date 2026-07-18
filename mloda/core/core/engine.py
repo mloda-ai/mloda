@@ -22,9 +22,12 @@ from mloda.core.prepare.graph.build_graph import BuildGraph
 from mloda.core.prepare.resolve_graph import ResolveGraph
 from mloda.core.runtime.run import ExecutionOrchestrator
 from mloda.core.prepare.identify_feature_group import (
+    PARTIAL_RECORDS_CAP,
     EvaluationResult,
+    FeatureResolutionError,
     IdentifyFeatureGroupClass,
     ResolutionRecord,
+    render_resolution_failure,
 )
 from mloda.core.runtime.flight.runner_flight_server import ParallelRunnerFlightServer
 from mloda.core.abstract_plugins.feature_group import FeatureGroup, format_feature_group_class
@@ -49,7 +52,6 @@ class Engine:
         api_input_data_collection: Optional[ApiInputDataCollection] = None,
         plugin_collector: Optional[PluginCollector] = None,
         column_ordering: Optional[str] = None,
-        auto_plan: bool = True,
     ) -> None:
         # setup variables which track the primary sources and the compute platforms
         self.feature_group_collection: dict[type[FeatureGroup], set[Feature]] = defaultdict(set)
@@ -79,18 +81,7 @@ class Engine:
         self._dual_consumption_warned: set[tuple[str, str, frozenset[str]]] = set()
         self._property_mapping_keys_cache: dict[type[FeatureGroup], frozenset[str]] = {}
         self.resolution_records: list[ResolutionRecord] = []
-        self.features = features
-        if auto_plan:
-            self.plan()
-
-    def plan(self) -> None:
-        """Run the eager planning pass: build the execution plan and resolve the TFS connection map.
-
-        Split from __init__ so mlodaAPI.diagnose can retain the engine, and the records captured before a
-        FeatureResolutionError, when planning fails. Meant to run once per engine: it appends to
-        resolution_records and mutates the feature collections, so a second call would double-count.
-        """
-        self.execution_planner = self.create_setup_execution_plan(self.features)
+        self.execution_planner = self.create_setup_execution_plan(features)
         self.tfs_connection_map = self._resolve_tfs_connection_map()
 
     def _resolve_tfs_connection_map(self) -> dict[type[ComputeFramework], Any]:
@@ -228,12 +219,21 @@ class Engine:
     def _identify_feature_group_and_frameworks(
         self, feature: Feature
     ) -> tuple[type[FeatureGroup], set[type[ComputeFramework]], EvaluationResult]:
-        """Identifies the feature group class, compute frameworks, and the EvaluationResult for a feature."""
-        identifier = IdentifyFeatureGroupClass(
+        """Identify the winning feature group via the non-raising seam; on failure raise the enriched error."""
+        result = IdentifyFeatureGroupClass.evaluate(
             feature, self.accessible_plugins, self.links, self.data_access_collection
         )
-        feature_group_class, compute_frameworks = identifier.get()
-        return feature_group_class, compute_frameworks, identifier.result
+        message = render_resolution_failure(result, feature)
+        if message is not None:
+            # Slice before deepcopy so the attached payload stays bounded.
+            raise FeatureResolutionError(
+                message,
+                str(feature.name),
+                result,
+                partial_records=deepcopy(self.resolution_records[-PARTIAL_RECORDS_CAP:]),
+            )
+        feature_group_class, compute_frameworks = next(iter(result.identified.items()))
+        return feature_group_class, compute_frameworks, result
 
     def _add_index_feature(
         self,

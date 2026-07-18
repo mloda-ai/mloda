@@ -29,6 +29,10 @@ from mloda.core.abstract_plugins.components.link import Link
 from mloda.core.abstract_plugins.components.default_options_key import DefaultOptionKeys
 
 
+class SetupConfigurationError(ValueError):
+    """Invalid mlodaAPI setup argument, raised before any feature resolution runs."""
+
+
 class mlodaAPI:
     """Main API for executing mloda feature requests.
 
@@ -53,10 +57,9 @@ class mlodaAPI:
         strict_type_enforcement: bool = False,
         column_ordering: Optional[str] = None,
         parallelization_modes: Optional[set[ParallelizationMode]] = None,
-        _defer_planning: bool = False,
     ) -> None:
         if column_ordering is not None and column_ordering not in ("alphabetical", "request_order"):
-            raise ValueError(
+            raise SetupConfigurationError(
                 f"column_ordering must be None, 'alphabetical', or 'request_order', got '{column_ordering}'"
             )
         self.column_ordering = column_ordering
@@ -86,7 +89,6 @@ class mlodaAPI:
         self.runner: None | ExecutionOrchestrator = None
         self.engine: None | Engine = None
 
-        self._defer_planning = _defer_planning
         self.engine = self._create_engine()
 
     def _process_features(
@@ -326,10 +328,10 @@ class mlodaAPI:
 
         Runs the same eager planning as prepare() but projects the outcome instead of raising: on success
         records equals resolution_report() with complete True; on a resolution failure records holds the
-        features resolved before the failing one plus that feature's EvaluationResult and rendered message.
-        A configuration error raised while building the session (for example an invalid column_ordering)
-        yields only the message; any other error raised during the planning pass propagates. Every parameter
-        after features is keyword-only.
+        features resolved before the failing one (from the error payload, capped at PARTIAL_RECORDS_CAP on
+        huge requests) plus that feature's EvaluationResult and rendered message. A SetupConfigurationError
+        (for example an invalid column_ordering) yields only the message; any other error propagates. Every
+        parameter after features is keyword-only.
         """
         try:
             session = cls(
@@ -344,27 +346,17 @@ class mlodaAPI:
                 strict_type_enforcement=strict_type_enforcement,
                 column_ordering=column_ordering,
                 parallelization_modes=parallelization_modes,
-                _defer_planning=True,
             )
-        except ValueError as error:
-            # Setup-phase configuration error (e.g. bad column_ordering); no feature was resolved yet.
-            return ResolutionDiagnosis(records=[], complete=False, message=str(error))
-
-        engine = session.engine
-        if engine is None:
-            raise ValueError("Internal error: engine not initialized. This is likely a bug in mloda.")
-
-        try:
-            engine.plan()
         except FeatureResolutionError as error:
             return ResolutionDiagnosis(
-                records=deepcopy(engine.resolution_records),
+                records=list(error.partial_records),
                 complete=False,
                 feature_name=error.feature_name,
                 failed_result=deepcopy(error.result),
                 message=str(error),
             )
-
+        except SetupConfigurationError as error:
+            return ResolutionDiagnosis(records=[], complete=False, message=str(error))
         return ResolutionDiagnosis(records=session.resolution_report(), complete=True)
 
     def resolved_plan(self) -> list[PlanStep]:
@@ -490,7 +482,6 @@ class mlodaAPI:
             self.api_input_data_collection,
             self.plugin_collector,
             column_ordering=self.column_ordering,
-            auto_plan=not self._defer_planning,
         )
         if not isinstance(engine, Engine):
             raise ValueError("Engine initialization failed.")

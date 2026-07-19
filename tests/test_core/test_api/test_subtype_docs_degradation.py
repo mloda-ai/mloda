@@ -27,6 +27,7 @@ from mloda_plugins.compute_framework.base_implementations.python_dict.python_dic
 SBFIX_HOOK_FEATURE = "sbfix_raising_hook_feature"
 SBFIX_DOC_KEY = "sbfixdoc_kind"
 SBFIX_BOGUS_FRAMEWORK = "SbfixNoSuchDocFramework"
+SBFIX852_EMPTY_HOOK_FEATURE = "sbfix852_empty_message_hook_feature"
 
 
 class SbfixRaisingHookFG(FeatureGroup):
@@ -53,6 +54,35 @@ class SbfixRaisingHookFG(FeatureGroup):
         compute_framework: type[ComputeFramework],
     ) -> bool:
         raise RuntimeError("sbfix hook exploded")
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+        return None
+
+
+class Sbfix852EmptyHookFG(FeatureGroup):
+    """supports_compute_framework hook that raises with an EMPTY message (issue #852)."""
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]] | None:
+        return {PythonDictFramework}
+
+    @classmethod
+    def match_feature_group_criteria(
+        cls,
+        feature_name: FeatureName | str,
+        options: Options,
+        data_access_collection: Optional[DataAccessCollection] = None,
+    ) -> bool:
+        return str(feature_name) == SBFIX852_EMPTY_HOOK_FEATURE
+
+    @classmethod
+    def supports_compute_framework(
+        cls,
+        feature_name: FeatureName | str,
+        options: Options,
+        compute_framework: type[ComputeFramework],
+    ) -> bool:
+        raise RuntimeError()
 
     def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
         return None
@@ -104,6 +134,18 @@ class TestSbfixRaisingHookFailsClosed:
         assert result.feature_group is None
         assert result.error is not None
         assert "sbfix hook exploded" in result.error
+
+
+class TestSbfix852EmptyMessageHookErrorIsNonEmpty:
+    """A raising hook with an empty message must still carry a non-empty, typed error (issue #852)."""
+
+    def test_empty_message_hook_error_is_truthy_and_typed(self) -> None:
+        # str(RuntimeError()) is "", so a naive error must not collapse to a falsy value that reads as success.
+        result = resolve_feature(SBFIX852_EMPTY_HOOK_FEATURE)
+        assert result.feature_group is None
+        assert bool(result.error) is True
+        assert result.error is not None
+        assert "RuntimeError" in result.error
 
 
 class TestSbfixBogusSupportedSurfacedInDocs:

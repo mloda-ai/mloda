@@ -152,6 +152,7 @@ module = [
     "pyarrow.csv",
     "pyarrow.feather",
     "pyarrow.flight",
+    "pyarrow.ipc",
     "pyarrow.json",
     "pyarrow.orc",
     "pyarrow.parquet",

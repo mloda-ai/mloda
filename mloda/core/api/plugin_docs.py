@@ -34,6 +34,7 @@ from mloda.core.api.plugin_info import ComputeFrameworkInfo, ExtenderInfo, Featu
 from mloda.core.prepare.accessible_plugins import (
     EnvironmentPreconditionError,
     FeatureGroupEnvironmentMapping,
+    FrameworkDeclarationError,
     PreFilterPlugins,
     RedefinitionConflictError,
     dedup_feature_group_subclasses,
@@ -412,9 +413,9 @@ def resolve_feature(
     )
     try:
         accessible_plugins: FeatureGroupEnvironmentMapping = PreFilterPlugins(
-            restricted_frameworks, plugin_collector
+            restricted_frameworks, plugin_collector, attribute_declaration_failures=True
         ).get_accessible_plugins()
-    except (RedefinitionConflictError, EnvironmentPreconditionError) as exc:
+    except (RedefinitionConflictError, EnvironmentPreconditionError, FrameworkDeclarationError) as exc:
         # mloda's own environment failure: already a complete sentence. Project it bare, no candidates.
         return ResolvedFeature(feature_name, None, [], error=f"{exc}{scope_suffix}")
     except Exception as exc:  # noqa: BLE001  (never-raising debug API; projects a broken plugin's build failure)

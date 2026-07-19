@@ -105,6 +105,15 @@ class TestSbfixRaisingHookFailsClosed:
         assert result.error is not None
         assert "sbfix hook exploded" in result.error
 
+    def test_empty_exception_message_surfaces_exception_type(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        def raise_empty(*args: object, **kwargs: object) -> None:
+            raise RuntimeError
+
+        monkeypatch.setattr("mloda.core.api.plugin_docs.IdentifyFeatureGroupClass.evaluate", raise_empty)
+        result = resolve_feature(SBFIX_HOOK_FEATURE)
+        assert result.feature_group is None
+        assert result.error == "RuntimeError"
+
 
 class TestSbfixBogusSupportedSurfacedInDocs:
     """Docs surface the undeclared 'supported' framework as subtype_error."""

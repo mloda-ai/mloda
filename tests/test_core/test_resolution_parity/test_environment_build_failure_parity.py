@@ -1,22 +1,28 @@
-"""Paired engine/debug tests for environment-build failure semantics (#790).
+"""Paired engine/debug tests for environment-build failure semantics (#790, unified in #850).
 
 A FeatureGroup whose compute_framework_rule() raises is an ENVIRONMENT-BUILD failure: it breaks
 PreFilterPlugins while it maps feature groups to their frameworks, before any matching happens. That build is
-fail-closed for both callers: the engine lets the provider's exception propagate raw, and resolve_feature
-keeps its never-raising contract by projecting the same failure into ResolvedFeature.error. Since the build
+fail-closed for every caller and now attributes the culprit uniformly (#850): the engine RAISES the typed
+FrameworkDeclarationError instead of letting the provider's raw exception propagate, and resolve_feature keeps
+its never-raising contract by projecting the SAME attributed text into ResolvedFeature.error. For an unscoped
+feature the two strings are identical (resolve_feature only appends a scope suffix, empty here).
+mlodaAPI.diagnose projects the same failure into a ResolutionDiagnosis instead of raising. Since the build
 aborts before matching, a broken group is not a listed candidate.
 
-That projection has two shapes, split by who is at fault rather than by which exception type a plugin
-happens to raise: a PLUGIN's failure is attributed ("Failed to build the plugin environment: <type>: <msg>
-(raised by <module:qualname> while declaring its compute frameworks)"), while mloda's own environment
-preconditions are already complete user-facing sentences and stay bare.
+Attribution is split by who is at fault rather than by which exception type a plugin happens to raise: a
+PLUGIN's failure is attributed ("Failed to build the plugin environment: <type>: <msg> (raised by
+<module:qualname> while declaring its compute frameworks)"), while mloda's own environment preconditions are
+already complete user-facing sentences and stay bare. A PluginCollector that filters out every FeatureGroup is
+one such precondition, and its message names the collector rather than the loader (#850).
 
 The broken class is built per test by a factory and dropped in a finally (del + gc.collect(), same pattern as
 test_sbdg_resolve_feature_broken_rule.py). This matters more than usual here: under fail-closed semantics a
 leaked broken class aborts the environment build of every unrelated resolve_feature/engine test in the same
-xdist worker. So nothing that could pin it may outlive the scoped block: no exception traceback, and no
-ResolvedFeature holding it in candidates. The assertions therefore run on plain strings read out of the
-result before the scope closes.
+xdist worker. So nothing that could pin it may outlive the scoped block: no exception traceback (the engine and
+prepare failures are caught unbound and read via sys.exc_info(), never pytest.raises/as exc), and no
+ResolvedFeature holding it in candidates. The assertions therefore run on plain strings read out of the result
+before the scope closes. The collector-filtered probe below is exempt: it declares its frameworks cleanly and
+is merely filtered, so plain pytest.raises is safe for it.
 """
 
 import gc
@@ -35,12 +41,16 @@ from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.abstract_plugins.plugin_registry.plugin_registry import PluginRegistry
 from mloda.core.api.plugin_docs import resolve_feature
+from mloda.core.api.request import mlodaAPI
 from mloda.core.core.engine import Engine
 from mloda.core.prepare.accessible_plugins import (
     EnvironmentPreconditionError,
+    FrameworkDeclarationError,
     PreFilterPlugins,
     RedefinitionConflictError,
 )
+from mloda.core.prepare.identify_feature_group import ResolutionDiagnosis
+from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 
 
 ENV_BUILD_FAILURE_FEATURE = "probe790_env_build_failure"
@@ -155,20 +165,22 @@ def _capture_engine_build_failure() -> Optional[str]:
     is the exact drift these paired tests exist to catch. Engine.__init__ reaches its environment build
     before any planning work, so this raises in well under a millisecond and constructs nothing else.
 
-    An unbound 'except' plus a transient sys.exc_info() read: a bound 'except ... as exc' (or pytest.raises)
-    keeps a traceback that pins the broken class through the Engine frame. Only the message string escapes
-    here, so no traceback outlives the block.
+    The engine attributes the provider failure as FrameworkDeclarationError (#850), so that is the type
+    caught here. An unbound 'except' plus a transient sys.exc_info() read: a bound 'except ... as exc' (or
+    pytest.raises) keeps a traceback that pins the broken class through the Engine frame. Only the message
+    string escapes here, so no traceback outlives the block.
     """
     try:
         Engine(Features([Feature(ENV_BUILD_FAILURE_FEATURE)]), PreFilterPlugins.get_cfw_subclasses(), None)
-    except RuntimeError:
+    except FrameworkDeclarationError:
         return str(sys.exc_info()[1])
     return None
 
 
 def test_engine_environment_build_fails_fast_on_broken_rule() -> None:
-    """The engine aborts the run: the provider's failure propagates raw out of Engine construction."""
+    """The engine aborts the run and ATTRIBUTES the culprit as FrameworkDeclarationError, not a raw exception (#850)."""
     broken_fg = _make_broken_rule_fg()
+    identity = f"{broken_fg.__module__}:{broken_fg.__qualname__}"
     try:
         message = _capture_engine_build_failure()
     finally:
@@ -176,7 +188,10 @@ def test_engine_environment_build_fails_fast_on_broken_rule() -> None:
         gc.collect()
 
     assert message is not None, "the engine must not swallow a raising compute_framework_rule"
+    assert "Failed to build the plugin environment" in message
+    assert "RuntimeError" in message
     assert ENV_BUILD_FAILURE_MESSAGE in message
+    assert identity in message
 
 
 def test_resolve_feature_projects_the_environment_build_failure() -> None:
@@ -230,7 +245,7 @@ def test_resolve_feature_names_the_broken_plugin_for_an_unrelated_feature() -> N
 
 
 def test_engine_and_resolve_feature_report_the_same_provider_failure() -> None:
-    """Parity: both paths surface the SAME provider failure, not two independently drifting strings."""
+    """Parity: for an unscoped feature both paths surface the SAME attributed string, not two drifting ones (#850)."""
     broken_fg = _make_broken_rule_fg()
     try:
         engine_message = _capture_engine_build_failure()
@@ -243,7 +258,46 @@ def test_engine_and_resolve_feature_report_the_same_provider_failure() -> None:
 
     assert engine_message is not None
     assert resolve_error is not None
-    assert engine_message in resolve_error
+    # resolve_feature appends only a scope suffix, empty for this unscoped feature, so the strings are equal.
+    assert engine_message == resolve_error
+
+
+def test_diagnose_projects_the_environment_build_failure() -> None:
+    """mlodaAPI.diagnose projects the attributed build failure into a ResolutionDiagnosis instead of raising (#850).
+
+    The diagnosis carries the same text the raising prepare() path throws, with no records and no failed
+    feature: the build aborts before any feature is resolved. prepare()'s failure is caught unbound and read
+    via sys.exc_info() so its traceback never pins the broken class, matching the engine helper's discipline.
+    """
+    broken_fg = _make_broken_rule_fg()
+    identity = f"{broken_fg.__module__}:{broken_fg.__qualname__}"
+    try:
+        diagnosis = mlodaAPI.diagnose([ENV_BUILD_FAILURE_FEATURE], compute_frameworks={PandasDataFrame})
+        complete = diagnosis.complete
+        message = diagnosis.message
+        records = diagnosis.records
+        feature_name = diagnosis.feature_name
+        failed_result = diagnosis.failed_result
+        del diagnosis
+        prepare_error: Optional[str] = None
+        try:
+            mlodaAPI.prepare([ENV_BUILD_FAILURE_FEATURE], compute_frameworks={PandasDataFrame})
+        except FrameworkDeclarationError:
+            prepare_error = str(sys.exc_info()[1])
+    finally:
+        del broken_fg
+        gc.collect()
+
+    assert complete is False
+    assert records == []
+    assert feature_name is None
+    assert failed_result is None
+    assert message is not None
+    assert "Failed to build the plugin environment" in message
+    assert identity in message
+    # The projected message is exactly what the raising path throws for the same request.
+    assert prepare_error is not None
+    assert message == prepare_error
 
 
 def test_resolve_feature_attributes_a_plugin_raised_value_error() -> None:
@@ -351,3 +405,82 @@ def test_own_environment_precondition_is_projected_bare() -> None:
     assert "Failed to build the plugin environment" not in error
     assert ENV_BUILD_FAILURE_MESSAGE not in error
     assert candidate_names == []
+
+
+COLLECTOR_FILTERED_FEATURE_850 = "probe850_collector_filtered_feature"
+
+
+class CollectorFilteredProbe850(FeatureGroup):
+    """Declares its frameworks cleanly; exists only to be enabled AND disabled by one collector (#850).
+
+    A module-scope, harmless global subclass: its rule never raises and it matches nothing, so it does not
+    pollute any other test's candidate universe. It is not subject to the leaked-broken-class hazard, so the
+    tests below may use plain pytest.raises.
+    """
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]] | None:
+        return {PandasDataFrame}
+
+    @classmethod
+    def match_feature_group_criteria(
+        cls,
+        feature_name: FeatureName | str,
+        options: Options,
+        data_access_collection: Optional[DataAccessCollection] = None,
+    ) -> bool:
+        return False
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+        return None
+
+
+def _collector_that_filters_everything() -> PluginCollector:
+    """A collector that both enables and disables the probe, emptying the (non-empty) loaded universe.
+
+    applicable_feature_group_class checks disabled first, so the probe is dropped; and because the enabled set
+    is non-empty and holds only that probe, every OTHER FeatureGroup is dropped too. The universe was
+    non-empty, so this is a collector configuration mistake, not a nothing-loaded state.
+    """
+    collector = PluginCollector()
+    collector.add_enabled_feature_group_classes({CollectorFilteredProbe850})
+    collector.add_disabled_feature_group_classes({CollectorFilteredProbe850})
+    return collector
+
+
+def test_collector_that_filters_everything_names_the_collector_not_the_loader() -> None:
+    """The env build blames the PluginCollector, with a message distinct from the nothing-loaded hint (#850)."""
+    collector = _collector_that_filters_everything()
+
+    with pytest.raises(EnvironmentPreconditionError) as exc_info:
+        PreFilterPlugins(PreFilterPlugins.get_cfw_subclasses(), collector)
+
+    message = str(exc_info.value)
+    assert "PluginCollector" in message
+    # The loaded universe was non-empty, so the nothing-loaded hint would misdirect the fix.
+    assert "Did you call PluginLoader.all()?" not in message
+
+
+def test_diagnose_projects_the_collector_precondition_failure() -> None:
+    """mlodaAPI.diagnose projects the collector's env-build precondition failure instead of raising (#850)."""
+    collector = _collector_that_filters_everything()
+
+    diagnosis = mlodaAPI.diagnose(
+        [COLLECTOR_FILTERED_FEATURE_850], compute_frameworks={PandasDataFrame}, plugin_collector=collector
+    )
+
+    assert isinstance(diagnosis, ResolutionDiagnosis)
+    assert diagnosis.complete is False
+    assert diagnosis.records == []
+    assert diagnosis.feature_name is None
+    assert diagnosis.failed_result is None
+
+    with pytest.raises(EnvironmentPreconditionError) as exc_info:
+        mlodaAPI.prepare(
+            [COLLECTOR_FILTERED_FEATURE_850], compute_frameworks={PandasDataFrame}, plugin_collector=collector
+        )
+
+    message = diagnosis.message
+    assert message is not None
+    assert message == str(exc_info.value)
+    assert "PluginCollector" in message

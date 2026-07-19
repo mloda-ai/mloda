@@ -116,8 +116,8 @@ class RedefinitionConflictError(ValueError):
 class FrameworkDeclarationError(ValueError):
     """A FeatureGroup raised while declaring its compute frameworks; carries the culprit's identity.
 
-    resolve_feature builds the environment with attribution on so it can name the broken plugin; the engine
-    builds with it off and keeps propagating the provider exception raw (#790). The message is a complete
+    The environment build always attributes the culprit on every path (engine and resolve_feature), so the
+    broken plugin is named rather than its raw exception propagated (#850). The message is a complete
     user-facing sentence that callers project as-is. Subclasses ``ValueError`` like the sibling build errors.
     """
 
@@ -309,9 +309,7 @@ class PreFilterPlugins:
         self,
         compute_frameworks: set[type[ComputeFramework]],
         plugin_collector: Optional[PluginCollector] = None,
-        attribute_declaration_failures: bool = False,
     ) -> None:
-        self.attribute_declaration_failures = attribute_declaration_failures
         feature_groups = self._set_feature_groups(plugin_collector)
         compute_frameworks = self._set_compute_frameworks(compute_frameworks, plugin_collector)
 
@@ -325,10 +323,14 @@ class PreFilterPlugins:
     def _set_feature_groups(self, plugin_collector: Optional[PluginCollector] = None) -> set[type[FeatureGroup]]:
         accessible_feature_groups = self.get_featuregroup_subclasses()
 
+        loaded_universe_was_non_empty = bool(accessible_feature_groups)
         if plugin_collector:
             for accessible_fg in deepcopy(accessible_feature_groups):
                 if not plugin_collector.applicable_feature_group_class(accessible_fg):
                     accessible_feature_groups.remove(accessible_fg)
+        collector_filtered_everything = (
+            plugin_collector is not None and loaded_universe_was_non_empty and len(accessible_feature_groups) == 0
+        )
 
         allow_redefinition = plugin_collector.allow_redefinition if plugin_collector is not None else False
         strict_mode = plugin_collector.strict_mode if plugin_collector is not None else strict_mode_from_env()
@@ -383,6 +385,12 @@ class PreFilterPlugins:
                 )
 
         if len(accessible_feature_groups) == 0:
+            if collector_filtered_everything:
+                raise EnvironmentPreconditionError(
+                    "The PluginCollector filtered out every FeatureGroup: none of the loaded FeatureGroups "
+                    "satisfied its enabled/disabled configuration. Adjust the classes passed to "
+                    "enabled_feature_groups()/disabled_feature_groups() (or the collector's applicability filter)."
+                )
             raise EnvironmentPreconditionError("No feature groups are loaded. Did you call PluginLoader.all()?")
         return accessible_feature_groups
 
@@ -429,19 +437,16 @@ class PreFilterPlugins:
         feature_groups: set[type[FeatureGroup]],
         compute_frameworks: set[type[ComputeFramework]],
     ) -> FeatureGroupEnvironmentMapping:
-        # Fail closed: a provider that raises while declaring its frameworks aborts the build. The engine
-        # build (flag off) propagates it raw and unwrapped (#790); resolve_feature (flag on) attributes it
-        # to the culprit FeatureGroup as FrameworkDeclarationError.
+        # Fail closed: a provider that raises while declaring its frameworks aborts the build. The build
+        # always attributes a raising provider as FrameworkDeclarationError, on both the engine and
+        # resolve_feature paths (#850).
         accessible_plugins: FeatureGroupEnvironmentMapping = {}
         for feature_group in feature_groups:
-            if self.attribute_declaration_failures:
-                try:
-                    definition = feature_group.compute_framework_definition()
-                except Exception as exc:  # noqa: BLE001  attribute the culprit, then re-raise typed
-                    identity = f"{feature_group.__module__}:{feature_group.__qualname__}"
-                    raise FrameworkDeclarationError(identity, exc) from exc
-            else:
+            try:
                 definition = feature_group.compute_framework_definition()
+            except Exception as exc:  # noqa: BLE001  attribute the culprit, then re-raise typed
+                identity = f"{feature_group.__module__}:{feature_group.__qualname__}"
+                raise FrameworkDeclarationError(identity, exc) from exc
             new_set_of_compute_frameworks = {cp_fg for cp_fg in definition if cp_fg in compute_frameworks}
             accessible_plugins[feature_group] = new_set_of_compute_frameworks
 

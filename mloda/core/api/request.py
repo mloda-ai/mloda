@@ -16,7 +16,12 @@ from mloda.core.prepare.identify_feature_group import (
 )
 from mloda.core.api.run_result import ResultStream, RunResult
 from mloda.core.api.prepare.setup_compute_framework import SetupComputeFramework
-from mloda.core.prepare.accessible_plugins import filter_extenders_by_strict_mode
+from mloda.core.prepare.accessible_plugins import (
+    EnvironmentPreconditionError,
+    FrameworkDeclarationError,
+    RedefinitionConflictError,
+    filter_extenders_by_strict_mode,
+)
 from mloda.core.filter.global_filter import GlobalFilter
 from mloda.core.runtime.run import ExecutionOrchestrator
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
@@ -337,8 +342,10 @@ class mlodaAPI:
         features resolved before the failing one (from the error payload, capped at PARTIAL_RECORDS_CAP on
         huge requests) plus that feature's EvaluationResult and rendered message. A SetupConfigurationError
         (any invalid request argument caught during session setup, before planning, for example an invalid
-        column_ordering or an unknown compute framework name) yields only the message; any other error
-        propagates. Every parameter after features is keyword-only.
+        column_ordering or an unknown compute framework name) yields only the message. Environment-build
+        failures (EnvironmentPreconditionError, RedefinitionConflictError, FrameworkDeclarationError) are
+        likewise projected into the diagnosis instead of raising; any other error propagates. Every parameter
+        after features is keyword-only.
         """
         try:
             session = cls(
@@ -362,6 +369,8 @@ class mlodaAPI:
                 failed_result=deepcopy(error.result),
                 message=str(error),
             )
+        except (EnvironmentPreconditionError, RedefinitionConflictError, FrameworkDeclarationError) as error:
+            return ResolutionDiagnosis(records=[], complete=False, message=str(error))
         except SetupConfigurationError as error:
             return ResolutionDiagnosis(records=[], complete=False, message=str(error))
         return ResolutionDiagnosis(records=session.resolution_report(), complete=True)

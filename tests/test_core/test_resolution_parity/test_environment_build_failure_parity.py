@@ -23,6 +23,8 @@ import gc
 import sys
 from typing import Optional
 
+import pytest
+
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.feature_collection import Features
@@ -34,13 +36,21 @@ from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.abstract_plugins.plugin_registry.plugin_registry import PluginRegistry
 from mloda.core.api.plugin_docs import resolve_feature
 from mloda.core.core.engine import Engine
-from mloda.core.prepare.accessible_plugins import PreFilterPlugins
+from mloda.core.prepare.accessible_plugins import (
+    EnvironmentPreconditionError,
+    PreFilterPlugins,
+    RedefinitionConflictError,
+)
 
 
 ENV_BUILD_FAILURE_FEATURE = "probe790_env_build_failure"
 ENV_BUILD_FAILURE_MESSAGE = "probe790 compute_framework_rule exploded"
 ENV_BUILD_VALUE_ERROR_FEATURE = "probe790_env_build_value_error"
 ENV_BUILD_VALUE_ERROR_MESSAGE = "probe790 compute_framework_rule rejected its own declaration"
+ENV_BUILD_MLODA_PRECONDITION_ERROR_FEATURE = "probe790_env_build_mloda_precondition_error"
+ENV_BUILD_MLODA_PRECONDITION_ERROR_MESSAGE = "probe790 compute_framework_rule raised EnvironmentPreconditionError"
+ENV_BUILD_MLODA_REDEFINITION_ERROR_FEATURE = "probe790_env_build_mloda_redefinition_error"
+ENV_BUILD_MLODA_REDEFINITION_ERROR_MESSAGE = "probe790 compute_framework_rule raised RedefinitionConflictError"
 
 
 def _make_broken_rule_fg() -> type[FeatureGroup]:
@@ -100,6 +110,41 @@ def _make_value_error_rule_fg() -> type[FeatureGroup]:
             return None
 
     return EnvBuildValueErrorProbe790
+
+
+def _make_mloda_typed_error_rule_fg(
+    exc_type: type[ValueError], expected_feature_name: str, message: str
+) -> type[FeatureGroup]:
+    """Build a fresh probe whose compute_framework_rule raises a mloda-imported error type.
+
+    EnvironmentPreconditionError and RedefinitionConflictError are public and importable, and subclass
+    ValueError, so a plugin author can raise either from their own rule. The failure must still be
+    attributed to the PLUGIN, not misread as mloda's OWN precondition just because the plugin borrowed a
+    type mloda also uses for its policy.
+    """
+    # Class objects are cyclic; collect leftovers from earlier tests before defining a twin.
+    gc.collect()
+
+    class EnvBuildMlodaTypedErrorProbe790(FeatureGroup):
+        """Matches a unique feature name, but its compute_framework_rule raises a mloda error type."""
+
+        @classmethod
+        def compute_framework_rule(cls) -> set[type[ComputeFramework]] | None:
+            raise exc_type(message)
+
+        @classmethod
+        def match_feature_group_criteria(
+            cls,
+            feature_name: FeatureName | str,
+            options: Options,
+            data_access_collection: Optional[DataAccessCollection] = None,
+        ) -> bool:
+            return str(feature_name) == expected_feature_name
+
+        def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+            return None
+
+    return EnvBuildMlodaTypedErrorProbe790
 
 
 def _capture_engine_build_failure() -> Optional[str]:
@@ -224,6 +269,55 @@ def test_resolve_feature_attributes_a_plugin_raised_value_error() -> None:
     assert "Failed to build the plugin environment" in error
     assert "ValueError" in error
     assert ENV_BUILD_VALUE_ERROR_MESSAGE in error
+    assert candidate_names == []
+
+
+@pytest.mark.parametrize(
+    ("exc_type", "feature_name", "message"),
+    [
+        (
+            EnvironmentPreconditionError,
+            ENV_BUILD_MLODA_PRECONDITION_ERROR_FEATURE,
+            ENV_BUILD_MLODA_PRECONDITION_ERROR_MESSAGE,
+        ),
+        (
+            RedefinitionConflictError,
+            ENV_BUILD_MLODA_REDEFINITION_ERROR_FEATURE,
+            ENV_BUILD_MLODA_REDEFINITION_ERROR_MESSAGE,
+        ),
+    ],
+)
+def test_resolve_feature_attributes_a_plugin_raised_mloda_typed_error(
+    exc_type: type[ValueError], feature_name: str, message: str
+) -> None:
+    """A plugin raising a mloda error type it imported is still attributed to the PLUGIN (#795).
+
+    EnvironmentPreconditionError and RedefinitionConflictError are public and subclass ValueError, so a
+    plugin can raise either from its own compute_framework_rule. Attribution must follow who is at fault, not
+    which type was raised: this plugin's failure must be prefixed and name the culprit, never projected bare
+    as if it were mloda's OWN precondition. Bare projection here would carry only the plugin's raw sentence,
+    which does not contain "raised by <identity>", so asserting the identity proves the split held. Both
+    types are exercised independently so a future type-specific carve-out cannot regress one while the other
+    stays green.
+    """
+    broken_fg = _make_mloda_typed_error_rule_fg(exc_type, feature_name, message)
+    identity = f"{broken_fg.__module__}:{broken_fg.__qualname__}"
+    try:
+        result = resolve_feature(feature_name)
+        winner_name = result.feature_group.get_class_name() if result.feature_group is not None else None
+        error = result.error
+        candidate_names = [candidate.get_class_name() for candidate in result.candidates]
+        del result
+    finally:
+        del broken_fg
+        gc.collect()
+
+    assert winner_name is None
+    assert error is not None
+    assert "Failed to build the plugin environment" in error
+    assert identity in error
+    assert exc_type.__name__ in error
+    assert message in error
     assert candidate_names == []
 
 

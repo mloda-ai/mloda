@@ -1,9 +1,9 @@
 from typing import Any
 
 try:
-    import pyarrow as pa
+    from pyarrow import ipc as pyarrow_ipc
 except ImportError:
-    pa = None
+    pyarrow_ipc = None
 
 from mloda.provider import FeatureSet
 from mloda_plugins.feature_group.input_data.read_file import ReadFile
@@ -109,12 +109,12 @@ class FeatherReader(ReadFile):
 
     @classmethod
     def load_data(cls, data_access: Any, features: FeatureSet) -> Any:
-        if pa is None:
+        if pyarrow_ipc is None:
             raise ImportError(
                 "pyarrow is required to read Feather files. Install it with: pip install 'mloda[pyarrow]'"
             )
         columns = list(features.get_all_names())
         # Feather V2 is the Arrow IPC file format; use ipc.open_file instead of the
         # deprecated pyarrow.feather.read_table (removed warning as of pyarrow 24).
-        with pa.ipc.open_file(data_access) as reader:
+        with pyarrow_ipc.open_file(data_access) as reader:
             return reader.read_all().select(columns)

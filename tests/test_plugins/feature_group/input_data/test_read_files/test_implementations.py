@@ -11,13 +11,6 @@ import pyarrow.orc as pyarrow_orc
 import pyarrow.parquet as pyarrow_parquet
 import pytest
 
-
-def _read_feather_ipc(source: Any, columns: list[str] | None = None) -> Any:
-    """Non-deprecated Feather V2 reader used as the test comparison oracle."""
-    with pa.ipc.open_file(source) as reader:
-        table = reader.read_all()
-    return table.select(columns) if columns is not None else table
-
 from mloda_plugins.compute_framework.base_implementations.pyarrow.pyarrow_file_source_transformer import (
     FileSourcePyArrowTransformer,
 )
@@ -26,6 +19,13 @@ from mloda_plugins.feature_group.input_data.read_files.feather import FeatherRea
 from mloda_plugins.feature_group.input_data.read_files.json import JsonReader
 from mloda_plugins.feature_group.input_data.read_files.orc import OrcReader
 from mloda_plugins.feature_group.input_data.read_files.parquet import ParquetReader
+
+
+def _read_feather_ipc(source: Any, columns: list[str] | None = None) -> Any:
+    """Non-deprecated Feather V2 reader used as the test comparison oracle."""
+    with pa.ipc.open_file(source) as reader:
+        table = reader.read_all()
+    return table.select(columns) if columns is not None else table
 
 
 class FeatureSet:

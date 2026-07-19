@@ -92,6 +92,7 @@ class FeatureGroup(ABC):
         FeatureChainParser.validate_property_mapping_defaults(cls.__name__, cls.PROPERTY_MAPPING)
         FeatureChainParser.validate_name_binding(cls)
         FeatureChainParser.warn_captureless_without_binding(cls)
+        FeatureChainParser.install_name_path_presence_guard(cls)
         FeatureChainParser.install_required_when_guard(cls)
         cls._validate_subtype_declaration()
 

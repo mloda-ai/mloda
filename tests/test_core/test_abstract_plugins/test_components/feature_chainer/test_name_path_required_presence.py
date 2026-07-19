@@ -400,20 +400,20 @@ class TestShippedPluginsClean:
         )
 
     def test_time_window_feature_group_name_match_is_clean(self, caplog: pytest.LogCaptureFixture) -> None:
-        """TimeWindowFeatureGroup matches a string name with no presence warning.
+        """TimeWindowFeatureGroup matches a valid string name with no presence warning.
 
-        window_size/time_unit are deferred_binding and in_features is excluded, so the name-only
-        match reports nothing.
+        window_function/window_size/time_unit are name-bound via named captures and in_features is
+        excluded, so the name-only match reports nothing.
         """
         with caplog.at_level(logging.WARNING):
-            result = TimeWindowFeatureGroup.match_feature_group_criteria("temperature__avg_7_days_window", Options())
+            result = TimeWindowFeatureGroup.match_feature_group_criteria("temperature__avg_7_day_window", Options())
 
         assert result is True
         assert not _required_presence_warnings(caplog, "TimeWindowFeatureGroup"), (
-            "deferred_binding + in_features exclusion must keep TimeWindowFeatureGroup clean on the name path"
+            "name-bound captures + in_features exclusion must keep TimeWindowFeatureGroup clean on the name path"
         )
 
-    def test_time_window_deferred_binding_marks_are_present(self) -> None:
-        """White-box: window_size and time_unit carry the deferred_binding mark."""
-        assert TimeWindowFeatureGroup.PROPERTY_MAPPING["window_size"].deferred_binding is True
-        assert TimeWindowFeatureGroup.PROPERTY_MAPPING["time_unit"].deferred_binding is True
+    def test_time_window_binds_name_values_instead_of_deferring(self) -> None:
+        """White-box: window_size and time_unit are name-bound, not deferred_binding."""
+        assert TimeWindowFeatureGroup.PROPERTY_MAPPING["window_size"].deferred_binding is False
+        assert TimeWindowFeatureGroup.PROPERTY_MAPPING["time_unit"].deferred_binding is False

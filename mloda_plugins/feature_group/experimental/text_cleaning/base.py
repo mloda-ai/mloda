@@ -9,7 +9,6 @@ from typing import Any, Optional
 
 from mloda.provider import FeatureGroup
 from mloda.user import Feature
-from mloda.provider import FeatureChainParser
 from mloda.provider import (
     FeatureChainParserMixin,
 )
@@ -104,7 +103,6 @@ class TextCleaningFeatureGroup(FeatureChainParserMixin, FeatureGroup):
             strict_validation=True,
             # The option is a sequence of operations; core unpacks it, so this judges ONE operation.
             element_validator=lambda op: op in TextCleaningFeatureGroup.SUPPORTED_OPERATIONS,
-            deferred_binding=True,  # parsed from the name by this group, not a framework-bound capture (#769)
         ),
         DefaultOptionKeys.in_features: PropertySpec(
             "Source feature to apply text cleaning operations to",
@@ -133,26 +131,7 @@ class TextCleaningFeatureGroup(FeatureChainParserMixin, FeatureGroup):
 
     @classmethod
     def _extract_cleaning_operations(cls, feature: Feature) -> Optional[tuple[Any, Any]]:
-        """
-        Extract cleaning operations from a feature.
-
-        Tries string-based parsing first, falls back to configuration-based approach.
-
-        Args:
-            feature: The feature to extract operations from
-
-        Returns:
-            Tuple of cleaning operations, or None if not found
-        """
-        # Try string-based parsing first
-        feature_name_str = feature.name
-
-        if FeatureChainParser.is_chained_feature(feature_name_str):
-            # For string-based features, get operations from options
-            operations = feature.options.get(cls.CLEANING_OPERATIONS) or ()
-            return operations  # type: ignore
-
-        # Fall back to configuration-based approach
+        """Cleaning operations from feature options (both paths), or None when absent."""
         operations = feature.options.get(cls.CLEANING_OPERATIONS)
         return operations if operations is not None else None
 

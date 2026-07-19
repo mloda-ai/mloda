@@ -14,7 +14,10 @@ from typing import Any
 
 import pytest
 
+from mloda.core.abstract_plugins.components.default_options_key import DefaultOptionKeys
 from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser import (
+    NAME_PATH_PRESENCE_GUARD_FLAG,
+    REQUIRED_WHEN_GUARD_FLAG,
     FeatureChainParser,
 )
 from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser_mixin import (
@@ -258,8 +261,12 @@ class TestGuardInstallation:
         assert InheritsMixinMatcher.match_feature_group_criteria("x__first_guarded", REQUIRES_ORDER_BY) is False
         assert predicate.calls == 1
 
-    def test_no_required_when_leaves_the_matcher_untouched(self) -> None:
-        """No conditional requirement declared means nothing to enforce: no wrapper is installed."""
+    def test_no_required_when_means_no_required_when_guard(self) -> None:
+        """No conditional requirement declared means no required_when guard on the resolved matcher.
+
+        The unconditionally required op_type key still earns the name-path presence guard (#769),
+        so a wrapper IS installed; only the required_when flag must stay absent.
+        """
 
         class NoRequiredWhen(FeatureChainParserMixin, FeatureGroup):
             PREFIX_PATTERN = GUARDED_PATTERN
@@ -272,9 +279,28 @@ class TestGuardInstallation:
                 ),
             }
 
-        assert "match_feature_group_criteria" not in NoRequiredWhen.__dict__
         resolved = NoRequiredWhen.match_feature_group_criteria.__func__  # type: ignore[attr-defined]
-        assert resolved is FeatureChainParserMixin.match_feature_group_criteria.__func__  # type: ignore[attr-defined]
+        assert getattr(resolved, REQUIRED_WHEN_GUARD_FLAG, False) is False
+        # The wrapper that is present is the presence guard, not a mislabeled required_when guard.
+        assert getattr(resolved, NAME_PATH_PRESENCE_GUARD_FLAG, False) is True
+
+    def test_no_flaggable_required_key_installs_no_guard_at_all(self) -> None:
+        """A defaulted-only mapping (in_features is name-satisfied) gives neither guard a job."""
+
+        class AllDefaultedNoGuard(FeatureChainParserMixin, FeatureGroup):
+            PREFIX_PATTERN = GUARDED_PATTERN
+            PROPERTY_MAPPING = {
+                OP_TYPE: PropertySpec(
+                    "Operation to apply",
+                    allowed_values={"sum": "Sum of values"},
+                    context=True,
+                    strict_validation=True,
+                    default="sum",
+                ),
+                DefaultOptionKeys.in_features: PropertySpec("source", context=True, strict_validation=False),
+            }
+
+        assert "match_feature_group_criteria" not in AllDefaultedNoGuard.__dict__
 
 
 class TestGuardAnswersInsteadOfRaising:

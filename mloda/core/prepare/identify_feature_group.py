@@ -261,7 +261,7 @@ def _render_none(result: EvaluationResult, feature: Feature, callout: str | None
 
     if result.facts.value_rejections:
         lines = "\n".join(f"  - {class_name}: {reason}" for class_name, reason in sorted(result.facts.value_rejections))
-        msg += f"\nFeature group(s) rejected an option value while matching '{feature_name}':\n{lines}"
+        msg += f"\nFeature group(s) rejected the supplied options while matching '{feature_name}':\n{lines}"
 
     similar = get_close_matches(feature_name, list(result.facts.known_names), n=5, cutoff=0.5)
     if similar:

@@ -29,6 +29,9 @@ INPUT_SEPARATOR = "&"  # Separates multiple input features
 # Marks a matcher that already carries the required_when guard, so it is never wrapped twice.
 REQUIRED_WHEN_GUARD_FLAG = "_mloda_required_when_guard"
 
+# Marks a matcher that already carries the name-path presence guard, so it is never wrapped twice.
+NAME_PATH_PRESENCE_GUARD_FLAG = "_mloda_name_path_presence_guard"
+
 # Marks a class whose captureless diagnostic already ran, so the two __init_subclass__ hooks
 # emit it at most once. Checked on the class's OWN dict so a subclass still evaluates fresh.
 CAPTURELESS_DIAGNOSTIC_FLAG = "_mloda_captureless_diagnostic_emitted"
@@ -44,6 +47,11 @@ _UNIVERSAL_MATCHER_PROBE_NAME = "mloda_universal_matcher_probe"
 # A ContextVar (not a plain global) keeps the count per thread and per async task.
 REQUIRED_WHEN_GUARD_DEPTH: contextvars.ContextVar[int] = contextvars.ContextVar(
     "mloda_required_when_guard_depth", default=0
+)
+
+# Same nesting rule for the name-path presence guard, tracked independently so the two guards compose.
+NAME_PATH_PRESENCE_GUARD_DEPTH: contextvars.ContextVar[int] = contextvars.ContextVar(
+    "mloda_name_path_presence_guard_depth", default=0
 )
 
 # Exception classes a user callable raises when it merely cannot judge a value.
@@ -927,6 +935,15 @@ class FeatureChainParser:
         return feature_name, options
 
     @classmethod
+    def _matcher_is_staticmethod(cls, owner: type[Any]) -> bool:
+        """True when the class's resolved matcher is a staticmethod descriptor."""
+        for klass in owner.__mro__:
+            descriptor = klass.__dict__.get("match_feature_group_criteria")
+            if descriptor is not None:
+                return isinstance(descriptor, staticmethod)
+        return False
+
+    @classmethod
     def _reject_staticmethod_matcher(cls, owner: type[Any]) -> None:
         """Reject a staticmethod matcher on a class that declares required_when.
 
@@ -1007,6 +1024,79 @@ class FeatureChainParser:
                 REQUIRED_WHEN_GUARD_DEPTH.reset(token)
 
         setattr(guarded, REQUIRED_WHEN_GUARD_FLAG, True)
+        setattr(owner, "match_feature_group_criteria", classmethod(guarded))
+
+    @classmethod
+    def install_name_path_presence_guard(cls, owner: type[Any]) -> None:
+        """Wrap a class's RESOLVED matcher so the name-path required-presence rule (#769) survives an override.
+
+        Mirrors ``install_required_when_guard``: installed at class definition from both
+        ``__init_subclass__`` hooks, never wrapped twice, and guards nest so only the outermost one
+        evaluates. An inner False stands untouched, so the inner path's own presence warning is never
+        duplicated. Installed before the required_when guard, which therefore stays outermost.
+        """
+        property_mapping = getattr(owner, "PROPERTY_MAPPING", None)
+        if not isinstance(property_mapping, dict):
+            return
+        if not cls.prefix_patterns_of(owner):
+            return
+        # Same exemptions as the inner rule: with empty options, the missing keys ARE the flaggable ones.
+        if not cls._name_path_missing_required_keys(Options(), property_mapping):
+            return
+
+        # The install condition is broad (any pattern class with an unconditionally required key), so a
+        # staticmethod matcher is skipped rather than rejected: a hard raise could break existing classes.
+        if cls._matcher_is_staticmethod(owner):
+            return
+
+        matcher = getattr(owner, "match_feature_group_criteria", None)
+        if matcher is None:
+            return
+
+        inner: Any = getattr(matcher, "__func__", matcher)
+        if getattr(inner, NAME_PATH_PRESENCE_GUARD_FLAG, False):
+            return
+
+        @functools.wraps(inner)
+        def guarded(guarded_cls: type[Any], *args: Any, **kwargs: Any) -> bool:
+            outermost = NAME_PATH_PRESENCE_GUARD_DEPTH.get() == 0
+            token = NAME_PATH_PRESENCE_GUARD_DEPTH.set(NAME_PATH_PRESENCE_GUARD_DEPTH.get() + 1)
+            try:
+                # An inner False stands: the inner default path already warned on its own presence
+                # non-match, so passing it through keeps one warning per match call.
+                if not inner(guarded_cls, *args, **kwargs):
+                    return False
+
+                if not outermost:
+                    return True
+
+                feature_name, options = FeatureChainParser._resolve_match_arguments(args, kwargs)
+                if options is None:
+                    return True
+
+                mapping = getattr(guarded_cls, "PROPERTY_MAPPING", None)
+                if not isinstance(mapping, dict):
+                    return True
+                # Flattened, because a matcher passes a list-valued pattern attribute straight to
+                # parse_name, so its ELEMENTS are the concrete patterns. A matcher must never leak
+                # an exception, so the parse is contained exactly as in build_effective_options.
+                patterns = FeatureChainParser._flatten_patterns(FeatureChainParser.prefix_patterns_of(guarded_cls))
+                parsed = safe_field(
+                    lambda: FeatureChainParser.parse_name(feature_name, patterns, CHAIN_SEPARATOR),
+                    ParsedFeatureName.no_match(),
+                    catching=(ValueError,),
+                )
+                if not FeatureChainParser._name_identifies_group(parsed, mapping):
+                    return True
+                bindings = FeatureChainParser.bind_name_captures(parsed, mapping)
+                effective_options = FeatureChainParser._merge_bindings(options, bindings, mapping)
+                return FeatureChainParser._check_name_path_required_presence(
+                    guarded_cls.__name__, feature_name, effective_options, mapping
+                )
+            finally:
+                NAME_PATH_PRESENCE_GUARD_DEPTH.reset(token)
+
+        setattr(guarded, NAME_PATH_PRESENCE_GUARD_FLAG, True)
         setattr(owner, "match_feature_group_criteria", classmethod(guarded))
 
     @classmethod

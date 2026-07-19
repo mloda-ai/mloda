@@ -127,6 +127,7 @@ class FeatureChainParserMixin:
         super().__init_subclass__(**kwargs)
         FeatureChainParser.validate_name_binding(cls)
         FeatureChainParser.warn_captureless_without_binding(cls)
+        FeatureChainParser.install_name_path_presence_guard(cls)
         FeatureChainParser.install_required_when_guard(cls)
         FeatureChainParser.warn_universal_optional_matcher(cls)
 

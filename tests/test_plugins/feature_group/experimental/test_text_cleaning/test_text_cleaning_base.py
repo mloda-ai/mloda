@@ -2,6 +2,9 @@
 Tests for the TextCleaningFeatureGroup base class.
 """
 
+import pytest
+
+from mloda.user import Feature
 from mloda.user import FeatureName
 from mloda.user import Options
 from mloda.provider import DefaultOptionKeys
@@ -13,10 +16,10 @@ class TestTextCleaningFeatureGroupBase:
     """Tests for the TextCleaningFeatureGroup base class."""
 
     def test_match_feature_group_criteria_valid(self) -> None:
-        """Test that valid feature names are accepted."""
-        # Valid feature name
+        """Test that valid feature names with cleaning operations supplied are accepted."""
+        # Valid feature name; cleaning_operations is option-required on the name path.
         feature_name = "review__cleaned_text"
-        options = Options()
+        options = Options(context={TextCleaningFeatureGroup.CLEANING_OPERATIONS: ("normalize",)})
 
         # Test with string
         assert TextCleaningFeatureGroup.match_feature_group_criteria(feature_name, options)
@@ -24,6 +27,13 @@ class TestTextCleaningFeatureGroupBase:
         # Test with FeatureName
         feature_name_obj = FeatureName(feature_name)
         assert TextCleaningFeatureGroup.match_feature_group_criteria(feature_name_obj, options)
+
+    def test_extract_operations_without_options_raises(self) -> None:
+        """Absent cleaning operations must raise instead of silently copying the source column."""
+        feature = Feature(FeatureName("text__cleaned_text"), Options())
+
+        with pytest.raises(ValueError):
+            TextCleaningFeatureGroup._extract_operations_and_source_feature(feature)
 
     def test_match_feature_group_criteria_invalid(self) -> None:
         """Test that invalid feature names are rejected."""

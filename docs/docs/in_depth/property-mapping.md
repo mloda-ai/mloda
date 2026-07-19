@@ -377,15 +377,14 @@ Two migrations remove the warning for a flagged key. Give the pattern a named ca
 `(?P<key>...)` so the framework binds the key from the name; or, for a key bound outside
 match-time name capture (parsed by the plugin from the name, or supplied downstream), set
 `deferred_binding=True`, which exempts it from this check only and leaves it required on the
-config path. `TimeWindowFeatureGroup` marks its name-parsed `window_size` and `time_unit` keys
-this way:
+config path. `ClusteringFeatureGroup` marks its name-parsed `k_value` key this way:
 
 ``` python
 from mloda.provider import PropertySpec
 
 PROPERTY_MAPPING = {
-    "window_size": PropertySpec(
-        "Window size parsed from the feature name by the plugin",
+    "k_value": PropertySpec(
+        "Cluster count parsed from the feature name by the plugin",
         deferred_binding=True,  # exempt from the string-named presence check only
     ),
 }
@@ -404,7 +403,7 @@ If every candidate rejects the feature, the final "No feature groups found" erro
 discarded reasons and appends them:
 
 ```
-Feature group(s) rejected an option value while matching 'window_size_windowed':
+Feature group(s) rejected the supplied options while matching 'window_size_windowed':
   - WindowedFeatureGroup: Property value '14' failed validation for 'window_size'
 ```
 

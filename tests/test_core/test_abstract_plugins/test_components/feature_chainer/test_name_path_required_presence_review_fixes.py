@@ -10,8 +10,11 @@ Pinned here:
 - ``allow_explicit_none``: an explicit None counts as present on the name path; the same key
   entirely absent is a non-match.
 - Every shipped FeatureGroup that declares a PROPERTY_MAPPING stays clean on the name path: its
-  required keys are name-carried (legacy first-capture fallback) or marked ``deferred_binding=True``.
-  This guard fails loudly if that fallback is ever retired without marking the affected keys deferred.
+  required keys are name-carried, supplied via the case's options, or marked ``deferred_binding=True``.
+  This guard fails loudly if a group starts warning or rejecting on its representative case.
+- Second review round (#769): TimeWindow name-carried window values are match-time strict (an
+  invalid size or unit is a non-match with a reason) and TextCleaning's ``cleaning_operations``
+  is option-required on the name path (its pattern is recognition-only and binds nothing).
 
 Warnings are filtered by the feature_chain_parser logger name + WARNING level + the contractual
 ``required option(s)`` marker substring, exactly like the sibling suite. Every fixture carries an
@@ -269,47 +272,134 @@ class TestAllowExplicitNoneOnNamePath:
         assert "nullable_r769rfna" in warnings[0].getMessage(), "the warning must name the absent key"
 
 
-# Representative valid name per shipped FeatureGroup that declares a PROPERTY_MAPPING. Each name
+# Representative valid case per shipped FeatureGroup that declares a PROPERTY_MAPPING. Each name
 # matches its PREFIX_PATTERN and every captured token is within the bound key's allowed_values, so
-# the group is clean on the name path (required keys are name-carried or deferred_binding=True).
-SHIPPED_NAME_PATH_CASES: list[tuple[type[Any], str]] = [
-    (AggregatedFeatureGroup, "sales__sum_aggr"),
-    (TimeWindowFeatureGroup, "temperature__avg_7_days_window"),
-    (GeoDistanceFeatureGroup, "point1&point2__haversine_distance"),
-    (TextCleaningFeatureGroup, "review__cleaned_text"),
-    (DimensionalityReductionFeatureGroup, "features__pca_2d"),
-    (EncodingFeatureGroup, "category__onehot_encoded"),
-    (MissingValueFeatureGroup, "amount__mean_imputed"),
-    (ScalingFeatureGroup, "amount__standard_scaled"),
-    (ClusteringFeatureGroup, "features__cluster_kmeans_3"),
-    (NodeCentralityFeatureGroup, "graph__degree_centrality"),
-    (SklearnPipelineFeatureGroup, "data__sklearn_pipeline_preprocessing"),
-    (ForecastingFeatureGroup, "sales__linear_forecast_7day"),
+# the group is clean on the name path (required keys are name-carried, supplied via the case's
+# options, or deferred_binding=True). Most cases need no options; TextCleaning must supply its
+# option-only cleaning_operations key.
+SHIPPED_NAME_PATH_CASES: list[tuple[type[Any], str, Options]] = [
+    (AggregatedFeatureGroup, "sales__sum_aggr", Options()),
+    (TimeWindowFeatureGroup, "temperature__avg_7_day_window", Options()),
+    (GeoDistanceFeatureGroup, "point1&point2__haversine_distance", Options()),
+    (
+        TextCleaningFeatureGroup,
+        "review__cleaned_text",
+        Options(context={TextCleaningFeatureGroup.CLEANING_OPERATIONS: ("normalize",)}),
+    ),
+    (DimensionalityReductionFeatureGroup, "features__pca_2d", Options()),
+    (EncodingFeatureGroup, "category__onehot_encoded", Options()),
+    (MissingValueFeatureGroup, "amount__mean_imputed", Options()),
+    (ScalingFeatureGroup, "amount__standard_scaled", Options()),
+    (ClusteringFeatureGroup, "features__cluster_kmeans_3", Options()),
+    (NodeCentralityFeatureGroup, "graph__degree_centrality", Options()),
+    (SklearnPipelineFeatureGroup, "data__sklearn_pipeline_preprocessing", Options()),
+    (ForecastingFeatureGroup, "sales__linear_forecast_7day", Options()),
 ]
 
-SHIPPED_IDS = [group.__name__ for group, _ in SHIPPED_NAME_PATH_CASES]
+SHIPPED_IDS = [case[0].__name__ for case in SHIPPED_NAME_PATH_CASES]
 
 
 class TestShippedPluginsCleanAcrossAllGroups:
     """GUARD: every shipped PROPERTY_MAPPING group is clean on the name path.
 
-    Fails loudly if the legacy positional-binding fallback (or a per-key ``deferred_binding`` mark)
-    is ever retired without keeping these groups quiet on the name path.
+    Fails loudly if a shipped group starts warning or rejecting on its representative case
+    (name-carried binding retired, an option-only key left unsupplied, or a ``deferred_binding``
+    mark dropped without a replacement binding).
     """
 
-    @pytest.mark.parametrize("group, valid_name", SHIPPED_NAME_PATH_CASES, ids=SHIPPED_IDS)
+    @pytest.mark.parametrize("group, valid_name, options", SHIPPED_NAME_PATH_CASES, ids=SHIPPED_IDS)
     def test_shipped_group_name_path_is_clean(
         self,
         group: type[Any],
         valid_name: str,
+        options: Options,
         caplog: pytest.LogCaptureFixture,
     ) -> None:
-        """A representative valid name matches with NO presence warning."""
+        """A representative valid case matches with NO presence warning."""
         with caplog.at_level(logging.WARNING):
-            result = group.match_feature_group_criteria(valid_name, Options())
+            result = group.match_feature_group_criteria(valid_name, options)
 
         assert result is True, f"{group.__name__} must match its representative name {valid_name!r}"
         assert not _required_presence_warnings(caplog, group.__name__), (
             f"{group.__name__} must stay clean on the name path "
-            f"(required keys are name-carried or deferred_binding=True)"
+            "(required keys are name-carried, option-supplied, or deferred_binding)"
         )
+
+
+# Second review round: names whose window values are invalid (zero size, unknown unit, plural unit).
+INVALID_TIME_WINDOW_NAMES: list[str] = [
+    "temperature__avg_0_day_window",
+    "temperature__avg_3_banana_window",
+    "temperature__avg_7_days_window",
+]
+
+
+class TestTimeWindowNameValuesMatchTimeStrict:
+    """Second review round: TimeWindow name-carried window values are match-time strict.
+
+    window_function/window_size/time_unit are bound from the name, so an invalid value is a
+    non-match with a rejection reason instead of a compute-time failure.
+    """
+
+    @pytest.mark.parametrize("invalid_name", INVALID_TIME_WINDOW_NAMES)
+    def test_invalid_name_value_is_a_non_match(self, invalid_name: str) -> None:
+        """An invalid name-carried window value must be rejected at match time."""
+        assert TimeWindowFeatureGroup.match_feature_group_criteria(invalid_name, Options()) is False
+
+    @pytest.mark.parametrize("invalid_name", INVALID_TIME_WINDOW_NAMES)
+    def test_invalid_name_value_has_a_rejection_reason(self, invalid_name: str) -> None:
+        """The strict-validation replay explains the rejection."""
+        reason = TimeWindowFeatureGroup._strict_validation_rejection_reason(invalid_name, Options())
+
+        assert reason is not None, f"{invalid_name!r} must produce a rejection reason"
+
+    def test_rejection_reason_surfaces_the_invalid_time_unit(self) -> None:
+        """The reason names the offending value."""
+        reason = TimeWindowFeatureGroup._strict_validation_rejection_reason(
+            "temperature__avg_3_banana_window", Options()
+        )
+
+        assert reason is not None
+        assert "banana" in reason, "the reason must surface the invalid time unit"
+
+    def test_valid_name_still_matches_clean(self, caplog: pytest.LogCaptureFixture) -> None:
+        """Companion regression: the valid singular-unit name matches with no presence warning."""
+        with caplog.at_level(logging.WARNING):
+            result = TimeWindowFeatureGroup.match_feature_group_criteria("temperature__avg_7_day_window", Options())
+
+        assert result is True
+        assert not _required_presence_warnings(caplog, "TimeWindowFeatureGroup")
+
+
+class TestTextCleaningNamePathRequiresOperations:
+    """Second review round: cleaning_operations is option-required on the name path.
+
+    The recognition-only pattern binds nothing from the name, so the key is not deferred and its
+    absence is a warned non-match.
+    """
+
+    def test_empty_options_is_a_non_match_with_warning(self, caplog: pytest.LogCaptureFixture) -> None:
+        """Absent cleaning_operations on the name path is a non-match naming the key."""
+        with caplog.at_level(logging.WARNING):
+            result = TextCleaningFeatureGroup.match_feature_group_criteria("review__cleaned_text", Options())
+
+        assert result is False, "absent cleaning_operations must be a name-path non-match"
+        warnings = _required_presence_warnings(caplog, "TextCleaningFeatureGroup")
+        assert warnings, "the absent required key must be warned about"
+        assert "cleaning_operations" in warnings[0].getMessage(), "the warning must name the absent key"
+
+    def test_supplied_operations_match_clean(self, caplog: pytest.LogCaptureFixture) -> None:
+        """With the option supplied the same name matches with no presence warning."""
+        options = Options(context={TextCleaningFeatureGroup.CLEANING_OPERATIONS: ("normalize",)})
+
+        with caplog.at_level(logging.WARNING):
+            result = TextCleaningFeatureGroup.match_feature_group_criteria("review__cleaned_text", options)
+
+        assert result is True
+        assert not _required_presence_warnings(caplog, "TextCleaningFeatureGroup")
+
+    def test_cleaning_operations_deferred_mark_is_removed(self) -> None:
+        """White-box: the key is not parsed from the name, so it must not be marked deferred."""
+        spec = TextCleaningFeatureGroup.PROPERTY_MAPPING[TextCleaningFeatureGroup.CLEANING_OPERATIONS]
+
+        assert spec.deferred_binding is False

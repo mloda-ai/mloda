@@ -91,8 +91,9 @@ class TestOrdinaryOperationVerdictsUnchanged:
 
         assert result is True
 
-    def test_name_path_without_options_matches(self) -> None:
-        assert TextCleaningFeatureGroup.match_feature_group_criteria(CLEANED_FEATURE, Options()) is True
+    def test_name_path_without_options_is_a_non_match(self) -> None:
+        """cleaning_operations is option-required on the name path, so its absence is a non-match."""
+        assert TextCleaningFeatureGroup.match_feature_group_criteria(CLEANED_FEATURE, Options()) is False
 
     def test_hashable_unsupported_operation_is_a_non_match(self) -> None:
         """A value the validator can judge (and rejects) keeps its verdict."""

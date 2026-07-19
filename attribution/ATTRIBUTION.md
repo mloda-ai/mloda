@@ -5,7 +5,7 @@
 | Pygments                               | 2.20.0          | BSD-2-Clause                                       |
 | annotated-types                        | 0.7.0           | MIT License                                        |
 | ast_serialize                          | 0.6.0           | MIT                                                |
-| asttokens                              | 3.0.1           | Apache 2.0                                         |
+| asttokens                              | 3.0.2           | Apache 2.0                                         |
 | bandit                                 | 1.9.4           | Apache-2.0                                         |
 | cachetools                             | 6.2.6           | MIT                                                |
 | certifi                                | 2026.6.17       | Mozilla Public License 2.0 (MPL 2.0)               |
@@ -102,7 +102,7 @@
 | traitlets                              | 5.15.1          | BSD License                                        |
 | typeguard                              | 4.5.2           | MIT                                                |
 | types-PyYAML                           | 6.0.12.20260518 | Apache-2.0                                         |
-| types-requests                         | 2.33.0.20260518 | Apache-2.0                                         |
+| types-requests                         | 2.33.0.20260712 | Apache-2.0                                         |
 | types-toml                             | 0.10.8.20260518 | Apache-2.0                                         |
 | typing-inspect                         | 0.9.0           | MIT License                                        |
 | typing-inspection                      | 0.4.2           | MIT                                                |

@@ -10,6 +10,7 @@ from mloda.core.abstract_plugins.components.plugin_option.plugin_collector impor
 from mloda.core.core.engine import Engine as Engine
 from mloda.core.api.plan_info import PlanStep, build_plan_steps
 from mloda.core.prepare.identify_feature_group import (
+    ComputeFrameworkPinError,
     FeatureResolutionError,
     ResolutionDiagnosis,
     ResolutionRecord,
@@ -343,9 +344,9 @@ class mlodaAPI:
         huge requests) plus that feature's EvaluationResult and rendered message. A SetupConfigurationError
         (any invalid request argument caught during session setup, before planning, for example an invalid
         column_ordering or an unknown compute framework name) yields only the message. Environment-build
-        failures (EnvironmentPreconditionError, RedefinitionConflictError, FrameworkDeclarationError) are
-        likewise projected into the diagnosis instead of raising; any other error propagates. Every parameter
-        after features is keyword-only.
+        failures (EnvironmentPreconditionError, RedefinitionConflictError, FrameworkDeclarationError) and
+        compute-framework pin misuse (ComputeFrameworkPinError) are likewise projected into the diagnosis
+        instead of raising; any other error propagates. Every parameter after features is keyword-only.
         """
         try:
             session = cls(
@@ -369,7 +370,12 @@ class mlodaAPI:
                 failed_result=deepcopy(error.result),
                 message=str(error),
             )
-        except (EnvironmentPreconditionError, RedefinitionConflictError, FrameworkDeclarationError) as error:
+        except (
+            ComputeFrameworkPinError,
+            EnvironmentPreconditionError,
+            RedefinitionConflictError,
+            FrameworkDeclarationError,
+        ) as error:
             return ResolutionDiagnosis(records=[], complete=False, message=str(error))
         except SetupConfigurationError as error:
             return ResolutionDiagnosis(records=[], complete=False, message=str(error))

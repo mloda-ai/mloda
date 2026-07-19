@@ -21,6 +21,7 @@ from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.api.plugin_docs import resolve_feature
+from mloda.core.api.request import mlodaAPI
 from mloda.core.prepare.accessible_plugins import FeatureGroupEnvironmentMapping
 from mloda.core.prepare.identify_feature_group import (
     ComputeFrameworkPinError,
@@ -303,3 +304,23 @@ class TestSingleFrameworkPinValidatedBeforeMatching:
         assert result.error == engine_message
         assert result.feature_group is None
         assert result.candidates == []
+
+    def test_diagnose_projects_the_pin_error(self) -> None:
+        """diagnose never raises: it projects the pin error into a ResolutionDiagnosis, matching prepare()'s throw (#851)."""
+        feature = Feature(PIN_NO_MATCH_FEATURE)
+        feature.compute_frameworks = {PandasDataFrame, PythonDictFramework}
+
+        diagnosis = mlodaAPI.diagnose([feature], compute_frameworks={PandasDataFrame})
+
+        assert diagnosis.complete is False
+        assert diagnosis.records == []
+        assert diagnosis.feature_name is None
+        assert diagnosis.failed_result is None
+        assert diagnosis.message is not None
+        assert str(feature.name) in diagnosis.message
+        assert PandasDataFrame.get_class_name() in diagnosis.message
+        assert PythonDictFramework.get_class_name() in diagnosis.message
+
+        with pytest.raises(ComputeFrameworkPinError) as exc_info:
+            mlodaAPI.prepare([feature], compute_frameworks={PandasDataFrame})
+        assert diagnosis.message == str(exc_info.value)

@@ -120,8 +120,8 @@ class TimeWindowFeatureGroup(TimeReferenceMixin, FeatureChainParserMixin, Featur
         ),
     }
 
-    # Define the regex pattern for this feature group
-    PREFIX_PATTERN = r".*__([\w]+)_(\d+)_([\w]+)_window$"
+    # Named captures bind window_function/window_size/time_unit; core validates them at match time.
+    PREFIX_PATTERN = r".*__(?P<window_function>[\w]+)_(?P<window_size>\d+)_(?P<time_unit>[\w]+)_window$"
 
     # In-feature configuration for FeatureChainParserMixin
     MIN_IN_FEATURES = 1

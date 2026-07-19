@@ -82,6 +82,7 @@ class SubDeclDocRankFG(FeatureChainParserMixin, FeatureGroup):
             "Rank subtype.",
             strict=True,
             allowed_values={"dense": "Dense ranking", "ordinal": "Ordinal ranking"},
+            deferred_binding=True,  # parametric subtypes (ntile_2) are resolved by SUBTYPES, not name capture
         ),
     }
 
@@ -201,6 +202,7 @@ class SubDeclDocR4RejectingFG(FeatureChainParserMixin, FeatureGroup):
             "Operation kind rejected almost everywhere.",
             strict=True,
             allowed_values={"median": "Median", "sum": "Sum"},
+            deferred_binding=True,  # parametric subtypes (ntile_3) are resolved by SUBTYPES, not name capture
         ),
     }
 

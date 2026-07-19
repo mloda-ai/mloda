@@ -54,6 +54,7 @@ NARROW_ENABLED_FEATURE_791 = "renderer_narrow_enabled_791"
 NONE_ENABLED_FEATURE_791 = "renderer_none_enabled_791"
 TIE_FEATURE_791 = "renderer_tie_791"
 TIE_CAPABILITY_FEATURE_791 = "renderer_tie_capability_791"
+MISSING_OPTION_FEATURE_791 = "renderer_missing_option_791__sum_renderer791m"
 
 HEALTHY_DOMAIN_791 = "renderer_healthy_domain_791"
 BOOM_SUPPORTED_NAME_791 = "renderer_boom_supported_name_791"
@@ -329,6 +330,23 @@ class RendererStrictFG791(FeatureChainParserMixin, FeatureGroup):
 WINDOW_REJECTION_REASON = "Property value '14' failed validation for 'window_size'"
 
 
+class RendererMissingOptionFG791(FeatureChainParserMixin, FeatureGroup):
+    """Name-path group whose required options-only key is absent: a MISSING-option rejection, not a wrong value."""
+
+    PREFIX_PATTERN = r".*__(?P<op_791m>\w+)_renderer791m$"
+    PROPERTY_MAPPING = {
+        "op_791m": property_spec("operation carried by the name", context=True),
+        "some_key_791m": property_spec("required, options-only", context=True),
+        DefaultOptionKeys.in_features: property_spec("source", context=True),
+    }
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+        return None
+
+
+MISSING_OPTION_REASON_791 = "required option(s) some_key_791m are absent after declared defaults and name bindings"
+
+
 class RendererNarrowEnabledFG791(CountingFeatureGroup791):
     """Declares two available frameworks; the run enables only the one this candidate rejects."""
 
@@ -599,6 +617,11 @@ def ordinary_none_scenario() -> Scenario:
     return feature, {RendererStrictFG791: {RendererFwOne791}, RendererKnownNamesFG791: {RendererFwOne791}}
 
 
+def missing_option_scenario() -> Scenario:
+    """No match: the sole candidate rejects for a MISSING required option."""
+    return Feature(MISSING_OPTION_FEATURE_791), {RendererMissingOptionFG791: {RendererFwOne791}}
+
+
 def scoped_none_scenario() -> Scenario:
     """No match while scoped to a feature group."""
     feature = Feature(SCOPED_NO_MATCH_FEATURE_791, feature_group="RendererKnownNamesFG791")
@@ -780,13 +803,29 @@ class TestRenderResolutionFailureMessages:
 
         lines = message.split("\n")
         assert lines[0] == f"No feature groups found for feature name: '{TYPO_FEATURE_791}'."
-        assert lines[1] == f"Feature group(s) rejected an option value while matching '{TYPO_FEATURE_791}':"
+        assert lines[1] == f"Feature group(s) rejected the supplied options while matching '{TYPO_FEATURE_791}':"
         assert lines[2] == f"  - RendererStrictFG791: {WINDOW_REJECTION_REASON}"
         assert lines[3].startswith("Did you mean one of: [")
         assert f"'{KNOWN_FEATURE_791}'" in lines[3]
         assert lines[4] == "Use resolve_feature(name, options=...) to debug feature resolution."
         assert lines[5] == TROUBLESHOOTING_LINE
         assert len(lines) == 6
+
+    def test_missing_option_rejection_renders_under_the_options_heading(self) -> None:
+        """A MISSING required option is not a wrong value, so the heading must cover both rejection kinds."""
+        scenario = missing_option_scenario()
+        feature, _ = scenario
+        result = _evaluate(scenario)
+
+        assert result.failure_kind == "none"
+        assert result.facts.value_rejections == (("RendererMissingOptionFG791", MISSING_OPTION_REASON_791),)
+
+        message = render_resolution_failure(result, feature)
+        assert message is not None
+        assert f"Feature group(s) rejected the supplied options while matching '{MISSING_OPTION_FEATURE_791}':" in (
+            message
+        )
+        assert f"  - RendererMissingOptionFG791: {MISSING_OPTION_REASON_791}" in message
 
     def test_empty_environment_stops_after_plugin_loader_hint(self) -> None:
         """An empty environment renders the PluginLoader hint and nothing else."""

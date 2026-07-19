@@ -129,6 +129,7 @@ class ClusteringFeatureGroup(FeatureChainParserMixin, FeatureGroup):
             context=True,
             strict_validation=True,
             element_validator=lambda value: value == "auto" or is_positive_int(value),
+            deferred_binding=True,  # parsed from the name by this group, not a framework-bound capture (#769)
         ),
         DefaultOptionKeys.in_features: PropertySpec(
             "Source features to use for clustering",

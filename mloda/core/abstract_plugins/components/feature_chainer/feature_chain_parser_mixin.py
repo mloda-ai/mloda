@@ -10,8 +10,8 @@ They serve different purposes and run at different points in the pipeline.
 ``element_validator`` (``PropertySpec.element_validator``)
   - Requires ``strict_validation=True`` on the same spec.
   - Runs inside ``FeatureChainParser._validate_property_value`` on **both** match paths,
-    the configuration-based one and the string-named one. Only required *presence* is
-    config-based only, because a key encoded in the feature name is satisfied by the name.
+    the configuration-based one and the string-named one. Required *presence* holds on both
+    too; a key encoded in the feature name is satisfied by the name binding.
   - Receives **individual parsed elements** after list unpacking
     (``_process_found_property_value`` unpacks a sequence value into a list and
     iterates over each element).
@@ -127,6 +127,7 @@ class FeatureChainParserMixin:
         super().__init_subclass__(**kwargs)
         FeatureChainParser.validate_name_binding(cls)
         FeatureChainParser.warn_captureless_without_binding(cls)
+        FeatureChainParser.install_name_path_presence_guard(cls)
         FeatureChainParser.install_required_when_guard(cls)
         FeatureChainParser.warn_universal_optional_matcher(cls)
 
@@ -292,6 +293,7 @@ class FeatureChainParserMixin:
                 options,
                 property_mapping=cls._get_property_mapping(),
                 prefix_patterns=cls._get_prefix_patterns(),
+                owner_name=cls.__name__,
             )
         except ValueError:
             return False
@@ -334,9 +336,9 @@ class FeatureChainParserMixin:
 
         try:
             if name_matched:
-                # The name relates the feature group to the feature, so only the values of the present
-                # options (name-derived bindings included) are judged; required presence is the config
-                # path's business. Judging the effective options keeps the replay in step with the match.
+                # The name relates the feature group to the feature, so the values of the present
+                # options (name-derived bindings included) are judged here; the name-path presence
+                # reason follows below. Judging the effective options keeps the replay in step with the match.
                 FeatureChainParser._validate_present_option_values(effective_options, property_mapping)
             else:
                 matches_mapping = FeatureChainParser._validate_options_against_property_mapping(
@@ -348,6 +350,11 @@ class FeatureChainParserMixin:
                     return None
         except ValueError as exc:
             return str(exc)
+
+        if name_matched:
+            reason = FeatureChainParser.name_path_presence_rejection_reason(effective_options, property_mapping)
+            if reason is not None:
+                return reason
 
         rejection = cls._first_rejecting_guard(effective_options, property_mapping)
         if rejection is None:

@@ -702,3 +702,36 @@ class TestPropertySpecAllowExplicitNone:
             allow_explicit_none=True,
         )
         assert built == hand_constructed
+
+
+class TestPropertySpecDeferredBinding:
+    """``deferred_binding`` passthrough (issue #769).
+
+    The per-key opt-out defaults to ``False`` and rides through the builder onto the field; a built
+    spec equals the ``PropertySpec`` an author constructs by hand, and a non-bool value is rejected at
+    construction (mirroring ``allow_explicit_none``). ``deferred_binding=True`` exempts the key from the
+    name-path required-presence check only; it does not change config-path requiredness.
+    """
+
+    def test_deferred_binding_emitted_through_builder(self) -> None:
+        """``deferred_binding=True`` lands on the field; omitting it leaves the default ``False``."""
+        assert property_spec("d", deferred_binding=True).deferred_binding is True
+        assert property_spec("d").deferred_binding is False
+
+    def test_deferred_binding_spec_equals_direct_construction(self) -> None:
+        """A ``deferred_binding`` spec is exactly the ``PropertySpec`` an author would construct."""
+        built = property_spec("d", deferred_binding=True)
+
+        hand_constructed = PropertySpec(
+            "d",
+            context=True,
+            strict_validation=False,
+            deferred_binding=True,
+        )
+        assert built == hand_constructed
+
+    def test_non_bool_deferred_binding_raises(self) -> None:
+        """A non-bool ``deferred_binding`` is rejected up front, like ``allow_explicit_none``."""
+        not_a_bool: Any = "yes"
+        with pytest.raises(ValueError, match=r"PropertySpec\('d'\)"):
+            property_spec("d", deferred_binding=not_a_bool)

@@ -190,6 +190,7 @@ class RaisingTypeErrorValidatorFeatureGroup(FeatureChainParserMixin, FeatureGrou
             context=True,
             strict_validation=True,
             element_validator=lambda op: op in SUPPORTED_OPERATIONS_ESC732,
+            deferred_binding=True,  # mirrors TextCleaningFeatureGroup: parsed from the name by the group (#769)
         ),
         DefaultOptionKeys.in_features: PropertySpec(
             "Source feature (esc732 fixture)",

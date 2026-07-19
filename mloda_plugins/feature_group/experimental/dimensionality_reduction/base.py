@@ -131,6 +131,7 @@ class DimensionalityReductionFeatureGroup(FeatureChainParserMixin, FeatureGroup)
             context=True,
             strict_validation=True,
             element_validator=is_positive_int,
+            deferred_binding=True,  # parsed from the name by this group, not a framework-bound capture (#769)
         ),
         DefaultOptionKeys.in_features: PropertySpec(
             "Source features to use for dimensionality reduction",

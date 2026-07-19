@@ -1,7 +1,8 @@
 """The string-named match path validates the option values that are present.
 
-Only required presence differs from the config-based path: a key the name carries is satisfied by the
-name. A rejected value is a non-match, and the parser's message is still available as the reason.
+Required presence is enforced on both paths: a key the name carries is satisfied by the name, and
+deferred_binding exempts a key on the name path only. A rejected value is a non-match, and the
+parser's message is still available as the reason.
 """
 
 from __future__ import annotations
@@ -50,12 +51,14 @@ class NamePathFeatureGroup(FeatureChainParserMixin):
             strict_validation=True,
             default="auto",
         ),
-        # No declared default: the key is REQUIRED on the config path.
+        # No declared default: the key is REQUIRED on the config path; deferred_binding
+        # exempts it on the name path only (it models a key bound after matching).
         "size": PropertySpec(
             "strict, element_validator, never encoded in the name",
             context=True,
             strict_validation=True,
             element_validator=_is_positive_int,
+            deferred_binding=True,
         ),
         "notes": PropertySpec(
             "non-strict, so no value space is enforced",
@@ -158,7 +161,7 @@ class TestNamePathStillAcceptsValidOptions:
         assert result is True
 
     def test_plain_name_match_without_options_still_matches(self) -> None:
-        """Required-PRESENCE stays off on the name path: no options at all still matches."""
+        """No options still matches: the name carries algorithm, defaults and deferred_binding cover the rest."""
         result = NamePathFeatureGroup.match_feature_group_criteria("f0__pca_2d", Options())
 
         assert result is True

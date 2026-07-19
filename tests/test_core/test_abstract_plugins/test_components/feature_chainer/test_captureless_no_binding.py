@@ -97,8 +97,10 @@ class TestCapturelessStillIdentifiesGroup:
         assert FeatureChainParser._name_identifies_group(parsed, TextCleaningFeatureGroup.PROPERTY_MAPPING) is True
 
     def test_text_cleaning_match_criteria_still_true(self) -> None:
-        """The recognition predicate keeps claiming its chained name with no options at all."""
-        assert TextCleaningFeatureGroup.match_feature_group_criteria("review__cleaned_text", Options()) is True
+        """The recognition predicate keeps claiming its chained name once the option-required key is supplied."""
+        options = Options(context={TextCleaningFeatureGroup.CLEANING_OPERATIONS: ("normalize",)})
+
+        assert TextCleaningFeatureGroup.match_feature_group_criteria("review__cleaned_text", options) is True
 
     def test_optional_first_positional_group_does_not_identify(self) -> None:
         """A POSITIONAL optional-first group that did not participate still does NOT identify (unchanged)."""

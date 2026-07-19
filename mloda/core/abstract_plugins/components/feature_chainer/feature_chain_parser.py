@@ -29,6 +29,9 @@ INPUT_SEPARATOR = "&"  # Separates multiple input features
 # Marks a matcher that already carries the required_when guard, so it is never wrapped twice.
 REQUIRED_WHEN_GUARD_FLAG = "_mloda_required_when_guard"
 
+# Marks a matcher that already carries the name-path presence guard, so it is never wrapped twice.
+NAME_PATH_PRESENCE_GUARD_FLAG = "_mloda_name_path_presence_guard"
+
 # Marks a class whose captureless diagnostic already ran, so the two __init_subclass__ hooks
 # emit it at most once. Checked on the class's OWN dict so a subclass still evaluates fresh.
 CAPTURELESS_DIAGNOSTIC_FLAG = "_mloda_captureless_diagnostic_emitted"
@@ -44,6 +47,11 @@ _UNIVERSAL_MATCHER_PROBE_NAME = "mloda_universal_matcher_probe"
 # A ContextVar (not a plain global) keeps the count per thread and per async task.
 REQUIRED_WHEN_GUARD_DEPTH: contextvars.ContextVar[int] = contextvars.ContextVar(
     "mloda_required_when_guard_depth", default=0
+)
+
+# Same nesting rule for the name-path presence guard, tracked independently so the two guards compose.
+NAME_PATH_PRESENCE_GUARD_DEPTH: contextvars.ContextVar[int] = contextvars.ContextVar(
+    "mloda_name_path_presence_guard_depth", default=0
 )
 
 # Exception classes a user callable raises when it merely cannot judge a value.
@@ -424,6 +432,71 @@ class FeatureChainParser:
         return cls._validate_final_properties(property_tracker, property_mapping)
 
     @classmethod
+    def _name_path_missing_required_keys(
+        cls, effective_options: Options, property_mapping: dict[str, PropertySpec]
+    ) -> list[str]:
+        """The missing required keys on the name path (#769).
+
+        The source key is name-provided (its count is enforced by MIN/MAX_IN_FEATURES), so
+        ``in_features`` is excluded. A declared-default or ``required_when`` key is skippable
+        (``_can_skip_required_check``); ``deferred_binding`` is the #769 opt-out. A key is absent
+        exactly as ``_collect_option_value`` / ``check_required_when`` read absence.
+        """
+        missing: list[str] = []
+        for key, spec in property_mapping.items():
+            if not isinstance(spec, PropertySpec):
+                continue
+            if key == DefaultOptionKeys.in_features:
+                continue
+            if cls._can_skip_required_check(spec):
+                continue
+            if spec.deferred_binding:
+                continue
+            absent = effective_options.get(key) is None and not (spec.allow_explicit_none and key in effective_options)
+            if absent:
+                missing.append(key)
+        return missing
+
+    @classmethod
+    def _check_name_path_required_presence(
+        cls,
+        owner_name: str | None,
+        feature_name: str | FeatureName,
+        effective_options: Options,
+        property_mapping: dict[str, PropertySpec],
+    ) -> bool:
+        """Enforce the name-path required-presence rule (#769). False means non-match."""
+        missing = cls._name_path_missing_required_keys(effective_options, property_mapping)
+        if not missing:
+            return True
+
+        owner = owner_name or "A feature group"
+        keys = ", ".join(sorted(missing))
+        logger.warning(
+            "%s did not match feature '%s': required option(s) %s are absent after declared defaults and "
+            "name bindings. Provide the option(s), add a named capture (?P<key>...), or set "
+            "deferred_binding=True on each key bound outside the name.",
+            owner,
+            feature_name,
+            keys,
+        )
+        return False
+
+    @classmethod
+    def name_path_presence_rejection_reason(
+        cls, effective_options: Options, property_mapping: dict[str, PropertySpec]
+    ) -> str | None:
+        """The reason a name-path candidate was rejected for missing presence (#769); None when nothing is missing.
+
+        Diagnostic-only: mirrors _check_name_path_required_presence so the resolution-failure
+        report explains the same non-match the matcher produced.
+        """
+        missing = cls._name_path_missing_required_keys(effective_options, property_mapping)
+        if not missing:
+            return None
+        return f"required option(s) {', '.join(sorted(missing))} are absent after declared defaults and name bindings"
+
+    @classmethod
     def match_configuration_feature_chain_parser(
         cls,
         feature_name: str | FeatureName,
@@ -431,13 +504,15 @@ class FeatureChainParser:
         property_mapping: Optional[dict[str, PropertySpec]] = None,
         prefix_patterns: Optional[list[Any]] = None,
         pattern: str = CHAIN_SEPARATOR,
+        owner_name: str | None = None,
     ) -> bool:
         """
         Unified method for matching features using either configuration-based or pattern-based parsing.
 
-        Both paths validate the values of the present options; only required presence is enforced on the
-        configuration-based path alone. This raises on a rejected value, so an overridden
-        ``match_feature_group_criteria`` must reach it through ``FeatureChainParserMixin.match_parser_criteria``.
+        Both paths validate the values of the present options and enforce required presence; the
+        string-named path resolves declared defaults and name bindings first (#769). This raises on a
+        rejected value, so an overridden ``match_feature_group_criteria`` must reach it through
+        ``FeatureChainParserMixin.match_parser_criteria``.
 
         Args:
             feature_name: The feature name to match
@@ -461,6 +536,10 @@ class FeatureChainParser:
                     bindings = cls.bind_name_captures(parsed, property_mapping)
                     effective_options = cls._merge_bindings(options, bindings, property_mapping)
                     cls._validate_present_option_values(effective_options, property_mapping)
+                    if not cls._check_name_path_required_presence(
+                        owner_name, feature_name, effective_options, property_mapping
+                    ):
+                        return False
                 return True
 
         # configuration-based
@@ -856,6 +935,15 @@ class FeatureChainParser:
         return feature_name, options
 
     @classmethod
+    def _matcher_is_staticmethod(cls, owner: type[Any]) -> bool:
+        """True when the class's resolved matcher is a staticmethod descriptor."""
+        for klass in owner.__mro__:
+            descriptor = klass.__dict__.get("match_feature_group_criteria")
+            if descriptor is not None:
+                return isinstance(descriptor, staticmethod)
+        return False
+
+    @classmethod
     def _reject_staticmethod_matcher(cls, owner: type[Any]) -> None:
         """Reject a staticmethod matcher on a class that declares required_when.
 
@@ -936,6 +1024,85 @@ class FeatureChainParser:
                 REQUIRED_WHEN_GUARD_DEPTH.reset(token)
 
         setattr(guarded, REQUIRED_WHEN_GUARD_FLAG, True)
+        setattr(owner, "match_feature_group_criteria", classmethod(guarded))
+
+    @classmethod
+    def install_name_path_presence_guard(cls, owner: type[Any]) -> None:
+        """Wrap a class's RESOLVED matcher so the name-path required-presence rule (#769) survives an override.
+
+        Mirrors ``install_required_when_guard``: installed at class definition from both
+        ``__init_subclass__`` hooks, never wrapped twice, and guards nest so only the outermost one
+        evaluates. An inner False stands untouched, so the inner path's own presence warning is never
+        duplicated. Nesting order relative to the required_when guard is behaviorally irrelevant:
+        each guard ANDs its own predicate onto the inner verdict and passes False through unchanged.
+        """
+        property_mapping = getattr(owner, "PROPERTY_MAPPING", None)
+        if not isinstance(property_mapping, dict):
+            return
+        if not cls.prefix_patterns_of(owner):
+            return
+        # Same exemptions as the inner rule: with empty options, the missing keys ARE the flaggable ones.
+        if not cls._name_path_missing_required_keys(Options(), property_mapping):
+            return
+
+        # Wrapping a staticmethod matcher would hide it from _reject_staticmethod_matcher, so the
+        # required_when installer's existing definition-time ValueError keeps precedence.
+        is_static = cls._matcher_is_staticmethod(owner)
+        if is_static and cls.has_required_when_predicates(property_mapping):
+            return
+
+        # getattr on a staticmethod returns the plain function, so the __func__ fetch below is a no-op
+        # for it and the flag check covers both shapes.
+        matcher = getattr(owner, "match_feature_group_criteria", None)
+        if matcher is None:
+            return
+
+        inner: Any = getattr(matcher, "__func__", matcher)
+        if getattr(inner, NAME_PATH_PRESENCE_GUARD_FLAG, False):
+            return
+
+        @functools.wraps(inner)
+        def guarded(guarded_cls: type[Any], *args: Any, **kwargs: Any) -> bool:
+            outermost = NAME_PATH_PRESENCE_GUARD_DEPTH.get() == 0
+            token = NAME_PATH_PRESENCE_GUARD_DEPTH.set(NAME_PATH_PRESENCE_GUARD_DEPTH.get() + 1)
+            try:
+                # A staticmethod inner keeps its calling convention: no cls injected. An inner False
+                # stands: the inner default path already warned on its own presence non-match, so
+                # passing it through keeps one warning per match call.
+                inner_verdict = inner(*args, **kwargs) if is_static else inner(guarded_cls, *args, **kwargs)
+                if not inner_verdict:
+                    return False
+
+                if not outermost:
+                    return True
+
+                feature_name, options = FeatureChainParser._resolve_match_arguments(args, kwargs)
+                if options is None:
+                    return True
+
+                mapping = getattr(guarded_cls, "PROPERTY_MAPPING", None)
+                if not isinstance(mapping, dict):
+                    return True
+                # Flattened, because a matcher passes a list-valued pattern attribute straight to
+                # parse_name, so its ELEMENTS are the concrete patterns. A matcher must never leak
+                # an exception, so the parse is contained exactly as in build_effective_options.
+                patterns = FeatureChainParser._flatten_patterns(FeatureChainParser.prefix_patterns_of(guarded_cls))
+                parsed = safe_field(
+                    lambda: FeatureChainParser.parse_name(feature_name, patterns, CHAIN_SEPARATOR),
+                    ParsedFeatureName.no_match(),
+                    catching=(ValueError,),
+                )
+                if not FeatureChainParser._name_identifies_group(parsed, mapping):
+                    return True
+                bindings = FeatureChainParser.bind_name_captures(parsed, mapping)
+                effective_options = FeatureChainParser._merge_bindings(options, bindings, mapping)
+                return FeatureChainParser._check_name_path_required_presence(
+                    guarded_cls.__name__, feature_name, effective_options, mapping
+                )
+            finally:
+                NAME_PATH_PRESENCE_GUARD_DEPTH.reset(token)
+
+        setattr(guarded, NAME_PATH_PRESENCE_GUARD_FLAG, True)
         setattr(owner, "match_feature_group_criteria", classmethod(guarded))
 
     @classmethod

@@ -1033,7 +1033,8 @@ class FeatureChainParser:
         Mirrors ``install_required_when_guard``: installed at class definition from both
         ``__init_subclass__`` hooks, never wrapped twice, and guards nest so only the outermost one
         evaluates. An inner False stands untouched, so the inner path's own presence warning is never
-        duplicated. Installed before the required_when guard, which therefore stays outermost.
+        duplicated. Nesting order relative to the required_when guard is behaviorally irrelevant:
+        each guard ANDs its own predicate onto the inner verdict and passes False through unchanged.
         """
         property_mapping = getattr(owner, "PROPERTY_MAPPING", None)
         if not isinstance(property_mapping, dict):
@@ -1044,11 +1045,14 @@ class FeatureChainParser:
         if not cls._name_path_missing_required_keys(Options(), property_mapping):
             return
 
-        # The install condition is broad (any pattern class with an unconditionally required key), so a
-        # staticmethod matcher is skipped rather than rejected: a hard raise could break existing classes.
-        if cls._matcher_is_staticmethod(owner):
+        # Wrapping a staticmethod matcher would hide it from _reject_staticmethod_matcher, so the
+        # required_when installer's existing definition-time ValueError keeps precedence.
+        is_static = cls._matcher_is_staticmethod(owner)
+        if is_static and cls.has_required_when_predicates(property_mapping):
             return
 
+        # getattr on a staticmethod returns the plain function, so the __func__ fetch below is a no-op
+        # for it and the flag check covers both shapes.
         matcher = getattr(owner, "match_feature_group_criteria", None)
         if matcher is None:
             return
@@ -1062,9 +1066,11 @@ class FeatureChainParser:
             outermost = NAME_PATH_PRESENCE_GUARD_DEPTH.get() == 0
             token = NAME_PATH_PRESENCE_GUARD_DEPTH.set(NAME_PATH_PRESENCE_GUARD_DEPTH.get() + 1)
             try:
-                # An inner False stands: the inner default path already warned on its own presence
-                # non-match, so passing it through keeps one warning per match call.
-                if not inner(guarded_cls, *args, **kwargs):
+                # A staticmethod inner keeps its calling convention: no cls injected. An inner False
+                # stands: the inner default path already warned on its own presence non-match, so
+                # passing it through keeps one warning per match call.
+                inner_verdict = inner(*args, **kwargs) if is_static else inner(guarded_cls, *args, **kwargs)
+                if not inner_verdict:
                     return False
 
                 if not outermost:

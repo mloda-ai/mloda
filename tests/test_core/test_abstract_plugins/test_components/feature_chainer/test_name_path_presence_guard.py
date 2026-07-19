@@ -103,6 +103,90 @@ class TestOverrideBypass:
         assert len(warnings) == 1, "one enforcement site per match call: exactly one presence warning"
 
 
+class TestStaticmethodOverrideBypass:
+    """A staticmethod matcher must be guarded too: wrapped without injecting cls, never skipped."""
+
+    def test_staticmethod_true_override_is_still_a_non_match(self, caplog: pytest.LogCaptureFixture) -> None:
+        """Skipping staticmethod matchers reopens the bypass; the guard must reject and warn here too."""
+
+        class _StaticBypassR769pg6(FeatureChainParserMixin):
+            PREFIX_PATTERN = r".*__(?P<carried_r769pg6>\w+)$"
+            PROPERTY_MAPPING = {
+                "carried_r769pg6": PropertySpec("required, carried by the name", context=True),
+                "missing_r769pg6": PropertySpec("required, options-only, absent", context=True),
+            }
+
+            @staticmethod
+            def match_feature_group_criteria(
+                feature_name: str | FeatureName,
+                options: Options,
+                data_access_collection: Any = None,
+            ) -> bool:
+                return True
+
+        with caplog.at_level(logging.WARNING):
+            result = _StaticBypassR769pg6.match_feature_group_criteria("src__op_r769pg6", Options())
+
+        assert result is False, "a staticmethod True override must not bypass the presence rule"
+        warnings = _presence_warnings(caplog, "_StaticBypassR769pg6")
+        assert warnings, "the guarded non-match must warn, naming the class"
+        assert "missing_r769pg6" in warnings[0].getMessage(), "the warning must name the missing key"
+
+    def test_staticmethod_override_with_supplied_key_keeps_the_match(self, caplog: pytest.LogCaptureFixture) -> None:
+        """The wrapper must preserve the staticmethod's verdict and calling convention: match, no warning."""
+
+        class _StaticSatisfiedR769pg7(FeatureChainParserMixin):
+            PREFIX_PATTERN = r".*__(?P<carried_r769pg7>\w+)$"
+            PROPERTY_MAPPING = {
+                "carried_r769pg7": PropertySpec("required, carried by the name", context=True),
+                "present_r769pg7": PropertySpec("required, present in options", context=True),
+            }
+
+            @staticmethod
+            def match_feature_group_criteria(
+                feature_name: str | FeatureName,
+                options: Options,
+                data_access_collection: Any = None,
+            ) -> bool:
+                return True
+
+        with caplog.at_level(logging.WARNING):
+            result = _StaticSatisfiedR769pg7.match_feature_group_criteria(
+                "src__op_r769pg7", Options(context={"present_r769pg7": "v_r769pg7"})
+            )
+
+        assert result is True, "a satisfied required key must keep the staticmethod's match"
+        assert not _presence_warnings(caplog, "_StaticSatisfiedR769pg7")
+
+    def test_staticmethod_override_with_deferred_binding_keeps_the_match(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """``deferred_binding=True`` exempts the key for a staticmethod matcher exactly as for a classmethod."""
+
+        class _StaticDeferredR769pg8(FeatureChainParserMixin):
+            PREFIX_PATTERN = r".*__(?P<carried_r769pg8>\w+)$"
+            PROPERTY_MAPPING = {
+                "carried_r769pg8": PropertySpec("required, carried by the name", context=True),
+                "deferred_r769pg8": PropertySpec(
+                    "required but bound outside the name", context=True, deferred_binding=True
+                ),
+            }
+
+            @staticmethod
+            def match_feature_group_criteria(
+                feature_name: str | FeatureName,
+                options: Options,
+                data_access_collection: Any = None,
+            ) -> bool:
+                return True
+
+        with caplog.at_level(logging.WARNING):
+            result = _StaticDeferredR769pg8.match_feature_group_criteria("src__op_r769pg8", Options())
+
+        assert result is True, "deferred_binding=True must keep the staticmethod's match"
+        assert not _presence_warnings(caplog, "_StaticDeferredR769pg8")
+
+
 class TestGuardHonorsTheInnerRule:
     """The guard mirrors the inner rule: same exemptions, name-path only, no false rejections."""
 

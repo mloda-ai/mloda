@@ -10,6 +10,10 @@ def _sbfix_boom() -> int:
     raise ValueError("sbfix boom")
 
 
+def _sbfix852_empty_boom() -> int:
+    raise RuntimeError()
+
+
 class TestSbfixSafeFieldWithError:
     """safe_field_with_error(read, fallback) returns (value, None) or (fallback, str(exc))."""
 
@@ -21,3 +25,10 @@ class TestSbfixSafeFieldWithError:
         assert value == 0
         assert error is not None
         assert "sbfix boom" in error
+
+    def test_empty_message_exception_yields_non_empty_typed_error(self) -> None:
+        # An empty-message exception must not collapse to a falsy error (issue #852).
+        value, error = safe_field_with_error(_sbfix852_empty_boom, 0)
+        assert value == 0
+        assert error
+        assert "RuntimeError" in error

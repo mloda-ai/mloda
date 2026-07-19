@@ -119,6 +119,7 @@ class SklearnPipelineFeatureGroup(FeatureChainParserMixin, FeatureGroup):
             context=True,
             strict_validation=False,
         ),
+        SklearnArtifact.ARTIFACT_STORAGE_PATH: SklearnArtifact.ARTIFACT_STORAGE_PATH_SPEC,
     }
 
     PREFIX_PATTERN = r".*__sklearn_pipeline_([\w]+)$"

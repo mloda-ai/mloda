@@ -100,6 +100,7 @@ class ScalingFeatureGroup(FeatureChainParserMixin, FeatureGroup):
             context=True,
             strict_validation=False,
         ),
+        SklearnArtifact.ARTIFACT_STORAGE_PATH: SklearnArtifact.ARTIFACT_STORAGE_PATH_SPEC,
     }
 
     @staticmethod

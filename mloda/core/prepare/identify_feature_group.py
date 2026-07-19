@@ -122,6 +122,10 @@ class FeatureResolutionError(ValueError):
         return type(self), (str(self), self.feature_name, self.result, self.partial_records)
 
 
+class ComputeFrameworkPinError(ValueError):
+    """User pinned more than one compute framework; validated before matching (#851)."""
+
+
 def matches_feature_group_scope(feature_group: type[FeatureGroup], scope: str | type[FeatureGroup]) -> bool:
     """Is the candidate inside the requested scope, for both the class-object and the string form.
 
@@ -327,6 +331,17 @@ class IdentifyFeatureGroupClass:
         self.feature_group_compute_framework_mapping = result.identified
         self.result = result
 
+    @staticmethod
+    def _validate_single_framework_pin(feature: Feature) -> None:
+        """Raise if the user pinned more than one compute framework; this misuse is only a programmer error."""
+        pinned = feature.compute_frameworks
+        if pinned is not None and len(pinned) > 1:
+            names = ", ".join(sorted(cfw.get_class_name() for cfw in pinned))
+            raise ComputeFrameworkPinError(
+                f"Feature '{feature.name}' is pinned to more than one compute framework ({names}); "
+                f"pin at most one compute framework."
+            )
+
     @classmethod
     def evaluate(
         cls,
@@ -336,6 +351,9 @@ class IdentifyFeatureGroupClass:
         data_access_collection: Optional[DataAccessCollection] = None,
     ) -> EvaluationResult:
         """Run the matching/filter logic without raising, returning a structured result."""
+        # Pre-matching guard: a >1 pin fires regardless of whether any candidate matches (the old check
+        # sat inside the filter loop, so it never ran when the name matched nothing).
+        cls._validate_single_framework_pin(feature)
         self = cls.__new__(cls)
         self._criteria_matched_feature_groups = set()
         self._abstract_matched_feature_groups = set()
@@ -651,11 +669,9 @@ class IdentifyFeatureGroupClass:
         compute_frameworks: set[type[ComputeFramework]],
         feature: Feature,
     ) -> bool:
+        # Cardinality (<=1) is validated up front in evaluate(), so no >1 pin reaches here.
         if feature.compute_frameworks is None:
             return True
-
-        if len(feature.compute_frameworks) > 1:
-            raise ValueError(f"Feature should only have one compute framework when set by user {feature.name}.")
 
         return feature.get_compute_framework() in compute_frameworks
 

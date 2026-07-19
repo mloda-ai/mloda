@@ -50,6 +50,7 @@ class SubDeclMatchWindowFG(FeatureChainParserMixin, FeatureGroup):
             "Window function subtype.",
             strict=True,
             allowed_values={"median": "Median", "sum": "Sum", "lag": "Lag"},
+            deferred_binding=True,  # parametric subtypes (ntile_2) are resolved by SUBTYPES, not name capture
         ),
     }
 
@@ -136,6 +137,7 @@ class SubDeclMatchRankLikeFG(FeatureChainParserMixin, FeatureGroup):
             "Ranking method.",
             strict=True,
             allowed_values={"dense": "Dense rank", "ordinal": "Ordinal rank"},
+            deferred_binding=True,  # parametric subtypes (ntile_2) are resolved by SUBTYPES, not name capture
         ),
     }
 

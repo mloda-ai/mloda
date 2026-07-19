@@ -76,7 +76,7 @@ does not understand can be absorbed silently.
 | Match time (parser) | `allowed_values` membership | Each element of a **present** option is in the accepted set | One element | `ValueError`, surfaced to the end user |
 | Match time (parser) | `element_validator` | Each element of a **present** option satisfies a predicate | One element | `ValueError`, surfaced to the end user |
 | Match time (parser) | Required presence (config path) | A key that declares no `default` and no `required_when` was provided | The options | Non-match (`False`) |
-| Match time (parser) | Required presence (string-named path) | Same, after declared defaults and name bindings resolve; `deferred_binding=True` and the source (`in_features`) key are exempt | The effective options | Warn or non-match per `MLODA_NAME_PATH_REQUIRED_PRESENCE` (`warn` default / `enforce` / `off`) |
+| Match time (parser) | Required presence (string-named path) | Same, after declared defaults and name bindings resolve; `deferred_binding=True` and the source (`in_features`) key are exempt | The effective options | Non-match (`False`), with a warning naming the missing key(s) |
 | Match time (mixin) | `match_guard` | The whole value has an acceptable shape | The raw value | Non-match (`False`) |
 | Match time (mixin) | `MIN/MAX_IN_FEATURES` | In-feature count is within bounds | The in-features | Non-match (`False`) |
 | Match time (guard installed at class definition) | `required_when` | A conditionally required option is present | `Options` | Non-match (`False`) |
@@ -95,9 +95,8 @@ short-circuits, and `match_guard` is never reached.
 
 Value validation does not depend on how the feature was created: membership and
 `element_validator` run on **both** match paths, the configuration-based one and the
-string-named one. Required **presence** now runs on both too, differing only in strength: the
-configuration path rejects a missing required key outright, while the string-named path is
-warn-by-default and becomes a non-match only under `MLODA_NAME_PATH_REQUIRED_PRESENCE=enforce`
+string-named one. Required **presence** runs on both too: the string-named path rejects a
+missing required key exactly like the configuration path does
 (see [Required presence on the string-named path](#required-presence-on-the-string-named-path)).
 A key the name encodes, a `deferred_binding=True` key, a declared-default key, and the source
 (`in_features`) key are never falsely reported missing. So `"income__pca_2d"` with no options at
@@ -371,16 +370,8 @@ resolved. Exempt from the check: a declared default, a `required_when` key, a
 `deferred_binding=True` key, and the source key (`in_features`), whose presence the name prefix
 supplies and whose count `MIN/MAX_IN_FEATURES` enforces.
 
-`MLODA_NAME_PATH_REQUIRED_PRESENCE` selects the mode (case-insensitive; unset or invalid means
-`warn`):
-
-| Value | Effect |
-| --- | --- |
-| `warn` (default) | Logs a warning naming the group and the missing key(s), still **matches**. The migration default. |
-| `enforce` | The missing key makes it a **non-match**. |
-| `off` (or `0`, `false`, `no`) | The check is skipped. |
-
-Under `enforce`, the resolution-failure report also names the missing key(s), not only the log.
+A flagged missing key makes the match a **non-match**: a warning names the group, the feature,
+and the missing key(s), and the resolution-failure report names the missing key(s) too.
 
 Two migrations remove the warning for a flagged key. Give the pattern a named capture
 `(?P<key>...)` so the framework binds the key from the name; or, for a key bound outside

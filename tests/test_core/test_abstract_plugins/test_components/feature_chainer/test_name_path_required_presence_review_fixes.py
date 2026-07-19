@@ -1,33 +1,21 @@
-"""Regression tests for the #769 name-path required-presence review fixes.
+"""Regression pins for the mandatory name-path required-presence rule (issue #769).
 
-Issue #769 (warn-then-enforce name-path required presence) is implemented and green; a deep review
-found four minor gaps. This file pins the ACCEPTED fixes. Two groups are RED (they fail against the
-committed code and pass once the Green phase lands the fix); two are GUARDs (they pass today and fail
-loudly if the pinned behavior ever regresses).
+Pinned here:
 
-Findings pinned here:
+- ``FeatureChainParser.name_path_presence_rejection_reason`` returns a reason naming the missing
+  key(s) UNCONDITIONALLY when keys are missing, None when nothing is missing, and never mentions
+  the retired env var. ``FeatureChainParserMixin._strict_validation_rejection_reason`` surfaces it,
+  so the resolution-failure report explains the non-match.
+- ``MLODA_NAME_PATH_REQUIRED_PRESENCE`` is retired: no value changes the reason or the verdict.
+- ``allow_explicit_none``: an explicit None counts as present on the name path; the same key
+  entirely absent is a non-match.
+- Every shipped FeatureGroup that declares a PROPERTY_MAPPING stays clean on the name path: its
+  required keys are name-carried (legacy first-capture fallback) or marked ``deferred_binding=True``.
+  This guard fails loudly if that fallback is ever retired without marking the affected keys deferred.
 
-- Finding #2 (RED): an ENFORCE-mode name-path non-match currently vanishes with no explanation. The
-  Green phase adds ``FeatureChainParser.name_path_presence_rejection_reason(effective_options,
-  property_mapping) -> str | None`` (a reason ONLY in enforce mode when required keys are missing) and
-  wires it into ``FeatureChainParserMixin._strict_validation_rejection_reason``, so the diagnostic replay
-  that feeds "no feature group matched" explains the missing key. Today the replay returns None.
-
-- Finding #3 (RED): the env var only recognizes ``off`` as the kill-switch. The Green phase also treats
-  ``0``, ``false``, ``no`` (case-insensitive) as disabled. Today those aliases fall through to warn.
-
-- Finding #5a (GUARD): a NO_DEFAULT key with ``allow_explicit_none=True`` counts an EXPLICIT None as
-  present on the name path (no warning, matches under enforce), while an ABSENT one is still missing.
-
-- Finding #1 (GUARD): every shipped FeatureGroup that declares a PROPERTY_MAPPING stays clean on the
-  name path in BOTH warn and enforce mode, because its required keys are name-carried (legacy first-
-  capture fallback) or marked ``deferred_binding=True``. This guard fails loudly if that legacy
-  positional-binding fallback is ever retired without also marking the affected keys deferred.
-
-Warnings are filtered by the feature_chain_parser logger name + WARNING level + the
-``MLODA_NAME_PATH_REQUIRED_PRESENCE`` marker substring, exactly like the sibling
-``test_name_path_required_presence.py`` suite. Every fixture carries an "r769rf" marker so it cannot
-collide with the r769 fixtures, the rf770 fixtures, or the global registry.
+Warnings are filtered by the feature_chain_parser logger name + WARNING level + the contractual
+``required option(s)`` marker substring, exactly like the sibling suite. Every fixture carries an
+"r769rf" marker so it cannot collide with the r769 fixtures or the global registry.
 """
 
 from __future__ import annotations
@@ -37,6 +25,7 @@ from typing import Any
 
 import pytest
 
+from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser import FeatureChainParser
 from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser_mixin import FeatureChainParserMixin
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.provider import PropertySpec
@@ -56,46 +45,44 @@ from mloda_plugins.feature_group.experimental.time_window.base import TimeWindow
 
 FEATURE_CHAIN_PARSER_LOGGER = "mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser"
 
+# Retired: tests only set it to prove it is ignored, and assert it never appears in reasons.
 ENV_VAR = "MLODA_NAME_PATH_REQUIRED_PRESENCE"
+
+# The marker substring the non-match warning is contractually required to contain.
+MARKER = "required option(s)"
 
 
 def _required_presence_warnings(
     caplog: pytest.LogCaptureFixture, class_name: str | None = None
 ) -> list[logging.LogRecord]:
-    """The #769 name-path required-presence WARNINGs, optionally scoped to one class name.
+    """The name-path required-presence WARNINGs, optionally scoped to one class name.
 
-    Filters by logger name, WARNING level, and the env-var marker substring the warning is
-    contractually required to mention, exactly like the sibling suite.
+    Filters by logger name, WARNING level, and the ``required option(s)`` marker substring the
+    warning is contractually required to contain, exactly like the sibling suite.
     """
     records = [
         record
         for record in caplog.records
         if record.levelno == logging.WARNING
         and record.name == FEATURE_CHAIN_PARSER_LOGGER
-        and ENV_VAR in record.getMessage()
+        and MARKER in record.getMessage()
     ]
     if class_name is not None:
         records = [record for record in records if class_name in record.getMessage()]
     return records
 
 
-class TestEnforceRejectionReasonSurfaced:
-    """Finding #2: an enforce-mode name-path non-match must explain the missing key (RED today).
+class TestRejectionReasonSurfaced:
+    """A name-path presence non-match must explain the missing key in the resolution-failure replay.
 
     The diagnostic replay ``_strict_validation_rejection_reason`` feeds the engine's
-    "no feature group matched" message. Today it never runs the presence check, so an enforced
-    non-match is silent. The Green phase surfaces the reason ONLY in enforce mode.
+    "no feature group matched" message; the presence reason is reported unconditionally.
     """
 
-    def test_enforce_mode_surfaces_missing_key_reason(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """RED: enforce mode must return a reason naming the missing key and the migration env var.
+    def test_missing_key_reason_surfaced(self) -> None:
+        """The replay returns a reason naming the missing key, with no env manipulation."""
 
-        Pre-implementation this fails: ``_strict_validation_rejection_reason`` returns None because the
-        diagnostic replay does not run the name-path presence check.
-        """
-        monkeypatch.setenv(ENV_VAR, "enforce")
-
-        class _EnforceReasonR769rfen(FeatureChainParserMixin, FeatureGroup):
+        class _ReasonR769rfen(FeatureChainParserMixin, FeatureGroup):
             PREFIX_PATTERN = r".*__(\w+)_r769rfen$"
             PROPERTY_MAPPING = {
                 "op_r769rfen": PropertySpec(
@@ -107,55 +94,37 @@ class TestEnforceRejectionReasonSurfaced:
                 "missing_r769rfen": PropertySpec("required, options-only, absent on the name path", context=True),
             }
 
-        reason = _EnforceReasonR769rfen._strict_validation_rejection_reason("src__op_r769rfen", Options())
+        reason = _ReasonR769rfen._strict_validation_rejection_reason("src__op_r769rfen", Options())
 
-        assert reason is not None, "enforce mode must explain why the name-path candidate did not match"
+        assert reason is not None, "a name-path presence non-match must explain itself"
         assert "missing_r769rfen" in reason, "the reason must name the missing required key"
-        assert ENV_VAR in reason, "the reason must mention the migration env var so the user can act"
+        assert ENV_VAR not in reason, "the reason must not reference the retired env var"
 
-    def test_warn_mode_reports_no_rejection_reason(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """GUARD: warn mode still matches, so there is no rejection reason to report."""
-        monkeypatch.setenv(ENV_VAR, "warn")
+    @pytest.mark.parametrize("env_value", ["off", "warn", "0", "enforce"])
+    def test_env_value_does_not_change_the_reason(self, env_value: str, monkeypatch: pytest.MonkeyPatch) -> None:
+        """The env var is retired: any value still yields the same env-var-free reason."""
+        monkeypatch.setenv(ENV_VAR, env_value)
 
-        class _WarnReasonR769rfwn(FeatureChainParserMixin, FeatureGroup):
-            PREFIX_PATTERN = r".*__(\w+)_r769rfwn$"
+        class _ReasonEnvR769rfev(FeatureChainParserMixin, FeatureGroup):
+            PREFIX_PATTERN = r".*__(\w+)_r769rfev$"
             PROPERTY_MAPPING = {
-                "op_r769rfwn": PropertySpec(
+                "op_r769rfev": PropertySpec(
                     "operation carried by the positional capture",
                     allowed_values=("op",),
                     context=True,
                     strict_validation=True,
                 ),
-                "missing_r769rfwn": PropertySpec("required, options-only, absent on the name path", context=True),
+                "missing_r769rfev": PropertySpec("required, options-only, absent on the name path", context=True),
             }
 
-        reason = _WarnReasonR769rfwn._strict_validation_rejection_reason("src__op_r769rfwn", Options())
+        reason = _ReasonEnvR769rfev._strict_validation_rejection_reason("src__op_r769rfev", Options())
 
-        assert reason is None, "warn mode matches, so the presence reason is scoped out"
+        assert reason is not None, f"env value {env_value!r} must be ignored: the reason is unconditional"
+        assert "missing_r769rfev" in reason
+        assert ENV_VAR not in reason, "the reason must not reference the retired env var"
 
-    def test_off_mode_reports_no_rejection_reason(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """GUARD: off mode disables the check, so there is no rejection reason to report."""
-        monkeypatch.setenv(ENV_VAR, "off")
-
-        class _OffReasonR769rfof(FeatureChainParserMixin, FeatureGroup):
-            PREFIX_PATTERN = r".*__(\w+)_r769rfof$"
-            PROPERTY_MAPPING = {
-                "op_r769rfof": PropertySpec(
-                    "operation carried by the positional capture",
-                    allowed_values=("op",),
-                    context=True,
-                    strict_validation=True,
-                ),
-                "missing_r769rfof": PropertySpec("required, options-only, absent on the name path", context=True),
-            }
-
-        reason = _OffReasonR769rfof._strict_validation_rejection_reason("src__op_r769rfof", Options())
-
-        assert reason is None, "off mode disables the check, so nothing is reported"
-
-    def test_enforce_present_key_no_reason(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """GUARD: enforce mode with the required key present in options has nothing missing to report."""
-        monkeypatch.setenv(ENV_VAR, "enforce")
+    def test_present_key_no_reason(self) -> None:
+        """GUARD: the required key present in options leaves nothing missing to report."""
 
         class _PresentReasonR769rfpr(FeatureChainParserMixin, FeatureGroup):
             PREFIX_PATTERN = r".*__(\w+)_r769rfpr$"
@@ -175,9 +144,8 @@ class TestEnforceRejectionReasonSurfaced:
 
         assert reason is None, "a present required key leaves nothing missing to explain"
 
-    def test_enforce_deferred_key_no_reason(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """GUARD: enforce mode with a deferred_binding key has nothing missing to report."""
-        monkeypatch.setenv(ENV_VAR, "enforce")
+    def test_deferred_key_no_reason(self) -> None:
+        """GUARD: a deferred_binding key has nothing missing to report."""
 
         class _DeferredReasonR769rfdf(FeatureChainParserMixin, FeatureGroup):
             PREFIX_PATTERN = r".*__(\w+)_r769rfdf$"
@@ -197,9 +165,8 @@ class TestEnforceRejectionReasonSurfaced:
 
         assert reason is None, "deferred_binding exempts the key, so nothing is missing"
 
-    def test_enforce_defaulted_key_no_reason(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """GUARD: enforce mode with a declared-default key has nothing missing to report."""
-        monkeypatch.setenv(ENV_VAR, "enforce")
+    def test_defaulted_key_no_reason(self) -> None:
+        """GUARD: a declared-default key has nothing missing to report."""
 
         class _DefaultedReasonR769rfdd(FeatureChainParserMixin, FeatureGroup):
             PREFIX_PATTERN = r".*__(\w+)_r769rfdd$"
@@ -218,68 +185,41 @@ class TestEnforceRejectionReasonSurfaced:
         assert reason is None, "a declared default makes the key optional, so nothing is missing"
 
 
-class TestOffAliases:
-    """Finding #3: 0/false/no (case-insensitive) also disable the check, like off (RED for the aliases)."""
+class TestNamePathPresenceRejectionReasonUnit:
+    """Direct contract of ``FeatureChainParser.name_path_presence_rejection_reason``."""
 
-    @pytest.mark.parametrize("env_value", ["0", "false", "FALSE", "no", "off", "OFF"])
-    def test_off_aliases_disable_the_check(
-        self, env_value: str, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
-    ) -> None:
-        """A missing-required-key match that WOULD warn matches True and logs NO warning when disabled.
+    def test_reason_when_key_missing(self) -> None:
+        """Missing keys produce a reason unconditionally; the reason names them and no env var."""
+        mapping = {"missing_r769rfu": PropertySpec("required, absent", context=True)}
 
-        Pre-implementation the ``0``/``false``/``FALSE``/``no`` cases fail: those values fall through to
-        warn, so the name-path match still logs a presence warning. ``off``/``OFF`` already pass (guard).
-        """
-        monkeypatch.setenv(ENV_VAR, env_value)
+        reason = FeatureChainParser.name_path_presence_rejection_reason(Options(), mapping)
 
-        class _OffAliasR769rfal(FeatureChainParserMixin):
-            PREFIX_PATTERN = r".*__(?P<carried_r769rfal>\w+)$"
-            PROPERTY_MAPPING = {
-                "carried_r769rfal": PropertySpec("required, carried by the name", context=True),
-                "missing_r769rfal": PropertySpec("required, options-only, absent", context=True),
-            }
+        assert reason is not None, "missing keys must produce a reason unconditionally"
+        assert "missing_r769rfu" in reason, "the reason must name the missing key"
+        assert ENV_VAR not in reason, "the reason must not reference the retired env var"
 
-        with caplog.at_level(logging.WARNING):
-            result = _OffAliasR769rfal.match_feature_group_criteria("src__val_r769rf", Options())
+    def test_none_when_nothing_missing(self) -> None:
+        """Nothing missing means no reason."""
+        mapping = {"present_r769rfu2": PropertySpec("required, present", context=True)}
 
-        assert result is True, f"a disabled mode ({env_value!r}) must not enforce"
-        assert not _required_presence_warnings(caplog, "_OffAliasR769rfal"), (
-            f"a disabled mode ({env_value!r}) must not warn"
+        reason = FeatureChainParser.name_path_presence_rejection_reason(
+            Options(context={"present_r769rfu2": "v_r769rf"}), mapping
         )
 
-    def test_invalid_value_still_behaves_like_warn(
-        self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
-    ) -> None:
-        """GUARD: a genuinely invalid value (``banana``) still matches AND warns, never disables the check."""
-        monkeypatch.setenv(ENV_VAR, "banana")
-
-        class _BananaR769rfbn(FeatureChainParserMixin):
-            PREFIX_PATTERN = r".*__(?P<carried_r769rfbn>\w+)$"
-            PROPERTY_MAPPING = {
-                "carried_r769rfbn": PropertySpec("required, carried by the name", context=True),
-                "missing_r769rfbn": PropertySpec("required, options-only, absent", context=True),
-            }
-
-        with caplog.at_level(logging.WARNING):
-            result = _BananaR769rfbn.match_feature_group_criteria("src__val_r769rf", Options())
-
-        assert result is True, "an invalid value must not enforce"
-        assert _required_presence_warnings(caplog, "_BananaR769rfbn"), "an invalid value must fall back to warn"
+        assert reason is None
 
 
 class TestAllowExplicitNoneOnNamePath:
-    """Finding #5a (GUARD): allow_explicit_none makes an explicit None count as present on the name path.
+    """allow_explicit_none makes an explicit None count as present on the name path.
 
-    The key is NO_DEFAULT, non-deferred, ``allow_explicit_none=True``; the operation key is name-carried.
+    The key is NO_DEFAULT, non-deferred, ``allow_explicit_none=True``; the operation key is
+    name-carried.
     """
 
-    def test_warn_explicit_none_matches_no_warning(
-        self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
-    ) -> None:
-        """WARN: an explicit None for the allow_explicit_none key counts as present -> no presence warning."""
-        monkeypatch.setenv(ENV_VAR, "warn")
+    def test_explicit_none_counts_as_present(self, caplog: pytest.LogCaptureFixture) -> None:
+        """An explicit None for the allow_explicit_none key counts as present: match, no warning."""
 
-        class _AllowNoneWarnR769rfnw(FeatureChainParserMixin, FeatureGroup):
+        class _AllowNonePresentR769rfnw(FeatureChainParserMixin, FeatureGroup):
             PREFIX_PATTERN = r".*__(\w+)_r769rfnw$"
             PROPERTY_MAPPING = {
                 "op_r769rfnw": PropertySpec(
@@ -294,18 +234,17 @@ class TestAllowExplicitNoneOnNamePath:
             }
 
         with caplog.at_level(logging.WARNING):
-            result = _AllowNoneWarnR769rfnw.match_feature_group_criteria(
+            result = _AllowNonePresentR769rfnw.match_feature_group_criteria(
                 "src__op_r769rfnw", Options(context={"nullable_r769rfnw": None})
             )
 
-        assert result is True
-        assert not _required_presence_warnings(caplog, "_AllowNoneWarnR769rfnw"), (
+        assert result is True, "an explicit None is present, so the match succeeds"
+        assert not _required_presence_warnings(caplog, "_AllowNonePresentR769rfnw"), (
             "an explicit None must count as present, so the key is not flagged missing"
         )
 
-    def test_warn_absent_warns(self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture) -> None:
-        """WARN (contrast): the same key entirely ABSENT is missing and warns, naming the key."""
-        monkeypatch.setenv(ENV_VAR, "warn")
+    def test_absent_key_is_non_match(self, caplog: pytest.LogCaptureFixture) -> None:
+        """Contrast: the same key entirely ABSENT is missing, so the match is rejected and warned."""
 
         class _AllowNoneAbsentR769rfna(FeatureChainParserMixin, FeatureGroup):
             PREFIX_PATTERN = r".*__(\w+)_r769rfna$"
@@ -324,61 +263,15 @@ class TestAllowExplicitNoneOnNamePath:
         with caplog.at_level(logging.WARNING):
             result = _AllowNoneAbsentR769rfna.match_feature_group_criteria("src__op_r769rfna", Options())
 
-        assert result is True, "warn mode still matches despite the absent key"
+        assert result is False, "an absent required key is a non-match, allow_explicit_none or not"
         warnings = _required_presence_warnings(caplog, "_AllowNoneAbsentR769rfna")
-        assert warnings, "an absent required key must warn, even when allow_explicit_none is set"
+        assert warnings, "the absent required key must be warned about"
         assert "nullable_r769rfna" in warnings[0].getMessage(), "the warning must name the absent key"
 
-    def test_enforce_explicit_none_matches(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """ENFORCE: an explicit None counts as present, so the name-path match still succeeds."""
-        monkeypatch.setenv(ENV_VAR, "enforce")
 
-        class _AllowNoneEnforceR769rfne(FeatureChainParserMixin, FeatureGroup):
-            PREFIX_PATTERN = r".*__(\w+)_r769rfne$"
-            PROPERTY_MAPPING = {
-                "op_r769rfne": PropertySpec(
-                    "operation carried by the positional capture",
-                    allowed_values=("op",),
-                    context=True,
-                    strict_validation=True,
-                ),
-                "nullable_r769rfne": PropertySpec(
-                    "required, but an explicit None counts as present", context=True, allow_explicit_none=True
-                ),
-            }
-
-        result = _AllowNoneEnforceR769rfne.match_feature_group_criteria(
-            "src__op_r769rfne", Options(context={"nullable_r769rfne": None})
-        )
-
-        assert result is True, "an explicit None is present, so enforce mode still matches"
-
-    def test_enforce_absent_is_non_match(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """ENFORCE (contrast): the same key entirely ABSENT is missing, so the match is rejected."""
-        monkeypatch.setenv(ENV_VAR, "enforce")
-
-        class _AllowNoneEnforceAbsentR769rfnx(FeatureChainParserMixin, FeatureGroup):
-            PREFIX_PATTERN = r".*__(\w+)_r769rfnx$"
-            PROPERTY_MAPPING = {
-                "op_r769rfnx": PropertySpec(
-                    "operation carried by the positional capture",
-                    allowed_values=("op",),
-                    context=True,
-                    strict_validation=True,
-                ),
-                "nullable_r769rfnx": PropertySpec(
-                    "required, but an explicit None counts as present", context=True, allow_explicit_none=True
-                ),
-            }
-
-        result = _AllowNoneEnforceAbsentR769rfnx.match_feature_group_criteria("src__op_r769rfnx", Options())
-
-        assert result is False, "an absent required key is a non-match under enforce, allow_explicit_none or not"
-
-
-# Finding #1 (GUARD): representative valid name per shipped FeatureGroup that declares a PROPERTY_MAPPING.
-# Each name matches its PREFIX_PATTERN and every captured token is within the bound key's allowed_values,
-# so the group is clean on the name path today (required keys are name-carried or deferred_binding=True).
+# Representative valid name per shipped FeatureGroup that declares a PROPERTY_MAPPING. Each name
+# matches its PREFIX_PATTERN and every captured token is within the bound key's allowed_values, so
+# the group is clean on the name path (required keys are name-carried or deferred_binding=True).
 SHIPPED_NAME_PATH_CASES: list[tuple[type[Any], str]] = [
     (AggregatedFeatureGroup, "sales__sum_aggr"),
     (TimeWindowFeatureGroup, "temperature__avg_7_days_window"),
@@ -398,30 +291,25 @@ SHIPPED_IDS = [group.__name__ for group, _ in SHIPPED_NAME_PATH_CASES]
 
 
 class TestShippedPluginsCleanAcrossAllGroups:
-    """Finding #1 (GUARD): every shipped PROPERTY_MAPPING group is clean on the name path in every mode.
+    """GUARD: every shipped PROPERTY_MAPPING group is clean on the name path.
 
-    Fails loudly if the legacy positional-binding fallback (or a per-key ``deferred_binding`` mark) is
-    ever retired without keeping these groups quiet on the name path.
+    Fails loudly if the legacy positional-binding fallback (or a per-key ``deferred_binding`` mark)
+    is ever retired without keeping these groups quiet on the name path.
     """
 
-    @pytest.mark.parametrize("mode", ["warn", "enforce"])
     @pytest.mark.parametrize("group, valid_name", SHIPPED_NAME_PATH_CASES, ids=SHIPPED_IDS)
     def test_shipped_group_name_path_is_clean(
         self,
         group: type[Any],
         valid_name: str,
-        mode: str,
-        monkeypatch: pytest.MonkeyPatch,
         caplog: pytest.LogCaptureFixture,
     ) -> None:
-        """A representative valid name matches with NO presence warning, in both warn and enforce mode."""
-        monkeypatch.setenv(ENV_VAR, mode)
-
+        """A representative valid name matches with NO presence warning."""
         with caplog.at_level(logging.WARNING):
             result = group.match_feature_group_criteria(valid_name, Options())
 
-        assert result is True, f"{group.__name__} must match its representative name {valid_name!r} in {mode} mode"
+        assert result is True, f"{group.__name__} must match its representative name {valid_name!r}"
         assert not _required_presence_warnings(caplog, group.__name__), (
-            f"{group.__name__} must stay clean on the name path in {mode} mode "
+            f"{group.__name__} must stay clean on the name path "
             f"(required keys are name-carried or deferred_binding=True)"
         )

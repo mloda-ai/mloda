@@ -7,7 +7,6 @@ from __future__ import annotations
 import contextvars
 import functools
 import logging
-import os
 import re
 from collections.abc import Callable
 from typing import Any, Optional
@@ -49,19 +48,6 @@ REQUIRED_WHEN_GUARD_DEPTH: contextvars.ContextVar[int] = contextvars.ContextVar(
 
 # Exception classes a user callable raises when it merely cannot judge a value.
 _EXPECTED_JUDGMENT_ERRORS: tuple[type[Exception], ...] = (TypeError, ValueError, AttributeError)
-
-# Name-path required-presence migration (#769): warn (default) / enforce / off.
-_NAME_PATH_PRESENCE_ENV = "MLODA_NAME_PATH_REQUIRED_PRESENCE"
-
-
-def _name_path_presence_mode() -> str:
-    """Read the #769 migration mode from the env var; off/0/false/no disable it, else warn (default) or enforce."""
-    mode = os.environ.get(_NAME_PATH_PRESENCE_ENV, "warn").strip().lower()
-    if mode in ("off", "0", "false", "no"):
-        return "off"
-    if mode == "enforce":
-        return "enforce"
-    return "warn"
 
 
 def _contained_raise_log_level(exc: BaseException) -> int:
@@ -471,59 +457,36 @@ class FeatureChainParser:
         effective_options: Options,
         property_mapping: dict[str, PropertySpec],
     ) -> bool:
-        """Warn-then-enforce the name-path required-presence rule (#769). False means non-match."""
-        mode = _name_path_presence_mode()
-        if mode == "off":
-            return True
-
+        """Enforce the name-path required-presence rule (#769). False means non-match."""
         missing = cls._name_path_missing_required_keys(effective_options, property_mapping)
         if not missing:
             return True
 
         owner = owner_name or "A feature group"
         keys = ", ".join(sorted(missing))
-        if mode == "enforce":
-            logger.warning(
-                "%s did not match feature '%s': required option(s) %s are absent after declared defaults and "
-                "name bindings (%s=enforce). Provide the option(s), add a named capture (?P<key>...), or set "
-                "deferred_binding=True on each key bound outside the name.",
-                owner,
-                feature_name,
-                keys,
-                _NAME_PATH_PRESENCE_ENV,
-            )
-            return False
-
         logger.warning(
-            "%s matched feature '%s' on its name, but required option(s) %s are absent after declared defaults "
-            "and name bindings; they will become a non-match once %s=enforce. Add a named capture (?P<key>...) "
-            "so the name binds them, provide the option(s), or set deferred_binding=True on each key intentionally "
-            "bound outside the name.",
+            "%s did not match feature '%s': required option(s) %s are absent after declared defaults and "
+            "name bindings. Provide the option(s), add a named capture (?P<key>...), or set "
+            "deferred_binding=True on each key bound outside the name.",
             owner,
             feature_name,
             keys,
-            _NAME_PATH_PRESENCE_ENV,
         )
-        return True
+        return False
 
     @classmethod
     def name_path_presence_rejection_reason(
         cls, effective_options: Options, property_mapping: dict[str, PropertySpec]
     ) -> str | None:
-        """Enforce-mode reason a name-path candidate was rejected for missing presence (#769); else None.
+        """The reason a name-path candidate was rejected for missing presence (#769); None when nothing is missing.
 
-        Diagnostic-only: mirrors the enforce branch of _check_name_path_required_presence so the
-        resolution-failure report explains the same non-match the matcher produced.
+        Diagnostic-only: mirrors _check_name_path_required_presence so the resolution-failure
+        report explains the same non-match the matcher produced.
         """
-        if _name_path_presence_mode() != "enforce":
-            return None
         missing = cls._name_path_missing_required_keys(effective_options, property_mapping)
         if not missing:
             return None
-        return (
-            f"required option(s) {', '.join(sorted(missing))} are absent after declared defaults and name "
-            f"bindings ({_NAME_PATH_PRESENCE_ENV}=enforce)"
-        )
+        return f"required option(s) {', '.join(sorted(missing))} are absent after declared defaults and name bindings"
 
     @classmethod
     def match_configuration_feature_chain_parser(
@@ -538,9 +501,10 @@ class FeatureChainParser:
         """
         Unified method for matching features using either configuration-based or pattern-based parsing.
 
-        Both paths validate the values of the present options; only required presence is enforced on the
-        configuration-based path alone. This raises on a rejected value, so an overridden
-        ``match_feature_group_criteria`` must reach it through ``FeatureChainParserMixin.match_parser_criteria``.
+        Both paths validate the values of the present options and enforce required presence; the
+        string-named path resolves declared defaults and name bindings first (#769). This raises on a
+        rejected value, so an overridden ``match_feature_group_criteria`` must reach it through
+        ``FeatureChainParserMixin.match_parser_criteria``.
 
         Args:
             feature_name: The feature name to match

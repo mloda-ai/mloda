@@ -2,8 +2,9 @@ from typing import Any, Optional
 import pytest
 
 from mloda.provider import BaseMergeEngine
-from mloda.user import Index
+from mloda.user import Index, JoinType
 from mloda_plugins.compute_framework.base_implementations.pyarrow.pyarrow_merge_engine import PyArrowMergeEngine
+from tests.test_plugins.compute_framework.test_tooling.merge_link import make_merge_link
 from tests.test_plugins.compute_framework.test_tooling.multi_index.multi_index_test_base import (
     MultiIndexMergeEngineTestBase,
 )
@@ -46,6 +47,22 @@ class TestPyArrowMergeEngineHelperColumnCollision:
         assert by_key[3]["mloda_right_index"] == 88
         # The synthetic join-key helper must NOT leak into the output schema.
         assert set(result.column_names) == {"left_id", "lval", "right_id", "mloda_right_index", "rval"}
+
+    @pytest.mark.parametrize("jointype", [JoinType.INNER, JoinType.LEFT, JoinType.RIGHT, JoinType.OUTER])
+    def test_merge_differing_keys_with_shared_payload_column(self, jointype: JoinType) -> None:
+        """Differing key names plus a SHARED non-key column name must not crash the helper drop.
+
+        Arrow's join result then holds two same-named payload columns, so dropping helpers by
+        name would raise ``KeyError: Field "value" exists 2 times``. Dropping by index avoids it,
+        and both original key columns must survive.
+        """
+        left = pa.Table.from_pydict({"lk": [1, 2, 3], "value": ["a", "b", "c"]})
+        right = pa.Table.from_pydict({"rk": [1, 2, 4], "value": ["x", "y", "z"]})
+
+        result = PyArrowMergeEngine().merge(left, right, make_merge_link(jointype, Index(("lk",)), Index(("rk",))))
+
+        assert "lk" in result.column_names
+        assert "rk" in result.column_names
 
 
 class TestPyArrowMergeEngineMultiIndex(MultiIndexMergeEngineTestBase):

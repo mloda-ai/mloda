@@ -181,20 +181,24 @@ class PyArrowMergeEngine(BaseMergeEngine):
     def join_logic(
         self, join_type: str, left_data: Any, right_data: Any, left_index: Index, right_index: Index, jointype: JoinType
     ) -> Any:
+        helper_columns: set[str] = set()
         if left_index.is_multi_index() or right_index.is_multi_index():
             left_keys = list(left_index.index)
             right_keys = list(right_index.index)
+        elif left_index.index[0] != right_index.index[0]:
+            # Join on helper copies of BOTH keys so Arrow leaves the original lk/rk columns
+            # untouched; each then keeps its real value or NULL on its unmatched side.
+            taken = set(left_data.column_names) | set(right_data.column_names)
+            left_helper = pick_helper_column_name(taken=taken, prefix="mloda_left_join_key")
+            right_helper = pick_helper_column_name(taken=taken | {left_helper}, prefix="mloda_right_join_key")
+            left_data = left_data.append_column(left_helper, left_data[left_index.index[0]])
+            right_data = right_data.append_column(right_helper, right_data[right_index.index[0]])
+            left_keys = [left_helper]
+            right_keys = [right_helper]
+            helper_columns = {left_helper, right_helper}
         else:
-            if left_index.index[0] != right_index.index[0]:
-                # PyArrow drops the index column in all cases.
-                # Thus, we create a copy of the index column and append it to the right_data to avoid this in case of different index columns.
-                _right_index = pick_helper_column_name(taken=set(right_data.column_names), prefix="mloda_right_index")
-                right_data = right_data.append_column(_right_index, right_data[right_index.index[0]])
-                left_keys = [left_index.index[0]]
-                right_keys = [_right_index]
-            else:
-                left_keys = [left_index.index[0]]
-                right_keys = [right_index.index[0]]
+            left_keys = [left_index.index[0]]
+            right_keys = [right_index.index[0]]
 
         # Normalize string types in join key columns to ensure compatibility
         # (e.g., string vs large_string are incompatible in PyArrow joins)
@@ -207,5 +211,10 @@ class PyArrowMergeEngine(BaseMergeEngine):
             right_keys=right_keys,
             join_type=join_type,
         )
+
+        if helper_columns:
+            # Drop helpers by index: a shared non-key column name would make a name-based select ambiguous.
+            keep = [i for i, name in enumerate(left_data.column_names) if name not in helper_columns]
+            left_data = left_data.select(keep)
 
         return left_data

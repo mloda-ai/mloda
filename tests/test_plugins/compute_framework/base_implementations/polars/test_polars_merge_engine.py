@@ -1,11 +1,15 @@
-from typing import Any
+from typing import Any, Optional
 import pytest
 
 from mloda.user import JoinType
 from mloda.user import Index
+from mloda.provider import BaseMergeEngine
 from mloda_plugins.compute_framework.base_implementations.polars.polars_merge_engine import PolarsMergeEngine
 from mloda_plugins.compute_framework.base_implementations.polars.polars_lazy_merge_engine import PolarsLazyMergeEngine
 from tests.test_plugins.compute_framework.test_tooling.merge_link import make_merge_link
+from tests.test_plugins.compute_framework.test_tooling.multi_index.multi_index_test_base import (
+    MultiIndexMergeEngineTestBase,
+)
 
 import logging
 
@@ -302,3 +306,22 @@ class TestPolarsMergeEngine:
         result = concat_func([df1, df2])
         expected = pl.DataFrame({"a": [1, 2, 3, 4]})
         assert result.equals(expected)
+
+
+@pytest.mark.skipif(pl is None, reason="Polars is not installed. Skipping this test.")
+class TestPolarsMergeEngineMultiIndex(MultiIndexMergeEngineTestBase):
+    """Test PolarsMergeEngine using shared multi-index + conformance scenarios."""
+
+    @classmethod
+    def merge_engine_class(cls) -> type[BaseMergeEngine]:
+        return PolarsMergeEngine
+
+    @classmethod
+    def framework_type(cls) -> type[Any]:
+        if pl is None:
+            raise ImportError("Polars is not installed")
+        dataframe_type: type[Any] = pl.DataFrame
+        return dataframe_type
+
+    def get_connection(self) -> Optional[Any]:
+        return None

@@ -446,8 +446,12 @@ class SqliteRelation(SqlBaseRelation):
         right_proj = self._build_join_projection(
             self_alias, self_cols, other_alias, other_cols, shared, prefer_right_shared=True
         )
-        first_shared_col = next(iter(shared))
-        where_clause = f"WHERE {q_self_alias}.{quote_ident(first_shared_col)} IS NULL"
+        # Unmatched right rows have a NULL self (left) join key. Derive it from the quoted
+        # condition so a nullable non-key shared column can never be chosen as the indicator.
+        match = re.search(re.escape(q_self_alias) + r'\.("(?:[^"]|"")+")', condition)
+        if match is None:
+            raise ValueError(f"Cannot derive left join key from condition: {condition}")
+        where_clause = f"WHERE {q_self_alias}.{match.group(1)} IS NULL"
 
         right_sql = (
             f"SELECT {right_proj} FROM {quote_ident(other._table_name)} AS {q_other_alias} "  # nosec

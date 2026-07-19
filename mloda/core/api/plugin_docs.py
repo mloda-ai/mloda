@@ -413,7 +413,7 @@ def resolve_feature(
     )
     try:
         accessible_plugins: FeatureGroupEnvironmentMapping = PreFilterPlugins(
-            restricted_frameworks, plugin_collector, attribute_declaration_failures=True
+            restricted_frameworks, plugin_collector
         ).get_accessible_plugins()
     except (RedefinitionConflictError, EnvironmentPreconditionError, FrameworkDeclarationError) as exc:
         # mloda's own environment failure: already a complete sentence. Project it bare, no candidates.

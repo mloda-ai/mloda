@@ -28,12 +28,16 @@ from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.api.plugin_docs import get_feature_group_docs, resolve_feature
 from mloda.core.api.plugin_info import FeatureGroupInfo, ResolvedFeature
+from mloda.core.api.request import mlodaAPI
 from mloda.core.abstract_plugins.components.base_feature_group_version import BaseFeatureGroupVersion
 from mloda.core.prepare.accessible_plugins import (
     PreFilterPlugins,
+    RedefinitionConflictError,
     dedup_feature_group_subclasses,
     _safe_class_source_hash,
 )
+from mloda.core.prepare.identify_feature_group import ResolutionDiagnosis
+from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 
 
 # Module-level reference store. This simulates IPython's ``_oh``/``Out[N]`` history,
@@ -512,6 +516,51 @@ def test_resolve_feature_returns_error_for_redef_conflict_does_not_raise() -> No
 
     # Fail-closed projection (#792): conflicting classes are never re-matched into candidates.
     assert result.candidates == [], f"candidates must be empty on conflict, got: {result.candidates}"
+
+
+# ---------------------------------------------------------------------------
+# Case 9b (#850): mlodaAPI.diagnose projects a RedefinitionConflictError instead
+# of raising, and the projected message equals what prepare() throws.
+# ---------------------------------------------------------------------------
+def test_diagnose_projects_redefinition_conflict_and_matches_prepare() -> None:
+    """diagnose() catches the dedup RedefinitionConflictError and projects it fail-closed (#850).
+
+    A different-source Jupyter-style redefinition raises RedefinitionConflictError during the
+    environment build (dedup, allow_redefinition defaults False). diagnose() must not raise: it
+    returns a ResolutionDiagnosis with no records and no failed feature (the build aborts before any
+    feature is resolved), carrying the SAME text the raising prepare() path throws for the same request.
+    The generated FG declares no compute_framework_rule, so PandasDataFrame is a valid framework to pass;
+    the conflict fires in dedup before any framework matching, so the choice does not affect the outcome.
+    """
+    qualname = "MyFG_Diagnose850"
+    feature_name = "case_diagnose850_feature_unique_xyz"
+    src_v1 = _make_fg_source(qualname, feature_name)
+    src_v2 = _make_fg_source(
+        qualname,
+        feature_name,
+        extra_body="    def extra_method(self):\n        return 850\n",
+    )
+
+    v1 = _exec_fg_in_main(qualname, src_v1, "cell-diagnose850-v1")
+    v2 = _exec_fg_in_main(qualname, src_v2, "cell-diagnose850-v2")
+    _REF_STORE.extend([v1, v2])
+
+    diagnosis = mlodaAPI.diagnose([feature_name], compute_frameworks={PandasDataFrame})
+
+    assert isinstance(diagnosis, ResolutionDiagnosis)
+    assert diagnosis.complete is False
+    assert diagnosis.records == []
+    assert diagnosis.feature_name is None
+    assert diagnosis.failed_result is None
+    assert diagnosis.message is not None
+    assert any(token in diagnosis.message for token in (qualname, "redefined", "set_allow_redefinition")), (
+        f"message must report the redefinition conflict; got: {diagnosis.message!r}"
+    )
+
+    # Parity with the raising path: prepare() throws the exact text diagnose() projected.
+    with pytest.raises(RedefinitionConflictError) as exc_info:
+        mlodaAPI.prepare([feature_name], compute_frameworks={PandasDataFrame})
+    assert diagnosis.message == str(exc_info.value)
 
 
 # ---------------------------------------------------------------------------

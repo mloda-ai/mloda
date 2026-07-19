@@ -167,6 +167,7 @@ class ForecastingFeatureGroup(TimeReferenceMixin, FeatureChainParserMixin, Featu
             element_validator=_is_bool,
             match_guard=_is_bool,
         ),
+        DefaultOptionKeys.reference_time: TimeReferenceMixin.REFERENCE_TIME_SPEC,
     }
 
     @staticmethod

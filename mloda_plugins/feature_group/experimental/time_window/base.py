@@ -118,6 +118,7 @@ class TimeWindowFeatureGroup(TimeReferenceMixin, FeatureChainParserMixin, Featur
             context=True,
             strict_validation=False,
         ),
+        DefaultOptionKeys.reference_time: TimeReferenceMixin.REFERENCE_TIME_SPEC,
     }
 
     # Named captures bind window_function/window_size/time_unit; core validates them at match time.

@@ -10,7 +10,7 @@ from mloda.core.abstract_plugins.components.contract.comparison_contract import 
     SemanticDimension,
 )
 from mloda.user import Options
-from mloda.provider import DefaultOptionKeys
+from mloda.provider import DefaultOptionKeys, property_spec
 
 
 class TimeReferenceMixin:
@@ -25,6 +25,11 @@ class TimeReferenceMixin:
         "month": "Months",
         "year": "Years",
     }
+
+    REFERENCE_TIME_SPEC = property_spec(
+        "Options key naming the reference-time column for time alignment; owned by TimeReferenceMixin, exposed by each concrete time-based feature group.",
+        default=None,
+    )
 
     @classmethod
     def get_reference_time_column(cls, options: Optional[Options] = None) -> str:

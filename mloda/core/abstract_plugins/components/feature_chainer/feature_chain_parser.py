@@ -764,7 +764,12 @@ class FeatureChainParser:
         try:
             universal = bool(matcher(_UNIVERSAL_MATCHER_PROBE_NAME, Options()))
         except Exception as exc:
-            logger.debug("universal-matcher probe for %s raised %s; treating it as non-universal.", owner.__name__, exc)
+            err = exc  # rebind: Python clears the "except ... as exc" name at block exit, so the closure needs a stable local
+            logger.debug(
+                "universal-matcher probe for %s raised %s; treating it as non-universal.",
+                owner.__name__,
+                safe_field(lambda: str(err), type(err).__name__),
+            )
             return
         if not universal:
             return

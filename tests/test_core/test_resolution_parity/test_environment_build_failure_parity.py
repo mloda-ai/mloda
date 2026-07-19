@@ -457,6 +457,8 @@ def test_collector_that_filters_everything_names_the_collector_not_the_loader() 
 
     message = str(exc_info.value)
     assert "PluginCollector" in message
+    # A distinctive fragment: it cannot match an unrelated collector error, unlike the bare substring.
+    assert "filtered out every FeatureGroup" in message
     # The loaded universe was non-empty, so the nothing-loaded hint would misdirect the fix.
     assert "Did you call PluginLoader.all()?" not in message
 
@@ -484,3 +486,5 @@ def test_diagnose_projects_the_collector_precondition_failure() -> None:
     assert message is not None
     assert message == str(exc_info.value)
     assert "PluginCollector" in message
+    # A distinctive fragment: it cannot match an unrelated collector error, unlike the bare substring.
+    assert "filtered out every FeatureGroup" in message

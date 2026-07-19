@@ -34,11 +34,12 @@ def safe_field_with_error(
     fallback: T,
     catching: tuple[type[Exception], ...] = (Exception,),
 ) -> tuple[T, str | None]:
-    """Like safe_field, but returns (value, None) on success and (fallback, non-empty error, the exception type name if the message is empty) on a raise."""
+    """Like safe_field but returns (value, None), else (fallback, str(exc) or the exception type name when blank)."""
     try:
         return read(), None
     except catching as exc:
-        return fallback, str(exc) or type(exc).__name__
+        message = str(exc)
+        return fallback, message if message.strip() else type(exc).__name__
 
 
 def get_all_subclasses(cls: Any, log_n_subclasses: int = 0) -> set[type[Any]]:

@@ -461,6 +461,16 @@ def test_collector_that_filters_everything_names_the_collector_not_the_loader() 
     assert "Did you call PluginLoader.all()?" not in message
 
 
+def test_nothing_loaded_raises_the_plugin_loader_hint(monkeypatch: pytest.MonkeyPatch) -> None:
+    """An empty FeatureGroup universe raises the nothing-loaded loader hint, not the collector message (#853)."""
+    monkeypatch.setattr(PreFilterPlugins, "get_featuregroup_subclasses", lambda self: set())
+
+    with pytest.raises(EnvironmentPreconditionError) as exc_info:
+        PreFilterPlugins(PreFilterPlugins.get_cfw_subclasses())
+
+    assert str(exc_info.value) == "No feature groups are loaded. Did you call PluginLoader.all()?"
+
+
 def test_diagnose_projects_the_collector_precondition_failure() -> None:
     """mlodaAPI.diagnose projects the collector's env-build precondition failure instead of raising (#850)."""
     collector = _collector_that_filters_everything()

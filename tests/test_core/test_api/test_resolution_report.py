@@ -4,7 +4,7 @@ Contract under test:
   * ``mloda.core.prepare.identify_feature_group.ResolutionRecord`` is a frozen dataclass beside
     ``EvaluationResult``, with fields ``feature_name: str``, ``requested: bool``, ``result: EvaluationResult``
     in that order. It is re-exported from both ``mloda.user`` and ``mloda.steward``.
-  * ``IdentifyFeatureGroupClass(...).result`` exposes the winning ``EvaluationResult`` on a successful
+  * ``IdentifyFeatureGroupClass.evaluate(...)`` returns the winning ``EvaluationResult`` on a successful
     resolution (``failure_kind is None``, ``identified`` holding the winner).
   * ``Engine`` gains ``resolution_records: list[ResolutionRecord]``, populated in traversal order as each
     feature is identified: top-level requested features get ``requested=True``, features found via
@@ -34,9 +34,9 @@ from mloda.core.core.engine import Engine
 from mloda.core.prepare.identify_feature_group import (
     EvaluationResult,
     FeatureResolutionError,
-    IdentifyFeatureGroupClass,
     ResolutionRecord,
 )
+from tests.test_core.test_prepare.identify_seam import evaluate_or_raise
 from mloda.provider import BaseInputData, ComputeFramework, DataCreator, FeatureGroup, FeatureSet
 from mloda.user import (
     DataAccessCollection,
@@ -334,16 +334,16 @@ class TestIdentifyFeatureGroupResultOnSuccess:
     """After a successful single-candidate resolution the identifier keeps its winning EvaluationResult."""
 
     def test_result_is_an_evaluation_result_with_no_failure(self) -> None:
-        identifier = IdentifyFeatureGroupClass(
+        result = evaluate_or_raise(
             feature=Feature(GOOD_FEATURE_811),
             accessible_plugins={ResReportGoodFG_811: {ResReportFw_811}},
             links=None,
             data_access_collection=None,
         )
 
-        assert isinstance(identifier.result, EvaluationResult)
-        assert identifier.result.failure_kind is None
-        assert ResReportGoodFG_811 in identifier.result.identified
+        assert isinstance(result, EvaluationResult)
+        assert result.failure_kind is None
+        assert ResReportGoodFG_811 in result.identified
 
 
 # ---------------------------------------------------------------------------

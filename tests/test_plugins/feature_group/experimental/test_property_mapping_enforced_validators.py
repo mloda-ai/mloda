@@ -20,7 +20,7 @@ from typing import Any, cast
 import pytest
 
 from mloda.core.prepare.accessible_plugins import FeatureGroupEnvironmentMapping
-from mloda.core.prepare.identify_feature_group import IdentifyFeatureGroupClass
+from tests.test_core.test_prepare.identify_seam import evaluate_or_raise
 from mloda.provider import DefaultOptionKeys
 from mloda.provider import FeatureChainParserMixin
 from mloda.provider import FeatureGroup
@@ -187,7 +187,7 @@ def _resolution_error(feature: Feature, feature_group: type[FeatureGroup]) -> st
     """Resolve the feature against a single accessible feature group and return the raised error."""
     accessible_plugins: FeatureGroupEnvironmentMapping = {feature_group: {PandasDataFrame}}
     with pytest.raises(ValueError) as exc_info:
-        IdentifyFeatureGroupClass(feature=feature, accessible_plugins=accessible_plugins, links=None)
+        evaluate_or_raise(feature=feature, accessible_plugins=accessible_plugins, links=None)
     return str(exc_info.value)
 
 

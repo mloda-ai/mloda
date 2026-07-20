@@ -38,9 +38,8 @@ raises that failure; `resolve_feature` reports the same failure in `result.error
 with no candidates, because the build never reaches matching. The difference stays
 presentation-only.
 
-Its environment is a **standalone default**, not a replay of a specific run:
-`ResolvedFeature.environment` reads `"standalone-default"`. The candidate
-universe defaults to every installed compute framework unless you narrow it (see
+Its candidate universe is a **standalone default**, not a replay of a specific
+run: it defaults to every installed compute framework unless you narrow it (see
 [Expressing the full request](#expressing-the-full-request)).
 
 ### Expressing the full request

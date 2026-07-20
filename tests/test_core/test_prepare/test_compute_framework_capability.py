@@ -29,7 +29,7 @@ from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.prepare.accessible_plugins import FeatureGroupEnvironmentMapping
-from mloda.core.prepare.identify_feature_group import IdentifyFeatureGroupClass
+from tests.test_core.test_prepare.identify_seam import evaluate_or_raise, identify_winner
 
 
 CAPABILITY_FEATURE = "capability_test_feature"
@@ -173,14 +173,12 @@ class TestComputeFrameworkCapabilityHook:
             PlainCapabilityFeatureGroup: {CapabilityFwA, CapabilityFwB},
         }
 
-        identified = IdentifyFeatureGroupClass(
+        feature_group_class, compute_frameworks = identify_winner(
             feature=feature,
             accessible_plugins=accessible_plugins,
             links=None,
             data_access_collection=None,
         )
-
-        feature_group_class, compute_frameworks = identified.get()
         assert feature_group_class is PlainCapabilityFeatureGroup
         assert compute_frameworks == {CapabilityFwA, CapabilityFwB}, (
             f"Default behaviour must keep all declared frameworks; got {compute_frameworks}"
@@ -198,14 +196,12 @@ class TestComputeFrameworkCapabilityHook:
             RejectBCapabilityFeatureGroup: {CapabilityFwA, CapabilityFwB},
         }
 
-        identified = IdentifyFeatureGroupClass(
+        feature_group_class, compute_frameworks = identify_winner(
             feature=feature,
             accessible_plugins=accessible_plugins,
             links=None,
             data_access_collection=None,
         )
-
-        feature_group_class, compute_frameworks = identified.get()
         assert feature_group_class is RejectBCapabilityFeatureGroup
         assert compute_frameworks == {CapabilityFwA}, (
             f"Unsupported CapabilityFwB must be narrowed out, leaving only CapabilityFwA; got {compute_frameworks}"
@@ -221,7 +217,7 @@ class TestComputeFrameworkCapabilityHook:
         }
 
         with pytest.raises(ValueError) as exc_info:
-            IdentifyFeatureGroupClass(
+            evaluate_or_raise(
                 feature=feature,
                 accessible_plugins=accessible_plugins,
                 links=None,
@@ -253,7 +249,7 @@ class TestComputeFrameworkCapabilityHook:
         }
 
         with pytest.raises(ValueError) as exc_info:
-            IdentifyFeatureGroupClass(
+            evaluate_or_raise(
                 feature=feature,
                 accessible_plugins=accessible_plugins,
                 links=None,
@@ -283,7 +279,7 @@ class TestComputeFrameworkCapabilityHook:
         }
 
         with pytest.raises(ValueError) as unknown_exc:
-            IdentifyFeatureGroupClass(
+            evaluate_or_raise(
                 feature=unknown_feature,
                 accessible_plugins=unknown_accessible,
                 links=None,
@@ -302,7 +298,7 @@ class TestComputeFrameworkCapabilityHook:
         }
 
         with pytest.raises(ValueError) as capability_exc:
-            IdentifyFeatureGroupClass(
+            evaluate_or_raise(
                 feature=pinned_feature,
                 accessible_plugins=capability_accessible,
                 links=None,
@@ -336,7 +332,7 @@ class TestComputeFrameworkCapabilityHook:
         }
 
         with pytest.raises(ValueError) as exc_info:
-            IdentifyFeatureGroupClass(
+            evaluate_or_raise(
                 feature=feature,
                 accessible_plugins=accessible_plugins,
                 links=None,

@@ -1,14 +1,15 @@
 import inspect
 from collections.abc import Sequence
+from copy import deepcopy
 from dataclasses import dataclass, field, replace
 from difflib import get_close_matches
-from typing import Any, Literal, Optional
+from typing import Literal, Optional
 
 from mloda.core.prepare.accessible_plugins import FeatureGroupEnvironmentMapping
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.abstract_plugins.components.domain import Domain
 from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser import PropertyValueRejection
-from mloda.core.abstract_plugins.components.utils import safe_field
+from mloda.core.abstract_plugins.components.utils import safe_field, as_str
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.abstract_plugins.components.feature import Feature
@@ -34,7 +35,6 @@ class RenderFacts:
     The empty instance is the success value: the winning path captures nothing.
     """
 
-    environment_empty: bool = False
     domains: dict[type[FeatureGroup], str] = field(default_factory=dict)
     concrete_frameworks: tuple[str, ...] = ()
     value_rejections: tuple[tuple[str, str], ...] = ()
@@ -113,7 +113,10 @@ class FeatureResolutionError(ValueError):
         super().__init__(message)
         self.feature_name = feature_name
         self.result = result
-        self.partial_records: tuple[ResolutionRecord, ...] = tuple(partial_records[-PARTIAL_RECORDS_CAP:])
+        # Cap then snapshot: slicing before deepcopy keeps the copied payload bounded on huge requests.
+        self.partial_records: tuple[ResolutionRecord, ...] = tuple(
+            deepcopy(record) for record in partial_records[-PARTIAL_RECORDS_CAP:]
+        )
 
     def __reduce__(
         self,
@@ -160,21 +163,10 @@ def _candidate_sort_key(feature_group: type[FeatureGroup]) -> tuple[str, str]:
     return feature_group.__name__, feature_group.__module__
 
 
-def _as_str(value: Any) -> str:
-    """Return `value` unchanged, raising TypeError on a non-str, so the guarded read that wraps this degrades.
-
-    A hook's annotation is a promise, not a guarantee. A non-str name reaching difflib raises there instead,
-    far from the plugin to blame, so every captured name is validated where it is read.
-    """
-    if not isinstance(value, str):
-        raise TypeError(f"expected str, got {type(value).__name__}")
-    return value
-
-
 def _supported_feature_names(feature_group: type[FeatureGroup]) -> set[str]:
     """Best-effort name catalog of one candidate. A malformed entry costs that candidate its whole catalog."""
     return safe_field(
-        lambda: {_as_str(name) for name in feature_group.feature_names_supported()},
+        lambda: {as_str(name) for name in feature_group.feature_names_supported()},
         set(),
         field=f"{feature_group.get_class_name()}.feature_names_supported",
     )
@@ -182,7 +174,7 @@ def _supported_feature_names(feature_group: type[FeatureGroup]) -> set[str]:
 
 def _prefix_name(feature_group: type[FeatureGroup]) -> str:
     """Best-effort prefix of one candidate."""
-    return safe_field(lambda: _as_str(feature_group.prefix()), "", field=f"{feature_group.get_class_name()}.prefix")
+    return safe_field(lambda: as_str(feature_group.prefix()), "", field=f"{feature_group.get_class_name()}.prefix")
 
 
 def _supports_framework(
@@ -260,9 +252,6 @@ def _render_none(result: EvaluationResult, feature: Feature, callout: str | None
     if callout:
         msg += f" {callout}"
 
-    if result.facts.environment_empty:
-        return msg + "\nNo plugins are loaded. Did you call PluginLoader.all()?"
-
     if result.facts.value_rejections:
         lines = "\n".join(f"  - {class_name}: {reason}" for class_name, reason in sorted(result.facts.value_rejections))
         msg += f"\nFeature group(s) rejected the supplied options while matching '{feature_name}':\n{lines}"
@@ -314,22 +303,14 @@ class IdentifyFeatureGroupClass:
     # they are scoped to one resolution attempt and never cache across runs.
     _domain_outcomes: dict[type[FeatureGroup], tuple[Optional[Domain], Optional[Exception]]]
     _declared_frameworks: dict[type[FeatureGroup], frozenset[type[ComputeFramework]]]
-    result: EvaluationResult
 
-    def __init__(
-        self,
-        feature: Feature,
-        accessible_plugins: FeatureGroupEnvironmentMapping,
-        links: Optional[set[Link]],
-        data_access_collection: Optional[DataAccessCollection] = None,
-    ):
-        result = self.evaluate(feature, accessible_plugins, links, data_access_collection)
-        # The message is a projection of the pass that just ran: no second evaluation, no re-asked hook.
-        message = render_resolution_failure(result, feature)
-        if message is not None:
-            raise FeatureResolutionError(message, str(feature.name), result)
-        self.feature_group_compute_framework_mapping = result.identified
-        self.result = result
+    def __init__(self, data_access_collection: Optional[DataAccessCollection] = None) -> None:
+        self._criteria_matched_feature_groups = set()
+        self._abstract_matched_feature_groups = set()
+        self._candidate_frameworks = {}
+        self._domain_outcomes = {}
+        self._declared_frameworks = {}
+        self._data_access_collection = data_access_collection
 
     @staticmethod
     def _validate_single_framework_pin(feature: Feature) -> None:
@@ -354,13 +335,7 @@ class IdentifyFeatureGroupClass:
         # Pre-matching guard: a >1 pin fires regardless of whether any candidate matches (the old check
         # sat inside the filter loop, so it never ran when the name matched nothing).
         cls._validate_single_framework_pin(feature)
-        self = cls.__new__(cls)
-        self._criteria_matched_feature_groups = set()
-        self._abstract_matched_feature_groups = set()
-        self._candidate_frameworks = {}
-        self._domain_outcomes = {}
-        self._declared_frameworks = {}
-        self._data_access_collection = data_access_collection
+        self = cls(data_access_collection)
         identified = self._filter_loop(feature, accessible_plugins, links, data_access_collection)
         result = EvaluationResult(
             identified=identified,
@@ -386,24 +361,20 @@ class IdentifyFeatureGroupClass:
         Only reached when the pass has no single winner, so the success path stays hook-free. Every provider
         hook here is best-effort: a raising one degrades its own fact, never this call or a sibling's fact.
         """
-        environment_empty = not accessible_plugins
-
         if result.failure_kind == "multiple":
-            return RenderFacts(environment_empty=environment_empty, domains=self._capture_domains(result))
+            return RenderFacts(domains=self._capture_domains(result))
 
         # Capability rejections win over the abstract-only fallback, and both over the ordinary none.
         capability_frameworks = self._capture_capability_frameworks(result, feature)
         if any(candidate.rejected for candidate in capability_frameworks.values()):
-            return RenderFacts(environment_empty=environment_empty, capability_frameworks=capability_frameworks)
+            return RenderFacts(capability_frameworks=capability_frameworks)
 
         if result.abstract_matched:
             return RenderFacts(
-                environment_empty=environment_empty,
                 concrete_frameworks=self._concrete_implementation_frameworks(result, accessible_plugins),
             )
 
         return RenderFacts(
-            environment_empty=environment_empty,
             value_rejections=self._capture_value_rejections(feature, accessible_plugins),
             known_names=self._capture_known_names(accessible_plugins),
         )
@@ -459,7 +430,7 @@ class IdentifyFeatureGroupClass:
         ComputeFramework costs the whole candidate its names, well-formed entries included, as before the memo.
         """
         return safe_field(
-            lambda: {_as_str(cfw.get_class_name()) for cfw in self._declared_frameworks_of(feature_group)},
+            lambda: {as_str(cfw.get_class_name()) for cfw in self._declared_frameworks_of(feature_group)},
             set(),
             field=f"{feature_group.get_class_name()}.compute_framework_definition",
         )
@@ -552,7 +523,7 @@ class IdentifyFeatureGroupClass:
         if not self._filter_feature_group_by_scope(feature_group, feature):
             return None
         reason = self._value_rejection_reason(feature_group, feature)
-        return None if reason is None else _as_str(reason)
+        return None if reason is None else as_str(reason)
 
     def _capture_known_names(self, accessible_plugins: FeatureGroupEnvironmentMapping) -> tuple[str, ...]:
         known_names: list[str] = []
@@ -682,9 +653,6 @@ class IdentifyFeatureGroupClass:
             return None
         reason: Optional[str] = rejection_check(feature.name, feature.options)
         return reason
-
-    def get(self) -> tuple[type[FeatureGroup], set[type[ComputeFramework]]]:
-        return next(iter(self.feature_group_compute_framework_mapping.items()))
 
     def filter_subclasses(
         self, _identified_feature_groups: FeatureGroupEnvironmentMapping

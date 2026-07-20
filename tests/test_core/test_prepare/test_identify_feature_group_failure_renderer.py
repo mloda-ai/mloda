@@ -46,7 +46,6 @@ ABSTRACT_FEATURE_791 = "renderer_abstract_791"
 KNOWN_FEATURE_791 = "renderer_known_feature_791"
 TYPO_FEATURE_791 = "renderer_knwon_feature_791"
 SCOPED_NO_MATCH_FEATURE_791 = "renderer_scoped_no_match_791"
-EMPTY_ENV_FEATURE_791 = "renderer_empty_env_791"
 FORWARDING_FEATURE_791 = "renderer_forwarding_791"
 RAISING_DOMAIN_FEATURE_791 = "renderer_raising_domain_791"
 RAISING_ABSTRACT_FEATURE_791 = "renderer_raising_abstract_791"
@@ -628,11 +627,6 @@ def scoped_none_scenario() -> Scenario:
     return feature, {RendererKnownNamesFG791: {RendererFwOne791}}
 
 
-def empty_environment_scenario() -> Scenario:
-    """No plugins are loaded at all."""
-    return Feature(EMPTY_ENV_FEATURE_791), {}
-
-
 def capability_narrow_enabled_scenario() -> Scenario:
     """Shape A: two declared frameworks, only the rejected one is enabled for this run."""
     return Feature(NARROW_ENABLED_FEATURE_791), {RendererNarrowEnabledFG791: {RendererFwOne791}}
@@ -827,15 +821,6 @@ class TestRenderResolutionFailureMessages:
         )
         assert f"  - RendererMissingOptionFG791: {MISSING_OPTION_REASON_791}" in message
 
-    def test_empty_environment_stops_after_plugin_loader_hint(self) -> None:
-        """An empty environment renders the PluginLoader hint and nothing else."""
-        message = _render(empty_environment_scenario())
-
-        assert message == (
-            f"No feature groups found for feature name: '{EMPTY_ENV_FEATURE_791}'."
-            "\nNo plugins are loaded. Did you call PluginLoader.all()?"
-        )
-
     def test_scoped_none_renders_callout_and_scoped_pointer(self) -> None:
         """A scoped no-match carries the scope callout and the scoped resolve_feature pointer."""
         message = _render(scoped_none_scenario())
@@ -981,18 +966,9 @@ class TestFactsCapturedDuringEvaluate:
 
         assert result.failure_kind == "none"
         assert result.facts.value_rejections == (("RendererStrictFG791", WINDOW_REJECTION_REASON),)
-        assert not result.facts.environment_empty
         assert KNOWN_FEATURE_791 in result.facts.known_names
         assert "RendererKnownNamesFG791" in result.facts.known_names
         assert "RendererStrictFG791_" in result.facts.known_names
-
-    def test_environment_empty_captured(self) -> None:
-        """An empty accessible_plugins is captured as a fact."""
-        result = _evaluate(empty_environment_scenario())
-
-        assert result.failure_kind == "none"
-        assert result.facts.environment_empty
-        assert result.facts.known_names == ()
 
 
 class TestFactCaptureNeverTakesEvaluateDown:

@@ -202,7 +202,6 @@ def test_resolve_feature_projects_the_environment_build_failure() -> None:
         winner_name = result.feature_group.get_class_name() if result.feature_group is not None else None
         error = result.error
         candidate_names = [candidate.get_class_name() for candidate in result.candidates]
-        environment = result.environment
         del result
     finally:
         del broken_fg
@@ -216,7 +215,6 @@ def test_resolve_feature_projects_the_environment_build_failure() -> None:
     assert ENV_BUILD_FAILURE_MESSAGE in error
     # The build aborts before matching, so a broken group is not a listed candidate.
     assert candidate_names == []
-    assert environment == "standalone-default"
 
 
 def test_resolve_feature_names_the_broken_plugin_for_an_unrelated_feature() -> None:
@@ -461,6 +459,16 @@ def test_collector_that_filters_everything_names_the_collector_not_the_loader() 
     assert "filtered out every FeatureGroup" in message
     # The loaded universe was non-empty, so the nothing-loaded hint would misdirect the fix.
     assert "Did you call PluginLoader.all()?" not in message
+
+
+def test_nothing_loaded_raises_the_plugin_loader_hint(monkeypatch: pytest.MonkeyPatch) -> None:
+    """An empty FeatureGroup universe raises the nothing-loaded loader hint, not the collector message (#853)."""
+    monkeypatch.setattr(PreFilterPlugins, "get_featuregroup_subclasses", lambda self: set())
+
+    with pytest.raises(EnvironmentPreconditionError) as exc_info:
+        PreFilterPlugins(PreFilterPlugins.get_cfw_subclasses())
+
+    assert str(exc_info.value) == "No feature groups are loaded. Did you call PluginLoader.all()?"
 
 
 def test_diagnose_projects_the_collector_precondition_failure() -> None:

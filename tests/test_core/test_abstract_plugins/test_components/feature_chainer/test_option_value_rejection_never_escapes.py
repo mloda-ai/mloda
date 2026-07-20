@@ -29,7 +29,7 @@ from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.prepare.accessible_plugins import FeatureGroupEnvironmentMapping
-from mloda.core.prepare.identify_feature_group import IdentifyFeatureGroupClass
+from tests.test_core.test_prepare.identify_seam import identify_winner
 
 
 PIPELINE_KEY = "pipeline_name_esc732"
@@ -313,13 +313,10 @@ class RequiredWhenNeighborFeatureGroupEsc763(FeatureGroup):
         return None
 
 
-def _identify(feature: Feature, accessible_plugins: FeatureGroupEnvironmentMapping) -> IdentifyFeatureGroupClass:
-    return IdentifyFeatureGroupClass(
-        feature=feature,
-        accessible_plugins=accessible_plugins,
-        links=None,
-        data_access_collection=None,
-    )
+def _identify(
+    feature: Feature, accessible_plugins: FeatureGroupEnvironmentMapping
+) -> tuple[type[FeatureGroup], set[type[ComputeFramework]]]:
+    return identify_winner(feature, accessible_plugins)
 
 
 def _records_at_or_above(caplog: pytest.LogCaptureFixture, logger_name: str, levelno: int) -> list[logging.LogRecord]:
@@ -482,7 +479,7 @@ class TestRejectionNeverEscapesTheEngine:
 
         identified = _identify(feature, accessible_plugins)
 
-        feature_group, _frameworks = identified.get()
+        feature_group, _frameworks = identified
         assert feature_group is NeighborFeatureGroup
 
     def test_raising_element_validator_yields_the_standard_no_match_error(self) -> None:
@@ -514,7 +511,7 @@ class TestRejectionNeverEscapesTheEngine:
 
         identified = _identify(feature, accessible_plugins)
 
-        feature_group, _frameworks = identified.get()
+        feature_group, _frameworks = identified
         assert feature_group is DirectParserOverrideFeatureGroup
 
 
@@ -630,7 +627,7 @@ class TestKeyErrorRejectionNeverEscapesTheEngine:
 
         identified = _identify(feature, accessible_plugins)
 
-        feature_group, _frameworks = identified.get()
+        feature_group, _frameworks = identified
         assert feature_group is RequiredWhenNeighborFeatureGroupEsc763
 
 

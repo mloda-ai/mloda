@@ -25,8 +25,8 @@ from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.api.plugin_docs import resolve_feature
 from mloda.core.prepare.accessible_plugins import FeatureGroupEnvironmentMapping, PreFilterPlugins
-from mloda.core.prepare.identify_feature_group import IdentifyFeatureGroupClass
 from mloda.user import PluginCollector
+from tests.test_core.test_prepare.identify_seam import evaluate_or_raise
 
 
 ABSTRACT_ONLY_FEATURE = "probe753_abstract_only"
@@ -140,7 +140,7 @@ def test_engine_rejects_lone_abstract_match() -> None:
     accessible_plugins: FeatureGroupEnvironmentMapping = {AbstractOnlyProbe753: {CfwAbstract753}}
 
     with pytest.raises(ValueError, match="Only abstract feature group base") as exc_info:
-        IdentifyFeatureGroupClass(
+        evaluate_or_raise(
             feature=feature,
             accessible_plugins=accessible_plugins,
             links=None,
@@ -185,7 +185,7 @@ def test_engine_unavailable_only_framework_raises_no_feature_groups() -> None:
     assert accessible == {UnavailableOnlyProbe753: set()}
 
     with pytest.raises(ValueError, match="No feature groups found for feature name: 'probe753_unavailable'"):
-        IdentifyFeatureGroupClass(
+        evaluate_or_raise(
             feature=Feature(UNAVAILABLE_FEATURE),
             accessible_plugins=accessible,
             links=None,
@@ -221,7 +221,7 @@ def test_engine_parent_child_differing_framework_sets_stays_ambiguous() -> None:
     }
 
     with pytest.raises(ValueError, match="Multiple feature groups found") as exc_info:
-        IdentifyFeatureGroupClass(
+        evaluate_or_raise(
             feature=feature,
             accessible_plugins=accessible_plugins,
             links=None,

@@ -30,7 +30,7 @@ from mloda.core.api.plugin_info import ResolvedFeature
 from mloda.core.api import plugin_docs
 from mloda.core.api.plugin_docs import resolve_feature
 from mloda.core.prepare.accessible_plugins import FeatureGroupEnvironmentMapping, RedefinitionConflictError
-from mloda.core.prepare.identify_feature_group import IdentifyFeatureGroupClass
+from tests.test_core.test_prepare.identify_seam import evaluate_or_raise
 from mloda.user import PluginLoader
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import (
@@ -991,7 +991,7 @@ class TestResolveFeatureScopedEngineParity:
         feature = Feature(SIBLING_SCOPED_FEATURE, feature_group="UnrelatedScopedResolve693FeatureGroup")
 
         with pytest.raises(ValueError) as exc_info:
-            IdentifyFeatureGroupClass(
+            evaluate_or_raise(
                 feature=feature,
                 accessible_plugins=accessible_plugins,
                 links=None,

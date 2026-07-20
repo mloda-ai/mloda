@@ -45,6 +45,7 @@ from mloda.core.api.plugin_docs import resolve_feature
 from mloda.core.prepare import identify_feature_group
 from mloda.core.prepare.accessible_plugins import FeatureGroupEnvironmentMapping, PreFilterPlugins
 from mloda.core.prepare.identify_feature_group import IdentifyFeatureGroupClass, render_resolution_failure
+from tests.test_core.test_prepare.identify_seam import evaluate_or_raise
 
 
 MULTIPLE_FEATURE_782 = "single_pass_multiple_782"
@@ -654,7 +655,7 @@ def _engine_error(scenario: Scenario782) -> str:
     _reset_counters()
 
     with pytest.raises(ValueError) as exc_info:
-        IdentifyFeatureGroupClass(
+        evaluate_or_raise(
             feature=scenario.feature,
             accessible_plugins=accessible_plugins,
             links=scenario.links,
@@ -1264,10 +1265,11 @@ class TestTheSecondEvaluationIsGone:
             "_abstract_only_message",
             "_strict_validation_rejection_hint",
             "_input_feature_forwarding_hint",
+            "get",
         ],
     )
     def test_legacy_raising_path_attribute_is_deleted(self, attribute: str) -> None:
-        """The raising wrapper renders from the EvaluationResult; the legacy builders are gone."""
+        """The raising wrapper and its winner accessors are gone; failures render from the EvaluationResult."""
         assert not hasattr(IdentifyFeatureGroupClass, attribute)
 
     def test_split_frameworks_by_capability_is_deleted(self) -> None:

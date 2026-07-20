@@ -13,6 +13,7 @@ from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.prepare.accessible_plugins import FeatureGroupEnvironmentMapping
 from mloda.core.prepare.identify_feature_group import CandidateFrameworks, IdentifyFeatureGroupClass
 from mloda.provider import FeatureChainParserMixin, FeatureGroup, SubtypeDeclaration, property_spec
+from tests.test_core.test_prepare.identify_seam import identify_winner
 
 
 MATCH_KEY = "subdeclm_window_function"
@@ -180,13 +181,10 @@ class SubDeclMatchFrameSpecFG(FeatureGroup):
         return None
 
 
-def _identify(feature: Feature, accessible_plugins: FeatureGroupEnvironmentMapping) -> IdentifyFeatureGroupClass:
-    return IdentifyFeatureGroupClass(
-        feature=feature,
-        accessible_plugins=accessible_plugins,
-        links=None,
-        data_access_collection=None,
-    )
+def _identify(
+    feature: Feature, accessible_plugins: FeatureGroupEnvironmentMapping
+) -> tuple[type[FeatureGroup], set[type[ComputeFramework]]]:
+    return identify_winner(feature, accessible_plugins)
 
 
 class TestMatchTimeIntegration:
@@ -198,7 +196,7 @@ class TestMatchTimeIntegration:
             SubDeclMatchWindowFG: {SubDeclMatchFwAlpha, SubDeclMatchFwBeta},
         }
 
-        feature_group_class, compute_frameworks = _identify(feature, accessible_plugins).get()
+        feature_group_class, compute_frameworks = _identify(feature, accessible_plugins)
         assert feature_group_class is SubDeclMatchWindowFG
         assert compute_frameworks == {SubDeclMatchFwAlpha}, (
             f"'median' is unsupported on SubDeclMatchFwBeta and must be routed around; got {compute_frameworks}"
@@ -229,7 +227,7 @@ class TestMatchTimeIntegration:
             SubDeclMatchWindowFG: {SubDeclMatchFwAlpha, SubDeclMatchFwBeta},
         }
 
-        feature_group_class, compute_frameworks = _identify(feature, accessible_plugins).get()
+        feature_group_class, compute_frameworks = _identify(feature, accessible_plugins)
         assert feature_group_class is SubDeclMatchWindowFG
         assert compute_frameworks == {SubDeclMatchFwAlpha}, (
             f"Family 'ntile' is unsupported on SubDeclMatchFwBeta, so 'ntile_2' must be routed around; "
@@ -244,7 +242,7 @@ class TestMatchTimeIntegration:
             SubDeclMatchWindowFG: {SubDeclMatchFwAlpha, SubDeclMatchFwBeta},
         }
 
-        _, compute_frameworks = _identify(feature, accessible_plugins).get()
+        _, compute_frameworks = _identify(feature, accessible_plugins)
         assert compute_frameworks == {SubDeclMatchFwAlpha, SubDeclMatchFwBeta}, (
             f"An undeclared subtype must stay open on every framework; got {compute_frameworks}"
         )
@@ -258,7 +256,7 @@ class TestMatchTimeIntegration:
             SubDeclMatchPlainFG: {SubDeclMatchFwAlpha, SubDeclMatchFwBeta},
         }
 
-        _, compute_frameworks = _identify(feature, accessible_plugins).get()
+        _, compute_frameworks = _identify(feature, accessible_plugins)
         assert compute_frameworks == {SubDeclMatchFwAlpha, SubDeclMatchFwBeta}
 
     def test_matching_stays_orthogonal_to_subtype_support(self) -> None:
@@ -282,7 +280,7 @@ class TestRankLikeFamily:
             SubDeclMatchRankLikeFG: {SubDeclMatchFwAlpha, SubDeclMatchFwBeta},
         }
 
-        feature_group_class, compute_frameworks = _identify(feature, accessible_plugins).get()
+        feature_group_class, compute_frameworks = _identify(feature, accessible_plugins)
         assert feature_group_class is SubDeclMatchRankLikeFG
         assert compute_frameworks == {SubDeclMatchFwAlpha}, (
             f"'ntile' is only supported on SubDeclMatchFwAlpha; got {compute_frameworks}"
@@ -294,7 +292,7 @@ class TestRankLikeFamily:
             SubDeclMatchRankLikeFG: {SubDeclMatchFwAlpha, SubDeclMatchFwBeta},
         }
 
-        _, compute_frameworks = _identify(feature, accessible_plugins).get()
+        _, compute_frameworks = _identify(feature, accessible_plugins)
         assert compute_frameworks == {SubDeclMatchFwAlpha, SubDeclMatchFwBeta}
 
 
@@ -318,7 +316,7 @@ class TestFrameSpecLikeFamily:
             SubDeclMatchFrameSpecFG: {SubDeclMatchFwAlpha, SubDeclMatchFwBeta},
         }
 
-        feature_group_class, compute_frameworks = _identify(feature, accessible_plugins).get()
+        feature_group_class, compute_frameworks = _identify(feature, accessible_plugins)
         assert feature_group_class is SubDeclMatchFrameSpecFG
         assert compute_frameworks == {SubDeclMatchFwAlpha}, (
             f"'rows_7' is unsupported on SubDeclMatchFwBeta; got {compute_frameworks}"
@@ -330,7 +328,7 @@ class TestFrameSpecLikeFamily:
             SubDeclMatchFrameSpecFG: {SubDeclMatchFwAlpha, SubDeclMatchFwBeta},
         }
 
-        _, compute_frameworks = _identify(feature, accessible_plugins).get()
+        _, compute_frameworks = _identify(feature, accessible_plugins)
         assert compute_frameworks == {SubDeclMatchFwAlpha, SubDeclMatchFwBeta}
 
 
@@ -393,7 +391,7 @@ class TestCompiledPrefixPatternParity:
             SubDeclMatchCompiledWindowFG: {SubDeclMatchFwAlpha, SubDeclMatchFwBeta},
         }
 
-        feature_group_class, compute_frameworks = _identify(feature, accessible_plugins).get()
+        feature_group_class, compute_frameworks = _identify(feature, accessible_plugins)
         assert feature_group_class is SubDeclMatchCompiledWindowFG
         assert compute_frameworks == {SubDeclMatchFwAlpha}, (
             f"'median' is unsupported on SubDeclMatchFwBeta and must be routed around even when PREFIX_PATTERN "
@@ -406,7 +404,7 @@ class TestCompiledPrefixPatternParity:
             SubDeclMatchCompiledWindowFG: {SubDeclMatchFwAlpha, SubDeclMatchFwBeta},
         }
 
-        _, compute_frameworks = _identify(feature, accessible_plugins).get()
+        _, compute_frameworks = _identify(feature, accessible_plugins)
         # Pin resolution directly: pre-fix the dropped compiled pattern returns None, so routing merely fails open.
         assert SubDeclMatchCompiledWindowFG.resolve_subtype("value__sum_subdeclmcompiled", Options()) == "sum"
         assert compute_frameworks == {SubDeclMatchFwAlpha, SubDeclMatchFwBeta}, (
@@ -422,7 +420,7 @@ class TestCompiledPrefixPatternParity:
             SubDeclMatchCompiledSuffixFG: {SubDeclMatchFwAlpha, SubDeclMatchFwBeta},
         }
 
-        feature_group_class, compute_frameworks = _identify(feature, accessible_plugins).get()
+        feature_group_class, compute_frameworks = _identify(feature, accessible_plugins)
         assert feature_group_class is SubDeclMatchCompiledSuffixFG
         assert compute_frameworks == {SubDeclMatchFwAlpha}, (
             f"'median' is unsupported on SubDeclMatchFwBeta and must be routed around even when the compiled "

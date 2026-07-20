@@ -30,6 +30,7 @@ from mloda.core.prepare.identify_feature_group import (
     render_resolution_failure,
 )
 from mloda.user import mlodaAPI
+from tests.test_core.test_prepare.identify_seam import evaluate_or_raise
 
 
 # Unique feature names so no other double in the parallel suite collides on them.
@@ -100,7 +101,7 @@ def _raised_resolution_error_809() -> FeatureResolutionError:
     feature = Feature(NO_MATCH_FEATURE_809)
 
     with pytest.raises(FeatureResolutionError) as exc_info:
-        IdentifyFeatureGroupClass(
+        evaluate_or_raise(
             feature=feature,
             accessible_plugins=_no_match_accessible_plugins(),
             links=None,
@@ -118,7 +119,7 @@ class TestFeatureResolutionErrorAtTheSeam:
         feature = Feature(NO_MATCH_FEATURE_809)
 
         with pytest.raises(FeatureResolutionError) as exc_info:
-            IdentifyFeatureGroupClass(
+            evaluate_or_raise(
                 feature=feature,
                 accessible_plugins=_no_match_accessible_plugins(),
                 links=None,
@@ -133,7 +134,7 @@ class TestFeatureResolutionErrorAtTheSeam:
         feature = Feature(NO_MATCH_FEATURE_809)
 
         with pytest.raises(FeatureResolutionError) as exc_info:
-            IdentifyFeatureGroupClass(
+            evaluate_or_raise(
                 feature=feature,
                 accessible_plugins=_no_match_accessible_plugins(),
                 links=None,
@@ -150,7 +151,7 @@ class TestFeatureResolutionErrorAtTheSeam:
         feature = Feature(NO_MATCH_FEATURE_809)
 
         with pytest.raises(FeatureResolutionError) as exc_info:
-            IdentifyFeatureGroupClass(
+            evaluate_or_raise(
                 feature=feature,
                 accessible_plugins=_no_match_accessible_plugins(),
                 links=None,
@@ -175,7 +176,7 @@ class TestFeatureResolutionErrorAtTheSeam:
         }
 
         with pytest.raises(FeatureResolutionError) as exc_info:
-            IdentifyFeatureGroupClass(
+            evaluate_or_raise(
                 feature=feature,
                 accessible_plugins=accessible_plugins,
                 links=None,

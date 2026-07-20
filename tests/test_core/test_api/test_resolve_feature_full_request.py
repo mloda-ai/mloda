@@ -46,7 +46,7 @@ from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.api.plugin_docs import resolve_feature
 from mloda.core.api.plugin_info import ResolvedFeature
 from mloda.core.prepare.accessible_plugins import FeatureGroupEnvironmentMapping
-from mloda.core.prepare.identify_feature_group import IdentifyFeatureGroupClass
+from tests.test_core.test_prepare.identify_seam import evaluate_or_raise
 from mloda.user import PluginCollector, PluginLoader
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import (
@@ -365,13 +365,13 @@ class TestResolveFeatureFrameworkPinViaFeature:
 
         # Declared pin: the engine identifies the group, and resolve_feature resolves it.
         pinned_declared = Feature(FRAMEWORK_FEATURE, compute_framework="PandasDataFrame")
-        engine_declared = IdentifyFeatureGroupClass(
+        engine_declared = evaluate_or_raise(
             feature=pinned_declared,
             accessible_plugins=accessible_plugins,
             links=None,
             data_access_collection=None,
         )
-        assert engine_declared.get()[0] is FrameworkPinResolve756FeatureGroup
+        assert next(iter(engine_declared.identified)) is FrameworkPinResolve756FeatureGroup
 
         collector = PluginCollector.enabled_feature_groups({FrameworkPinResolve756FeatureGroup})
         debug_declared = resolve_feature(
@@ -382,7 +382,7 @@ class TestResolveFeatureFrameworkPinViaFeature:
         # Undeclared pin: the engine refuses (ValueError), and resolve_feature fails closed.
         pinned_undeclared = Feature(FRAMEWORK_FEATURE, compute_framework="SqliteFramework")
         with pytest.raises(ValueError):
-            IdentifyFeatureGroupClass(
+            evaluate_or_raise(
                 feature=pinned_undeclared,
                 accessible_plugins=accessible_plugins,
                 links=None,
@@ -431,20 +431,20 @@ class TestResolveFeatureLinksThreaded:
         collector = PluginCollector.enabled_feature_groups({LinkResolve756FeatureGroup})
 
         supported = {_supported_link()}
-        engine_supported = IdentifyFeatureGroupClass(
+        engine_supported = evaluate_or_raise(
             feature=Feature(LINK_FEATURE),
             accessible_plugins=accessible_plugins,
             links=supported,
             data_access_collection=None,
         )
-        assert engine_supported.get()[0] is LinkResolve756FeatureGroup
+        assert next(iter(engine_supported.identified)) is LinkResolve756FeatureGroup
         assert resolve_feature(LINK_FEATURE, plugin_collector=collector, links=supported).feature_group is (
             LinkResolve756FeatureGroup
         )
 
         unsupported = {_unsupported_link()}
         with pytest.raises(ValueError):
-            IdentifyFeatureGroupClass(
+            evaluate_or_raise(
                 feature=Feature(LINK_FEATURE),
                 accessible_plugins=accessible_plugins,
                 links=unsupported,
@@ -481,20 +481,20 @@ class TestResolveFeatureDataAccessCollectionThreaded:
         collector = PluginCollector.enabled_feature_groups({DataAccessResolve756FeatureGroup})
         dac = DataAccessCollection(files={EXPECTED_FILE_HANDLE})
 
-        engine_with = IdentifyFeatureGroupClass(
+        engine_with = evaluate_or_raise(
             feature=Feature(DATA_ACCESS_FEATURE),
             accessible_plugins=accessible_plugins,
             links=None,
             data_access_collection=dac,
         )
-        assert engine_with.get()[0] is DataAccessResolve756FeatureGroup
+        assert next(iter(engine_with.identified)) is DataAccessResolve756FeatureGroup
         assert (
             resolve_feature(DATA_ACCESS_FEATURE, plugin_collector=collector, data_access_collection=dac).feature_group
             is DataAccessResolve756FeatureGroup
         )
 
         with pytest.raises(ValueError):
-            IdentifyFeatureGroupClass(
+            evaluate_or_raise(
                 feature=Feature(DATA_ACCESS_FEATURE),
                 accessible_plugins=accessible_plugins,
                 links=None,

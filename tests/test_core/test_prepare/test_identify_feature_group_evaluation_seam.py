@@ -1,11 +1,9 @@
 """Pinning tests for the non-raising evaluation seam on IdentifyFeatureGroupClass (issue #754).
 
-The engine wrapper ``IdentifyFeatureGroupClass(...)`` validates and RAISES ``ValueError`` on
-any unresolved / ambiguous match. This suite pins a parallel, non-raising classmethod
 ``IdentifyFeatureGroupClass.evaluate(feature, accessible_plugins, links, data_access_collection=None)``
-that runs the same matching/filter logic but returns a structured ``EvaluationResult`` instead of
-raising. Both symbols are imported from ``mloda.core.prepare.identify_feature_group``; the seam is
-implemented, and these tests pin its non-raising contract.
+runs the matching/filter logic and returns a structured ``EvaluationResult`` instead of raising. The
+raising path now lives in the engine seam, mirrored here by the ``evaluate_or_raise`` test helper. This
+suite pins evaluate()'s non-raising contract against that raising counterpart.
 """
 
 from abc import abstractmethod
@@ -30,6 +28,7 @@ from mloda.core.prepare.identify_feature_group import (
 )
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
+from tests.test_core.test_prepare.identify_seam import evaluate_or_raise
 
 
 # Unique feature names so no other double in the parallel suite collides on them.
@@ -220,7 +219,7 @@ class TestEvaluationSeamParityWithEngineWrapper:
         }
 
         with pytest.raises(ValueError):
-            IdentifyFeatureGroupClass(
+            evaluate_or_raise(
                 feature=feature,
                 accessible_plugins=accessible_plugins,
                 links=None,
@@ -261,7 +260,7 @@ class TestSingleFrameworkPinValidatedBeforeMatching:
         accessible_plugins: FeatureGroupEnvironmentMapping = {SeamSingleFG: {SeamFwAlpha}}
 
         with pytest.raises(ComputeFrameworkPinError) as exc_info:
-            IdentifyFeatureGroupClass(
+            evaluate_or_raise(
                 feature=feature,
                 accessible_plugins=accessible_plugins,
                 links=None,
@@ -291,7 +290,7 @@ class TestSingleFrameworkPinValidatedBeforeMatching:
         accessible_plugins: FeatureGroupEnvironmentMapping = {SeamSingleFG: {SeamFwAlpha}}
 
         with pytest.raises(ComputeFrameworkPinError) as exc_info:
-            IdentifyFeatureGroupClass(
+            evaluate_or_raise(
                 feature=feature,
                 accessible_plugins=accessible_plugins,
                 links=None,

@@ -303,22 +303,14 @@ class IdentifyFeatureGroupClass:
     # they are scoped to one resolution attempt and never cache across runs.
     _domain_outcomes: dict[type[FeatureGroup], tuple[Optional[Domain], Optional[Exception]]]
     _declared_frameworks: dict[type[FeatureGroup], frozenset[type[ComputeFramework]]]
-    result: EvaluationResult
 
-    def __init__(
-        self,
-        feature: Feature,
-        accessible_plugins: FeatureGroupEnvironmentMapping,
-        links: Optional[set[Link]],
-        data_access_collection: Optional[DataAccessCollection] = None,
-    ):
-        result = self.evaluate(feature, accessible_plugins, links, data_access_collection)
-        # The message is a projection of the pass that just ran: no second evaluation, no re-asked hook.
-        message = render_resolution_failure(result, feature)
-        if message is not None:
-            raise FeatureResolutionError(message, str(feature.name), result)
-        self.feature_group_compute_framework_mapping = result.identified
-        self.result = result
+    def __init__(self, data_access_collection: Optional[DataAccessCollection] = None) -> None:
+        self._criteria_matched_feature_groups = set()
+        self._abstract_matched_feature_groups = set()
+        self._candidate_frameworks = {}
+        self._domain_outcomes = {}
+        self._declared_frameworks = {}
+        self._data_access_collection = data_access_collection
 
     @staticmethod
     def _validate_single_framework_pin(feature: Feature) -> None:
@@ -343,13 +335,7 @@ class IdentifyFeatureGroupClass:
         # Pre-matching guard: a >1 pin fires regardless of whether any candidate matches (the old check
         # sat inside the filter loop, so it never ran when the name matched nothing).
         cls._validate_single_framework_pin(feature)
-        self = cls.__new__(cls)
-        self._criteria_matched_feature_groups = set()
-        self._abstract_matched_feature_groups = set()
-        self._candidate_frameworks = {}
-        self._domain_outcomes = {}
-        self._declared_frameworks = {}
-        self._data_access_collection = data_access_collection
+        self = cls(data_access_collection)
         identified = self._filter_loop(feature, accessible_plugins, links, data_access_collection)
         result = EvaluationResult(
             identified=identified,
@@ -667,9 +653,6 @@ class IdentifyFeatureGroupClass:
             return None
         reason: Optional[str] = rejection_check(feature.name, feature.options)
         return reason
-
-    def get(self) -> tuple[type[FeatureGroup], set[type[ComputeFramework]]]:
-        return next(iter(self.feature_group_compute_framework_mapping.items()))
 
     def filter_subclasses(
         self, _identified_feature_groups: FeatureGroupEnvironmentMapping

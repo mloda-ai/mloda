@@ -21,7 +21,7 @@ from mloda.core.abstract_plugins.components.base_feature_group_version import SO
 from mloda.core.abstract_plugins.components.subtype_declaration import SubtypeDeclaration
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.abstract_plugins.components.plugin_option.plugin_collector import PluginCollector
-from mloda.core.abstract_plugins.components.utils import get_all_subclasses, safe_field, safe_field_with_error
+from mloda.core.abstract_plugins.components.utils import as_str, get_all_subclasses, safe_field, safe_field_with_error
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.function_extender import Extender
 from mloda.core.abstract_plugins.plugin_registry.plugin_registry import PluginRegistry
@@ -41,6 +41,7 @@ from mloda.core.prepare.accessible_plugins import (
     registry_for,
 )
 from mloda.core.prepare.identify_feature_group import (
+    CandidateFrameworks,
     IdentifyFeatureGroupClass,
     render_resolution_failure,
     scope_callout,
@@ -52,16 +53,9 @@ def list_registered(plugin_type: type[Any]) -> list[type[Any]]:
     return PluginRegistry.default().list_registered(plugin_type)
 
 
-def _as_str(value: Any) -> str:
-    """Return `value` unchanged, raising TypeError if a plugin returned a non-str, so the guarded read degrades."""
-    if not isinstance(value, str):
-        raise TypeError(f"expected str, got {type(value).__name__}")
-    return value
-
-
 def _safe_version(fg_class: type[FeatureGroup]) -> str:
     """Return the feature group version or "unavailable" if source introspection fails or version() is not a str."""
-    return safe_field(lambda: _as_str(fg_class.version()), "unavailable", catching=SOURCE_INTROSPECTION_ERRORS)
+    return safe_field(lambda: as_str(fg_class.version()), "unavailable", catching=SOURCE_INTROSPECTION_ERRORS)
 
 
 def _subtype_support_or_error(fg_class: type[FeatureGroup]) -> tuple[dict[str, list[str]], Optional[str]]:
@@ -144,9 +138,9 @@ def get_feature_group_docs(
             continue
 
         cls_name = fg_class.__name__
-        fg_name = safe_field(lambda: _as_str(fg_class.get_class_name()), cls_name, field=f"{cls_name}.get_class_name")
+        fg_name = safe_field(lambda: as_str(fg_class.get_class_name()), cls_name, field=f"{cls_name}.get_class_name")
         doc_fallback = (fg_class.__doc__ or "").strip() or cls_name
-        description = safe_field(lambda: _as_str(fg_class.description()), doc_fallback, field=f"{cls_name}.description")
+        description = safe_field(lambda: as_str(fg_class.description()), doc_fallback, field=f"{cls_name}.description")
         version = _safe_version(fg_class)
         module = fg_class.__module__
         compute_frameworks: list[str] = safe_field(
@@ -449,10 +443,10 @@ def resolve_feature(
     candidates = sorted(result.criteria_matched, key=lambda c: c.get_class_name())
 
     if result.failure_kind is None:
-        winner, supported_frameworks = next(iter(result.identified.items()))
-        available = accessible_plugins.get(winner, set())
-        supported_names = sorted(c.get_class_name() for c in supported_frameworks)
-        unsupported_names = sorted(c.get_class_name() for c in (available - supported_frameworks))
+        winner = next(iter(result.identified))
+        split = result.candidate_frameworks.get(winner, CandidateFrameworks())
+        supported_names = sorted(c.get_class_name() for c in split.supported)
+        unsupported_names = sorted(c.get_class_name() for c in split.rejected)
         subtype, subtype_family = _resolved_subtype_fields(winner, feature_name_obj, resolved_options)
         return ResolvedFeature(
             feature_name,

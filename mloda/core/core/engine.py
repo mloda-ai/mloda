@@ -22,7 +22,6 @@ from mloda.core.prepare.graph.build_graph import BuildGraph
 from mloda.core.prepare.resolve_graph import ResolveGraph
 from mloda.core.runtime.run import ExecutionOrchestrator
 from mloda.core.prepare.identify_feature_group import (
-    PARTIAL_RECORDS_CAP,
     EvaluationResult,
     FeatureResolutionError,
     IdentifyFeatureGroupClass,
@@ -72,7 +71,6 @@ class Engine:
         self.api_input_data_collection = api_input_data_collection
 
         self.plugin_collector = plugin_collector
-        self.copy_compute_frameworks = deepcopy(compute_frameworks)
 
         self.data_access_collection = data_access_collection
         self.column_ordering = column_ordering
@@ -224,12 +222,11 @@ class Engine:
         )
         message = render_resolution_failure(result, feature)
         if message is not None:
-            # Slice before deepcopy so the attached payload stays bounded.
             raise FeatureResolutionError(
                 message,
                 str(feature.name),
                 result,
-                partial_records=deepcopy(self.resolution_records[-PARTIAL_RECORDS_CAP:]),
+                partial_records=self.resolution_records,
             )
         feature_group_class, compute_frameworks = next(iter(result.identified.items()))
         return feature_group_class, compute_frameworks, result

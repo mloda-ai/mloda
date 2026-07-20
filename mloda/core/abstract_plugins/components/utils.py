@@ -42,6 +42,13 @@ def safe_field_with_error(
         return fallback, message if message.strip() else type(exc).__name__
 
 
+def as_str(value: Any) -> str:
+    """Return `value` unchanged, raising TypeError on a non-str so the guarded read that wraps it degrades."""
+    if not isinstance(value, str):
+        raise TypeError(f"expected str, got {type(value).__name__}")
+    return value
+
+
 def get_all_subclasses(cls: Any, log_n_subclasses: int = 0) -> set[type[Any]]:
     all_subclasses = set()
 

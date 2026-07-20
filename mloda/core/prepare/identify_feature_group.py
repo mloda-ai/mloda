@@ -1,14 +1,15 @@
 import inspect
 from collections.abc import Sequence
+from copy import deepcopy
 from dataclasses import dataclass, field, replace
 from difflib import get_close_matches
-from typing import Any, Literal, Optional
+from typing import Literal, Optional
 
 from mloda.core.prepare.accessible_plugins import FeatureGroupEnvironmentMapping
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.abstract_plugins.components.domain import Domain
 from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser import PropertyValueRejection
-from mloda.core.abstract_plugins.components.utils import safe_field
+from mloda.core.abstract_plugins.components.utils import safe_field, as_str
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.abstract_plugins.components.feature import Feature
@@ -113,7 +114,10 @@ class FeatureResolutionError(ValueError):
         super().__init__(message)
         self.feature_name = feature_name
         self.result = result
-        self.partial_records: tuple[ResolutionRecord, ...] = tuple(partial_records[-PARTIAL_RECORDS_CAP:])
+        # Cap then snapshot: slicing before deepcopy keeps the copied payload bounded on huge requests.
+        self.partial_records: tuple[ResolutionRecord, ...] = tuple(
+            deepcopy(record) for record in partial_records[-PARTIAL_RECORDS_CAP:]
+        )
 
     def __reduce__(
         self,
@@ -160,21 +164,10 @@ def _candidate_sort_key(feature_group: type[FeatureGroup]) -> tuple[str, str]:
     return feature_group.__name__, feature_group.__module__
 
 
-def _as_str(value: Any) -> str:
-    """Return `value` unchanged, raising TypeError on a non-str, so the guarded read that wraps this degrades.
-
-    A hook's annotation is a promise, not a guarantee. A non-str name reaching difflib raises there instead,
-    far from the plugin to blame, so every captured name is validated where it is read.
-    """
-    if not isinstance(value, str):
-        raise TypeError(f"expected str, got {type(value).__name__}")
-    return value
-
-
 def _supported_feature_names(feature_group: type[FeatureGroup]) -> set[str]:
     """Best-effort name catalog of one candidate. A malformed entry costs that candidate its whole catalog."""
     return safe_field(
-        lambda: {_as_str(name) for name in feature_group.feature_names_supported()},
+        lambda: {as_str(name) for name in feature_group.feature_names_supported()},
         set(),
         field=f"{feature_group.get_class_name()}.feature_names_supported",
     )
@@ -182,7 +175,7 @@ def _supported_feature_names(feature_group: type[FeatureGroup]) -> set[str]:
 
 def _prefix_name(feature_group: type[FeatureGroup]) -> str:
     """Best-effort prefix of one candidate."""
-    return safe_field(lambda: _as_str(feature_group.prefix()), "", field=f"{feature_group.get_class_name()}.prefix")
+    return safe_field(lambda: as_str(feature_group.prefix()), "", field=f"{feature_group.get_class_name()}.prefix")
 
 
 def _supports_framework(
@@ -459,7 +452,7 @@ class IdentifyFeatureGroupClass:
         ComputeFramework costs the whole candidate its names, well-formed entries included, as before the memo.
         """
         return safe_field(
-            lambda: {_as_str(cfw.get_class_name()) for cfw in self._declared_frameworks_of(feature_group)},
+            lambda: {as_str(cfw.get_class_name()) for cfw in self._declared_frameworks_of(feature_group)},
             set(),
             field=f"{feature_group.get_class_name()}.compute_framework_definition",
         )
@@ -552,7 +545,7 @@ class IdentifyFeatureGroupClass:
         if not self._filter_feature_group_by_scope(feature_group, feature):
             return None
         reason = self._value_rejection_reason(feature_group, feature)
-        return None if reason is None else _as_str(reason)
+        return None if reason is None else as_str(reason)
 
     def _capture_known_names(self, accessible_plugins: FeatureGroupEnvironmentMapping) -> tuple[str, ...]:
         known_names: list[str] = []

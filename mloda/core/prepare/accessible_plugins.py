@@ -27,6 +27,14 @@ logger = logging.getLogger(__name__)
 _warned_unregistered: set[str] = set()
 
 
+def _warn_once_unregistered(unregistered_names: list[str], plugin_kind: str) -> None:
+    """Warn about registry-missing plugins, remembering names so each is warned at most once across runs."""
+    new_names = [name for name in unregistered_names if name not in _warned_unregistered]
+    if new_names:
+        _warned_unregistered.update(new_names)
+        logger.warning("%s not registered in the plugin registry: %s.", plugin_kind, ", ".join(new_names))
+
+
 FeatureGroupEnvironmentMapping = dict[type[FeatureGroup], set[type[ComputeFramework]]]
 
 
@@ -81,10 +89,7 @@ def filter_extenders_by_strict_mode(
     unregistered_names = sorted({f"{type(e).__module__}:{type(e).__qualname__}" for e in unregistered})
 
     if strict_mode == "warn":
-        new_names = [name for name in unregistered_names if name not in _warned_unregistered]
-        if new_names:
-            _warned_unregistered.update(new_names)
-            logger.warning("Extenders not registered in the plugin registry: %s.", ", ".join(new_names))
+        _warn_once_unregistered(unregistered_names, "Extenders")
         return extenders
 
     if unregistered:
@@ -373,16 +378,9 @@ class PreFilterPlugins:
             unregistered = sorted(
                 f"{fg.__module__}:{fg.__qualname__}"
                 for fg in accessible_feature_groups
-                if fg not in registered
-                and not inspect.isabstract(fg)
-                and f"{fg.__module__}:{fg.__qualname__}" not in _warned_unregistered
+                if fg not in registered and not inspect.isabstract(fg)
             )
-            if unregistered:
-                _warned_unregistered.update(unregistered)
-                logger.warning(
-                    "FeatureGroups not registered in the plugin registry: %s.",
-                    ", ".join(unregistered),
-                )
+            _warn_once_unregistered(unregistered, "FeatureGroups")
 
         if len(accessible_feature_groups) == 0:
             if collector_filtered_everything:
@@ -415,10 +413,7 @@ class PreFilterPlugins:
         unregistered_names = sorted(f"{cfw.__module__}:{cfw.__qualname__}" for cfw in unregistered)
 
         if strict_mode == "warn":
-            new_names = [name for name in unregistered_names if name not in _warned_unregistered]
-            if new_names:
-                _warned_unregistered.update(new_names)
-                logger.warning("ComputeFrameworks not registered in the plugin registry: %s.", ", ".join(new_names))
+            _warn_once_unregistered(unregistered_names, "ComputeFrameworks")
             return compute_frameworks
 
         surviving = compute_frameworks - unregistered

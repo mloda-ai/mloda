@@ -249,17 +249,6 @@ class KnownFeatureGroup(FeatureGroup):
 class TestNoFeatureGroupFoundErrorMessage:
     """Tests for the improved 'no feature groups found' error message."""
 
-    def test_no_plugins_loaded_suggests_plugin_loader(self) -> None:
-        feature = Feature("some_feature")
-        accessible_plugins: FeatureGroupEnvironmentMapping = {}
-
-        with pytest.raises(ValueError, match="PluginLoader.all"):
-            IdentifyFeatureGroupClass(
-                feature=feature,
-                accessible_plugins=accessible_plugins,
-                links=None,
-            )
-
     def test_suggests_similar_feature_names(self) -> None:
         feature = Feature("knwon_feature")  # typo of "known_feature"
         accessible_plugins: FeatureGroupEnvironmentMapping = {

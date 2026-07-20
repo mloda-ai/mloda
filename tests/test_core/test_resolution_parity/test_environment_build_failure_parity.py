@@ -202,7 +202,6 @@ def test_resolve_feature_projects_the_environment_build_failure() -> None:
         winner_name = result.feature_group.get_class_name() if result.feature_group is not None else None
         error = result.error
         candidate_names = [candidate.get_class_name() for candidate in result.candidates]
-        environment = result.environment
         del result
     finally:
         del broken_fg
@@ -216,7 +215,6 @@ def test_resolve_feature_projects_the_environment_build_failure() -> None:
     assert ENV_BUILD_FAILURE_MESSAGE in error
     # The build aborts before matching, so a broken group is not a listed candidate.
     assert candidate_names == []
-    assert environment == "standalone-default"
 
 
 def test_resolve_feature_names_the_broken_plugin_for_an_unrelated_feature() -> None:

@@ -7,8 +7,7 @@ uses, so the debug API resolves against the universe a real run sees. What that 
      a framework a matching group does not declare empties its available set, so the group fails to resolve,
      mirroring how ``PreFilterPlugins`` intersects the caller's framework set.
   2. A ``plugin_collector`` yields the same universe the engine builds, registry strict mode included.
-  3. ``ResolvedFeature.environment`` ("standalone-default") is carried on every result, success and error.
-  4. Scoping the universe (strict mode, and equally a collector's enabled/disabled filter) drops a broken
+  3. Scoping the universe (strict mode, and equally a collector's enabled/disabled filter) drops a broken
      plugin before its declaration is consulted, so it cannot abort the build for everyone (#790).
 """
 
@@ -24,7 +23,6 @@ from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.api.plugin_docs import resolve_feature
-from mloda.core.api.plugin_info import ResolvedFeature
 from mloda.core.prepare.accessible_plugins import PreFilterPlugins
 from mloda.user import PluginCollector, PluginLoader
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
@@ -33,7 +31,6 @@ from mloda_plugins.compute_framework.base_implementations.python_dict.python_dic
 )
 
 
-PLAIN_FEATURE_757 = "PlainResolve757Feature"
 PYTHON_DICT_ONLY_FEATURE = "PythonDictOnlyResolve757Feature"
 STRICT_EXCLUDED_FEATURE = "StrictExcludedResolve757Feature"
 BROKEN_RULE_FEATURE_757 = "broken_rule_resolve_757_feature"
@@ -43,26 +40,6 @@ BROKEN_RULE_FEATURE_757 = "broken_rule_resolve_757_feature"
 def load_plugins() -> None:
     """Load all plugins before running tests in this module."""
     PluginLoader.all()
-
-
-class PlainResolve757FeatureGroup(FeatureGroup):
-    """A plain, unambiguously resolvable fixture matching its own feature name."""
-
-    @classmethod
-    def compute_framework_rule(cls) -> set[type[ComputeFramework]] | None:
-        return {PandasDataFrame, PythonDictFramework}
-
-    @classmethod
-    def match_feature_group_criteria(
-        cls,
-        feature_name: FeatureName | str,
-        options: Options,
-        data_access_collection: Optional[DataAccessCollection] = None,
-    ) -> bool:
-        return str(feature_name) == PLAIN_FEATURE_757
-
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
-        return None
 
 
 class PythonDictOnlyResolve757FeatureGroup(FeatureGroup):
@@ -201,32 +178,6 @@ class TestResolveFeatureCollectorUniverseParity:
         assert scoped.error is not None
 
 
-class TestResolvedFeatureEnvironmentLabel:
-    """DoD-3: ResolvedFeature gains environment: str = "standalone-default", carried on every result (#757)."""
-
-    def test_dataclass_default_is_standalone_default(self) -> None:
-        """The 4-positional-arg constructor still works and defaults environment to the literal label."""
-        result = ResolvedFeature("n", None, [], None)
-        assert result.environment == "standalone-default"
-
-    def test_resolving_result_carries_environment(self) -> None:
-        """A successful resolution reports the standalone-default environment."""
-        collector = PluginCollector.enabled_feature_groups({PlainResolve757FeatureGroup})
-
-        result = resolve_feature(PLAIN_FEATURE_757, plugin_collector=collector)
-
-        assert result.feature_group is PlainResolve757FeatureGroup
-        assert result.environment == "standalone-default"
-
-    def test_no_match_error_result_carries_environment(self) -> None:
-        """A no-match / error result also reports the standalone-default environment."""
-        result = resolve_feature("CompletelyMissing757FeatureXYZ")
-
-        assert result.feature_group is None
-        assert result.error is not None
-        assert result.environment == "standalone-default"
-
-
 class TestScopingABrokenPluginOutOfTheUniverse:
     """DoD-4: scoping the universe keeps a broken plugin from ever being consulted (#757, #790)."""
 
@@ -249,7 +200,6 @@ class TestScopingABrokenPluginOutOfTheUniverse:
             result = resolve_feature(BROKEN_RULE_FEATURE_757, plugin_collector=collector)
             winner_name = result.feature_group.get_class_name() if result.feature_group is not None else None
             error = result.error
-            environment = result.environment
             del result
         finally:
             del broken_fg
@@ -259,4 +209,3 @@ class TestScopingABrokenPluginOutOfTheUniverse:
         assert error is not None
         assert f"No feature groups found for feature name: '{BROKEN_RULE_FEATURE_757}'" in error
         assert "Failed to build the plugin environment" not in error
-        assert environment == "standalone-default"

@@ -35,7 +35,6 @@ class RenderFacts:
     The empty instance is the success value: the winning path captures nothing.
     """
 
-    environment_empty: bool = False
     domains: dict[type[FeatureGroup], str] = field(default_factory=dict)
     concrete_frameworks: tuple[str, ...] = ()
     value_rejections: tuple[tuple[str, str], ...] = ()
@@ -253,9 +252,6 @@ def _render_none(result: EvaluationResult, feature: Feature, callout: str | None
     if callout:
         msg += f" {callout}"
 
-    if result.facts.environment_empty:
-        return msg + "\nNo plugins are loaded. Did you call PluginLoader.all()?"
-
     if result.facts.value_rejections:
         lines = "\n".join(f"  - {class_name}: {reason}" for class_name, reason in sorted(result.facts.value_rejections))
         msg += f"\nFeature group(s) rejected the supplied options while matching '{feature_name}':\n{lines}"
@@ -379,24 +375,20 @@ class IdentifyFeatureGroupClass:
         Only reached when the pass has no single winner, so the success path stays hook-free. Every provider
         hook here is best-effort: a raising one degrades its own fact, never this call or a sibling's fact.
         """
-        environment_empty = not accessible_plugins
-
         if result.failure_kind == "multiple":
-            return RenderFacts(environment_empty=environment_empty, domains=self._capture_domains(result))
+            return RenderFacts(domains=self._capture_domains(result))
 
         # Capability rejections win over the abstract-only fallback, and both over the ordinary none.
         capability_frameworks = self._capture_capability_frameworks(result, feature)
         if any(candidate.rejected for candidate in capability_frameworks.values()):
-            return RenderFacts(environment_empty=environment_empty, capability_frameworks=capability_frameworks)
+            return RenderFacts(capability_frameworks=capability_frameworks)
 
         if result.abstract_matched:
             return RenderFacts(
-                environment_empty=environment_empty,
                 concrete_frameworks=self._concrete_implementation_frameworks(result, accessible_plugins),
             )
 
         return RenderFacts(
-            environment_empty=environment_empty,
             value_rejections=self._capture_value_rejections(feature, accessible_plugins),
             known_names=self._capture_known_names(accessible_plugins),
         )

@@ -21,11 +21,10 @@ its frameworks fails the environment build, which `resolve_feature` prefixes wit
 `Failed to build the plugin environment:` where a run raises it bare. See
 [Broken framework declarations](../discover-plugins.md#broken-framework-declarations).
 
-Its environment is a standalone default (`result.environment` is
-`"standalone-default"`), not a replay of a specific run. Pass a `Feature`,
-`options`, `plugin_collector`, `links`, `data_access_collection`, or
-`compute_frameworks` (a run that restricts its frameworks needs this to mirror)
-to reproduce the run you are debugging. See
+Its candidate universe is a standalone default, not a replay of a specific run.
+Pass a `Feature`, `options`, `plugin_collector`, `links`,
+`data_access_collection`, or `compute_frameworks` (a run that restricts its
+frameworks needs this to mirror) to reproduce the run you are debugging. See
 [Discover Plugins](../discover-plugins.md) for the full signature.
 
 ## Multiple Feature Groups Error

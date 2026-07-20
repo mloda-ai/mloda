@@ -4,6 +4,12 @@ from mloda.provider import FeatureGroup
 from mloda.provider import FeatureSet
 from mloda.provider import BaseInputData
 from mloda_plugins.feature_group.input_data.read_document import ReadDocument
+from mloda_plugins.feature_group.input_data.reader_option_specs import (
+    DATA_ACCESS_HANDLE,
+    DATA_ACCESS_HANDLE_SPEC,
+    DOCUMENT_SUFFIXES,
+    DOCUMENT_SUFFIXES_SPEC,
+)
 
 
 class ReadDocumentFeature(FeatureGroup):
@@ -12,6 +18,11 @@ class ReadDocumentFeature(FeatureGroup):
     Delegates to ``ReadDocument``, which extracts structured data from
     document formats and returns the result as a compute-framework object.
     """
+
+    PROPERTY_MAPPING = {
+        DOCUMENT_SUFFIXES: DOCUMENT_SUFFIXES_SPEC,
+        DATA_ACCESS_HANDLE: DATA_ACCESS_HANDLE_SPEC,
+    }
 
     @classmethod
     def input_data(cls) -> Optional[BaseInputData]:

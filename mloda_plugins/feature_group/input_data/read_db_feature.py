@@ -4,6 +4,10 @@ from mloda.provider import FeatureGroup
 from mloda.provider import FeatureSet
 from mloda.provider import BaseInputData
 from mloda_plugins.feature_group.input_data.read_db import ReadDB
+from mloda_plugins.feature_group.input_data.reader_option_specs import (
+    DATA_ACCESS_HANDLE,
+    DATA_ACCESS_HANDLE_SPEC,
+)
 
 
 class ReadDBFeature(FeatureGroup):
@@ -12,6 +16,10 @@ class ReadDBFeature(FeatureGroup):
     Delegates to ``ReadDB``, which executes queries against a configured
     database connection and returns the result as a compute-framework object.
     """
+
+    PROPERTY_MAPPING = {
+        DATA_ACCESS_HANDLE: DATA_ACCESS_HANDLE_SPEC,
+    }
 
     @classmethod
     def input_data(cls) -> Optional[BaseInputData]:

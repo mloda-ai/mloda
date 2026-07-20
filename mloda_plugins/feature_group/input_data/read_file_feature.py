@@ -4,6 +4,12 @@ from mloda.provider import FeatureGroup
 from mloda.provider import FeatureSet
 from mloda.provider import BaseInputData
 from mloda_plugins.feature_group.input_data.read_file import ReadFile
+from mloda_plugins.feature_group.input_data.reader_option_specs import (
+    DATA_ACCESS_HANDLE,
+    DATA_ACCESS_HANDLE_SPEC,
+    DOCUMENT_SUFFIXES,
+    DOCUMENT_SUFFIXES_SPEC,
+)
 
 
 class ReadFileFeature(FeatureGroup):
@@ -13,6 +19,11 @@ class ReadFileFeature(FeatureGroup):
     ``ReadFile``, which selects a reader based on the file extension provided
     in the feature options.
     """
+
+    PROPERTY_MAPPING = {
+        DOCUMENT_SUFFIXES: DOCUMENT_SUFFIXES_SPEC,
+        DATA_ACCESS_HANDLE: DATA_ACCESS_HANDLE_SPEC,
+    }
 
     @classmethod
     def input_data(cls) -> Optional[BaseInputData]:

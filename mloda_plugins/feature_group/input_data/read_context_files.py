@@ -9,7 +9,7 @@ from mloda.user import FeatureName
 from mloda.provider import FeatureSet
 from mloda.user import JoinType
 from mloda.user import Options
-from mloda.provider import DefaultOptionKeys
+from mloda.provider import DefaultOptionKeys, property_spec
 from mloda_plugins.feature_group.experimental.dynamic_feature_group_factory.dynamic_feature_group_factory import (
     DynamicFeatureGroupCreator,
 )
@@ -36,6 +36,34 @@ class ConcatenatedFileContent(FeatureGroup):
 
     It uses dynamic feature group creation to create the single reader feature groups (a feature group per file).
     """
+
+    PROPERTY_MAPPING = {
+        "disallowed_files": property_spec(
+            "File basenames excluded from reading; the runtime default is ['__init__.py'].",
+            default=None,
+            context=False,
+        ),
+        "file_paths": property_spec(
+            "Explicit files to concatenate; when unset, target_folder is scanned (one of the two is required at runtime).",
+            default=None,
+            context=False,
+        ),
+        "target_folder": property_spec(
+            "Folder(s) scanned for files when file_paths is unset (one of the two is required at runtime).",
+            default=None,
+            context=False,
+        ),
+        "file_type": property_spec(
+            "File suffix to scan for in target_folder; the runtime default is 'py'.",
+            default=None,
+            context=False,
+        ),
+        "document_reader_class": property_spec(
+            "Name of the ReadDocument subclass that reads each file; required at runtime.",
+            default=None,
+            context=False,
+        ),
+    }
 
     # This feature should just be created once mlodaAPI run.
     join_feature_name = "FGConcatenatedFileContent_JoinLLMFiles"

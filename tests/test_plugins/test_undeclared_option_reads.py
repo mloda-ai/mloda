@@ -1,4 +1,4 @@
-"""Static sweep: every Options key an experimental plugin reads must be a declared PROPERTY_MAPPING key.
+"""Static sweep: every Options key a feature_group plugin reads must be a declared PROPERTY_MAPPING key.
 
 A feature group that reads ``options.get("foo")`` (directly, through a class constant, through a
 ``DefaultOptionKeys`` member, or through a local alias of one) is promising its users a ``foo`` option.
@@ -10,12 +10,10 @@ The check is deliberately GLOBAL: a key passes when SOME shipped feature group d
 that reads it. That is the intended model for shared keys like ``reference_time``; per-group owning-surface
 attribution is out of scope for this sweep.
 
-Scope notes (both are load-bearing and deliberately narrower than a naive reading of the ticket):
+Scope notes:
 
-* ``SCAN_ROOT`` is ``mloda_plugins/feature_group/experimental`` rather than the whole ``feature_group``
-  tree. The ticket inventory covers exactly the experimental subtree, and the dynamic allowlist path
-  below is written relative to it. The ``input_data`` readers under ``feature_group`` carry their own,
-  out-of-ticket set of undeclared literal reads that this sweep intentionally does not touch.
+* ``SCAN_ROOT`` is the whole ``mloda_plugins/feature_group`` tree (issue os-013 widened it from the
+  experimental subtree), so the ``input_data`` readers are swept too; allowlist paths are relative to it.
 * ``reference_time`` is a ``DefaultOptionKeys`` member yet is NOT treated as framework-reserved here.
   The time-based groups expose it as a user-overridable column option, so os-004 reclassifies it as a
   key those groups must DECLARE. The remaining ``DefaultOptionKeys`` values stay framework-reserved.
@@ -38,11 +36,15 @@ from mloda_plugins.feature_group.experimental.sklearn.encoding.base import Encod
 from mloda_plugins.feature_group.experimental.sklearn.pipeline.base import SklearnPipelineFeatureGroup
 from mloda_plugins.feature_group.experimental.sklearn.scaling.base import ScalingFeatureGroup
 from mloda_plugins.feature_group.experimental.time_window.base import TimeWindowFeatureGroup
+from mloda_plugins.feature_group.input_data.read_context_files import ConcatenatedFileContent
+from mloda_plugins.feature_group.input_data.read_db_feature import ReadDBFeature
+from mloda_plugins.feature_group.input_data.read_document_feature import ReadDocumentFeature
+from mloda_plugins.feature_group.input_data.read_file_feature import ReadFileFeature
 
 # Anchor the scan root to the repo layout via __file__, not the cwd: a cwd-relative root makes the
 # rglob loops empty and the sweep pass vacuously. This file sits two parents below the repo root.
 _REPO_ROOT = Path(__file__).resolve().parents[2]
-SCAN_ROOT = _REPO_ROOT / "mloda_plugins" / "feature_group" / "experimental"
+SCAN_ROOT = _REPO_ROOT / "mloda_plugins" / "feature_group"
 assert SCAN_ROOT.exists(), f"scan root not found; check the parents index for the repo root: {SCAN_ROOT}"
 
 # Accessor calls whose result is an Options-like object: cls.get_singular_option_from_options(...).get(...)
@@ -67,17 +69,27 @@ FRAMEWORK_KEYS: frozenset[str] = frozenset(_DEFAULT_OPTION_KEY_MEMBERS.values())
 # source file (relative to SCAN_ROOT): a read of the same literal from any other file is still flagged.
 ALLOWED_LITERAL_KEYS: dict[str, tuple[str, str, str]] = {
     "initial_requested_data": (
-        "source_input_feature.py",
+        "experimental/source_input_feature.py",
         "SourceInputFeatureComposite",
         "engine-internal request-scoping signal set as a Feature attribute; not a user-facing option",
+    ),
+    "BaseInputData": (
+        "input_data/read_dbs/sqlite.py",
+        "SQLITEReader",
+        "engine-internal (ReaderClass, data_access) tuple recorded by BaseInputData matching and "
+        "consumed by init_reader; not a user-facing option",
     ),
 }
 
 # Reads whose key is computed at runtime, keyed by (path relative to SCAN_ROOT, enclosing function).
 ALLOWED_DYNAMIC_READS: dict[tuple[str, str], tuple[str, str]] = {
-    ("forecasting/forecasting_artifact.py", "custom_loader"): (
+    ("experimental/forecasting/forecasting_artifact.py", "custom_loader"): (
         "ForecastingArtifact",
         "artifact is keyed by the runtime feature name, not a fixed option key",
+    ),
+    ("input_data/read_document.py", "load_data"): (
+        "ReadDocument",
+        "reader-selection contract: the options key is the reader's class name, computed at runtime",
     ),
 }
 
@@ -305,9 +317,9 @@ def declared_union() -> frozenset[str]:
 
 
 def test_no_undeclared_static_option_reads() -> None:
-    """No experimental plugin reads an Options key that no FeatureGroup declares (outside the narrow allowlist)."""
+    """No feature_group plugin reads an Options key that no FeatureGroup declares (outside the narrow allowlist)."""
     assert SCAN_ROOT.exists(), SCAN_ROOT
-    assert _count_reads(SCAN_ROOT) >= 25, "scan found too few reads; SCAN_ROOT is likely misconfigured"
+    assert _count_reads(SCAN_ROOT) >= 40, "scan found too few reads; SCAN_ROOT is likely misconfigured"
     violations = find_violations(
         SCAN_ROOT,
         declared_union(),
@@ -331,6 +343,26 @@ def test_artifact_storage_path_declared_by_sklearn_groups() -> None:
     assert "artifact_storage_path" in EncodingFeatureGroup.declared_option_keys()
     assert "artifact_storage_path" in ScalingFeatureGroup.declared_option_keys()
     assert "artifact_storage_path" in SklearnPipelineFeatureGroup.declared_option_keys()
+
+
+def test_reader_groups_declare_document_suffixes() -> None:
+    """The file and document readers declare the document_suffixes option they read."""
+    assert "document_suffixes" in ReadFileFeature.declared_option_keys()
+    assert "document_suffixes" in ReadDocumentFeature.declared_option_keys()
+
+
+def test_reader_groups_declare_data_access_handle() -> None:
+    """The reader groups declare the data_access_handle option their readers consume."""
+    assert "data_access_handle" in ReadFileFeature.declared_option_keys()
+    assert "data_access_handle" in ReadDocumentFeature.declared_option_keys()
+    assert "data_access_handle" in ReadDBFeature.declared_option_keys()
+
+
+def test_concatenated_file_content_declares_its_keys() -> None:
+    """ConcatenatedFileContent declares every option key it reads."""
+    declared = ConcatenatedFileContent.declared_option_keys()
+    for key in ("disallowed_files", "file_paths", "target_folder", "file_type", "document_reader_class"):
+        assert key in declared, key
 
 
 def test_scanner_flags_new_undeclared_literal_read(tmp_path: Path) -> None:

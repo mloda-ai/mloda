@@ -1089,9 +1089,11 @@ class FeatureChainParser:
                 patterns = FeatureChainParser._flatten_patterns(FeatureChainParser.prefix_patterns_of(guarded_cls))
                 parsed = safe_field(
                     lambda: FeatureChainParser.parse_name(feature_name, patterns, CHAIN_SEPARATOR),
-                    ParsedFeatureName.no_match(),
-                    catching=(ValueError,),
+                    None,
+                    catching=(ValueError, re.error),
                 )
+                if parsed is None:
+                    return False
                 if not FeatureChainParser._name_identifies_group(parsed, mapping):
                     return True
                 bindings = FeatureChainParser.bind_name_captures(parsed, mapping)

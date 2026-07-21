@@ -44,7 +44,10 @@ from mloda.core.api import plugin_docs
 from mloda.core.api.plugin_docs import resolve_feature
 from mloda.core.prepare import identify_feature_group
 from mloda.core.prepare.accessible_plugins import FeatureGroupEnvironmentMapping, PreFilterPlugins
-from mloda.core.prepare.identify_feature_group import IdentifyFeatureGroupClass, render_resolution_failure
+from mloda.core.prepare.identify_feature_group import (
+    IdentifyFeatureGroupClass,
+    render_resolution_failure,
+)
 from tests.test_core.test_prepare.identify_seam import evaluate_or_raise
 
 
@@ -853,7 +856,9 @@ class TestEngineAndResolveFeatureAgree:
         if "multiple" in scenario_name:
             assert message.startswith("Multiple feature groups found for feature")
         elif "capability" in scenario_name:
-            assert message.startswith("Unsupported compute framework(s) for feature")
+            # Capability rejection is now a near-miss line under the ordinary none message, not its own message.
+            assert message.startswith("No feature groups found for feature name:")
+            assert "(compute framework): supports_compute_framework rejected" in message
         else:
             assert message.startswith("No feature groups found for feature name:")
 
@@ -928,12 +933,11 @@ class TestDecisionHooksRunAtMostOncePerCandidate:
         }
 
     def test_engine_asks_the_capability_hook_once_per_candidate_framework_pair(self) -> None:
-        """The decision loop split the enabled framework; capture may only ask about the declared rest."""
+        """Run-only: the hook is asked solely over the run-enabled frameworks, so the disabled FwTwo is dropped."""
         _engine_error(capability_scenario())
 
         assert PAIR_CALLS == {
             ("SinglePassCapabilityRejectFG_782", "SinglePassFwOne_782"): 1,
-            ("SinglePassCapabilityRejectFG_782", "SinglePassFwTwo_782"): 1,
         }
 
     def test_resolve_feature_asks_the_capability_hook_once_per_candidate_framework_pair(self) -> None:
@@ -942,14 +946,13 @@ class TestDecisionHooksRunAtMostOncePerCandidate:
 
         assert PAIR_CALLS == {
             ("SinglePassCapabilityRejectFG_782", "SinglePassFwOne_782"): 1,
-            ("SinglePassCapabilityRejectFG_782", "SinglePassFwTwo_782"): 1,
         }
 
     def test_engine_asks_the_capability_hook_once_for_the_abstract_only_concrete_subclass(self) -> None:
-        """The subclass declares one framework the run disabled: capture asks about it once, and only it."""
+        """Run-only: the subclass declares only a run-disabled framework, so the hook is not asked at all."""
         _engine_error(abstract_only_scenario())
 
-        assert PAIR_CALLS == {("SinglePassConcreteSubFG_782", "SinglePassFwTwo_782"): 1}
+        assert PAIR_CALLS == {}
 
     def test_engine_asks_the_link_hooks_once_per_candidate_and_index(self) -> None:
         """index_columns is per candidate; supports_index is per (candidate, index)."""
@@ -982,7 +985,7 @@ class TestDecisionHooksRunAtMostOncePerCandidate:
         message = _engine_error(scenario)
 
         assert _counts_for("_strict_validation_rejection_reason") == {}
-        assert f"  - SinglePassStrictFG_782: {STRICT_REJECTION_REASON_782}" in message
+        assert f"  - SinglePassStrictFG_782 (option value): {STRICT_REJECTION_REASON_782}" in message
 
     def test_resolve_feature_renders_the_value_rejection_from_the_first_pass_without_the_hook(self) -> None:
         """Same contract across the diagnostic API: rendered from the first pass, hook not consulted."""
@@ -991,7 +994,7 @@ class TestDecisionHooksRunAtMostOncePerCandidate:
         message = _resolve_error(scenario)
 
         assert _counts_for("_strict_validation_rejection_reason") == {}
-        assert f"  - SinglePassStrictFG_782: {STRICT_REJECTION_REASON_782}" in message
+        assert f"  - SinglePassStrictFG_782 (option value): {STRICT_REJECTION_REASON_782}" in message
 
     def test_engine_asks_a_reader_style_matcher_once_per_candidate(self) -> None:
         """A matcher that consults a DataAccessCollection is asked once, like any other."""
@@ -1016,7 +1019,7 @@ class TestStatefulHookCannotChangeTheResultOrItsMessage:
         resolve_message = _resolve_error(stateful_match_scenario())
 
         assert engine_message == resolve_message
-        assert engine_message.startswith("Unsupported compute framework(s) for feature")
+        assert engine_message.startswith("No feature groups found for feature name:")
         assert "SinglePassFwOne_782" in engine_message
 
     def test_stateful_matcher_keeps_its_candidate_in_resolve_feature(self) -> None:
@@ -1031,7 +1034,7 @@ class TestStatefulHookCannotChangeTheResultOrItsMessage:
 
         assert resolved.error is not None
         assert [candidate.get_class_name() for candidate in resolved.candidates] == ["SinglePassStatefulMatchFG_782"]
-        assert resolved.error.startswith("Unsupported compute framework(s) for feature")
+        assert resolved.error.startswith("No feature groups found for feature name:")
 
     def test_stateful_capability_hook_message_describes_the_first_answer(self) -> None:
         """First answer: the framework is rejected. A later 'supported' answer must not rewrite the message."""
@@ -1040,7 +1043,7 @@ class TestStatefulHookCannotChangeTheResultOrItsMessage:
         resolve_message = _resolve_error(stateful_support_scenario())
 
         assert engine_message == resolve_message
-        assert engine_message.startswith("Unsupported compute framework(s) for feature")
+        assert engine_message.startswith("No feature groups found for feature name:")
         assert "SinglePassFwOne_782" in engine_message
 
     def test_stateful_capability_hook_is_asked_once_per_pair(self) -> None:
@@ -1177,7 +1180,7 @@ class TestMalformedHookValuesDegradeLikeARaise:
         assert message.startswith(f"No feature groups found for feature name: '{BAD_CATALOG_FEATURE_782}'.")
         assert TROUBLESHOOTING_LINE_782 in message
 
-    def test_a_hostile_rejection_hook_cannot_inject_a_reason_into_the_facts(self) -> None:
+    def test_a_hostile_rejection_hook_cannot_inject_a_reason_into_the_eliminations(self) -> None:
         """Two same-named groups override the hook, one with a non-str reason: neither is consulted.
 
         The old hazard was a sorted() over hook-provided reasons, where two same-named candidates forced
@@ -1195,8 +1198,9 @@ class TestMalformedHookValuesDegradeLikeARaise:
         result = IdentifyFeatureGroupClass.evaluate(feature=feature, accessible_plugins=accessible_plugins, links=None)
         message = render_resolution_failure(result, feature)
 
+        # These matchers name-mismatch and record nothing, so no reason (malformed or not) is ever attributed.
         assert _counts_for("_strict_validation_rejection_reason") == {}
-        assert result.facts.value_rejections == ()
+        assert result.eliminations == {}
         assert message is not None
         assert HEALTHY_REJECTION_REASON_782 not in message
         assert str(BAD_REASON_VALUE_782) not in message

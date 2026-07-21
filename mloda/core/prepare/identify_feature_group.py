@@ -32,6 +32,25 @@ class CandidateFrameworks:
     rejected: frozenset[type[ComputeFramework]] = frozenset()
 
 
+EliminationStage = Literal[
+    "value_rejection",
+    "domain",
+    "scope",
+    "capability",
+    "frameworks_not_enabled",
+    "framework_pin",
+    "links",
+]
+
+
+@dataclass(frozen=True)
+class Elimination:
+    """Why one near-miss candidate lost: the first gate it failed and that gate's reason."""
+
+    stage: EliminationStage
+    reason: str
+
+
 @dataclass(frozen=True)
 class RenderFacts:
     """Facts captured during the decision pass so rendering needs no provider hook.
@@ -41,11 +60,10 @@ class RenderFacts:
 
     domains: dict[type[FeatureGroup], str] = field(default_factory=dict)
     concrete_frameworks: tuple[str, ...] = ()
-    value_rejections: tuple[tuple[str, str], ...] = ()
     known_names: tuple[str, ...] = ()
-    # Render-only split over the DECLARED available frameworks, which is wider than the run's own
-    # candidate_frameworks split: a framework the run did not enable still renders as supported.
-    capability_frameworks: dict[type[FeatureGroup], CandidateFrameworks] = field(default_factory=dict)
+    # Class name and prefix of each eliminated near-miss, so a "Did you mean" suggestion that merely echoes
+    # a candidate the near-miss block already named can be suppressed.
+    eliminated_hints: frozenset[str] = frozenset()
 
 
 @dataclass(frozen=True)
@@ -56,6 +74,7 @@ class EvaluationResult:
     criteria_matched: set[type[FeatureGroup]] = field(default_factory=set)
     abstract_matched: set[type[FeatureGroup]] = field(default_factory=set)
     candidate_frameworks: dict[type[FeatureGroup], CandidateFrameworks] = field(default_factory=dict)
+    eliminations: dict[type[FeatureGroup], Elimination] = field(default_factory=dict)
     facts: RenderFacts = field(default_factory=RenderFacts)
 
     @property
@@ -181,15 +200,26 @@ def _prefix_name(feature_group: type[FeatureGroup]) -> str:
     return safe_field(lambda: as_str(feature_group.prefix()), "", field=f"{feature_group.get_class_name()}.prefix")
 
 
-def _supports_framework(
-    feature_group: type[FeatureGroup], feature: Feature, compute_framework: type[ComputeFramework]
-) -> bool | None:
-    """Best-effort capability answer. None when the hook raised, leaving the pair undecided for rendering."""
-    return safe_field(
-        lambda: feature_group.supports_compute_framework(feature.name, feature.options, compute_framework),
-        None,
-        field=f"{feature_group.get_class_name()}.supports_compute_framework",
+_STAGE_LABELS: dict[EliminationStage, str] = {
+    "value_rejection": "option value",
+    "domain": "domain",
+    "scope": "scope",
+    "capability": "compute framework",
+    "frameworks_not_enabled": "compute framework",
+    "framework_pin": "compute framework pin",
+    "links": "links",
+}
+
+
+def _render_near_miss_block(result: EvaluationResult, feature: Feature) -> str | None:
+    """Shared section naming each eliminated near-miss candidate, its gate label, and its reason."""
+    if not result.eliminations:
+        return None
+    lines = "\n".join(
+        f"  - {fg.__name__} ({_STAGE_LABELS[result.eliminations[fg].stage]}): {result.eliminations[fg].reason}"
+        for fg in sorted(result.eliminations, key=_candidate_sort_key)
     )
+    return f"Feature group(s) eliminated while matching '{str(feature.name)}':\n{lines}"
 
 
 def _render_multiple(result: EvaluationResult, feature: Feature, callout: str | None) -> str:
@@ -208,45 +238,31 @@ def _render_multiple(result: EvaluationResult, feature: Feature, callout: str | 
     )
 
 
-def _render_capability(result: EvaluationResult, feature: Feature) -> str | None:
-    """One line per candidate that rejects a framework, each naming only its OWN frameworks."""
-    rejecting = {fg: cfw for fg, cfw in result.facts.capability_frameworks.items() if cfw.rejected}
-    if not rejecting:
-        return None
-
-    lines = []
-    for fg in sorted(rejecting, key=_candidate_sort_key):
-        candidate_frameworks = rejecting[fg]
-        rejected_names = sorted(fw.get_class_name() for fw in candidate_frameworks.rejected)
-        line = f"  - {fg.__name__}: {rejected_names}."
-        if candidate_frameworks.supported:
-            supported_names = sorted(fw.get_class_name() for fw in candidate_frameworks.supported)
-            line += f" Supported on: {supported_names}."
-        lines.append(line)
-
-    body = "\n".join(lines)
-    return (
-        f"Unsupported compute framework(s) for feature '{str(feature.name)}':\n"
-        f"{body}\n"
-        "Pin the feature to a supported compute framework or override supports_compute_framework."
-    )
-
-
-def _render_abstract_only(result: EvaluationResult, feature: Feature) -> str:
+def _render_abstract_only(result: EvaluationResult, feature: Feature, callout: str | None) -> str:
     feature_name = str(feature.name)
     if not result.facts.concrete_frameworks:
-        return (
+        msg = (
             f"No feature groups found for feature name: '{feature_name}'. "
             f"Only abstract feature group base(s) matched, which cannot be instantiated; "
             f"no concrete implementation is available or enabled."
         )
+    else:
+        framework_names = sorted(result.facts.concrete_frameworks)
+        msg = (
+            f"No feature groups found for feature name: '{feature_name}'. "
+            f"Its concrete implementations require compute framework(s) {framework_names}, "
+            f"none of which are available or enabled for this run."
+        )
 
-    framework_names = sorted(result.facts.concrete_frameworks)
-    return (
-        f"No feature groups found for feature name: '{feature_name}'. "
-        f"Its concrete implementations require compute framework(s) {framework_names}, "
-        f"none of which are available or enabled for this run."
-    )
+    # Place the callout on the sentence line, before the near-miss block, exactly as _render_none does, so it
+    # is never space-glued to the last near-miss bullet.
+    if callout:
+        msg += f" {callout}"
+
+    near_miss = _render_near_miss_block(result, feature)
+    if near_miss is not None:
+        msg += f"\n{near_miss}"
+    return msg
 
 
 def _render_none(result: EvaluationResult, feature: Feature, callout: str | None) -> str:
@@ -256,11 +272,14 @@ def _render_none(result: EvaluationResult, feature: Feature, callout: str | None
     if callout:
         msg += f" {callout}"
 
-    if result.facts.value_rejections:
-        lines = "\n".join(f"  - {class_name}: {reason}" for class_name, reason in sorted(result.facts.value_rejections))
-        msg += f"\nFeature group(s) rejected the supplied options while matching '{feature_name}':\n{lines}"
+    near_miss = _render_near_miss_block(result, feature)
+    if near_miss is not None:
+        msg += f"\n{near_miss}"
 
     similar = get_close_matches(feature_name, list(result.facts.known_names), n=5, cutoff=0.5)
+    # Drop suggestions that merely echo a candidate the near-miss block already named; if that empties the
+    # list, omit the line rather than repeat what was just eliminated.
+    similar = [name for name in similar if name not in result.facts.eliminated_hints]
     if similar:
         msg += f"\nDid you mean one of: {similar}?"
 
@@ -287,13 +306,8 @@ def render_resolution_failure(result: EvaluationResult, feature: Feature) -> str
     if kind == "multiple":
         return _render_multiple(result, feature, callout)
 
-    capability_message = _render_capability(result, feature)
-    if capability_message is not None:
-        return f"{capability_message} {callout}" if callout else capability_message
-
     if result.abstract_matched:
-        abstract_message = _render_abstract_only(result, feature)
-        return f"{abstract_message} {callout}" if callout else abstract_message
+        return _render_abstract_only(result, feature, callout)
 
     return _render_none(result, feature, callout)
 
@@ -303,6 +317,7 @@ class IdentifyFeatureGroupClass:
     _abstract_matched_feature_groups: set[type[FeatureGroup]]
     _candidate_frameworks: dict[type[FeatureGroup], CandidateFrameworks]
     _match_rejections: dict[type[FeatureGroup], str]
+    _eliminations: dict[type[FeatureGroup], Elimination]
     _data_access_collection: Optional[DataAccessCollection]
     # Per-evaluation memos of the hooks more than one reader wants. evaluate() builds a fresh instance, so
     # they are scoped to one resolution attempt and never cache across runs.
@@ -313,8 +328,9 @@ class IdentifyFeatureGroupClass:
         self._criteria_matched_feature_groups = set()
         self._abstract_matched_feature_groups = set()
         self._candidate_frameworks = {}
-        # Reasons the first pass recorded, keyed by candidate class.
+        # Reasons the first match pass recorded, keyed by candidate class.
         self._match_rejections = {}
+        self._eliminations = {}
         self._domain_outcomes = {}
         self._declared_frameworks = {}
         self._data_access_collection = data_access_collection
@@ -349,9 +365,12 @@ class IdentifyFeatureGroupClass:
             criteria_matched=self._criteria_matched_feature_groups,
             abstract_matched=self._abstract_matched_feature_groups,
             candidate_frameworks=self._candidate_frameworks,
+            eliminations=self._eliminations,
         )
         if result.failure_kind is not None:
-            result = replace(result, facts=self._capture_render_facts(result, feature, accessible_plugins))
+            # Every elimination (value_rejection included) was already recorded during the single filter pass;
+            # this only captures the non-elimination facts the messages still need.
+            result = replace(result, facts=self._capture_render_facts(result, accessible_plugins))
         # A captured exception pins its traceback, whose frames pin this instance: a refcount cycle that would
         # keep both alive until a gc pass. Dropping the outcomes here makes the memo's lifetime what it claims.
         self._domain_outcomes.clear()
@@ -360,31 +379,33 @@ class IdentifyFeatureGroupClass:
     def _capture_render_facts(
         self,
         result: EvaluationResult,
-        feature: Feature,
         accessible_plugins: FeatureGroupEnvironmentMapping,
     ) -> RenderFacts:
-        """Capture what rendering needs, following the branch precedence the message builders use today.
+        """Capture the non-elimination facts the messages still need, precedence-free.
 
-        Only reached when the pass has no single winner, so the success path stays hook-free. Every provider
-        hook here is best-effort: a raising one degrades its own fact, never this call or a sibling's fact.
+        The renderer alone owns which message wins, so this does not mirror its branch order: it captures
+        all three facts unconditionally (the failure path is rare). domains feeds the multiple message,
+        concrete_frameworks the abstract_only message, known_names the none message. Only reached when the
+        pass has no single winner. Every provider hook here is best-effort: a raising one degrades its own
+        fact, never this call or a sibling's fact.
         """
-        if result.failure_kind == "multiple":
-            return RenderFacts(domains=self._capture_domains(result))
-
-        # Capability rejections win over the abstract-only fallback, and both over the ordinary none.
-        capability_frameworks = self._capture_capability_frameworks(result, feature)
-        if any(candidate.rejected for candidate in capability_frameworks.values()):
-            return RenderFacts(capability_frameworks=capability_frameworks)
-
-        if result.abstract_matched:
-            return RenderFacts(
-                concrete_frameworks=self._concrete_implementation_frameworks(result, accessible_plugins),
-            )
-
         return RenderFacts(
-            value_rejections=self._capture_value_rejections(feature, accessible_plugins),
+            domains=self._capture_domains(result),
+            concrete_frameworks=self._concrete_implementation_frameworks(result, accessible_plugins),
             known_names=self._capture_known_names(accessible_plugins),
+            eliminated_hints=self._capture_eliminated_hints(result),
         )
+
+    def _capture_eliminated_hints(self, result: EvaluationResult) -> frozenset[str]:
+        """Class name and prefix of every eliminated near-miss, so the none message can suppress a
+        'Did you mean' suggestion that merely echoes a candidate its near-miss block already names."""
+        hints: set[str] = set()
+        for feature_group in result.eliminations:
+            hints.add(feature_group.get_class_name())
+            prefix = _prefix_name(feature_group)
+            if prefix:
+                hints.add(prefix)
+        return frozenset(hints)
 
     def _domain_outcome(self, feature_group: type[FeatureGroup]) -> tuple[Optional[Domain], Optional[Exception]]:
         """Memoized get_domain() OUTCOME, value or raise, so one candidate's hook runs once per evaluation.
@@ -442,14 +463,6 @@ class IdentifyFeatureGroupClass:
             field=f"{feature_group.get_class_name()}.compute_framework_definition",
         )
 
-    def _available_declared_frameworks(self, feature_group: type[FeatureGroup]) -> frozenset[type[ComputeFramework]]:
-        """Best-effort render universe of one candidate: the frameworks it declares that are available."""
-        return safe_field(
-            lambda: frozenset(cfw for cfw in self._declared_frameworks_of(feature_group) if cfw.is_available()),
-            frozenset(),
-            field=f"{feature_group.get_class_name()}.is_available",
-        )
-
     def _capture_domains(self, result: EvaluationResult) -> dict[type[FeatureGroup], str]:
         """Domain name of every identified candidate, skipping the ones whose get_domain() raised."""
         domains: dict[type[FeatureGroup], str] = {}
@@ -458,35 +471,6 @@ class IdentifyFeatureGroupClass:
             if domain is not None:
                 domains[feature_group] = domain
         return domains
-
-    def _capture_capability_frameworks(
-        self, result: EvaluationResult, feature: Feature
-    ) -> dict[type[FeatureGroup], CandidateFrameworks]:
-        """Split each criteria-matched candidate's declared available frameworks, the universe the message uses.
-
-        Starts from the decision split, which already answered the enabled frameworks, and only asks about the
-        rest: the capability hook is asked at most once per (candidate, framework) pair per evaluation.
-        """
-        capability_frameworks: dict[type[FeatureGroup], CandidateFrameworks] = {}
-        for feature_group in result.criteria_matched:
-            decided = result.candidate_frameworks.get(feature_group, CandidateFrameworks())
-            declared = self._available_declared_frameworks(feature_group)
-            supported = set(decided.supported & declared)
-            rejected = set(decided.rejected & declared)
-
-            for cfw in declared - decided.supported - decided.rejected:
-                verdict = _supports_framework(feature_group, feature, cfw)
-                if verdict is None:
-                    continue
-                if verdict:
-                    supported.add(cfw)
-                else:
-                    rejected.add(cfw)
-
-            capability_frameworks[feature_group] = CandidateFrameworks(
-                supported=frozenset(supported), rejected=frozenset(rejected)
-            )
-        return capability_frameworks
 
     def _concrete_implementation_frameworks(
         self, result: EvaluationResult, accessible_plugins: FeatureGroupEnvironmentMapping
@@ -500,38 +484,6 @@ class IdentifyFeatureGroupClass:
                 continue
             frameworks.update(self._declared_framework_names(candidate))
         return tuple(sorted(frameworks))
-
-    def _capture_value_rejections(
-        self, feature: Feature, accessible_plugins: FeatureGroupEnvironmentMapping
-    ) -> tuple[tuple[str, str], ...]:
-        """Project the reasons the first pass recorded onto the domain/scope-filtered candidates, no replay."""
-        reasons: list[tuple[str, str]] = []
-        for feature_group in accessible_plugins:
-            reason = self._scoped_value_rejection_reason(feature_group, feature)
-            if reason is not None:
-                reasons.append((feature_group.get_class_name(), reason))
-        return tuple(sorted(reasons))
-
-    def _scoped_value_rejection_reason(self, feature_group: type[FeatureGroup], feature: Feature) -> str | None:
-        """Best-effort recorded rejection reason of one candidate, guarded together with the filters it runs."""
-        return safe_field(
-            lambda: self._in_scope_value_rejection_reason(feature_group, feature),
-            None,
-            field=f"{feature_group.get_class_name()} value rejection capture",
-        )
-
-    def _in_scope_value_rejection_reason(self, feature_group: type[FeatureGroup], feature: Feature) -> str | None:
-        """The candidate's recorded rejection reason, or None when the domain or scope filter rules it out.
-
-        Recorded reasons are always str, so the as_str below is a cheap invariant check, not a guard
-        against a hostile hook.
-        """
-        if not self._filter_feature_group_by_domain(feature_group, feature):
-            return None
-        if not self._filter_feature_group_by_scope(feature_group, feature):
-            return None
-        reason = self._value_rejection_reason(feature_group)
-        return None if reason is None else as_str(reason)
 
     def _capture_known_names(self, accessible_plugins: FeatureGroupEnvironmentMapping) -> tuple[str, ...]:
         known_names: list[str] = []
@@ -554,16 +506,27 @@ class IdentifyFeatureGroupClass:
         _identified_feature_groups: FeatureGroupEnvironmentMapping = {}
 
         for feature_group, compute_frameworks in accessible_plugins.items():
+            # A criteria non-match records a value_rejection only when the first pass recorded a reason for it:
+            # a plain name mismatch is not a near-miss, but a value the candidate declined (with a reportable
+            # reason) is. The criteria call above just recorded any rejection under this candidate's window, so
+            # this reads it back for a criteria-FAILING candidate only; a matched/winning/abstract candidate is
+            # never probed. Recorded regardless of domain/scope or of the overall outcome (a sibling may win).
             if not self._filter_feature_group_by_criteria(feature_group, feature, data_access_collection):
+                reason = self._value_rejection_reason(feature_group)
+                if reason is not None:
+                    self._record_elimination(feature_group, "value_rejection", reason)
                 continue
 
             if not self._filter_feature_group_by_domain(feature_group, feature):
+                self._record_elimination(feature_group, "domain", self._domain_reason(feature_group, feature))
                 continue
 
             if not self._filter_feature_group_by_scope(feature_group, feature):
+                self._record_elimination(feature_group, "scope", "outside the requested feature group scope")
                 continue
 
-            # Abstract bases can match name+domain+scope but cannot be instantiated; never let one win.
+            # Abstract bases can match name+domain+scope but cannot be instantiated; never let one win, and
+            # never record one as a near-miss: the abstract_only message owns them.
             if inspect.isabstract(feature_group):
                 self._abstract_matched_feature_groups.add(feature_group)
                 continue
@@ -583,17 +546,62 @@ class IdentifyFeatureGroupClass:
                 rejected=frozenset(compute_frameworks) - frozenset(supported_frameworks),
             )
 
+            # Decide the empty-supported case FIRST so a pin over an empty supported set reports the deeper
+            # capability / not-enabled reason rather than framework_pin. The identification decision (all three
+            # gates must hold) is order-independent, so this reordering only changes which reason is recorded.
+            if not supported_frameworks:
+                if compute_frameworks:
+                    rejected_names = sorted(cfw.get_class_name() for cfw in compute_frameworks)
+                    self._record_elimination(
+                        feature_group, "capability", f"supports_compute_framework rejected {rejected_names}"
+                    )
+                else:
+                    self._record_elimination(
+                        feature_group,
+                        "frameworks_not_enabled",
+                        "none of its compute frameworks are enabled for this run",
+                    )
+                continue
+
             if not self._filter_feature_group_by_framework(supported_frameworks, feature):
+                pin_name = feature.get_compute_framework().get_class_name()
+                supported_names = sorted(cfw.get_class_name() for cfw in supported_frameworks)
+                self._record_elimination(
+                    feature_group,
+                    "framework_pin",
+                    f"pinned compute framework '{pin_name}' is not among its supported {supported_names}",
+                )
                 continue
 
             if not self._filter_feature_group_by_links(feature_group, links):
+                self._record_elimination(feature_group, "links", "no index column matches the run's links")
                 continue
 
-            if supported_frameworks:
-                _identified_feature_groups[feature_group] = supported_frameworks
+            _identified_feature_groups[feature_group] = supported_frameworks
 
         _identified_feature_groups = self.filter_subclasses(_identified_feature_groups)
         return _identified_feature_groups
+
+    def _record_elimination(self, feature_group: type[FeatureGroup], stage: EliminationStage, reason: str) -> None:
+        """Record the first gate a non-winning name-matching candidate failed; one entry per candidate."""
+        self._eliminations.setdefault(feature_group, Elimination(stage=stage, reason=reason))
+
+    def _value_rejection_reason(self, feature_group: type[FeatureGroup]) -> Optional[str]:
+        """The reason the first match pass recorded for this candidate class, if any.
+
+        The candidate's criteria match records its own value rejection under a per-candidate window; this
+        only reads that record back, so no rejection hook is ever reran on the failure path.
+        """
+        return self._match_rejections.get(feature_group)
+
+    def _domain_reason(self, feature_group: type[FeatureGroup], feature: Feature) -> str:
+        """Reason wording for a candidate dropped at the domain gate, which only fires for a domain-carrying request."""
+        assert feature.domain is not None  # the domain gate only drops a candidate when the request carries a domain
+        requested = feature.domain.name
+        candidate_domain = self._domain_name(feature_group)
+        if candidate_domain is None:
+            return f"does not declare the requested domain '{requested}'"
+        return f"declares domain '{candidate_domain}', but the run requested '{requested}'"
 
     def _filter_feature_group_by_links(self, feature_group: type[FeatureGroup], links: Optional[set[Link]]) -> bool:
         # Case index columns not given, so no validation possible
@@ -626,7 +634,8 @@ class IdentifyFeatureGroupClass:
 
         The per-candidate recording window is what keys reasons by candidate class, so same-named classes cannot
         collide (review fix). The try/finally guarantees the reset even when an unexpected exception propagates;
-        in that case nothing is attributed.
+        in that case nothing is attributed. The filter loop reads the recorded reason back at this candidate's
+        non-match point, so the value_rejection near-miss is captured without ever re-probing a rejection hook.
         """
         token = MATCH_REJECTION_REASONS.set({})
         try:
@@ -667,10 +676,6 @@ class IdentifyFeatureGroupClass:
             return True
 
         return feature.get_compute_framework() in compute_frameworks
-
-    def _value_rejection_reason(self, feature_group: type[FeatureGroup]) -> Optional[str]:
-        """The reason the first pass recorded for this candidate class, if any."""
-        return self._match_rejections.get(feature_group)
 
     def filter_subclasses(
         self, _identified_feature_groups: FeatureGroupEnvironmentMapping

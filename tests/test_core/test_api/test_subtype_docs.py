@@ -393,10 +393,10 @@ class TestSubDeclDocContractDUnsupportedEverywhere:
         assert result.feature_group is None
         assert result.candidates == [SubDeclDocR4RejectingFG]
         assert result.error is not None
-        # Engine wording names the frameworks and the capability hook.
-        assert "Unsupported compute framework(s)" in result.error
+        # Engine wording names the frameworks and the capability hook via the near-miss line.
+        assert "Feature group(s) eliminated while matching 'value__median_sbddr4':" in result.error
+        assert "SubDeclDocR4RejectingFG (compute framework): supports_compute_framework rejected" in result.error
         assert "PythonDictFramework" in result.error
-        assert "Pin the feature to a supported compute framework" in result.error
         # The delegated failure path returns the ResolvedFeature defaults: no structured split, no subtype.
         assert result.supported_compute_frameworks == []
         assert result.unsupported_compute_frameworks == []
@@ -407,7 +407,7 @@ class TestSubDeclDocContractDUnsupportedEverywhere:
         result = resolve_feature("value__ntile_3_sbddr4")
         assert result.feature_group is None
         assert result.error is not None
-        assert "Unsupported compute framework(s)" in result.error
+        assert "SubDeclDocR4RejectingFG (compute framework): supports_compute_framework rejected" in result.error
         assert "PythonDictFramework" in result.error
         # No structured subtype on the delegated failure path.
         assert result.subtype is None

@@ -32,6 +32,7 @@ from mloda.core.api.plugin_docs import resolve_feature
 from mloda.core.prepare.accessible_plugins import FeatureGroupEnvironmentMapping
 from mloda.core.prepare.identify_feature_group import (
     CandidateFrameworks,
+    Elimination,
     EvaluationResult,
     IdentifyFeatureGroupClass,
     RenderFacts,
@@ -691,8 +692,8 @@ FAILING_SCENARIOS: dict[str, Callable[[], Scenario]] = {
 }
 
 # Every (candidate, framework) pair the capability hook may be asked about during one evaluate(), and how
-# often: exactly once. The decision loop splits the ENABLED frameworks, capture only adds the pairs it did
-# not cover, so the union is the candidate's declared+available frameworks and nothing is asked twice.
+# often: exactly once. Run-only: the hook is asked solely over the frameworks the run enabled for the
+# candidate, so a declared-but-disabled framework is never asked about at all.
 CAPABILITY_PAIR_EXPECTATIONS: dict[str, dict[tuple[str, str], int]] = {
     "capability": {
         ("RendererCapabilityAFG791", "RendererFwOne791"): 1,
@@ -702,12 +703,8 @@ CAPABILITY_PAIR_EXPECTATIONS: dict[str, dict[tuple[str, str], int]] = {
     },
     "capability_narrow_enabled": {
         ("RendererNarrowEnabledFG791", "RendererFwOne791"): 1,
-        ("RendererNarrowEnabledFG791", "RendererFwTwo791"): 1,
     },
-    "capability_none_enabled": {
-        ("RendererNoneEnabledFG791", "RendererFwOne791"): 1,
-        ("RendererNoneEnabledFG791", "RendererFwTwo791"): 1,
-    },
+    "capability_none_enabled": {},
 }
 
 
@@ -760,25 +757,29 @@ class TestRenderResolutionFailureMessages:
         )
 
     def test_capability_rejection_renders_one_line_per_candidate(self) -> None:
-        """Each rejecting candidate names its OWN rejected and supported frameworks."""
+        """Each pinned-out candidate names its OWN supported frameworks in one sorted near-miss line."""
         message = _render(capability_scenario())
 
-        assert message == (
-            f"Unsupported compute framework(s) for feature '{CAPABILITY_FEATURE_791}':\n"
-            "  - RendererCapabilityAFG791: ['RendererFwTwo791']. Supported on: ['RendererFwOne791'].\n"
-            "  - RendererCapabilityBFG791: ['RendererFwOne791']. Supported on: ['RendererFwTwo791'].\n"
-            "Pin the feature to a supported compute framework or override supports_compute_framework."
-        )
+        assert message.startswith(f"No feature groups found for feature name: '{CAPABILITY_FEATURE_791}'.")
+        assert (
+            f"Feature group(s) eliminated while matching '{CAPABILITY_FEATURE_791}':\n"
+            "  - RendererCapabilityAFG791 (compute framework pin): pinned compute framework 'RendererFwThree791'"
+            " is not among its supported ['RendererFwOne791']\n"
+            "  - RendererCapabilityBFG791 (compute framework pin): pinned compute framework 'RendererFwThree791'"
+            " is not among its supported ['RendererFwTwo791']"
+        ) in message
 
     def test_abstract_only_names_concrete_implementation_frameworks(self) -> None:
-        """Abstract-only with accessible concrete subclasses names the frameworks they require."""
+        """Abstract-only names the concrete frameworks, then appends the near-miss line for the concrete subclass."""
         message = _render(abstract_with_frameworks_scenario())
 
         assert message == (
             f"No feature groups found for feature name: '{ABSTRACT_FEATURE_791}'. "
             "Its concrete implementations require compute framework(s) "
             "['RendererFwOne791', 'RendererFwTwo791'], "
-            "none of which are available or enabled for this run."
+            "none of which are available or enabled for this run.\n"
+            f"Feature group(s) eliminated while matching '{ABSTRACT_FEATURE_791}':\n"
+            "  - RendererConcreteSubFG791 (compute framework): none of its compute frameworks are enabled for this run"
         )
 
     def test_abstract_only_without_concrete_implementation(self) -> None:
@@ -792,13 +793,13 @@ class TestRenderResolutionFailureMessages:
         )
 
     def test_ordinary_none_renders_rejections_suggestion_and_pointers(self) -> None:
-        """Value rejections, then 'Did you mean', then the resolve_feature and troubleshooting lines."""
+        """The near-miss block, then 'Did you mean', then the resolve_feature and troubleshooting lines."""
         message = _render(ordinary_none_scenario())
 
         lines = message.split("\n")
         assert lines[0] == f"No feature groups found for feature name: '{TYPO_FEATURE_791}'."
-        assert lines[1] == f"Feature group(s) rejected the supplied options while matching '{TYPO_FEATURE_791}':"
-        assert lines[2] == f"  - RendererStrictFG791: {WINDOW_REJECTION_REASON}"
+        assert lines[1] == f"Feature group(s) eliminated while matching '{TYPO_FEATURE_791}':"
+        assert lines[2] == f"  - RendererStrictFG791 (option value): {WINDOW_REJECTION_REASON}"
         assert lines[3].startswith("Did you mean one of: [")
         assert f"'{KNOWN_FEATURE_791}'" in lines[3]
         assert lines[4] == "Use resolve_feature(name, options=...) to debug feature resolution."
@@ -806,20 +807,20 @@ class TestRenderResolutionFailureMessages:
         assert len(lines) == 6
 
     def test_missing_option_rejection_renders_under_the_options_heading(self) -> None:
-        """A MISSING required option is not a wrong value, so the heading must cover both rejection kinds."""
+        """A MISSING required option is a value_rejection too, so it lands in the near-miss block as an option value."""
         scenario = missing_option_scenario()
         feature, _ = scenario
         result = _evaluate(scenario)
 
         assert result.failure_kind == "none"
-        assert result.facts.value_rejections == (("RendererMissingOptionFG791", MISSING_OPTION_REASON_791),)
+        assert result.eliminations == {
+            RendererMissingOptionFG791: Elimination(stage="value_rejection", reason=MISSING_OPTION_REASON_791)
+        }
 
         message = render_resolution_failure(result, feature)
         assert message is not None
-        assert f"Feature group(s) rejected the supplied options while matching '{MISSING_OPTION_FEATURE_791}':" in (
-            message
-        )
-        assert f"  - RendererMissingOptionFG791: {MISSING_OPTION_REASON_791}" in message
+        assert f"Feature group(s) eliminated while matching '{MISSING_OPTION_FEATURE_791}':" in message
+        assert f"  - RendererMissingOptionFG791 (option value): {MISSING_OPTION_REASON_791}" in message
 
     def test_scoped_none_renders_callout_and_scoped_pointer(self) -> None:
         """A scoped no-match carries the scope callout and the scoped resolve_feature pointer."""
@@ -849,15 +850,21 @@ class TestRenderResolutionFailureMessages:
 class TestPerCandidateCorrelation:
     """A candidate's frameworks stay correlated to that candidate, never merged into a union."""
 
-    def test_capability_frameworks_are_never_unioned_across_candidates(self) -> None:
-        """Mirrored candidates: no line may claim a framework is both supported and unsupported."""
+    def test_near_miss_lines_name_only_each_candidates_own_frameworks(self) -> None:
+        """Mirrored candidates: each near-miss line names only its OWN supported framework, never the union."""
         message = _render(capability_scenario())
 
         a_line = next(line for line in message.split("\n") if "RendererCapabilityAFG791" in line)
         b_line = next(line for line in message.split("\n") if "RendererCapabilityBFG791" in line)
 
-        assert a_line == "  - RendererCapabilityAFG791: ['RendererFwTwo791']. Supported on: ['RendererFwOne791']."
-        assert b_line == "  - RendererCapabilityBFG791: ['RendererFwOne791']. Supported on: ['RendererFwTwo791']."
+        assert a_line == (
+            "  - RendererCapabilityAFG791 (compute framework pin): pinned compute framework 'RendererFwThree791'"
+            " is not among its supported ['RendererFwOne791']"
+        )
+        assert b_line == (
+            "  - RendererCapabilityBFG791 (compute framework pin): pinned compute framework 'RendererFwThree791'"
+            " is not among its supported ['RendererFwTwo791']"
+        )
         # The cross-candidate union today's message builds must never appear.
         assert "['RendererFwOne791', 'RendererFwTwo791']" not in message
 
@@ -960,12 +967,14 @@ class TestFactsCapturedDuringEvaluate:
         assert result.failure_kind == "abstract_only"
         assert result.facts.concrete_frameworks == ()
 
-    def test_value_rejections_and_known_names_captured_for_ordinary_none(self) -> None:
-        """The ordinary-none kind captures the value rejections and the name catalog."""
+    def test_ordinary_none_records_value_rejection_elimination_and_captures_known_names(self) -> None:
+        """The ordinary-none kind records the value rejection as an elimination and captures the name catalog."""
         result = _evaluate(ordinary_none_scenario())
 
         assert result.failure_kind == "none"
-        assert result.facts.value_rejections == (("RendererStrictFG791", WINDOW_REJECTION_REASON),)
+        assert result.eliminations == {
+            RendererStrictFG791: Elimination(stage="value_rejection", reason=WINDOW_REJECTION_REASON)
+        }
         assert KNOWN_FEATURE_791 in result.facts.known_names
         assert "RendererKnownNamesFG791" in result.facts.known_names
         assert "RendererStrictFG791_" in result.facts.known_names
@@ -1041,12 +1050,14 @@ class TestFactCaptureNeverTakesEvaluateDown:
 
         assert result.failure_kind == "none"
         assert "RendererRaisingRejectionFG791._strict_validation_rejection_reason" not in HOOK_CALLS
-        assert result.facts.value_rejections == (("RendererStrictFG791", WINDOW_REJECTION_REASON),)
+        assert result.eliminations == {
+            RendererStrictFG791: Elimination(stage="value_rejection", reason=WINDOW_REJECTION_REASON)
+        }
 
         message = render_resolution_failure(result, feature)
         assert message is not None
-        assert f"  - RendererStrictFG791: {WINDOW_REJECTION_REASON}" in message
-        assert "RendererRaisingRejectionFG791:" not in message
+        assert f"  - RendererStrictFG791 (option value): {WINDOW_REJECTION_REASON}" in message
+        assert "RendererRaisingRejectionFG791 (option value)" not in message
 
     def test_raising_compute_framework_rule_falls_back_to_the_bare_abstract_message(self) -> None:
         """No framework name could be captured, so the abstract-only message takes its bare variant."""
@@ -1060,7 +1071,10 @@ class TestFactCaptureNeverTakesEvaluateDown:
         assert render_resolution_failure(result, feature) == (
             f"No feature groups found for feature name: '{RAISING_ABSTRACT_FEATURE_791}'. "
             "Only abstract feature group base(s) matched, which cannot be instantiated; "
-            "no concrete implementation is available or enabled."
+            "no concrete implementation is available or enabled.\n"
+            f"Feature group(s) eliminated while matching '{RAISING_ABSTRACT_FEATURE_791}':\n"
+            "  - RendererRaisingConcreteSubFG791 (compute framework): "
+            "none of its compute frameworks are enabled for this run"
         )
 
     def test_resolve_feature_still_reports_candidates_when_get_domain_raises(self) -> None:
@@ -1079,15 +1093,15 @@ class TestFactCaptureNeverTakesEvaluateDown:
 
 
 class TestCapabilityRenderingUniverse:
-    """The capability message keeps today's universe: the candidate's DECLARED frameworks that are available.
+    """Run-only: the capability near-miss names ONLY the run-enabled frameworks the candidate rejected.
 
     ``candidate_frameworks`` is the decision fact and stays the run's own (narrower) split of the
-    frameworks that were enabled. Rendering must not inherit that narrowing, or a candidate loses the
-    'Supported on' clause it has today, and an all-disabled candidate flips to the ordinary-none message.
+    frameworks that were enabled. Rendering inherits that narrowing: a declared-but-not-enabled framework
+    is never named, and an all-disabled candidate renders under the ordinary-none message.
     """
 
     def test_not_enabled_framework_still_renders_as_supported(self) -> None:
-        """Shape A: the supported framework is available but not enabled, and must still be named."""
+        """Shape A: only the enabled framework is named; the supported-but-not-enabled one is dropped."""
         scenario = capability_narrow_enabled_scenario()
         feature, _ = scenario
 
@@ -1099,14 +1113,18 @@ class TestCapabilityRenderingUniverse:
                 supported=frozenset(), rejected=frozenset({RendererFwOne791})
             )
         }
-        assert render_resolution_failure(result, feature) == (
-            f"Unsupported compute framework(s) for feature '{NARROW_ENABLED_FEATURE_791}':\n"
-            "  - RendererNarrowEnabledFG791: ['RendererFwOne791']. Supported on: ['RendererFwTwo791'].\n"
-            "Pin the feature to a supported compute framework or override supports_compute_framework."
-        )
+        message = render_resolution_failure(result, feature)
+        assert message is not None
+        assert message.startswith(f"No feature groups found for feature name: '{NARROW_ENABLED_FEATURE_791}'.")
+        assert (
+            "  - RendererNarrowEnabledFG791 (compute framework): "
+            "supports_compute_framework rejected ['RendererFwOne791']"
+        ) in message
+        # The declared-but-not-enabled framework is no longer part of the run-only universe.
+        assert "RendererFwTwo791" not in message
 
     def test_no_enabled_framework_still_renders_the_capability_message(self) -> None:
-        """Shape B: an empty accessible set must not flip the failure to the ordinary-none message."""
+        """Shape B: nothing enabled renders the frameworks_not_enabled near-miss under the ordinary-none message."""
         scenario = capability_none_enabled_scenario()
         feature, _ = scenario
 
@@ -1118,12 +1136,12 @@ class TestCapabilityRenderingUniverse:
         }
         message = render_resolution_failure(result, feature)
 
-        assert message == (
-            f"Unsupported compute framework(s) for feature '{NONE_ENABLED_FEATURE_791}':\n"
-            "  - RendererNoneEnabledFG791: ['RendererFwOne791']. Supported on: ['RendererFwTwo791'].\n"
-            "Pin the feature to a supported compute framework or override supports_compute_framework."
-        )
-        assert "No feature groups found" not in message
+        assert message is not None
+        assert message.startswith(f"No feature groups found for feature name: '{NONE_ENABLED_FEATURE_791}'.")
+        assert (
+            "  - RendererNoneEnabledFG791 (compute framework): none of its compute frameworks are enabled for this run"
+        ) in message
+        assert "RendererFwTwo791" not in message
 
     @pytest.mark.parametrize("scenario_name", sorted(CAPABILITY_PAIR_EXPECTATIONS))
     def test_capability_hook_is_asked_once_per_candidate_framework_pair(self, scenario_name: str) -> None:
@@ -1156,7 +1174,11 @@ class TestSortTiesAreStable:
         assert _render((feature, b_first)) == expected
 
     def test_capability_tie_sorts_by_module_and_ignores_insertion_order(self) -> None:
-        """Same-named capability candidates render module-sorted, whichever way they were inserted."""
+        """Same-named capability candidates render module-sorted, whichever way they were inserted.
+
+        Every close match here is a candidate the near-miss block already named (its class name or prefix), so
+        the 'Did you mean' line is suppressed entirely rather than echoing the eliminated candidates back.
+        """
         group_a, group_b = _build_tie_capability_groups()
         feature = Feature(TIE_CAPABILITY_FEATURE_791, compute_framework="RendererFwThree791")
         both = {RendererFwOne791, RendererFwTwo791}
@@ -1164,11 +1186,17 @@ class TestSortTiesAreStable:
         b_first: FeatureGroupEnvironmentMapping = {group_b: set(both), group_a: set(both)}
 
         expected = (
-            f"Unsupported compute framework(s) for feature '{TIE_CAPABILITY_FEATURE_791}':\n"
-            "  - RendererTieFG791: ['RendererFwTwo791']. Supported on: ['RendererFwOne791'].\n"
-            "  - RendererTieFG791: ['RendererFwOne791']. Supported on: ['RendererFwTwo791'].\n"
-            "Pin the feature to a supported compute framework or override supports_compute_framework."
+            f"No feature groups found for feature name: '{TIE_CAPABILITY_FEATURE_791}'.\n"
+            f"Feature group(s) eliminated while matching '{TIE_CAPABILITY_FEATURE_791}':\n"
+            "  - RendererTieFG791 (compute framework pin): pinned compute framework 'RendererFwThree791'"
+            " is not among its supported ['RendererFwOne791']\n"
+            "  - RendererTieFG791 (compute framework pin): pinned compute framework 'RendererFwThree791'"
+            " is not among its supported ['RendererFwTwo791']\n"
+            "Use resolve_feature(name, options=...) to debug feature resolution.\n"
+            f"{TROUBLESHOOTING_LINE}"
         )
 
         assert _render((feature, a_first)) == expected
         assert _render((feature, b_first)) == expected
+        # The suppressed suggestion must not echo the already-named eliminated candidate or its prefix.
+        assert "Did you mean" not in _render((feature, a_first))

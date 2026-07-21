@@ -213,8 +213,10 @@ class TestMatchTimeIntegration:
             _identify(feature, accessible_plugins)
 
         message = str(exc_info.value)
-        lowered = message.lower()
-        assert "unsupported" in lowered or "not supported" in lowered, (
+        assert "compute framework pin" in message, (
+            f"Error must signal a rejected compute-framework pin, but got: {message}"
+        )
+        assert "is not among its supported" in message, (
             f"Error must signal an unsupported framework, but got: {message}"
         )
         assert SubDeclMatchFwBeta.get_class_name() in message

@@ -40,21 +40,22 @@ feature only**:
 - If another framework can still run the operation, the matcher routes around
   the rejected one silently (no error).
 - If the only remaining candidate is the rejected framework (for example, the
-  user pinned the feature to it), resolution fails with a dedicated,
-  actionable error listing one line per rejecting feature group, each naming
-  only that group's own unsupported and supported frameworks, e.g.
+  user pinned the feature to it), resolution fails with the standard
+  "No feature groups found" error, which names the near-miss feature group and
+  why it dropped, one line per eliminated candidate under a
+  "Feature group(s) eliminated while matching '...'" block, e.g.
 
 ```
-Unsupported compute framework(s) for feature 'X':
-  - MedianFeatureGroup: ['SQLiteFramework']. Supported on: ['DuckDBFramework', 'PandasDataFrame'].
-Pin the feature to a supported compute framework or override supports_compute_framework.
+No feature groups found for feature name: 'X'.
+Feature group(s) eliminated while matching 'X':
+  - MedianFeatureGroup (compute framework pin): pinned compute framework 'SQLiteFramework' is not among its supported ['DuckDBFramework', 'PandasDataFrame']
+Use resolve_feature(name, options=...) to debug feature resolution.
 ```
 
-This is distinct from the "no feature group found" error, so an unsupported
-operation is no longer indistinguishable from an unknown feature. Prefer this
-hook over raising a generic error from inside `calculate_feature`: the
-rejection happens during planning rather than at compute time, and the message
-is built for you.
+The rejected framework is named as a near-miss with its reason rather than
+vanishing into a generic "unknown feature" message. Prefer this hook over
+raising a generic error from inside `calculate_feature`: the rejection happens
+during planning rather than at compute time, and the message is built for you.
 
 The debug inspector `resolve_feature(name)` reflects the hook too, because it
 runs the **same matcher over the same candidate universe as the engine** (it

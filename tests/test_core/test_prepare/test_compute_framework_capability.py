@@ -208,7 +208,7 @@ class TestComputeFrameworkCapabilityHook:
         )
 
     def test_distinguishable_error_when_pinned_to_unsupported_framework(self) -> None:
-        """Pinning to the unsupported framework yields a dedicated, distinguishable error."""
+        """Pinning to the unsupported framework names the pin as a compute-framework-pin near-miss."""
         feature = Feature(CAPABILITY_FEATURE)
         feature.compute_frameworks = {CapabilityFwB}
 
@@ -225,19 +225,19 @@ class TestComputeFrameworkCapabilityHook:
             )
 
         error_message = str(exc_info.value)
-        lowered = error_message.lower()
 
-        assert "unsupported" in lowered or "not supported" in lowered, (
-            f"Capability error must signal an unsupported framework, but got: {error_message}"
+        assert "Feature group(s) eliminated while matching" in error_message, (
+            f"Capability pin rejection must render as a near-miss line, but got: {error_message}"
+        )
+        assert "compute framework pin" in error_message, (
+            f"A pin rejection must be labelled a compute framework pin, but got: {error_message}"
         )
         assert CapabilityFwB.get_class_name() in error_message, (
-            f"Error must name the unsupported framework '{CapabilityFwB.get_class_name()}', but got: {error_message}"
+            f"Error must name the pinned unsupported framework '{CapabilityFwB.get_class_name()}', "
+            f"but got: {error_message}"
         )
         assert CapabilityFwA.get_class_name() in error_message, (
             f"Error must name the supported framework '{CapabilityFwA.get_class_name()}', but got: {error_message}"
-        )
-        assert "Did you mean" not in error_message, (
-            f"Capability error must skip the fuzzy suggestion path, but got: {error_message}"
         )
 
     def test_all_frameworks_reject_operation(self) -> None:
@@ -257,11 +257,13 @@ class TestComputeFrameworkCapabilityHook:
             )
 
         error_message = str(exc_info.value)
-        lowered = error_message.lower()
 
         assert CAPABILITY_FEATURE in error_message, f"Error must mention the feature name, but got: {error_message}"
-        assert "unsupported" in lowered or "not supported" in lowered, (
-            f"Error must signal that the framework(s) are unsupported, but got: {error_message}"
+        assert "Feature group(s) eliminated while matching" in error_message, (
+            f"An all-rejected candidate must render as a capability near-miss, but got: {error_message}"
+        )
+        assert "supports_compute_framework rejected" in error_message, (
+            f"Error must signal that supports_compute_framework rejected the frameworks, but got: {error_message}"
         )
         assert CapabilityFwA.get_class_name() in error_message, (
             f"Error must name rejected framework '{CapabilityFwA.get_class_name()}', but got: {error_message}"
@@ -305,23 +307,23 @@ class TestComputeFrameworkCapabilityHook:
                 data_access_collection=None,
             )
         capability_message = str(capability_exc.value)
-        lowered = capability_message.lower()
 
-        assert "unsupported" in lowered or "not supported" in lowered, (
-            f"Capability error must signal an unsupported framework, but got: {capability_message}"
+        # Both share the base "No feature groups found" line now; the capability rejection is
+        # distinguished by its near-miss block, which the unknown-feature error never carries.
+        assert "Feature group(s) eliminated while matching" in capability_message, (
+            f"Capability error must name the eliminated near-miss candidate, but got: {capability_message}"
         )
-        assert "No feature groups found for feature name" not in capability_message, (
-            f"Capability error must be distinguishable from the unknown-feature error, but got: {capability_message}"
+        assert "Feature group(s) eliminated while matching" not in unknown_message, (
+            f"Unknown-feature error must carry no near-miss block, but got: {unknown_message}"
         )
 
-    def test_supported_list_includes_declared_but_not_enabled_framework(self) -> None:
-        """A declared+available+supporting framework appears in 'Supported on' even if not enabled this run.
+    def test_capability_reason_names_only_run_enabled_rejected_framework(self) -> None:
+        """Run-only capability reason: only the run-enabled framework the candidate rejected is named.
 
-        The 'Supported on' list is derived from the candidate's OWN
-        ``compute_framework_definition()`` intersected with availability and
-        ``supports_compute_framework``, NOT from the run-enabled set. Here CapabilityFwA is declared by
-        ``DualDeclaringFG_782`` and available, but only CapabilityFwB is enabled for this run. FwA must
-        still show up as supported on that candidate's line.
+        os-011 (Q2 = run-only) dropped the wider declared-available universe. ``DualDeclaringFG_782``
+        declares {CapabilityFwA, CapabilityFwB} and supports the op on CapabilityFwA, but only CapabilityFwB
+        is enabled for this run and CapabilityFwB is exactly what it rejects. The capability reason names only
+        the run-enabled, rejected CapabilityFwB; the declared-but-not-enabled CapabilityFwA no longer appears.
         """
         feature = Feature(CAPABILITY_FEATURE)
         feature.compute_frameworks = {CapabilityFwB}
@@ -340,18 +342,15 @@ class TestComputeFrameworkCapabilityHook:
             )
 
         error_message = str(exc_info.value)
-        lowered = error_message.lower()
 
-        assert "unsupported" in lowered or "not supported" in lowered, (
-            f"Capability error must signal an unsupported framework, but got: {error_message}"
+        assert "Feature group(s) eliminated while matching" in error_message, (
+            f"Capability rejection must render as a near-miss line, but got: {error_message}"
         )
-        assert CapabilityFwB.get_class_name() in error_message, (
-            f"Error must name the unsupported framework '{CapabilityFwB.get_class_name()}', but got: {error_message}"
+        assert f"supports_compute_framework rejected ['{CapabilityFwB.get_class_name()}']" in error_message, (
+            f"Reason must name the run-enabled rejected framework '{CapabilityFwB.get_class_name()}', "
+            f"but got: {error_message}"
         )
-        assert CapabilityFwA.get_class_name() in error_message, (
-            "Error 'Supported on' list must include the declared+available+supporting framework "
-            f"'{CapabilityFwA.get_class_name()}' even though it was not enabled this run, but got: {error_message}"
-        )
-        assert "Did you mean" not in error_message, (
-            f"Capability error must skip the fuzzy suggestion path, but got: {error_message}"
+        assert CapabilityFwA.get_class_name() not in error_message, (
+            "run-only capability reason must not name the declared-but-not-enabled framework "
+            f"'{CapabilityFwA.get_class_name()}', but got: {error_message}"
         )

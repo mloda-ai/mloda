@@ -334,9 +334,9 @@ def test_capability_rejection_error_names_the_scope() -> None:
     """When every framework of the scoped group is capability-rejected, the error names the scope.
 
     The scoped group matches the feature name, but supports_compute_framework
-    rejects all of its frameworks, so the no-match error takes the capability
-    branch. That message must still call out the requested scope, otherwise the
-    scoped request looks like a plain capability failure.
+    rejects all of its frameworks, so the no-match error carries a capability
+    near-miss line. That message must still call out the requested scope, otherwise
+    the scoped request looks like a plain capability failure.
     """
     feature = Feature("subject_token", feature_group=RejectAllScopedSource)
     accessible_plugins: FeatureGroupEnvironmentMapping = {
@@ -351,8 +351,9 @@ def test_capability_rejection_error_names_the_scope() -> None:
             data_access_collection=None,
         )
     message = str(exc_info.value)
-    # Prove the capability branch was taken (guards against a fixture bug).
-    assert "Unsupported compute framework" in message
+    # Prove the capability near-miss was recorded (guards against a fixture bug).
+    assert "Feature group(s) eliminated while matching 'subject_token':" in message
+    assert "supports_compute_framework rejected ['ScopedCapabilityFw']" in message
     assert "Scoped to feature group: 'RejectAllScopedSource'" in message
 
 

@@ -62,10 +62,13 @@ class TestCapabilityRunAllEndToEnd:
         else:
             raise AssertionError("Expected a ValueError when pinned to the unsupported framework")
 
-        lowered = message.lower()
-        assert "unsupported" in lowered, f"Capability error must signal 'unsupported', got: {message}"
+        assert "supports_compute_framework rejected" in message, (
+            f"Capability error must signal the capability hook rejection, got: {message}"
+        )
         assert "PythonDictFramework" in message, f"Error must name the rejected framework, got: {message}"
-        assert "Did you mean" not in message, f"Capability error must skip the fuzzy suggestion path, got: {message}"
+        assert "E2ECapRunAllFeatureGroup (compute framework):" in message, (
+            f"Capability error must name the eliminated candidate under the near-miss line, got: {message}"
+        )
 
     def test_route_around_to_pandas_returns_dataframe(self) -> None:
         """With both frameworks enabled, the run routes around to Pandas and computes."""

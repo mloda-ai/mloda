@@ -580,14 +580,15 @@ class TestResolveFeatureCapabilityAware:
         assert result.feature_group is None
         assert result.error is not None
 
-        lowered = result.error.lower()
-        assert "unsupported" in lowered, f"Error must signal 'unsupported', got: {result.error}"
+        # Engine wording: the near-miss line names the eliminated candidate and the capability hook.
+        assert "AllRejectedCapResolveFeatureGroup (compute framework):" in result.error, (
+            f"Error must name the eliminated candidate, got: {result.error}"
+        )
+        assert "supports_compute_framework rejected" in result.error, (
+            f"Error must signal the capability hook rejection, got: {result.error}"
+        )
         assert "PandasDataFrame" in result.error, f"Error must name PandasDataFrame, got: {result.error}"
         assert "PythonDictFramework" in result.error, f"Error must name PythonDictFramework, got: {result.error}"
-        # Engine wording: names the capability hook and drops the debug-only phrasings.
-        assert "Pin the feature to a supported compute framework" in result.error, (
-            f"Error must carry the engine's capability-rejection guidance, got: {result.error}"
-        )
         assert "default options" not in result.error, (
             f"Engine error has no 'default options' caveat, got: {result.error}"
         )
@@ -908,7 +909,8 @@ class TestResolveFeatureScopedCapabilityRejection:
         assert result.feature_group is None
         assert result.error is not None
         # After #755 the engine builds the capability-rejection message; the scope callout is retained.
-        assert "Pin the feature to a supported compute framework" in result.error
+        assert "AllRejectedCapResolveFeatureGroup (compute framework):" in result.error
+        assert "supports_compute_framework rejected" in result.error
         assert "PandasDataFrame" in result.error
         assert "PythonDictFramework" in result.error
         assert "Scoped to feature group: 'AllRejectedCapResolveFeatureGroup'." in result.error

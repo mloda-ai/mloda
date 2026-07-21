@@ -1085,15 +1085,15 @@ class FeatureChainParser:
                     return True
                 # Flattened, because a matcher passes a list-valued pattern attribute straight to
                 # parse_name, so its ELEMENTS are the concrete patterns. A matcher must never leak
-                # an exception, so the parse is contained exactly as in build_effective_options.
+                # an exception, so the parse is contained as in build_effective_options; re.error is
+                # additionally caught here because a malformed pattern must degrade to a non-match
+                # of the name path, never veto the inner verdict (#868).
                 patterns = FeatureChainParser._flatten_patterns(FeatureChainParser.prefix_patterns_of(guarded_cls))
                 parsed = safe_field(
                     lambda: FeatureChainParser.parse_name(feature_name, patterns, CHAIN_SEPARATOR),
-                    None,
+                    ParsedFeatureName.no_match(),
                     catching=(ValueError, re.error),
                 )
-                if parsed is None:
-                    return False
                 if not FeatureChainParser._name_identifies_group(parsed, mapping):
                     return True
                 bindings = FeatureChainParser.bind_name_captures(parsed, mapping)

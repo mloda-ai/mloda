@@ -161,10 +161,10 @@ class TestSbparPropertyMappingDefaultParity:
 class TestSbparMalformedPrefixPatternNeverRaises:
     """resolve_subtype degrades to None on a malformed PREFIX_PATTERN instead of raising re.error."""
 
-    def test_matcher_degrades_malformed_pattern_to_non_match(self) -> None:
+    def test_matcher_contains_malformed_pattern_and_keeps_class_name_match(self) -> None:
         assert (
             SbparBadPrefixFG.match_feature_group_criteria(FeatureName(SbparBadPrefixFG.get_class_name()), Options())
-            is False
+            is True
         )
 
     def test_resolve_subtype_returns_none_for_chained_name(self) -> None:

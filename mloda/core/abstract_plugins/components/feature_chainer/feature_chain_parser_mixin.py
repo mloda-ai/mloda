@@ -302,6 +302,9 @@ class FeatureChainParserMixin:
         except PropertyValueRejection as exc:
             record_match_rejection(cls.__name__, str(exc))
             return False
+        # Known asymmetry deliberately kept in scope: a config error raised while merging name bindings on the
+        # string path (e.g. a key in both group and context) is still contained as a non-match here, while the
+        # required_when path surfaces it via build_effective_options (os-005 review note).
         except ValueError:
             return False
 

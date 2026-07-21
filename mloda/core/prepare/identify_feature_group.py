@@ -302,7 +302,7 @@ class IdentifyFeatureGroupClass:
     _criteria_matched_feature_groups: set[type[FeatureGroup]]
     _abstract_matched_feature_groups: set[type[FeatureGroup]]
     _candidate_frameworks: dict[type[FeatureGroup], CandidateFrameworks]
-    _match_rejections: dict[str, str]
+    _match_rejections: dict[type[FeatureGroup], str]
     _data_access_collection: Optional[DataAccessCollection]
     # Per-evaluation memos of the hooks more than one reader wants. evaluate() builds a fresh instance, so
     # they are scoped to one resolution attempt and never cache across runs.
@@ -313,7 +313,7 @@ class IdentifyFeatureGroupClass:
         self._criteria_matched_feature_groups = set()
         self._abstract_matched_feature_groups = set()
         self._candidate_frameworks = {}
-        # Reasons the first pass recorded, keyed by class name.
+        # Reasons the first pass recorded, keyed by candidate class.
         self._match_rejections = {}
         self._domain_outcomes = {}
         self._declared_frameworks = {}
@@ -343,13 +343,7 @@ class IdentifyFeatureGroupClass:
         # sat inside the filter loop, so it never ran when the name matched nothing).
         cls._validate_single_framework_pin(feature)
         self = cls(data_access_collection)
-        # try/finally so a raising hook cannot leak an active recorder out of this evaluation.
-        token = MATCH_REJECTION_REASONS.set({})
-        try:
-            identified = self._filter_loop(feature, accessible_plugins, links, data_access_collection)
-        finally:
-            self._match_rejections = MATCH_REJECTION_REASONS.get() or {}
-            MATCH_REJECTION_REASONS.reset(token)
+        identified = self._filter_loop(feature, accessible_plugins, links, data_access_collection)
         result = EvaluationResult(
             identified=identified,
             criteria_matched=self._criteria_matched_feature_groups,
@@ -536,7 +530,7 @@ class IdentifyFeatureGroupClass:
             return None
         if not self._filter_feature_group_by_scope(feature_group, feature):
             return None
-        reason = self._value_rejection_reason(feature_group, feature)
+        reason = self._value_rejection_reason(feature_group)
         return None if reason is None else as_str(reason)
 
     def _capture_known_names(self, accessible_plugins: FeatureGroupEnvironmentMapping) -> tuple[str, ...]:
@@ -629,13 +623,26 @@ class IdentifyFeatureGroupClass:
         """A rejected option value is a non-match, whoever calls the parser: a candidate that overrides the match
         hook and calls FeatureChainParser directly must not take the whole filter loop down. Only the rejection is
         caught, so a plain ValueError (the forwarded-name-mismatch guidance) still reaches the user.
+
+        The per-candidate recording window is what keys reasons by candidate class, so same-named classes cannot
+        collide (review fix). The try/finally guarantees the reset even when an unexpected exception propagates;
+        in that case nothing is attributed.
         """
+        token = MATCH_REJECTION_REASONS.set({})
         try:
-            return feature_group.match_feature_group_criteria(feature.name, feature.options, data_access_collection)
+            matched = feature_group.match_feature_group_criteria(feature.name, feature.options, data_access_collection)
         except PropertyValueRejection as exc:
             logger.debug("%s rejected an option value while matching '%s': %s", feature_group, feature.name, exc)
             record_match_rejection(feature_group.get_class_name(), str(exc))
-            return False
+            matched = False
+        finally:
+            recorded = MATCH_REJECTION_REASONS.get() or {}
+            MATCH_REJECTION_REASONS.reset(token)
+        if not matched and recorded:
+            # Everything recorded during this candidate's window belongs to this candidate, whatever
+            # owner name an inner delegation stamped; first recorded reason wins (insertion order).
+            self._match_rejections[feature_group] = next(iter(recorded.values()))
+        return matched
 
     def _filter_feature_group_by_domain(self, feature_group: type[FeatureGroup], feature: Feature) -> bool:
         """Decision-side domain gate: unguarded, so a raising get_domain() still fails the engine loudly."""
@@ -661,9 +668,9 @@ class IdentifyFeatureGroupClass:
 
         return feature.get_compute_framework() in compute_frameworks
 
-    def _value_rejection_reason(self, feature_group: type[FeatureGroup], feature: Feature) -> Optional[str]:
-        """The reason the first pass recorded for this candidate, if any."""
-        return self._match_rejections.get(feature_group.get_class_name())
+    def _value_rejection_reason(self, feature_group: type[FeatureGroup]) -> Optional[str]:
+        """The reason the first pass recorded for this candidate class, if any."""
+        return self._match_rejections.get(feature_group)
 
     def filter_subclasses(
         self, _identified_feature_groups: FeatureGroupEnvironmentMapping

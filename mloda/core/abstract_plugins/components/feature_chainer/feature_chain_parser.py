@@ -53,8 +53,9 @@ NAME_PATH_PRESENCE_GUARD_DEPTH: contextvars.ContextVar[int] = contextvars.Contex
     "mloda_name_path_presence_guard_depth", default=0
 )
 
-# Active only while the engine evaluates candidates for one feature; maps owner class name to the first
-# structured rejection reason the real match pass produced (os-005 replaces the diagnostic replay).
+# Active for one candidate's match call: the engine opens a window per candidate. Maps the recording
+# site's owner name to the first structured rejection reason the real match pass produced, and the
+# engine attributes the harvest to the candidate class object it called (os-005 replaces the replay).
 MATCH_REJECTION_REASONS: contextvars.ContextVar[dict[str, str] | None] = contextvars.ContextVar(
     "mloda_match_rejection_reasons", default=None
 )

@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import contextvars
 from collections.abc import Iterator
-from typing import Any, Optional
+from typing import Any, Optional, cast
 
 import pytest
 
@@ -46,6 +46,15 @@ STRICT_REJECTION_REASON_OS005R = "Property value '14' failed validation for 'win
 MISSING_OPTION_REASON_OS005R = "required option(s) some_key_os005r are absent after declared defaults and name bindings"
 GUARD_REJECTION_REASON_OS005R = "Property value 'ok_os005r' rejected by match_guard for 'guarded_key_os005r'"
 FACADE_SENTINEL_REASON_OS005R = "facade sentinel reason os005r"
+
+# The name-collision groups carry an os005c suffix of their own so their names and option keys stay
+# unique to this test; the shared class NAME is the point of the collision scenario.
+COLLIDING_FEATURE_OS005C = "colliding_recording_feature_os005c"
+COLLIDING_NAME_OS005C = "CollidingRejectFGOs005c"
+COLLIDING_MODULE_A_OS005C = "tests.colliding_reject_module_a_os005c"
+COLLIDING_MODULE_B_OS005C = "tests.colliding_reject_module_b_os005c"
+COLLIDE_A_REASON_OS005C = "Property value 'bogus_os005c' not found in mapping for 'collide_a_os005c'"
+COLLIDE_B_REASON_OS005C = "Property value 'bogus_os005c' not found in mapping for 'collide_b_os005c'"
 
 # Every value the strict element_validator judged, across the WHOLE failed resolution. Reset per test.
 VALIDATOR_CALLS_OS005R: list[Any] = []
@@ -138,6 +147,42 @@ class FacadeProbeFGOs005r(FeatureGroup):
         return None
 
 
+def _build_colliding_rejection_groups_os005c() -> tuple[type[FeatureGroup], type[FeatureGroup]]:
+    """Build two same-named candidates across modules, each strictly rejecting its OWN option key.
+
+    Sharing a ``__name__`` is a supported scenario, so a recording keyed by class name would collapse
+    the two into one slot. Each group's strict key is unique (``collide_a_os005c`` / ``collide_b_os005c``),
+    so the same failed feature yields a DIFFERENT rejection reason per class. Leaked into another test's
+    universe the groups are inert: each matches only when its own required collide key is present.
+    """
+
+    def make(module: str, key: str) -> type[FeatureGroup]:
+        def input_features(self: Any, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+            return None
+
+        namespace: dict[str, Any] = {
+            "__module__": module,
+            "__doc__": "Same-named candidate whose strict key rejects the provided value.",
+            "PROPERTY_MAPPING": {
+                key: property_spec(
+                    "strict key accepting only its ok sentinel",
+                    strict=True,
+                    allowed_values=("ok_os005c",),
+                    context=False,
+                ),
+                DefaultOptionKeys.in_features: property_spec("source", context=True),
+            },
+            "input_features": input_features,
+        }
+        created: Any = type(COLLIDING_NAME_OS005C, (FeatureChainParserMixin, FeatureGroup), namespace)
+        return cast(type[FeatureGroup], created)
+
+    return (
+        make(COLLIDING_MODULE_A_OS005C, "collide_a_os005c"),
+        make(COLLIDING_MODULE_B_OS005C, "collide_b_os005c"),
+    )
+
+
 @pytest.fixture(autouse=True)
 def _reset_recording_state() -> Iterator[None]:
     """Recorder and counter state must not leak between tests, in either direction."""
@@ -190,6 +235,36 @@ class TestFirstPassRejectionRecording:
         facts = _failed_facts(feature, accessible_plugins)
 
         assert facts.value_rejections == (("GuardRecordingFGOs005r", GUARD_REJECTION_REASON_OS005R),)
+
+    def test_same_named_candidates_each_keep_their_own_recorded_reason(self) -> None:
+        """Two candidates sharing a __name__ each report the reason their OWN match produced.
+
+        A recording keyed by class name collapses both classes into one first-wins slot: the second
+        class's distinct reason is dropped and the shared reason is attributed to both candidates.
+        Scoped per candidate, the facts carry two entries with the same name and two different reasons.
+        """
+        group_a, group_b = _build_colliding_rejection_groups_os005c()
+        feature = Feature(
+            COLLIDING_FEATURE_OS005C,
+            Options(
+                context={
+                    DefaultOptionKeys.in_features: "src",
+                    "collide_a_os005c": "bogus_os005c",
+                    "collide_b_os005c": "bogus_os005c",
+                }
+            ),
+        )
+        accessible_plugins: FeatureGroupEnvironmentMapping = {
+            group_a: {RecorderFwOneOs005r},
+            group_b: {RecorderFwOneOs005r},
+        }
+
+        facts = _failed_facts(feature, accessible_plugins)
+
+        assert facts.value_rejections == (
+            (COLLIDING_NAME_OS005C, COLLIDE_A_REASON_OS005C),
+            (COLLIDING_NAME_OS005C, COLLIDE_B_REASON_OS005C),
+        )
 
 
 class TestEngineNeverCallsTheFacade:

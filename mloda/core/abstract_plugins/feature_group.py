@@ -15,6 +15,7 @@ from mloda.core.abstract_plugins.components.base_feature_group_version import Ba
 from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser import (
     CHAIN_SEPARATOR,
     FeatureChainParser,
+    option_key_is_present,
 )
 from mloda.core.abstract_plugins.components.feature_chainer.property_spec import PropertySpec, is_no_default
 from mloda.core.abstract_plugins.components.subtype_declaration import SubtypeDeclaration
@@ -243,7 +244,7 @@ class FeatureGroup(ABC):
         fills_context: dict[str, Any] = {}
         for key, spec in mapping.items():
             # An opted-in spec honors an explicit None: presence, not non-None-ness, gates the fill (#768).
-            present = key in options if spec.allow_explicit_none else options.get(key) is not None
+            present = option_key_is_present(spec, key, options)
             if present:
                 continue
             if is_no_default(spec.default) or spec.default is None:

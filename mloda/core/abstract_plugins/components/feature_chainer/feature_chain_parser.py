@@ -8,7 +8,6 @@ import contextvars
 import functools
 import logging
 import re
-from collections.abc import Callable
 from typing import Any, Optional
 
 from mloda.core.abstract_plugins.components.feature import Feature
@@ -61,6 +60,14 @@ _EXPECTED_JUDGMENT_ERRORS: tuple[type[Exception], ...] = (TypeError, ValueError,
 def _contained_raise_log_level(exc: BaseException) -> int:
     """DEBUG for expected judgment failures, WARNING for classes that suggest a broken callable."""
     return logging.DEBUG if isinstance(exc, _EXPECTED_JUDGMENT_ERRORS) else logging.WARNING
+
+
+def option_key_is_present(spec: PropertySpec, key: str, options: Options) -> bool:
+    """The single presence decision (#768 matrix): an opted-in explicit None counts as present, a flagless
+    present-as-None does not."""
+    if spec.allow_explicit_none:
+        return key in options
+    return options.get(key) is not None
 
 
 class PropertyValueRejection(ValueError):
@@ -193,21 +200,6 @@ class FeatureChainParser:
         return not is_no_default(spec.default) or spec.required_when is not None
 
     @classmethod
-    def _is_context_parameter(cls, spec: PropertySpec) -> bool:
-        """Check if the spec marks the property as a context parameter."""
-        return spec.context
-
-    @classmethod
-    def _is_strict_validation(cls, spec: PropertySpec) -> bool:
-        """Check if the spec requires strict validation (values must be in the value space)."""
-        return spec.strict_validation
-
-    @classmethod
-    def _get_element_validator(cls, spec: PropertySpec) -> Callable[[Any], Any] | None:
-        """Get the spec's per-element validator if present."""
-        return spec.element_validator
-
-    @classmethod
     def _validate_property_value(
         cls, found_property_val: Any, property_value: Any, property_name: str, original_property_config: PropertySpec
     ) -> None:
@@ -216,10 +208,10 @@ class FeatureChainParser:
 
         Raises PropertyValueRejection if validation fails, otherwise returns None.
         """
-        if not cls._is_strict_validation(original_property_config):
+        if not original_property_config.strict_validation:
             return  # No validation needed
 
-        element_validator = cls._get_element_validator(original_property_config)
+        element_validator = original_property_config.element_validator
 
         if element_validator is not None:
             # A validator that raises cannot judge the value, so the value is rejected, not the run.
@@ -290,7 +282,7 @@ class FeatureChainParser:
             return DefaultOptionKeys.group
         elif property_name in options.context:
             return DefaultOptionKeys.context
-        elif cls._is_context_parameter(property_value):
+        elif property_value.context:
             return DefaultOptionKeys.context
         else:
             return DefaultOptionKeys.group
@@ -301,11 +293,6 @@ class FeatureChainParser:
         if spec.allowed_values is None:
             return {}
         return spec.allowed_values
-
-    @classmethod
-    def _extract_property_values(cls, spec: PropertySpec) -> Any:
-        """Alias kept for existing callers."""
-        return cls.extract_property_values(spec)
 
     @classmethod
     def _require_spec(cls, owner_name: str, key: str, spec: Any) -> PropertySpec:
@@ -393,10 +380,10 @@ class FeatureChainParser:
         property_config = property_mapping[property_name]
         found_property_value = options.get(property_name)
         # An opted-in spec treats a present-as-None value as PRESENT, so it flows through validation (#768).
-        if found_property_value is None and not (property_config.allow_explicit_none and property_name in options):
+        if not option_key_is_present(property_config, property_name, options):
             return None
         return cls._process_found_property_value(
-            found_property_value, cls._extract_property_values(property_config), property_name, property_config
+            found_property_value, cls.extract_property_values(property_config), property_name, property_config
         )
 
     @classmethod
@@ -452,7 +439,7 @@ class FeatureChainParser:
                 continue
             if spec.deferred_binding:
                 continue
-            absent = effective_options.get(key) is None and not (spec.allow_explicit_none and key in effective_options)
+            absent = not option_key_is_present(spec, key, effective_options)
             if absent:
                 missing.append(key)
         return missing
@@ -601,7 +588,7 @@ class FeatureChainParser:
         for key, spec in property_mapping.items():
             if not isinstance(spec, PropertySpec):
                 continue
-            if legacy_value in cls._extract_property_values(spec):
+            if legacy_value in cls.extract_property_values(spec):
                 return {key: legacy_value}
         return {}
 
@@ -648,7 +635,7 @@ class FeatureChainParser:
             if not isinstance(spec, PropertySpec):
                 continue
             # An explicit option (including an opted-in explicit None, #768) is never overwritten.
-            if options.get(key) is not None or (spec.allow_explicit_none and key in options):
+            if option_key_is_present(spec, key, options):
                 continue
             if cls._determine_parameter_category(key, spec, options) == DefaultOptionKeys.context:
                 merged_context[key] = value
@@ -723,7 +710,7 @@ class FeatureChainParser:
     def _str_reachable_values(cls, spec: PropertySpec) -> set[str]:
         """The str members of a spec's value space; only a str can be reverse-looked-up from a capture."""
         reachable: set[str] = set()
-        for value in cls._extract_property_values(spec):
+        for value in cls.extract_property_values(spec):
             if isinstance(value, str):
                 reachable.add(value)
         return reachable
@@ -905,11 +892,7 @@ class FeatureChainParser:
                 )
                 return False
             # An opted-in key present as an explicit None counts as present, so the requirement is met (#768).
-            if (
-                is_required
-                and effective_options.get(key) is None
-                and not (spec.allow_explicit_none and key in effective_options)
-            ):
+            if is_required and not option_key_is_present(spec, key, effective_options):
                 logger.debug(
                     "Feature group %s requires option '%s' (predicate %s is satisfied) but it was not provided.",
                     owner_name,

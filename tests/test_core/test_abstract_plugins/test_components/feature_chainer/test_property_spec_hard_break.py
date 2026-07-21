@@ -152,7 +152,7 @@ class TestPropertySpecMappingBehavesAsBefore:
             PREFIX_PATTERN = r".*__([\w]+)_hardbreak694$"
             PROPERTY_MAPPING = {"hardbreak694_agg": spec}
 
-        effective = HardBreak694ContextCategorization._build_effective_options(
+        effective = FeatureChainParser.build_effective_options(
             "source__first_hardbreak694",
             [HardBreak694ContextCategorization.PREFIX_PATTERN],
             HardBreak694ContextCategorization.PROPERTY_MAPPING,

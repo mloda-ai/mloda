@@ -65,6 +65,7 @@ from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser
     CHAIN_SEPARATOR,
     INPUT_SEPARATOR,
     _contained_raise_log_level,
+    option_key_is_present,
 )
 from mloda.core.abstract_plugins.components.feature_chainer.property_spec import PropertySpec
 from mloda.core.abstract_plugins.components.default_options_key import DefaultOptionKeys
@@ -423,7 +424,7 @@ class FeatureChainParserMixin:
                 continue
             value = options.get(key)
             # An opted-in explicit None reaches the guard; every flagless spec still skips a None (#768).
-            if value is None and not (mapping_entry.allow_explicit_none and key in options):
+            if not option_key_is_present(mapping_entry, key, options):
                 continue
             try:
                 rejected = not guard(value)
@@ -495,17 +496,6 @@ class FeatureChainParserMixin:
         if hasattr(cls, "PROPERTY_MAPPING"):
             return cast(Optional[dict[str, PropertySpec]], cls.PROPERTY_MAPPING)
         return None
-
-    @classmethod
-    def _build_effective_options(
-        cls,
-        feature_name: str,
-        prefix_patterns: list[Any],
-        property_mapping: dict[str, PropertySpec],
-        options: Options,
-    ) -> Options:
-        """Merge the value parsed from the feature name into the options the predicates see."""
-        return FeatureChainParser.build_effective_options(feature_name, prefix_patterns, property_mapping, options)
 
     @classmethod
     def _extract_source_features(cls, feature: Feature) -> list[str]:

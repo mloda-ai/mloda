@@ -2,12 +2,12 @@
 
 PROPERTY_MAPPING specs historically conflated allowed-value->docstring entries,
 flag keys, and a magic plain-string ``"explanation"`` doc key in one namespace.
-``FeatureChainParser._extract_property_values`` recovered the allowed-value set by
+``FeatureChainParser.extract_property_values`` recovered the allowed-value set by
 subtracting a hardcoded blocklist. This module pins the ``PropertySpec.allowed_values``
 field that replaced that:
 
 * authors DECLARE the accepted values under ``allowed_values``,
-* ``_extract_property_values`` returns exactly that mapping, so both membership
+* ``extract_property_values`` returns exactly that mapping, so both membership
   validation and the class-definition default invariant follow automatically,
 * nothing else in the spec can widen the value space.
 
@@ -162,7 +162,7 @@ class TestNoSilentWidening:
             strict_validation=True,
         )
 
-        extracted = FeatureChainParser._extract_property_values(spec)
+        extracted = FeatureChainParser.extract_property_values(spec)
         assert extracted == {"add": "Addition"}
 
     def test_doc_key_name_rejected_by_strict_validation(self) -> None:

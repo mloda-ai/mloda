@@ -1,63 +1,34 @@
 # Progress
 
-## Status Overview
-
-```mermaid
-pie title Implementation Status
-    "Completed" : 85
-    "In Progress" : 10
-    "Planned" : 5
-```
-
 ## Working Features
 
-```mermaid
-mindmap
-  root((mloda))
-    Feature Groups
-      Core
-        AggregatedFeatureGroup
-        TimeWindowFeatureGroup
-        MissingValueFeatureGroup
-      Analytics
-        ClusteringFeatureGroup
-        DimensionalityReduction
-        ForecastingFeatureGroup
-        NodeCentralityFeatureGroup
-      Processing
-        TextCleaningFeatureGroup
-        GeoDistanceFeatureGroup
-        SklearnPipelineFeatureGroup
-    Compute Frameworks
-      PandasDataFrame
-      PyArrowTable
-      PythonDict
-      PolarsDataFrame
-      DuckDBFramework
-      IcebergFramework
-      SparkFramework
-    Core Systems
-      Options Refactoring
-      PROPERTY_MAPPING
-      Feature Chaining
-      Artifact Storage
-```
+### Compute Frameworks (9)
+
+PythonDict (dependency-free) needs no extra and SQLite needs only PyArrow; the rest are optional extras: Pandas, PyArrow, Polars (eager and lazy), DuckDB, Iceberg, Spark. DuckDB and SQLite share a common SQL base.
+
+### Feature Groups
+
+- **Core transforms**: Aggregated, TimeWindow, MissingValue (under data quality).
+- **Analytics**: Clustering, DimensionalityReduction, Forecasting (scikit-learn); NodeCentrality (numpy graph centrality).
+- **Sklearn family**: Pipeline, Encoding, Scaling (shared artifact storage).
+- **Processing**: TextCleaning (nltk), GeoDistance.
+- **LLM**: API-backed LLM feature groups, CLI features, and tool integrations.
+- **Infrastructure**: environment introspection (InstalledPackages, ListDirectory), dynamic feature-group factory, source-input composition, and the input-data reader suite (CSV / Parquet / Feather / ORC / JSON file readers, document readers, SQLite DB reader).
+
+### Extenders
+
+- OtelExtender (OpenTelemetry).
 
 ## Recent Achievements
-- ✅ Options object refactoring with group/context separation
-- ✅ All Feature Groups modernized to PROPERTY_MAPPING
-- ✅ Sklearn Pipeline with artifact storage
-- ✅ Complete compute framework implementations
-- ✅ **Options.data property deprecated and removed** (October 2025)
 
-## Known Issues
+- ✅ `PROPERTY_MAPPING` hardening: typed `PropertySpec` contract, raw-dict hard break, `property_spec()` authoring path.
+- ✅ Framework-enforced default materialization at the compute boundary; opt-in explicit-`None`.
+- ✅ Structured parsed-name bindings; required-presence enforcement; all-optional universal-matcher guard.
+- ✅ Typed resolution failures with per-candidate elimination facts and a `session.resolution_report()`.
+- ✅ Post-hardening cleanup: retired transitional parser seams; `PROPERTY_MAPPING` test suite consolidated around a public behavior matrix.
 
-```mermaid
-flowchart TD
-    Issue1[FeatureSet Creation] --> |Unintuitive| Fix1[feature_set.add syntax]
+## Remaining / Known Issues
 
-    style Issue1 fill:#fbb,stroke:#333
-```
-
-- **FeatureSet creation**: Requires `FeatureSet()` then `.add(feature)`
-
+- **os-008**: effective-options materialization placement and default-equivalent twin canonicalization.
+- **Phase 6 downstream**: raw-mapping migration and doc/sample refresh in mloda-registry, plugin-template, and mloda.ai.
+- **Local FeatureGroup subclass GC race** (mloda#868): shared-fixture test parametrization is deferred until this flake is resolved.

@@ -1,49 +1,25 @@
 # Active Context
 
-## Current Status
-
-```mermaid
-timeline
-    title Recent Completions
-    
-    2025-06 : Spark Framework
-            : Iceberg Framework
-            : DuckDB Framework
-            
-    2025-07 : Options Refactoring
-            : Group/Context Separation
-            
-    2025-08 : Sklearn Pipeline
-            : Feature Groups
-            : Artifact Storage
-```
-
 ## Current Work Focus
 
-✅ **Phase 1 Completed: Options Object Refactoring**
-- Implemented group/context parameter separation
-- Feature Groups now correctly split only on isolation-requiring parameters
-- Full backward compatibility maintained
+The active initiative is the **PROPERTY_MAPPING / PropertySpec consumption hardening** epic (from the mloda#750 audit): make the typed option contract safe from authoring through compute, migrate downstream plugins, and retire transitional code.
 
-✅ **Sklearn Pipeline Feature Group**
-- File-based artifact storage with joblib
-- Comprehensive pipeline management
-- 43 test cases, all passing
+Core hardening is complete and the full `tox` gate is green (170 skipped, plus format, lint, licenses, strict mypy, and bandit).
+
+## Status
+
+- ✅ Typed `PropertySpec` is the sole `PROPERTY_MAPPING` contract; raw-dict specs are a hard break.
+- ✅ Defaults are materialized once at the central compute boundary (framework-enforced), with opt-in explicit-`None` semantics.
+- ✅ Structured name parsing and explicit capture-to-spec binding replace reverse lookup and fabricated captureless tokens.
+- ✅ Required-presence enforcement on the string-named match path; all-optional universal-matcher guard.
+- ✅ Resolution failures carry per-candidate elimination facts (`EvaluationResult`).
+- ✅ Post-hardening cleanup: retired transitional parser seams (os-005) and consolidated the `PROPERTY_MAPPING` test suite around a public behavior matrix (os-006).
 
 ## Next Steps
 
-- Add integration tests for filtering with compute frameworks
-- Phase 2: Individual sklearn transformation feature groups
-- Continue feature group parameter migration
+- **os-008**: decide effective-options materialization placement and default-equivalent twin canonicalization (follow-up from the #796 / #803 reviews).
+- **Phase 6 downstream** (owning repos): migrate mloda-registry raw mappings and captureless patterns, align declared value spaces with runtime behavior, scaffold the plugin-template example, and refresh mloda.ai samples before raising the registry `>=0.10,<0.11` cap.
 
-## Active Architecture
+## Architecture Snapshot
 
-```mermaid
-flowchart TD
-    Options --> |group| Isolation[Feature Group Splitting]
-    Options --> |context| Metadata[Algorithm Parameters]
-    
-    Isolation --> |Different Sources| Split[Separate Resolution]
-    Metadata --> |Same Group| Together[Resolve Together]
-    
-    style Options fill:#bbf,stroke:#333,stroke-width:2px
+The typed option lifecycle (author -> parse -> bind -> match -> resolve -> materialize defaults -> compute) is documented in `systemPatterns.md`.

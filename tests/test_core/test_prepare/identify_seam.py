@@ -1,8 +1,14 @@
-"""Test seam mirroring how production raises a resolution failure over IdentifyFeatureGroupClass.
+"""Canonical resolution test seam (os-014): target this, not IdentifyFeatureGroupClass internals.
 
-The raising IdentifyFeatureGroupClass(...) constructor was removed: the engine and resolve_feature call
-evaluate() and render the failure themselves. These helpers reproduce that engine seam so unit tests can
-drive it without the deleted wrapper. Everything here is built on evaluate() + render_resolution_failure.
+- IdentifyFeatureGroupClass.evaluate(...) -> EvaluationResult: the authoritative matcher, non-raising for
+  match outcomes (it still validates compute-framework pin cardinality up front).
+- render_resolution_failure(result, feature) -> str | None: the pure failure renderer, None on success.
+- evaluate_or_raise / identify_winner below: raise-on-failure, via the typed FeatureResolutionError.
+- EvaluationResult fields (identified, criteria_matched, abstract_matched, candidate_frameworks,
+  eliminations, facts) and the derived failure_kind property, for structured assertions.
+
+Exact failure-message wording is out of scope: it is inherently wording-coupled, so prefer asserting on
+structured facts and reserve exact-string checks for tests whose contract is the wording itself.
 """
 
 from typing import Optional

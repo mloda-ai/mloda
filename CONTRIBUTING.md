@@ -59,6 +59,14 @@ All code must pass the automated checks enforced by tox. The toolchain includes:
 - Keep documentation to the necessary minimum.
 - Use [Conventional Commits](https://www.conventionalcommits.org/) for commit messages (`fix:`, `feat:`, `chore:`, etc.).
 
+### Testing resolution changes
+
+Tests that drive FeatureGroup resolution target the seam in `tests/test_core/test_prepare/identify_seam.py`
+(`evaluate_or_raise`, `identify_winner`), not `IdentifyFeatureGroupClass` internals, so refactors do not
+ripple across test files. Exact failure-message wording is not part of the seam. Plugin authors debugging
+resolution use the public `resolve_feature`; see the
+[resolution errors guide](docs/docs/in_depth/troubleshooting/feature-group-resolution-errors.md).
+
 ### Running Checks Locally
 
 Run the full suite (linting, formatting, type checking, security, and tests). Always run tox before submitting a pull request:

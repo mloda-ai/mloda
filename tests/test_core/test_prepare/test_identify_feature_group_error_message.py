@@ -358,8 +358,9 @@ class StrictWindowFeatureGroup(FeatureChainParserMixin, FeatureGroup):
     Deliberately does NOT override match_feature_group_criteria, so it exercises the
     mixin's default swallow-to-False path: an element_validator rejection inside
     FeatureChainParser._validate_property_value raises ValueError, which
-    match_feature_group_criteria catches and turns into a plain False, discarding the
-    actionable message. _strict_validation_rejection_reason recovers that message.
+    match_feature_group_criteria catches and turns into a plain False. The match pass
+    records that rejection as it happens, and the failure message renders the recorded
+    reason.
     """
 
     PROPERTY_MAPPING = {
@@ -399,10 +400,10 @@ class StrictMaxWindowFeatureGroup(FeatureChainParserMixin, FeatureGroup):
 class TestStrictValidationRejectionHint:
     """Tests for the strict-validation rejection hint in the no-feature-group error.
 
-    The no-feature-group-found error consults
-    FeatureChainParserMixin._strict_validation_rejection_reason for each accessible
-    candidate and surfaces the discarded ValueError (e.g. "Property value '14' failed
-    validation for 'window_size'") together with the culprit class name(s).
+    The match pass records each candidate's strict-validation rejection as it happens,
+    and the no-feature-group-found error surfaces the recorded reason (e.g. "Property
+    value '14' failed validation for 'window_size'") together with the culprit class
+    name(s).
     """
 
     def test_hint_names_rejected_option_value_and_class(self) -> None:
@@ -436,7 +437,7 @@ class TestStrictValidationRejectionHint:
     def test_no_hint_when_feature_is_unrelated(self) -> None:
         """A feature with none of the mapped keys present is a non-match, not a
         rejection: match_feature_group_criteria returns False without raising, so
-        _strict_validation_rejection_reason must find nothing to surface."""
+        no rejection is recorded and there is nothing to surface."""
         feature = Feature("totally_unrelated_feature")
 
         accessible_plugins: FeatureGroupEnvironmentMapping = {

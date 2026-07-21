@@ -8,7 +8,11 @@ from typing import Literal, Optional
 from mloda.core.prepare.accessible_plugins import FeatureGroupEnvironmentMapping
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.abstract_plugins.components.domain import Domain
-from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser import PropertyValueRejection
+from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser import (
+    MATCH_REJECTION_REASONS,
+    PropertyValueRejection,
+    record_match_rejection,
+)
 from mloda.core.abstract_plugins.components.utils import safe_field, as_str
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
@@ -298,6 +302,7 @@ class IdentifyFeatureGroupClass:
     _criteria_matched_feature_groups: set[type[FeatureGroup]]
     _abstract_matched_feature_groups: set[type[FeatureGroup]]
     _candidate_frameworks: dict[type[FeatureGroup], CandidateFrameworks]
+    _match_rejections: dict[str, str]
     _data_access_collection: Optional[DataAccessCollection]
     # Per-evaluation memos of the hooks more than one reader wants. evaluate() builds a fresh instance, so
     # they are scoped to one resolution attempt and never cache across runs.
@@ -308,6 +313,8 @@ class IdentifyFeatureGroupClass:
         self._criteria_matched_feature_groups = set()
         self._abstract_matched_feature_groups = set()
         self._candidate_frameworks = {}
+        # Reasons the first pass recorded, keyed by class name.
+        self._match_rejections = {}
         self._domain_outcomes = {}
         self._declared_frameworks = {}
         self._data_access_collection = data_access_collection
@@ -336,7 +343,13 @@ class IdentifyFeatureGroupClass:
         # sat inside the filter loop, so it never ran when the name matched nothing).
         cls._validate_single_framework_pin(feature)
         self = cls(data_access_collection)
-        identified = self._filter_loop(feature, accessible_plugins, links, data_access_collection)
+        # try/finally so a raising hook cannot leak an active recorder out of this evaluation.
+        token = MATCH_REJECTION_REASONS.set({})
+        try:
+            identified = self._filter_loop(feature, accessible_plugins, links, data_access_collection)
+        finally:
+            self._match_rejections = MATCH_REJECTION_REASONS.get() or {}
+            MATCH_REJECTION_REASONS.reset(token)
         result = EvaluationResult(
             identified=identified,
             criteria_matched=self._criteria_matched_feature_groups,
@@ -497,6 +510,7 @@ class IdentifyFeatureGroupClass:
     def _capture_value_rejections(
         self, feature: Feature, accessible_plugins: FeatureGroupEnvironmentMapping
     ) -> tuple[tuple[str, str], ...]:
+        """Project the reasons the first pass recorded onto the domain/scope-filtered candidates, no replay."""
         reasons: list[tuple[str, str]] = []
         for feature_group in accessible_plugins:
             reason = self._scoped_value_rejection_reason(feature_group, feature)
@@ -505,18 +519,18 @@ class IdentifyFeatureGroupClass:
         return tuple(sorted(reasons))
 
     def _scoped_value_rejection_reason(self, feature_group: type[FeatureGroup], feature: Feature) -> str | None:
-        """Best-effort rejection reason of one candidate, guarded together with the filters it runs."""
+        """Best-effort recorded rejection reason of one candidate, guarded together with the filters it runs."""
         return safe_field(
             lambda: self._in_scope_value_rejection_reason(feature_group, feature),
             None,
-            field=f"{feature_group.get_class_name()}._strict_validation_rejection_reason",
+            field=f"{feature_group.get_class_name()} value rejection capture",
         )
 
     def _in_scope_value_rejection_reason(self, feature_group: type[FeatureGroup], feature: Feature) -> str | None:
-        """The candidate's rejection reason, or None when the domain or scope filter rules it out.
+        """The candidate's recorded rejection reason, or None when the domain or scope filter rules it out.
 
-        The reason is validated here, inside the caller's guard: a non-str one only detonates later, in the
-        sorted() over reasons, where two same-named candidates make it a str/int comparison.
+        Recorded reasons are always str, so the as_str below is a cheap invariant check, not a guard
+        against a hostile hook.
         """
         if not self._filter_feature_group_by_domain(feature_group, feature):
             return None
@@ -620,6 +634,7 @@ class IdentifyFeatureGroupClass:
             return feature_group.match_feature_group_criteria(feature.name, feature.options, data_access_collection)
         except PropertyValueRejection as exc:
             logger.debug("%s rejected an option value while matching '%s': %s", feature_group, feature.name, exc)
+            record_match_rejection(feature_group.get_class_name(), str(exc))
             return False
 
     def _filter_feature_group_by_domain(self, feature_group: type[FeatureGroup], feature: Feature) -> bool:
@@ -647,12 +662,8 @@ class IdentifyFeatureGroupClass:
         return feature.get_compute_framework() in compute_frameworks
 
     def _value_rejection_reason(self, feature_group: type[FeatureGroup], feature: Feature) -> Optional[str]:
-        """The candidate's own message for rejecting an option VALUE, if it has one."""
-        rejection_check = getattr(feature_group, "_strict_validation_rejection_reason", None)
-        if rejection_check is None:
-            return None
-        reason: Optional[str] = rejection_check(feature.name, feature.options)
-        return reason
+        """The reason the first pass recorded for this candidate, if any."""
+        return self._match_rejections.get(feature_group.get_class_name())
 
     def filter_subclasses(
         self, _identified_feature_groups: FeatureGroupEnvironmentMapping

@@ -53,6 +53,12 @@ NAME_PATH_PRESENCE_GUARD_DEPTH: contextvars.ContextVar[int] = contextvars.Contex
     "mloda_name_path_presence_guard_depth", default=0
 )
 
+# Active only while the engine evaluates candidates for one feature; maps owner class name to the first
+# structured rejection reason the real match pass produced (os-005 replaces the diagnostic replay).
+MATCH_REJECTION_REASONS: contextvars.ContextVar[dict[str, str] | None] = contextvars.ContextVar(
+    "mloda_match_rejection_reasons", default=None
+)
+
 # Exception classes a user callable raises when it merely cannot judge a value.
 _EXPECTED_JUDGMENT_ERRORS: tuple[type[Exception], ...] = (TypeError, ValueError, AttributeError)
 
@@ -60,6 +66,14 @@ _EXPECTED_JUDGMENT_ERRORS: tuple[type[Exception], ...] = (TypeError, ValueError,
 def _contained_raise_log_level(exc: BaseException) -> int:
     """DEBUG for expected judgment failures, WARNING for classes that suggest a broken callable."""
     return logging.DEBUG if isinstance(exc, _EXPECTED_JUDGMENT_ERRORS) else logging.WARNING
+
+
+def record_match_rejection(owner_name: str, reason: str) -> None:
+    """Record a match rejection; the first reason per owner wins, and outside an active evaluation it is a no-op."""
+    reasons = MATCH_REJECTION_REASONS.get()
+    if reasons is None:
+        return
+    reasons.setdefault(owner_name, reason)
 
 
 def option_key_is_present(spec: PropertySpec, key: str, options: Options) -> bool:
@@ -121,7 +135,7 @@ class FeatureChainParser:
 
         A prefix pattern is anything ``re.match`` accepts: a ``str`` or a compiled ``re.Pattern``.
         A matched pattern with nothing before the separator raises the historical ValueError;
-        ``match_parser_criteria`` and ``_strict_validation_rejection_reason`` depend on that raise.
+        ``match_parser_criteria`` and the mixin's standalone rejection diagnostic depend on that raise.
         """
         _feature_name: str = feature_name
 
@@ -444,6 +458,11 @@ class FeatureChainParser:
                 missing.append(key)
         return missing
 
+    @staticmethod
+    def _presence_rejection_reason(missing: list[str]) -> str:
+        """The one formatting of the missing-required-keys reason, shared by the matcher and the diagnostic."""
+        return f"required option(s) {', '.join(sorted(missing))} are absent after declared defaults and name bindings"
+
     @classmethod
     def _check_name_path_required_presence(
         cls,
@@ -456,6 +475,9 @@ class FeatureChainParser:
         missing = cls._name_path_missing_required_keys(effective_options, property_mapping)
         if not missing:
             return True
+
+        if owner_name is not None:
+            record_match_rejection(owner_name, cls._presence_rejection_reason(missing))
 
         owner = owner_name or "A feature group"
         keys = ", ".join(sorted(missing))
@@ -481,7 +503,7 @@ class FeatureChainParser:
         missing = cls._name_path_missing_required_keys(effective_options, property_mapping)
         if not missing:
             return None
-        return f"required option(s) {', '.join(sorted(missing))} are absent after declared defaults and name bindings"
+        return cls._presence_rejection_reason(missing)
 
     @classmethod
     def match_configuration_feature_chain_parser(

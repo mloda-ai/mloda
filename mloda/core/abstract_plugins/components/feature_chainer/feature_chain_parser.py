@@ -513,9 +513,9 @@ class FeatureChainParser:
         """
 
         # string based matching. parse_name raises the no-source ValueError exactly as before, contained by
-        # match_parser_criteria. Effective options are built from the parse facts here, NOT via the
-        # monkeypatchable build_effective_options: a build raise stays owned by check_required_when, the one
-        # containment site that knows the owner (see build_effective_options / TestBuildEffectiveOptionsRaiseIsContained).
+        # match_parser_criteria. Effective options are built from the parse facts here, keeping the matcher's
+        # own parse containment; a raise out of build_effective_options in check_required_when now surfaces
+        # as a framework defect (os-005, see TestBuildEffectiveOptionsRaiseSurfaces).
         if prefix_patterns is not None:
             parsed = cls.parse_name(feature_name, prefix_patterns, pattern)
             if cls._name_identifies_group(parsed, property_mapping):
@@ -860,17 +860,9 @@ class FeatureChainParser:
         if property_mapping is None or not cls.has_required_when_predicates(property_mapping):
             return True
 
-        # Building effective options may itself raise, so a raise here is contained as a non-match too.
-        try:
-            effective_options = cls.build_effective_options(feature_name, prefix_patterns, property_mapping, options)
-        except Exception as exc:
-            logger.log(
-                _contained_raise_log_level(exc),
-                "building effective options for required_when on %s raised %s; treating feature group as a non-match.",
-                owner_name,
-                exc,
-            )
-            return False
+        # build_effective_options runs no user callback, so a raise from it is a framework defect (or a user
+        # configuration error carrying actionable guidance) and must surface, not read as a non-match (os-005, #763).
+        effective_options = cls.build_effective_options(feature_name, prefix_patterns, property_mapping, options)
         for key, spec in property_mapping.items():
             if not isinstance(spec, PropertySpec):
                 continue

@@ -372,6 +372,16 @@ def test_scanner_flags_new_undeclared_literal_read(tmp_path: Path) -> None:
     assert any("totally_new_key" in v for v in violations), violations
 
 
+def test_scanner_reports_plugin_key_and_location(tmp_path: Path) -> None:
+    """A violation names the reading class, the key, and the file:line of the read."""
+    source = "class Foo:\n    @classmethod\n    def f(cls, options):\n        return options.get('totally_new_key')\n"
+    (tmp_path / "mod.py").write_text(source)
+    violations = find_violations(tmp_path, frozenset(), frozenset(), {}, {})
+    assert any("plugin Foo" in v and "totally_new_key" in v and v.startswith("mod.py:4") for v in violations), (
+        violations
+    )
+
+
 def test_scanner_resolves_declared_class_constant(tmp_path: Path) -> None:
     """``options.get(cls.CONST)`` resolves through the class constant: declared passes, undeclared flags."""
     source = (

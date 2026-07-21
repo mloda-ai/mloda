@@ -1,4 +1,6 @@
-"""Shared option-key declarations for the readers, which are BaseInputData classes without PROPERTY_MAPPING; the wrapper feature groups declare their user keys here."""
+"""Shared option-key specs for the input_data readers.
+
+The readers are BaseInputData classes without PROPERTY_MAPPING; the wrapper feature groups declare these user keys."""
 
 from mloda.provider import property_spec
 
@@ -11,6 +13,6 @@ DOCUMENT_SUFFIXES_SPEC = property_spec(
     context=False,
 )
 DATA_ACCESS_HANDLE_SPEC = property_spec(
-    "Name of a DataAccessCollection handle pinning which registered file or credentials entry the reader uses; see docs/in_depth/named-data-access-handles.md.",
+    "Name of a DataAccessCollection handle pinning which registered file or credentials entry the reader uses; see docs/docs/in_depth/named-data-access-handles.md.",
     default=None,
 )

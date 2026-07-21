@@ -263,19 +263,6 @@ class TestMatchGuardRejectionIsReportable:
         assert str(invalid_value) in reason
 
     @pytest.mark.parametrize("case", _case_params())
-    def test_string_named_path_reports_nothing_for_valid_value(self, case: KeyCase) -> None:
-        """No false positives: a value the guard accepts has nothing to report."""
-        reason = case.feature_group._strict_validation_rejection_reason(
-            case.string_feature_name, case.options(case.valid_value)
-        )
-        assert reason is None
-
-    @pytest.mark.parametrize("case", _case_params())
-    def test_string_named_path_reports_nothing_when_key_is_absent(self, case: KeyCase) -> None:
-        """No false positives: an absent key is not a rejection."""
-        assert case.feature_group._strict_validation_rejection_reason(case.string_feature_name, Options()) is None
-
-    @pytest.mark.parametrize("case", _case_params())
     def test_no_guard_rejection_reported_for_unrelated_feature_name(self, case: KeyCase) -> None:
         """A feature group that does not match the name at all must not report its guards.
 

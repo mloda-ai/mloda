@@ -115,6 +115,15 @@ class TestTransitionalSeamsAreGone:
         """The mixin pass-through is gone: call ``FeatureChainParser.build_effective_options``."""
         assert not hasattr(FeatureChainParserMixin, "_build_effective_options")
 
+    def test_get_validation_function_is_gone(self) -> None:
+        """The pre-rename ``_get_validation_function`` getter is gone: read ``spec.element_validator``."""
+        assert not hasattr(FeatureChainParser, "_get_validation_function")
+
+    def test_validate_type_validators_rename_is_gone(self) -> None:
+        """``_validate_type_validators`` was renamed to ``_validate_match_guards`` on the mixin."""
+        assert not hasattr(FeatureChainParserMixin, "_validate_type_validators")
+        assert hasattr(FeatureChainParserMixin, "_validate_match_guards")
+
 
 class TestPublicSurvivorsStay:
     """The public canonical names the wrappers delegated to keep existing."""

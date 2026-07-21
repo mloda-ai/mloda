@@ -36,9 +36,6 @@ from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.provider import PropertySpec, property_spec
 
-STALE_ELEMENT_VALIDATOR_NAME = "validation_function"
-STALE_MATCH_GUARD_NAME = "type_validator"
-
 
 def _construct(*args: Any, **kwargs: Any) -> PropertySpec:
     """Call ``PropertySpec`` through an untyped seam, keeping the stale-keyword tests mypy-clean."""
@@ -113,6 +110,8 @@ class TestValidatorFieldNames:
 
         assert spec.element_validator is _positive_int
         assert spec.match_guard is _positive_int
+        assert PropertySpec("x").element_validator is None
+        assert PropertySpec("x").match_guard is None
 
     def test_stale_validation_function_name_is_a_type_error(self) -> None:
         """``validation_function`` is an unknown keyword on the constructor and the builder."""
@@ -127,23 +126,6 @@ class TestValidatorFieldNames:
             _construct("cols", type_validator=_positive_int)
         with pytest.raises(TypeError):
             _build("cols", type_validator=_positive_int)
-
-
-class TestRenamedInternalHelpers:
-    """The internal helpers follow the field names, so the vocabulary is consistent end to end."""
-
-    def test_element_validator_is_read_from_the_field(self) -> None:
-        """``PropertySpec.element_validator`` is the field callers read; the old getter name is gone."""
-        assert not hasattr(FeatureChainParser, f"_get_{STALE_ELEMENT_VALIDATOR_NAME}")
-
-        spec = PropertySpec("Size of the time window", strict_validation=True, element_validator=_positive_int)
-        assert spec.element_validator is _positive_int
-        assert PropertySpec("x").element_validator is None
-
-    def test_mixin_exposes_validate_match_guards(self) -> None:
-        """``FeatureChainParserMixin._validate_match_guards`` replaces ``_validate_type_validators``."""
-        assert not hasattr(FeatureChainParserMixin, "_validate_type_validators")
-        assert hasattr(FeatureChainParserMixin, "_validate_match_guards")
 
 
 class TestElementValidatorSemantics:

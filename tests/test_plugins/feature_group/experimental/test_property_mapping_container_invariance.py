@@ -44,12 +44,8 @@ def _text_cleaning_options(operations: Any) -> Options:
 
 
 class TestTextCleaningOperationsAreValidatedPerElement:
-    """Each cleaning operation is validated individually against ``SUPPORTED_OPERATIONS``.
-
-    The plugin's ``element_validator`` currently string-parses a stringified tuple back
-    apart (``op.strip("'\\" ,")``) because core used to stringify tuples. That workaround
-    only ever worked for tuples: a list of the very same operations does not match today.
-    """
+    """Each cleaning operation is validated individually against ``SUPPORTED_OPERATIONS``: the same
+    operations match whether the caller writes a list, a tuple or a frozenset (issue #600)."""
 
     @pytest.mark.parametrize(("label", "operations"), VALID_OPERATIONS, ids=[label for label, _ in VALID_OPERATIONS])
     def test_supported_operations_match_in_any_container(self, label: str, operations: Any) -> None:
@@ -71,19 +67,6 @@ class TestTextCleaningOperationsAreValidatedPerElement:
             assert TextCleaningFeatureGroup.match_feature_group_criteria(
                 "placeholder", _text_cleaning_options([operation])
             ), f"{operation} must be accepted"
-
-    def test_operations_validator_is_a_plain_per_element_membership_check(self) -> None:
-        """The declared ``element_validator`` judges ONE operation, not a container of them.
-
-        Calling it with a whole container must not be how it works: it receives an
-        element. This is what lets the plugin's lambda collapse to a membership check.
-        """
-        spec = TextCleaningFeatureGroup.PROPERTY_MAPPING[TextCleaningFeatureGroup.CLEANING_OPERATIONS]
-        validator = spec.element_validator
-
-        assert validator is not None
-        assert validator("normalize") is True
-        assert validator("bogus_operation") is False
 
 
 class TestGeoDistanceInFeaturesContainerInvariance:

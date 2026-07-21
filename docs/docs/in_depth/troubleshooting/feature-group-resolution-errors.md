@@ -1,14 +1,14 @@
 # Feature Group Resolution Errors
 
 Resolution runs inside a full `mloda` request, but you do not need to build one
-to reproduce a resolution error. `resolve_feature` (from `mloda.steward`) runs
+to reproduce a resolution error. `resolve_feature` (from `mloda.provider`) runs
 the **same matcher over the same candidate universe** as a run and reports what a
 run would, without raising: the failure lands in `result.error` instead of an
 exception, so for the matching failures on this page the message below is the
 message you get back.
 
 ``` python
-from mloda.steward import resolve_feature
+from mloda.provider import resolve_feature
 
 result = resolve_feature("my_feature")  # or resolve_feature(Feature(...)) for a full request
 if result.error:

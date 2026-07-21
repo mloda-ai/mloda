@@ -8,7 +8,6 @@ import contextvars
 import functools
 import logging
 import re
-from collections.abc import Callable
 from typing import Any, Optional
 
 from mloda.core.abstract_plugins.components.feature import Feature
@@ -54,6 +53,13 @@ NAME_PATH_PRESENCE_GUARD_DEPTH: contextvars.ContextVar[int] = contextvars.Contex
     "mloda_name_path_presence_guard_depth", default=0
 )
 
+# Active for one candidate's match call: the engine opens a window per candidate. Maps the recording
+# site's owner name to the first structured rejection reason the real match pass produced, and the
+# engine attributes the harvest to the candidate class object it called (os-005 replaces the replay).
+MATCH_REJECTION_REASONS: contextvars.ContextVar[dict[str, str] | None] = contextvars.ContextVar(
+    "mloda_match_rejection_reasons", default=None
+)
+
 # Exception classes a user callable raises when it merely cannot judge a value.
 _EXPECTED_JUDGMENT_ERRORS: tuple[type[Exception], ...] = (TypeError, ValueError, AttributeError)
 
@@ -61,6 +67,22 @@ _EXPECTED_JUDGMENT_ERRORS: tuple[type[Exception], ...] = (TypeError, ValueError,
 def _contained_raise_log_level(exc: BaseException) -> int:
     """DEBUG for expected judgment failures, WARNING for classes that suggest a broken callable."""
     return logging.DEBUG if isinstance(exc, _EXPECTED_JUDGMENT_ERRORS) else logging.WARNING
+
+
+def record_match_rejection(owner_name: str, reason: str) -> None:
+    """Record a match rejection; the first reason per owner wins, and outside an active evaluation it is a no-op."""
+    reasons = MATCH_REJECTION_REASONS.get()
+    if reasons is None:
+        return
+    reasons.setdefault(owner_name, reason)
+
+
+def option_key_is_present(spec: PropertySpec, key: str, options: Options) -> bool:
+    """The single presence decision (#768 matrix): an opted-in explicit None counts as present, a flagless
+    present-as-None does not."""
+    if spec.allow_explicit_none:
+        return key in options
+    return options.get(key) is not None
 
 
 class PropertyValueRejection(ValueError):
@@ -114,7 +136,7 @@ class FeatureChainParser:
 
         A prefix pattern is anything ``re.match`` accepts: a ``str`` or a compiled ``re.Pattern``.
         A matched pattern with nothing before the separator raises the historical ValueError;
-        ``match_parser_criteria`` and ``_strict_validation_rejection_reason`` depend on that raise.
+        ``match_parser_criteria`` and the mixin's standalone rejection diagnostic depend on that raise.
         """
         _feature_name: str = feature_name
 
@@ -193,21 +215,6 @@ class FeatureChainParser:
         return not is_no_default(spec.default) or spec.required_when is not None
 
     @classmethod
-    def _is_context_parameter(cls, spec: PropertySpec) -> bool:
-        """Check if the spec marks the property as a context parameter."""
-        return spec.context
-
-    @classmethod
-    def _is_strict_validation(cls, spec: PropertySpec) -> bool:
-        """Check if the spec requires strict validation (values must be in the value space)."""
-        return spec.strict_validation
-
-    @classmethod
-    def _get_element_validator(cls, spec: PropertySpec) -> Callable[[Any], Any] | None:
-        """Get the spec's per-element validator if present."""
-        return spec.element_validator
-
-    @classmethod
     def _validate_property_value(
         cls, found_property_val: Any, property_value: Any, property_name: str, original_property_config: PropertySpec
     ) -> None:
@@ -216,10 +223,10 @@ class FeatureChainParser:
 
         Raises PropertyValueRejection if validation fails, otherwise returns None.
         """
-        if not cls._is_strict_validation(original_property_config):
+        if not original_property_config.strict_validation:
             return  # No validation needed
 
-        element_validator = cls._get_element_validator(original_property_config)
+        element_validator = original_property_config.element_validator
 
         if element_validator is not None:
             # A validator that raises cannot judge the value, so the value is rejected, not the run.
@@ -290,7 +297,7 @@ class FeatureChainParser:
             return DefaultOptionKeys.group
         elif property_name in options.context:
             return DefaultOptionKeys.context
-        elif cls._is_context_parameter(property_value):
+        elif property_value.context:
             return DefaultOptionKeys.context
         else:
             return DefaultOptionKeys.group
@@ -301,11 +308,6 @@ class FeatureChainParser:
         if spec.allowed_values is None:
             return {}
         return spec.allowed_values
-
-    @classmethod
-    def _extract_property_values(cls, spec: PropertySpec) -> Any:
-        """Alias kept for existing callers."""
-        return cls.extract_property_values(spec)
 
     @classmethod
     def _require_spec(cls, owner_name: str, key: str, spec: Any) -> PropertySpec:
@@ -393,10 +395,10 @@ class FeatureChainParser:
         property_config = property_mapping[property_name]
         found_property_value = options.get(property_name)
         # An opted-in spec treats a present-as-None value as PRESENT, so it flows through validation (#768).
-        if found_property_value is None and not (property_config.allow_explicit_none and property_name in options):
+        if not option_key_is_present(property_config, property_name, options):
             return None
         return cls._process_found_property_value(
-            found_property_value, cls._extract_property_values(property_config), property_name, property_config
+            found_property_value, cls.extract_property_values(property_config), property_name, property_config
         )
 
     @classmethod
@@ -452,10 +454,15 @@ class FeatureChainParser:
                 continue
             if spec.deferred_binding:
                 continue
-            absent = effective_options.get(key) is None and not (spec.allow_explicit_none and key in effective_options)
+            absent = not option_key_is_present(spec, key, effective_options)
             if absent:
                 missing.append(key)
         return missing
+
+    @staticmethod
+    def _presence_rejection_reason(missing: list[str]) -> str:
+        """The one formatting of the missing-required-keys reason, shared by the matcher and the diagnostic."""
+        return f"required option(s) {', '.join(sorted(missing))} are absent after declared defaults and name bindings"
 
     @classmethod
     def _check_name_path_required_presence(
@@ -469,6 +476,9 @@ class FeatureChainParser:
         missing = cls._name_path_missing_required_keys(effective_options, property_mapping)
         if not missing:
             return True
+
+        if owner_name is not None:
+            record_match_rejection(owner_name, cls._presence_rejection_reason(missing))
 
         owner = owner_name or "A feature group"
         keys = ", ".join(sorted(missing))
@@ -494,7 +504,7 @@ class FeatureChainParser:
         missing = cls._name_path_missing_required_keys(effective_options, property_mapping)
         if not missing:
             return None
-        return f"required option(s) {', '.join(sorted(missing))} are absent after declared defaults and name bindings"
+        return cls._presence_rejection_reason(missing)
 
     @classmethod
     def match_configuration_feature_chain_parser(
@@ -526,9 +536,9 @@ class FeatureChainParser:
         """
 
         # string based matching. parse_name raises the no-source ValueError exactly as before, contained by
-        # match_parser_criteria. Effective options are built from the parse facts here, NOT via the
-        # monkeypatchable build_effective_options: a build raise stays owned by check_required_when, the one
-        # containment site that knows the owner (see build_effective_options / TestBuildEffectiveOptionsRaiseIsContained).
+        # match_parser_criteria. Effective options are built from the parse facts here, keeping the matcher's
+        # own parse containment; a raise out of build_effective_options in check_required_when now surfaces
+        # as a framework defect (os-005, see TestBuildEffectiveOptionsRaiseSurfaces).
         if prefix_patterns is not None:
             parsed = cls.parse_name(feature_name, prefix_patterns, pattern)
             if cls._name_identifies_group(parsed, property_mapping):
@@ -601,7 +611,7 @@ class FeatureChainParser:
         for key, spec in property_mapping.items():
             if not isinstance(spec, PropertySpec):
                 continue
-            if legacy_value in cls._extract_property_values(spec):
+            if legacy_value in cls.extract_property_values(spec):
                 return {key: legacy_value}
         return {}
 
@@ -648,7 +658,7 @@ class FeatureChainParser:
             if not isinstance(spec, PropertySpec):
                 continue
             # An explicit option (including an opted-in explicit None, #768) is never overwritten.
-            if options.get(key) is not None or (spec.allow_explicit_none and key in options):
+            if option_key_is_present(spec, key, options):
                 continue
             if cls._determine_parameter_category(key, spec, options) == DefaultOptionKeys.context:
                 merged_context[key] = value
@@ -723,7 +733,7 @@ class FeatureChainParser:
     def _str_reachable_values(cls, spec: PropertySpec) -> set[str]:
         """The str members of a spec's value space; only a str can be reverse-looked-up from a capture."""
         reachable: set[str] = set()
-        for value in cls._extract_property_values(spec):
+        for value in cls.extract_property_values(spec):
             if isinstance(value, str):
                 reachable.add(value)
         return reachable
@@ -873,17 +883,9 @@ class FeatureChainParser:
         if property_mapping is None or not cls.has_required_when_predicates(property_mapping):
             return True
 
-        # Building effective options may itself raise, so a raise here is contained as a non-match too.
-        try:
-            effective_options = cls.build_effective_options(feature_name, prefix_patterns, property_mapping, options)
-        except Exception as exc:
-            logger.log(
-                _contained_raise_log_level(exc),
-                "building effective options for required_when on %s raised %s; treating feature group as a non-match.",
-                owner_name,
-                exc,
-            )
-            return False
+        # build_effective_options runs no user callback, so a raise from it is a framework defect (or a user
+        # configuration error carrying actionable guidance) and must surface, not read as a non-match (os-005, #763).
+        effective_options = cls.build_effective_options(feature_name, prefix_patterns, property_mapping, options)
         for key, spec in property_mapping.items():
             if not isinstance(spec, PropertySpec):
                 continue
@@ -905,11 +907,7 @@ class FeatureChainParser:
                 )
                 return False
             # An opted-in key present as an explicit None counts as present, so the requirement is met (#768).
-            if (
-                is_required
-                and effective_options.get(key) is None
-                and not (spec.allow_explicit_none and key in effective_options)
-            ):
+            if is_required and not option_key_is_present(spec, key, effective_options):
                 logger.debug(
                     "Feature group %s requires option '%s' (predicate %s is satisfied) but it was not provided.",
                     owner_name,

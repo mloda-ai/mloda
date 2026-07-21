@@ -69,9 +69,10 @@ GOOD_VALUE_ESC763 = "good_esc763"
 NEEDS_MODE_ESC763 = "needs_esc763"
 OPTIONAL_MODE_ESC763 = "optional_esc763"
 
-# The tier763 markers pin the two-tier logging contract on the same containment sites: an expected judgment
-# failure (TypeError, ValueError, AttributeError) stays at DEBUG, while any other exception class means the
-# callable itself looks broken and must surface at WARNING. Containment (reject / non-match) is unchanged.
+# The tier763 markers pin the two-tier logging contract on the user-callable containment sites: an expected
+# judgment failure (TypeError, ValueError, AttributeError) stays at DEBUG, while any other exception class means
+# the callable itself looks broken and must surface at WARNING. Containment (reject / non-match) is unchanged
+# for user callables; a raise from framework-owned build_effective_options surfaces instead (os-005).
 TYPE_POISON_VALUE_TIER763 = "type_poison_tier763"
 CAUSE_KEY_TIER763 = "cause_key_tier763"
 
@@ -109,12 +110,12 @@ def _keyerror_required_when_esc763(options: Options) -> bool:
 
 
 def _raise_build_effective_options_esc763(cls: Any, *args: Any, **kwargs: Any) -> Options:
-    """Force build_effective_options to raise a plain ValueError: the escape #763 must contain."""
+    """Force build_effective_options to raise a plain ValueError: a raise the narrowed containment must surface."""
     raise ValueError("esc763 build_effective_options boom")
 
 
 def _raise_keyerror_build_effective_options_tier763(cls: Any, *args: Any, **kwargs: Any) -> Options:
-    """Force build_effective_options to raise KeyError: a broken-looking class that must surface at WARNING."""
+    """Force build_effective_options to raise KeyError: a raise the narrowed containment must surface, not contain."""
     raise KeyError("tier763 build_effective_options boom")
 
 
@@ -674,15 +675,18 @@ class TestKeyErrorPathsDoNotOverReject:
         )
 
 
-class TestBuildEffectiveOptionsRaiseIsContained:
-    """issue #763: a raise from build_effective_options inside the required_when guard is a non-match, not an escape.
+class TestBuildEffectiveOptionsRaiseSurfaces:
+    """os-005 narrows the #763 containment to user-supplied callables (element_validator, match_guard,
+    required_when predicates). No user callback runs inside the framework-owned build_effective_options,
+    so a raise out of it is a framework defect (or a user configuration error carrying actionable
+    guidance) and must propagate out of matching instead of being contained as a non-match.
 
     The driver is OPTIONAL_MODE_ESC763, so the predicate itself returns False (would match True): the monkeypatched
-    build_effective_options, called before the predicate loop and outside its try/except, is the sole raise source.
+    build_effective_options, called before the predicate loop, is the sole raise source.
     """
 
-    def test_build_effective_options_raise_is_a_non_match(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """A ValueError from build_effective_options is contained as a non-match, not an escape out of the matcher."""
+    def test_build_effective_options_raise_propagates_from_the_matcher(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """A ValueError from build_effective_options propagates out of the matcher instead of being contained."""
         monkeypatch.setattr(
             FeatureChainParser,
             "build_effective_options",
@@ -690,16 +694,13 @@ class TestBuildEffectiveOptionsRaiseIsContained:
         )
         options = Options(context={DRIVER_KEY_ESC763: OPTIONAL_MODE_ESC763})
 
-        result = RaisingKeyErrorRequiredWhenFeatureGroupEsc763.match_feature_group_criteria(
-            REQUIRED_WHEN_FEATURE_ESC763, options
-        )
+        with pytest.raises(ValueError, match="esc763 build_effective_options boom"):
+            RaisingKeyErrorRequiredWhenFeatureGroupEsc763.match_feature_group_criteria(
+                REQUIRED_WHEN_FEATURE_ESC763, options
+            )
 
-        assert result is False
-
-    def test_build_effective_options_raise_yields_the_standard_no_match_error(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        """The engine turns that contained raise into the standard no-match error, not a bare escape."""
+    def test_build_effective_options_raise_propagates_out_of_the_engine(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """The engine no longer converts the raise into the standard no-match error: the boom itself surfaces."""
         monkeypatch.setattr(
             FeatureChainParser,
             "build_effective_options",
@@ -710,19 +711,65 @@ class TestBuildEffectiveOptionsRaiseIsContained:
             RaisingKeyErrorRequiredWhenFeatureGroupEsc763: {MockComputeFrameworkEsc732},
         }
 
-        with pytest.raises(ValueError) as exc_info:
+        with pytest.raises(ValueError, match="esc763 build_effective_options boom") as exc_info:
             _identify(feature, accessible_plugins)
 
-        message = str(exc_info.value)
-        assert "No feature groups found" in message, (
-            f"A build_effective_options raise must be a non-match, not an exception out of the engine, but got: {message}"
+        assert "No feature groups found" not in str(exc_info.value), (
+            "a framework-defect raise must not be converted into the standard no-match error"
+        )
+
+    def test_keyerror_build_effective_options_raise_propagates_without_warning(
+        self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """A KeyError from build_effective_options propagates unchanged; the parser logs no WARNING containment."""
+        caplog.set_level(logging.DEBUG, logger=PARSER_LOGGER_NAME)
+        monkeypatch.setattr(
+            FeatureChainParser,
+            "build_effective_options",
+            classmethod(_raise_keyerror_build_effective_options_tier763),
+        )
+        options = Options(context={DRIVER_KEY_ESC763: OPTIONAL_MODE_ESC763})
+
+        with pytest.raises(KeyError, match="tier763 build_effective_options boom"):
+            RaisingKeyErrorRequiredWhenFeatureGroupEsc763.match_feature_group_criteria(
+                REQUIRED_WHEN_FEATURE_ESC763, options
+            )
+
+        assert _records_at_or_above(caplog, PARSER_LOGGER_NAME, logging.WARNING) == [], (
+            "a propagating build_effective_options raise must not leave a WARNING-tier containment record"
+        )
+
+    def test_valueerror_build_effective_options_raise_leaves_no_containment_record(
+        self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """A ValueError from build_effective_options propagates unchanged and leaves no containment record at all."""
+        caplog.set_level(logging.DEBUG, logger=PARSER_LOGGER_NAME)
+        monkeypatch.setattr(
+            FeatureChainParser,
+            "build_effective_options",
+            classmethod(_raise_build_effective_options_esc763),
+        )
+        options = Options(context={DRIVER_KEY_ESC763: OPTIONAL_MODE_ESC763})
+
+        with pytest.raises(ValueError, match="esc763 build_effective_options boom"):
+            RaisingKeyErrorRequiredWhenFeatureGroupEsc763.match_feature_group_criteria(
+                REQUIRED_WHEN_FEATURE_ESC763, options
+            )
+
+        assert _records_at_or_above(caplog, PARSER_LOGGER_NAME, logging.WARNING) == []
+        debug_records = _records_at_exactly(caplog, PARSER_LOGGER_NAME, logging.DEBUG)
+        assert all("non-match" not in record.getMessage() for record in debug_records), (
+            "a propagating build_effective_options raise must not leave a DEBUG non-match containment record"
         )
 
 
 class TestContainedRaiseLogTiers:
-    """Two-tier logging for contained raises: an expected judgment failure (TypeError, ValueError,
+    """Two-tier logging for raises contained from user-supplied callables only (element_validator,
+    match_guard, required_when predicates): an expected judgment failure (TypeError, ValueError,
     AttributeError) stays at DEBUG, any other exception class looks like a broken callable and must
-    surface at WARNING. Containment itself (reject / non-match, never escape) is unchanged either way.
+    surface at WARNING. Containment itself (reject / non-match, never escape) is unchanged for these
+    user callables; framework-owned build_effective_options raises propagate instead (os-005, see
+    TestBuildEffectiveOptionsRaiseSurfaces).
     """
 
     def test_keyerror_validator_raise_logs_at_warning(self, caplog: pytest.LogCaptureFixture) -> None:
@@ -835,53 +882,6 @@ class TestContainedRaiseLogTiers:
         assert any(
             REQUIRED_WHEN_KEY_ESC763 in record.getMessage() or owner in record.getMessage() for record in debug_records
         ), "the DEBUG containment record must name the guarded key or the owning feature group"
-
-    def test_keyerror_build_effective_options_raise_logs_at_warning(
-        self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
-    ) -> None:
-        """build_effective_options raising KeyError is still a non-match, but the containment surfaces at WARNING."""
-        caplog.set_level(logging.DEBUG, logger=PARSER_LOGGER_NAME)
-        monkeypatch.setattr(
-            FeatureChainParser,
-            "build_effective_options",
-            classmethod(_raise_keyerror_build_effective_options_tier763),
-        )
-        options = Options(context={DRIVER_KEY_ESC763: OPTIONAL_MODE_ESC763})
-
-        result = RaisingKeyErrorRequiredWhenFeatureGroupEsc763.match_feature_group_criteria(
-            REQUIRED_WHEN_FEATURE_ESC763, options
-        )
-
-        assert result is False
-        warnings = _records_at_or_above(caplog, PARSER_LOGGER_NAME, logging.WARNING)
-        assert warnings, "a KeyError out of build_effective_options looks broken and must log at WARNING"
-        owner = RaisingKeyErrorRequiredWhenFeatureGroupEsc763.__name__
-        assert any(owner in record.getMessage() for record in warnings)
-
-    def test_valueerror_build_effective_options_raise_logs_at_debug_only(
-        self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
-    ) -> None:
-        """build_effective_options raising ValueError is an expected failure: contained at DEBUG, never WARNING."""
-        caplog.set_level(logging.DEBUG, logger=PARSER_LOGGER_NAME)
-        monkeypatch.setattr(
-            FeatureChainParser,
-            "build_effective_options",
-            classmethod(_raise_build_effective_options_esc763),
-        )
-        options = Options(context={DRIVER_KEY_ESC763: OPTIONAL_MODE_ESC763})
-
-        result = RaisingKeyErrorRequiredWhenFeatureGroupEsc763.match_feature_group_criteria(
-            REQUIRED_WHEN_FEATURE_ESC763, options
-        )
-
-        assert result is False
-        assert _records_at_or_above(caplog, PARSER_LOGGER_NAME, logging.WARNING) == []
-        debug_records = _records_at_exactly(caplog, PARSER_LOGGER_NAME, logging.DEBUG)
-        assert debug_records, "the contained ValueError must still log its rejection at DEBUG"
-        owner = RaisingKeyErrorRequiredWhenFeatureGroupEsc763.__name__
-        assert any(owner in record.getMessage() for record in debug_records), (
-            "the DEBUG containment record must name the feature group whose match was denied"
-        )
 
 
 class TestValidatorCauseChaining:

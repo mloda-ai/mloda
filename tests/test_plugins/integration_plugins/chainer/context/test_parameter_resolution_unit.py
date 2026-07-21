@@ -222,21 +222,21 @@ class TestParameterResolutionUnit:
         assert cannot_skip is False, "ident should not be identified as optional"
 
     def test_context_parameter_identification(self) -> None:
-        """Test the _is_context_parameter logic."""
+        """Test the spec.context flag."""
         property_mapping = ChainedContextFeatureGroupTest.PROPERTY_MAPPING
 
         # Test: Parameters marked as context
-        is_context_ident = FeatureChainParser._is_context_parameter(property_mapping["ident"])
+        is_context_ident = property_mapping["ident"].context
         assert is_context_ident is True, "ident should be identified as context parameter"
 
-        is_context_property3 = FeatureChainParser._is_context_parameter(property_mapping["property3"])
+        is_context_property3 = property_mapping["property3"].context
         assert is_context_property3 is True, "property3 should be identified as context parameter"
 
-        is_context_source = FeatureChainParser._is_context_parameter(property_mapping[DefaultOptionKeys.in_features])
+        is_context_source = property_mapping[DefaultOptionKeys.in_features].context
         assert is_context_source is True, "in_features should be identified as context parameter"
 
         # Test: Parameters not marked as context (group parameters)
-        is_context_property2 = FeatureChainParser._is_context_parameter(property_mapping["property2"])
+        is_context_property2 = property_mapping["property2"].context
         assert is_context_property2 is False, "property2 should not be identified as context parameter"
 
     def test_edge_case_parameter_values(self) -> None:
@@ -269,7 +269,7 @@ class TestParameterResolutionUnit:
         assert result is True, "Should handle special test value for property2"
 
     def test_parameter_extraction_logic(self) -> None:
-        """Test the _extract_property_values logic."""
+        """Test the extract_property_values logic."""
         # Test: the declared value space is returned, the fields around it are not
         spec_with_default = PropertySpec(
             "Optional property with a default",
@@ -278,7 +278,7 @@ class TestParameterResolutionUnit:
             context=True,
         )
 
-        extracted = FeatureChainParser._extract_property_values(spec_with_default)
+        extracted = FeatureChainParser.extract_property_values(spec_with_default)
         expected = {"opt_val1": "explanation", "opt_val2": "explanation"}
         assert extracted == expected, "Should return exactly the declared allowed_values"
 
@@ -287,7 +287,7 @@ class TestParameterResolutionUnit:
         # PropertySpec has no such fallback.)
         spec_without_allowed_values = PropertySpec("Spec without a declared value space")
 
-        extracted = FeatureChainParser._extract_property_values(spec_without_allowed_values)
+        extracted = FeatureChainParser.extract_property_values(spec_without_allowed_values)
         assert extracted == {}, "Should declare an empty value space when allowed_values is absent"
 
     def test_validation_final_properties(self) -> None:
@@ -423,8 +423,8 @@ class TestParameterResolutionUnit:
         )
         assert result is True, "Should pass validation when in_features has default flexible validation"
 
-    def test_strict_validation_helper_methods(self) -> None:
-        """Test the _is_strict_validation helper method with default non-strict behavior."""
+    def test_strict_validation_flag(self) -> None:
+        """Test the spec.strict_validation flag with default non-strict behavior."""
 
         # Test: Spec with explicit strict validation = True
         strict_spec = PropertySpec(
@@ -432,7 +432,7 @@ class TestParameterResolutionUnit:
             allowed_values={"value1": "explanation"},
             strict_validation=True,
         )
-        assert FeatureChainParser._is_strict_validation(strict_spec) is True, "Should identify strict validation = True"
+        assert strict_spec.strict_validation is True, "Should identify strict validation = True"
 
         # Test: Spec with explicit strict validation = False
         flexible_spec = PropertySpec(
@@ -440,9 +440,7 @@ class TestParameterResolutionUnit:
             allowed_values={"value1": "explanation"},
             strict_validation=False,
         )
-        assert FeatureChainParser._is_strict_validation(flexible_spec) is False, (
-            "Should identify strict validation = False"
-        )
+        assert flexible_spec.strict_validation is False, "Should identify strict validation = False"
 
         # Test: Spec without an explicit strict validation flag (defaults to False)
         default_spec = PropertySpec(
@@ -450,17 +448,13 @@ class TestParameterResolutionUnit:
             allowed_values={"value1": "explanation"},
             context=True,
         )
-        assert FeatureChainParser._is_strict_validation(default_spec) is False, (
-            "Should default to strict validation = False"
-        )
+        assert default_spec.strict_validation is False, "Should default to strict validation = False"
 
         # Test: Minimal spec (explanation only) defaults to False. The non-spec inputs
         # the old helper tolerated (bare strings, empty dicts) are rejected at class
         # definition now, so PropertySpec instances are the only shapes left to test.
         minimal_spec = PropertySpec("Minimal spec")
-        assert FeatureChainParser._is_strict_validation(minimal_spec) is False, (
-            "Should default to strict validation = False for a minimal spec"
-        )
+        assert minimal_spec.strict_validation is False, "Should default to strict validation = False for a minimal spec"
 
     def test_mixed_validation_scenarios(self) -> None:
         """Test complex scenarios with mixed strict and flexible validation."""

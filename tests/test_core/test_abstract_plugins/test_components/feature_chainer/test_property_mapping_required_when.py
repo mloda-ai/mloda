@@ -94,7 +94,7 @@ class TestRequiredWhenUnit:
             strict_validation=False,
             required_when=_needs_order_by,
         )
-        extracted = FeatureChainParser._extract_property_values(mapping_entry)
+        extracted = FeatureChainParser.extract_property_values(mapping_entry)
         assert extracted == {}
 
     def test_extract_property_values_strips_explanation(self) -> None:
@@ -104,7 +104,7 @@ class TestRequiredWhenUnit:
             context=True,
             strict_validation=False,
         )
-        extracted = FeatureChainParser._extract_property_values(mapping_entry)
+        extracted = FeatureChainParser.extract_property_values(mapping_entry)
         assert extracted == {}
 
     def test_can_skip_required_check_with_required_when(self) -> None:
@@ -225,7 +225,7 @@ class TestRequiredWhenIntegration:
             context={"order_by": "ts"},
             propagate_context_keys=frozenset({"order_by"}),
         )
-        effective = MockWithConditionalRequired._build_effective_options(
+        effective = FeatureChainParser.build_effective_options(
             "source__first_windowed",
             [MockWithConditionalRequired.PREFIX_PATTERN],
             MockWithConditionalRequired.PROPERTY_MAPPING,

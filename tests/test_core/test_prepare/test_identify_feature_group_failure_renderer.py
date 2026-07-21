@@ -660,7 +660,7 @@ def raising_names_none_scenario() -> Scenario:
 
 
 def raising_rejection_none_scenario() -> Scenario:
-    """An ordinary-none failure where one candidate's value-rejection diagnostic raises."""
+    """An ordinary-none failure next to a candidate whose value-rejection diagnostic would raise if consulted."""
     feature = Feature(
         TYPO_FEATURE_791,
         Options(context={DefaultOptionKeys.in_features: "src", "window_size": 14}),
@@ -975,7 +975,7 @@ class TestFactCaptureNeverTakesEvaluateDown:
     """Fact capture is best-effort rendering data, never a decision input.
 
     evaluate() now calls hooks its decision pass never called (get_domain on a domain-less request,
-    prefix, feature_names_supported, _strict_validation_rejection_reason, compute_framework_definition).
+    prefix, feature_names_supported, compute_framework_definition).
     A provider whose hook raises must degrade that one fact only: evaluate() still returns its result and
     the renderer still returns a message, exactly as the guarded message builders behaved before #791.
     """
@@ -1028,14 +1028,19 @@ class TestFactCaptureNeverTakesEvaluateDown:
         assert message is not None
         assert f"'{KNOWN_FEATURE_791}'" in message
 
-    def test_raising_value_rejection_reason_keeps_the_healthy_rejection_line(self) -> None:
-        """A raising diagnostic contributes no rejection line; the healthy rejecting candidate still does."""
+    def test_the_raising_rejection_hook_is_never_consulted(self) -> None:
+        """The engine renders rejections recorded in the first pass, so a raising hook simply never fires.
+
+        The healthy strict candidate's rejection was recorded while matching and still renders; the
+        hostile diagnostic is never called, so there is nothing to degrade.
+        """
         scenario = raising_rejection_none_scenario()
         feature, _ = scenario
 
         result = _evaluate(scenario)
 
         assert result.failure_kind == "none"
+        assert "RendererRaisingRejectionFG791._strict_validation_rejection_reason" not in HOOK_CALLS
         assert result.facts.value_rejections == (("RendererStrictFG791", WINDOW_REJECTION_REASON),)
 
         message = render_resolution_failure(result, feature)

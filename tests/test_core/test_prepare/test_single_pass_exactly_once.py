@@ -71,6 +71,7 @@ BAD_NAME_VALUE_782 = 123
 BAD_PREFIX_VALUE_782 = 456
 BAD_REASON_VALUE_782 = 999
 HEALTHY_REJECTION_REASON_782 = "single pass healthy rejection reason 782"
+STRICT_REJECTION_REASON_782 = "Property value '14' failed validation for 'window_size_782'"
 
 # Same-named tie candidates get an explicit __module__ so only the module can break the sort tie.
 TIE_MODULE_A_782 = "tests.single_pass_tie_module_a_782"
@@ -516,15 +517,17 @@ def _build_bad_declaration_groups_782() -> tuple[
 
 
 def _build_tie_rejection_groups_782() -> tuple[type[FeatureGroup], type[FeatureGroup]]:
-    """Build two same-named candidates across modules, one returning a non-str rejection reason.
+    """Build two same-named candidates across modules, both overriding the rejection hook, one with a non-str reason.
 
-    Sharing a __name__ is what forces ``sorted()`` past the first tuple element and onto the reason,
-    so a malformed reason is compared against a well-formed one.
+    Sharing a __name__ once forced ``sorted()`` past the first tuple element and onto the hook-provided
+    reason. Reasons now come only from first-pass recording, so the pin is that these hooks are never
+    consulted at all; the hook counts its calls to prove it.
     """
 
     def rejection_hook(cls: Any, feature_name: Any, options: Any) -> Any:
         # Disarmed, the group reports no rejection at all, which is what makes a leaked one inert: these two
         # SHARE a __name__, so an armed leak would poison any later sorted() over the whole universe.
+        _record(cls.get_class_name(), "_strict_validation_rejection_reason")
         return _malformed(cls.REASON) if cls.ARMED else None
 
     def make(module: str, reason: Any) -> type[FeatureGroup]:
@@ -972,21 +975,23 @@ class TestDecisionHooksRunAtMostOncePerCandidate:
             ("SinglePassLinkFG_782", str(RIGHT_INDEX_782)): 1,
         }
 
-    def test_engine_asks_the_typed_value_rejection_hook_once_per_candidate(self) -> None:
-        """The rejection reason is captured once and rendered from the capture."""
+    def test_engine_renders_the_value_rejection_from_the_first_pass_without_the_hook(self) -> None:
+        """The rejection reason is rendered from the first pass; the hook is not consulted."""
         scenario = strict_none_scenario()
 
-        _engine_error(scenario)
+        message = _engine_error(scenario)
 
-        assert _counts_for("_strict_validation_rejection_reason") == _once_each(scenario.candidates)
+        assert _counts_for("_strict_validation_rejection_reason") == {}
+        assert f"  - SinglePassStrictFG_782: {STRICT_REJECTION_REASON_782}" in message
 
-    def test_resolve_feature_asks_the_typed_value_rejection_hook_once_per_candidate(self) -> None:
-        """Same budget across the diagnostic API."""
+    def test_resolve_feature_renders_the_value_rejection_from_the_first_pass_without_the_hook(self) -> None:
+        """Same contract across the diagnostic API: rendered from the first pass, hook not consulted."""
         scenario = strict_none_scenario()
 
-        _resolve_error(scenario)
+        message = _resolve_error(scenario)
 
-        assert _counts_for("_strict_validation_rejection_reason") == _once_each(scenario.candidates)
+        assert _counts_for("_strict_validation_rejection_reason") == {}
+        assert f"  - SinglePassStrictFG_782: {STRICT_REJECTION_REASON_782}" in message
 
     def test_engine_asks_a_reader_style_matcher_once_per_candidate(self) -> None:
         """A matcher that consults a DataAccessCollection is asked once, like any other."""
@@ -1172,8 +1177,14 @@ class TestMalformedHookValuesDegradeLikeARaise:
         assert message.startswith(f"No feature groups found for feature name: '{BAD_CATALOG_FEATURE_782}'.")
         assert TROUBLESHOOTING_LINE_782 in message
 
-    def test_evaluate_does_not_raise_when_a_rejection_reason_is_non_str(self) -> None:
-        """Two candidates sharing a __name__ force sorted() onto the reason, where a non-str one detonates."""
+    def test_a_hostile_rejection_hook_cannot_inject_a_reason_into_the_facts(self) -> None:
+        """Two same-named groups override the hook, one with a non-str reason: neither is consulted.
+
+        The old hazard was a sorted() over hook-provided reasons, where two same-named candidates forced
+        the comparison onto a malformed (non-str) reason. Rejection reasons are now recorded during the
+        first pass only, and these matchers record nothing, so a hook cannot inject a reason at all and
+        the sorted() poisoning hazard is structurally gone.
+        """
         healthy, malformed = _build_tie_rejection_groups_782()
         feature = Feature(TIE_REJECT_FEATURE_782)
         accessible_plugins: FeatureGroupEnvironmentMapping = {
@@ -1184,9 +1195,10 @@ class TestMalformedHookValuesDegradeLikeARaise:
         result = IdentifyFeatureGroupClass.evaluate(feature=feature, accessible_plugins=accessible_plugins, links=None)
         message = render_resolution_failure(result, feature)
 
-        assert result.facts.value_rejections == (("SinglePassTieRejectFG_782", HEALTHY_REJECTION_REASON_782),)
+        assert _counts_for("_strict_validation_rejection_reason") == {}
+        assert result.facts.value_rejections == ()
         assert message is not None
-        assert HEALTHY_REJECTION_REASON_782 in message
+        assert HEALTHY_REJECTION_REASON_782 not in message
         assert str(BAD_REASON_VALUE_782) not in message
 
     def test_malformed_get_domain_degrades_only_its_own_domain_suffix(self) -> None:

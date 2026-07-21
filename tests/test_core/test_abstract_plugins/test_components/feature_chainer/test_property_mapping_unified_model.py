@@ -132,13 +132,13 @@ class TestValidatorFieldNames:
 class TestRenamedInternalHelpers:
     """The internal helpers follow the field names, so the vocabulary is consistent end to end."""
 
-    def test_parser_exposes_get_element_validator(self) -> None:
-        """``FeatureChainParser._get_element_validator`` reads the field; the old name is gone."""
+    def test_element_validator_is_read_from_the_field(self) -> None:
+        """``PropertySpec.element_validator`` is the field callers read; the old getter name is gone."""
         assert not hasattr(FeatureChainParser, f"_get_{STALE_ELEMENT_VALIDATOR_NAME}")
 
         spec = PropertySpec("Size of the time window", strict_validation=True, element_validator=_positive_int)
-        assert FeatureChainParser._get_element_validator(spec) is _positive_int
-        assert FeatureChainParser._get_element_validator(PropertySpec("x")) is None
+        assert spec.element_validator is _positive_int
+        assert PropertySpec("x").element_validator is None
 
     def test_mixin_exposes_validate_match_guards(self) -> None:
         """``FeatureChainParserMixin._validate_match_guards`` replaces ``_validate_type_validators``."""

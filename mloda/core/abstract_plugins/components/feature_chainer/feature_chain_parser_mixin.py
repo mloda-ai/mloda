@@ -40,9 +40,10 @@ element, the match fails with a ``ValueError`` before ``match_guard`` is
 reached.
 
 A guard rejection on a spec that also sets ``strict_validation=True`` is
-reportable: ``_strict_validation_rejection_reason`` turns it into a message so
-the feature group does not vanish silently. A guard on a non-strict spec keeps
-its "not mine" meaning and reports nothing.
+reportable: the match pass records it as it happens, and the recorded reason
+feeds the resolution-failure report. ``_strict_validation_rejection_reason``
+remains a standalone diagnostic facade producing the same message. A guard on
+a non-strict spec keeps its "not mine" meaning and reports nothing.
 
 Validators must be pure functions with no side effects. They may be called
 multiple times during feature group resolution (once per candidate feature
@@ -64,7 +65,10 @@ from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser
     FeatureChainParser,
     CHAIN_SEPARATOR,
     INPUT_SEPARATOR,
+    PropertyValueRejection,
     _contained_raise_log_level,
+    option_key_is_present,
+    record_match_rejection,
 )
 from mloda.core.abstract_plugins.components.feature_chainer.property_spec import PropertySpec
 from mloda.core.abstract_plugins.components.default_options_key import DefaultOptionKeys
@@ -295,12 +299,22 @@ class FeatureChainParserMixin:
                 prefix_patterns=cls._get_prefix_patterns(),
                 owner_name=cls.__name__,
             )
+        except PropertyValueRejection as exc:
+            record_match_rejection(cls.__name__, str(exc))
+            return False
+        # Known asymmetry deliberately kept in scope: a config error raised while merging name bindings on the
+        # string path (e.g. a key in both group and context) is still contained as a non-match here, while the
+        # required_when path surfaces it via build_effective_options (os-005 review note).
         except ValueError:
             return False
 
     @classmethod
     def _strict_validation_rejection_reason(cls, feature_name: str | FeatureName, options: Options) -> str | None:
         """Return the rejection message that match_feature_group_criteria discards, if any.
+
+        The engine no longer calls this: it renders the reasons the first match pass recorded via
+        ``record_match_rejection``. This stays a compatibility facade for direct diagnostic calls
+        and must keep producing the same messages the match pass records.
 
         Reports two kinds of value rejection, both gated on the feature group OTHERWISE matching
         the feature:
@@ -338,7 +352,7 @@ class FeatureChainParserMixin:
             if name_matched:
                 # The name relates the feature group to the feature, so the values of the present
                 # options (name-derived bindings included) are judged here; the name-path presence
-                # reason follows below. Judging the effective options keeps the replay in step with the match.
+                # reason follows below. Judging the effective options keeps the diagnostic in step with the match.
                 FeatureChainParser._validate_present_option_values(effective_options, property_mapping)
             else:
                 matches_mapping = FeatureChainParser._validate_options_against_property_mapping(
@@ -423,7 +437,7 @@ class FeatureChainParserMixin:
                 continue
             value = options.get(key)
             # An opted-in explicit None reaches the guard; every flagless spec still skips a None (#768).
-            if value is None and not (mapping_entry.allow_explicit_none and key in options):
+            if not option_key_is_present(mapping_entry, key, options):
                 continue
             try:
                 rejected = not guard(value)
@@ -453,6 +467,8 @@ class FeatureChainParserMixin:
 
         key, value = rejection
         logger.debug("match_guard for '%s' rejected value %r", key, value)
+        if property_mapping is not None and property_mapping[key].strict_validation:
+            record_match_rejection(cls.__name__, f"Property value '{value}' rejected by match_guard for '{key}'")
         return False
 
     @classmethod
@@ -495,17 +511,6 @@ class FeatureChainParserMixin:
         if hasattr(cls, "PROPERTY_MAPPING"):
             return cast(Optional[dict[str, PropertySpec]], cls.PROPERTY_MAPPING)
         return None
-
-    @classmethod
-    def _build_effective_options(
-        cls,
-        feature_name: str,
-        prefix_patterns: list[Any],
-        property_mapping: dict[str, PropertySpec],
-        options: Options,
-    ) -> Options:
-        """Merge the value parsed from the feature name into the options the predicates see."""
-        return FeatureChainParser.build_effective_options(feature_name, prefix_patterns, property_mapping, options)
 
     @classmethod
     def _extract_source_features(cls, feature: Feature) -> list[str]:

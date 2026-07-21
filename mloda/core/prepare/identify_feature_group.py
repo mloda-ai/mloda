@@ -61,6 +61,9 @@ class RenderFacts:
     domains: dict[type[FeatureGroup], str] = field(default_factory=dict)
     concrete_frameworks: tuple[str, ...] = ()
     known_names: tuple[str, ...] = ()
+    # Class name and prefix of each eliminated near-miss, so a "Did you mean" suggestion that merely echoes
+    # a candidate the near-miss block already named can be suppressed.
+    eliminated_hints: frozenset[str] = frozenset()
 
 
 @dataclass(frozen=True)
@@ -235,7 +238,7 @@ def _render_multiple(result: EvaluationResult, feature: Feature, callout: str | 
     )
 
 
-def _render_abstract_only(result: EvaluationResult, feature: Feature) -> str:
+def _render_abstract_only(result: EvaluationResult, feature: Feature, callout: str | None) -> str:
     feature_name = str(feature.name)
     if not result.facts.concrete_frameworks:
         msg = (
@@ -250,6 +253,11 @@ def _render_abstract_only(result: EvaluationResult, feature: Feature) -> str:
             f"Its concrete implementations require compute framework(s) {framework_names}, "
             f"none of which are available or enabled for this run."
         )
+
+    # Place the callout on the sentence line, before the near-miss block, exactly as _render_none does, so it
+    # is never space-glued to the last near-miss bullet.
+    if callout:
+        msg += f" {callout}"
 
     near_miss = _render_near_miss_block(result, feature)
     if near_miss is not None:
@@ -269,6 +277,9 @@ def _render_none(result: EvaluationResult, feature: Feature, callout: str | None
         msg += f"\n{near_miss}"
 
     similar = get_close_matches(feature_name, list(result.facts.known_names), n=5, cutoff=0.5)
+    # Drop suggestions that merely echo a candidate the near-miss block already named; if that empties the
+    # list, omit the line rather than repeat what was just eliminated.
+    similar = [name for name in similar if name not in result.facts.eliminated_hints]
     if similar:
         msg += f"\nDid you mean one of: {similar}?"
 
@@ -296,8 +307,7 @@ def render_resolution_failure(result: EvaluationResult, feature: Feature) -> str
         return _render_multiple(result, feature, callout)
 
     if result.abstract_matched:
-        abstract_message = _render_abstract_only(result, feature)
-        return f"{abstract_message} {callout}" if callout else abstract_message
+        return _render_abstract_only(result, feature, callout)
 
     return _render_none(result, feature, callout)
 
@@ -358,9 +368,8 @@ class IdentifyFeatureGroupClass:
             eliminations=self._eliminations,
         )
         if result.failure_kind is not None:
-            # eliminations is the same dict object result carries, so this precedence-free pass fills in the
-            # value_rejection near-misses (setdefault keeps any earlier gate a candidate already failed).
-            self._capture_value_rejections(feature, accessible_plugins)
+            # Every elimination (value_rejection included) was already recorded during the single filter pass;
+            # this only captures the non-elimination facts the messages still need.
             result = replace(result, facts=self._capture_render_facts(result, accessible_plugins))
         # A captured exception pins its traceback, whose frames pin this instance: a refcount cycle that would
         # keep both alive until a gc pass. Dropping the outcomes here makes the memo's lifetime what it claims.
@@ -384,7 +393,19 @@ class IdentifyFeatureGroupClass:
             domains=self._capture_domains(result),
             concrete_frameworks=self._concrete_implementation_frameworks(result, accessible_plugins),
             known_names=self._capture_known_names(accessible_plugins),
+            eliminated_hints=self._capture_eliminated_hints(result),
         )
+
+    def _capture_eliminated_hints(self, result: EvaluationResult) -> frozenset[str]:
+        """Class name and prefix of every eliminated near-miss, so the none message can suppress a
+        'Did you mean' suggestion that merely echoes a candidate its near-miss block already names."""
+        hints: set[str] = set()
+        for feature_group in result.eliminations:
+            hints.add(feature_group.get_class_name())
+            prefix = _prefix_name(feature_group)
+            if prefix:
+                hints.add(prefix)
+        return frozenset(hints)
 
     def _domain_outcome(self, feature_group: type[FeatureGroup]) -> tuple[Optional[Domain], Optional[Exception]]:
         """Memoized get_domain() OUTCOME, value or raise, so one candidate's hook runs once per evaluation.
@@ -485,9 +506,15 @@ class IdentifyFeatureGroupClass:
         _identified_feature_groups: FeatureGroupEnvironmentMapping = {}
 
         for feature_group, compute_frameworks in accessible_plugins.items():
-            # A criteria non-match records nothing here: a plain name mismatch is not a near-miss, and a value
-            # rejection is captured on the failure path by _capture_value_rejections over the rejection hook.
+            # A criteria non-match records a value_rejection only when the first pass recorded a reason for it:
+            # a plain name mismatch is not a near-miss, but a value the candidate declined (with a reportable
+            # reason) is. The criteria call above just recorded any rejection under this candidate's window, so
+            # this reads it back for a criteria-FAILING candidate only; a matched/winning/abstract candidate is
+            # never probed. Recorded regardless of domain/scope or of the overall outcome (a sibling may win).
             if not self._filter_feature_group_by_criteria(feature_group, feature, data_access_collection):
+                reason = self._value_rejection_reason(feature_group)
+                if reason is not None:
+                    self._record_elimination(feature_group, "value_rejection", reason)
                 continue
 
             if not self._filter_feature_group_by_domain(feature_group, feature):
@@ -559,46 +586,18 @@ class IdentifyFeatureGroupClass:
         """Record the first gate a non-winning name-matching candidate failed; one entry per candidate."""
         self._eliminations.setdefault(feature_group, Elimination(stage=stage, reason=reason))
 
-    def _capture_value_rejections(self, feature: Feature, accessible_plugins: FeatureGroupEnvironmentMapping) -> None:
-        """Record a value_rejection for each accessible candidate that rejects an option VALUE.
-
-        Precedence-free: it asks every candidate that passes the domain and scope gates, and setdefault keeps
-        any earlier gate a candidate already failed in the decision loop. Its own domain/scope/rejection reads
-        are guarded, so a raising provider degrades only its own candidate, never this pass.
-        """
-        for feature_group in accessible_plugins:
-            reason = self._scoped_value_rejection_reason(feature_group, feature)
-            if reason is not None:
-                self._record_elimination(feature_group, "value_rejection", reason)
-
-    def _scoped_value_rejection_reason(self, feature_group: type[FeatureGroup], feature: Feature) -> str | None:
-        """Best-effort recorded rejection reason of one candidate, guarded together with the filters it runs."""
-        return safe_field(
-            lambda: self._in_scope_value_rejection_reason(feature_group, feature),
-            None,
-            field=f"{feature_group.get_class_name()} value rejection capture",
-        )
-
-    def _in_scope_value_rejection_reason(self, feature_group: type[FeatureGroup], feature: Feature) -> str | None:
-        """The candidate's recorded rejection reason, or None when the domain or scope filter rules it out.
-
-        Recorded reasons are always str, so the as_str below is a cheap invariant check, not a guard
-        against a hostile hook.
-        """
-        if not self._filter_feature_group_by_domain(feature_group, feature):
-            return None
-        if not self._filter_feature_group_by_scope(feature_group, feature):
-            return None
-        reason = self._value_rejection_reason(feature_group)
-        return None if reason is None else as_str(reason)
-
     def _value_rejection_reason(self, feature_group: type[FeatureGroup]) -> Optional[str]:
-        """The reason the first match pass recorded for this candidate class, if any."""
+        """The reason the first match pass recorded for this candidate class, if any.
+
+        The candidate's criteria match records its own value rejection under a per-candidate window; this
+        only reads that record back, so no rejection hook is ever reran on the failure path.
+        """
         return self._match_rejections.get(feature_group)
 
     def _domain_reason(self, feature_group: type[FeatureGroup], feature: Feature) -> str:
-        """Reason wording for a candidate dropped at the domain gate."""
-        requested = feature.domain.name if feature.domain is not None else ""
+        """Reason wording for a candidate dropped at the domain gate, which only fires for a domain-carrying request."""
+        assert feature.domain is not None  # the domain gate only drops a candidate when the request carries a domain
+        requested = feature.domain.name
         candidate_domain = self._domain_name(feature_group)
         if candidate_domain is None:
             return f"does not declare the requested domain '{requested}'"
@@ -635,7 +634,8 @@ class IdentifyFeatureGroupClass:
 
         The per-candidate recording window is what keys reasons by candidate class, so same-named classes cannot
         collide (review fix). The try/finally guarantees the reset even when an unexpected exception propagates;
-        in that case nothing is attributed.
+        in that case nothing is attributed. The filter loop reads the recorded reason back at this candidate's
+        non-match point, so the value_rejection near-miss is captured without ever re-probing a rejection hook.
         """
         token = MATCH_REJECTION_REASONS.set({})
         try:

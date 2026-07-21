@@ -850,7 +850,7 @@ class TestRenderResolutionFailureMessages:
 class TestPerCandidateCorrelation:
     """A candidate's frameworks stay correlated to that candidate, never merged into a union."""
 
-    def test_capability_frameworks_are_never_unioned_across_candidates(self) -> None:
+    def test_near_miss_lines_name_only_each_candidates_own_frameworks(self) -> None:
         """Mirrored candidates: each near-miss line names only its OWN supported framework, never the union."""
         message = _render(capability_scenario())
 
@@ -967,7 +967,7 @@ class TestFactsCapturedDuringEvaluate:
         assert result.failure_kind == "abstract_only"
         assert result.facts.concrete_frameworks == ()
 
-    def test_value_rejections_and_known_names_captured_for_ordinary_none(self) -> None:
+    def test_ordinary_none_records_value_rejection_elimination_and_captures_known_names(self) -> None:
         """The ordinary-none kind records the value rejection as an elimination and captures the name catalog."""
         result = _evaluate(ordinary_none_scenario())
 
@@ -1174,7 +1174,11 @@ class TestSortTiesAreStable:
         assert _render((feature, b_first)) == expected
 
     def test_capability_tie_sorts_by_module_and_ignores_insertion_order(self) -> None:
-        """Same-named capability candidates render module-sorted, whichever way they were inserted."""
+        """Same-named capability candidates render module-sorted, whichever way they were inserted.
+
+        Every close match here is a candidate the near-miss block already named (its class name or prefix), so
+        the 'Did you mean' line is suppressed entirely rather than echoing the eliminated candidates back.
+        """
         group_a, group_b = _build_tie_capability_groups()
         feature = Feature(TIE_CAPABILITY_FEATURE_791, compute_framework="RendererFwThree791")
         both = {RendererFwOne791, RendererFwTwo791}
@@ -1188,10 +1192,11 @@ class TestSortTiesAreStable:
             " is not among its supported ['RendererFwOne791']\n"
             "  - RendererTieFG791 (compute framework pin): pinned compute framework 'RendererFwThree791'"
             " is not among its supported ['RendererFwTwo791']\n"
-            "Did you mean one of: ['RendererTieFG791', 'RendererTieFG791', 'RendererTieFG791_', 'RendererTieFG791_']?\n"
             "Use resolve_feature(name, options=...) to debug feature resolution.\n"
             f"{TROUBLESHOOTING_LINE}"
         )
 
         assert _render((feature, a_first)) == expected
         assert _render((feature, b_first)) == expected
+        # The suppressed suggestion must not echo the already-named eliminated candidate or its prefix.
+        assert "Did you mean" not in _render((feature, a_first))

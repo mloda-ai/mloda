@@ -33,7 +33,7 @@ from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.prepare.accessible_plugins import FeatureGroupEnvironmentMapping
-from mloda.core.prepare.identify_feature_group import FeatureResolutionError, RenderFacts
+from mloda.core.prepare.identify_feature_group import Elimination, EvaluationResult, FeatureResolutionError
 from tests.test_core.test_prepare.identify_seam import evaluate_or_raise
 
 
@@ -195,15 +195,15 @@ def _reset_recording_state() -> Iterator[None]:
     FACADE_CALLS_OS005R.clear()
 
 
-def _failed_facts(feature: Feature, accessible_plugins: FeatureGroupEnvironmentMapping) -> RenderFacts:
-    """Run one engine attempt that must fail and return the facts its single pass captured."""
+def _failed_result(feature: Feature, accessible_plugins: FeatureGroupEnvironmentMapping) -> EvaluationResult:
+    """Run one engine attempt that must fail and return the structured result its single pass produced."""
     with pytest.raises(FeatureResolutionError) as exc_info:
         evaluate_or_raise(feature=feature, accessible_plugins=accessible_plugins, links=None)
-    return exc_info.value.result.facts
+    return exc_info.value.result
 
 
 class TestFirstPassRejectionRecording:
-    """The failure facts carry the rejections the real match pass produced, without a replay."""
+    """The failure eliminations carry the rejections the real match pass produced, without a replay."""
 
     def test_strict_value_rejection_is_reported_and_the_validator_runs_once(self) -> None:
         """One failed resolution judges the bad value exactly once: match only, no diagnosis replay."""
@@ -213,9 +213,11 @@ class TestFirstPassRejectionRecording:
         )
         accessible_plugins: FeatureGroupEnvironmentMapping = {StrictRecordingFGOs005r: {RecorderFwOneOs005r}}
 
-        facts = _failed_facts(feature, accessible_plugins)
+        result = _failed_result(feature, accessible_plugins)
 
-        assert facts.value_rejections == (("StrictRecordingFGOs005r", STRICT_REJECTION_REASON_OS005R),)
+        assert result.eliminations == {
+            StrictRecordingFGOs005r: Elimination(stage="value_rejection", reason=STRICT_REJECTION_REASON_OS005R)
+        }
         assert VALIDATOR_CALLS_OS005R == [14]
 
     def test_missing_required_option_reason_is_reported_from_the_first_pass(self) -> None:
@@ -223,25 +225,29 @@ class TestFirstPassRejectionRecording:
         feature = Feature(MISSING_OPTION_FEATURE_OS005R)
         accessible_plugins: FeatureGroupEnvironmentMapping = {MissingOptionRecordingFGOs005r: {RecorderFwOneOs005r}}
 
-        facts = _failed_facts(feature, accessible_plugins)
+        result = _failed_result(feature, accessible_plugins)
 
-        assert facts.value_rejections == (("MissingOptionRecordingFGOs005r", MISSING_OPTION_REASON_OS005R),)
+        assert result.eliminations == {
+            MissingOptionRecordingFGOs005r: Elimination(stage="value_rejection", reason=MISSING_OPTION_REASON_OS005R)
+        }
 
     def test_strict_match_guard_rejection_is_reported_from_the_first_pass(self) -> None:
         """A guard rejection on a strict spec records the same message the facade produces."""
         feature = Feature(GUARD_FEATURE_OS005R, Options(context={"guarded_key_os005r": "ok_os005r"}))
         accessible_plugins: FeatureGroupEnvironmentMapping = {GuardRecordingFGOs005r: {RecorderFwOneOs005r}}
 
-        facts = _failed_facts(feature, accessible_plugins)
+        result = _failed_result(feature, accessible_plugins)
 
-        assert facts.value_rejections == (("GuardRecordingFGOs005r", GUARD_REJECTION_REASON_OS005R),)
+        assert result.eliminations == {
+            GuardRecordingFGOs005r: Elimination(stage="value_rejection", reason=GUARD_REJECTION_REASON_OS005R)
+        }
 
     def test_same_named_candidates_each_keep_their_own_recorded_reason(self) -> None:
         """Two candidates sharing a __name__ each report the reason their OWN match produced.
 
         A recording keyed by class name collapses both classes into one first-wins slot: the second
         class's distinct reason is dropped and the shared reason is attributed to both candidates.
-        Scoped per candidate, the facts carry two entries with the same name and two different reasons.
+        Keyed by the class OBJECT, the eliminations carry two entries with the same name and two reasons.
         """
         group_a, group_b = _build_colliding_rejection_groups_os005c()
         feature = Feature(
@@ -259,12 +265,12 @@ class TestFirstPassRejectionRecording:
             group_b: {RecorderFwOneOs005r},
         }
 
-        facts = _failed_facts(feature, accessible_plugins)
+        result = _failed_result(feature, accessible_plugins)
 
-        assert facts.value_rejections == (
-            (COLLIDING_NAME_OS005C, COLLIDE_A_REASON_OS005C),
-            (COLLIDING_NAME_OS005C, COLLIDE_B_REASON_OS005C),
-        )
+        assert result.eliminations == {
+            group_a: Elimination(stage="value_rejection", reason=COLLIDE_A_REASON_OS005C),
+            group_b: Elimination(stage="value_rejection", reason=COLLIDE_B_REASON_OS005C),
+        }
 
 
 class TestEngineNeverCallsTheFacade:
@@ -275,10 +281,10 @@ class TestEngineNeverCallsTheFacade:
         feature = Feature(FACADE_FEATURE_OS005R)
         accessible_plugins: FeatureGroupEnvironmentMapping = {FacadeProbeFGOs005r: {RecorderFwOneOs005r}}
 
-        facts = _failed_facts(feature, accessible_plugins)
+        result = _failed_result(feature, accessible_plugins)
 
         assert FACADE_CALLS_OS005R == []
-        assert facts.value_rejections == ()
+        assert result.eliminations == {}
 
     def test_the_facade_still_answers_standalone_calls(self) -> None:
         """Called directly, the facade keeps working: many tests use it as a diagnostic."""

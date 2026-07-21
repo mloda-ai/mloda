@@ -239,6 +239,11 @@ class TestComputeFrameworkCapabilityHook:
         assert CapabilityFwA.get_class_name() in error_message, (
             f"Error must name the supported framework '{CapabilityFwA.get_class_name()}', but got: {error_message}"
         )
+        # The near-miss block already names the eliminated candidate; a fuzzy suggestion must not echo it.
+        suggestion_line = next((line for line in error_message.split("\n") if line.startswith("Did you mean")), "")
+        assert RejectBCapabilityFeatureGroup.get_class_name() not in suggestion_line, (
+            f"the 'Did you mean' suggestion must not echo the already-named eliminated candidate, got: {error_message}"
+        )
 
     def test_all_frameworks_reject_operation(self) -> None:
         """When every framework rejects the op, a graceful error names the feature."""
@@ -353,4 +358,9 @@ class TestComputeFrameworkCapabilityHook:
         assert CapabilityFwA.get_class_name() not in error_message, (
             "run-only capability reason must not name the declared-but-not-enabled framework "
             f"'{CapabilityFwA.get_class_name()}', but got: {error_message}"
+        )
+        # The eliminated candidate is named in the near-miss block; a fuzzy suggestion must not echo it.
+        suggestion_line = next((line for line in error_message.split("\n") if line.startswith("Did you mean")), "")
+        assert DualDeclaringFG_782.get_class_name() not in suggestion_line, (
+            f"the 'Did you mean' suggestion must not echo the already-named eliminated candidate, got: {error_message}"
         )

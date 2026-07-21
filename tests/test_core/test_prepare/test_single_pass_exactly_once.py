@@ -985,7 +985,7 @@ class TestDecisionHooksRunAtMostOncePerCandidate:
         message = _engine_error(scenario)
 
         assert _counts_for("_strict_validation_rejection_reason") == {}
-        assert f"  - SinglePassStrictFG_782: {STRICT_REJECTION_REASON_782}" in message
+        assert f"  - SinglePassStrictFG_782 (option value): {STRICT_REJECTION_REASON_782}" in message
 
     def test_resolve_feature_renders_the_value_rejection_from_the_first_pass_without_the_hook(self) -> None:
         """Same contract across the diagnostic API: rendered from the first pass, hook not consulted."""
@@ -994,7 +994,7 @@ class TestDecisionHooksRunAtMostOncePerCandidate:
         message = _resolve_error(scenario)
 
         assert _counts_for("_strict_validation_rejection_reason") == {}
-        assert f"  - SinglePassStrictFG_782: {STRICT_REJECTION_REASON_782}" in message
+        assert f"  - SinglePassStrictFG_782 (option value): {STRICT_REJECTION_REASON_782}" in message
 
     def test_engine_asks_a_reader_style_matcher_once_per_candidate(self) -> None:
         """A matcher that consults a DataAccessCollection is asked once, like any other."""

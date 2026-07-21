@@ -399,12 +399,12 @@ candidate's "no match" must not abort the search for another candidate that migh
 the feature. This holds on both paths: a bad option value on a string-named feature is the same
 non-match as on a configuration-based one.
 
-If every candidate rejects the feature, the final "No feature groups found" error collects the
-discarded reasons and appends them:
+If every candidate rejects the feature, the final "No feature groups found" error names each
+discarded candidate and why it dropped:
 
 ```
-Feature group(s) rejected the supplied options while matching 'window_size_windowed':
-  - WindowedFeatureGroup: Property value '14' failed validation for 'window_size'
+Feature group(s) eliminated while matching 'window_size_windowed':
+  - WindowedFeatureGroup (option value): Property value '14' failed validation for 'window_size'
 ```
 
 This is diagnostic only. It does not change the `True`/`False` contract, so a value rejected by

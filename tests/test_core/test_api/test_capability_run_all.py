@@ -69,6 +69,11 @@ class TestCapabilityRunAllEndToEnd:
         assert "E2ECapRunAllFeatureGroup (compute framework):" in message, (
             f"Capability error must name the eliminated candidate under the near-miss line, got: {message}"
         )
+        # The near-miss block already names the eliminated candidate; the fuzzy suggestion must not echo it.
+        suggestion_line = next((line for line in message.split("\n") if line.startswith("Did you mean")), "")
+        assert "E2ECapRunAllFeatureGroup" not in suggestion_line, (
+            f"the 'Did you mean' suggestion must not echo the already-named eliminated candidate, got: {message}"
+        )
 
     def test_route_around_to_pandas_returns_dataframe(self) -> None:
         """With both frameworks enabled, the run routes around to Pandas and computes."""

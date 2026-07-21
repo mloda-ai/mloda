@@ -54,6 +54,10 @@ PRECEDENCE_CAP_FEATURE = "elim_precedence_cap_feat_011"
 PRECEDENCE_NE_FEATURE = "elim_precedence_ne_feat_011"
 SUCCESS_FEATURE = "elim_success_feat_011"
 NONMATCH_ONLY_NAME = "elim_only_this_other_name_011"
+WIN_WITH_REJECTOR_FEATURE = "elim_win_with_rejector_feat_011"
+DOMAIN_AND_VALUE_REJECT_FEATURE = "elim_domain_and_value_reject_feat_011"
+REPROBE_FEATURE = "elim_reprobe_feat_011"
+SCOPED_ABSTRACT_SCOPE = "_ElimBaseFG"
 
 REQUESTED_DOMAIN = "elim_requested_domain_011"
 CANDIDATE_DOMAIN = "elim_candidate_domain_011"
@@ -61,6 +65,13 @@ UNRELATED_SCOPE = "ElimUnrelatedScope011"
 
 # Value-rejection wording matches today's ``_strict_validation_rejection_reason`` output.
 VALUE_REJECT_REASON = "Property value '14' failed validation for 'window_size'"
+WIN_REJECT_REASON = "Property value 'bad' rejected by match_guard for 'mode'"
+DOMAIN_VALUE_REASON = "Property value '7' failed validation for 'k'"
+REPROBE_REASON = "a criteria-matched candidate must never be re-probed as a value rejection"
+
+# A criteria-matched candidate's value must be inspected once (at match time). A failure-path capture that
+# re-probed such a candidate via ``_strict_validation_rejection_reason`` would inspect it a second time.
+REPROBE_INSPECT_CALLS: dict[str, int] = {}
 
 
 # --- compute framework doubles ------------------------------------------------------------------
@@ -140,8 +151,8 @@ class _ElimBaseFG(FeatureGroup):
 class ElimValueRejectFG011(_ElimBaseFG):
     """Name matches, but the criteria hook raises ``PropertyValueRejection`` on the value.
 
-    ``_strict_validation_rejection_reason`` returns the reportable wording. The contract prefers that
-    hook over ``str(exc)``, so the recorded reason is the hook's return, not the raw exception text.
+    The first match pass records the raised message as the value_rejection reason, so the rejection's own
+    wording is what surfaces; no diagnostic hook is re-probed on the failure path.
     """
 
     MATCHES = frozenset({VALUE_FEATURE})
@@ -155,12 +166,8 @@ class ElimValueRejectFG011(_ElimBaseFG):
         data_access_collection: Optional[DataAccessCollection] = None,
     ) -> bool:
         if str(feature_name) in cls.MATCHES:
-            raise PropertyValueRejection("raw exception text 011 that must not surface as the reason")
+            raise PropertyValueRejection(VALUE_REJECT_REASON)
         return False
-
-    @classmethod
-    def _strict_validation_rejection_reason(cls, feature_name: str | FeatureName, options: Options) -> str | None:
-        return VALUE_REJECT_REASON
 
 
 class ElimDomainFG011(_ElimBaseFG):
@@ -272,6 +279,99 @@ class ElimNonMatchingFG011(_ElimBaseFG):
 
     MATCHES = frozenset({NONMATCH_ONLY_NAME})
     FRAMEWORK_RULE = {ElimFwOne011}
+
+
+class ElimWinnerFG011(_ElimBaseFG):
+    """Sole winner of the win-with-losing-rejector scenario; matches the shared name and supports its framework."""
+
+    MATCHES = frozenset({WIN_WITH_REJECTOR_FEATURE})
+    FRAMEWORK_RULE = {ElimFwOne011}
+
+
+class ElimLosingRejectorFG011(_ElimBaseFG):
+    """Matches the shared name but rejects the option VALUE, recording a reportable reason: a losing near-miss.
+
+    The rejection is name-guarded so a leaked global subclass records nothing for any other suite's feature.
+    """
+
+    MATCHES = frozenset({WIN_WITH_REJECTOR_FEATURE})
+
+    @classmethod
+    def match_feature_group_criteria(
+        cls,
+        feature_name: FeatureName | str,
+        options: Options,
+        data_access_collection: Optional[DataAccessCollection] = None,
+    ) -> bool:
+        # Name matches, but the value is rejected: the first pass records the reason as the match fails.
+        if str(feature_name) == WIN_WITH_REJECTOR_FEATURE:
+            raise PropertyValueRejection(WIN_REJECT_REASON)
+        return False
+
+
+class ElimDomainAndValueRejectFG011(_ElimBaseFG):
+    """Rejects the option VALUE (criteria fails first) AND declares an unrequested domain.
+
+    The value_rejection is recorded at the criteria gate, before the domain gate is ever consulted, so the
+    stage is value_rejection rather than domain. The reason is name-guarded to stay inert when leaked.
+    """
+
+    MATCHES = frozenset({DOMAIN_AND_VALUE_REJECT_FEATURE})
+    DOMAIN_NAME = CANDIDATE_DOMAIN
+
+    @classmethod
+    def match_feature_group_criteria(
+        cls,
+        feature_name: FeatureName | str,
+        options: Options,
+        data_access_collection: Optional[DataAccessCollection] = None,
+    ) -> bool:
+        # The value is rejected at the criteria gate, recording the reason before the domain gate is reached.
+        if str(feature_name) == DOMAIN_AND_VALUE_REJECT_FEATURE:
+            raise PropertyValueRejection(DOMAIN_VALUE_REASON)
+        return False
+
+
+class _ElimReprobeFG011(_ElimBaseFG):
+    """Criteria-matched candidate whose value is inspected once, at match time.
+
+    Both match and the rejection hook increment the SAME per-class counter, so a re-probe of this matched
+    candidate via ``_strict_validation_rejection_reason`` would push its count to two. The hook is name-guarded
+    to stay inert when leaked into another suite's candidate universe.
+    """
+
+    FRAMEWORK_RULE = {ElimFwOne011}
+
+    @classmethod
+    def match_feature_group_criteria(
+        cls,
+        feature_name: FeatureName | str,
+        options: Options,
+        data_access_collection: Optional[DataAccessCollection] = None,
+    ) -> bool:
+        matched = str(feature_name) in cls.MATCHES
+        if matched:
+            REPROBE_INSPECT_CALLS[cls.get_class_name()] = REPROBE_INSPECT_CALLS.get(cls.get_class_name(), 0) + 1
+        return matched
+
+    @classmethod
+    def _strict_validation_rejection_reason(cls, feature_name: str | FeatureName, options: Options) -> str | None:
+        if str(feature_name) != REPROBE_FEATURE:
+            return None
+        REPROBE_INSPECT_CALLS[cls.get_class_name()] = REPROBE_INSPECT_CALLS.get(cls.get_class_name(), 0) + 1
+        return REPROBE_REASON
+
+
+class ElimReprobeAFG011(_ElimReprobeFG011):
+    """First of two matched winners sharing the re-probe name; the pair triggers a 'multiple' failure."""
+
+    MATCHES = frozenset({REPROBE_FEATURE})
+
+
+class ElimReprobeBFG011(_ElimReprobeFG011):
+    """Second matched winner sharing the re-probe name."""
+
+    MATCHES = frozenset({REPROBE_FEATURE})
 
 
 # A link whose indexes ElimLinksFG011 does not support, driving the links gate to reject.
@@ -482,6 +582,86 @@ class TestNoEliminationRecorded:
         assert ElimValueRejectFG011 in err.result.eliminations
         # ... but the candidate whose name never matched is not a near-miss.
         assert ElimNonMatchingFG011 not in err.result.eliminations
+
+
+class TestValueRejectionCaptureCorrectness:
+    """value_rejection is recorded for a criteria-FAILING candidate at that first gate, regardless of domain
+    or scope and regardless of the overall outcome; a criteria-matched candidate is never re-probed."""
+
+    def test_losing_value_rejector_recorded_even_when_a_sibling_wins(self) -> None:
+        """A losing value-rejecter is a near-miss even when a sibling WINS and the resolution succeeds."""
+        feature = Feature(WIN_WITH_REJECTOR_FEATURE)
+        plugins: FeatureGroupEnvironmentMapping = {
+            ElimWinnerFG011: {ElimFwOne011},
+            ElimLosingRejectorFG011: {ElimFwOne011},
+        }
+
+        result = IdentifyFeatureGroupClass.evaluate(feature, plugins, None)
+
+        # A sibling won, so the resolution as a whole is a success ...
+        assert result.failure_kind is None
+        winner_fg, _ = next(iter(result.identified.items()))
+        assert winner_fg is ElimWinnerFG011
+        # ... yet the losing value-rejecter is still recorded, which the old failure-only capture never did.
+        assert result.eliminations[ElimLosingRejectorFG011] == Elimination(
+            stage="value_rejection", reason=WIN_REJECT_REASON
+        )
+        assert ElimWinnerFG011 not in result.eliminations
+
+    def test_value_rejection_recorded_even_with_a_domain_mismatch(self) -> None:
+        """A candidate that value-rejects AND declares an unrequested domain is staged value_rejection.
+
+        The criteria gate is first, so the reason is captured there; the old domain/scope-gated capture
+        dropped such a candidate entirely.
+        """
+        feature = Feature(DOMAIN_AND_VALUE_REJECT_FEATURE, domain=REQUESTED_DOMAIN)
+        plugins: FeatureGroupEnvironmentMapping = {ElimDomainAndValueRejectFG011: {ElimFwOne011}}
+
+        err = _fail(feature, plugins)
+
+        assert err.result.eliminations[ElimDomainAndValueRejectFG011] == Elimination(
+            stage="value_rejection", reason=DOMAIN_VALUE_REASON
+        )
+
+    def test_criteria_matched_candidates_are_not_reprobed_as_value_rejections(self) -> None:
+        """Two matched winners (a 'multiple' failure) are each inspected once, never re-probed as rejections."""
+        REPROBE_INSPECT_CALLS.clear()
+        feature = Feature(REPROBE_FEATURE)
+        plugins: FeatureGroupEnvironmentMapping = {
+            ElimReprobeAFG011: {ElimFwOne011},
+            ElimReprobeBFG011: {ElimFwOne011},
+        }
+
+        err = _fail(feature, plugins)
+
+        assert err.result.failure_kind == "multiple"
+        # Each matched candidate's value was inspected exactly once, at match time: the rejection hook, which
+        # would inspect it a second time, is never asked of a criteria-matched candidate.
+        assert REPROBE_INSPECT_CALLS == {"ElimReprobeAFG011": 1, "ElimReprobeBFG011": 1}
+        # And no matched winner is recorded as a value_rejection near-miss.
+        assert err.result.eliminations == {}
+
+
+class TestScopedAbstractOnlyCallout:
+    """FIX C: the scope callout in the abstract_only branch sits on the sentence line, never glued to a bullet."""
+
+    def test_scoped_abstract_only_callout_is_not_glued_to_a_near_miss_bullet(self) -> None:
+        feature = Feature(ABSTRACT_FEATURE, feature_group=SCOPED_ABSTRACT_SCOPE)
+        plugins: FeatureGroupEnvironmentMapping = {
+            ElimAbstractBaseFG011: {ElimFwOne011},
+            ElimAbstractNearMissFG011: {ElimFwOne011},
+        }
+
+        err = _fail(feature, plugins)
+        message = str(err)
+
+        assert err.result.failure_kind == "abstract_only"
+        # A near-miss block is present, so a glued callout would land on the last bullet line.
+        assert f"Feature group(s) eliminated while matching '{ABSTRACT_FEATURE}':" in message
+        assert message.count("Scoped to feature group:") == 1
+        callout_line = next(line for line in message.split("\n") if "Scoped to feature group:" in line)
+        assert not callout_line.startswith("  - ")
+        assert callout_line.startswith(f"No feature groups found for feature name: '{ABSTRACT_FEATURE}'.")
 
 
 def test_render_resolution_failure_is_importable() -> None:

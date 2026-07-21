@@ -99,6 +99,14 @@ from mloda.core.filter.filter_engine import BaseFilterEngine
 from mloda.core.abstract_plugins.components.mask.base_mask_engine import BaseMaskEngine
 from mloda.core.abstract_plugins.components.merge.base_merge_engine import BaseMergeEngine
 
+# Feature resolution debugging
+from mloda.core.api.plugin_docs import resolve_feature
+from mloda.core.prepare.identify_feature_group import (
+    FeatureResolutionError,
+    ResolutionDiagnosis,
+    ResolutionRecord,
+)
+
 __version__ = get_mloda_version()
 
 __all__ = [
@@ -162,4 +170,9 @@ __all__ = [
     "BaseFilterEngine",
     "BaseMaskEngine",
     "BaseMergeEngine",
+    # Feature resolution debugging
+    "resolve_feature",
+    "FeatureResolutionError",
+    "ResolutionRecord",
+    "ResolutionDiagnosis",
 ]

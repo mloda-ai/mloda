@@ -17,6 +17,8 @@ else:
     print(f"Resolution failed: {result.error}")
 ```
 
+Plugin authors can also import `resolve_feature` from `mloda.provider`; it is the same function.
+
 This is useful for:
 - Debugging feature resolution issues
 - Understanding which plugin handles a feature

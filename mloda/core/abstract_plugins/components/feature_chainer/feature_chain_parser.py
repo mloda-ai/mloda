@@ -188,21 +188,6 @@ class FeatureChainParser:
         return cls._legacy_operation_config(parsed), parsed.source_feature
 
     @classmethod
-    def _match_pattern_based_feature(
-        cls,
-        feature_name: str | FeatureName,
-        prefix_patterns: list[Any],
-        pattern: str = CHAIN_SEPARATOR,
-    ) -> bool:
-        """Internal method for matching pattern-based features - used by match_configuration_feature_chain_parser."""
-        _feature_name: FeatureName = FeatureName(feature_name) if isinstance(feature_name, str) else feature_name
-
-        has_prefix_configuration, source_feature = cls.parse_feature_name(_feature_name, prefix_patterns, pattern)
-        if has_prefix_configuration is None or source_feature is None:
-            return False
-        return True
-
-    @classmethod
     def _can_skip_required_check(cls, spec: PropertySpec) -> bool:
         """Check if the base parser should treat this property as optional.
 
@@ -498,8 +483,9 @@ class FeatureChainParser:
     ) -> str | None:
         """The reason a name-path candidate was rejected for missing presence (#769); None when nothing is missing.
 
-        Diagnostic-only: mirrors _check_name_path_required_presence so the resolution-failure
-        report explains the same non-match the matcher produced.
+        Supported diagnostic seam (os-015), paired with ``_strict_validation_rejection_reason``:
+        mirrors _check_name_path_required_presence so the resolution-failure report explains the
+        same non-match the matcher produced.
         """
         missing = cls._name_path_missing_required_keys(effective_options, property_mapping)
         if not missing:

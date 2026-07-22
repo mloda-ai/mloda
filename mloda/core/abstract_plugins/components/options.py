@@ -151,15 +151,6 @@ class Options:
         OptionsValidator.validate_no_duplicate_keys(self.group, self.context)
         OptionsValidator.validate_propagate_keys_in_context(self.propagate_context_keys, self.context)
 
-    def add(self, key: str, value: Any) -> None:
-        """
-        Legacy method for backward compatibility.
-        Adds to group to maintain existing behavior during migration.
-
-        Possibility that we keep this as default method for adding options in the future.
-        """
-        self.add_to_group(key, value)
-
     def add_to_group(self, key: str, value: Any) -> None:
         """Add parameter to group (affects Feature Group resolution/splitting)."""
         OptionsValidator.validate_can_add_to_group(key, value, self.group, self.context)

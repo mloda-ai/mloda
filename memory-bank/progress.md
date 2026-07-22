@@ -21,14 +21,17 @@ PythonDict (dependency-free) needs no extra and SQLite needs only PyArrow; the r
 
 ## Recent Achievements
 
+- ✅ FeatureGroup resolution unified around one matcher: `resolve_feature` adapts the same non-raising `EvaluationResult` seam a run uses.
+- ✅ Typed resolution failures (`FeatureResolutionError`) with per-candidate elimination facts, `mlodaAPI.diagnose(...)`, and `session.resolution_report()`; resolution debug tooling exported from `mloda.provider`.
+- ✅ Post-epic cleanup (os-015): removed remaining dead code and documented the new resolution surfaces.
 - ✅ `PROPERTY_MAPPING` hardening: typed `PropertySpec` contract, raw-dict hard break, `property_spec()` authoring path.
 - ✅ Framework-enforced default materialization at the compute boundary; opt-in explicit-`None`.
 - ✅ Structured parsed-name bindings; required-presence enforcement; all-optional universal-matcher guard.
-- ✅ Typed resolution failures with per-candidate elimination facts and a `session.resolution_report()`.
 - ✅ Post-hardening cleanup: retired transitional parser seams; `PROPERTY_MAPPING` test suite consolidated around a public behavior matrix.
 
 ## Remaining / Known Issues
 
 - **os-008**: effective-options materialization placement and default-equivalent twin canonicalization.
+- **os-016 / os-017 / os-018**: optional resolution refactors (shared `resolve_or_raise` helper, columnwise framework-hook triple, author-time guard split).
 - **Phase 6 downstream**: raw-mapping migration and doc/sample refresh in mloda-registry, plugin-template, and mloda.ai.
 - **Local FeatureGroup subclass GC race** (mloda#868): shared-fixture test parametrization is deferred until this flake is resolved.

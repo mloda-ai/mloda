@@ -78,7 +78,8 @@ class FeatureSet:
         """Rebind every feature's options (and self.options) through feature_group.options_with_defaults,
         memoized by Options identity so aliases stay aliased; identity no-op without concrete defaults (#796).
         Precondition: same-named features distinguished only by an explicitly-set default value collapse
-        when the default fills their twin, and that raises."""
+        when the default fills their twin, and that raises. The engine canonicalizes default-equivalent
+        twins at intake, so the raise is a defensive invariant for direct API use."""
         # The memo holds a strong reference to each source Options so its id cannot be recycled mid-loop.
         memo: dict[int, tuple[Options, Options]] = {}
         rebound = False

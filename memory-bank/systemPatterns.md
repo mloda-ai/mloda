@@ -49,7 +49,15 @@ flowchart LR
 3. **Bind** (`feature_chain_parser.py`): `bind_name_captures` binds named captures exclusively by name into an effective `Options`; a captureless pattern is a recognition predicate that identifies the group and binds nothing. A present option value always wins over a name-derived one. A transitional positional fallback (`_legacy_operation_config`) still reverse-looks-up single-capture legacy patterns, pending downstream migration (mloda-registry#327).
 4. **Match**: `match_configuration_feature_chain_parser` validates present values (a bad value raises `PropertyValueRejection`, a `ValueError` verdict rather than a crash) and enforces required presence on the string-named path.
 5. **Resolve** (`prepare/identify_feature_group.py`): `IdentifyFeatureGroupClass.evaluate` runs one non-raising resolution pass, recording per-candidate elimination facts (`EvaluationResult`, `Elimination`) so a failure explains which gate each near-miss failed. Class-definition-time checks reject order-dependent bindings and install guards enforcing `required_when` and name-path required presence; an all-optional matcher that would match any name emits a definition-time warning unless the class sets `ALLOW_UNIVERSAL_MATCHER`.
-6. **Materialize defaults, then compute**: `ComputeFramework.run_calculate_feature` (`@final`) calls `FeatureSet.materialize_option_defaults` once, immediately before `calculate_feature`. Defaults are framework-enforced at this single boundary, not opt-in per plugin. `options_with_defaults()` fills only absent keys that declare a concrete default; `NO_DEFAULT` and a declared `None` fill nothing. Presence honors the explicit-`None` policy: a present `None` counts as set only when the spec sets `allow_explicit_none=True`.
+6. **Materialize defaults at intake, then compute** (os-008): `Engine.add_feature_to_collection` rebinds each resolved feature's options through `options_with_defaults()` as it enters the plan, so default-equivalent twins (same name, one key explicitly set to its declared default) merge through the standard duplicate path with uuid remapping. `ComputeFramework.run_calculate_feature` (`@final`) still calls `FeatureSet.materialize_option_defaults` as an idempotent safety net for direct API use; its twin-collapse ValueError is unreachable from engine-driven requests. `options_with_defaults()` fills only absent keys that declare a concrete default; `NO_DEFAULT` and a declared `None` fill nothing. Presence honors the explicit-`None` policy: a present `None` counts as set only when the spec sets `allow_explicit_none=True`.
+
+Which lifecycle stages observe which options view:
+
+| Stage | Options view |
+|-------|--------------|
+| Parse, bind, match, resolve (candidate selection; subtype resolution applies defaults internally) | declared (pre-default) |
+| `input_features()` and child option inheritance | declared (pre-default) |
+| Splitting, planning, validators, filters, compute | effective (post-default) |
 
 ## Component Roles
 

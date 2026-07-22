@@ -1,4 +1,4 @@
-"""Pin the os-008 intake-default-canonicalization contract.
+"""Pin the intake default-canonicalization contract.
 
 Declared PropertySpec defaults are materialized at feature intake on the resolved feature's own
 options, so default-equivalent same-name twins canonicalize through the standard duplicate path.
@@ -362,7 +362,7 @@ def _default_equivalent_warnings(caplog: pytest.LogCaptureFixture) -> list[str]:
 def test_context_default_twins_merge_instead_of_raising() -> None:
     """Same-name twins split only by an explicitly-set declared context default merge at intake.
 
-    Pre-os-008 the absent twin is filled at the compute boundary, collapsing the FeatureSet
+    Without intake canonicalization the absent twin is filled at the compute boundary, collapsing the FeatureSet
     with the "collapsed duplicate features" ValueError; intake canonicalization must instead
     merge the twins through the standard duplicate path and compute once.
     """
@@ -380,7 +380,7 @@ def test_context_default_twins_merge_instead_of_raising() -> None:
 def test_group_default_twins_merge_into_single_computation() -> None:
     """Same-name twins split only by an explicitly-set declared group default merge at intake.
 
-    Pre-os-008 the pre-default group options differ, so the twins split into two FeatureSets
+    Without intake canonicalization the pre-default group options differ, so the twins split into two FeatureSets
     and yield two result frames; intake canonicalization must merge them into ONE computation.
     """
     name = "idc_grp_twin_feature"

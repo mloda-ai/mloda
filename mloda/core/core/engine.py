@@ -77,8 +77,8 @@ class Engine:
         self.request_feature_order: list[str] = [str(f.name) for f in features]
         self._dual_consumption_warned: set[tuple[str, str, frozenset[str]]] = set()
         self._property_mapping_keys_cache: dict[type[FeatureGroup], frozenset[str]] = {}
-        # Intake materialization memo (os-008): the strong source reference keeps its id from being
-        # recycled, so features sharing one pre-default Options share one effective Options.
+        # Intake materialization memo: the strong source reference keeps its id stable, so features
+        # sharing one pre-default Options share one effective Options.
         self._intake_options_memo: dict[tuple[type[FeatureGroup], int], tuple[Options, Options]] = {}
         # Declared (pre-default) options per surviving feature uuid, for default-equivalent merge warnings.
         self._declared_options_by_uuid: dict[UUID, Options] = {}
@@ -156,8 +156,8 @@ class Engine:
         self._set_feature_name(feature, feature_group)
         self._set_compute_framework_and_data_type(feature, compute_frameworks, feature_group_class)
 
-        # Stash the declared pre-default options: dependency declaration and child inheritance
-        # observe them, while intake materialization canonicalizes default-equivalent twins (os-008).
+        # Stash the declared pre-default options: dependency declaration and child inheritance observe
+        # them; intake materialization canonicalizes default-equivalent twins.
         declared_options = feature.options
         added = self.add_feature_to_collection(feature_group_class, feature, features.child_uuid)
 
@@ -362,9 +362,8 @@ class Engine:
         child_uuid: Optional[UUID],
         if_index_feature: bool = False,
     ) -> bool:
-        # Materialize declared defaults at intake (os-008): default-equivalent twins become equal and
-        # merge through the standard duplicate path below. Identity no-op without concrete defaults.
-        # Memoized per (feature group, source Options identity) so a shared Options stays aliased.
+        # Materialize declared defaults at intake: default-equivalent twins become equal and merge
+        # via the duplicate path below; identity no-op without concrete defaults.
         declared_options = feature.options
         memo_key = (feature_group_class, id(declared_options))
         entry = self._intake_options_memo.get(memo_key)

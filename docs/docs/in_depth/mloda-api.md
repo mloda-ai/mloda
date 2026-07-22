@@ -100,7 +100,7 @@ from mloda.steward import (
 Resolve a single feature name (or a `Feature`) to its matching FeatureGroup without running the request, reporting failures in `result.error` instead of raising. It takes `feature` (`str | Feature`) positionally plus keyword-only `options`, `plugin_collector`, `feature_group`, `links`, `data_access_collection`, and `compute_frameworks`, and returns a `ResolvedFeature` (8 fields, including `candidates`, `error`, `supported_compute_frameworks`, `subtype`).
 
 ``` python
-from mloda.provider import resolve_feature
+from mloda.steward import resolve_feature
 
 result = resolve_feature("my_feature_name")
 if result.feature_group:

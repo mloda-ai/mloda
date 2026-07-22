@@ -27,17 +27,45 @@ Pass a `Feature`, `options`, `plugin_collector`, `links`,
 frameworks needs this to mirror) to reproduce the run you are debugging. See
 [Discover Plugins](../discover-plugins.md) for the full signature.
 
+## Catching resolution failures
+
+Inside a run, a feature that does not resolve to exactly one FeatureGroup raises
+`FeatureResolutionError` during planning (the `mloda.run_all(...)` /
+`mloda.prepare(...)` call, before any compute runs). It is a `ValueError`
+subclass, so existing `except ValueError` handlers keep working, but you can now
+catch it specifically and inspect why it failed:
+
+``` python
+from mloda.provider import FeatureResolutionError
+from mloda.user import mloda
+
+try:
+    mloda.run_all(["my_feature"])
+except FeatureResolutionError as err:
+    print(err.feature_name)   # the feature that failed to resolve
+    print(err)                # the human-readable message a run prints
+    for record in err.partial_records:
+        print(record.feature_name, record.requested)  # features resolved before the failure
+    # err.result carries the per-candidate elimination facts (an EvaluationResult)
+```
+
+To inspect a request without catching an exception, use the non-raising
+surfaces: `resolve_feature` for a single name (above), or `mlodaAPI.diagnose(...)`,
+which returns a `ResolutionDiagnosis` for the whole request. See
+[mlodaAPI](../mloda-api.md#diagnose-and-resolution_report) for both, plus the
+fields on `FeatureResolutionError`, `ResolutionDiagnosis`, and `ResolutionRecord`.
+
 ## Multiple Feature Groups Error
 
 ### The Problem
 
 ```
-ValueError: Multiple feature groups found for feature '<feature_name>':
+FeatureResolutionError: Multiple feature groups found for feature '<feature_name>':
   - FeatureGroupA (...) [domain: ...]
   - FeatureGroupB (...) [domain: ...]
 ```
 
-This error occurs when multiple distinct feature groups claim they can handle the same feature. Each feature must resolve to exactly one feature group to prevent conflicts.
+This error occurs when multiple distinct feature groups claim they can handle the same feature. Each feature must resolve to exactly one feature group to prevent conflicts. It is raised as `FeatureResolutionError` (a `ValueError` subclass) during planning; see [Catching resolution failures](#catching-resolution-failures) to inspect it.
 
 If you previously hit this in a notebook because of a redefined feature group (re-running a cell that defines `class MyFG(FeatureGroup): ...`), that case is now auto-deduplicated. If this error still appears, it points to a real conflict between two distinct classes (different `(module, qualname)`).
 

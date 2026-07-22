@@ -23,7 +23,7 @@ PythonDict (dependency-free) needs no extra and SQLite needs only PyArrow; the r
 
 - ✅ FeatureGroup resolution unified around one matcher: `resolve_feature` adapts the same non-raising `EvaluationResult` seam a run uses.
 - ✅ Typed resolution failures (`FeatureResolutionError`) with per-candidate elimination facts, `mlodaAPI.diagnose(...)`, and `session.resolution_report()`; resolution debug tooling exported from `mloda.provider`.
-- ✅ Post-epic cleanup (os-015): removed remaining dead code and documented the new resolution surfaces.
+- ✅ Post-epic cleanup: removed remaining dead code and documented the new resolution surfaces.
 - ✅ `PROPERTY_MAPPING` hardening: typed `PropertySpec` contract, raw-dict hard break, `property_spec()` authoring path.
 - ✅ Framework-enforced default materialization at the compute boundary; opt-in explicit-`None`.
 - ✅ Structured parsed-name bindings; required-presence enforcement; all-optional universal-matcher guard.

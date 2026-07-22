@@ -313,7 +313,7 @@ class FeatureChainParserMixin:
         """Return the rejection message that match_feature_group_criteria discards, if any.
 
         The engine no longer calls this: it renders the reasons the first match pass recorded via
-        ``record_match_rejection``. This is a supported diagnostic seam (os-015): a stable,
+        ``record_match_rejection``. This is a supported diagnostic seam: a stable,
         overridable hook for reproducing a single group's value-rejection reason outside a run. It
         must keep producing the same messages the match pass records.
 

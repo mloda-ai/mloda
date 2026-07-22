@@ -483,7 +483,7 @@ class FeatureChainParser:
     ) -> str | None:
         """The reason a name-path candidate was rejected for missing presence (#769); None when nothing is missing.
 
-        Supported diagnostic seam (os-015), paired with ``_strict_validation_rejection_reason``:
+        Supported diagnostic seam, paired with ``_strict_validation_rejection_reason``:
         mirrors _check_name_path_required_presence so the resolution-failure report explains the
         same non-match the matcher produced.
         """

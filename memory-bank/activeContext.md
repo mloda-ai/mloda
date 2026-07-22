@@ -17,7 +17,7 @@ The full `tox` gate is green (tests, format, lint, licenses, strict mypy, bandit
 - ✅ Typed failures: `FeatureResolutionError` (a `ValueError` subclass) carries `.feature_name`, `.result`, and `.partial_records`.
 - ✅ Non-raising diagnostics: `mlodaAPI.diagnose(...)` returns a `ResolutionDiagnosis`; `session.resolution_report()` returns per-feature `ResolutionRecord`s.
 - ✅ Per-candidate elimination facts captured in `EvaluationResult`; resolution debug tooling exported from `mloda.provider`; a blessed, contract-pinned resolution test seam (os-014).
-- ✅ Post-epic cleanup (os-015): removed the last dead symbols and documented the new surfaces (troubleshooting page, `mloda-api.md`).
+- ✅ Post-epic cleanup: removed the last dead symbols and documented the new surfaces (troubleshooting page, `mloda-api.md`).
 
 ### PROPERTY_MAPPING hardening (complete)
 

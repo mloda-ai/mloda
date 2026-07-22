@@ -1,6 +1,6 @@
 """Tests for the format_feature_group_class (singular) helper, which stays live in
 production (engine.py, execution_plan.py, feature_group_step.py) after the plural
-format_feature_group_classes was removed in os-015."""
+format_feature_group_classes was removed."""
 
 from typing import Optional
 

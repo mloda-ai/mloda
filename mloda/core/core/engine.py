@@ -77,6 +77,11 @@ class Engine:
         self.request_feature_order: list[str] = [str(f.name) for f in features]
         self._dual_consumption_warned: set[tuple[str, str, frozenset[str]]] = set()
         self._property_mapping_keys_cache: dict[type[FeatureGroup], frozenset[str]] = {}
+        # Intake materialization memo (os-008): the strong source reference keeps its id from being
+        # recycled, so features sharing one pre-default Options share one effective Options.
+        self._intake_options_memo: dict[tuple[type[FeatureGroup], int], tuple[Options, Options]] = {}
+        # Declared (pre-default) options per surviving feature uuid, for default-equivalent merge warnings.
+        self._declared_options_by_uuid: dict[UUID, Options] = {}
         self.resolution_records: list[ResolutionRecord] = []
         self.execution_planner = self.create_setup_execution_plan(features)
         self.tfs_connection_map = self._resolve_tfs_connection_map()
@@ -335,6 +340,8 @@ class Engine:
                 # it is treated as a separate instance from the original filter feature
                 match.filter_feature.uuid = uuid.uuid4()
                 self.global_filter.add_filter_to_collection(feature_group_class, feature.name, match)
+                # The filter feature's options are already post-default via unify_options, so this intake
+                # call must remain an identity no-op (no rebind) to keep the SingleFilter set hash stable.
                 self.add_feature_to_collection(feature_group_class, match.filter_feature, features.child_uuid)
 
     def add_feature_link_to_links(self, feature: Feature) -> None:
@@ -357,7 +364,14 @@ class Engine:
     ) -> bool:
         # Materialize declared defaults at intake (os-008): default-equivalent twins become equal and
         # merge through the standard duplicate path below. Identity no-op without concrete defaults.
-        feature.options = feature_group_class.options_with_defaults(feature.options)
+        # Memoized per (feature group, source Options identity) so a shared Options stays aliased.
+        declared_options = feature.options
+        memo_key = (feature_group_class, id(declared_options))
+        entry = self._intake_options_memo.get(memo_key)
+        if entry is None:
+            entry = (declared_options, feature_group_class.options_with_defaults(declared_options))
+            self._intake_options_memo[memo_key] = entry
+        feature.options = entry[1]
         feature_collection = self.feature_group_collection[feature_group_class]
 
         if feature not in feature_collection:
@@ -365,11 +379,13 @@ class Engine:
 
             self.feature_link_parents[feature.uuid] = set()
             feature_collection.add(feature)
+            self._declared_options_by_uuid[feature.uuid] = declared_options
             return True
 
         existing_feature = next((f for f in feature_collection if feature == f), None)
 
         if existing_feature is not None:
+            self._warn_on_default_equivalent_merge(feature, declared_options, existing_feature)
             # Propagate the requested flag: filter twins must not displace requested output columns (issue #712).
             if feature.initial_requested_data and not existing_feature.initial_requested_data:
                 existing_feature.initial_requested_data = True
@@ -378,6 +394,19 @@ class Engine:
                 self._update_feature_link_parents(child_uuid, feature.uuid, existing_feature.uuid, if_index_feature)
 
         return False
+
+    def _warn_on_default_equivalent_merge(
+        self, feature: Feature, declared_options: Options, existing_feature: Feature
+    ) -> None:
+        """Warn when a merge holds only post-materialization: the declared (pre-default) options differ."""
+        survivor_declared = self._declared_options_by_uuid.get(existing_feature.uuid, existing_feature.options)
+        if declared_options.group == survivor_declared.group and declared_options.context == survivor_declared.context:
+            return
+        logger.warning(
+            f"Feature '{feature.name}' was requested twice with default-equivalent options: the requests "
+            f"differ only in explicitly-set declared defaults and merged into one feature at intake. "
+            f"Deduplicate the request; dependency declaration follows the first-listed request."
+        )
 
     def _update_feature_link_parents(
         self, child_uuid: UUID, original_uuid: UUID, wanted_uuid: UUID, if_index_feature: bool

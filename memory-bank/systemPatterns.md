@@ -55,7 +55,7 @@ Which lifecycle stages observe which options view:
 
 | Stage | Options view |
 |-------|--------------|
-| Parse, bind, match, resolve (candidate selection) | declared (pre-default) |
+| Parse, bind, match, resolve (candidate selection; subtype resolution applies defaults internally) | declared (pre-default) |
 | `input_features()` and child option inheritance | declared (pre-default) |
 | Splitting, planning, validators, filters, compute | effective (post-default) |
 

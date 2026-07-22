@@ -9,7 +9,7 @@ Core hardening is complete and the full `tox` gate is green (170 skipped, plus f
 ## Status
 
 - ✅ Typed `PropertySpec` is the sole `PROPERTY_MAPPING` contract; raw-dict specs are a hard break.
-- ✅ Defaults are materialized once at the central compute boundary (framework-enforced), with opt-in explicit-`None` semantics.
+- ✅ Defaults are materialized at feature intake (framework-enforced), with opt-in explicit-`None` semantics; default-equivalent twin requests canonicalize during planning, and the compute boundary remains an idempotent safety net (os-008).
 - ✅ Structured name parsing and explicit capture-to-spec binding replace reverse lookup and fabricated captureless tokens.
 - ✅ Required-presence enforcement on the string-named match path; all-optional universal-matcher guard.
 - ✅ Resolution failures carry per-candidate elimination facts (`EvaluationResult`).
@@ -17,7 +17,6 @@ Core hardening is complete and the full `tox` gate is green (170 skipped, plus f
 
 ## Next Steps
 
-- **os-008**: decide effective-options materialization placement and default-equivalent twin canonicalization (follow-up from the #796 / #803 reviews).
 - **Phase 6 downstream** (owning repos): migrate mloda-registry raw mappings and captureless patterns, align declared value spaces with runtime behavior, scaffold the plugin-template example, and refresh mloda.ai samples before raising the registry `>=0.10,<0.11` cap.
 
 ## Architecture Snapshot

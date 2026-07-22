@@ -151,12 +151,15 @@ class Engine:
         self._set_feature_name(feature, feature_group)
         self._set_compute_framework_and_data_type(feature, compute_frameworks, feature_group_class)
 
+        # Stash the declared pre-default options: dependency declaration and child inheritance
+        # observe them, while intake materialization canonicalizes default-equivalent twins (os-008).
+        declared_options = feature.options
         added = self.add_feature_to_collection(feature_group_class, feature, features.child_uuid)
 
         if added:
             parent_domain = feature.domain.name if feature.domain else None
             self._handle_input_features_recursion(
-                feature_group_class, feature.uuid, feature.options, feature.name, parent_domain=parent_domain
+                feature_group_class, feature.uuid, declared_options, feature.name, parent_domain=parent_domain
             )
 
         if self.global_filter:
@@ -352,6 +355,9 @@ class Engine:
         child_uuid: Optional[UUID],
         if_index_feature: bool = False,
     ) -> bool:
+        # Materialize declared defaults at intake (os-008): default-equivalent twins become equal and
+        # merge through the standard duplicate path below. Identity no-op without concrete defaults.
+        feature.options = feature_group_class.options_with_defaults(feature.options)
         feature_collection = self.feature_group_collection[feature_group_class]
 
         if feature not in feature_collection:

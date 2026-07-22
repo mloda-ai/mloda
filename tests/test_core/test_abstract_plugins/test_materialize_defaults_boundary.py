@@ -13,6 +13,9 @@ plugin reading ``feature.options`` directly never sees declared defaults. The pi
   call and the FEATURE_GROUP_CALCULATE_FEATURE extender path observe materialized options: absent keys carry
   their declared defaults, present values (even falsy) win, and an ``allow_explicit_none=True`` explicit
   None is retained.
+
+Since os-008 the engine canonicalizes default-equivalent twins at intake, so the compute-boundary call is
+an idempotent safety net and its collapse ValueError is unreachable from engine-driven requests.
 """
 
 from __future__ import annotations
@@ -341,7 +344,9 @@ class TestFeatureSetMaterializeOptionDefaults:
 
     def test_collapse_of_same_name_twins_raises_actionable_duplicate_message(self) -> None:
         """Filling a context default on one twin of a same-name pair collapses the set: the ValueError
-        must name the duplicate-feature cause and list the affected names, not blame an upstream invariant."""
+        must name the duplicate-feature cause and list the affected names, not blame an upstream invariant.
+        Since os-008 the engine merges such twins at intake, so this raise is a defensive invariant for
+        direct FeatureSet/API use, unreachable from engine-driven requests."""
         twin_name = "mdb_unit_twin_feature"
         explicit = Feature(twin_name, Options(context={MDB_CTX_KEY: CTX_DEFAULT}))
         absent = Feature(twin_name, Options())

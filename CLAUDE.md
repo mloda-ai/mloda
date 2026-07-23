@@ -32,7 +32,11 @@
 
 ## Phase Completion Protocol
 
-When working with `memory-bank/todo.md` that contains phases:
+Phased work uses a `memory-bank/todo.md` checklist. This file is **transient**: it is
+created for the duration of a phased task and removed when the work lands, so it is not
+part of the Memory Bank core files below and is normally absent from the repository.
+
+When such a `todo.md` exists and contains phases:
 
 1. **After completing each phase**: Run `tox` to validate all tests pass
 2. **If tox passes**:

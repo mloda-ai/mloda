@@ -27,7 +27,6 @@ tests/
 ├── test_documentation/         # Tests for documentation examples
 ├── test_examples/              # Tests for example code
 │   └── mloda_basics/           # Tests for basic mloda examples
-├── test_memory_bank/           # Tests for memory bank functionality
 └── test_plugins/               # Tests for plugin implementations
     ├── compute_framework/      # Tests for compute framework plugins
     ├── extender/               # Tests for extender plugins

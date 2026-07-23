@@ -22,7 +22,6 @@ Usage:
 
 See Also:
     - GitHub Issue #133: JoinSpec Convenience Function
-    - Design Decision: /memory-bank/design-decisions/joinspec-convenience-function.md
 """
 
 from typing import Any, Optional

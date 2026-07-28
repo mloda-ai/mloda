@@ -700,3 +700,30 @@ class IdentifyFeatureGroupClass:
             _identified_feature_groups.pop(fg)
 
         return _identified_feature_groups
+
+
+def evaluate_and_render(
+    feature: Feature,
+    accessible_plugins: FeatureGroupEnvironmentMapping,
+    links: Optional[set[Link]] = None,
+    data_access_collection: Optional[DataAccessCollection] = None,
+) -> tuple[EvaluationResult, str | None]:
+    """One resolution pass plus its failure message; the message is None iff the feature resolved."""
+    # Unguarded: ComputeFrameworkPinError is a misuse validated before matching, so it escapes unconverted.
+    result = IdentifyFeatureGroupClass.evaluate(feature, accessible_plugins, links, data_access_collection)
+    return result, render_resolution_failure(result, feature)
+
+
+def resolve_or_raise(
+    feature: Feature,
+    accessible_plugins: FeatureGroupEnvironmentMapping,
+    links: Optional[set[Link]] = None,
+    data_access_collection: Optional[DataAccessCollection] = None,
+    partial_records: Sequence[ResolutionRecord] = (),
+) -> EvaluationResult:
+    """Evaluate one feature and raise the typed FeatureResolutionError on failure."""
+    result, message = evaluate_and_render(feature, accessible_plugins, links, data_access_collection)
+    if message is not None:
+        # The constructor does the cap-then-deepcopy snapshot, so the records are forwarded as they are.
+        raise FeatureResolutionError(message, str(feature.name), result, partial_records=partial_records)
+    return result

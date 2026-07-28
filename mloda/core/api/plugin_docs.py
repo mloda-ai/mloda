@@ -42,8 +42,7 @@ from mloda.core.prepare.accessible_plugins import (
 )
 from mloda.core.prepare.identify_feature_group import (
     CandidateFrameworks,
-    IdentifyFeatureGroupClass,
-    render_resolution_failure,
+    evaluate_and_render,
     scope_callout,
 )
 
@@ -347,7 +346,7 @@ def resolve_feature(
 
     Design note: resolve_feature is a thin adapter. It only normalizes the standalone request, builds the
     canonical accessible-plugins environment once, delegates one evaluation to
-    IdentifyFeatureGroupClass.evaluate, and projects the result. ANY environment-build failure (including
+    evaluate_and_render, and projects the result. ANY environment-build failure (including
     redefinition conflicts) is projected fail-closed from the failure itself into ``error`` with no
     candidates and no re-matching; the seam owns name/domain/scope/abstract/subclass filtering, the
     winner, candidates, and the failure texts.
@@ -428,21 +427,22 @@ def resolve_feature(
         if feature_obj is None:
             return ResolvedFeature(feature_name, None, [], error=f"{feature_error}{scope_suffix}")
 
-    # The seam does the name/domain/scope/abstract/subclass filtering. Matching or a capability hook can raise;
-    # resolve_feature must not, so degrade any raise into an error result (never-raising contract).
-    evaluation = safe_field_with_error(
-        lambda: IdentifyFeatureGroupClass.evaluate(
+    # The seam does the name/domain/scope/abstract/subclass filtering. Matching, a capability hook or the
+    # renderer can raise; resolve_feature must not, so degrade any raise into an error result.
+    evaluation, eval_error = safe_field_with_error(
+        lambda: evaluate_and_render(
             feature_obj, accessible_plugins, links=links, data_access_collection=data_access_collection
         ),
         None,
     )
-    result, eval_error = evaluation
-    if result is None:
+    if evaluation is None:
         return ResolvedFeature(feature_name, None, [], error=f"{eval_error}{scope_suffix}")
+    result, message = evaluation
 
     candidates = sorted(result.criteria_matched, key=lambda c: c.get_class_name())
 
-    if result.failure_kind is None:
+    # The message is None exactly when the feature resolved, so it carries the success/failure split.
+    if message is None:
         winner = next(iter(result.identified))
         split = result.candidate_frameworks.get(winner, CandidateFrameworks())
         supported_names = sorted(c.get_class_name() for c in split.supported)
@@ -459,7 +459,6 @@ def resolve_feature(
             subtype_family=subtype_family,
         )
 
-    # A projection of the evaluation already in hand: the same result the engine renders from, and the
+    # A projection of the evaluation already in hand: the same message the engine raises with, and the
     # renderer emits the scope callout itself, so scope_suffix must not be appended a second time.
-    error = render_resolution_failure(result, feature_obj)
-    return ResolvedFeature(feature_name, None, candidates, error=error)
+    return ResolvedFeature(feature_name, None, candidates, error=message)

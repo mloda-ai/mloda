@@ -7,6 +7,8 @@
 - EvaluationResult fields (identified, criteria_matched, abstract_matched, candidate_frameworks,
   eliminations, facts) and the derived failure_kind property, for structured assertions.
 
+evaluate_or_raise delegates to identify_feature_group.resolve_or_raise; target this seam, not the helper directly.
+
 Exact failure-message wording is out of scope: it is inherently wording-coupled, so prefer asserting on
 structured facts and reserve exact-string checks for tests whose contract is the wording itself.
 """

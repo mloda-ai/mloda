@@ -13,6 +13,10 @@ The "evaluate -> render -> raise" idiom is hand-copied in the engine, in the ble
 ``ComputeFrameworkPinError`` is a misuse validated before matching, so it escapes both helpers unconverted, and
 the error ``resolve_or_raise`` raises must be equivalent to the one the os-014 seam raises for the same feature.
 
+The third converged call site, ``resolve_feature``, does not delegate to the helper: it projects the pair's
+result into a ``ResolvedFeature`` behind a never-raise guard that now covers rendering as well as evaluation.
+Both halves of that are pinned here, against the helper itself.
+
 All fixture names carry an ``016`` suffix: test feature groups become global subclasses and the suite runs in
 parallel, so a shared name would leak into another module's candidate universe.
 """
@@ -26,10 +30,15 @@ from mloda.core.abstract_plugins.components.data_access_collection import DataAc
 from mloda.core.abstract_plugins.components.domain import Domain
 from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
+from mloda.core.abstract_plugins.components.link import Link
 from mloda.core.abstract_plugins.components.options import Options
+from mloda.core.abstract_plugins.components.plugin_option.plugin_collector import PluginCollector
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
-from mloda.core.prepare.accessible_plugins import FeatureGroupEnvironmentMapping
+from mloda.core.api import plugin_docs
+from mloda.core.api.plugin_docs import resolve_feature
+from mloda.core.api.plugin_info import ResolvedFeature
+from mloda.core.prepare.accessible_plugins import FeatureGroupEnvironmentMapping, PreFilterPlugins
 from mloda.core.prepare.identify_feature_group import (
     PARTIAL_RECORDS_CAP,
     ComputeFrameworkPinError,
@@ -40,6 +49,7 @@ from mloda.core.prepare.identify_feature_group import (
     evaluate_and_render,
     render_resolution_failure,
     resolve_or_raise,
+    scope_callout,
 )
 from tests.test_core.test_prepare.identify_seam import evaluate_or_raise
 
@@ -167,6 +177,35 @@ def _plugins_for(feature_name: str) -> FeatureGroupEnvironmentMapping:
     return _match_plugins()
 
 
+def _frameworks_016() -> set[type[ComputeFramework]]:
+    """A fresh compute-framework restriction, the one resolve_feature accepts as a keyword."""
+    return {ResolveOrRaiseFw016}
+
+
+def _collector_for(feature_name: str) -> PluginCollector:
+    """A collector restricting the universe to exactly the fixture groups behind one failure kind."""
+    if feature_name == RESOLVE_MULTIPLE_FEATURE_016:
+        return PluginCollector.enabled_feature_groups({ResolveOrRaiseSiblingAFG016, ResolveOrRaiseSiblingBFG016})
+    if feature_name == RESOLVE_ABSTRACT_FEATURE_016:
+        return PluginCollector.enabled_feature_groups({ResolveOrRaiseAbstractFG016})
+    return PluginCollector.enabled_feature_groups({ResolveOrRaiseMatchFG016})
+
+
+def _built_plugins_for(feature_name: str) -> FeatureGroupEnvironmentMapping:
+    """The environment resolve_feature builds for that fixture, via the same PreFilterPlugins path."""
+    return PreFilterPlugins(_frameworks_016(), _collector_for(feature_name)).get_accessible_plugins()
+
+
+def _resolve_feature_016(feature_name: str, scope: Optional[type[FeatureGroup]] = None) -> ResolvedFeature:
+    """Run resolve_feature over the fixture universe of one failure kind."""
+    return resolve_feature(
+        feature_name,
+        feature_group=scope,
+        plugin_collector=_collector_for(feature_name),
+        compute_frameworks=_frameworks_016(),
+    )
+
+
 def _empty_result() -> EvaluationResult:
     """A minimal EvaluationResult for cheap ResolutionRecord construction."""
     return EvaluationResult(identified={})
@@ -202,6 +241,19 @@ FAILURE_CASES = [
     ("multiple", RESOLVE_MULTIPLE_FEATURE_016),
     ("abstract_only", RESOLVE_ABSTRACT_FEATURE_016),
 ]
+
+
+RENDER_EXPLOSION_016 = "resolve_or_raise_016 render step exploded"
+
+
+def _exploding_evaluate_and_render(
+    feature: Feature,
+    accessible_plugins: FeatureGroupEnvironmentMapping,
+    links: Optional[set[Link]] = None,
+    data_access_collection: Optional[DataAccessCollection] = None,
+) -> tuple[EvaluationResult, str | None]:
+    """Stand-in for the helper pair that always raises, standing for a renderer that blows up."""
+    raise RuntimeError(RENDER_EXPLOSION_016)
 
 
 class TestEvaluateAndRenderSuccess:
@@ -360,7 +412,7 @@ class TestResolveOrRaiseFailure:
 
     @pytest.mark.parametrize(("failure_kind", "feature_name"), FAILURE_CASES)
     def test_raises_for_every_failure_kind(self, failure_kind: str, feature_name: str) -> None:
-        """Each of the three failure kinds raises, and the message matches the pair's rendered one."""
+        """Each of the three failure kinds raises with the renderer's own message over the same evaluation."""
         feature = Feature(feature_name)
         accessible_plugins = _plugins_for(feature_name)
 
@@ -371,15 +423,12 @@ class TestResolveOrRaiseFailure:
                 links=None,
                 data_access_collection=None,
             )
-        _, message = evaluate_and_render(
-            feature=feature,
-            accessible_plugins=_plugins_for(feature_name),
-            links=None,
-            data_access_collection=None,
-        )
+        direct = IdentifyFeatureGroupClass.evaluate(feature, _plugins_for(feature_name), links=None)
+        expected = render_resolution_failure(direct, feature)
 
         assert exc_info.value.result.failure_kind == failure_kind
-        assert str(exc_info.value) == message
+        assert expected is not None
+        assert str(exc_info.value) == expected
 
 
 class TestResolveOrRaisePartialRecords:
@@ -437,15 +486,13 @@ class TestComputeFrameworkPinErrorEscapesBothHelpers:
 
     def test_evaluate_and_render_propagates_the_pin_error(self) -> None:
         """evaluate_and_render lets ComputeFrameworkPinError out instead of rendering a message."""
-        with pytest.raises(ComputeFrameworkPinError) as exc_info:
+        with pytest.raises(ComputeFrameworkPinError):
             evaluate_and_render(
                 feature=_pinned_feature(RESOLVE_NO_MATCH_FEATURE_016),
                 accessible_plugins=_match_plugins(),
                 links=None,
                 data_access_collection=None,
             )
-
-        assert not isinstance(exc_info.value, FeatureResolutionError)
 
     def test_resolve_or_raise_propagates_the_pin_error(self) -> None:
         """resolve_or_raise lets the same pin error out, unconverted, with its own wording."""
@@ -459,7 +506,6 @@ class TestComputeFrameworkPinErrorEscapesBothHelpers:
                 data_access_collection=None,
             )
 
-        assert not isinstance(exc_info.value, FeatureResolutionError)
         assert ResolveOrRaiseFw016.get_class_name() in str(exc_info.value)
         assert ResolveOrRaiseFwBeta016.get_class_name() in str(exc_info.value)
 
@@ -501,3 +547,123 @@ class TestSeamParity:
         assert helper_info.value.feature_name == seam_info.value.feature_name
         assert helper_info.value.result.failure_kind == failure_kind
         assert seam_info.value.result.failure_kind == failure_kind
+
+
+class TestResolveFeatureCallSiteParity:
+    """resolve_feature projects exactly what resolve_or_raise raises for the same environment.
+
+    The seam above delegates to resolve_or_raise, so it re-enters the same function; resolve_feature does
+    not, which makes it the one call site whose agreement can actually break. It takes no accessible-plugins
+    mapping, only a collector and a compute-framework restriction, so the environment is rebuilt through the
+    PreFilterPlugins path it uses internally instead of the hand-built fixture mappings. All three failure
+    kinds are expressible that way, which the environment test below pins.
+
+    Complements test_single_pass_exactly_once.py::TestEngineAndResolveFeatureAgree, whose reference is the
+    engine seam and whose subject is the per-attempt hook budget; here the reference is the helper itself.
+    """
+
+    def test_the_rebuilt_environment_is_the_fixture_universe(self) -> None:
+        """The collector projection yields exactly the fixture groups, so both call sites see one universe."""
+        assert _built_plugins_for(RESOLVE_NO_MATCH_FEATURE_016) == _match_plugins()
+        assert _built_plugins_for(RESOLVE_ABSTRACT_FEATURE_016) == _abstract_plugins()
+        assert set(_built_plugins_for(RESOLVE_MULTIPLE_FEATURE_016)) == {
+            ResolveOrRaiseSiblingAFG016,
+            ResolveOrRaiseSiblingBFG016,
+        }
+
+    @pytest.mark.parametrize(("failure_kind", "feature_name"), FAILURE_CASES)
+    def test_resolve_feature_error_is_the_error_the_helper_raises(self, failure_kind: str, feature_name: str) -> None:
+        """Same string on both call sites, for all three failure kinds."""
+        with pytest.raises(FeatureResolutionError) as exc_info:
+            resolve_or_raise(
+                feature=Feature(feature_name),
+                accessible_plugins=_built_plugins_for(feature_name),
+                links=None,
+                data_access_collection=None,
+            )
+        resolved = _resolve_feature_016(feature_name)
+
+        assert exc_info.value.result.failure_kind == failure_kind
+        assert resolved.feature_group is None
+        assert resolved.error == str(exc_info.value)
+
+    @pytest.mark.parametrize(("failure_kind", "feature_name"), FAILURE_CASES)
+    def test_resolve_feature_candidates_are_that_error_criteria_matched(
+        self, failure_kind: str, feature_name: str
+    ) -> None:
+        """The projected candidates are the failing evaluation's criteria-matched groups, sorted by name."""
+        with pytest.raises(FeatureResolutionError) as exc_info:
+            resolve_or_raise(
+                feature=Feature(feature_name),
+                accessible_plugins=_built_plugins_for(feature_name),
+                links=None,
+                data_access_collection=None,
+            )
+        resolved = _resolve_feature_016(feature_name)
+
+        expected = sorted(candidate.get_class_name() for candidate in exc_info.value.result.criteria_matched)
+        assert [candidate.get_class_name() for candidate in resolved.candidates] == expected
+
+    def test_a_resolvable_feature_agrees_on_the_winner(self) -> None:
+        """Success side of the same parity: the helper's identified group is the ResolvedFeature's winner."""
+        result = resolve_or_raise(
+            feature=Feature(RESOLVE_MATCH_FEATURE_016),
+            accessible_plugins=_built_plugins_for(RESOLVE_MATCH_FEATURE_016),
+            links=None,
+            data_access_collection=None,
+        )
+        resolved = _resolve_feature_016(RESOLVE_MATCH_FEATURE_016)
+
+        assert resolved.error is None
+        assert resolved.feature_group is next(iter(result.identified))
+        assert resolved.feature_group is ResolveOrRaiseMatchFG016
+
+
+class TestResolveFeatureDegradesARaisingHelper:
+    """resolve_feature guards evaluation AND rendering, so a raising helper becomes an error result.
+
+    The one intentional behaviour delta of the convergence: the never-raise guard now wraps the whole
+    evaluate-plus-render pair, so a renderer that blows up can no longer escape the debug API. The
+    degraded result is fail-closed exactly like the pre-existing raising-evaluate path: no candidates, and
+    the scope callout appended by resolve_feature because no rendered message carried one.
+    """
+
+    def test_a_raising_helper_becomes_the_error_instead_of_escaping(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """The call returns a ResolvedFeature carrying the raised message rather than propagating it."""
+        monkeypatch.setattr(plugin_docs, "evaluate_and_render", _exploding_evaluate_and_render)
+
+        resolved = _resolve_feature_016(RESOLVE_MATCH_FEATURE_016)
+
+        assert isinstance(resolved, ResolvedFeature)
+        assert resolved.feature_name == RESOLVE_MATCH_FEATURE_016
+        assert resolved.feature_group is None
+        assert resolved.error is not None
+        assert RENDER_EXPLOSION_016 in resolved.error
+
+    def test_the_degraded_path_reports_no_candidates(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Fail-closed: nothing is re-matched to fill in candidates behind the failure."""
+        monkeypatch.setattr(plugin_docs, "evaluate_and_render", _exploding_evaluate_and_render)
+
+        resolved = _resolve_feature_016(RESOLVE_MATCH_FEATURE_016)
+
+        assert resolved.candidates == []
+
+    def test_the_degraded_path_appends_the_scope_callout(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """A scoped request still names its scope once, as on the raising-evaluate path."""
+        monkeypatch.setattr(plugin_docs, "evaluate_and_render", _exploding_evaluate_and_render)
+
+        resolved = _resolve_feature_016(RESOLVE_MATCH_FEATURE_016, scope=ResolveOrRaiseMatchFG016)
+
+        callout = scope_callout(ResolveOrRaiseMatchFG016)
+        assert callout is not None
+        assert resolved.error is not None
+        assert RENDER_EXPLOSION_016 in resolved.error
+        assert resolved.error.endswith(callout)
+        assert resolved.error.count(callout) == 1
+
+    def test_the_same_call_resolves_without_the_raising_helper(self) -> None:
+        """Control: the degradation above is caused by the raise, not by the fixture environment."""
+        resolved = _resolve_feature_016(RESOLVE_MATCH_FEATURE_016)
+
+        assert resolved.error is None
+        assert resolved.feature_group is ResolveOrRaiseMatchFG016

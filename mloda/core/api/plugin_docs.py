@@ -345,11 +345,10 @@ def resolve_feature(
     Signature misuse (options/feature_group alongside a Feature) is a programmer error and raises TypeError.
 
     Design note: resolve_feature is a thin adapter. It only normalizes the standalone request, builds the
-    canonical accessible-plugins environment once, delegates one evaluation to
-    evaluate_and_render, and projects the result. ANY environment-build failure (including
-    redefinition conflicts) is projected fail-closed from the failure itself into ``error`` with no
-    candidates and no re-matching; the seam owns name/domain/scope/abstract/subclass filtering, the
-    winner, candidates, and the failure texts.
+    canonical accessible-plugins environment once, delegates one evaluation to evaluate_and_render, and
+    projects the result. ANY environment-build failure (including redefinition conflicts) is projected
+    fail-closed from the failure itself into ``error`` with no candidates and no re-matching; the seam owns
+    name/domain/scope/abstract/subclass filtering, the winner, candidates, and the failure texts.
 
     Engine inputs now covered: name, options, domain and compute-framework pin (carried on the Feature),
     scope (via the Feature's feature_group_scope or the feature_group argument for the string form), and

@@ -97,34 +97,19 @@ from mloda.steward import (
 
 ##### resolve_feature
 
-Resolve a feature name to its matching FeatureGroup class. This is useful for debugging feature resolution or understanding which FeatureGroup handles a specific feature.
+Resolve a single feature name (or a `Feature`) to its matching FeatureGroup without running the request, reporting failures in `result.error` instead of raising. It takes `feature` (`str | Feature`) positionally plus keyword-only `options`, `plugin_collector`, `feature_group`, `links`, `data_access_collection`, and `compute_frameworks`, and returns a `ResolvedFeature` (8 fields, including `candidates`, `error`, `supported_compute_frameworks`, `subtype`).
 
 ``` python
 from mloda.steward import resolve_feature
 
-# Successful resolution
 result = resolve_feature("my_feature_name")
 if result.feature_group:
     print(f"Resolved to: {result.feature_group.__name__}")
 else:
     print(f"Error: {result.error}")
-
-# Access all matching candidates (before subclass filtering)
-print(f"Candidates: {[fg.__name__ for fg in result.candidates]}")
 ```
 
-**Parameters:**
-
-- **feature_name** (`str`): The name of the feature to resolve.
-- **options** (`Options | None`, keyword-only): Options used for matching and for the compute framework capability split. Defaults to empty `Options`. Required to resolve FeatureGroups that gate matching on an option.
-- **plugin_collector** (`PluginCollector | None`, keyword-only): Restricts the FeatureGroups considered, and threads its `allow_redefinition` flag into deduplication.
-
-**Returns:** `ResolvedFeature` dataclass with fields:
-
-- **feature_name** (`str`): The input feature name.
-- **feature_group** (`Type[FeatureGroup] | None`): The resolved FeatureGroup class, or None if resolution failed.
-- **candidates** (`List[Type[FeatureGroup]]`): All FeatureGroups that matched before subclass filtering.
-- **error** (`str | None`): Error message if resolution failed (no match or multiple conflicts).
+See [Discover Plugins](discover-plugins.md#resolving-feature-names) for the full signature, every `ResolvedFeature` field, and worked examples (options-gated groups, scoping, broken framework declarations). `resolve_feature` is exported from `mloda.provider`, `mloda.user`, and `mloda.steward`; the `ResolvedFeature` return type is exported from `mloda.steward`.
 
 ##### explain and resolved_plan
 
@@ -179,6 +164,41 @@ from mloda.user import mloda
 for step in mloda.explain(["sales__mean_aggr"], compute_frameworks=["PandasDataFrame"]):
     print(step.requested_feature_names, step.injected_feature_names)
 ```
+
+##### diagnose and resolution_report
+
+`diagnose` and `resolution_report()` are the non-raising counterparts to `explain` and `resolved_plan()`: where the plan-based pair returns `PlanStep` records, these return the resolution facts a failing request would otherwise raise.
+
+`mlodaAPI.diagnose(features, ...)` runs the whole-request preflight without raising and returns a single `ResolutionDiagnosis`. It takes the same arguments as `explain` (every parameter after `features` is keyword-only). On success its `records` equal `session.resolution_report()` and `complete` is `True`; on a resolution failure it carries the records resolved before the failing feature plus `feature_name`, `failed_result`, and `message`; on an environment or config failure (redefinition conflict, framework-declaration error, compute-framework pin) it returns `records=[]`, `complete=False`, and only `message`.
+
+`session.resolution_report()` returns the `list[ResolutionRecord]` captured while `prepare()` planned the request, one per feature, available before or after `run()`.
+
+``` python
+from mloda.user import mlodaAPI
+
+diagnosis = mlodaAPI.diagnose(["sales__mean_aggr"], compute_frameworks=["PandasDataFrame"])
+if diagnosis.complete:
+    for record in diagnosis.records:
+        print(record.feature_name, record.requested)
+else:
+    print(diagnosis.feature_name, diagnosis.message)
+```
+
+When the same request is run rather than diagnosed, the failure raises `FeatureResolutionError` (below).
+
+##### Resolution result types
+
+Import the typed resolution surfaces from `mloda.provider` (also re-exported from `mloda.user` and `mloda.steward`):
+
+``` python
+from mloda.provider import FeatureResolutionError, ResolutionDiagnosis, ResolutionRecord
+```
+
+- **`FeatureResolutionError`** (a `ValueError` subclass): raised during planning (`mlodaAPI(...)` / `prepare()` / `run_all()`) when a feature does not resolve to exactly one FeatureGroup. Attributes: `feature_name` (`str`), `result` (`EvaluationResult`, the captured per-candidate elimination facts), `partial_records` (`tuple[ResolutionRecord, ...]`, features resolved before the failure, capped at the last 1000). Because it subclasses `ValueError`, existing `except ValueError` handlers keep working; catch `FeatureResolutionError` to read the attributes. See [Feature Group Resolution Errors](troubleshooting/feature-group-resolution-errors.md).
+- **`ResolutionDiagnosis`** (frozen dataclass): the return value of `diagnose`, never raised. Fields: `records` (`list[ResolutionRecord]`), `complete` (`bool`), `feature_name` (`str | None`), `failed_result` (`EvaluationResult | None`), `message` (`str | None`).
+- **`ResolutionRecord`** (frozen dataclass): one per feature, returned inside `resolution_report()`, `ResolutionDiagnosis.records`, and `FeatureResolutionError.partial_records`; never raised. Fields: `feature_name` (`str`), `requested` (`bool`), `result` (`EvaluationResult`).
+
+`EvaluationResult` is the captured matcher outcome carried by the fields above; it lives in `mloda.core.prepare.identify_feature_group` and is not part of the public `__init__` exports.
 
 ##### get_feature_group_docs
 

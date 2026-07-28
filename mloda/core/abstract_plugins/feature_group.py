@@ -3,7 +3,7 @@ from __future__ import annotations
 import inspect
 import logging
 from collections.abc import Collection, Mapping
-from typing import Any, ClassVar, Callable, Iterable, Optional, final
+from typing import Any, ClassVar, Callable, Optional, final
 from abc import ABC
 
 from mloda.core.abstract_plugins.components.base_artifact import BaseArtifact
@@ -14,6 +14,7 @@ from mloda.core.abstract_plugins.components.domain import Domain
 from mloda.core.abstract_plugins.components.base_feature_group_version import BaseFeatureGroupVersion
 from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser import (
     CHAIN_SEPARATOR,
+    COLUMN_SEPARATOR,
     FeatureChainParser,
     option_key_is_present,
 )
@@ -469,7 +470,7 @@ class FeatureGroup(ABC):
 
         Returns the original name if no ~N suffix exists.
         """
-        return column_name.split("~")[0]
+        return column_name.split(COLUMN_SEPARATOR)[0]
 
     @staticmethod
     def expand_feature_columns(feature_name: str, num_columns: int) -> list[str]:
@@ -841,15 +842,3 @@ class FeatureGroup(ABC):
 def format_feature_group_class(fg_class: type[FeatureGroup]) -> str:
     """Format a single FeatureGroup class for error messages."""
     return f"{fg_class.__name__} ({fg_class.__module__})"
-
-
-def format_feature_group_classes(feature_groups: Iterable[type[FeatureGroup]], include_domain: bool = False) -> str:
-    """Format FeatureGroup classes for error messages."""
-    lines = []
-    for fg_class in feature_groups:
-        line = f"  - {fg_class.__name__} ({fg_class.__module__})"
-        if include_domain:
-            domain = fg_class.get_domain()
-            line += f" [domain: {domain.name}]"
-        lines.append(line)
-    return "\n".join(lines)

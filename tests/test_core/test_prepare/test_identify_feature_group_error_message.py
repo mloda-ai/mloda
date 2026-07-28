@@ -1,7 +1,8 @@
 """Tests for error message formatting in identify_feature_group.py.
 
-This test verifies that error messages use formatted output from
-format_feature_group_classes instead of raw dict/class representation.
+This test verifies that the multiple-feature-group error message uses the
+formatted candidate output from _render_multiple (naming each class as
+"ClassName (module.path)") instead of raw dict/class representation.
 """
 
 from typing import Optional

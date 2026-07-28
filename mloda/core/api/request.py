@@ -530,11 +530,13 @@ class mlodaAPI:
         return runner
 
     def get_result(self) -> list[Any]:
+        """Return the computed run results; raises if no run function has executed yet."""
         if self.runner is None:
             raise ValueError("You need to run any run function beforehand.")
         return self.runner.get_result()
 
     def get_artifacts(self) -> dict[str, Any]:
+        """Return the artifacts produced by the run; raises if no run function has executed yet."""
         if self.runner is None:
             raise ValueError("You need to run any run function beforehand.")
         return self.runner.get_artifacts()

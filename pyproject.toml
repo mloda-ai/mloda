@@ -187,3 +187,9 @@ constraint-dependencies = [
     "soupsieve>=2.8.4",
     "nbconvert>=7.17.1",
 ]
+# Overrides, not constraints: marimo pins `pymdown-extensions<11`, and the fix for the
+# b64 path-traversal advisory only ships in 11.0. A constraint cannot beat that upper
+# pin, so the pin is overridden here. Drop this once marimo allows 11.x.
+override-dependencies = [
+    "pymdown-extensions>=11.0.1",
+]

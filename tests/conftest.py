@@ -1,3 +1,4 @@
+import gc
 import os
 from typing import Any
 import pytest
@@ -46,6 +47,17 @@ def flight_server_setup() -> ParallelRunnerFlightServer:
 def flight_server(flight_server_setup: ParallelRunnerFlightServer) -> Any:
     yield flight_server_setup
     flight_server_setup.end_flight_server_process()
+
+
+def pytest_collection_finish(session: Any) -> None:
+    """Freeze once all test modules are imported and no test has run, so later gc.collect() calls skip them."""
+    gc.collect()
+    gc.freeze()
+
+
+def pytest_sessionfinish(session: Any, exitstatus: Any) -> None:
+    """Unfreeze before finalization, or the multiprocessing tests abort with a gilstate_tss_set fatal error."""
+    gc.unfreeze()
 
 
 CHECK_SKIP_COUNT_ENV_VAR = "CHECK_SKIP_COUNT"

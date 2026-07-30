@@ -378,7 +378,8 @@ For an engine-driven request intake has already run, so the compute-boundary cal
 no-op. It carries the work only for direct `FeatureSet` use that bypasses the engine, and there the
 collapsing twins raise instead of merging.
 
-Both sites run *after* resolution, so materialization never changes **matching**. It does change
+Both sites run *after* resolution, so materialization never changes **resolution matching** (filter
+matching runs after intake and does observe materialized values, see below). It does change
 how features **group**: intake materialization deliberately canonicalizes default-equivalent twins,
 so a feature that passes a declared default explicitly and one that omits it become equal and merge
 into a single feature (with a warning naming the duplicated request) instead of computing twice.
@@ -393,7 +394,7 @@ Which stage sees which view of the options:
 
 | Stage | Options view |
 | --- | --- |
-| Parse, bind, match, resolve (subtype resolution applies defaults internally) | declared (pre-default) |
+| Parse, bind, resolution match, resolve (subtype resolution applies defaults internally) | declared (pre-default) |
 | `input_features()` and child option inheritance | declared (pre-default) |
 | Splitting, planning, filter matching, `validate_input_features`, compute | effective (post-default) |
 
@@ -402,8 +403,9 @@ path the safety net materializes inside `run_calculate_feature`, which is after
 `validate_input_features`, not before it.
 
 Filter matching is the one place the same classmethod sees both views: `GlobalFilter` calls
-`match_feature_group_criteria` again after intake, so it observes effective options where feature
-resolution saw declared ones.
+`match_feature_group_criteria` again after intake, passing the filter feature's own options
+enriched from the resolved feature's effective ones (`unify_options`), so a key the filter feature
+omits arrives materialized where feature resolution saw it declared.
 
 ``` python
 graph_type = feature.options.get("graph_type")  # the declared default when the caller omitted it

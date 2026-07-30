@@ -25,6 +25,8 @@ def match_feature_group_criteria(cls, feature_name, options, data_access_collect
 
 Do not call `FeatureChainParser.match_configuration_feature_chain_parser` directly from a match hook: it raises on an option value the `PROPERTY_MAPPING` rejects, and an exception out of the hook aborts feature identification for every candidate, not just yours. `match_parser_criteria` turns that rejection into a non-match, and the reason still reaches the user in the "No feature groups found" error.
 
+The options view depends on the caller: feature resolution passes declared (pre-default) options, while filter matching runs after intake and passes the resolved feature's effective (post-default) options merged onto the filter feature's own. Matching logic that reads option values can see different values on the two paths. See [Applying declared defaults](property-mapping.md#applying-declared-defaults).
+
 ### 2. PROPERTY_MAPPING Configuration
 
 The `PROPERTY_MAPPING` defines how configuration-based features are validated:

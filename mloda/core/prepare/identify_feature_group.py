@@ -16,9 +16,7 @@ from mloda.core.prepare.resolution_types import (
     ResolutionRecord,
 )
 from mloda.core.prepare.resolution_failure_renderer import (
-    TROUBLESHOOTING_URL,
     render_resolution_failure,
-    scope_callout,
     _prefix_name,
     _supported_feature_names,
 )
@@ -39,7 +37,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-# Keeps the pre-split import surface of this module intact: the moved names stay importable from here.
+# Re-exports the moved types and the renderer entry point it calls; rendering-only names come from the renderer.
 __all__ = [
     "CandidateFrameworks",
     "ComputeFrameworkPinError",
@@ -52,12 +50,10 @@ __all__ = [
     "RenderFacts",
     "ResolutionDiagnosis",
     "ResolutionRecord",
-    "TROUBLESHOOTING_URL",
     "evaluate_and_render",
     "matches_feature_group_scope",
     "render_resolution_failure",
     "resolve_or_raise",
-    "scope_callout",
 ]
 
 

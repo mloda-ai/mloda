@@ -1,6 +1,6 @@
 """Pins the split of identify_feature_group into resolution_types and resolution_failure_renderer.
 
-Ownership, re-export identity for the public names, and the acyclic direction
+Ownership, re-export identity for the public names the matcher keeps, and the acyclic direction
 resolution_types <- resolution_failure_renderer <- identify_feature_group.
 """
 
@@ -45,6 +45,15 @@ RENDERER_NAMES = (
     "render_resolution_failure",
 )
 
+# The only renderer name the matcher still re-exports: its own evaluate_and_render calls it.
+REEXPORTED_RENDERER_NAMES = ("render_resolution_failure",)
+
+# Rendering-only: nothing reaches these through the matcher, so it must not import or re-export them.
+RENDERER_ONLY_NAMES = (
+    "TROUBLESHOOTING_URL",
+    "scope_callout",
+)
+
 # What stays in the matcher module, with its definition, not as a re-export.
 MATCHER_KEPT_NAMES = (
     "matches_feature_group_scope",
@@ -71,7 +80,6 @@ CALL_SITE_NAMES = (
     "matches_feature_group_scope",
     "render_resolution_failure",
     "resolve_or_raise",
-    "scope_callout",
 )
 
 _SUBPROCESS_TIMEOUT = 8.0
@@ -134,13 +142,22 @@ def test_resolution_failure_renderer_module_defines_its_names() -> None:
 
 def test_public_moved_names_are_reexported_by_identity() -> None:
     """The matcher must re-export the same objects, not copies, so isinstance and `is` checks keep working."""
-    for module_name, names in ((TYPES_MODULE, TYPES_NAMES), (RENDERER_MODULE, RENDERER_NAMES)):
+    for module_name, names in ((TYPES_MODULE, TYPES_NAMES), (RENDERER_MODULE, REEXPORTED_RENDERER_NAMES)):
         owner = importlib.import_module(module_name)
         for name in _public(names):
             assert hasattr(identify_feature_group, name), f"{MATCHER_MODULE} no longer re-exports {name}"
             assert getattr(identify_feature_group, name) is getattr(owner, name), (
                 f"{MATCHER_MODULE}.{name} is not the same object as {module_name}.{name}"
             )
+
+
+def test_rendering_only_names_are_not_reexported_by_the_matcher() -> None:
+    """These names are rendering-only, so every consumer takes them from the renderer, never through the matcher."""
+    renderer = importlib.import_module(RENDERER_MODULE)
+    for name in RENDERER_ONLY_NAMES:
+        assert hasattr(renderer, name), f"{RENDERER_MODULE} no longer owns {name}"
+        assert name not in identify_feature_group.__all__, f"{MATCHER_MODULE}.__all__ still re-exports {name}"
+        assert not hasattr(identify_feature_group, name), f"{MATCHER_MODULE} still imports {name}"
 
 
 def test_kept_names_stay_defined_in_the_matcher_module() -> None:

@@ -1,8 +1,7 @@
-"""Tests for error message formatting in identify_feature_group.py.
+"""Tests for the resolution failure messages raised when a feature does not resolve to exactly one group.
 
-This test verifies that the multiple-feature-group error message uses the
-formatted candidate output from _render_multiple (naming each class as
-"ClassName (module.path)") instead of raw dict/class representation.
+The formatting lives in mloda/core/prepare/resolution_failure_renderer.py: _render_multiple names each
+candidate as "ClassName (module.path)" instead of a raw dict/class representation.
 """
 
 from typing import Optional

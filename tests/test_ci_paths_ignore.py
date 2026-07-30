@@ -138,6 +138,8 @@ def test_protected_set_is_not_stale() -> None:
     protected = _protected_paths()
     assert "docs/docs/index.md" in protected, "docs/ markdown is executed by tests/test_documentation"
     assert "CONTRIBUTING.md" in protected, "CONTRIBUTING.md content is asserted by tests/test_project_structure.py"
+    assert "CLAUDE.md" in protected, "CLAUDE.md content is asserted by tests/test_agent_docs_sync.py"
+    assert "AGENTS.md" in protected, "AGENTS.md content is asserted by tests/test_agent_docs_sync.py"
 
 
 def test_paths_ignore_declared_for_push_and_pull_request() -> None:

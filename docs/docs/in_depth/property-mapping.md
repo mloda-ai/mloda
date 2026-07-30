@@ -81,6 +81,8 @@ does not understand can be absorbed silently.
 | Match time (mixin) | `MIN/MAX_IN_FEATURES` | In-feature count is within bounds | The in-features | Non-match (`False`) |
 | Match time (guard installed at class definition) | `required_when` | A conditionally required option is present | `Options` | Non-match (`False`) |
 | Class definition (mixin) | Universal-matcher diagnostic | An all-optional `PROPERTY_MAPPING` inherits the configuration matcher, so it matches any name with empty options | The class | `logger.warning`, unless `ALLOW_UNIVERSAL_MATCHER = True` |
+| Author time (reader surface) | `mypy --strict` | `READER_OPTIONS` holds `ReaderOptionSpec` values and each field exists: `runtime_defualt=...` (typo) | The constructor call | mypy error at the declaration. Without mypy: an unknown field is a `TypeError` |
+| Match time (reader selection) | `ReaderOptionSpec.runtime_default` | Nothing is validated. The reader's OWN code applies its declared fallback for an absent key, reading it back with `reader_option_default(key)` | The key name | `ValueError` naming the key and the reader class, for a key no `READER_OPTIONS` declares |
 
 A spec is constructed inside the class body, so its own rules fire before the class exists.
 Class definition is left with exactly one rule: the type itself. Within `__post_init__` the
@@ -107,6 +109,66 @@ rejected either way.
 declares it gets its resolved `match_feature_group_criteria` wrapped at class definition,
 and the wrapper runs the predicates after that matcher returns `True`. Overriding the
 matcher therefore keeps the contract, whether the override delegates or not.
+
+The last two rows are the whole reader surface, and they sit outside the ordered match-time sequence
+above: a `READER_OPTIONS` key is consumed during reader selection, and no other moment fires for it.
+See [Two declaration surfaces](#two-declaration-surfaces).
+
+## Two declaration surfaces
+
+Option keys are declared in two places, and only one of the two is enforced.
+
+| Surface | Declared on | What the framework does with it |
+| --- | --- | --- |
+| `PROPERTY_MAPPING` (values are `PropertySpec`) | a `FeatureGroup` | Enforces it: value validation (`allowed_values`, `element_validator`), presence and `required_when`, and materialization of declared defaults. |
+| `READER_OPTIONS` (values are `ReaderOptionSpec`) | a `BaseInputData` reader | Nothing. It is an inventory: which keys the reader reads, and what the reader itself does with them. |
+
+A reader consumes its option keys during reader **selection** (`match_subclass_data_access`, reached
+through `BaseInputData.matches` from the matcher), which runs at match time, before the framework
+materializes anything. Nothing can be applied on a reader's behalf at that point, so
+`ReaderOptionSpec` declares only what is true there:
+
+| Field | Type | Default | Meaning |
+| --- | --- | --- | --- |
+| `explanation` | `str` | required, positional | What the key means. |
+| `runtime_default` | `Any` | `None` | The fallback the reader's OWN code applies when the key is absent. The reader reads it back with `reader_option_default(key)`, so the declaration is load-bearing rather than decorative: `ReadFile` and `ReadDocument` resolve `document_suffixes` that way, and a reader declaring a different default matches differently with no option set. |
+| `framework_set` | `bool` | `False` | The framework writes this key, the user does not. The reserved `"BaseInputData"` key holds the matched `(ReaderClass, data_access)` pair, written by `add_base_input_data_to_options` and read back by `init_reader`. |
+
+`READER_OPTIONS` merges across the MRO (`reader_option_specs()`, most-derived declaration winning),
+so a concrete reader inherits its family's keys and redeclares nothing, and
+`declared_reader_option_keys()` is the merged key set. `reader_option_default()` raises for a key no
+declaration carries, so a typo in *reader* code is loud instead of a silent `None`.
+
+What a plugin author may rely on:
+
+| Guarantee | `PropertySpec` | `ReaderOptionSpec` |
+| --- | --- | --- |
+| The declared value space is enforced against user values | yes, under `strict_validation` | no |
+| The declared default is applied by the framework | yes (see [Applying declared defaults](#applying-declared-defaults)) | no, only the reader's own code applies it |
+| Presence and `required_when` are checked | yes | no |
+| A user's mistyped key surfaces | for a required key, yes: absence is a non-match, with a warning on the string-named path | no: the reader falls back to its `runtime_default`, so the typo is silently ignored |
+
+That silence is a property of match-time consumption, not an oversight, and it is why these keys are
+not declared as `PropertySpec`s: a spec would promise enforcement that could never fire, because
+selection is over before the framework touches the options.
+
+### A pattern-less feature group sits in between
+
+A `FeatureGroup` that declares no `PREFIX_PATTERN` or `SUFFIX_PATTERN` (`ConcatenatedFileContent` is
+the in-repo example) carries a real `PROPERTY_MAPPING`, but only part of the enforced surface reaches
+it:
+
+- `required_when` **is** enforced. Its guard is installed from `FeatureGroup.__init_subclass__` and
+  wraps the class's resolved `match_feature_group_criteria` instead of living inside the chain-parser
+  matcher, so a missing required key is a non-match at match time, not a late `ValueError` inside
+  `input_features`.
+- `strict_validation` is never reached: value validation lives inside the chain-parser matcher, and a
+  pattern-less group keeps the default class-name matcher, which does not call the parser. The
+  name-path presence rule is unavailable too, because it needs a parsed name and its guard installs
+  only for a class that declares a pattern.
+- Declared defaults stay metadata until the group materializes them itself by calling
+  `options_with_defaults` at its own read site. That call is what makes a declared default real at an
+  `input_features` read site (see [Applying declared defaults](#applying-declared-defaults)).
 
 ## Choosing a mechanism
 
@@ -297,12 +359,24 @@ A present value is never overridden, even a falsy `0`/`False`/`""`. `NO_DEFAULT`
 `default=None` fill nothing. A strict default is already validated at construction, so the
 materialized value is not re-checked.
 
-The framework applies this centrally at the compute boundary: `run_calculate_feature`
-materializes the declared defaults into the `FeatureSet` before `calculate_feature` and any
-calculate-feature extender run, so a plugin reads `feature.options` directly.
-`options_with_defaults` remains for pre-materialization contexts (e.g. `resolve_subtype`
-internals). Materialization happens *after* resolution, so it never changes matching or
-FeatureSet splitting.
+The framework applies this at two sites. At feature **intake**
+(`Engine.add_feature_to_collection`) a feature's options are rebound through
+`options_with_defaults` as it enters the collection. At the **compute boundary**
+`run_calculate_feature` materializes the declared defaults into the `FeatureSet` before
+`calculate_feature` and any calculate-feature extender run, so a plugin reads `feature.options`
+directly. `options_with_defaults` remains for pre-materialization contexts (e.g. `resolve_subtype`
+internals) and for read sites the framework hands pre-default options, `input_features` above all.
+
+Both sites run *after* resolution, so materialization never changes **matching**. It does change
+how features **group**: intake materialization deliberately canonicalizes default-equivalent twins,
+so a feature that passes a declared default explicitly and one that omits it become equal and merge
+into a single feature (with a warning naming the duplicated request) instead of computing twice.
+
+One consequence for authors: `input_features` is called with the DECLARED, pre-default options (the
+engine stashes them before intake rebinds, and a child inherits the same pre-default options), so a
+declared default does NOT reach an `input_features` read site. A group that wants it there calls
+`options_with_defaults` itself, as `ConcatenatedFileContent` does (see
+[A pattern-less feature group sits in between](#a-pattern-less-feature-group-sits-in-between)).
 
 ``` python
 graph_type = feature.options.get("graph_type")  # the declared default when the caller omitted it
@@ -507,6 +581,10 @@ if it really is a whole-value check.
 | Declared-default invariant | `tests/test_core/test_abstract_plugins/test_property_mapping_default_invariant.py` |
 | Declared defaults materialized into runtime options | `tests/test_core/test_abstract_plugins/test_options_with_defaults.py` |
 | Declared defaults materialized at the compute boundary | `tests/test_core/test_abstract_plugins/test_materialize_defaults_boundary.py` |
+| Declared defaults materialized at intake, canonicalizing default-equivalent twins | `tests/test_core/test_abstract_plugins/test_intake_default_canonicalization.py` |
+| The reader surface: the spec type, the reserved framework key, the MRO merge, the loud undeclared key | `tests/.../test_components/test_reader_option_declarations.py` |
+| Per-reader declarations, and the `runtime_default` that is load-bearing at selection | `tests/.../input_data/test_reader_option_declarations.py` |
+| A pattern-less group: enforced `required_when`, and defaults it applies itself | `tests/.../input_data/test_read_context_files_option_declarations.py` |
 | Container invariance, no stringification, str-as-scalar, dict-as-composite, empty containers | `tests/.../feature_chainer/test_property_mapping_sequence_unpacking.py` |
 | Present option values validated on the string-named path too | `tests/.../feature_chainer/test_name_path_validates_option_values.py` |
 | Required presence on the string-named path: the mandatory non-match, the retired env var stays ignored, and the `deferred_binding` / `in_features` exemptions | `tests/.../feature_chainer/test_name_path_required_presence.py` |

@@ -894,11 +894,20 @@ class FeatureChainParser:
                 return False
             # An opted-in key present as an explicit None counts as present, so the requirement is met (#768).
             if is_required and not option_key_is_present(spec, key, effective_options):
+                predicate_name = getattr(predicate, "__name__", repr(predicate))
                 logger.debug(
                     "Feature group %s requires option '%s' (predicate %s is satisfied) but it was not provided.",
                     owner_name,
                     key,
-                    getattr(predicate, "__name__", repr(predicate)),
+                    predicate_name,
+                )
+                # Same diagnostic seam as the sibling presence rules, so the resolution-failure report can
+                # explain this non-match. The engine re-keys the harvest by candidate, so the reason itself
+                # names the class that declared the requirement.
+                record_match_rejection(
+                    owner_name,
+                    f"required option '{key}' is absent, but {owner_name} declares it required "
+                    f"(required_when predicate {predicate_name} is satisfied)",
                 )
                 return False
         return True

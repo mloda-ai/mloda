@@ -1,9 +1,9 @@
 import os
 from pathlib import Path
-from typing import Any
+from typing import Any, ClassVar
 from mloda.user import DataAccessCollection
 from mloda.provider import FeatureSet
-from mloda.provider import BaseInputData
+from mloda.provider import BaseInputData, ReaderOptionSpec
 from mloda.user import Options
 
 
@@ -38,6 +38,17 @@ class ReadFile(BaseInputData):
     """
 
     _auto_load_group: str = "feature_group/input_data/read_files"
+
+    READER_OPTIONS: ClassVar[dict[str, ReaderOptionSpec]] = {
+        "document_suffixes": ReaderOptionSpec(
+            "Suffixes handed over to document readers; ReadFile auto-excludes them from its own matching.",
+            runtime_default=frozenset(),
+        ),
+        "data_access_handle": ReaderOptionSpec(
+            "Hint naming which DataAccessCollection file handle to prefer while matching.",
+            runtime_default=None,
+        ),
+    }
 
     _structured_suffixes: "frozenset[str]" = frozenset(
         {
@@ -78,7 +89,9 @@ class ReadFile(BaseInputData):
 
     @classmethod
     def match_subclass_data_access(cls, data_access: Any, feature_names: list[str], options: Options) -> Any:
-        document_suffixes: "frozenset[str]" = options.get("document_suffixes") or frozenset()
+        document_suffixes: "frozenset[str]" = options.get("document_suffixes") or cls.reader_option_default(
+            "document_suffixes"
+        )
 
         if isinstance(data_access, DataAccessCollection):
             if data_access.column_to_file is not None:

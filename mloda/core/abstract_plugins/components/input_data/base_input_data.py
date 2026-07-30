@@ -1,8 +1,9 @@
 from abc import ABC
-from typing import Any, Optional
+from typing import Any, ClassVar, Optional
 
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.abstract_plugins.components.feature_set import FeatureSet
+from mloda.core.abstract_plugins.components.input_data.reader_option_spec import ReaderOptionSpec
 from mloda.core.abstract_plugins.components.options import Options
 
 
@@ -10,8 +11,41 @@ from mloda.core.abstract_plugins.components.utils import get_all_subclasses
 
 
 class BaseInputData(ABC):
+    READER_OPTIONS: ClassVar[dict[str, ReaderOptionSpec]] = {
+        "BaseInputData": ReaderOptionSpec(
+            "The matched (ReaderClass, data_access) pair, written by add_base_input_data_to_options "
+            "and read back by init_reader.",
+            framework_set=True,
+        ),
+    }
+
     def __init__(self) -> None:
         pass
+
+    @classmethod
+    def reader_option_specs(cls) -> dict[str, ReaderOptionSpec]:
+        """Merge READER_OPTIONS across cls.__mro__, most-derived winning; a fresh dict per call.
+
+        Reads each class's own __dict__ so an inherited attribute is not merged twice, and walks the
+        MRO in reverse so a derived declaration overwrites the base one on a key collision.
+        """
+        merged: dict[str, ReaderOptionSpec] = {}
+        for klass in reversed(cls.__mro__):
+            merged.update(klass.__dict__.get("READER_OPTIONS", {}))
+        return merged
+
+    @classmethod
+    def declared_reader_option_keys(cls) -> frozenset[str]:
+        """Every option key this reader family declares."""
+        return frozenset(cls.reader_option_specs())
+
+    @classmethod
+    def reader_option_default(cls, key: str) -> Any:
+        """The declared runtime_default of key; an undeclared key is a typo, not a silent None."""
+        specs = cls.reader_option_specs()
+        if key not in specs:
+            raise ValueError(f"Reader option '{key}' is not declared in READER_OPTIONS of {cls.__name__}.")
+        return specs[key].runtime_default
 
     @classmethod
     def data_access_name(cls) -> str:

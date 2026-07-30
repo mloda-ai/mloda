@@ -154,6 +154,14 @@ def test_call_site_names_remain_importable_from_the_matcher() -> None:
     matcher = importlib.import_module(MATCHER_MODULE)
     missing = _missing_names(matcher, CALL_SITE_NAMES)
     assert missing == [], f"{MATCHER_MODULE} no longer exposes {missing}, so its call sites break"
+    # hasattr alone is blind to __all__, but mypy --strict implies --no-implicit-reexport: the re-export
+    # surface it checks against is __all__, so a name missing there breaks type checking at every call site
+    # even while the runtime attribute is still there.
+    unexported = [name for name in CALL_SITE_NAMES if name not in matcher.__all__]
+    assert unexported == [], (
+        f"{MATCHER_MODULE}.__all__ omits {unexported}; mypy --strict's no-implicit-reexport checks against "
+        f"__all__, so its call sites fail to type-check even though the attributes still exist"
+    )
 
 
 def test_renderer_does_not_import_the_matcher() -> None:
@@ -164,7 +172,7 @@ def test_renderer_does_not_import_the_matcher() -> None:
     assert offenders == [], f"{path.name} imports {offenders}, which closes the cycle"
 
 
-def test_resolution_types_imports_neither_sibling() -> None:
+def test_resolution_types_imports_neither_the_matcher_nor_the_renderer() -> None:
     path = _prepare_dir() / "resolution_types.py"
     assert path.is_file(), f"{path} does not exist"
     modules = _imported_modules(path)

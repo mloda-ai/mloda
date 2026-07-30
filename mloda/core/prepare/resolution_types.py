@@ -1,4 +1,4 @@
-"""Captured facts of one resolution pass: the base of the resolution import order, it imports no sibling."""
+"""Captured facts of one resolution pass: it imports neither the renderer nor the matcher, so both can depend on it."""
 
 from dataclasses import dataclass, field
 from typing import Literal

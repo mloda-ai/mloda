@@ -7,6 +7,8 @@
 - EvaluationResult fields (identified, criteria_matched, abstract_matched, candidate_frameworks,
   eliminations, facts) and the derived failure_kind property, for structured assertions.
 
+evaluate_or_raise delegates to identify_feature_group.resolve_or_raise; target this seam, not the helper directly.
+
 Exact failure-message wording is out of scope: it is inherently wording-coupled, so prefer asserting on
 structured facts and reserve exact-string checks for tests whose contract is the wording itself.
 """
@@ -21,9 +23,7 @@ from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.prepare.accessible_plugins import FeatureGroupEnvironmentMapping
 from mloda.core.prepare.identify_feature_group import (
     EvaluationResult,
-    FeatureResolutionError,
-    IdentifyFeatureGroupClass,
-    render_resolution_failure,
+    resolve_or_raise,
 )
 
 
@@ -34,11 +34,7 @@ def evaluate_or_raise(
     data_access_collection: Optional[DataAccessCollection] = None,
 ) -> EvaluationResult:
     """Evaluate one feature and raise the typed error on failure, exactly as the engine seam does."""
-    result = IdentifyFeatureGroupClass.evaluate(feature, accessible_plugins, links, data_access_collection)
-    message = render_resolution_failure(result, feature)
-    if message is not None:
-        raise FeatureResolutionError(message, str(feature.name), result)
-    return result
+    return resolve_or_raise(feature, accessible_plugins, links, data_access_collection)
 
 
 def identify_winner(

@@ -495,7 +495,7 @@ class FeatureChainParser:
         # string based matching. parse_name raises the no-source ValueError exactly as before, contained by
         # match_parser_criteria. Effective options are built from the parse facts here, keeping the matcher's
         # own parse containment; a raise out of build_effective_options in the author guards'
-        # check_required_when now surfaces as a framework defect (os-005, see TestBuildEffectiveOptionsRaiseSurfaces).
+        # check_required_when now surfaces as a framework defect (see TestBuildEffectiveOptionsRaiseSurfaces).
         if prefix_patterns is not None:
             parsed = cls.parse_name(feature_name, prefix_patterns, pattern)
             if cls._name_identifies_group(parsed, property_mapping):

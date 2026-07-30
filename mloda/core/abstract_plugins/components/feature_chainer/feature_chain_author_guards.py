@@ -237,7 +237,7 @@ def check_required_when(
         return True
 
     # build_effective_options runs no user callback, so a raise from it is a framework defect (or a user
-    # configuration error carrying actionable guidance) and must surface, not read as a non-match (os-005, #763).
+    # configuration error carrying actionable guidance) and must surface, not read as a non-match (#763).
     effective_options = FeatureChainParser.build_effective_options(
         feature_name, prefix_patterns, property_mapping, options
     )

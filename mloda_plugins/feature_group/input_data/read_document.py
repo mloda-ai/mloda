@@ -1,8 +1,8 @@
 import os
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, ClassVar, Optional
 
-from mloda.provider import BaseInputData, FeatureSet
+from mloda.provider import BaseInputData, FeatureSet, ReaderOptionSpec
 from mloda.user import DataAccessCollection, Options
 from mloda_plugins.feature_group.input_data.read_file import ReadFile
 
@@ -34,6 +34,17 @@ class ReadDocument(BaseInputData):
     """
 
     _auto_load_group: str = "feature_group/input_data/read_files"
+
+    READER_OPTIONS: ClassVar[dict[str, ReaderOptionSpec]] = {
+        "document_suffixes": ReaderOptionSpec(
+            "Structured suffixes this document reader claims instead of leaving them to ReadFile.",
+            runtime_default=frozenset(),
+        ),
+        "data_access_handle": ReaderOptionSpec(
+            "Hint naming which DataAccessCollection file handle to prefer while matching.",
+            runtime_default=None,
+        ),
+    }
 
     @classmethod
     def produce_document(cls, file_path: str) -> Any:
@@ -89,7 +100,7 @@ class ReadDocument(BaseInputData):
                 pinned = cls._resolve_pinned_file(data_access, feature_names)
                 if pinned is not None:
                     return pinned
-            document_suffixes = options.get("document_suffixes") or frozenset()
+            document_suffixes = cls.reader_option("document_suffixes", options)
             hint = options.get("data_access_handle")
             if hint is not None:
                 handle_kind = data_access.handles().get(hint)

@@ -9,7 +9,7 @@ from mloda.user import FeatureName
 from mloda.provider import FeatureSet
 from mloda.user import JoinType
 from mloda.user import Options
-from mloda.provider import DefaultOptionKeys
+from mloda.provider import DefaultOptionKeys, PropertySpec
 from mloda_plugins.feature_group.experimental.dynamic_feature_group_factory.dynamic_feature_group_factory import (
     DynamicFeatureGroupCreator,
 )
@@ -26,6 +26,16 @@ except ImportError:
     pd = None
 
 
+def target_folder_required(options: Options) -> bool:
+    """``target_folder`` is the source only when no explicit ``file_paths`` were given."""
+    return not options.get("file_paths")
+
+
+def document_reader_class_required(options: Options) -> bool:
+    """A reader is needed for every read, whatever the source is."""
+    return True
+
+
 class ConcatenatedFileContent(FeatureGroup):
     """
     A feature group that reads and combines content from files within a directory (default: python files).
@@ -40,28 +50,60 @@ class ConcatenatedFileContent(FeatureGroup):
     # This feature should just be created once mlodaAPI run.
     join_feature_name = "FGConcatenatedFileContent_JoinLLMFiles"
 
+    # All five keys change WHAT gets read, so context=False classifies each truthfully as a group
+    # parameter. The flag is only consulted where the framework PLACES a value, i.e. when it fills a
+    # declared default or binds a name capture; with no pattern there are no captures, so it is
+    # load-bearing for the two keys below that declare a default and descriptive for the other three.
+    PROPERTY_MAPPING = {
+        # The default is a tuple for EQUALITY, not hashing: Options normalizes a list for hashing, so a
+        # list and a tuple hash equal yet compare unequal, and a caller passing ["__init__.py"] would
+        # get a feature that never merges with the materialized default.
+        "disallowed_files": PropertySpec("File names to skip.", default=("__init__.py",), context=False),
+        "file_type": PropertySpec("Suffix collected from target_folder.", default="py", context=False),
+        "file_paths": PropertySpec(
+            "Explicit files to read, instead of scanning target_folder.", default=None, context=False
+        ),
+        "target_folder": PropertySpec(
+            "Folders scanned for file_type; required when no file_paths are given.",
+            default=None,
+            context=False,
+            required_when=target_folder_required,
+        ),
+        # NO_DEFAULT is the truthful declaration, but the name-path presence rule that enforces it installs only
+        # for a PREFIX/SUFFIX-declaring class; this group declares none, so required_when enforces it at match time.
+        "document_reader_class": PropertySpec(
+            "Reader class name used per file; declares no default, so it is required.",
+            context=False,
+            required_when=document_reader_class_required,
+        ),
+    }
+
     def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
-        disallowed_files = list(options.get("disallowed_files")) if options.get("disallowed_files") else ["__init__.py"]
+        # The engine passes DECLARED options, so the declared defaults only reach this read site here.
+        effective = self.options_with_defaults(options)
+        disallowed_files = list(effective.get("disallowed_files"))
 
-        if options.get("file_paths"):
-            file_paths = list(options.get("file_paths"))
+        given_file_paths = options.get("file_paths")
+        if given_file_paths:
+            file_paths: list[str] = []
+            for file in given_file_paths:
+                clean_file = file.replace("\n", "")  # Line-oriented file lists carry newlines into the path.
+                if os.path.basename(clean_file) not in disallowed_files:  # Compares only the file name.
+                    file_paths.append(clean_file)
 
-            if options.get("file_paths"):
-                file_paths = list(options.get("file_paths"))
-
-                new_file_paths = []
-                for file in file_paths:
-                    file_name = os.path.basename(file)  # Extracts only the file name
-                    if file_name not in disallowed_files:
-                        _file = file.replace("\n", "")
-                        new_file_paths.append(_file)
-
+            # Mirrors find_file_paths on the other branch: an empty selection cannot be read, so it
+            # fails here instead of producing a join child with an empty in_features frozenset.
+            if not file_paths:
+                raise ValueError(
+                    f"No files left for {self.get_class_name()}: 'disallowed_files' {tuple(disallowed_files)} "
+                    f"excluded every path given in 'file_paths' {tuple(given_file_paths)}."
+                )
         else:
             target_folder = options.get("target_folder")
             if not target_folder:
                 raise ValueError(f"The option 'target_folder' is required for {self.get_class_name()}.")
 
-            file_type = options.get("file_type") or "py"
+            file_type = effective.get("file_type")
             file_paths = find_file_paths(list(target_folder), file_type, not_allowed_files_names=disallowed_files)
 
         document_reader_class = options.get("document_reader_class")

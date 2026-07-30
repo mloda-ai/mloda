@@ -112,6 +112,12 @@ class TestUnifiedCheckSourceFeaturesSignature:
         )
 
 
+@pytest.mark.parametrize("cls", ALL_PANDAS_CLASSES, ids=lambda c: c.__name__)
+def test_pandas_plugin_is_concrete(cls: Any) -> None:
+    """An unimplemented abstract method keeps a plugin abstract, and registration then skips it silently."""
+    assert inspect.isabstract(cls) is False, f"{cls.__name__} is abstract: {sorted(cls.__abstractmethods__)}"
+
+
 TOLERANT_PANDAS_CLASSES = [
     PandasAggregatedFeatureGroup,
     PandasClusteringFeatureGroup,

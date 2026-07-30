@@ -20,9 +20,10 @@ class ColumnwiseFrameworkHooks(ABC):
             feature_names: Resolved source feature names (may contain ~N suffixes)
 
         Raises:
-            ValueError: When the source features this feature group needs are absent. Tolerant
-                groups raise only when none of the names exist, strict groups raise when any name
-                is missing; see test_check_source_features_signature.py.
+            ValueError: When the source features this feature group needs are absent.
+                Aggregated, clustering, time window, and forecasting groups are tolerant
+                and raise only when none of the names exist; every other column-wise
+                group is strict and raises when any name is missing.
         """
         ...
 

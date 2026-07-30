@@ -1,11 +1,27 @@
 import inspect
 from collections.abc import Sequence
 from copy import deepcopy
-from dataclasses import dataclass, field, replace
-from difflib import get_close_matches
-from typing import Literal, Optional
+from dataclasses import replace
+from typing import Optional
 
 from mloda.core.prepare.accessible_plugins import FeatureGroupEnvironmentMapping
+from mloda.core.prepare.resolution_types import (
+    CandidateFrameworks,
+    Elimination,
+    EliminationStage,
+    EvaluationResult,
+    PARTIAL_RECORDS_CAP,
+    RenderFacts,
+    ResolutionDiagnosis,
+    ResolutionRecord,
+)
+from mloda.core.prepare.resolution_failure_renderer import (
+    TROUBLESHOOTING_URL,
+    render_resolution_failure,
+    scope_callout,
+    _prefix_name,
+    _supported_feature_names,
+)
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.abstract_plugins.components.domain import Domain
 from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser import (
@@ -23,103 +39,26 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-
-@dataclass(frozen=True)
-class CandidateFrameworks:
-    """One candidate's own accessible frameworks, split by the match-time capability hook."""
-
-    supported: frozenset[type[ComputeFramework]] = frozenset()
-    rejected: frozenset[type[ComputeFramework]] = frozenset()
-
-
-EliminationStage = Literal[
-    "value_rejection",
-    "domain",
-    "scope",
-    "capability",
-    "frameworks_not_enabled",
-    "framework_pin",
-    "links",
+# Keeps the pre-split import surface of this module intact: the moved names stay importable from here.
+__all__ = [
+    "CandidateFrameworks",
+    "ComputeFrameworkPinError",
+    "Elimination",
+    "EliminationStage",
+    "EvaluationResult",
+    "FeatureResolutionError",
+    "IdentifyFeatureGroupClass",
+    "PARTIAL_RECORDS_CAP",
+    "RenderFacts",
+    "ResolutionDiagnosis",
+    "ResolutionRecord",
+    "TROUBLESHOOTING_URL",
+    "evaluate_and_render",
+    "matches_feature_group_scope",
+    "render_resolution_failure",
+    "resolve_or_raise",
+    "scope_callout",
 ]
-
-
-@dataclass(frozen=True)
-class Elimination:
-    """Why one near-miss candidate lost: the first gate it failed and that gate's reason."""
-
-    stage: EliminationStage
-    reason: str
-
-
-@dataclass(frozen=True)
-class RenderFacts:
-    """Facts captured during the decision pass so rendering needs no provider hook.
-
-    The empty instance is the success value: the winning path captures nothing.
-    """
-
-    domains: dict[type[FeatureGroup], str] = field(default_factory=dict)
-    concrete_frameworks: tuple[str, ...] = ()
-    known_names: tuple[str, ...] = ()
-    # Class name and prefix of each eliminated near-miss, so a "Did you mean" suggestion that merely echoes
-    # a candidate the near-miss block already named can be suppressed.
-    eliminated_hints: frozenset[str] = frozenset()
-
-
-@dataclass(frozen=True)
-class EvaluationResult:
-    """Non-raising result of matching a feature against accessible plugins."""
-
-    identified: FeatureGroupEnvironmentMapping
-    criteria_matched: set[type[FeatureGroup]] = field(default_factory=set)
-    abstract_matched: set[type[FeatureGroup]] = field(default_factory=set)
-    candidate_frameworks: dict[type[FeatureGroup], CandidateFrameworks] = field(default_factory=dict)
-    eliminations: dict[type[FeatureGroup], Elimination] = field(default_factory=dict)
-    facts: RenderFacts = field(default_factory=RenderFacts)
-
-    @property
-    def failure_kind(self) -> Literal["multiple", "abstract_only", "none"] | None:
-        # "none" means no winner in the identified mapping, not that nothing matched: an all-rejected
-        # concrete group still yields "none" with a non-empty criteria_matched.
-        n = len(self.identified)
-        if n == 1:
-            return None
-        if n > 1:
-            return "multiple"
-        if self.abstract_matched:
-            return "abstract_only"
-        return "none"
-
-
-@dataclass(frozen=True)
-class ResolutionRecord:
-    """One feature's identification during planning: its name, whether it was requested, and its EvaluationResult."""
-
-    feature_name: str
-    requested: bool
-    result: EvaluationResult
-
-
-# Cap on records attached to a FeatureResolutionError so the copy stays bounded on huge requests.
-PARTIAL_RECORDS_CAP = 1000
-
-
-@dataclass(frozen=True)
-class ResolutionDiagnosis:
-    """Non-raising outcome of mlodaAPI.diagnose, a whole-request resolution preflight.
-
-    complete is True iff the whole request resolved; then records equals session.resolution_report() and
-    feature_name/failed_result/message are None. On a resolution failure records holds the features resolved
-    before the failing one (capped at PARTIAL_RECORDS_CAP on huge requests), feature_name/failed_result carry
-    that feature's failed evaluation, and message is its rendered text. On a configuration error records is
-    empty and only message is set.
-    """
-
-    records: list[ResolutionRecord]
-    complete: bool
-    feature_name: str | None = None
-    failed_result: EvaluationResult | None = None
-    message: str | None = None
 
 
 class FeatureResolutionError(ValueError):
@@ -168,148 +107,6 @@ def matches_feature_group_scope(feature_group: type[FeatureGroup], scope: str | 
         ancestor.__name__ == scope and ancestor is not FeatureGroup and issubclass(ancestor, FeatureGroup)
         for ancestor in feature_group.__mro__
     )
-
-
-def scope_callout(scope: str | type[FeatureGroup] | None) -> str | None:
-    """Render the shared scope callout, or None when the scope is unset."""
-    if scope is None:
-        return None
-    scope_name = scope.get_class_name() if isinstance(scope, type) else scope
-    return f"Scoped to feature group: '{scope_name}'."
-
-
-TROUBLESHOOTING_URL = "https://mloda-ai.github.io/mloda/in_depth/troubleshooting/feature-group-resolution-errors/"
-
-
-def _candidate_sort_key(feature_group: type[FeatureGroup]) -> tuple[str, str]:
-    """Sort candidates by name, then module: two candidates may share a name across modules."""
-    return feature_group.__name__, feature_group.__module__
-
-
-def _supported_feature_names(feature_group: type[FeatureGroup]) -> set[str]:
-    """Best-effort name catalog of one candidate. A malformed entry costs that candidate its whole catalog."""
-    return safe_field(
-        lambda: {as_str(name) for name in feature_group.feature_names_supported()},
-        set(),
-        field=f"{feature_group.get_class_name()}.feature_names_supported",
-    )
-
-
-def _prefix_name(feature_group: type[FeatureGroup]) -> str:
-    """Best-effort prefix of one candidate."""
-    return safe_field(lambda: as_str(feature_group.prefix()), "", field=f"{feature_group.get_class_name()}.prefix")
-
-
-_STAGE_LABELS: dict[EliminationStage, str] = {
-    "value_rejection": "option value",
-    "domain": "domain",
-    "scope": "scope",
-    "capability": "compute framework",
-    "frameworks_not_enabled": "compute framework",
-    "framework_pin": "compute framework pin",
-    "links": "links",
-}
-
-
-def _render_near_miss_block(result: EvaluationResult, feature: Feature) -> str | None:
-    """Shared section naming each eliminated near-miss candidate, its gate label, and its reason."""
-    if not result.eliminations:
-        return None
-    lines = "\n".join(
-        f"  - {fg.__name__} ({_STAGE_LABELS[result.eliminations[fg].stage]}): {result.eliminations[fg].reason}"
-        for fg in sorted(result.eliminations, key=_candidate_sort_key)
-    )
-    return f"Feature group(s) eliminated while matching '{str(feature.name)}':\n{lines}"
-
-
-def _render_multiple(result: EvaluationResult, feature: Feature, callout: str | None) -> str:
-    # Every identified candidate gets a line; only a candidate with a captured domain gets the suffix.
-    lines = "\n".join(
-        f"  - {fg.__name__} ({fg.__module__})"
-        + (f" [domain: {result.facts.domains[fg]}]" if fg in result.facts.domains else "")
-        for fg in sorted(result.identified, key=_candidate_sort_key)
-    )
-    scope_line = f"{callout}\n" if callout else ""
-    return (
-        f"Multiple feature groups found for feature '{str(feature.name)}':\n"
-        f"{lines}\n"
-        f"{scope_line}"
-        f"For troubleshooting guide, see: {TROUBLESHOOTING_URL}"
-    )
-
-
-def _render_abstract_only(result: EvaluationResult, feature: Feature, callout: str | None) -> str:
-    feature_name = str(feature.name)
-    if not result.facts.concrete_frameworks:
-        msg = (
-            f"No feature groups found for feature name: '{feature_name}'. "
-            f"Only abstract feature group base(s) matched, which cannot be instantiated; "
-            f"no concrete implementation is available or enabled."
-        )
-    else:
-        framework_names = sorted(result.facts.concrete_frameworks)
-        msg = (
-            f"No feature groups found for feature name: '{feature_name}'. "
-            f"Its concrete implementations require compute framework(s) {framework_names}, "
-            f"none of which are available or enabled for this run."
-        )
-
-    # Place the callout on the sentence line, before the near-miss block, exactly as _render_none does, so it
-    # is never space-glued to the last near-miss bullet.
-    if callout:
-        msg += f" {callout}"
-
-    near_miss = _render_near_miss_block(result, feature)
-    if near_miss is not None:
-        msg += f"\n{near_miss}"
-    return msg
-
-
-def _render_none(result: EvaluationResult, feature: Feature, callout: str | None) -> str:
-    feature_name = str(feature.name)
-    msg = f"No feature groups found for feature name: '{feature_name}'."
-
-    if callout:
-        msg += f" {callout}"
-
-    near_miss = _render_near_miss_block(result, feature)
-    if near_miss is not None:
-        msg += f"\n{near_miss}"
-
-    similar = get_close_matches(feature_name, list(result.facts.known_names), n=5, cutoff=0.5)
-    # Drop suggestions that merely echo a candidate the near-miss block already named; if that empties the
-    # list, omit the line rather than repeat what was just eliminated.
-    similar = [name for name in similar if name not in result.facts.eliminated_hints]
-    if similar:
-        msg += f"\nDid you mean one of: {similar}?"
-
-    pointer_args = "name, options=..., feature_group=..." if callout else "name, options=..."
-    msg += (
-        f"\nUse resolve_feature({pointer_args}) to debug feature resolution."
-        f"\nFor troubleshooting guide, see: {TROUBLESHOOTING_URL}"
-    )
-    return msg
-
-
-def render_resolution_failure(result: EvaluationResult, feature: Feature) -> str | None:
-    """Project a failed EvaluationResult into its message. Pure: reads only the result and the Feature.
-
-    Calls no provider-overridable hook, so every fact it needs was captured by evaluate(). The
-    forwarding hint is dropped: it needs a speculative second match, which is not a projection.
-    """
-    kind = result.failure_kind
-    if kind is None:
-        return None
-
-    callout = scope_callout(feature.feature_group_scope)
-
-    if kind == "multiple":
-        return _render_multiple(result, feature, callout)
-
-    if result.abstract_matched:
-        return _render_abstract_only(result, feature, callout)
-
-    return _render_none(result, feature, callout)
 
 
 class IdentifyFeatureGroupClass:

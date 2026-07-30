@@ -58,7 +58,7 @@ NO_REEXPORT_NAMES = (
     "check_required_when",
 )
 
-# The runtime match path, which stays on FeatureChainParser.
+# The runtime match path, which stays on FeatureChainParser, including the members the guards call back into.
 PARSER_KEPT_METHODS = (
     "parse_name",
     "parse_feature_name",
@@ -70,6 +70,9 @@ PARSER_KEPT_METHODS = (
     "_name_identifies_group",
     "_merge_bindings",
     "_check_name_path_required_presence",
+    "_can_skip_required_check",
+    "_name_path_missing_required_keys",
+    "extract_property_values",
     "name_path_presence_rejection_reason",
     "extract_in_feature",
     "validate_property_mapping_defaults",
@@ -79,6 +82,7 @@ PARSER_KEPT_METHODS = (
 PARSER_KEPT_MODULE_LEVEL = (
     "record_match_rejection",
     "option_key_is_present",
+    "_contained_raise_log_level",
     "PropertyValueRejection",
 )
 
@@ -108,6 +112,11 @@ def _chainer_dir() -> Path:
     parser_file = feature_chain_parser.__file__
     assert parser_file is not None
     return Path(parser_file).parent
+
+
+def _repo_root() -> Path:
+    """Repo root, four levels above mloda/core/abstract_plugins/components/feature_chainer."""
+    return _chainer_dir().parents[4]
 
 
 def _missing_names(module: ModuleType, names: Sequence[str]) -> list[str]:
@@ -195,6 +204,7 @@ def test_parser_imports_in_a_clean_interpreter_without_the_author_guards() -> No
         capture_output=True,
         text=True,
         timeout=_SUBPROCESS_TIMEOUT,
+        cwd=_repo_root(),
     )
     assert result.returncode == 0, f"importing {PARSER_MODULE} in a fresh interpreter failed:\n{result.stderr}"
     assert result.stdout.strip() == "absent", f"{GUARDS_MODULE} was imported transitively by {PARSER_MODULE}"

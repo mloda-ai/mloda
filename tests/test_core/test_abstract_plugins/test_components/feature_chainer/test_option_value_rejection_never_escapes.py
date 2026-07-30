@@ -333,6 +333,11 @@ def _records_at_exactly(caplog: pytest.LogCaptureFixture, logger_name: str, leve
     return [record for record in caplog.records if record.name == logger_name and record.levelno == levelno]
 
 
+def _any_logger_records_at_or_above(caplog: pytest.LogCaptureFixture, levelno: int) -> list[logging.LogRecord]:
+    """Records any logger emitted at or above the given level."""
+    return [record for record in caplog.records if record.levelno >= levelno]
+
+
 class TestRaisingElementValidatorIsARejection:
     """A validator that raises rejects the value; it does not blow up the match."""
 
@@ -724,8 +729,8 @@ class TestBuildEffectiveOptionsRaiseSurfaces:
     def test_keyerror_build_effective_options_raise_propagates_without_warning(
         self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
     ) -> None:
-        """A KeyError from build_effective_options propagates unchanged; the guards log no WARNING containment."""
-        caplog.set_level(logging.DEBUG, logger=GUARDS_LOGGER_NAME)
+        """A KeyError from build_effective_options propagates unchanged; no module logs a WARNING containment."""
+        caplog.set_level(logging.DEBUG)
         monkeypatch.setattr(
             FeatureChainParser,
             "build_effective_options",
@@ -738,7 +743,7 @@ class TestBuildEffectiveOptionsRaiseSurfaces:
                 REQUIRED_WHEN_FEATURE_ESC763, options
             )
 
-        assert _records_at_or_above(caplog, GUARDS_LOGGER_NAME, logging.WARNING) == [], (
+        assert _any_logger_records_at_or_above(caplog, logging.WARNING) == [], (
             "a propagating build_effective_options raise must not leave a WARNING-tier containment record"
         )
 
@@ -746,7 +751,7 @@ class TestBuildEffectiveOptionsRaiseSurfaces:
         self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
     ) -> None:
         """A ValueError from build_effective_options propagates unchanged and leaves no containment record at all."""
-        caplog.set_level(logging.DEBUG, logger=GUARDS_LOGGER_NAME)
+        caplog.set_level(logging.DEBUG)
         monkeypatch.setattr(
             FeatureChainParser,
             "build_effective_options",
@@ -759,7 +764,7 @@ class TestBuildEffectiveOptionsRaiseSurfaces:
                 REQUIRED_WHEN_FEATURE_ESC763, options
             )
 
-        assert _records_at_or_above(caplog, GUARDS_LOGGER_NAME, logging.WARNING) == []
+        assert _any_logger_records_at_or_above(caplog, logging.WARNING) == []
         debug_records = _records_at_exactly(caplog, GUARDS_LOGGER_NAME, logging.DEBUG)
         assert all("non-match" not in record.getMessage() for record in debug_records), (
             "a propagating build_effective_options raise must not leave a DEBUG non-match containment record"

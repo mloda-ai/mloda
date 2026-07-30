@@ -2,6 +2,10 @@
 matcher guards the two ``__init_subclass__`` hooks install.
 
 Imports ``feature_chain_parser``; the parser never imports this module, which keeps the split acyclic.
+
+Depends on these parser-private names, so renaming one of them is a cross-module break:
+``FeatureChainParser._can_skip_required_check``, ``._check_name_path_required_presence``, ``._merge_bindings``,
+``._name_identifies_group``, ``._name_path_missing_required_keys``, and module-private ``_contained_raise_log_level``.
 """
 
 from __future__ import annotations

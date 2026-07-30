@@ -47,6 +47,8 @@ def _make_probe_fg() -> type[FeatureGroup]:
     """A throwaway root FeatureGroup whose criteria observes PFC_TARGET's PFC_KEY, the option this test pins."""
 
     class PfcCriteriaProbeFeatureGroup(FeatureGroup):
+        main_criteria_observed: list[Any] = []  # class-local recorder: no external ref, so no leak
+
         PROPERTY_MAPPING = {
             PFC_KEY: PropertySpec("Steers filter-criteria matching.", context=True, default=PFC_DEFAULT),
         }
@@ -64,8 +66,11 @@ def _make_probe_fg() -> type[FeatureGroup]:
         ) -> bool:
             # PFC_MAIN must always resolve: feature resolution itself observes declared (pre-default)
             # options, so gating the root request on PFC_KEY would break it whenever the key is absent.
+            # The recorder captures what this branch actually observed, so the declared-options half of
+            # the module's asymmetry claim is assertable, not just assumed.
             name = str(feature_name)
             if name == PFC_MAIN:
+                cls.main_criteria_observed.append(options.get(PFC_KEY))
                 return True
             if name == PFC_TARGET:
                 return bool(options.get(PFC_KEY) == PFC_DEFAULT)
@@ -82,6 +87,7 @@ def _make_probe_fg() -> type[FeatureGroup]:
             payload = {
                 "names": sorted(str(f.name) for f in features.features),
                 "filter_count": len(features.filters) if features.filters else 0,
+                "main_criteria_observed": list(cls.main_criteria_observed),
             }
             return {str(feature.name): [payload] for feature in features.features}
 
@@ -102,7 +108,10 @@ def _run(options: Options) -> dict[str, Any]:
     """Run PFC_MAIN under a global EQUAL filter on PFC_TARGET; return PFC_MAIN's payload row.
 
     The probe class and collector stay locals of THIS frame, so a failing assert in the caller
-    never pins the throwaway class in a traceback and the no-leak guard stays green.
+    never pins the throwaway class in a traceback and the no-leak guard stays green. `fg` and
+    `collector` are deleted from THIS frame too, right after `run_all` returns and before the
+    asserts below: otherwise a failing assert here would pin them into this frame's own traceback,
+    which would trip the no-leak fixture's assertion as well and mask the real failure.
     """
     fg = _make_probe_fg()
     collector = PluginCollector.enabled_feature_groups({fg})
@@ -114,6 +123,7 @@ def _run(options: Options) -> dict[str, Any]:
         plugin_collector=collector,
         global_filter=global_filter,
     )
+    del fg, collector
     assert len(results) == 1, f"expected exactly one result frame, got: {results!r}"
     payload = _single_row(results[0], PFC_MAIN)
     assert isinstance(payload, dict)
@@ -131,6 +141,9 @@ def test_filter_matches_via_materialized_default_when_request_leaves_key_absent(
         f"the filter must attach PFC_TARGET via the materialized default: {payload!r}"
     )
     assert payload["filter_count"] == 1, f"exactly one filter must match: {payload!r}"
+    assert payload["main_criteria_observed"] == [None], (
+        f"resolve-time match must observe the declared (pre-default) view, not the materialized default: {payload!r}"
+    )
 
 
 def test_filter_does_not_match_when_explicit_option_differs_from_default() -> None:

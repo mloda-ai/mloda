@@ -333,8 +333,8 @@ class Engine:
                 # We assign a new UUID to the filter feature to ensure
                 # it is treated as a separate instance from the original filter feature
                 match.filter_feature.uuid = uuid.uuid4()
-                # Intake may materialize declared defaults into the filter feature's options, and
-                # SingleFilter's hash covers that feature, so intake must run before the filter is stored.
+                # Intake may materialize declared defaults into the filter feature's options: group fills shift
+                # SingleFilter's hash, context fills shift its equality, so intake must run before it is stored.
                 self.add_feature_to_collection(feature_group_class, match.filter_feature, features.child_uuid)
                 self.global_filter.add_filter_to_collection(feature_group_class, feature.name, match)
 

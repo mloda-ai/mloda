@@ -1,19 +1,14 @@
 """Pin filter-feature intake ordering for an explicitly declared None option (#904).
 
-``Engine._add_filter_feature`` stores a matched ``SingleFilter`` into ``GlobalFilter.collection`` and
-only then runs the filter feature through feature intake. ``GlobalFilter.unify_options`` copies the
-host's effective options into the filter feature only for keys the filter feature does NOT already
-hold, so a key the filter feature declares explicitly as ``None`` reaches intake unfilled;
-``options_with_defaults`` then treats a present-but-``None`` value as absent and rebinds the options.
-That rebind lands on a ``SingleFilter`` already inside a set:
+Intake must run BEFORE ``Engine._add_filter_feature`` stores the matched ``SingleFilter``, because
+it can rebind the filter feature's options (an explicit ``None`` reaches intake unfilled and is then
+treated as absent: ``docs/docs/in_depth/property-mapping.md``). Rebinding an entry already inside a
+set breaks it two ways: a group key shifts ``SingleFilter.__hash__``, and either category changes
+``Feature.__eq__``, so a host reached twice stores the same filter twice.
 
-- a group key (``context=False``) shifts ``SingleFilter.__hash__``, because ``Options.__hash__``
-  covers group only, so the stored entry is no longer findable in its own set,
-- either category changes ``Feature.__eq__``, which compares ``options`` AND ``options.context``, so
-  a host feature reached twice stores the same filter twice and hands both to the FeatureSet.
-
-Intake must therefore run BEFORE the filter enters the collection, without changing the effective
-value the filter feature is computed with.
+The symptoms differ because ``set.__contains__`` recomputes the hash while ``set.__eq__`` compares
+STORED hashes, so two equally stale sets still compare equal: the membership probe below catches the
+group case, but a stale duplicate only aborts the run once two hosts hold unequal entry counts.
 """
 
 from __future__ import annotations
@@ -35,12 +30,8 @@ from mloda_plugins.compute_framework.base_implementations.python_dict.python_dic
 
 @pytest.fixture(autouse=True)
 def _no_feature_group_registry_pollution() -> Any:
-    """Guarantee this module never leaks its throwaway FeatureGroup subclasses.
-
-    The probes below are defined inside factory functions and sit in reference cycles, so they
-    linger in ``FeatureGroup.__subclasses__()`` until a GC cycle runs and other tests enumerating
-    feature groups trip over them. Force the collection and pin the no-pollution contract.
-    """
+    """Guarantee this module never leaks its throwaway FeatureGroup subclasses: they sit in reference
+    cycles, so without a forced collection other tests enumerating feature groups trip over them."""
     yield
     gc.collect()
     gc.collect()
@@ -64,6 +55,7 @@ class _Probe(NamedTuple):
     spec: PropertySpec
     context_key: bool  # where the explicit None is declared; the group half is the hash-shifting one
     root: str  # host feature the filter attaches to
+    root_b: str  # second host of the same feature group, requested directly so it is reached once
     target: str  # filter feature; never requested, only reachable through the filter
     derived_a: str  # two derived features, both declaring root as their input feature
     derived_b: str
@@ -74,6 +66,7 @@ GRP_PROBE = _Probe(
     spec=PropertySpec("A group concrete default.", context=False, default=FEN_GRP_DEFAULT),
     context_key=False,
     root="fen_grp_root",
+    root_b="fen_grp_root_b",
     target="fen_grp_target",
     derived_a="fen_grp_derived_a",
     derived_b="fen_grp_derived_b",
@@ -84,6 +77,7 @@ CTX_PROBE = _Probe(
     spec=PropertySpec("A context concrete default.", context=True, default=FEN_CTX_DEFAULT),
     context_key=True,
     root="fen_ctx_root",
+    root_b="fen_ctx_root_b",
     target="fen_ctx_target",
     derived_a="fen_ctx_derived_a",
     derived_b="fen_ctx_derived_b",
@@ -99,6 +93,7 @@ EN_PROBE = _Probe(
     ),
     context_key=False,
     root="fen_en_root",
+    root_b="fen_en_root_b",
     target="fen_en_target",
     derived_a="fen_en_derived_a",
     derived_b="fen_en_derived_b",
@@ -120,12 +115,12 @@ def _make_host_fg(probe: _Probe) -> type[FeatureGroup]:
 
         @classmethod
         def input_data(cls) -> DataCreator:
-            return DataCreator({probe.root, probe.target})
+            return DataCreator({probe.root, probe.root_b, probe.target})
 
         @classmethod
         def final_filters(cls) -> bool:
-            # The payload is not filterable data: read features.filters inline instead of letting
-            # the framework run post-calculation row elimination against it.
+            # The payload is not filterable data: read features.filters inline instead of running
+            # post-calculation row elimination against it.
             return False
 
         @classmethod
@@ -141,10 +136,8 @@ def _make_host_fg(probe: _Probe) -> type[FeatureGroup]:
 
 
 def _make_derived_fg(probe: _Probe) -> type[FeatureGroup]:
-    """A throwaway consumer serving two names that BOTH declare the host as their input feature.
-
-    The host is therefore processed twice, so the engine runs filter matching for it twice.
-    """
+    """A throwaway consumer serving two names that BOTH declare the host as their input feature, so
+    the host is processed twice and the engine runs filter matching for it twice."""
 
     class FenDerivedFeatureGroup(FeatureGroup):
         @classmethod
@@ -162,10 +155,8 @@ def _make_derived_fg(probe: _Probe) -> type[FeatureGroup]:
 
 
 def _summarize(global_filter: GlobalFilter, key: str) -> dict[str, dict[str, Any]]:
-    """Plain-data view of the collection, keyed by host feature name.
-
-    The collection keys hold the throwaway feature group class, so only plain values leave this frame.
-    """
+    """Plain-data view of the collection keyed by host feature name; the collection keys hold the
+    throwaway feature group class, so only plain values leave this frame."""
     summary: dict[str, dict[str, Any]] = {}
     for (feature_group, host_name), stored in global_filter.collection.items():
         entries = list(stored)
@@ -182,9 +173,7 @@ def _summarize(global_filter: GlobalFilter, key: str) -> dict[str, dict[str, Any
 
 def _payload_rows(frames: list[Any], column: str) -> list[Any]:
     """Every row stored under ``column``, tolerant of columnar dict or list-of-row-dicts frames.
-
-    Deliberately assert-free so the caller can drop the run's objects before judging the outcome.
-    """
+    Deliberately assert-free so the caller can drop the run's objects before judging the outcome."""
     rows: list[Any] = []
     for frame in frames:
         if isinstance(frame, dict):
@@ -195,13 +184,15 @@ def _payload_rows(frames: list[Any], column: str) -> list[Any]:
     return rows
 
 
-def _run(probe: _Probe, via_derived: bool) -> dict[str, Any]:
+def _run(probe: _Probe, via_derived: bool, second_host: bool = False) -> dict[str, Any]:
     """Run the probe under a global EQUAL filter whose filter feature declares probe.key as None.
 
-    Returns the collection summary plus the host's payload row. Every object referencing a throwaway
-    class (the classes, the collector, the GlobalFilter whose collection keys hold the host class,
-    the results) is deleted from THIS frame before the asserts below, so a failing assert cannot pin
-    them into a traceback and trip the no-leak fixture on top of the real failure.
+    ``second_host`` requests probe.root_b as well, so one host of the group is reached once while the
+    derived pair reaches probe.root twice. Returns the collection summary plus the payload row of the
+    observed column. Every object referencing a throwaway class (the classes, the collector, the
+    GlobalFilter whose collection keys hold the host class, the results) is deleted from THIS frame
+    before the asserts below, so a failing assert cannot pin them into a traceback and trip the
+    no-leak fixture on top of the real failure.
     """
     # The request carries the same explicit None as the filter feature: with allow_explicit_none
     # neither side is filled, which keeps host and filter feature in one FeatureSet. For the other
@@ -213,6 +204,8 @@ def _run(probe: _Probe, via_derived: bool) -> dict[str, Any]:
         feature_groups.add(_make_derived_fg(probe))
         column = probe.derived_a
         requested = [Feature(name, _explicit_none_options(probe)) for name in (probe.derived_a, probe.derived_b)]
+    if second_host:
+        requested.append(Feature(probe.root_b, _explicit_none_options(probe)))
 
     collector = PluginCollector.enabled_feature_groups(feature_groups)
     global_filter = GlobalFilter()
@@ -248,34 +241,46 @@ def _host_entry(observed: dict[str, Any], probe: _Probe) -> dict[str, Any]:
 
 
 def test_group_key_stored_filter_stays_findable_in_its_own_set() -> None:
-    """A filter feature declaring a group-key explicit None keeps a stable hash while stored.
-
-    Intake fills the declared default after the SingleFilter entered the collection, so the stored
-    entry's hash shifts inside the set and the set stops recognizing its own member.
-    """
+    """The stored group-key filter stays findable in its own set (fails pre-fix: intake fills the
+    declared default after insertion, so the entry's hash shifts and the set loses its own member)."""
     entry = _host_entry(_run(GRP_PROBE, via_derived=False), GRP_PROBE)
     assert entry["entries"] == 1, f"exactly one filter must be stored for the host feature: {entry!r}"
     assert entry["membership"] == [True], f"the stored filter must stay findable in its own set: {entry!r}"
 
 
 def test_group_key_filter_is_stored_once_when_the_host_is_reached_twice() -> None:
-    """A host reached by two consumers collects its group-key filter once, not once per pass.
-
-    The first stored entry is rebound by intake, so the second pass's value-equal SingleFilter no
-    longer compares equal to it, lands as a second entry, and is handed to the FeatureSet twice.
-    """
+    """A host reached by two consumers collects its group-key filter once (fails pre-fix: the rebound
+    entry stops comparing equal, so the second pass lands a duplicate and the FeatureSet gets both)."""
     observed = _run(GRP_PROBE, via_derived=True)
     entry = _host_entry(observed, GRP_PROBE)
     assert entry["entries"] == 1, f"the same filter must be stored once for the host feature: {entry!r}"
     assert observed["payload"]["filter_count"] == 1, f"the FeatureSet must receive one filter: {observed['payload']!r}"
 
 
-def test_group_key_filter_feature_computes_with_the_materialized_default() -> None:
-    """The declared default still reaches the filter feature (guard against an over-reaching fix).
+def test_group_key_two_hosts_with_unequal_reach_keep_one_filter_each() -> None:
+    """Two hosts of one group, one reached twice and one once, keep a filter each and the run finishes.
 
-    Running intake earlier must not stop the fill: the filter feature is still computed with the
-    materialized default, and the collection stores that same effective view.
+    Fails pre-fix: the twice-reached host collects two entries against the once-reached host's one,
+    and ``ExecutionPlan.add_single_filters_to_feature_set`` aborts the run over the unequal sets
+    (``ValueError: ... has different filters for different features``). This is the hard symptom the
+    symmetric dedup tests cannot reach, because two equally stale sets still compare equal.
     """
+    observed = _run(GRP_PROBE, via_derived=True, second_host=True)
+    collection = observed["collection"]
+    counts = {name: entry["entries"] for name, entry in collection.items()}
+    assert counts == {GRP_PROBE.root: 1, GRP_PROBE.root_b: 1}, (
+        f"each host must hold exactly one filter, else the plan rejects the unequal sets: {collection!r}"
+    )
+    payload = observed["payload"]
+    assert {GRP_PROBE.root, GRP_PROBE.root_b} <= set(payload["names"]), (
+        f"both hosts must share one FeatureSet, else their filters are never compared: {payload!r}"
+    )
+    assert payload["filter_count"] == 1, f"the shared FeatureSet must receive one filter: {payload!r}"
+
+
+def test_group_key_filter_feature_computes_with_the_materialized_default() -> None:
+    """Guard, passes pre-fix: running intake earlier must not stop the fill, so the declared default
+    still reaches both the computed filter feature and the stored entry (over-reaching-fix guard)."""
     observed = _run(GRP_PROBE, via_derived=False)
     payload = observed["payload"]
     assert GRP_PROBE.target in payload["names"], f"the filter must attach its target feature: {payload!r}"
@@ -287,22 +292,16 @@ def test_group_key_filter_feature_computes_with_the_materialized_default() -> No
 
 
 def test_context_key_stored_filter_stays_findable_in_its_own_set() -> None:
-    """The context half is the quieter one: the fill lands in context, which the hash ignores.
-
-    ``Options.__hash__`` covers group only, so the stored entry keeps its hash and stays findable
-    even before the fix; the dedup twin below is the discriminating half of the context case.
-    """
+    """Guard, passes pre-fix: ``Options.__hash__`` covers group only, so a context fill leaves the
+    stored hash intact; the dedup twin below is the discriminating half of the context case."""
     entry = _host_entry(_run(CTX_PROBE, via_derived=False), CTX_PROBE)
     assert entry["entries"] == 1, f"exactly one filter must be stored for the host feature: {entry!r}"
     assert entry["membership"] == [True], f"the stored filter must stay findable in its own set: {entry!r}"
 
 
 def test_context_key_filter_is_stored_once_when_the_host_is_reached_twice() -> None:
-    """A host reached by two consumers collects its context-key filter once, not once per pass.
-
-    ``Feature.__eq__`` compares ``options.context``, so the rebound stored entry stops comparing
-    equal to the second pass's value-equal SingleFilter even though their hashes still agree.
-    """
+    """A host reached by two consumers collects its context-key filter once (fails pre-fix:
+    ``Feature.__eq__`` compares ``options.context``, so the rebound entry stops comparing equal)."""
     observed = _run(CTX_PROBE, via_derived=True)
     entry = _host_entry(observed, CTX_PROBE)
     assert entry["entries"] == 1, f"the same filter must be stored once for the host feature: {entry!r}"
@@ -310,11 +309,8 @@ def test_context_key_filter_is_stored_once_when_the_host_is_reached_twice() -> N
 
 
 def test_opted_in_explicit_none_filter_is_never_rebound() -> None:
-    """With ``allow_explicit_none=True`` the explicit None is honored, so intake never fills (guard).
-
-    Nothing is rebound at all here, so membership must hold and the None must survive to compute
-    time. A fix that dropped the explicit None instead of reordering intake would break this.
-    """
+    """Guard, passes pre-fix: ``allow_explicit_none=True`` honors the None, so nothing is rebound and
+    the None survives to compute time; a fix that dropped the explicit None would break this."""
     observed = _run(EN_PROBE, via_derived=False)
     entry = _host_entry(observed, EN_PROBE)
     assert entry["entries"] == 1, f"exactly one filter must be stored for the host feature: {entry!r}"
@@ -327,7 +323,7 @@ def test_opted_in_explicit_none_filter_is_never_rebound() -> None:
 
 
 def test_opted_in_explicit_none_filter_is_stored_once_when_the_host_is_reached_twice() -> None:
-    """Without a rebind, both passes store the same value-equal SingleFilter into one entry (guard)."""
+    """Guard, passes pre-fix: without a rebind both passes store the same filter into one entry."""
     observed = _run(EN_PROBE, via_derived=True)
     entry = _host_entry(observed, EN_PROBE)
     assert entry["entries"] == 1, f"the same filter must be stored once for the host feature: {entry!r}"

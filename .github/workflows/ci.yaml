@@ -30,6 +30,7 @@ jobs:
       matrix:
         python-version: ["3.10", "3.11", "3.12", "3.13", "3.14"]
         toxenv: ["-e core", "-e installed"]
+        # The python310 entry is the one that also runs the version-independent static gate (ruff, licenses, bandit).
         include:
           - python-version: "3.10"
             toxenv: "-e python310"

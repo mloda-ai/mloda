@@ -79,6 +79,7 @@ source .venv/bin/activate
 - **Python**: supported range is `>=3.10,<3.15`; CI matrixes 3.10, 3.11, 3.12, 3.13, 3.14.
 - **Type hints**: use modern forms (`list[str]`, `dict[str, int]`, `X | None`). Ruff enforces this via `UP006` and `UP007`.
 - **Formatting**: ruff format with line length 120.
+- **Static gate placement**: `ruff`, the `pip-licenses` checks and `bandit` are version-independent and run only in the default `python310` tox env, so CI pays for them once; `pytest` and `mypy` run per version, and `tox -e python312` alone therefore skips the static checks.
 - **Tests**: every new feature or bug fix must come with tests; follow the patterns in the existing `tests/` tree. Tests must be parallel-safe (pytest-xdist) and finish under the 10-second timeout. The default tox env asserts `EXPECTED_SKIP_COUNT=170`; if a test you add is skipped, update the count or unskip it.
 - **Supply chain**: `[tool.uv] exclude-newer = "7 days"` in `pyproject.toml` defers new dependency releases by 7 days. Do not edit this without a reason.
 - **Licenses**: dependencies must satisfy the allowlist in `tox.ini` (Apache-2.0, BSD, MIT, MPL-2.0, PSF, ISC, LGPLv2+). Adding a dependency with a non-listed license fails tox.

@@ -558,6 +558,9 @@ The matcher must be a `classmethod`; a `staticmethod` matcher on a class that de
 The guard is installed at class definition, so mutating `PROPERTY_MAPPING` or replacing
 `match_feature_group_criteria` after the class body escapes it.
 
+This guard, the name-path presence guard, and the class-definition diagnostics below live in
+`feature_chain_author_guards.py`, which imports `feature_chain_parser` and never the reverse.
+
 ## Guarding against a universal configuration matcher
 
 A key is unconditionally required only when it declares no `default` and no `required_when`. A

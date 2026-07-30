@@ -37,7 +37,8 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-# Re-exports the moved types and the renderer entry point it calls; rendering-only names come from the renderer.
+# Re-exported by rule: the resolution_types block whole (documented compatibility surface, docs cite EvaluationResult
+# here) plus render_resolution_failure, whose output evaluate_and_render returns. Rendering-only names: the renderer.
 __all__ = [
     "CandidateFrameworks",
     "ComputeFrameworkPinError",

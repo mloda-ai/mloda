@@ -20,6 +20,7 @@ MATCHER_MODULE = "mloda.core.prepare.identify_feature_group"
 TYPES_MODULE = "mloda.core.prepare.resolution_types"
 RENDERER_MODULE = "mloda.core.prepare.resolution_failure_renderer"
 
+# Policy: the whole block stays a matcher re-export; docs/docs/in_depth/mloda-api.md:201 documents it as importable.
 TYPES_NAMES = (
     "CandidateFrameworks",
     "EliminationStage",
@@ -45,7 +46,8 @@ RENDERER_NAMES = (
     "render_resolution_failure",
 )
 
-# The only renderer name the matcher still re-exports: its own evaluate_and_render calls it.
+# render_resolution_failure is the public rendering entry point paired with evaluate_and_render, which returns its
+# output, so call sites may legitimately take it from the matcher.
 REEXPORTED_RENDERER_NAMES = ("render_resolution_failure",)
 
 # Rendering-only: nothing reaches these through the matcher, so it must not import or re-export them.
@@ -138,6 +140,11 @@ def test_resolution_failure_renderer_module_defines_its_names() -> None:
     renderer = importlib.import_module(RENDERER_MODULE)
     missing = _missing_names(renderer, RENDERER_NAMES)
     assert missing == [], f"{RENDERER_MODULE} does not define {missing}"
+    classified = set(REEXPORTED_RENDERER_NAMES) | set(RENDERER_ONLY_NAMES)
+    assert set(_public(RENDERER_NAMES)) == classified, (
+        "a new public renderer name must be classified into one bucket or the other, REEXPORTED_RENDERER_NAMES or "
+        f"RENDERER_ONLY_NAMES, else nothing pins it: {sorted(set(_public(RENDERER_NAMES)) ^ classified)}"
+    )
 
 
 def test_public_moved_names_are_reexported_by_identity() -> None:
@@ -152,7 +159,7 @@ def test_public_moved_names_are_reexported_by_identity() -> None:
 
 
 def test_rendering_only_names_are_not_reexported_by_the_matcher() -> None:
-    """These names are rendering-only, so every consumer takes them from the renderer, never through the matcher."""
+    """Rendering-only: the matcher must neither import nor re-export these, so no consumer can route through it."""
     renderer = importlib.import_module(RENDERER_MODULE)
     for name in RENDERER_ONLY_NAMES:
         assert hasattr(renderer, name), f"{RENDERER_MODULE} no longer owns {name}"

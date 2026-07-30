@@ -75,6 +75,8 @@ Run the full suite (linting, formatting, type checking, security, and tests). Al
 tox
 ```
 
+Plain `tox` runs the complete gate, while `tox -e python312` and the other per-version envs run only that interpreter's tests, type checking and license allowlist check.
+
 For quick iteration during development, you can run only the tests. Note that this skips linting, type checking, and security checks, so it is not a substitute for tox:
 
 ```bash
@@ -124,7 +126,7 @@ git checkout -b fix/short-description
 3. Make your changes and ensure `tox` passes locally.
 4. Commit using [Conventional Commits](https://www.conventionalcommits.org/) format.
 5. Push your branch to your fork and open a pull request targeting `main`.
-6. CI runs the full tox suite on Python 3.10, 3.11, 3.12, 3.13, and 3.14. All checks must pass before merge.
+6. CI runs tests, type checking and the license allowlist on Python 3.10, 3.11, 3.12, 3.13, and 3.14; formatting, linting and the security scan run once, in the 3.10 job. All checks must pass before merge.
 
 ## License
 

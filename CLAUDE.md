@@ -75,16 +75,16 @@ source .venv/bin/activate
 
 ## Project Practices
 
-`tox` is the gate. It runs `pytest -n 8 --timeout=10`, then `ruff format --check`, `ruff check`, a `pip-licenses` allowlist check, `mypy --strict --ignore-missing-imports`, and `bandit`. All of these must pass before a PR is mergeable.
+`tox` is the gate. It runs `ruff format --check`, `ruff check`, a `pip-licenses` allowlist check, `pytest -n 8 --timeout=10`, `mypy --strict --ignore-missing-imports`, and `bandit`. All of these must pass before a PR is mergeable.
 
 - **Python**: supported range is `>=3.10,<3.15`; CI matrixes 3.10, 3.11, 3.12, 3.13, 3.14.
 - **Type hints**: use modern forms (`list[str]`, `dict[str, int]`, `X | None`). Ruff enforces this via `UP006` and `UP007`.
 - **Formatting**: ruff format with line length 120.
-- **Static gate placement**: `ruff`, the `pip-licenses` checks and `bandit` are version-independent and run only in the default `python310` tox env, so CI pays for them once; `pytest` and `mypy` run per version, and `tox -e python312` alone therefore skips the static checks.
+- **Static gate placement**: `ruff`, `bandit` and the two `pip-licenses` file writers are version-independent and run only in the default `python310` tox env, so CI pays for them once; `pytest`, `mypy` and the `pip-licenses` allowlist check run per version because the installed dependency set differs per interpreter. `tox -e python312` alone therefore skips ruff, bandit and the license-file writers.
 - **Tests**: every new feature or bug fix must come with tests; follow the patterns in the existing `tests/` tree. Tests must be parallel-safe (pytest-xdist) and finish under the 10-second timeout. The default tox env asserts `EXPECTED_SKIP_COUNT=170`; if a test you add is skipped, update the count or unskip it.
 - **Supply chain**: `[tool.uv] exclude-newer = "7 days"` in `pyproject.toml` defers new dependency releases by 7 days. Do not edit this without a reason.
 - **Licenses**: dependencies must satisfy the allowlist in `tox.ini` (Apache-2.0, BSD, MIT, MPL-2.0, PSF, ISC, LGPLv2+). Adding a dependency with a non-listed license fails tox.
-- **`attribution/ATTRIBUTION.md`**: `tox` regenerates this file from the installed dependency versions on every run, so a dependency change shows up as a diff here. This is intended: commit the update as part of the same change so the tracked file stays current. The release workflow does not regenerate it; it ships the committed copy, so keeping it up to date in PRs is what keeps releases accurate.
+- **`attribution/ATTRIBUTION.md`**: `tox` regenerates this file from the installed dependency versions in the default env only, so a dependency change shows up as a diff here. This is intended: commit the update as part of the same change so the tracked file stays current. The release workflow does not regenerate it; it ships the committed copy, so keeping it up to date in PRs is what keeps releases accurate.
 - **Commits**: use [Conventional Commits](https://www.conventionalcommits.org/) (`feat:`, `fix:`, `chore:`, `docs:`, `test:`, `refactor:`, `minor:`). semantic-release computes the next version. This project deviates from the standard: the minor version (middle number) bumps only on `minor:` commits; `feat:` is treated as a patch bump.
 
 ### mypy iteration notes

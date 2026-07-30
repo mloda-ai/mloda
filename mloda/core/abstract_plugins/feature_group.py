@@ -602,6 +602,12 @@ class FeatureGroup(ABC):
         You can disallow them by removing them. However, often you can just use the default.
         If you want to implement a concrete implementation, e.g. just accept specific names,
         then you can overwrite this function.
+
+        The options view depends on the caller: feature resolution passes declared (pre-default)
+        options, while GlobalFilter calls this method again after intake to match a filter feature
+        and observes effective (post-default) options. An override whose matching logic reads option
+        values can therefore behave differently on the two paths. See
+        docs/docs/in_depth/property-mapping.md ("Applying declared defaults") for the stage table.
         """
 
         base_feature_name = cls.get_column_base_feature(feature_name)

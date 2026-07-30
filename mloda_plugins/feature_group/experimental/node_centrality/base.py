@@ -16,9 +16,10 @@ from mloda.provider import (
 from mloda.provider import FeatureSet
 from mloda.provider import DefaultOptionKeys
 from mloda.provider import PropertySpec
+from mloda_plugins.feature_group.experimental.columnwise_framework_hooks import ColumnwiseFrameworkHooks
 
 
-class NodeCentralityFeatureGroup(FeatureChainParserMixin, FeatureGroup):
+class NodeCentralityFeatureGroup(FeatureChainParserMixin, ColumnwiseFrameworkHooks, FeatureGroup):
     # Option keys for centrality configuration
     CENTRALITY_TYPE = "centrality_type"
     GRAPH_TYPE = "graph_type"
@@ -293,37 +294,6 @@ class NodeCentralityFeatureGroup(FeatureChainParserMixin, FeatureGroup):
         # Fall back to configuration-based approach
         centrality_type = feature.options.get(cls.CENTRALITY_TYPE)
         return str(centrality_type) if centrality_type is not None else None
-
-    @classmethod
-    @abstractmethod
-    def _check_source_features_exist(cls, data: Any, feature_names: list[str]) -> None:
-        """
-        Check if the source features exist in the data.
-
-        Args:
-            data: The input data
-            feature_names: List of feature names to check
-
-        Raises:
-            ValueError: If any of the features do not exist in the data.
-        """
-        ...
-
-    @classmethod
-    @abstractmethod
-    def _add_result_to_data(cls, data: Any, feature_name: str, result: Any) -> Any:
-        """
-        Add the result to the data.
-
-        Args:
-            data: The input data
-            feature_name: The name of the feature to add
-            result: The result to add
-
-        Returns:
-            The updated data
-        """
-        ...
 
     @classmethod
     @abstractmethod

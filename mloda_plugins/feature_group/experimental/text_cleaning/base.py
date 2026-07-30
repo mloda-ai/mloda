@@ -15,9 +15,10 @@ from mloda.provider import (
 from mloda.provider import FeatureSet
 from mloda.provider import DefaultOptionKeys
 from mloda.provider import PropertySpec
+from mloda_plugins.feature_group.experimental.columnwise_framework_hooks import ColumnwiseFrameworkHooks
 
 
-class TextCleaningFeatureGroup(FeatureChainParserMixin, FeatureGroup):
+class TextCleaningFeatureGroup(FeatureChainParserMixin, ColumnwiseFrameworkHooks, FeatureGroup):
     """
     Base class for all text cleaning feature groups.
 
@@ -179,21 +180,6 @@ class TextCleaningFeatureGroup(FeatureChainParserMixin, FeatureGroup):
 
     @classmethod
     @abstractmethod
-    def _check_source_features_exist(cls, data: Any, feature_names: list[str]) -> None:
-        """
-        Check if the source features exist in the data.
-
-        Args:
-            data: The input data
-            feature_names: List of feature names to check
-
-        Raises:
-            ValueError: If any of the features do not exist in the data.
-        """
-        ...
-
-    @classmethod
-    @abstractmethod
     def _get_source_text(cls, data: Any, feature_name: str) -> Any:
         """
         Get the source text from the data.
@@ -204,22 +190,6 @@ class TextCleaningFeatureGroup(FeatureChainParserMixin, FeatureGroup):
 
         Returns:
             The source text
-        """
-        ...
-
-    @classmethod
-    @abstractmethod
-    def _add_result_to_data(cls, data: Any, feature_name: str, result: Any) -> Any:
-        """
-        Add the result to the data.
-
-        Args:
-            data: The input data
-            feature_name: The name of the feature to add
-            result: The result to add
-
-        Returns:
-            The updated data
         """
         ...
 

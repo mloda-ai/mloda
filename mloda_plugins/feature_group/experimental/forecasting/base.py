@@ -15,6 +15,7 @@ from mloda.user import FeatureName
 from mloda.user import Options
 from mloda.provider import DefaultOptionKeys
 from mloda.provider import PropertySpec, is_positive_int
+from mloda_plugins.feature_group.experimental.columnwise_framework_hooks import ColumnDiscoveryFrameworkHooks
 from mloda_plugins.feature_group.experimental.forecasting.forecasting_artifact import ForecastingArtifact
 from mloda_plugins.feature_group.experimental.time_reference_mixin import TimeReferenceMixin
 
@@ -24,7 +25,7 @@ def _is_bool(value: Any) -> bool:
     return isinstance(value, bool)
 
 
-class ForecastingFeatureGroup(TimeReferenceMixin, FeatureChainParserMixin, FeatureGroup):
+class ForecastingFeatureGroup(TimeReferenceMixin, FeatureChainParserMixin, ColumnDiscoveryFrameworkHooks, FeatureGroup):
     """
     Base class for all forecasting feature groups.
 
@@ -492,51 +493,6 @@ class ForecastingFeatureGroup(TimeReferenceMixin, FeatureChainParserMixin, Featu
 
         Raises:
             ValueError: If the reference time column is not a datetime column
-        """
-        ...
-
-    @classmethod
-    @abstractmethod
-    def _get_available_columns(cls, data: Any) -> set[str]:
-        """
-        Get the set of available column names from the data.
-
-        Args:
-            data: The input data
-
-        Returns:
-            Set of column names available in the data
-        """
-        ...
-
-    @classmethod
-    @abstractmethod
-    def _check_source_features_exist(cls, data: Any, feature_names: list[str]) -> None:
-        """
-        Check if the resolved source features exist in the data.
-
-        Args:
-            data: The input data
-            feature_names: List of resolved feature names (may contain ~N suffixes)
-
-        Raises:
-            ValueError: If none of the features exist in the data (partial presence is accepted).
-        """
-        ...
-
-    @classmethod
-    @abstractmethod
-    def _add_result_to_data(cls, data: Any, feature_name: str, result: Any) -> Any:
-        """
-        Add the result to the data.
-
-        Args:
-            data: The input data
-            feature_name: The name of the feature to add
-            result: The result to add
-
-        Returns:
-            The updated data
         """
         ...
 

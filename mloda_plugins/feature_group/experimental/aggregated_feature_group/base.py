@@ -17,9 +17,10 @@ from mloda.provider import (
 from mloda.provider import DefaultOptionKeys
 from mloda.provider import PropertySpec
 from mloda.provider import SubtypeDeclaration
+from mloda_plugins.feature_group.experimental.columnwise_framework_hooks import ColumnDiscoveryFrameworkHooks
 
 
-class AggregatedFeatureGroup(FeatureChainParserMixin, FeatureGroup):
+class AggregatedFeatureGroup(FeatureChainParserMixin, ColumnDiscoveryFrameworkHooks, FeatureGroup):
     """
     Base class for all aggregated feature groups.
 
@@ -191,51 +192,6 @@ class AggregatedFeatureGroup(FeatureChainParserMixin, FeatureGroup):
             data = cls._add_result_to_data(data, feature.name, result)
 
         return data
-
-    @classmethod
-    @abstractmethod
-    def _get_available_columns(cls, data: Any) -> set[str]:
-        """
-        Get the set of available column names from the data.
-
-        Args:
-            data: The input data
-
-        Returns:
-            Set of column names available in the data
-        """
-        ...
-
-    @classmethod
-    @abstractmethod
-    def _check_source_features_exist(cls, data: Any, feature_names: list[str]) -> None:
-        """
-        Check if the resolved source features exist in the data.
-
-        Args:
-            data: The input data
-            feature_names: List of resolved feature names (may contain ~N suffixes)
-
-        Raises:
-            ValueError: If none of the features exist in the data (partial presence is accepted).
-        """
-        ...
-
-    @classmethod
-    @abstractmethod
-    def _add_result_to_data(cls, data: Any, feature_name: str, result: Any) -> Any:
-        """
-        Add the result to the data.
-
-        Args:
-            data: The input data
-            feature_name: The name of the feature to add
-            result: The result to add
-
-        Returns:
-            The updated data
-        """
-        ...
 
     @classmethod
     @abstractmethod

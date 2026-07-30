@@ -61,6 +61,13 @@ from typing import Any, Optional, cast
 from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.components.options import Options
+from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_author_guards import (
+    install_name_path_presence_guard,
+    install_required_when_guard,
+    validate_name_binding,
+    warn_captureless_without_binding,
+    warn_universal_optional_matcher,
+)
 from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser import (
     FeatureChainParser,
     CHAIN_SEPARATOR,
@@ -100,7 +107,7 @@ class FeatureChainParserMixin:
     True and the option value is absent, ``match_feature_group_criteria`` rejects the match.
     When the predicate returns False, the option is treated as optional. The predicates are
     enforced by a guard installed on the class at definition time (see
-    ``FeatureChainParser.install_required_when_guard``), so overriding
+    ``feature_chain_author_guards.install_required_when_guard``), so overriding
     ``match_feature_group_criteria`` keeps the contract.
 
     This works for both string-based and configuration-based feature creation. For
@@ -132,11 +139,11 @@ class FeatureChainParserMixin:
         # The mixin sits first in the MRO of ``class X(FeatureChainParserMixin, FeatureGroup)``,
         # so super() is what lets FeatureGroup's own class-definition validation still run.
         super().__init_subclass__(**kwargs)
-        FeatureChainParser.validate_name_binding(cls)
-        FeatureChainParser.warn_captureless_without_binding(cls)
-        FeatureChainParser.install_name_path_presence_guard(cls)
-        FeatureChainParser.install_required_when_guard(cls)
-        FeatureChainParser.warn_universal_optional_matcher(cls)
+        validate_name_binding(cls)
+        warn_captureless_without_binding(cls)
+        install_name_path_presence_guard(cls)
+        install_required_when_guard(cls)
+        warn_universal_optional_matcher(cls)
 
     @classmethod
     def _validate_string_match(cls, _feature_name: str, _operation_config: str, _in_feature: str) -> bool:

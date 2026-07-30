@@ -30,7 +30,8 @@ from mloda_plugins.feature_group.experimental.text_cleaning.base import TextClea
 
 CLEANED_TEXT_NAME = "x__cleaned_text"
 CLEANED_TEXT_PATTERN = r".*__cleaned_text$"
-FEATURE_CHAIN_PARSER_LOGGER = "mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser"
+# The captureless diagnostic is emitted by feature_chain_author_guards.warn_captureless_without_binding.
+AUTHOR_GUARDS_LOGGER = "mloda.core.abstract_plugins.components.feature_chainer.feature_chain_author_guards"
 
 # "cleaned" is exactly the token the retired code fabricated from ``__cleaned_text``.
 FABRICATED_TOKEN = "cleaned"  # nosec B105
@@ -162,7 +163,7 @@ class TestCapturelessDefinitionDiagnostic:
             record
             for record in caplog.records
             if record.levelno == logging.WARNING
-            and record.name == FEATURE_CHAIN_PARSER_LOGGER
+            and record.name == AUTHOR_GUARDS_LOGGER
             and "RECOGNITION_ONLY_PATTERN" in record.getMessage()
         ]
         assert warnings
@@ -186,7 +187,7 @@ class TestCapturelessDefinitionDiagnostic:
             record
             for record in caplog.records
             if record.levelno == logging.WARNING
-            and record.name == FEATURE_CHAIN_PARSER_LOGGER
+            and record.name == AUTHOR_GUARDS_LOGGER
             and "RECOGNITION_ONLY_PATTERN" in record.getMessage()
         ]
         assert not warnings
@@ -303,7 +304,7 @@ class TestDiagnosticEmittedOnce:
         warnings = [
             record
             for record in caplog.records
-            if record.name == FEATURE_CHAIN_PARSER_LOGGER and "RECOGNITION_ONLY_PATTERN" in record.getMessage()
+            if record.name == AUTHOR_GUARDS_LOGGER and "RECOGNITION_ONLY_PATTERN" in record.getMessage()
         ]
         assert len(warnings) == 1
 
@@ -324,6 +325,6 @@ class TestDiagnosticEmittedOnce:
         warnings = [
             record
             for record in caplog.records
-            if record.name == FEATURE_CHAIN_PARSER_LOGGER and "RECOGNITION_ONLY_PATTERN" in record.getMessage()
+            if record.name == AUTHOR_GUARDS_LOGGER and "RECOGNITION_ONLY_PATTERN" in record.getMessage()
         ]
         assert len(warnings) == 1

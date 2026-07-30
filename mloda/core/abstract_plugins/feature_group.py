@@ -12,6 +12,12 @@ from mloda.core.abstract_plugins.components.data_types import DataType
 
 from mloda.core.abstract_plugins.components.domain import Domain
 from mloda.core.abstract_plugins.components.base_feature_group_version import BaseFeatureGroupVersion
+from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_author_guards import (
+    install_name_path_presence_guard,
+    install_required_when_guard,
+    validate_name_binding,
+    warn_captureless_without_binding,
+)
 from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser import (
     CHAIN_SEPARATOR,
     COLUMN_SEPARATOR,
@@ -92,10 +98,10 @@ class FeatureGroup(ABC):
     def __init_subclass__(cls, **kwargs: Any) -> None:
         super().__init_subclass__(**kwargs)
         FeatureChainParser.validate_property_mapping_defaults(cls.__name__, cls.PROPERTY_MAPPING)
-        FeatureChainParser.validate_name_binding(cls)
-        FeatureChainParser.warn_captureless_without_binding(cls)
-        FeatureChainParser.install_name_path_presence_guard(cls)
-        FeatureChainParser.install_required_when_guard(cls)
+        validate_name_binding(cls)
+        warn_captureless_without_binding(cls)
+        install_name_path_presence_guard(cls)
+        install_required_when_guard(cls)
         cls._validate_subtype_declaration()
 
     @classmethod

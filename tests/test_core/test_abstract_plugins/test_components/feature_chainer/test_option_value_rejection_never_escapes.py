@@ -16,6 +16,7 @@ import pytest
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.abstract_plugins.components.default_options_key import DefaultOptionKeys
 from mloda.core.abstract_plugins.components.feature import Feature
+from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_author_guards import check_required_when
 from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser import (
     FeatureChainParser,
     PropertyValueRejection,
@@ -76,9 +77,11 @@ OPTIONAL_MODE_ESC763 = "optional_esc763"
 TYPE_POISON_VALUE_TIER763 = "type_poison_tier763"
 CAUSE_KEY_TIER763 = "cause_key_tier763"
 
-# Both modules create their logger via logging.getLogger(__name__), so the class's module IS the logger name.
+# Every module creates its logger via logging.getLogger(__name__), so the class's module IS the logger name.
 PARSER_LOGGER_NAME = FeatureChainParser.__module__
 MIXIN_LOGGER_NAME = FeatureChainParserMixin.__module__
+# check_required_when, and with it the required_when containment record, lives in the author-guards module.
+GUARDS_LOGGER_NAME = check_required_when.__module__
 
 
 def _keyerror_element_validator_esc763(value: Any) -> bool:
@@ -721,8 +724,8 @@ class TestBuildEffectiveOptionsRaiseSurfaces:
     def test_keyerror_build_effective_options_raise_propagates_without_warning(
         self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
     ) -> None:
-        """A KeyError from build_effective_options propagates unchanged; the parser logs no WARNING containment."""
-        caplog.set_level(logging.DEBUG, logger=PARSER_LOGGER_NAME)
+        """A KeyError from build_effective_options propagates unchanged; the guards log no WARNING containment."""
+        caplog.set_level(logging.DEBUG, logger=GUARDS_LOGGER_NAME)
         monkeypatch.setattr(
             FeatureChainParser,
             "build_effective_options",
@@ -735,7 +738,7 @@ class TestBuildEffectiveOptionsRaiseSurfaces:
                 REQUIRED_WHEN_FEATURE_ESC763, options
             )
 
-        assert _records_at_or_above(caplog, PARSER_LOGGER_NAME, logging.WARNING) == [], (
+        assert _records_at_or_above(caplog, GUARDS_LOGGER_NAME, logging.WARNING) == [], (
             "a propagating build_effective_options raise must not leave a WARNING-tier containment record"
         )
 
@@ -743,7 +746,7 @@ class TestBuildEffectiveOptionsRaiseSurfaces:
         self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
     ) -> None:
         """A ValueError from build_effective_options propagates unchanged and leaves no containment record at all."""
-        caplog.set_level(logging.DEBUG, logger=PARSER_LOGGER_NAME)
+        caplog.set_level(logging.DEBUG, logger=GUARDS_LOGGER_NAME)
         monkeypatch.setattr(
             FeatureChainParser,
             "build_effective_options",
@@ -756,8 +759,8 @@ class TestBuildEffectiveOptionsRaiseSurfaces:
                 REQUIRED_WHEN_FEATURE_ESC763, options
             )
 
-        assert _records_at_or_above(caplog, PARSER_LOGGER_NAME, logging.WARNING) == []
-        debug_records = _records_at_exactly(caplog, PARSER_LOGGER_NAME, logging.DEBUG)
+        assert _records_at_or_above(caplog, GUARDS_LOGGER_NAME, logging.WARNING) == []
+        debug_records = _records_at_exactly(caplog, GUARDS_LOGGER_NAME, logging.DEBUG)
         assert all("non-match" not in record.getMessage() for record in debug_records), (
             "a propagating build_effective_options raise must not leave a DEBUG non-match containment record"
         )
@@ -850,7 +853,7 @@ class TestContainedRaiseLogTiers:
 
     def test_keyerror_required_when_raise_logs_at_warning(self, caplog: pytest.LogCaptureFixture) -> None:
         """A predicate raising KeyError is still a non-match, but the containment surfaces at WARNING."""
-        caplog.set_level(logging.DEBUG, logger=PARSER_LOGGER_NAME)
+        caplog.set_level(logging.DEBUG, logger=GUARDS_LOGGER_NAME)
         options = Options(context={DRIVER_KEY_ESC763: POISON_VALUE_ESC763})
 
         result = RaisingKeyErrorRequiredWhenFeatureGroupEsc763.match_feature_group_criteria(
@@ -858,7 +861,7 @@ class TestContainedRaiseLogTiers:
         )
 
         assert result is False
-        warnings = _records_at_or_above(caplog, PARSER_LOGGER_NAME, logging.WARNING)
+        warnings = _records_at_or_above(caplog, GUARDS_LOGGER_NAME, logging.WARNING)
         assert warnings, "a KeyError-raising predicate looks broken and must log at WARNING"
         owner = RaisingKeyErrorRequiredWhenFeatureGroupEsc763.__name__
         assert any(
@@ -867,7 +870,7 @@ class TestContainedRaiseLogTiers:
 
     def test_typeerror_required_when_raise_logs_at_debug_only(self, caplog: pytest.LogCaptureFixture) -> None:
         """A predicate raising TypeError is an expected judgment failure: contained at DEBUG, never WARNING."""
-        caplog.set_level(logging.DEBUG, logger=PARSER_LOGGER_NAME)
+        caplog.set_level(logging.DEBUG, logger=GUARDS_LOGGER_NAME)
         options = Options(context={DRIVER_KEY_ESC763: TYPE_POISON_VALUE_TIER763})
 
         result = RaisingKeyErrorRequiredWhenFeatureGroupEsc763.match_feature_group_criteria(
@@ -875,8 +878,8 @@ class TestContainedRaiseLogTiers:
         )
 
         assert result is False
-        assert _records_at_or_above(caplog, PARSER_LOGGER_NAME, logging.WARNING) == []
-        debug_records = _records_at_exactly(caplog, PARSER_LOGGER_NAME, logging.DEBUG)
+        assert _records_at_or_above(caplog, GUARDS_LOGGER_NAME, logging.WARNING) == []
+        debug_records = _records_at_exactly(caplog, GUARDS_LOGGER_NAME, logging.DEBUG)
         assert debug_records, "the contained TypeError must still log its rejection at DEBUG"
         owner = RaisingKeyErrorRequiredWhenFeatureGroupEsc763.__name__
         assert any(

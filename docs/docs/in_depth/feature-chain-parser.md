@@ -146,6 +146,18 @@ class MyFeatureGroup(FeatureChainParserMixin, FeatureGroup):
 | `IN_FEATURE_SEPARATOR` | `str` | `"&"` | Separator for multiple in_features |
 | `RECOGNITION_ONLY_PATTERN` | `bool` | `False` | Declares a captureless pattern as recognition-only (binds no key from the name) |
 
+### Column-Wise Data Hooks
+
+Beyond parsing, the mixin declares three column-wise data hooks: `_get_available_columns`,
+`_check_source_features_exist` and `_add_result_to_data`. The concrete compute-framework subclass
+(pandas, PyArrow, Polars, python dict, ...) implements them; the inherited defaults raise
+`NotImplementedError` naming the class and the hook, so a missing implementation fails loudly
+instead of silently. A group that resolves column names against the data implements the discovery
+hook too; the others only need the check/add pair.
+
+Whether `_check_source_features_exist` tolerates partial presence (some source names missing) or
+rejects it is a per-feature-group policy, not a framework rule.
+
 ### Captureless Patterns and Name Binding
 
 A captureless `PREFIX_PATTERN` (one with no capture group, e.g. `r".*__cleaned_text$"`) binds no

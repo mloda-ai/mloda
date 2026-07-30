@@ -81,6 +81,9 @@ class FeatureChainParserMixin:
     """
     Mixin providing default implementations for feature chain parsing.
 
+    Beyond the chain-parsing helpers, it also carries the column-wise data hooks
+    (see the section at the end of the class).
+
     Subclasses should define:
     - PREFIX_PATTERN or SUFFIX_PATTERN: Regex patterns for matching
     - PROPERTY_MAPPING: Property validation mapping (see docs/in_depth/property-mapping.md)
@@ -619,3 +622,50 @@ class FeatureChainParserMixin:
         if value is not None:
             return str(value)
         return None
+
+    # Column-wise data hooks: the concrete compute-framework subclass (pandas, pyarrow, ...) implements
+    # these. They are deliberately not @abstractmethod, since this is a plain class where that would be
+    # unenforced; the defaults below raise instead, naming the class that skipped the implementation.
+
+    @classmethod
+    def _get_available_columns(cls, data: Any) -> set[str]:
+        """
+        Get the set of available column names from the data.
+
+        Args:
+            data: The input data
+
+        Returns:
+            Set of column names available in the data
+        """
+        raise NotImplementedError(f"{cls.__name__} must implement _get_available_columns")
+
+    @classmethod
+    def _check_source_features_exist(cls, data: Any, feature_names: list[str]) -> None:
+        """
+        Check that the resolved source features exist in the data.
+
+        Args:
+            data: The input data
+            feature_names: Resolved source feature names (may contain ~N suffixes)
+
+        Raises:
+            ValueError: When the source features this feature group needs are absent. Whether
+                partial presence is accepted is defined by the implementing feature group.
+        """
+        raise NotImplementedError(f"{cls.__name__} must implement _check_source_features_exist")
+
+    @classmethod
+    def _add_result_to_data(cls, data: Any, feature_name: str, result: Any) -> Any:
+        """
+        Add the result to the data.
+
+        Args:
+            data: The input data
+            feature_name: The name of the feature to add
+            result: The result to add
+
+        Returns:
+            The updated data
+        """
+        raise NotImplementedError(f"{cls.__name__} must implement _add_result_to_data")

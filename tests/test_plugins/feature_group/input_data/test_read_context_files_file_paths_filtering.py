@@ -17,6 +17,12 @@ counts as a use of the list.
 The reads are observed the same way as in the sibling declaration tests: call ``_create_join_class``
 first, then read ``DefaultOptionKeys.in_features`` off the produced feature and inspect each
 ``SourceTuple``.
+
+Filtering that removes EVERY named file is the sharp edge of the fix and is pinned here too: an
+empty result must be a loud error, not a join child whose ``in_features`` is an empty frozenset.
+
+Subclass-leak policy: this module defines no ``FeatureGroup`` or ``BaseInputData`` subclass at all,
+so it has nothing to leak; it drives the shipped ``ConcatenatedFileContent`` directly.
 """
 
 from __future__ import annotations
@@ -119,6 +125,91 @@ class TestDisallowedFilesAppliesToExplicitFilePaths:
         instance = ConcatenatedFileContent()
 
         assert _names(instance, options) == {"a.py", "__init__.py"}
+
+
+class TestFilteringEveryFileOutIsALoudError:
+    """An emptied ``file_paths`` list must raise where the option is read, not produce an empty join.
+
+    RED: the filter currently leaves ``file_paths`` empty, still creates the join child, and stores an
+    empty ``in_features`` frozenset. The uncomputable join then fails far away from the cause
+    (``AttributeError: 'NoneType' object has no attribute 'columns'`` in ``calculate_feature``, plus a
+    ``FeatureResolutionError`` for the join feature name). On ``origin/main`` this same input returned
+    the file, so this is a regression the filtering fix introduced. The ``target_folder`` branch already
+    behaves correctly here: ``find_file_paths`` raises ``No files found in the root directory``.
+    """
+
+    def test_the_declared_default_filtering_out_the_only_file_raises(self, tmp_path: Path) -> None:
+        """The reviewer's reproduction: one explicit path, removed by the declared default."""
+        _write(tmp_path, "__init__.py")
+        options = _options(tmp_path, ["__init__.py"])
+
+        instance = ConcatenatedFileContent()
+        instance._create_join_class(instance.join_feature_name)
+
+        with pytest.raises(ValueError) as exc_info:
+            instance.input_features(options, PROBE_FEATURE)
+
+        message = str(exc_info.value)
+        assert "file_paths" in message
+        assert "disallowed_files" in message
+        assert ConcatenatedFileContent.get_class_name() in message
+
+    def test_an_explicit_disallowed_files_emptying_the_list_raises(self, tmp_path: Path) -> None:
+        """The same error for an explicitly named exclusion: the emptied result is what matters."""
+        _write(tmp_path, "skip.py")
+        options = _options(tmp_path, ["skip.py"], disallowed_files=("skip.py",))
+
+        instance = ConcatenatedFileContent()
+        instance._create_join_class(instance.join_feature_name)
+
+        with pytest.raises(ValueError, match="file_paths"):
+            instance.input_features(options, PROBE_FEATURE)
+
+    def test_both_source_branches_raise_when_nothing_survives_the_filter(self, tmp_path: Path) -> None:
+        """The two branches must agree on the empty case as they now do on the non-empty one.
+
+        Scanning the folder already raises through ``find_file_paths``; naming the same file
+        explicitly must not instead hand back a join child with an empty ``in_features`` frozenset.
+        """
+        _write(tmp_path, "__init__.py")
+        explicit = _options(tmp_path, ["__init__.py"])
+        scanned = Options(
+            {
+                "target_folder": [str(tmp_path)],
+                "document_reader_class": PyFileReader.get_class_name(),
+            }
+        )
+
+        instance = ConcatenatedFileContent()
+        instance._create_join_class(instance.join_feature_name)
+
+        with pytest.raises(ValueError):
+            instance.input_features(scanned, PROBE_FEATURE)
+        with pytest.raises(ValueError):
+            instance.input_features(explicit, PROBE_FEATURE)
+
+    def test_one_survivor_is_enough_to_keep_going(self, tmp_path: Path) -> None:
+        """Control: partial filtering is normal and must not raise."""
+        _write(tmp_path, "a.py", "__init__.py")
+        options = _options(tmp_path, ["a.py", "__init__.py"])
+
+        instance = ConcatenatedFileContent()
+
+        assert _names(instance, options) == {"a.py"}
+
+    def test_an_empty_file_paths_option_still_falls_through_to_target_folder(self) -> None:
+        """An empty ``file_paths`` is not an emptied one: it selects the other source branch."""
+        options = Options(
+            {
+                "file_paths": [],
+                "document_reader_class": PyFileReader.get_class_name(),
+            }
+        )
+
+        instance = ConcatenatedFileContent()
+
+        with pytest.raises(ValueError, match="target_folder"):
+            instance.input_features(options, PROBE_FEATURE)
 
 
 class TestEmbeddedNewlinesAreStrippedFromExplicitFilePaths:

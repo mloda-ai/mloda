@@ -19,6 +19,11 @@ Scope notes:
 * ``reference_time`` is a ``DefaultOptionKeys`` member yet is NOT treated as framework-reserved here.
   The time-based groups expose it as a user-overridable column option, so os-004 reclassifies it as a
   key those groups must DECLARE. The remaining ``DefaultOptionKeys`` values stay framework-reserved.
+
+Subclass-leak policy: this module NEEDS a leaked test-tree ``BaseInputData`` subclass to stay reachable
+through ``__subclasses__()`` mid-test, because that is what proves the module-prefix filter in
+``reader_declared_union`` really excludes it; the probe is built inside a helper and reclaimed by the
+module teardown gc pass, and it is never a final reader, so it cannot reach reader selection.
 """
 
 from __future__ import annotations
@@ -42,6 +47,7 @@ from mloda_plugins.feature_group.experimental.sklearn.encoding.base import Encod
 from mloda_plugins.feature_group.experimental.sklearn.pipeline.base import SklearnPipelineFeatureGroup
 from mloda_plugins.feature_group.experimental.sklearn.scaling.base import ScalingFeatureGroup
 from mloda_plugins.feature_group.experimental.time_window.base import TimeWindowFeatureGroup
+from mloda_plugins.feature_group.input_data.read_context_files import ConcatenatedFileContent
 from mloda_plugins.feature_group.input_data.read_document import ReadDocument
 from mloda_plugins.feature_group.input_data.read_files.markdown_document_reader import MarkdownDocumentReader
 
@@ -51,14 +57,19 @@ _REPO_ROOT = Path(__file__).resolve().parents[2]
 SCAN_ROOT = _REPO_ROOT / "mloda_plugins" / "feature_group"
 assert SCAN_ROOT.exists(), f"scan root not found; check the parents index for the repo root: {SCAN_ROOT}"
 
-# Accessor calls whose result is an Options-like object: cls.get_singular_option_from_options(...).get(...)
-# and get_options(...).get(...). Anything else (arbitrary methods containing "option") is not an Options read.
-_OPTIONS_ACCESSORS = frozenset({"get_singular_option_from_options", "get_options"})
+# Accessor calls whose result is an Options-like object: cls.get_singular_option_from_options(...).get(...),
+# get_options(...).get(...) and cls.options_with_defaults(...).get(...). Anything else (arbitrary methods
+# containing "option") is not an Options read. options_with_defaults is load-bearing here: a group that
+# resolves its declared defaults reads every key through it, so leaving it out blinds the scan to those
+# reads entirely (that is how ConcatenatedFileContent's disallowed_files/file_type reads went missing).
+_OPTIONS_ACCESSORS = frozenset({"get_singular_option_from_options", "get_options", "options_with_defaults"})
 _OPTIONS_RECEIVER_NAMES = frozenset({"options", "option"})
-_READ_METHODS = frozenset({"get", "get_options_key"})
-# get_options_key is a FeatureSet method: its receiver (features/self) is never options-like, so it is
-# recognized by method name alone. The name is distinctive enough to carry the match on its own.
-_METHOD_NAME_ONLY_READS = frozenset({"get_options_key"})
+_READ_METHODS = frozenset({"get", "get_options_key", "reader_option"})
+# Reads whose receiver is never options-like, so they are recognized by method name alone: get_options_key
+# is a FeatureSet method (receiver features/self) and reader_option is a BaseInputData classmethod
+# (receiver cls) taking the key FIRST and the Options second. Both names are distinctive enough to carry
+# the match on their own, and both take the key as their first positional argument.
+_METHOD_NAME_ONLY_READS = frozenset({"get_options_key", "reader_option"})
 
 # DefaultOptionKeys.<member> resolves to the member's string value. Built from the enum so it cannot drift.
 _DEFAULT_OPTION_KEY_MEMBERS: dict[str, str] = {member.name: member.value for member in DefaultOptionKeys}
@@ -97,6 +108,12 @@ ALLOWED_DYNAMIC_READS: dict[tuple[str, str], tuple[str, str]] = {
 # the probe for whether the union really reaches READER_OPTIONS. "BaseInputData" is the reserved key the
 # framework itself writes; the other two are read inside reader matching.
 READER_ONLY_KEYS: frozenset[str] = frozenset({"BaseInputData", "data_access_handle", "document_suffixes"})
+
+# Individual source files whose reads are asserted key-by-key below, so a scanner blind spot cannot
+# silently drop them again. Relative to SCAN_ROOT.
+READ_CONTEXT_FILES_REL = "input_data/read_context_files.py"
+READ_FILE_REL = "input_data/read_file.py"
+READ_DOCUMENT_REL = "input_data/read_document.py"
 
 # Declared by the throwaway reader below, never by shipped code.
 _PROBE_READER_KEY = "uor_leaked_test_tree_probe_key"
@@ -297,6 +314,34 @@ def _count_reads(root: Path) -> int:
     return total
 
 
+def _resolved_keys_in(rel: str) -> set[str]:
+    """Every statically resolved option key the scanner sees in one file under SCAN_ROOT."""
+    path = SCAN_ROOT / rel
+    by_class, by_name = _collect_class_constants(SCAN_ROOT)
+    tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+    return {read.key for read in _reads_in_tree(tree, by_class, by_name) if read.key is not None}
+
+
+def _reader_option_call_keys(rel: str) -> set[str]:
+    """Literal keys read through ``cls.reader_option(key, options)`` in one file under SCAN_ROOT.
+
+    Independent of the scanner on purpose: it pins the ACCESSOR the reader uses, while
+    ``_resolved_keys_in`` pins that the scanner still resolves the key behind it.
+    """
+    path = SCAN_ROOT / rel
+    tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+    keys: set[str] = set()
+    for node in ast.walk(tree):
+        if not (isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)):
+            continue
+        if node.func.attr != "reader_option" or not node.args:
+            continue
+        first = node.args[0]
+        if isinstance(first, ast.Constant) and isinstance(first.value, str):
+            keys.add(first.value)
+    return keys
+
+
 def _dynamic_allowed(rel: str, func_name: str | None, dynamic_allow: dict[tuple[str, str], tuple[str, str]]) -> bool:
     """A dynamic read is documented when its (path, function) exactly matches an allowlist entry."""
     for (path_rel, allowed_func), _ in dynamic_allow.items():
@@ -370,7 +415,10 @@ def declared_union() -> frozenset[str]:
 def test_no_undeclared_static_option_reads() -> None:
     """No shipped feature_group plugin reads an Options key that nothing declares (outside the narrow allowlist)."""
     assert SCAN_ROOT.exists(), SCAN_ROOT
-    assert _count_reads(SCAN_ROOT) >= 40, "scan found too few reads; SCAN_ROOT is likely misconfigured"
+    # Vacuity floor, NOT a target: its only job is to prove the rglob loops really walked the tree
+    # instead of finding nothing. Keep it around half the measured total (55 today) so that removing a
+    # read site stays a legitimate change; pinning it to the exact count made deleting reads fail here.
+    assert _count_reads(SCAN_ROOT) >= 28, "scan found too few reads; SCAN_ROOT is likely misconfigured"
     violations = find_violations(
         SCAN_ROOT,
         declared_union(),
@@ -470,6 +518,120 @@ def test_read_document_selection_key_is_the_reader_class_name() -> None:
     assert ALLOWED_DYNAMIC_READS[READ_DOCUMENT_DYNAMIC_READ][0] == ReadDocument.__name__
     assert MarkdownDocumentReader.data_access_name() == MarkdownDocumentReader.__name__
     assert MarkdownDocumentReader.__name__ not in declared_union()
+
+
+class TestEveryKnownReadSiteStaysVisible:
+    """Per-key pins on the three reader/group files whose reads a scanner blind spot could drop."""
+
+    @pytest.mark.parametrize("key", ["disallowed_files", "file_type"])
+    def test_read_context_files_default_backed_reads_are_resolved(self, key: str) -> None:
+        """The two keys read through ``self.options_with_defaults(options)`` are seen by the scanner.
+
+        These are exactly the reads that vanished when the read site moved behind the accessor: the
+        receiver stopped being a name the scanner recognized as options-like.
+        """
+        assert key in _resolved_keys_in(READ_CONTEXT_FILES_REL)
+
+    @pytest.mark.parametrize("key", ["file_paths", "target_folder", "document_reader_class"])
+    def test_read_context_files_direct_reads_are_resolved(self, key: str) -> None:
+        """Control: the three keys still read straight off ``options`` are seen too."""
+        assert key in _resolved_keys_in(READ_CONTEXT_FILES_REL)
+
+    def test_read_context_files_resolves_all_five_declared_keys(self) -> None:
+        """The scanner's view of the file covers the whole declared inventory, with nothing extra."""
+        assert _resolved_keys_in(READ_CONTEXT_FILES_REL) == ConcatenatedFileContent.declared_option_keys()
+
+    @pytest.mark.parametrize("rel", [READ_FILE_REL, READ_DOCUMENT_REL])
+    def test_reader_match_time_reads_are_resolved(self, rel: str) -> None:
+        """Both readers' match-time keys stay visible whichever accessor resolves them."""
+        resolved = _resolved_keys_in(rel)
+
+        assert "document_suffixes" in resolved
+        assert "data_access_handle" in resolved
+
+    @pytest.mark.parametrize("rel", [READ_FILE_REL, READ_DOCUMENT_REL])
+    def test_document_suffixes_is_read_through_the_reader_option_accessor(self, rel: str) -> None:
+        """``document_suffixes`` resolves its declared default through the presence-honouring accessor.
+
+        RED until the ``reader_option(key, options)`` accessor lands and both readers call it: today
+        they use ``options.get(...) or cls.reader_option_default(...)``, which silently replaces an
+        explicit empty value with the declared default.
+        """
+        assert "document_suffixes" in _reader_option_call_keys(rel)
+
+
+def test_scanner_resolves_a_read_behind_options_with_defaults(tmp_path: Path) -> None:
+    """A read behind ``x = obj.options_with_defaults(options)`` is resolved, not silently ignored."""
+    source = (
+        "class Foo:\n"
+        "    def f(self, options):\n"
+        "        effective = self.options_with_defaults(options)\n"
+        "        return effective.get('undeclared_x')\n"
+    )
+    (tmp_path / "mod.py").write_text(source)
+
+    violations = find_violations(tmp_path, frozenset(), frozenset(), {}, {})
+
+    assert any("undeclared_x" in v for v in violations), violations
+    assert find_violations(tmp_path, frozenset({"undeclared_x"}), frozenset(), {}, {}) == []
+
+
+def test_scanner_resolves_a_direct_read_off_options_with_defaults(tmp_path: Path) -> None:
+    """The un-aliased ``self.options_with_defaults(options).get(key)`` chain resolves too."""
+    source = (
+        "class Foo:\n"
+        "    def f(self, options):\n"
+        "        return self.options_with_defaults(options).get('undeclared_x')\n"
+    )
+    (tmp_path / "mod.py").write_text(source)
+
+    violations = find_violations(tmp_path, frozenset(), frozenset(), {}, {})
+
+    assert any("undeclared_x" in v for v in violations), violations
+
+
+def test_scanner_flags_reader_option(tmp_path: Path) -> None:
+    """``cls.reader_option('k', options)`` is recognized by method name, with the KEY as first argument."""
+    source = (
+        "class Foo:\n"
+        "    @classmethod\n"
+        "    def f(cls, options):\n"
+        "        return cls.reader_option('undeclared_x', options)\n"
+    )
+    (tmp_path / "mod.py").write_text(source)
+
+    violations = find_violations(tmp_path, frozenset(), frozenset(), {}, {})
+
+    assert any("undeclared_x" in v for v in violations), violations
+    assert find_violations(tmp_path, frozenset({"undeclared_x"}), frozenset(), {}, {}) == []
+
+
+def test_scanner_reads_the_first_positional_argument_of_reader_option(tmp_path: Path) -> None:
+    """The key is the FIRST argument: the Options in second position is never mistaken for the key."""
+    source = (
+        "class Foo:\n"
+        "    @classmethod\n"
+        "    def f(cls, options):\n"
+        "        return cls.reader_option('undeclared_x', options)\n"
+    )
+    (tmp_path / "mod.py").write_text(source)
+
+    violations = find_violations(tmp_path, frozenset(), frozenset(), {}, {})
+
+    assert len(violations) == 1, violations
+    assert "'undeclared_x'" in violations[0], violations[0]
+    assert "dynamic" not in violations[0], violations[0]
+
+
+def test_scanner_ignores_reader_option_default(tmp_path: Path) -> None:
+    """``reader_option_default(key)`` consults no Options, so it is not an Options read.
+
+    The recognition is an exact method-name match, so the longer sibling name does not match.
+    """
+    source = "class Foo:\n    @classmethod\n    def f(cls):\n        return cls.reader_option_default('undeclared_x')\n"
+    (tmp_path / "mod.py").write_text(source)
+
+    assert find_violations(tmp_path, frozenset(), frozenset(), {}, {}) == []
 
 
 def test_scanner_flags_new_undeclared_literal_read(tmp_path: Path) -> None:

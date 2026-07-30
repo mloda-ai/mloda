@@ -19,33 +19,87 @@ class BaseInputData(ABC):
         ),
     }
 
+    _reader_option_specs_cache: ClassVar[Optional[dict[str, ReaderOptionSpec]]] = None
+    """Merged declarations of ONE class, written into that class's own __dict__ by _merged_reader_option_specs."""
+
     def __init__(self) -> None:
         pass
 
-    @classmethod
-    def reader_option_specs(cls) -> dict[str, ReaderOptionSpec]:
-        """Merge READER_OPTIONS across cls.__mro__, most-derived winning; a fresh dict per call.
+    def __init_subclass__(cls, **kwargs: Any) -> None:
+        super().__init_subclass__(**kwargs)
+        cls._validate_reader_options()
 
-        Reads each class's own __dict__ so an inherited attribute is not merged twice, and walks the
-        MRO in reverse so a derived declaration overwrites the base one on a key collision.
+    @classmethod
+    def _validate_reader_options(cls) -> None:
+        """Reject a non-ReaderOptionSpec value where it is written, not later on .runtime_default.
+
+        Mirrors FeatureChainParser._require_spec for PROPERTY_MAPPING, and checks only this class's
+        own declaration so a bad child under a valid parent still raises.
         """
+        for key, spec in cls.__dict__.get("READER_OPTIONS", {}).items():
+            if not isinstance(spec, ReaderOptionSpec):
+                raise ValueError(
+                    f"{cls.__name__}.READER_OPTIONS['{key}'] is a {type(spec).__name__}, not a ReaderOptionSpec. "
+                    f"Construct ReaderOptionSpec(...) instead."
+                )
+
+    @classmethod
+    def _merged_reader_option_specs(cls) -> dict[str, ReaderOptionSpec]:
+        """The merged declarations of cls, cached in cls's OWN __dict__; internal, never handed out.
+
+        Reader selection is a hot path, so the MRO walk runs once per class. The cache is read back
+        with cls.__dict__.get so a subclass never answers from a warm parent cache, and it lives on
+        the class itself rather than in a class-keyed registry so it holds no reference to any class.
+        """
+        cached: Optional[dict[str, ReaderOptionSpec]] = cls.__dict__.get("_reader_option_specs_cache")
+        if cached is not None:
+            return cached
+
         merged: dict[str, ReaderOptionSpec] = {}
         for klass in reversed(cls.__mro__):
             merged.update(klass.__dict__.get("READER_OPTIONS", {}))
+        cls._reader_option_specs_cache = merged
         return merged
+
+    @classmethod
+    def reader_option_specs(cls) -> dict[str, ReaderOptionSpec]:
+        """The declarations of this reader family, most-derived winning; a fresh dict per call.
+
+        Merged across cls.__mro__ from each class's own __dict__ so an inherited attribute is not
+        merged twice, walking the MRO in reverse so a derived declaration wins on a key collision.
+        """
+        return dict(cls._merged_reader_option_specs())
 
     @classmethod
     def declared_reader_option_keys(cls) -> frozenset[str]:
         """Every option key this reader family declares."""
-        return frozenset(cls.reader_option_specs())
+        return frozenset(cls._merged_reader_option_specs())
+
+    @classmethod
+    def _declared_reader_option_spec(cls, key: str) -> ReaderOptionSpec:
+        """The declaration of key; an undeclared key is a typo, not a silent None."""
+        specs = cls._merged_reader_option_specs()
+        if key not in specs:
+            raise ValueError(f"Reader option '{key}' is not declared in READER_OPTIONS of {cls.__name__}.")
+        return specs[key]
 
     @classmethod
     def reader_option_default(cls, key: str) -> Any:
-        """The declared runtime_default of key; an undeclared key is a typo, not a silent None."""
-        specs = cls.reader_option_specs()
-        if key not in specs:
-            raise ValueError(f"Reader option '{key}' is not declared in READER_OPTIONS of {cls.__name__}.")
-        return specs[key].runtime_default
+        """The declared runtime_default of key, without consulting any Options."""
+        return cls._declared_reader_option_spec(key).runtime_default
+
+    @classmethod
+    def reader_option(cls, key: str, options: Options) -> Any:
+        """The supplied value of key when present, else the declared runtime_default.
+
+        Presence, not truthiness: an explicit empty value ("hand nothing over") survives, while None
+        reads as absent per the framework's dominant absence rule.
+        """
+        spec = cls._declared_reader_option_spec(key)
+        value = options.get(key)
+        if value is None:
+            return spec.runtime_default
+        return value
 
     @classmethod
     def data_access_name(cls) -> str:

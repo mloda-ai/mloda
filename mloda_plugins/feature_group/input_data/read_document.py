@@ -100,7 +100,7 @@ class ReadDocument(BaseInputData):
                 pinned = cls._resolve_pinned_file(data_access, feature_names)
                 if pinned is not None:
                     return pinned
-            document_suffixes = options.get("document_suffixes") or cls.reader_option_default("document_suffixes")
+            document_suffixes = cls.reader_option("document_suffixes", options)
             hint = options.get("data_access_handle")
             if hint is not None:
                 handle_kind = data_access.handles().get(hint)

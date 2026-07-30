@@ -19,10 +19,14 @@ What is pinned here:
   ``runtime_default=frozenset({".json"})`` therefore matches ``.json`` differently from a stock
   reader even when the option is not set: ReadFile DECLINES the file (``document_suffixes``
   auto-excludes those suffixes for structured readers) while ReadDocument CLAIMS it.
+* The declared default applies only when the option is ABSENT. An explicit ``frozenset()`` means
+  "hand nothing over" and must beat a non-empty declared default, otherwise the option cannot be
+  turned off for a reader that declares one. That is what ``reader_option(key, options)`` fixes.
 
-Isolation: every reader defined here deliberately does NOT override ``load_data``, so
-``is_final_reader()`` is False and ``get_all_filtered_subclasses`` never collects it. Matching is
-exercised by calling ``match_subclass_data_access`` directly, never through ``mlodaAPI``.
+Subclass-leak policy: this module DELIBERATELY leaks its module-level ``BaseInputData`` subclasses.
+That is benign and pinned by ``TestLocalReadersStayOutOfDiscovery``: none of them overrides
+``load_data``, so ``is_final_reader()`` is False and ``get_all_filtered_subclasses`` never collects
+them. Matching is exercised by calling ``match_subclass_data_access`` directly, never via ``mlodaAPI``.
 """
 
 from __future__ import annotations
@@ -244,6 +248,77 @@ class TestDeclaredDefaultIsLoadBearing:
 
         matched = _RodStockJsonReadDocument.match_subclass_data_access(data_access, ["content"], options)
         assert matched == json_path
+
+
+class TestAnExplicitEmptyOptionBeatsTheDeclaredDefault:
+    """Presence, not truthiness: an explicit ``frozenset()`` turns the option OFF.
+
+    RED until ``reader_option(key, options)`` replaces
+    ``options.get("document_suffixes") or cls.reader_option_default("document_suffixes")``: today a
+    reader declaring a non-empty ``runtime_default`` silently overrides an explicit empty value, so
+    the option it declares can never be switched off by the caller.
+    """
+
+    def test_explicit_empty_makes_read_file_claim_json_again(self, json_path: str) -> None:
+        """The declaring reader excludes ``.json`` by default, and an explicit empty set undoes that."""
+        options = Options({"document_suffixes": frozenset()})
+
+        matched = _RodJsonExcludingReadFile.match_subclass_data_access(json_path, ["value"], options)
+
+        assert matched == json_path
+
+    def test_read_file_still_declines_without_the_option(self, json_path: str) -> None:
+        """Control for the pair above: absent means the declared default applies."""
+        assert _RodJsonExcludingReadFile.match_subclass_data_access(json_path, ["value"], Options()) is None
+
+    def test_explicit_none_reads_as_absent_for_read_file(self, json_path: str) -> None:
+        """An explicit ``None`` is absence, so the declared default still applies."""
+        options = Options({"document_suffixes": None})
+
+        assert _RodJsonExcludingReadFile.match_subclass_data_access(json_path, ["value"], options) is None
+
+    def test_explicit_empty_makes_read_document_skip_json_again(self, json_path: str) -> None:
+        """The declaring document reader claims ``.json`` by default; an explicit empty set undoes that."""
+        data_access = DataAccessCollection(files={"rod_payload": json_path})
+        options = Options({"document_suffixes": frozenset()})
+
+        matched = _RodJsonClaimingReadDocument.match_subclass_data_access(data_access, ["content"], options)
+
+        assert matched is None
+
+    def test_read_document_still_claims_without_the_option(self, json_path: str) -> None:
+        """Control for the pair above: absent means the declared default applies."""
+        data_access = DataAccessCollection(files={"rod_payload": json_path})
+
+        matched = _RodJsonClaimingReadDocument.match_subclass_data_access(data_access, ["content"], Options())
+
+        assert matched == json_path
+
+    def test_explicit_none_reads_as_absent_for_read_document(self, json_path: str) -> None:
+        """An explicit ``None`` is absence here too."""
+        data_access = DataAccessCollection(files={"rod_payload": json_path})
+        options = Options({"document_suffixes": None})
+
+        matched = _RodJsonClaimingReadDocument.match_subclass_data_access(data_access, ["content"], options)
+
+        assert matched == json_path
+
+    def test_read_document_reads_the_option_only_for_a_data_access_collection(self, json_path: str) -> None:
+        """Documented asymmetry: the bare-path branch never consults ``document_suffixes`` at all.
+
+        ``ReadDocument.match_subclass_data_access`` reads the key inside its ``DataAccessCollection``
+        branch only, so a resolved path claims the file whatever the option says. Pinned so the
+        presence fix is not mistaken for a behaviour change on this branch.
+        """
+        claimed_with_option = _RodJsonClaimingReadDocument.match_subclass_data_access(
+            json_path, ["content"], Options({"document_suffixes": frozenset()})
+        )
+        claimed_without_option = _RodJsonClaimingReadDocument.match_subclass_data_access(
+            json_path, ["content"], Options()
+        )
+
+        assert claimed_with_option == json_path
+        assert claimed_without_option == json_path
 
 
 class TestLocalReadersStayOutOfDiscovery:

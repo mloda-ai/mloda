@@ -27,17 +27,22 @@ The hand-rolled ``ValueError`` backstops in ``input_features`` are KEPT, so
 ``test_read_context_files.py::TestConcatenatedFileContentFormatAgnostic::test_missing_document_reader_class_raises_error``
 stays green.
 
-Isolation: the one throwaway subclass is built inside a helper (never at module import time, so a
-missing ``PROPERTY_MAPPING`` fails one test instead of the whole module) and carries a distinctive
-``Rcfd`` name, so its inherited class-name matcher cannot hijack a real feature. The autouse fixture
-forces the GC pass that reclaims it.
+Subclass-leak policy: this module tolerates NO leak, unlike its reader-side siblings. Its throwaway
+class is a ``FeatureGroup``, and a leaked feature group is reachable by resolution: it inherits a
+class-name matcher and would compete for features in any test that enumerates feature groups. It is
+therefore built inside a helper (never at module import time, so a missing ``PROPERTY_MAPPING`` fails
+one test instead of the whole module), carries a distinctive ``Rcfd`` name, and the ONE test that
+builds it requests the ``no_feature_group_registry_pollution`` fixture that forces the reclaiming GC
+pass and asserts the class is gone. The fixture is deliberately not autouse: a failure anywhere else
+in the module would otherwise pin the frame, keep the class alive, and fire a second, misleading
+failure in teardown.
 """
 
 from __future__ import annotations
 
 import gc
+from collections.abc import Iterator
 from pathlib import Path
-from typing import Any
 
 import pytest
 
@@ -56,13 +61,17 @@ DECLARED_KEYS = frozenset({"disallowed_files", "file_paths", "target_folder", "f
 PROBE_FEATURE = FeatureName("rcfd_declaration_probe")
 
 
-@pytest.fixture(autouse=True)
-def _no_feature_group_registry_pollution() -> Any:
-    """Guarantee this module never leaks its throwaway ConcatenatedFileContent subclass.
+@pytest.fixture
+def no_feature_group_registry_pollution() -> Iterator[None]:
+    """Guarantee the one test that builds a throwaway ConcatenatedFileContent subclass leaks nothing.
 
     A test-local FeatureGroup subclass sits in reference cycles, so it lingers in
     ``FeatureGroup.__subclasses__()`` until a GC cycle runs, where other tests enumerating feature
     groups trip over it. Forcing the collection here reclaims it and pins the no-pollution contract.
+
+    Requested explicitly rather than autouse: only one test in this module builds a class, and an
+    autouse teardown assertion turns any unrelated failure in the module into two failures, because
+    pytest holds the failing frame alive and with it every class that frame references.
     """
     yield
     gc.collect()
@@ -142,13 +151,31 @@ class TestDeclarationInventory:
 class TestDeclaredDefaults:
     """The declared defaults are the real runtime fallbacks, not documentation."""
 
-    def test_disallowed_files_declares_a_hashable_tuple_default(self) -> None:
-        """``context=False`` puts the materialized default in hashed GROUP options, so it must be hashable."""
+    def test_disallowed_files_declares_a_tuple_default(self) -> None:
+        """``context=False`` puts the materialized default in GROUP options, which decide feature identity."""
         default = _spec("disallowed_files").default
 
         assert default == ("__init__.py",)
-        assert isinstance(default, tuple), f"a list default would break group hashing; got {type(default).__name__}"
+        assert isinstance(default, tuple), (
+            "a list default would compare unequal to the tuple form while hashing the same, so a caller "
+            f"passing the default explicitly would never merge with the materialized one; got {type(default).__name__}"
+        )
         assert hash(default) is not None
+
+    def test_a_list_default_would_hash_equal_yet_compare_unequal(self) -> None:
+        """The real reason the declared default is a tuple, pinned on ``Options`` itself.
+
+        Group hashing is NOT the problem: ``Options.__hash__`` runs ``_make_hashable``, which normalizes
+        a list to a tuple, so a list default hashes fine. The problem is that hashing and equality then
+        disagree: the two forms land in the same hash bucket but compare unequal, so a caller who passes
+        ``["__init__.py"]`` gets a feature that never merges with the materialized ``("__init__.py",)``.
+        """
+        as_declared = Options({"disallowed_files": ("__init__.py",)})
+        as_list = Options({"disallowed_files": ["__init__.py"]})
+
+        assert hash(as_declared) == hash(as_list), "group hashing normalizes lists, so hashing is not the issue"
+        assert as_declared != as_list
+        assert as_declared.group["disallowed_files"] != as_list.group["disallowed_files"]
 
     def test_file_type_declares_the_py_default(self) -> None:
         """``file_type`` falls back to ``"py"`` at the read site, so the spec declares it."""
@@ -258,7 +285,9 @@ class TestDeclaredDefaultsAreLoadBearing:
         assert materialized.get("file_type") == "md"
         assert materialized.get("disallowed_files") == ("a.py",)
 
-    def test_declared_file_type_default_drives_the_read(self, tmp_path: Path) -> None:
+    def test_declared_file_type_default_drives_the_read(
+        self, tmp_path: Path, no_feature_group_registry_pollution: None
+    ) -> None:
         """A subclass declaring ``file_type="md"`` reads the ``.md`` files with no ``file_type`` option set.
 
         This is the whole point of the refactor: ``input_features`` must resolve ``file_type`` through
@@ -277,6 +306,53 @@ class TestDeclaredDefaultsAreLoadBearing:
         instance = _make_markdown_default_subclass()()
 
         assert _source_tuple_names(instance, options) == {"b.md"}
+
+    def test_an_explicit_empty_file_type_is_not_replaced_by_the_declared_default(self) -> None:
+        """Presence, not truthiness: ``options_with_defaults`` keeps an explicit ``""``.
+
+        The declared ``"py"`` default fills only an ABSENT key, so a caller who explicitly asks for an
+        empty suffix gets exactly that. Pinned as the contrast case to the reader surface, where the
+        ``or``-based fallback cannot tell an absent key from an explicit empty one.
+        """
+        options = Options(
+            {
+                "target_folder": ["/rcfd"],
+                "document_reader_class": PyFileReader.get_class_name(),
+                "file_type": "",
+            }
+        )
+
+        materialized = ConcatenatedFileContent.options_with_defaults(options)
+
+        assert materialized.get("file_type") == ""
+
+    def test_an_explicit_empty_file_type_raises_the_no_files_found_error(self, tmp_path: Path) -> None:
+        """An empty suffix matches nothing, and a zero-match scan is the existing loud ValueError.
+
+        Chosen behavior: no new validation layer for ``file_type=""``. The honoured empty value reaches
+        ``find_file_paths``, whose ``rglob("*.")`` matches nothing, and the existing
+        "No files found in the root directory" raise names the folder that was scanned. That is already
+        the clear, actionable failure this branch gives for any suffix with no matches, so an extra
+        empty-string check would add surface without adding information.
+        """
+        (tmp_path / "a.py").write_text("# python\n", encoding="utf-8")
+        options = Options(
+            {
+                "target_folder": [str(tmp_path)],
+                "document_reader_class": PyFileReader.get_class_name(),
+                "file_type": "",
+            }
+        )
+
+        instance = ConcatenatedFileContent()
+        instance._create_join_class(instance.join_feature_name)
+
+        with pytest.raises(ValueError) as exc_info:
+            instance.input_features(options, PROBE_FEATURE)
+
+        message = str(exc_info.value)
+        assert "No files found" in message
+        assert str(tmp_path) in message
 
     def test_declared_disallowed_files_default_excludes_dunder_init(self, tmp_path: Path) -> None:
         """With no ``disallowed_files`` option the declared ``("__init__.py",)`` default excludes it.

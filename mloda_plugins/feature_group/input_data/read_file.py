@@ -89,9 +89,7 @@ class ReadFile(BaseInputData):
 
     @classmethod
     def match_subclass_data_access(cls, data_access: Any, feature_names: list[str], options: Options) -> Any:
-        document_suffixes: "frozenset[str]" = options.get("document_suffixes") or cls.reader_option_default(
-            "document_suffixes"
-        )
+        document_suffixes: "frozenset[str]" = cls.reader_option("document_suffixes", options)
 
         if isinstance(data_access, DataAccessCollection):
             if data_access.column_to_file is not None:

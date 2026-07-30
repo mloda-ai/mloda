@@ -32,9 +32,9 @@
 
 ## Phase Completion Protocol
 
-Phased work uses a `memory-bank/todo.md` checklist. This file is **transient**: it is
-created for the duration of a phased task and removed when the work lands, so it is not
-part of the Memory Bank core files below and is normally absent from the repository.
+Phased work uses a `todo.md` checklist at the repository root. This file is **transient**: it
+is created for the duration of a phased task and removed when the work lands, so it is
+normally absent from the repository.
 
 When such a `todo.md` exists and contains phases:
 
@@ -103,15 +103,10 @@ When filing a GitHub issue (via `gh issue create` or otherwise), follow the stru
 
 Issues that meet this bar are eligible for the `good first issue` label without further sharpening.
 
-## Memory Bank
+## Project Context
 
-The `memory-bank/` directory contains project context documentation. Read both files at the start of tasks to understand the project.
-
-### Core Files
-| File | Purpose |
-|------|---------|
-| `systemPatterns.md` | System architecture, design patterns, the PropertySpec lifecycle |
-| `activeContext.md` | Current work focus, what works, next steps, known issues |
-
-### Hierarchy
-`systemPatterns.md` holds the durable architecture; `activeContext.md` holds the current epic state and must be refreshed when an epic advances.
+`docs/docs/` is the published documentation tree. Start a task by reading `docs/docs/index.md` and
+`mloda/core/README.md` for the architecture, then the `in_depth/` page for the subsystem you are
+touching (`in_depth/property-mapping.md` is the PropertySpec lifecycle). In-tree READMEs
+(`mloda/core/`, `mloda_plugins/`, `tests/`) and `CONTRIBUTING.md` cover the rest. Current work state
+comes from git history and the issue tracker, not from a checked-in status file.

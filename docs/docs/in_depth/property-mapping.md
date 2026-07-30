@@ -76,7 +76,7 @@ does not understand can be absorbed silently.
 | Match time (parser) | `allowed_values` membership | Each element of a **present** option is in the accepted set | One element | `ValueError`, surfaced to the end user |
 | Match time (parser) | `element_validator` | Each element of a **present** option satisfies a predicate | One element | `ValueError`, surfaced to the end user |
 | Match time (parser) | Required presence (config path) | A key that declares no `default` and no `required_when` was provided | The options | Non-match (`False`) |
-| Match time (parser) | Required presence (string-named path) | Same, after declared defaults and name bindings resolve; `deferred_binding=True` and the source (`in_features`) key are exempt | The effective options | Non-match (`False`), with a warning naming the missing key(s) |
+| Match time (parser) | Required presence (string-named path) | Same, after declared defaults and name bindings resolve; `deferred_binding=True` and the source (`in_features`) key are exempt | The name-bound options | Non-match (`False`), with a warning naming the missing key(s) |
 | Match time (mixin) | `match_guard` | The whole value has an acceptable shape | The raw value | Non-match (`False`) |
 | Match time (mixin) | `MIN/MAX_IN_FEATURES` | In-feature count is within bounds | The in-features | Non-match (`False`) |
 | Match time (guard installed at class definition) | `required_when` | A conditionally required option is present | `Options` | Non-match (`False`) |
@@ -374,6 +374,10 @@ The framework applies this at two sites. At feature **intake**
 directly. `options_with_defaults` remains for pre-materialization contexts (e.g. `resolve_subtype`
 internals) and for read sites the framework hands pre-default options, `input_features` above all.
 
+For an engine-driven request intake has already run, so the compute-boundary call is an idempotent
+no-op. It carries the work only for direct `FeatureSet` use that bypasses the engine, and there the
+collapsing twins raise instead of merging.
+
 Both sites run *after* resolution, so materialization never changes **matching**. It does change
 how features **group**: intake materialization deliberately canonicalizes default-equivalent twins,
 so a feature that passes a declared default explicitly and one that omits it become equal and merge
@@ -384,6 +388,22 @@ engine stashes them before intake rebinds, and a child inherits the same pre-def
 declared default does NOT reach an `input_features` read site. A group that wants it there calls
 `options_with_defaults` itself, as `ConcatenatedFileContent` does (see
 [A pattern-less feature group sits in between](#a-pattern-less-feature-group-sits-in-between)).
+
+Which stage sees which view of the options:
+
+| Stage | Options view |
+| --- | --- |
+| Parse, bind, match, resolve (subtype resolution applies defaults internally) | declared (pre-default) |
+| `input_features()` and child option inheritance | declared (pre-default) |
+| Splitting, planning, filter matching, `validate_input_features`, compute | effective (post-default) |
+
+The last row assumes intake has run, which is every engine-driven request. On the direct `FeatureSet`
+path the safety net materializes inside `run_calculate_feature`, which is after
+`validate_input_features`, not before it.
+
+Filter matching is the one place the same classmethod sees both views: `GlobalFilter` calls
+`match_feature_group_criteria` again after intake, so it observes effective options where feature
+resolution saw declared ones.
 
 ``` python
 graph_type = feature.options.get("graph_type")  # the declared default when the caller omitted it
@@ -591,6 +611,7 @@ if it really is a whole-value check.
 | Declared defaults materialized into runtime options | `tests/test_core/test_abstract_plugins/test_options_with_defaults.py` |
 | Declared defaults materialized at the compute boundary | `tests/test_core/test_abstract_plugins/test_materialize_defaults_boundary.py` |
 | Declared defaults materialized at intake, canonicalizing default-equivalent twins | `tests/test_core/test_abstract_plugins/test_intake_default_canonicalization.py` |
+| Filter criteria matching observes effective options | `tests/test_core/test_filter/test_filter_criteria_effective_options.py` |
 | The reader surface: the spec type and its class-definition guard, the reserved framework key, the MRO merge, the loud undeclared key, the presence rule of `reader_option()` | `tests/.../test_components/test_reader_option_declarations.py` |
 | Per-reader declarations, the `runtime_default` that is load-bearing at selection, and the bare-path branch it does not reach | `tests/.../input_data/test_reader_option_declarations.py` |
 | A pattern-less group: enforced `required_when`, and defaults it applies itself | `tests/.../input_data/test_read_context_files_option_declarations.py` |

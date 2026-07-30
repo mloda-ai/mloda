@@ -10,6 +10,9 @@ dist/
 .aider*
 security-reports/
 
+# Transient phased-work checklist (see CLAUDE.md, Phase Completion Protocol).
+/todo.md
+
 # Generated from the marimo .py notebooks at docs build time.
 docs/docs/examples/**/*.ipynb
 __marimo__/

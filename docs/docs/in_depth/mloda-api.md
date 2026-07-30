@@ -198,7 +198,7 @@ from mloda.provider import FeatureResolutionError, ResolutionDiagnosis, Resoluti
 - **`ResolutionDiagnosis`** (frozen dataclass): the return value of `diagnose`, never raised. Fields: `records` (`list[ResolutionRecord]`), `complete` (`bool`), `feature_name` (`str | None`), `failed_result` (`EvaluationResult | None`), `message` (`str | None`).
 - **`ResolutionRecord`** (frozen dataclass): one per feature, returned inside `resolution_report()`, `ResolutionDiagnosis.records`, and `FeatureResolutionError.partial_records`; never raised. Fields: `feature_name` (`str`), `requested` (`bool`), `result` (`EvaluationResult`).
 
-`EvaluationResult` is the captured matcher outcome carried by the fields above; it lives in `mloda.core.prepare.identify_feature_group` and is not part of the public `__init__` exports.
+`EvaluationResult` is the captured matcher outcome carried by the fields above; it is defined in `mloda.core.prepare.resolution_types`, also importable from `mloda.core.prepare.identify_feature_group`, and is not part of the public `__init__` exports.
 
 ##### get_feature_group_docs
 

@@ -156,6 +156,16 @@ That silence is a property of match-time consumption, not an oversight, and it i
 not declared as `PropertySpec`s: a spec would promise enforcement that could never fire, because
 selection is over before the framework touches the options.
 
+More precisely, selection has no rejection channel. `PropertySpec` enforcement means "reject this
+candidate and record why", but `feature_scope_data_access` tests `if matched_data_access:`, so a
+reader returns a data access or something falsy, and falsy already means "this reader does not handle
+this input". An invalid option value is therefore indistinguishable from the wrong reader, and
+raising is not an alternative: only `NotImplementedError` is a soft no-match, anything else aborts
+matching for every reader sharing the `DataAccessCollection`. So the split is protocol-driven and
+provisional. If reader selection gains a candidate-and-rejection model comparable to resolution's
+([#727](https://github.com/mloda-ai/mloda/issues/727)), the two types should collapse back into one
+`PropertySpec`.
+
 ### A pattern-less feature group sits in between
 
 A `FeatureGroup` that declares no `PREFIX_PATTERN` or `SUFFIX_PATTERN` (`ConcatenatedFileContent` is

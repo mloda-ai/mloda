@@ -49,15 +49,46 @@ def flight_server(flight_server_setup: ParallelRunnerFlightServer) -> Any:
     flight_server_setup.end_flight_server_process()
 
 
+NO_GC_FREEZE_ENV_VAR = "MLODA_NO_GC_FREEZE"
+
+# CPython 3.12 seeds the permanent generation with ~375 objects at interpreter startup (3.10, 3.11, 3.13 and 3.14
+# seed none), while freezing a realistic imported graph moves tens of thousands. A truthiness check would read
+# 3.12's seed as a host freeze and never freeze on that version, so ownership is decided against this floor.
+MIN_FROZEN_GRAPH_OBJECTS = 1000
+
+_froze_the_graph = False
+
+
+# The gc.collect() is load-bearing, not a tidy-up: a FeatureGroup subclass that is dead but not yet collected here
+# gets frozen alive and stays visible to get_all_subclasses(FeatureGroup) for the whole run, since objects frozen
+# before a collection are never reclaimed afterwards on any of 3.10-3.14. A non-empty permanent generation means a
+# host froze its own graph before calling pytest, and that freeze is not ours to touch. Freezing also empties
+# gc.get_objects() and hides frozen referrers from gc.get_referrers(), so MLODA_NO_GC_FREEZE opts out of it for
+# anyone debugging object retention inside the suite.
 def pytest_collection_finish(session: Any) -> None:
     """Freeze once all test modules are imported and no test has run, so later gc.collect() calls skip them."""
+    global _froze_the_graph
+    if os.getenv(NO_GC_FREEZE_ENV_VAR):
+        return
+    if gc.get_freeze_count() > MIN_FROZEN_GRAPH_OBJECTS:
+        return
     gc.collect()
     gc.freeze()
+    _froze_the_graph = True
 
 
+# tryfirst because hook impls run in reverse registration order: a deeper conftest or a later-registered plugin
+# that raises in pytest_sessionfinish would skip this unfreeze. A missed unfreeze surfaces as 'Fatal Python error:
+# gilstate_tss_set: failed to set current tstate (TSS)', which exits 134 serially but stays invisible under xdist,
+# where both workers abort and the run still exits 0.
+@pytest.hookimpl(tryfirst=True)
 def pytest_sessionfinish(session: Any, exitstatus: Any) -> None:
-    """Unfreeze before finalization, or the multiprocessing tests abort with a gilstate_tss_set fatal error."""
+    """Unfreeze our own freeze only, or the multiprocessing tests abort with a gilstate_tss_set fatal error."""
+    global _froze_the_graph
+    if not _froze_the_graph:
+        return
     gc.unfreeze()
+    _froze_the_graph = False
 
 
 CHECK_SKIP_COUNT_ENV_VAR = "CHECK_SKIP_COUNT"

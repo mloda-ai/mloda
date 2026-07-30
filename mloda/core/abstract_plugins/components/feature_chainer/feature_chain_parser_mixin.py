@@ -247,6 +247,9 @@ class FeatureChainParserMixin:
         variable ``MLODA_ALLOW_FORWARDED_NAME_MISMATCH=1`` downgrades this error to a
         warning.
 
+        The options view depends on the caller: feature resolution passes declared (pre-default)
+        options, filter matching a post-intake merge. See ``FeatureGroup.match_feature_group_criteria``.
+
         Args:
             feature_name: Feature name to match
             options: Options containing configuration

@@ -1,7 +1,7 @@
 """Failing tests for per-feature EvaluationResult capture and ``session.resolution_report()`` (issue #811).
 
 Contract under test:
-  * ``mloda.core.prepare.identify_feature_group.ResolutionRecord`` is a frozen dataclass beside
+  * ``mloda.core.prepare.resolution_types.ResolutionRecord`` is a frozen dataclass beside
     ``EvaluationResult``, with fields ``feature_name: str``, ``requested: bool``, ``result: EvaluationResult``
     in that order. It is re-exported from both ``mloda.user`` and ``mloda.steward``.
   * ``IdentifyFeatureGroupClass.evaluate(...)`` returns the winning ``EvaluationResult`` on a successful
@@ -31,9 +31,9 @@ import pytest
 import mloda.steward as mloda_steward
 import mloda.user as mloda_user
 from mloda.core.core.engine import Engine
-from mloda.core.prepare.identify_feature_group import (
+from mloda.core.prepare.identify_feature_group import FeatureResolutionError
+from mloda.core.prepare.resolution_types import (
     EvaluationResult,
-    FeatureResolutionError,
     ResolutionRecord,
 )
 from tests.test_core.test_prepare.identify_seam import evaluate_or_raise

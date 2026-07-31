@@ -40,11 +40,9 @@ from mloda.core.prepare.accessible_plugins import (
     dedup_feature_group_subclasses,
     registry_for,
 )
-from mloda.core.prepare.identify_feature_group import (
-    CandidateFrameworks,
-    evaluate_and_render,
-    scope_callout,
-)
+from mloda.core.prepare.identify_feature_group import evaluate_and_render
+from mloda.core.prepare.resolution_failure_renderer import scope_callout
+from mloda.core.prepare.resolution_types import CandidateFrameworks
 
 
 def list_registered(plugin_type: type[Any]) -> list[type[Any]]:

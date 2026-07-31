@@ -30,13 +30,13 @@ from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.api.plugin_docs import resolve_feature
 from mloda.core.prepare.accessible_plugins import FeatureGroupEnvironmentMapping
-from mloda.core.prepare.identify_feature_group import (
+from mloda.core.prepare.identify_feature_group import IdentifyFeatureGroupClass
+from mloda.core.prepare.resolution_failure_renderer import render_resolution_failure
+from mloda.core.prepare.resolution_types import (
     CandidateFrameworks,
     Elimination,
     EvaluationResult,
-    IdentifyFeatureGroupClass,
     RenderFacts,
-    render_resolution_failure,
 )
 
 

@@ -40,16 +40,17 @@ from mloda.core.api.plugin_docs import resolve_feature
 from mloda.core.api.plugin_info import ResolvedFeature
 from mloda.core.prepare.accessible_plugins import FeatureGroupEnvironmentMapping, PreFilterPlugins
 from mloda.core.prepare.identify_feature_group import (
-    PARTIAL_RECORDS_CAP,
     ComputeFrameworkPinError,
-    EvaluationResult,
     FeatureResolutionError,
     IdentifyFeatureGroupClass,
-    ResolutionRecord,
     evaluate_and_render,
-    render_resolution_failure,
     resolve_or_raise,
-    scope_callout,
+)
+from mloda.core.prepare.resolution_failure_renderer import render_resolution_failure, scope_callout
+from mloda.core.prepare.resolution_types import (
+    PARTIAL_RECORDS_CAP,
+    EvaluationResult,
+    ResolutionRecord,
 )
 from tests.test_core.test_prepare.identify_seam import evaluate_or_raise
 

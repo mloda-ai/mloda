@@ -27,8 +27,8 @@ from mloda.core.prepare.accessible_plugins import FeatureGroupEnvironmentMapping
 from mloda.core.prepare.identify_feature_group import (
     FeatureResolutionError,
     IdentifyFeatureGroupClass,
-    render_resolution_failure,
 )
+from mloda.core.prepare.resolution_failure_renderer import render_resolution_failure
 from mloda.user import mlodaAPI
 from tests.test_core.test_prepare.identify_seam import evaluate_or_raise
 

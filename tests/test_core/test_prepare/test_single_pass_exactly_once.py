@@ -44,10 +44,8 @@ from mloda.core.api import plugin_docs
 from mloda.core.api.plugin_docs import resolve_feature
 from mloda.core.prepare import identify_feature_group
 from mloda.core.prepare.accessible_plugins import FeatureGroupEnvironmentMapping, PreFilterPlugins
-from mloda.core.prepare.identify_feature_group import (
-    IdentifyFeatureGroupClass,
-    render_resolution_failure,
-)
+from mloda.core.prepare.identify_feature_group import IdentifyFeatureGroupClass
+from mloda.core.prepare.resolution_failure_renderer import render_resolution_failure
 from tests.test_core.test_prepare.identify_seam import evaluate_or_raise
 
 

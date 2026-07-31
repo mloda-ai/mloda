@@ -49,7 +49,7 @@ from mloda.core.prepare.accessible_plugins import (
     PreFilterPlugins,
     RedefinitionConflictError,
 )
-from mloda.core.prepare.identify_feature_group import ResolutionDiagnosis
+from mloda.core.prepare.resolution_types import ResolutionDiagnosis
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 
 

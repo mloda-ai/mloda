@@ -1,7 +1,7 @@
 """Failing tests for the diagnose refactor: FeatureResolutionError carries the partial resolution records.
 
 Contract under test (PR #836):
-  * ``PARTIAL_RECORDS_CAP`` is a module-level int constant (1000) in ``identify_feature_group``.
+  * ``PARTIAL_RECORDS_CAP`` is a module-level int constant (1000) in ``resolution_types``.
   * ``FeatureResolutionError.__init__`` accepts ``partial_records: Sequence[ResolutionRecord] = ()`` and stores
     it as a tuple truncated to the LAST ``PARTIAL_RECORDS_CAP`` entries; ``__reduce__`` round-trips it via pickle.
   * The raising ``mloda.prepare`` path attaches the records resolved before the failure to the error, and
@@ -23,9 +23,9 @@ import pytest
 
 from mloda.core.api.request import SetupConfigurationError
 from mloda.core.core.engine import Engine
-from mloda.core.prepare.identify_feature_group import (
+from mloda.core.prepare.identify_feature_group import FeatureResolutionError
+from mloda.core.prepare.resolution_types import (
     EvaluationResult,
-    FeatureResolutionError,
     ResolutionRecord,
 )
 from mloda.provider import BaseInputData, ComputeFramework, DataCreator, FeatureGroup, FeatureSet
@@ -114,7 +114,7 @@ class TestPartialRecordsCapConstant:
     """PARTIAL_RECORDS_CAP is a module-level int constant with value 1000."""
 
     def test_partial_records_cap_is_1000(self) -> None:
-        from mloda.core.prepare.identify_feature_group import PARTIAL_RECORDS_CAP
+        from mloda.core.prepare.resolution_types import PARTIAL_RECORDS_CAP
 
         assert isinstance(PARTIAL_RECORDS_CAP, int)
         assert PARTIAL_RECORDS_CAP == 1000
@@ -143,7 +143,7 @@ class TestFeatureResolutionErrorPartialRecords:
         assert error.partial_records == tuple(records)
 
     def test_partial_records_is_truncated_to_the_last_cap_entries(self) -> None:
-        from mloda.core.prepare.identify_feature_group import PARTIAL_RECORDS_CAP
+        from mloda.core.prepare.resolution_types import PARTIAL_RECORDS_CAP
 
         result = _empty_result()
         records = [_record(f"capped_836pr_{index}", result) for index in range(PARTIAL_RECORDS_CAP + 5)]

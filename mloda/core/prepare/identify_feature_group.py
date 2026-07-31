@@ -5,6 +5,8 @@ from dataclasses import replace
 from typing import Optional
 
 from mloda.core.prepare.accessible_plugins import FeatureGroupEnvironmentMapping
+
+# Not a re-export facade: every import here is used by this module and ruff F401 fails any added just to re-export.
 from mloda.core.prepare.resolution_types import (
     CandidateFrameworks,
     Elimination,
@@ -12,13 +14,10 @@ from mloda.core.prepare.resolution_types import (
     EvaluationResult,
     PARTIAL_RECORDS_CAP,
     RenderFacts,
-    ResolutionDiagnosis,
     ResolutionRecord,
 )
 from mloda.core.prepare.resolution_failure_renderer import (
-    TROUBLESHOOTING_URL,
     render_resolution_failure,
-    scope_callout,
     _prefix_name,
     _supported_feature_names,
 )
@@ -38,27 +37,6 @@ from mloda.core.abstract_plugins.components.link import Link
 import logging
 
 logger = logging.getLogger(__name__)
-
-# Keeps the pre-split import surface of this module intact: the moved names stay importable from here.
-__all__ = [
-    "CandidateFrameworks",
-    "ComputeFrameworkPinError",
-    "Elimination",
-    "EliminationStage",
-    "EvaluationResult",
-    "FeatureResolutionError",
-    "IdentifyFeatureGroupClass",
-    "PARTIAL_RECORDS_CAP",
-    "RenderFacts",
-    "ResolutionDiagnosis",
-    "ResolutionRecord",
-    "TROUBLESHOOTING_URL",
-    "evaluate_and_render",
-    "matches_feature_group_scope",
-    "render_resolution_failure",
-    "resolve_or_raise",
-    "scope_callout",
-]
 
 
 class FeatureResolutionError(ValueError):

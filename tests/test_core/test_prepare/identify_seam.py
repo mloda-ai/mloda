@@ -21,10 +21,8 @@ from mloda.core.abstract_plugins.components.link import Link
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.prepare.accessible_plugins import FeatureGroupEnvironmentMapping
-from mloda.core.prepare.identify_feature_group import (
-    EvaluationResult,
-    resolve_or_raise,
-)
+from mloda.core.prepare.identify_feature_group import resolve_or_raise
+from mloda.core.prepare.resolution_types import EvaluationResult
 
 
 def evaluate_or_raise(

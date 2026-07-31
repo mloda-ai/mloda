@@ -11,7 +11,8 @@ from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.prepare.accessible_plugins import FeatureGroupEnvironmentMapping
-from mloda.core.prepare.identify_feature_group import CandidateFrameworks, IdentifyFeatureGroupClass
+from mloda.core.prepare.identify_feature_group import IdentifyFeatureGroupClass
+from mloda.core.prepare.resolution_types import CandidateFrameworks
 from mloda.provider import FeatureChainParserMixin, FeatureGroup, SubtypeDeclaration, property_spec
 from tests.test_core.test_prepare.identify_seam import identify_winner
 

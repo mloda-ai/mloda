@@ -78,7 +78,12 @@ from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser
 )
 from mloda.core.abstract_plugins.components.feature_chainer.property_spec import PropertySpec
 from mloda.core.abstract_plugins.components.default_options_key import DefaultOptionKeys
-from mloda.core.abstract_plugins.components.utils import contained_raise_log_level, escalate_match_abort, safe_field
+from mloda.core.abstract_plugins.components.utils import (
+    contained_raise_log_level,
+    escalate_match_abort,
+    is_match_abort,
+    safe_field,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -316,10 +321,10 @@ class FeatureChainParserMixin:
         except PropertyValueRejection as exc:
             record_match_rejection(cls.__name__, str(exc))
             return False
-        # Known asymmetry deliberately kept in scope: a config error raised while merging name bindings on the
-        # string path (e.g. a key in both group and context) is still contained as a non-match here, while the
-        # required_when path surfaces it via build_effective_options (os-005 review note).
-        except ValueError:
+        # A marked raise crosses this containment; an unmarked ValueError stays a non-match.
+        except ValueError as exc:
+            if is_match_abort(exc):
+                raise
             return False
 
     @classmethod

@@ -3,16 +3,24 @@
 The provenance marker must preserve the exception object exactly, because callers assert on its original
 type at the matcher boundary. ``resolve_feature`` keeps its never-raises contract: a marked raise reaches
 ``ResolvedFeature.error`` instead of propagating. Doubles are dropped per test.
+
+A mark is only worth anything if every handler BETWEEN the raise and the seam re-raises it. Two sit on the
+normal path and are covered here: ``FeatureChainParserMixin.match_parser_criteria`` (which turns a parser
+error into a non-match) and ``FeatureGroup.is_root`` (which turns a raising ``input_features`` into "not a
+root"). ``utils.safe_field`` is the deliberate exception: it degrades one field in rendering paths and
+swallows a marked exception on purpose.
 """
 
 import gc
 from collections.abc import Callable
 from dataclasses import dataclass
 from functools import partial
-from typing import Optional, TypeVar
+from typing import ClassVar, Optional, TypeVar
 
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.abstract_plugins.components.feature import Feature
+from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser_mixin import FeatureChainParserMixin
+from mloda.core.abstract_plugins.components.feature_chainer.property_spec import PropertySpec, property_spec
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.components.utils import escalate_match_abort, is_match_abort
@@ -32,6 +40,16 @@ UNMARKED_CLASS_NAME = "UnmarkedRaiseFG845e"
 RAISE_TYPE_NAME = "ValueError"
 MATCHER_ERROR_STAGE = "matcher_error"
 
+# Name-bound probe for the parser's own marked raise: the key is a named capture of the pattern.
+BINDING_KEY = "op_845f_both_categories"
+BINDING_PATTERN = r".*__(?P<op_845f_both_categories>\w+)_845f$"
+BINDING_FEATURE = "src845f__alpha_845f"
+# Same pattern, nothing before the separator: parse_name's own UNMARKED "no source feature" ValueError.
+NO_SOURCE_FEATURE = "__alpha_845f"
+BOTH_CATEGORIES_FRAGMENT = "exists in both group and context"
+IS_ROOT_MARKED_MESSAGE = "boom_845f_marked_input_features"
+IS_ROOT_UNMARKED_MESSAGE = "boom_845f_unmarked_input_features"
+
 T = TypeVar("T")
 
 
@@ -39,12 +57,27 @@ class MatchAbortFw845e(ComputeFramework):
     """Dummy compute framework for the match-abort escalation tests."""
 
 
-def _capture(call: Callable[[], T]) -> tuple[Optional[T], Optional[str]]:
-    """Run call, returning (value, None) or (None, 'Type: message'). No traceback is retained."""
+@dataclass(frozen=True)
+class _RaiseReadout:
+    """Plain-data readout of an escaping raise. Holds no exception object and no traceback."""
+
+    marked: bool
+    type_name: str
+    message: str
+
+
+def _outcome(call: Callable[[], T]) -> tuple[Optional[T], Optional[_RaiseReadout]]:
+    """Run call, returning (value, None) or (None, readout of the escaping raise)."""
     try:
         return call(), None
     except Exception as exc:  # noqa: BLE001  (an escape, or its absence, is the fact under test)
-        return None, f"{type(exc).__name__}: {exc}"
+        return None, _RaiseReadout(is_match_abort(exc), type(exc).__name__, str(exc))
+
+
+def _capture(call: Callable[[], T]) -> tuple[Optional[T], Optional[str]]:
+    """Run call, returning (value, None) or (None, 'Type: message'). No traceback is retained."""
+    value, readout = _outcome(call)
+    return value, None if readout is None else f"{readout.type_name}: {readout.message}"
 
 
 def _make_marked_raise_fg() -> type[FeatureGroup]:
@@ -219,6 +252,181 @@ class TestMatchAbortCrossesTheMatchSeam:
         assert snapshot.reason is not None
         assert RAISE_TYPE_NAME in snapshot.reason
         assert UNMARKED_MESSAGE in snapshot.reason
+
+
+class BothCategoriesMixin845f(FeatureChainParserMixin):
+    """Chain-parser probe: its name binding drives the parser into the marked both-categories raise.
+
+    A mixin, not a FeatureGroup: nothing here may join another test's candidate universe.
+    """
+
+    PREFIX_PATTERN = BINDING_PATTERN
+    # Annotated exactly as FeatureGroup declares it, so the FeatureGroup subclass below stays consistent.
+    PROPERTY_MAPPING: ClassVar[Optional[dict[str, PropertySpec]]] = {
+        BINDING_KEY: property_spec("the key the feature name carries")
+    }
+
+
+def _both_categories_options() -> Options:
+    """Options holding BINDING_KEY in group AND context, the shape _determine_parameter_category rejects."""
+    # Mutated after construction: Options() itself rejects a key present in both categories, so this state
+    # is only reachable by writing the second dict directly.
+    options = Options(group={BINDING_KEY: None})
+    options.context[BINDING_KEY] = "from_context_845f"
+    # The group value is None so the merge reads the key as absent and asks which category it belongs in.
+    return options
+
+
+def _make_both_categories_fg() -> type[FeatureGroup]:
+    """Candidate whose inherited chain-parser matcher hits the marked both-categories raise."""
+    # Class objects are cyclic; collect leftovers from earlier tests before defining a twin.
+    gc.collect()
+
+    class BothCategoriesFG845f(BothCategoriesMixin845f, FeatureGroup):
+        """Stands in for a normal chain-parser group asked to match a contradictory option set."""
+
+        @classmethod
+        def compute_framework_rule(cls) -> set[type[ComputeFramework]] | None:
+            return {MatchAbortFw845e}
+
+        def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+            return None
+
+    return BothCategoriesFG845f
+
+
+def _evaluate_both_categories() -> Optional[_RaiseReadout]:
+    """Evaluate the both-categories candidate through the seam; read any escaping raise out as plain data."""
+    probe_fg = _make_both_categories_fg()
+    try:
+        feature = Feature(BINDING_FEATURE, _both_categories_options())
+        plugins: FeatureGroupEnvironmentMapping = {probe_fg: {MatchAbortFw845e}}
+        result, readout = _outcome(partial(IdentifyFeatureGroupClass.evaluate, feature, plugins, None))
+        del result
+        del plugins
+        return readout
+    finally:
+        del probe_fg
+        gc.collect()
+
+
+def _make_is_root_fg(raiser: Callable[[], None]) -> type[FeatureGroup]:
+    """Candidate whose input_features raises whatever ``raiser`` raises."""
+    gc.collect()
+
+    class IsRootProbeFG845f(FeatureGroup):
+        """Stands in for a group whose input_features cannot answer for this feature name."""
+
+        def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+            raiser()
+            return None
+
+    return IsRootProbeFG845f
+
+
+def _is_root_outcome(raiser: Callable[[], None]) -> tuple[Optional[bool], Optional[_RaiseReadout]]:
+    """(verdict, None) when is_root answers, (None, readout) when the raise escapes it."""
+    probe_fg = _make_is_root_fg(raiser)
+    try:
+        instance = probe_fg()
+        verdict, readout = _outcome(partial(instance.is_root, Options(), "is_root_probe_845f"))
+        del instance
+        return verdict, readout
+    finally:
+        del probe_fg
+        gc.collect()
+
+
+def _raise_marked_value_error() -> None:
+    raise escalate_match_abort(ValueError(IS_ROOT_MARKED_MESSAGE))
+
+
+def _raise_unmarked_value_error() -> None:
+    raise ValueError(IS_ROOT_UNMARKED_MESSAGE)
+
+
+def _raise_not_implemented() -> None:
+    raise NotImplementedError
+
+
+class TestMarkedRaiseSurvivesTheChainParserContainment:
+    """match_parser_criteria contains a parser error as a non-match, but never a MARKED one."""
+
+    def test_marked_config_error_escapes_match_parser_criteria(self) -> None:
+        """The both-categories raise is a framework invariant break: it must not read as a non-match."""
+        verdict, readout = _outcome(
+            partial(BothCategoriesMixin845f.match_parser_criteria, BINDING_FEATURE, _both_categories_options())
+        )
+
+        assert verdict is None, "a marked raise was swallowed into a match verdict by match_parser_criteria"
+        assert readout is not None
+        assert readout.marked is True
+        assert readout.type_name == RAISE_TYPE_NAME
+        assert BINDING_KEY in readout.message
+        assert BOTH_CATEGORIES_FRAGMENT in readout.message
+
+    def test_marked_config_error_escapes_match_feature_group_criteria(self) -> None:
+        """The mark survives the matcher the engine actually calls, not just the parser helper."""
+        verdict, readout = _outcome(
+            partial(BothCategoriesMixin845f.match_feature_group_criteria, BINDING_FEATURE, _both_categories_options())
+        )
+
+        assert verdict is None, "a marked raise was swallowed into a match verdict by match_feature_group_criteria"
+        assert readout is not None
+        assert readout.marked is True
+        assert readout.type_name == RAISE_TYPE_NAME
+        assert BOTH_CATEGORIES_FRAGMENT in readout.message
+
+    def test_unmarked_parser_error_is_still_a_non_match(self) -> None:
+        """Containment stays the default: parse_name's own unmarked ValueError is a non-match, not a raise."""
+        verdict, readout = _outcome(
+            partial(BothCategoriesMixin845f.match_parser_criteria, NO_SOURCE_FEATURE, Options())
+        )
+
+        assert readout is None, "an unmarked parser error must stay contained as a non-match"
+        assert verdict is False
+
+    def test_marked_config_error_crosses_the_match_seam(self) -> None:
+        """The raise reaches the caller of evaluate() with mark and message intact.
+
+        The mark lives on that one exception object, so reading it back at the caller is what shows the
+        object crossed rather than being re-wrapped or downgraded into a verdict on the way.
+        """
+        readout = _evaluate_both_categories()
+
+        assert readout is not None, "the marked raise never reached the seam; a handler on the way swallowed it"
+        assert readout.marked is True
+        assert readout.type_name == RAISE_TYPE_NAME
+        assert BINDING_KEY in readout.message
+        assert BOTH_CATEGORIES_FRAGMENT in readout.message
+
+
+class TestIsRootRespectsTheMark:
+    """is_root reads a raising input_features as "not a root", except when the raise is marked."""
+
+    def test_marked_input_features_raise_escapes_is_root(self) -> None:
+        """A framework-owned raise must not be downgraded into a root verdict."""
+        verdict, readout = _is_root_outcome(_raise_marked_value_error)
+
+        assert verdict is None, "a marked raise was swallowed into an is_root verdict"
+        assert readout is not None
+        assert readout.marked is True
+        assert readout.type_name == RAISE_TYPE_NAME
+        assert readout.message == IS_ROOT_MARKED_MESSAGE
+
+    def test_unmarked_input_features_raise_still_means_not_root(self) -> None:
+        """Unchanged: an unmarked failure in input_features means this group does not match."""
+        verdict, readout = _is_root_outcome(_raise_unmarked_value_error)
+
+        assert readout is None, "an unmarked raise out of input_features must stay contained"
+        assert verdict is False
+
+    def test_not_implemented_input_features_still_means_root(self) -> None:
+        """Unchanged: an unimplemented input_features is the documented way to declare a root feature."""
+        verdict, readout = _is_root_outcome(_raise_not_implemented)
+
+        assert readout is None
+        assert verdict is True
 
 
 class TestResolveFeatureStillNeverRaises:

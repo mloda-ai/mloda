@@ -423,7 +423,9 @@ class IdentifyFeatureGroupClass:
         framework defect, so containing it cannot hide the problem while a rival candidate wins the feature; leave
         a raise contained when it is one candidate's own judgment or own defect. Every raise the match path can
         reach must say which it is, at the raise; tests/test_core/test_prepare/test_match_abort_sweep.py enforces
-        that. A contained raise is kept as text, never as an exception object whose traceback would pin the plugin
+        that. A mark only survives when every handler between the raise and this seam re-raises it:
+        ``match_parser_criteria`` and ``is_root`` do, while ``safe_field`` deliberately degrades instead. A
+        contained raise is kept as text, never as an exception object whose traceback would pin the plugin
         class. The per-candidate rejection window, reset in the finally, keys reasons by candidate class.
         """
         token = MATCH_REJECTION_REASONS.set({})

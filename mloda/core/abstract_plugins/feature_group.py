@@ -36,7 +36,7 @@ from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.feature_set import FeatureSet
 from mloda.core.abstract_plugins.components.options import Options, _isolate_forwarded_value
 from mloda.core.abstract_plugins.components.index.index import Index
-from mloda.core.abstract_plugins.components.utils import get_all_subclasses, safe_field
+from mloda.core.abstract_plugins.components.utils import get_all_subclasses, is_match_abort, safe_field
 
 logger = logging.getLogger(__name__)
 
@@ -527,7 +527,7 @@ class FeatureGroup(ABC):
 
         The specific input features may depend on the provided options and the feature name.
         """
-        # Contained: an unimplemented hook is this candidate's own defect (#845).
+        # Contained: this is the root-feature protocol signal, which is_root reads as "this IS a root" (#845).
         raise NotImplementedError
 
     @classmethod
@@ -795,9 +795,11 @@ class FeatureGroup(ABC):
         except NotImplementedError:
             # input_features not implemented means this is a root feature.
             return True
-        except Exception:
+        except Exception as exc:
             # Errors in input_features (e.g. validation failures for this feature name)
             # mean the feature group does not match, so it is not a root.
+            if is_match_abort(exc):
+                raise
             logger.debug(
                 "%s.input_features raised an exception for feature '%s'",
                 type(self).__name__,

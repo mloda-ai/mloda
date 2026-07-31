@@ -274,8 +274,8 @@ class FeatureChainParser:
         if isinstance(spec, PropertySpec):
             return spec
 
-        # Contained: an unmigrated PROPERTY_MAPPING is that candidate's own defect, and the class-definition
-        # check rejects a shipped one loudly.
+        # Contained: a mapping handed to the public entry point is the caller's defect, and the seam reads it
+        # as that candidate's non-match.
         raise ValueError(
             f"{owner_name}.PROPERTY_MAPPING['{key}'] is a {type(spec).__name__}, not a PropertySpec. "
             f"Raw dict specs are no longer accepted; construct PropertySpec(...) or use the "

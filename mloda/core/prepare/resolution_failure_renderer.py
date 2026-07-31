@@ -10,6 +10,8 @@ from mloda.core.prepare.resolution_types import EliminationStage, EvaluationResu
 
 TROUBLESHOOTING_URL = "https://mloda-ai.github.io/mloda/in_depth/troubleshooting/feature-group-resolution-errors/"
 
+MAX_SUGGESTIONS = 5
+
 
 def scope_callout(scope: str | type[FeatureGroup] | None) -> str | None:
     """Render the shared scope callout, or None when the scope is unset."""
@@ -115,10 +117,11 @@ def _render_none(result: EvaluationResult, feature: Feature, callout: str | None
     if near_miss is not None:
         msg += f"\n{near_miss}"
 
-    similar = get_close_matches(feature_name, list(result.facts.known_names), n=5, cutoff=0.5)
-    # Drop suggestions that merely echo a candidate the near-miss block already named; if that empties the
-    # list, omit the line rather than repeat what was just eliminated.
-    similar = [name for name in similar if name not in result.facts.eliminated_hints]
+    # A suggestion equal to the requested name, or echoing an already-named candidate, carries nothing new.
+    # Drop it, and the catalog's repeats, before the cut, so neither can spend a slot.
+    droppable = {feature_name, *result.facts.eliminated_hints}
+    known_names = [name for name in dict.fromkeys(result.facts.known_names) if name not in droppable]
+    similar = get_close_matches(feature_name, known_names, n=MAX_SUGGESTIONS, cutoff=0.5)
     if similar:
         msg += f"\nDid you mean one of: {similar}?"
 

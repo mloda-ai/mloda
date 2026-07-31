@@ -29,8 +29,7 @@ class GlobalFilter:
            names and the uuid to the used single filter. This is used to track which features are associated with which filters for a specific feature group.
            This can be used to check after the fact if a feature is a filter feature for a specific feature group
            e.g. for debugging, logging or quality checks.
-        3. `dropped_filters`: The counterpart to `collection`, mapping (feature group, filter feature name) to the
-           reason a contained raise dropped that filter, which is otherwise indistinguishable from never matching.
+        3. `dropped_filters`: maps (feature group, filter feature name) to the reason a contained raise dropped it.
 
         These attributes provide the foundation for adding, managing, and applying filters across various feature groups
         and features in the context of a data processing pipeline.
@@ -127,12 +126,9 @@ class GlobalFilter:
     ) -> bool:
         """A raising match hook is a non-match for this filter only, mirroring the resolution seam (#845).
 
-        The level does not depend on the exception type, unlike the seam's contained_raise_log_level: the
-        first drop of a key warns, because no resolution failure message carries the reason here, and a
-        dropped filter changes results silently. The reason
-        is kept as text, never an exception object whose traceback would pin the plugin class, and the drop
-        is also recorded in the `dropped_filters` ledger. No option rollback: the hook sees a per-match
-        deepcopy's options, discarded with the dropped filter.
+        The drop is recorded in `dropped_filters` and kept as text, never an exception object whose traceback
+        would pin the plugin class. The level ignores the exception type, unlike the seam, because nothing else
+        surfaces the reason here. No option rollback: the hook sees a per-match deepcopy.
         """
         try:
             return feature_group.match_feature_group_criteria(
@@ -145,11 +141,7 @@ class GlobalFilter:
             return False
 
     def _record_dropped_filter(self, feature_group: type[FeatureGroup], filter_feature_name: str, reason: str) -> None:
-        """Record the drop, WARNING the first time a key drops and DEBUG on every repeat.
-
-        identify_matched_filters runs once per feature the group serves, so one broken hook would
-        otherwise emit the same WARNING once per feature.
-        """
+        """Record the drop: WARNING on a key's first drop, DEBUG after, as the hook is probed per served feature."""
         key = (feature_group, filter_feature_name)
         first = key not in self.dropped_filters
         self.dropped_filters.setdefault(key, reason)

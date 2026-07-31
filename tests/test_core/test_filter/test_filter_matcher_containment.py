@@ -1,21 +1,8 @@
-"""Red-phase pins for issue #899: a raising match hook during FILTER matching must be contained.
+"""Issue #899: a raising match hook during filter matching is contained as a non-match for that filter.
 
-``GlobalFilter.criteria`` calls ``match_feature_group_criteria`` uncontained, so one broken hook takes
-the whole run down, while the resolution seam (#845, ``IdentifyFeatureGroupClass._filter_feature_group_by_criteria``)
-treats the very same raise as a contained non-match. Containment here drops only that filter for that
-feature group and logs it at WARNING, deliberately not through the seam's ``contained_raise_log_level``:
-this path carries no resolution-failure message, and a silently dropped filter changes results. The
-reason stays TEXT, so no retained traceback pins the plugin class. A raise marked with
-``escalate_match_abort`` still propagates untouched, exactly as in the resolution seam.
-
-A log line is not a trace a caller can read, and ``identify_matched_filters`` runs once per processed
-feature, so the drop is also recorded in a per-instance ``GlobalFilter.dropped_filters`` ledger and only
-the first drop of a (group, filter feature) key warns; repeats fall back to DEBUG. The seam's own
-``except`` block reads the exception, so a double hostile to that read must not escape from in there
-either, mirroring tests/test_core/test_prepare/test_match_abort_marker_robustness.py.
-
-Probe classes live inside factory functions and are dropped before any assert runs, so a failing assert
-never pins a throwaway FeatureGroup into its traceback and trips the no-leak fixture in tests/conftest.py.
+The drop is recorded in ``GlobalFilter.dropped_filters`` and logged; a raise marked with ``escalate_match_abort``
+still aborts. Probe classes live inside factory functions and are dropped before any assert runs, so a failing
+assert never pins a throwaway FeatureGroup into its traceback and trips the no-leak fixture in tests/conftest.py.
 """
 
 from __future__ import annotations
@@ -234,11 +221,7 @@ def _make_hostile_filter_matcher_fg() -> type[FeatureGroup]:
 
 
 def _ledger(global_filter: GlobalFilter) -> Optional[dict[Any, Any]]:
-    """The instance drop ledger, or None while the attribute does not exist yet.
-
-    Read through getattr on purpose: a missing ledger must surface as a readable assert, not as an
-    AttributeError whose traceback pins the throwaway class through this frame.
-    """
+    """The instance drop ledger, read via getattr so a missing one asserts readably instead of pinning the class."""
     return cast(Optional[dict[Any, Any]], getattr(global_filter, "dropped_filters", None))
 
 
@@ -277,11 +260,7 @@ def _drive_criteria(
     caplog: pytest.LogCaptureFixture,
     calls: int = 1,
 ) -> _DropSnapshot:
-    """Call criteria `calls` times against ONE GlobalFilter and read the outcome out as plain data.
-
-    The group, the filter and the ledger are unbound in the finally, so a failing assert in the caller
-    never pins the throwaway class into its traceback through this frame.
-    """
+    """Call criteria `calls` times against ONE GlobalFilter; the finally unbinds every name that pins the class."""
     caplog.clear()
     fg = make_fg()
     global_filter = GlobalFilter()
@@ -349,11 +328,7 @@ class TestDroppedFilterIsRecorded:
         )
 
     def test_repeat_drops_of_one_key_warn_once_then_debug(self, caplog: pytest.LogCaptureFixture) -> None:
-        """identify_matched_filters runs per processed feature, so one broken hook may warn only once.
-
-        The dedupe rides on the per-instance ledger: a repeat is a key already recorded there, never
-        module state, which would silence the first drop of the next run.
-        """
+        """One broken hook may warn only once, deduped on the per-instance ledger, never on module state."""
         snapshot = _drive_criteria(_make_raising_filter_matcher_fg, FILTER_FEATURE_RAISING, caplog, calls=3)
 
         assert snapshot.escaped is None, f"the raise must not cross GlobalFilter.criteria: {snapshot.escaped}"
@@ -473,12 +448,7 @@ def _single_row(frame: Any, column: str) -> Any:
 
 
 def _run(escalate: bool) -> tuple[Optional[dict[str, Any]], Optional[str]]:
-    """Run E2E_MAIN under a global EQUAL filter on E2E_TARGET; return (E2E_MAIN payload, escaped text).
-
-    The escape is captured as text rather than caught by pytest.raises: an ExceptionInfo keeps the
-    hook frame alive, and that frame's `cls` pins the throwaway class for the no-leak fixture. `fg`
-    and `collector` are deleted from THIS frame before the asserts below for the same reason.
-    """
+    """Run E2E_MAIN under a filter; the escape is text, not pytest.raises, whose ExceptionInfo pins the class."""
     fg = _make_e2e_probe_fg(escalate)
     collector = PluginCollector.enabled_feature_groups({fg})
     global_filter = GlobalFilter()

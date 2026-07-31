@@ -56,8 +56,12 @@ MATCHER_KEPT_NAMES = (
     "resolve_or_raise",
 )
 
-# Directories swept for imports of the matcher, relative to the repo root.
-SWEPT_DIRS = ("mloda", "mloda_plugins", "tests")
+# Directories swept for imports of the matcher, relative to the repo root. docs/ is in because the marimo
+# notebooks under docs/docs/examples/ are excluded from both mypy and ruff F401, so nothing else gates them.
+SWEPT_DIRS = ("mloda", "mloda_plugins", "tests", "docs")
+
+# Last segment of MATCHER_MODULE: what the sweep gates on, see the gate comment below.
+MATCHER_BASENAME = MATCHER_MODULE.rsplit(".", 1)[-1]
 
 _SUBPROCESS_TIMEOUT = 8.0
 
@@ -77,8 +81,13 @@ def _prepare_dir() -> Path:
 
 
 def _repo_root() -> Path:
-    """Repo root, derived from the matcher's location at <root>/mloda/core/prepare."""
-    return _prepare_dir().parents[2]
+    """Repo root, derived from this file's location at <root>/tests/test_core/test_prepare.
+
+    Deliberately not off _prepare_dir(): under `tox -e installed` the matcher resolves to site-packages,
+    which has no tests tree, so a module-derived root would sweep nothing and still pass. The test file
+    is always in the checkout, whichever import mode is in play.
+    """
+    return Path(__file__).parents[3]
 
 
 def _missing_names(module: ModuleType, names: Sequence[str]) -> list[str]:
@@ -145,16 +154,25 @@ def test_matcher_declares_no_all() -> None:
 
 
 def test_no_call_site_imports_a_foreign_name_from_the_matcher() -> None:
-    """Every name comes from the module that owns it, so the matcher cannot drift back into a facade."""
+    """No call site imports a name from the matcher that the matcher does not own.
+
+    Not the main line of defence: `mypy --strict` sweeps the same trees and its no_implicit_reexport
+    rejects every static evasion (aliased imports, module-object attribute access, relative imports).
+    Its one blind spot is what this test exists for: re-adding __all__ to the matcher makes those
+    re-exports legal again for mypy, and the call sites route through the facade unchallenged.
+    """
     root = _repo_root()
     offenders: list[str] = []
     for directory in SWEPT_DIRS:
         base = root / directory
-        if not base.is_dir():
+        if not base.is_dir():  # a directory may be absent (slim checkout, sdist layout); the rest still gets swept
             continue
         for path in sorted(base.rglob("*.py")):
             source = path.read_text(encoding="utf-8")
-            if MATCHER_MODULE not in source:  # substring gate first: parsing ~900 files would blow the 10s timeout
+            # Substring gate: parses 27 of 907 files, ~0.15s instead of ~1.5s. A 10x saving well inside the
+            # 10s timeout either way, so drop it freely if it ever gets in the way. Gating on the bare last
+            # segment rather than the dotted path keeps `from a.b . c import X` spellings in scope.
+            if MATCHER_BASENAME not in source:
                 continue
             offenders.extend(_foreign_matcher_imports(path, source))
     listed = "\n".join(offenders)

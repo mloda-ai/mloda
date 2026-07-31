@@ -8,6 +8,7 @@ from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.abstract_plugins.components.feature import Feature
+from mloda.core.abstract_plugins.components.utils import contained_raise_reason, is_match_abort
 from mloda.core.filter.filter_type_enum import FilterType
 from mloda.core.filter.single_filter import SingleFilter
 from mloda.core.abstract_plugins.components.default_options_key import DefaultOptionKeys
@@ -28,12 +29,14 @@ class GlobalFilter:
            names and the uuid to the used single filter. This is used to track which features are associated with which filters for a specific feature group.
            This can be used to check after the fact if a feature is a filter feature for a specific feature group
            e.g. for debugging, logging or quality checks.
+        3. `dropped_filters`: maps (feature group, filter feature name) to the reason a contained raise dropped it.
 
         These attributes provide the foundation for adding, managing, and applying filters across various feature groups
         and features in the context of a data processing pipeline.
         """
         self.filters: set[SingleFilter] = set()
         self.collection: dict[tuple[type[FeatureGroup], FeatureName], set[SingleFilter]] = {}
+        self.dropped_filters: dict[tuple[type[FeatureGroup], str], str] = {}
 
     def add_filter(
         self, filter_feature: Feature | str, filter_type: str | FilterType, parameter: dict[str, Any]
@@ -121,9 +124,33 @@ class GlobalFilter:
         filter: SingleFilter,
         data_access_collection: Optional[DataAccessCollection] = None,
     ) -> bool:
-        # Uncontained: the #845 match seam does not reach here, but the group is already identified.
-        return feature_group.match_feature_group_criteria(
-            filter.filter_feature.name, filter.filter_feature.options, data_access_collection
+        """A raising match hook is a non-match for this filter only, mirroring the resolution seam (#845).
+
+        The drop is recorded in `dropped_filters` and kept as text, never an exception object whose traceback
+        would pin the plugin class. The level ignores the exception type, unlike the seam, because nothing else
+        surfaces the reason here. No option rollback: the hook sees a per-match deepcopy.
+        """
+        try:
+            return feature_group.match_feature_group_criteria(
+                filter.filter_feature.name, filter.filter_feature.options, data_access_collection
+            )
+        except Exception as exc:  # noqa: BLE001  (contained: one broken matcher must not fail the whole run)
+            if is_match_abort(exc):
+                raise
+            self._record_dropped_filter(feature_group, str(filter.filter_feature.name), contained_raise_reason(exc))
+            return False
+
+    def _record_dropped_filter(self, feature_group: type[FeatureGroup], filter_feature_name: str, reason: str) -> None:
+        """Record the drop: WARNING on a key's first drop, DEBUG after, as the hook is probed per served feature."""
+        key = (feature_group, filter_feature_name)
+        first = key not in self.dropped_filters
+        self.dropped_filters.setdefault(key, reason)
+        logger.log(
+            logging.WARNING if first else logging.DEBUG,
+            "%s %s while matching filter feature '%s'; dropping that filter for this feature group.",
+            feature_group.get_class_name(),
+            reason,
+            filter_feature_name,
         )
 
     def domain(self, filter: SingleFilter, feature_domain: None | Domain, feature_group: type[FeatureGroup]) -> bool:

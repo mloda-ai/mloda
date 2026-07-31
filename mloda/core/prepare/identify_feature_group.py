@@ -1,4 +1,3 @@
-import functools
 import inspect
 from collections.abc import Sequence
 from copy import deepcopy
@@ -32,6 +31,7 @@ from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser
 from mloda.core.abstract_plugins.components.utils import (
     as_str,
     contained_raise_log_level,
+    contained_raise_reason,
     is_match_abort,
     safe_field,
 )
@@ -443,8 +443,7 @@ class IdentifyFeatureGroupClass:
                 logger.debug("%s rejected an option value while matching '%s': %s", feature_group, feature.name, exc)
                 record_match_rejection(feature_group.get_class_name(), str(exc))
             else:
-                # partial, not a lambda: exc binds eagerly, so no closure keeps it and its traceback alive.
-                reason = f"raised {type(exc).__name__}: {safe_field(functools.partial(str, exc), type(exc).__name__)}"
+                reason = contained_raise_reason(exc)
                 logger.log(
                     contained_raise_log_level(exc),
                     "%s %s while matching '%s'; treating it as a non-match.",

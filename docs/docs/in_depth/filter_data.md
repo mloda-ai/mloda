@@ -172,12 +172,19 @@ The previous sections show how **users** create filters. This section explains h
 
 ### How filters reach your FeatureGroup
 
-When a user passes a `GlobalFilter`, the framework matches each `SingleFilter` to the
-FeatureGroups that declare the filter's column as an input. Each matched filter is
-**deep-copied** before delivery. If two FeatureGroups both match the same original
-filter, they each receive independent copies. This means a single `GlobalFilter` can
-be processed differently by different FeatureGroups in the same pipeline: one may use
-the mask engine for inline masking while another uses filters for row elimination.
+When a user passes a `GlobalFilter`, the framework tests every `SingleFilter` against
+each FeatureGroup already resolved for a feature. Each filter is **deep-copied** first,
+and the copy is delivered only if it clears three gates in order: the group's own
+`match_feature_group_criteria()` on the filter feature's name and options, the domain,
+and the compute framework. Declaring the filter's column as an input is **not** the
+test, and links are not re-checked here (feature resolution already covered them).
+That matcher sees the filter feature's own options enriched from the resolved
+feature's effective (post-default) ones, see
+[Applying declared defaults](property-mapping.md#applying-declared-defaults). If two
+FeatureGroups both match the same original filter, they each receive independent
+copies. This means a single `GlobalFilter` can be processed differently by different
+FeatureGroups in the same pipeline: one may use the mask engine for inline masking
+while another uses filters for row elimination.
 
 Matched filters are attached to the `FeatureSet` before `calculate_feature()` is
 called. Inside your calculation you can access them via `features.filters`:

@@ -11,7 +11,9 @@ All names are suffixed ``_791`` because test feature groups become global subcla
 """
 
 from abc import abstractmethod
+from ast import literal_eval
 from collections.abc import Callable, Iterator
+from difflib import get_close_matches
 from typing import Any, ClassVar, Optional, cast
 
 import pytest
@@ -55,6 +57,9 @@ NONE_ENABLED_FEATURE_791 = "renderer_none_enabled_791"
 TIE_FEATURE_791 = "renderer_tie_791"
 TIE_CAPABILITY_FEATURE_791 = "renderer_tie_capability_791"
 MISSING_OPTION_FEATURE_791 = "renderer_missing_option_791__sum_renderer791m"
+STRANDED_FEATURE_791 = "renderer_stranded_791"
+CUTOFF_FEATURE_791 = "renderer_cutoff_791"
+CUTOFF_CATALOG_NAME_791 = "renderer_cutoff_threshold_group_791"
 
 HEALTHY_DOMAIN_791 = "renderer_healthy_domain_791"
 BOOM_SUPPORTED_NAME_791 = "renderer_boom_supported_name_791"
@@ -67,6 +72,8 @@ TROUBLESHOOTING_LINE = (
     "For troubleshooting guide, see: "
     "https://mloda-ai.github.io/mloda/in_depth/troubleshooting/feature-group-resolution-errors/"
 )
+
+SUGGESTION_PREFIX = "Did you mean one of: "
 
 # Call counters for every provider-overridable hook, keyed "<ClassName>.<hook>". Reset per test.
 HOOK_CALLS: dict[str, int] = {}
@@ -363,6 +370,37 @@ class RendererNoneEnabledFG791(CountingFeatureGroup791):
     SUPPORTED_FRAMEWORKS = frozenset({"RendererFwTwo791"})
 
 
+class RendererStrandedFG791(CountingFeatureGroup791):
+    """Declares the requested name itself, then loses every framework the run could have enabled."""
+
+    MATCHES = frozenset({STRANDED_FEATURE_791})
+    SUPPORTED_NAMES = frozenset({STRANDED_FEATURE_791})
+    FRAMEWORK_RULE = {RendererFwOne791, RendererFwTwo791}
+
+
+class RendererCutoffAFG791(CountingFeatureGroup791):
+    """Eliminated candidate declaring the requested name, so the name catalog carries the exact echo."""
+
+    MATCHES = frozenset({CUTOFF_FEATURE_791})
+    SUPPORTED_NAMES = frozenset({CUTOFF_FEATURE_791})
+    FRAMEWORK_RULE = {RendererFwOne791, RendererFwTwo791}
+
+
+class RendererCutoffBFG791(CountingFeatureGroup791):
+    """Second eliminated candidate, contributing two more droppable hints: its class name and its prefix."""
+
+    MATCHES = frozenset({CUTOFF_FEATURE_791})
+    FRAMEWORK_RULE = {RendererFwOne791, RendererFwTwo791}
+
+
+class SpareNameCatalogFG791(CountingFeatureGroup791):
+    """Healthy catalog group, named far enough from the request that only its supported name can be suggested."""
+
+    MATCHES = frozenset({CUTOFF_CATALOG_NAME_791})
+    SUPPORTED_NAMES = frozenset({CUTOFF_CATALOG_NAME_791})
+    FRAMEWORK_RULE = {RendererFwOne791}
+
+
 class RendererDomainBoom791(RuntimeError):
     """Raised by a provider's get_domain() hook."""
 
@@ -638,6 +676,23 @@ def capability_none_enabled_scenario() -> Scenario:
     return Feature(NONE_ENABLED_FEATURE_791), {RendererNoneEnabledFG791: set()}
 
 
+def stranded_supported_name_scenario() -> Scenario:
+    """The requested name is declared by the one candidate the run then eliminates: nothing is left to suggest."""
+    return Feature(STRANDED_FEATURE_791), {RendererStrandedFG791: set()}
+
+
+def suggestion_cut_scenario() -> Scenario:
+    """Five droppable close matches (the echo plus both eliminated candidates' hints) outrank the useful name."""
+    return (
+        Feature(CUTOFF_FEATURE_791),
+        {
+            RendererCutoffAFG791: set(),
+            RendererCutoffBFG791: set(),
+            SpareNameCatalogFG791: {RendererFwOne791},
+        },
+    )
+
+
 def raising_domain_multiple_scenario() -> Scenario:
     """A 'multiple' failure where one identified candidate's get_domain() raises. The request has no domain."""
     raising, healthy = _build_raising_domain_groups()
@@ -718,6 +773,14 @@ def _render(scenario: Scenario) -> str:
     message = render_resolution_failure(_evaluate(scenario), feature)
     assert message is not None
     return message
+
+
+def _suggestions(message: str) -> list[str]:
+    """Names listed on the 'Did you mean' line, or an empty list when the renderer omitted the line."""
+    line = next((line for line in message.split("\n") if line.startswith(SUGGESTION_PREFIX)), None)
+    if line is None:
+        return []
+    return cast(list[str], literal_eval(line[len(SUGGESTION_PREFIX) : -1]))
 
 
 @pytest.fixture(autouse=True)
@@ -1200,3 +1263,53 @@ class TestSortTiesAreStable:
         assert _render((feature, b_first)) == expected
         # The suppressed suggestion must not echo the already-named eliminated candidate or its prefix.
         assert "Did you mean" not in _render((feature, a_first))
+
+
+class TestSuggestionsNeverEchoTheRequestedName:
+    """A suggestion equal to the requested name is worthless, whichever candidate contributed it."""
+
+    def test_eliminated_candidates_supported_name_is_never_suggested_back(self) -> None:
+        """A candidate declaring the requested name is eliminated: the message must not hand that name back."""
+        scenario = stranded_supported_name_scenario()
+        feature, _ = scenario
+        result = _evaluate(scenario)
+
+        # The name catalog carries the requested name, and the eliminated hints (class name and prefix only)
+        # cannot reach it, so suppression has to key on the requested name itself.
+        assert STRANDED_FEATURE_791 in result.facts.known_names
+        assert STRANDED_FEATURE_791 not in result.facts.eliminated_hints
+
+        message = render_resolution_failure(result, feature)
+        assert message is not None
+        assert "Did you mean" not in message
+        assert message == (
+            f"No feature groups found for feature name: '{STRANDED_FEATURE_791}'.\n"
+            f"Feature group(s) eliminated while matching '{STRANDED_FEATURE_791}':\n"
+            "  - RendererStrandedFG791 (compute framework): none of its compute frameworks are enabled for this run\n"
+            "Use resolve_feature(name, options=...) to debug feature resolution.\n"
+            f"{TROUBLESHOOTING_LINE}"
+        )
+
+    def test_droppable_matches_do_not_consume_the_suggestion_slots(self) -> None:
+        """Suggestions are filtered before the cut, so a useful name ranked behind five droppable ones survives."""
+        scenario = suggestion_cut_scenario()
+        feature, _ = scenario
+        result = _evaluate(scenario)
+
+        droppable = {CUTOFF_FEATURE_791, *result.facts.eliminated_hints}
+        # Premise of the scenario: cutting to five first spends every slot on a droppable name.
+        cut_first = get_close_matches(CUTOFF_FEATURE_791, list(result.facts.known_names), n=5, cutoff=0.5)
+        assert len(cut_first) == 5
+        assert set(cut_first) <= droppable
+        assert CUTOFF_CATALOG_NAME_791 not in cut_first
+
+        message = render_resolution_failure(result, feature)
+        assert message is not None
+        suggestions = _suggestions(message)
+
+        assert CUTOFF_CATALOG_NAME_791 in suggestions
+        assert droppable.isdisjoint(suggestions)
+        assert len(suggestions) <= 5
+        # Both eliminated candidates are still named where they belong, in the near-miss block.
+        assert "  - RendererCutoffAFG791 (compute framework):" in message
+        assert "  - RendererCutoffBFG791 (compute framework):" in message

@@ -115,10 +115,12 @@ def _render_none(result: EvaluationResult, feature: Feature, callout: str | None
     if near_miss is not None:
         msg += f"\n{near_miss}"
 
-    similar = get_close_matches(feature_name, list(result.facts.known_names), n=5, cutoff=0.5)
-    # Drop suggestions that merely echo a candidate the near-miss block already named; if that empties the
-    # list, omit the line rather than repeat what was just eliminated.
-    similar = [name for name in similar if name not in result.facts.eliminated_hints]
+    # A suggestion equal to the requested name, or echoing a candidate the near-miss block already named,
+    # carries nothing new: drop it before the cut so it cannot spend one of the five slots.
+    known_names = list(result.facts.known_names)
+    droppable = {feature_name, *result.facts.eliminated_hints}
+    ranked = get_close_matches(feature_name, known_names, n=len(known_names), cutoff=0.5) if known_names else []
+    similar = [name for name in ranked if name not in droppable][:5]
     if similar:
         msg += f"\nDid you mean one of: {similar}?"
 

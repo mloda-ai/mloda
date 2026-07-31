@@ -4,9 +4,8 @@ matcher guards the two ``__init_subclass__`` hooks install.
 Imports ``feature_chain_parser``; the parser never imports this module, which keeps the split acyclic.
 
 One edge runs the other way: ``warn_missing_columnwise_hooks`` imports its hook helpers back out of
-``feature_chain_parser_mixin``, which imports this module at module scope. That is sound only because
-the import is function-local and the helpers sit BELOW the mixin class body, so nothing can subclass
-the mixin before that module finished executing. Moving them above the class body would break it.
+``feature_chain_parser_mixin``, which works only because that import is function-local and the helpers
+sit BELOW the mixin class body. Moving them above it would break the edge.
 
 Depends on these parser-private names, so renaming one of them is a cross-module break:
 ``FeatureChainParser._can_skip_required_check``, ``._check_name_path_required_presence``, ``._merge_bindings``,
@@ -232,15 +231,9 @@ def warn_universal_optional_matcher(owner: type[Any]) -> None:
 def warn_missing_columnwise_hooks(owner: type[Any]) -> None:
     """Nudge an author whose framework-bound class leaves a required column-wise hook unimplemented.
 
-    ``compute_framework_rule`` in the class's OWN __dict__ is the static marker of a framework-bound
-    implementation. It is read, never called: running author code at class-definition time is not this
-    guard's business. A family base declares the requirement for its children without that marker, so
-    it stays silent, and only the hooks actually left unimplemented are named. A class whose marker is
-    not a real framework pin opts out with ALLOW_MISSING_COLUMNWISE_HOOKS = True.
-
-    The declaration itself is read defensively: the guard runs from ``__init_subclass__``, so a raise it
-    let through would become the author's class-definition error. A malformed declaration degrades to no
-    hooks and is reported on its own, since a name that is no hook is always author error.
+    ``compute_framework_rule`` in the class's OWN __dict__ is the framework-bound marker; it is read,
+    never called. A family base carries no such marker, so it stays silent. The declaration read must
+    not raise: this runs from ``__init_subclass__``, where a raise becomes the author's class error.
     """
     # Local import: feature_chain_parser_mixin imports this module, so a module-scope import would cycle.
     from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser_mixin import (
@@ -250,11 +243,10 @@ def warn_missing_columnwise_hooks(owner: type[Any]) -> None:
 
     unrecognized = unrecognized_columnwise_hooks(owner)
     if unrecognized:
-        # Logged as a list, never joined: a declaration that lost its braces is a string, and its
-        # single characters must not read as hook names.
+        # A list, never joined: a brace-less declaration is a string whose characters must not read as hooks.
         logger.warning(
-            "%s declares %s in REQUIRED_COLUMNWISE_HOOKS, which name no column-wise hook and are "
-            "ignored. Declare COLUMNWISE_HOOKS or COLUMN_DISCOVERY_HOOKS from mloda.provider.",
+            "%s declares %s in REQUIRED_COLUMNWISE_HOOKS, which name no hook and are ignored. "
+            "Declare COLUMNWISE_HOOKS or COLUMN_DISCOVERY_HOOKS from mloda.provider.",
             owner.__name__,
             unrecognized,
         )
@@ -267,9 +259,8 @@ def warn_missing_columnwise_hooks(owner: type[Any]) -> None:
     if not missing:
         return
     logger.warning(
-        "%s binds a compute framework but does not implement %s as a classmethod or staticmethod, so a "
-        "run reaches the raising default of FeatureChainParserMixin and fails there. Implement them on "
-        "this class, or narrow REQUIRED_COLUMNWISE_HOOKS if the family does not call them.",
+        "%s binds a compute framework but does not implement %s as a classmethod or staticmethod, so a run "
+        "hits the raising default. Implement them, or narrow REQUIRED_COLUMNWISE_HOOKS.",
         owner.__name__,
         ", ".join(missing),
     )

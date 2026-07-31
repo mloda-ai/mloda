@@ -705,10 +705,9 @@ def _resolved_hook(owner: type[Any], hook_name: str) -> Any:
 
 
 def _hook_is_implemented(owner: type[Any], hook_name: str) -> bool:
-    """True when the ``cls._hook(...)`` call reaches an own implementation rather than the raising default.
+    """True when ``cls._hook(...)`` reaches an own implementation rather than the raising default.
 
-    An absent hook is missing, and so is one written without ``@classmethod``: that call would pass the
-    data as ``cls`` and shift every argument.
+    A plain function is unreachable: the ``cls`` slot would eat the data argument.
     """
     if not isinstance(inspect.getattr_static(owner, hook_name, None), (classmethod, staticmethod)):
         return False
@@ -716,11 +715,8 @@ def _hook_is_implemented(owner: type[Any], hook_name: str) -> bool:
 
 
 def _declared_hook_names(owner: type[Any]) -> frozenset[Any]:
-    """Every name a class declares required, degrading a raising or non-iterable declaration to empty."""
-    names: frozenset[Any] = safe_field(
-        lambda: frozenset(getattr(owner, "REQUIRED_COLUMNWISE_HOOKS", frozenset())), frozenset()
-    )
-    return names
+    """Every name a class declares required; a raising or non-iterable declaration degrades to empty."""
+    return safe_field(lambda: frozenset(getattr(owner, "REQUIRED_COLUMNWISE_HOOKS", frozenset())), frozenset())
 
 
 def declared_columnwise_hooks(owner: type[Any]) -> frozenset[str]:
@@ -736,7 +732,6 @@ def unrecognized_columnwise_hooks(owner: type[Any]) -> list[str]:
 def missing_columnwise_hooks(owner: type[Any]) -> list[str]:
     """The declared hooks the class does not implement in a reachable shape, sorted.
 
-    A family base legitimately reports all of them: it declares the requirement for its framework
-    implementations. Adding the framework-bound gate on top is the guard's job, not this one's.
+    A family base correctly reports all of them; gating on the framework marker is the guard's job.
     """
     return sorted(hook for hook in declared_columnwise_hooks(owner) if not _hook_is_implemented(owner, hook))

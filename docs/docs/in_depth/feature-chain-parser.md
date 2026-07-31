@@ -174,7 +174,6 @@ from mloda.provider import COLUMN_DISCOVERY_HOOKS, FeatureChainParserMixin, Feat
 from mloda.user.pandas import PandasDataFrame
 
 class RollingBase(FeatureChainParserMixin, FeatureGroup):
-    # calculate_feature resolves column names against the data, so all three are required.
     REQUIRED_COLUMNWISE_HOOKS = COLUMN_DISCOVERY_HOOKS
 
 class PandasRolling(RollingBase):
@@ -188,9 +187,8 @@ class PandasRolling(RollingBase):
 
     @classmethod
     def _check_source_features_exist(cls, data, feature_names):
-        missing = [name for name in feature_names if name not in data.columns]
-        if missing:
-            raise ValueError(f"Missing {missing}, available: {list(data.columns)}")
+        if set(feature_names) - set(data.columns):
+            raise ValueError(f"Missing source features, available: {list(data.columns)}")
 
     @classmethod
     def _add_result_to_data(cls, data, feature_name, result):
@@ -198,17 +196,14 @@ class PandasRolling(RollingBase):
         return data
 ```
 
-mloda warns at class-definition time when a `FeatureChainParserMixin` subclass (the guard runs from
-that `__init_subclass__` only, never from `FeatureGroup`'s) declares a non-empty
-`REQUIRED_COLUMNWISE_HOOKS`, pins `compute_framework_rule` in its OWN class body (an inherited pin
-does not count) and still leaves a required hook unimplemented. A hook is unimplemented when it is
-absent, when it still resolves to the raising default, or when it is written without `@classmethod`,
-which the `cls._hook(...)` call cannot reach. Only the class body is read, so a hook attached after
-it is not seen, and a declared name that is no hook is dropped and warned about separately. The
-message names only the unimplemented hooks. It is a warning, not an error: a family base declares the
-contract without implementing it, and the runtime `NotImplementedError` stays the hard failure. Set
-`ALLOW_MISSING_COLUMNWISE_HOOKS = True` on a class whose `compute_framework_rule` is not a real
-framework pin to opt out.
+A `FeatureChainParserMixin` subclass that pins `compute_framework_rule` in its own class body and
+still leaves a declared hook unimplemented is warned at class-definition time. It stays a warning, so
+a family base can declare what it does not implement; the runtime `NotImplementedError` is the hard
+failure. Opt out with `ALLOW_MISSING_COLUMNWISE_HOOKS = True`.
+
+- An inherited `compute_framework_rule` is no pin, and a hook attached after the class body is not seen.
+- A hook without `@classmethod` counts as unimplemented: the `cls._hook(...)` call cannot reach it.
+- A declared name that is no hook is dropped and warned about separately.
 
 `get_feature_group_docs()` reports the same contract per class as `required_columnwise_hooks` and
 `missing_columnwise_hooks`, so tooling can list what a class still owes.

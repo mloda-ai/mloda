@@ -155,13 +155,14 @@ class BaseInputData(ABC):
 
     @classmethod
     def deal_with_base_input_data_name_as_cls_or_str(cls, key: Any) -> str:
-        # Contained: this runs per candidate over every option key, so one odd key must not abort the run (#845).
         if hasattr(key, "get_class_name"):
             if not issubclass(key, BaseInputData):
+                # Contained: this runs per candidate over every option key, so an odd key is a non-match (#845).
                 raise ValueError(f"Key {key} is not a subclass of BaseInputData.")
             key = key.get_class_name()
 
         if not isinstance(key, str):
+            # Contained: this runs per candidate over every option key, so one odd key must not abort the run (#845).
             raise ValueError(f"Key {key} is not a string.")
         return key
 

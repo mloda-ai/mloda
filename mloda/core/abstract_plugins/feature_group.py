@@ -527,6 +527,7 @@ class FeatureGroup(ABC):
 
         The specific input features may depend on the provided options and the feature name.
         """
+        # Contained: an unimplemented hook is this candidate's own defect (#845).
         raise NotImplementedError
 
     @classmethod

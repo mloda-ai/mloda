@@ -419,10 +419,12 @@ class IdentifyFeatureGroupClass:
     ) -> bool:
         """A raise out of the match hook is a non-match for that candidate only, not a run-wide abort (#845).
 
-        Policy: a candidate's own defect stays contained here, while escalate_match_abort marks the raises that
-        report a misconfiguration the user must fix, and those cross the seam untouched. A contained raise is
-        kept as text, never as an exception object whose traceback would pin the plugin class. The per-candidate
-        rejection window, reset in the finally, keys reasons by candidate class.
+        Policy: mark a raise with escalate_match_abort when it reports a misconfiguration, a contradiction or a
+        framework defect, so containing it cannot hide the problem while a rival candidate wins the feature; leave
+        a raise contained when it is one candidate's own judgment or own defect. Every raise the match path can
+        reach must say which it is, at the raise; tests/test_core/test_prepare/test_match_abort_sweep.py enforces
+        that. A contained raise is kept as text, never as an exception object whose traceback would pin the plugin
+        class. The per-candidate rejection window, reset in the finally, keys reasons by candidate class.
         """
         token = MATCH_REJECTION_REASONS.set({})
         # Shallow copies, taken per candidate so an earlier match's write survives a later candidate's raise.

@@ -211,11 +211,13 @@ class FeatureChainParserMixin:
         count = len(in_features)
 
         if count < self.MIN_IN_FEATURES:
+            # Contained: an in_feature count below the declared MIN means this group cannot serve the feature.
             raise ValueError(
                 f"Feature '{feature_name}' requires at least {self.MIN_IN_FEATURES} in_feature(s), but found {count}"
             )
 
         if self.MAX_IN_FEATURES is not None and count > self.MAX_IN_FEATURES:
+            # Contained: an in_feature count above the declared MAX means this group cannot serve the feature.
             raise ValueError(
                 f"Feature '{feature_name}' allows at most {self.MAX_IN_FEATURES} in_feature(s), but found {count}"
             )

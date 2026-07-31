@@ -146,6 +146,7 @@ class MyFeatureGroup(FeatureChainParserMixin, FeatureGroup):
 | `IN_FEATURE_SEPARATOR` | `str` | `"&"` | Separator for multiple in_features |
 | `RECOGNITION_ONLY_PATTERN` | `bool` | `False` | Declares a captureless pattern as recognition-only (binds no key from the name) |
 | `REQUIRED_COLUMNWISE_HOOKS` | `frozenset[str]` | `frozenset()` | Column-wise data hooks the family requires |
+| `ALLOW_MISSING_COLUMNWISE_HOOKS` | `bool` | `False` | Opts out of the missing-hook diagnostic |
 
 ### Column-Wise Data Hooks
 
@@ -161,8 +162,7 @@ rejects it is a per-feature-group policy, not a framework rule.
 
 `REQUIRED_COLUMNWISE_HOOKS` declares which of the three a family needs. A family base sets it to the
 constant matching the hooks its own `calculate_feature` calls, and its compute-framework subclasses
-implement them. Both constants come from
-`mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser_mixin`.
+implement them. Both constants come from `mloda.provider`.
 
 | Constant | Declares |
 |----------|----------|
@@ -170,10 +170,7 @@ implement them. Both constants come from
 | `COLUMN_DISCOVERY_HOOKS` | those two plus `_get_available_columns` |
 
 ``` python
-from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser_mixin import (
-    COLUMN_DISCOVERY_HOOKS,
-)
-from mloda.provider import FeatureChainParserMixin, FeatureGroup
+from mloda.provider import COLUMN_DISCOVERY_HOOKS, FeatureChainParserMixin, FeatureGroup
 from mloda.user.pandas import PandasDataFrame
 
 class RollingBase(FeatureChainParserMixin, FeatureGroup):
@@ -201,11 +198,17 @@ class PandasRolling(RollingBase):
         return data
 ```
 
-mloda warns at class-definition time when a class declares a non-empty `REQUIRED_COLUMNWISE_HOOKS`,
-pins `compute_framework_rule` in its own class body (the marker of a framework-bound implementation),
-and still resolves a required hook to the raising default. The message names only the unimplemented
-hooks. It is a warning, not an error: a family base declares the contract without implementing it,
-and the runtime `NotImplementedError` stays the hard failure.
+mloda warns at class-definition time when a `FeatureChainParserMixin` subclass (the guard runs from
+that `__init_subclass__` only, never from `FeatureGroup`'s) declares a non-empty
+`REQUIRED_COLUMNWISE_HOOKS`, pins `compute_framework_rule` in its OWN class body (an inherited pin
+does not count) and still leaves a required hook unimplemented. A hook is unimplemented when it is
+absent, when it still resolves to the raising default, or when it is written without `@classmethod`,
+which the `cls._hook(...)` call cannot reach. Only the class body is read, so a hook attached after
+it is not seen, and a declared name that is no hook is dropped and warned about separately. The
+message names only the unimplemented hooks. It is a warning, not an error: a family base declares the
+contract without implementing it, and the runtime `NotImplementedError` stays the hard failure. Set
+`ALLOW_MISSING_COLUMNWISE_HOOKS = True` on a class whose `compute_framework_rule` is not a real
+framework pin to opt out.
 
 `get_feature_group_docs()` reports the same contract per class as `required_columnwise_hooks` and
 `missing_columnwise_hooks`, so tooling can list what a class still owes.

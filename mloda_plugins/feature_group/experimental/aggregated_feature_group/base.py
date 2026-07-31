@@ -14,7 +14,7 @@ from mloda.provider import FeatureChainParser
 from mloda.provider import (
     FeatureChainParserMixin,
 )
-from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser_mixin import COLUMN_DISCOVERY_HOOKS
+from mloda.provider import COLUMN_DISCOVERY_HOOKS
 from mloda.provider import DefaultOptionKeys
 from mloda.provider import PropertySpec
 from mloda.provider import SubtypeDeclaration
@@ -110,7 +110,7 @@ class AggregatedFeatureGroup(FeatureChainParserMixin, FeatureGroup):
     MIN_IN_FEATURES = 1
     MAX_IN_FEATURES = 1
 
-    # Column-wise hooks calculate_feature calls; the compute-framework subclasses implement them.
+    # Hooks calculate_feature calls: _get_available_columns, _check_source_features_exist, _add_result_to_data.
     REQUIRED_COLUMNWISE_HOOKS = COLUMN_DISCOVERY_HOOKS
 
     # Property mapping for configuration-based feature creation

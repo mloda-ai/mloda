@@ -108,6 +108,8 @@ class FeatureChainParserMixin:
       from the name (all values come from options); default False (#772)
     - ALLOW_UNIVERSAL_MATCHER: Optional opt-in marking an all-optional PROPERTY_MAPPING as an
       intentional universal configuration matcher; default False (#771)
+    - ALLOW_MISSING_COLUMNWISE_HOOKS: Optional opt-out from the missing-hook diagnostic for a class
+      whose compute_framework_rule is not a real framework pin; default False
 
     PROPERTY_MAPPING supports conditional requirements via ``PropertySpec.required_when``.
     Attach a predicate ``(Options) -> bool`` to any spec. When the predicate returns
@@ -144,6 +146,9 @@ class FeatureChainParserMixin:
     # The column-wise hooks a family's calculate_feature calls; a family base declares it for its
     # framework implementations, which is what makes a skipped hook diagnosable at class definition.
     REQUIRED_COLUMNWISE_HOOKS: frozenset[str] = frozenset()
+    # A class whose compute_framework_rule is not a real framework pin (an injected delegating one, for
+    # example) is no framework implementation; set True to silence the missing-hook diagnostic.
+    ALLOW_MISSING_COLUMNWISE_HOOKS: bool = False
 
     def __init_subclass__(cls, **kwargs: Any) -> None:
         # The mixin sits first in the MRO of ``class X(FeatureChainParserMixin, FeatureGroup)``,
@@ -699,19 +704,39 @@ def _resolved_hook(owner: type[Any], hook_name: str) -> Any:
     return getattr(attribute, "__func__", attribute)
 
 
+def _hook_is_implemented(owner: type[Any], hook_name: str) -> bool:
+    """True when the ``cls._hook(...)`` call reaches an own implementation rather than the raising default.
+
+    An absent hook is missing, and so is one written without ``@classmethod``: that call would pass the
+    data as ``cls`` and shift every argument.
+    """
+    if not isinstance(inspect.getattr_static(owner, hook_name, None), (classmethod, staticmethod)):
+        return False
+    return _resolved_hook(owner, hook_name) is not _resolved_hook(FeatureChainParserMixin, hook_name)
+
+
+def _declared_hook_names(owner: type[Any]) -> frozenset[Any]:
+    """Every name a class declares required, degrading a raising or non-iterable declaration to empty."""
+    names: frozenset[Any] = safe_field(
+        lambda: frozenset(getattr(owner, "REQUIRED_COLUMNWISE_HOOKS", frozenset())), frozenset()
+    )
+    return names
+
+
 def declared_columnwise_hooks(owner: type[Any]) -> frozenset[str]:
-    """The column-wise hooks a class declares required; empty for a class that declares none."""
-    return frozenset(getattr(owner, "REQUIRED_COLUMNWISE_HOOKS", frozenset()))
+    """The column-wise hooks a class declares required; a name that is no hook is dropped."""
+    return _declared_hook_names(owner) & COLUMN_DISCOVERY_HOOKS
+
+
+def unrecognized_columnwise_hooks(owner: type[Any]) -> list[str]:
+    """The declared names that are no column-wise hook, as text; always author error."""
+    return sorted(str(name) for name in _declared_hook_names(owner) - COLUMN_DISCOVERY_HOOKS)
 
 
 def missing_columnwise_hooks(owner: type[Any]) -> list[str]:
-    """The declared hooks the class still resolves to the raising default above, sorted.
+    """The declared hooks the class does not implement in a reachable shape, sorted.
 
     A family base legitimately reports all of them: it declares the requirement for its framework
     implementations. Adding the framework-bound gate on top is the guard's job, not this one's.
     """
-    return sorted(
-        hook
-        for hook in declared_columnwise_hooks(owner)
-        if _resolved_hook(owner, hook) is _resolved_hook(FeatureChainParserMixin, hook)
-    )
+    return sorted(hook for hook in declared_columnwise_hooks(owner) if not _hook_is_implemented(owner, hook))

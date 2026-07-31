@@ -3,6 +3,12 @@
 Ownership of the moved names, the runtime match path staying put, the acyclic direction
 feature_chain_parser <- feature_chain_author_guards, and the absence of re-exports back
 onto FeatureChainParser.
+
+The split is one-directional only towards the PARSER. ``warn_missing_columnwise_hooks`` imports
+``missing_columnwise_hooks`` back out of feature_chain_parser_mixin, a function-local import that
+works only because that helper sits below the class body of the module that imports these guards.
+The last two tests pin both halves of that: the source position, and a module docstring that admits
+the edge instead of claiming a split it no longer has.
 """
 
 from __future__ import annotations
@@ -21,6 +27,11 @@ from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser
 
 PARSER_MODULE = "mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser"
 GUARDS_MODULE = "mloda.core.abstract_plugins.components.feature_chainer.feature_chain_author_guards"
+MIXIN_MODULE = "mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser_mixin"
+
+# The one reverse edge: the guard reaches back into the mixin module for this helper.
+REVERSE_EDGE_HELPER = "missing_columnwise_hooks"
+REVERSE_EDGE_ANCHOR = "FeatureChainParserMixin"
 
 # Author-time constants that move with the guards.
 GUARDS_CONSTANTS = (
@@ -194,6 +205,48 @@ def test_parser_does_not_import_the_author_guards() -> None:
     parser_path = _chainer_dir() / "feature_chain_parser.py"
     offenders = _references(_imported_modules(parser_path), "feature_chain_author_guards")
     assert offenders == [], f"{parser_path.name} imports {offenders}, which closes the cycle"
+
+
+def _top_level_positions(path: Path) -> dict[str, int]:
+    """Source line of every top-level class and function definition in one module."""
+    tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+    return {
+        node.name: node.lineno
+        for node in tree.body
+        if isinstance(node, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef))
+    }
+
+
+def test_reverse_edge_helper_is_defined_below_the_mixin_class() -> None:
+    """The guard's function-local import of missing_columnwise_hooks is only sound from below the class.
+
+    feature_chain_parser_mixin imports this guards module at module scope, so the guard cannot import it
+    back at module scope. The function-local import works because the helper is defined at the TAIL of the
+    mixin module: moving it above the class body would make the mixin module import itself mid-definition.
+    """
+    mixin_path = _chainer_dir() / "feature_chain_parser_mixin.py"
+    assert mixin_path.is_file(), f"{mixin_path} does not exist"
+    positions = _top_level_positions(mixin_path)
+    assert REVERSE_EDGE_ANCHOR in positions, f"{mixin_path.name} no longer defines {REVERSE_EDGE_ANCHOR}"
+    assert REVERSE_EDGE_HELPER in positions, f"{mixin_path.name} no longer defines {REVERSE_EDGE_HELPER}"
+    assert positions[REVERSE_EDGE_HELPER] > positions[REVERSE_EDGE_ANCHOR], (
+        f"{REVERSE_EDGE_HELPER} moved above class {REVERSE_EDGE_ANCHOR}, which breaks the guard's "
+        f"function-local import back into {MIXIN_MODULE}"
+    )
+
+
+def test_guards_module_docstring_admits_the_reverse_edge() -> None:
+    """The docstring must not claim a one-directional split the module no longer has.
+
+    It documents the guards -> parser direction as the whole story, while the module also reaches back
+    into feature_chain_parser_mixin. A reader trusting the docstring would move the helper and break it.
+    """
+    guards = importlib.import_module(GUARDS_MODULE)
+    docstring = guards.__doc__ or ""
+    assert "feature_chain_parser_mixin" in docstring, (
+        f"{GUARDS_MODULE} imports {REVERSE_EDGE_HELPER} from feature_chain_parser_mixin, so its module "
+        f"docstring must name that edge instead of describing a single direction"
+    )
 
 
 def test_parser_imports_in_a_clean_interpreter_without_the_author_guards() -> None:

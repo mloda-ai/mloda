@@ -11,7 +11,7 @@ from mloda.provider import FeatureGroup
 from mloda.provider import BaseArtifact
 from mloda.user import Feature
 from mloda.provider import CHAIN_SEPARATOR, FeatureChainParser, FeatureChainParserMixin, FeatureSet
-from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser_mixin import COLUMN_DISCOVERY_HOOKS
+from mloda.provider import COLUMN_DISCOVERY_HOOKS
 from mloda.user import FeatureName
 from mloda.user import Options
 from mloda.provider import DefaultOptionKeys
@@ -130,7 +130,7 @@ class ForecastingFeatureGroup(TimeReferenceMixin, FeatureChainParserMixin, Featu
     MIN_IN_FEATURES = 1
     MAX_IN_FEATURES = 1
 
-    # Column-wise hooks calculate_feature calls; the compute-framework subclasses implement them.
+    # Hooks calculate_feature calls: _get_available_columns, _check_source_features_exist, _add_result_to_data.
     REQUIRED_COLUMNWISE_HOOKS = COLUMN_DISCOVERY_HOOKS
 
     # Property mapping for configuration-based features with group/context separation

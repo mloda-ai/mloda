@@ -154,6 +154,12 @@ subtypes per framework; empty for abstract bases) and `subtype_error` (set
 when the declaration is invalid). See
 [Declaring capability per subtype](compute-framework-integration.md#declaring-capability-per-subtype).
 
+It also carries the column-wise hook contract: `required_columnwise_hooks` (the
+hooks the feature group declares it needs, sorted) and
+`missing_columnwise_hooks` (those of them it does not implement). Both are
+empty for a feature group that declares none. See
+[Column-Wise Data Hooks](feature-chain-parser.md#column-wise-data-hooks).
+
 ## Inspecting Compute Frameworks
 
 Get documentation for compute frameworks:

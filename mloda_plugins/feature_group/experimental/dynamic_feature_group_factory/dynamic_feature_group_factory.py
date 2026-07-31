@@ -285,6 +285,9 @@ class DynamicFeatureGroupCreator:
                 "input_features": input_features,
                 "index_columns": classmethod(index_columns),
                 "supports_index": classmethod(supports_index),
+                # The injected compute_framework_rule only delegates unless the caller pinned one, so
+                # without that property it is no framework pin and must not trip the missing-hook guard.
+                "ALLOW_MISSING_COLUMNWISE_HOOKS": "compute_framework_rule" not in properties,
             },
         )
         DynamicFeatureGroupCreator._created_classes[class_name] = new_class

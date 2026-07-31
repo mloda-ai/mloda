@@ -1,9 +1,13 @@
 from copy import deepcopy
 from datetime import datetime, timezone
+from itertools import chain
 from typing import Any, Optional
 
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.abstract_plugins.components.domain import Domain
+from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser import option_key_is_present
+from mloda.core.abstract_plugins.components.feature_chainer.property_spec import is_no_default
+from mloda.core.abstract_plugins.components.utils import safe_field
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
@@ -87,6 +91,10 @@ class GlobalFilter:
         for filter in self.filters:
             # We are making a deepcopy so that, we do not change the original filter.
             _filter = deepcopy(filter)
+            # Reported here, not in unify_options: only this method holds the resolving group, whose spec
+            # decides what intake materializes. Safe on this side of the call, because unify_options only
+            # ADDS keys the filter feature does not declare and never rewrites a declared one.
+            self._warn_on_diverging_options(feature_group, feat.options, _filter.filter_feature.options)
             _filter.filter_feature.options = self.unify_options(feat.options, _filter.filter_feature.options)
 
             if self.criteria(feature_group, _filter, data_access_collection) is False:
@@ -101,18 +109,74 @@ class GlobalFilter:
         return matched_filters
 
     def unify_options(self, feat_options: Options, filter_options: Options) -> Options:
+        """Enrich the filter feature's declared options from the feature's effective ones.
+
+        Adds only; a declared value is never rewritten. Divergences are reported by the caller (#911).
+        """
         # Preserve each key's category so context keys do not leak into group (issue #712).
         for key, value in feat_options.group.items():
             if key not in filter_options:
                 filter_options.add_to_group(key, value)
-            elif filter_options[key] != value:
-                logger.warning(f"Options are not the same. {key} is different. {filter_options[key]} != {value}")
         for key, value in feat_options.context.items():
             if key not in filter_options:
                 filter_options.add_to_context(key, value)
-            elif filter_options[key] != value:
-                logger.warning(f"Options are not the same. {key} is different. {filter_options[key]} != {value}")
         return filter_options
+
+    def _warn_on_diverging_options(
+        self, feature_group: Optional[type[FeatureGroup]], feat_options: Options, filter_options: Options
+    ) -> None:
+        """Report every key the filter feature declares differently from the feature's effective value.
+
+        Both namespaces are covered. A key the filter feature does not declare is unify_options' business and
+        never reported. Silent where intake provably erases the difference (#911).
+        """
+        for key, value in chain(feat_options.group.items(), feat_options.context.items()):
+            if key not in filter_options:
+                continue
+            declared = filter_options[key]
+            if declared == value:
+                continue
+            fill = self._intake_fill(feature_group, key, filter_options)
+            if self._converges_at_intake(fill, value):
+                continue
+            if fill is None:
+                logger.warning(f"Options are not the same. {key} is different. {declared} != {value}")
+            else:
+                # Name what the filter feature will actually compute with: the SPEC default, not the
+                # feature's value, so the message does not read as "leave it None, it is filled with that".
+                logger.warning(
+                    f"Options are not the same. {key} is different. {declared!r} (intake fills {fill!r}) != {value!r}"
+                )
+
+    @staticmethod
+    def _intake_fill(feature_group: Optional[type[FeatureGroup]], key: str, filter_options: Options) -> Any:
+        """The value intake will materialize into the filter feature for ``key``, None when it fills nothing.
+
+        Mirrors ``FeatureGroup.options_with_defaults``: a concrete spec default fills a key the spec reads as
+        absent. Without the resolving group there is no spec to consult, so nothing is suppressed and every
+        difference keeps warning.
+        """
+        if feature_group is None:
+            return None
+        spec = (feature_group.PROPERTY_MAPPING or {}).get(key)
+        if spec is None or is_no_default(spec.default) or spec.default is None:
+            return None
+        # Absence, not None-ness: an allow_explicit_none key is present, so its None survives and stays divergent.
+        if option_key_is_present(spec, key, filter_options):
+            return None
+        return spec.default
+
+    @staticmethod
+    def _converges_at_intake(intake_fill: Any, feat_value: Any) -> bool:
+        """Does intake erase the divergence by filling the filter feature with the feature's own value (#911)?
+
+        safe_field: ``default`` is Any, so a third-party numpy or pandas default makes the comparison raise
+        out of a decision that only picks a log line. An uncomparable default is NOT convergent and keeps
+        warning, which is the behaviour before the spec was consulted at all.
+        """
+        if intake_fill is None:
+            return False
+        return safe_field(lambda: bool(intake_fill == feat_value), False)
 
     def criteria(
         self,

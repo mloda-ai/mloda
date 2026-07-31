@@ -19,10 +19,8 @@ from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.prepare.accessible_plugins import FeatureGroupEnvironmentMapping
-from mloda.core.prepare.identify_feature_group import (
-    IdentifyFeatureGroupClass,
-    render_resolution_failure,
-)
+from mloda.core.prepare.identify_feature_group import IdentifyFeatureGroupClass
+from mloda.core.prepare.resolution_failure_renderer import render_resolution_failure
 from mloda.steward import resolve_feature
 
 

@@ -172,19 +172,25 @@ The previous sections show how **users** create filters. This section explains h
 
 ### How filters reach your FeatureGroup
 
-When a user passes a `GlobalFilter`, the framework tests every `SingleFilter` against
-each FeatureGroup already resolved for a feature. Each filter is **deep-copied** first,
-and the copy is delivered only if it clears three gates in order: the group's own
-`match_feature_group_criteria()` on the filter feature's name and options, the domain,
-and the compute framework. Declaring the filter's column as an input is **not** the
+When a user passes a `GlobalFilter`, the framework tests every `SingleFilter` against the
+FeatureGroup that each feature already resolved to, using that feature's options, domain
+and compute framework. Each filter is **deep-copied** first, so everything below happens
+on the copy and never on the filter the user built. The copy is delivered only if it
+clears three gates, in order: the group's own `match_feature_group_criteria()` on the
+filter feature's name and options (plus the run's `DataAccessCollection`), then the filter
+feature's domain against the resolved feature's, then its compute framework against the
+resolved feature's. The last two gates also backfill: a filter feature that declares no
+domain or compute framework inherits the resolved feature's (the FeatureGroup's domain
+when the feature declares none). Declaring the filter's column as an input is **not** the
 test, and links are not re-checked here (feature resolution already covered them).
-That matcher sees the filter feature's own options enriched from the resolved
-feature's effective (post-default) ones, see
-[Applying declared defaults](property-mapping.md#applying-declared-defaults). If two
-FeatureGroups both match the same original filter, they each receive independent
-copies. This means a single `GlobalFilter` can be processed differently by different
-FeatureGroups in the same pipeline: one may use the mask engine for inline masking
-while another uses filters for row elimination.
+
+`match_feature_group_criteria()` sees the filter feature's own options enriched from the
+resolved feature's effective (post-default) ones (see
+[Applying declared defaults](property-mapping.md#applying-declared-defaults)). If two
+FeatureGroups both match the same original filter, they each receive independent copies.
+This means a single `GlobalFilter` can be processed differently by different FeatureGroups
+in the same pipeline: one may use the mask engine for inline masking while another uses
+filters for row elimination.
 
 Matched filters are attached to the `FeatureSet` before `calculate_feature()` is
 called. Inside your calculation you can access them via `features.filters`:
@@ -320,7 +326,7 @@ return pa.table({
 
 | Your FeatureGroup... | `final_filters()` | Uses [mask engine](mask_engine.md)? | Must preserve filter column? |
 |---------------------|:-----------------:|:------------------------:|:---------------------------:|
-| Ignores filters | `None` (default) | No | Yes (it is in `input_data`) |
+| Ignores filters | `None` (default) | No | Yes (elimination reads it from your output) |
 | Handles everything inline | `False` | Yes | No (elimination skipped) |
 | Uses inline logic + elimination | `True` | Yes | **Yes** |
 | Just forces elimination | `True` | No | Yes |

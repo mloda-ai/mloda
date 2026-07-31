@@ -333,10 +333,10 @@ class Engine:
                 # We assign a new UUID to the filter feature to ensure
                 # it is treated as a separate instance from the original filter feature
                 match.filter_feature.uuid = uuid.uuid4()
-                self.global_filter.add_filter_to_collection(feature_group_class, feature.name, match)
-                # The filter feature's options are already post-default via unify_options, so this intake
-                # call must remain an identity no-op (no rebind) to keep the SingleFilter set hash stable.
+                # Intake may materialize declared defaults into the filter feature's options: group fills shift
+                # SingleFilter's hash, context fills shift its equality, so intake must run before it is stored.
                 self.add_feature_to_collection(feature_group_class, match.filter_feature, features.child_uuid)
+                self.global_filter.add_filter_to_collection(feature_group_class, feature.name, match)
 
     def add_feature_link_to_links(self, feature: Feature) -> None:
         """With this functionality, we can add links with a feature instead via mloda API."""

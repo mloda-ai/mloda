@@ -13,30 +13,15 @@ group case, but a stale duplicate only aborts the run once two hosts hold unequa
 
 from __future__ import annotations
 
-import gc
 from typing import Any, NamedTuple
-
-import pytest
 
 from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.feature_set import FeatureSet
 from mloda.core.abstract_plugins.components.options import Options
-from mloda.core.abstract_plugins.components.utils import get_all_subclasses
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.provider import DataCreator, PropertySpec
 from mloda.user import FeatureName, FilterType, GlobalFilter, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
-
-
-@pytest.fixture(autouse=True)
-def _no_feature_group_registry_pollution() -> Any:
-    """Guarantee this module never leaks its throwaway FeatureGroup subclasses: they sit in reference
-    cycles, so without a forced collection other tests enumerating feature groups trip over them."""
-    yield
-    gc.collect()
-    gc.collect()
-    leaked = [c for c in get_all_subclasses(FeatureGroup) if c.__module__ == __name__]
-    assert not leaked, f"Leaked FeatureGroup subclasses from {__name__}: {[c.__name__ for c in leaked]}"
 
 
 # PROPERTY_MAPPING keys/defaults for the throwaway probes; the fen_ prefix keeps them unique to this module.

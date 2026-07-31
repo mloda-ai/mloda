@@ -12,7 +12,6 @@ Group 3 (``resolve_subtype`` delegating to this mechanism) is already pinned by
 
 from __future__ import annotations
 
-import gc
 from typing import Any
 
 import pytest
@@ -20,7 +19,6 @@ import pytest
 from mloda.core.abstract_plugins.components.feature_chainer.property_spec import is_no_default
 from mloda.core.abstract_plugins.components.feature_set import FeatureSet
 from mloda.core.abstract_plugins.components.options import Options
-from mloda.core.abstract_plugins.components.utils import get_all_subclasses
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.provider import PropertySpec
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.base import AggregatedFeatureGroup
@@ -35,25 +33,6 @@ from mloda_plugins.feature_group.experimental.sklearn.pipeline.base import Sklea
 from mloda_plugins.feature_group.experimental.sklearn.scaling.base import ScalingFeatureGroup
 from mloda_plugins.feature_group.experimental.text_cleaning.base import TextCleaningFeatureGroup
 from mloda_plugins.feature_group.experimental.time_window.base import TimeWindowFeatureGroup
-
-
-@pytest.fixture(autouse=True)
-def _no_feature_group_registry_pollution() -> Any:
-    """Guarantee this module never leaks throwaway FeatureGroup subclasses.
-
-    The tests below define FeatureGroup subclasses to exercise the author experience.
-    Those class objects sit in reference cycles, so they linger in
-    ``FeatureGroup.__subclasses__()`` until a GC cycle runs. While they linger, other
-    tests that enumerate feature groups via ``get_all_subclasses(FeatureGroup)`` trip
-    over them. After each test we force a collection to reclaim the now-unreferenced
-    classes and assert that none of this module's classes remain registered, pinning
-    the no-pollution contract.
-    """
-    yield
-    gc.collect()
-    gc.collect()
-    leaked = [c for c in get_all_subclasses(FeatureGroup) if c.__module__ == __name__]
-    assert not leaked, f"Leaked FeatureGroup subclasses from {__name__}: {[c.__name__ for c in leaked]}"
 
 
 # PROPERTY_MAPPING keys for the throwaway feature group, one per default edge under test.

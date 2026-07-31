@@ -37,7 +37,6 @@ from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser
 from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser_mixin import FeatureChainParserMixin
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.components.options import Options
-from mloda.core.abstract_plugins.components.utils import get_all_subclasses
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.provider import PropertySpec
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.base import AggregatedFeatureGroup
@@ -79,22 +78,6 @@ def _universal_matcher_warnings(
     if class_name is not None:
         records = [record for record in records if class_name in record.getMessage()]
     return records
-
-
-@pytest.fixture(autouse=True)
-def _no_feature_group_registry_pollution() -> Any:
-    """Guarantee this module never leaks throwaway FeatureGroup subclasses.
-
-    Its tests define local FeatureGroup subclasses (some whose matcher raises or matches any name). Those
-    class objects sit in reference cycles, lingering in FeatureGroup.__subclasses__() until a GC cycle runs;
-    while they linger, other tests that enumerate via get_all_subclasses(FeatureGroup) (e.g. test_resolve_feature)
-    trip over them. Force a collection and assert none of this module's classes remain.
-    """
-    yield
-    gc.collect()
-    gc.collect()
-    leaked = [c for c in get_all_subclasses(FeatureGroup) if c.__module__ == __name__]
-    assert not leaked, f"Leaked FeatureGroup subclasses from {__name__}: {[c.__name__ for c in leaked]}"
 
 
 class TestUniversalMatcherWarns:

@@ -18,7 +18,6 @@ PROPERTY_MAPPING key. See ``test_property_mapping_spec_shape.py``.
 from __future__ import annotations
 
 import copy
-import gc
 import pickle
 from typing import Any
 
@@ -33,7 +32,6 @@ from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser
 from mloda.core.abstract_plugins.components.feature_chainer.property_spec import _NoDefault, is_no_default
 from mloda.core.abstract_plugins.components.feature_set import FeatureSet
 from mloda.core.abstract_plugins.components.options import Options
-from mloda.core.abstract_plugins.components.utils import get_all_subclasses
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.provider import NO_DEFAULT, PropertySpec, property_spec
 
@@ -46,21 +44,6 @@ def _build(*args: Any, **kwargs: Any) -> PropertySpec:
     the leniency tests below exercise exactly the shapes the type does not name.
     """
     return property_spec(*args, **kwargs)
-
-
-@pytest.fixture(autouse=True)
-def _no_feature_group_registry_pollution() -> Any:
-    """Guarantee this module never leaks throwaway FeatureGroup subclasses.
-
-    Copied from ``test_property_mapping_default_invariant.py``. The round-trip test
-    defines a FeatureGroup subclass; this fixture forces a collection afterwards
-    and asserts none of this module's classes linger in the registry.
-    """
-    yield
-    gc.collect()
-    gc.collect()
-    leaked = [c for c in get_all_subclasses(FeatureGroup) if c.__module__ == __name__]
-    assert not leaked, f"Leaked FeatureGroup subclasses from {__name__}: {[c.__name__ for c in leaked]}"
 
 
 class TestPropertySpecImport:

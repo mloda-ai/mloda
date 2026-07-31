@@ -295,6 +295,17 @@ def _forwarded_mismatch_options() -> Options:
     return options
 
 
+def _matches_own_class_name(fg: type[FeatureGroup]) -> bool:
+    """Whether fg matches its own class name; a raising matcher counts as no match.
+
+    The sweeps below call every registered matcher, so one broken candidate must not error the test (#868).
+    """
+    try:
+        return bool(fg.match_feature_group_criteria(FeatureName(fg.get_class_name()), Options(), None))
+    except Exception:
+        return False
+
+
 class TestResolvedFeatureDataclass:
     """Tests for the ResolvedFeature dataclass structure."""
 
@@ -371,7 +382,7 @@ class TestResolveFeatureValidMatch:
 
         all_fgs = get_all_subclasses(FeatureGroup)
         for fg in all_fgs:
-            if not fg.match_feature_group_criteria(FeatureName(fg.get_class_name()), Options(), None):
+            if not _matches_own_class_name(fg):
                 continue
             result = resolve_feature(fg.get_class_name())
             if result.feature_group is not None:
@@ -439,7 +450,7 @@ class TestResolveFeatureCandidates:
         for fg in all_fgs:
             if inspect.isabstract(fg):
                 continue
-            if not fg.match_feature_group_criteria(FeatureName(fg.get_class_name()), Options(), None):
+            if not _matches_own_class_name(fg):
                 continue
             candidates = resolve_feature(fg.get_class_name()).candidates
             if candidates:

@@ -1,8 +1,8 @@
 """Pin the gc.freeze contract that keeps the suite's per-test gc.collect() calls off the hot path.
 
-26 test modules call gc.collect() (13 from an autouse fixture, the rest inline in a test body or a finally
-block), because a throwaway FeatureGroup subclass defined in a test body lingers in
-FeatureGroup.__subclasses__() until a GC pass reclaims its reference cycle. Each collect rescans the whole
+The suite calls gc.collect() constantly (from the shared autouse isolation fixture in tests/conftest.py, and
+inline in test bodies and finally blocks), because a throwaway FeatureGroup subclass defined in a test body
+lingers in FeatureGroup.__subclasses__() until a GC pass reclaims its cycle. Each collect rescans the whole
 imported heap (pandas, polars, duckdb, pyarrow, sklearn, every plugin and test module), so one collect costs
 hundreds of milliseconds and gc dominates the suite's wall time. Freezing the imported graph into the
 permanent generation once collection has finished makes those collects free without weakening the isolation
@@ -17,7 +17,6 @@ import os
 import subprocess  # nosec B404
 import sys
 from pathlib import Path
-from typing import Any
 
 import pytest
 
@@ -94,16 +93,7 @@ _HOST_HOOK_SEQUENCES: list[str] = [_SESSION_FINISH, f"{_COLLECTION_FINISH}\n{_SE
 _HOST_HOOK_IDS = ["sessionfinish_only", "collection_finish_then_sessionfinish"]
 
 
-@pytest.fixture(autouse=True)
-def _no_feature_group_registry_pollution() -> Any:
-    """Guarantee this module never leaks its throwaway FeatureGroup subclass (see the filter test's twin fixture)."""
-    yield
-    gc.collect()
-    gc.collect()
-    leaked = [c for c in get_all_subclasses(FeatureGroup) if c.__module__ == __name__]
-    assert not leaked, f"Leaked FeatureGroup subclasses from {__name__}: {[c.__name__ for c in leaked]}"
-
-
+# No local isolation fixture: the shared autouse one in tests/conftest.py already covers this module (#845).
 def _define_throwaway_feature_group() -> type[FeatureGroup]:
     """Define a FeatureGroup subclass inside a function body, exactly as the suite's throwaway probes do."""
 

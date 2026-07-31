@@ -3,9 +3,24 @@ import os
 from typing import Any
 import pytest
 
+from mloda.core.abstract_plugins.components.utils import get_all_subclasses
+from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.abstract_plugins.plugin_registry.plugin_registry import PluginRegistry
 from mloda.core.prepare import accessible_plugins
 from mloda.core.runtime.flight.runner_flight_server import ParallelRunnerFlightServer
+
+from tests.registry_isolation import reclaim_leaked_feature_groups
+
+
+# Defined first on purpose: autouse fixtures tear down in reverse, so this runs after the registry reset.
+@pytest.fixture(autouse=True)
+def _no_feature_group_registry_pollution(request: pytest.FixtureRequest) -> Any:
+    """Fail a test that leaves one of its own FeatureGroup subclasses registered (#845)."""
+    before = get_all_subclasses(FeatureGroup)
+    yield
+    module_name = request.module.__name__
+    leaked = reclaim_leaked_feature_groups(before, module_name)
+    assert not leaked, f"Leaked FeatureGroup subclasses from {module_name}: {[c.__name__ for c in leaked]}"
 
 
 def _clear_warned_unregistered() -> None:

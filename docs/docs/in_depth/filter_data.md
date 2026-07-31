@@ -181,6 +181,9 @@ filter, they each receive independent copies. This means a single `GlobalFilter`
 be processed differently by different FeatureGroups in the same pipeline: one may use
 the mask engine for inline masking while another uses filters for row elimination.
 
+If a FeatureGroup's `match_feature_group_criteria` raises while a filter is matched, only
+that filter is dropped for that FeatureGroup and the drop is logged at WARNING.
+
 Matched filters are attached to the `FeatureSet` before `calculate_feature()` is
 called. Inside your calculation you can access them via `features.filters`:
 

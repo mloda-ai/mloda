@@ -1,3 +1,4 @@
+import functools
 from copy import deepcopy
 from datetime import datetime, timezone
 from typing import Any, Optional
@@ -8,6 +9,7 @@ from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.abstract_plugins.components.feature import Feature
+from mloda.core.abstract_plugins.components.utils import is_match_abort, safe_field
 from mloda.core.filter.filter_type_enum import FilterType
 from mloda.core.filter.single_filter import SingleFilter
 from mloda.core.abstract_plugins.components.default_options_key import DefaultOptionKeys
@@ -121,10 +123,29 @@ class GlobalFilter:
         filter: SingleFilter,
         data_access_collection: Optional[DataAccessCollection] = None,
     ) -> bool:
-        # Uncontained: the #845 match seam does not reach here, but the group is already identified.
-        return feature_group.match_feature_group_criteria(
-            filter.filter_feature.name, filter.filter_feature.options, data_access_collection
-        )
+        """A raising match hook is a non-match for this filter only, mirroring the resolution seam (#845).
+
+        WARNING regardless of exception type, unlike the seam's contained_raise_log_level: no resolution
+        failure message carries the reason here, and a dropped filter changes results silently. The reason
+        is kept as text, never an exception object whose traceback would pin the plugin class. No option
+        rollback: the hook sees a per-match deepcopy's options, discarded with the dropped filter.
+        """
+        try:
+            return feature_group.match_feature_group_criteria(
+                filter.filter_feature.name, filter.filter_feature.options, data_access_collection
+            )
+        except Exception as exc:  # noqa: BLE001  (contained: one broken matcher must not fail the whole run)
+            if is_match_abort(exc):
+                raise
+            # partial, not a lambda: exc binds eagerly, so no closure keeps it and its traceback alive.
+            reason = f"raised {type(exc).__name__}: {safe_field(functools.partial(str, exc), type(exc).__name__)}"
+            logger.warning(
+                "%s %s while matching filter feature '%s'; dropping that filter for this feature group.",
+                feature_group.get_class_name(),
+                reason,
+                filter.filter_feature.name,
+            )
+            return False
 
     def domain(self, filter: SingleFilter, feature_domain: None | Domain, feature_group: type[FeatureGroup]) -> bool:
         # We have matched already the feature group and the feature.

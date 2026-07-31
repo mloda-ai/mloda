@@ -5,6 +5,7 @@
 - **Orchestration Only**: Coordinate Test-Driven Development cycles between specialized agents
 - **No Code Implementation**: NEVER write implementation code or tests directly
 - **Agent Delegation**: Use Red Agent for test writing, Green Agent for implementation
+- **Session root**: `.claude/agents/red-agent.md` and `.claude/agents/green-agent.md` are only auto-loaded when Claude Code's session is rooted at this repository. If working from a parent or workspace directory, start a session inside the clone (`cd code/mloda && claude`) so the agents are available natively.
 
 ## TDD Workflow
 
@@ -51,7 +52,7 @@ Each phase should be a clean, validated checkpoint with all tests passing and ch
 **CRITICAL**: If agent behavior is unexpected or incorrect:
 
 1. **Update Agent Configuration**: Modify `.claude/agents/red-agent.md` or `.claude/agents/green-agent.md` to refine instructions, constraints, or workflow
-2. **Update This File**: Modify `CLAUDE.md` and `AGENTS.md` (keep them in sync) to clarify orchestration rules or add missing guidance
+2. **Update This File**: Modify `CLAUDE.md` and `AGENTS.md` (`tests/test_agent_docs_sync.py` pins them identical) to clarify orchestration rules or add missing guidance
 3. **Document Changes**: Briefly explain what was learned and why the change improves behavior
 
 This enables continuous learning and improvement of the TDD workflow based on actual usage patterns.
@@ -84,6 +85,12 @@ source .venv/bin/activate
 - **Licenses**: dependencies must satisfy the allowlist in `tox.ini` (Apache-2.0, BSD, MIT, MPL-2.0, PSF, ISC, LGPLv2+). Adding a dependency with a non-listed license fails tox.
 - **`attribution/ATTRIBUTION.md`**: `tox` regenerates this file from the installed dependency versions on every run, so a dependency change shows up as a diff here. This is intended: commit the update as part of the same change so the tracked file stays current. The release workflow does not regenerate it; it ships the committed copy, so keeping it up to date in PRs is what keeps releases accurate.
 - **Commits**: use [Conventional Commits](https://www.conventionalcommits.org/) (`feat:`, `fix:`, `chore:`, `docs:`, `test:`, `refactor:`, `minor:`). semantic-release computes the next version. This project deviates from the standard: the minor version (middle number) bumps only on `minor:` commits; `feat:` is treated as a patch bump.
+
+### mypy iteration notes
+
+- `mypy --strict --ignore-missing-imports .` (what tox runs) checks `tests/` as well as `mloda/` and `mloda_plugins/`. Running `mypy mloda/` locally will miss test-tree type errors that block the tox gate. `tox` (or `tox -e python310`) is the only trustworthy mypy invocation.
+- A stray local build (`python -m build` or `pip wheel .`) creates a `build/` directory. mypy picks it up and reports spurious errors. Clean it with `rm -rf build/` before running tox. The `[tool.mypy]` exclude list in `pyproject.toml` includes `build/` to prevent this at the gate.
+- Running `mypy --strict .` in the dev venv (outside tox) may surface pyspark-related errors that tox's isolated env does not see; trust the tox run as the source of truth.
 
 ## Issue Creation
 

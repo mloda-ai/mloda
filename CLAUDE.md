@@ -52,7 +52,7 @@ Each phase should be a clean, validated checkpoint with all tests passing and ch
 **CRITICAL**: If agent behavior is unexpected or incorrect:
 
 1. **Update Agent Configuration**: Modify `.claude/agents/red-agent.md` or `.claude/agents/green-agent.md` to refine instructions, constraints, or workflow
-2. **Update This File**: Modify `CLAUDE.md` and `AGENTS.md` (keep them in sync) to clarify orchestration rules or add missing guidance
+2. **Update This File**: Modify `CLAUDE.md` and `AGENTS.md` (`tests/test_agent_docs_sync.py` pins them identical) to clarify orchestration rules or add missing guidance
 3. **Document Changes**: Briefly explain what was learned and why the change improves behavior
 
 This enables continuous learning and improvement of the TDD workflow based on actual usage patterns.

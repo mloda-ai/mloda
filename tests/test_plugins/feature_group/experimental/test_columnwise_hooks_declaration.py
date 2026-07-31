@@ -65,11 +65,10 @@ MIXIN_MODULE = "mloda.core.abstract_plugins.components.feature_chainer.feature_c
 # The core package a plugin module must never import from: the facade is the authoring surface.
 CORE_CHAINER_PACKAGE = "mloda.core.abstract_plugins.components.feature_chainer"
 
-# The contract a plugin author needs: the two declarations and the two readers over them.
+# The contract a plugin author needs: the two declarations and the reader over them.
 CONTRACT_SYMBOLS = (
     "COLUMNWISE_HOOKS",
     "COLUMN_DISCOVERY_HOOKS",
-    "declared_columnwise_hooks",
     "missing_columnwise_hooks",
 )
 

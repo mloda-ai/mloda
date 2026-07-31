@@ -76,7 +76,6 @@ from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser
 from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser_mixin import (
     COLUMNWISE_HOOKS,
     COLUMN_DISCOVERY_HOOKS,
-    declared_columnwise_hooks,
     missing_columnwise_hooks,
 )
 from mloda.core.abstract_plugins.components.feature_chainer.parsed_feature_name import ParsedFeatureName
@@ -162,7 +161,6 @@ __all__ = [
     "FeatureChainParserMixin",
     "COLUMNWISE_HOOKS",
     "COLUMN_DISCOVERY_HOOKS",
-    "declared_columnwise_hooks",
     "missing_columnwise_hooks",
     "ParsedFeatureName",
     "PropertySpec",

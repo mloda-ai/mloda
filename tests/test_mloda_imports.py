@@ -151,7 +151,6 @@ def test_import_provider_base_classes() -> None:
         # Column-wise hook contract
         COLUMNWISE_HOOKS,
         COLUMN_DISCOVERY_HOOKS,
-        declared_columnwise_hooks,
         missing_columnwise_hooks,
         # Transformers
         BaseTransformer,
@@ -193,7 +192,6 @@ def test_import_provider_base_classes() -> None:
     # Column-wise hook contract: a plugin author declares it without reading core source
     assert COLUMNWISE_HOOKS
     assert COLUMN_DISCOVERY_HOOKS > COLUMNWISE_HOOKS
-    assert callable(declared_columnwise_hooks)
     assert callable(missing_columnwise_hooks)
     # Transformers
     assert BaseTransformer is not None

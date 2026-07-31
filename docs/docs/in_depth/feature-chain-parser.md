@@ -205,9 +205,6 @@ failure. Opt out with `ALLOW_MISSING_COLUMNWISE_HOOKS = True`.
 - A hook without `@classmethod` counts as unimplemented: the `cls._hook(...)` call cannot reach it.
 - A declared name that is no hook is dropped and warned about separately.
 
-`get_feature_group_docs()` reports the same contract per class as `required_columnwise_hooks` and
-`missing_columnwise_hooks`, so tooling can list what a class still owes.
-
 ### Captureless Patterns and Name Binding
 
 A captureless `PREFIX_PATTERN` (one with no capture group, e.g. `r".*__cleaned_text$"`) binds no

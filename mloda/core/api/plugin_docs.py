@@ -27,10 +27,6 @@ from mloda.core.abstract_plugins.function_extender import Extender
 from mloda.core.abstract_plugins.plugin_registry.plugin_registry import PluginRegistry
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.abstract_plugins.components.feature import Feature, normalize_feature_group_scope
-from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser_mixin import (
-    declared_columnwise_hooks,
-    missing_columnwise_hooks,
-)
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.components.link import Link
 from mloda.core.abstract_plugins.components.options import Options
@@ -66,14 +62,6 @@ def _subtype_support_or_error(fg_class: type[FeatureGroup]) -> tuple[dict[str, l
     if error is not None:
         return {}, error
     return {framework: sorted(supported) for framework, supported in matrix.items()}, None
-
-
-def _columnwise_hook_fields(fg_class: type[FeatureGroup]) -> tuple[list[str], list[str]]:
-    """Return the (required, missing) column-wise hooks, degrading a raising declaration to two empty lists."""
-    label = f"{fg_class.__name__}.REQUIRED_COLUMNWISE_HOOKS"
-    required: list[str] = safe_field(lambda: sorted(declared_columnwise_hooks(fg_class)), [], field=label)
-    missing: list[str] = safe_field(lambda: missing_columnwise_hooks(fg_class), [], field=label)
-    return required, missing
 
 
 def _resolved_subtype_fields(
@@ -185,7 +173,6 @@ def get_feature_group_docs(
         )
         parametric_subtypes = sorted(declaration.family_names()) if declaration is not None else []
         subtype_support, subtype_error = _subtype_support_or_error(fg_class)
-        required_hooks, missing_hooks = _columnwise_hook_fields(fg_class)
 
         results.append(
             FeatureGroupInfo(
@@ -201,8 +188,6 @@ def get_feature_group_docs(
                 parametric_subtypes=parametric_subtypes,
                 subtype_support=subtype_support,
                 subtype_error=subtype_error,
-                required_columnwise_hooks=required_hooks,
-                missing_columnwise_hooks=missing_hooks,
             )
         )
 

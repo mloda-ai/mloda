@@ -24,10 +24,6 @@ class FeatureGroupInfo:
     subtype_support: dict[str, list[str]] = field(default_factory=dict)
     # Message when the capability declaration is invalid, None for a legitimately empty matrix.
     subtype_error: Optional[str] = None
-    # Sorted column-wise hooks the feature group declares required (REQUIRED_COLUMNWISE_HOOKS).
-    required_columnwise_hooks: list[str] = field(default_factory=list)
-    # Sorted subset of those still resolving to the raising default on FeatureChainParserMixin.
-    missing_columnwise_hooks: list[str] = field(default_factory=list)
 
 
 @dataclass

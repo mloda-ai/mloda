@@ -1,7 +1,8 @@
 """Pins the split of identify_feature_group into resolution_types and resolution_failure_renderer.
 
-Ownership, re-export identity for the public names the matcher keeps, and the acyclic direction
-resolution_types <- resolution_failure_renderer <- identify_feature_group.
+Which module owns which name, that the matcher is not a facade (no __all__, no call site importing a
+name it does not own from it), and the acyclic direction resolution_types <- resolution_failure_renderer
+<- identify_feature_group.
 """
 
 from __future__ import annotations
@@ -10,7 +11,7 @@ import ast
 import importlib
 import subprocess  # nosec B404
 import sys
-from collections.abc import Iterable, Sequence
+from collections.abc import Sequence
 from pathlib import Path
 from types import ModuleType
 
@@ -20,7 +21,6 @@ MATCHER_MODULE = "mloda.core.prepare.identify_feature_group"
 TYPES_MODULE = "mloda.core.prepare.resolution_types"
 RENDERER_MODULE = "mloda.core.prepare.resolution_failure_renderer"
 
-# Policy: the whole block stays a matcher re-export; docs/docs/in_depth/mloda-api.md:201 documents it as importable.
 TYPES_NAMES = (
     "CandidateFrameworks",
     "EliminationStage",
@@ -46,17 +46,7 @@ RENDERER_NAMES = (
     "render_resolution_failure",
 )
 
-# render_resolution_failure is the public rendering entry point paired with evaluate_and_render, which returns its
-# output, so call sites may legitimately take it from the matcher.
-REEXPORTED_RENDERER_NAMES = ("render_resolution_failure",)
-
-# Rendering-only: nothing reaches these through the matcher, so it must not import or re-export them.
-RENDERER_ONLY_NAMES = (
-    "TROUBLESHOOTING_URL",
-    "scope_callout",
-)
-
-# What stays in the matcher module, with its definition, not as a re-export.
+# What stays in the matcher module, with its definition, and the only names a call site may import from it.
 MATCHER_KEPT_NAMES = (
     "matches_feature_group_scope",
     "FeatureResolutionError",
@@ -66,23 +56,8 @@ MATCHER_KEPT_NAMES = (
     "resolve_or_raise",
 )
 
-# Every name a call site imports from the matcher module today; the split must keep all of them importable.
-CALL_SITE_NAMES = (
-    "CandidateFrameworks",
-    "ComputeFrameworkPinError",
-    "Elimination",
-    "EvaluationResult",
-    "FeatureResolutionError",
-    "IdentifyFeatureGroupClass",
-    "PARTIAL_RECORDS_CAP",
-    "RenderFacts",
-    "ResolutionDiagnosis",
-    "ResolutionRecord",
-    "evaluate_and_render",
-    "matches_feature_group_scope",
-    "render_resolution_failure",
-    "resolve_or_raise",
-)
+# Directories swept for imports of the matcher, relative to the repo root.
+SWEPT_DIRS = ("mloda", "mloda_plugins", "tests")
 
 _SUBPROCESS_TIMEOUT = 8.0
 
@@ -101,12 +76,26 @@ def _prepare_dir() -> Path:
     return Path(matcher_file).parent
 
 
+def _repo_root() -> Path:
+    """Repo root, derived from the matcher's location at <root>/mloda/core/prepare."""
+    return _prepare_dir().parents[2]
+
+
 def _missing_names(module: ModuleType, names: Sequence[str]) -> list[str]:
     return [name for name in names if not hasattr(module, name)]
 
 
-def _public(names: Iterable[str]) -> list[str]:
-    return [name for name in names if not name.startswith("_")]
+def _foreign_matcher_imports(path: Path, source: str) -> list[str]:
+    """`path:line -> name` for every name imported from the matcher that the matcher does not own."""
+    tree = ast.parse(source, filename=str(path))
+    offenders: list[str] = []
+    for node in ast.walk(tree):  # walk, not tree.body: function-local imports count too
+        if not isinstance(node, ast.ImportFrom) or node.module != MATCHER_MODULE:
+            continue
+        offenders.extend(
+            f"{path}:{node.lineno} -> {alias.name}" for alias in node.names if alias.name not in MATCHER_KEPT_NAMES
+        )
+    return offenders
 
 
 def _imported_modules(path: Path) -> set[str]:
@@ -140,31 +129,6 @@ def test_resolution_failure_renderer_module_defines_its_names() -> None:
     renderer = importlib.import_module(RENDERER_MODULE)
     missing = _missing_names(renderer, RENDERER_NAMES)
     assert missing == [], f"{RENDERER_MODULE} does not define {missing}"
-    classified = set(REEXPORTED_RENDERER_NAMES) | set(RENDERER_ONLY_NAMES)
-    assert set(_public(RENDERER_NAMES)) == classified, (
-        "a new public renderer name must be classified into one bucket or the other, REEXPORTED_RENDERER_NAMES or "
-        f"RENDERER_ONLY_NAMES, else nothing pins it: {sorted(set(_public(RENDERER_NAMES)) ^ classified)}"
-    )
-
-
-def test_public_moved_names_are_reexported_by_identity() -> None:
-    """The matcher must re-export the same objects, not copies, so isinstance and `is` checks keep working."""
-    for module_name, names in ((TYPES_MODULE, TYPES_NAMES), (RENDERER_MODULE, REEXPORTED_RENDERER_NAMES)):
-        owner = importlib.import_module(module_name)
-        for name in _public(names):
-            assert hasattr(identify_feature_group, name), f"{MATCHER_MODULE} no longer re-exports {name}"
-            assert getattr(identify_feature_group, name) is getattr(owner, name), (
-                f"{MATCHER_MODULE}.{name} is not the same object as {module_name}.{name}"
-            )
-
-
-def test_rendering_only_names_are_not_reexported_by_the_matcher() -> None:
-    """Rendering-only: the matcher must neither import nor re-export these, so no consumer can route through it."""
-    renderer = importlib.import_module(RENDERER_MODULE)
-    for name in RENDERER_ONLY_NAMES:
-        assert hasattr(renderer, name), f"{RENDERER_MODULE} no longer owns {name}"
-        assert name not in identify_feature_group.__all__, f"{MATCHER_MODULE}.__all__ still re-exports {name}"
-        assert not hasattr(identify_feature_group, name), f"{MATCHER_MODULE} still imports {name}"
 
 
 def test_kept_names_stay_defined_in_the_matcher_module() -> None:
@@ -174,17 +138,29 @@ def test_kept_names_stay_defined_in_the_matcher_module() -> None:
         assert owner == MATCHER_MODULE, f"{name} moved out of {MATCHER_MODULE} to {owner}"
 
 
-def test_call_site_names_remain_importable_from_the_matcher() -> None:
-    matcher = importlib.import_module(MATCHER_MODULE)
-    missing = _missing_names(matcher, CALL_SITE_NAMES)
-    assert missing == [], f"{MATCHER_MODULE} no longer exposes {missing}, so its call sites break"
-    # hasattr alone is blind to __all__, but mypy --strict implies --no-implicit-reexport: the re-export
-    # surface it checks against is __all__, so a name missing there breaks type checking at every call site
-    # even while the runtime attribute is still there.
-    unexported = [name for name in CALL_SITE_NAMES if name not in matcher.__all__]
-    assert unexported == [], (
-        f"{MATCHER_MODULE}.__all__ omits {unexported}; mypy --strict's no-implicit-reexport checks against "
-        f"__all__, so its call sites fail to type-check even though the attributes still exist"
+def test_matcher_declares_no_all() -> None:
+    """A module always exports what it defines, so __all__ here would only re-export imports: the facade is back."""
+    declared = getattr(identify_feature_group, "__all__", None)
+    assert declared is None, f"{MATCHER_MODULE} declares __all__ = {declared}, re-exporting names it does not own"
+
+
+def test_no_call_site_imports_a_foreign_name_from_the_matcher() -> None:
+    """Every name comes from the module that owns it, so the matcher cannot drift back into a facade."""
+    root = _repo_root()
+    offenders: list[str] = []
+    for directory in SWEPT_DIRS:
+        base = root / directory
+        if not base.is_dir():
+            continue
+        for path in sorted(base.rglob("*.py")):
+            source = path.read_text(encoding="utf-8")
+            if MATCHER_MODULE not in source:  # substring gate first: parsing ~900 files would blow the 10s timeout
+                continue
+            offenders.extend(_foreign_matcher_imports(path, source))
+    listed = "\n".join(offenders)
+    assert offenders == [], (
+        f"these imports take a name from {MATCHER_MODULE} that it does not own; import each from "
+        f"{TYPES_MODULE} or {RENDERER_MODULE} instead:\n{listed}"
     )
 
 

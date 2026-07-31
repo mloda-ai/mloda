@@ -23,9 +23,9 @@ from mloda.core.api.request import mlodaAPI
 from mloda.core.prepare.accessible_plugins import FeatureGroupEnvironmentMapping
 from mloda.core.prepare.identify_feature_group import (
     ComputeFrameworkPinError,
-    EvaluationResult,
     IdentifyFeatureGroupClass,
 )
+from mloda.core.prepare.resolution_types import EvaluationResult
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
 from tests.test_core.test_prepare.identify_seam import evaluate_or_raise

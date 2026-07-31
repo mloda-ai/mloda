@@ -12,7 +12,7 @@ universe in the parallel suite.
 
 from typing import Any
 
-from mloda.core.prepare.identify_feature_group import EvaluationResult
+from mloda.core.prepare.resolution_types import EvaluationResult
 from mloda.provider import DefaultOptionKeys
 from mloda.user import Feature, Options, PluginCollector, ResolutionRecord, mloda, mlodaAPI
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame

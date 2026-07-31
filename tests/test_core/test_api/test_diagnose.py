@@ -1,7 +1,7 @@
 """Failing tests for the non-raising resolution preflight ``mlodaAPI.diagnose()`` (issue #812).
 
 Contract under test:
-  * ``mloda.core.prepare.identify_feature_group.ResolutionDiagnosis`` is a frozen dataclass beside
+  * ``mloda.core.prepare.resolution_types.ResolutionDiagnosis`` is a frozen dataclass beside
     ``ResolutionRecord`` and ``EvaluationResult``, with fields ``records``, ``complete``, ``feature_name``,
     ``failed_result``, ``message`` in that order. It is re-exported from ``mloda.user`` and ``mloda.steward``.
   * ``mlodaAPI.diagnose(...)`` runs the SAME eager planning as ``prepare(...)`` but NEVER raises for a
@@ -26,9 +26,9 @@ import pytest
 # ``mloda`` mlodaAPI alias imported below.
 import mloda.steward as mloda_steward
 import mloda.user as mloda_user
-from mloda.core.prepare.identify_feature_group import (
+from mloda.core.prepare.identify_feature_group import FeatureResolutionError
+from mloda.core.prepare.resolution_types import (
     EvaluationResult,
-    FeatureResolutionError,
     ResolutionDiagnosis,
     ResolutionRecord,
 )

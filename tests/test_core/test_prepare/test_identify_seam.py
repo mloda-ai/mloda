@@ -21,11 +21,11 @@ from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.prepare.accessible_plugins import FeatureGroupEnvironmentMapping
 from mloda.core.prepare.identify_feature_group import (
-    EvaluationResult,
     FeatureResolutionError,
     IdentifyFeatureGroupClass,
-    render_resolution_failure,
 )
+from mloda.core.prepare.resolution_failure_renderer import render_resolution_failure
+from mloda.core.prepare.resolution_types import EvaluationResult
 from tests.test_core.test_prepare.identify_seam import evaluate_or_raise, identify_winner
 
 

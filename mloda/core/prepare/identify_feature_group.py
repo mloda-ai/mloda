@@ -12,7 +12,6 @@ from mloda.core.prepare.resolution_types import (
     EvaluationResult,
     PARTIAL_RECORDS_CAP,
     RenderFacts,
-    ResolutionDiagnosis,
     ResolutionRecord,
 )
 from mloda.core.prepare.resolution_failure_renderer import (
@@ -36,26 +35,6 @@ from mloda.core.abstract_plugins.components.link import Link
 import logging
 
 logger = logging.getLogger(__name__)
-
-# Re-exported by rule: the resolution_types block whole (documented compatibility surface, docs cite EvaluationResult
-# here) plus render_resolution_failure, whose output evaluate_and_render returns. Rendering-only names: the renderer.
-__all__ = [
-    "CandidateFrameworks",
-    "ComputeFrameworkPinError",
-    "Elimination",
-    "EliminationStage",
-    "EvaluationResult",
-    "FeatureResolutionError",
-    "IdentifyFeatureGroupClass",
-    "PARTIAL_RECORDS_CAP",
-    "RenderFacts",
-    "ResolutionDiagnosis",
-    "ResolutionRecord",
-    "evaluate_and_render",
-    "matches_feature_group_scope",
-    "render_resolution_failure",
-    "resolve_or_raise",
-]
 
 
 class FeatureResolutionError(ValueError):

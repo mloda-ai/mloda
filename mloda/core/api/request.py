@@ -12,6 +12,8 @@ from mloda.core.api.plan_info import PlanStep, build_plan_steps
 from mloda.core.prepare.identify_feature_group import (
     ComputeFrameworkPinError,
     FeatureResolutionError,
+)
+from mloda.core.prepare.resolution_types import (
     ResolutionDiagnosis,
     ResolutionRecord,
 )

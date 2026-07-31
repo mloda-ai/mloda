@@ -9,7 +9,7 @@ from uuid import uuid4
 
 
 from mloda.core.core.engine import Engine
-from mloda.core.prepare.identify_feature_group import EvaluationResult
+from mloda.core.prepare.resolution_types import EvaluationResult
 from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.feature_collection import Features
 from mloda.core.abstract_plugins.components.feature_name import FeatureName

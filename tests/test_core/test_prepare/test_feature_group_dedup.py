@@ -36,7 +36,7 @@ from mloda.core.prepare.accessible_plugins import (
     dedup_feature_group_subclasses,
     _safe_class_source_hash,
 )
-from mloda.core.prepare.identify_feature_group import ResolutionDiagnosis
+from mloda.core.prepare.resolution_types import ResolutionDiagnosis
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 
 

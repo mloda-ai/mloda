@@ -21,10 +21,10 @@ from mloda.core.prepare.execution_plan import ExecutionPlan
 from mloda.core.prepare.graph.build_graph import BuildGraph
 from mloda.core.prepare.resolve_graph import ResolveGraph
 from mloda.core.runtime.run import ExecutionOrchestrator
-from mloda.core.prepare.identify_feature_group import (
+from mloda.core.prepare.identify_feature_group import resolve_or_raise
+from mloda.core.prepare.resolution_types import (
     EvaluationResult,
     ResolutionRecord,
-    resolve_or_raise,
 )
 from mloda.core.runtime.flight.runner_flight_server import ParallelRunnerFlightServer
 from mloda.core.abstract_plugins.feature_group import FeatureGroup, format_feature_group_class

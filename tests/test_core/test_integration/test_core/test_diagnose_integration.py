@@ -15,9 +15,9 @@ from typing import Any
 
 import pytest
 
-from mloda.core.prepare.identify_feature_group import (
+from mloda.core.prepare.identify_feature_group import FeatureResolutionError
+from mloda.core.prepare.resolution_types import (
     EvaluationResult,
-    FeatureResolutionError,
     ResolutionDiagnosis,
     ResolutionRecord,
 )

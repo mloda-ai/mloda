@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import functools
 from typing import Any, Callable, TypeVar
 
 import logging
@@ -57,6 +58,12 @@ def safe_field(
             # str(exc), not exc: a retained log record must not pin the traceback, its frames and the plugin class.
             logger.warning("Degraded field '%s': %s: %s", field, type(exc).__name__, str(exc))
         return fallback
+
+
+def contained_raise_reason(exc: BaseException) -> str:
+    """Text form of a contained raise: type and message, never the exception object."""
+    # partial, not a lambda: exc binds eagerly, so no closure keeps it and its traceback alive.
+    return f"raised {type(exc).__name__}: {safe_field(functools.partial(str, exc), type(exc).__name__)}"
 
 
 def safe_field_with_error(

@@ -8,6 +8,12 @@ this path carries no resolution-failure message, and a silently dropped filter c
 reason stays TEXT, so no retained traceback pins the plugin class. A raise marked with
 ``escalate_match_abort`` still propagates untouched, exactly as in the resolution seam.
 
+A log line is not a trace a caller can read, and ``identify_matched_filters`` runs once per processed
+feature, so the drop is also recorded in a per-instance ``GlobalFilter.dropped_filters`` ledger and only
+the first drop of a (group, filter feature) key warns; repeats fall back to DEBUG. The seam's own
+``except`` block reads the exception, so a double hostile to that read must not escape from in there
+either, mirroring tests/test_core/test_prepare/test_match_abort_marker_robustness.py.
+
 Probe classes live inside factory functions and are dropped before any assert runs, so a failing assert
 never pins a throwaway FeatureGroup into its traceback and trips the no-leak fixture in tests/conftest.py.
 """
@@ -17,8 +23,9 @@ from __future__ import annotations
 import gc
 import logging
 from collections.abc import Callable
+from dataclasses import dataclass
 from functools import partial
-from typing import Any, Optional, TypeVar
+from typing import Any, Optional, TypeVar, cast
 
 import pytest
 
@@ -41,6 +48,11 @@ UNIT_CLASS_NAME = "RaisingFilterMatcherFG899"
 HOST_FEATURE = "gfc_host_feat_899"  # the resolved feature the filters are matched against
 FILTER_FEATURE_RAISING = "gfc_raising_filter_feat_899"  # the hook raises for this name
 FILTER_FEATURE_OK = "gfc_ok_filter_feat_899"  # the hook matches this name
+FILTER_FEATURE_UNKNOWN = "gfc_unknown_filter_feat_899"  # the hook answers False for this name, without raising
+
+HOSTILE_CLASS_NAME = "HostileFilterMatcherFG899"
+HOSTILE_TYPE_NAME = "HostileFilterMatcherError899"
+HOSTILE_STR_MESSAGE = "boom_899_hostile_str_raised"
 
 E2E_MAIN = "gfc_main_feat_899"  # requested root feature; must keep resolving
 E2E_TARGET = "gfc_target_feat_899"  # never requested directly; only reachable as a matched filter feature
@@ -179,6 +191,236 @@ class TestFilterMatcherContainment:
         assert RAISE_TYPE_NAME in message, f"the warning must name the exception type: {message}"
         assert RAISE_MESSAGE in message, f"the warning must carry the raise message: {message}"
         assert exc_infos == [None], "the reason is kept as text: no traceback may be retained on the record"
+
+
+def _is_dunder(name: str) -> bool:
+    """Dunder lookups stay untouched so the interpreter's own machinery keeps working on the double."""
+    return name.startswith("__") and name.endswith("__")
+
+
+class HostileFilterMatcherError899(Exception):
+    """Hostile to the except block that reads it: attribute access raises and so does str()."""
+
+    def __getattr__(self, name: str) -> Any:
+        if _is_dunder(name):
+            raise AttributeError(name)
+        raise RuntimeError(f"hostile attribute access for '{name}'")
+
+    def __str__(self) -> str:
+        raise RuntimeError(HOSTILE_STR_MESSAGE)
+
+
+def _make_hostile_filter_matcher_fg() -> type[FeatureGroup]:
+    """A throwaway group whose hook raises an exception hostile to every read the except block makes."""
+    gc.collect()
+
+    class HostileFilterMatcherFG899(FeatureGroup):
+        @classmethod
+        def feature_names_supported(cls) -> set[str]:
+            return {HOST_FEATURE, FILTER_FEATURE_OK}
+
+        @classmethod
+        def match_feature_group_criteria(
+            cls,
+            feature_name: FeatureName | str,
+            options: Options,
+            data_access_collection: Optional[DataAccessCollection] = None,
+        ) -> bool:
+            if str(feature_name) == FILTER_FEATURE_RAISING:
+                raise HostileFilterMatcherError899(RAISE_MESSAGE)
+            return str(feature_name) in cls.feature_names_supported()
+
+    return HostileFilterMatcherFG899
+
+
+def _ledger(global_filter: GlobalFilter) -> Optional[dict[Any, Any]]:
+    """The instance drop ledger, or None while the attribute does not exist yet.
+
+    Read through getattr on purpose: a missing ledger must surface as a readable assert, not as an
+    AttributeError whose traceback pins the throwaway class through this frame.
+    """
+    return cast(Optional[dict[Any, Any]], getattr(global_filter, "dropped_filters", None))
+
+
+def _messages(caplog: pytest.LogCaptureFixture, level: int) -> tuple[str, ...]:
+    """Formatted messages GlobalFilter logged at exactly that level."""
+    records = [record for record in caplog.records if record.name == GF_LOGGER_NAME and record.levelno == level]
+    return tuple(record.getMessage() for record in records)
+
+
+def _capture_type_name(call: Callable[[], T]) -> tuple[Optional[T], Optional[str]]:
+    """Run call, returning (value, None) or (None, type name). Reads no message: a double's str() raises."""
+    try:
+        return call(), None
+    except Exception as exc:  # noqa: BLE001  (an escape is the fact under test)
+        return None, type(exc).__name__
+
+
+@dataclass(frozen=True)
+class _DropSnapshot:
+    """Plain-data readout of one or more criteria calls. Holds no class and no exception object."""
+
+    results: tuple[Optional[bool], ...]
+    escaped: Optional[str]
+    has_ledger: bool
+    keyed_by_group_and_filter: bool
+    entries: tuple[tuple[str, str], ...]  # (feature group class name, filter feature name), sorted
+    reasons: tuple[str, ...]  # reason text per entry, aligned with entries
+    reason_types: tuple[str, ...]  # type name of each stored reason, so text stays assertable
+    warnings: tuple[str, ...]
+    debugs: tuple[str, ...]
+
+
+def _drive_criteria(
+    make_fg: Callable[[], type[FeatureGroup]],
+    filter_feature_name: str,
+    caplog: pytest.LogCaptureFixture,
+    calls: int = 1,
+) -> _DropSnapshot:
+    """Call criteria `calls` times against ONE GlobalFilter and read the outcome out as plain data.
+
+    The group, the filter and the ledger are unbound in the finally, so a failing assert in the caller
+    never pins the throwaway class into its traceback through this frame.
+    """
+    caplog.clear()
+    fg = make_fg()
+    global_filter = GlobalFilter()
+    ledger: Optional[dict[Any, Any]] = None
+    items: list[tuple[Any, Any]] = []
+    try:
+        results: list[Optional[bool]] = []
+        escaped: Optional[str] = None
+        with caplog.at_level(logging.DEBUG, logger=GF_LOGGER_NAME):
+            for _ in range(calls):
+                value, failure = _capture_type_name(
+                    partial(global_filter.criteria, fg, _single(filter_feature_name), None)
+                )
+                results.append(value)
+                if failure is not None:
+                    escaped = failure
+                    break
+        ledger = _ledger(global_filter)
+        items = [] if ledger is None else sorted(ledger.items(), key=lambda item: str(item[0]))
+        return _DropSnapshot(
+            results=tuple(results),
+            escaped=escaped,
+            has_ledger=ledger is not None,
+            keyed_by_group_and_filter=ledger is not None and (fg, filter_feature_name) in ledger,
+            entries=tuple((str(key[0].get_class_name()), str(key[1])) for key, _ in items),
+            reasons=tuple(str(reason) for _, reason in items),
+            reason_types=tuple(type(reason).__name__ for _, reason in items),
+            warnings=_messages(caplog, logging.WARNING),
+            debugs=_messages(caplog, logging.DEBUG),
+        )
+    finally:
+        del fg, global_filter, ledger, items
+        gc.collect()
+
+
+class TestDroppedFilterIsRecorded:
+    """A dropped filter widens the result set, so it must leave a machine-readable trace, not just a log line."""
+
+    def test_fresh_global_filter_records_no_drops(self) -> None:
+        """The ledger is per instance and starts empty, so any entry in it means a real drop happened."""
+        ledger = _ledger(GlobalFilter())
+
+        assert ledger is not None, "GlobalFilter must expose a dropped_filters ledger"
+        assert ledger == {}, f"a fresh GlobalFilter has dropped nothing, got: {ledger!r}"
+
+    def test_contained_raise_records_group_filter_and_reason(self, caplog: pytest.LogCaptureFixture) -> None:
+        """One entry, keyed by (feature group, filter feature name), carrying the WARNING's own reason text."""
+        snapshot = _drive_criteria(_make_raising_filter_matcher_fg, FILTER_FEATURE_RAISING, caplog)
+
+        assert snapshot.escaped is None, f"the raise must not cross GlobalFilter.criteria: {snapshot.escaped}"
+        assert snapshot.has_ledger, "GlobalFilter must expose a dropped_filters ledger"
+        assert snapshot.entries == ((UNIT_CLASS_NAME, FILTER_FEATURE_RAISING),), (
+            f"exactly one drop, keyed by group and filter feature, got: {snapshot.entries}"
+        )
+        assert snapshot.keyed_by_group_and_filter, "the key must be the group CLASS, not its name or a stand-in"
+        assert snapshot.reason_types == ("str",), (
+            f"the reason stays text: no exception object may be stored, got: {snapshot.reason_types}"
+        )
+        reason = snapshot.reasons[0]
+        assert RAISE_TYPE_NAME in reason, f"the reason must name the exception type: {reason}"
+        assert RAISE_MESSAGE in reason, f"the reason must carry the raise message: {reason}"
+        assert len(snapshot.warnings) == 1, f"exactly one WARNING must report the drop, got: {snapshot.warnings}"
+        assert reason in snapshot.warnings[0], (
+            f"the stored reason must be the one the warning carries: {reason} vs {snapshot.warnings[0]}"
+        )
+
+    def test_repeat_drops_of_one_key_warn_once_then_debug(self, caplog: pytest.LogCaptureFixture) -> None:
+        """identify_matched_filters runs per processed feature, so one broken hook may warn only once.
+
+        The dedupe rides on the per-instance ledger: a repeat is a key already recorded there, never
+        module state, which would silence the first drop of the next run.
+        """
+        snapshot = _drive_criteria(_make_raising_filter_matcher_fg, FILTER_FEATURE_RAISING, caplog, calls=3)
+
+        assert snapshot.escaped is None, f"the raise must not cross GlobalFilter.criteria: {snapshot.escaped}"
+        assert snapshot.results == (False, False, False), (
+            f"every call is a non-match for that filter, got: {snapshot.results}"
+        )
+        assert len(snapshot.warnings) == 1, f"only the first drop of a key may warn, got: {snapshot.warnings}"
+        assert len(snapshot.debugs) == 2, f"every repeat drop must fall back to DEBUG, got: {snapshot.debugs}"
+        assert snapshot.entries == ((UNIT_CLASS_NAME, FILTER_FEATURE_RAISING),), (
+            f"repeats must not add entries, got: {snapshot.entries}"
+        )
+        reason = snapshot.reasons[0]
+        assert RAISE_TYPE_NAME in reason, f"a repeat must not rewrite the stored reason: {reason}"
+        assert RAISE_MESSAGE in reason, f"a repeat must not rewrite the stored reason: {reason}"
+
+    def test_escalated_abort_records_no_drop(self) -> None:
+        """A marked abort propagates instead of dropping a filter, so it must leave the ledger empty."""
+        marker = escalate_match_abort(RuntimeError(ESCALATE_MESSAGE))
+        fg = _make_escalating_filter_matcher_fg(marker)
+        global_filter = GlobalFilter()
+        _, escaped = _capture(partial(global_filter.criteria, fg, _single(FILTER_FEATURE_RAISING), None))
+        ledger = _ledger(global_filter)
+        has_ledger = ledger is not None
+        entry_count = 0 if ledger is None else len(ledger)
+        # Drop the retained traceback: its frames pin the throwaway class through the hook's `cls`.
+        marker.__traceback__ = None
+        del fg, global_filter, ledger
+        gc.collect()
+
+        assert escaped == f"{RAISE_TYPE_NAME}: {ESCALATE_MESSAGE}"
+        assert has_ledger, "GlobalFilter must expose a dropped_filters ledger"
+        assert entry_count == 0, f"a propagating abort is not a drop, got {entry_count} entries"
+
+    def test_plain_non_match_records_no_drop(self, caplog: pytest.LogCaptureFixture) -> None:
+        """A hook that simply answers False is not a drop: only a contained raise may show up in the ledger."""
+        snapshot = _drive_criteria(_make_raising_filter_matcher_fg, FILTER_FEATURE_UNKNOWN, caplog)
+
+        assert snapshot.escaped is None, f"an ordinary non-match raises nothing: {snapshot.escaped}"
+        assert snapshot.results == (False,), f"an unsupported filter feature is a non-match, got: {snapshot.results}"
+        assert snapshot.has_ledger, "GlobalFilter must expose a dropped_filters ledger"
+        assert snapshot.entries == (), f"a non-match is not a drop, got: {snapshot.entries}"
+        assert snapshot.warnings == (), f"a non-match must not warn, got: {snapshot.warnings}"
+
+
+class TestHostileExceptionStaysInsideTheExceptBlock:
+    """The except block reads the exception itself, so a hostile double must not escape from in there."""
+
+    def test_hostile_raise_is_contained_recorded_and_logged(self, caplog: pytest.LogCaptureFixture) -> None:
+        """Same exposure as the resolution seam (#845 R2): a raising __getattr__ and a raising __str__."""
+        snapshot = _drive_criteria(_make_hostile_filter_matcher_fg, FILTER_FEATURE_RAISING, caplog)
+
+        assert snapshot.escaped is None, f"nothing may escape the except block itself: {snapshot.escaped}"
+        assert snapshot.results == (False,), f"a hostile raise is still a non-match, got: {snapshot.results}"
+        assert snapshot.entries == ((HOSTILE_CLASS_NAME, FILTER_FEATURE_RAISING),), (
+            f"the drop must still be recorded, got: {snapshot.entries}"
+        )
+        assert snapshot.reason_types == ("str",), (
+            f"the reason stays text even when str() raises, got: {snapshot.reason_types}"
+        )
+        assert HOSTILE_TYPE_NAME in snapshot.reasons[0], (
+            f"the reason must name the exception type, the one read that cannot fail: {snapshot.reasons[0]}"
+        )
+        assert len(snapshot.warnings) == 1, f"the drop must still be logged once, got: {snapshot.warnings}"
+        assert HOSTILE_CLASS_NAME in snapshot.warnings[0], f"the warning must name the group: {snapshot.warnings[0]}"
+        assert FILTER_FEATURE_RAISING in snapshot.warnings[0], (
+            f"the warning must name the filter feature: {snapshot.warnings[0]}"
+        )
 
 
 def _make_e2e_probe_fg(escalate: bool) -> type[FeatureGroup]:

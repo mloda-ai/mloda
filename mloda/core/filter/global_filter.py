@@ -1,4 +1,3 @@
-import functools
 from copy import deepcopy
 from datetime import datetime, timezone
 from typing import Any, Optional
@@ -9,7 +8,7 @@ from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.abstract_plugins.components.feature import Feature
-from mloda.core.abstract_plugins.components.utils import is_match_abort, safe_field
+from mloda.core.abstract_plugins.components.utils import contained_raise_reason, is_match_abort
 from mloda.core.filter.filter_type_enum import FilterType
 from mloda.core.filter.single_filter import SingleFilter
 from mloda.core.abstract_plugins.components.default_options_key import DefaultOptionKeys
@@ -30,12 +29,15 @@ class GlobalFilter:
            names and the uuid to the used single filter. This is used to track which features are associated with which filters for a specific feature group.
            This can be used to check after the fact if a feature is a filter feature for a specific feature group
            e.g. for debugging, logging or quality checks.
+        3. `dropped_filters`: The counterpart to `collection`, mapping (feature group, filter feature name) to the
+           reason a contained raise dropped that filter, which is otherwise indistinguishable from never matching.
 
         These attributes provide the foundation for adding, managing, and applying filters across various feature groups
         and features in the context of a data processing pipeline.
         """
         self.filters: set[SingleFilter] = set()
         self.collection: dict[tuple[type[FeatureGroup], FeatureName], set[SingleFilter]] = {}
+        self.dropped_filters: dict[tuple[type[FeatureGroup], str], str] = {}
 
     def add_filter(
         self, filter_feature: Feature | str, filter_type: str | FilterType, parameter: dict[str, Any]
@@ -125,10 +127,12 @@ class GlobalFilter:
     ) -> bool:
         """A raising match hook is a non-match for this filter only, mirroring the resolution seam (#845).
 
-        WARNING regardless of exception type, unlike the seam's contained_raise_log_level: no resolution
-        failure message carries the reason here, and a dropped filter changes results silently. The reason
-        is kept as text, never an exception object whose traceback would pin the plugin class. No option
-        rollback: the hook sees a per-match deepcopy's options, discarded with the dropped filter.
+        The level does not depend on the exception type, unlike the seam's contained_raise_log_level: the
+        first drop of a key warns, because no resolution failure message carries the reason here, and a
+        dropped filter changes results silently. The reason
+        is kept as text, never an exception object whose traceback would pin the plugin class, and the drop
+        is also recorded in the `dropped_filters` ledger. No option rollback: the hook sees a per-match
+        deepcopy's options, discarded with the dropped filter.
         """
         try:
             return feature_group.match_feature_group_criteria(
@@ -137,15 +141,25 @@ class GlobalFilter:
         except Exception as exc:  # noqa: BLE001  (contained: one broken matcher must not fail the whole run)
             if is_match_abort(exc):
                 raise
-            # partial, not a lambda: exc binds eagerly, so no closure keeps it and its traceback alive.
-            reason = f"raised {type(exc).__name__}: {safe_field(functools.partial(str, exc), type(exc).__name__)}"
-            logger.warning(
-                "%s %s while matching filter feature '%s'; dropping that filter for this feature group.",
-                feature_group.get_class_name(),
-                reason,
-                filter.filter_feature.name,
-            )
+            self._record_dropped_filter(feature_group, str(filter.filter_feature.name), contained_raise_reason(exc))
             return False
+
+    def _record_dropped_filter(self, feature_group: type[FeatureGroup], filter_feature_name: str, reason: str) -> None:
+        """Record the drop, WARNING the first time a key drops and DEBUG on every repeat.
+
+        identify_matched_filters runs once per feature the group serves, so one broken hook would
+        otherwise emit the same WARNING once per feature.
+        """
+        key = (feature_group, filter_feature_name)
+        first = key not in self.dropped_filters
+        self.dropped_filters.setdefault(key, reason)
+        logger.log(
+            logging.WARNING if first else logging.DEBUG,
+            "%s %s while matching filter feature '%s'; dropping that filter for this feature group.",
+            feature_group.get_class_name(),
+            reason,
+            filter_feature_name,
+        )
 
     def domain(self, filter: SingleFilter, feature_domain: None | Domain, feature_group: type[FeatureGroup]) -> bool:
         # We have matched already the feature group and the feature.

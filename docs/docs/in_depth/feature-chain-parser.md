@@ -317,7 +317,7 @@ def match_feature_group_criteria(cls, feature_name, options, data_access_collect
     return cls.match_parser_criteria(feature_name, options)
 ```
 
-`match_parser_criteria` calls the parser with the class's `PROPERTY_MAPPING` and patterns and turns a rejected option value into a non-match. Calling `FeatureChainParser` directly from a match hook lets that rejection escape as an exception and abort feature identification for every candidate.
+`match_parser_criteria` calls the parser with the class's `PROPERTY_MAPPING` and patterns and turns a rejected option value into a non-match. Calling `FeatureChainParser` directly from a match hook lets that rejection escape as an exception; the engine contains it as a `match hook` near-miss for that candidate, but the rejection reason is the more useful one. Containment covers plugin raises only: a framework-owned raise, such as a forwarded option value contradicting the feature name, still aborts the whole resolution.
 
 ### 3. Modernize input_features Method
 

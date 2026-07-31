@@ -73,13 +73,12 @@ from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser
     CHAIN_SEPARATOR,
     INPUT_SEPARATOR,
     PropertyValueRejection,
-    _contained_raise_log_level,
     option_key_is_present,
     record_match_rejection,
 )
 from mloda.core.abstract_plugins.components.feature_chainer.property_spec import PropertySpec
 from mloda.core.abstract_plugins.components.default_options_key import DefaultOptionKeys
-from mloda.core.abstract_plugins.components.utils import safe_field
+from mloda.core.abstract_plugins.components.utils import contained_raise_log_level, escalate_match_abort, safe_field
 
 logger = logging.getLogger(__name__)
 
@@ -301,8 +300,8 @@ class FeatureChainParserMixin:
     def match_parser_criteria(cls, feature_name: str | FeatureName, options: Options) -> bool:
         """Call the parser, turning a rejected option value or a malformed name into a non-match, never an exception.
 
-        The only safe way to reach the parser from an overridden ``match_feature_group_criteria``: an exception out
-        of a match hook aborts the identification of the feature for every candidate, not just this one.
+        The preferred way to reach the parser from an overridden ``match_feature_group_criteria``: a raise from a
+        match hook is contained as a ``match hook`` near-miss, but a rejection carries a better reason than a crash.
         """
         try:
             return FeatureChainParser.match_configuration_feature_chain_parser(
@@ -430,7 +429,8 @@ class FeatureChainParserMixin:
             if os.environ.get("MLODA_ALLOW_FORWARDED_NAME_MISMATCH", "").lower() in ("1", "true"):
                 logger.warning(message)
                 continue
-            raise ValueError(message)
+            # Marked: user misconfiguration; containing it would let a rival group win with the value ignored (#845).
+            raise escalate_match_abort(ValueError(message))
 
     @classmethod
     def _first_rejecting_guard(
@@ -456,7 +456,7 @@ class FeatureChainParserMixin:
             try:
                 rejected = not guard(value)
             except Exception as exc:
-                level = _contained_raise_log_level(exc)
+                level = contained_raise_log_level(exc)
                 if level == logging.DEBUG:
                     logger.debug("match_guard for '%s' raised %s for value %r", key, exc, value)
                 else:

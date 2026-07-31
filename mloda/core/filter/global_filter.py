@@ -120,6 +120,7 @@ class GlobalFilter:
         filter: SingleFilter,
         data_access_collection: Optional[DataAccessCollection] = None,
     ) -> bool:
+        # Uncontained: the #845 match seam does not reach here, but the group is already identified.
         return feature_group.match_feature_group_criteria(
             filter.filter_feature.name, filter.filter_feature.options, data_access_collection
         )

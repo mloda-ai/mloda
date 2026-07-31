@@ -24,6 +24,7 @@ class ApiInputData(BaseInputData):
 
         _data_access_name = self.data_access_name()
         if not _data_access_name:
+            # Contained: a blank data_access_name is this reader's own defect (#845).
             raise ValueError(f"Data access name was not set for ApiInputData class {self.__class__.__name__}.")
 
         api_input_data_column_names = options[_data_access_name]

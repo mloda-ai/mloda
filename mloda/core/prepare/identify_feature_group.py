@@ -1,3 +1,4 @@
+import functools
 import inspect
 from collections.abc import Sequence
 from copy import deepcopy
@@ -29,7 +30,12 @@ from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser
     PropertyValueRejection,
     record_match_rejection,
 )
-from mloda.core.abstract_plugins.components.utils import safe_field, as_str
+from mloda.core.abstract_plugins.components.utils import (
+    as_str,
+    contained_raise_log_level,
+    is_match_abort,
+    safe_field,
+)
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.abstract_plugins.components.feature import Feature
@@ -114,6 +120,7 @@ class IdentifyFeatureGroupClass:
     _abstract_matched_feature_groups: set[type[FeatureGroup]]
     _candidate_frameworks: dict[type[FeatureGroup], CandidateFrameworks]
     _match_rejections: dict[type[FeatureGroup], str]
+    _matcher_errors: dict[type[FeatureGroup], str]
     _eliminations: dict[type[FeatureGroup], Elimination]
     _data_access_collection: Optional[DataAccessCollection]
     # Per-evaluation memos of the hooks more than one reader wants. evaluate() builds a fresh instance, so
@@ -127,6 +134,8 @@ class IdentifyFeatureGroupClass:
         self._candidate_frameworks = {}
         # Reasons the first match pass recorded, keyed by candidate class.
         self._match_rejections = {}
+        # Contained matcher raises as text, keyed by candidate class: never the exception object.
+        self._matcher_errors = {}
         self._eliminations = {}
         self._domain_outcomes = {}
         self._declared_frameworks = {}
@@ -309,6 +318,11 @@ class IdentifyFeatureGroupClass:
             # this reads it back for a criteria-FAILING candidate only; a matched/winning/abstract candidate is
             # never probed. Recorded regardless of domain/scope or of the overall outcome (a sibling may win).
             if not self._filter_feature_group_by_criteria(feature_group, feature, data_access_collection):
+                # A contained matcher raise is always a near-miss: the raise says nothing about name ownership.
+                matcher_error = self._matcher_errors.get(feature_group)
+                if matcher_error is not None:
+                    self._record_elimination(feature_group, "matcher_error", matcher_error)
+                    continue
                 reason = self._value_rejection_reason(feature_group)
                 if reason is not None:
                     self._record_elimination(feature_group, "value_rejection", reason)
@@ -425,21 +439,42 @@ class IdentifyFeatureGroupClass:
         feature: Feature,
         data_access_collection: Optional[DataAccessCollection],
     ) -> bool:
-        """A rejected option value is a non-match, whoever calls the parser: a candidate that overrides the match
-        hook and calls FeatureChainParser directly must not take the whole filter loop down. Only the rejection is
-        caught, so a plain ValueError (the forwarded-name-mismatch guidance) still reaches the user.
+        """A raise out of the match hook is a non-match for that candidate only, not a run-wide abort (#845).
 
-        The per-candidate recording window is what keys reasons by candidate class, so same-named classes cannot
-        collide (review fix). The try/finally guarantees the reset even when an unexpected exception propagates;
-        in that case nothing is attributed. The filter loop reads the recorded reason back at this candidate's
-        non-match point, so the value_rejection near-miss is captured without ever re-probing a rejection hook.
+        Policy: a candidate's own defect stays contained here, while escalate_match_abort marks the raises that
+        report a misconfiguration the user must fix, and those cross the seam untouched. A contained raise is
+        kept as text, never as an exception object whose traceback would pin the plugin class. The per-candidate
+        rejection window, reset in the finally, keys reasons by candidate class.
         """
         token = MATCH_REJECTION_REASONS.set({})
+        # Shallow copies, taken per candidate so an earlier match's write survives a later candidate's raise.
+        group_before = dict(feature.options.group)
+        context_before = dict(feature.options.context)
         try:
             matched = feature_group.match_feature_group_criteria(feature.name, feature.options, data_access_collection)
-        except PropertyValueRejection as exc:
-            logger.debug("%s rejected an option value while matching '%s': %s", feature_group, feature.name, exc)
-            record_match_rejection(feature_group.get_class_name(), str(exc))
+        except Exception as exc:  # noqa: BLE001  (contained: one broken matcher must not poison other features)
+            if is_match_abort(exc):
+                raise
+            # Only the contained branch rolls back: a matcher that returns True keeps its write, which is how a
+            # matched reader is linked through mloda.
+            feature.options.group.clear()
+            feature.options.group.update(group_before)
+            feature.options.context.clear()
+            feature.options.context.update(context_before)
+            if isinstance(exc, PropertyValueRejection):
+                logger.debug("%s rejected an option value while matching '%s': %s", feature_group, feature.name, exc)
+                record_match_rejection(feature_group.get_class_name(), str(exc))
+            else:
+                # partial, not a lambda: exc binds eagerly, so no closure keeps it and its traceback alive.
+                reason = f"raised {type(exc).__name__}: {safe_field(functools.partial(str, exc), type(exc).__name__)}"
+                logger.log(
+                    contained_raise_log_level(exc),
+                    "%s %s while matching '%s'; treating it as a non-match.",
+                    feature_group.get_class_name(),
+                    reason,
+                    feature.name,
+                )
+                self._matcher_errors[feature_group] = reason
             matched = False
         finally:
             recorded = MATCH_REJECTION_REASONS.get() or {}

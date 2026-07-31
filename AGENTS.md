@@ -5,6 +5,7 @@
 - **Orchestration Only**: Coordinate Test-Driven Development cycles between specialized agents
 - **No Code Implementation**: NEVER write implementation code or tests directly
 - **Agent Delegation**: Use Red Agent for test writing, Green Agent for implementation
+- **Session root**: `.claude/agents/red-agent.md` and `.claude/agents/green-agent.md` are only auto-loaded when Claude Code's session is rooted at this repository. If working from a parent or workspace directory, start a session inside the clone (`cd code/mloda && claude`) so the agents are available natively.
 
 ## TDD Workflow
 
@@ -51,7 +52,7 @@ Each phase should be a clean, validated checkpoint with all tests passing and ch
 **CRITICAL**: If agent behavior is unexpected or incorrect:
 
 1. **Update Agent Configuration**: Modify `.claude/agents/red-agent.md` or `.claude/agents/green-agent.md` to refine instructions, constraints, or workflow
-2. **Update This File**: Modify `CLAUDE.md` and `AGENTS.md` (`tests/test_agent_docs_sync.py` pins them identical; only a line meaningless outside Claude Code may stay out of `AGENTS.md`, by ending in a `claude-only` HTML comment and being listed in `CLAUDE_ONLY_PREFIXES`) to clarify orchestration rules or add missing guidance
+2. **Update This File**: Modify `CLAUDE.md` and `AGENTS.md` (`tests/test_agent_docs_sync.py` pins them identical) to clarify orchestration rules or add missing guidance
 3. **Document Changes**: Briefly explain what was learned and why the change improves behavior
 
 This enables continuous learning and improvement of the TDD workflow based on actual usage patterns.

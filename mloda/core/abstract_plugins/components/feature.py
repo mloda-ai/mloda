@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from copy import copy
 from typing import TYPE_CHECKING, Any, Optional
 from uuid import uuid4
 from mloda.core.abstract_plugins.components.data_types import DataType
@@ -351,6 +352,24 @@ class Feature:
                 self._child_options_key(),
             )
         )
+
+    def __copy__(self) -> Feature:
+        """A value-equal Feature owning the mutable containers __eq__/__hash__ read (#910).
+
+        options and child_options are rebuilt while every option VALUE stays shared by reference:
+        _make_hashable falls back to repr() for an unhashable non-container leaf and the default repr
+        embeds the object address, so deep-copying a value would silently shift this Feature's hash and
+        break the very dedup the copy protects. Both containers are written in place by the engine
+        (intake forwarding, strict_type_enforcement, matcher writes), which is what the copy stops.
+        """
+        # One level: a Feature nested inside child_options.group keeps sharing its own options, the
+        # documented limitation class of _isolate_forwarded_value.
+        duplicate = self.__class__.__new__(self.__class__)
+        duplicate.__dict__.update(self.__dict__)
+        duplicate.options = copy(self.options)
+        if self.child_options is not None:
+            duplicate.child_options = copy(self.child_options)
+        return duplicate
 
     def _child_options_key(self) -> Any:
         """Cycle-safe identity view of child_options for __eq__/__hash__ (#608).

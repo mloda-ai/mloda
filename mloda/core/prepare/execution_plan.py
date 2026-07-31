@@ -1007,6 +1007,8 @@ class ExecutionPlan:
                 for feature in feature_set.features:
                     if feature.name == filtered_feature_name:
                         if len(relevant_filters) == 0:
+                            # Read-only alias of the live collection set; FeatureSet.add_filters
+                            # copies it once at the storing end (#910).
                             relevant_filters = single_filters
                         else:
                             if relevant_filters != single_filters:

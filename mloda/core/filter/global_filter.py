@@ -44,7 +44,8 @@ class GlobalFilter:
         Parameters:
         - filter_feature: The feature or its name used for filtering. It can be a string or a `Feature` object.
             To identify if a filter is used, we need to check if the feature is part of the feature group.
-            During this process, we enrich the filter feature with the options of the feature.
+            A `Feature` is stored as a snapshot: identify_matched_filters enriches a per-match deepcopy
+            with the filtered feature's options, never the filter stored here.
         - filter_type: The type of filtering operation (e.g., equals, greater than). It can be a string or a `FilterType`.
             This filter_type does not need to match the FilterType, but it should be a string that is meaningful in the concrete
             Featuregroup implementation.

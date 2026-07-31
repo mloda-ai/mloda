@@ -166,4 +166,6 @@ class FeatureSet:
     def add_filters(self, single_filters: set[SingleFilter]) -> None:
         FeatureSetValidator.validate_filters_not_set(self.filters)
         FeatureSetValidator.validate_filters_is_set_type(single_filters)
-        self.filters = single_filters
+        # Copied here, at the storing end: callers hand over the live GlobalFilter.collection set,
+        # which keeps growing across sessions and would retroactively change this plan (#910).
+        self.filters = set(single_filters)

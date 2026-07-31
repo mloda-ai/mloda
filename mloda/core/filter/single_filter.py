@@ -1,3 +1,4 @@
+from copy import copy
 from typing import Any
 import uuid
 
@@ -46,7 +47,9 @@ class SingleFilter:
         from mloda.core.abstract_plugins.components.feature import Feature
 
         if isinstance(filter_feature, Feature):
-            return filter_feature
+            # The caller keeps its own object: Feature.__copy__ owns the containers that decide the
+            # hash, so a later write to them cannot lose this filter from a set it sits in (#910).
+            return copy(filter_feature)
         elif isinstance(filter_feature, str):
             return Feature(name=filter_feature)
         else:

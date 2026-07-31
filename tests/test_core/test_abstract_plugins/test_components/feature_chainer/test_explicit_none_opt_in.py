@@ -18,6 +18,7 @@ from typing import Any
 
 import pytest
 
+from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_author_guards import check_required_when
 from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser import (
     FeatureChainParser,
     PropertyValueRejection,
@@ -129,32 +130,19 @@ class TestRequiredWhenHonorsExplicitNone:
         """D1: an opted-in satisfied requirement is met by an explicit None, which now counts as present."""
         property_mapping = {"k": PropertySpec("k", required_when=_always_required, allow_explicit_none=True)}
 
-        assert (
-            FeatureChainParser.check_required_when(
-                "Owner", "any_feature", [], property_mapping, Options(context={"k": None})
-            )
-            is True
-        )
+        assert check_required_when("Owner", "any_feature", [], property_mapping, Options(context={"k": None})) is True
 
     def test_flagless_explicit_none_leaves_requirement_unmet(self) -> None:
         """D2 contrast (DoD 3): without the flag the explicit None reads as absent, so the requirement is unmet."""
         property_mapping = {"k": PropertySpec("k", required_when=_always_required)}
 
-        assert (
-            FeatureChainParser.check_required_when(
-                "Owner", "any_feature", [], property_mapping, Options(context={"k": None})
-            )
-            is False
-        )
+        assert check_required_when("Owner", "any_feature", [], property_mapping, Options(context={"k": None})) is False
 
     def test_opted_in_absent_key_leaves_requirement_unmet(self) -> None:
         """D3: absent stays absent; an opted-in required key that is truly absent is still unmet."""
         property_mapping = {"k": PropertySpec("k", required_when=_always_required, allow_explicit_none=True)}
 
-        assert (
-            FeatureChainParser.check_required_when("Owner", "any_feature", [], property_mapping, Options(context={}))
-            is False
-        )
+        assert check_required_when("Owner", "any_feature", [], property_mapping, Options(context={})) is False
 
 
 class TestMatchGuardHonorsExplicitNone:

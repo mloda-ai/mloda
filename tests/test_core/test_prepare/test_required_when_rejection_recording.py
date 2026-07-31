@@ -5,7 +5,7 @@
 matches becomes that candidate's ``value_rejection`` ``Elimination`` and reaches the resolution-failure
 report. Two presence rules already record there, the name-path required-presence rule
 (``FeatureChainParser._check_name_path_required_presence``) and the strict ``match_guard``
-(``FeatureChainParserMixin``). ``FeatureChainParser.check_required_when`` only logs at debug and records
+(``FeatureChainParserMixin``). ``feature_chain_author_guards.check_required_when`` only logs at debug and records
 nothing, so a feature group that a declared ``required_when`` turned into a non-match is invisible in
 the failure report. See ``test_first_pass_rejection_recording.py`` for the seam's full contract.
 

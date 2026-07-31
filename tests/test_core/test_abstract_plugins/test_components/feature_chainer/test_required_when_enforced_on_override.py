@@ -15,11 +15,11 @@ from typing import Any
 import pytest
 
 from mloda.core.abstract_plugins.components.default_options_key import DefaultOptionKeys
-from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser import (
+from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_author_guards import (
     NAME_PATH_PRESENCE_GUARD_FLAG,
     REQUIRED_WHEN_GUARD_FLAG,
-    FeatureChainParser,
 )
+from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser import FeatureChainParser
 from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser_mixin import (
     FeatureChainParserMixin,
 )

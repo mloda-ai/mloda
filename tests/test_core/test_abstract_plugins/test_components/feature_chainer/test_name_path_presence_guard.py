@@ -2,7 +2,7 @@
 
 The rule is enforced inside ``FeatureChainParserMixin.match_parser_criteria``, so a provider that
 overrides ``match_feature_group_criteria`` and returns True WITHOUT delegating bypasses it entirely.
-Like ``required_when`` (``FeatureChainParser.install_required_when_guard``), the enforcement must be
+Like ``required_when`` (``feature_chain_author_guards.install_required_when_guard``), the enforcement must be
 a definition-time wrapper around the matcher: it turns the bypass into a warned non-match, honors
 the same exemptions as the inner rule, applies only when the name identifies the group, and never
 duplicates the inner path's warning.

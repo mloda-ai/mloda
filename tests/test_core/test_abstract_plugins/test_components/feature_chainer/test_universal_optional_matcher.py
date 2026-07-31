@@ -30,10 +30,10 @@ from typing import Any
 
 import pytest
 
-from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser import (
-    FeatureChainParser,
+from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_author_guards import (
     _UNIVERSAL_MATCHER_PROBE_NAME,
 )
+from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser import FeatureChainParser
 from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser_mixin import FeatureChainParserMixin
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.components.options import Options
@@ -42,7 +42,8 @@ from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.provider import PropertySpec
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.base import AggregatedFeatureGroup
 
-FEATURE_CHAIN_PARSER_LOGGER = "mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser"
+# Both the universal-matcher diagnostic and check_required_when live in the author-guards module.
+AUTHOR_GUARDS_LOGGER = "mloda.core.abstract_plugins.components.feature_chainer.feature_chain_author_guards"
 
 # A name that no fixture pattern would ever recognize, used as the "unrelated probe".
 UNRELATED_NAME_U771 = "some_unrelated_feature_u771"
@@ -72,7 +73,7 @@ def _universal_matcher_warnings(
         record
         for record in caplog.records
         if record.levelno == logging.WARNING
-        and record.name == FEATURE_CHAIN_PARSER_LOGGER
+        and record.name == AUTHOR_GUARDS_LOGGER
         and "ALLOW_UNIVERSAL_MATCHER" in record.getMessage()
     ]
     if class_name is not None:
@@ -339,7 +340,7 @@ class TestUniversalMatcherDoesNotWarn:
         spurious = [
             record
             for record in caplog.records
-            if record.name == FEATURE_CHAIN_PARSER_LOGGER
+            if record.name == AUTHOR_GUARDS_LOGGER
             and "required_when" in record.getMessage()
             and "raised" in record.getMessage()
         ]
@@ -413,7 +414,7 @@ class TestUniversalMatcherDoesNotWarn:
         A record holding the exception pins its traceback, frame and the probed class, defeating the
         registry-pollution cleanup under DEBUG logging (the utils.safe_field discipline).
         """
-        with caplog.at_level(logging.DEBUG, logger=FEATURE_CHAIN_PARSER_LOGGER):
+        with caplog.at_level(logging.DEBUG, logger=AUTHOR_GUARDS_LOGGER):
 
             class _DebugRaiserU771y(FeatureChainParserMixin, FeatureGroup):
                 PROPERTY_MAPPING = {"opt_u771y": PropertySpec("optional", default=None)}

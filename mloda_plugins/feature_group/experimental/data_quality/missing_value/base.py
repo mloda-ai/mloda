@@ -13,6 +13,7 @@ from mloda.provider import FeatureChainParser
 from mloda.provider import (
     FeatureChainParserMixin,
 )
+from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser_mixin import COLUMN_DISCOVERY_HOOKS
 from mloda.provider import FeatureSet
 from mloda.provider import DefaultOptionKeys
 from mloda.provider import PropertySpec
@@ -164,6 +165,9 @@ class MissingValueFeatureGroup(FeatureChainParserMixin, FeatureGroup):
     # In-feature configuration for FeatureChainParserMixin
     MIN_IN_FEATURES = 1
     MAX_IN_FEATURES = 1
+
+    # Column-wise hooks calculate_feature calls; the compute-framework subclasses implement them.
+    REQUIRED_COLUMNWISE_HOOKS = COLUMN_DISCOVERY_HOOKS
 
     PROPERTY_MAPPING = {
         IMPUTATION_METHOD: PropertySpec(

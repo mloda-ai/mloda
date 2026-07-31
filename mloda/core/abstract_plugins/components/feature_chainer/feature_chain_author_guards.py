@@ -224,6 +224,33 @@ def warn_universal_optional_matcher(owner: type[Any]) -> None:
     )
 
 
+def warn_missing_columnwise_hooks(owner: type[Any]) -> None:
+    """Nudge an author whose framework-bound class leaves a required column-wise hook on the raising default.
+
+    ``compute_framework_rule`` in the class's OWN __dict__ is the static marker of a framework-bound
+    implementation. It is read, never called: running author code at class-definition time is not this
+    guard's business. A family base declares the requirement for its children without that marker, so
+    it stays silent, and only the hooks actually left unimplemented are named.
+    """
+    if "compute_framework_rule" not in owner.__dict__:
+        return
+    # Local import: feature_chain_parser_mixin imports this module, so a module-scope import would cycle.
+    from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser_mixin import (
+        missing_columnwise_hooks,
+    )
+
+    missing = missing_columnwise_hooks(owner)
+    if not missing:
+        return
+    logger.warning(
+        "%s binds a compute framework but leaves %s on the raising default of FeatureChainParserMixin, "
+        "so a run reaches the hook and fails there. Implement them on this class, or narrow "
+        "REQUIRED_COLUMNWISE_HOOKS if the family does not call them.",
+        owner.__name__,
+        ", ".join(missing),
+    )
+
+
 def check_required_when(
     owner_name: str,
     feature_name: str | FeatureName,

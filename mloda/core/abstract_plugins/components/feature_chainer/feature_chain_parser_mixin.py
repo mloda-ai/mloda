@@ -53,6 +53,7 @@ group). Return values use truthy/falsy semantics: any falsy return (``False``,
 
 from __future__ import annotations
 
+import inspect
 import logging
 import os
 from collections.abc import Callable
@@ -66,6 +67,7 @@ from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_author
     install_required_when_guard,
     validate_name_binding,
     warn_captureless_without_binding,
+    warn_missing_columnwise_hooks,
     warn_universal_optional_matcher,
 )
 from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser import (
@@ -81,6 +83,12 @@ from mloda.core.abstract_plugins.components.default_options_key import DefaultOp
 from mloda.core.abstract_plugins.components.utils import contained_raise_log_level, escalate_match_abort, safe_field
 
 logger = logging.getLogger(__name__)
+
+# The pair every column-wise family needs: the source-feature check and the result writer.
+COLUMNWISE_HOOKS: frozenset[str] = frozenset({"_check_source_features_exist", "_add_result_to_data"})
+
+# The pair plus the discovery hook, for a family that resolves column names against the data.
+COLUMN_DISCOVERY_HOOKS: frozenset[str] = COLUMNWISE_HOOKS | {"_get_available_columns"}
 
 
 class FeatureChainParserMixin:
@@ -133,6 +141,9 @@ class FeatureChainParserMixin:
     # An all-optional PROPERTY_MAPPING that inherits the config matcher matches any feature name with
     # empty options; set True to declare that universal match intentional and silence the #771 warning.
     ALLOW_UNIVERSAL_MATCHER: bool = False
+    # The column-wise hooks a family's calculate_feature calls; a family base declares it for its
+    # framework implementations, which is what makes a skipped hook diagnosable at class definition.
+    REQUIRED_COLUMNWISE_HOOKS: frozenset[str] = frozenset()
 
     def __init_subclass__(cls, **kwargs: Any) -> None:
         # The mixin sits first in the MRO of ``class X(FeatureChainParserMixin, FeatureGroup)``,
@@ -143,6 +154,7 @@ class FeatureChainParserMixin:
         install_name_path_presence_guard(cls)
         install_required_when_guard(cls)
         warn_universal_optional_matcher(cls)
+        warn_missing_columnwise_hooks(cls)
 
     @classmethod
     def _validate_string_match(cls, _feature_name: str, _operation_config: str, _in_feature: str) -> bool:
@@ -679,3 +691,27 @@ class FeatureChainParserMixin:
             The updated data
         """
         raise NotImplementedError(f"{cls.__name__} must implement _add_result_to_data")
+
+
+def _resolved_hook(owner: type[Any], hook_name: str) -> Any:
+    """The plain function behind a hook attribute, or None when the owner has no such hook."""
+    attribute = inspect.getattr_static(owner, hook_name, None)
+    return getattr(attribute, "__func__", attribute)
+
+
+def declared_columnwise_hooks(owner: type[Any]) -> frozenset[str]:
+    """The column-wise hooks a class declares required; empty for a class that declares none."""
+    return frozenset(getattr(owner, "REQUIRED_COLUMNWISE_HOOKS", frozenset()))
+
+
+def missing_columnwise_hooks(owner: type[Any]) -> list[str]:
+    """The declared hooks the class still resolves to the raising default above, sorted.
+
+    A family base legitimately reports all of them: it declares the requirement for its framework
+    implementations. Adding the framework-bound gate on top is the guard's job, not this one's.
+    """
+    return sorted(
+        hook
+        for hook in declared_columnwise_hooks(owner)
+        if _resolved_hook(owner, hook) is _resolved_hook(FeatureChainParserMixin, hook)
+    )

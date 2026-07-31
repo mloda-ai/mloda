@@ -145,6 +145,7 @@ class MyFeatureGroup(FeatureChainParserMixin, FeatureGroup):
 | `MAX_IN_FEATURES` | `int \| None` | `None` | Maximum allowed in_features (None = unlimited) |
 | `IN_FEATURE_SEPARATOR` | `str` | `"&"` | Separator for multiple in_features |
 | `RECOGNITION_ONLY_PATTERN` | `bool` | `False` | Declares a captureless pattern as recognition-only (binds no key from the name) |
+| `REQUIRED_COLUMNWISE_HOOKS` | `frozenset[str]` | `frozenset()` | Column-wise data hooks the family requires |
 
 ### Column-Wise Data Hooks
 
@@ -157,6 +158,57 @@ hook too; the others only need the check/add pair.
 
 Whether `_check_source_features_exist` tolerates partial presence (some source names missing) or
 rejects it is a per-feature-group policy, not a framework rule.
+
+`REQUIRED_COLUMNWISE_HOOKS` declares which of the three a family needs. A family base sets it to the
+constant matching the hooks its own `calculate_feature` calls, and its compute-framework subclasses
+implement them. Both constants come from
+`mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser_mixin`.
+
+| Constant | Declares |
+|----------|----------|
+| `COLUMNWISE_HOOKS` | `_check_source_features_exist` and `_add_result_to_data` |
+| `COLUMN_DISCOVERY_HOOKS` | those two plus `_get_available_columns` |
+
+``` python
+from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser_mixin import (
+    COLUMN_DISCOVERY_HOOKS,
+)
+from mloda.provider import FeatureChainParserMixin, FeatureGroup
+from mloda.user.pandas import PandasDataFrame
+
+class RollingBase(FeatureChainParserMixin, FeatureGroup):
+    # calculate_feature resolves column names against the data, so all three are required.
+    REQUIRED_COLUMNWISE_HOOKS = COLUMN_DISCOVERY_HOOKS
+
+class PandasRolling(RollingBase):
+    @classmethod
+    def compute_framework_rule(cls):
+        return {PandasDataFrame}
+
+    @classmethod
+    def _get_available_columns(cls, data):
+        return set(data.columns)
+
+    @classmethod
+    def _check_source_features_exist(cls, data, feature_names):
+        missing = [name for name in feature_names if name not in data.columns]
+        if missing:
+            raise ValueError(f"Missing {missing}, available: {list(data.columns)}")
+
+    @classmethod
+    def _add_result_to_data(cls, data, feature_name, result):
+        data[feature_name] = result
+        return data
+```
+
+mloda warns at class-definition time when a class declares a non-empty `REQUIRED_COLUMNWISE_HOOKS`,
+pins `compute_framework_rule` in its own class body (the marker of a framework-bound implementation),
+and still resolves a required hook to the raising default. The message names only the unimplemented
+hooks. It is a warning, not an error: a family base declares the contract without implementing it,
+and the runtime `NotImplementedError` stays the hard failure.
+
+`get_feature_group_docs()` reports the same contract per class as `required_columnwise_hooks` and
+`missing_columnwise_hooks`, so tooling can list what a class still owes.
 
 ### Captureless Patterns and Name Binding
 

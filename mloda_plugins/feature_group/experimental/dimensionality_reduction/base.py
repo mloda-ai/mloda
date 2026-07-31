@@ -13,6 +13,7 @@ from mloda.provider import CHAIN_SEPARATOR, FeatureChainParser
 from mloda.provider import (
     FeatureChainParserMixin,
 )
+from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser_mixin import COLUMNWISE_HOOKS
 from mloda.provider import FeatureSet
 from mloda.user import Options
 from mloda.provider import DefaultOptionKeys
@@ -118,6 +119,9 @@ class DimensionalityReductionFeatureGroup(FeatureChainParserMixin, FeatureGroup)
     IN_FEATURE_SEPARATOR = ","
     MIN_IN_FEATURES = 1
     MAX_IN_FEATURES = None
+
+    # Column-wise hooks calculate_feature calls; the compute-framework subclasses implement them.
+    REQUIRED_COLUMNWISE_HOOKS = COLUMNWISE_HOOKS
 
     PROPERTY_MAPPING = {
         ALGORITHM: PropertySpec(

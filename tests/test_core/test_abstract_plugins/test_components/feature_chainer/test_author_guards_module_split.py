@@ -37,6 +37,7 @@ GUARDS_FUNCTIONS = (
     "validate_name_binding",
     "warn_captureless_without_binding",
     "warn_universal_optional_matcher",
+    "warn_missing_columnwise_hooks",
     "check_required_when",
     "install_required_when_guard",
     "install_name_path_presence_guard",

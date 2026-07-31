@@ -5,7 +5,7 @@ Imports ``feature_chain_parser``; the parser never imports this module, which ke
 
 Depends on these parser-private names, so renaming one of them is a cross-module break:
 ``FeatureChainParser._can_skip_required_check``, ``._check_name_path_required_presence``, ``._merge_bindings``,
-``._name_identifies_group``, ``._name_path_missing_required_keys``, and module-private ``_contained_raise_log_level``.
+``._name_identifies_group``, and ``._name_path_missing_required_keys``.
 """
 
 from __future__ import annotations
@@ -21,13 +21,12 @@ from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser import (
     CHAIN_SEPARATOR,
     FeatureChainParser,
-    _contained_raise_log_level,
     option_key_is_present,
     record_match_rejection,
 )
 from mloda.core.abstract_plugins.components.feature_chainer.parsed_feature_name import ParsedFeatureName
 from mloda.core.abstract_plugins.components.feature_chainer.property_spec import PropertySpec
-from mloda.core.abstract_plugins.components.utils import safe_field
+from mloda.core.abstract_plugins.components.utils import contained_raise_log_level, escalate_match_abort, safe_field
 
 logger = logging.getLogger(__name__)
 
@@ -238,9 +237,14 @@ def check_required_when(
 
     # build_effective_options runs no user callback, so a raise from it is a framework defect (or a user
     # configuration error carrying actionable guidance) and must surface, not read as a non-match (#763).
-    effective_options = FeatureChainParser.build_effective_options(
-        feature_name, prefix_patterns, property_mapping, options
-    )
+    # Marked so it survives the match seam, which otherwise contains every raise (#845).
+    try:
+        effective_options = FeatureChainParser.build_effective_options(
+            feature_name, prefix_patterns, property_mapping, options
+        )
+    except Exception as exc:
+        escalate_match_abort(exc)
+        raise
     for key, spec in property_mapping.items():
         if not isinstance(spec, PropertySpec):
             continue
@@ -253,7 +257,7 @@ def check_required_when(
             is_required = bool(predicate(effective_options))
         except Exception as exc:
             logger.log(
-                _contained_raise_log_level(exc),
+                contained_raise_log_level(exc),
                 "required_when predicate %s for '%s' raised %s; treating feature group %s as a non-match.",
                 getattr(predicate, "__name__", repr(predicate)),
                 key,

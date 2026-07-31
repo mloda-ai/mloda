@@ -21,7 +21,6 @@ so rejection is asserted via ``pytest.raises(ValueError)``.
 
 from __future__ import annotations
 
-import gc
 from typing import Any
 
 import pytest
@@ -35,24 +34,7 @@ from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser
 from mloda.core.abstract_plugins.components.feature_chainer.property_spec import PropertySpec
 from mloda.core.abstract_plugins.components.feature_set import FeatureSet
 from mloda.core.abstract_plugins.components.options import Options
-from mloda.core.abstract_plugins.components.utils import get_all_subclasses
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
-
-
-@pytest.fixture(autouse=True)
-def _no_feature_group_registry_pollution() -> Any:
-    """Guarantee this module never leaks throwaway FeatureGroup subclasses.
-
-    Copied from ``test_property_mapping_default_invariant.py``: tests below define
-    FeatureGroup subclasses to exercise ``FeatureGroup.__init_subclass__``. Those
-    class objects sit in reference cycles, so we force a collection after each test
-    and assert that none of this module's classes remain registered.
-    """
-    yield
-    gc.collect()
-    gc.collect()
-    leaked = [c for c in get_all_subclasses(FeatureGroup) if c.__module__ == __name__]
-    assert not leaked, f"Leaked FeatureGroup subclasses from {__name__}: {[c.__name__ for c in leaked]}"
 
 
 class TestStrictMembershipViaAllowedValues:

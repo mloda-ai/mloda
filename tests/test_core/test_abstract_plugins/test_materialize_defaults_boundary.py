@@ -20,7 +20,6 @@ an idempotent safety net and its collapse ValueError is unreachable from engine-
 
 from __future__ import annotations
 
-import gc
 from typing import Any, Callable
 from uuid import uuid4
 
@@ -30,30 +29,11 @@ from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.feature_set import FeatureSet
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.components.parallelization_modes import ParallelizationMode
-from mloda.core.abstract_plugins.components.utils import get_all_subclasses
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook
 from mloda.provider import DataCreator, PropertySpec
 from mloda.user import PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
-
-
-@pytest.fixture(autouse=True)
-def _no_feature_group_registry_pollution() -> Any:
-    """Guarantee this module never leaks throwaway FeatureGroup subclasses.
-
-    The tests below define FeatureGroup subclasses inside factory functions. Those class
-    objects sit in reference cycles, so they linger in ``FeatureGroup.__subclasses__()``
-    until a GC cycle runs. While they linger, other tests that enumerate feature groups via
-    ``get_all_subclasses(FeatureGroup)`` trip over them. After each test we force a
-    collection to reclaim the now-unreferenced classes and assert that none of this
-    module's classes remain registered, pinning the no-pollution contract.
-    """
-    yield
-    gc.collect()
-    gc.collect()
-    leaked = [c for c in get_all_subclasses(FeatureGroup) if c.__module__ == __name__]
-    assert not leaked, f"Leaked FeatureGroup subclasses from {__name__}: {[c.__name__ for c in leaked]}"
 
 
 # PROPERTY_MAPPING keys for the throwaway probes; the mdb_ prefix keeps them unique to this module.

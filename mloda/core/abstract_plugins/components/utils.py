@@ -8,6 +8,36 @@ logger = logging.getLogger(__name__)
 
 T = TypeVar("T")
 
+E = TypeVar("E", bound=BaseException)
+
+# Provenance marker for a framework-owned raise. Not an exception type: the object must stay exactly as raised.
+MATCH_ABORT_FLAG = "_mloda_match_abort"
+
+# Exception classes a user callable raises when it merely cannot judge a value.
+_EXPECTED_JUDGMENT_ERRORS: tuple[type[Exception], ...] = (TypeError, ValueError, AttributeError)
+
+
+def contained_raise_log_level(exc: BaseException) -> int:
+    """DEBUG for expected judgment failures, WARNING for classes that suggest a broken callable."""
+    return logging.DEBUG if isinstance(exc, _EXPECTED_JUDGMENT_ERRORS) else logging.WARNING
+
+
+def escalate_match_abort(exc: E) -> E:
+    """Mark a framework-owned raise so the match seam re-raises it instead of containing it as a non-match."""
+    # __dict__, not setattr: setattr raises on a frozen-dataclass exception, and failing to mark must not
+    # replace the exception being marked.
+    try:
+        exc.__dict__[MATCH_ABORT_FLAG] = True
+    except Exception:  # noqa: BLE001  (marking is never worth losing the original raise)
+        logger.debug("Could not mark %s as a match abort.", type(exc).__name__)
+    return exc
+
+
+def is_match_abort(exc: BaseException) -> bool:
+    """Is this raise marked as framework-owned, so the match seam must not contain it."""
+    # __dict__, not getattr: a custom __getattr__ could raise inside the seam's except block or fake the marker.
+    return exc.__dict__.get(MATCH_ABORT_FLAG, False) is True
+
 
 def safe_field(
     read: Callable[[], T],

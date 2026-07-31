@@ -82,7 +82,6 @@ PARSER_KEPT_METHODS = (
 PARSER_KEPT_MODULE_LEVEL = (
     "record_match_rejection",
     "option_key_is_present",
-    "_contained_raise_log_level",
     "PropertyValueRejection",
 )
 

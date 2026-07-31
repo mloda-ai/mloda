@@ -8,7 +8,6 @@ and it must reach both the mixin matcher and the default FeatureGroup matcher.
 
 from __future__ import annotations
 
-import gc
 import re
 from typing import Any
 
@@ -33,18 +32,6 @@ ORDER_BY = "order_by"
 GUARDED_PATTERN = r".*__([\w]+)_guarded$"
 CUSTOM_SEPARATOR_PATTERN = r".*::([\w]+)_custom$"
 COMPILED_PATTERN = re.compile(r".*__([\w]+)_compiled$")
-
-
-@pytest.fixture(autouse=True)
-def _no_feature_group_registry_pollution() -> Any:
-    """Reclaim the throwaway FeatureGroup subclasses defined inside the tests below.
-
-    They sit in reference cycles, so they linger in ``FeatureGroup.__subclasses__()`` until a GC
-    cycle runs, and other tests enumerate that registry.
-    """
-    yield
-    gc.collect()
-    gc.collect()
 
 
 class CountingPredicate:

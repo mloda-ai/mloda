@@ -15,7 +15,7 @@ from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.components.default_options_key import DefaultOptionKeys
 from mloda.core.abstract_plugins.components.feature_chainer.parsed_feature_name import ParsedFeatureName
 from mloda.core.abstract_plugins.components.feature_chainer.property_spec import PropertySpec, is_no_default
-from mloda.core.abstract_plugins.components.utils import safe_field
+from mloda.core.abstract_plugins.components.utils import contained_raise_log_level, safe_field
 
 logger = logging.getLogger(__name__)
 
@@ -30,14 +30,6 @@ INPUT_SEPARATOR = "&"  # Separates multiple input features
 MATCH_REJECTION_REASONS: contextvars.ContextVar[dict[str, str] | None] = contextvars.ContextVar(
     "mloda_match_rejection_reasons", default=None
 )
-
-# Exception classes a user callable raises when it merely cannot judge a value.
-_EXPECTED_JUDGMENT_ERRORS: tuple[type[Exception], ...] = (TypeError, ValueError, AttributeError)
-
-
-def _contained_raise_log_level(exc: BaseException) -> int:
-    """DEBUG for expected judgment failures, WARNING for classes that suggest a broken callable."""
-    return logging.DEBUG if isinstance(exc, _EXPECTED_JUDGMENT_ERRORS) else logging.WARNING
 
 
 def record_match_rejection(owner_name: str, reason: str) -> None:
@@ -190,7 +182,7 @@ class FeatureChainParser:
             try:
                 verdict = element_validator(found_property_val)
             except Exception as exc:
-                level = _contained_raise_log_level(exc)
+                level = contained_raise_log_level(exc)
                 if level == logging.DEBUG:
                     logger.debug(
                         "element_validator for '%s' raised %s for value %r; treating value as rejected.",

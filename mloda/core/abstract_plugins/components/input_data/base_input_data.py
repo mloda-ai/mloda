@@ -7,7 +7,7 @@ from mloda.core.abstract_plugins.components.input_data.reader_option_spec import
 from mloda.core.abstract_plugins.components.options import Options
 
 
-from mloda.core.abstract_plugins.components.utils import get_all_subclasses
+from mloda.core.abstract_plugins.components.utils import escalate_match_abort, get_all_subclasses
 
 
 class BaseInputData(ABC):
@@ -155,6 +155,7 @@ class BaseInputData(ABC):
 
     @classmethod
     def deal_with_base_input_data_name_as_cls_or_str(cls, key: Any) -> str:
+        # Contained: this runs per candidate over every option key, so one odd key must not abort the run (#845).
         if hasattr(key, "get_class_name"):
             if not issubclass(key, BaseInputData):
                 raise ValueError(f"Key {key} is not a subclass of BaseInputData.")
@@ -220,8 +221,11 @@ class BaseInputData(ABC):
                 return
 
             already_cls_to_be_added, _ = existing_data
-            raise ValueError(
-                f"BaseInputData already set with different values. {cls_to_be_added} != {already_cls_to_be_added}"
+            # Marked: two conflicting readers for one feature is a user misconfiguration.
+            raise escalate_match_abort(
+                ValueError(
+                    f"BaseInputData already set with different values. {cls_to_be_added} != {already_cls_to_be_added}"
+                )
             )
         options.add_to_group("BaseInputData", (cls_to_be_added, matched_data_access))
 
@@ -310,6 +314,7 @@ class BaseInputData(ABC):
         required = cls._final_reader_requires()
         for name in required:
             if not hasattr(anchor, name):
+                # Contained: this runs over every registered reader, so one broken plugin must not abort every run.
                 raise ValueError(
                     f"Required final-reader hook '{name}' is not defined on anchor class {anchor.__name__}."
                 )
@@ -348,7 +353,10 @@ class BaseInputData(ABC):
             return None
         for name in feature_names:
             if name not in column_map:
-                raise ValueError(f"Mixed batch: some features pinned, others not: {feature_names}")
+                # Marked: containing a half-pinned batch would hand the feature to a reader that ignores the pins.
+                raise escalate_match_abort(
+                    ValueError(f"Mixed batch: some features pinned, others not: {feature_names}")
+                )
         pinned_paths: set[str] = {files_registry[h] for h in pinned_handles}
         if len(pinned_paths) == 1:
             pinned_path: str = next(iter(pinned_paths))
@@ -364,7 +372,8 @@ class BaseInputData(ABC):
         ]
         if len(valid_candidates) == 1:
             return valid_candidates[0]
-        raise ValueError(f"Features in batch are pinned to different files: {pinned_paths}")
+        # Marked: same as the mixed batch above.
+        raise escalate_match_abort(ValueError(f"Features in batch are pinned to different files: {pinned_paths}"))
 
 
 def _collect_filtered_subclasses(cls: Any, parent_class: Any) -> list[type[BaseInputData]]:

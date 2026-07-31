@@ -2,6 +2,7 @@ from typing import Any, Optional
 
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.abstract_plugins.components.options import Options
+from mloda.core.abstract_plugins.components.utils import escalate_match_abort
 
 
 import logging
@@ -80,6 +81,7 @@ class MatchData:
         """
         We check for data access collection if any child classes match the data access.
         """
+        # Contained: an unimplemented hook is this candidate's own defect (#845).
         raise NotImplementedError()
 
     @classmethod
@@ -95,7 +97,10 @@ class MatchData:
             if existing_data == matched_data_access:
                 return
 
-            raise ValueError(f"{cls_name} already set with different values. {existing_data} != {matched_data_access}")
+            # Marked: two conflicting readers for one feature is a user misconfiguration.
+            raise escalate_match_abort(
+                ValueError(f"{cls_name} already set with different values. {existing_data} != {matched_data_access}")
+            )
         options.add_to_group(cls_name, matched_data_access)
 
     @classmethod

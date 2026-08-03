@@ -146,7 +146,6 @@ class MyFeatureGroup(FeatureChainParserMixin, FeatureGroup):
 | `IN_FEATURE_SEPARATOR` | `str` | `"&"` | Separator for multiple in_features |
 | `RECOGNITION_ONLY_PATTERN` | `bool` | `False` | Declares a captureless pattern as recognition-only (binds no key from the name) |
 | `REQUIRED_COLUMNWISE_HOOKS` | `frozenset[str]` | `frozenset()` | Column-wise data hooks the family requires |
-| `ALLOW_MISSING_COLUMNWISE_HOOKS` | `bool` | `False` | Opts out of the missing-hook diagnostic |
 
 ### Column-Wise Data Hooks
 
@@ -196,14 +195,20 @@ class PandasRolling(RollingBase):
         return data
 ```
 
-A `FeatureChainParserMixin` subclass that pins `compute_framework_rule` in its own class body and
-still leaves a declared hook unimplemented is warned at class-definition time. It stays a warning, so
-a family base can declare what it does not implement; the runtime `NotImplementedError` is the hard
-failure. Opt out with `ALLOW_MISSING_COLUMNWISE_HOOKS = True`.
+`missing_columnwise_hooks(cls)`, also from `mloda.provider`, returns the declared hooks a class does
+not implement. Assert it empty in your own test suite to catch a skipped hook there rather than
+mid-run:
 
-- An inherited `compute_framework_rule` is no pin, and a hook attached after the class body is not seen.
-- A hook without `@classmethod` counts as unimplemented: the `cls._hook(...)` call cannot reach it.
-- A declared name that is no hook is dropped and warned about separately.
+``` python
+from mloda.provider import missing_columnwise_hooks
+
+def test_pandas_rolling_implements_its_hooks():
+    assert missing_columnwise_hooks(PandasRolling) == []
+```
+
+A hook that is not a `@classmethod` or `@staticmethod` counts as missing: the `cls._hook(...)` call
+cannot reach it. A family base reports all of its declared hooks, since it declares the contract its
+subclasses implement, so assert this on the framework-bound class rather than on the base.
 
 ### Captureless Patterns and Name Binding
 

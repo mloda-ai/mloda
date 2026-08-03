@@ -67,7 +67,6 @@ from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_author
     install_required_when_guard,
     validate_name_binding,
     warn_captureless_without_binding,
-    warn_missing_columnwise_hooks,
     warn_universal_optional_matcher,
 )
 from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser import (
@@ -108,8 +107,6 @@ class FeatureChainParserMixin:
       from the name (all values come from options); default False (#772)
     - ALLOW_UNIVERSAL_MATCHER: Optional opt-in marking an all-optional PROPERTY_MAPPING as an
       intentional universal configuration matcher; default False (#771)
-    - ALLOW_MISSING_COLUMNWISE_HOOKS: Optional opt-out from the missing-hook diagnostic for a class
-      whose compute_framework_rule is not a real framework pin; default False
 
     PROPERTY_MAPPING supports conditional requirements via ``PropertySpec.required_when``.
     Attach a predicate ``(Options) -> bool`` to any spec. When the predicate returns
@@ -143,12 +140,9 @@ class FeatureChainParserMixin:
     # An all-optional PROPERTY_MAPPING that inherits the config matcher matches any feature name with
     # empty options; set True to declare that universal match intentional and silence the #771 warning.
     ALLOW_UNIVERSAL_MATCHER: bool = False
-    # The column-wise hooks a family's calculate_feature calls; a family base declares it for its
-    # framework implementations, which is what makes a skipped hook diagnosable at class definition.
+    # The column-wise hooks a family's calculate_feature calls; a family base declares it so its
+    # framework implementations can be checked against it with missing_columnwise_hooks below.
     REQUIRED_COLUMNWISE_HOOKS: frozenset[str] = frozenset()
-    # A class whose compute_framework_rule is not a real framework pin (an injected delegating one, for
-    # example) is no framework implementation; set True to silence the missing-hook diagnostic.
-    ALLOW_MISSING_COLUMNWISE_HOOKS: bool = False
 
     def __init_subclass__(cls, **kwargs: Any) -> None:
         # The mixin sits first in the MRO of ``class X(FeatureChainParserMixin, FeatureGroup)``,
@@ -159,7 +153,6 @@ class FeatureChainParserMixin:
         install_name_path_presence_guard(cls)
         install_required_when_guard(cls)
         warn_universal_optional_matcher(cls)
-        warn_missing_columnwise_hooks(cls)
 
     @classmethod
     def _validate_string_match(cls, _feature_name: str, _operation_config: str, _in_feature: str) -> bool:
@@ -714,24 +707,15 @@ def _hook_is_implemented(owner: type[Any], hook_name: str) -> bool:
     return _resolved_hook(owner, hook_name) is not _resolved_hook(FeatureChainParserMixin, hook_name)
 
 
-def _declared_hook_names(owner: type[Any]) -> frozenset[Any]:
-    """Every name a class declares required; a raising or non-iterable declaration degrades to empty."""
-    return safe_field(lambda: frozenset(getattr(owner, "REQUIRED_COLUMNWISE_HOOKS", frozenset())), frozenset())
-
-
 def declared_columnwise_hooks(owner: type[Any]) -> frozenset[str]:
-    """The column-wise hooks a class declares required; a name that is no hook is dropped."""
-    return _declared_hook_names(owner) & COLUMN_DISCOVERY_HOOKS
-
-
-def unrecognized_columnwise_hooks(owner: type[Any]) -> list[str]:
-    """The declared names that are no column-wise hook, as text; always author error."""
-    return sorted(str(name) for name in _declared_hook_names(owner) - COLUMN_DISCOVERY_HOOKS)
+    """The column-wise hooks a class declares required; empty for a class that declares none."""
+    return frozenset(getattr(owner, "REQUIRED_COLUMNWISE_HOOKS", frozenset()))
 
 
 def missing_columnwise_hooks(owner: type[Any]) -> list[str]:
     """The declared hooks the class does not implement in a reachable shape, sorted.
 
-    A family base correctly reports all of them; gating on the framework marker is the guard's job.
+    Assert this empty in a plugin repo's own suite to catch a skipped hook there instead of mid-run.
+    A family base correctly reports all of them: it declares the contract its subclasses implement.
     """
     return sorted(hook for hook in declared_columnwise_hooks(owner) if not _hook_is_implemented(owner, hook))

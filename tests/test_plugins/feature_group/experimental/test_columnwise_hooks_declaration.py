@@ -3,7 +3,7 @@
 The three hooks live on FeatureChainParserMixin as raising defaults, so a downstream author who
 writes a new compute-framework implementation gets no signal until the run reaches the hook. The
 declaration closes that gap: every family base states the hooks its own calculate_feature calls in
-``REQUIRED_COLUMNWISE_HOOKS``, and the class-definition guard reads it.
+``REQUIRED_COLUMNWISE_HOOKS``, and ``missing_columnwise_hooks`` reads it back in a test.
 
 A declaration that drifts from the code is worse than none, so the sweep at the end of this module
 compares each declaration against a static scan of the hooks the base module actually calls.
@@ -18,20 +18,17 @@ from __future__ import annotations
 import ast
 import importlib
 import inspect
-import logging
 from pathlib import Path
 from typing import Any
 
 import pytest
 
 import mloda.provider
-from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_author_guards import (
-    warn_missing_columnwise_hooks,
-)
 from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser_mixin import (
     COLUMN_DISCOVERY_HOOKS,
     COLUMNWISE_HOOKS,
     FeatureChainParserMixin,
+    missing_columnwise_hooks,
 )
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.base import AggregatedFeatureGroup
 from mloda_plugins.feature_group.experimental.clustering.base import ClusteringFeatureGroup
@@ -57,8 +54,6 @@ from tests.test_plugins.feature_group.experimental.test_columnwise_hooks_contrac
     SCAN_ROOT,
     STRICTNESS,
 )
-
-AUTHOR_GUARDS_LOGGER = "mloda.core.abstract_plugins.components.feature_chainer.feature_chain_author_guards"
 
 MIXIN_MODULE = "mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser_mixin"
 
@@ -290,28 +285,27 @@ def test_no_family_module_calls_a_hook_its_base_does_not_declare() -> None:
 
 @pytest.mark.parametrize("plugin_class", list(STRICTNESS), ids=[cls.__name__ for cls in STRICTNESS])
 def test_shipped_family_class_declares_a_requirement_it_implements(plugin_class: type[Any]) -> None:
-    """Precondition for the silence sweep: every shipped class is framework-bound and carries a requirement."""
+    """Precondition for the sweep below: every shipped class is framework-bound and carries a requirement."""
     assert "compute_framework_rule" in plugin_class.__dict__, (
-        f"{plugin_class.__name__} is not framework-bound, so the guard would skip it vacuously"
+        f"{plugin_class.__name__} is not framework-bound, so it is no implementation to check"
     )
     assert plugin_class.REQUIRED_COLUMNWISE_HOOKS, f"{plugin_class.__name__} inherits an empty requirement"
 
 
 @pytest.mark.parametrize("plugin_class", list(STRICTNESS), ids=[cls.__name__ for cls in STRICTNESS])
-def test_shipped_family_class_reports_no_missing_hook(
-    plugin_class: type[Any], caplog: pytest.LogCaptureFixture
-) -> None:
-    """The new guard is quiet on the current tree: no shipped class leaves a required hook unimplemented."""
+def test_shipped_family_class_reports_no_missing_hook(plugin_class: type[Any]) -> None:
+    """This is the check a plugin repo runs: no shipped class leaves a declared hook unimplemented.
+
+    The hand-rolled comparison is an independent oracle: it must agree with the exported reader, so a
+    reader that silently reports nothing cannot pass this sweep.
+    """
     default_hooks = {hook: resolved_hook(FeatureChainParserMixin, hook) for hook in HOOK_NAMES}
-    missing = sorted(
+    expected = sorted(
         hook
         for hook in plugin_class.REQUIRED_COLUMNWISE_HOOKS
         if resolved_hook(plugin_class, hook) is default_hooks[hook]
     )
-    assert missing == [], f"{plugin_class.__name__} inherits the raising default for {missing}"
-
-    with caplog.at_level(logging.WARNING, logger=AUTHOR_GUARDS_LOGGER):
-        warn_missing_columnwise_hooks(plugin_class)
-
-    warnings = [record.getMessage() for record in caplog.records if record.name == AUTHOR_GUARDS_LOGGER]
-    assert warnings == [], f"the guard warns about the shipped {plugin_class.__name__}: {warnings}"
+    assert expected == [], f"{plugin_class.__name__} inherits the raising default for {expected}"
+    assert missing_columnwise_hooks(plugin_class) == expected, (
+        f"missing_columnwise_hooks disagrees with the direct hook comparison for {plugin_class.__name__}"
+    )

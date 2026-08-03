@@ -3,10 +3,6 @@ matcher guards the two ``__init_subclass__`` hooks install.
 
 Imports ``feature_chain_parser``; the parser never imports this module, which keeps the split acyclic.
 
-One edge runs the other way: ``warn_missing_columnwise_hooks`` imports its hook helpers back out of
-``feature_chain_parser_mixin``, which works only because that import is function-local and the helpers
-sit BELOW the mixin class body. Moving them above it would break the edge.
-
 Depends on these parser-private names, so renaming one of them is a cross-module break:
 ``FeatureChainParser._can_skip_required_check``, ``._check_name_path_required_presence``, ``._merge_bindings``,
 ``._name_identifies_group``, and ``._name_path_missing_required_keys``.
@@ -225,44 +221,6 @@ def warn_universal_optional_matcher(owner: type[Any]) -> None:
         "required key (a PropertySpec with no default, or a required_when predicate that fires), or "
         "set ALLOW_UNIVERSAL_MATCHER = True to declare the universal match intentional.",
         owner.__name__,
-    )
-
-
-def warn_missing_columnwise_hooks(owner: type[Any]) -> None:
-    """Nudge an author whose framework-bound class leaves a required column-wise hook unimplemented.
-
-    ``compute_framework_rule`` in the class's OWN __dict__ is the framework-bound marker; it is read,
-    never called. A family base carries no such marker, so it stays silent. The declaration read must
-    not raise: this runs from ``__init_subclass__``, where a raise becomes the author's class error.
-    """
-    # Local import: feature_chain_parser_mixin imports this module, so a module-scope import would cycle.
-    from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser_mixin import (
-        missing_columnwise_hooks,
-        unrecognized_columnwise_hooks,
-    )
-
-    unrecognized = unrecognized_columnwise_hooks(owner)
-    if unrecognized:
-        # A list, never joined: a brace-less declaration is a string whose characters must not read as hooks.
-        logger.warning(
-            "%s declares %s in REQUIRED_COLUMNWISE_HOOKS, which name no hook and are ignored. "
-            "Declare COLUMNWISE_HOOKS or COLUMN_DISCOVERY_HOOKS from mloda.provider.",
-            owner.__name__,
-            unrecognized,
-        )
-    if getattr(owner, "ALLOW_MISSING_COLUMNWISE_HOOKS", False):
-        return
-    if "compute_framework_rule" not in owner.__dict__:
-        return
-
-    missing = missing_columnwise_hooks(owner)
-    if not missing:
-        return
-    logger.warning(
-        "%s binds a compute framework but does not implement %s as a classmethod or staticmethod, so a run "
-        "hits the raising default. Implement them, or narrow REQUIRED_COLUMNWISE_HOOKS.",
-        owner.__name__,
-        ", ".join(missing),
     )
 
 

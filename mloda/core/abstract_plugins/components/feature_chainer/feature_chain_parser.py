@@ -15,7 +15,7 @@ from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.components.default_options_key import DefaultOptionKeys
 from mloda.core.abstract_plugins.components.feature_chainer.parsed_feature_name import ParsedFeatureName
 from mloda.core.abstract_plugins.components.feature_chainer.property_spec import PropertySpec, is_no_default
-from mloda.core.abstract_plugins.components.utils import contained_raise_log_level, safe_field
+from mloda.core.abstract_plugins.components.utils import contained_raise_log_level, escalate_match_abort, safe_field
 
 logger = logging.getLogger(__name__)
 
@@ -113,6 +113,7 @@ class FeatureChainParser:
                 continue
 
             if len(parts) == 1 or not source_feature:
+                # Contained: a matched pattern with no source feature is this parser's own name verdict.
                 raise ValueError(f"Matches the pattern {pattern}, but has no source feature: {_feature_name}")
 
             return ParsedFeatureName(
@@ -198,6 +199,7 @@ class FeatureChainParser:
                 raised = exc
                 verdict = False
             if not verdict:
+                # Contained: a rejected option value is this candidate's own verdict, recorded as its reason.
                 raise PropertyValueRejection(
                     f"Property value '{found_property_val}' failed validation for '{property_name}'"
                 ) from raised
@@ -209,6 +211,7 @@ class FeatureChainParser:
             except TypeError:
                 is_member = False
             if not is_member:
+                # Contained: a rejected option value is this candidate's own verdict, recorded as its reason.
                 raise PropertyValueRejection(
                     f"Property value '{found_property_val}' not found in mapping for '{property_name}'"
                 )
@@ -236,9 +239,12 @@ class FeatureChainParser:
         """
 
         if property_name in options.group and property_name in options.context:
-            raise ValueError(
-                f"Parameter '{property_name}' exists in both group and context. "
-                "This is not allowed. Please choose one category."
+            # Marked: Options construction already rejects a key in both categories, so this is a broken invariant.
+            raise escalate_match_abort(
+                ValueError(
+                    f"Parameter '{property_name}' exists in both group and context. "
+                    "This is not allowed. Please choose one category."
+                )
             )
 
         if property_name in options.group:
@@ -268,6 +274,7 @@ class FeatureChainParser:
         if isinstance(spec, PropertySpec):
             return spec
 
+        # Contained: a raw dict spec is that candidate's own defect, so the seam reads it as a non-match.
         raise ValueError(
             f"{owner_name}.PROPERTY_MAPPING['{key}'] is a {type(spec).__name__}, not a PropertySpec. "
             f"Raw dict specs are no longer accepted; construct PropertySpec(...) or use the "

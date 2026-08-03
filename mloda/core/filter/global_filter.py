@@ -129,6 +129,8 @@ class GlobalFilter:
         The drop is recorded in `dropped_filters` and kept as text, never an exception object whose traceback
         would pin the plugin class. The level ignores the exception type, unlike the seam, because nothing else
         surfaces the reason here. No option rollback: the hook sees a per-match deepcopy.
+
+        Mark-or-contain policy: see IdentifyFeatureGroupClass._filter_feature_group_by_criteria.
         """
         try:
             return feature_group.match_feature_group_criteria(

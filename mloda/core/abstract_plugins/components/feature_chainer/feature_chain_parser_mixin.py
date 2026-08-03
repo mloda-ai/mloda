@@ -78,7 +78,12 @@ from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser
 )
 from mloda.core.abstract_plugins.components.feature_chainer.property_spec import PropertySpec
 from mloda.core.abstract_plugins.components.default_options_key import DefaultOptionKeys
-from mloda.core.abstract_plugins.components.utils import contained_raise_log_level, escalate_match_abort, safe_field
+from mloda.core.abstract_plugins.components.utils import (
+    contained_raise_log_level,
+    escalate_match_abort,
+    is_match_abort,
+    safe_field,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -211,11 +216,13 @@ class FeatureChainParserMixin:
         count = len(in_features)
 
         if count < self.MIN_IN_FEATURES:
+            # Contained: an in_feature count below the declared MIN means this group cannot serve the feature.
             raise ValueError(
                 f"Feature '{feature_name}' requires at least {self.MIN_IN_FEATURES} in_feature(s), but found {count}"
             )
 
         if self.MAX_IN_FEATURES is not None and count > self.MAX_IN_FEATURES:
+            # Contained: an in_feature count above the declared MAX means this group cannot serve the feature.
             raise ValueError(
                 f"Feature '{feature_name}' allows at most {self.MAX_IN_FEATURES} in_feature(s), but found {count}"
             )
@@ -314,10 +321,10 @@ class FeatureChainParserMixin:
         except PropertyValueRejection as exc:
             record_match_rejection(cls.__name__, str(exc))
             return False
-        # Known asymmetry deliberately kept in scope: a config error raised while merging name bindings on the
-        # string path (e.g. a key in both group and context) is still contained as a non-match here, while the
-        # required_when path surfaces it via build_effective_options (os-005 review note).
-        except ValueError:
+        # A marked raise crosses this containment; an unmarked ValueError stays a non-match.
+        except ValueError as exc:
+            if is_match_abort(exc):
+                raise
             return False
 
     @classmethod

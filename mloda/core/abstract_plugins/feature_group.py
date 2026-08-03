@@ -681,10 +681,10 @@ class FeatureGroup(ABC):
         """Controls whether the framework applies post-calculation row elimination.
 
         This method is independent of inline filter reading. ``features.filters``
-        is always available inside ``calculate_feature()``, regardless of what
-        this method returns. A FeatureGroup may read filters inline (e.g. for
-        conditional masking or predicate pushdown) and still request row
-        elimination by returning ``True``.
+        is set regardless of what this method returns, but it may be ``None`` or an
+        empty set, so guard with ``if features.filters:``. A FeatureGroup may read
+        filters inline (e.g. for conditional masking or predicate pushdown) and
+        still request row elimination by returning ``True``.
 
         Returns:
             None:  Defer to the FilterEngine (default).

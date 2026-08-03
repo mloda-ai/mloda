@@ -14,7 +14,7 @@ from abc import abstractmethod
 from ast import literal_eval
 from collections.abc import Callable, Iterator
 from difflib import get_close_matches
-from typing import Any, ClassVar, Optional, cast
+from typing import Any, ClassVar, Optional, cast, get_args
 
 import pytest
 
@@ -22,6 +22,7 @@ from mloda.core.abstract_plugins.components.data_access_collection import DataAc
 from mloda.core.abstract_plugins.components.default_options_key import DefaultOptionKeys
 from mloda.core.abstract_plugins.components.domain import Domain
 from mloda.core.abstract_plugins.components.feature import Feature
+from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser import PropertyValueRejection
 from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser_mixin import FeatureChainParserMixin
 from mloda.core.abstract_plugins.components.feature_chainer.property_spec import property_spec
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
@@ -31,12 +32,14 @@ from mloda.core.abstract_plugins.components.plugin_option.plugin_collector impor
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.api.plugin_docs import resolve_feature
+from mloda.core.prepare import resolution_types
 from mloda.core.prepare.accessible_plugins import FeatureGroupEnvironmentMapping
 from mloda.core.prepare.identify_feature_group import IdentifyFeatureGroupClass
 from mloda.core.prepare.resolution_failure_renderer import render_resolution_failure
 from mloda.core.prepare.resolution_types import (
     CandidateFrameworks,
     Elimination,
+    EliminationStage,
     EvaluationResult,
     RenderFacts,
 )
@@ -66,6 +69,28 @@ DUPLICATE_SPARE_NAME_791 = "renderer_duplicate_spare_791"
 EMPTY_CATALOG_FEATURE_791 = "renderer_empty_catalog_791"
 DECLARED_UNMATCHED_FEATURE_791 = "renderer_declared_unmatched_791"
 WIDE_FEATURE_791 = "renderer_wide_791"
+DEAD_SIBLING_FEATURE_791 = "renderer_dead_sibling_revenue_791"
+DEAD_SIBLING_SPARE_791 = "renderer_dead_sibling_profit_791"
+SHARED_TYPO_FEATURE_791 = "renderer_shared_naem_791"
+SHARED_LIVE_NAME_791 = "renderer_shared_name_791"
+SHARED_DEAD_NAME_791 = "renderer_shared_dead_791"
+VALUE_STAGE_FEATURE_791 = "renderer_value_stage_791"
+VALUE_STAGE_SPARE_791 = "renderer_value_stage_spare_791"
+CAPABILITY_STAGE_FEATURE_791 = "renderer_capability_stage_791"
+CAPABILITY_STAGE_SPARE_791 = "renderer_capability_stage_spare_791"
+RAISING_DEAD_NAMES_FEATURE_791 = "renderer_raising_dead_names_791"
+RAISING_DEAD_NAMES_SPARE_791 = "renderer_raising_dead_names_spare_791"
+
+VALUE_STAGE_REJECTION_REASON_791 = "renderer_value_stage_791 declines every value of this option"
+
+# The stages whose gate CAN see the feature name, so a sibling name of a candidate eliminated there may still
+# resolve. Pinned here as the complement of NAME_INDEPENDENT_STAGES: a ninth stage fails the partition test.
+NAME_DEPENDENT_STAGES_791: frozenset[EliminationStage] = frozenset(
+    {"value_rejection", "matcher_error", "capability", "framework_pin"}
+)
+EXPECTED_NAME_INDEPENDENT_STAGES_791: frozenset[EliminationStage] = frozenset(
+    {"domain", "scope", "frameworks_not_enabled", "links"}
+)
 
 # Eight names, all close to WIDE_FEATURE_791, so only the cut can bound the rendered line.
 WIDE_CATALOG_NAMES_791 = frozenset(
@@ -467,6 +492,58 @@ class RendererWideCatalogFG791(CountingFeatureGroup791):
     FRAMEWORK_RULE = {RendererFwOne791}
 
 
+class RendererDeadSiblingFG791(CountingFeatureGroup791):
+    """The reported repro: declares the requested name AND a sibling, then loses every framework."""
+
+    MATCHES = frozenset({DEAD_SIBLING_FEATURE_791})
+    SUPPORTED_NAMES = frozenset({DEAD_SIBLING_FEATURE_791, DEAD_SIBLING_SPARE_791})
+    FRAMEWORK_RULE = {RendererFwOne791, RendererFwTwo791}
+
+
+class RendererSharedDeadFG791(CountingFeatureGroup791):
+    """Dead contributor of two names: one it shares with the live group below, one only it declares."""
+
+    MATCHES = frozenset({SHARED_TYPO_FEATURE_791})
+    SUPPORTED_NAMES = frozenset({SHARED_LIVE_NAME_791, SHARED_DEAD_NAME_791})
+    FRAMEWORK_RULE = {RendererFwOne791, RendererFwTwo791}
+
+
+class RendererSharedLiveFG791(CountingFeatureGroup791):
+    """Live contributor of the shared name: it matches nothing here, so nothing ever eliminates it."""
+
+    SUPPORTED_NAMES = frozenset({SHARED_LIVE_NAME_791})
+    FRAMEWORK_RULE = {RendererFwOne791}
+
+
+class RendererValueStageFG791(CountingFeatureGroup791):
+    """Eliminated at value_rejection, a name-DEPENDENT stage: it declined THIS name's value."""
+
+    MATCHES = frozenset({VALUE_STAGE_FEATURE_791})
+    SUPPORTED_NAMES = frozenset({VALUE_STAGE_SPARE_791})
+    FRAMEWORK_RULE = {RendererFwOne791}
+
+    @classmethod
+    def match_feature_group_criteria(
+        cls,
+        feature_name: FeatureName | str,
+        options: Options,
+        data_access_collection: Optional[DataAccessCollection] = None,
+    ) -> bool:
+        # Name-guarded, so this globally visible class stays inert for every other name it is asked about.
+        if not super().match_feature_group_criteria(feature_name, options, data_access_collection):
+            return False
+        raise PropertyValueRejection(VALUE_STAGE_REJECTION_REASON_791)
+
+
+class RendererCapabilityStageFG791(CountingFeatureGroup791):
+    """Eliminated at capability: the per-feature hook rejected the one framework the run enabled."""
+
+    MATCHES = frozenset({CAPABILITY_STAGE_FEATURE_791})
+    SUPPORTED_NAMES = frozenset({CAPABILITY_STAGE_SPARE_791})
+    FRAMEWORK_RULE = {RendererFwOne791}
+    SUPPORTED_FRAMEWORKS = frozenset({"RendererFwThree791"})
+
+
 class RendererDomainBoom791(RuntimeError):
     """Raised by a provider's get_domain() hook."""
 
@@ -571,6 +648,26 @@ def _build_raising_names_group() -> type[CountingFeatureGroup791]:
             return set()
 
     return _armed(RendererRaisingNamesFG791)
+
+
+def _build_raising_dead_names_group() -> type[CountingFeatureGroup791]:
+    """Build a group that is eliminated with no framework left AND whose feature_names_supported() raises."""
+
+    class RendererRaisingDeadNamesFG791(RaisingHookGroup791):
+        """Dead candidate whose declared names can never be read."""
+
+        MATCHES = frozenset({RAISING_DEAD_NAMES_FEATURE_791})
+        SUPPORTED_NAMES = frozenset({RAISING_DEAD_NAMES_SPARE_791})
+        FRAMEWORK_RULE = {RendererFwOne791, RendererFwTwo791}
+
+        @classmethod
+        def feature_names_supported(cls) -> set[str]:
+            _record(cls.get_class_name(), "feature_names_supported")
+            if cls.ARMED:
+                raise RendererNamesBoom791("feature_names_supported exploded 791")
+            return set(cls.SUPPORTED_NAMES)
+
+    return _armed(RendererRaisingDeadNamesFG791)
 
 
 def _build_raising_rejection_group() -> type[CountingFeatureGroup791]:
@@ -789,6 +886,39 @@ def wide_catalog_scenario() -> Scenario:
     return Feature(WIDE_FEATURE_791), {RendererWideCatalogFG791: {RendererFwOne791}}
 
 
+def dead_sibling_scenario() -> Scenario:
+    """The reported repro: the sole candidate declaring both names loses every framework the run could enable."""
+    return Feature(DEAD_SIBLING_FEATURE_791), {RendererDeadSiblingFG791: set()}
+
+
+def shared_dead_and_live_name_scenario() -> Scenario:
+    """One name is declared by both a dead and a live candidate, the other only by the dead one."""
+    return (
+        Feature(SHARED_TYPO_FEATURE_791),
+        {RendererSharedDeadFG791: set(), RendererSharedLiveFG791: {RendererFwOne791}},
+    )
+
+
+def value_stage_scenario() -> Scenario:
+    """A value_rejection near-miss that keeps an enabled framework, so a sibling name could still resolve to it."""
+    return Feature(VALUE_STAGE_FEATURE_791), {RendererValueStageFG791: {RendererFwOne791}}
+
+
+def value_stage_without_frameworks_scenario() -> Scenario:
+    """The same value_rejection candidate minus every enabled framework: no name can resolve to it."""
+    return Feature(VALUE_STAGE_FEATURE_791), {RendererValueStageFG791: set()}
+
+
+def capability_stage_scenario() -> Scenario:
+    """A capability near-miss: the per-feature hook rejected the enabled framework for THIS name."""
+    return Feature(CAPABILITY_STAGE_FEATURE_791), {RendererCapabilityStageFG791: {RendererFwOne791}}
+
+
+def raising_dead_names_scenario() -> Scenario:
+    """A dead candidate whose feature_names_supported() raises, so it can contribute no name at all."""
+    return Feature(RAISING_DEAD_NAMES_FEATURE_791), {_build_raising_dead_names_group(): set()}
+
+
 def raising_domain_multiple_scenario() -> Scenario:
     """A 'multiple' failure where one identified candidate's get_domain() raises. The request has no domain."""
     raising, healthy = _build_raising_domain_groups()
@@ -835,6 +965,12 @@ FAILING_SCENARIOS: dict[str, Callable[[], Scenario]] = {
     "scoped_none": scoped_none_scenario,
     "capability_narrow_enabled": capability_narrow_enabled_scenario,
     "capability_none_enabled": capability_none_enabled_scenario,
+    "dead_sibling": dead_sibling_scenario,
+    "shared_dead_and_live_name": shared_dead_and_live_name_scenario,
+    "value_stage": value_stage_scenario,
+    "value_stage_without_frameworks": value_stage_without_frameworks_scenario,
+    "capability_stage": capability_stage_scenario,
+    "raising_dead_names": raising_dead_names_scenario,
     "raising_domain_multiple": raising_domain_multiple_scenario,
     "raising_prefix_none": raising_prefix_none_scenario,
     "raising_names_none": raising_names_none_scenario,
@@ -1494,3 +1630,143 @@ class TestSuggestionSlotsListDistinctNames:
         assert suggestions is not None
         assert len(suggestions) == MAX_RENDERED_SUGGESTIONS_791
         assert set(suggestions) <= WIDE_CATALOG_NAMES_791
+
+
+class TestSuggestionsNeverPointAtADeadGroupsSiblingName:
+    """A name only dead groups declare cannot resolve either, so suggesting it hands back the same failure.
+
+    A candidate is dead when it was eliminated AND either the gate that dropped it structurally could not see
+    the feature name (NAME_INDEPENDENT_STAGES), or it has no accessible compute framework left at all. The
+    rule is per NAME, not per candidate: one live declarer is enough to keep a name suggestible.
+    """
+
+    def test_a_dead_groups_sibling_name_is_never_suggested(self) -> None:
+        """The reported repro: following the suggested sibling would fail with a byte-identical message."""
+        scenario = dead_sibling_scenario()
+        feature, _ = scenario
+        result = _evaluate(scenario)
+
+        assert result.eliminations[RendererDeadSiblingFG791].stage == "frameworks_not_enabled"
+        # Premise: the requested name and the eliminated hints cannot reach the sibling, so only this rule can.
+        droppable = {DEAD_SIBLING_FEATURE_791, *result.facts.eliminated_hints}
+        survivors = [name for name in dict.fromkeys(result.facts.known_names) if name not in droppable]
+        ranked = get_close_matches(DEAD_SIBLING_FEATURE_791, survivors, n=MAX_RENDERED_SUGGESTIONS_791, cutoff=0.5)
+        assert ranked == [DEAD_SIBLING_SPARE_791]
+        assert DEAD_SIBLING_SPARE_791 in result.facts.dead_only_names
+
+        message = render_resolution_failure(result, feature)
+        assert message is not None
+        assert message == (
+            f"No feature groups found for feature name: '{DEAD_SIBLING_FEATURE_791}'.\n"
+            f"Feature group(s) eliminated while matching '{DEAD_SIBLING_FEATURE_791}':\n"
+            "  - RendererDeadSiblingFG791 (compute framework): "
+            "none of its compute frameworks are enabled for this run\n"
+            "Use resolve_feature(name, options=...) to debug feature resolution.\n"
+            f"{TROUBLESHOOTING_LINE}"
+        )
+
+    def test_a_name_a_live_group_also_declares_is_still_suggested(self) -> None:
+        """Suppression keys on the name: the live declarer would resolve it, so only the dead-only name goes."""
+        scenario = shared_dead_and_live_name_scenario()
+        feature, _ = scenario
+        result = _evaluate(scenario)
+
+        assert result.eliminations[RendererSharedDeadFG791].stage == "frameworks_not_enabled"
+        assert RendererSharedLiveFG791 not in result.eliminations
+        assert SHARED_LIVE_NAME_791 not in result.facts.dead_only_names
+        assert SHARED_DEAD_NAME_791 in result.facts.dead_only_names
+
+        message = render_resolution_failure(result, feature)
+        assert message is not None
+        suggestions = _suggestions(message)
+
+        assert suggestions is not None
+        assert set(suggestions) == {SHARED_LIVE_NAME_791, "RendererSharedLiveFG791", "RendererSharedLiveFG791_"}
+
+    def test_a_value_rejection_candidates_sibling_name_is_still_suggested(self) -> None:
+        """value_rejection is name-DEPENDENT: the candidate declined this name's value, not the sibling's."""
+        scenario = value_stage_scenario()
+        feature, _ = scenario
+        result = _evaluate(scenario)
+
+        assert result.eliminations == {
+            RendererValueStageFG791: Elimination(stage="value_rejection", reason=VALUE_STAGE_REJECTION_REASON_791)
+        }
+        assert VALUE_STAGE_SPARE_791 not in result.facts.dead_only_names
+
+        message = render_resolution_failure(result, feature)
+        assert message is not None
+        assert _suggestions(message) == [VALUE_STAGE_SPARE_791]
+
+    def test_a_capability_candidates_sibling_name_is_still_suggested(self) -> None:
+        """capability comes from supports_compute_framework(feature.name, ...), so a sibling name may pass it."""
+        scenario = capability_stage_scenario()
+        feature, _ = scenario
+        result = _evaluate(scenario)
+
+        assert result.eliminations[RendererCapabilityStageFG791].stage == "capability"
+        assert CAPABILITY_STAGE_SPARE_791 not in result.facts.dead_only_names
+
+        message = render_resolution_failure(result, feature)
+        assert message is not None
+        assert _suggestions(message) == [CAPABILITY_STAGE_SPARE_791]
+
+    def test_a_name_dependent_stage_without_any_framework_is_dead_anyway(self) -> None:
+        """Same candidate and same stage as above, minus every framework: no name can reach it, so it is dead."""
+        scenario = value_stage_without_frameworks_scenario()
+        feature, _ = scenario
+        result = _evaluate(scenario)
+
+        assert result.eliminations[RendererValueStageFG791].stage == "value_rejection"
+        assert VALUE_STAGE_SPARE_791 in result.facts.known_names
+        assert VALUE_STAGE_SPARE_791 in result.facts.dead_only_names
+
+        message = render_resolution_failure(result, feature)
+        assert message is not None
+        assert _suggestions(message) is None
+
+    def test_a_raising_names_hook_on_a_dead_candidate_contributes_nothing(self) -> None:
+        """A dead candidate whose name hook raises degrades to no dead name, and takes nothing else down."""
+        scenario = raising_dead_names_scenario()
+        feature, accessible_plugins = scenario
+        (raising,) = accessible_plugins
+
+        result = _evaluate(scenario)
+
+        assert result.eliminations[raising].stage == "frameworks_not_enabled"
+        assert RAISING_DEAD_NAMES_SPARE_791 not in result.facts.known_names
+        assert result.facts.dead_only_names == frozenset()
+
+        message = render_resolution_failure(result, feature)
+        assert message is not None
+        assert message == (
+            f"No feature groups found for feature name: '{RAISING_DEAD_NAMES_FEATURE_791}'.\n"
+            f"Feature group(s) eliminated while matching '{RAISING_DEAD_NAMES_FEATURE_791}':\n"
+            f"  - {raising.__name__} (compute framework): none of its compute frameworks are enabled for this run\n"
+            "Use resolve_feature(name, options=...) to debug feature resolution.\n"
+            f"{TROUBLESHOOTING_LINE}"
+        )
+
+    def test_feature_names_supported_is_read_once_per_candidate(self) -> None:
+        """The name catalog and the dead-name capture read the same candidate, and share one hook call."""
+        result = _evaluate(dead_sibling_scenario())
+
+        # Both readers ran: the catalog holds the sibling and the dead-name capture claimed it.
+        assert DEAD_SIBLING_SPARE_791 in result.facts.known_names
+        assert DEAD_SIBLING_SPARE_791 in result.facts.dead_only_names
+        assert HOOK_CALLS["RendererDeadSiblingFG791.feature_names_supported"] == 1
+
+
+class TestEveryEliminationStageIsClassified:
+    """A ninth stage must be classified before it ships: an unclassified one silently keeps or drops names."""
+
+    def test_the_two_stage_sets_partition_the_stage_literal(self) -> None:
+        """NAME_INDEPENDENT_STAGES and its name-dependent complement cover EliminationStage exactly once."""
+        # Read off the module rather than name-imported, so a missing constant fails this test alone and not
+        # the whole module's collection.
+        name_independent = resolution_types.NAME_INDEPENDENT_STAGES
+        stages = frozenset(get_args(EliminationStage))
+
+        assert name_independent == EXPECTED_NAME_INDEPENDENT_STAGES_791
+        assert name_independent.isdisjoint(NAME_DEPENDENT_STAGES_791)
+        assert name_independent | NAME_DEPENDENT_STAGES_791 == stages

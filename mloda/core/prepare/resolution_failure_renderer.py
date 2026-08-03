@@ -117,9 +117,9 @@ def _render_none(result: EvaluationResult, feature: Feature, callout: str | None
     if near_miss is not None:
         msg += f"\n{near_miss}"
 
-    # A suggestion equal to the requested name, or echoing an already-named candidate, carries nothing new.
-    # Drop it, and the catalog's repeats, before the cut, so neither can spend a slot.
-    droppable = {feature_name, *result.facts.eliminated_hints}
+    # A suggestion equal to the requested name, echoing an already-named candidate, or reaching only groups this
+    # pass killed, carries nothing new. Drop it, and the catalog's repeats, before the cut, so none spends a slot.
+    droppable = {feature_name, *result.facts.eliminated_hints, *result.facts.dead_only_names}
     known_names = [name for name in dict.fromkeys(result.facts.known_names) if name not in droppable]
     similar = get_close_matches(feature_name, known_names, n=MAX_SUGGESTIONS, cutoff=0.5)
     if similar:

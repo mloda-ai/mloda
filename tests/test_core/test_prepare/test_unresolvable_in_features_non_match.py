@@ -1,8 +1,9 @@
 """Issue #884: an in_features value the matcher cannot resolve is a plain non-match at the resolution seam.
 
-A falsy value (``""``, ``0``, ``False``, ``{}``) makes ``Options.get_in_features`` raise a ValueError the mixin does
-not catch, so the engine contains it and records the candidate as a ``matcher_error`` near-miss. A truthy value the
-matcher cannot count (``{"a": 1}``) is already a plain non-match, so the two shapes must resolve identically.
+A falsy value (``""``, ``0``, ``False``, ``{}``) makes ``Options.get_in_features`` raise a ValueError, which the mixin
+now catches and answers False to, so nothing reaches the engine and no ``matcher_error`` near-miss is recorded. Before
+the fix it escaped as a raise. A truthy value the matcher cannot count (``{"a": 1}``) was always a plain non-match, so
+the two shapes must resolve identically.
 
 Assertions read structured facts off the EvaluationResult, per the seam's own docstring. The probe class lives inside
 a factory and is dropped before any assert runs, so a failing assert never pins a throwaway FeatureGroup into its

@@ -81,6 +81,7 @@ from mloda.core.abstract_plugins.components.feature_chainer.property_spec import
 from mloda.core.abstract_plugins.components.default_options_key import DefaultOptionKeys
 from mloda.core.abstract_plugins.components.utils import (
     contained_raise_log_level,
+    contained_raise_reason,
     escalate_match_abort,
     is_match_abort,
 )
@@ -512,18 +513,26 @@ class FeatureChainParserMixin:
                     # Present but empty: zero in_features, a non-match rather than an error.
                     count = 0
                 else:
-                    # An in_features shape this matcher cannot count (SourceInputFeature stores join
-                    # tuples there) is a NON-MATCH: a group that cannot even count the in_features
-                    # cannot consume them. Skipping MIN/MAX here would accept the feature and let the
-                    # group win a resolution its own cap says it must lose. A value get_in_features
-                    # cannot resolve at all (every falsy one) is that same non-match, not a raise (#884).
+                    # An in_features shape this matcher cannot count (SourceInputFeature stores join tuples)
+                    # is a NON-MATCH: a group that cannot even count them cannot consume them, and skipping
+                    # MIN/MAX would let it win a resolution its own cap says it must lose. get_in_features
+                    # also rejects a falsy non-collection ("", 0, False, {}); None is gated above and an empty
+                    # collection counted as zero, so only those reach here, and they are that same non-match
+                    # (#884). Narrow on purpose: another class out of it is a defect for the seam to surface,
+                    # not a value judged here. The DEBUG line therefore also fires for the join-tuple shape.
                     try:
                         count = len(options.get_in_features())
                     except (TypeError, ValueError) as exc:
                         # A marked raise crosses this containment as the same object, as everywhere else.
                         if is_match_abort(exc):
                             raise
-                        logger.debug("%s cannot resolve in_features value %r: %s", cls.__name__, in_features_raw, exc)
+                        # Text, not exc: a retained record must not pin this frame, its cls and the plugin class.
+                        logger.debug(
+                            "%s cannot resolve in_features value %r: %s",
+                            cls.__name__,
+                            in_features_raw,
+                            contained_raise_reason(exc),
+                        )
                         return False
                 if count < cls.MIN_IN_FEATURES:
                     return False

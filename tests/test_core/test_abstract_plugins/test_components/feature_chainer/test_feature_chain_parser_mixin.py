@@ -408,8 +408,9 @@ class _MarkedAbortOptions(Options):
         raise self.marker
 
 
-# Every in_features value the matcher cannot resolve. The falsy ones raise today, the truthy ones
-# already answer False; False and 0 need explicit ids, since pytest gives them the same one.
+# Every in_features value the matcher cannot resolve: get_in_features raises a ValueError on the falsy
+# ones and a TypeError on the truthy ones, and the mixin answers False to both. The ids are explicit
+# because pytest would name the two dicts value4 / value8 and give "" an empty id.
 UNRESOLVABLE_IN_FEATURES = [
     pytest.param("", id="empty_str"),
     pytest.param(0, id="zero_int"),
@@ -594,17 +595,23 @@ class TestFeatureChainParserMixinMinMaxInFeatures:
 
         assert MockFeatureGroupWithMinMax.match_feature_group_criteria("any_name", options) is True
 
-    def test_marked_match_abort_still_escapes_the_in_features_gate(self) -> None:
+    @pytest.mark.parametrize(
+        "error_type",
+        [pytest.param(ValueError, id="value_error"), pytest.param(TypeError, id="type_error")],
+    )
+    def test_marked_match_abort_still_escapes_the_in_features_gate(self, error_type: type[Exception]) -> None:
         """A raise marked with escalate_match_abort crosses the matcher as the SAME object, never contained.
 
-        Mirrors match_parser_criteria, the pattern any new in_features handler has to follow.
+        Mirrors match_parser_criteria, the pattern any new in_features handler has to follow. The TypeError case
+        is the one that regressed: the old safe_field(..., catching=(TypeError,)) swallowed a marked TypeError,
+        because safe_field has no is_match_abort check.
         """
-        marker = escalate_match_abort(ValueError(ABORT_MESSAGE_884))
+        marker = escalate_match_abort(error_type(ABORT_MESSAGE_884))
         # A resolvable-looking raw value, so the gate gets as far as calling get_in_features at all.
         options = _MarkedAbortOptions(context={"operation": "op1", "in_features": ["a", "b"]})
         options.marker = marker
 
-        with pytest.raises(ValueError) as exc_info:
+        with pytest.raises(error_type) as exc_info:
             MockFeatureGroupWithMinMax.match_feature_group_criteria("any_name", options)
 
         assert exc_info.value is marker, f"the marked exception itself must escape, got: {exc_info.value!r}"

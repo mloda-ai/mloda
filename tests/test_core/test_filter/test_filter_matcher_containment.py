@@ -398,7 +398,7 @@ class TestUnresolvableInFeaturesIsNotADrop:
     """Issue #884: an in_features value the matcher cannot resolve is a plain non-match, not a contained raise."""
 
     def test_unresolvable_in_features_is_a_non_match_without_a_drop(self, caplog: pytest.LogCaptureFixture) -> None:
-        """Today the falsy value raises out of the matcher, so the filter seam records a drop and warns about it."""
+        """The falsy value never leaves the matcher, so the filter seam records no drop and warns about nothing."""
         snapshot = _drive_criteria(
             _make_in_features_mixin_fg,
             FILTER_FEATURE_IN_FEATURES,

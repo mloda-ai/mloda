@@ -52,8 +52,9 @@ To create effective and maintainable plugins:
 - Make plugins configurable for different use cases
 
 ## Directory Structure
-```
+```text
 mloda_plugins/
 ├── compute_framework/   # Compute framework implementations
 ├── feature_group/       # Feature group implementations
 └── function_extender/   # Function extender implementations
+```

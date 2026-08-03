@@ -16,6 +16,7 @@ from mloda.provider import CHAIN_SEPARATOR, FeatureChainParser
 from mloda.provider import (
     FeatureChainParserMixin,
 )
+from mloda.provider import COLUMNWISE_HOOKS
 from mloda.provider import DefaultOptionKeys
 from mloda.provider import PropertySpec
 
@@ -101,6 +102,9 @@ class GeoDistanceFeatureGroup(FeatureChainParserMixin, FeatureGroup):
     # Geo distance requires exactly 2 point features
     MIN_IN_FEATURES = 2
     MAX_IN_FEATURES = 2
+
+    # Hooks calculate_feature calls: _check_source_features_exist, _add_result_to_data.
+    REQUIRED_COLUMNWISE_HOOKS = COLUMNWISE_HOOKS
 
     # Property mapping for configuration-based features with group/context separation
     PROPERTY_MAPPING = {

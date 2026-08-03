@@ -17,6 +17,7 @@ from mloda.provider import FeatureChainParser
 from mloda.provider import (
     FeatureChainParserMixin,
 )
+from mloda.provider import COLUMNWISE_HOOKS
 from mloda.provider import BaseArtifact
 from mloda.provider import DefaultOptionKeys
 from mloda.provider import PropertySpec
@@ -129,6 +130,9 @@ class SklearnPipelineFeatureGroup(FeatureChainParserMixin, FeatureGroup):
     IN_FEATURE_SEPARATOR = ","  # Use comma for multiple source features
     MIN_IN_FEATURES = 1
     MAX_IN_FEATURES: Optional[int] = None  # Unlimited
+
+    # Hooks calculate_feature calls: _check_source_features_exist, _add_result_to_data.
+    REQUIRED_COLUMNWISE_HOOKS = COLUMNWISE_HOOKS
 
     @staticmethod
     def artifact() -> type[BaseArtifact] | None:

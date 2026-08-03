@@ -53,6 +53,7 @@ group). Return values use truthy/falsy semantics: any falsy return (``False``,
 
 from __future__ import annotations
 
+import inspect
 import logging
 import os
 from collections.abc import Callable
@@ -86,6 +87,12 @@ from mloda.core.abstract_plugins.components.utils import (
 )
 
 logger = logging.getLogger(__name__)
+
+# The pair every column-wise family needs: the source-feature check and the result writer.
+COLUMNWISE_HOOKS: frozenset[str] = frozenset({"_check_source_features_exist", "_add_result_to_data"})
+
+# The pair plus the discovery hook, for a family that resolves column names against the data.
+COLUMN_DISCOVERY_HOOKS: frozenset[str] = COLUMNWISE_HOOKS | {"_get_available_columns"}
 
 
 class FeatureChainParserMixin:
@@ -138,6 +145,9 @@ class FeatureChainParserMixin:
     # An all-optional PROPERTY_MAPPING that inherits the config matcher matches any feature name with
     # empty options; set True to declare that universal match intentional and silence the #771 warning.
     ALLOW_UNIVERSAL_MATCHER: bool = False
+    # The column-wise hooks a family's calculate_feature calls; a family base declares it so its
+    # framework implementations can be checked against it with missing_columnwise_hooks below.
+    REQUIRED_COLUMNWISE_HOOKS: frozenset[str] = frozenset()
 
     def __init_subclass__(cls, **kwargs: Any) -> None:
         # The mixin sits first in the MRO of ``class X(FeatureChainParserMixin, FeatureGroup)``,
@@ -686,3 +696,33 @@ class FeatureChainParserMixin:
             The updated data
         """
         raise NotImplementedError(f"{cls.__name__} must implement _add_result_to_data")
+
+
+def _resolved_hook(owner: type[Any], hook_name: str) -> Any:
+    """The plain function behind a hook attribute, or None when the owner has no such hook."""
+    attribute = inspect.getattr_static(owner, hook_name, None)
+    return getattr(attribute, "__func__", attribute)
+
+
+def _hook_is_implemented(owner: type[Any], hook_name: str) -> bool:
+    """True when ``cls._hook(...)`` reaches an own implementation rather than the raising default.
+
+    A plain function is unreachable: the ``cls`` slot would eat the data argument.
+    """
+    if not isinstance(inspect.getattr_static(owner, hook_name, None), (classmethod, staticmethod)):
+        return False
+    return _resolved_hook(owner, hook_name) is not _resolved_hook(FeatureChainParserMixin, hook_name)
+
+
+def declared_columnwise_hooks(owner: type[Any]) -> frozenset[str]:
+    """The column-wise hooks a class declares required; empty for a class that declares none."""
+    return frozenset(getattr(owner, "REQUIRED_COLUMNWISE_HOOKS", frozenset()))
+
+
+def missing_columnwise_hooks(owner: type[Any]) -> list[str]:
+    """The declared hooks the class does not implement in a reachable shape, sorted.
+
+    Assert this empty in a plugin repo's own suite to catch a skipped hook there instead of mid-run.
+    A family base correctly reports all of them: it declares the contract its subclasses implement.
+    """
+    return sorted(hook for hook in declared_columnwise_hooks(owner) if not _hook_is_implemented(owner, hook))

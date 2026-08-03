@@ -12,6 +12,7 @@ from mloda.user import Feature
 from mloda.provider import (
     FeatureChainParserMixin,
 )
+from mloda.provider import COLUMNWISE_HOOKS
 from mloda.provider import FeatureSet
 from mloda.provider import DefaultOptionKeys
 from mloda.provider import PropertySpec
@@ -93,6 +94,9 @@ class TextCleaningFeatureGroup(FeatureChainParserMixin, FeatureGroup):
     # In-feature configuration for FeatureChainParserMixin
     MIN_IN_FEATURES = 1
     MAX_IN_FEATURES = 1
+
+    # Hooks calculate_feature calls: _check_source_features_exist, _add_result_to_data.
+    REQUIRED_COLUMNWISE_HOOKS = COLUMNWISE_HOOKS
 
     # Property mapping for configuration-based features
     PROPERTY_MAPPING = {

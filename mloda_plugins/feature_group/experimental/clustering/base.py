@@ -13,6 +13,7 @@ from mloda.provider import CHAIN_SEPARATOR, FeatureChainParser
 from mloda.provider import (
     FeatureChainParserMixin,
 )
+from mloda.provider import COLUMN_DISCOVERY_HOOKS
 from mloda.provider import FeatureSet
 from mloda.provider import DefaultOptionKeys
 from mloda.provider import PropertySpec, is_positive_int
@@ -115,6 +116,9 @@ class ClusteringFeatureGroup(FeatureChainParserMixin, FeatureGroup):
     # In-feature configuration for FeatureChainParserMixin
     MIN_IN_FEATURES = 1
     MAX_IN_FEATURES = None  # Unlimited in_features allowed
+
+    # Hooks calculate_feature calls: _get_available_columns, _check_source_features_exist, _add_result_to_data.
+    REQUIRED_COLUMNWISE_HOOKS = COLUMN_DISCOVERY_HOOKS
 
     # Property mapping for configuration-based feature creation
     PROPERTY_MAPPING = {

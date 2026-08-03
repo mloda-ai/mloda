@@ -145,6 +145,7 @@ class MyFeatureGroup(FeatureChainParserMixin, FeatureGroup):
 | `MAX_IN_FEATURES` | `int \| None` | `None` | Maximum allowed in_features (None = unlimited) |
 | `IN_FEATURE_SEPARATOR` | `str` | `"&"` | Separator for multiple in_features |
 | `RECOGNITION_ONLY_PATTERN` | `bool` | `False` | Declares a captureless pattern as recognition-only (binds no key from the name) |
+| `REQUIRED_COLUMNWISE_HOOKS` | `frozenset[str]` | `frozenset()` | Column-wise data hooks the family requires |
 
 ### Column-Wise Data Hooks
 
@@ -157,6 +158,57 @@ hook too; the others only need the check/add pair.
 
 Whether `_check_source_features_exist` tolerates partial presence (some source names missing) or
 rejects it is a per-feature-group policy, not a framework rule.
+
+`REQUIRED_COLUMNWISE_HOOKS` declares which of the three a family needs. A family base sets it to the
+constant matching the hooks its own `calculate_feature` calls, and its compute-framework subclasses
+implement them. Both constants come from `mloda.provider`.
+
+| Constant | Declares |
+|----------|----------|
+| `COLUMNWISE_HOOKS` | `_check_source_features_exist` and `_add_result_to_data` |
+| `COLUMN_DISCOVERY_HOOKS` | those two plus `_get_available_columns` |
+
+``` python
+from mloda.provider import COLUMN_DISCOVERY_HOOKS, FeatureChainParserMixin, FeatureGroup
+from mloda.user.pandas import PandasDataFrame
+
+class RollingBase(FeatureChainParserMixin, FeatureGroup):
+    REQUIRED_COLUMNWISE_HOOKS = COLUMN_DISCOVERY_HOOKS
+
+class PandasRolling(RollingBase):
+    @classmethod
+    def compute_framework_rule(cls):
+        return {PandasDataFrame}
+
+    @classmethod
+    def _get_available_columns(cls, data):
+        return set(data.columns)
+
+    @classmethod
+    def _check_source_features_exist(cls, data, feature_names):
+        if set(feature_names) - set(data.columns):
+            raise ValueError(f"Missing source features, available: {list(data.columns)}")
+
+    @classmethod
+    def _add_result_to_data(cls, data, feature_name, result):
+        data[feature_name] = result
+        return data
+```
+
+`missing_columnwise_hooks(cls)`, also from `mloda.provider`, returns the declared hooks a class does
+not implement. Assert it empty in your own test suite to catch a skipped hook there rather than
+mid-run:
+
+``` python
+from mloda.provider import missing_columnwise_hooks
+
+def test_pandas_rolling_implements_its_hooks():
+    assert missing_columnwise_hooks(PandasRolling) == []
+```
+
+A hook that is not a `@classmethod` or `@staticmethod` counts as missing: the `cls._hook(...)` call
+cannot reach it. A family base reports all of its declared hooks, since it declares the contract its
+subclasses implement, so assert this on the framework-bound class rather than on the base.
 
 ### Captureless Patterns and Name Binding
 

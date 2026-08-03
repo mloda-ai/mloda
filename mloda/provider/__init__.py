@@ -73,6 +73,11 @@ from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser
     INPUT_SEPARATOR,
 )
 from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser_mixin import FeatureChainParserMixin
+from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser_mixin import (
+    COLUMNWISE_HOOKS,
+    COLUMN_DISCOVERY_HOOKS,
+    missing_columnwise_hooks,
+)
 from mloda.core.abstract_plugins.components.feature_chainer.parsed_feature_name import ParsedFeatureName
 from mloda.core.abstract_plugins.components.feature_chainer.property_spec import (
     NO_DEFAULT,
@@ -154,6 +159,9 @@ __all__ = [
     "COLUMN_SEPARATOR",
     "INPUT_SEPARATOR",
     "FeatureChainParserMixin",
+    "COLUMNWISE_HOOKS",
+    "COLUMN_DISCOVERY_HOOKS",
+    "missing_columnwise_hooks",
     "ParsedFeatureName",
     "PropertySpec",
     "is_no_default",

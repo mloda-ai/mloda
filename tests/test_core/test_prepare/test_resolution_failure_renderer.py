@@ -80,6 +80,14 @@ CAPABILITY_STAGE_FEATURE_791 = "renderer_capability_stage_791"
 CAPABILITY_STAGE_SPARE_791 = "renderer_capability_stage_spare_791"
 RAISING_DEAD_NAMES_FEATURE_791 = "renderer_raising_dead_names_791"
 RAISING_DEAD_NAMES_SPARE_791 = "renderer_raising_dead_names_spare_791"
+DISABLED_PAIR_FEATURE_791 = "renderer_disabled_pair_revenue_791"
+DISABLED_PAIR_SPARE_791 = "renderer_disabled_pair_profit_791"
+
+# Built around the class names below, because the default matcher also owns a name by class-name PREFIX.
+# The request drops the trailing underscore, so nothing matches it while both declared names stay close to it.
+LIVE_PREFIX_FEATURE_791 = "RendererLivePrefixFG791sum_791"
+LIVE_PREFIX_COVERED_791 = "RendererLivePrefixFG791_sum_791"
+DEAD_PREFIX_UNCOVERED_791 = "RendererDeadPrefixFG791_sum_791"
 
 VALUE_STAGE_REJECTION_REASON_791 = "renderer_value_stage_791 declines every value of this option"
 
@@ -87,9 +95,6 @@ VALUE_STAGE_REJECTION_REASON_791 = "renderer_value_stage_791 declines every valu
 # resolve. Pinned here as the complement of NAME_INDEPENDENT_STAGES: a ninth stage fails the partition test.
 NAME_DEPENDENT_STAGES_791: frozenset[EliminationStage] = frozenset(
     {"value_rejection", "matcher_error", "capability", "framework_pin"}
-)
-EXPECTED_NAME_INDEPENDENT_STAGES_791: frozenset[EliminationStage] = frozenset(
-    {"domain", "scope", "frameworks_not_enabled", "links"}
 )
 
 # Eight names, all close to WIDE_FEATURE_791, so only the cut can bound the rendered line.
@@ -544,6 +549,48 @@ class RendererCapabilityStageFG791(CountingFeatureGroup791):
     SUPPORTED_FRAMEWORKS = frozenset({"RendererFwThree791"})
 
 
+class RendererDisabledPairFG791(CountingFeatureGroup791):
+    """Declares and matches BOTH names, then loses every framework: whichever one is requested, it is eliminated."""
+
+    MATCHES = frozenset({DISABLED_PAIR_FEATURE_791, DISABLED_PAIR_SPARE_791})
+    SUPPORTED_NAMES = frozenset({DISABLED_PAIR_FEATURE_791, DISABLED_PAIR_SPARE_791})
+    FRAMEWORK_RULE = {RendererFwOne791, RendererFwTwo791}
+
+
+class SpareNoFrameworkFG791(CountingFeatureGroup791):
+    """Declares the spare name and matches nothing, so nothing records the empty framework set that kills it.
+
+    Named far from both feature names on purpose: only its declared name may ever reach the suggestion line.
+    """
+
+    SUPPORTED_NAMES = frozenset({DISABLED_PAIR_SPARE_791})
+    FRAMEWORK_RULE = {RendererFwOne791}
+
+
+class RendererLivePrefixFG791(CountingFeatureGroup791):
+    """Live group matching by class-name prefix, the default rule, so it owns names it never declares."""
+
+    FRAMEWORK_RULE = {RendererFwOne791}
+
+    @classmethod
+    def match_feature_group_criteria(
+        cls,
+        feature_name: FeatureName | str,
+        options: Options,
+        data_access_collection: Optional[DataAccessCollection] = None,
+    ) -> bool:
+        _record(cls.get_class_name(), "match_feature_group_criteria")
+        return cls.feature_name_contains_class_name_as_prefix(str(feature_name))
+
+
+class RendererDeadPrefixFG791(CountingFeatureGroup791):
+    """Dead declarer of two names: one the live prefix above covers, one only its own dead prefix covers."""
+
+    MATCHES = frozenset({LIVE_PREFIX_FEATURE_791})
+    SUPPORTED_NAMES = frozenset({LIVE_PREFIX_COVERED_791, DEAD_PREFIX_UNCOVERED_791})
+    FRAMEWORK_RULE = {RendererFwOne791, RendererFwTwo791}
+
+
 class RendererDomainBoom791(RuntimeError):
     """Raised by a provider's get_domain() hook."""
 
@@ -914,6 +961,38 @@ def capability_stage_scenario() -> Scenario:
     return Feature(CAPABILITY_STAGE_FEATURE_791), {RendererCapabilityStageFG791: {RendererFwOne791}}
 
 
+def disabled_pair_scenario() -> Scenario:
+    """Two groups with no enabled framework; only the one that matched the request is recorded as eliminated."""
+    return (
+        Feature(DISABLED_PAIR_FEATURE_791),
+        {RendererDisabledPairFG791: set(), SpareNoFrameworkFG791: set()},
+    )
+
+
+def disabled_pair_reverse_scenario() -> Scenario:
+    """The same two groups, now requesting the spare name the other direction suggests."""
+    return (
+        Feature(DISABLED_PAIR_SPARE_791),
+        {RendererDisabledPairFG791: set(), SpareNoFrameworkFG791: set()},
+    )
+
+
+def live_prefix_scenario() -> Scenario:
+    """A dead group's two names next to a live group whose prefix owns one of them."""
+    return (
+        Feature(LIVE_PREFIX_FEATURE_791),
+        {RendererDeadPrefixFG791: set(), RendererLivePrefixFG791: {RendererFwOne791}},
+    )
+
+
+def live_prefix_success_scenario() -> Scenario:
+    """The same two groups, requesting the covered name: the live group's prefix resolves it."""
+    return (
+        Feature(LIVE_PREFIX_COVERED_791),
+        {RendererDeadPrefixFG791: set(), RendererLivePrefixFG791: {RendererFwOne791}},
+    )
+
+
 def raising_dead_names_scenario() -> Scenario:
     """A dead candidate whose feature_names_supported() raises, so it can contribute no name at all."""
     return Feature(RAISING_DEAD_NAMES_FEATURE_791), {_build_raising_dead_names_group(): set()}
@@ -970,6 +1049,9 @@ FAILING_SCENARIOS: dict[str, Callable[[], Scenario]] = {
     "value_stage": value_stage_scenario,
     "value_stage_without_frameworks": value_stage_without_frameworks_scenario,
     "capability_stage": capability_stage_scenario,
+    "disabled_pair": disabled_pair_scenario,
+    "disabled_pair_reverse": disabled_pair_reverse_scenario,
+    "live_prefix": live_prefix_scenario,
     "raising_dead_names": raising_dead_names_scenario,
     "raising_domain_multiple": raising_domain_multiple_scenario,
     "raising_prefix_none": raising_prefix_none_scenario,
@@ -1757,16 +1839,92 @@ class TestSuggestionsNeverPointAtADeadGroupsSiblingName:
         assert HOOK_CALLS["RendererDeadSiblingFG791.feature_names_supported"] == 1
 
 
+class TestAGroupWithoutAnyFrameworkIsDeadWithoutAnElimination:
+    """A group with no accessible framework can never be identified, for ANY name, so it declares nothing live.
+
+    It is only recorded as eliminated for the name it was asked about, so an elimination record is the wrong
+    liveness test: a second such group that never matched would otherwise keep the whole dead pair suggestible.
+    """
+
+    def test_two_disabled_groups_never_suggest_each_others_names(self) -> None:
+        """Neither direction may suggest the other name: both requests hit the same pair of disabled groups."""
+        scenario = disabled_pair_scenario()
+        feature, _ = scenario
+        result = _evaluate(scenario)
+
+        assert result.eliminations[RendererDisabledPairFG791].stage == "frameworks_not_enabled"
+        # The spare group never matched this name, so nothing records it: only its empty framework set kills it.
+        assert SpareNoFrameworkFG791 not in result.eliminations
+
+        # Premise: the spare name is the one suggestion this request ranks, so only this rule can drop it.
+        droppable = {DISABLED_PAIR_FEATURE_791, *result.facts.eliminated_hints}
+        survivors = [name for name in dict.fromkeys(result.facts.known_names) if name not in droppable]
+        ranked = get_close_matches(DISABLED_PAIR_FEATURE_791, survivors, n=MAX_RENDERED_SUGGESTIONS_791, cutoff=0.5)
+        assert ranked == [DISABLED_PAIR_SPARE_791]
+
+        message = render_resolution_failure(result, feature)
+        assert message is not None
+        assert message == (
+            f"No feature groups found for feature name: '{DISABLED_PAIR_FEATURE_791}'.\n"
+            f"Feature group(s) eliminated while matching '{DISABLED_PAIR_FEATURE_791}':\n"
+            "  - RendererDisabledPairFG791 (compute framework): "
+            "none of its compute frameworks are enabled for this run\n"
+            "Use resolve_feature(name, options=...) to debug feature resolution.\n"
+            f"{TROUBLESHOOTING_LINE}"
+        )
+        assert DISABLED_PAIR_SPARE_791 in result.facts.dead_only_names
+
+        # The other direction of the ping-pong: following the spare name may not point back at the first one.
+        reverse = disabled_pair_reverse_scenario()
+        reverse_feature, _ = reverse
+        reverse_result = _evaluate(reverse)
+
+        reverse_message = render_resolution_failure(reverse_result, reverse_feature)
+        assert reverse_message is not None
+        assert _suggestions(reverse_message) is None
+        assert DISABLED_PAIR_FEATURE_791 in reverse_result.facts.dead_only_names
+
+
+class TestALivePrefixKeepsACoveredNameSuggestible:
+    """The default matcher also owns names by class-name prefix, so a live group covers names it never declares.
+
+    Subtracting only the exact names live groups declare misses that coverage and suppresses a name that resolves.
+    """
+
+    def test_only_the_name_no_live_prefix_covers_is_suppressed(self) -> None:
+        """One dead group, two dead names: the live prefix keeps one suggestible, the other stays suppressed."""
+        scenario = live_prefix_scenario()
+        feature, _ = scenario
+        result = _evaluate(scenario)
+
+        assert result.eliminations[RendererDeadPrefixFG791].stage == "frameworks_not_enabled"
+        assert RendererLivePrefixFG791 not in result.eliminations
+        # Premise: the live prefix covers one of the two dead names, and no live prefix covers the other.
+        assert LIVE_PREFIX_COVERED_791.startswith(RendererLivePrefixFG791.prefix())
+        assert not DEAD_PREFIX_UNCOVERED_791.startswith(RendererLivePrefixFG791.prefix())
+
+        # Coverage is resolution, not just text: requesting the covered name identifies that one live group.
+        success = _evaluate(live_prefix_success_scenario())
+        assert success.failure_kind is None
+        assert set(success.identified) == {RendererLivePrefixFG791}
+
+        message = render_resolution_failure(result, feature)
+        assert message is not None
+        suggestions = _suggestions(message)
+
+        assert suggestions is not None
+        assert set(suggestions) == {LIVE_PREFIX_COVERED_791, "RendererLivePrefixFG791", "RendererLivePrefixFG791_"}
+        assert LIVE_PREFIX_COVERED_791 not in result.facts.dead_only_names
+        assert DEAD_PREFIX_UNCOVERED_791 in result.facts.dead_only_names
+
+
 class TestEveryEliminationStageIsClassified:
     """A ninth stage must be classified before it ships: an unclassified one silently keeps or drops names."""
 
     def test_the_two_stage_sets_partition_the_stage_literal(self) -> None:
         """NAME_INDEPENDENT_STAGES and its name-dependent complement cover EliminationStage exactly once."""
-        # Read off the module rather than name-imported, so a missing constant fails this test alone and not
-        # the whole module's collection.
         name_independent = resolution_types.NAME_INDEPENDENT_STAGES
         stages = frozenset(get_args(EliminationStage))
 
-        assert name_independent == EXPECTED_NAME_INDEPENDENT_STAGES_791
         assert name_independent.isdisjoint(NAME_DEPENDENT_STAGES_791)
         assert name_independent | NAME_DEPENDENT_STAGES_791 == stages

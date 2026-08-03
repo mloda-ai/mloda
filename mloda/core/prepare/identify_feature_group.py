@@ -173,10 +173,10 @@ class IdentifyFeatureGroupClass:
         """Capture the non-elimination facts the messages still need, precedence-free.
 
         The renderer alone owns which message wins, so this does not mirror its branch order: it captures
-        all three facts unconditionally (the failure path is rare). domains feeds the multiple message,
-        concrete_frameworks the abstract_only message, known_names the none message. Only reached when the
-        pass has no single winner. Every provider hook here is best-effort: a raising one degrades its own
-        fact, never this call or a sibling's fact.
+        all five facts unconditionally (the failure path is rare). domains feeds the multiple message,
+        concrete_frameworks the abstract_only message, and known_names, eliminated_hints and dead_only_names
+        the none message. Only reached when the pass has no single winner. Every provider hook here is
+        best-effort: a raising one degrades its own fact, never this call or a sibling's fact.
         """
         return RenderFacts(
             domains=self._capture_domains(result),
@@ -192,7 +192,7 @@ class IdentifyFeatureGroupClass:
         hints: set[str] = set()
         for feature_group in result.eliminations:
             hints.add(feature_group.get_class_name())
-            prefix = _prefix_name(feature_group)
+            prefix = self._prefix_of(feature_group)
             if prefix:
                 hints.add(prefix)
         return frozenset(hints)
@@ -311,28 +311,40 @@ class IdentifyFeatureGroupClass:
         feature_group: type[FeatureGroup],
         compute_frameworks: set[type[ComputeFramework]],
     ) -> bool:
-        """No name at all can resolve to this candidate: it lost at a name-blind gate, or has no framework left."""
+        """No name at all can resolve to this candidate: it has no framework left, or it lost at a name-blind gate.
+
+        The framework set is tested before the elimination lookup because it kills the candidate without one:
+        a record only exists for the name that was asked about, while an empty set routes EVERY name to
+        frameworks_not_enabled.
+        """
+        if not compute_frameworks:
+            return True
         elimination = result.eliminations.get(feature_group)
-        if elimination is None:
-            return False
-        return elimination.stage in NAME_INDEPENDENT_STAGES or not compute_frameworks
+        return elimination is not None and elimination.stage in NAME_INDEPENDENT_STAGES
 
     def _capture_dead_only_names(
         self, result: EvaluationResult, accessible_plugins: FeatureGroupEnvironmentMapping
     ) -> frozenset[str]:
-        """Declared names left with no live declarer, so suggesting one would fail again with the same message.
+        """Declared names that no live candidate declares and no live candidate's prefix covers.
 
         A difference, not a per-candidate drop: one accessible group that is still alive keeps its name
-        suggestible, whatever a dead sibling also declares.
+        suggestible, whatever a dead sibling also declares. Prefixes because the default matcher owns names
+        by class-name prefix too, so a live group covers names it never declares. The matcher's data-access
+        branches stay out: deciding one needs the speculative second match the renderer's contract refuses.
         """
         dead: set[str] = set()
         live: set[str] = set()
+        live_prefixes: set[str] = set()
         for feature_group, compute_frameworks in accessible_plugins.items():
             if self._is_dead(result, feature_group, compute_frameworks):
                 dead.update(self._supported_names_of(feature_group))
-            else:
-                live.update(self._catalog_names_of(feature_group))
-        return frozenset(dead - live)
+                continue
+            live.update(self._catalog_names_of(feature_group))
+            # Non-empty only: _prefix_name degrades a raising prefix() to "", which every name starts with.
+            prefix = self._prefix_of(feature_group)
+            if prefix:
+                live_prefixes.add(prefix)
+        return frozenset(name for name in dead - live if not any(name.startswith(prefix) for prefix in live_prefixes))
 
     def _filter_loop(
         self,

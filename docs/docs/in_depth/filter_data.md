@@ -191,15 +191,27 @@ called. Inside your calculation you can access them via `features.filters`:
 ```
 @classmethod
 def calculate_feature(cls, data, features: FeatureSet):
-    if features.filters is not None:
+    if features.filters:
         for single_filter in features.filters:
             column = single_filter.name             # e.g. "status"
             value  = single_filter.parameter.value  # e.g. "active"
             # ... use however you need
 ```
 
-`features.filters` is available whenever a `GlobalFilter` with matching filters is
-provided. It is `None` when no filters match or no `GlobalFilter` is passed.
+Guard on truthiness, not on `is not None`. `features.filters` has three states:
+
+| State | When |
+|-------|------|
+| non-empty set | filters matched this `FeatureSet` |
+| empty set | no filter matched this `FeatureSet`, but the `GlobalFilter` matched somewhere |
+| `None` | no `GlobalFilter` was passed, or that `GlobalFilter` never matched anything |
+
+"Somewhere" reaches further than your calculation: it covers another FeatureGroup, another
+`FeatureSet` of your own FeatureGroup (your FeatureGroup is planned as one `FeatureSet` per
+compute framework, option set, data type and dependency level), and any earlier run, because
+a reused `GlobalFilter` keeps the matches it has recorded. Which of the two empty states you
+get is therefore decided outside your FeatureGroup. `if features.filters:` covers both;
+`if features.filters is not None:` passes with nothing to iterate.
 
 ### Two independent concerns
 

@@ -4,11 +4,9 @@ The provenance marker must preserve the exception object exactly, because caller
 type at the matcher boundary. ``resolve_feature`` keeps its never-raises contract: a marked raise reaches
 ``ResolvedFeature.error`` instead of propagating. Doubles are dropped per test.
 
-A mark is only worth anything if every handler BETWEEN the raise and the seam re-raises it. Two sit on the
-normal path and are covered here: ``FeatureChainParserMixin.match_parser_criteria`` (which turns a parser
-error into a non-match) and ``FeatureGroup.is_root`` (which turns a raising ``input_features`` into "not a
-root"). ``utils.safe_field`` is the deliberate exception: it degrades one field in rendering paths and
-swallows a marked exception on purpose.
+A mark is only worth anything if every handler BETWEEN the raise and the seam re-raises it. The two on the
+normal path are covered here: ``match_parser_criteria`` and ``FeatureGroup.is_root``. ``utils.safe_field``
+is the deliberate exception: it degrades one field in a rendering path and swallows a marked exception.
 """
 
 import gc
@@ -255,10 +253,7 @@ class TestMatchAbortCrossesTheMatchSeam:
 
 
 class BothCategoriesMixin845f(FeatureChainParserMixin):
-    """Chain-parser probe: its name binding drives the parser into the marked both-categories raise.
-
-    A mixin, not a FeatureGroup: nothing here may join another test's candidate universe.
-    """
+    """Probe for the marked both-categories raise; a mixin, so it joins no other test's candidate universe."""
 
     PREFIX_PATTERN = BINDING_PATTERN
     # Annotated exactly as FeatureGroup declares it, so the FeatureGroup subclass below stays consistent.
@@ -269,8 +264,7 @@ class BothCategoriesMixin845f(FeatureChainParserMixin):
 
 def _both_categories_options() -> Options:
     """Options holding BINDING_KEY in group AND context, the shape _determine_parameter_category rejects."""
-    # Mutated after construction: Options() itself rejects a key present in both categories, so this state
-    # is only reachable by writing the second dict directly.
+    # Options() itself rejects a key in both categories, so this state needs a write to the second dict.
     options = Options(group={BINDING_KEY: None})
     options.context[BINDING_KEY] = "from_context_845f"
     # The group value is None so the merge reads the key as absent and asks which category it belongs in.
@@ -279,7 +273,6 @@ def _both_categories_options() -> Options:
 
 def _make_both_categories_fg() -> type[FeatureGroup]:
     """Candidate whose inherited chain-parser matcher hits the marked both-categories raise."""
-    # Class objects are cyclic; collect leftovers from earlier tests before defining a twin.
     gc.collect()
 
     class BothCategoriesFG845f(BothCategoriesMixin845f, FeatureGroup):
@@ -387,11 +380,7 @@ class TestMarkedRaiseSurvivesTheChainParserContainment:
         assert verdict is False
 
     def test_marked_config_error_crosses_the_match_seam(self) -> None:
-        """The raise reaches the caller of evaluate() with mark and message intact.
-
-        The mark lives on that one exception object, so reading it back at the caller is what shows the
-        object crossed rather than being re-wrapped or downgraded into a verdict on the way.
-        """
+        """Reading the mark back at evaluate()'s caller shows that one object crossed, unwrapped."""
         readout = _evaluate_both_categories()
 
         assert readout is not None, "the marked raise never reached the seam; a handler on the way swallowed it"

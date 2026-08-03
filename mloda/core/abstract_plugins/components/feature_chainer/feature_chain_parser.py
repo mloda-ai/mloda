@@ -274,8 +274,7 @@ class FeatureChainParser:
         if isinstance(spec, PropertySpec):
             return spec
 
-        # Contained: a mapping handed to the public entry point is the caller's defect, and the seam reads it
-        # as that candidate's non-match.
+        # Contained: a raw dict spec is that candidate's own defect, so the seam reads it as a non-match.
         raise ValueError(
             f"{owner_name}.PROPERTY_MAPPING['{key}'] is a {type(spec).__name__}, not a PropertySpec. "
             f"Raw dict specs are no longer accepted; construct PropertySpec(...) or use the "

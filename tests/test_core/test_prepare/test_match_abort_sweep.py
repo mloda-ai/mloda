@@ -1,33 +1,15 @@
 """Static sweep: every raise a match hook can reach must state whether it escalates or stays contained.
 
-``IdentifyFeatureGroupClass._filter_feature_group_by_criteria`` contains any raise out of
-``match_feature_group_criteria`` as a non-match for that candidate, unless the exception was marked with
-``escalate_match_abort``. The marked set is hand-maintained, so a NEW unmarked raise on the match path is
-silently downgraded to "this candidate does not match" and a rival plugin wins the feature. This sweep walks
-the static call graph from the match seams through the declared match-path modules and requires every raise
-it reaches to carry a decision: either the escalation call, or a ``# Contained: <reason>`` comment anchored to
-that individual raise.
+``IdentifyFeatureGroupClass._filter_feature_group_by_criteria`` contains a raise out of
+``match_feature_group_criteria`` as a non-match unless ``escalate_match_abort`` marked it, so a NEW unmarked
+raise on the match path silently loses the feature to a rival plugin. This sweep walks the static call graph
+from the match seams through the declared match-path modules and requires a decision at each individual
+raise: the escalation call, or a ``# Contained: <reason>`` comment on the raise line or in the comment block
+directly above it. A reason elsewhere in the enclosing function is not accepted; a later raise would inherit
+it and the gate would rot.
 
-What it deliberately does NOT cover:
-
-* Plugin code under ``mloda_plugins``. Their match hooks are user-shaped code; containment is the point.
-* Dynamic dispatch. The graph resolves calls by NAME inside the declared modules only, so a hook reached
-  purely through a runtime-built callable is invisible here. ``check_required_when`` and ``guarded`` are
-  seeded for exactly that reason: they run inside the matcher wrappers the two ``__init_subclass__`` hooks
-  install, and no static call edge reaches them from the seams.
-* Decorators. A decorator is not a call edge here: it runs at definition time, not when the match path calls
-  the function, and counting it would resolve ``@functools.wraps`` onto same-named framework functions.
-* Handlers BETWEEN a marked raise and the seam. A mark only survives if every ``except`` on the way
-  re-raises when ``is_match_abort`` holds, and this sweep reads raises, not handlers.
-  ``FeatureChainParserMixin.match_parser_criteria`` and ``FeatureGroup.is_root`` are the two handlers a mark
-  crosses on the normal path; test_match_abort_escalation.py owns that behavior. ``utils.safe_field``
-  swallows a marked exception deliberately: its contract is to degrade one field in a rendering path.
-* Whether a contained raise is the RIGHT call. The comment records the author's decision; this sweep only
-  proves a decision was made and written down next to the raise.
-
-Anchoring policy: the reason must sit on the raise line or in the contiguous comment block directly above the
-raise. A reason merely present somewhere in the enclosing function is not accepted, otherwise a second raise
-added later would inherit the first one's reason and the gate would rot.
+Not covered: plugin code under ``mloda_plugins``; dynamic dispatch, which is why SEEDS is hand-written;
+decorators; handlers between a marked raise and the seam (test_match_abort_escalation.py owns those).
 """
 
 from __future__ import annotations
@@ -40,8 +22,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Literal, NamedTuple
 
-# Anchor the scan to the repo layout via __file__, not the cwd: a cwd-relative root makes every lookup below
-# empty and the sweep pass vacuously. This file sits three parents below the repo root.
+# Anchored via __file__, not the cwd: a cwd-relative root makes every lookup empty and the sweep vacuous.
 _REPO_ROOT = Path(__file__).resolve().parents[3]
 _CORE_ROOT = _REPO_ROOT / "mloda"
 assert _CORE_ROOT.is_dir(), f"core root not found; check the parents index for the repo root: {_CORE_ROOT}"
@@ -51,23 +32,11 @@ assert _CORE_ROOT.is_dir(), f"core root not found; check the parents index for t
 MATCH_PATH_MODULES: dict[str, str] = {
     "mloda/core/prepare/identify_feature_group.py": "the containment seam itself",
     "mloda/core/abstract_plugins/feature_group.py": "the default matcher every group inherits",
-    "mloda/core/abstract_plugins/components/feature_chainer/feature_chain_parser_mixin.py": (
-        "the chain-parser matcher, the most common override"
-    ),
-    "mloda/core/abstract_plugins/components/feature_chainer/feature_chain_parser.py": (
-        "name parsing and property resolution run inside that matcher"
-    ),
-    "mloda/core/abstract_plugins/components/feature_chainer/feature_chain_author_guards.py": (
-        "the required_when guard wrapped around a group's matcher"
-    ),
-    "mloda/core/abstract_plugins/components/feature_chainer/property_spec.py": (
-        "the matcher's required-key check reads the spec sentinel here (is_no_default); the module's own "
-        "raises all sit in PropertySpec construction, which runs at class definition, and stay declared so a "
-        "match-time construction would be swept instead of slipping past"
-    ),
-    "mloda/core/abstract_plugins/components/input_data/base_input_data.py": (
-        "reader matching and file pinning, reached from the input-data matchers"
-    ),
+    "mloda/core/abstract_plugins/components/feature_chainer/feature_chain_parser_mixin.py": "the chain-parser matcher",
+    "mloda/core/abstract_plugins/components/feature_chainer/feature_chain_parser.py": "the parsing that matcher runs",
+    "mloda/core/abstract_plugins/components/feature_chainer/feature_chain_author_guards.py": "the required_when guard",
+    "mloda/core/abstract_plugins/components/feature_chainer/property_spec.py": "the matcher reads the spec sentinel",
+    "mloda/core/abstract_plugins/components/input_data/base_input_data.py": "reader matching and file pinning",
     "mloda/core/abstract_plugins/components/input_data/api/api_input_data.py": "the api reader's match hook",
     "mloda/core/abstract_plugins/components/input_data/creator/data_creator.py": "the data-creator match hook",
     "mloda/core/abstract_plugins/components/match_data/match_data.py": "reader selection during matching",
@@ -76,31 +45,19 @@ MATCH_PATH_MODULES: dict[str, str] = {
 for _module in MATCH_PATH_MODULES:
     assert (_REPO_ROOT / _module).exists(), f"declared match-path module not found: {_module}"
 
-# Entry points of the walk. The first two are the seam; the rest are reached from code the graph cannot see,
-# so they are seeded by hand.
+# Entry points. The first two are the seam; the rest are reached from code the graph cannot see.
 SEEDS: dict[str, str] = {
     "match_feature_group_criteria": "the match hook every candidate is asked",
     "_filter_feature_group_by_criteria": "the seam that contains a raising hook",
-    "_resolve_pinned_file": "framework helper invoked from reader match hooks that live in mloda_plugins",
-    "check_required_when": "runs inside the matcher wrapper install_required_when_guard installs",
-    "guarded": (
-        "the installed guard closures ARE the resolved match_feature_group_criteria of a guarded class; "
-        "the setattr that installs them is no static call edge"
-    ),
+    "_resolve_pinned_file": "called from reader match hooks in mloda_plugins",
+    "check_required_when": "runs inside the wrapper install_required_when_guard installs",
+    "guarded": "the installed closure IS a guarded class's matcher; the setattr is no call edge",
 }
 
-# Raising functions OUTSIDE the declared modules that the match path calls. Each needs a decision too, but it
-# is recorded here instead of at the raise, because these functions serve callers far away from matching.
-# Resolution is by name, so an entry can also be a name COLLISION rather than a real call edge; those say so
-# and are declared to keep the sweep closed, not because the match path calls them.
-_CANDIDATE_OWN_DECLARATION = (
-    "contained: this validates the requesting feature's own declaration while a candidate is being tried, so "
-    "the seam reads a raise as that candidate's non-match"
-)
-_READER_AUTO_LOAD = (
-    "contained: reader auto-load runs during matching, and a broken plugin group must not abort a run another "
-    "candidate can serve"
-)
+# Raising functions OUTSIDE the declared modules that the match path calls; the decision is recorded here
+# instead of at the raise. Resolution is by name, so an entry can be a name COLLISION, not a call edge.
+_CANDIDATE_OWN_DECLARATION = "contained: validates the requesting feature's own declaration during matching"
+_READER_AUTO_LOAD = "contained: reader auto-load during matching; a broken plugin group must not abort the run"
 
 RAISING_HELPERS_OUTSIDE_THE_PATH: dict[tuple[str, str], str] = {
     ("mloda/core/abstract_plugins/components/options.py", "__init__"): _CANDIDATE_OWN_DECLARATION,
@@ -111,19 +68,13 @@ RAISING_HELPERS_OUTSIDE_THE_PATH: dict[tuple[str, str], str] = {
     ("mloda/core/abstract_plugins/plugin_loader/plugin_loader.py", "load_group"): _READER_AUTO_LOAD,
     ("mloda/core/abstract_plugins/plugin_loader/plugin_loader.py", "all"): _READER_AUTO_LOAD,
     ("mloda/core/abstract_plugins/components/link.py", "matches"): (
-        "name collision, not a call edge: the match path calls the input-data match hooks named matches, never "
-        "Link.matches"
+        "name collision: the match path calls the input-data hooks named matches, not Link.matches"
     ),
     ("mloda/core/abstract_plugins/components/utils.py", "get_all_subclasses"): (
-        "a real edge with a collided verdict: it only walks classes the run already imported and raises "
-        "nothing itself; it counts as raising through the set.add / set.update name collision"
+        "real edge, collided verdict: it raises nothing itself; the set.add / set.update names do"
     ),
-    ("mloda/core/prepare/resolve_links.py", "update"): (
-        "name collision, not a call edge: the match path calls dict.update, not the link resolver's update"
-    ),
-    ("mloda/core/runtime/run.py", "join"): (
-        "name collision, not a call edge: the match path calls str.join, not the runner's join"
-    ),
+    ("mloda/core/prepare/resolve_links.py", "update"): "name collision: dict.update, not the link resolver's",
+    ("mloda/core/runtime/run.py", "join"): "name collision: str.join, not the runner's join",
 }
 
 _ESCALATION = "escalate_match_abort"
@@ -169,16 +120,7 @@ class _Sweep(NamedTuple):
 
 
 def _scan(node: ast.AST) -> tuple[frozenset[str], bool]:
-    """One walk of ``node``: the names it calls, and whether it contains a ``raise <exc>``.
-
-    Called names are ``f(...)`` by id and ``x.f(...)`` by attribute, decorators excluded (they run at
-    definition time, not when the match path calls the function). No builtin-method filter: ``"".join(...)``
-    does pull in a framework function named ``join``, a name collision rather than a call edge, and
-    RAISING_HELPERS_OUTSIDE_THE_PATH records those as such. Filtering them here would also hide every
-    framework method named ``get``, ``update`` or ``add``. A bare re-raise is not a raise of its own.
-
-    One walk, not two: the index scans every function under ``mloda/``, so a second pass costs real time.
-    """
+    """The names ``node`` calls and whether it raises, in one walk (the index scans all of ``mloda/``)."""
     names: set[str] = set()
     raises = False
     stack: list[ast.AST] = [node]
@@ -194,6 +136,7 @@ def _scan(node: ast.AST) -> tuple[frozenset[str], bool]:
             raises = True
         for field, value in ast.iter_fields(current):
             if field == "decorator_list":
+                # A decorator runs at definition time, not when the match path calls the function.
                 continue
             for child in value if isinstance(value, list) else [value]:
                 if isinstance(child, ast.AST):
@@ -202,15 +145,11 @@ def _scan(node: ast.AST) -> tuple[frozenset[str], bool]:
 
 
 def _escalates(node: ast.AST) -> bool:
-    """True when ``escalate_match_abort`` is called anywhere inside ``node``."""
     return _ESCALATION in _scan(node)[0]
 
 
 def _own_line_and_trailing_comments(source: str) -> tuple[dict[int, str], dict[int, str]]:
-    """Comment text per line, split into own-line comments and comments trailing code.
-
-    tokenize, not a raw ``#`` scan: a ``#`` inside a string literal is not a comment token.
-    """
+    """Comment text per line, split into own-line and trailing; tokenize, so a ``#`` in a string is not one."""
     lines = source.splitlines()
     own_line: dict[int, str] = {}
     trailing: dict[int, str] = {}
@@ -240,11 +179,7 @@ def _anchored_reason(
     lineno: int,
     tag: str,
 ) -> str | None:
-    """The tagged reason for the raise at ``lineno``: trailing on that line, or in the block directly above.
-
-    The block ends at the first line that is not an own-line comment, so a blank or code line separates a
-    raise from a reason written for something else.
-    """
+    """The tagged reason for the raise at ``lineno``: trailing on that line, or in the block directly above."""
     reason = _tagged_reason(trailing.get(lineno, ""), tag)
     if reason is not None:
         return reason
@@ -269,11 +204,7 @@ def _collect_raises(node: ast.AST, functions: list[str], out: list[tuple[ast.Rai
 
 
 def classify_raises(source: str, module: str, functions: frozenset[str] | None = None) -> list[RaiseSite]:
-    """Classify every ``raise <exc>`` in ``source``, restricted to the named functions when given.
-
-    A pure function over text so the classifier can be exercised on snippets, independent of the tree.
-    ``functions`` filters by name: a raise counts when any function enclosing it is named in the filter.
-    """
+    """Classify every ``raise <exc>`` in ``source``, restricted to raises inside the named functions."""
     tree = ast.parse(source, filename=module)
     own_line, trailing = _own_line_and_trailing_comments(source)
     found: list[tuple[ast.Raise, list[str]]] = []
@@ -288,8 +219,7 @@ def classify_raises(source: str, module: str, functions: frozenset[str] | None =
         if raise_node.exc is None:
             # A bare re-raise carries no decision of its own: it sits under the escalate_match_abort line.
             continue
-        # Only the raised expression itself counts. Crediting an escalation elsewhere in the enclosing
-        # handler would bless every later raise added next to it.
+        # Only the raised expression counts: crediting the enclosing handler would bless later raises too.
         marked = _escalates(raise_node.exc)
         claimed = _anchored_reason(own_line, trailing, raise_node.lineno, _MARKED_TAG)
         contained = _anchored_reason(own_line, trailing, raise_node.lineno, _CONTAINED_TAG)
@@ -315,12 +245,7 @@ class _Index(NamedTuple):
 
 
 def _raising_names(calls_per_name: dict[str, frozenset[str]], direct: frozenset[str]) -> frozenset[str]:
-    """Names that can raise: directly, or through anything they call.
-
-    Depth-1 detection is defeated by one non-raising wrapper in an undeclared module, so this is transitive.
-    The graph resolves calls by NAME, so the raising verdict is a name's too: a name raises when any
-    definition of it does. Cycle-safe: a name only ever joins the set, so the fixed point terminates.
-    """
+    """Names that raise directly or through anything they call: one non-raising wrapper defeats depth-1."""
     callers: dict[str, set[str]] = {}
     for name, called in calls_per_name.items():
         for callee in called:
@@ -354,8 +279,7 @@ def _index() -> _Index:
                 if raises:
                     direct.add(node.name)
             elif isinstance(node, ast.ClassDef):
-                # Options(...) / Feature(...) is an ast.Call on a CLASS name: the edge is into what
-                # construction runs, which no call node names.
+                # A call on a CLASS name is an edge into what construction runs, which no call node names.
                 for child in node.body:
                     if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef)) and child.name in _CONSTRUCTORS:
                         constructors.setdefault(node.name, []).append(_Definition(module, child))
@@ -365,11 +289,8 @@ def _index() -> _Index:
 
 @lru_cache(maxsize=1)
 def sweep() -> _Sweep:
-    """Walk the match path from the seeds and classify every raise it reaches.
-
-    Indexing ``mloda/`` (not ``mloda_plugins/``) is what lets the walk notice calls that leave the declared
-    modules; the walk itself never follows them.
-    """
+    """Walk the match path from the seeds and classify every raise it reaches."""
+    # The index covers all of mloda/, so a call leaving the declared modules is seen, though never followed.
     index = _index()
 
     def targets_of(called: str) -> list[_Definition]:
@@ -414,20 +335,17 @@ def _of_kind(kind: Kind) -> list[RaiseSite]:
 
 
 def test_every_reachable_raise_is_marked_or_contained() -> None:
-    """No raise the match path can reach is left without an escalation decision."""
     unannotated = _of_kind("unannotated")
 
     assert unannotated == [], (
         "Raise sites reachable from the match seams with no escalation decision:\n"
         + "\n".join(f"  {site.location()}" for site in unannotated)
-        + "\n\nFor each one, decide and record it at the raise: wrap the exception in "
-        f"{_ESCALATION}(...) when the run must fail instead of silently losing the candidate, or write "
-        f"'# {_CONTAINED_TAG} <reason>' directly above the raise when the seam may read it as a non-match."
+        + f"\n\nRecord the decision at the raise: wrap the exception in {_ESCALATION}(...), or write "
+        f"'# {_CONTAINED_TAG} <reason>' directly above it."
     )
 
 
 def test_no_marked_comment_without_an_escalation() -> None:
-    """No raise claims to be marked while nothing at the site actually escalates."""
     mismarked = _of_kind("mismarked")
 
     assert mismarked == [], (
@@ -437,7 +355,6 @@ def test_no_marked_comment_without_an_escalation() -> None:
 
 
 def test_calls_into_raising_helpers_outside_the_path_are_declared() -> None:
-    """Every raising helper the match path calls outside the declared modules is declared with a reason."""
     undeclared = [
         call for call in sweep().external if (call.module, call.function) not in RAISING_HELPERS_OUTSIDE_THE_PATH
     ]
@@ -445,13 +362,13 @@ def test_calls_into_raising_helpers_outside_the_path_are_declared() -> None:
     assert undeclared == [], (
         "The match path calls raising functions outside the declared modules:\n"
         + "\n".join(f"  {call.module}::{call.function} from {call.caller}" for call in undeclared)
-        + "\n\nEither declare the (module, function) pair in RAISING_HELPERS_OUTSIDE_THE_PATH with the reason "
-        "its raises may stay contained, or add the module to MATCH_PATH_MODULES so its raises are swept."
+        + "\n\nDeclare the (module, function) pair in RAISING_HELPERS_OUTSIDE_THE_PATH with a reason, or add "
+        "the module to MATCH_PATH_MODULES so its raises are swept."
     )
 
 
 def test_declared_helpers_outside_the_path_are_still_called() -> None:
-    """Every declared helper is still reached, so stale entries cannot accumulate."""
+    """Stale entries cannot accumulate: every declared helper must still be reached."""
     called = {(call.module, call.function) for call in sweep().external}
     stale = sorted(entry for entry in RAISING_HELPERS_OUTSIDE_THE_PATH if entry not in called)
 
@@ -471,19 +388,17 @@ def test_every_seed_resolves_inside_a_declared_module() -> None:
     )
 
     assert unresolved == [], (
-        f"SEEDS entries that name no definition in a declared module: {unresolved}. A renamed closure or "
-        "helper drops its whole subgraph from the sweep, so rename the seed with it."
+        f"SEEDS entries that name no definition in a declared module: {unresolved}. Rename the seed with the "
+        "definition it points at."
     )
 
 
 def test_every_declared_module_is_reachable() -> None:
-    """Each declared module contributes at least one reachable function."""
     reached = {module for module, _ in sweep().reachable}
     unreached = sorted(set(MATCH_PATH_MODULES) - reached)
 
     assert unreached == [], (
-        f"MATCH_PATH_MODULES entries no seed reaches: {unreached}. Drop the entry, or add the seed that "
-        "reaches it if the call edge is dynamic."
+        f"MATCH_PATH_MODULES entries no seed reaches: {unreached}. Drop the entry, or add the seed that reaches it."
     )
 
 
@@ -507,11 +422,7 @@ def test_known_escalations_are_enumerated() -> None:
 
 
 def test_classifier_flags_an_unannotated_raise_inside_an_escalating_handler() -> None:
-    """An escalation elsewhere in the handler annotates nothing: only the raised expression counts.
-
-    Crediting the handler would let a new raise added next to an ``escalate_match_abort(exc); raise`` inherit
-    a mark it does not carry.
-    """
+    """An escalation elsewhere in the handler annotates nothing: only the raised expression counts."""
     source = (
         "def match_feature_group_criteria(cls, feature, options):\n"
         "    try:\n"
@@ -530,7 +441,7 @@ def test_classifier_flags_an_unannotated_raise_inside_an_escalating_handler() ->
 
 
 def test_classifier_flags_an_unannotated_raise() -> None:
-    """A raise with no decision at it is reported, whatever the enclosing function says elsewhere."""
+    """A '# Contained:' mention inside a docstring is not a decision at the raise."""
     source = (
         "def match_feature_group_criteria(cls, feature, options):\n"
         '    """# Contained: a docstring mention is not a decision at the raise."""\n'
@@ -546,7 +457,6 @@ def test_classifier_flags_an_unannotated_raise() -> None:
 
 
 def test_classifier_accepts_a_contained_comment_and_an_escalation() -> None:
-    """Both ways of recording a decision are accepted, and neither is reported as unannotated."""
     source = (
         "def match_feature_group_criteria(cls, feature, options):\n"
         "    if feature is None:\n"
@@ -564,7 +474,6 @@ def test_classifier_accepts_a_contained_comment_and_an_escalation() -> None:
 
 
 def test_classifier_flags_a_marked_comment_without_an_escalation() -> None:
-    """A comment that claims escalation without one is a lie the sweep must catch, not accept as annotated."""
     source = (
         "def match_feature_group_criteria(cls, feature, options):\n"
         "    # Marked: claims to escalate, nothing here does.\n"

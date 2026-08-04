@@ -4,6 +4,7 @@ from typing import Any, ClassVar
 from mloda.user import DataAccessCollection
 from mloda.provider import FeatureSet
 from mloda.provider import BaseInputData, PropertySpec, record_match_rejection
+from mloda.core.abstract_plugins.components.match_rejection import INPUT_DATA_STAGE
 from mloda.user import Options
 
 
@@ -175,7 +176,7 @@ class ReadFile(BaseInputData):
                 cls.get_class_name(),
                 f"{cls.get_class_name()} matched the suffix of {file_name} but it lacks the column(s): "
                 f"{', '.join(missing)}",
-                stage="input_data",
+                stage=INPUT_DATA_STAGE,
             )
             return False
         return True

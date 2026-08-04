@@ -87,7 +87,10 @@ from mloda.core.abstract_plugins.components.feature_chainer.property_spec import
 )
 
 # Match rejection recording
-from mloda.core.abstract_plugins.components.match_rejection import record_match_rejection
+from mloda.core.abstract_plugins.components.match_rejection import (
+    INPUT_DATA_STAGE,
+    record_match_rejection,
+)
 
 # Subtype declaration
 from mloda.core.abstract_plugins.components.subtype_declaration import SubtypeDeclaration
@@ -170,6 +173,7 @@ __all__ = [
     "property_spec",
     "NO_DEFAULT",
     # Match rejection recording
+    "INPUT_DATA_STAGE",
     "record_match_rejection",
     # Subtype declaration
     "SubtypeDeclaration",

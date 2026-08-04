@@ -1,6 +1,7 @@
 from typing import Any, ClassVar
 from mloda.user import DataAccessCollection
 from mloda.provider import FeatureSet, BaseInputData, PropertySpec, record_match_rejection
+from mloda.core.abstract_plugins.components.match_rejection import INPUT_DATA_STAGE
 from mloda.user import Options
 
 
@@ -136,7 +137,7 @@ class ReadDB(BaseInputData):
                             cls.get_class_name(),
                             f"{cls.get_class_name()} accepted the credentials but declined "
                             f"the feature '{feature_names[0]}'",
-                            stage="input_data",
+                            stage=INPUT_DATA_STAGE,
                         )
                         continue
                     except NotImplementedError:

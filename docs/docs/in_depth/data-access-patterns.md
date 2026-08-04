@@ -104,7 +104,7 @@ A reader that owns an input but cannot serve the requested feature can record wh
 ``` python
 from typing import Any
 
-from mloda.provider import FeatureSet, record_match_rejection
+from mloda.provider import INPUT_DATA_STAGE, FeatureSet, record_match_rejection
 from mloda_plugins.feature_group.input_data.read_file import ReadFile
 
 class SensorCsvReader(ReadFile):
@@ -126,7 +126,7 @@ class SensorCsvReader(ReadFile):
                 cls.get_class_name(),
                 f"{cls.get_class_name()} matched the suffix of {file_name} "
                 f"but its header lacks the #sensor-schema marker",
-                stage="input_data",
+                stage=INPUT_DATA_STAGE,
             )
             return False
         return True
@@ -144,10 +144,12 @@ Rules for reader authors:
 - Plain non-matches (wrong suffix, invalid credentials) stay silent. `NotImplementedError` from `is_valid_credentials` is a silent non-match; from `check_feature_in_data_access` it is an accept (the reader matches on credentials alone).
 - Never raise to decline: anything but `NotImplementedError` in the DB match hooks aborts matching for every reader sharing the `DataAccessCollection`. Record, then return a falsy value.
 - Recording outside an engine-opened window is a no-op, so readers stay usable standalone.
-- Recorded reasons are discarded at the enclosing candidate level: when the reader ultimately matches, when a sibling reader matches, or when the feature group matches by another rule. Only a decline surfaces them.
+- Recorded reasons are discarded at the enclosing candidate level: when the reader ultimately matches, when a sibling reader matches, or, for unowned recordings, when the feature group matches by another rule. An owned veto instead gates the name-based rules (see the paragraph below). Only a decline surfaces them.
 - Name the reader and the concrete input in the reason, as the example does.
 
 `ReadFile` column validation and the `ReadDB` feature check (`check_feature_in_data_access`) already record automatically; a custom reader only needs this for its own decline points.
+
+A veto recorded while the user explicitly addressed the reader family (an option key equal to the reader's `data_access_name()`) gates the candidate's name-based match rules: the feature group fails at resolution with that reason instead of resolving by name and crashing at load time in `init_reader`. An unowned decline on the global probe stays near-miss material only, and the MatchData rule is not gated.
 
 ## MatchData Pattern
 

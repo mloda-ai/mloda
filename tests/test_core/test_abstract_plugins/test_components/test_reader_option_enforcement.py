@@ -16,7 +16,12 @@ from mloda.core.abstract_plugins.components.feature_chainer.property_spec import
     is_no_default,
     is_positive_int,
 )
-from mloda.core.abstract_plugins.components.match_rejection import MATCH_REJECTION_REASONS, MatchRejection
+from mloda.core.abstract_plugins.components.match_rejection import (
+    INPUT_DATA_OWNED_STAGE,
+    INPUT_DATA_STAGE,
+    MATCH_REJECTION_REASONS,
+    MatchRejection,
+)
 from mloda.core.abstract_plugins.components.utils import get_all_subclasses
 from mloda.core.prepare.accessible_plugins import FeatureGroupEnvironmentMapping
 from mloda.core.prepare.identify_feature_group import IdentifyFeatureGroupClass
@@ -397,7 +402,7 @@ class TestFeatureScopeStrictValues:
         owner = RoeStrictValuesReader.get_class_name()
         assert list(rejection_window) == [owner]
         stored = rejection_window[owner]
-        assert stored.stage == "input_data"
+        assert stored.stage == INPUT_DATA_OWNED_STAGE
         assert owner in stored.reason
         assert ROE_FORMAT_KEY in stored.reason
         assert "roe_bogus" in stored.reason
@@ -434,7 +439,7 @@ class TestFeatureScopeStrictValues:
 
         assert matched is False
         stored = rejection_window[RoeStrictValuesReader.get_class_name()]
-        assert stored.stage == "input_data"
+        assert stored.stage == INPUT_DATA_OWNED_STAGE
         assert ROE_FORMAT_KEY in stored.reason
 
     def test_all_valid_container_elements_still_match(self, rejection_window: dict[str, MatchRejection]) -> None:
@@ -456,7 +461,7 @@ class TestFeatureScopeStrictValues:
 
         assert matched is False
         stored = rejection_window[RoeStrictValuesReader.get_class_name()]
-        assert stored.stage == "input_data"
+        assert stored.stage == INPUT_DATA_OWNED_STAGE
         assert ROE_CHAR_KEY in stored.reason
         assert "xyz" in stored.reason
 
@@ -470,7 +475,7 @@ class TestFeatureScopeStrictValues:
 
         assert matched is False
         stored = rejection_window[RoeStrictValuesReader.get_class_name()]
-        assert stored.stage == "input_data"
+        assert stored.stage == INPUT_DATA_OWNED_STAGE
         assert ROE_FORMAT_KEY in stored.reason
 
     def test_explicit_none_on_a_flagless_strict_spec_reads_absent(
@@ -537,7 +542,7 @@ class TestElementValidator:
 
         assert matched is False
         stored = rejection_window[RoeValidatorReader.get_class_name()]
-        assert stored.stage == "input_data"
+        assert stored.stage == INPUT_DATA_OWNED_STAGE
         assert RoeValidatorReader.get_class_name() in stored.reason
         assert ROE_COUNT_KEY in stored.reason
         assert "roe_member" in stored.reason
@@ -552,7 +557,7 @@ class TestElementValidator:
 
         assert matched is False
         stored = rejection_window[RoeValidatorReader.get_class_name()]
-        assert stored.stage == "input_data"
+        assert stored.stage == INPUT_DATA_OWNED_STAGE
         assert ROE_TOUCHY_KEY in stored.reason
 
 
@@ -572,7 +577,7 @@ class TestRequiredness:
         owner = RoeConditionalReader.get_class_name()
         assert list(rejection_window) == [owner]
         stored = rejection_window[owner]
-        assert stored.stage == "input_data"
+        assert stored.stage == INPUT_DATA_OWNED_STAGE
         assert owner in stored.reason
         assert ROE_COND_KEY in stored.reason
 
@@ -626,7 +631,7 @@ class TestRequiredness:
         owner = reader.get_class_name()
         assert list(rejection_window) == [owner]
         stored = rejection_window[owner]
-        assert stored.stage == "input_data"
+        assert stored.stage == INPUT_DATA_OWNED_STAGE
         assert owner in stored.reason
         assert ROE_REQUIRED_KEY in stored.reason
 
@@ -666,7 +671,7 @@ class TestRequiredness:
 
         assert matched is False
         stored = rejection_window[reader.get_class_name()]
-        assert stored.stage == "input_data"
+        assert stored.stage == INPUT_DATA_OWNED_STAGE
         assert ROE_NULLABLE_KEY in stored.reason
 
     def test_declared_defaults_keep_absent_keys_optional(self, rejection_window: dict[str, MatchRejection]) -> None:
@@ -695,7 +700,7 @@ class TestGlobalProbeEnforcement:
         owner = RoeStrictValuesReader.get_class_name()
         assert list(rejection_window) == [owner]
         stored = rejection_window[owner]
-        assert stored.stage == "input_data"
+        assert stored.stage == INPUT_DATA_STAGE
         assert owner in stored.reason
         assert ROE_FORMAT_KEY in stored.reason
         assert "roe_bogus" in stored.reason
@@ -757,7 +762,7 @@ class TestGlobalProbeEnforcement:
         solo = RoePairVetoedFamily.match_data_access([ROE_FEATURE_NAME], dac, options=options)
         assert solo == (None, None)
         stored = rejection_window[RoePairVetoedReader.get_class_name()]
-        assert stored.stage == "input_data"
+        assert stored.stage == INPUT_DATA_STAGE
 
         paired = RoePairFamily.match_data_access([ROE_FEATURE_NAME], dac, options=options)
         assert paired == (RoePairCleanReader, ROE_PAIR_CLEAN_ACCESS)
@@ -841,7 +846,7 @@ class TestEngineIntegration:
         assert result.identified == {}
         elimination = result.eliminations.get(RoeEnforcementFG)
         assert elimination is not None
-        assert elimination.stage == "input_data"
+        assert elimination.stage == INPUT_DATA_STAGE
         assert RoeEngineReader.get_class_name() in elimination.reason
         assert ROE_ENGINE_KEY in elimination.reason
         assert "roe_bogus" in elimination.reason

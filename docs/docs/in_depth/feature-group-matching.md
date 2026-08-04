@@ -115,6 +115,8 @@ For feature groups not yet modernized, the default matching criteria still apply
    feature_name in FeatureGroup.feature_names_supported()
    ```
 
+An owned reader veto recorded during rule 1 (the user addressed the reader family by name and its declaration rejected the request) gates the name-based rules 2 to 4; see [Data Access Patterns](data-access-patterns.md) for the recording contract.
+
 ## Matching Examples
 
 ### Modern Feature Group (Aggregation)

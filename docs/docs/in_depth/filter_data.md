@@ -233,13 +233,27 @@ merged onto the filter feature's. The matched filters are then attached to the `
 not to the feature that matched them. So a feature that declined a filter is still filtered by
 it when a sibling feature of the same `FeatureSet` matched it, and a contained raise on one
 feature (recorded in `GlobalFilter.dropped_filters`) does not scope the drop to that feature
-either. Every divergence of this kind is logged as a WARNING naming the feature and the filter
-feature it declined.
+either.
+
+A divergence inside one `FeatureSet` is reported, not resolved, and how depends on its shape:
+
+| Divergence | Reported as |
+|------------|-------------|
+| one feature matched nothing, a sibling matched | WARNING naming the feature and the filter feature it did not match, once per divergence; the filter still applies to both |
+| two features matched different non-empty filter sets | `ValueError` out of `ExecutionPlan.add_single_filters_to_feature_set` |
+
+The second row also catches siblings that both match but whose enriched filter options differ,
+because the resulting `SingleFilter`s are then unequal.
 
 To scope a filter to some features only, make the deciding option a **group** option instead of
 a context option. Features are planned into one `FeatureSet` per compute framework, option set,
 data type and dependency level, so differing group options split them into separate
 `FeatureSet`s, and each set then gets only the filters matched for it.
+
+`GlobalFilter.probes` records what every probe matched, the empty result included, keyed by
+feature group, feature name and feature uuid. Like `collection` it accumulates across runs that
+share the `GlobalFilter`, and like `dropped_filters` it is there for debugging and quality
+checks, not for steering a calculation.
 
 ### Two independent concerns
 

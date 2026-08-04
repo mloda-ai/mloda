@@ -45,6 +45,9 @@ class ExecutionPlan:
         # Helper variable
         self.feature_set_collections: list[set[UUID]] = []
 
+        # A feature can be planned into several feature sets: report each divergence once, then at DEBUG.
+        self.reported_unmatched: set[tuple[type[FeatureGroup], str, tuple[str, ...]]] = set()
+
     def __iter__(self) -> Generator[TransformFrameworkStep | JoinStep | FeatureGroupStep, None, None]:
         yield from self.execution_plan
 
@@ -1030,19 +1033,23 @@ class ExecutionPlan:
             return
 
         for feature in feature_set.features:
-            probed = self.global_filter.probes.get((feature_group, feature.name))
+            probed = self.global_filter.probes.get((feature_group, feature.name, feature.uuid))
             # No probe entry: filter and index features enter the collection without being probed.
             if probed is None:
                 continue
             unmatched = sorted({str(f.filter_feature.name) for f in relevant_filters - probed})
             if not unmatched:
                 continue
-            logger.warning(
-                "Feature '%s' of %s did not match the filter feature(s) %s, but the filter still applies "
+            key = (feature_group, str(feature.name), tuple(unmatched))
+            first = key not in self.reported_unmatched
+            self.reported_unmatched.add(key)
+            logger.log(
+                logging.WARNING if first else logging.DEBUG,
+                "The filter feature(s) %s were not matched for feature '%s' of %s, but the filter still applies "
                 "because the filter scope is the FeatureSet.",
+                ", ".join(f"'{name}'" for name in unmatched),
                 feature.name,
                 format_feature_group_class(feature_group),
-                ", ".join(f"'{name}'" for name in unmatched),
             )
 
     def get_parent_children_mapping(self, parent_to_children_mapping: dict[UUID, set[UUID]]) -> dict[UUID, set[UUID]]:

@@ -339,7 +339,7 @@ class Engine:
                 self.global_filter.add_filter_to_collection(feature_group_class, feature.name, match)
 
             # After the loop: the recorded objects are the renamed ones the collection holds.
-            self.global_filter.record_probe(feature_group_class, feature.name, matched_filters)
+            self.global_filter.record_probe(feature_group_class, feature.name, feature.uuid, matched_filters)
 
     def add_feature_link_to_links(self, feature: Feature) -> None:
         """With this functionality, we can add links with a feature instead via mloda API."""

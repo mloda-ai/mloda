@@ -47,6 +47,8 @@ class GlobalFilter:
         self.probes: dict[tuple[type[FeatureGroup], FeatureName, UUID], set[SingleFilter]] = {}
         self.matched_filter_uuids: set[UUID] = set()
         self._warned_divergences: set[str] = set()
+        # Own state, not dropped_filters: a falsy non-bool is an ordinary non-match, never a recorded drop.
+        self._reported_falsy_matches: set[tuple[type[FeatureGroup], str]] = set()
 
     def reset_match_tracking(self) -> None:
         """Match and divergence-warning tracking is scoped to one engine setup."""
@@ -222,11 +224,13 @@ class GlobalFilter:
         """
         try:
             # bool() inside the try: reading a plugin's return is itself a plugin call (#927).
-            return bool(
-                feature_group.match_feature_group_criteria(
-                    filter.filter_feature.name, filter.filter_feature.options, data_access_collection
-                )
+            returned = feature_group.match_feature_group_criteria(
+                filter.filter_feature.name, filter.filter_feature.options, data_access_collection
             )
+            matched = bool(returned)
+            if not matched and not isinstance(returned, bool):
+                self._report_falsy_match(feature_group, str(filter.filter_feature.name), returned)
+            return matched
         except Exception as exc:  # noqa: BLE001  (contained: one broken matcher must not fail the whole run)
             if is_match_abort(exc):
                 raise
@@ -243,6 +247,21 @@ class GlobalFilter:
             "%s %s while matching filter feature '%s'; dropping that filter for this feature group.",
             feature_group.get_class_name(),
             reason,
+            filter_feature_name,
+        )
+
+    def _report_falsy_match(self, feature_group: type[FeatureGroup], filter_feature_name: str, returned: Any) -> None:
+        """Report the detached filter: WARNING on a key's first report, DEBUG after, like `_record_dropped_filter`."""
+        key = (feature_group, filter_feature_name)
+        first = key not in self._reported_falsy_matches
+        self._reported_falsy_matches.add(key)
+        logger.log(
+            logging.WARNING if first else logging.DEBUG,
+            "%s returned a falsy non-bool (%s) while matching filter feature '%s'; that filter is not attached. "
+            "Return True explicitly to keep it.",
+            feature_group.get_class_name(),
+            # The type name only: the value's own __repr__ is plugin code and must not run here.
+            type(returned).__name__,
             filter_feature_name,
         )
 

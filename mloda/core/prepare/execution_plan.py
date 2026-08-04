@@ -45,7 +45,7 @@ class ExecutionPlan:
         # Helper variable
         self.feature_set_collections: list[set[UUID]] = []
 
-        # A feature can be planned into several feature sets: report each divergence once, then at DEBUG.
+        # Report each divergence once, then at DEBUG.
         self.reported_unmatched: set[tuple[type[FeatureGroup], str, tuple[str, ...]]] = set()
 
     def __iter__(self) -> Generator[TransformFrameworkStep | JoinStep | FeatureGroupStep, None, None]:
@@ -1028,13 +1028,13 @@ class ExecutionPlan:
     def _warn_on_unmatched_features(
         self, feature_group: type[FeatureGroup], feature_set: FeatureSet, relevant_filters: set[SingleFilter]
     ) -> None:
-        """Report features of the set that declined a filter the set gets anyway: the scope is the FeatureSet."""
+        """Warn about features that declined a filter their feature set gets anyway."""
         if self.global_filter is None or not relevant_filters:
             return
 
         for feature in feature_set.features:
             probed = self.global_filter.probes.get((feature_group, feature.name, feature.uuid))
-            # No probe entry: filter and index features enter the collection without being probed.
+            # Filter and index features enter the collection without being probed.
             if probed is None:
                 continue
             unmatched = sorted({str(f.filter_feature.name) for f in relevant_filters - probed})

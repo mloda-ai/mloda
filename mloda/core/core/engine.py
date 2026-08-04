@@ -338,7 +338,7 @@ class Engine:
                 self.add_feature_to_collection(feature_group_class, match.filter_feature, features.child_uuid)
                 self.global_filter.add_filter_to_collection(feature_group_class, feature.name, match)
 
-            # After the loop: the recorded objects are the renamed ones the collection holds.
+            # After the loop, so the recorded filters are the renamed ones.
             self.global_filter.record_probe(feature_group_class, feature.name, feature.uuid, matched_filters)
 
     def add_feature_link_to_links(self, feature: Feature) -> None:

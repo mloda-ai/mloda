@@ -1,8 +1,5 @@
-"""Issue #928: filters are probed per feature but attached per FeatureSet, so a decline is silent.
-
-Features that differ only in a plain context option share one FeatureSet. When the group declines the
-filter for one of them and accepts it for another, the shared set is filtered anyway. The scope stays
-per FeatureSet; the divergence must become observable as a WARNING, once, per probed feature.
+"""Filters are probed per feature but attached per FeatureSet, so a decline is silently widened.
+The scope stays per FeatureSet; the divergence must be reported as a WARNING, once, per probed feature.
 """
 
 from __future__ import annotations
@@ -26,13 +23,13 @@ from mloda_plugins.compute_framework.base_implementations.python_dict.python_dic
 EP_LOGGER_NAME = "mloda.core.prepare.execution_plan"
 
 # The fsp_ prefix keeps every feature name unique to this module.
-FSP_DECLINE = "fsp_decline_feat_928"  # probing this feature makes the group decline the filter
-FSP_ACCEPT = "fsp_accept_feat_928"  # probing this feature makes the group accept the filter
-FSP_FILTER = "fsp_filter_feat_928"  # the filter feature whose match hook answers per probing feature
-FSP_SAME = "fsp_same_feat_928"  # requested twice, once per mode: one name, two features, one set
-FSP_UNIFORM_A = "fsp_uniform_a_feat_928"  # two different names, identical options, both accepting
-FSP_UNIFORM_B = "fsp_uniform_b_feat_928"
-FSP_MODE_KEY = "fsp_mode_928"  # "a" declines, "b" accepts
+FSP_DECLINE = "fsp_decline_feat"  # probing this feature makes the group decline the filter
+FSP_ACCEPT = "fsp_accept_feat"  # probing this feature makes the group accept the filter
+FSP_FILTER = "fsp_filter_feat"  # the filter feature whose match hook answers per probing feature
+FSP_SAME = "fsp_same_feat"  # requested twice, once per mode: one name, two features, one set
+FSP_UNIFORM_A = "fsp_uniform_a_feat"  # two different names, identical options, both accepting
+FSP_UNIFORM_B = "fsp_uniform_b_feat"
+FSP_MODE_KEY = "fsp_mode"  # "a" declines, "b" accepts
 
 SERVED_FSP_NAMES = (FSP_DECLINE, FSP_ACCEPT, FSP_SAME, FSP_UNIFORM_A, FSP_UNIFORM_B)
 ALL_FSP_NAMES = SERVED_FSP_NAMES + (FSP_FILTER,)
@@ -45,10 +42,10 @@ def _sentinel(features: FeatureSet) -> dict[str, list[int]]:
 
 
 def _make_fg(capture: list[tuple[Feature, ...]] | None = None) -> type[FeatureGroup]:
-    """A throwaway root group whose filter-feature match depends on the mode carried by the probing feature."""
+    """A throwaway root group whose filter-feature match depends on the probing feature's mode."""
     gc.collect()
 
-    class FspScopeFG928(FeatureGroup):
+    class FspScopeFG(FeatureGroup):
         @classmethod
         def input_data(cls) -> DataCreator:
             return DataCreator(set(ALL_FSP_NAMES))
@@ -67,7 +64,7 @@ def _make_fg(capture: list[tuple[Feature, ...]] | None = None) -> type[FeatureGr
 
         @classmethod
         def final_filters(cls) -> bool:
-            # The payload is a sentinel, not filterable data: report features.filters inline instead.
+            # The payload is a sentinel, not filterable data.
             return False
 
         @classmethod
@@ -76,7 +73,7 @@ def _make_fg(capture: list[tuple[Feature, ...]] | None = None) -> type[FeatureGr
                 capture.append(tuple(features.features))
             return _sentinel(features)
 
-    return FspScopeFG928
+    return FspScopeFG
 
 
 def _filter_on_fsp() -> GlobalFilter:
@@ -98,7 +95,7 @@ def _mode_pair(in_group: bool) -> list[Feature | str]:
 
 @dataclass(frozen=True)
 class _RunSnapshot:
-    """Plain-data readout of one run: sentinels, divergence warnings, probe entries. Holds no class."""
+    """Plain-data readout of one run. Holds no reference to the throwaway group."""
 
     sentinels: dict[str, int]
     warnings: tuple[str, ...]
@@ -115,7 +112,7 @@ def _sentinels(results: list[Any], columns: tuple[str, ...]) -> dict[str, int]:
 
 
 def _fsp_records(caplog: pytest.LogCaptureFixture) -> tuple[tuple[int, str], ...]:
-    """Level and message of every execution-plan record mentioning one of this module's feature names."""
+    """Level and message of every execution-plan record naming one of this module's features."""
     return tuple(
         (record.levelno, record.getMessage())
         for record in caplog.records
@@ -129,7 +126,7 @@ def _fsp_warnings(caplog: pytest.LogCaptureFixture) -> tuple[str, ...]:
 
 
 def _probe_entries(global_filter: GlobalFilter) -> dict[str, tuple[int, ...]]:
-    """Per probed feature name, the sorted match counts of its probe entries, one entry per probed feature."""
+    """Per probed feature name, the sorted match counts of its probe entries."""
     entries: dict[str, list[int]] = {}
     # The key holds the feature group class: read the name only, never bind the class.
     for key, matched in global_filter.probes.items():
@@ -138,7 +135,7 @@ def _probe_entries(global_filter: GlobalFilter) -> dict[str, tuple[int, ...]]:
 
 
 def _set_shapes(captured: list[tuple[Feature, ...]]) -> tuple[tuple[str, ...], ...]:
-    """The served feature names of every planned FeatureSet, one sorted tuple per set. Holds no feature."""
+    """The served feature names of every planned FeatureSet, one sorted tuple per set."""
     served = (tuple(sorted(str(feature.name) for feature in features)) for features in captured)
     return tuple(sorted(served))
 
@@ -149,10 +146,10 @@ def _run(
     global_filter: GlobalFilter,
     caplog: pytest.LogCaptureFixture,
 ) -> _RunSnapshot:
-    """Run the given features in one session and collect sentinels, warnings and probes as plain data.
+    """Run the features in one session and collect the readout as plain data.
 
-    Every object referencing the throwaway feature group is dropped before returning, so a failing
-    assert in the caller cannot pin it into a traceback and trip the no-leak fixture.
+    Everything referencing the throwaway group is dropped before returning, so a failing assert
+    cannot pin it into a traceback and trip the no-leak fixture.
     """
     caplog.clear()
     captured: list[tuple[Feature, ...]] = []
@@ -173,7 +170,7 @@ def _run(
         probe_entries=_probe_entries(global_filter),
         set_shapes=_set_shapes(captured),
     )
-    # Records carry args that can hold the throwaway class; drop them with everything else.
+    # Records carry args that can hold the throwaway class.
     caplog.clear()
     del fg, collector, results, captured
     gc.collect()
@@ -181,7 +178,7 @@ def _run(
 
 
 def test_the_declining_feature_is_filtered_anyway(caplog: pytest.LogCaptureFixture) -> None:
-    """Characterization: the shared FeatureSet gets the filter, so the declining feature is filtered too."""
+    """The shared FeatureSet gets the filter, so the declining feature is filtered too."""
     snapshot = _run(_mode_pair(False), (FSP_DECLINE, FSP_ACCEPT), _filter_on_fsp(), caplog)
 
     assert snapshot.sentinels[FSP_ACCEPT] == 1, f"the accepting feature must get its one filter: {snapshot!r}"
@@ -191,7 +188,7 @@ def test_the_declining_feature_is_filtered_anyway(caplog: pytest.LogCaptureFixtu
 
 
 def test_the_divergence_is_reported_as_a_warning(caplog: pytest.LogCaptureFixture) -> None:
-    """The silent widening must be observable: one WARNING naming the declining feature and the filter."""
+    """One WARNING names the declining feature and the filter."""
     snapshot = _run(_mode_pair(False), (FSP_DECLINE, FSP_ACCEPT), _filter_on_fsp(), caplog)
 
     assert len(snapshot.warnings) == 1, f"exactly one WARNING must report the divergence, got: {snapshot.warnings}"
@@ -201,7 +198,7 @@ def test_the_divergence_is_reported_as_a_warning(caplog: pytest.LogCaptureFixtur
 
 
 def test_every_probe_is_recorded_including_the_empty_one(caplog: pytest.LogCaptureFixture) -> None:
-    """The decline is only detectable if empty probe results are recorded, not just the matches."""
+    """Empty probe results are recorded too, not just the matches."""
     snapshot = _run(_mode_pair(False), (FSP_DECLINE, FSP_ACCEPT), _filter_on_fsp(), caplog)
 
     assert snapshot.probe_entries.get(FSP_DECLINE) == (0,), (
@@ -211,7 +208,7 @@ def test_every_probe_is_recorded_including_the_empty_one(caplog: pytest.LogCaptu
 
 
 def test_two_features_of_one_name_diverge_and_are_reported(caplog: pytest.LogCaptureFixture) -> None:
-    """One name requested with two context modes: the declining twin must still be reported, not unioned away."""
+    """One name requested with two context modes: the declining twin is still reported."""
     same_name: list[Feature | str] = [Feature(FSP_SAME, _options("a")), Feature(FSP_SAME, _options("b"))]
     snapshot = _run(same_name, (FSP_SAME,), _filter_on_fsp(), caplog)
 
@@ -228,7 +225,7 @@ def test_two_features_of_one_name_diverge_and_are_reported(caplog: pytest.LogCap
 
 
 def _cross_run_warnings(caplog: pytest.LogCaptureFixture) -> tuple[tuple[str, ...], tuple[str, ...]]:
-    """Two runs of one name over one shared GlobalFilter: run 1 accepts, run 2 declines. Returns both warning sets."""
+    """Two runs of one name over a shared GlobalFilter: run 1 accepts, run 2 declines."""
     caplog.clear()
     fg = _make_fg()
     collector = PluginCollector.enabled_feature_groups({fg})
@@ -258,7 +255,7 @@ def _cross_run_warnings(caplog: pytest.LogCaptureFixture) -> tuple[tuple[str, ..
 
 
 def test_a_stale_probe_of_an_earlier_run_does_not_mask_a_later_decline(caplog: pytest.LogCaptureFixture) -> None:
-    """The second run declines the filter its stale collection entry still attaches: that must warn."""
+    """The second run warns about the stale filter its earlier collection entry still attaches."""
     first, second = _cross_run_warnings(caplog)
 
     assert first == (), f"the accepting run must not warn: {first}"
@@ -268,7 +265,7 @@ def test_a_stale_probe_of_an_earlier_run_does_not_mask_a_later_decline(caplog: p
 
 
 def test_a_filterless_run_records_no_probes(caplog: pytest.LogCaptureFixture) -> None:
-    """An empty GlobalFilter has nothing to probe, so the ledger must stay empty and hold no group class."""
+    """An empty GlobalFilter has nothing to probe, so the ledger stays empty."""
     snapshot = _run(_mode_pair(False), (FSP_DECLINE, FSP_ACCEPT), GlobalFilter(), caplog)
 
     assert snapshot.sentinels == {FSP_DECLINE: -1, FSP_ACCEPT: -1}, f"no filter can be delivered: {snapshot!r}"
@@ -276,11 +273,10 @@ def test_a_filterless_run_records_no_probes(caplog: pytest.LogCaptureFixture) ->
 
 
 def _repeated_report_levels(caplog: pytest.LogCaptureFixture) -> tuple[tuple[int, str], ...]:
-    """Level and message of the divergence reports for one feature planned into two feature sets.
+    """Divergence reports for one feature planned into two feature sets.
 
-    A genuine two-FeatureSet plan is not reachable within the timeout, so the dedup is pinned at the unit
-    level: one real run populates the GlobalFilter, then the plan step is replayed over two fresh sets
-    rebuilt from the features of the diverging set.
+    A genuine two-FeatureSet plan is not reachable within the timeout, so one real run populates the
+    GlobalFilter and the plan step is then replayed twice over the diverging set.
     """
     caplog.clear()
     captured: list[tuple[Feature, ...]] = []
@@ -312,7 +308,7 @@ def _repeated_report_levels(caplog: pytest.LogCaptureFixture) -> tuple[tuple[int
 
 
 def test_the_divergence_report_does_not_repeat(caplog: pytest.LogCaptureFixture) -> None:
-    """The same divergence reported twice must warn once and drop to DEBUG after, like a dropped filter."""
+    """The same divergence warns once, then drops to DEBUG."""
     records = _repeated_report_levels(caplog)
 
     levels = tuple(level for level, _ in records)
@@ -322,7 +318,7 @@ def test_the_divergence_report_does_not_repeat(caplog: pytest.LogCaptureFixture)
 def test_a_group_option_splits_the_sets_and_spares_the_declining_feature(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
-    """The documented remedy: as a group option the mode splits the feature sets, so only one is filtered."""
+    """As a group option the mode splits the feature sets, so only one is filtered."""
     snapshot = _run(_mode_pair(True), (FSP_DECLINE, FSP_ACCEPT), _filter_on_fsp(), caplog)
 
     assert snapshot.sentinels[FSP_ACCEPT] == 1, f"the accepting feature set must get its one filter: {snapshot!r}"
@@ -334,7 +330,7 @@ def test_a_group_option_splits_the_sets_and_spares_the_declining_feature(
 
 
 def test_the_uniform_case_warns_about_nothing(caplog: pytest.LogCaptureFixture) -> None:
-    """Two different names with identical options share one set and both match, so there is nothing to report."""
+    """Two names with identical options share one set and both match, so nothing is reported."""
     uniform: list[Feature | str] = [Feature(FSP_UNIFORM_A, _options("b")), Feature(FSP_UNIFORM_B, _options("b"))]
     snapshot = _run(uniform, (FSP_UNIFORM_A, FSP_UNIFORM_B), _filter_on_fsp(), caplog)
 

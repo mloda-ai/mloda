@@ -226,34 +226,15 @@ a reused `GlobalFilter` keeps the matches it has recorded. Which of the two empt
 get is therefore decided outside your FeatureGroup. `if features.filters:` covers both;
 `if features.filters is not None:` passes with nothing to iterate.
 
-### Filter scope is the `FeatureSet`, matching is probed per feature
+### Filter scope is the `FeatureSet`
 
-`match_feature_group_criteria()` is probed once per feature, with that feature's own options
-merged onto the filter feature's. The matched filters are then attached to the `FeatureSet`,
-not to the feature that matched them. So a feature that declined a filter is still filtered by
-it when a sibling feature of the same `FeatureSet` matched it, and a contained raise on one
-feature (recorded in `GlobalFilter.dropped_filters`) does not scope the drop to that feature
-either.
+Matching is probed per feature, but matched filters attach to the `FeatureSet`. A feature that
+declined a filter is still filtered by it once a sibling of its set matched it, a contained raise
+included; that is logged as a WARNING. Two features matching different non-empty filter sets
+raise `ValueError` instead. To scope a filter, make the deciding option a **group** option:
+differing group options split the features into separate `FeatureSet`s.
 
-A divergence inside one `FeatureSet` is reported, not resolved, and how depends on its shape:
-
-| Divergence | Reported as |
-|------------|-------------|
-| one feature matched nothing, a sibling matched | WARNING naming the feature and the filter feature it did not match, once per divergence; the filter still applies to both |
-| two features matched different non-empty filter sets | `ValueError` out of `ExecutionPlan.add_single_filters_to_feature_set` |
-
-The second row also catches siblings that both match but whose enriched filter options differ,
-because the resulting `SingleFilter`s are then unequal.
-
-To scope a filter to some features only, make the deciding option a **group** option instead of
-a context option. Features are planned into one `FeatureSet` per compute framework, option set,
-data type and dependency level, so differing group options split them into separate
-`FeatureSet`s, and each set then gets only the filters matched for it.
-
-`GlobalFilter.probes` records what every probe matched, the empty result included, keyed by
-feature group, feature name and feature uuid. Like `collection` it accumulates across runs that
-share the `GlobalFilter`, and like `dropped_filters` it is there for debugging and quality
-checks, not for steering a calculation.
+`GlobalFilter.probes` records what every probe matched, empty results included, for debugging.
 
 ### Two independent concerns
 

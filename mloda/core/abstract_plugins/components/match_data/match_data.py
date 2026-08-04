@@ -94,14 +94,21 @@ class MatchData:
 
         if cls_name in options:
             existing_data = options.get(cls_name)
-            if existing_data == matched_data_access:
+            # `is True`, not a truth test: a non-bool __eq__ result (numpy array, DataFrame) must fall through
+            # to the marked escalation instead of raising "truth value is ambiguous" unmarked (#932).
+            if (existing_data == matched_data_access) is True:
                 return
 
             # Marked: two conflicting readers for one feature is a user misconfiguration.
             # Presence, not truthiness, is the identity, so the same contradiction is not left to raise unmarked
             # one level down in Options.add_to_group (#932).
+            # The access value is deliberately named by TYPE only: it can carry credentials, and this message
+            # escalates to the caller and is logged.
             raise escalate_match_abort(
-                ValueError(f"{cls_name} already set with different values. {existing_data} != {matched_data_access}")
+                ValueError(
+                    f"{cls_name} already set with different values. "
+                    f"incoming={type(matched_data_access).__name__}, existing={type(existing_data).__name__}"
+                )
             )
         options.add_to_group(cls_name, matched_data_access)
 

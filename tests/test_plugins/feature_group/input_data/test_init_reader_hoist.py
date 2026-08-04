@@ -10,7 +10,7 @@ Contract:
         "Options were not set for {self.__class__.__name__}" and contains "BaseInputData",
         "Options(context=", and an example line containing "ReaderClass" and "data_access".
       - options.get("BaseInputData") is None (key missing or None): ValueError containing
-        "'BaseInputData' key is missing or None", the class name, and the same example hints.
+        "'BaseInputData' key is missing", the class name, and the same example hints.
       - happy path: options carrying {"BaseInputData": (SomeReaderClass, data_access)}
         returns (instance of SomeReaderClass, data_access).
 
@@ -86,7 +86,7 @@ class TestBaseInitReaderIsConcrete:
         with pytest.raises(ValueError) as excinfo:
             reader.init_reader(options)
         message = str(excinfo.value)
-        assert "'BaseInputData' key is missing or None" in message
+        assert "'BaseInputData' key is missing" in message
         assert "HoistBareInputData" in message
         assert "ReaderClass" in message
         assert "data_access" in message
@@ -121,5 +121,5 @@ class TestFamilyBehaviorAfterHoist:
         # bracket-access implementation must funnel a keyless Options into the same
         # ValueError as the base (never KeyError or a None-unpack TypeError).
         options = Options(context={"other_key": "value"})
-        with pytest.raises(ValueError, match="'BaseInputData' key is missing or None"):
+        with pytest.raises(ValueError, match="'BaseInputData' key is missing"):
             ReadDB().init_reader(options)

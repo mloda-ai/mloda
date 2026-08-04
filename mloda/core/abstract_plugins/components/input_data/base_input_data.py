@@ -22,9 +22,10 @@ class BaseInputData(ABC):
     READER_OPTIONS: ClassVar[dict[str, PropertySpec]] = {
         "BaseInputData": PropertySpec(
             "The matched (ReaderClass, data_access) pair, written by add_base_input_data_to_options "
-            "and read back by init_reader.",
+            "and read back by init_reader; an explicitly stored None counts as present.",
             default=None,
             framework_set=True,
+            allow_explicit_none=True,
         ),
     }
 
@@ -371,16 +372,26 @@ class BaseInputData(ABC):
 
         if "BaseInputData" in options:
             existing_data = options.get("BaseInputData")
-            if existing_data == (cls_to_be_added, matched_data_access):
+            # `is True`, not a truth test: a non-bool __eq__ result (numpy array, DataFrame) must fall through
+            # to the marked escalation instead of raising "truth value is ambiguous" unmarked (#932).
+            if (existing_data == (cls_to_be_added, matched_data_access)) is True:
                 return
+
+            if isinstance(existing_data, tuple) and len(existing_data) == 2:
+                existing_label = f"{existing_data[0]} (access type {type(existing_data[1]).__name__})"
+            else:
+                existing_label = type(existing_data).__name__
 
             # Marked: two conflicting readers for one feature is a user misconfiguration.
             # Presence, not truthiness, is the identity, so the same contradiction is not left to raise unmarked
             # one level down in Options.add_to_group (#932).
+            # The access value is deliberately named by TYPE only: it can carry credentials (ReadDB matches a
+            # credentials dict), and this message escalates to the caller and is logged.
             raise escalate_match_abort(
                 ValueError(
                     f"BaseInputData already set with different values. "
-                    f"{(cls_to_be_added, matched_data_access)} != {existing_data}"
+                    f"incoming={cls_to_be_added} (access type {type(matched_data_access).__name__}), "
+                    f"existing={existing_label}"
                 )
             )
         options.add_to_group("BaseInputData", (cls_to_be_added, matched_data_access))
@@ -401,7 +412,8 @@ class BaseInputData(ABC):
 
         if reader_data_access is None:
             raise ValueError(
-                f"'BaseInputData' key is missing or None in the provided Options for {self.__class__.__name__}.\n"
+                f"'BaseInputData' key is missing in the provided Options for {self.__class__.__name__}.\n"
+                "Reader selection never leaves a None stored under it: there, a stored None is a conflict.\n"
                 "The 'BaseInputData' key in Options must map to a tuple of "
                 "(ReaderClass, data_access).\n"
                 "Example:\n"

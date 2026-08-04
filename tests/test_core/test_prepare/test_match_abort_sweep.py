@@ -59,7 +59,9 @@ SEEDS: dict[str, str] = {
 _CANDIDATE_OWN_DECLARATION = "contained: validates the requesting feature's own declaration during matching"
 _READER_AUTO_LOAD = "contained: reader auto-load during matching; a broken plugin group must not abort the run"
 _DECIDED_ABOVE_BY_READER_SELECTION = (
-    "decided above by the marked raise in reader selection (#932); this write only ever reaches an absent key"
+    "decided above by the marked raise in reader selection (#932), for its two match-path callers "
+    "BaseInputData.add_base_input_data_to_options and MatchData.add_base_input_data_to_options; "
+    "from both, this write only ever reaches an absent key. A third caller needs its own decision"
 )
 
 RAISING_HELPERS_OUTSIDE_THE_PATH: dict[tuple[str, str], str] = {

@@ -136,10 +136,10 @@ NAME_DEPENDENT_STAGES_791: frozenset[EliminationStage] = frozenset(
     {"value_rejection", "input_data", "matcher_error", "capability", "framework_pin"}
 )
 
-# The label each stage renders. The keys are pinned complete against EliminationStage, the values against
-# _STAGE_LABELS, so neither a new stage nor a renamed label can ship unstated. Two stages share one label on
-# purpose (capability and frameworks_not_enabled both render 'compute framework'): this is stage -> label, and
-# label uniqueness is deliberately NOT pinned.
+# The label each stage renders, stated here independently of the renderer: EliminationStage is checked against
+# these keys and each rendered near-miss line against these values, so a new stage cannot ship unlabeled. Two
+# stages share one label on purpose (capability and frameworks_not_enabled both render 'compute framework'):
+# this is stage -> label, and label uniqueness is deliberately NOT pinned.
 EXPECTED_STAGE_LABELS_791: dict[EliminationStage, str] = {
     "value_rejection": "option value",
     "input_data": "input data",
@@ -2677,23 +2677,24 @@ class TestEveryEliminationStageIsClassified:
 
 
 class TestEveryStageLabelIsPinned:
-    """The class above pins the label table's KEYS; this one pins its VALUES, as a table and as rendered text.
+    """TestEveryEliminationStageIsClassified pins the label table's KEYS; this one pins its VALUES as rendered text.
 
-    Seven stages are pinned end to end through real matching in
-    tests/test_core/test_prepare/test_candidate_elimination_reasons.py and one (input_data) in
-    tests/test_plugins/feature_group/input_data/test_reader_match_rejections.py; those stay. This guard is
-    what a tenth stage, or a renamed label, trips even when no hand-written line covers it.
+    Every stage shipping today also has a hand-written rendered line: seven in
+    tests/test_core/test_prepare/test_candidate_elimination_reasons.py, input_data in
+    tests/test_plugins/feature_group/input_data/test_reader_match_rejections.py, matcher_error in
+    tests/test_core/test_prepare/test_raising_matcher_containment.py, so a RENAME is already caught per stage.
+    What this guard adds is that a NEW stage cannot ship with an unpinned label.
     """
 
     def test_the_expected_table_names_every_stage(self) -> None:
         """A tenth stage fails here until someone states the label it renders."""
         assert frozenset(EXPECTED_STAGE_LABELS_791) == frozenset(get_args(EliminationStage))
 
-    def test_the_label_table_matches_the_expected_labels(self) -> None:
-        """Renaming a label in production fails here."""
-        assert _STAGE_LABELS == EXPECTED_STAGE_LABELS_791
-
-    @pytest.mark.parametrize(("stage", "label"), sorted(EXPECTED_STAGE_LABELS_791.items()))
+    @pytest.mark.parametrize(
+        ("stage", "label"),
+        sorted(EXPECTED_STAGE_LABELS_791.items()),
+        ids=sorted(EXPECTED_STAGE_LABELS_791),
+    )
     def test_a_stage_renders_its_expected_label(self, stage: EliminationStage, label: str) -> None:
         """The near-miss line of every stage reads '  - <class> (<label>): <reason>'."""
         feature = Feature(STAGE_LABEL_FEATURE_791)

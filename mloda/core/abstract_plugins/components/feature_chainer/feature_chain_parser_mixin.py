@@ -329,6 +329,8 @@ class FeatureChainParserMixin:
                 prefix_patterns=cls._get_prefix_patterns(),
                 owner_name=cls.__name__,
             )
+        # Swallows: the parser's own non-match verdict, recorded as the candidate's reason.
+        # A framework raise is marked instead and lands in the ValueError handler below.
         except PropertyValueRejection as exc:
             record_match_rejection(cls.__name__, str(exc))
             return False
@@ -473,6 +475,7 @@ class FeatureChainParserMixin:
                 continue
             try:
                 rejected = not guard(value)
+            # Swallows: a guard that raises cannot judge the value, so the value counts as rejected.
             except Exception as exc:
                 level = contained_raise_log_level(exc)
                 if level == logging.DEBUG:

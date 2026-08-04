@@ -252,9 +252,9 @@ def check_required_when(
         predicate = spec.required_when
         if predicate is None:
             continue
-        # A predicate that raises cannot judge the value, so the feature group is a non-match, not the run.
         try:
             is_required = bool(predicate(effective_options))
+        # Swallows: a predicate that raises cannot judge, so this is a non-match, not the run.
         except Exception as exc:
             logger.log(
                 contained_raise_log_level(exc),

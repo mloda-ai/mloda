@@ -163,11 +163,10 @@ class FeatureChainParser:
         element_validator = original_property_config.element_validator
 
         if element_validator is not None:
-            # A validator that raises cannot judge the value, so the value is rejected, not the run.
             raised: Exception | None = None
             try:
                 verdict = element_validator(found_property_val)
-            except Exception as exc:
+            except Exception as exc:  # Swallows: a validator that raises cannot judge the value, so it is rejected.
                 level = contained_raise_log_level(exc)
                 if level == logging.DEBUG:
                     logger.debug(
@@ -189,10 +188,10 @@ class FeatureChainParser:
                     f"Property value '{found_property_val}' failed validation for '{property_name}'"
                 ) from raised
         else:
-            # Fallback to membership check. An unhashable element (e.g. a dict) can never be
-            # a member of the accepted set, so it is a clean rejection, not a TypeError.
+            # Fallback to membership check.
             try:
                 is_member = found_property_val in property_value
+            # Swallows: an unhashable element can never be a member, so the TypeError is a clean rejection.
             except TypeError:
                 is_member = False
             if not is_member:

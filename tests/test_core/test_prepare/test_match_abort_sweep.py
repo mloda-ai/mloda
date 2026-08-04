@@ -8,8 +8,12 @@ raise: the escalation call, or a ``# Contained: <reason>`` comment on the raise 
 directly above it. A reason elsewhere in the enclosing function is not accepted; a later raise would inherit
 it and the gate would rot.
 
+A sibling sweep walks the same reachable set for ``except`` handlers: a mark only survives if every handler
+between the raise and the seam re-raises it, so each handler must re-raise on ``is_match_abort`` or carry a
+``# Swallows: <reason>`` comment.
+
 Not covered: plugin code under ``mloda_plugins``; dynamic dispatch, which is why SEEDS is hand-written;
-decorators; handlers between a marked raise and the seam (test_match_abort_escalation.py owns those).
+decorators.
 """
 
 from __future__ import annotations
@@ -81,14 +85,28 @@ RAISING_HELPERS_OUTSIDE_THE_PATH: dict[tuple[str, str], str] = {
     ("mloda/core/runtime/run.py", "join"): "name collision: str.join, not the runner's join",
 }
 
+# Swallowing functions OUTSIDE the declared modules that the match path calls; a handler there is decided here.
+SWALLOWING_HELPERS_OUTSIDE_THE_PATH: dict[tuple[str, str], str] = {
+    ("mloda/core/abstract_plugins/components/utils.py", "safe_field"): (
+        "it degrades one field in a rendering path, so swallowing a marked exception is its contract"
+    ),
+    ("mloda/core/abstract_plugins/components/utils.py", "escalate_match_abort"): (
+        "the guard around the marker write; failing to mark must not replace the exception being marked"
+    ),
+}
+
 _ESCALATION = "escalate_match_abort"
+_ABORT_CHECK = "is_match_abort"
 _CONTAINED_TAG = "Contained:"
 _MARKED_TAG = "Marked:"
+_SWALLOW_TAG = "Swallows:"
 
 # Constructing a class runs these, so a call on a class name is an edge into them.
 _CONSTRUCTORS: frozenset[str] = frozenset({"__init__", "__post_init__"})
 
 Kind = Literal["marked", "contained", "mismarked", "unannotated"]
+
+HandlerKind = Literal["escalating", "swallowing", "misannotated", "unannotated"]
 
 
 class RaiseSite(NamedTuple):
@@ -98,6 +116,19 @@ class RaiseSite(NamedTuple):
     lineno: int
     function: str
     kind: Kind
+    reason: str | None
+
+    def location(self) -> str:
+        return f"{self.module}:{self.lineno} {self.function}()"
+
+
+class HandlerSite(NamedTuple):
+    """One ``except`` clause and the containment decision written at it."""
+
+    module: str
+    lineno: int
+    function: str
+    kind: HandlerKind
     reason: str | None
 
     def location(self) -> str:
@@ -121,6 +152,8 @@ class _Sweep(NamedTuple):
     sites: tuple[RaiseSite, ...]
     reachable: frozenset[tuple[str, str]]
     external: tuple[ExternalCall, ...]
+    handlers: tuple[HandlerSite, ...]
+    swallowing_external: tuple[ExternalCall, ...]
 
 
 def _scan(node: ast.AST) -> tuple[frozenset[str], bool]:
@@ -150,6 +183,23 @@ def _scan(node: ast.AST) -> tuple[frozenset[str], bool]:
 
 def _escalates(node: ast.AST) -> bool:
     return _ESCALATION in _scan(node)[0]
+
+
+def _handler_escalates(handler: ast.ExceptHandler) -> bool:
+    """A raise as a direct child re-raises unconditionally; otherwise the abort check needs a raise beside it."""
+    if any(isinstance(statement, ast.Raise) for statement in handler.body):
+        return True
+    calls: set[str] = set()
+    raises = False
+    for statement in handler.body:
+        calls |= _scan(statement)[0]
+        raises = raises or any(isinstance(node, ast.Raise) for node in ast.walk(statement))
+    return raises and _ABORT_CHECK in calls
+
+
+def _swallows(node: ast.AST) -> bool:
+    """Does this definition hold a handler that neither re-raises nor checks the marker."""
+    return any(isinstance(child, ast.ExceptHandler) and not _handler_escalates(child) for child in ast.walk(node))
 
 
 def _own_line_and_trailing_comments(source: str) -> tuple[dict[int, str], dict[int, str]]:
@@ -240,6 +290,44 @@ def classify_raises(source: str, module: str, functions: frozenset[str] | None =
     return sorted(sites)
 
 
+def _collect_handlers(node: ast.AST, functions: list[str], out: list[tuple[ast.ExceptHandler, list[str]]]) -> None:
+    """Walk ``node``, recording each except clause with its enclosing function chain."""
+    for child in ast.iter_child_nodes(node):
+        if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            _collect_handlers(child, [*functions, child.name], out)
+        else:
+            if isinstance(child, ast.ExceptHandler):
+                out.append((child, functions))
+            _collect_handlers(child, functions, out)
+
+
+def classify_handlers(source: str, module: str, functions: frozenset[str] | None = None) -> list[HandlerSite]:
+    """Classify every ``except`` clause in ``source``, restricted to handlers inside the named functions."""
+    tree = ast.parse(source, filename=module)
+    own_line, trailing = _own_line_and_trailing_comments(source)
+    found: list[tuple[ast.ExceptHandler, list[str]]] = []
+    _collect_handlers(tree, [], found)
+
+    sites: list[HandlerSite] = []
+    for handler, chain in found:
+        if not chain:
+            continue
+        if functions is not None and not any(name in functions for name in chain):
+            continue
+        escalating = _handler_escalates(handler)
+        # Anchored at the except line only: a reason elsewhere in the function would bless the next handler too.
+        declared = _anchored_reason(own_line, trailing, handler.lineno, _SWALLOW_TAG)
+        kind: HandlerKind
+        if escalating:
+            kind, reason = ("misannotated", declared) if declared is not None else ("escalating", None)
+        elif declared is not None:
+            kind, reason = "swallowing", declared
+        else:
+            kind, reason = "unannotated", None
+        sites.append(HandlerSite(module, handler.lineno, chain[-1], kind, reason))
+    return sorted(sites)
+
+
 class _Index(NamedTuple):
     """Every definition under ``mloda/``, plus the names whose call can raise."""
 
@@ -311,6 +399,7 @@ def sweep() -> _Sweep:
 
     reachable: set[tuple[str, str]] = set()
     external: set[ExternalCall] = set()
+    swallowing: set[ExternalCall] = set()
     while queue:
         definition = queue.popleft()
         reachable.add((definition.module, definition.node.name))
@@ -322,16 +411,27 @@ def sweep() -> _Sweep:
                     if key not in visited:
                         visited.add(key)
                         queue.append(target)
-                elif target.node.name in index.raising:
+                    continue
+                if target.node.name in index.raising:
                     external.add(ExternalCall(target.module, target.node.name, caller))
+                if _swallows(target.node):
+                    swallowing.add(ExternalCall(target.module, target.node.name, caller))
 
     sites: list[RaiseSite] = []
+    handlers: list[HandlerSite] = []
     for module in sorted({module for module, _ in reachable}):
         names = frozenset(name for reached_module, name in reachable if reached_module == module)
         source = (_REPO_ROOT / module).read_text(encoding="utf-8")
         sites.extend(classify_raises(source, module, names))
+        handlers.extend(classify_handlers(source, module, names))
 
-    return _Sweep(tuple(sorted(sites)), frozenset(reachable), tuple(sorted(external)))
+    return _Sweep(
+        tuple(sorted(sites)),
+        frozenset(reachable),
+        tuple(sorted(external)),
+        tuple(sorted(handlers)),
+        tuple(sorted(swallowing)),
+    )
 
 
 def _of_kind(kind: Kind) -> list[RaiseSite]:
@@ -487,3 +587,204 @@ def test_classifier_flags_a_marked_comment_without_an_escalation() -> None:
     sites = classify_raises(source, "snippet.py", frozenset({"match_feature_group_criteria"}))
 
     assert [site.kind for site in sites] == ["mismarked"]
+
+
+# The handler sweep: same reachable set, one decision per except clause.
+
+
+def _handlers_of_kind(kind: HandlerKind) -> list[HandlerSite]:
+    return [site for site in sweep().handlers if site.kind == kind]
+
+
+def _handlers(source: str) -> list[HandlerSite]:
+    return classify_handlers(source, "snippet.py", frozenset({"match_feature_group_criteria"}))
+
+
+def test_every_reachable_handler_escalates_or_declares_a_swallow() -> None:
+    unannotated = _handlers_of_kind("unannotated")
+
+    assert unannotated == [], (
+        "Handlers reachable from the match seams with no containment decision:\n"
+        + "\n".join(f"  {site.location()}" for site in unannotated)
+        + "\n\nA handler that swallows a marked raise undoes the escalation. Record the decision at the "
+        f"handler: re-raise when is_match_abort(exc) holds, or write '# {_SWALLOW_TAG} <reason>' on the except line."
+    )
+
+
+def test_no_swallows_comment_on_a_reraising_handler() -> None:
+    misannotated = _handlers_of_kind("misannotated")
+
+    assert misannotated == [], f"Handlers carrying a '# {_SWALLOW_TAG}' comment that re-raise anyway:\n" + "\n".join(
+        f"  {site.location()}: {site.reason}" for site in misannotated
+    )
+
+
+def test_calls_into_swallowing_helpers_outside_the_path_are_declared() -> None:
+    undeclared = [
+        call
+        for call in sweep().swallowing_external
+        if (call.module, call.function) not in SWALLOWING_HELPERS_OUTSIDE_THE_PATH
+    ]
+
+    assert undeclared == [], (
+        "The match path calls functions outside the declared modules that swallow exceptions:\n"
+        + "\n".join(f"  {call.module}::{call.function} from {call.caller}" for call in undeclared)
+        + "\n\nDeclare the (module, function) pair in SWALLOWING_HELPERS_OUTSIDE_THE_PATH with a reason, or add "
+        "the module to MATCH_PATH_MODULES so its handlers are swept."
+    )
+
+
+def test_declared_swallowing_helpers_outside_the_path_are_still_called() -> None:
+    """Stale entries cannot accumulate: every declared swallowing helper must still be reached."""
+    called = {(call.module, call.function) for call in sweep().swallowing_external}
+    stale = sorted(entry for entry in SWALLOWING_HELPERS_OUTSIDE_THE_PATH if entry not in called)
+
+    assert stale == [], f"SWALLOWING_HELPERS_OUTSIDE_THE_PATH entries the match path no longer calls: {stale}"
+
+
+def test_known_escalating_handlers_are_enumerated() -> None:
+    """Canary: the handlers that re-raise today are all seen, so a silently empty handler sweep cannot pass."""
+    seam = "mloda/core/prepare/identify_feature_group.py"
+    feature_group = "mloda/core/abstract_plugins/feature_group.py"
+    mixin = "mloda/core/abstract_plugins/components/feature_chainer/feature_chain_parser_mixin.py"
+    guards = "mloda/core/abstract_plugins/components/feature_chainer/feature_chain_author_guards.py"
+    expected = {
+        (seam, "_filter_feature_group_by_criteria"),
+        (feature_group, "is_root"),
+        (mixin, "match_parser_criteria"),
+        (guards, "check_required_when"),
+    }
+
+    escalating = {(site.module, site.function) for site in _handlers_of_kind("escalating")}
+
+    assert expected <= escalating, f"known escalating handlers missing from the sweep: {sorted(expected - escalating)}"
+    # Vacuity floor, not a target: 15 handlers today, so removing one stays a legitimate change.
+    assert len(sweep().handlers) >= 12, f"sweep enumerated only {len(sweep().handlers)} handlers; it is not walking"
+
+
+def test_handler_classifier_flags_a_blanket_handler() -> None:
+    source = (
+        "def match_feature_group_criteria(cls, feature, options):\n"
+        "    try:\n"
+        "        return probe(feature)\n"
+        "    except Exception:\n"
+        "        return False\n"
+    )
+
+    sites = _handlers(source)
+
+    assert [site.kind for site in sites] == ["unannotated"]
+    assert sites[0].lineno == 4
+
+
+def test_handler_classifier_accepts_a_conditional_reraise() -> None:
+    source = (
+        "def match_feature_group_criteria(cls, feature, options):\n"
+        "    try:\n"
+        "        return probe(feature)\n"
+        "    except ValueError as exc:\n"
+        "        if is_match_abort(exc):\n"
+        "            raise\n"
+        "        return False\n"
+    )
+
+    sites = _handlers(source)
+
+    assert [site.kind for site in sites] == ["escalating"]
+
+
+def test_handler_classifier_accepts_an_escalation_and_a_bare_reraise() -> None:
+    source = (
+        "def match_feature_group_criteria(cls, feature, options):\n"
+        "    try:\n"
+        "        return probe(feature)\n"
+        "    except Exception as exc:\n"
+        "        escalate_match_abort(exc)\n"
+        "        raise\n"
+    )
+
+    sites = _handlers(source)
+
+    assert [site.kind for site in sites] == ["escalating"]
+
+
+def test_handler_classifier_accepts_a_trailing_swallows_comment() -> None:
+    source = (
+        "def match_feature_group_criteria(cls, feature, options):\n"
+        "    try:\n"
+        "        return probe(feature)\n"
+        "    except ValueError:  # Swallows: a malformed name is this candidate's own defect.\n"
+        "        return False\n"
+    )
+
+    sites = _handlers(source)
+
+    assert [site.kind for site in sites] == ["swallowing"]
+    assert sites[0].reason == "a malformed name is this candidate's own defect."
+
+
+def test_handler_classifier_accepts_an_own_line_swallows_comment() -> None:
+    source = (
+        "def match_feature_group_criteria(cls, feature, options):\n"
+        "    try:\n"
+        "        return probe(feature)\n"
+        "    # Swallows: a missing file is a non-match for this reader only.\n"
+        "    except OSError:\n"
+        "        return False\n"
+    )
+
+    sites = _handlers(source)
+
+    assert [site.kind for site in sites] == ["swallowing"]
+    assert sites[0].reason == "a missing file is a non-match for this reader only."
+
+
+def test_handler_classifier_requires_a_raise_beside_the_abort_check() -> None:
+    """Reading is_match_abort without re-raising escalates nothing."""
+    source = (
+        "def match_feature_group_criteria(cls, feature, options):\n"
+        "    try:\n"
+        "        return probe(feature)\n"
+        "    except ValueError as exc:\n"
+        "        if is_match_abort(exc):\n"
+        "            record(exc)\n"
+        "        return False\n"
+    )
+
+    sites = _handlers(source)
+
+    assert [site.kind for site in sites] == ["unannotated"]
+
+
+def test_handler_classifier_does_not_inherit_a_swallows_reason() -> None:
+    """A reason on an earlier handler annotates nothing: the next handler needs its own."""
+    source = (
+        "def match_feature_group_criteria(cls, feature, options):\n"
+        "    try:\n"
+        "        return probe(feature)\n"
+        "    except OSError:  # Swallows: a missing file is a non-match for this reader only.\n"
+        "        return False\n"
+        "    except ValueError:\n"
+        "        return False\n"
+    )
+
+    sites = _handlers(source)
+
+    assert [site.kind for site in sites] == ["swallowing", "unannotated"]
+
+
+def test_handler_classifier_flags_a_swallows_comment_on_a_reraise() -> None:
+    source = (
+        "def match_feature_group_criteria(cls, feature, options):\n"
+        "    try:\n"
+        "        return probe(feature)\n"
+        "    except ValueError as exc:  # Swallows: stale, this handler re-raises.\n"
+        "        if is_match_abort(exc):\n"
+        "            raise\n"
+        "        return False\n"
+    )
+
+    sites = _handlers(source)
+
+    assert [site.kind for site in sites] == ["misannotated"]
+    assert sites[0].reason == "stale, this handler re-raises."

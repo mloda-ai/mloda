@@ -15,7 +15,12 @@ from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.components.default_options_key import DefaultOptionKeys
 from mloda.core.abstract_plugins.components.feature_chainer.parsed_feature_name import ParsedFeatureName
 from mloda.core.abstract_plugins.components.feature_chainer.property_spec import PropertySpec, is_no_default
-from mloda.core.abstract_plugins.components.utils import contained_raise_log_level, escalate_match_abort, safe_field
+from mloda.core.abstract_plugins.components.utils import (
+    contained_raise_log_level,
+    contained_raise_reason,
+    escalate_match_abort,
+    safe_field,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -170,15 +175,17 @@ class FeatureChainParser:
                 level = contained_raise_log_level(exc)
                 if level == logging.DEBUG:
                     logger.debug(
-                        "element_validator for '%s' raised %s for value %r; treating value as rejected.",
+                        "element_validator for '%s' %s for value %r; treating value as rejected.",
                         property_name,
-                        exc,
+                        contained_raise_reason(exc),
                         found_property_val,
                     )
                 else:
                     # The raw value stays out of WARNING logs; rerun with debug logging to see it.
                     logger.warning(
-                        "element_validator for '%s' raised %s; treating value as rejected.", property_name, exc
+                        "element_validator for '%s' %s; treating value as rejected.",
+                        property_name,
+                        contained_raise_reason(exc),
                     )
                 raised = exc
                 verdict = False

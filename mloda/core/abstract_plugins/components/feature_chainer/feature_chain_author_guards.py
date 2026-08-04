@@ -26,7 +26,12 @@ from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser
 from mloda.core.abstract_plugins.components.match_rejection import record_match_rejection
 from mloda.core.abstract_plugins.components.feature_chainer.parsed_feature_name import ParsedFeatureName
 from mloda.core.abstract_plugins.components.feature_chainer.property_spec import PropertySpec
-from mloda.core.abstract_plugins.components.utils import contained_raise_log_level, escalate_match_abort, safe_field
+from mloda.core.abstract_plugins.components.utils import (
+    contained_raise_log_level,
+    contained_raise_reason,
+    escalate_match_abort,
+    safe_field,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -258,10 +263,10 @@ def check_required_when(
         except Exception as exc:
             logger.log(
                 contained_raise_log_level(exc),
-                "required_when predicate %s for '%s' raised %s; treating feature group %s as a non-match.",
+                "required_when predicate %s for '%s' %s; treating feature group %s as a non-match.",
                 getattr(predicate, "__name__", repr(predicate)),
                 key,
-                exc,
+                contained_raise_reason(exc),
                 owner_name,
             )
             return False

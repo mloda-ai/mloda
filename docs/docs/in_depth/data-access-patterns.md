@@ -104,7 +104,7 @@ A reader that owns an input but cannot serve the requested feature can record wh
 ``` python
 from typing import Any
 
-from mloda.provider import FeatureSet, record_match_rejection
+from mloda.provider import INPUT_DATA_STAGE, FeatureSet, record_match_rejection
 from mloda_plugins.feature_group.input_data.read_file import ReadFile
 
 class SensorCsvReader(ReadFile):
@@ -126,7 +126,7 @@ class SensorCsvReader(ReadFile):
                 cls.get_class_name(),
                 f"{cls.get_class_name()} matched the suffix of {file_name} "
                 f"but its header lacks the #sensor-schema marker",
-                stage="input_data",
+                stage=INPUT_DATA_STAGE,
             )
             return False
         return True

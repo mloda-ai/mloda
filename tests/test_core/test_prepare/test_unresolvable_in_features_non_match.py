@@ -1,7 +1,6 @@
 """Issue #884: an in_features value the matcher cannot resolve is a plain non-match at the resolution seam.
 
-The probe class is dropped under gc.collect() before any assert runs, so a failing assert cannot pin a
-FeatureGroup into its traceback and trip the no-leak fixture in tests/conftest.py.
+The probe class is dropped under gc.collect() before any assert, so no failing assert pins it (tests/conftest.py).
 """
 
 from __future__ import annotations
@@ -39,9 +38,7 @@ def _make_in_features_mixin_fg() -> type[FeatureGroup]:
 
     class InFeaturesMixinFG884(FeatureChainParserMixin, FeatureGroup):
         PREFIX_PATTERN = r".*__(?P<operation>\w+)_infeat884$"
-        PROPERTY_MAPPING = {
-            "operation": property_spec("operation carried by the name", allowed_values=("op1",), context=True),
-        }
+        PROPERTY_MAPPING = {"operation": property_spec("operation", allowed_values=("op1",), context=True)}
 
         @classmethod
         def compute_framework_rule(cls) -> set[type[ComputeFramework]] | None:
@@ -78,8 +75,6 @@ def _resolve(in_features: Any) -> tuple[Optional[str], tuple[str, ...], tuple[tu
 
 
 class TestUnresolvableInFeaturesIsAPlainNonMatch:
-    """A candidate that cannot resolve the requested in_features simply loses; it is not a broken matcher."""
-
     def test_falsy_in_features_records_no_matcher_error(self) -> None:
         """An empty string is a value the matcher cannot resolve, so it is a non-match, not a raise to contain."""
         error_type, identified, eliminations = _resolve("")

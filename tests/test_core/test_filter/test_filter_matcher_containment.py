@@ -42,7 +42,6 @@ HOSTILE_CLASS_NAME = "HostileFilterMatcherFG899"
 HOSTILE_TYPE_NAME = "HostileFilterMatcherError899"
 HOSTILE_STR_MESSAGE = "boom_899_hostile_str_raised"
 
-# Issue #884: a mixin group asked for an in_features value it cannot resolve.
 FILTER_FEATURE_IN_FEATURES = "gfc_in_features_filter_feat_884"
 
 E2E_MAIN = "gfc_main_feat_899"  # requested root feature; must keep resolving
@@ -384,9 +383,7 @@ def _make_in_features_mixin_fg() -> type[FeatureGroup]:
     gc.collect()
 
     class InFeaturesMixinFilterFG884(FeatureChainParserMixin, FeatureGroup):
-        PROPERTY_MAPPING = {
-            "operation": property_spec("operation the group serves", allowed_values=("op1",), context=True),
-        }
+        PROPERTY_MAPPING = {"operation": property_spec("operation", allowed_values=("op1",), context=True)}
 
         def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
             return None
@@ -395,10 +392,8 @@ def _make_in_features_mixin_fg() -> type[FeatureGroup]:
 
 
 class TestUnresolvableInFeaturesIsNotADrop:
-    """Issue #884: an in_features value the matcher cannot resolve is a plain non-match, not a contained raise."""
-
     def test_unresolvable_in_features_is_a_non_match_without_a_drop(self, caplog: pytest.LogCaptureFixture) -> None:
-        """The falsy value never leaves the matcher, so the filter seam records no drop and warns about nothing."""
+        """Issue #884: the value never leaves the matcher, so the seam records no drop and warns about nothing."""
         snapshot = _drive_criteria(
             _make_in_features_mixin_fg,
             FILTER_FEATURE_IN_FEATURES,

@@ -149,6 +149,8 @@ Rules for reader authors:
 
 `ReadFile` column validation and the `ReadDB` feature check (`check_feature_in_data_access`) already record automatically; a custom reader only needs this for its own decline points.
 
+A recorded reader veto also gates the candidate's name-based match rules. A feature group whose reader declined attributably fails at resolution with that reason instead of resolving by name and crashing at load time in `init_reader`.
+
 ## MatchData Pattern
 
 ### Purpose

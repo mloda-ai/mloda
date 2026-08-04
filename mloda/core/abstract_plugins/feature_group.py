@@ -31,6 +31,7 @@ from mloda.core.abstract_plugins.components.input_data.api.api_input_data import
 from mloda.core.abstract_plugins.components.input_data.base_input_data import BaseInputData
 from mloda.core.abstract_plugins.components.input_data.creator.data_creator import DataCreator
 from mloda.core.abstract_plugins.components.match_data.match_data import MatchData
+from mloda.core.abstract_plugins.components.match_rejection import has_match_rejection
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.feature_set import FeatureSet
@@ -616,12 +617,20 @@ class FeatureGroup(ABC):
         feature declares itself keeps its declared value, an omitted key arrives materialized.
         Matching logic that reads option values can therefore see different values on the two paths.
         See ``docs/in_depth/property-mapping.md`` ("Applying declared defaults").
+
+        A reader veto recorded during the input-data rule gates the later rules: when the reader
+        walk declined attributably, the candidate is a non-match instead of being recovered by name.
         """
 
         base_feature_name = cls.get_column_base_feature(feature_name)
 
         if cls._is_root_and_matches_input_data(base_feature_name, options, data_access_collection):
             return True
+
+        # A recorded reader veto means the user engaged this candidate's declared reader option
+        # space; a name-rule recovery would only defer the failure to load time in init_reader.
+        if has_match_rejection("input_data"):
+            return False
 
         if cls._matches_data(base_feature_name, options, data_access_collection):
             return True

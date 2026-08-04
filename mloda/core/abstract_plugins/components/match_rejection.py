@@ -32,3 +32,11 @@ def record_match_rejection(owner_name: str, reason: str, stage: str = "value_rej
     if reasons is None:
         return
     reasons.setdefault(owner_name, MatchRejection(reason, stage))
+
+
+def has_match_rejection(stage: str) -> bool:
+    """True iff the active window holds a rejection with exactly this stage; False without an active window."""
+    reasons = MATCH_REJECTION_REASONS.get()
+    if reasons is None:
+        return False
+    return any(rejection.stage == stage for rejection in reasons.values())

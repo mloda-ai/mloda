@@ -130,6 +130,9 @@ class ExampleOrderFilter(FeatureGroup):
                          }
         # The following algorithm is naive and rather should show an example than a normal use case.
         # The filter implementation highly depends on the feature group!
+        # features.filters is None or an empty set if no filter matched this feature set.
+        if not features.filters:
+            return _data_creator
         # Extract the filter value and filter_name information from the filters.
         for filter in features.filters:
             filter_value = filter.parameter.value

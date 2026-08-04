@@ -449,7 +449,7 @@ def test_from_dict_rejects_non_string_key() -> None:
     """Test a non-string key raises ValueError instead of the raw TypeError out of sorted()."""
     params: dict[Any, Any] = {1: "a", "b": 2}
 
-    with pytest.raises(ValueError, match="1"):
+    with pytest.raises(ValueError, match=r"key 1 is not a string"):
         FilterParameterImpl.from_dict(params)
 
 
@@ -468,7 +468,7 @@ def test_from_dict_rejects_non_string_key_even_without_mixed_types() -> None:
     """Test a key set that sorts fine is still rejected when the keys are not strings."""
     params: dict[Any, Any] = {1: "a", 2: "b"}
 
-    with pytest.raises(ValueError, match="1"):
+    with pytest.raises(ValueError, match=r"key 1 is not a string"):
         FilterParameterImpl.from_dict(params)
 
 

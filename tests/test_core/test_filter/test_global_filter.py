@@ -395,7 +395,7 @@ class TestGlobalFilterNonStringParameterKey:
         """Test a mixed-type key dict raises ValueError rather than the sort's TypeError."""
         parameter: dict[Any, Any] = {1: "a", "value": 2}
 
-        with pytest.raises(ValueError, match="1"):
+        with pytest.raises(ValueError, match=r"key 1 is not a string"):
             self.global_filter.add_filter(Feature("col"), FilterType.EQUAL, parameter)
 
         assert len(self.global_filter.filters) == 0

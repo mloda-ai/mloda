@@ -273,7 +273,7 @@ class Options:
             return frozenset([_convert_to_feature(val)])
         else:
             raise TypeError(
-                f"Unsupported type for source feature: {type(val)}. "
+                f"Unsupported source feature {val!r} of type {type(val).__name__}. "
                 "Expected list, tuple, set, frozenset, str, or Feature object."
             )
 

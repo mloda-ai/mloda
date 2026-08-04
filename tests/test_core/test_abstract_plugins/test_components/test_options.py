@@ -448,9 +448,10 @@ class TestOptionsGetInFeaturesFalsyValue:
         return str(excinfo.value)
 
     def test_absent_key_names_the_key(self) -> None:
-        """An absent key still raises ValueError naming the key."""
+        """An absent key still raises ValueError naming the key, not the enum repr."""
         message = self._message(Options())
-        assert IN_FEATURES in message, message
+        assert f"'{IN_FEATURES}'" in message, message
+        assert "DefaultOptionKeys" not in message, message
 
     @pytest.mark.parametrize("falsy", ["", 0, {}], ids=["empty_str", "zero_int", "empty_dict"])
     def test_present_falsy_value_still_raises_value_error(self, falsy: Any) -> None:
@@ -460,9 +461,10 @@ class TestOptionsGetInFeaturesFalsyValue:
 
     @pytest.mark.parametrize("falsy", ["", 0, {}], ids=["empty_str", "zero_int", "empty_dict"])
     def test_present_falsy_value_message_names_the_key(self, falsy: Any) -> None:
-        """The falsy-value message names the key, so the user knows which option is at fault."""
+        """The falsy-value message names the key readably, so the user knows which option is at fault."""
         message = self._message(Options(context={IN_FEATURES: falsy}))
-        assert IN_FEATURES in message, message
+        assert f"'{IN_FEATURES}'" in message, message
+        assert "DefaultOptionKeys" not in message, message
 
     @pytest.mark.parametrize("falsy", ["", 0, {}], ids=["empty_str", "zero_int", "empty_dict"])
     def test_present_falsy_value_message_shows_the_value(self, falsy: Any) -> None:
@@ -480,5 +482,27 @@ class TestOptionsGetInFeaturesFalsyValue:
     def test_falsy_value_in_group_is_reported_the_same_way(self) -> None:
         """The distinction holds for a group key too, not only a context key."""
         message = self._message(Options(group={IN_FEATURES: ""}))
-        assert IN_FEATURES in message, message
+        assert f"'{IN_FEATURES}'" in message, message
+        assert "DefaultOptionKeys" not in message, message
         assert repr("") in message, message
+
+
+class TestOptionsGetInFeaturesUnresolvableTruthyValue:
+    """get_in_features names the offending value for a present, truthy but unresolvable in_features (#942)."""
+
+    def _message(self, value: Any) -> str:
+        with pytest.raises(TypeError) as excinfo:
+            Options(context={IN_FEATURES: value}).get_in_features()
+        return str(excinfo.value)
+
+    @pytest.mark.parametrize("value", [5, {"a": 1}], ids=["int", "dict"])
+    def test_unsupported_type_message_shows_the_value(self, value: Any) -> None:
+        """The unsupported-type message carries the offending value, not only its type."""
+        message = self._message(value)
+        assert repr(value) in message, message
+
+    @pytest.mark.parametrize("value", [5, {"a": 1}], ids=["int", "dict"])
+    def test_unsupported_type_message_still_shows_the_type(self, value: Any) -> None:
+        """The unsupported-type message keeps naming the type alongside the value."""
+        message = self._message(value)
+        assert type(value).__name__ in message, message

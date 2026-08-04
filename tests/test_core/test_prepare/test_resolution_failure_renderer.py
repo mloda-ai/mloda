@@ -84,6 +84,26 @@ RAISING_DEAD_NAMES_SPARE_791 = "renderer_raising_dead_names_spare_791"
 DISABLED_PAIR_FEATURE_791 = "renderer_disabled_pair_revenue_791"
 DISABLED_PAIR_SPARE_791 = "renderer_disabled_pair_profit_791"
 
+# The name-blind gates. Each pair is a requested name nothing matches plus the sibling name the group that
+# loses at the gate declares, so only the gate can decide whether that sibling is worth suggesting.
+DOMAIN_GATE_FEATURE_791 = "renderer_domain_gate_revenue_791"
+DOMAIN_GATE_SIBLING_791 = "renderer_domain_gate_profit_791"
+SCOPE_GATE_FEATURE_791 = "renderer_scope_gate_revenue_791"
+SCOPE_GATE_SIBLING_791 = "renderer_scope_gate_profit_791"
+VALUE_DOMAIN_FEATURE_791 = "renderer_value_domain_revenue_791"
+VALUE_DOMAIN_SPARE_791 = "renderer_value_domain_profit_791"
+DEGRADED_DOMAIN_FEATURE_791 = "renderer_degraded_domain_revenue_791"
+DEGRADED_DOMAIN_SPARE_791 = "renderer_degraded_domain_profit_791"
+
+# The requested domain is declared by no candidate at all, so every domain-carrying request below fails it.
+REQUESTED_DOMAIN_791 = "renderer_requested_domain_791"
+OTHER_DOMAIN_791 = "renderer_other_domain_791"
+
+# Scope of the name-blind scope gate: a healthy group of this module, so the scope names a real accessible class.
+GATE_SCOPE_791 = "RendererKnownNamesFG791"
+
+VALUE_DOMAIN_REJECTION_REASON_791 = "ValueRejectingCrossDomainFG791 declines every value of this option"
+
 # Built around the class names below, because the default matcher also owns a name by class-name PREFIX.
 # The request drops the trailing underscore, so nothing matches it while both declared names stay close to it.
 LIVE_PREFIX_FEATURE_791 = "RendererLivePrefixFG791sum_791"
@@ -105,6 +125,9 @@ UNLABELED_STAGE_REASON_791 = "eliminated at a stage this build has no label for"
 
 # The renderer's own module logger: the degrade must be reported by the module that degrades.
 RENDERER_LOGGER_791 = "mloda.core.prepare.resolution_failure_renderer"
+
+# The matcher's own module logger: a degraded domain read happens during evaluate(), never during rendering.
+IDENTIFY_LOGGER_791 = "mloda.core.prepare.identify_feature_group"
 
 # Eight names, all close to WIDE_FEATURE_791, so only the cut can bound the rendered line.
 WIDE_CATALOG_NAMES_791 = frozenset(
@@ -600,6 +623,50 @@ class RendererDeadPrefixFG791(CountingFeatureGroup791):
     FRAMEWORK_RULE = {RendererFwOne791, RendererFwTwo791}
 
 
+class CrossDomainDeclarerFG791(CountingFeatureGroup791):
+    """Declares and matches the sibling name only, from a domain no request here asks for.
+
+    Named far from both feature names on purpose: only its declared name may ever reach the suggestion line.
+    """
+
+    MATCHES = frozenset({DOMAIN_GATE_SIBLING_791})
+    SUPPORTED_NAMES = frozenset({DOMAIN_GATE_SIBLING_791})
+    DOMAIN_NAME = OTHER_DOMAIN_791
+    FRAMEWORK_RULE = {RendererFwOne791}
+
+
+class OutsideScopeDeclarerFG791(CountingFeatureGroup791):
+    """Declares and matches the sibling name only, from outside the scope every request here asks for.
+
+    Named far from both feature names on purpose: only its declared name may ever reach the suggestion line.
+    """
+
+    MATCHES = frozenset({SCOPE_GATE_SIBLING_791})
+    SUPPORTED_NAMES = frozenset({SCOPE_GATE_SIBLING_791})
+    FRAMEWORK_RULE = {RendererFwOne791}
+
+
+class ValueRejectingCrossDomainFG791(CountingFeatureGroup791):
+    """Declines THIS name's value at the matcher AND sits in another domain: name-dependent record, name-blind gate."""
+
+    MATCHES = frozenset({VALUE_DOMAIN_FEATURE_791})
+    SUPPORTED_NAMES = frozenset({VALUE_DOMAIN_SPARE_791})
+    DOMAIN_NAME = OTHER_DOMAIN_791
+    FRAMEWORK_RULE = {RendererFwOne791}
+
+    @classmethod
+    def match_feature_group_criteria(
+        cls,
+        feature_name: FeatureName | str,
+        options: Options,
+        data_access_collection: Optional[DataAccessCollection] = None,
+    ) -> bool:
+        # Name-guarded, so this globally visible class stays inert for every other name it is asked about.
+        if not super().match_feature_group_criteria(feature_name, options, data_access_collection):
+            return False
+        raise PropertyValueRejection(VALUE_DOMAIN_REJECTION_REASON_791)
+
+
 class RendererDomainBoom791(RuntimeError):
     """Raised by a provider's get_domain() hook."""
 
@@ -667,6 +734,28 @@ def _build_raising_domain_groups() -> tuple[type[CountingFeatureGroup791], type[
         FRAMEWORK_RULE = {RendererFwOne791}
 
     return _armed(RendererRaisingDomainFG791), RendererHealthyDomainFG791
+
+
+def _build_unreadable_domain_group() -> type[CountingFeatureGroup791]:
+    """Build a non-matching declarer of a sibling name whose get_domain() raises, so no gate can judge it.
+
+    Named far from both feature names on purpose: only its declared name may ever reach the suggestion line.
+    """
+
+    class UnreadableDomainFG791(RaisingHookGroup791):
+        """Declarer whose domain can never be read, matching nothing."""
+
+        SUPPORTED_NAMES = frozenset({DEGRADED_DOMAIN_SPARE_791})
+        FRAMEWORK_RULE = {RendererFwOne791}
+
+        @classmethod
+        def get_domain(cls) -> Domain:
+            _record(cls.get_class_name(), "get_domain")
+            if cls.ARMED:
+                raise RendererDomainBoom791("get_domain exploded 791")
+            return Domain.get_default_domain()
+
+    return _armed(UnreadableDomainFG791)
 
 
 def _build_raising_prefix_group() -> type[CountingFeatureGroup791]:
@@ -1002,6 +1091,67 @@ def live_prefix_success_scenario() -> Scenario:
     )
 
 
+def domain_gate_scenario() -> Scenario:
+    """A domain-carrying request nothing matches, next to a declarer of the close sibling name in another domain."""
+    return (
+        Feature(DOMAIN_GATE_FEATURE_791, domain=REQUESTED_DOMAIN_791),
+        {CrossDomainDeclarerFG791: {RendererFwOne791}},
+    )
+
+
+def domain_gate_sibling_scenario() -> Scenario:
+    """The same request domain, now asking for the sibling name a suggestion would hand back."""
+    return (
+        Feature(DOMAIN_GATE_SIBLING_791, domain=REQUESTED_DOMAIN_791),
+        {CrossDomainDeclarerFG791: {RendererFwOne791}},
+    )
+
+
+def domainless_gate_scenario() -> Scenario:
+    """The same declarer on a request carrying NO domain, where the domain gate cannot fire at all."""
+    return Feature(DOMAIN_GATE_FEATURE_791), {CrossDomainDeclarerFG791: {RendererFwOne791}}
+
+
+def domain_hook_cost_scenario() -> Scenario:
+    """One candidate the decision pass compares by domain, one it never matches, on a domain-carrying request."""
+    return (
+        Feature(DOMAIN_GATE_SIBLING_791, domain=REQUESTED_DOMAIN_791),
+        {CrossDomainDeclarerFG791: {RendererFwOne791}, ValueRejectingCrossDomainFG791: {RendererFwOne791}},
+    )
+
+
+def scope_gate_scenario() -> Scenario:
+    """A scoped request nothing matches, next to a declarer of the close sibling name outside that scope."""
+    return (
+        Feature(SCOPE_GATE_FEATURE_791, feature_group=GATE_SCOPE_791),
+        {OutsideScopeDeclarerFG791: {RendererFwOne791}, RendererKnownNamesFG791: {RendererFwOne791}},
+    )
+
+
+def scope_gate_sibling_scenario() -> Scenario:
+    """The same scope, now asking for the sibling name a suggestion would hand back."""
+    return (
+        Feature(SCOPE_GATE_SIBLING_791, feature_group=GATE_SCOPE_791),
+        {OutsideScopeDeclarerFG791: {RendererFwOne791}, RendererKnownNamesFG791: {RendererFwOne791}},
+    )
+
+
+def value_rejection_cross_domain_scenario() -> Scenario:
+    """A candidate recorded at a name-DEPENDENT stage that the name-blind domain gate kills anyway."""
+    return (
+        Feature(VALUE_DOMAIN_FEATURE_791, domain=REQUESTED_DOMAIN_791),
+        {ValueRejectingCrossDomainFG791: {RendererFwOne791}},
+    )
+
+
+def degraded_domain_scenario() -> Scenario:
+    """A domain-carrying request whose only declarer of the close sibling name cannot report its domain."""
+    return (
+        Feature(DEGRADED_DOMAIN_FEATURE_791, domain=REQUESTED_DOMAIN_791),
+        {_build_unreadable_domain_group(): {RendererFwOne791}},
+    )
+
+
 def raising_dead_names_scenario() -> Scenario:
     """A dead candidate whose feature_names_supported() raises, so it can contribute no name at all."""
     return Feature(RAISING_DEAD_NAMES_FEATURE_791), {_build_raising_dead_names_group(): set()}
@@ -1061,6 +1211,10 @@ FAILING_SCENARIOS: dict[str, Callable[[], Scenario]] = {
     "disabled_pair": disabled_pair_scenario,
     "disabled_pair_reverse": disabled_pair_reverse_scenario,
     "live_prefix": live_prefix_scenario,
+    "domain_gate": domain_gate_scenario,
+    "scope_gate": scope_gate_scenario,
+    "value_rejection_cross_domain": value_rejection_cross_domain_scenario,
+    "degraded_domain": degraded_domain_scenario,
     "raising_dead_names": raising_dead_names_scenario,
     "raising_domain_multiple": raising_domain_multiple_scenario,
     "raising_prefix_none": raising_prefix_none_scenario,
@@ -1925,6 +2079,184 @@ class TestALivePrefixKeepsACoveredNameSuggestible:
         assert set(suggestions) == {LIVE_PREFIX_COVERED_791, "RendererLivePrefixFG791", "RendererLivePrefixFG791_"}
         assert LIVE_PREFIX_COVERED_791 not in result.facts.dead_only_names
         assert DEAD_PREFIX_UNCOVERED_791 in result.facts.dead_only_names
+
+
+class TestANameBlindGateKillsEveryNameItsCandidateDeclares:
+    """domain and scope are name-blind, so a candidate that loses at either resolves NO name it declares.
+
+    An elimination is recorded only for a candidate that first matched the requested name, so a wrong-domain or
+    out-of-scope group that never matched carries no record at all. Reading deadness off the record alone counts
+    such a group as a live declarer, and the suggestion then hands back a name that fails at the very same gate.
+    """
+
+    def test_a_wrong_domain_declarers_sibling_name_is_never_suggested(self) -> None:
+        """The declarer never matched the requested name, so only the gate itself can say it is dead."""
+        scenario = domain_gate_scenario()
+        feature, _ = scenario
+        result = _evaluate(scenario)
+
+        # Premise: nothing matched, so this candidate carries no elimination record to judge it by.
+        assert result.failure_kind == "none"
+        assert result.eliminations == {}
+        # Premise: the sibling is the one name this request ranks, so only this rule can drop it.
+        survivors = [name for name in dict.fromkeys(result.facts.known_names) if name != DOMAIN_GATE_FEATURE_791]
+        ranked = get_close_matches(DOMAIN_GATE_FEATURE_791, survivors, n=MAX_RENDERED_SUGGESTIONS_791, cutoff=0.5)
+        assert ranked == [DOMAIN_GATE_SIBLING_791]
+
+        # Suppression is resolution, not just text: requesting the sibling fails at the same gate.
+        sibling = _evaluate(domain_gate_sibling_scenario())
+        assert sibling.failure_kind == "none"
+        assert sibling.eliminations[CrossDomainDeclarerFG791].stage == "domain"
+
+        assert DOMAIN_GATE_SIBLING_791 in result.facts.dead_only_names
+
+        message = render_resolution_failure(result, feature)
+        assert message is not None
+        assert message == (
+            f"No feature groups found for feature name: '{DOMAIN_GATE_FEATURE_791}'.\n"
+            "Use resolve_feature(name, options=...) to debug feature resolution.\n"
+            f"{TROUBLESHOOTING_LINE}"
+        )
+
+    def test_an_out_of_scope_declarers_sibling_name_is_never_suggested(self) -> None:
+        """Same shape at the scope gate: the out-of-scope name goes, the in-scope group's own name stays."""
+        scenario = scope_gate_scenario()
+        feature, _ = scenario
+        result = _evaluate(scenario)
+
+        # Premise: nothing matched, so this candidate carries no elimination record to judge it by.
+        assert result.failure_kind == "none"
+        assert result.eliminations == {}
+        # Premise: the out-of-scope sibling outranks the in-scope group's own name, so only this rule can drop it.
+        survivors = [name for name in dict.fromkeys(result.facts.known_names) if name != SCOPE_GATE_FEATURE_791]
+        ranked = get_close_matches(SCOPE_GATE_FEATURE_791, survivors, n=MAX_RENDERED_SUGGESTIONS_791, cutoff=0.5)
+        assert ranked == [SCOPE_GATE_SIBLING_791, KNOWN_FEATURE_791]
+
+        # Suppression is resolution, not just text: requesting the sibling fails at the same gate.
+        sibling = _evaluate(scope_gate_sibling_scenario())
+        assert sibling.failure_kind == "none"
+        assert sibling.eliminations[OutsideScopeDeclarerFG791].stage == "scope"
+
+        assert SCOPE_GATE_SIBLING_791 in result.facts.dead_only_names
+        # The in-scope group is untouched by the gate, so its own name stays suggestible.
+        assert KNOWN_FEATURE_791 not in result.facts.dead_only_names
+
+        message = render_resolution_failure(result, feature)
+        assert message is not None
+        assert message == (
+            f"No feature groups found for feature name: '{SCOPE_GATE_FEATURE_791}'. "
+            f"Scoped to feature group: '{GATE_SCOPE_791}'.\n"
+            f"Did you mean one of: ['{KNOWN_FEATURE_791}']?\n"
+            "Use resolve_feature(name, options=..., feature_group=...) to debug feature resolution.\n"
+            f"{TROUBLESHOOTING_LINE}"
+        )
+
+    def test_a_name_dependent_record_does_not_revive_a_wrong_domain_candidate(self) -> None:
+        """The record says value_rejection, but the domain gate kills every name the candidate declares."""
+        scenario = value_rejection_cross_domain_scenario()
+        feature, _ = scenario
+        result = _evaluate(scenario)
+
+        # Premise: the recorded stage is name-DEPENDENT, so the record alone keeps this candidate live.
+        assert result.eliminations == {
+            ValueRejectingCrossDomainFG791: Elimination(
+                stage="value_rejection", reason=VALUE_DOMAIN_REJECTION_REASON_791
+            )
+        }
+        assert "value_rejection" in NAME_DEPENDENT_STAGES_791
+        # Premise: the spare is the one name this request ranks, so only this rule can drop it.
+        droppable = {VALUE_DOMAIN_FEATURE_791, *result.facts.eliminated_hints}
+        survivors = [name for name in dict.fromkeys(result.facts.known_names) if name not in droppable]
+        ranked = get_close_matches(VALUE_DOMAIN_FEATURE_791, survivors, n=MAX_RENDERED_SUGGESTIONS_791, cutoff=0.5)
+        assert ranked == [VALUE_DOMAIN_SPARE_791]
+
+        assert VALUE_DOMAIN_SPARE_791 in result.facts.dead_only_names
+
+        message = render_resolution_failure(result, feature)
+        assert message is not None
+        assert message == (
+            f"No feature groups found for feature name: '{VALUE_DOMAIN_FEATURE_791}'.\n"
+            f"Feature group(s) eliminated while matching '{VALUE_DOMAIN_FEATURE_791}':\n"
+            f"  - ValueRejectingCrossDomainFG791 (option value): {VALUE_DOMAIN_REJECTION_REASON_791}\n"
+            "Use resolve_feature(name, options=...) to debug feature resolution.\n"
+            f"{TROUBLESHOOTING_LINE}"
+        )
+
+
+class TestADegradedDomainReadNeverDecidesAgainstACandidate:
+    """A domain that cannot be read is not a wrong domain: the candidate stays live and the degrade is reported."""
+
+    def test_a_raising_get_domain_keeps_the_candidates_names_suggestible(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """evaluate() still returns, the message still renders, and the unreadable candidate keeps its names."""
+        scenario = degraded_domain_scenario()
+        feature, accessible_plugins = scenario
+        (unreadable,) = accessible_plugins
+
+        with caplog.at_level(logging.WARNING, logger=IDENTIFY_LOGGER_791):
+            result = _evaluate(scenario)
+
+        # Premise: the request carries a domain, and the candidate never matched, so no decision gate judged it.
+        assert feature.domain is not None
+        assert result.failure_kind == "none"
+        assert result.eliminations == {}
+
+        assert DEGRADED_DOMAIN_SPARE_791 not in result.facts.dead_only_names
+
+        message = render_resolution_failure(result, feature)
+        assert message is not None
+        assert _suggestions(message) == [DEGRADED_DOMAIN_SPARE_791]
+
+        warnings = [
+            record.getMessage()
+            for record in caplog.records
+            if record.levelno == logging.WARNING and record.name == IDENTIFY_LOGGER_791
+        ]
+        degraded_field = f"{unreadable.get_class_name()}.get_domain"
+        assert [warning for warning in warnings if degraded_field in warning], (
+            f"Expected a WARNING naming '{degraded_field}', got {warnings}"
+        )
+
+
+class TestTheNameBlindGateCaptureCostsNoExtraHookCall:
+    """The capture reuses the decision pass's memoized domain outcome, and asks for nothing it cannot use."""
+
+    def test_a_domainless_request_never_reads_a_non_matching_candidates_domain(self) -> None:
+        """Without a requested domain the gate cannot fire, so the hook must not be called at all."""
+        scenario = domainless_gate_scenario()
+        feature, _ = scenario
+        result = _evaluate(scenario)
+
+        # Premise: no domain to compare against, and the candidate never matched, so no gate can judge it.
+        assert feature.domain is None
+        assert result.failure_kind == "none"
+        assert result.eliminations == {}
+        # Premise: this candidate's counters are wired, so the assertion below is about the hook, not the key.
+        assert HOOK_CALLS["CrossDomainDeclarerFG791.match_feature_group_criteria"] == 1
+
+        assert "CrossDomainDeclarerFG791.get_domain" not in HOOK_CALLS
+        # The gate cannot fire, so the candidate stays live and keeps every name it declares suggestible.
+        assert result.facts.dead_only_names == frozenset()
+
+    def test_each_candidates_domain_is_read_at_most_once_per_evaluation(self) -> None:
+        """One decision-pass read plus one capture read of the same candidate is one hook call, not two."""
+        scenario = domain_hook_cost_scenario()
+        _, accessible_plugins = scenario
+        result = _evaluate(scenario)
+
+        # Premise: one candidate reached the decision-side domain gate, the other never matched at all.
+        assert result.eliminations[CrossDomainDeclarerFG791].stage == "domain"
+        assert ValueRejectingCrossDomainFG791 not in result.eliminations
+        # Premise: the capture really does need the second candidate's domain, so the bound is not vacuous.
+        assert VALUE_DOMAIN_SPARE_791 in result.facts.dead_only_names
+
+        counts = {
+            candidate.get_class_name(): HOOK_CALLS.get(f"{candidate.get_class_name()}.get_domain", 0)
+            for candidate in accessible_plugins
+        }
+        assert counts["CrossDomainDeclarerFG791"] == 1, counts
+        assert all(count <= 1 for count in counts.values()), counts
 
 
 class TestEveryEliminationStageIsClassified:

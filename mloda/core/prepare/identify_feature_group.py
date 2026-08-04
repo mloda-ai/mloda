@@ -159,7 +159,7 @@ class IdentifyFeatureGroupClass:
         if result.failure_kind is not None:
             # Every elimination (value_rejection included) was already recorded during the single filter pass;
             # this only captures the non-elimination facts the messages still need.
-            result = replace(result, facts=self._capture_render_facts(result, accessible_plugins))
+            result = replace(result, facts=self._capture_render_facts(result, accessible_plugins, feature))
         # A captured exception pins its traceback, whose frames pin this instance: a refcount cycle that would
         # keep both alive until a gc pass. Dropping the outcomes here makes the memo's lifetime what it claims.
         self._domain_outcomes.clear()
@@ -169,6 +169,7 @@ class IdentifyFeatureGroupClass:
         self,
         result: EvaluationResult,
         accessible_plugins: FeatureGroupEnvironmentMapping,
+        feature: Feature,
     ) -> RenderFacts:
         """Capture the non-elimination facts the messages still need, precedence-free.
 
@@ -183,7 +184,7 @@ class IdentifyFeatureGroupClass:
             concrete_frameworks=self._concrete_implementation_frameworks(result, accessible_plugins),
             known_names=self._capture_known_names(accessible_plugins),
             eliminated_hints=self._capture_eliminated_hints(result),
-            dead_only_names=self._capture_dead_only_names(result, accessible_plugins),
+            dead_only_names=self._capture_dead_only_names(result, accessible_plugins, feature),
         )
 
     def _capture_eliminated_hints(self, result: EvaluationResult) -> frozenset[str]:
@@ -305,11 +306,22 @@ class IdentifyFeatureGroupClass:
             known_names.extend(self._catalog_names_of(fg_class))
         return tuple(known_names)
 
+    def _fails_name_blind_gate(self, feature_group: type[FeatureGroup], feature: Feature) -> bool:
+        """Capture-side retest of the two name-blind gates, scope then domain, that never raises."""
+        if not self._filter_feature_group_by_scope(feature_group, feature):
+            return True
+        if feature.domain is None:
+            return False
+        candidate_domain = self._domain_name(feature_group)
+        # A domain that could not be read is not a wrong domain, so a degraded read leaves the candidate live.
+        return candidate_domain is not None and candidate_domain != feature.domain.name
+
     def _is_dead(
         self,
         result: EvaluationResult,
         feature_group: type[FeatureGroup],
         compute_frameworks: set[type[ComputeFramework]],
+        feature: Feature,
     ) -> bool:
         """No name at all can resolve to this candidate: it has no framework left, or it lost at a name-blind gate.
 
@@ -319,11 +331,15 @@ class IdentifyFeatureGroupClass:
         """
         if not compute_frameworks:
             return True
+        # A candidate that never matched the requested name carries no record at all, so the name-blind gates
+        # are tested directly here; the record lookup below still owns the stages no gate here can retest.
+        if self._fails_name_blind_gate(feature_group, feature):
+            return True
         elimination = result.eliminations.get(feature_group)
         return elimination is not None and elimination.stage in NAME_INDEPENDENT_STAGES
 
     def _capture_dead_only_names(
-        self, result: EvaluationResult, accessible_plugins: FeatureGroupEnvironmentMapping
+        self, result: EvaluationResult, accessible_plugins: FeatureGroupEnvironmentMapping, feature: Feature
     ) -> frozenset[str]:
         """Declared names that no live candidate declares and no live candidate's prefix covers.
 
@@ -336,7 +352,7 @@ class IdentifyFeatureGroupClass:
         live: set[str] = set()
         live_prefixes: set[str] = set()
         for feature_group, compute_frameworks in accessible_plugins.items():
-            if self._is_dead(result, feature_group, compute_frameworks):
+            if self._is_dead(result, feature_group, compute_frameworks, feature):
                 dead.update(self._supported_names_of(feature_group))
                 continue
             live.update(self._catalog_names_of(feature_group))

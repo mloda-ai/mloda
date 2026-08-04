@@ -29,6 +29,7 @@ class BaseInputData(ABC):
             "and read back by init_reader.",
             default=None,
             framework_set=True,
+            allow_explicit_none=True,
         ),
     }
 
@@ -373,16 +374,24 @@ class BaseInputData(ABC):
         Adding the found data access class to the options.
         """
 
-        if options.get("BaseInputData"):
+        if "BaseInputData" in options:
             existing_data = options.get("BaseInputData")
-            if existing_data == (cls_to_be_added, matched_data_access):
+            # `is True`, not a truth test: a non-bool __eq__ result (numpy array) must not raise unmarked here.
+            if (existing_data == (cls_to_be_added, matched_data_access)) is True:
                 return
 
-            already_cls_to_be_added, _ = existing_data
+            if isinstance(existing_data, tuple) and len(existing_data) == 2:
+                existing_label = f"{existing_data[0]} (access type {type(existing_data[1]).__name__})"
+            else:
+                existing_label = type(existing_data).__name__
+
             # Marked: two conflicting readers for one feature is a user misconfiguration.
+            # Keyed on presence so add_to_group cannot raise it unmarked; access named by type, it may hold secrets.
             raise escalate_match_abort(
                 ValueError(
-                    f"BaseInputData already set with different values. {cls_to_be_added} != {already_cls_to_be_added}"
+                    f"BaseInputData already set with different values. "
+                    f"incoming={cls_to_be_added} (access type {type(matched_data_access).__name__}), "
+                    f"existing={existing_label}"
                 )
             )
         options.add_to_group("BaseInputData", (cls_to_be_added, matched_data_access))
@@ -403,7 +412,7 @@ class BaseInputData(ABC):
 
         if reader_data_access is None:
             raise ValueError(
-                f"'BaseInputData' key is missing or None in the provided Options for {self.__class__.__name__}.\n"
+                f"'BaseInputData' key is missing in the provided Options for {self.__class__.__name__}.\n"
                 "The 'BaseInputData' key in Options must map to a tuple of "
                 "(ReaderClass, data_access).\n"
                 "Example:\n"

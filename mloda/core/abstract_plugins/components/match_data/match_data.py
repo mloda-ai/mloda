@@ -92,14 +92,19 @@ class MatchData:
 
         cls_name = cls.get_class_name()
 
-        if options.get(cls_name):
+        if cls_name in options:
             existing_data = options.get(cls_name)
-            if existing_data == matched_data_access:
+            # `is True`, not a truth test: a non-bool __eq__ result (numpy array) must not raise unmarked here.
+            if (existing_data == matched_data_access) is True:
                 return
 
             # Marked: two conflicting readers for one feature is a user misconfiguration.
+            # Keyed on presence so add_to_group cannot raise it unmarked; access named by type, it may hold secrets.
             raise escalate_match_abort(
-                ValueError(f"{cls_name} already set with different values. {existing_data} != {matched_data_access}")
+                ValueError(
+                    f"{cls_name} already set with different values. "
+                    f"incoming={type(matched_data_access).__name__}, existing={type(existing_data).__name__}"
+                )
             )
         options.add_to_group(cls_name, matched_data_access)
 

@@ -361,6 +361,11 @@ class Feature:
         embeds the object address, so deep-copying a value would silently shift this Feature's hash and
         break the very dedup the copy protects. Both containers are written in place by the engine
         (intake forwarding, strict_type_enforcement, matcher writes), which is what the copy stops.
+
+        compute_frameworks, read by __eq__/__hash__ too, is deliberately NOT rebuilt: the copy shares
+        that set by reference (#924). Safe only because every write site rebinds it and none mutates in place;
+        copying it would hide that GlobalFilter.compute_framework rebinds a filter feature's set from the
+        resolved one. Guard: test_compute_frameworks_sharing.py::test_no_module_mutates_compute_frameworks_in_place.
         """
         # One level: a Feature nested inside child_options.group keeps sharing its own options, the
         # documented limitation class of _isolate_forwarded_value.

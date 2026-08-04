@@ -240,6 +240,10 @@ class Options:
         val = self.get(DefaultOptionKeys.in_features)
 
         if not val:
+            if DefaultOptionKeys.in_features in self:
+                raise ValueError(
+                    f"The key '{DefaultOptionKeys.in_features}' is set to {val!r}, which resolves to no input features."
+                )
             raise ValueError(
                 f"Input features not found in options. Please ensure that the key '{DefaultOptionKeys.in_features}' is set."
             )

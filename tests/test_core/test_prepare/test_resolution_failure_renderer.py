@@ -158,6 +158,10 @@ IDENTIFY_LOGGER_791 = "mloda.core.prepare.identify_feature_group"
 # safe_field's own module logger: a guarded read reports its degrade from wherever the guard sits.
 SAFE_FIELD_LOGGER_791 = "mloda.core.abstract_plugins.components.utils"
 
+# The links gate reads two hooks, so its degrade names both: reporting it as index_columns alone names the
+# wrong hook whenever supports_index is the one that raised.
+LINKS_DEGRADE_FIELD_791 = "index_columns/supports_index"
+
 # Eight names, all close to WIDE_FEATURE_791, so only the cut can bound the rendered line.
 WIDE_CATALOG_NAMES_791 = frozenset(
     {
@@ -1384,6 +1388,33 @@ def links_hook_cost_scenario() -> LinkedScenario:
     )
 
 
+def multiple_with_links_scenario() -> LinkedScenario:
+    """A 'multiple' failure on a linked run, next to a dead declarer and a candidate that never matched."""
+    return (
+        Feature(MULTIPLE_FEATURE_791),
+        {
+            RendererMultipleBFG791: {RendererFwOne791},
+            RendererMultipleAFG791: {RendererFwOne791},
+            SpareNoFrameworkFG791: set(),
+            LinksGateDeclarerFG791: {RendererFwOne791},
+        },
+        {LINKS_GATE_LINK_791},
+    )
+
+
+def abstract_only_with_links_scenario() -> LinkedScenario:
+    """An 'abstract_only' failure on a linked run, next to a candidate that never matched."""
+    return (
+        Feature(ABSTRACT_FEATURE_791),
+        {
+            RendererAbstractBaseFG791: {RendererFwOne791},
+            RendererConcreteSubFG791: set(),
+            LinksGateDeclarerFG791: {RendererFwOne791},
+        },
+        {LINKS_GATE_LINK_791},
+    )
+
+
 def value_rejection_unlinked_scenario() -> LinkedScenario:
     """A candidate recorded at a name-DEPENDENT stage that the name-blind links gate kills anyway."""
     return (
@@ -1598,14 +1629,14 @@ def _render(scenario: Scenario) -> str:
     return message
 
 
-def _degrade_warnings(caplog: pytest.LogCaptureFixture, feature_group: type[FeatureGroup]) -> list[str]:
-    """WARNINGs naming one candidate's degraded read, from whichever guarded read reported it."""
+def _degrade_warnings(caplog: pytest.LogCaptureFixture, field: str) -> list[str]:
+    """WARNINGs naming one degraded field, from whichever guarded read reported it."""
     return [
         record.getMessage()
         for record in caplog.records
         if record.levelno == logging.WARNING
         and record.name in (IDENTIFY_LOGGER_791, SAFE_FIELD_LOGGER_791)
-        and f"{feature_group.get_class_name()}." in record.getMessage()
+        and field in record.getMessage()
     ]
 
 
@@ -2670,8 +2701,9 @@ class TestADegradedIndexReadNeverDecidesAgainstACandidate:
         assert message is not None
         assert _suggestions(message) == [DEGRADED_LINKS_SPARE_791]
 
-        warnings = _degrade_warnings(caplog, unreadable)
-        assert warnings, f"Expected a WARNING naming the degraded read of '{unreadable.get_class_name()}'"
+        # The gate reads two hooks, so its degrade names the pair rather than whichever one it starts with.
+        degraded_field = f"{unreadable.get_class_name()}.{LINKS_DEGRADE_FIELD_791}"
+        assert _degrade_warnings(caplog, degraded_field), f"Expected a WARNING naming '{degraded_field}'"
 
     def test_a_raising_supports_index_keeps_the_candidates_names_suggestible(
         self, caplog: pytest.LogCaptureFixture
@@ -2687,8 +2719,9 @@ class TestADegradedIndexReadNeverDecidesAgainstACandidate:
         # Premise: the run carries links, and the candidate never matched, so only the capture reads it.
         assert result.failure_kind == "none"
         assert result.eliminations == {}
-        # At least one call: the first raise is already enough to leave the gate undecided.
-        assert HOOK_CALLS.get(f"{unreadable.get_class_name()}.supports_index", 0) >= 1, HOOK_CALLS
+        # Premise: the capture really reached the gate, and the first index it asks about is already enough
+        # to leave it undecided, so the count is one and not one per index of the run's single link.
+        assert HOOK_CALLS.get(f"{unreadable.get_class_name()}.supports_index", 0) == 1, HOOK_CALLS
 
         assert DEGRADED_LINKS_SPARE_791 not in result.facts.dead_only_names
 
@@ -2696,16 +2729,18 @@ class TestADegradedIndexReadNeverDecidesAgainstACandidate:
         assert message is not None
         assert _suggestions(message) == [DEGRADED_LINKS_SPARE_791]
 
-        warnings = _degrade_warnings(caplog, unreadable)
-        assert warnings, f"Expected a WARNING naming the degraded read of '{unreadable.get_class_name()}'"
+        # The hook that raised is supports_index, so a degrade reported as index_columns names the wrong one.
+        degraded_field = f"{unreadable.get_class_name()}.{LINKS_DEGRADE_FIELD_791}"
+        assert _degrade_warnings(caplog, degraded_field), f"Expected a WARNING naming '{degraded_field}'"
 
 
 class TestTheLinksGateIsRetestedOnlyWhenTheRunHasLinks:
     """The links retest costs two provider hooks, so it runs exactly where it can decide something.
 
-    A run without links pays nothing and decides nothing. A run with links pays one index read per candidate
-    for the decision pass and the capture together, which is the budget
-    tests/test_core/test_prepare/test_single_pass_exactly_once.py already holds the engine to.
+    A run without links pays nothing and decides nothing. A run with links runs the gate once per candidate,
+    the decision pass and the capture together. One gate RUN is the invariant, not one hook call: the doubles
+    here override supports_index, so a run costs one index read, while a group that does not override it costs
+    1 + 2 * len(links) reads, because the base supports_index calls index_columns itself.
     """
 
     def test_a_linkless_run_never_reads_a_non_matching_candidates_index_columns(self) -> None:
@@ -2729,8 +2764,8 @@ class TestTheLinksGateIsRetestedOnlyWhenTheRunHasLinks:
         assert message is not None
         assert _suggestions(message) == [LINKS_GATE_SIBLING_791]
 
-    def test_each_candidates_index_columns_is_read_at_most_once_per_evaluation(self) -> None:
-        """One decision-pass read plus one capture read of the same candidate is one hook call, not two."""
+    def test_each_candidates_links_gate_runs_at_most_once_per_evaluation(self) -> None:
+        """One decision-pass run plus one capture run of the same candidate is one gate run, not two."""
         scenario = links_hook_cost_scenario()
         _, accessible_plugins, _ = scenario
         result = _evaluate_linked(scenario)
@@ -2750,10 +2785,75 @@ class TestTheLinksGateIsRetestedOnlyWhenTheRunHasLinks:
             for candidate in accessible_plugins
         }
         # Both are pinned EXACTLY: an upper bound also holds when a hook is never called at all, so an edit that
-        # stopped asking about the non-matching candidate entirely would slip through it. Two index supports per
-        # candidate because the run carries one link, and a link carries two indexes.
+        # stopped asking about the non-matching candidate entirely would slip through it. One gate run reads the
+        # index columns once and asks about both indexes of the run's single link.
         assert index_reads == {"LinksGateDeclarerFG791": 1, "ValueRejectingUnlinkedFG791": 1}, index_reads
         assert support_reads == {"LinksGateDeclarerFG791": 2, "ValueRejectingUnlinkedFG791": 2}, support_reads
+
+
+class TestADeadNameIsCapturedOnlyForTheMessageThatReadsIt:
+    """_render_none is the only reader of dead_only_names, so only a 'none' failure may pay for it.
+
+    The capture is a sweep over every accessible plugin, and the links retest makes each candidate of that
+    sweep cost a whole gate run: 1 + 2 * len(links) index reads on a group that does not override
+    supports_index. Computing it for a 'multiple' or 'abstract_only' failure buys a fact those messages
+    never read.
+    """
+
+    def test_a_multiple_failure_captures_no_dead_name_and_reads_no_index_hook(self) -> None:
+        """The dead declarer's names are not captured, and the candidate that never matched is not asked."""
+        scenario = multiple_with_links_scenario()
+        feature, _, _ = scenario
+        result = _evaluate_linked(scenario)
+
+        # Premise: two winners make this 'multiple', and a group with no framework at all is dead for every
+        # name it declares, so an unconditional capture would claim its names here.
+        assert result.failure_kind == "multiple"
+        assert set(result.identified) == {RendererMultipleAFG791, RendererMultipleBFG791}
+        assert SpareNoFrameworkFG791 not in result.identified
+        # Premise: this candidate's counters are wired, so what follows is about the hooks, not about the keys.
+        assert HOOK_CALLS["LinksGateDeclarerFG791.match_feature_group_criteria"] == 1
+
+        assert result.facts.dead_only_names == frozenset()
+        assert "LinksGateDeclarerFG791.index_columns" not in HOOK_CALLS
+        assert "LinksGateDeclarerFG791.supports_index" not in HOOK_CALLS
+
+        # Nothing the user sees changes: the message reads the identified candidates and their domains only.
+        module = RendererMultipleAFG791.__module__
+        assert render_resolution_failure(result, feature) == (
+            f"Multiple feature groups found for feature '{MULTIPLE_FEATURE_791}':\n"
+            f"  - RendererMultipleAFG791 ({module}) [domain: renderer_domain_a_791]\n"
+            f"  - RendererMultipleBFG791 ({module}) [domain: renderer_domain_b_791]\n"
+            f"{TROUBLESHOOTING_LINE}"
+        )
+
+    def test_an_abstract_only_failure_captures_no_dead_name_and_reads_no_index_hook(self) -> None:
+        """Same for the other kind: an abstract base and its stranded subclass are both dead, and unread."""
+        scenario = abstract_only_with_links_scenario()
+        feature, _, _ = scenario
+        result = _evaluate_linked(scenario)
+
+        # Premise: the abstract base can never be identified and the concrete subclass has no framework left,
+        # so both are dead for every name they declare and an unconditional capture would claim their names.
+        assert result.failure_kind == "abstract_only"
+        assert result.abstract_matched == {RendererAbstractBaseFG791}
+        assert result.eliminations[RendererConcreteSubFG791].stage == "frameworks_not_enabled"
+        # Premise: this candidate's counters are wired, so what follows is about the hooks, not about the keys.
+        assert HOOK_CALLS["LinksGateDeclarerFG791.match_feature_group_criteria"] == 1
+
+        assert result.facts.dead_only_names == frozenset()
+        assert "LinksGateDeclarerFG791.index_columns" not in HOOK_CALLS
+        assert "LinksGateDeclarerFG791.supports_index" not in HOOK_CALLS
+
+        # Nothing the user sees changes: the message reads the concrete frameworks and the near-miss block only.
+        assert render_resolution_failure(result, feature) == (
+            f"No feature groups found for feature name: '{ABSTRACT_FEATURE_791}'. "
+            "Its concrete implementations require compute framework(s) "
+            "['RendererFwOne791', 'RendererFwTwo791'], "
+            "none of which are available or enabled for this run.\n"
+            f"Feature group(s) eliminated while matching '{ABSTRACT_FEATURE_791}':\n"
+            "  - RendererConcreteSubFG791 (compute framework): none of its compute frameworks are enabled for this run"
+        )
 
 
 class TestTheNameBlindGateCaptureCostsNoExtraHookCall:

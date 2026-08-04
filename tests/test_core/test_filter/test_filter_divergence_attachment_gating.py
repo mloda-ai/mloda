@@ -35,6 +35,10 @@ FDG_NOWHERE = "fdg_nowhere_feature"  # a filter target no feature group ever ser
 
 UNMATCHED_PHRASE = "matched no feature group"
 
+FDG_RERUN_TARGET = "fdg_rerun_target_feature"
+FDG_DEDUP_KEY = "fdg_dedup_key"
+FDG_OTHER_HOST_VAL = "fdg_other_host_val"
+
 
 def _rejecting_probe() -> type[FeatureGroup]:
     class FdgRejectingProbeFeatureGroup(FeatureGroup):
@@ -234,3 +238,104 @@ def test_engine_stays_silent_for_a_filter_that_attaches(caplog: pytest.LogCaptur
 
     assert observed["collection_size"] >= 1, f"the filter must have attached: {observed!r}"
     assert [message for message in _warnings_naming(caplog, FDG_TARGET) if UNMATCHED_PHRASE in message] == []
+
+
+def _run_reusing(
+    global_filter: GlobalFilter,
+    served: set[str],
+    mapping: dict[str, PropertySpec] | None = None,
+    host_options: Options | None = None,
+) -> None:
+    """One engine run of FDG_HOST against a throwaway probe, reusing the caller's GlobalFilter.
+
+    The probe class and its collector are deleted from THIS frame; the caller must delete its
+    GlobalFilter reference before asserting, since the collection pins attached probe classes.
+    """
+    collector = PluginCollector.enabled_feature_groups({_engine_probe(served, mapping)})
+    results = mloda.run_all(
+        [Feature(FDG_HOST, host_options or Options())],
+        compute_frameworks={PythonDictFramework},
+        plugin_collector=collector,
+        global_filter=global_filter,
+    )
+    del collector, results
+
+
+def test_unmatched_tracking_is_scoped_to_a_single_engine_run(caplog: pytest.LogCaptureFixture) -> None:
+    """Reusing one GlobalFilter: a match in run 1 must not silence run 2's unmatched warning."""
+    global_filter = GlobalFilter()
+    global_filter.add_filter(Feature(FDG_RERUN_TARGET, Options()), FilterType.EQUAL, {"value": 1})
+    with caplog.at_level(logging.WARNING):
+        _run_reusing(global_filter, {FDG_HOST, FDG_RERUN_TARGET})
+    first = [message for message in _warnings_naming(caplog, FDG_RERUN_TARGET) if UNMATCHED_PHRASE in message]
+    caplog.clear()
+    with caplog.at_level(logging.WARNING):
+        _run_reusing(global_filter, {FDG_HOST})
+    del global_filter
+
+    assert first == [], f"the filter attached in run 1, so run 1 must stay silent: {first!r}"
+    second = [message for message in _warnings_naming(caplog, FDG_RERUN_TARGET) if UNMATCHED_PHRASE in message]
+    assert len(second) == 1, f"run 2 matched nothing, exactly one warning expected, got: {second!r}"
+
+
+def test_identical_divergence_message_is_emitted_once_per_setup(caplog: pytest.LogCaptureFixture) -> None:
+    """Three attachments rendering one byte-identical divergence message must warn once."""
+    global_filter = GlobalFilter()
+    global_filter.add_filter(
+        Feature(FDG_TARGET, Options(group={FDG_DEDUP_KEY: FDG_FILTER_VAL})), FilterType.EQUAL, {"value": 1}
+    )
+    probe = _accepting_probe()
+    with caplog.at_level(logging.WARNING):
+        for host in ("fdg_dedup_host_a", "fdg_dedup_host_b", "fdg_dedup_host_c"):
+            global_filter.identify_matched_filters(probe, Feature(host, Options(group={FDG_DEDUP_KEY: FDG_HOST_VAL})))
+    del probe, global_filter
+
+    assert _warnings_naming(caplog, FDG_DEDUP_KEY) == [
+        f"Options are not the same. {FDG_DEDUP_KEY} is different. {FDG_FILTER_VAL} != {FDG_HOST_VAL}"
+    ]
+
+
+def test_divergence_dedup_keeps_distinct_messages(caplog: pytest.LogCaptureFixture) -> None:
+    """The control: two hosts rendering two different messages must both be reported."""
+    global_filter = GlobalFilter()
+    global_filter.add_filter(
+        Feature(FDG_TARGET, Options(group={FDG_DEDUP_KEY: FDG_FILTER_VAL})), FilterType.EQUAL, {"value": 1}
+    )
+    probe = _accepting_probe()
+    with caplog.at_level(logging.WARNING):
+        global_filter.identify_matched_filters(
+            probe, Feature("fdg_dedup_host_a", Options(group={FDG_DEDUP_KEY: FDG_HOST_VAL}))
+        )
+        global_filter.identify_matched_filters(
+            probe, Feature("fdg_dedup_host_b", Options(group={FDG_DEDUP_KEY: FDG_OTHER_HOST_VAL}))
+        )
+    del probe, global_filter
+
+    assert sorted(_warnings_naming(caplog, FDG_DEDUP_KEY)) == sorted(
+        [
+            f"Options are not the same. {FDG_DEDUP_KEY} is different. {FDG_FILTER_VAL} != {FDG_HOST_VAL}",
+            f"Options are not the same. {FDG_DEDUP_KEY} is different. {FDG_FILTER_VAL} != {FDG_OTHER_HOST_VAL}",
+        ]
+    )
+
+
+def test_divergence_dedup_is_scoped_to_a_single_engine_run(caplog: pytest.LogCaptureFixture) -> None:
+    """Reusing one GlobalFilter: each engine run re-emits an identical divergence message once."""
+    mapping = {FDG_DEDUP_KEY: PropertySpec("A group key the filter feature declares differently.", context=False)}
+    host_options = Options(group={FDG_DEDUP_KEY: FDG_HOST_VAL})
+    global_filter = GlobalFilter()
+    global_filter.add_filter(
+        Feature(FDG_TARGET, Options(group={FDG_DEDUP_KEY: FDG_FILTER_VAL})), FilterType.EQUAL, {"value": 1}
+    )
+    with caplog.at_level(logging.WARNING):
+        _run_reusing(global_filter, {FDG_HOST, FDG_TARGET}, mapping, host_options)
+    first = _warnings_naming(caplog, FDG_DEDUP_KEY)
+    caplog.clear()
+    with caplog.at_level(logging.WARNING):
+        _run_reusing(global_filter, {FDG_HOST, FDG_TARGET}, mapping, host_options)
+    del global_filter
+
+    expected = f"Options are not the same. {FDG_DEDUP_KEY} is different. {FDG_FILTER_VAL} != {FDG_HOST_VAL}"
+    assert first == [expected], f"run 1 must emit the divergence message once: {first!r}"
+    second = _warnings_naming(caplog, FDG_DEDUP_KEY)
+    assert second == [expected], f"run 2 must emit the divergence message once again: {second!r}"

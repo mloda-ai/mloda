@@ -36,7 +36,7 @@ class GlobalFilter:
            e.g. for debugging, logging or quality checks.
         3. `dropped_filters`: maps (feature group, filter feature name) to the reason a contained raise dropped it.
         4. `probes`: maps (feature group, feature name, feature uuid) to the filters that probe matched, empty included.
-        5. `matched_filter_uuids`: uuids of filters that cleared every gate at least once, across all calls.
+        5. `matched_filter_uuids`: uuids of filters that cleared every gate at least once this setup.
 
         These attributes provide the foundation for adding, managing, and applying filters across various feature groups
         and features in the context of a data processing pipeline.
@@ -46,6 +46,13 @@ class GlobalFilter:
         self.dropped_filters: dict[tuple[type[FeatureGroup], str], str] = {}
         self.probes: dict[tuple[type[FeatureGroup], FeatureName, UUID], set[SingleFilter]] = {}
         self.matched_filter_uuids: set[UUID] = set()
+        # Rendered divergence messages already emitted this setup; cleared by reset_match_tracking.
+        self._warned_divergences: set[str] = set()
+
+    def reset_match_tracking(self) -> None:
+        """Match and divergence-warning tracking is scoped to one engine setup."""
+        self.matched_filter_uuids.clear()
+        self._warned_divergences.clear()
 
     def record_probe(
         self,
@@ -133,9 +140,9 @@ class GlobalFilter:
 
     def warn_on_unmatched_filters(self) -> None:
         """Warn once per filter that matched no feature group during the whole setup."""
-        for filter in self.filters:
+        for filter in sorted(self.filters, key=lambda f: f.name):
             if filter.uuid not in self.matched_filter_uuids:
-                logger.warning(f"Filter feature '{filter.filter_feature.name}' matched no feature group.")
+                logger.warning(f"Filter feature '{filter.name}' matched no feature group.")
 
     def unify_options(self, feat_options: Options, filter_options: Options) -> Options:
         """Add the feature's options the filter feature omits. A declared value is never rewritten."""
@@ -162,12 +169,16 @@ class GlobalFilter:
             if self._converges_at_intake(fill, value):
                 continue
             if fill is None:
-                logger.warning(f"Options are not the same. {key} is different. {declared} != {value}")
+                message = f"Options are not the same. {key} is different. {declared} != {value}"
             else:
                 # Name the spec default, which is what the filter feature will actually compute with.
-                logger.warning(
+                message = (
                     f"Options are not the same. {key} is different. {declared!r} (intake fills {fill!r}) != {value!r}"
                 )
+            if message in self._warned_divergences:
+                continue
+            self._warned_divergences.add(message)
+            logger.warning(message)
 
     @staticmethod
     def _intake_fill(feature_group: Optional[type[FeatureGroup]], key: str, filter_options: Options) -> Any:

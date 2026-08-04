@@ -117,6 +117,9 @@ class Engine:
         raise ValueError("ExecutionOrchestrator setup failed.")
 
     def create_setup_execution_plan(self, features: Features) -> ExecutionPlan:
+        if self.global_filter:
+            self.global_filter.reset_match_tracking()
+
         self.setup_features_recursion(features)
 
         if self.global_filter:

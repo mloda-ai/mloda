@@ -1,8 +1,6 @@
-"""#932: an option-write conflict during reader selection escalates, like the reader conflict above it.
+"""An option-write conflict during reader selection escalates instead of being contained as a non-match.
 
-Both ``add_base_input_data_to_options`` twins decide on PRESENCE, so a reserved key present with any
-value (falsy, or truthy but malformed) escalates at their own marked raise, never reaching the unmarked
-``Options.add_to_group``. The escalated message names classes and types only, never the access value.
+Both ``add_base_input_data_to_options`` twins decide on presence, and report class and type names only.
 """
 
 import gc
@@ -42,11 +40,11 @@ T = TypeVar("T")
 
 
 class OptionWriteFw932(ComputeFramework):
-    """Dummy compute framework for the option-write conflict tests."""
+    pass
 
 
 def _capture(call: Callable[[], T]) -> tuple[Optional[T], Optional[str]]:
-    """Run call, returning (value, None) or (None, 'Type: message'). No traceback is retained."""
+    """Returns (value, None) or (None, 'Type: message'); no traceback is retained."""
     try:
         return call(), None
     except Exception as exc:  # noqa: BLE001  (an escape, or its absence, is the fact under test)
@@ -55,20 +53,18 @@ def _capture(call: Callable[[], T]) -> tuple[Optional[T], Optional[str]]:
 
 @dataclass(frozen=True)
 class _ConflictSnapshot:
-    """Plain-data readout of one evaluation. Holds no class and no exception object."""
+    """Readout of one evaluation, holding no class and no exception object."""
 
     escaped: Optional[str]
     identified_names: tuple[str, ...]
 
 
 def _make_match_data_fg() -> type[FeatureGroup]:
-    """MatchData candidate whose reserved key is already PRESENT with a falsy value."""
+    """MatchData candidate resolving a global access while its class-name key is present as None."""
     # Class objects are cyclic; collect leftovers from earlier tests before defining a twin.
     gc.collect()
 
     class OptionWriteMatchDataFG932(FeatureGroup, MatchData):
-        """Resolves a global-scope access while its own class-name key sits in the options as None."""
-
         @classmethod
         def feature_names_supported(cls) -> set[str]:
             return {MATCH_DATA_FEATURE}
@@ -102,8 +98,6 @@ def _make_match_data_rival_fg() -> type[FeatureGroup]:
     gc.collect()
 
     class OptionWriteMatchDataRivalFG932(FeatureGroup):
-        """The group that would silently win while the option-write conflict is swallowed."""
-
         @classmethod
         def feature_names_supported(cls) -> set[str]:
             return {MATCH_DATA_FEATURE}
@@ -123,7 +117,7 @@ class OptionWriteReaderFamily932(BaseInputData):
 
 
 class OptionWriteReader932(OptionWriteReaderFamily932):
-    """Final reader that matches ONLY its own marker value, so process-wide discovery cannot collide."""
+    """Matches only its own marker value, so process-wide discovery cannot collide."""
 
     @classmethod
     def match_subclass_data_access(
@@ -143,12 +137,10 @@ class OptionWriteReader932(OptionWriteReaderFamily932):
 
 
 def _make_reader_fg() -> type[FeatureGroup]:
-    """Reader-selecting candidate whose reserved 'BaseInputData' key is PRESENT with a falsy value."""
+    """Reader-selecting candidate whose reserved 'BaseInputData' key is already present."""
     gc.collect()
 
     class OptionWriteReaderFG932(FeatureGroup):
-        """Root feature group selecting the test reader family."""
-
         @classmethod
         def input_data(cls) -> Optional[BaseInputData]:
             return OptionWriteReaderFamily932()
@@ -172,8 +164,6 @@ def _make_reader_rival_fg() -> type[FeatureGroup]:
     gc.collect()
 
     class OptionWriteReaderRivalFG932(FeatureGroup):
-        """The group that would silently win while the option-write conflict is swallowed."""
-
         @classmethod
         def feature_names_supported(cls) -> set[str]:
             return {READER_FEATURE}
@@ -195,7 +185,7 @@ def _evaluate(
     rival_fg: Optional[type[FeatureGroup]],
     data_access: Optional[DataAccessCollection],
 ) -> _ConflictSnapshot:
-    """Evaluate one feature at the match seam and read the outcome out as plain data."""
+    """Evaluates one feature at the match seam and reads the outcome out as plain data."""
     feature = Feature(feature_name, options=options)
     plugins: FeatureGroupEnvironmentMapping = {conflict_fg: {OptionWriteFw932}}
     if rival_fg is not None:
@@ -210,7 +200,7 @@ def _evaluate(
 
 
 def _evaluate_match_data_conflict(with_rival: bool) -> _ConflictSnapshot:
-    """MatchData twin: the class-name key is present as None while a global access resolves."""
+    """MatchData twin: class-name key present as None while a global access resolves."""
     conflict_fg = _make_match_data_fg()
     rival_fg = _make_match_data_rival_fg() if with_rival else None
     try:
@@ -224,7 +214,7 @@ def _evaluate_match_data_conflict(with_rival: bool) -> _ConflictSnapshot:
 
 
 def _evaluate_reader_conflict(with_rival: bool, global_scope: bool, reserved_value: Any = None) -> _ConflictSnapshot:
-    """BaseInputData twin: the reserved key is present with reserved_value while a reader resolves."""
+    """BaseInputData twin: reserved key present with reserved_value while a reader resolves."""
     conflict_fg = _make_reader_fg()
     rival_fg = _make_reader_rival_fg() if with_rival else None
     try:
@@ -247,10 +237,8 @@ class TestMatchDataOptionWriteConflictAbortsTheMatch:
     def test_conflict_reaches_the_caller(self) -> None:
         snapshot = _evaluate_match_data_conflict(with_rival=False)
 
-        assert snapshot.escaped is not None, "the option-write conflict must not be contained as a non-match"
-        assert snapshot.escaped.startswith(f"{RAISE_TYPE_NAME}: "), (
-            f"the conflict's own ValueError must reach the caller, got: {snapshot.escaped}"
-        )
+        assert snapshot.escaped is not None
+        assert snapshot.escaped.startswith(f"{RAISE_TYPE_NAME}: ")
         assert MATCH_DATA_CLASS_NAME in snapshot.escaped
         assert CONFLICT_TEXT in snapshot.escaped, "the twin's own raise must escape, not the deeper option write"
         assert snapshot.identified_names == ()
@@ -258,16 +246,13 @@ class TestMatchDataOptionWriteConflictAbortsTheMatch:
     def test_conflict_is_not_dropped_when_a_rival_claims_the_name(self) -> None:
         snapshot = _evaluate_match_data_conflict(with_rival=True)
 
-        assert snapshot.identified_names != (MATCH_DATA_RIVAL_NAME,), (
-            "the rival must not silently win while the option-write conflict is swallowed"
-        )
-        assert snapshot.escaped is not None, "a rival candidate must not hide the option-write conflict"
+        assert snapshot.identified_names != (MATCH_DATA_RIVAL_NAME,)
+        assert snapshot.escaped is not None
         assert snapshot.escaped.startswith(f"{RAISE_TYPE_NAME}: ")
         assert MATCH_DATA_CLASS_NAME in snapshot.escaped
         assert CONFLICT_TEXT in snapshot.escaped
 
     def test_conflict_message_names_no_access_value(self) -> None:
-        """The access can carry credentials, so only class and type names are reported."""
         snapshot = _evaluate_match_data_conflict(with_rival=False)
 
         assert snapshot.escaped is not None
@@ -280,10 +265,8 @@ class TestBaseInputDataOptionWriteConflictAbortsTheMatch:
     def test_feature_scope_conflict_reaches_the_caller(self) -> None:
         snapshot = _evaluate_reader_conflict(with_rival=False, global_scope=False)
 
-        assert snapshot.escaped is not None, "the option-write conflict must not be contained as a non-match"
-        assert snapshot.escaped.startswith(f"{RAISE_TYPE_NAME}: "), (
-            f"the conflict's own ValueError must reach the caller, got: {snapshot.escaped}"
-        )
+        assert snapshot.escaped is not None
+        assert snapshot.escaped.startswith(f"{RAISE_TYPE_NAME}: ")
         assert RESERVED_KEY in snapshot.escaped
         assert CONFLICT_TEXT in snapshot.escaped, "the twin's own raise must escape, not the deeper option write"
         assert snapshot.identified_names == ()
@@ -291,24 +274,23 @@ class TestBaseInputDataOptionWriteConflictAbortsTheMatch:
     def test_global_scope_conflict_reaches_the_caller(self) -> None:
         snapshot = _evaluate_reader_conflict(with_rival=False, global_scope=True)
 
-        assert snapshot.escaped is not None, "the option-write conflict must not be contained as a non-match"
+        assert snapshot.escaped is not None
         assert snapshot.escaped.startswith(f"{RAISE_TYPE_NAME}: ")
         assert RESERVED_KEY in snapshot.escaped
         assert CONFLICT_TEXT in snapshot.escaped
         assert snapshot.identified_names == ()
 
     def test_present_truthy_malformed_value_reaches_the_caller(self) -> None:
-        """A user passing the access directly under the reserved key: present, truthy, not a pair."""
+        """The access passed directly under the reserved key: present, truthy, not a pair."""
         snapshot = _evaluate_reader_conflict(with_rival=False, global_scope=False, reserved_value=MALFORMED_ACCESS)
 
-        assert snapshot.escaped is not None, "a malformed reserved value must not be contained as a non-match"
+        assert snapshot.escaped is not None
         assert snapshot.escaped.startswith(f"{RAISE_TYPE_NAME}: ")
         assert RESERVED_KEY in snapshot.escaped
         assert CONFLICT_TEXT in snapshot.escaped, "the unpack of the malformed value must not raise instead"
         assert snapshot.identified_names == ()
 
     def test_conflict_message_names_no_access_value(self) -> None:
-        """The access can carry credentials, so only class and type names are reported."""
         snapshot = _evaluate_reader_conflict(with_rival=False, global_scope=False, reserved_value=MALFORMED_ACCESS)
 
         assert snapshot.escaped is not None
@@ -318,10 +300,8 @@ class TestBaseInputDataOptionWriteConflictAbortsTheMatch:
     def test_conflict_is_not_dropped_when_a_rival_claims_the_name(self) -> None:
         snapshot = _evaluate_reader_conflict(with_rival=True, global_scope=False)
 
-        assert snapshot.identified_names != (READER_RIVAL_NAME,), (
-            "the rival must not silently win while the option-write conflict is swallowed"
-        )
-        assert snapshot.escaped is not None, "a rival candidate must not hide the option-write conflict"
+        assert snapshot.identified_names != (READER_RIVAL_NAME,)
+        assert snapshot.escaped is not None
         assert snapshot.escaped.startswith(f"{RAISE_TYPE_NAME}: ")
         assert RESERVED_KEY in snapshot.escaped
         assert CONFLICT_TEXT in snapshot.escaped

@@ -22,7 +22,7 @@ class BaseInputData(ABC):
     READER_OPTIONS: ClassVar[dict[str, PropertySpec]] = {
         "BaseInputData": PropertySpec(
             "The matched (ReaderClass, data_access) pair, written by add_base_input_data_to_options "
-            "and read back by init_reader; an explicitly stored None counts as present.",
+            "and read back by init_reader.",
             default=None,
             framework_set=True,
             allow_explicit_none=True,
@@ -372,8 +372,7 @@ class BaseInputData(ABC):
 
         if "BaseInputData" in options:
             existing_data = options.get("BaseInputData")
-            # `is True`, not a truth test: a non-bool __eq__ result (numpy array, DataFrame) must fall through
-            # to the marked escalation instead of raising "truth value is ambiguous" unmarked (#932).
+            # `is True`, not a truth test: a non-bool __eq__ result (numpy array) must not raise unmarked here.
             if (existing_data == (cls_to_be_added, matched_data_access)) is True:
                 return
 
@@ -383,10 +382,7 @@ class BaseInputData(ABC):
                 existing_label = type(existing_data).__name__
 
             # Marked: two conflicting readers for one feature is a user misconfiguration.
-            # Presence, not truthiness, is the identity, so the same contradiction is not left to raise unmarked
-            # one level down in Options.add_to_group (#932).
-            # The access value is deliberately named by TYPE only: it can carry credentials (ReadDB matches a
-            # credentials dict), and this message escalates to the caller and is logged.
+            # Keyed on presence so add_to_group cannot raise it unmarked; access named by type, it may hold secrets.
             raise escalate_match_abort(
                 ValueError(
                     f"BaseInputData already set with different values. "
@@ -413,7 +409,6 @@ class BaseInputData(ABC):
         if reader_data_access is None:
             raise ValueError(
                 f"'BaseInputData' key is missing in the provided Options for {self.__class__.__name__}.\n"
-                "Reader selection never leaves a None stored under it: there, a stored None is a conflict.\n"
                 "The 'BaseInputData' key in Options must map to a tuple of "
                 "(ReaderClass, data_access).\n"
                 "Example:\n"

@@ -369,16 +369,18 @@ class BaseInputData(ABC):
         Adding the found data access class to the options.
         """
 
-        if options.get("BaseInputData"):
+        if "BaseInputData" in options:
             existing_data = options.get("BaseInputData")
             if existing_data == (cls_to_be_added, matched_data_access):
                 return
 
-            already_cls_to_be_added, _ = existing_data
             # Marked: two conflicting readers for one feature is a user misconfiguration.
+            # Presence, not truthiness, is the identity, so the same contradiction is not left to raise unmarked
+            # one level down in Options.add_to_group (#932).
             raise escalate_match_abort(
                 ValueError(
-                    f"BaseInputData already set with different values. {cls_to_be_added} != {already_cls_to_be_added}"
+                    f"BaseInputData already set with different values. "
+                    f"{(cls_to_be_added, matched_data_access)} != {existing_data}"
                 )
             )
         options.add_to_group("BaseInputData", (cls_to_be_added, matched_data_access))

@@ -92,12 +92,14 @@ class MatchData:
 
         cls_name = cls.get_class_name()
 
-        if options.get(cls_name):
+        if cls_name in options:
             existing_data = options.get(cls_name)
             if existing_data == matched_data_access:
                 return
 
             # Marked: two conflicting readers for one feature is a user misconfiguration.
+            # Presence, not truthiness, is the identity, so the same contradiction is not left to raise unmarked
+            # one level down in Options.add_to_group (#932).
             raise escalate_match_abort(
                 ValueError(f"{cls_name} already set with different values. {existing_data} != {matched_data_access}")
             )

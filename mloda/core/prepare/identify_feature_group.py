@@ -525,6 +525,9 @@ class IdentifyFeatureGroupClass:
         enforces that. A mark only survives if every handler in between re-raises it (``safe_field`` does not). A
         contained raise is kept as text, never as an exception object whose traceback would pin the plugin
         class. The per-candidate rejection window, reset in the finally, keys reasons by candidate class.
+
+        An option-write conflict during reader selection is a contradiction and escalates, decided at the
+        reader-selection raise rather than left to the deeper Options write (#932).
         """
         token = MATCH_REJECTION_REASONS.set({})
         # Shallow copies, taken per candidate so an earlier match's write survives a later candidate's raise.

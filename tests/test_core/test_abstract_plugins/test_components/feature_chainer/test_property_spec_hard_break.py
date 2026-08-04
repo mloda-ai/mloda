@@ -17,8 +17,8 @@ invariants. This module pins the Phase B hard break:
 7. ``PropertySpec`` is exported from ``mloda.provider`` and is the same class.
 8. ``FeatureChainParser._can_skip_required_check`` understands ``PropertySpec``: a non-None
    ``default`` or a ``required_when`` predicate makes the key skippable.
-9. ``framework_set`` (issue #949) is a reader-surface flag: a PROPERTY_MAPPING spec declaring
-   ``framework_set=True`` is rejected at class definition, naming the owner class and the key.
+9. ``framework_set=True`` (#949) is reader-surface only and rejected at class definition, naming
+   the owner class and the key.
 """
 
 from __future__ import annotations
@@ -326,12 +326,7 @@ class TestCanSkipRequiredCheckOnPropertySpec:
 
 
 class TestFrameworkSetStaysOffThePropertyMappingSurface:
-    """Item 9: ``framework_set`` marks a reader-written READER_OPTIONS key (issue #949).
-
-    A FeatureGroup key is always user- or name-supplied, so declaring ``framework_set=True`` in a
-    PROPERTY_MAPPING is a category error and must surface at class definition, naming the owner
-    class and the key like the raw-dict rejection above.
-    """
+    """Item 9: ``framework_set=True`` in a PROPERTY_MAPPING is a category error, rejected at class definition."""
 
     def test_framework_set_spec_rejected_at_class_definition(self) -> None:
         """``framework_set=True`` in a PROPERTY_MAPPING names the class, the key, and the flag."""

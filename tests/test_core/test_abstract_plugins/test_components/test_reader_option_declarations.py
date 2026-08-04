@@ -1,38 +1,6 @@
-"""Pins the collapsed ``READER_OPTIONS`` declaration surface on ``BaseInputData`` (issue #949).
-
-``ReaderOptionSpec`` is gone: readers declare their option keys with the ONE spec type,
-``PropertySpec``, which gains the reader-surface ``framework_set`` flag. Reader option keys are
-consumed at MATCH time, inside reader selection, before the framework materializes any
-``PROPERTY_MAPPING`` default, so a declared ``default`` here is applied by the reader's own
-accessors (``reader_option`` / ``reader_option_default``), never by the framework.
-
-What is pinned here:
-
-* ``PropertySpec`` carries ``framework_set: bool = False``: frozen, part of value equality, and a
-  non-bool is rejected at construction like the other bool fields.
-* The module ``mloda.core.abstract_plugins.components.input_data.reader_option_spec`` no longer
-  exists, and ``mloda.provider`` no longer exports ``ReaderOptionSpec``.
-* ``BaseInputData.READER_OPTIONS`` values ARE ``PropertySpec`` instances. The reserved
-  ``"BaseInputData"`` key is ``framework_set=True`` with a declared ``default=None``, and the keys
-  ``add_base_input_data_to_options`` writes are exactly the keys declared ``framework_set=True``.
-* The MRO merge, the per-class cache, the fresh-copy semantics, and the loud undeclared-key
-  ``ValueError`` carry over unchanged from the two-type world, reading ``default`` where the old
-  spec read ``runtime_default``.
-* ``reader_option(key, options)`` reads presence per the spec: a flagless spec treats an explicit
-  ``None`` as absent, an ``allow_explicit_none=True`` spec HONOURS it, and a spec declaring no
-  default (``NO_DEFAULT``) makes the key required at read time. ``options=None`` reads as every
-  key absent, mirroring the selection seam's contract.
-* ``__init_subclass__`` validates the declaration: only ``PropertySpec`` values; no
-  ``match_guard``, no ``deferred_binding=True``, no ``context=False``; and ``framework_set=True``
-  may not combine with ``strict_validation=True``, ``required_when``, or a missing default.
-  Strict declarations with a declared, in-space default define fine (enforced at selection time in
-  cycle 2, #949).
-
-Subclass-leak policy: this module DELIBERATELY leaks its throwaway ``BaseInputData`` subclasses
-(the ``functools.cache``-built family for the process lifetime, test-local ones until a gc cycle).
-That is benign and pinned: none of them overrides ``load_data`` or declares
-``_final_reader_requires``, so ``is_final_reader()`` is False and ``get_all_filtered_subclasses``
-never collects them into reader selection.
+"""Pins the collapsed ``READER_OPTIONS`` surface on ``BaseInputData`` (issue #949): one spec type,
+``PropertySpec`` plus ``framework_set``, read via ``reader_option`` / ``reader_option_default``.
+Leak policy: the throwaway readers here leak deliberately; none is final, so selection never collects them.
 """
 
 from __future__ import annotations
@@ -69,11 +37,7 @@ def _rod_match_guard(value: Any) -> bool:
 
 @cache
 def _decl_family() -> tuple[type[BaseInputData], type[BaseInputData], type[BaseInputData]]:
-    """(parent, child, override): the shared declaring family, built lazily and process-cached.
-
-    Lazy so a broken class-definition guard fails the tests that USE the family instead of the
-    whole module's collection.
-    """
+    """(parent, child, override): the shared declaring family; lazy so a broken guard fails users, not collection."""
 
     class RodDeclParentReader(BaseInputData):
         """Parent declaring key A only; inherits the reserved framework key."""
@@ -325,12 +289,7 @@ class TestReaderOptionHonoursPresence:
 
     @pytest.mark.parametrize("falsy_value", [frozenset(), (), [], "", 0, False, {}])
     def test_present_but_falsy_value_is_honoured_not_replaced(self, falsy_value: Any) -> None:
-        """An explicit empty value means "hand nothing over" and must survive the read.
-
-        ``options.get(key) or cls.reader_option_default(key)`` cannot tell an absent key from an
-        explicit empty one, so a non-empty declared default would silently win and the option could
-        never be turned off. The accessor pins the presence read instead.
-        """
+        """An explicit empty value means "hand nothing over" and must survive the read."""
         parent, _, _ = _decl_family()
         options = Options({"rod_key_a": falsy_value})
 
@@ -476,11 +435,7 @@ class TestNoDefaultMakesTheKeyRequired:
 
 
 class TestReaderOptionToleratesNoneOptions:
-    """``reader_option(key, None)`` mirrors the selection seam: no Options reads as every key absent.
-
-    ``_reader_options_admit`` already treats ``options=None`` as the all-absent state, so the
-    accessor must agree instead of crashing with an ``AttributeError`` on ``None``.
-    """
+    """``reader_option(key, None)`` mirrors the selection seam: no Options reads as every key absent."""
 
     def test_none_options_return_the_declared_default(self) -> None:
         """With no Options at all, the declared fallback applies exactly as for an absent key."""
@@ -634,14 +589,7 @@ class TestMergedSpecCacheStaysFresh:
 
 
 class TestReaderOptionsAreValidatedAtClassDefinition:
-    """``READER_OPTIONS`` accepts reader-shaped ``PropertySpec`` instances and NOTHING else.
-
-    Mirrors ``FeatureGroup.__init_subclass__``'s ``PROPERTY_MAPPING`` rule (see
-    ``tests/test_core/test_abstract_plugins/test_components/feature_chainer/test_property_spec_hard_break.py``):
-    the mistake must surface where it is written, not later deep inside reader matching. Reader
-    option keys never pass through name-parsing or match gating, so the fields that only mean
-    something there (``match_guard``, ``deferred_binding``, ``context=False``) are rejected too.
-    """
+    """``READER_OPTIONS`` accepts reader-shaped ``PropertySpec`` instances and NOTHING else, rejected where written."""
 
     def test_string_value_rejected_at_class_definition(self) -> None:
         """``{"k": "just a string"}`` names the class, the key and the ``PropertySpec`` remedy."""
@@ -730,12 +678,7 @@ class TestReaderOptionsAreValidatedAtClassDefinition:
         assert "context" in message
 
     def test_context_zero_spec_rejected_at_class_definition(self) -> None:
-        """``context=0`` cannot slip past the ``is False`` check above: construction rejects it first.
-
-        The spec is built inside the class body, so the ``PropertySpec`` bool guard fires at class
-        definition, before ``_validate_reader_options`` even runs; its message names the field, not
-        the class.
-        """
+        """``context=0`` cannot slip past the ``is False`` check above: the construction bool guard rejects it first."""
         with pytest.raises(ValueError) as exc_info:
 
             class RodContextZeroReader(BaseInputData):

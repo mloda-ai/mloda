@@ -40,14 +40,8 @@ class BaseInputData(ABC):
 
     @classmethod
     def _validate_reader_options(cls) -> None:
-        """Reject a reader-invalid declaration where it is written, not later deep in reader matching.
-
-        Mirrors FeatureChainParser._require_spec for PROPERTY_MAPPING, and checks only this class's
-        own declaration so a bad child under a valid parent still raises. Reader option keys never
-        pass through name-parsing or match gating, so the fields that only mean something there are
-        rejected, and a framework-written key is exempt from user-value validation, so a spec that
-        would silently never fire is rejected too.
-        """
+        """Reject a reader-invalid declaration where it is written, not later deep in reader matching;
+        checks only this class's own declaration so a bad child under a valid parent still raises."""
         for key, spec in cls.__dict__.get("READER_OPTIONS", {}).items():
             if not isinstance(spec, PropertySpec):
                 raise ValueError(
@@ -139,13 +133,8 @@ class BaseInputData(ABC):
 
     @classmethod
     def reader_option(cls, key: str, options: Optional[Options]) -> Any:
-        """The supplied value of key when present, else the declared default.
-
-        Presence honours the spec: allow_explicit_none=True reads presence as ``key in options`` (an
-        explicit None is a value), otherwise a non-None ``options.get(key)``. options=None reads as
-        every key absent, mirroring _reader_options_admit. Absent with no declared default
-        (NO_DEFAULT) is a loud ValueError.
-        """
+        """The supplied value of key when present, else the declared default; NO_DEFAULT raises.
+        allow_explicit_none=True reads presence as ``key in options``; options=None reads all-absent."""
         spec = cls._declared_reader_option_spec(key)
         if options is not None:
             value = options.get(key)
@@ -159,14 +148,7 @@ class BaseInputData(ABC):
     @classmethod
     def _reader_options_admit(cls, options: Optional[Options], record_absence: bool) -> bool:
         """Check this candidate's merged declarations BEFORE its probe runs; a veto is its own non-match.
-
-        Mirrors the FeatureChainParser semantics on the reader surface (#949 cycle 2): strict
-        validation for present keys, requiredness for absent keys, framework-written keys exempt.
-        options=None reads as every key absent. Every recorded veto goes through the
-        match-rejection channel with stage "input_data"; outside an active window nothing records.
-        record_absence gates ONLY the absence-based requiredness recordings; a present-value strict
-        rejection is about the user's own input and records on both selection paths.
-        """
+        record_absence gates only absence recordings; a present-value strict rejection records on both paths."""
         for key, spec in cls._merged_reader_option_specs().items():
             if spec.framework_set:
                 continue
@@ -189,9 +171,7 @@ class BaseInputData(ABC):
         cls, key: str, spec: PropertySpec, options: Optional[Options], record_absence: bool
     ) -> bool:
         """Requiredness of an ABSENT key: required_when decides when declared, else NO_DEFAULT rejects.
-
-        The veto is the same on both selection paths; record_absence says whether it is recorded.
-        """
+        record_absence says whether the veto is recorded."""
         owner = cls.get_class_name()
         predicate = spec.required_when
         if predicate is not None:
@@ -230,11 +210,8 @@ class BaseInputData(ABC):
 
     @classmethod
     def _present_reader_option_admits(cls, key: str, spec: PropertySpec, value: Any) -> bool:
-        """Strict validation of a PRESENT value, element-wise over sequence containers.
-
-        The spec declares the arity, not the caller's Python syntax: list/tuple/set/frozenset
-        unpack element-wise, a str is one scalar, a dict one composite value.
-        """
+        """Strict validation of a PRESENT value: list/tuple/set/frozenset unpack element-wise,
+        a str is one scalar, a dict one composite value."""
         elements = list(value) if isinstance(value, (list, tuple, set, frozenset)) else [value]
         for element in elements:
             if cls._reader_option_element_admits(key, spec, element):
@@ -265,7 +242,6 @@ class BaseInputData(ABC):
                     exc,
                 )
                 return False
-        # A strict spec without a validator declares a non-empty allowed_values (PropertySpec invariant).
         # An unhashable element can never be a member of the value space: a clean rejection, not a TypeError.
         try:
             return spec.allowed_values is not None and element in spec.allowed_values
@@ -317,9 +293,9 @@ class BaseInputData(ABC):
                 _key = cls.deal_with_base_input_data_name_as_cls_or_str(key)
 
                 if _key == subclass.data_access_name():
-                    # The user addressed this reader family by name, so ownership is established: absence vetoes record.
+                    # The user addressed this reader family by name (ownership), so absence vetoes record.
                     if not subclass._reader_options_admit(options, record_absence=True):
-                        break  # Vetoed candidate: the probe never runs, same exit as the non-match below.
+                        break
                     matched_data_access = subclass.match_subclass_data_access(value, [feature_name], options=options)  # type: ignore[attr-defined]
                     if matched_data_access:
                         cls.add_base_input_data_to_options(subclass, matched_data_access, options)
@@ -377,7 +353,7 @@ class BaseInputData(ABC):
         for subclass in subclasses:
             # A global probe never established ownership, so a silent absence veto cannot displace a real near-miss.
             if not subclass._reader_options_admit(options, record_absence=False):
-                continue  # Vetoed candidate: siblings keep probing.
+                continue
             matched_data_access = subclass.match_subclass_data_access(  # type: ignore[attr-defined]
                 data_access_collection, feature_names, options=options
             )

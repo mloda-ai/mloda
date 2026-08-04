@@ -81,10 +81,10 @@ does not understand can be absorbed silently.
 | Match time (mixin) | `MIN/MAX_IN_FEATURES` | In-feature count is within bounds | The in-features | Non-match (`False`) |
 | Match time (guard installed at class definition) | `required_when` | A conditionally required option is present | `Options` | Non-match (`False`) |
 | Class definition (mixin) | Universal-matcher diagnostic | An all-optional `PROPERTY_MAPPING` inherits the configuration matcher, so it matches any name with empty options | The class | `logger.warning`, unless `ALLOW_UNIVERSAL_MATCHER = True` |
-| Author time (reader surface) | `mypy --strict` | `READER_OPTIONS` holds `PropertySpec` values and each field exists: `defualt=...` (typo) | The constructor call | mypy error at the declaration. Without mypy: an unknown field is a `TypeError` |
-| Class definition (`BaseInputData.__init_subclass__`) | Spec type + surface guard | Every value in the class's OWN `READER_OPTIONS` IS a `PropertySpec`, and declares nothing inert on a reader: no `match_guard`, no `deferred_binding`, no `context=False`, and a `framework_set` key carries no enforcement fields | Every value in that class's declaration | `ValueError` naming the class, the key and the offending field |
-| Match time (reader selection) | Presence + strict validation | Before a candidate reader probes: a required key (`NO_DEFAULT`, or a firing `required_when`) is present, and each element of a present strict key passes `element_validator` or membership; `framework_set` keys are exempt | The candidate's merged specs and the options | That reader is a non-match. A supplied-value rejection, or a requiredness failure on a reader the user addressed, records an attributable rejection (`stage="input_data"`); an unaddressed global probe missing a required key, or a predicate that cannot judge, declines silently |
-| Match time (reader code) | `reader_option(key, options)` | The reader's OWN code reads a supplied value, falling back to its declared `default` | The key name and the options | `ValueError` naming the key and the reader class, for an undeclared key or an absent `NO_DEFAULT` one |
+| Author time (reader surface) | `mypy --strict` | `READER_OPTIONS` holds `PropertySpec` values | The constructor call | mypy error at the declaration |
+| Class definition (`BaseInputData.__init_subclass__`) | Spec type + surface guard | Every value IS a `PropertySpec` and declares nothing inert on a reader (`match_guard`, `deferred_binding`, `context=False`, enforcement fields on a `framework_set` key) | Every value in that class's declaration | `ValueError` naming class, key and field |
+| Match time (reader selection) | Presence + strict validation | Required keys are present and present strict values pass, element-wise; `framework_set` keys exempt | The candidate's merged specs and the options | Reader non-match. Addressed-reader and supplied-value failures record a `stage="input_data"` rejection; unaddressed absence and an unjudgeable predicate decline silently |
+| Match time (reader code) | `reader_option(key, options)` | Supplied value, else the declared `default` | The key name and the options | `ValueError` for an undeclared key or an absent `NO_DEFAULT` one |
 
 A spec is constructed inside the class body, so its own rules fire before the class exists.
 Class definition is left with exactly one rule: the type itself. Within `__post_init__` the
@@ -126,32 +126,26 @@ differently because they consume values at different moments.
 | Surface | Declared on | What the framework does with it |
 | --- | --- | --- |
 | `PROPERTY_MAPPING` | a `FeatureGroup` | Enforces it and applies it: value validation (`allowed_values`, `element_validator`), presence and `required_when`, and materialization of declared defaults into `Options`. |
-| `READER_OPTIONS` | a `BaseInputData` reader | Enforces it at reader selection: presence, `required_when`, and strict value validation run before a candidate reader probes, and a failure vetoes that reader. Supplied-value rejections, and requiredness failures on a reader the user addressed, record an attributable rejection (`stage="input_data"`); an unaddressed global probe declines silently on absence, so it cannot displace a genuine near-miss reason. Declared defaults are never materialized; only the reader's own code applies them. |
+| `READER_OPTIONS` | a `BaseInputData` reader | Enforces it at reader selection: presence, `required_when` and strict values are checked before a candidate probes, and a failure vetoes that reader, recording per the ownership rule above. Defaults are never materialized; only the reader's own code applies them. |
 
 A reader consumes its option keys during reader **selection** (`match_subclass_data_access`, reached
-through `BaseInputData.matches` from the matcher), which runs at match time, before the framework
-materializes anything. Two consequences keep the shared type honest on this surface:
+through `BaseInputData.matches` from the matcher), before the framework materializes anything. Two
+consequences keep the shared type honest on this surface:
 
-- **`default` stays a runtime fallback.** On a `FeatureGroup`, a declared default enters `Options`
-  (hashing, twin canonicalization, downstream visibility). On a reader it is only returned by
-  `reader_option(key, options)` at the reader's own read site and never enters `Options`. Presence
-  follows the [#768 matrix](#applying-declared-defaults): flagless, `options.get(key) is not None`;
-  with `allow_explicit_none=True`, `key in options`, and an explicit `None` is honored. A
-  `NO_DEFAULT` key is required at selection, and `reader_option` raises for it when unmatched code
-  reads it with no supplied value. The declaration is load-bearing rather than decorative:
-  `ReadFile` and `ReadDocument` resolve `document_suffixes` that way, and a reader declaring a
-  different default matches differently with no option set (for `ReadDocument` only in its
-  `DataAccessCollection` branch: its bare str/Path branch passes no `document_suffixes`, so the
-  declaration is inert there).
+- **`default` stays a runtime fallback.** A `FeatureGroup` default enters `Options` (hashing, twin
+  canonicalization, downstream visibility); a reader default is only returned by
+  `reader_option(key, options)` and never enters `Options`. Presence follows the
+  [#768 matrix](#applying-declared-defaults); a `NO_DEFAULT` key is required at selection, and
+  `reader_option` raises for it. The declaration is load-bearing: `ReadFile` and `ReadDocument`
+  resolve `document_suffixes` this way (for `ReadDocument` only in its `DataAccessCollection`
+  branch; the bare str/Path branch passes no `document_suffixes`).
 - **Fields with no reader meaning are rejected where they are written.** `match_guard`,
   `deferred_binding=True` and `context=False` describe name matching and value placement, which a
-  reader does not have, so `BaseInputData.__init_subclass__` rejects them instead of letting them
-  sit silently inert (the #865 defect class). `framework_set=True` marks the one key the framework
-  writes and users do not: the reserved `"BaseInputData"` key holding the matched
-  `(ReaderClass, data_access)` pair, written by `add_base_input_data_to_options` and read back by
-  `init_reader`. Framework-written keys are exempt from selection enforcement, so a
-  `framework_set` spec declaring enforcement fields is rejected too; on the `PROPERTY_MAPPING`
-  surface the field is rejected outright.
+  reader does not have, so `BaseInputData.__init_subclass__` rejects them instead of leaving them
+  silently inert (#865). `framework_set=True` marks the one framework-written key, the reserved
+  `"BaseInputData"` pair written by `add_base_input_data_to_options` and read by `init_reader`.
+  Such keys are exempt from enforcement, so enforcement fields on them are rejected too; on
+  `PROPERTY_MAPPING` the field is rejected outright.
 
 `READER_OPTIONS` merges across the MRO (`reader_option_specs()`, most-derived declaration winning),
 so a concrete reader inherits its family's keys and redeclares nothing, and
@@ -168,13 +162,11 @@ What a plugin author may rely on:
 | Presence and `required_when` are checked | yes | yes, at selection; addressing the reader makes a failure attributable, a global probe declines silently on absence |
 | A user's mistyped key surfaces | for a required key, yes: absence is a non-match, with a warning on the string-named path | for a required key, yes: absence is an attributable non-match; an optional key's typo still falls back to the declared default |
 
-The surfaces used to be two types: `ReaderOptionSpec` existed because reader selection had no
-rejection channel, so enforcement fields on a reader would have been silently inert, exactly the
-defect #865 was filed about. The shared match-rejection channel (#727) made reader declines
-attributable, which is what made the middle field group enforceable and collapsed the two types
-back into one (#949). One migration edge deserves care: a bare `PropertySpec("...")` declares
-`NO_DEFAULT` and is therefore required at selection; the equivalent of the old bare
-`ReaderOptionSpec("...")` is `PropertySpec("...", default=None)`.
+The surfaces used to be two types: reader selection had no rejection channel, so enforcement
+fields on a reader would have been silently inert (#865). The shared channel (#727) made declines
+attributable and collapsed the types back into one (#949). Migration edge: a bare
+`PropertySpec("...")` is required at selection; the old bare `ReaderOptionSpec("...")` is
+`PropertySpec("...", default=None)`.
 
 ### A pattern-less feature group sits in between
 

@@ -1,37 +1,6 @@
-"""Pins the per-reader ``READER_OPTIONS`` declarations and makes the declared default load-bearing.
-
-Reader option keys are read at MATCH time (inside ``match_subclass_data_access``), before the
-framework materializes any ``PROPERTY_MAPPING`` default, so the readers declare them themselves.
-Issue #949 collapsed the former ``ReaderOptionSpec`` into ``PropertySpec``: every ``READER_OPTIONS``
-value IS a ``PropertySpec`` and the fallback lives in its ``default`` field. See the core-side
-contract in ``tests/test_core/test_abstract_plugins/test_components/test_reader_option_declarations.py``.
-
-What is pinned here:
-
-* ``ReadFile`` and ``ReadDocument`` declare ``document_suffixes`` (``default=frozenset()``) and
-  ``data_access_handle`` (``default=None``); ``ReadDB`` declares ``data_access_handle``
-  (``default=None``). All declared values are ``PropertySpec`` instances. Shipped concrete readers
-  (``CsvReader``, ``MarkdownDocumentReader``, ``SQLITEReader``) inherit the declarations and
-  re-declare nothing.
-* Every options key these three readers actually read is a declared key. The reads are observed
-  behaviorally through a recording ``Options`` subclass, so the inventory cannot drift.
-* The declared ``default`` is load-bearing, not documentation: the ``document_suffixes`` fallback
-  in ``ReadFile.match_subclass_data_access`` / ``ReadDocument.match_subclass_data_access`` comes
-  from the declaration instead of a hard-coded ``frozenset()``. A reader that declares
-  ``default=frozenset({".json"})`` therefore matches ``.json`` differently from a stock reader even
-  when the option is not set: ReadFile DECLINES the file (``document_suffixes`` auto-excludes those
-  suffixes for structured readers) while ReadDocument CLAIMS it.
-* The declared default applies only when the option is ABSENT. An explicit ``frozenset()`` means
-  "hand nothing over" and must beat a non-empty declared default, otherwise the option cannot be
-  turned off for a reader that declares one. That presence read is what ``reader_option(key,
-  options)`` carries.
-
-Subclass-leak policy: this module DELIBERATELY leaks its throwaway ``BaseInputData`` subclasses
-(the module-level ones permanently, the ``functools.cache``-built declaring readers for the process
-lifetime). That is benign and pinned by ``TestLocalReadersStayOutOfDiscovery``: none of them
-overrides ``load_data``, so ``is_final_reader()`` is False and ``get_all_filtered_subclasses``
-never collects them. Matching is exercised by calling ``match_subclass_data_access`` directly,
-never via ``mlodaAPI``.
+"""Pins the per-reader ``READER_OPTIONS`` declarations (issue #949: ``PropertySpec`` values) and
+makes the declared ``document_suffixes`` default load-bearing in ReadFile/ReadDocument matching.
+Leak policy: the leaked readers here are never final; matching is called directly, never via mlodaAPI.
 """
 
 from __future__ import annotations
@@ -93,10 +62,7 @@ class _RodStockJsonReadDocument(ReadDocument):
 
 @cache
 def _json_excluding_read_file() -> type[ReadFile]:
-    """ReadFile reader declaring ``.json`` as a document suffix, so it must decline ``.json`` files.
-
-    Built lazily so a broken declaration guard fails the tests that use it, not module collection.
-    """
+    """ReadFile declaring ``.json`` as a document suffix; lazy so a broken guard fails its users, not collection."""
 
     class RodJsonExcludingReadFile(ReadFile):
         READER_OPTIONS: ClassVar[dict[str, PropertySpec]] = {
@@ -284,12 +250,7 @@ class TestDeclaredDefaultIsLoadBearing:
 
 
 class TestAnExplicitEmptyOptionBeatsTheDeclaredDefault:
-    """Presence, not truthiness: an explicit ``frozenset()`` turns the option OFF.
-
-    ``reader_option(key, options)`` carries this: an ``options.get(...) or
-    cls.reader_option_default(...)`` chain would silently replace an explicit empty value with a
-    non-empty declared default, so the option a reader declares could never be switched off.
-    """
+    """Presence, not truthiness: an explicit ``frozenset()`` turns the declared option OFF."""
 
     def test_explicit_empty_makes_read_file_claim_json_again(self, json_path: str) -> None:
         """The declaring reader excludes ``.json`` by default, and an explicit empty set undoes that."""

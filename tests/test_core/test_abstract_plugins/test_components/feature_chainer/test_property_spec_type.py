@@ -4,9 +4,8 @@
 tests the type in isolation: construction defaults, immutability, ``allowed_values``
 normalization, the flag and callable shape rules, the strict-needs-a-value-space invariant,
 the ``NO_DEFAULT`` optionality sentinel and the declared-default rule (issue #530 semantics).
-The one consumer touched here is the spec-shape rule itself: the public parser entry point must
-reject a spec that is not a ``PropertySpec``, and a ``framework_set=True`` spec, which is
-reader-surface only (#949).
+The one consumer touched here is the spec-shape rule: the public parser entry point rejects a
+non-``PropertySpec`` and a reader-surface ``framework_set=True`` spec (#949).
 """
 
 from __future__ import annotations
@@ -159,12 +158,7 @@ class TestFlagAndCallableShapeRules:
 
     @pytest.mark.parametrize("bad_flag", [0, 1])
     def test_context_must_be_a_real_bool(self, bad_flag: Any) -> None:
-        """An int under ``context`` raises naming the field, like its sibling flags (#949).
-
-        ``context=0`` is the sharp case: it is falsy but is NOT ``False``, so the reader-surface
-        ``spec.context is False`` guard never sees it. The construction guard closes that bypass
-        at the source.
-        """
+        """``context=0`` is falsy but NOT ``False``; construction must reject it before the reader guard (#949)."""
         with pytest.raises(ValueError) as exc_info:
             _spec("x", context=bad_flag, default=None)
 
@@ -281,12 +275,7 @@ class TestParserEntryPointRequiresPropertySpec:
             FeatureChainParser.validate_property_mapping_defaults("SomeOwner", property_mapping)
 
     def test_match_configuration_rejects_a_framework_set_spec(self) -> None:
-        """A ``framework_set=True`` spec handed straight to the matcher raises naming the key (#949).
-
-        The flag marks a reader-surface key the framework writes; a caller-supplied mapping never
-        passed the class-definition check, so the match-time entry point must reject it too instead
-        of silently exempting the key from validation.
-        """
+        """A ``framework_set=True`` spec handed straight to the matcher raises naming the key (#949)."""
         property_mapping = {"pst949_reader_key": PropertySpec("Reader-surface key.", default=None, framework_set=True)}
 
         with pytest.raises(ValueError) as exc_info:

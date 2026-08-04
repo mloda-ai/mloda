@@ -1,13 +1,21 @@
+import logging
 from abc import ABC
 from typing import Any, ClassVar, Optional
 
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.abstract_plugins.components.feature_chainer.property_spec import PropertySpec, is_no_default
 from mloda.core.abstract_plugins.components.feature_set import FeatureSet
+from mloda.core.abstract_plugins.components.match_rejection import record_match_rejection
 from mloda.core.abstract_plugins.components.options import Options
 
 
-from mloda.core.abstract_plugins.components.utils import escalate_match_abort, get_all_subclasses
+from mloda.core.abstract_plugins.components.utils import (
+    contained_raise_log_level,
+    escalate_match_abort,
+    get_all_subclasses,
+)
+
+logger = logging.getLogger(__name__)
 
 
 class BaseInputData(ABC):
@@ -149,6 +157,112 @@ class BaseInputData(ABC):
         return spec.default
 
     @classmethod
+    def _reader_options_admit(cls, options: Optional[Options]) -> bool:
+        """Check this candidate's merged declarations BEFORE its probe runs; a veto is its own non-match.
+
+        Mirrors the FeatureChainParser semantics on the reader surface (#949 cycle 2): strict
+        validation for present keys, requiredness for absent keys, framework-written keys exempt.
+        options=None reads as every key absent. Every recorded veto goes through the
+        match-rejection channel with stage "input_data"; outside an active window nothing records.
+        """
+        for key, spec in cls._merged_reader_option_specs().items():
+            if spec.framework_set:
+                continue
+            if options is None:
+                if not cls._absent_reader_option_admits(key, spec, options):
+                    return False
+                continue
+            present = key in options if spec.allow_explicit_none else options.get(key) is not None
+            if not present:
+                if not cls._absent_reader_option_admits(key, spec, options):
+                    return False
+            elif spec.strict_validation:
+                if not cls._present_reader_option_admits(key, spec, options.get(key)):
+                    return False
+        return True
+
+    @classmethod
+    def _absent_reader_option_admits(cls, key: str, spec: PropertySpec, options: Optional[Options]) -> bool:
+        """Requiredness of an ABSENT key: required_when decides when declared, else NO_DEFAULT rejects."""
+        owner = cls.get_class_name()
+        predicate = spec.required_when
+        if predicate is not None:
+            # A predicate that raises cannot judge, so the reader is a silent non-match, not the run.
+            try:
+                is_required = bool(predicate(options if options is not None else Options()))
+            except Exception as exc:
+                logger.log(
+                    contained_raise_log_level(exc),
+                    "required_when predicate %s for reader option '%s' raised %s; treating reader %s as a non-match.",
+                    getattr(predicate, "__name__", repr(predicate)),
+                    key,
+                    exc,
+                    owner,
+                )
+                return False
+            if is_required:
+                record_match_rejection(
+                    owner,
+                    f"required reader option '{key}' is absent, but {owner} declares it required "
+                    f"(required_when predicate {getattr(predicate, '__name__', repr(predicate))} is satisfied)",
+                    stage="input_data",
+                )
+                return False
+            return True
+        if is_no_default(spec.default):
+            record_match_rejection(
+                owner,
+                f"required reader option '{key}' is absent, but {owner} declares it required (no default declared)",
+                stage="input_data",
+            )
+            return False
+        return True
+
+    @classmethod
+    def _present_reader_option_admits(cls, key: str, spec: PropertySpec, value: Any) -> bool:
+        """Strict validation of a PRESENT value, element-wise over sequence containers.
+
+        The spec declares the arity, not the caller's Python syntax: list/tuple/set/frozenset
+        unpack element-wise, a str is one scalar, a dict one composite value.
+        """
+        elements = list(value) if isinstance(value, (list, tuple, set, frozenset)) else [value]
+        for element in elements:
+            if cls._reader_option_element_admits(key, spec, element):
+                continue
+            owner = cls.get_class_name()
+            record_match_rejection(
+                owner,
+                f"reader option '{key}' value {element!r} is rejected by the declaration of {owner}",
+                stage="input_data",
+            )
+            return False
+        return True
+
+    @classmethod
+    def _reader_option_element_admits(cls, key: str, spec: PropertySpec, element: Any) -> bool:
+        """One element's verdict: a declared element_validator REPLACES membership."""
+        validator = spec.element_validator
+        if validator is not None:
+            # A validator that raises cannot judge the value, so the value is rejected, not the run.
+            try:
+                return bool(validator(element))
+            except Exception as exc:
+                logger.log(
+                    contained_raise_log_level(exc),
+                    "element_validator for reader option '%s' of %s raised %s; treating value as rejected.",
+                    key,
+                    cls.get_class_name(),
+                    exc,
+                )
+                return False
+        # A strict spec without a validator declares a non-empty allowed_values (PropertySpec invariant).
+        # An unhashable element can never be a member of the value space: a clean rejection, not a TypeError.
+        try:
+            return spec.allowed_values is not None and element in spec.allowed_values
+        except TypeError:
+            return False
+
+    @classmethod
     def data_access_name(cls) -> str:
         """This function should return the name of the data access."""
         return cls.__name__
@@ -193,6 +307,8 @@ class BaseInputData(ABC):
                 _key = cls.deal_with_base_input_data_name_as_cls_or_str(key)
 
                 if _key == subclass.data_access_name():
+                    if not subclass._reader_options_admit(options):
+                        break  # Vetoed candidate: the probe never runs, same exit as the non-match below.
                     matched_data_access = subclass.match_subclass_data_access(value, [feature_name], options=options)  # type: ignore[attr-defined]
                     if matched_data_access:
                         cls.add_base_input_data_to_options(subclass, matched_data_access, options)
@@ -248,6 +364,8 @@ class BaseInputData(ABC):
         subclasses = get_all_filtered_subclasses(BaseInputData, cls)
 
         for subclass in subclasses:
+            if not subclass._reader_options_admit(options):
+                continue  # Vetoed candidate: siblings keep probing.
             matched_data_access = subclass.match_subclass_data_access(  # type: ignore[attr-defined]
                 data_access_collection, feature_names, options=options
             )

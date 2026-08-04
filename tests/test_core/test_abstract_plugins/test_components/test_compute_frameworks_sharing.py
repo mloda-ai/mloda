@@ -1,11 +1,17 @@
 """Rot guard: ``Feature.compute_frameworks`` is REBOUND, never mutated in place.
 
-The set is shared by reference (``Feature.__copy__`` hands the copy the same object, and
-``GlobalFilter.compute_framework`` aliases the resolved feature's set into the filter feature) while it also
-feeds ``Feature.__eq__`` and ``Feature.__hash__``. An in-place write therefore shifts the hash of every other
-holder and strands it in any set or dict it sits in; a rebind leaves the other holders untouched.
+The set is shared by reference (``GlobalFilter.compute_framework`` aliases the resolved feature's set into the
+filter feature; ``resolve_compute_frameworks.py:24-26`` binds ONE set to EVERY Feature of a ``PlannedQueue``
+entry, an N-holder alias) while it also feeds ``Feature.__eq__`` and ``Feature.__hash__``. An in-place write
+therefore shifts the hash of every other holder and strands it in any set or dict it sits in; a rebind leaves
+the other holders untouched.
 
-CfwManager.compute_frameworks is a dict, not this attribute, so an in-place write there is a false positive.
+Blind spot: a local alias (``cfs = feature.compute_frameworks``, then ``cfs.add(x)``) is invisible to a source
+scan, and ``identify_feature_group.py:131`` already binds such a local.
+
+Same-named attributes that are not this set, so a write there would be a false positive (none trips today):
+``CfwManager.compute_frameworks`` (dict), ``FeatureGroupInfo.compute_frameworks`` (list[str]),
+``SetupComputeFramework.compute_frameworks`` (the available-framework set).
 """
 
 from __future__ import annotations
@@ -54,9 +60,10 @@ SCAN_ROOTS = sorted(
 )
 
 _HINT = (
-    "Rebind instead: feature.compute_frameworks = {...}. The set is shared by reference (Feature.__copy__, "
-    "GlobalFilter.compute_framework) and feeds Feature.__eq__/__hash__, so an in-place write shifts the hash "
-    "of every other holder and loses it from any set or dict it sits in."
+    "Rebind instead: feature.compute_frameworks = {...}. The set is shared by reference "
+    "(GlobalFilter.compute_framework, ResolveComputeFrameworks.links) and feeds Feature.__eq__/__hash__, so an "
+    "in-place write shifts the hash of every other holder and loses it from any set or dict it sits in. "
+    "If the flagged holder is not a Feature, rename its attribute or teach the guard to skip it."
 )
 
 # Every form the guard must catch, one per line, as source text the guard parses but never executes.
@@ -144,7 +151,8 @@ def _configured_forms() -> set[str]:
 
 def test_no_module_mutates_compute_frameworks_in_place() -> None:
     """Every module under mloda/ and mloda_plugins/ must rebind the attribute instead of writing it in place."""
-    assert SCAN_ROOTS, "could not locate the mloda and mloda_plugins package directories"
+    # Vacuity floor, NOT a target: a sweep over half the tree would pass this guard trivially.
+    assert {root.name for root in SCAN_ROOTS} >= {"mloda", "mloda_plugins"}, f"roots: {SCAN_ROOTS}"
 
     violations: list[str] = []
     for root in SCAN_ROOTS:
@@ -154,9 +162,9 @@ def test_no_module_mutates_compute_frameworks_in_place() -> None:
 
 
 def test_the_sweep_reaches_both_trees() -> None:
-    """A sweep that reaches no files passes trivially, so the reach itself is pinned."""
-    assert {root.name for root in SCAN_ROOTS} >= {"mloda", "mloda_plugins"}, f"roots: {SCAN_ROOTS}"
+    """A sweep that reaches no files passes trivially, so the file count itself is pinned."""
     scanned = [path for root in SCAN_ROOTS for path in root.rglob("*.py")]
+    # Vacuity floor, NOT a target: well under the measured total (288 today) so deleting a module stays legitimate.
     assert len(scanned) > 100, f"only {len(scanned)} files scanned"
 
 
@@ -207,11 +215,13 @@ def _feature_with_framework(name: str = CFS_FEATURE) -> Feature:
     return Feature(name, compute_framework=PythonDictFramework.get_class_name())
 
 
-def test_copy_shares_the_compute_frameworks_set_by_reference() -> None:
-    """Characterization: __copy__ rebuilds options but hands the copy the very same set object."""
+def test_copy_owns_its_compute_frameworks_set() -> None:
+    """__copy__ owns that set exactly as it owns options: value-equal to the original, never the same object."""
     feature = _feature_with_framework()
     assert feature.compute_frameworks == {PythonDictFramework}
-    assert copy(feature).compute_frameworks is feature.compute_frameworks
+    duplicate = copy(feature)
+    assert duplicate.compute_frameworks == feature.compute_frameworks
+    assert duplicate.compute_frameworks is not feature.compute_frameworks
 
 
 def test_copy_of_a_feature_without_frameworks_keeps_none() -> None:
@@ -239,24 +249,30 @@ def test_two_independently_built_features_own_separate_sets() -> None:
     assert first.compute_frameworks is not second.compute_frameworks
 
 
+def _aliased_pair() -> tuple[Feature, Feature]:
+    """Two features sharing one set object, the sanctioned aliasing form the guard protects."""
+    feature = _feature_with_framework()
+    alias = _feature_with_framework(CFS_FILTER_FEATURE)
+    alias.compute_frameworks = feature.compute_frameworks
+    return feature, alias
+
+
 def test_an_in_place_write_through_an_alias_loses_a_feature_from_a_set() -> None:
     """Why the guard exists: the shared set feeds __hash__, so one alias's write strands the other holder."""
-    feature = _feature_with_framework()
-    alias = copy(feature)
+    feature, alias = _aliased_pair()
     holder = {feature}
     assert feature in holder
 
     assert alias.compute_frameworks is not None
     alias.compute_frameworks.add(SqliteFramework)
 
-    assert feature not in holder, "the in-place write must be what loses the feature, not the copy"
+    assert feature not in holder, "the in-place write must be what loses the feature, not the aliasing"
     assert feature.compute_frameworks == {PythonDictFramework, SqliteFramework}
 
 
 def test_a_rebind_through_an_alias_leaves_the_other_holder_findable() -> None:
     """The sanctioned form, from the same angle: rebinding the alias does not touch the stored feature."""
-    feature = _feature_with_framework()
-    alias = copy(feature)
+    feature, alias = _aliased_pair()
     holder = {feature}
 
     alias.compute_frameworks = {SqliteFramework}

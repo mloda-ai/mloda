@@ -362,10 +362,10 @@ class Feature:
         break the very dedup the copy protects. Both containers are written in place by the engine
         (intake forwarding, strict_type_enforcement, matcher writes), which is what the copy stops.
 
-        compute_frameworks, read by __eq__/__hash__ too, is deliberately NOT rebuilt: the copy shares
-        that set by reference (#924). Safe only because every write site rebinds it and none mutates in place;
-        copying it would hide that GlobalFilter.compute_framework rebinds a filter feature's set from the
-        resolved one. Guard: test_compute_frameworks_sharing.py::test_no_module_mutates_compute_frameworks_in_place.
+        compute_frameworks, read by __eq__/__hash__ too, is owned as well (#924), same reason: a
+        caller-side in-place write must not shift this Feature's hash. A shallow set() copy suffices
+        here because the elements are classes, so unlike an option value there is no repr/address
+        hazard. Library-side writes still only rebind: test_compute_frameworks_sharing.py.
         """
         # One level: a Feature nested inside child_options.group keeps sharing its own options, the
         # documented limitation class of _isolate_forwarded_value.
@@ -374,6 +374,8 @@ class Feature:
         duplicate.options = copy(self.options)
         if self.child_options is not None:
             duplicate.child_options = copy(self.child_options)
+        if self.compute_frameworks is not None:
+            duplicate.compute_frameworks = set(self.compute_frameworks)
         return duplicate
 
     def _child_options_key(self) -> Any:

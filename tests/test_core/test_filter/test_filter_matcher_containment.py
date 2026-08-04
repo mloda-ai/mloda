@@ -393,7 +393,7 @@ def _make_in_features_mixin_fg() -> type[FeatureGroup]:
 
 class TestUnresolvableInFeaturesIsNotADrop:
     def test_unresolvable_in_features_is_a_non_match_without_a_drop(self, caplog: pytest.LogCaptureFixture) -> None:
-        """Issue #884: the value never leaves the matcher, so the seam records no drop and warns about nothing."""
+        """The value never leaves the matcher, so the seam records no drop and warns about nothing."""
         snapshot = _drive_criteria(
             _make_in_features_mixin_fg,
             FILTER_FEATURE_IN_FEATURES,

@@ -514,7 +514,7 @@ class FeatureChainParserMixin:
                     count = 0
                 else:
                     # An in_features value this matcher cannot count is a non-match, not an error:
-                    # skipping MIN/MAX would let the group win a resolution its own cap says it must lose (#884).
+                    # skipping MIN/MAX would let the group win a resolution its own cap says it must lose.
                     # The catch is narrow on purpose; another exception class is a defect to surface, not a value.
                     try:
                         count = len(options.get_in_features())

@@ -1,4 +1,4 @@
-"""Issue #884: an in_features value the matcher cannot resolve is a plain non-match at the resolution seam.
+"""An in_features value the matcher cannot resolve is a plain non-match at the resolution seam.
 
 The probe class is dropped under gc.collect() before any assert, so no failing assert pins it (tests/conftest.py).
 """

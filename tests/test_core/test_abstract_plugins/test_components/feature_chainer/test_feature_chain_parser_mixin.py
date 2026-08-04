@@ -17,7 +17,7 @@ from mloda.provider import DefaultOptionKeys, PropertySpec
 
 MIXIN_LOGGER_NAME = "mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser_mixin"
 
-ABORT_MESSAGE_884 = "abort_884_in_features_escalated"
+ABORT_MESSAGE = "abort_in_features_escalated"
 
 
 class MockFeatureGroup(FeatureChainParserMixin):
@@ -524,7 +524,7 @@ class TestFeatureChainParserMixinMinMaxInFeatures:
 
     @pytest.mark.parametrize("value", UNRESOLVABLE_IN_FEATURES, ids=UNRESOLVABLE_IDS)
     def test_unresolvable_in_features_is_a_plain_non_match(self, value: Any) -> None:
-        """An in_features value the matcher cannot resolve is a non-match, never a raise (#884)."""
+        """An in_features value the matcher cannot resolve is a non-match, never a raise."""
         options = Options(context={"operation": "op1", "in_features": value})
         result = MockFeatureGroupWithMinMax.match_feature_group_criteria("any_name", options)
         assert result is False
@@ -570,7 +570,7 @@ class TestFeatureChainParserMixinMinMaxInFeatures:
     @pytest.mark.parametrize("error_type", [ValueError, TypeError], ids=["value_error", "type_error"])
     def test_marked_match_abort_still_escapes_the_in_features_gate(self, error_type: type[Exception]) -> None:
         """A raise marked with escalate_match_abort crosses the matcher as the SAME object, never contained."""
-        marker = escalate_match_abort(error_type(ABORT_MESSAGE_884))
+        marker = escalate_match_abort(error_type(ABORT_MESSAGE))
         # A resolvable-looking raw value, so the gate gets as far as calling get_in_features at all.
         options = _MarkedAbortOptions(context={"operation": "op1", "in_features": ["a", "b"]})
         options.marker = marker

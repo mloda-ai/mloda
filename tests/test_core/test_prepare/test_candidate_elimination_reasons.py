@@ -396,8 +396,9 @@ def _fail(
 
 
 class TestEliminationStages:
-    """One test per stage: the eliminated candidate maps to the expected (stage, reason), and the
-    near-miss message line carries the contract's stage label."""
+    """One test per stage except matcher_error: the eliminated candidate maps to the expected (stage, reason),
+    and the near-miss message line carries the contract's stage label. matcher_error needs a raising matcher, so
+    it is covered in tests/test_core/test_prepare/test_raising_matcher_containment.py."""
 
     def test_value_rejection_stage(self) -> None:
         feature = Feature(VALUE_FEATURE)

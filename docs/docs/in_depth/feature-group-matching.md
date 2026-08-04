@@ -29,6 +29,8 @@ Containment covers plugin raises only: a framework-owned raise (a two-readers co
 
 Filter matching contains the same way: a raise is a non-match for that probe, like a `False` return, and is recorded in `GlobalFilter.dropped_filters`. A framework-owned raise still aborts.
 
+The filter probe runs per feature, but a matched filter is attached to the whole `FeatureSet`, so a non-match for one feature does not suppress a filter a sibling of the same set matched. See [Filter scope](filter_data.md#filter-scope-is-the-featureset-matching-is-probed-per-feature).
+
 The options view depends on the caller: feature resolution passes declared (pre-default) options, while filter matching runs after intake and passes the resolved feature's effective (post-default) options merged onto the filter feature's own. Matching logic that reads option values can see different values on the two paths. See [Applying declared defaults](property-mapping.md#applying-declared-defaults).
 
 ### 2. PROPERTY_MAPPING Configuration

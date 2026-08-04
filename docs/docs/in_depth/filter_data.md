@@ -226,6 +226,21 @@ a reused `GlobalFilter` keeps the matches it has recorded. Which of the two empt
 get is therefore decided outside your FeatureGroup. `if features.filters:` covers both;
 `if features.filters is not None:` passes with nothing to iterate.
 
+### Filter scope is the `FeatureSet`, matching is probed per feature
+
+`match_feature_group_criteria()` is probed once per feature, with that feature's own options
+merged onto the filter feature's. The matched filters are then attached to the `FeatureSet`,
+not to the feature that matched them. So a feature that declined a filter is still filtered by
+it when a sibling feature of the same `FeatureSet` matched it, and a contained raise on one
+feature (recorded in `GlobalFilter.dropped_filters`) does not scope the drop to that feature
+either. Every divergence of this kind is logged as a WARNING naming the feature and the filter
+feature it declined.
+
+To scope a filter to some features only, make the deciding option a **group** option instead of
+a context option. Features are planned into one `FeatureSet` per compute framework, option set,
+data type and dependency level, so differing group options split them into separate
+`FeatureSet`s, and each set then gets only the filters matched for it.
+
 ### Two independent concerns
 
 Filters involve two decisions that are **independent** of each other:

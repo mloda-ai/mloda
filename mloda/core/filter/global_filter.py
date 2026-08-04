@@ -34,6 +34,7 @@ class GlobalFilter:
            This can be used to check after the fact if a feature is a filter feature for a specific feature group
            e.g. for debugging, logging or quality checks.
         3. `dropped_filters`: maps (feature group, filter feature name) to the reason a contained raise dropped it.
+        4. `probes`: maps (feature group, feature name) to the filters that probe matched, empty set included.
 
         These attributes provide the foundation for adding, managing, and applying filters across various feature groups
         and features in the context of a data processing pipeline.
@@ -41,6 +42,16 @@ class GlobalFilter:
         self.filters: set[SingleFilter] = set()
         self.collection: dict[tuple[type[FeatureGroup], FeatureName], set[SingleFilter]] = {}
         self.dropped_filters: dict[tuple[type[FeatureGroup], str], str] = {}
+        self.probes: dict[tuple[type[FeatureGroup], FeatureName], set[SingleFilter]] = {}
+
+    def record_probe(
+        self,
+        feature_group: type[FeatureGroup],
+        filtered_feature_name: FeatureName,
+        matched_filters: set[SingleFilter],
+    ) -> None:
+        """Record what a probe matched, empty included, so a decline stays visible next to `collection`."""
+        self.probes.setdefault((feature_group, filtered_feature_name), set()).update(matched_filters)
 
     def add_filter(
         self, filter_feature: Feature | str, filter_type: str | FilterType, parameter: dict[str, Any]

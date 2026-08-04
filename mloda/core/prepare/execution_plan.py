@@ -1019,7 +1019,31 @@ class ExecutionPlan:
                                       """
                                 )
 
+        self._warn_on_unmatched_features(feature_group, feature_set, relevant_filters)
         feature_set.add_filters(relevant_filters)
+
+    def _warn_on_unmatched_features(
+        self, feature_group: type[FeatureGroup], feature_set: FeatureSet, relevant_filters: set[SingleFilter]
+    ) -> None:
+        """Report features of the set that declined a filter the set gets anyway: the scope is the FeatureSet."""
+        if self.global_filter is None or not relevant_filters:
+            return
+
+        for feature in feature_set.features:
+            probed = self.global_filter.probes.get((feature_group, feature.name))
+            # No probe entry: filter and index features enter the collection without being probed.
+            if probed is None:
+                continue
+            unmatched = sorted({str(f.filter_feature.name) for f in relevant_filters - probed})
+            if not unmatched:
+                continue
+            logger.warning(
+                "Feature '%s' of %s did not match the filter feature(s) %s, but the filter still applies "
+                "because the filter scope is the FeatureSet.",
+                feature.name,
+                format_feature_group_class(feature_group),
+                ", ".join(f"'{name}'" for name in unmatched),
+            )
 
     def get_parent_children_mapping(self, parent_to_children_mapping: dict[UUID, set[UUID]]) -> dict[UUID, set[UUID]]:
         inverted_dict: dict[UUID, set[UUID]] = {}

@@ -136,7 +136,27 @@ NAME_DEPENDENT_STAGES_791: frozenset[EliminationStage] = frozenset(
     {"value_rejection", "input_data", "matcher_error", "capability", "framework_pin"}
 )
 
-# Stands in for a ninth stage shipped without a near-miss label: no entry of the label table covers this token.
+# The label each stage renders. The keys are pinned complete against EliminationStage, the values against
+# _STAGE_LABELS, so neither a new stage nor a renamed label can ship unstated. Two stages share one label on
+# purpose (capability and frameworks_not_enabled both render 'compute framework'): this is stage -> label, and
+# label uniqueness is deliberately NOT pinned.
+EXPECTED_STAGE_LABELS_791: dict[EliminationStage, str] = {
+    "value_rejection": "option value",
+    "input_data": "input data",
+    "matcher_error": "match hook",
+    "domain": "domain",
+    "scope": "scope",
+    "capability": "compute framework",
+    "frameworks_not_enabled": "compute framework",
+    "framework_pin": "compute framework pin",
+    "links": "links",
+}
+
+# One synthetic near-miss, rendered once per stage, so every label is read back off a real rendered line.
+STAGE_LABEL_FEATURE_791 = "renderer_stage_label_791"
+STAGE_LABEL_REASON_791 = "eliminated at this stage"
+
+# Stands in for a tenth stage shipped without a near-miss label: no entry of the label table covers this token.
 UNLABELED_STAGE_791 = "renderer_unlabeled_stage_791"
 UNLABELED_STAGE_FEATURE_791 = "renderer_unlabeled_stage_feature_791"
 UNLABELED_STAGE_REASON_791 = "eliminated at a stage this build has no label for"
@@ -2654,6 +2674,42 @@ class TestEveryEliminationStageIsClassified:
     def test_every_stage_carries_a_near_miss_label(self) -> None:
         """dict[EliminationStage, str] does not force an entry per member, so the table is pinned complete here."""
         assert set(_STAGE_LABELS) == set(get_args(EliminationStage))
+
+
+class TestEveryStageLabelIsPinned:
+    """The class above pins the label table's KEYS; this one pins its VALUES, as a table and as rendered text.
+
+    Seven stages are pinned end to end through real matching in
+    tests/test_core/test_prepare/test_candidate_elimination_reasons.py and one (input_data) in
+    tests/test_plugins/feature_group/input_data/test_reader_match_rejections.py; those stay. This guard is
+    what a tenth stage, or a renamed label, trips even when no hand-written line covers it.
+    """
+
+    def test_the_expected_table_names_every_stage(self) -> None:
+        """A tenth stage fails here until someone states the label it renders."""
+        assert frozenset(EXPECTED_STAGE_LABELS_791) == frozenset(get_args(EliminationStage))
+
+    def test_the_label_table_matches_the_expected_labels(self) -> None:
+        """Renaming a label in production fails here."""
+        assert _STAGE_LABELS == EXPECTED_STAGE_LABELS_791
+
+    @pytest.mark.parametrize(("stage", "label"), sorted(EXPECTED_STAGE_LABELS_791.items()))
+    def test_a_stage_renders_its_expected_label(self, stage: EliminationStage, label: str) -> None:
+        """The near-miss line of every stage reads '  - <class> (<label>): <reason>'."""
+        feature = Feature(STAGE_LABEL_FEATURE_791)
+        result = EvaluationResult(
+            identified={},
+            eliminations={RendererSuccessFG791: Elimination(stage=stage, reason=STAGE_LABEL_REASON_791)},
+        )
+
+        # Premise: this failure reaches the near-miss block, which is the only place a label renders.
+        assert result.failure_kind == "none"
+
+        message = render_resolution_failure(result, feature)
+
+        assert message is not None
+        bullets = [line for line in message.split("\n") if line.startswith("  - ")]
+        assert bullets == [f"  - RendererSuccessFG791 ({label}): {STAGE_LABEL_REASON_791}"]
 
 
 class TestAnUnlabeledStageStillRenders:

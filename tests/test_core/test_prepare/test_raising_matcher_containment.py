@@ -33,6 +33,8 @@ NEIGHBOR_FEATURE = "contained_neighbor_feat_845"
 # Deliberately dissimilar, so no "Did you mean" suggestion can name the broken class.
 UNRELATED_FEATURE = "zqx_no_group_owns_this_845"
 MATCHER_ERROR_STAGE = "matcher_error"
+# The near-miss label the renderer prints for that stage. This file is the only place it is pinned.
+MATCHER_ERROR_LABEL = "match hook"
 
 T = TypeVar("T")
 
@@ -224,6 +226,24 @@ class TestRaisingMatcherContainment:
         assert len(bullets) == 1
         assert RAISE_TYPE_NAME in bullets[0]
         assert RAISE_MESSAGE in bullets[0]
+
+    def test_near_miss_bullet_labels_the_stage_match_hook(self) -> None:
+        """The whole bullet is pinned: renaming the matcher_error label changes this user-visible line."""
+        snapshot = _evaluate_own_feature()
+
+        assert snapshot.escaped is None
+        assert snapshot.message is not None
+        assert snapshot.reason is not None
+        # Premise: this bullet renders the matcher_error stage, so it is that stage's label under test.
+        assert snapshot.stage == MATCHER_ERROR_STAGE
+        message = snapshot.message
+        reason = snapshot.reason
+
+        bullets = [line for line in message.split("\n") if line.startswith(f"  - {BROKEN_CLASS_NAME} (")]
+        assert bullets == [f"  - {BROKEN_CLASS_NAME} ({MATCHER_ERROR_LABEL}): {reason}"]
+        # The reason the bullet carries is the contained raise, as text.
+        assert RAISE_TYPE_NAME in reason
+        assert RAISE_MESSAGE in reason
 
     def test_recorded_reason_is_a_plain_string(self) -> None:
         """The contained raise is recorded as text: no exception object (and no traceback) is retained."""

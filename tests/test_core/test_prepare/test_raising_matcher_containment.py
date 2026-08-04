@@ -33,6 +33,8 @@ NEIGHBOR_FEATURE = "contained_neighbor_feat_845"
 # Deliberately dissimilar, so no "Did you mean" suggestion can name the broken class.
 UNRELATED_FEATURE = "zqx_no_group_owns_this_845"
 MATCHER_ERROR_STAGE = "matcher_error"
+# The near-miss label of that stage; the table pin is EXPECTED_STAGE_LABELS_791 in test_resolution_failure_renderer.py.
+MATCHER_ERROR_LABEL = "match hook"
 
 T = TypeVar("T")
 
@@ -213,17 +215,17 @@ class TestRaisingMatcherContainment:
         assert RAISE_MESSAGE in snapshot.reason
 
     def test_near_miss_block_names_the_broken_class(self) -> None:
-        """render_resolution_failure names the broken class, its exception type and its message."""
+        """The whole bullet is pinned: the broken class, the matcher_error stage label, and the reason."""
         snapshot = _evaluate_own_feature()
 
         assert snapshot.escaped is None
         assert snapshot.message is not None
+        assert snapshot.reason is not None
         message = snapshot.message
+        reason = snapshot.reason
         assert f"Feature group(s) eliminated while matching '{BROKEN_OWN_FEATURE}':" in message
         bullets = [line for line in message.split("\n") if line.startswith(f"  - {BROKEN_CLASS_NAME} (")]
-        assert len(bullets) == 1
-        assert RAISE_TYPE_NAME in bullets[0]
-        assert RAISE_MESSAGE in bullets[0]
+        assert bullets == [f"  - {BROKEN_CLASS_NAME} ({MATCHER_ERROR_LABEL}): {reason}"]
 
     def test_recorded_reason_is_a_plain_string(self) -> None:
         """The contained raise is recorded as text: no exception object (and no traceback) is retained."""

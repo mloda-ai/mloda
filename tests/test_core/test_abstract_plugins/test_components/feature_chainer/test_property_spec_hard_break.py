@@ -4,18 +4,21 @@ Phase A introduced ``PropertySpec`` as a typed, frozen spec carrying the ``prope
 invariants. This module pins the Phase B hard break:
 
 1. A raw dict spec in PROPERTY_MAPPING raises at class definition, naming the owning class,
-   the property key and the ``PropertySpec`` remedy. Same for a bare non-dict spec value.
-2. A PROPERTY_MAPPING whose values are ``PropertySpec`` instances defines fine, and the
+   the property key and the ``PropertySpec`` remedy.
+2. A bare non-dict spec value is rejected at class definition with the same naming.
+3. A PROPERTY_MAPPING whose values are ``PropertySpec`` instances defines fine, and the
    matching pipeline behaves exactly as the dict form did: strict accept/reject, context
    categorization of string-parsed values, ``required_when`` and ``match_guard``.
-3. ``FeatureGroup.declared_option_values`` reads a ``PropertySpec``'s ``allowed_values``.
-4. The unknown-key machinery is deleted: ``PROPERTY_SPEC_KEYS`` and ``REMOVED_PROPERTY_KEYS``
+4. ``FeatureGroup.declared_option_values`` reads a ``PropertySpec``'s ``allowed_values``.
+5. The unknown-key machinery is deleted: ``PROPERTY_SPEC_KEYS`` and ``REMOVED_PROPERTY_KEYS``
    no longer exist (``PropertySpec``'s constructor is the schema now).
-5. ``property_spec(...)`` returns a ``PropertySpec`` (``strict=`` maps to
+6. ``property_spec(...)`` returns a ``PropertySpec`` (``strict=`` maps to
    ``strict_validation=``) and its authoring rejections still fire.
-6. ``PropertySpec`` is exported from ``mloda.provider`` and is the same class.
-7. ``FeatureChainParser._can_skip_required_check`` understands ``PropertySpec``: a non-None
+7. ``PropertySpec`` is exported from ``mloda.provider`` and is the same class.
+8. ``FeatureChainParser._can_skip_required_check`` understands ``PropertySpec``: a non-None
    ``default`` or a ``required_when`` predicate makes the key skippable.
+9. ``framework_set=True`` (#949) is reader-surface only and rejected at class definition, naming
+   the owner class and the key.
 """
 
 from __future__ import annotations
@@ -320,3 +323,40 @@ class TestCanSkipRequiredCheckOnPropertySpec:
         spec = PropertySpec("x")
 
         assert FeatureChainParser._can_skip_required_check(spec) is False
+
+
+class TestFrameworkSetStaysOffThePropertyMappingSurface:
+    """Item 9: ``framework_set=True`` in a PROPERTY_MAPPING is a category error, rejected at class definition."""
+
+    def test_framework_set_spec_rejected_at_class_definition(self) -> None:
+        """``framework_set=True`` in a PROPERTY_MAPPING names the class, the key, and the flag."""
+        with pytest.raises(ValueError) as exc_info:
+
+            class HardBreak949FrameworkSetFeatureGroup(FeatureChainParserMixin, FeatureGroup):
+                PROPERTY_MAPPING = {
+                    "hardbreak949_reader_key": PropertySpec("Reader-surface key.", default=None, framework_set=True)
+                }
+
+                @classmethod
+                def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+                    return data
+
+        message = str(exc_info.value)
+        del exc_info
+        assert "HardBreak949FrameworkSetFeatureGroup" in message
+        assert "hardbreak949_reader_key" in message
+        assert "framework_set" in message
+
+    def test_framework_set_false_spec_defines_fine(self) -> None:
+        """Control: the field's default (an explicit False included) stays valid on this surface."""
+
+        class HardBreak949FlaglessFeatureGroup(FeatureChainParserMixin, FeatureGroup):
+            PROPERTY_MAPPING = {
+                "hardbreak949_plain_key": PropertySpec("Plain user-facing key.", default=None, framework_set=False)
+            }
+
+            @classmethod
+            def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+                return data
+
+        assert "hardbreak949_plain_key" in HardBreak949FlaglessFeatureGroup.declared_option_keys()

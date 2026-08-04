@@ -1,42 +1,17 @@
-"""Pins the per-reader ``READER_OPTIONS`` declarations and makes the declared default load-bearing.
-
-Reader option keys are read at MATCH time (inside ``match_subclass_data_access``), before the
-framework materializes any ``PROPERTY_MAPPING`` default, so the readers declare them themselves
-through ``ReaderOptionSpec``. See the core-side contract in
-``tests/test_core/test_abstract_plugins/test_components/test_reader_option_declarations.py``.
-
-What is pinned here:
-
-* ``ReadFile`` and ``ReadDocument`` declare ``document_suffixes`` (``runtime_default=frozenset()``)
-  and ``data_access_handle`` (``runtime_default=None``); ``ReadDB`` declares
-  ``data_access_handle``. Shipped concrete readers (``CsvReader``, ``MarkdownDocumentReader``,
-  ``SQLITEReader``) inherit the declarations and re-declare nothing.
-* Every options key these three readers actually read is a declared key. The reads are observed
-  behaviorally through a recording ``Options`` subclass, so the inventory cannot drift.
-* The declared ``runtime_default`` is load-bearing, not documentation: the ``document_suffixes``
-  fallback in ``ReadFile.match_subclass_data_access`` / ``ReadDocument.match_subclass_data_access``
-  comes from the declaration instead of a hard-coded ``frozenset()``. A reader that declares
-  ``runtime_default=frozenset({".json"})`` therefore matches ``.json`` differently from a stock
-  reader even when the option is not set: ReadFile DECLINES the file (``document_suffixes``
-  auto-excludes those suffixes for structured readers) while ReadDocument CLAIMS it.
-* The declared default applies only when the option is ABSENT. An explicit ``frozenset()`` means
-  "hand nothing over" and must beat a non-empty declared default, otherwise the option cannot be
-  turned off for a reader that declares one. That is what ``reader_option(key, options)`` fixes.
-
-Subclass-leak policy: this module DELIBERATELY leaks its module-level ``BaseInputData`` subclasses.
-That is benign and pinned by ``TestLocalReadersStayOutOfDiscovery``: none of them overrides
-``load_data``, so ``is_final_reader()`` is False and ``get_all_filtered_subclasses`` never collects
-them. Matching is exercised by calling ``match_subclass_data_access`` directly, never via ``mlodaAPI``.
+"""Pins the per-reader ``READER_OPTIONS`` declarations (issue #949: ``PropertySpec`` values) and
+makes the declared ``document_suffixes`` default load-bearing in ReadFile/ReadDocument matching.
+Leak policy: the leaked readers here are never final; matching is called directly, never via mlodaAPI.
 """
 
 from __future__ import annotations
 
+from functools import cache
 from pathlib import Path
 from typing import Any, ClassVar
 
 import pytest
 
-from mloda.core.abstract_plugins.components.input_data.reader_option_spec import ReaderOptionSpec
+from mloda.core.abstract_plugins.components.feature_chainer.property_spec import PropertySpec
 from mloda.user import DataAccessCollection, Options
 from mloda_plugins.feature_group.input_data.read_db import ReadDB
 from mloda_plugins.feature_group.input_data.read_dbs.sqlite import SQLITEReader
@@ -77,21 +52,6 @@ class _RodStockJsonReadFile(ReadFile):
         return (".json",)
 
 
-class _RodJsonExcludingReadFile(ReadFile):
-    """ReadFile reader declaring ``.json`` as a document suffix, so it must decline ``.json`` files."""
-
-    READER_OPTIONS: ClassVar[dict[str, ReaderOptionSpec]] = {
-        "document_suffixes": ReaderOptionSpec(
-            "Suffixes handed to document readers; declared non-empty so ReadFile auto-excludes them.",
-            runtime_default=frozenset({".json"}),
-        ),
-    }
-
-    @classmethod
-    def suffix(cls) -> tuple[str, ...]:
-        return (".json",)
-
-
 class _RodStockJsonReadDocument(ReadDocument):
     """Stock ReadDocument reader for ``.json``: skips the structured suffix by default."""
 
@@ -100,19 +60,42 @@ class _RodStockJsonReadDocument(ReadDocument):
         return (".json",)
 
 
-class _RodJsonClaimingReadDocument(ReadDocument):
+@cache
+def _json_excluding_read_file() -> type[ReadFile]:
+    """ReadFile declaring ``.json`` as a document suffix; lazy so a broken guard fails its users, not collection."""
+
+    class RodJsonExcludingReadFile(ReadFile):
+        READER_OPTIONS: ClassVar[dict[str, PropertySpec]] = {
+            "document_suffixes": PropertySpec(
+                "Suffixes handed to document readers; declared non-empty so ReadFile auto-excludes them.",
+                default=frozenset({".json"}),
+            ),
+        }
+
+        @classmethod
+        def suffix(cls) -> tuple[str, ...]:
+            return (".json",)
+
+    return RodJsonExcludingReadFile
+
+
+@cache
+def _json_claiming_read_document() -> type[ReadDocument]:
     """ReadDocument reader declaring ``.json`` as a document suffix, so it must claim ``.json`` files."""
 
-    READER_OPTIONS: ClassVar[dict[str, ReaderOptionSpec]] = {
-        "document_suffixes": ReaderOptionSpec(
-            "Structured suffixes this document reader owns; declared non-empty to claim .json.",
-            runtime_default=frozenset({".json"}),
-        ),
-    }
+    class RodJsonClaimingReadDocument(ReadDocument):
+        READER_OPTIONS: ClassVar[dict[str, PropertySpec]] = {
+            "document_suffixes": PropertySpec(
+                "Structured suffixes this document reader owns; declared non-empty to claim .json.",
+                default=frozenset({".json"}),
+            ),
+        }
 
-    @classmethod
-    def suffix(cls) -> tuple[str, ...]:
-        return (".json",)
+        @classmethod
+        def suffix(cls) -> tuple[str, ...]:
+            return (".json",)
+
+    return RodJsonClaimingReadDocument
 
 
 @pytest.fixture
@@ -137,7 +120,13 @@ class TestReadFileDeclarations:
     def test_declares_exactly_its_match_time_keys(self) -> None:
         assert ReadFile.declared_reader_option_keys() == {"document_suffixes", "data_access_handle", _RESERVED_KEY}
 
-    def test_declared_runtime_defaults(self) -> None:
+    def test_declared_values_are_property_specs(self) -> None:
+        assert all(isinstance(spec, PropertySpec) for spec in ReadFile.reader_option_specs().values())
+
+    def test_declared_defaults(self) -> None:
+        specs = ReadFile.reader_option_specs()
+        assert specs["document_suffixes"].default == frozenset()
+        assert specs["data_access_handle"].default is None
         assert ReadFile.reader_option_default("document_suffixes") == frozenset()
         assert ReadFile.reader_option_default("data_access_handle") is None
 
@@ -154,7 +143,13 @@ class TestReadDocumentDeclarations:
     def test_declares_exactly_its_match_time_keys(self) -> None:
         assert ReadDocument.declared_reader_option_keys() == {"document_suffixes", "data_access_handle", _RESERVED_KEY}
 
-    def test_declared_runtime_defaults(self) -> None:
+    def test_declared_values_are_property_specs(self) -> None:
+        assert all(isinstance(spec, PropertySpec) for spec in ReadDocument.reader_option_specs().values())
+
+    def test_declared_defaults(self) -> None:
+        specs = ReadDocument.reader_option_specs()
+        assert specs["document_suffixes"].default == frozenset()
+        assert specs["data_access_handle"].default is None
         assert ReadDocument.reader_option_default("document_suffixes") == frozenset()
         assert ReadDocument.reader_option_default("data_access_handle") is None
 
@@ -170,7 +165,11 @@ class TestReadDBDeclarations:
     def test_declares_exactly_its_match_time_keys(self) -> None:
         assert ReadDB.declared_reader_option_keys() == {"data_access_handle", _RESERVED_KEY}
 
-    def test_declared_runtime_default(self) -> None:
+    def test_declared_values_are_property_specs(self) -> None:
+        assert all(isinstance(spec, PropertySpec) for spec in ReadDB.reader_option_specs().values())
+
+    def test_declared_default(self) -> None:
+        assert ReadDB.reader_option_specs()["data_access_handle"].default is None
         assert ReadDB.reader_option_default("data_access_handle") is None
 
     def test_document_suffixes_is_not_a_read_db_key(self) -> None:
@@ -220,7 +219,7 @@ class TestDeclaredDefaultIsLoadBearing:
 
     def test_declared_default_makes_read_file_decline_json(self, json_path: str) -> None:
         """The declared ``frozenset({".json"})`` default auto-excludes ``.json`` with no option set."""
-        assert _RodJsonExcludingReadFile.match_subclass_data_access(json_path, ["value"], Options()) is None
+        assert _json_excluding_read_file().match_subclass_data_access(json_path, ["value"], Options()) is None
 
     def test_explicit_option_still_overrides_the_read_file_default(self, json_path: str) -> None:
         """A user-set ``document_suffixes`` wins over the declared default."""
@@ -238,7 +237,7 @@ class TestDeclaredDefaultIsLoadBearing:
         """The declared ``frozenset({".json"})`` default claims ``.json`` with no option set."""
         data_access = DataAccessCollection(files={"rod_payload": json_path})
 
-        matched = _RodJsonClaimingReadDocument.match_subclass_data_access(data_access, ["content"], Options())
+        matched = _json_claiming_read_document().match_subclass_data_access(data_access, ["content"], Options())
         assert matched == json_path
 
     def test_explicit_option_still_overrides_the_read_document_default(self, json_path: str) -> None:
@@ -251,38 +250,32 @@ class TestDeclaredDefaultIsLoadBearing:
 
 
 class TestAnExplicitEmptyOptionBeatsTheDeclaredDefault:
-    """Presence, not truthiness: an explicit ``frozenset()`` turns the option OFF.
-
-    RED until ``reader_option(key, options)`` replaces
-    ``options.get("document_suffixes") or cls.reader_option_default("document_suffixes")``: today a
-    reader declaring a non-empty ``runtime_default`` silently overrides an explicit empty value, so
-    the option it declares can never be switched off by the caller.
-    """
+    """Presence, not truthiness: an explicit ``frozenset()`` turns the declared option OFF."""
 
     def test_explicit_empty_makes_read_file_claim_json_again(self, json_path: str) -> None:
         """The declaring reader excludes ``.json`` by default, and an explicit empty set undoes that."""
         options = Options({"document_suffixes": frozenset()})
 
-        matched = _RodJsonExcludingReadFile.match_subclass_data_access(json_path, ["value"], options)
+        matched = _json_excluding_read_file().match_subclass_data_access(json_path, ["value"], options)
 
         assert matched == json_path
 
     def test_read_file_still_declines_without_the_option(self, json_path: str) -> None:
         """Control for the pair above: absent means the declared default applies."""
-        assert _RodJsonExcludingReadFile.match_subclass_data_access(json_path, ["value"], Options()) is None
+        assert _json_excluding_read_file().match_subclass_data_access(json_path, ["value"], Options()) is None
 
     def test_explicit_none_reads_as_absent_for_read_file(self, json_path: str) -> None:
-        """An explicit ``None`` is absence, so the declared default still applies."""
+        """``document_suffixes`` is a flagless spec, so an explicit ``None`` is absence."""
         options = Options({"document_suffixes": None})
 
-        assert _RodJsonExcludingReadFile.match_subclass_data_access(json_path, ["value"], options) is None
+        assert _json_excluding_read_file().match_subclass_data_access(json_path, ["value"], options) is None
 
     def test_explicit_empty_makes_read_document_skip_json_again(self, json_path: str) -> None:
         """The declaring document reader claims ``.json`` by default; an explicit empty set undoes that."""
         data_access = DataAccessCollection(files={"rod_payload": json_path})
         options = Options({"document_suffixes": frozenset()})
 
-        matched = _RodJsonClaimingReadDocument.match_subclass_data_access(data_access, ["content"], options)
+        matched = _json_claiming_read_document().match_subclass_data_access(data_access, ["content"], options)
 
         assert matched is None
 
@@ -290,7 +283,7 @@ class TestAnExplicitEmptyOptionBeatsTheDeclaredDefault:
         """Control for the pair above: absent means the declared default applies."""
         data_access = DataAccessCollection(files={"rod_payload": json_path})
 
-        matched = _RodJsonClaimingReadDocument.match_subclass_data_access(data_access, ["content"], Options())
+        matched = _json_claiming_read_document().match_subclass_data_access(data_access, ["content"], Options())
 
         assert matched == json_path
 
@@ -299,7 +292,7 @@ class TestAnExplicitEmptyOptionBeatsTheDeclaredDefault:
         data_access = DataAccessCollection(files={"rod_payload": json_path})
         options = Options({"document_suffixes": None})
 
-        matched = _RodJsonClaimingReadDocument.match_subclass_data_access(data_access, ["content"], options)
+        matched = _json_claiming_read_document().match_subclass_data_access(data_access, ["content"], options)
 
         assert matched == json_path
 
@@ -308,12 +301,12 @@ class TestAnExplicitEmptyOptionBeatsTheDeclaredDefault:
 
         ``ReadDocument.match_subclass_data_access`` reads the key inside its ``DataAccessCollection``
         branch only, so a resolved path claims the file whatever the option says. Pinned so the
-        presence fix is not mistaken for a behaviour change on this branch.
+        presence read is not mistaken for a behaviour change on this branch.
         """
-        claimed_with_option = _RodJsonClaimingReadDocument.match_subclass_data_access(
+        claimed_with_option = _json_claiming_read_document().match_subclass_data_access(
             json_path, ["content"], Options({"document_suffixes": frozenset()})
         )
-        claimed_without_option = _RodJsonClaimingReadDocument.match_subclass_data_access(
+        claimed_without_option = _json_claiming_read_document().match_subclass_data_access(
             json_path, ["content"], Options()
         )
 
@@ -328,8 +321,8 @@ class TestLocalReadersStayOutOfDiscovery:
         for reader in (
             _RodFileProbe,
             _RodStockJsonReadFile,
-            _RodJsonExcludingReadFile,
+            _json_excluding_read_file(),
             _RodStockJsonReadDocument,
-            _RodJsonClaimingReadDocument,
+            _json_claiming_read_document(),
         ):
             assert reader.is_final_reader() is False

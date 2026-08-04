@@ -1,25 +1,34 @@
+import logging
 from abc import ABC
 from typing import Any, ClassVar, Optional
 
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
+from mloda.core.abstract_plugins.components.feature_chainer.property_spec import PropertySpec, is_no_default
 from mloda.core.abstract_plugins.components.feature_set import FeatureSet
-from mloda.core.abstract_plugins.components.input_data.reader_option_spec import ReaderOptionSpec
+from mloda.core.abstract_plugins.components.match_rejection import record_match_rejection
 from mloda.core.abstract_plugins.components.options import Options
 
 
-from mloda.core.abstract_plugins.components.utils import escalate_match_abort, get_all_subclasses
+from mloda.core.abstract_plugins.components.utils import (
+    contained_raise_log_level,
+    escalate_match_abort,
+    get_all_subclasses,
+)
+
+logger = logging.getLogger(__name__)
 
 
 class BaseInputData(ABC):
-    READER_OPTIONS: ClassVar[dict[str, ReaderOptionSpec]] = {
-        "BaseInputData": ReaderOptionSpec(
+    READER_OPTIONS: ClassVar[dict[str, PropertySpec]] = {
+        "BaseInputData": PropertySpec(
             "The matched (ReaderClass, data_access) pair, written by add_base_input_data_to_options "
             "and read back by init_reader.",
+            default=None,
             framework_set=True,
         ),
     }
 
-    _reader_option_specs_cache: ClassVar[Optional[dict[str, ReaderOptionSpec]]] = None
+    _reader_option_specs_cache: ClassVar[Optional[dict[str, PropertySpec]]] = None
     """Merged declarations of ONE class, written into that class's own __dict__ by _merged_reader_option_specs."""
 
     def __init__(self) -> None:
@@ -31,38 +40,69 @@ class BaseInputData(ABC):
 
     @classmethod
     def _validate_reader_options(cls) -> None:
-        """Reject a non-ReaderOptionSpec value where it is written, not later on .runtime_default.
-
-        Mirrors FeatureChainParser._require_spec for PROPERTY_MAPPING, and checks only this class's
-        own declaration so a bad child under a valid parent still raises.
-        """
+        """Reject a reader-invalid declaration where it is written, not later deep in reader matching;
+        checks only this class's own declaration so a bad child under a valid parent still raises."""
         for key, spec in cls.__dict__.get("READER_OPTIONS", {}).items():
-            if not isinstance(spec, ReaderOptionSpec):
+            if not isinstance(spec, PropertySpec):
                 raise ValueError(
-                    f"{cls.__name__}.READER_OPTIONS['{key}'] is a {type(spec).__name__}, not a ReaderOptionSpec. "
-                    f"Construct ReaderOptionSpec(...) instead."
+                    f"{cls.__name__}.READER_OPTIONS['{key}'] is a {type(spec).__name__}, not a PropertySpec. "
+                    f"Construct PropertySpec(...) instead."
                 )
+            if spec.match_guard is not None:
+                raise ValueError(
+                    f"{cls.__name__}.READER_OPTIONS['{key}'] declares a match_guard, which is name-matching "
+                    f"machinery and silently inert on a reader."
+                )
+            if spec.deferred_binding:
+                raise ValueError(
+                    f"{cls.__name__}.READER_OPTIONS['{key}'] declares deferred_binding=True, which is the "
+                    f"name-capture exemption; a reader key has no name path."
+                )
+            if spec.context is False:
+                raise ValueError(
+                    f"{cls.__name__}.READER_OPTIONS['{key}'] declares context=False, which places a "
+                    f"materialized value; readers place none."
+                )
+            if spec.framework_set:
+                if spec.strict_validation:
+                    raise ValueError(
+                        f"{cls.__name__}.READER_OPTIONS['{key}'] combines framework_set=True with "
+                        f"strict_validation=True; the framework-written key is exempt from user-value "
+                        f"validation, so strictness would be silently inert."
+                    )
+                if spec.required_when is not None:
+                    raise ValueError(
+                        f"{cls.__name__}.READER_OPTIONS['{key}'] combines framework_set=True with a "
+                        f"required_when predicate; the framework-written key is exempt from user-value "
+                        f"validation, so the predicate would be silently inert."
+                    )
+                if is_no_default(spec.default):
+                    raise ValueError(
+                        f"{cls.__name__}.READER_OPTIONS['{key}'] declares framework_set=True without a "
+                        f"declared default; the framework-written key must declare its absent-state "
+                        f"default explicitly, None included."
+                    )
 
     @classmethod
-    def _merged_reader_option_specs(cls) -> dict[str, ReaderOptionSpec]:
+    def _merged_reader_option_specs(cls) -> dict[str, PropertySpec]:
         """The merged declarations of cls, cached in cls's OWN __dict__; internal, never handed out.
 
         Reader selection is a hot path, so the MRO walk runs once per class. The cache is read back
         with cls.__dict__.get so a subclass never answers from a warm parent cache, and it lives on
         the class itself rather than in a class-keyed registry so it holds no reference to any class.
         """
-        cached: Optional[dict[str, ReaderOptionSpec]] = cls.__dict__.get("_reader_option_specs_cache")
+        cached: Optional[dict[str, PropertySpec]] = cls.__dict__.get("_reader_option_specs_cache")
         if cached is not None:
             return cached
 
-        merged: dict[str, ReaderOptionSpec] = {}
+        merged: dict[str, PropertySpec] = {}
         for klass in reversed(cls.__mro__):
             merged.update(klass.__dict__.get("READER_OPTIONS", {}))
         cls._reader_option_specs_cache = merged
         return merged
 
     @classmethod
-    def reader_option_specs(cls) -> dict[str, ReaderOptionSpec]:
+    def reader_option_specs(cls) -> dict[str, PropertySpec]:
         """The declarations of this reader family, most-derived winning; a fresh dict per call.
 
         Merged across cls.__mro__ from each class's own __dict__ so an inherited attribute is not
@@ -76,7 +116,7 @@ class BaseInputData(ABC):
         return frozenset(cls._merged_reader_option_specs())
 
     @classmethod
-    def _declared_reader_option_spec(cls, key: str) -> ReaderOptionSpec:
+    def _declared_reader_option_spec(cls, key: str) -> PropertySpec:
         """The declaration of key; an undeclared key is a typo, not a silent None."""
         specs = cls._merged_reader_option_specs()
         if key not in specs:
@@ -85,21 +125,128 @@ class BaseInputData(ABC):
 
     @classmethod
     def reader_option_default(cls, key: str) -> Any:
-        """The declared runtime_default of key, without consulting any Options."""
-        return cls._declared_reader_option_spec(key).runtime_default
+        """The declared default of key, without consulting any Options."""
+        spec = cls._declared_reader_option_spec(key)
+        if is_no_default(spec.default):
+            raise ValueError(f"Reader option '{key}' of {cls.__name__} declares no default.")
+        return spec.default
 
     @classmethod
-    def reader_option(cls, key: str, options: Options) -> Any:
-        """The supplied value of key when present, else the declared runtime_default.
-
-        Presence, not truthiness: an explicit empty value ("hand nothing over") survives, while None
-        reads as absent per the framework's dominant absence rule.
-        """
+    def reader_option(cls, key: str, options: Optional[Options]) -> Any:
+        """The supplied value of key when present, else the declared default; NO_DEFAULT raises.
+        allow_explicit_none=True reads presence as ``key in options``; options=None reads all-absent."""
         spec = cls._declared_reader_option_spec(key)
-        value = options.get(key)
-        if value is None:
-            return spec.runtime_default
-        return value
+        if options is not None:
+            value = options.get(key)
+            present = key in options if spec.allow_explicit_none else value is not None
+            if present:
+                return value
+        if is_no_default(spec.default):
+            raise ValueError(f"Reader option '{key}' of {cls.__name__} declares no default and no value was supplied.")
+        return spec.default
+
+    @classmethod
+    def _reader_options_admit(cls, options: Optional[Options], record_absence: bool) -> bool:
+        """Check this candidate's merged declarations BEFORE its probe runs; a veto is its own non-match.
+        record_absence gates only absence recordings; a present-value strict rejection records on both paths."""
+        for key, spec in cls._merged_reader_option_specs().items():
+            if spec.framework_set:
+                continue
+            if options is None:
+                if not cls._absent_reader_option_admits(key, spec, options, record_absence):
+                    return False
+                continue
+            value = options.get(key)
+            present = key in options if spec.allow_explicit_none else value is not None
+            if not present:
+                if not cls._absent_reader_option_admits(key, spec, options, record_absence):
+                    return False
+            elif spec.strict_validation:
+                if not cls._present_reader_option_admits(key, spec, value):
+                    return False
+        return True
+
+    @classmethod
+    def _absent_reader_option_admits(
+        cls, key: str, spec: PropertySpec, options: Optional[Options], record_absence: bool
+    ) -> bool:
+        """Requiredness of an ABSENT key: required_when decides when declared, else NO_DEFAULT rejects.
+        record_absence says whether the veto is recorded."""
+        owner = cls.get_class_name()
+        predicate = spec.required_when
+        if predicate is not None:
+            # A predicate that raises cannot judge, so the reader is a silent non-match, not the run.
+            try:
+                is_required = bool(predicate(options if options is not None else Options()))
+            except Exception as exc:
+                logger.log(
+                    contained_raise_log_level(exc),
+                    "required_when predicate %s for reader option '%s' raised %s; treating reader %s as a non-match.",
+                    getattr(predicate, "__name__", repr(predicate)),
+                    key,
+                    exc,
+                    owner,
+                )
+                return False
+            if is_required:
+                if record_absence:
+                    record_match_rejection(
+                        owner,
+                        f"required reader option '{key}' is absent, but {owner} declares it required "
+                        f"(required_when predicate {getattr(predicate, '__name__', repr(predicate))} is satisfied)",
+                        stage="input_data",
+                    )
+                return False
+            return True
+        if is_no_default(spec.default):
+            if record_absence:
+                record_match_rejection(
+                    owner,
+                    f"required reader option '{key}' is absent, but {owner} declares it required (no default declared)",
+                    stage="input_data",
+                )
+            return False
+        return True
+
+    @classmethod
+    def _present_reader_option_admits(cls, key: str, spec: PropertySpec, value: Any) -> bool:
+        """Strict validation of a PRESENT value: list/tuple/set/frozenset unpack element-wise,
+        a str is one scalar, a dict one composite value."""
+        elements = list(value) if isinstance(value, (list, tuple, set, frozenset)) else [value]
+        for element in elements:
+            if cls._reader_option_element_admits(key, spec, element):
+                continue
+            owner = cls.get_class_name()
+            record_match_rejection(
+                owner,
+                f"reader option '{key}' value {element!r} is rejected by the declaration of {owner}",
+                stage="input_data",
+            )
+            return False
+        return True
+
+    @classmethod
+    def _reader_option_element_admits(cls, key: str, spec: PropertySpec, element: Any) -> bool:
+        """One element's verdict: a declared element_validator REPLACES membership."""
+        validator = spec.element_validator
+        if validator is not None:
+            # A validator that raises cannot judge the value, so the value is rejected, not the run.
+            try:
+                return bool(validator(element))
+            except Exception as exc:
+                logger.log(
+                    contained_raise_log_level(exc),
+                    "element_validator for reader option '%s' of %s raised %s; treating value as rejected.",
+                    key,
+                    cls.get_class_name(),
+                    exc,
+                )
+                return False
+        # An unhashable element can never be a member of the value space: a clean rejection, not a TypeError.
+        try:
+            return spec.allowed_values is not None and element in spec.allowed_values
+        except TypeError:
+            return False
 
     @classmethod
     def data_access_name(cls) -> str:
@@ -146,6 +293,9 @@ class BaseInputData(ABC):
                 _key = cls.deal_with_base_input_data_name_as_cls_or_str(key)
 
                 if _key == subclass.data_access_name():
+                    # The user addressed this reader family by name (ownership), so absence vetoes record.
+                    if not subclass._reader_options_admit(options, record_absence=True):
+                        break
                     matched_data_access = subclass.match_subclass_data_access(value, [feature_name], options=options)  # type: ignore[attr-defined]
                     if matched_data_access:
                         cls.add_base_input_data_to_options(subclass, matched_data_access, options)
@@ -201,6 +351,9 @@ class BaseInputData(ABC):
         subclasses = get_all_filtered_subclasses(BaseInputData, cls)
 
         for subclass in subclasses:
+            # A global probe never established ownership, so a silent absence veto cannot displace a real near-miss.
+            if not subclass._reader_options_admit(options, record_absence=False):
+                continue
             matched_data_access = subclass.match_subclass_data_access(  # type: ignore[attr-defined]
                 data_access_collection, feature_names, options=options
             )

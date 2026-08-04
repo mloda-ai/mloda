@@ -38,7 +38,6 @@ from mloda.core.abstract_plugins.components.feature_set import FeatureSet
 from mloda.core.abstract_plugins.components.input_data.base_input_data import BaseInputData
 from mloda.core.abstract_plugins.components.input_data.file_source import FileSource
 from mloda.core.abstract_plugins.components.input_data.input_data_descriptor import InputDataDescriptor
-from mloda.core.abstract_plugins.components.input_data.reader_option_spec import ReaderOptionSpec
 from mloda.core.abstract_plugins.components.input_data.api.api_input_data import ApiInputData
 from mloda.core.abstract_plugins.components.input_data.api.api_input_data_feature import ApiInputDataFeature
 from mloda.core.abstract_plugins.components.input_data.api.base_api_data import BaseApiData
@@ -136,7 +135,6 @@ __all__ = [
     "BaseInputData",
     "FileSource",
     "InputDataDescriptor",
-    "ReaderOptionSpec",
     "ApiInputData",
     "ApiInputDataFeature",
     "BaseApiData",

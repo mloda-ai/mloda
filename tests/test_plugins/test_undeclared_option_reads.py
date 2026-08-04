@@ -36,8 +36,8 @@ from typing import ClassVar, NamedTuple
 
 import pytest
 
+from mloda.core.abstract_plugins.components.feature_chainer.property_spec import PropertySpec
 from mloda.core.abstract_plugins.components.input_data.base_input_data import BaseInputData
-from mloda.core.abstract_plugins.components.input_data.reader_option_spec import ReaderOptionSpec
 from mloda.core.abstract_plugins.components.utils import get_all_subclasses
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.abstract_plugins.plugin_loader.plugin_loader import PluginLoader
@@ -141,8 +141,8 @@ def _make_leaked_reader_probe() -> type[BaseInputData]:
     """
 
     class UorLeakedTestTreeReaderProbe(BaseInputData):
-        READER_OPTIONS: ClassVar[dict[str, ReaderOptionSpec]] = {
-            _PROBE_READER_KEY: ReaderOptionSpec("Test-tree only; must never reach the declared union."),
+        READER_OPTIONS: ClassVar[dict[str, PropertySpec]] = {
+            _PROBE_READER_KEY: PropertySpec("Test-tree only; must never reach the declared union.", default=None),
         }
 
     return UorLeakedTestTreeReaderProbe

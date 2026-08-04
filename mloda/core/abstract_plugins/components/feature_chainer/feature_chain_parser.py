@@ -250,29 +250,28 @@ class FeatureChainParser:
 
     @classmethod
     def _require_spec(cls, owner_name: str, key: str, spec: Any) -> PropertySpec:
-        """Reject anything that is not a ``PropertySpec``.
-
-        The parser entry point is public and takes a mapping straight from a caller, so the type
-        rule cannot live at class-definition time alone: an unmigrated dict would otherwise die
-        with an AttributeError deep in the match path instead of this ValueError.
-        """
-        if isinstance(spec, PropertySpec):
-            return spec
-
-        # Contained: a raw dict spec is that candidate's own defect, so the seam reads it as a non-match.
-        raise ValueError(
-            f"{owner_name}.PROPERTY_MAPPING['{key}'] is a {type(spec).__name__}, not a PropertySpec. "
-            f"Raw dict specs are no longer accepted; construct PropertySpec(...) or use the "
-            f"property_spec(...) helper."
-        )
+        """Reject anything that is not a reader-free ``PropertySpec``; the parser entry point is
+        public and takes caller mappings, so neither rule can live at class-definition time alone."""
+        if not isinstance(spec, PropertySpec):
+            # Contained: a raw dict spec is that candidate's own defect, so the seam reads it as a non-match.
+            raise ValueError(
+                f"{owner_name}.PROPERTY_MAPPING['{key}'] is a {type(spec).__name__}, not a PropertySpec. "
+                f"Raw dict specs are no longer accepted; construct PropertySpec(...) or use the "
+                f"property_spec(...) helper."
+            )
+        if spec.framework_set:
+            # Contained: a framework_set spec is that candidate's own defect, so the seam reads it as a non-match.
+            raise ValueError(
+                f"{owner_name}.PROPERTY_MAPPING['{key}'] declares framework_set=True, which marks a "
+                f"reader-surface (READER_OPTIONS) key written by the framework; PROPERTY_MAPPING keys "
+                f"are user-set."
+            )
+        return spec
 
     @classmethod
     def validate_property_mapping_defaults(cls, owner_name: str, property_mapping: dict[str, Any] | None) -> None:
-        """Validate a PROPERTY_MAPPING at class-definition time.
-
-        Every spec must BE a ``PropertySpec``; a spec validates itself at construction, so the
-        only rule left here is the type itself.
-        """
+        """Validate a PROPERTY_MAPPING at class-definition time; the rules live in ``_require_spec``,
+        shared with the match-time entry points."""
         if property_mapping is None:
             return
 

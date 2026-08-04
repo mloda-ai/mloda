@@ -2,7 +2,7 @@ import os
 from pathlib import Path
 from typing import Any, ClassVar, Optional
 
-from mloda.provider import BaseInputData, FeatureSet, ReaderOptionSpec
+from mloda.provider import BaseInputData, FeatureSet, PropertySpec
 from mloda.user import DataAccessCollection, Options
 from mloda_plugins.feature_group.input_data.read_file import ReadFile
 
@@ -35,14 +35,14 @@ class ReadDocument(BaseInputData):
 
     _auto_load_group: str = "feature_group/input_data/read_files"
 
-    READER_OPTIONS: ClassVar[dict[str, ReaderOptionSpec]] = {
-        "document_suffixes": ReaderOptionSpec(
+    READER_OPTIONS: ClassVar[dict[str, PropertySpec]] = {
+        "document_suffixes": PropertySpec(
             "Structured suffixes this document reader claims instead of leaving them to ReadFile.",
-            runtime_default=frozenset(),
+            default=frozenset(),
         ),
-        "data_access_handle": ReaderOptionSpec(
+        "data_access_handle": PropertySpec(
             "Hint naming which DataAccessCollection file handle to prefer while matching.",
-            runtime_default=None,
+            default=None,
         ),
     }
 

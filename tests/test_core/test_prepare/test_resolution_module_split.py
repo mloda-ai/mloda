@@ -12,6 +12,7 @@ import importlib
 import re
 import subprocess  # nosec B404
 import sys
+import textwrap
 from collections.abc import Sequence
 from pathlib import Path
 from types import ModuleType
@@ -60,18 +61,19 @@ MATCHER_KEPT_NAMES = (
 )
 
 # Directories swept for imports of the matcher, relative to the repo root. docs/ is in because the marimo
-# notebooks under docs/docs/examples/ are excluded from both mypy and ruff F401, and because mktestdocs runs
-# only a fence spelled exactly ```python, so nothing gates a block spelled ```python title="..." either.
+# notebooks under docs/docs/examples/ are excluded from both mypy and ruff F401, and because mktestdocs runs the
+# exact ```python spelling only, leaving every other form ungated.
 SWEPT_DIRS = ("mloda", "mloda_plugins", "tests", "docs")
 
-# Last segment of MATCHER_MODULE: what the sweep gates on, see the gate comment below.
+# Last segment of MATCHER_MODULE: what the sweep gates files and markdown blocks on, see the gate comments below.
 MATCHER_BASENAME = MATCHER_MODULE.rsplit(".", 1)[-1]
 
 # Package of the matcher as directory names, for the synthetic trees the sweep tests below build under tmp_path.
 MATCHER_PACKAGE_PARTS = tuple(MATCHER_MODULE.split(".")[:-1])
 
-# Opening fence of a markdown python block: the info string starts with python, so ```python title="x" counts.
-_PYTHON_FENCE = re.compile(r"```python(\s|$)")
+# Opening fence of a markdown python block in every spelling mkdocs renders as python: a space after the
+# backticks, the py and python3 aliases, and any info string behind the language, such as title="x".
+_PYTHON_FENCE = re.compile(r"```\s*(python3?|py)(\s|$)")
 
 _SUBPROCESS_TIMEOUT = 8.0
 
@@ -112,7 +114,7 @@ def _resolved_module(path: Path, node: ast.ImportFrom, root: Path) -> str | None
     if node.level == 0:
         return node.module
     package = path.relative_to(root).parts[:-1]  # __init__.py and a plain module share the same package
-    if node.level > len(package) + 1:
+    if node.level > len(package):  # the deepest level still at or below the root is the package depth
         return None
     base = package[: len(package) - node.level + 1]
     return ".".join((*base, node.module) if node.module else base)
@@ -142,29 +144,61 @@ def _python_blocks(source: str) -> list[tuple[int, str]]:
     lines = source.splitlines()
     blocks: list[tuple[int, str]] = []
     opened: int | None = None
+    width = 0
     is_python = False
     for lineno, line in enumerate(lines, start=1):
         stripped = line.strip()
         if not stripped.startswith("```"):
             continue
-        if opened is None:  # every fence is tracked, so a ``` inside another block cannot open a python one
-            opened, is_python = lineno, _PYTHON_FENCE.match(stripped) is not None
+        backticks = len(stripped) - len(stripped.lstrip("`"))
+        if opened is None:
+            opened, width, is_python = lineno, backticks, _PYTHON_FENCE.match(stripped) is not None
+            continue
+        if backticks < width:  # a shorter fence is content of the open block, as in a ``` shown inside a ````
             continue
         if is_python:
             blocks.append((opened, "\n".join(lines[opened : lineno - 1])))
         opened = None
+    if opened is not None and is_python:  # a fence left open at the end of the file still delimits a block
+        blocks.append((opened, "\n".join(lines[opened:])))
     return blocks
 
 
 def _foreign_matcher_imports_in_markdown(path: Path, source: str, root: Path) -> list[str]:
     """The same check over the python blocks of a markdown file, reported at their line in the file.
 
-    Nothing catches a block that does not parse: it got here by naming the matcher, so it is worth a loud
-    failure rather than a silent skip.
+    Only a block naming the matcher is parsed: the docs are full of pseudo-code and of fences indented into a
+    list, neither of which parses. Once a block has named the matcher, a parse error is worth a loud failure.
     """
     offenders: list[str] = []
     for offset, block in _python_blocks(source):
-        offenders.extend(_foreign_names(path, ast.parse(block, filename=str(path)), root, offset))
+        if MATCHER_BASENAME not in block:
+            continue
+        tree = ast.parse(textwrap.dedent(block), filename=str(path))  # dedent keeps the line count, so offset holds
+        offenders.extend(_foreign_names(path, tree, root, offset))
+    return offenders
+
+
+def _sweep(root: Path) -> list[str]:
+    """`path:line -> name` per name a file under `root` imports from the matcher that the matcher does not own."""
+    paths: list[Path] = []
+    for directory in SWEPT_DIRS:
+        base = root / directory
+        if not base.is_dir():  # a directory may be absent (slim checkout, sdist layout); the rest still gets swept
+            continue
+        paths.extend([*base.rglob("*.py"), *base.rglob("*.md")])
+    offenders: list[str] = []
+    for path in sorted(paths):
+        source = path.read_text(encoding="utf-8")
+        # Substring gate: a handful of the repo's files get parsed instead of all of them. It only keeps the
+        # sweep cheap, which it is either way, so drop it freely if it gets in the way. Gating on the bare last
+        # segment rather than the dotted path keeps `from a.b . c import X` spellings in scope.
+        if MATCHER_BASENAME not in source:
+            continue
+        if path.suffix == ".md":
+            offenders.extend(_foreign_matcher_imports_in_markdown(path, source, root))
+        else:
+            offenders.extend(_foreign_matcher_imports(path, source, root))
     return offenders
 
 
@@ -229,23 +263,7 @@ def test_no_call_site_imports_a_foreign_name_from_the_matcher() -> None:
     Its one blind spot is what this test exists for: re-adding __all__ to the matcher makes those
     re-exports legal again for mypy, and the call sites route through the facade unchallenged.
     """
-    root = _repo_root()
-    offenders: list[str] = []
-    for directory in SWEPT_DIRS:
-        base = root / directory
-        if not base.is_dir():  # a directory may be absent (slim checkout, sdist layout); the rest still gets swept
-            continue
-        for path in sorted([*base.rglob("*.py"), *base.rglob("*.md")]):
-            source = path.read_text(encoding="utf-8")
-            # Substring gate: parses 37 of 973 files, ~0.2s instead of ~1.4s. A 7x saving well inside the
-            # 10s timeout either way, so drop it freely if it ever gets in the way. Gating on the bare last
-            # segment rather than the dotted path keeps `from a.b . c import X` spellings in scope.
-            if MATCHER_BASENAME not in source:
-                continue
-            if path.suffix == ".md":
-                offenders.extend(_foreign_matcher_imports_in_markdown(path, source, root))
-            else:
-                offenders.extend(_foreign_matcher_imports(path, source, root))
+    offenders = _sweep(_repo_root())
     listed = "\n".join(offenders)
     assert offenders == [], (
         f"these imports take a name from {MATCHER_MODULE} that it does not own; import each from "
@@ -279,6 +297,18 @@ def test_a_relative_import_of_a_sibling_module_is_not_reported(tmp_path: Path) -
     assert _foreign_matcher_imports(path, source, tmp_path) == []
 
 
+def test_a_relative_import_walking_above_the_root_is_not_reported(tmp_path: Path) -> None:
+    """The highest level that stays at or below the root is the package depth, not one more.
+
+    `tests.foo.bar` has a package two deep, so level 3 is `attempted relative import beyond top-level
+    package` for CPython: the import never runs, so it can never take a name from the matcher.
+    """
+    path = tmp_path / "tests" / "foo" / "bar.py"
+    source = f"from ...{MATCHER_MODULE} import RenderFacts\n"
+    offenders = _foreign_matcher_imports(path, source, tmp_path)
+    assert offenders == [], f"a level walking above the root resolved to the matcher: {offenders}"
+
+
 def test_a_markdown_snippet_importing_a_foreign_name_is_reported(tmp_path: Path) -> None:
     """The reported line is the line in the markdown file, not the line within the block."""
     path = tmp_path / "docs" / "guide.md"
@@ -297,6 +327,147 @@ def test_a_non_python_fenced_block_is_not_scanned(tmp_path: Path) -> None:
     path = tmp_path / "docs" / "guide.md"
     source = _markdown_with_block("text", f"from {MATCHER_MODULE} import render_resolution_failure")
     assert _foreign_matcher_imports_in_markdown(path, source, tmp_path) == []
+
+
+@pytest.mark.parametrize("language", [" python", " py", " python3"])
+def test_a_spaced_or_aliased_python_fence_is_scanned(tmp_path: Path, language: str) -> None:
+    """mkdocs renders ``` python, ```py and ```python3 as python and mktestdocs runs none of them."""
+    path = tmp_path / "docs" / "guide.md"
+    source = _markdown_with_block(language, f"from {MATCHER_MODULE} import render_resolution_failure")
+    offenders = _foreign_matcher_imports_in_markdown(path, source, tmp_path)
+    assert offenders == [f"{path}:4 -> render_resolution_failure"], f"```{language} went unscanned: {offenders}"
+
+
+@pytest.mark.parametrize("language", ['python title="x"', ' python title="x"'])
+def test_a_titled_python_fence_is_scanned(tmp_path: Path, language: str) -> None:
+    """The spelling the SWEPT_DIRS comment cites, in both the tight and the spaced form."""
+    path = tmp_path / "docs" / "guide.md"
+    source = _markdown_with_block(language, f"from {MATCHER_MODULE} import render_resolution_failure")
+    offenders = _foreign_matcher_imports_in_markdown(path, source, tmp_path)
+    assert offenders == [f"{path}:4 -> render_resolution_failure"], f"```{language} went unscanned: {offenders}"
+
+
+@pytest.mark.parametrize("language", ["pythonic", "pytest"])
+def test_a_near_miss_language_fence_is_not_scanned(tmp_path: Path, language: str) -> None:
+    """Widening the fence pattern to the python aliases must not swallow a language that merely starts alike."""
+    path = tmp_path / "docs" / "guide.md"
+    source = _markdown_with_block(language, f"from {MATCHER_MODULE} import render_resolution_failure")
+    offenders = _foreign_matcher_imports_in_markdown(path, source, tmp_path)
+    assert offenders == [], f"```{language} is not python, yet it was scanned: {offenders}"
+
+
+def test_an_indented_block_that_does_not_name_the_matcher_is_not_parsed(tmp_path: Path) -> None:
+    """A fence indented into a numbered list is not parseable on its own, and it names no import of ours.
+
+    Real precedent: docs/docs/in_depth/feature-group-matching.md, three-space fences inside a numbered list.
+    """
+    path = tmp_path / "docs" / "guide.md"
+    source = "\n".join(
+        [
+            "# Guide",
+            "",
+            f"Matching lives in {MATCHER_BASENAME}.",
+            "",
+            "1. **Class Name Match**:",
+            "   ```python",
+            "   feature_name == FeatureGroup.get_class_name()",
+            "   ```",
+            "",
+        ]
+    )
+    assert _foreign_matcher_imports_in_markdown(path, source, tmp_path) == []
+
+
+def test_a_pseudo_code_block_that_does_not_name_the_matcher_is_not_parsed(tmp_path: Path) -> None:
+    """Prose in a python fence is common in the docs; only a block naming the matcher is worth parsing."""
+    path = tmp_path / "docs" / "guide.md"
+    source = "\n".join(
+        [
+            "# Guide",
+            "",
+            f"Matching lives in {MATCHER_BASENAME}.",
+            "",
+            "```python",
+            "run(features=[...], key=1, 2)",
+            "```",
+            "",
+        ]
+    )
+    assert _foreign_matcher_imports_in_markdown(path, source, tmp_path) == []
+
+
+def test_an_indented_block_importing_a_foreign_name_is_reported(tmp_path: Path) -> None:
+    """Indentation is no exemption: a block naming the matcher is checked, at its line in the markdown file."""
+    path = tmp_path / "docs" / "guide.md"
+    source = "\n".join(
+        [
+            "# Guide",
+            "",
+            "1. Take the renderer from the matcher:",
+            "   ```python",
+            f"   from {MATCHER_MODULE} import render_resolution_failure",
+            "   ```",
+            "",
+        ]
+    )
+    offenders = _foreign_matcher_imports_in_markdown(path, source, tmp_path)
+    assert offenders == [f"{path}:5 -> render_resolution_failure"], f"expected the markdown line, got {offenders}"
+
+
+def test_a_four_backtick_block_does_not_hide_a_later_python_block(tmp_path: Path) -> None:
+    """A ```` block displaying a bare fence must not shift the pairing of every fence after it."""
+    path = tmp_path / "docs" / "guide.md"
+    source = "\n".join(
+        [
+            "# Guide",
+            "",
+            "````",
+            "```",
+            "````",
+            "",
+            "```python",
+            f"from {MATCHER_MODULE} import render_resolution_failure",
+            "```",
+            "",
+        ]
+    )
+    offenders = _foreign_matcher_imports_in_markdown(path, source, tmp_path)
+    assert offenders == [f"{path}:8 -> render_resolution_failure"], f"the later block went unseen: {offenders}"
+
+
+def test_prose_in_a_four_backtick_block_is_not_parsed_as_python(tmp_path: Path) -> None:
+    """The other direction of the same mis-pairing: content of a ```` block is content, never a python block."""
+    path = tmp_path / "docs" / "guide.md"
+    source = "\n".join(
+        [
+            "# Guide",
+            "",
+            "````",
+            "```",
+            "```python",
+            "run(features=[...], key=1, 2)",
+            "```",
+            "````",
+            "",
+        ]
+    )
+    assert _foreign_matcher_imports_in_markdown(path, source, tmp_path) == []
+
+
+def test_an_unterminated_python_fence_at_end_of_file_is_scanned(tmp_path: Path) -> None:
+    """A block left open at the end of the file is still a block: it must be flushed, not dropped."""
+    path = tmp_path / "docs" / "guide.md"
+    source = "\n".join(
+        [
+            "# Guide",
+            "",
+            "```python",
+            f"from {MATCHER_MODULE} import render_resolution_failure",
+            "",
+        ]
+    )
+    offenders = _foreign_matcher_imports_in_markdown(path, source, tmp_path)
+    assert offenders == [f"{path}:4 -> render_resolution_failure"], f"the open block was dropped: {offenders}"
 
 
 def test_the_sweep_reports_a_relative_import(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

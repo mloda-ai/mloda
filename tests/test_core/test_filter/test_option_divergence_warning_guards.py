@@ -1,8 +1,7 @@
 """Pin the guard clauses and the rendered text of the filter-option divergence warning (#911).
 
-``test_unify_options_divergence_warning.py`` drives the same behaviour through the engine. These cases call
-the seam directly, because each guard below decides nothing but whether one log line is written: every early
-return is one token away from suppressing every divergence, and an engine run per guard buys no extra proof.
+``test_unify_options_divergence_warning.py`` drives the same behaviour through the engine. These cases
+call the seam directly: every guard below decides nothing but whether one log line is written.
 """
 
 from __future__ import annotations
@@ -48,10 +47,9 @@ class _ArrayLikeDefault:
 
 
 def _emit(mapping: Optional[dict[str, PropertySpec]], feat_options: Options, filter_options: Options) -> None:
-    """Run the divergence seam once against a throwaway group; ``mapping`` None means no resolving group.
+    """Run the seam once against a throwaway group; ``mapping`` None means no resolving group.
 
-    The probe class stays local to this frame, so it is unreachable once the call returns and cannot leak
-    into the registry (the asserts live in the caller, whose traceback never pins this frame).
+    The probe class stays local to this frame, so it cannot leak into the registry.
     """
     feature_group: Optional[type[FeatureGroup]] = None
     if mapping is not None:
@@ -74,7 +72,7 @@ def _messages(caplog: pytest.LogCaptureFixture, key: str) -> list[str]:
 
 
 def test_stays_silent_when_intake_materializes_the_features_own_value(caplog: pytest.LogCaptureFixture) -> None:
-    """The discriminating control: without it every guard case below could pass on a seam that never warns."""
+    """The control: without it every guard case below could pass on a seam that never warns."""
     with caplog.at_level(logging.WARNING):
         _emit(
             {DWG_KEY: PropertySpec("A group key with a concrete default.", context=False, default=DWG_DEFAULT)},
@@ -82,11 +80,11 @@ def test_stays_silent_when_intake_materializes_the_features_own_value(caplog: py
             Options(group={DWG_KEY: None}),
         )
 
-    assert _messages(caplog, DWG_KEY) == [], "a declared None that intake fills with the feature's value must not warn"
+    assert _messages(caplog, DWG_KEY) == []
 
 
 def test_warns_without_a_resolving_feature_group(caplog: pytest.LogCaptureFixture) -> None:
-    """No group means no spec to consult, so nothing is suppressed and every difference is reported."""
+    """No group means no spec to consult, so nothing is suppressed."""
     with caplog.at_level(logging.WARNING):
         _emit(None, Options(group={DWG_KEY: DWG_DEFAULT}), Options(group={DWG_KEY: None}))
 
@@ -130,7 +128,7 @@ def test_warns_when_the_spec_default_is_none(caplog: pytest.LogCaptureFixture) -
 
 
 def test_warns_when_the_spec_default_cannot_be_compared(caplog: pytest.LogCaptureFixture) -> None:
-    """A third-party default whose ``==`` returns a non-bool must not abort the run from a logging decision."""
+    """An uncomparable default must not abort the run from a decision that only picks a log line."""
     spec = PropertySpec("A group key defaulting to an array-like.", context=False, default=_ArrayLikeDefault())
     with caplog.at_level(logging.WARNING):
         _emit({DWG_KEY: spec}, Options(group={DWG_KEY: DWG_HOST_VAL}), Options(group={DWG_KEY: None}))
@@ -139,7 +137,7 @@ def test_warns_when_the_spec_default_cannot_be_compared(caplog: pytest.LogCaptur
     assert _messages(caplog, DWG_KEY) == [
         f"Options are not the same. {DWG_KEY} is different. "
         f"None (intake fills <array-like default>) != '{DWG_HOST_VAL}'"
-    ], "an uncomparable default is not convergent, so it must keep warning instead of raising"
+    ]
 
 
 def test_warns_for_a_context_key_divergence(caplog: pytest.LogCaptureFixture) -> None:
@@ -155,7 +153,7 @@ def test_warns_for_a_context_key_divergence(caplog: pytest.LogCaptureFixture) ->
 
 
 def test_the_surviving_none_warning_names_the_value_intake_materializes(caplog: pytest.LogCaptureFixture) -> None:
-    """The filter feature computes with the SPEC default, so naming the feature's value alone misleads."""
+    """The filter feature computes with the spec default, so naming the feature's value alone misleads."""
     with caplog.at_level(logging.WARNING):
         _emit(
             {DWG_KEY: PropertySpec("A group key with a concrete default.", context=False, default=DWG_DEFAULT)},
@@ -165,11 +163,11 @@ def test_the_surviving_none_warning_names_the_value_intake_materializes(caplog: 
 
     assert _messages(caplog, DWG_KEY) == [
         f"Options are not the same. {DWG_KEY} is different. None (intake fills '{DWG_DEFAULT}') != '{DWG_HOST_VAL}'"
-    ], "the message must name what intake materializes into the filter feature"
+    ]
 
 
 def test_the_plain_divergence_message_is_unchanged(caplog: pytest.LogCaptureFixture) -> None:
-    """Two explicit values reach compute time as declared, so their message keeps its pre-#911 wording."""
+    """Two explicit values reach compute time as declared, so their message keeps its original wording."""
     with caplog.at_level(logging.WARNING):
         _emit(
             {DWG_KEY: PropertySpec("A group key with a concrete default.", context=False, default=DWG_DEFAULT)},
@@ -179,4 +177,4 @@ def test_the_plain_divergence_message_is_unchanged(caplog: pytest.LogCaptureFixt
 
     assert _messages(caplog, DWG_KEY) == [
         f"Options are not the same. {DWG_KEY} is different. {DWG_FILTER_VAL} != {DWG_HOST_VAL}"
-    ], "a divergence intake does not touch must keep the original message"
+    ]

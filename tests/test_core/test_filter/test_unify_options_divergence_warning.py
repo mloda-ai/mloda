@@ -1,12 +1,10 @@
 """Pin the option divergence warning for a filter feature declaring a defaulted key as None (#911).
 
 Filter matching compares the host feature's EFFECTIVE options against the filter feature's DECLARED
-ones, so a filter feature declaring a defaulted key explicitly as None is reported as diverging from a
-value intake then materializes into it one call later. The warning must fire on a divergence that
-survives intake, not on one that provably converges.
-
-Every case drives the engine seam (``Engine._add_filter_feature``), because only there is the
-resolving feature group, and with it the spec that decides what intake will materialize, available.
+ones, so a defaulted key declared as None is reported as diverging from a value intake materializes
+into it one call later. The warning must fire on a divergence that survives intake, not on one that
+converges. Every case drives the engine seam, because only there is the resolving feature group,
+and with it the spec that decides what intake will materialize, available.
 """
 
 from __future__ import annotations
@@ -91,9 +89,8 @@ def _payload_rows(frames: list[Any], column: str) -> list[Any]:
 def _run(mapping: dict[str, PropertySpec], host_options: Options, filter_options: Options) -> dict[str, Any]:
     """Run UNW_HOST under a global EQUAL filter on UNW_TARGET; return plain-data views of both sides.
 
-    The probe class, the collector and the GlobalFilter (whose collection keys hold the class) are
-    deleted from THIS frame before the asserts, so a failing assert cannot pin the throwaway class into
-    a traceback and trip the no-leak fixture on top of the real failure.
+    The probe class, the collector and the GlobalFilter are deleted from THIS frame before the asserts,
+    so a failing assert cannot pin the throwaway class into a traceback and trip the no-leak fixture.
     """
     collector = PluginCollector.enabled_feature_groups({_make_probe_fg(mapping)})
     global_filter = GlobalFilter()
@@ -118,7 +115,7 @@ def _run(mapping: dict[str, PropertySpec], host_options: Options, filter_options
 
 
 def _warnings_naming(caplog: pytest.LogCaptureFixture, key: str) -> list[str]:
-    """Every warning-level message naming ``key``; location-agnostic, since the fix may move the check."""
+    """Every warning-level message naming ``key``; location-agnostic, since the check may move."""
     return [
         record.getMessage()
         for record in caplog.records
@@ -135,15 +132,13 @@ def _stored_value(observed: dict[str, Any], key: str) -> Any:
 
 
 def test_no_warning_when_a_declared_none_converges_on_the_group_default(caplog: pytest.LogCaptureFixture) -> None:
-    """A filter feature declaring a defaulted group key as None converges on the host's value, so no warning."""
+    """A defaulted group key declared as None converges on the host's value, so no warning."""
     with caplog.at_level(logging.WARNING):
         observed = _run({UNW_GRP_KEY: GRP_SPEC}, Options(), Options(group={UNW_GRP_KEY: None}))
 
-    assert observed["host_effective"][UNW_GRP_KEY] == UNW_DEFAULT, f"host must hold the default: {observed!r}"
-    assert _stored_value(observed, UNW_GRP_KEY) == UNW_DEFAULT, f"intake must fill the same default: {observed!r}"
-    assert _warnings_naming(caplog, UNW_GRP_KEY) == [], (
-        "a declared None that intake fills with the host's own value must not warn"
-    )
+    assert observed["host_effective"][UNW_GRP_KEY] == UNW_DEFAULT
+    assert _stored_value(observed, UNW_GRP_KEY) == UNW_DEFAULT
+    assert _warnings_naming(caplog, UNW_GRP_KEY) == []
 
 
 def test_no_warning_when_a_declared_none_converges_on_the_context_default(caplog: pytest.LogCaptureFixture) -> None:
@@ -151,23 +146,20 @@ def test_no_warning_when_a_declared_none_converges_on_the_context_default(caplog
     with caplog.at_level(logging.WARNING):
         observed = _run({UNW_CTX_KEY: CTX_SPEC}, Options(), Options(context={UNW_CTX_KEY: None}))
 
-    assert observed["host_effective"][UNW_CTX_KEY] == UNW_DEFAULT, f"host must hold the default: {observed!r}"
-    assert _stored_value(observed, UNW_CTX_KEY) == UNW_DEFAULT, f"intake must fill the same default: {observed!r}"
-    assert _warnings_naming(caplog, UNW_CTX_KEY) == [], (
-        "a declared None that intake fills with the host's own value must not warn"
-    )
+    assert observed["host_effective"][UNW_CTX_KEY] == UNW_DEFAULT
+    assert _stored_value(observed, UNW_CTX_KEY) == UNW_DEFAULT
+    assert _warnings_naming(caplog, UNW_CTX_KEY) == []
 
 
 def test_warns_when_a_declared_none_diverges_from_an_explicit_host_value(caplog: pytest.LogCaptureFixture) -> None:
-    """A declared None against an explicit host value is a real divergence: intake fills the SPEC default,
-    not the host's value, so the filter feature ends up computing with something else."""
+    """Intake fills the spec default, not the host's value, so the filter feature computes with something else."""
     with caplog.at_level(logging.WARNING):
         observed = _run(
             {UNW_GRP_KEY: GRP_SPEC}, Options(group={UNW_GRP_KEY: UNW_HOST_VAL}), Options(group={UNW_GRP_KEY: None})
         )
 
-    assert observed["host_effective"][UNW_GRP_KEY] == UNW_HOST_VAL, f"host must keep its value: {observed!r}"
-    assert _stored_value(observed, UNW_GRP_KEY) == UNW_DEFAULT, f"intake must fill the spec default: {observed!r}"
+    assert observed["host_effective"][UNW_GRP_KEY] == UNW_HOST_VAL
+    assert _stored_value(observed, UNW_GRP_KEY) == UNW_DEFAULT
     assert _warnings_naming(caplog, UNW_GRP_KEY), "a divergence that survives intake must still be reported"
 
 
@@ -180,8 +172,8 @@ def test_warns_when_two_explicit_values_differ(caplog: pytest.LogCaptureFixture)
             Options(group={UNW_GRP_KEY: UNW_FILTER_VAL}),
         )
 
-    assert observed["host_effective"][UNW_GRP_KEY] == UNW_HOST_VAL, f"host must keep its value: {observed!r}"
-    assert _stored_value(observed, UNW_GRP_KEY) == UNW_FILTER_VAL, f"the filter must keep its value: {observed!r}"
+    assert observed["host_effective"][UNW_GRP_KEY] == UNW_HOST_VAL
+    assert _stored_value(observed, UNW_GRP_KEY) == UNW_FILTER_VAL
     assert _warnings_naming(caplog, UNW_GRP_KEY), "two differing explicit values must still be reported"
 
 
@@ -190,11 +182,9 @@ def test_warns_when_an_opted_in_none_stays_divergent(caplog: pytest.LogCaptureFi
     with caplog.at_level(logging.WARNING):
         observed = _run({UNW_OPTIN_KEY: OPTIN_SPEC}, Options(), Options(group={UNW_OPTIN_KEY: None}))
 
-    assert observed["host_effective"][UNW_OPTIN_KEY] == UNW_DEFAULT, f"host must hold the default: {observed!r}"
-    assert _stored_value(observed, UNW_OPTIN_KEY) is None, f"the opted-in None must survive intake: {observed!r}"
-    assert _warnings_naming(caplog, UNW_OPTIN_KEY), (
-        "an honored None against a concrete host value must still be reported"
-    )
+    assert observed["host_effective"][UNW_OPTIN_KEY] == UNW_DEFAULT
+    assert _stored_value(observed, UNW_OPTIN_KEY) is None
+    assert _warnings_naming(caplog, UNW_OPTIN_KEY), "an honored None against a concrete host value must be reported"
 
 
 def test_absent_filter_keys_are_copied_into_their_own_namespace_without_warning(
@@ -209,8 +199,8 @@ def test_absent_filter_keys_are_copied_into_their_own_namespace_without_warning(
         )
 
     stored = observed["filter_stored"]
-    assert stored["group"].get(UNW_GRP_KEY) == UNW_HOST_VAL, f"a host group key must stay in group: {stored!r}"
-    assert stored["context"].get(UNW_CTX_KEY) == UNW_CTX_VAL, f"a host context key must stay in context: {stored!r}"
+    assert stored["group"].get(UNW_GRP_KEY) == UNW_HOST_VAL
+    assert stored["context"].get(UNW_CTX_KEY) == UNW_CTX_VAL
     assert UNW_CTX_KEY not in stored["group"], f"a context key must not leak into group: {stored!r}"
-    assert _warnings_naming(caplog, UNW_GRP_KEY) == [], "a copied group key must not warn"
-    assert _warnings_naming(caplog, UNW_CTX_KEY) == [], "a copied context key must not warn"
+    assert _warnings_naming(caplog, UNW_GRP_KEY) == []
+    assert _warnings_naming(caplog, UNW_CTX_KEY) == []

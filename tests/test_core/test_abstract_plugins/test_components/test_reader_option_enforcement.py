@@ -2,12 +2,19 @@
 
 During reader selection, BEFORE a candidate's ``match_subclass_data_access`` runs, the framework
 checks the candidate's merged ``READER_OPTIONS`` declarations against the supplied ``Options``
-(``framework_set`` keys exempt). A failed check makes THAT candidate a non-match, leaves every
-other candidate probing, and records ``record_match_rejection(<reader class name>, reason,
-stage="input_data")`` into the active per-candidate window; outside an active window nothing is
-recorded and nothing raises. Enforced on BOTH selection paths: ``feature_scope_data_access`` (the
-reader addressed by its ``data_access_name`` option key) and ``match_data_access`` (the global
+(``framework_set`` keys exempt). A failed check makes THAT candidate a non-match and leaves every
+other candidate probing, on BOTH selection paths: ``feature_scope_data_access`` (the reader
+addressed by its ``data_access_name`` option key) and ``match_data_access`` (the global
 ``DataAccessCollection`` probe, where ``options`` may be None and reads as every key absent).
+
+RECORDING is split by ownership. A present-value strict rejection records
+``record_match_rejection(<reader class name>, reason, stage="input_data")`` into the active
+per-candidate window on BOTH paths: the user supplied that key, so the decline is about their
+input. An absence-based requiredness veto (``NO_DEFAULT``, or a firing ``required_when``) records
+ONLY on the feature-scope path, where the user explicitly addressed the reader family and
+ownership is therefore established; on the global path it vetoes silently, so a reader that never
+established ownership cannot displace a genuine near-miss reason under the engine's
+first-recorded-wins harvest. Outside an active window nothing is recorded and nothing raises.
 
 The checks, mirroring ``FeatureChainParser._validate_property_value`` and the #768 presence matrix:
 
@@ -18,7 +25,7 @@ The checks, mirroring ``FeatureChainParser._validate_property_value`` and the #7
 * requiredness for ABSENT keys: ``required_when`` decides when declared (a raising predicate is a
   silent non-match with no recording), a ``NO_DEFAULT`` spec without one is unconditionally
   required, a declared default (None included) keeps the key optional, and an opted-in explicit
-  None counts as present.
+  None counts as present; the resulting veto records only on the feature-scope path.
 * the engine maps the recorded stage to an ``input_data`` elimination exactly as the hand-rolled
   ``record_match_rejection(..., stage="input_data")`` reader declines (PR #948) already do.
 
@@ -29,9 +36,10 @@ process, for the process lifetime. Containment is two-fold and machine-checked b
 ``roe_`` marker (access string or dac folder handle) is present, and every MODULE-LEVEL reader's
 specs are foreign-inert (strict keys fire only when a module-unique key is PRESENT; conditional
 requiredness is keyed to the module-unique trigger key). A spec firing on mere ABSENCE
-(``default=NO_DEFAULT`` without ``required_when``) would record a rejection into every foreign
-probe window once enforcement lands, so those readers are built test-locally (``RoeLocal*``
-names) and reclaimed via gc by the ``collect_after`` fixture.
+(``default=NO_DEFAULT`` without ``required_when``) vetoes every foreign global probe and would
+record into any foreign probe that addressed the reader on the feature-scope path, so those
+readers are built test-locally (``RoeLocal*`` names) and reclaimed via gc by the
+``collect_after`` fixture.
 """
 
 from __future__ import annotations
@@ -75,6 +83,7 @@ ROE_DEFAULTED_KEY = "roe_defaulted"
 ROE_NONE_DEFAULT_KEY = "roe_none_defaulted"
 
 ROE_COND_ACCESS = "roe_conditional_access"
+ROE_COND_HANDLE = "roe_conditional_handle"
 ROE_COND_KEY = "roe_conditional"
 ROE_TRIGGER_KEY = "roe_trigger"
 
@@ -215,10 +224,15 @@ class RoeLenientReader(_RoeMarkedReader):
         return {ROE_FEATURE_NAME: [1]}
 
 
-class RoeConditionalReader(_RoeMarkedReader):
+class RoeCondFamily(_RoeMarkedReader):
+    """Scopes the global probes of the conditional reader to exactly that one candidate."""
+
+
+class RoeConditionalReader(RoeCondFamily):
     """Final reader whose key is required only when the module-unique trigger option is supplied."""
 
     ROE_ACCESS = ROE_COND_ACCESS
+    ROE_HANDLE = ROE_COND_HANDLE
 
     READER_OPTIONS: ClassVar[dict[str, PropertySpec]] = {
         ROE_COND_KEY: PropertySpec("Required iff the trigger key is supplied.", required_when=_roe_trigger_required),
@@ -588,7 +602,11 @@ class TestElementValidator:
 
 
 class TestRequiredness:
-    """Requiredness for ABSENT keys, evaluated on the options as the reader will see them."""
+    """Requiredness for ABSENT keys on the feature-scope path, where the addressed reader RECORDS.
+
+    The user named the reader family in the options, so ownership is established and an
+    absence-based veto is about their configuration: it records into the window.
+    """
 
     def test_conditionally_required_key_absent_with_trigger_is_rejected(
         self, rejection_window: dict[str, MatchRejection]
@@ -647,7 +665,8 @@ class TestRequiredness:
     def test_unconditionally_required_key_absent_is_rejected(
         self, rejection_window: dict[str, MatchRejection], collect_after: None
     ) -> None:
-        """A NO_DEFAULT spec without required_when makes absence a recorded rejection."""
+        """A NO_DEFAULT spec without required_when makes absence a RECORDED rejection here: the
+        user addressed this reader by its data_access_name key, so ownership is established."""
         _, reader = _roe_required_family("absent")
         options = Options({reader.data_access_name(): ROE_REQUIRED_ACCESS})
 
@@ -711,12 +730,18 @@ class TestRequiredness:
 
 
 class TestGlobalProbeEnforcement:
-    """The same checks run on the match_data_access path, where options may also be None."""
+    """The same VETOES run on the match_data_access path, where options may also be None.
+
+    Recording differs: a present-value strict rejection still records (the user supplied the key),
+    but an absence-based requiredness veto records NOTHING here, because a candidate on the global
+    probe never established ownership and must not displace a genuine near-miss reason.
+    """
 
     def test_bad_strict_value_rejects_the_candidate_on_the_global_probe(
         self, rejection_window: dict[str, MatchRejection]
     ) -> None:
-        """A strict-rejected value vetoes the candidate before it can claim the collection."""
+        """A strict-rejected PRESENT value vetoes AND records on the global probe too: the user
+        supplied that key, so the decline is about their input."""
         options = Options({ROE_FORMAT_KEY: "roe_bogus"})
         dac = DataAccessCollection(folders={ROE_STRICT_HANDLE: "/roe/nowhere"})
 
@@ -734,16 +759,49 @@ class TestGlobalProbeEnforcement:
     def test_none_options_read_every_key_absent(
         self, rejection_window: dict[str, MatchRejection], collect_after: None
     ) -> None:
-        """options=None on the global probe reads as all-absent, so an unconditional key rejects."""
-        family, reader = _roe_required_family("none_options")
+        """options=None reads as all-absent: the unconditional key still vetoes, silently."""
+        family, _ = _roe_required_family("none_options")
         dac = DataAccessCollection(folders={ROE_REQUIRED_HANDLE: "/roe/nowhere"})
 
         result = family.match_data_access([ROE_FEATURE_NAME], dac, options=None)
 
         assert result == (None, None)
-        stored = rejection_window[reader.get_class_name()]
-        assert stored.stage == "input_data"
-        assert ROE_REQUIRED_KEY in stored.reason
+        assert rejection_window == {}
+
+    def test_an_absent_required_key_is_a_silent_veto_on_the_global_probe(
+        self, rejection_window: dict[str, MatchRejection], collect_after: None
+    ) -> None:
+        """Supplied Options missing the required key: the candidate vetoes, the window stays empty."""
+        family, _ = _roe_required_family("global_absent")
+        dac = DataAccessCollection(folders={ROE_REQUIRED_HANDLE: "/roe/nowhere"})
+
+        result = family.match_data_access([ROE_FEATURE_NAME], dac, options=Options())
+
+        assert result == (None, None)
+        assert rejection_window == {}
+
+    def test_a_firing_required_when_is_a_silent_veto_on_the_global_probe(
+        self, rejection_window: dict[str, MatchRejection]
+    ) -> None:
+        """A firing required_when over an absent key is the same silent veto as NO_DEFAULT absence."""
+        options = Options({ROE_TRIGGER_KEY: True})
+        dac = DataAccessCollection(folders={ROE_COND_HANDLE: "/roe/nowhere"})
+
+        result = RoeCondFamily.match_data_access([ROE_FEATURE_NAME], dac, options=options)
+
+        assert result == (None, None)
+        assert rejection_window == {}
+
+    def test_a_dormant_required_when_still_matches_on_the_global_probe(
+        self, rejection_window: dict[str, MatchRejection]
+    ) -> None:
+        """Control: without the trigger the conditional candidate claims the collection cleanly."""
+        dac = DataAccessCollection(folders={ROE_COND_HANDLE: "/roe/nowhere"})
+
+        result = RoeCondFamily.match_data_access([ROE_FEATURE_NAME], dac, options=Options())
+
+        assert result == (RoeConditionalReader, ROE_COND_ACCESS)
+        assert rejection_window == {}
 
     def test_a_vetoed_candidate_leaves_sibling_candidates_probing(
         self, rejection_window: dict[str, MatchRejection]
@@ -875,7 +933,8 @@ class TestModuleLeakPolicy:
         """Every module-level final reader carries its markers and no absence-firing spec.
 
         RoeLocal* readers are exempt: they exist only inside a test and are reclaimed by
-        collect_after, precisely BECAUSE their required keys would fire on every foreign probe.
+        collect_after, precisely BECAUSE their required keys veto every foreign global probe and
+        would record on a foreign feature-scope probe that addressed them.
         """
         module_level = [
             cls
@@ -890,5 +949,5 @@ class TestModuleLeakPolicy:
                 if spec.framework_set:
                     continue
                 assert not (is_no_default(spec.default) and spec.required_when is None), (
-                    f"{cls.__name__}.READER_OPTIONS['{key}'] would record a rejection on every foreign probe"
+                    f"{cls.__name__}.READER_OPTIONS['{key}'] would fire on every foreign probe"
                 )

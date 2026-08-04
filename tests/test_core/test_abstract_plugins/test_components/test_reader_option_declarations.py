@@ -20,7 +20,8 @@ What is pinned here:
   spec read ``runtime_default``.
 * ``reader_option(key, options)`` reads presence per the spec: a flagless spec treats an explicit
   ``None`` as absent, an ``allow_explicit_none=True`` spec HONOURS it, and a spec declaring no
-  default (``NO_DEFAULT``) makes the key required at read time.
+  default (``NO_DEFAULT``) makes the key required at read time. ``options=None`` reads as every
+  key absent, mirroring the selection seam's contract.
 * ``__init_subclass__`` validates the declaration: only ``PropertySpec`` values; no
   ``match_guard``, no ``deferred_binding=True``, no ``context=False``; and ``framework_set=True``
   may not combine with ``strict_validation=True``, ``required_when``, or a missing default.
@@ -474,6 +475,58 @@ class TestNoDefaultMakesTheKeyRequired:
         assert reader.__name__ in message
 
 
+class TestReaderOptionToleratesNoneOptions:
+    """``reader_option(key, None)`` mirrors the selection seam: no Options reads as every key absent.
+
+    ``_reader_options_admit`` already treats ``options=None`` as the all-absent state, so the
+    accessor must agree instead of crashing with an ``AttributeError`` on ``None``.
+    """
+
+    def test_none_options_return_the_declared_default(self) -> None:
+        """With no Options at all, the declared fallback applies exactly as for an absent key."""
+        parent, _, _ = _decl_family()
+        none_options: Any = None  # the accessor's contract widens to Optional[Options]
+
+        assert parent.reader_option("rod_key_a", none_options) == "parent_a"
+
+    def test_none_options_on_an_opted_in_spec_read_absent(self) -> None:
+        """The ``allow_explicit_none`` presence read (``key in options``) must tolerate None too."""
+
+        class RodNoneOptionsOptInReader(BaseInputData):
+            READER_OPTIONS: ClassVar[dict[str, PropertySpec]] = {
+                "rod_none_opt_in_key": PropertySpec(
+                    "Opts into explicit None.", default="declared", allow_explicit_none=True
+                ),
+            }
+
+        none_options: Any = None
+
+        assert RodNoneOptionsOptInReader.reader_option("rod_none_opt_in_key", none_options) == "declared"
+
+    def test_none_options_on_a_no_default_spec_raise_the_absent_key_error(self) -> None:
+        """A NO_DEFAULT key with no Options raises EXACTLY the absent-key ValueError."""
+
+        class RodNoneOptionsRequiredReader(BaseInputData):
+            READER_OPTIONS: ClassVar[dict[str, PropertySpec]] = {
+                "rod_none_required_key": PropertySpec("Required at read time; no declared fallback."),
+            }
+
+        none_options: Any = None
+        with pytest.raises(ValueError) as none_exc:
+            RodNoneOptionsRequiredReader.reader_option("rod_none_required_key", none_options)
+        none_message = str(none_exc.value)
+        del none_exc
+
+        with pytest.raises(ValueError) as absent_exc:
+            RodNoneOptionsRequiredReader.reader_option("rod_none_required_key", Options())
+        absent_message = str(absent_exc.value)
+        del absent_exc
+
+        assert none_message == absent_message
+        assert "rod_none_required_key" in none_message
+        assert "RodNoneOptionsRequiredReader" in none_message
+
+
 class TestMergedSpecCacheStaysFresh:
     """The merged-spec cache is per class, so it can never answer for the wrong class.
 
@@ -675,6 +728,25 @@ class TestReaderOptionsAreValidatedAtClassDefinition:
         assert "RodContextFalseReader" in message
         assert "rod_group_key" in message
         assert "context" in message
+
+    def test_context_zero_spec_rejected_at_class_definition(self) -> None:
+        """``context=0`` cannot slip past the ``is False`` check above: construction rejects it first.
+
+        The spec is built inside the class body, so the ``PropertySpec`` bool guard fires at class
+        definition, before ``_validate_reader_options`` even runs; its message names the field, not
+        the class.
+        """
+        with pytest.raises(ValueError) as exc_info:
+
+            class RodContextZeroReader(BaseInputData):
+                READER_OPTIONS: ClassVar[dict[str, PropertySpec]] = {
+                    "rod_zero_key": _spec("Group-categorized by stealth.", context=0, default=None),
+                }
+
+        message = str(exc_info.value)
+        del exc_info
+        assert "context" in message
+        assert "bool" in message
 
     def test_framework_set_with_strict_validation_rejected(self) -> None:
         """A framework-written value is never user-validated, so strictness on it is a lie."""

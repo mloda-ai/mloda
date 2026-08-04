@@ -111,6 +111,9 @@ class PropertySpec:
                 )
             object.__setattr__(self, "allowed_values", tuple(self.allowed_values))
 
+        if not isinstance(self.context, bool):
+            raise ValueError(f"{prefix}: context must be a bool, got {type(self.context).__name__}.")
+
         if not isinstance(self.strict_validation, bool):
             raise ValueError(
                 f"{prefix}: strict_validation must be a bool, got {type(self.strict_validation).__name__}."

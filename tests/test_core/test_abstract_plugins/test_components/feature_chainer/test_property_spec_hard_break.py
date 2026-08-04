@@ -4,19 +4,20 @@ Phase A introduced ``PropertySpec`` as a typed, frozen spec carrying the ``prope
 invariants. This module pins the Phase B hard break:
 
 1. A raw dict spec in PROPERTY_MAPPING raises at class definition, naming the owning class,
-   the property key and the ``PropertySpec`` remedy. Same for a bare non-dict spec value.
-2. A PROPERTY_MAPPING whose values are ``PropertySpec`` instances defines fine, and the
+   the property key and the ``PropertySpec`` remedy.
+2. A bare non-dict spec value is rejected at class definition with the same naming.
+3. A PROPERTY_MAPPING whose values are ``PropertySpec`` instances defines fine, and the
    matching pipeline behaves exactly as the dict form did: strict accept/reject, context
    categorization of string-parsed values, ``required_when`` and ``match_guard``.
-3. ``FeatureGroup.declared_option_values`` reads a ``PropertySpec``'s ``allowed_values``.
-4. The unknown-key machinery is deleted: ``PROPERTY_SPEC_KEYS`` and ``REMOVED_PROPERTY_KEYS``
+4. ``FeatureGroup.declared_option_values`` reads a ``PropertySpec``'s ``allowed_values``.
+5. The unknown-key machinery is deleted: ``PROPERTY_SPEC_KEYS`` and ``REMOVED_PROPERTY_KEYS``
    no longer exist (``PropertySpec``'s constructor is the schema now).
-5. ``property_spec(...)`` returns a ``PropertySpec`` (``strict=`` maps to
+6. ``property_spec(...)`` returns a ``PropertySpec`` (``strict=`` maps to
    ``strict_validation=``) and its authoring rejections still fire.
-6. ``PropertySpec`` is exported from ``mloda.provider`` and is the same class.
-7. ``FeatureChainParser._can_skip_required_check`` understands ``PropertySpec``: a non-None
+7. ``PropertySpec`` is exported from ``mloda.provider`` and is the same class.
+8. ``FeatureChainParser._can_skip_required_check`` understands ``PropertySpec``: a non-None
    ``default`` or a ``required_when`` predicate makes the key skippable.
-8. ``framework_set`` (issue #949) is a reader-surface flag: a PROPERTY_MAPPING spec declaring
+9. ``framework_set`` (issue #949) is a reader-surface flag: a PROPERTY_MAPPING spec declaring
    ``framework_set=True`` is rejected at class definition, naming the owner class and the key.
 """
 

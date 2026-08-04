@@ -4,8 +4,9 @@
 tests the type in isolation: construction defaults, immutability, ``allowed_values``
 normalization, the flag and callable shape rules, the strict-needs-a-value-space invariant,
 the ``NO_DEFAULT`` optionality sentinel and the declared-default rule (issue #530 semantics).
-The one consumer touched here is the type rule itself: the public parser entry point must
-reject a spec that is not a ``PropertySpec``.
+The one consumer touched here is the spec-shape rule itself: the public parser entry point must
+reject a spec that is not a ``PropertySpec``, and a ``framework_set=True`` spec, which is
+reader-surface only (#949).
 """
 
 from __future__ import annotations
@@ -156,6 +157,22 @@ class TestFlagAndCallableShapeRules:
         with pytest.raises(ValueError, match="(?i)bool"):
             _spec("x", allow_explicit_none=bad_flag)
 
+    @pytest.mark.parametrize("bad_flag", [0, 1])
+    def test_context_must_be_a_real_bool(self, bad_flag: Any) -> None:
+        """An int under ``context`` raises naming the field, like its sibling flags (#949).
+
+        ``context=0`` is the sharp case: it is falsy but is NOT ``False``, so the reader-surface
+        ``spec.context is False`` guard never sees it. The construction guard closes that bypass
+        at the source.
+        """
+        with pytest.raises(ValueError) as exc_info:
+            _spec("x", context=bad_flag, default=None)
+
+        message = str(exc_info.value)
+        del exc_info
+        assert "context" in message
+        assert "bool" in message
+
     def test_non_callable_element_validator_raises(self) -> None:
         """``element_validator`` must be callable."""
         with pytest.raises(ValueError, match="(?i)callable"):
@@ -245,7 +262,7 @@ class TestNoDefaultSentinel:
 
 
 class TestParserEntryPointRequiresPropertySpec:
-    """The public parser entry point enforces the type rule, not just class definition."""
+    """The public parser entry point enforces the spec-shape rules, not just class definition."""
 
     def test_match_configuration_rejects_a_dict_spec(self) -> None:
         """A raw dict spec handed straight to the matcher is a ValueError, never an AttributeError."""
@@ -262,6 +279,25 @@ class TestParserEntryPointRequiresPropertySpec:
 
         with pytest.raises(ValueError, match="not a PropertySpec"):
             FeatureChainParser.validate_property_mapping_defaults("SomeOwner", property_mapping)
+
+    def test_match_configuration_rejects_a_framework_set_spec(self) -> None:
+        """A ``framework_set=True`` spec handed straight to the matcher raises naming the key (#949).
+
+        The flag marks a reader-surface key the framework writes; a caller-supplied mapping never
+        passed the class-definition check, so the match-time entry point must reject it too instead
+        of silently exempting the key from validation.
+        """
+        property_mapping = {"pst949_reader_key": PropertySpec("Reader-surface key.", default=None, framework_set=True)}
+
+        with pytest.raises(ValueError) as exc_info:
+            FeatureChainParser.match_configuration_feature_chain_parser(
+                "any_feature", Options(context={"pst949_reader_key": "x"}), property_mapping
+            )
+
+        message = str(exc_info.value)
+        del exc_info
+        assert "pst949_reader_key" in message
+        assert "framework_set" in message
 
 
 class TestDeclaredDefault:

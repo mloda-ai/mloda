@@ -138,52 +138,60 @@ class BaseInputData(ABC):
         return spec.default
 
     @classmethod
-    def reader_option(cls, key: str, options: Options) -> Any:
+    def reader_option(cls, key: str, options: Optional[Options]) -> Any:
         """The supplied value of key when present, else the declared default.
 
         Presence honours the spec: allow_explicit_none=True reads presence as ``key in options`` (an
-        explicit None is a value), otherwise a non-None ``options.get(key)``. Absent with no declared
-        default (NO_DEFAULT) is a loud ValueError.
+        explicit None is a value), otherwise a non-None ``options.get(key)``. options=None reads as
+        every key absent, mirroring _reader_options_admit. Absent with no declared default
+        (NO_DEFAULT) is a loud ValueError.
         """
         spec = cls._declared_reader_option_spec(key)
-        if spec.allow_explicit_none:
-            present = key in options
-        else:
-            present = options.get(key) is not None
-        if present:
-            return options.get(key)
+        if options is not None:
+            value = options.get(key)
+            present = key in options if spec.allow_explicit_none else value is not None
+            if present:
+                return value
         if is_no_default(spec.default):
             raise ValueError(f"Reader option '{key}' of {cls.__name__} declares no default and no value was supplied.")
         return spec.default
 
     @classmethod
-    def _reader_options_admit(cls, options: Optional[Options]) -> bool:
+    def _reader_options_admit(cls, options: Optional[Options], record_absence: bool) -> bool:
         """Check this candidate's merged declarations BEFORE its probe runs; a veto is its own non-match.
 
         Mirrors the FeatureChainParser semantics on the reader surface (#949 cycle 2): strict
         validation for present keys, requiredness for absent keys, framework-written keys exempt.
         options=None reads as every key absent. Every recorded veto goes through the
         match-rejection channel with stage "input_data"; outside an active window nothing records.
+        record_absence gates ONLY the absence-based requiredness recordings; a present-value strict
+        rejection is about the user's own input and records on both selection paths.
         """
         for key, spec in cls._merged_reader_option_specs().items():
             if spec.framework_set:
                 continue
             if options is None:
-                if not cls._absent_reader_option_admits(key, spec, options):
+                if not cls._absent_reader_option_admits(key, spec, options, record_absence):
                     return False
                 continue
-            present = key in options if spec.allow_explicit_none else options.get(key) is not None
+            value = options.get(key)
+            present = key in options if spec.allow_explicit_none else value is not None
             if not present:
-                if not cls._absent_reader_option_admits(key, spec, options):
+                if not cls._absent_reader_option_admits(key, spec, options, record_absence):
                     return False
             elif spec.strict_validation:
-                if not cls._present_reader_option_admits(key, spec, options.get(key)):
+                if not cls._present_reader_option_admits(key, spec, value):
                     return False
         return True
 
     @classmethod
-    def _absent_reader_option_admits(cls, key: str, spec: PropertySpec, options: Optional[Options]) -> bool:
-        """Requiredness of an ABSENT key: required_when decides when declared, else NO_DEFAULT rejects."""
+    def _absent_reader_option_admits(
+        cls, key: str, spec: PropertySpec, options: Optional[Options], record_absence: bool
+    ) -> bool:
+        """Requiredness of an ABSENT key: required_when decides when declared, else NO_DEFAULT rejects.
+
+        The veto is the same on both selection paths; record_absence says whether it is recorded.
+        """
         owner = cls.get_class_name()
         predicate = spec.required_when
         if predicate is not None:
@@ -201,20 +209,22 @@ class BaseInputData(ABC):
                 )
                 return False
             if is_required:
-                record_match_rejection(
-                    owner,
-                    f"required reader option '{key}' is absent, but {owner} declares it required "
-                    f"(required_when predicate {getattr(predicate, '__name__', repr(predicate))} is satisfied)",
-                    stage="input_data",
-                )
+                if record_absence:
+                    record_match_rejection(
+                        owner,
+                        f"required reader option '{key}' is absent, but {owner} declares it required "
+                        f"(required_when predicate {getattr(predicate, '__name__', repr(predicate))} is satisfied)",
+                        stage="input_data",
+                    )
                 return False
             return True
         if is_no_default(spec.default):
-            record_match_rejection(
-                owner,
-                f"required reader option '{key}' is absent, but {owner} declares it required (no default declared)",
-                stage="input_data",
-            )
+            if record_absence:
+                record_match_rejection(
+                    owner,
+                    f"required reader option '{key}' is absent, but {owner} declares it required (no default declared)",
+                    stage="input_data",
+                )
             return False
         return True
 
@@ -307,7 +317,8 @@ class BaseInputData(ABC):
                 _key = cls.deal_with_base_input_data_name_as_cls_or_str(key)
 
                 if _key == subclass.data_access_name():
-                    if not subclass._reader_options_admit(options):
+                    # The user addressed this reader family by name, so ownership is established: absence vetoes record.
+                    if not subclass._reader_options_admit(options, record_absence=True):
                         break  # Vetoed candidate: the probe never runs, same exit as the non-match below.
                     matched_data_access = subclass.match_subclass_data_access(value, [feature_name], options=options)  # type: ignore[attr-defined]
                     if matched_data_access:
@@ -364,7 +375,8 @@ class BaseInputData(ABC):
         subclasses = get_all_filtered_subclasses(BaseInputData, cls)
 
         for subclass in subclasses:
-            if not subclass._reader_options_admit(options):
+            # A global probe never established ownership, so a silent absence veto cannot displace a real near-miss.
+            if not subclass._reader_options_admit(options, record_absence=False):
                 continue  # Vetoed candidate: siblings keep probing.
             matched_data_access = subclass.match_subclass_data_access(  # type: ignore[attr-defined]
                 data_access_collection, feature_names, options=options

@@ -1,6 +1,7 @@
 """Tests for FeatureChainParserMixin."""
 
-from typing import Optional
+import logging
+from typing import Any, Optional
 
 import pytest
 
@@ -10,7 +11,13 @@ from mloda.user import Options
 from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser_mixin import (
     FeatureChainParserMixin,
 )
+from mloda.core.abstract_plugins.components.utils import escalate_match_abort
 from mloda.provider import DefaultOptionKeys, PropertySpec
+
+
+MIXIN_LOGGER_NAME = "mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser_mixin"
+
+ABORT_MESSAGE = "abort_in_features_escalated"
 
 
 class MockFeatureGroup(FeatureChainParserMixin):
@@ -391,6 +398,21 @@ class TestFeatureChainParserMixinEdgeCases:
         assert feature_names == {"first", "second", "third"}
 
 
+class _MarkedAbortOptions(Options):
+    """Options whose in_features read raises the caller's own exception, so its identity stays assertable."""
+
+    marker: BaseException
+
+    def get_in_features(self) -> "frozenset[Feature]":
+        raise self.marker
+
+
+# Every in_features value the matcher cannot resolve: get_in_features raises a ValueError on the falsy ones and a
+# TypeError on the truthy ones. The ids are explicit; pytest would name the two dicts value4 / value8 and give "" none.
+UNRESOLVABLE_IN_FEATURES = ["", 0, 0.0, False, {}, 5, 1.5, True, {"a": 1}]
+UNRESOLVABLE_IDS = "empty_str zero_int zero_float false empty_dict int float true non_empty_dict".split()
+
+
 class TestFeatureChainParserMixinMinMaxInFeatures:
     """Tests for MIN_IN_FEATURES / MAX_IN_FEATURES enforcement in match_feature_group_criteria."""
 
@@ -499,6 +521,63 @@ class TestFeatureChainParserMixinMinMaxInFeatures:
         )
         result = MockFeatureGroupSingleInFeature.match_feature_group_criteria("any_name", options)
         assert result is False
+
+    @pytest.mark.parametrize("value", UNRESOLVABLE_IN_FEATURES, ids=UNRESOLVABLE_IDS)
+    def test_unresolvable_in_features_is_a_plain_non_match(self, value: Any) -> None:
+        """An in_features value the matcher cannot resolve is a non-match, never a raise."""
+        options = Options(context={"operation": "op1", "in_features": value})
+        result = MockFeatureGroupWithMinMax.match_feature_group_criteria("any_name", options)
+        assert result is False
+
+    @pytest.mark.parametrize("value", ["", {"a": 1}], ids=["falsy_empty_str", "truthy_dict"])
+    def test_unresolvable_in_features_logs_one_debug_line_carrying_the_value(
+        self, value: Any, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """The rejection is readable at DEBUG, carries the offending value, and stays quiet above DEBUG."""
+        options = Options(context={"operation": "op1", "in_features": value})
+        with caplog.at_level(logging.DEBUG, logger=MIXIN_LOGGER_NAME):
+            result = MockFeatureGroupWithMinMax.match_feature_group_criteria("any_name", options)
+        records = [record for record in caplog.records if record.name == MIXIN_LOGGER_NAME]
+        debugs = [record.getMessage() for record in records if record.levelno == logging.DEBUG]
+        loud = [record.getMessage() for record in records if record.levelno >= logging.WARNING]
+
+        assert result is False
+        assert len(debugs) == 1, f"exactly one DEBUG record must report the rejection, got: {debugs}"
+        assert repr(value) in debugs[0], f"the DEBUG record must carry the offending value: {debugs[0]}"
+        assert loud == [], f"an unresolvable value is one group's non-match, not a defect, got: {loud}"
+
+    def test_absent_in_features_still_matches(self) -> None:
+        """Regression pin: an absent in_features never enters the MIN/MAX gate."""
+        options = Options(context={"operation": "op1"})
+        assert MockFeatureGroupWithMinMax.match_feature_group_criteria("any_name", options) is True
+
+    def test_none_in_features_still_matches(self) -> None:
+        """Regression pin: an explicit None skips the gate; it is not an unresolvable value."""
+        options = Options(context={"operation": "op1", "in_features": None})
+        assert MockFeatureGroupWithMinMax.match_feature_group_criteria("any_name", options) is True
+
+    @pytest.mark.parametrize("value", [[], (), frozenset()], ids=["empty_list", "empty_tuple", "empty_frozenset"])
+    def test_empty_collection_still_counts_as_zero_in_features(self, value: Any) -> None:
+        """Regression pin: an empty collection means zero in_features, below MIN=2."""
+        options = Options(context={"operation": "op1", "in_features": value})
+        assert MockFeatureGroupWithMinMax.match_feature_group_criteria("any_name", options) is False
+
+    def test_resolvable_in_features_still_matches(self) -> None:
+        """Regression pin: a value the matcher can count keeps its current behavior."""
+        options = Options(context={"operation": "op1", "in_features": frozenset({Feature("a"), Feature("b")})})
+        assert MockFeatureGroupWithMinMax.match_feature_group_criteria("any_name", options) is True
+
+    @pytest.mark.parametrize("error_type", [ValueError, TypeError], ids=["value_error", "type_error"])
+    def test_marked_match_abort_still_escapes_the_in_features_gate(self, error_type: type[Exception]) -> None:
+        """A raise marked with escalate_match_abort crosses the matcher as the SAME object, never contained."""
+        marker = escalate_match_abort(error_type(ABORT_MESSAGE))
+        # A resolvable-looking raw value, so the gate gets as far as calling get_in_features at all.
+        options = _MarkedAbortOptions(context={"operation": "op1", "in_features": ["a", "b"]})
+        options.marker = marker
+        with pytest.raises(error_type) as exc_info:
+            MockFeatureGroupWithMinMax.match_feature_group_criteria("any_name", options)
+
+        assert exc_info.value is marker, f"the marked exception itself must escape, got: {exc_info.value!r}"
 
 
 class TestFeatureChainParserMixinListValuedOptions:

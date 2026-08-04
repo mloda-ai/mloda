@@ -81,9 +81,9 @@ from mloda.core.abstract_plugins.components.feature_chainer.property_spec import
 from mloda.core.abstract_plugins.components.default_options_key import DefaultOptionKeys
 from mloda.core.abstract_plugins.components.utils import (
     contained_raise_log_level,
+    contained_raise_reason,
     escalate_match_abort,
     is_match_abort,
-    safe_field,
 )
 
 logger = logging.getLogger(__name__)
@@ -257,7 +257,8 @@ class FeatureChainParserMixin:
         invalid. See the module docstring for the full validation design.
 
         Also enforces MIN_IN_FEATURES / MAX_IN_FEATURES constraints when
-        in_features is present in options.
+        in_features is present in options. An in_features value the matcher cannot
+        resolve is a non-match.
 
         ``required_when`` is NOT evaluated here. The guard installed at class definition
         runs the predicates after this method (or any override of it) returns True.
@@ -512,16 +513,22 @@ class FeatureChainParserMixin:
                     # Present but empty: zero in_features, a non-match rather than an error.
                     count = 0
                 else:
-                    # An in_features shape this matcher cannot count (SourceInputFeature stores join
-                    # tuples there) is a NON-MATCH: a group that cannot even count the in_features
-                    # cannot consume them. Skipping MIN/MAX here would accept the feature and let the
-                    # group win a resolution its own cap says it must lose.
-                    in_features: frozenset[Feature] | None = safe_field(
-                        options.get_in_features, None, catching=(TypeError,)
-                    )
-                    if in_features is None:
+                    # An in_features value this matcher cannot count is a non-match, not an error:
+                    # skipping MIN/MAX would let the group win a resolution its own cap says it must lose.
+                    # The catch is narrow on purpose; another exception class is a defect to surface, not a value.
+                    try:
+                        count = len(options.get_in_features())
+                    except (TypeError, ValueError) as exc:
+                        if is_match_abort(exc):
+                            raise
+                        # Text, not exc: a retained record must not pin this frame, its cls and the plugin class.
+                        logger.debug(
+                            "%s cannot resolve in_features value %r: %s",
+                            cls.__name__,
+                            in_features_raw,
+                            contained_raise_reason(exc),
+                        )
                         return False
-                    count = len(in_features)
                 if count < cls.MIN_IN_FEATURES:
                     return False
                 if cls.MAX_IN_FEATURES is not None and count > cls.MAX_IN_FEATURES:

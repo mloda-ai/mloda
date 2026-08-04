@@ -17,10 +17,11 @@ from typing import Any, Optional, TypeVar, cast
 import pytest
 
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
+from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser_mixin import FeatureChainParserMixin
 from mloda.core.abstract_plugins.components.feature_set import FeatureSet
 from mloda.core.abstract_plugins.components.utils import escalate_match_abort
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
-from mloda.provider import DataCreator
+from mloda.provider import DataCreator, DefaultOptionKeys, property_spec
 from mloda.user import Feature, FeatureName, FilterType, GlobalFilter, Options, PluginCollector, SingleFilter, mloda
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
 
@@ -41,6 +42,8 @@ HOSTILE_CLASS_NAME = "HostileFilterMatcherFG899"
 HOSTILE_TYPE_NAME = "HostileFilterMatcherError899"
 HOSTILE_STR_MESSAGE = "boom_899_hostile_str_raised"
 
+FILTER_FEATURE_IN_FEATURES = "gfc_in_features_filter_feat_884"
+
 E2E_MAIN = "gfc_main_feat_899"  # requested root feature; must keep resolving
 E2E_TARGET = "gfc_target_feat_899"  # never requested directly; only reachable as a matched filter feature
 
@@ -55,9 +58,10 @@ def _capture(call: Callable[[], T]) -> tuple[Optional[T], Optional[str]]:
         return None, f"{type(exc).__name__}: {exc}"
 
 
-def _single(filter_feature_name: str) -> SingleFilter:
-    """A minimal EQUAL filter on one feature name."""
-    return SingleFilter(filter_feature_name, FilterType.EQUAL, {"value": 1})
+def _single(filter_feature_name: str, options: Optional[Options] = None) -> SingleFilter:
+    """A minimal EQUAL filter on one feature name, optionally carrying that filter feature's own options."""
+    filter_feature: Feature | str = filter_feature_name if options is None else Feature(filter_feature_name, options)
+    return SingleFilter(filter_feature, FilterType.EQUAL, {"value": 1})
 
 
 def _make_raising_filter_matcher_fg() -> type[FeatureGroup]:
@@ -259,6 +263,7 @@ def _drive_criteria(
     filter_feature_name: str,
     caplog: pytest.LogCaptureFixture,
     calls: int = 1,
+    options: Optional[Options] = None,
 ) -> _DropSnapshot:
     """Call criteria `calls` times against ONE GlobalFilter; the finally unbinds every name that pins the class."""
     caplog.clear()
@@ -272,7 +277,7 @@ def _drive_criteria(
         with caplog.at_level(logging.DEBUG, logger=GF_LOGGER_NAME):
             for _ in range(calls):
                 value, failure = _capture_type_name(
-                    partial(global_filter.criteria, fg, _single(filter_feature_name), None)
+                    partial(global_filter.criteria, fg, _single(filter_feature_name, options), None)
                 )
                 results.append(value)
                 if failure is not None:
@@ -369,6 +374,35 @@ class TestDroppedFilterIsRecorded:
         assert snapshot.escaped is None, f"an ordinary non-match raises nothing: {snapshot.escaped}"
         assert snapshot.results == (False,), f"an unsupported filter feature is a non-match, got: {snapshot.results}"
         assert snapshot.has_ledger, "GlobalFilter must expose a dropped_filters ledger"
+        assert snapshot.entries == (), f"a non-match is not a drop, got: {snapshot.entries}"
+        assert snapshot.warnings == (), f"a non-match must not warn, got: {snapshot.warnings}"
+
+
+def _make_in_features_mixin_fg() -> type[FeatureGroup]:
+    """A throwaway mixin group that matches on its option set, so only the in_features gate can reject a filter."""
+    gc.collect()
+
+    class InFeaturesMixinFilterFG884(FeatureChainParserMixin, FeatureGroup):
+        PROPERTY_MAPPING = {"operation": property_spec("operation", allowed_values=("op1",), context=True)}
+
+        def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+            return None
+
+    return InFeaturesMixinFilterFG884
+
+
+class TestUnresolvableInFeaturesIsNotADrop:
+    def test_unresolvable_in_features_is_a_non_match_without_a_drop(self, caplog: pytest.LogCaptureFixture) -> None:
+        """The value never leaves the matcher, so the seam records no drop and warns about nothing."""
+        snapshot = _drive_criteria(
+            _make_in_features_mixin_fg,
+            FILTER_FEATURE_IN_FEATURES,
+            caplog,
+            options=Options(context={"operation": "op1", DefaultOptionKeys.in_features: ""}),
+        )
+
+        assert snapshot.escaped is None, f"nothing may cross GlobalFilter.criteria: {snapshot.escaped}"
+        assert snapshot.results == (False,), f"an unresolvable in_features is a non-match, got: {snapshot.results}"
         assert snapshot.entries == (), f"a non-match is not a drop, got: {snapshot.entries}"
         assert snapshot.warnings == (), f"a non-match must not warn, got: {snapshot.warnings}"
 

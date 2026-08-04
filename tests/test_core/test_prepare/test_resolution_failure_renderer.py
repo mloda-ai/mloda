@@ -10,6 +10,7 @@ hook. The feature groups below count every such hook, so a renderer that calls o
 All names are suffixed ``_791`` because test feature groups become global subclasses.
 """
 
+import inspect
 import logging
 from abc import abstractmethod
 from ast import literal_eval
@@ -94,6 +95,16 @@ VALUE_DOMAIN_FEATURE_791 = "renderer_value_domain_revenue_791"
 VALUE_DOMAIN_SPARE_791 = "renderer_value_domain_profit_791"
 DEGRADED_DOMAIN_FEATURE_791 = "renderer_degraded_domain_revenue_791"
 DEGRADED_DOMAIN_SPARE_791 = "renderer_degraded_domain_profit_791"
+MALFORMED_DOMAIN_FEATURE_791 = "renderer_malformed_domain_revenue_791"
+MALFORMED_DOMAIN_SPARE_791 = "renderer_malformed_domain_profit_791"
+
+# A get_domain() return that is not a Domain at all: the decision gate compares it and drops the candidate.
+MALFORMED_DOMAIN_VALUE_791 = "renderer_not_a_domain_791"
+
+# The name an abstract base and a framework-less concrete group both declare, plus a typo of it that
+# nothing matches: only whether the abstract base counts as a live declarer decides the suggestion.
+ABSTRACT_DECLARER_NAME_791 = "renderer_uninstantiable_revenue_791"
+ABSTRACT_DECLARER_TYPO_791 = "renderer_uninstantiable_revneue_791"
 
 # The requested domain is declared by no candidate at all, so every domain-carrying request below fails it.
 REQUESTED_DOMAIN_791 = "renderer_requested_domain_791"
@@ -109,6 +120,13 @@ VALUE_DOMAIN_REJECTION_REASON_791 = "ValueRejectingCrossDomainFG791 declines eve
 LIVE_PREFIX_FEATURE_791 = "RendererLivePrefixFG791sum_791"
 LIVE_PREFIX_COVERED_791 = "RendererLivePrefixFG791_sum_791"
 DEAD_PREFIX_UNCOVERED_791 = "RendererDeadPrefixFG791_sum_791"
+
+# The two names the default matcher owns by class identity: the class name itself and its prefix. Neither is
+# declared by anything, so only the candidate that carries them can keep them suggestible. The request is a
+# typo of the class name, close to both and matching neither.
+DEAD_CLASS_NAME_791 = "RendererCrossDomainNameFG791"
+DEAD_CLASS_PREFIX_791 = "RendererCrossDomainNameFG791_"
+DEAD_CLASS_NAME_TYPO_791 = "RendererCrossDoaminNameFG791"
 
 VALUE_STAGE_REJECTION_REASON_791 = "renderer_value_stage_791 declines every value of this option"
 
@@ -177,6 +195,15 @@ def _record_pair(class_name: str, framework_name: str) -> None:
     """Count one capability-hook call for a single (candidate, framework) pair."""
     key = (class_name, framework_name)
     PAIR_CALLS[key] = PAIR_CALLS.get(key, 0) + 1
+
+
+def _malformed(value: Any) -> Any:
+    """Return a deliberately ill-typed value.
+
+    A provider's annotation is a promise, not a guarantee: hiding the value from the type checker is how a
+    real plugin's runtime bug reaches mloda. The gate that compares it still decides, so the core must too.
+    """
+    return value
 
 
 class RendererFwOne791(ComputeFramework):
@@ -635,6 +662,36 @@ class CrossDomainDeclarerFG791(CountingFeatureGroup791):
     FRAMEWORK_RULE = {RendererFwOne791}
 
 
+class RendererCrossDomainNameFG791(CountingFeatureGroup791):
+    """Declares no name at all and owns two by class identity, from a domain no request here asks for.
+
+    Named CLOSE to its request on purpose: the class name and the prefix are the only names it can contribute.
+    """
+
+    DOMAIN_NAME = OTHER_DOMAIN_791
+    FRAMEWORK_RULE = {RendererFwOne791}
+
+    @classmethod
+    def match_feature_group_criteria(
+        cls,
+        feature_name: FeatureName | str,
+        options: Options,
+        data_access_collection: Optional[DataAccessCollection] = None,
+    ) -> bool:
+        _record(cls.get_class_name(), "match_feature_group_criteria")
+        # The two class-identity rules of the default matcher, and the two names the catalog captures for it.
+        name = str(feature_name)
+        return cls.feature_name_equal_to_class_name(name) or cls.feature_name_contains_class_name_as_prefix(name)
+
+
+class RendererLiveNameDeclarerFG791(CountingFeatureGroup791):
+    """Live declarer of the wrong-domain group's two class-identity names, in the requested domain."""
+
+    SUPPORTED_NAMES = frozenset({DEAD_CLASS_NAME_791, DEAD_CLASS_PREFIX_791})
+    DOMAIN_NAME = REQUESTED_DOMAIN_791
+    FRAMEWORK_RULE = {RendererFwOne791}
+
+
 class OutsideScopeDeclarerFG791(CountingFeatureGroup791):
     """Declares and matches the sibling name only, from outside the scope every request here asks for.
 
@@ -643,6 +700,34 @@ class OutsideScopeDeclarerFG791(CountingFeatureGroup791):
 
     MATCHES = frozenset({SCOPE_GATE_SIBLING_791})
     SUPPORTED_NAMES = frozenset({SCOPE_GATE_SIBLING_791})
+    FRAMEWORK_RULE = {RendererFwOne791}
+
+
+class SpareAbstractBaseFG791(CountingFeatureGroup791):
+    """Abstract base declaring and matching one name, in the requested domain: it can never be identified.
+
+    Named far from both feature names on purpose: only its declared name may ever reach the suggestion line.
+    """
+
+    MATCHES = frozenset({ABSTRACT_DECLARER_NAME_791})
+    SUPPORTED_NAMES = frozenset({ABSTRACT_DECLARER_NAME_791})
+    DOMAIN_NAME = REQUESTED_DOMAIN_791
+    FRAMEWORK_RULE = {RendererFwOne791}
+
+    @classmethod
+    @abstractmethod
+    def _renderer_spare_abstract_hook_791(cls) -> str:
+        """Abstract hook that keeps this base uninstantiable."""
+
+
+class SpareDeadTwinFG791(CountingFeatureGroup791):
+    """Concrete declarer of the same name, left without a single enabled framework by every run below.
+
+    Named far from both feature names on purpose: only its declared name may ever reach the suggestion line.
+    """
+
+    MATCHES = frozenset({ABSTRACT_DECLARER_NAME_791})
+    SUPPORTED_NAMES = frozenset({ABSTRACT_DECLARER_NAME_791})
     FRAMEWORK_RULE = {RendererFwOne791}
 
 
@@ -688,7 +773,9 @@ class RendererFrameworkRuleBoom791(RuntimeError):
 
 
 class RaisingHookGroup791(CountingFeatureGroup791):
-    """Base for the groups whose fact-capture hook raises. Its subclasses are ALWAYS built inside a function.
+    """Base for the groups whose fact-capture hook raises or returns a malformed value.
+
+    Its subclasses are ALWAYS built inside a function.
 
     ``ARMED`` is what makes that safe. A group built per test still outlives it: pytest keeps a failing
     test's traceback, and that traceback keeps the builder's frame (and so the class) alive and globally
@@ -756,6 +843,30 @@ def _build_unreadable_domain_group() -> type[CountingFeatureGroup791]:
             return Domain.get_default_domain()
 
     return _armed(UnreadableDomainFG791)
+
+
+def _build_malformed_domain_group() -> type[CountingFeatureGroup791]:
+    """Build a declarer of a sibling name whose get_domain() returns a bare str instead of a Domain.
+
+    Named far from both feature names on purpose: only its declared name may ever reach the suggestion line.
+    """
+
+    class BadDomainReturnFG791(RaisingHookGroup791):
+        """Declarer whose domain read is well-formed as a call and malformed as a value."""
+
+        MATCHES = frozenset({MALFORMED_DOMAIN_SPARE_791})
+        SUPPORTED_NAMES = frozenset({MALFORMED_DOMAIN_SPARE_791})
+        FRAMEWORK_RULE = {RendererFwOne791}
+
+        @classmethod
+        def get_domain(cls) -> Domain:
+            _record(cls.get_class_name(), "get_domain")
+            if cls.ARMED:
+                bad_domain: Domain = _malformed(MALFORMED_DOMAIN_VALUE_791)
+                return bad_domain
+            return Domain.get_default_domain()
+
+    return _armed(BadDomainReturnFG791)
 
 
 def _build_raising_prefix_group() -> type[CountingFeatureGroup791]:
@@ -1152,6 +1263,67 @@ def degraded_domain_scenario() -> Scenario:
     )
 
 
+def malformed_domain_scenario() -> Scenario:
+    """A domain-carrying request whose only declarer of the close sibling name returns a non-Domain domain."""
+    return (
+        Feature(MALFORMED_DOMAIN_FEATURE_791, domain=REQUESTED_DOMAIN_791),
+        {_build_malformed_domain_group(): {RendererFwOne791}},
+    )
+
+
+def malformed_domain_sibling_scenario() -> Scenario:
+    """The same request domain, now asking for the sibling name a suggestion would hand back."""
+    return (
+        Feature(MALFORMED_DOMAIN_SPARE_791, domain=REQUESTED_DOMAIN_791),
+        {_build_malformed_domain_group(): {RendererFwOne791}},
+    )
+
+
+def dead_class_name_scenario() -> Scenario:
+    """A domain-carrying request nothing matches, next to a wrong-domain group its typo names."""
+    return (
+        Feature(DEAD_CLASS_NAME_TYPO_791, domain=REQUESTED_DOMAIN_791),
+        {RendererCrossDomainNameFG791: {RendererFwOne791}},
+    )
+
+
+def dead_class_name_with_live_declarer_scenario() -> Scenario:
+    """The same request, now with a live group declaring both names the wrong-domain group owns."""
+    return (
+        Feature(DEAD_CLASS_NAME_TYPO_791, domain=REQUESTED_DOMAIN_791),
+        {RendererCrossDomainNameFG791: {RendererFwOne791}, RendererLiveNameDeclarerFG791: {RendererFwOne791}},
+    )
+
+
+def dead_class_name_echo_scenario(name: str) -> Scenario:
+    """The same request domain, now asking for one of the two names a suggestion would hand back."""
+    return Feature(name, domain=REQUESTED_DOMAIN_791), {RendererCrossDomainNameFG791: {RendererFwOne791}}
+
+
+def abstract_declarer_typo_scenario() -> Scenario:
+    """A typo nothing matches, next to an abstract declarer of the close name and a framework-less twin."""
+    return (
+        Feature(ABSTRACT_DECLARER_TYPO_791),
+        {SpareAbstractBaseFG791: {RendererFwOne791}, SpareDeadTwinFG791: set()},
+    )
+
+
+def abstract_declarer_name_scenario() -> Scenario:
+    """The same two groups, now asking for the name a suggestion would hand back."""
+    return (
+        Feature(ABSTRACT_DECLARER_NAME_791),
+        {SpareAbstractBaseFG791: {RendererFwOne791}, SpareDeadTwinFG791: set()},
+    )
+
+
+def abstract_domain_gate_scenario() -> Scenario:
+    """An abstract-only failure on a request that carries the domain the abstract base declares."""
+    return (
+        Feature(ABSTRACT_DECLARER_NAME_791, domain=REQUESTED_DOMAIN_791),
+        {SpareAbstractBaseFG791: {RendererFwOne791}},
+    )
+
+
 def raising_dead_names_scenario() -> Scenario:
     """A dead candidate whose feature_names_supported() raises, so it can contribute no name at all."""
     return Feature(RAISING_DEAD_NAMES_FEATURE_791), {_build_raising_dead_names_group(): set()}
@@ -1215,6 +1387,10 @@ FAILING_SCENARIOS: dict[str, Callable[[], Scenario]] = {
     "scope_gate": scope_gate_scenario,
     "value_rejection_cross_domain": value_rejection_cross_domain_scenario,
     "degraded_domain": degraded_domain_scenario,
+    "malformed_domain": malformed_domain_scenario,
+    "dead_class_name": dead_class_name_scenario,
+    "abstract_declarer_typo": abstract_declarer_typo_scenario,
+    "abstract_domain_gate": abstract_domain_gate_scenario,
     "raising_dead_names": raising_dead_names_scenario,
     "raising_domain_multiple": raising_domain_multiple_scenario,
     "raising_prefix_none": raising_prefix_none_scenario,
@@ -1971,7 +2147,7 @@ class TestSuggestionsNeverPointAtADeadGroupsSiblingName:
         assert _suggestions(message) is None
 
     def test_a_raising_names_hook_on_a_dead_candidate_contributes_nothing(self) -> None:
-        """A dead candidate whose name hook raises degrades to no dead name, and takes nothing else down."""
+        """A dead candidate whose name hook raises declares no dead name, and takes nothing else down."""
         scenario = raising_dead_names_scenario()
         feature, accessible_plugins = scenario
         (raising,) = accessible_plugins
@@ -1980,7 +2156,10 @@ class TestSuggestionsNeverPointAtADeadGroupsSiblingName:
 
         assert result.eliminations[raising].stage == "frameworks_not_enabled"
         assert RAISING_DEAD_NAMES_SPARE_791 not in result.facts.known_names
-        assert result.facts.dead_only_names == frozenset()
+        # The declared names could not be read, so all this dead candidate contributes is its class identity:
+        # the hook that raised names nothing at all.
+        assert RAISING_DEAD_NAMES_SPARE_791 not in result.facts.dead_only_names
+        assert result.facts.dead_only_names == frozenset({raising.get_class_name(), raising.prefix()})
 
         message = render_resolution_failure(result, feature)
         assert message is not None
@@ -2113,7 +2292,8 @@ class TestANameBlindGateKillsEveryNameItsCandidateDeclares:
         message = render_resolution_failure(result, feature)
         assert message is not None
         assert message == (
-            f"No feature groups found for feature name: '{DOMAIN_GATE_FEATURE_791}'.\n"
+            f"No feature groups found for feature name: '{DOMAIN_GATE_FEATURE_791}'. "
+            f"Requested domain: '{REQUESTED_DOMAIN_791}'.\n"
             "Use resolve_feature(name, options=...) to debug feature resolution.\n"
             f"{TROUBLESHOOTING_LINE}"
         )
@@ -2175,7 +2355,8 @@ class TestANameBlindGateKillsEveryNameItsCandidateDeclares:
         message = render_resolution_failure(result, feature)
         assert message is not None
         assert message == (
-            f"No feature groups found for feature name: '{VALUE_DOMAIN_FEATURE_791}'.\n"
+            f"No feature groups found for feature name: '{VALUE_DOMAIN_FEATURE_791}'. "
+            f"Requested domain: '{REQUESTED_DOMAIN_791}'.\n"
             f"Feature group(s) eliminated while matching '{VALUE_DOMAIN_FEATURE_791}':\n"
             f"  - ValueRejectingCrossDomainFG791 (option value): {VALUE_DOMAIN_REJECTION_REASON_791}\n"
             "Use resolve_feature(name, options=...) to debug feature resolution.\n"
@@ -2255,8 +2436,208 @@ class TestTheNameBlindGateCaptureCostsNoExtraHookCall:
             candidate.get_class_name(): HOOK_CALLS.get(f"{candidate.get_class_name()}.get_domain", 0)
             for candidate in accessible_plugins
         }
+        # Both counts are pinned EXACTLY: an upper bound also holds when a hook is never called at all, so an
+        # edit that stopped asking about the non-matching candidate entirely would slip through it.
         assert counts["CrossDomainDeclarerFG791"] == 1, counts
-        assert all(count <= 1 for count in counts.values()), counts
+        assert counts["ValueRejectingCrossDomainFG791"] == 1, counts
+
+
+class TestADomainCarryingFailureNamesTheRequestedDomain:
+    """A request that carries a domain says so in its failure message, exactly as a scoped request does.
+
+    The domain is a gate the user set and the reason nothing resolved, so a message that never mentions it
+    describes a run the user did not ask for. The callout sits where ``scope_callout``'s does: on the sentence
+    line, before any near-miss block. The pointer line is unchanged, because ``resolve_feature`` takes the
+    domain on the Feature and has no domain keyword to name.
+    """
+
+    def test_a_none_failure_states_the_requested_domain(self) -> None:
+        """The whole none message, with the domain the request carried on its sentence line."""
+        scenario = domain_gate_scenario()
+        feature, _ = scenario
+        result = _evaluate(scenario)
+
+        # Premise: the request carries a domain, and that domain is why nothing resolved.
+        assert feature.domain is not None
+        assert feature.domain.name == REQUESTED_DOMAIN_791
+        assert result.failure_kind == "none"
+
+        message = render_resolution_failure(result, feature)
+        assert message is not None
+        assert message.split("\n")[0].endswith(f"Requested domain: '{REQUESTED_DOMAIN_791}'.")
+        assert message == (
+            f"No feature groups found for feature name: '{DOMAIN_GATE_FEATURE_791}'. "
+            f"Requested domain: '{REQUESTED_DOMAIN_791}'.\n"
+            "Use resolve_feature(name, options=...) to debug feature resolution.\n"
+            f"{TROUBLESHOOTING_LINE}"
+        )
+
+    def test_an_abstract_only_failure_states_the_requested_domain(self) -> None:
+        """Same callout in the same place on the other message that carries one."""
+        scenario = abstract_domain_gate_scenario()
+        feature, _ = scenario
+        result = _evaluate(scenario)
+
+        # Premise: the abstract base declares the requested domain, so the request reaches the abstract message.
+        assert feature.domain is not None
+        assert result.failure_kind == "abstract_only"
+
+        message = render_resolution_failure(result, feature)
+        assert message == (
+            f"No feature groups found for feature name: '{ABSTRACT_DECLARER_NAME_791}'. "
+            "Only abstract feature group base(s) matched, which cannot be instantiated; "
+            "no concrete implementation is available or enabled. "
+            f"Requested domain: '{REQUESTED_DOMAIN_791}'."
+        )
+
+
+class TestAnAbstractBaseIsNeverALiveDeclarer:
+    """An accessible abstract base can be matched but never identified, so it keeps no name suggestible.
+
+    ``_filter_loop`` parks an abstract candidate in ``abstract_matched`` and never in the identified mapping,
+    whatever name it is asked about: exactly the predicate the dead-name capture computes. Counting it as a
+    live declarer cancels a dead sibling's suppression, and the suggestion then hands back a name whose own
+    message only says the base cannot be instantiated.
+    """
+
+    def test_an_abstract_declarer_does_not_keep_a_dead_siblings_name_suggestible(self) -> None:
+        """The base is accessible and enabled, so only its abstractness can say it declares nothing live."""
+        scenario = abstract_declarer_typo_scenario()
+        feature, _ = scenario
+        result = _evaluate(scenario)
+
+        # Premise: the base is abstract, and nothing else about this run kills it.
+        assert inspect.isabstract(SpareAbstractBaseFG791)
+        assert feature.domain is None
+        assert feature.feature_group_scope is None
+        # Premise: neither candidate matched the typo, so no elimination record judges either of them.
+        assert result.failure_kind == "none"
+        assert result.eliminations == {}
+        # Premise: the shared name is the one name this request ranks, so only this rule can drop it.
+        survivors = [name for name in dict.fromkeys(result.facts.known_names) if name != ABSTRACT_DECLARER_TYPO_791]
+        ranked = get_close_matches(ABSTRACT_DECLARER_TYPO_791, survivors, n=MAX_RENDERED_SUGGESTIONS_791, cutoff=0.5)
+        assert ranked == [ABSTRACT_DECLARER_NAME_791]
+
+        # Suppression is resolution, not just text: following the suggestion renders the abstract-only message.
+        sibling_feature, sibling_plugins = abstract_declarer_name_scenario()
+        sibling = _evaluate((sibling_feature, sibling_plugins))
+        assert sibling.failure_kind == "abstract_only"
+        assert sibling.abstract_matched == {SpareAbstractBaseFG791}
+        assert render_resolution_failure(sibling, sibling_feature) == (
+            f"No feature groups found for feature name: '{ABSTRACT_DECLARER_NAME_791}'. "
+            "Only abstract feature group base(s) matched, which cannot be instantiated; "
+            "no concrete implementation is available or enabled.\n"
+            f"Feature group(s) eliminated while matching '{ABSTRACT_DECLARER_NAME_791}':\n"
+            "  - SpareDeadTwinFG791 (compute framework): none of its compute frameworks are enabled for this run"
+        )
+
+        assert ABSTRACT_DECLARER_NAME_791 in result.facts.dead_only_names
+
+        message = render_resolution_failure(result, feature)
+        assert message is not None
+        assert _suggestions(message) is None
+
+
+class TestADeadCandidatesClassNameAndPrefixAreSuppressedToo:
+    """A dead candidate owns two more names than it declares: its class name and its class-name prefix.
+
+    The live branch of the difference contributes the whole catalog (class name, declared names, prefix) while
+    the dead branch contributes only the declared names, and a candidate that never matched carries no
+    eliminated_hints entry either. So nothing suppresses the two names the default matcher owns by class
+    identity, and both are handed back although both are eliminated at the very same gate.
+    """
+
+    def test_a_dead_candidates_class_name_and_prefix_are_never_suggested(self) -> None:
+        """The wrong-domain group declares no name at all, so only its class identity can be suggested."""
+        scenario = dead_class_name_scenario()
+        feature, _ = scenario
+        result = _evaluate(scenario)
+
+        # Premise: the two constants really are this candidate's class-identity names.
+        assert RendererCrossDomainNameFG791.get_class_name() == DEAD_CLASS_NAME_791
+        assert RendererCrossDomainNameFG791.prefix() == DEAD_CLASS_PREFIX_791
+        # Premise: nothing matched the typo, so no record and no eliminated hint can reach either name.
+        assert result.failure_kind == "none"
+        assert result.eliminations == {}
+        assert result.facts.eliminated_hints == frozenset()
+        # Premise: both names are what this request ranks, so only this rule can drop them.
+        survivors = [name for name in dict.fromkeys(result.facts.known_names) if name != DEAD_CLASS_NAME_TYPO_791]
+        ranked = get_close_matches(DEAD_CLASS_NAME_TYPO_791, survivors, n=MAX_RENDERED_SUGGESTIONS_791, cutoff=0.5)
+        assert ranked == [DEAD_CLASS_NAME_791, DEAD_CLASS_PREFIX_791]
+
+        # Suppression is resolution, not just text: both names really are eliminated at the same gate.
+        for echo_name in (DEAD_CLASS_NAME_791, DEAD_CLASS_PREFIX_791):
+            echo = _evaluate(dead_class_name_echo_scenario(echo_name))
+            assert echo.failure_kind == "none"
+            assert echo.eliminations[RendererCrossDomainNameFG791].stage == "domain"
+
+        assert DEAD_CLASS_NAME_791 in result.facts.dead_only_names
+        assert DEAD_CLASS_PREFIX_791 in result.facts.dead_only_names
+
+        message = render_resolution_failure(result, feature)
+        assert message is not None
+        assert _suggestions(message) is None
+
+    def test_a_live_declarer_of_the_same_two_names_keeps_them_suggestible(self) -> None:
+        """Still a difference, not a per-candidate drop: one live declarer keeps both names worth suggesting."""
+        scenario = dead_class_name_with_live_declarer_scenario()
+        feature, _ = scenario
+        result = _evaluate(scenario)
+
+        # Premise: the live group matched nothing here, so nothing ever eliminates it.
+        assert result.failure_kind == "none"
+        assert RendererLiveNameDeclarerFG791 not in result.eliminations
+        assert RendererLiveNameDeclarerFG791.get_domain() == Domain(REQUESTED_DOMAIN_791)
+
+        assert result.facts.dead_only_names == frozenset()
+
+        message = render_resolution_failure(result, feature)
+        assert message is not None
+        suggestions = _suggestions(message)
+
+        assert suggestions is not None
+        assert {DEAD_CLASS_NAME_791, DEAD_CLASS_PREFIX_791} <= set(suggestions)
+
+
+class TestAMalformedDomainReturnIsDecidedLikeTheGateDecidesIt:
+    """The decision gate is ``domain == feature.domain``, so a non-Domain return FAILS it for every name.
+
+    A raise is the other case: there the gate raises rather than deciding, so nothing is known and the
+    candidate stays live (TestADegradedDomainReadNeverDecidesAgainstACandidate). Reading both through one
+    best-effort name that maps them onto the same None makes the capture disagree with the gate it retests:
+    the same malformed read eliminates a name-matching candidate at 'domain' and keeps a non-matching one alive.
+    """
+
+    def test_a_malformed_get_domain_return_kills_the_names_it_declares(self) -> None:
+        """The candidate never matched, so only the retest decides, and the gate would have decided against it."""
+        scenario = malformed_domain_scenario()
+        feature, accessible_plugins = scenario
+        (malformed,) = accessible_plugins
+        result = _evaluate(scenario)
+
+        # Premise: the request carries a domain, and the candidate never matched, so no gate recorded it.
+        assert feature.domain is not None
+        assert result.failure_kind == "none"
+        assert result.eliminations == {}
+        # Premise: the return really is not a Domain, so the gate compares it and decides against it.
+        assert not isinstance(malformed.get_domain(), Domain)
+        # Premise: the spare is the one name this request ranks, so only this rule can drop it.
+        survivors = [name for name in dict.fromkeys(result.facts.known_names) if name != MALFORMED_DOMAIN_FEATURE_791]
+        ranked = get_close_matches(MALFORMED_DOMAIN_FEATURE_791, survivors, n=MAX_RENDERED_SUGGESTIONS_791, cutoff=0.5)
+        assert ranked == [MALFORMED_DOMAIN_SPARE_791]
+
+        # Suppression is resolution, not just text: requesting the spare is eliminated at the domain gate.
+        sibling_feature, sibling_plugins = malformed_domain_sibling_scenario()
+        (sibling_group,) = sibling_plugins
+        sibling = _evaluate((sibling_feature, sibling_plugins))
+        assert sibling.failure_kind == "none"
+        assert sibling.eliminations[sibling_group].stage == "domain"
+
+        assert MALFORMED_DOMAIN_SPARE_791 in result.facts.dead_only_names
+
+        message = render_resolution_failure(result, feature)
+        assert message is not None
+        assert _suggestions(message) is None
 
 
 class TestEveryEliminationStageIsClassified:

@@ -89,15 +89,15 @@ def as_str(value: Any) -> str:
     return value
 
 
-def unhashable_part(value: Any) -> str | None:
-    """Name of the first part of `value` that does not hash, None when the whole value hashes."""
+def unhashable_part(value: Any, catching: tuple[type[Exception], ...] = (Exception,)) -> str | None:
+    """Name of the first part of `value` whose hash raises one of `catching`, None when the whole value hashes."""
     # Probe the real hash, not isinstance(value, Hashable): a tuple carrying a dict and a __hash__ that
     # raises both report as hashable.
-    if safe_field(lambda: isinstance(hash(value), int), False):
+    if safe_field(lambda: isinstance(hash(value), int), False, catching=catching):
         return None
     if isinstance(value, tuple):
         for element in value:
-            found = unhashable_part(element)
+            found = unhashable_part(element, catching=catching)
             if found is not None:
                 return found
     return type(value).__name__

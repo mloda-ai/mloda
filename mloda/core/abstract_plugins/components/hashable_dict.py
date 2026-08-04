@@ -18,11 +18,12 @@ def _deep_hashable(value: Any) -> Any:
         return tuple(_deep_hashable(item) for item in value)
     if isinstance(value, set):
         return frozenset(_deep_hashable(item) for item in value)
-    # This site coerces an unhashable leaf to repr so grouping never crashes; filter_parameter rejects instead.
+    # A leaf whose hash raises TypeError is coerced to repr so grouping never crashes; any other raise
+    # propagates. filter_parameter rejects broadly instead.
     # Residual constraint: two values that are __eq__-equal but unhashable must have
     # repr consistent with equality, else they over-split into separate groups (a
     # rare, non-crashing tradeoff).
-    if unhashable_part(value) is not None:
+    if unhashable_part(value, catching=(TypeError,)) is not None:
         return repr(value)
     return value
 

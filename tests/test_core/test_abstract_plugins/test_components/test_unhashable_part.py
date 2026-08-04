@@ -1,4 +1,8 @@
-"""Tests for the shared `unhashable_part` probe and its two call sites: filters reject, HashableDict coerces."""
+"""Tests for the shared `unhashable_part` probe and its two call sites.
+
+Filters reject on any probe failure; HashableDict coerces to repr for TypeError only, so a leaf
+whose __hash__ raises anything else still propagates instead of degrading to an address-bearing repr.
+"""
 
 from collections.abc import Hashable
 from typing import Any
@@ -9,9 +13,11 @@ from mloda.core.abstract_plugins.components import feature as feature_module
 from mloda.core.abstract_plugins.components import hashable_dict as hashable_dict_module
 from mloda.core.abstract_plugins.components import options as options_module
 from mloda.core.abstract_plugins.components.hashable_dict import HashableDict, _deep_hashable
+from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.components.utils import unhashable_part
 from mloda.core.filter import filter_parameter as filter_parameter_module
 from mloda.core.filter.filter_parameter import FilterParameterImpl, _normalize_collections
+from mloda.core.filter.global_filter import GlobalFilter
 
 
 class _RaisingHash:
@@ -28,6 +34,19 @@ class _RaisingHash:
 
     def __repr__(self) -> str:
         return f"_RaisingHash({self.token})"
+
+
+class _RaisingValueErrorHash:
+    """A leaf whose __hash__ raises ValueError, like a writable memoryview."""
+
+    def __init__(self, token: str) -> None:
+        self.token = token
+
+    def __hash__(self) -> int:
+        raise ValueError("boom")
+
+    def __eq__(self, other: object) -> bool:
+        return isinstance(other, _RaisingValueErrorHash) and self.token == other.token
 
 
 class TestUnhashablePartOnHashableValues:
@@ -83,6 +102,23 @@ class TestUnhashablePartProbesTheRealHash:
         assert unhashable_part(value) == "_RaisingHash"
 
 
+class TestUnhashablePartCatchingIsSelectable:
+    """`catching` narrows which probe failures count as unhashable; anything else propagates."""
+
+    def test_default_catching_names_a_value_error_raising_leaf(self) -> None:
+        assert unhashable_part(_RaisingValueErrorHash("leaf")) == "_RaisingValueErrorHash"
+
+    def test_type_error_only_catching_still_names_a_type_error_raising_leaf(self) -> None:
+        assert unhashable_part(_RaisingHash("leaf"), catching=(TypeError,)) == "_RaisingHash"
+
+    def test_type_error_only_catching_propagates_a_value_error(self) -> None:
+        with pytest.raises(ValueError):
+            unhashable_part(_RaisingValueErrorHash("leaf"), catching=(TypeError,))
+
+    def test_type_error_only_catching_still_names_a_plain_unhashable_value(self) -> None:
+        assert unhashable_part({"a": 1}, catching=(TypeError,)) == "dict"
+
+
 class TestFilterParameterRejects:
     """Filter policy: normalize collections shallowly, then REJECT anything that still does not hash."""
 
@@ -98,6 +134,14 @@ class TestFilterParameterRejects:
             FilterParameterImpl.from_dict({"value": _RaisingHash("leaf")})
         assert "_RaisingHash" in str(excinfo.value)
 
+    def test_value_error_raising_hash_value_is_rejected_by_name(self) -> None:
+        """The filter path keeps catching broadly: rejection message, not the leaf's own 'boom'."""
+        with pytest.raises(ValueError) as excinfo:
+            FilterParameterImpl.from_dict({"value": _RaisingValueErrorHash("leaf")})
+        message = str(excinfo.value)
+        assert "unhashable _RaisingValueErrorHash" in message
+        assert "boom" not in message
+
     def test_hashable_parameters_still_build(self) -> None:
         parameter = FilterParameterImpl.from_dict({"values": ["a", "b"]})
         assert parameter.values == ["a", "b"]
@@ -107,9 +151,6 @@ class TestFilterParameterRejects:
 
     def test_the_module_private_probe_is_gone(self) -> None:
         assert not hasattr(filter_parameter_module, "_unhashable_type")
-
-    def test_the_old_helper_name_is_gone(self) -> None:
-        assert not hasattr(filter_parameter_module, "_make_hashable")
 
 
 class TestNormalizeCollectionsStaysShallow:
@@ -162,8 +203,44 @@ class TestHashableDictCoerces:
     def test_call_site_uses_the_shared_probe(self) -> None:
         assert getattr(hashable_dict_module, "unhashable_part") is unhashable_part
 
-    def test_the_old_helper_name_is_gone(self) -> None:
-        assert not hasattr(hashable_dict_module, "_make_hashable")
+
+class TestHashableDictCoercesTypeErrorOnly:
+    """Deep path: only a TypeError-refusing leaf degrades to repr; any other raise stays loud."""
+
+    def test_deep_hashable_propagates_a_value_error_leaf(self) -> None:
+        with pytest.raises(ValueError):
+            _deep_hashable(_RaisingValueErrorHash("acme"))
+
+    def test_hashable_dict_propagates_a_value_error_leaf(self) -> None:
+        with pytest.raises(ValueError):
+            hash(HashableDict({"leaf": _RaisingValueErrorHash("acme")}))
+
+    def test_nested_value_error_leaf_also_propagates(self) -> None:
+        with pytest.raises(ValueError):
+            hash(HashableDict({"leaf": [{"inner": _RaisingValueErrorHash("acme")}]}))
+
+    def test_options_hash_propagates_a_value_error_leaf(self) -> None:
+        with pytest.raises(ValueError):
+            hash(Options(group={"leaf": _RaisingValueErrorHash("acme")}))
+
+
+class TestPublicEntryPoints:
+    """The two policies as a caller meets them: filters reject loudly, Options keeps grouping."""
+
+    def test_global_filter_add_filter_rejects_an_unhashable_nested_value(self) -> None:
+        global_filter = GlobalFilter()
+        with pytest.raises(ValueError) as excinfo:
+            global_filter.add_filter("some_feature", "equal", {"values": [{"a": 1}]})
+        message = str(excinfo.value)
+        assert "dict" in message
+        assert "values" in message
+        assert global_filter.filters == set()
+
+    def test_options_hashes_a_type_error_unhashable_leaf(self) -> None:
+        left = Options(group={"leaf": _RaisingHash("acme")})
+        right = Options(group={"leaf": _RaisingHash("acme")})
+        assert left == right
+        assert hash(left) == hash(right)
 
 
 class TestCrossModuleImportsFollowTheRename:
@@ -175,6 +252,6 @@ class TestCrossModuleImportsFollowTheRename:
     def test_feature_imports_deep_hashable(self) -> None:
         assert getattr(feature_module, "_deep_hashable") is _deep_hashable
 
-    @pytest.mark.parametrize("module", [options_module, feature_module])
-    def test_the_old_name_is_no_longer_imported(self, module: Any) -> None:
+    @pytest.mark.parametrize("module", [filter_parameter_module, hashable_dict_module, options_module, feature_module])
+    def test_the_old_helper_name_is_gone(self, module: Any) -> None:
         assert not hasattr(module, "_make_hashable")

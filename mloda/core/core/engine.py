@@ -463,6 +463,7 @@ class Engine:
                     f"Feature {feature.name} does not support compute framework {feature.compute_frameworks}."
                 )
         else:
+            # Hash-safe only because this runs before add_feature_to_collection stores the feature.
             feature.compute_frameworks = compute_frameworks
         return feature
 

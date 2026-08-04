@@ -27,6 +27,11 @@ class ResolveComputeFrameworks:
 
                         self.trekker_right_left_adjuster(link_trekker, {_f.uuid for _f in p[1]})
 
+                        # Rewriting compute_frameworks moves member hashes: rehash so the set and aliases stay valid.
+                        members = list(p[1])
+                        p[1].clear()
+                        p[1].update(members)
+
             new_planned_queue.append(p)
 
         link_trekker.order_links_by_frameworks()

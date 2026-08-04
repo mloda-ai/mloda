@@ -513,17 +513,12 @@ class FeatureChainParserMixin:
                     # Present but empty: zero in_features, a non-match rather than an error.
                     count = 0
                 else:
-                    # An in_features shape this matcher cannot count (SourceInputFeature stores join tuples)
-                    # is a NON-MATCH: a group that cannot even count them cannot consume them, and skipping
-                    # MIN/MAX would let it win a resolution its own cap says it must lose. get_in_features
-                    # also rejects a falsy non-collection ("", 0, False, {}); None is gated above and an empty
-                    # collection counted as zero, so only those reach here, and they are that same non-match
-                    # (#884). Narrow on purpose: another class out of it is a defect for the seam to surface,
-                    # not a value judged here. The DEBUG line therefore also fires for the join-tuple shape.
+                    # An in_features value this matcher cannot count is a non-match, not an error:
+                    # skipping MIN/MAX would let the group win a resolution its own cap says it must lose (#884).
+                    # The catch is narrow on purpose; another exception class is a defect to surface, not a value.
                     try:
                         count = len(options.get_in_features())
                     except (TypeError, ValueError) as exc:
-                        # A marked raise crosses this containment as the same object, as everywhere else.
                         if is_match_abort(exc):
                             raise
                         # Text, not exc: a retained record must not pin this frame, its cls and the plugin class.

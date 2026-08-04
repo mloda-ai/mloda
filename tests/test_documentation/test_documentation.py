@@ -85,8 +85,8 @@ def test_files_good() -> None:
     run_md_files_isolated(sorted(Path("docs").glob("**/*.md")))
 
 
-CODE_BLOCK_PATTERN = re.compile(r"```python\n(.*?)```", re.DOTALL)
-TEST_IMPORT_PATTERN = re.compile(r"^\s*from\s+tests\.", re.MULTILINE)
+CODE_BLOCK_PATTERN = re.compile(r"```(?:python|py)\n(.*?)```", re.DOTALL)
+TEST_IMPORT_PATTERN = re.compile(r"^\s*from\s+tests\..*$", re.MULTILINE)
 
 
 @pytest.mark.parametrize("fpath", sorted(Path("docs/docs").rglob("*.md")), ids=str)
@@ -97,6 +97,21 @@ def test_no_test_imports_in_docs(fpath: Path) -> None:
         for match in TEST_IMPORT_PATTERN.finditer(block.group(1)):
             violations.append(match.group().strip())
     assert not violations, f"{fpath} imports from test modules (not available to users): {violations}"
+
+
+ILLUSTRATIVE_BLOCK_WITH_TEST_IMPORT = "# Doc\n\n```py\nfrom tests.foo import bar\n```\n"
+
+
+def test_test_imports_in_illustrative_blocks_are_scanned() -> None:
+    """A ```py block is read by users too, so its test imports must be caught."""
+    found = [
+        match.group().strip()
+        for block in CODE_BLOCK_PATTERN.finditer(ILLUSTRATIVE_BLOCK_WITH_TEST_IMPORT)
+        for match in TEST_IMPORT_PATTERN.finditer(block.group(1))
+    ]
+    assert found == ["from tests.foo import bar"], (
+        f"CODE_BLOCK_PATTERN matches only ```python, so blocks retagged to ```py go unscanned, got {found}"
+    )
 
 
 DOCS_ROOT = Path("docs/docs")

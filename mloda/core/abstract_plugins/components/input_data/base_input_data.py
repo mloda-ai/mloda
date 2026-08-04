@@ -84,7 +84,7 @@ class BaseInputData(ABC):
                     raise ValueError(
                         f"{cls.__name__}.READER_OPTIONS['{key}'] combines framework_set=True with "
                         f"allow_explicit_none=True; the admit path skips the framework-written key, "
-                        f"so the flag would be silently inert."
+                        f"so the flag cannot affect reader selection."
                     )
                 if is_no_default(spec.default):
                     raise ValueError(

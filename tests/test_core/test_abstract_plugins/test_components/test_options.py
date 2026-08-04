@@ -298,7 +298,7 @@ class TestOptionsNestedStructureHashing:
 
     WHY THIS EXISTS:
     Options.group may contain nested dicts, lists, or sets for complex configuration.
-    The _make_hashable helper recursively converts these to hashable equivalents,
+    The _deep_hashable helper recursively converts these to hashable equivalents,
     enabling proper hashing and use in sets/dicts for feature group resolution.
     """
 

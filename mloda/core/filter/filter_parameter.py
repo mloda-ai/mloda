@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from typing import Any, Optional, Protocol, cast, runtime_checkable
 
-from mloda.core.abstract_plugins.components.utils import safe_field
+from mloda.core.abstract_plugins.components.utils import unhashable_part
 
 
 @runtime_checkable
@@ -22,7 +22,7 @@ class FilterParameter(Protocol):
     def max_exclusive(self) -> bool: ...
 
 
-def _make_hashable(value: Any) -> Any:
+def _normalize_collections(value: Any) -> Any:
     """Normalize collection values to tuples so the frozen dataclass stays hashable.
 
     Sets are ordered deterministically, str/bytes stay scalar and are never exploded.
@@ -36,19 +36,6 @@ def _make_hashable(value: Any) -> Any:
     return value
 
 
-def _unhashable_type(value: Any) -> str | None:
-    """Name of the first part of `value` that does not hash, None when the whole value hashes."""
-    # Probe the real hash, not isinstance(value, Hashable): a __hash__ that raises reports as hashable.
-    if safe_field(lambda: isinstance(hash(value), int), False):
-        return None
-    if isinstance(value, tuple):
-        for element in value:
-            found = _unhashable_type(element)
-            if found is not None:
-                return found
-    return type(value).__name__
-
-
 @dataclass(frozen=True)
 class FilterParameterImpl:
     _raw: tuple[tuple[str, Any], ...]
@@ -59,9 +46,10 @@ class FilterParameterImpl:
         for key in params:
             if not isinstance(key, str):
                 raise ValueError(f"Filter parameter key {key!r} is not a string.")
-        normalized = {k: _make_hashable(v) for k, v in params.items()}
+        normalized = {k: _normalize_collections(v) for k, v in params.items()}
+        # This site rejects what still does not hash; _deep_hashable in hashable_dict coerces instead.
         for key, value in normalized.items():
-            culprit = _unhashable_type(value)
+            culprit = unhashable_part(value)
             if culprit is not None:
                 raise ValueError(
                     f"Filter parameter '{key}' holds an unhashable {culprit}; "

@@ -1,7 +1,7 @@
 """Regression tests for similarity hashing over an unhashable INHERITED context value.
 
 Feature.similarity_hash / base_similarity_hash now fold INHERITED context VALUES into
-the grouping hash via _split_context_hashable -> _make_hashable. _make_hashable only
+the grouping hash via _split_context_hashable -> _deep_hashable. _deep_hashable only
 unwraps dict/list/tuple/set; a context value that is itself unhashable and NOT a
 container (an object whose __hash__ is None) reaches the outer hash(...) untouched and
 raises TypeError. Pre-PR the context was never hashed, so propagated/inherited

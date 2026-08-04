@@ -1,9 +1,11 @@
 from typing import Any
 
+from mloda.core.abstract_plugins.components.utils import unhashable_part
 
-def _make_hashable(value: Any) -> Any:
+
+def _deep_hashable(value: Any) -> Any:
     if isinstance(value, dict):
-        items = [(k, _make_hashable(v)) for k, v in value.items()]
+        items = [(k, _deep_hashable(v)) for k, v in value.items()]
         # Mixed-type keys (e.g. reader class plus str) are unorderable; fall back to a
         # type-robust deterministic sort. The common orderable case stays unchanged.
         try:
@@ -13,16 +15,14 @@ def _make_hashable(value: Any) -> Any:
                 sorted(items, key=lambda kv: (kv[0].__class__.__module__, kv[0].__class__.__qualname__, repr(kv[0])))
             )
     if isinstance(value, (list, tuple)):
-        return tuple(_make_hashable(item) for item in value)
+        return tuple(_deep_hashable(item) for item in value)
     if isinstance(value, set):
-        return frozenset(_make_hashable(item) for item in value)
-    # Unhashable non-container leaves fall back to repr so grouping never crashes.
+        return frozenset(_deep_hashable(item) for item in value)
+    # This site coerces an unhashable leaf to repr so grouping never crashes; filter_parameter rejects instead.
     # Residual constraint: two values that are __eq__-equal but unhashable must have
     # repr consistent with equality, else they over-split into separate groups (a
     # rare, non-crashing tradeoff).
-    try:
-        hash(value)
-    except TypeError:
+    if unhashable_part(value) is not None:
         return repr(value)
     return value
 
@@ -32,7 +32,7 @@ class HashableDict:
         self.data = data
 
     def __hash__(self) -> int:
-        return hash(_make_hashable(self.data))
+        return hash(_deep_hashable(self.data))
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, HashableDict):

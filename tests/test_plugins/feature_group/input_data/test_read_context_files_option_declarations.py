@@ -165,7 +165,7 @@ class TestDeclaredDefaults:
     def test_a_list_default_would_hash_equal_yet_compare_unequal(self) -> None:
         """The real reason the declared default is a tuple, pinned on ``Options`` itself.
 
-        Group hashing is NOT the problem: ``Options.__hash__`` runs ``_make_hashable``, which normalizes
+        Group hashing is NOT the problem: ``Options.__hash__`` runs ``_deep_hashable``, which normalizes
         a list to a tuple, so a list default hashes fine. The problem is that hashing and equality then
         disagree: the two forms land in the same hash bucket but compare unequal, so a caller who passes
         ``["__init__.py"]`` gets a feature that never merges with the materialized ``("__init__.py",)``.

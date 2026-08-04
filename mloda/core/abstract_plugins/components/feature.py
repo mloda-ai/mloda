@@ -361,6 +361,9 @@ class Feature:
         embeds the object address, so deep-copying a value would silently shift this Feature's hash and
         break the very dedup the copy protects. Both containers are written in place by the engine
         (intake forwarding, strict_type_enforcement, matcher writes), which is what the copy stops.
+
+        compute_frameworks is hashed too, so it is owned for the same reason. A shallow set() copy is
+        enough: its elements are classes, not option values with a repr/address hazard.
         """
         # One level: a Feature nested inside child_options.group keeps sharing its own options, the
         # documented limitation class of _isolate_forwarded_value.
@@ -369,6 +372,8 @@ class Feature:
         duplicate.options = copy(self.options)
         if self.child_options is not None:
             duplicate.child_options = copy(self.child_options)
+        if self.compute_frameworks is not None:
+            duplicate.compute_frameworks = set(self.compute_frameworks)
         return duplicate
 
     def _child_options_key(self) -> Any:

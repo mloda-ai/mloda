@@ -7,6 +7,8 @@ sitting in the public ``GlobalFilter.filters`` set. Three public paths reach it 
 ``strict_type_enforcement=True`` adds a group key to the shared ``Options`` in place, and that same
 in-place write lands on the ``child_options`` the engine stamped onto a cached input feature. Either
 way the set loses its own member and a value-equal ``add_filter`` stops deduplicating.
+
+``compute_frameworks`` is hashed too and a caller can write it in place, so the filter feature owns it as well.
 """
 
 from __future__ import annotations
@@ -20,6 +22,7 @@ from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.provider import DataCreator, PropertySpec
 from mloda.user import DataType, Feature, FilterType, GlobalFilter, Options, PluginCollector, SingleFilter, mloda
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
+from mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_framework import SqliteFramework
 
 
 # The sfo_ prefix keeps every key and feature name unique to this module.
@@ -35,6 +38,7 @@ SFO_CONSUMER_FEATURE = "sfo_cached_consumer"
 SFO_CONSUMER_KEY = "sfo_consumer_key"
 SFO_LEAF_FEATURE = "sfo_leaf_feature"
 SFO_LEAF_KEY = "sfo_leaf_key"
+SFO_CFW_FEATURE = "sfo_cfw_feature"
 
 
 def _make_shared_fg(name: str, property_mapping: dict[str, PropertySpec]) -> type[FeatureGroup]:
@@ -320,6 +324,39 @@ def test_single_filter_stays_in_its_set_when_the_caller_feature_changes() -> Non
     feature.options.add_to_group(SFO_LATE_KEY, "late")
     assert single_filter in holder, "a caller-side mutation must not lose the filter from its set"
     feature.options = Options(group={SFO_UNIT_KEY: "rebound"})
+    assert single_filter in holder, "a caller-side rebind must not lose the filter from its set"
+
+
+def _cfw_feature() -> Feature:
+    return Feature(SFO_CFW_FEATURE, compute_framework=PythonDictFramework.get_class_name())
+
+
+def test_single_filter_does_not_alias_the_caller_features_compute_frameworks() -> None:
+    """Value-equal to the caller's set, never the same object."""
+    feature = _cfw_feature()
+    single_filter = SingleFilter(feature, FilterType.EQUAL, {"value": 1})
+    assert single_filter.filter_feature.compute_frameworks == feature.compute_frameworks, "must equal the caller's"
+    assert single_filter.filter_feature.compute_frameworks is not feature.compute_frameworks, "must not alias"
+
+
+def test_single_filter_hash_survives_an_in_place_compute_frameworks_write() -> None:
+    feature = _cfw_feature()
+    single_filter = SingleFilter(feature, FilterType.EQUAL, {"value": 1})
+    before = hash(single_filter)
+    assert feature.compute_frameworks is not None
+    feature.compute_frameworks.add(SqliteFramework)
+    assert hash(single_filter) == before, "a caller-side in-place write must not shift the filter's hash"
+
+
+def test_single_filter_stays_in_its_set_when_the_caller_adds_a_compute_framework() -> None:
+    """Findable after an in-place write, and after a rebind."""
+    feature = _cfw_feature()
+    single_filter = SingleFilter(feature, FilterType.EQUAL, {"value": 1})
+    holder = {single_filter}
+    assert feature.compute_frameworks is not None
+    feature.compute_frameworks.add(SqliteFramework)
+    assert single_filter in holder, "a caller-side in-place write must not lose the filter from its set"
+    feature.compute_frameworks = {SqliteFramework}
     assert single_filter in holder, "a caller-side rebind must not lose the filter from its set"
 
 

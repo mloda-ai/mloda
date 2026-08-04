@@ -337,7 +337,11 @@ class FeatureChainParserMixin:
                 prefix_patterns=cls._get_prefix_patterns(),
                 owner_name=cls.__name__,
             )
+        # PropertyValueRejection subclasses ValueError, so this handler sits above the abort check and must
+        # run it: an unmarked rejection is the parser's non-match verdict, recorded as the candidate's reason.
         except PropertyValueRejection as exc:
+            if is_match_abort(exc):
+                raise
             record_match_rejection(cls.__name__, str(exc))
             return False
         # A marked raise crosses this containment; an unmarked ValueError stays a non-match.
@@ -481,6 +485,7 @@ class FeatureChainParserMixin:
                 continue
             try:
                 rejected = not guard(value)
+            # Swallows: a guard that raises cannot judge the value, so the value counts as rejected.
             except Exception as exc:
                 level = contained_raise_log_level(exc)
                 # Text, not exc: a retained record must not pin the traceback, its frames and the plugin class.

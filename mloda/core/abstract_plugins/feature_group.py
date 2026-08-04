@@ -801,8 +801,11 @@ class FeatureGroup(ABC):
             if self.input_features(options, feature_name) is None:
                 # No input features declared, so this is a root feature.
                 return True
-        except NotImplementedError:
-            # input_features not implemented means this is a root feature.
+        # An unimplemented input_features is the documented way to declare a root feature, but this handler
+        # sits above the abort check below it, so a marked raise has to cross it first.
+        except NotImplementedError as exc:
+            if is_match_abort(exc):
+                raise
             return True
         except Exception as exc:
             # Errors in input_features (e.g. validation failures for this feature name)

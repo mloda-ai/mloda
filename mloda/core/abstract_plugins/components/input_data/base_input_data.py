@@ -180,9 +180,9 @@ class BaseInputData(ABC):
         owner = cls.get_class_name()
         predicate = spec.required_when
         if predicate is not None:
-            # A predicate that raises cannot judge, so the reader is a silent non-match, not the run.
             try:
                 is_required = bool(predicate(options if options is not None else Options()))
+            # Swallows: a predicate that raises cannot judge, so the reader is a non-match, not the run.
             except Exception as exc:
                 logger.log(
                     contained_raise_log_level(exc),
@@ -235,10 +235,9 @@ class BaseInputData(ABC):
         """One element's verdict: a declared element_validator REPLACES membership."""
         validator = spec.element_validator
         if validator is not None:
-            # A validator that raises cannot judge the value, so the value is rejected, not the run.
             try:
                 return bool(validator(element))
-            except Exception as exc:
+            except Exception as exc:  # Swallows: a validator that raises cannot judge the value, so it is rejected.
                 logger.log(
                     contained_raise_log_level(exc),
                     "element_validator for reader option '%s' of %s raised %s; treating value as rejected.",
@@ -247,9 +246,9 @@ class BaseInputData(ABC):
                     exc,
                 )
                 return False
-        # An unhashable element can never be a member of the value space: a clean rejection, not a TypeError.
         try:
             return spec.allowed_values is not None and element in spec.allowed_values
+        # Swallows: an unhashable element can never be a member, so the TypeError is a clean rejection.
         except TypeError:
             return False
 
@@ -501,6 +500,7 @@ class BaseInputData(ABC):
         try:
             cls.suffix()  # type: ignore[attr-defined]
             return True
+        # Swallows: the probe asks whether suffix() is implemented, and both classes ARE that answer.
         except (NotImplementedError, AttributeError):
             return False
 

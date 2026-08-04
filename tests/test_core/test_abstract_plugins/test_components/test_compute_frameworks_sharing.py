@@ -1,17 +1,8 @@
-"""Rot guard: ``Feature.compute_frameworks`` is REBOUND, never mutated in place.
+"""Rot guard: ``Feature.compute_frameworks`` is rebound, never mutated in place.
 
-The set is shared by reference (``GlobalFilter.compute_framework`` aliases the resolved feature's set into the
-filter feature; ``resolve_compute_frameworks.py:24-26`` binds ONE set to EVERY Feature of a ``PlannedQueue``
-entry, an N-holder alias) while it also feeds ``Feature.__eq__`` and ``Feature.__hash__``. An in-place write
-therefore shifts the hash of every other holder and strands it in any set or dict it sits in; a rebind leaves
-the other holders untouched.
-
-Blind spot: a local alias (``cfs = feature.compute_frameworks``, then ``cfs.add(x)``) is invisible to a source
-scan, and ``identify_feature_group.py:131`` already binds such a local.
-
-Same-named attributes that are not this set, so a write there would be a false positive (none trips today):
-``CfwManager.compute_frameworks`` (dict), ``FeatureGroupInfo.compute_frameworks`` (list[str]),
-``SetupComputeFramework.compute_frameworks`` (the available-framework set).
+The set is shared by reference and feeds ``__eq__``/``__hash__``, so an in-place write shifts the hash of
+every other holder. Blind spot: a local alias (``cfs = feature.compute_frameworks``) is invisible to this
+source scan, and a same-named attribute on a non-Feature class would be a false positive.
 """
 
 from __future__ import annotations
@@ -45,7 +36,6 @@ MUTATING_METHODS = frozenset(
     }
 )
 
-# The augmented assignments a set supports. An unlisted op on the attribute is still reported, by its node name.
 AUG_OP_SYMBOLS: dict[type[ast.operator], str] = {
     ast.BitOr: "|=",
     ast.BitAnd: "&=",
@@ -53,20 +43,16 @@ AUG_OP_SYMBOLS: dict[type[ast.operator], str] = {
     ast.BitXor: "^=",
 }
 
-# mloda is a namespace package, so __file__ is None: its directories come from __path__. An editable install
-# repeats a directory there, hence the dedup.
+# Namespace package: the directories come from __path__, and an editable install repeats one, hence the dedup.
 SCAN_ROOTS = sorted(
     {Path(entry).resolve() for entry in (*mloda.__path__, *mloda_plugins.__path__) if Path(entry).is_dir()}
 )
 
 _HINT = (
-    "Rebind instead: feature.compute_frameworks = {...}. The set is shared by reference "
-    "(GlobalFilter.compute_framework, ResolveComputeFrameworks.links) and feeds Feature.__eq__/__hash__, so an "
-    "in-place write shifts the hash of every other holder and loses it from any set or dict it sits in. "
-    "If the flagged holder is not a Feature, rename its attribute or teach the guard to skip it."
+    "Rebind instead: feature.compute_frameworks = {...}. The set is shared by reference and feeds "
+    "Feature.__eq__/__hash__. If the flagged holder is not a Feature, teach the guard to skip it."
 )
 
-# Every form the guard must catch, one per line, as source text the guard parses but never executes.
 EVERY_IN_PLACE_FORM = """
 def rot(feature, framework):
     feature.compute_frameworks.add(framework)
@@ -84,7 +70,6 @@ def rot(feature, framework):
     feature.compute_frameworks ^= {framework}
 """
 
-# The sanctioned forms: rebinding, deliberate aliasing, reading, iterating, snapshotting, other attributes.
 LEGAL_FORMS = """
 def legal(feature, other, framework):
     feature.compute_frameworks = {framework}
@@ -109,7 +94,7 @@ def _is_target_attribute(node: ast.expr) -> bool:
 
 
 def _mutating_method(node: ast.Call) -> str | None:
-    """The set method a call mutates ``<expr>.compute_frameworks`` with, None for anything else."""
+    """The set method the call mutates the attribute with, None for anything else."""
     func = node.func
     if not isinstance(func, ast.Attribute) or func.attr not in MUTATING_METHODS:
         return None
@@ -150,7 +135,7 @@ def _configured_forms() -> set[str]:
 
 
 def test_no_module_mutates_compute_frameworks_in_place() -> None:
-    """Every module under mloda/ and mloda_plugins/ must rebind the attribute instead of writing it in place."""
+    """Scope: every module under mloda/ and mloda_plugins/."""
     # Vacuity floor, NOT a target: a sweep over half the tree would pass this guard trivially.
     assert {root.name for root in SCAN_ROOTS} >= {"mloda", "mloda_plugins"}, f"roots: {SCAN_ROOTS}"
 
@@ -162,14 +147,14 @@ def test_no_module_mutates_compute_frameworks_in_place() -> None:
 
 
 def test_the_sweep_reaches_both_trees() -> None:
-    """A sweep that reaches no files passes trivially, so the file count itself is pinned."""
+    """A sweep over no files would pass trivially."""
     scanned = [path for root in SCAN_ROOTS for path in root.rglob("*.py")]
     # Vacuity floor, NOT a target: well under the measured total (288 today) so deleting a module stays legitimate.
     assert len(scanned) > 100, f"only {len(scanned)} files scanned"
 
 
 def test_guard_flags_every_in_place_write_form() -> None:
-    """Positive control: without it the guard could rot into one that detects nothing."""
+    """Positive control."""
     assert sorted(_forms(_violations_in_source(EVERY_IN_PLACE_FORM, "rot.py"))) == sorted(
         [
             ".compute_frameworks &= ...",
@@ -190,24 +175,22 @@ def test_guard_flags_every_in_place_write_form() -> None:
 
 
 def test_the_positive_control_covers_every_configured_form() -> None:
-    """Adding a method or operator to the configuration must not go untested."""
     assert set(_forms(_violations_in_source(EVERY_IN_PLACE_FORM, "rot.py"))) == _configured_forms()
 
 
 def test_guard_reports_the_file_and_line_of_a_violation() -> None:
-    """The failure message must name the offending site, not just that one exists."""
     source = "x = 1\nfeature.compute_frameworks.add(x)\n"
     assert _violations_in_source(source, "some/module.py") == ["some/module.py:2: .compute_frameworks.add(...)"]
 
 
 def test_guard_flags_a_mutation_through_a_nested_base_expression() -> None:
-    """The base expression is irrelevant: only the attribute it ends in decides."""
+    """Only the attribute the expression ends in decides."""
     source = "def rot(f, filters):\n    filters[0].filter_feature.compute_frameworks.add(f)\n"
     assert _forms(_violations_in_source(source, "nested.py")) == [".compute_frameworks.add(...)"]
 
 
 def test_guard_allows_rebinding_reading_and_unrelated_attributes() -> None:
-    """Negative control: the sanctioned forms must stay unflagged or the guard is unusable."""
+    """Negative control."""
     assert _violations_in_source(LEGAL_FORMS, "legal.py") == []
 
 
@@ -216,7 +199,7 @@ def _feature_with_framework(name: str = CFS_FEATURE) -> Feature:
 
 
 def test_copy_owns_its_compute_frameworks_set() -> None:
-    """__copy__ owns that set exactly as it owns options: value-equal to the original, never the same object."""
+    """Value-equal to the original, never the same object."""
     feature = _feature_with_framework()
     assert feature.compute_frameworks == {PythonDictFramework}
     duplicate = copy(feature)
@@ -225,14 +208,14 @@ def test_copy_owns_its_compute_frameworks_set() -> None:
 
 
 def test_copy_of_a_feature_without_frameworks_keeps_none() -> None:
-    """Characterization: an unresolved feature copies as unresolved."""
+    """Characterization."""
     feature = Feature(CFS_FEATURE)
     assert feature.compute_frameworks is None
     assert copy(feature).compute_frameworks is None
 
 
 def test_global_filter_aliases_the_features_set_into_a_filter_feature_without_one() -> None:
-    """Characterization: a filter feature with no framework adopts the resolved feature's set object."""
+    """Characterization: the alias is deliberate."""
     feat = _feature_with_framework()
     single_filter = SingleFilter(Feature(CFS_FILTER_FEATURE), FilterType.EQUAL, {"value": 1})
     assert single_filter.filter_feature.compute_frameworks is None
@@ -242,7 +225,7 @@ def test_global_filter_aliases_the_features_set_into_a_filter_feature_without_on
 
 
 def test_two_independently_built_features_own_separate_sets() -> None:
-    """Characterization: the constructor allocates per instance, so sharing only ever comes from a copy or alias."""
+    """Characterization: sharing only ever comes from a copy or an alias."""
     first = _feature_with_framework()
     second = _feature_with_framework()
     assert first.compute_frameworks == second.compute_frameworks
@@ -250,7 +233,7 @@ def test_two_independently_built_features_own_separate_sets() -> None:
 
 
 def _aliased_pair() -> tuple[Feature, Feature]:
-    """Two features sharing one set object, the sanctioned aliasing form the guard protects."""
+    """Two features sharing one set object, the sanctioned aliasing form."""
     feature = _feature_with_framework()
     alias = _feature_with_framework(CFS_FILTER_FEATURE)
     alias.compute_frameworks = feature.compute_frameworks
@@ -258,7 +241,7 @@ def _aliased_pair() -> tuple[Feature, Feature]:
 
 
 def test_an_in_place_write_through_an_alias_loses_a_feature_from_a_set() -> None:
-    """Why the guard exists: the shared set feeds __hash__, so one alias's write strands the other holder."""
+    """Why the guard exists."""
     feature, alias = _aliased_pair()
     holder = {feature}
     assert feature in holder
@@ -271,7 +254,7 @@ def test_an_in_place_write_through_an_alias_loses_a_feature_from_a_set() -> None
 
 
 def test_a_rebind_through_an_alias_leaves_the_other_holder_findable() -> None:
-    """The sanctioned form, from the same angle: rebinding the alias does not touch the stored feature."""
+    """The sanctioned form, from the same angle."""
     feature, alias = _aliased_pair()
     holder = {feature}
 

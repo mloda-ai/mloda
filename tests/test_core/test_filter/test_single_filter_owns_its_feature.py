@@ -8,8 +8,7 @@ sitting in the public ``GlobalFilter.filters`` set. Three public paths reach it 
 in-place write lands on the ``child_options`` the engine stamped onto a cached input feature. Either
 way the set loses its own member and a value-equal ``add_filter`` stops deduplicating.
 
-``compute_frameworks`` is hashed too, and a caller can write it in place at any time, so the filter
-feature owns that set as well (#924).
+``compute_frameworks`` is hashed too and a caller can write it in place, so the filter feature owns it as well.
 """
 
 from __future__ import annotations
@@ -329,24 +328,18 @@ def test_single_filter_stays_in_its_set_when_the_caller_feature_changes() -> Non
 
 
 def _cfw_feature() -> Feature:
-    """A plain feature pinned to one compute framework, for the compute_frameworks ownership pins."""
     return Feature(SFO_CFW_FEATURE, compute_framework=PythonDictFramework.get_class_name())
 
 
 def test_single_filter_does_not_alias_the_caller_features_compute_frameworks() -> None:
-    """A SingleFilter owns that set too: value-equal to the caller's, never the same object."""
+    """Value-equal to the caller's set, never the same object."""
     feature = _cfw_feature()
     single_filter = SingleFilter(feature, FilterType.EQUAL, {"value": 1})
-    assert single_filter.filter_feature.compute_frameworks == feature.compute_frameworks, (
-        "the filter's own compute_frameworks must equal the caller's"
-    )
-    assert single_filter.filter_feature.compute_frameworks is not feature.compute_frameworks, (
-        "the filter must not alias the caller's compute_frameworks set"
-    )
+    assert single_filter.filter_feature.compute_frameworks == feature.compute_frameworks, "must equal the caller's"
+    assert single_filter.filter_feature.compute_frameworks is not feature.compute_frameworks, "must not alias"
 
 
 def test_single_filter_hash_survives_an_in_place_compute_frameworks_write() -> None:
-    """Adding a framework to the caller's set in place must not shift the filter's hash."""
     feature = _cfw_feature()
     single_filter = SingleFilter(feature, FilterType.EQUAL, {"value": 1})
     before = hash(single_filter)
@@ -356,7 +349,7 @@ def test_single_filter_hash_survives_an_in_place_compute_frameworks_write() -> N
 
 
 def test_single_filter_stays_in_its_set_when_the_caller_adds_a_compute_framework() -> None:
-    """A stored filter stays findable after the caller writes compute_frameworks in place, then rebinds."""
+    """Findable after an in-place write, and after a rebind."""
     feature = _cfw_feature()
     single_filter = SingleFilter(feature, FilterType.EQUAL, {"value": 1})
     holder = {single_filter}

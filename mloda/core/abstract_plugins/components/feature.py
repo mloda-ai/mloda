@@ -362,10 +362,8 @@ class Feature:
         break the very dedup the copy protects. Both containers are written in place by the engine
         (intake forwarding, strict_type_enforcement, matcher writes), which is what the copy stops.
 
-        compute_frameworks, read by __eq__/__hash__ too, is owned as well (#924), same reason: a
-        caller-side in-place write must not shift this Feature's hash. A shallow set() copy suffices
-        here because the elements are classes, so unlike an option value there is no repr/address
-        hazard. Library-side writes still only rebind: test_compute_frameworks_sharing.py.
+        compute_frameworks is hashed too, so it is owned for the same reason. A shallow set() copy is
+        enough: its elements are classes, not option values with a repr/address hazard.
         """
         # One level: a Feature nested inside child_options.group keeps sharing its own options, the
         # documented limitation class of _isolate_forwarded_value.

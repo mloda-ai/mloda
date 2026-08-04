@@ -72,6 +72,11 @@ def _raise_records(caplog: pytest.LogCaptureFixture, logger_name: str, level: in
     ]
 
 
+def _module_records(caplog: pytest.LogCaptureFixture, logger_name: str) -> list[logging.LogRecord]:
+    """Only the module under test; DEBUG capture is global, so a neighbour's record is not this contract."""
+    return [record for record in caplog.records if record.name == logger_name]
+
+
 def _run_validator(validator: Any, caplog: pytest.LogCaptureFixture) -> None:
     """Drive the parser's element_validator seam."""
     property_mapping = {
@@ -103,7 +108,7 @@ class TestParserElementValidatorRaiseLogsNoExceptionObject:
         _run_validator(_clr975_validator_raises_unexpected, caplog)
 
         assert _raise_records(caplog, PARSER_LOGGER_NAME, logging.WARNING), "the broken-looking validator warns"
-        for record in caplog.records:
+        for record in _module_records(caplog, PARSER_LOGGER_NAME):
             assert _exception_args(record) == [], f"record pins an exception object: {record.getMessage()}"
             assert record.exc_info is None, f"record pins a traceback via exc_info: {record.getMessage()}"
 
@@ -111,7 +116,7 @@ class TestParserElementValidatorRaiseLogsNoExceptionObject:
         _run_validator(_clr975_validator_raises_type_error, caplog)
 
         assert _raise_records(caplog, PARSER_LOGGER_NAME, logging.DEBUG), "the judgment failure reports at DEBUG"
-        for record in caplog.records:
+        for record in _module_records(caplog, PARSER_LOGGER_NAME):
             assert _exception_args(record) == [], f"record pins an exception object: {record.getMessage()}"
             assert record.exc_info is None, f"record pins a traceback via exc_info: {record.getMessage()}"
 
@@ -143,14 +148,14 @@ class TestRequiredWhenRaiseLogsNoExceptionObject:
     def test_warning_branch_retains_no_exception_object(self, caplog: pytest.LogCaptureFixture) -> None:
         assert _run_predicate(_clr975_predicate_raises_unexpected, caplog) is False
         assert _raise_records(caplog, GUARDS_LOGGER_NAME, logging.WARNING), "the broken-looking predicate warns"
-        for record in caplog.records:
+        for record in _module_records(caplog, GUARDS_LOGGER_NAME):
             assert _exception_args(record) == [], f"record pins an exception object: {record.getMessage()}"
             assert record.exc_info is None, f"record pins a traceback via exc_info: {record.getMessage()}"
 
     def test_debug_branch_retains_no_exception_object(self, caplog: pytest.LogCaptureFixture) -> None:
         assert _run_predicate(_clr975_predicate_raises_type_error, caplog) is False
         assert _raise_records(caplog, GUARDS_LOGGER_NAME, logging.DEBUG), "the judgment failure reports at DEBUG"
-        for record in caplog.records:
+        for record in _module_records(caplog, GUARDS_LOGGER_NAME):
             assert _exception_args(record) == [], f"record pins an exception object: {record.getMessage()}"
             assert record.exc_info is None, f"record pins a traceback via exc_info: {record.getMessage()}"
 

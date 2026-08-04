@@ -185,6 +185,7 @@ class BaseInputData(ABC):
                 is_required = bool(predicate(options if options is not None else Options()))
             # Swallows: a predicate that raises cannot judge, so the reader is a non-match, not the run.
             except Exception as exc:
+                # Text, not exc: a retained record must not pin the traceback, its frames and the plugin class.
                 logger.log(
                     contained_raise_log_level(exc),
                     "required_when predicate %s for reader option '%s' %s; treating reader %s as a non-match.",

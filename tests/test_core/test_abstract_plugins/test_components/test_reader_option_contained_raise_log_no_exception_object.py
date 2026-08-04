@@ -56,6 +56,11 @@ def _exception_args(record: logging.LogRecord) -> list[BaseException]:
     return [value for value in values if isinstance(value, BaseException)]
 
 
+def _reader_records(caplog: pytest.LogCaptureFixture) -> list[logging.LogRecord]:
+    """Only the module under test; DEBUG capture is global, so a neighbour's record is not this contract."""
+    return [record for record in caplog.records if record.name == READER_LOGGER_NAME]
+
+
 def _raise_records(caplog: pytest.LogCaptureFixture, level: int) -> list[logging.LogRecord]:
     return [
         record
@@ -84,7 +89,7 @@ class TestRequiredWhenRaiseLogsNoExceptionObject:
 
         assert _absent_key_verdict(spec, caplog) is False
         assert _raise_records(caplog, logging.WARNING), "the broken-looking predicate must report at WARNING"
-        for record in caplog.records:
+        for record in _reader_records(caplog):
             assert _exception_args(record) == [], f"record pins an exception object: {record.getMessage()}"
             assert record.exc_info is None, f"record pins a traceback via exc_info: {record.getMessage()}"
 
@@ -93,7 +98,7 @@ class TestRequiredWhenRaiseLogsNoExceptionObject:
 
         assert _absent_key_verdict(spec, caplog) is False
         assert _raise_records(caplog, logging.DEBUG), "the expected judgment failure must report at DEBUG"
-        for record in caplog.records:
+        for record in _reader_records(caplog):
             assert _exception_args(record) == [], f"record pins an exception object: {record.getMessage()}"
             assert record.exc_info is None, f"record pins a traceback via exc_info: {record.getMessage()}"
 
@@ -129,7 +134,7 @@ class TestElementValidatorRaiseLogsNoExceptionObject:
 
         assert _element_verdict(spec, caplog) is False
         assert _raise_records(caplog, logging.WARNING), "the broken-looking validator must report at WARNING"
-        for record in caplog.records:
+        for record in _reader_records(caplog):
             assert _exception_args(record) == [], f"record pins an exception object: {record.getMessage()}"
             assert record.exc_info is None, f"record pins a traceback via exc_info: {record.getMessage()}"
 
@@ -140,7 +145,7 @@ class TestElementValidatorRaiseLogsNoExceptionObject:
 
         assert _element_verdict(spec, caplog) is False
         assert _raise_records(caplog, logging.DEBUG), "the expected judgment failure must report at DEBUG"
-        for record in caplog.records:
+        for record in _reader_records(caplog):
             assert _exception_args(record) == [], f"record pins an exception object: {record.getMessage()}"
             assert record.exc_info is None, f"record pins a traceback via exc_info: {record.getMessage()}"
 

@@ -210,12 +210,11 @@ def warn_universal_optional_matcher(owner: type[Any]) -> None:
     try:
         universal = bool(matcher(_UNIVERSAL_MATCHER_PROBE_NAME, Options()))
     except Exception as exc:
-        # rebind: Python clears the "except ... as exc" name at block exit, so the closure needs a stable local
-        err = exc
+        # Text, not exc: a retained record must not pin the traceback, its frames and the plugin class.
         logger.debug(
-            "universal-matcher probe for %s raised %s; treating it as non-universal.",
+            "universal-matcher probe for %s %s; treating it as non-universal.",
             owner.__name__,
-            safe_field(lambda: str(err), type(err).__name__),
+            contained_raise_reason(exc),
         )
         return
     if not universal:

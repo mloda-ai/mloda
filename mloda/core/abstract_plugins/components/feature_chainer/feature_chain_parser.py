@@ -172,6 +172,7 @@ class FeatureChainParser:
             try:
                 verdict = element_validator(found_property_val)
             except Exception as exc:  # Swallows: a validator that raises cannot judge the value, so it is rejected.
+                # Text, not exc: a retained record must not pin the traceback, its frames and the plugin class.
                 level = contained_raise_log_level(exc)
                 if level == logging.DEBUG:
                     logger.debug(

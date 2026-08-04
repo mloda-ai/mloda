@@ -1,3 +1,4 @@
+import functools
 import inspect
 from collections.abc import Sequence
 from copy import deepcopy
@@ -620,7 +621,13 @@ class IdentifyFeatureGroupClass:
             feature.options.context.clear()
             feature.options.context.update(context_before)
             if isinstance(exc, PropertyValueRejection):
-                logger.debug("%s rejected an option value while matching '%s': %s", feature_group, feature.name, exc)
+                # Text, not exc: a retained record must not pin the traceback, its frames and the plugin class.
+                logger.debug(
+                    "%s rejected an option value while matching '%s': %s",
+                    feature_group.get_class_name(),
+                    feature.name,
+                    safe_field(functools.partial(str, exc), type(exc).__name__),
+                )
                 record_match_rejection(feature_group.get_class_name(), str(exc))
             else:
                 reason = contained_raise_reason(exc)

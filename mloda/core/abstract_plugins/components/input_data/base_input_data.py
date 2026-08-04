@@ -29,7 +29,6 @@ class BaseInputData(ABC):
             "and read back by init_reader.",
             default=None,
             framework_set=True,
-            allow_explicit_none=True,
         ),
     }
 
@@ -80,6 +79,12 @@ class BaseInputData(ABC):
                         f"{cls.__name__}.READER_OPTIONS['{key}'] combines framework_set=True with a "
                         f"required_when predicate; the framework-written key is exempt from user-value "
                         f"validation, so the predicate would be silently inert."
+                    )
+                if spec.allow_explicit_none:
+                    raise ValueError(
+                        f"{cls.__name__}.READER_OPTIONS['{key}'] combines framework_set=True with "
+                        f"allow_explicit_none=True; the admit path skips the framework-written key, "
+                        f"so the flag would be silently inert."
                     )
                 if is_no_default(spec.default):
                     raise ValueError(

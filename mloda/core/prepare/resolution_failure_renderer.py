@@ -5,6 +5,7 @@ from difflib import get_close_matches
 
 from mloda.core.abstract_plugins.components.utils import safe_field, as_str
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
+from mloda.core.abstract_plugins.components.domain import Domain
 from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.prepare.resolution_types import EliminationStage, EvaluationResult
 
@@ -22,6 +23,13 @@ def scope_callout(scope: str | type[FeatureGroup] | None) -> str | None:
         return None
     scope_name = scope.get_class_name() if isinstance(scope, type) else scope
     return f"Scoped to feature group: '{scope_name}'."
+
+
+def domain_callout(domain: Domain | None) -> str | None:
+    """Render the shared domain callout, or None when the request carries no domain."""
+    if domain is None:
+        return None
+    return f"Requested domain: '{domain.name}'."
 
 
 def _candidate_sort_key(feature_group: type[FeatureGroup]) -> tuple[str, str]:
@@ -94,7 +102,9 @@ def _render_multiple(result: EvaluationResult, feature: Feature, callout: str | 
     )
 
 
-def _render_abstract_only(result: EvaluationResult, feature: Feature, callout: str | None) -> str:
+def _render_abstract_only(
+    result: EvaluationResult, feature: Feature, callout: str | None, domain_note: str | None
+) -> str:
     feature_name = str(feature.name)
     if not result.facts.concrete_frameworks:
         msg = (
@@ -110,10 +120,11 @@ def _render_abstract_only(result: EvaluationResult, feature: Feature, callout: s
             f"none of which are available or enabled for this run."
         )
 
-    # Place the callout on the sentence line, before the near-miss block, exactly as _render_none does, so it
-    # is never space-glued to the last near-miss bullet.
-    if callout:
-        msg += f" {callout}"
+    # Place the callouts on the sentence line, before the near-miss block, exactly as _render_none does, so
+    # neither is ever space-glued to the last near-miss bullet.
+    for note in (callout, domain_note):
+        if note:
+            msg += f" {note}"
 
     near_miss = _render_near_miss_block(result, feature)
     if near_miss is not None:
@@ -121,12 +132,13 @@ def _render_abstract_only(result: EvaluationResult, feature: Feature, callout: s
     return msg
 
 
-def _render_none(result: EvaluationResult, feature: Feature, callout: str | None) -> str:
+def _render_none(result: EvaluationResult, feature: Feature, callout: str | None, domain_note: str | None) -> str:
     feature_name = str(feature.name)
     msg = f"No feature groups found for feature name: '{feature_name}'."
 
-    if callout:
-        msg += f" {callout}"
+    for note in (callout, domain_note):
+        if note:
+            msg += f" {note}"
 
     near_miss = _render_near_miss_block(result, feature)
     if near_miss is not None:
@@ -140,6 +152,7 @@ def _render_none(result: EvaluationResult, feature: Feature, callout: str | None
     if similar:
         msg += f"\nDid you mean one of: {similar}?"
 
+    # Only the scope widens the pointer: resolve_feature takes the domain on the Feature, not as a keyword.
     pointer_args = "name, options=..., feature_group=..." if callout else "name, options=..."
     msg += (
         f"\nUse resolve_feature({pointer_args}) to debug feature resolution."
@@ -161,9 +174,12 @@ def render_resolution_failure(result: EvaluationResult, feature: Feature) -> str
     callout = scope_callout(feature.feature_group_scope)
 
     if kind == "multiple":
+        # No domain callout here: every candidate line of that message already carries its own domain.
         return _render_multiple(result, feature, callout)
 
-    if result.abstract_matched:
-        return _render_abstract_only(result, feature, callout)
+    domain_note = domain_callout(feature.domain)
 
-    return _render_none(result, feature, callout)
+    if result.abstract_matched:
+        return _render_abstract_only(result, feature, callout, domain_note)
+
+    return _render_none(result, feature, callout, domain_note)

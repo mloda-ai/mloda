@@ -160,7 +160,7 @@ class IdentifyFeatureGroupClass:
         if result.failure_kind is not None:
             # Every elimination (value_rejection included) was already recorded during the single filter pass;
             # this only captures the non-elimination facts the messages still need.
-            result = replace(result, facts=self._capture_render_facts(result, accessible_plugins))
+            result = replace(result, facts=self._capture_render_facts(result, accessible_plugins, feature))
         # A captured exception pins its traceback, whose frames pin this instance: a refcount cycle that would
         # keep both alive until a gc pass. Dropping the outcomes here makes the memo's lifetime what it claims.
         self._domain_outcomes.clear()
@@ -170,6 +170,7 @@ class IdentifyFeatureGroupClass:
         self,
         result: EvaluationResult,
         accessible_plugins: FeatureGroupEnvironmentMapping,
+        feature: Feature,
     ) -> RenderFacts:
         """Capture the non-elimination facts the messages still need, precedence-free.
 
@@ -184,7 +185,7 @@ class IdentifyFeatureGroupClass:
             concrete_frameworks=self._concrete_implementation_frameworks(result, accessible_plugins),
             known_names=self._capture_known_names(accessible_plugins),
             eliminated_hints=self._capture_eliminated_hints(result),
-            dead_only_names=self._capture_dead_only_names(result, accessible_plugins),
+            dead_only_names=self._capture_dead_only_names(result, accessible_plugins, feature),
         )
 
     def _capture_eliminated_hints(self, result: EvaluationResult) -> frozenset[str]:
@@ -306,11 +307,29 @@ class IdentifyFeatureGroupClass:
             known_names.extend(self._catalog_names_of(fg_class))
         return tuple(known_names)
 
+    def _fails_name_blind_gate(self, feature_group: type[FeatureGroup], feature: Feature) -> bool:
+        """Capture-side retest of the two name-blind gates, scope then domain, that never raises."""
+        if not self._filter_feature_group_by_scope(feature_group, feature):
+            return True
+        if feature.domain is None:
+            return False
+        domain, error = self._domain_outcome(feature_group)
+        # _domain_name is what reports either degrade, and both readers share one memo, so reading through it
+        # keeps this at a single get_domain() call per candidate.
+        if self._domain_name(feature_group) is None:
+            # A raise leaves the gate undecided, so nothing is known and the candidate stays live. A malformed
+            # return is decided: the gate compares it and drops the candidate, for every name it declares.
+            return error is None
+        # The gate's own comparison, never a name one: a Domain subclass with a custom __eq__ must not pass the
+        # gate and fail this retest.
+        return domain != feature.domain
+
     def _is_dead(
         self,
         result: EvaluationResult,
         feature_group: type[FeatureGroup],
         compute_frameworks: set[type[ComputeFramework]],
+        feature: Feature,
     ) -> bool:
         """No name at all can resolve to this candidate: it has no framework left, or it lost at a name-blind gate.
 
@@ -320,13 +339,22 @@ class IdentifyFeatureGroupClass:
         """
         if not compute_frameworks:
             return True
+        # _filter_loop parks an abstract base in abstract_matched and never in the identified mapping, whatever
+        # name it is asked about.
+        if inspect.isabstract(feature_group):
+            return True
+        # A candidate that never matched the requested name carries no record at all, so the name-blind gates
+        # are tested directly here. links is the one name-blind gate this predicate does not retest: doing so
+        # needs index_columns() and the run's links per candidate, provider hooks the capture makes nowhere else.
+        if self._fails_name_blind_gate(feature_group, feature):
+            return True
         elimination = result.eliminations.get(feature_group)
         return elimination is not None and elimination.stage in NAME_INDEPENDENT_STAGES
 
     def _capture_dead_only_names(
-        self, result: EvaluationResult, accessible_plugins: FeatureGroupEnvironmentMapping
+        self, result: EvaluationResult, accessible_plugins: FeatureGroupEnvironmentMapping, feature: Feature
     ) -> frozenset[str]:
-        """Declared names that no live candidate declares and no live candidate's prefix covers.
+        """Catalog names of dead candidates that no live candidate owns and no live candidate's prefix covers.
 
         A difference, not a per-candidate drop: one accessible group that is still alive keeps its name
         suggestible, whatever a dead sibling also declares. Prefixes because the default matcher owns names
@@ -337,8 +365,10 @@ class IdentifyFeatureGroupClass:
         live: set[str] = set()
         live_prefixes: set[str] = set()
         for feature_group, compute_frameworks in accessible_plugins.items():
-            if self._is_dead(result, feature_group, compute_frameworks):
-                dead.update(self._supported_names_of(feature_group))
+            if self._is_dead(result, feature_group, compute_frameworks, feature):
+                # The whole catalog, as the live branch collects it: the default matcher owns a candidate's
+                # class name and its class-name prefix too, and a dead candidate resolves neither.
+                dead.update(self._catalog_names_of(feature_group))
                 continue
             live.update(self._catalog_names_of(feature_group))
             # Non-empty only: _prefix_name degrades a raising prefix() to "", which every name starts with.

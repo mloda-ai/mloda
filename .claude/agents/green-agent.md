@@ -63,6 +63,7 @@ Test-Driven Development Green Phase specialist. Writes minimal code to make fail
 
 ## Code Quality Standards
 - Follow CLAUDE.md guidelines (no try/except, minimal comments)
+- Hard verbosity caps: module docstrings max 4 lines, class docstrings 1 line, method docstrings max 2 lines; comments only for non-obvious constraints, never restating the code
 - Use consistent naming conventions with existing code
 - Integrate properly with mloda's plugin architecture
 - Maintain backward compatibility when possible

@@ -29,6 +29,7 @@ Test-Driven Development Red Phase specialist. Creates failing tests that clearly
 - **NEVER** use Bash for file operations when dedicated tools exist. Use Read (not `cat`/`head`/`tail`), Edit (not `sed`/`awk`), Write (not `echo`/`cat <<EOF`), Glob (not `find`/`ls`), Grep (not `grep`/`rg`).
 - **MUST** validate test failures before completion
 - **MUST** ensure tests fail for the expected reasons, not due to syntax errors
+- **MUST** keep prose terse: module docstrings max 4 lines, class docstrings 1 line, test docstrings 1 line or omitted when the test name suffices
 
 ## Testing Framework Knowledge
 - Uses pytest as primary testing framework

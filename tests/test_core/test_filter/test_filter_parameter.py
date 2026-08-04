@@ -1,8 +1,18 @@
 """Tests for FilterParameter Protocol and FilterParameterImpl."""
 
+import re
+from decimal import Decimal
+
 import pytest
 from typing import Any
 from mloda.core.filter.filter_parameter import FilterParameter, FilterParameterImpl
+
+
+class AlwaysRaisesOnHash:
+    """Defines __hash__, so it reports as hashable through its type, but raises when hashed."""
+
+    def __hash__(self) -> int:
+        raise TypeError("this object refuses to be hashed")
 
 
 # --- Creation tests ---
@@ -320,3 +330,133 @@ def test_list_and_tuple_values_are_equal_and_hash_equal() -> None:
     assert from_list == from_tuple
     assert hash(from_list) == hash(from_tuple)
     assert len({from_list, from_tuple}) == 1
+
+
+# --- Unhashable value rejection tests (see issue #925) ---
+
+
+def test_from_dict_rejects_dict_value() -> None:
+    """Test a dict value is rejected, since normalization leaves it raw and unhashable."""
+    params: dict[str, Any] = {"value": {"a": 1}}
+
+    with pytest.raises(ValueError, match=r"'value'"):
+        FilterParameterImpl.from_dict(params)
+
+
+def test_from_dict_rejects_dict_nested_in_list_value() -> None:
+    """Test a list value holding a dict is rejected, since the shallow tuple conversion misses it."""
+    params: dict[str, Any] = {"values": [{"a": 1}]}
+
+    with pytest.raises(ValueError, match="values"):
+        FilterParameterImpl.from_dict(params)
+
+
+def test_from_dict_rejects_list_nested_in_list_value() -> None:
+    """Test a list value holding a list is rejected."""
+    params: dict[str, Any] = {"values": [[1, 2]]}
+
+    with pytest.raises(ValueError, match="values"):
+        FilterParameterImpl.from_dict(params)
+
+
+def test_from_dict_rejects_dict_nested_in_tuple_value() -> None:
+    """Test a tuple value holding a dict is rejected, even though the tuple itself is a hashable type."""
+    params: dict[str, Any] = {"values": ({"a": 1},)}
+
+    with pytest.raises(ValueError, match="values"):
+        FilterParameterImpl.from_dict(params)
+
+
+def test_from_dict_rejects_unhashable_leaf_value() -> None:
+    """Test an unhashable scalar such as bytearray is rejected."""
+    params: dict[str, Any] = {"value": bytearray(b"abc")}
+
+    with pytest.raises(ValueError, match=r"'value'"):
+        FilterParameterImpl.from_dict(params)
+
+
+def test_from_dict_rejects_unhashable_range_bound() -> None:
+    """Test the rejection is not limited to the value/values keys."""
+    params: dict[str, Any] = {"min": {"a": 1}, "max": 50}
+
+    with pytest.raises(ValueError, match="min"):
+        FilterParameterImpl.from_dict(params)
+
+
+def test_from_dict_error_names_the_offending_key() -> None:
+    """Test the message names the key that carries the unhashable value, not a neighbouring key."""
+    params: dict[str, Any] = {"min": 1, "payload": {"a": 1}}
+
+    with pytest.raises(ValueError, match="payload"):
+        FilterParameterImpl.from_dict(params)
+
+
+@pytest.mark.parametrize(
+    "value",
+    [Decimal("sNaN"), memoryview(bytearray(b"ab")), AlwaysRaisesOnHash()],
+    ids=["signaling-nan", "writable-memoryview", "raising-hash"],
+)
+def test_from_dict_rejects_value_whose_hash_raises(value: Any) -> None:
+    """Test a value that defines __hash__ but raises is rejected, not deferred to a later hash call."""
+    with pytest.raises(ValueError, match=r"'value'"):
+        FilterParameterImpl.from_dict({"value": value})
+
+
+def test_from_dict_rejects_value_whose_hash_raises_inside_a_collection() -> None:
+    """Test the raising value is caught through a list too, not only as a bare scalar."""
+    params: dict[str, Any] = {"values": [1, AlwaysRaisesOnHash()]}
+
+    with pytest.raises(ValueError, match=r"'values'"):
+        FilterParameterImpl.from_dict(params)
+
+
+@pytest.mark.parametrize(
+    "params, key, culprit",
+    [
+        ({"value": {"a": 1}}, "value", "dict"),
+        ({"values": [{"a": 1}]}, "values", "dict"),
+        ({"values": [[1, 2]]}, "values", "list"),
+    ],
+    ids=["dict-value", "dict-in-list", "list-in-list"],
+)
+def test_from_dict_error_names_the_offending_type(params: dict[str, Any], key: str, culprit: str) -> None:
+    """Test the message names the inner type that cannot be hashed, since the key alone can mislead."""
+    with pytest.raises(ValueError) as excinfo:
+        FilterParameterImpl.from_dict(params)
+
+    message = str(excinfo.value)
+    assert f"'{key}'" in message, message
+    assert re.search(rf"\b{culprit}\b", message), message
+
+
+def test_from_dict_accepts_deeply_nested_tuple() -> None:
+    """Test a tuple nested past the Python recursion limit stays accepted, since hash() copes with it."""
+    deep: Any = ()
+    for _ in range(1000):
+        deep = (deep,)
+    hash(deep)
+
+    filter_param = FilterParameterImpl.from_dict({"value": deep})
+
+    assert filter_param.value is deep
+    hash(filter_param)
+
+
+@pytest.mark.parametrize(
+    "params",
+    [
+        {"value": 25},
+        {"value": None},
+        {"value": "EU"},
+        {"values": "EU"},
+        {"values": ["A", "B"]},
+        {"values": {"A", "B"}},
+        {"values": ("A", "B")},
+        {"values": [(1, 2), (3, 4)]},
+        {"min": 0, "max": 100, "max_exclusive": True},
+    ],
+    ids=["int", "none", "str", "str-values", "list", "set", "tuple", "list-of-tuples", "range"],
+)
+def test_from_dict_accepts_every_hashable_value_shape(params: dict[str, Any]) -> None:
+    """Test the rejection leaves the supported value shapes untouched."""
+    hash(FilterParameterImpl.from_dict(params))

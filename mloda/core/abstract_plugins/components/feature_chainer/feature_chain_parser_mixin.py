@@ -291,9 +291,13 @@ class FeatureChainParserMixin:
         # name-carried value is as visible to match_guard as an explicit one. A no-source ValueError cannot
         # reach here: it would already have made match_parser_criteria a non-match.
         effective_options = options
+        # The sources input_features would read off the name, so the in_feature gate counts the same ones.
+        name_sources: list[str] | None = None
         if result:
             parsed = FeatureChainParser.parse_name(feature_name, prefix_patterns, CHAIN_SEPARATOR)
             if FeatureChainParser._name_identifies_group(parsed, property_mapping):
+                if parsed.source_feature:
+                    name_sources = parsed.source_feature.split(cls.IN_FEATURE_SEPARATOR)
                 # Bound once and reused: the merge and the guards must see the name-derived value even
                 # when the legacy operation value is absent (a named-optional-first pattern).
                 bindings = FeatureChainParser.bind_name_captures(parsed, property_mapping or {})
@@ -309,7 +313,7 @@ class FeatureChainParserMixin:
         if not cls._validate_match_guards(result, effective_options, property_mapping):
             return False
 
-        if not cls._validate_in_features(result, options):
+        if not cls._validate_in_features(result, options, name_sources):
             return False
 
         return result
@@ -475,11 +479,12 @@ class FeatureChainParserMixin:
                 rejected = not guard(value)
             except Exception as exc:
                 level = contained_raise_log_level(exc)
+                # Text, not exc: a retained record must not pin the traceback, its frames and the plugin class.
                 if level == logging.DEBUG:
-                    logger.debug("match_guard for '%s' raised %s for value %r", key, exc, value)
+                    logger.debug("match_guard for '%s' %s for value %r", key, contained_raise_reason(exc), value)
                 else:
                     # The raw value stays out of WARNING logs; rerun with debug logging to see it.
-                    logger.warning("match_guard for '%s' raised %s", key, exc)
+                    logger.warning("match_guard for '%s' %s", key, contained_raise_reason(exc))
                 rejected = True
             if rejected:
                 return key, value
@@ -504,35 +509,42 @@ class FeatureChainParserMixin:
         return False
 
     @classmethod
-    def _validate_in_features(cls, result: bool, options: Options) -> bool:
-        # Enforce MIN/MAX_IN_FEATURES when in_features is present in options
-        if result and hasattr(cls, "MIN_IN_FEATURES") and hasattr(cls, "MAX_IN_FEATURES"):
+    def _validate_in_features(cls, result: bool, options: Options, name_sources: list[str] | None = None) -> bool:
+        # Enforce MIN/MAX_IN_FEATURES on the name-carried sources when there are any, else on the options value
+        if not (result and hasattr(cls, "MIN_IN_FEATURES") and hasattr(cls, "MAX_IN_FEATURES")):
+            return True
+
+        if name_sources is not None:
+            count = len(name_sources)
+        else:
             in_features_raw = options.get(DefaultOptionKeys.in_features)
-            if in_features_raw is not None:
-                if isinstance(in_features_raw, (list, tuple, set, frozenset)) and not in_features_raw:
-                    # Present but empty: zero in_features, a non-match rather than an error.
-                    count = 0
-                else:
-                    # An in_features value this matcher cannot count is a non-match, not an error:
-                    # skipping MIN/MAX would let the group win a resolution its own cap says it must lose.
-                    # The catch is narrow on purpose; another exception class is a defect to surface, not a value.
-                    try:
-                        count = len(options.get_in_features())
-                    except (TypeError, ValueError) as exc:
-                        if is_match_abort(exc):
-                            raise
-                        # Text, not exc: a retained record must not pin this frame, its cls and the plugin class.
-                        logger.debug(
-                            "%s cannot resolve in_features value %r: %s",
-                            cls.__name__,
-                            in_features_raw,
-                            contained_raise_reason(exc),
-                        )
-                        return False
-                if count < cls.MIN_IN_FEATURES:
+            if in_features_raw is None:
+                return True
+            if isinstance(in_features_raw, (list, tuple, set, frozenset)) and not in_features_raw:
+                # Present but empty: zero in_features, a non-match rather than an error.
+                count = 0
+            else:
+                # An in_features value this matcher cannot count is a non-match, not an error:
+                # skipping MIN/MAX would let the group win a resolution its own cap says it must lose.
+                # The catch is narrow on purpose; another exception class is a defect to surface, not a value.
+                try:
+                    count = len(options.get_in_features())
+                except (TypeError, ValueError) as exc:
+                    if is_match_abort(exc):
+                        raise
+                    # Text, not exc: a retained record must not pin this frame, its cls and the plugin class.
+                    logger.debug(
+                        "%s cannot resolve in_features value %r: %s",
+                        cls.__name__,
+                        in_features_raw,
+                        contained_raise_reason(exc),
+                    )
                     return False
-                if cls.MAX_IN_FEATURES is not None and count > cls.MAX_IN_FEATURES:
-                    return False
+
+        if count < cls.MIN_IN_FEATURES:
+            return False
+        if cls.MAX_IN_FEATURES is not None and count > cls.MAX_IN_FEATURES:
+            return False
         return True
 
     @classmethod

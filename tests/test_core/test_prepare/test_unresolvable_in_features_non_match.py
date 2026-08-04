@@ -1,6 +1,8 @@
 """An in_features value the matcher cannot resolve is a plain non-match at the resolution seam.
 
-The probe class is dropped under gc.collect() before any assert, so no failing assert pins it (tests/conftest.py).
+The probe matches by options, not by name: a name that identifies the group carries its own sources and
+the option is never consulted (#944). The probe class is dropped under gc.collect() before any assert,
+so no failing assert pins it (tests/conftest.py).
 """
 
 from __future__ import annotations
@@ -22,7 +24,7 @@ from mloda.core.prepare.resolution_types import EvaluationResult
 from tests.test_core.test_prepare.identify_seam import evaluate_or_raise
 
 
-IN_FEATURES_FEATURE_884 = "src__op1_infeat884"
+IN_FEATURES_FEATURE_884 = "in_features_probe_884"
 IN_FEATURES_CLASS_NAME_884 = "InFeaturesMixinFG884"
 RESOLUTION_ERROR_NAME = "FeatureResolutionError"
 MATCHER_ERROR_STAGE = "matcher_error"
@@ -33,7 +35,7 @@ class InFeaturesFw884(ComputeFramework):
 
 
 def _make_in_features_mixin_fg() -> type[FeatureGroup]:
-    """A mixin candidate matched by its own name, so only the in_features gate can still reject it."""
+    """A mixin candidate matched by its options, so only the in_features gate can still reject it."""
     gc.collect()  # class objects are cyclic: collect leftovers before defining a twin
 
     class InFeaturesMixinFG884(FeatureChainParserMixin, FeatureGroup):
@@ -53,7 +55,8 @@ def _make_in_features_mixin_fg() -> type[FeatureGroup]:
 def _resolve(in_features: Any) -> tuple[Optional[str], tuple[str, ...], tuple[tuple[str, str, str], ...]]:
     """Evaluate one feature carrying that value: (error type, winner names, (class, stage, reason) per elimination)."""
     feature_group = _make_in_features_mixin_fg()
-    feature = Feature(IN_FEATURES_FEATURE_884, Options(context={DefaultOptionKeys.in_features: in_features}))
+    options = Options(context={"operation": "op1", DefaultOptionKeys.in_features: in_features})
+    feature = Feature(IN_FEATURES_FEATURE_884, options)
     plugins: FeatureGroupEnvironmentMapping = {feature_group: {InFeaturesFw884}}
     try:
         error_type: Optional[str] = None

@@ -56,8 +56,10 @@ def _render_near_miss_block(result: EvaluationResult, feature: Feature) -> str |
     """Shared section naming each eliminated near-miss candidate, its gate label, and its reason."""
     if not result.eliminations:
         return None
+    # An unlabeled stage falls back to its raw token: crashing the failure path is worse than an unlabeled line.
     lines = "\n".join(
-        f"  - {fg.__name__} ({_STAGE_LABELS[result.eliminations[fg].stage]}): {result.eliminations[fg].reason}"
+        f"  - {fg.__name__} ({_STAGE_LABELS.get(result.eliminations[fg].stage, result.eliminations[fg].stage)}): "
+        f"{result.eliminations[fg].reason}"
         for fg in sorted(result.eliminations, key=_candidate_sort_key)
     )
     return f"Feature group(s) eliminated while matching '{str(feature.name)}':\n{lines}"

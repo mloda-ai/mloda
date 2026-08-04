@@ -227,6 +227,16 @@ a reused `GlobalFilter` keeps the matches it has recorded. Which of the two empt
 get is therefore decided outside your FeatureGroup. `if features.filters:` covers both;
 `if features.filters is not None:` passes with nothing to iterate.
 
+### Filter scope is the `FeatureSet`
+
+Matching is probed per feature, but matched filters attach to the `FeatureSet`. A feature that
+declined a filter is still filtered by it once a sibling of its set matched it, a contained raise
+included; that is logged as a WARNING. Two features matching different non-empty filter sets
+raise `ValueError` instead. To scope a filter, make the deciding option a **group** option:
+differing group options split the features into separate `FeatureSet`s.
+
+`GlobalFilter.probes` records what every probe matched, empty results included, for debugging.
+
 ### Two independent concerns
 
 Filters involve two decisions that are **independent** of each other:

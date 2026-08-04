@@ -45,6 +45,9 @@ class ExecutionPlan:
         # Helper variable
         self.feature_set_collections: list[set[UUID]] = []
 
+        # Report each divergence once, then at DEBUG.
+        self.reported_unmatched: set[tuple[type[FeatureGroup], str, tuple[str, ...]]] = set()
+
     def __iter__(self) -> Generator[TransformFrameworkStep | JoinStep | FeatureGroupStep, None, None]:
         yield from self.execution_plan
 
@@ -1019,7 +1022,35 @@ class ExecutionPlan:
                                       """
                                 )
 
+        self._warn_on_unmatched_features(feature_group, feature_set, relevant_filters)
         feature_set.add_filters(relevant_filters)
+
+    def _warn_on_unmatched_features(
+        self, feature_group: type[FeatureGroup], feature_set: FeatureSet, relevant_filters: set[SingleFilter]
+    ) -> None:
+        """Warn about features that declined a filter their feature set gets anyway."""
+        if self.global_filter is None or not relevant_filters:
+            return
+
+        for feature in feature_set.features:
+            probed = self.global_filter.probes.get((feature_group, feature.name, feature.uuid))
+            # Filter and index features enter the collection without being probed.
+            if probed is None:
+                continue
+            unmatched = sorted({str(f.filter_feature.name) for f in relevant_filters - probed})
+            if not unmatched:
+                continue
+            key = (feature_group, str(feature.name), tuple(unmatched))
+            first = key not in self.reported_unmatched
+            self.reported_unmatched.add(key)
+            logger.log(
+                logging.WARNING if first else logging.DEBUG,
+                "The filter feature(s) %s were not matched for feature '%s' of %s, but the filter still applies "
+                "because the filter scope is the FeatureSet.",
+                ", ".join(f"'{name}'" for name in unmatched),
+                feature.name,
+                format_feature_group_class(feature_group),
+            )
 
     def get_parent_children_mapping(self, parent_to_children_mapping: dict[UUID, set[UUID]]) -> dict[UUID, set[UUID]]:
         inverted_dict: dict[UUID, set[UUID]] = {}

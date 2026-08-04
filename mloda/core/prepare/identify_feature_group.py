@@ -12,6 +12,7 @@ from mloda.core.prepare.resolution_types import (
     Elimination,
     EliminationStage,
     EvaluationResult,
+    NAME_INDEPENDENT_STAGES,
     PARTIAL_RECORDS_CAP,
     RenderFacts,
     ResolutionRecord,
@@ -105,6 +106,8 @@ class IdentifyFeatureGroupClass:
     # they are scoped to one resolution attempt and never cache across runs.
     _domain_outcomes: dict[type[FeatureGroup], tuple[Optional[Domain], Optional[Exception]]]
     _declared_frameworks: dict[type[FeatureGroup], frozenset[type[ComputeFramework]]]
+    _supported_names: dict[type[FeatureGroup], frozenset[str]]
+    _prefixes: dict[type[FeatureGroup], str]
 
     def __init__(self, data_access_collection: Optional[DataAccessCollection] = None) -> None:
         self._criteria_matched_feature_groups = set()
@@ -117,6 +120,8 @@ class IdentifyFeatureGroupClass:
         self._eliminations = {}
         self._domain_outcomes = {}
         self._declared_frameworks = {}
+        self._supported_names = {}
+        self._prefixes = {}
         self._data_access_collection = data_access_collection
 
     @staticmethod
@@ -168,16 +173,17 @@ class IdentifyFeatureGroupClass:
         """Capture the non-elimination facts the messages still need, precedence-free.
 
         The renderer alone owns which message wins, so this does not mirror its branch order: it captures
-        all three facts unconditionally (the failure path is rare). domains feeds the multiple message,
-        concrete_frameworks the abstract_only message, known_names the none message. Only reached when the
-        pass has no single winner. Every provider hook here is best-effort: a raising one degrades its own
-        fact, never this call or a sibling's fact.
+        all five facts unconditionally (the failure path is rare). domains feeds the multiple message,
+        concrete_frameworks the abstract_only message, and known_names, eliminated_hints and dead_only_names
+        the none message. Only reached when the pass has no single winner. Every provider hook here is
+        best-effort: a raising one degrades its own fact, never this call or a sibling's fact.
         """
         return RenderFacts(
             domains=self._capture_domains(result),
             concrete_frameworks=self._concrete_implementation_frameworks(result, accessible_plugins),
             known_names=self._capture_known_names(accessible_plugins),
             eliminated_hints=self._capture_eliminated_hints(result),
+            dead_only_names=self._capture_dead_only_names(result, accessible_plugins),
         )
 
     def _capture_eliminated_hints(self, result: EvaluationResult) -> frozenset[str]:
@@ -186,7 +192,7 @@ class IdentifyFeatureGroupClass:
         hints: set[str] = set()
         for feature_group in result.eliminations:
             hints.add(feature_group.get_class_name())
-            prefix = _prefix_name(feature_group)
+            prefix = self._prefix_of(feature_group)
             if prefix:
                 hints.add(prefix)
         return frozenset(hints)
@@ -269,16 +275,76 @@ class IdentifyFeatureGroupClass:
             frameworks.update(self._declared_framework_names(candidate))
         return tuple(sorted(frameworks))
 
+    def _supported_names_of(self, feature_group: type[FeatureGroup]) -> frozenset[str]:
+        """Memoized feature_names_supported(): the name catalog and the dead-name capture share one call.
+
+        Degrades exactly as _supported_feature_names does: a raising hook costs that candidate its whole catalog.
+        """
+        if feature_group not in self._supported_names:
+            self._supported_names[feature_group] = frozenset(_supported_feature_names(feature_group))
+        return self._supported_names[feature_group]
+
+    def _prefix_of(self, feature_group: type[FeatureGroup]) -> str:
+        """Memoized prefix(), read by the name catalog and by the live side of the dead-name difference."""
+        if feature_group not in self._prefixes:
+            self._prefixes[feature_group] = _prefix_name(feature_group)
+        return self._prefixes[feature_group]
+
+    def _catalog_names_of(self, feature_group: type[FeatureGroup]) -> list[str]:
+        """One candidate's whole contribution to the name catalog, in capture order."""
+        # get_class_name() is @final, so it cannot raise on a provider's behalf and needs no guard.
+        names = [feature_group.get_class_name(), *self._supported_names_of(feature_group)]
+        prefix = self._prefix_of(feature_group)
+        if prefix:
+            names.append(prefix)
+        return names
+
     def _capture_known_names(self, accessible_plugins: FeatureGroupEnvironmentMapping) -> tuple[str, ...]:
         known_names: list[str] = []
         for fg_class in accessible_plugins:
-            # get_class_name() is @final, so it cannot raise on a provider's behalf and needs no guard.
-            known_names.append(fg_class.get_class_name())
-            known_names.extend(_supported_feature_names(fg_class))
-            prefix = _prefix_name(fg_class)
-            if prefix:
-                known_names.append(prefix)
+            known_names.extend(self._catalog_names_of(fg_class))
         return tuple(known_names)
+
+    def _is_dead(
+        self,
+        result: EvaluationResult,
+        feature_group: type[FeatureGroup],
+        compute_frameworks: set[type[ComputeFramework]],
+    ) -> bool:
+        """No name at all can resolve to this candidate: it has no framework left, or it lost at a name-blind gate.
+
+        The framework set is tested before the elimination lookup because it kills the candidate without one:
+        a record only exists for the name that was asked about, while an empty set routes EVERY name to
+        frameworks_not_enabled.
+        """
+        if not compute_frameworks:
+            return True
+        elimination = result.eliminations.get(feature_group)
+        return elimination is not None and elimination.stage in NAME_INDEPENDENT_STAGES
+
+    def _capture_dead_only_names(
+        self, result: EvaluationResult, accessible_plugins: FeatureGroupEnvironmentMapping
+    ) -> frozenset[str]:
+        """Declared names that no live candidate declares and no live candidate's prefix covers.
+
+        A difference, not a per-candidate drop: one accessible group that is still alive keeps its name
+        suggestible, whatever a dead sibling also declares. Prefixes because the default matcher owns names
+        by class-name prefix too, so a live group covers names it never declares. The matcher's data-access
+        branches stay out: deciding one needs the speculative second match the renderer's contract refuses.
+        """
+        dead: set[str] = set()
+        live: set[str] = set()
+        live_prefixes: set[str] = set()
+        for feature_group, compute_frameworks in accessible_plugins.items():
+            if self._is_dead(result, feature_group, compute_frameworks):
+                dead.update(self._supported_names_of(feature_group))
+                continue
+            live.update(self._catalog_names_of(feature_group))
+            # Non-empty only: _prefix_name degrades a raising prefix() to "", which every name starts with.
+            prefix = self._prefix_of(feature_group)
+            if prefix:
+                live_prefixes.add(prefix)
+        return frozenset(name for name in dead - live if not any(name.startswith(prefix) for prefix in live_prefixes))
 
     def _filter_loop(
         self,

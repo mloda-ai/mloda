@@ -27,6 +27,10 @@ EliminationStage = Literal[
     "links",
 ]
 
+# A stage belongs here when its gate's hook cannot receive the feature name, so the outcome is the same for
+# every name the candidate declares.
+NAME_INDEPENDENT_STAGES: frozenset[EliminationStage] = frozenset({"domain", "scope", "frameworks_not_enabled", "links"})
+
 
 @dataclass(frozen=True)
 class Elimination:
@@ -49,6 +53,9 @@ class RenderFacts:
     # Class name and prefix of each eliminated near-miss, so a "Did you mean" suggestion that merely echoes
     # a candidate the near-miss block already named can be suppressed.
     eliminated_hints: frozenset[str] = frozenset()
+    # Names that no live accessible group declares and that no live group's class-name prefix covers, so no
+    # surviving candidate is known to own them.
+    dead_only_names: frozenset[str] = frozenset()
 
 
 @dataclass(frozen=True)

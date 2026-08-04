@@ -244,9 +244,9 @@ Matching is probed per feature, but matched filters attach to the `FeatureSet`. 
 declined a filter is still filtered by it once a sibling of its set matched it, a contained raise
 included; that is logged as a WARNING. Siblings matching different non-empty filter sets get the
 union attached. Matches of one filter that differ only in the enriched options count as that one
-filter: it attaches once and is not reported. To scope a filter, make the deciding option a
-**group** option:
-differing group options split the features into separate `FeatureSet`s.
+filter, attached once and not reported, only while they resolve to the same column: a per-sibling
+rename makes them distinct predicates and both attach. To scope a filter, make the deciding
+option a **group** option: differing group options split the features into separate `FeatureSet`s.
 
 `GlobalFilter.probes` records what every probe matched, empty results included, for debugging.
 

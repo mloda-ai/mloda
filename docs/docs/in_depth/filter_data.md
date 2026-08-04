@@ -199,6 +199,10 @@ If a FeatureGroup's `match_feature_group_criteria` raises while a filter is matc
 is a non-match for that probe, like a `False` return, and the drop is recorded in
 `GlobalFilter.dropped_filters`. A framework-owned raise still aborts.
 
+The option divergence warning fires only for a filter that actually attaches, once per distinct
+message per setup. A filter that matches no FeatureGroup at all is reported once after setup
+("matched no feature group").
+
 Matched filters are attached to the `FeatureSet` before `calculate_feature()` is
 called. Inside your calculation you can access them via `features.filters`:
 

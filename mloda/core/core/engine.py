@@ -117,7 +117,13 @@ class Engine:
         raise ValueError("ExecutionOrchestrator setup failed.")
 
     def create_setup_execution_plan(self, features: Features) -> ExecutionPlan:
+        if self.global_filter:
+            self.global_filter.reset_match_tracking()
+
         self.setup_features_recursion(features)
+
+        if self.global_filter:
+            self.global_filter.warn_on_unmatched_filters()
 
         graph_builder = BuildGraph(self.feature_link_parents, self.feature_group_collection)
         graph_builder.build_graph_from_feature_links()

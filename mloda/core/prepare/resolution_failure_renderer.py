@@ -45,6 +45,7 @@ def _prefix_name(feature_group: type[FeatureGroup]) -> str:
 
 _STAGE_LABELS: dict[EliminationStage, str] = {
     "value_rejection": "option value",
+    "input_data": "input data",
     "matcher_error": "match hook",
     "domain": "domain",
     "scope": "scope",

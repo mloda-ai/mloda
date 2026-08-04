@@ -99,33 +99,52 @@ Reader selection answers "which plugin handles this input" the way [feature-grou
 
 ### Declining with an attributable reason
 
-A reader that owns an input but cannot serve the requested feature can record why it declined; the reason then appears in the near-miss block of the "No feature groups found" error message. `record_match_rejection` is exported via `mloda.provider`:
+A reader that owns an input but cannot serve the requested feature can record why it declined; the reason then appears in the near-miss block of the "No feature groups found" error message, labeled `(input data)`. `record_match_rejection` is exported via `mloda.provider`. A custom reader owns its own suffix and overrides `load_data` wholesale; its own decline points sit beyond the automatic column validation, for example a required schema marker in the header:
 
 ``` python
-from mloda.provider import record_match_rejection
-from mloda_plugins.feature_group.input_data.read_files.csv import CsvReader
+from typing import Any
 
-class SensorCsvReader(CsvReader):
+from mloda.provider import FeatureSet, record_match_rejection
+from mloda_plugins.feature_group.input_data.read_file import ReadFile
+
+class SensorCsvReader(ReadFile):
+    @classmethod
+    def suffix(cls) -> tuple[str, ...]:
+        return (".sensorcsv",)
+
+    @classmethod
+    def load_data(cls, data_access: Any, features: FeatureSet) -> Any: ...
+
     @classmethod
     def validate_columns(cls, file_name: str, feature_names: list[str]) -> bool:
-        columns = cls.get_column_names(file_name)
-        missing = [name for name in feature_names if name not in columns]
-        if missing:
+        if super().validate_columns(file_name, feature_names) is False:
+            return False
+        with open(file_name, encoding="utf-8") as handle:
+            header = handle.readline()
+        if "#sensor-schema" not in header:
             record_match_rejection(
                 cls.get_class_name(),
-                f"{cls.get_class_name()} owns {file_name} but it lacks: {', '.join(missing)}",
+                f"{cls.get_class_name()} matched the suffix of {file_name} "
+                f"but its header lacks the #sensor-schema marker",
+                stage="input_data",
             )
             return False
         return True
 ```
 
+The recorded decline renders as a near-miss line of the resolution failure:
+
+```
+  - SensorFeatureGroup (input data): SensorCsvReader matched the suffix of /data/run1.sensorcsv but its header lacks the #sensor-schema marker
+```
+
 Rules for reader authors:
 
 - Record only when ownership is established but the content fails: right suffix but a missing column, valid credentials but a declined feature.
-- Plain non-matches (wrong suffix, invalid credentials, `NotImplementedError`) stay silent.
+- Plain non-matches (wrong suffix, invalid credentials) stay silent. `NotImplementedError` from `is_valid_credentials` is a silent non-match; from `check_feature_in_data_access` it is an accept (the reader matches on credentials alone).
 - Never raise to decline: anything but `NotImplementedError` in the DB match hooks aborts matching for every reader sharing the `DataAccessCollection`. Record, then return a falsy value.
 - Recording outside an engine-opened window is a no-op, so readers stay usable standalone.
-- A reader that ultimately matches discards its recorded reasons; only a decline surfaces them.
+- Recorded reasons are discarded at the enclosing candidate level: when the reader ultimately matches, when a sibling reader matches, or when the feature group matches by another rule. Only a decline surfaces them.
 - Name the reader and the concrete input in the reason, as the example does.
 
 `ReadFile` column validation and the `ReadDB` feature check (`check_feature_in_data_access`) already record automatically; a custom reader only needs this for its own decline points.

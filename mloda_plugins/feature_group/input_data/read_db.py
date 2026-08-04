@@ -136,6 +136,7 @@ class ReadDB(BaseInputData):
                             cls.get_class_name(),
                             f"{cls.get_class_name()} accepted the credentials but declined "
                             f"the feature '{feature_names[0]}'",
+                            stage="input_data",
                         )
                         continue
                     except NotImplementedError:

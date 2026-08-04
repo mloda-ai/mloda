@@ -173,7 +173,9 @@ class ReadFile(BaseInputData):
             # Attributable decline: ownership established, content failed; plain non-matches stay silent.
             record_match_rejection(
                 cls.get_class_name(),
-                f"{cls.get_class_name()} owns {file_name} but it lacks the column(s): {', '.join(missing)}",
+                f"{cls.get_class_name()} matched the suffix of {file_name} but it lacks the column(s): "
+                f"{', '.join(missing)}",
+                stage="input_data",
             )
             return False
         return True

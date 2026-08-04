@@ -24,6 +24,7 @@ from mloda.core.abstract_plugins.components.default_options_key import DefaultOp
 from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.match_rejection import (
     MATCH_REJECTION_REASONS,
+    MatchRejection,
     record_match_rejection,
 )
 from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser_mixin import FeatureChainParserMixin
@@ -323,4 +324,4 @@ class TestRecorderActivation:
         recorded = MATCH_REJECTION_REASONS.get()
         MATCH_REJECTION_REASONS.reset(token)
 
-        assert recorded == {"FirstWinsOwnerOs005r": "first reason os005r"}
+        assert recorded == {"FirstWinsOwnerOs005r": MatchRejection(reason="first reason os005r")}

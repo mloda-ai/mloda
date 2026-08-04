@@ -18,6 +18,7 @@ class CandidateFrameworks:
 
 EliminationStage = Literal[
     "value_rejection",
+    "input_data",
     "matcher_error",
     "domain",
     "scope",

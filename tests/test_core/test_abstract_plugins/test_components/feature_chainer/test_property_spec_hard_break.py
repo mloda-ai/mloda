@@ -16,6 +16,8 @@ invariants. This module pins the Phase B hard break:
 6. ``PropertySpec`` is exported from ``mloda.provider`` and is the same class.
 7. ``FeatureChainParser._can_skip_required_check`` understands ``PropertySpec``: a non-None
    ``default`` or a ``required_when`` predicate makes the key skippable.
+8. ``framework_set`` (issue #949) is a reader-surface flag: a PROPERTY_MAPPING spec declaring
+   ``framework_set=True`` is rejected at class definition, naming the owner class and the key.
 """
 
 from __future__ import annotations
@@ -320,3 +322,45 @@ class TestCanSkipRequiredCheckOnPropertySpec:
         spec = PropertySpec("x")
 
         assert FeatureChainParser._can_skip_required_check(spec) is False
+
+
+class TestFrameworkSetStaysOffThePropertyMappingSurface:
+    """Item 9: ``framework_set`` marks a reader-written READER_OPTIONS key (issue #949).
+
+    A FeatureGroup key is always user- or name-supplied, so declaring ``framework_set=True`` in a
+    PROPERTY_MAPPING is a category error and must surface at class definition, naming the owner
+    class and the key like the raw-dict rejection above.
+    """
+
+    def test_framework_set_spec_rejected_at_class_definition(self) -> None:
+        """``framework_set=True`` in a PROPERTY_MAPPING names the class, the key, and the flag."""
+        with pytest.raises(ValueError) as exc_info:
+
+            class HardBreak949FrameworkSetFeatureGroup(FeatureChainParserMixin, FeatureGroup):
+                PROPERTY_MAPPING = {
+                    "hardbreak949_reader_key": PropertySpec("Reader-surface key.", default=None, framework_set=True)
+                }
+
+                @classmethod
+                def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+                    return data
+
+        message = str(exc_info.value)
+        del exc_info
+        assert "HardBreak949FrameworkSetFeatureGroup" in message
+        assert "hardbreak949_reader_key" in message
+        assert "framework_set" in message
+
+    def test_framework_set_false_spec_defines_fine(self) -> None:
+        """Control: the field's default (an explicit False included) stays valid on this surface."""
+
+        class HardBreak949FlaglessFeatureGroup(FeatureChainParserMixin, FeatureGroup):
+            PROPERTY_MAPPING = {
+                "hardbreak949_plain_key": PropertySpec("Plain user-facing key.", default=None, framework_set=False)
+            }
+
+            @classmethod
+            def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+                return data
+
+        assert "hardbreak949_plain_key" in HardBreak949FlaglessFeatureGroup.declared_option_keys()

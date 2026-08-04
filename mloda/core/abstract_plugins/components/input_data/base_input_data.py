@@ -2,8 +2,8 @@ from abc import ABC
 from typing import Any, ClassVar, Optional
 
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
+from mloda.core.abstract_plugins.components.feature_chainer.property_spec import PropertySpec, is_no_default
 from mloda.core.abstract_plugins.components.feature_set import FeatureSet
-from mloda.core.abstract_plugins.components.input_data.reader_option_spec import ReaderOptionSpec
 from mloda.core.abstract_plugins.components.options import Options
 
 
@@ -11,15 +11,16 @@ from mloda.core.abstract_plugins.components.utils import escalate_match_abort, g
 
 
 class BaseInputData(ABC):
-    READER_OPTIONS: ClassVar[dict[str, ReaderOptionSpec]] = {
-        "BaseInputData": ReaderOptionSpec(
+    READER_OPTIONS: ClassVar[dict[str, PropertySpec]] = {
+        "BaseInputData": PropertySpec(
             "The matched (ReaderClass, data_access) pair, written by add_base_input_data_to_options "
             "and read back by init_reader.",
+            default=None,
             framework_set=True,
         ),
     }
 
-    _reader_option_specs_cache: ClassVar[Optional[dict[str, ReaderOptionSpec]]] = None
+    _reader_option_specs_cache: ClassVar[Optional[dict[str, PropertySpec]]] = None
     """Merged declarations of ONE class, written into that class's own __dict__ by _merged_reader_option_specs."""
 
     def __init__(self) -> None:
@@ -31,38 +32,75 @@ class BaseInputData(ABC):
 
     @classmethod
     def _validate_reader_options(cls) -> None:
-        """Reject a non-ReaderOptionSpec value where it is written, not later on .runtime_default.
+        """Reject a reader-invalid declaration where it is written, not later deep in reader matching.
 
         Mirrors FeatureChainParser._require_spec for PROPERTY_MAPPING, and checks only this class's
-        own declaration so a bad child under a valid parent still raises.
+        own declaration so a bad child under a valid parent still raises. Reader option keys never
+        pass through name-parsing or match gating, so the fields that only mean something there are
+        rejected, and a framework-written key is exempt from user-value validation, so a spec that
+        would silently never fire is rejected too.
         """
         for key, spec in cls.__dict__.get("READER_OPTIONS", {}).items():
-            if not isinstance(spec, ReaderOptionSpec):
+            if not isinstance(spec, PropertySpec):
                 raise ValueError(
-                    f"{cls.__name__}.READER_OPTIONS['{key}'] is a {type(spec).__name__}, not a ReaderOptionSpec. "
-                    f"Construct ReaderOptionSpec(...) instead."
+                    f"{cls.__name__}.READER_OPTIONS['{key}'] is a {type(spec).__name__}, not a PropertySpec. "
+                    f"Construct PropertySpec(...) instead."
                 )
+            if spec.match_guard is not None:
+                raise ValueError(
+                    f"{cls.__name__}.READER_OPTIONS['{key}'] declares a match_guard, which is name-matching "
+                    f"machinery and silently inert on a reader."
+                )
+            if spec.deferred_binding:
+                raise ValueError(
+                    f"{cls.__name__}.READER_OPTIONS['{key}'] declares deferred_binding=True, which is the "
+                    f"name-capture exemption; a reader key has no name path."
+                )
+            if spec.context is False:
+                raise ValueError(
+                    f"{cls.__name__}.READER_OPTIONS['{key}'] declares context=False, which places a "
+                    f"materialized value; readers place none."
+                )
+            if spec.framework_set:
+                if spec.strict_validation:
+                    raise ValueError(
+                        f"{cls.__name__}.READER_OPTIONS['{key}'] combines framework_set=True with "
+                        f"strict_validation=True; the framework-written key is exempt from user-value "
+                        f"validation, so strictness would be silently inert."
+                    )
+                if spec.required_when is not None:
+                    raise ValueError(
+                        f"{cls.__name__}.READER_OPTIONS['{key}'] combines framework_set=True with a "
+                        f"required_when predicate; the framework-written key is exempt from user-value "
+                        f"validation, so the predicate would be silently inert."
+                    )
+                if is_no_default(spec.default):
+                    raise ValueError(
+                        f"{cls.__name__}.READER_OPTIONS['{key}'] declares framework_set=True without a "
+                        f"declared default; the framework-written key must declare its absent-state "
+                        f"default explicitly, None included."
+                    )
 
     @classmethod
-    def _merged_reader_option_specs(cls) -> dict[str, ReaderOptionSpec]:
+    def _merged_reader_option_specs(cls) -> dict[str, PropertySpec]:
         """The merged declarations of cls, cached in cls's OWN __dict__; internal, never handed out.
 
         Reader selection is a hot path, so the MRO walk runs once per class. The cache is read back
         with cls.__dict__.get so a subclass never answers from a warm parent cache, and it lives on
         the class itself rather than in a class-keyed registry so it holds no reference to any class.
         """
-        cached: Optional[dict[str, ReaderOptionSpec]] = cls.__dict__.get("_reader_option_specs_cache")
+        cached: Optional[dict[str, PropertySpec]] = cls.__dict__.get("_reader_option_specs_cache")
         if cached is not None:
             return cached
 
-        merged: dict[str, ReaderOptionSpec] = {}
+        merged: dict[str, PropertySpec] = {}
         for klass in reversed(cls.__mro__):
             merged.update(klass.__dict__.get("READER_OPTIONS", {}))
         cls._reader_option_specs_cache = merged
         return merged
 
     @classmethod
-    def reader_option_specs(cls) -> dict[str, ReaderOptionSpec]:
+    def reader_option_specs(cls) -> dict[str, PropertySpec]:
         """The declarations of this reader family, most-derived winning; a fresh dict per call.
 
         Merged across cls.__mro__ from each class's own __dict__ so an inherited attribute is not
@@ -76,7 +114,7 @@ class BaseInputData(ABC):
         return frozenset(cls._merged_reader_option_specs())
 
     @classmethod
-    def _declared_reader_option_spec(cls, key: str) -> ReaderOptionSpec:
+    def _declared_reader_option_spec(cls, key: str) -> PropertySpec:
         """The declaration of key; an undeclared key is a typo, not a silent None."""
         specs = cls._merged_reader_option_specs()
         if key not in specs:
@@ -85,21 +123,30 @@ class BaseInputData(ABC):
 
     @classmethod
     def reader_option_default(cls, key: str) -> Any:
-        """The declared runtime_default of key, without consulting any Options."""
-        return cls._declared_reader_option_spec(key).runtime_default
+        """The declared default of key, without consulting any Options."""
+        spec = cls._declared_reader_option_spec(key)
+        if is_no_default(spec.default):
+            raise ValueError(f"Reader option '{key}' of {cls.__name__} declares no default.")
+        return spec.default
 
     @classmethod
     def reader_option(cls, key: str, options: Options) -> Any:
-        """The supplied value of key when present, else the declared runtime_default.
+        """The supplied value of key when present, else the declared default.
 
-        Presence, not truthiness: an explicit empty value ("hand nothing over") survives, while None
-        reads as absent per the framework's dominant absence rule.
+        Presence honours the spec: allow_explicit_none=True reads presence as ``key in options`` (an
+        explicit None is a value), otherwise a non-None ``options.get(key)``. Absent with no declared
+        default (NO_DEFAULT) is a loud ValueError.
         """
         spec = cls._declared_reader_option_spec(key)
-        value = options.get(key)
-        if value is None:
-            return spec.runtime_default
-        return value
+        if spec.allow_explicit_none:
+            present = key in options
+        else:
+            present = options.get(key) is not None
+        if present:
+            return options.get(key)
+        if is_no_default(spec.default):
+            raise ValueError(f"Reader option '{key}' of {cls.__name__} declares no default and no value was supplied.")
+        return spec.default
 
     @classmethod
     def data_access_name(cls) -> str:

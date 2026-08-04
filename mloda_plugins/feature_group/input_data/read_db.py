@@ -1,6 +1,6 @@
 from typing import Any, ClassVar
 from mloda.user import DataAccessCollection
-from mloda.provider import FeatureSet, BaseInputData, ReaderOptionSpec, record_match_rejection
+from mloda.provider import FeatureSet, BaseInputData, PropertySpec, record_match_rejection
 from mloda.user import Options
 
 
@@ -23,10 +23,10 @@ class ReadDB(BaseInputData):
 
     _auto_load_group: str = "feature_group/input_data/read_dbs"
 
-    READER_OPTIONS: ClassVar[dict[str, ReaderOptionSpec]] = {
-        "data_access_handle": ReaderOptionSpec(
+    READER_OPTIONS: ClassVar[dict[str, PropertySpec]] = {
+        "data_access_handle": PropertySpec(
             "Hint naming which DataAccessCollection credentials handle to prefer while matching.",
-            runtime_default=None,
+            default=None,
         ),
     }
 

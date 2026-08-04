@@ -271,13 +271,19 @@ class FeatureChainParser:
         """Validate a PROPERTY_MAPPING at class-definition time.
 
         Every spec must BE a ``PropertySpec``; a spec validates itself at construction, so the
-        only rule left here is the type itself.
+        rules left here are the type itself and the reader-surface-only ``framework_set`` flag.
         """
         if property_mapping is None:
             return
 
         for key, spec in property_mapping.items():
-            cls._require_spec(owner_name, key, spec)
+            checked = cls._require_spec(owner_name, key, spec)
+            if checked.framework_set:
+                raise ValueError(
+                    f"{owner_name}.PROPERTY_MAPPING['{key}'] declares framework_set=True, which marks a "
+                    f"reader-surface (READER_OPTIONS) key written by the framework; PROPERTY_MAPPING keys "
+                    f"are user-set."
+                )
 
     @classmethod
     def _unpack_property_value(cls, found_property_value: Any) -> list[Any]:

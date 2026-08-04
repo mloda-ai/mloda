@@ -88,6 +88,8 @@ class PropertySpec:
     # outside match-time name capture (parsed from the name by the plugin, or supplied downstream).
     # It does NOT change config-path requiredness.
     deferred_binding: bool = False
+    # Marks a reader-surface key the framework writes rather than the user; rejected on the PROPERTY_MAPPING surface.
+    framework_set: bool = False
 
     def __post_init__(self) -> None:
         prefix = f"PropertySpec({self.explanation!r})"
@@ -121,6 +123,9 @@ class PropertySpec:
 
         if not isinstance(self.deferred_binding, bool):
             raise ValueError(f"{prefix}: deferred_binding must be a bool, got {type(self.deferred_binding).__name__}.")
+
+        if not isinstance(self.framework_set, bool):
+            raise ValueError(f"{prefix}: framework_set must be a bool, got {type(self.framework_set).__name__}.")
 
         if self.element_validator is not None and not callable(self.element_validator):
             raise ValueError(f"{prefix}: element_validator must be callable.")

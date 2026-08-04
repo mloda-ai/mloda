@@ -3,7 +3,7 @@ from pathlib import Path
 from typing import Any, ClassVar
 from mloda.user import DataAccessCollection
 from mloda.provider import FeatureSet
-from mloda.provider import BaseInputData, ReaderOptionSpec, record_match_rejection
+from mloda.provider import BaseInputData, PropertySpec, record_match_rejection
 from mloda.user import Options
 
 
@@ -39,14 +39,14 @@ class ReadFile(BaseInputData):
 
     _auto_load_group: str = "feature_group/input_data/read_files"
 
-    READER_OPTIONS: ClassVar[dict[str, ReaderOptionSpec]] = {
-        "document_suffixes": ReaderOptionSpec(
+    READER_OPTIONS: ClassVar[dict[str, PropertySpec]] = {
+        "document_suffixes": PropertySpec(
             "Suffixes handed over to document readers; ReadFile auto-excludes them from its own matching.",
-            runtime_default=frozenset(),
+            default=frozenset(),
         ),
-        "data_access_handle": ReaderOptionSpec(
+        "data_access_handle": PropertySpec(
             "Hint naming which DataAccessCollection file handle to prefer while matching.",
-            runtime_default=None,
+            default=None,
         ),
     }
 

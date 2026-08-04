@@ -4,13 +4,13 @@ Feature chain parser for handling feature name chaining across feature groups.
 
 from __future__ import annotations
 
-import contextvars
 import logging
 import re
 from typing import Any, Optional
 
 from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
+from mloda.core.abstract_plugins.components.match_rejection import record_match_rejection
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.components.default_options_key import DefaultOptionKeys
 from mloda.core.abstract_plugins.components.feature_chainer.parsed_feature_name import ParsedFeatureName
@@ -23,21 +23,6 @@ logger = logging.getLogger(__name__)
 CHAIN_SEPARATOR = "__"  # Separates chained transformations (source→suffix)
 COLUMN_SEPARATOR = "~"  # Separates multi-column output index
 INPUT_SEPARATOR = "&"  # Separates multiple input features
-
-# Active for one candidate's match call: the engine opens a window per candidate. Maps the recording
-# site's owner name to the first structured rejection reason the real match pass produced, and the
-# engine attributes the harvest to the candidate class object it called (os-005 replaces the replay).
-MATCH_REJECTION_REASONS: contextvars.ContextVar[dict[str, str] | None] = contextvars.ContextVar(
-    "mloda_match_rejection_reasons", default=None
-)
-
-
-def record_match_rejection(owner_name: str, reason: str) -> None:
-    """Record a match rejection; the first reason per owner wins, and outside an active evaluation it is a no-op."""
-    reasons = MATCH_REJECTION_REASONS.get()
-    if reasons is None:
-        return
-    reasons.setdefault(owner_name, reason)
 
 
 def option_key_is_present(spec: PropertySpec, key: str, options: Options) -> bool:

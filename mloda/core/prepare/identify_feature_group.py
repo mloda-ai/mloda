@@ -24,9 +24,10 @@ from mloda.core.prepare.resolution_failure_renderer import (
 )
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.abstract_plugins.components.domain import Domain
-from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser import (
+from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser import PropertyValueRejection
+from mloda.core.abstract_plugins.components.match_rejection import (
     MATCH_REJECTION_REASONS,
-    PropertyValueRejection,
+    MatchRejection,
     record_match_rejection,
 )
 from mloda.core.abstract_plugins.components.utils import (
@@ -98,7 +99,7 @@ class IdentifyFeatureGroupClass:
     _criteria_matched_feature_groups: set[type[FeatureGroup]]
     _abstract_matched_feature_groups: set[type[FeatureGroup]]
     _candidate_frameworks: dict[type[FeatureGroup], CandidateFrameworks]
-    _match_rejections: dict[type[FeatureGroup], str]
+    _match_rejections: dict[type[FeatureGroup], MatchRejection]
     _matcher_errors: dict[type[FeatureGroup], str]
     _eliminations: dict[type[FeatureGroup], Elimination]
     _data_access_collection: Optional[DataAccessCollection]
@@ -363,13 +364,16 @@ class IdentifyFeatureGroupClass:
             # never probed. Recorded regardless of domain/scope or of the overall outcome (a sibling may win).
             if not self._filter_feature_group_by_criteria(feature_group, feature, data_access_collection):
                 # A contained matcher raise is always a near-miss: the raise says nothing about name ownership.
+                # Deliberate precedence: a contained crash outranks a recorded decline for the same candidate.
                 matcher_error = self._matcher_errors.get(feature_group)
                 if matcher_error is not None:
                     self._record_elimination(feature_group, "matcher_error", matcher_error)
                     continue
-                reason = self._value_rejection_reason(feature_group)
-                if reason is not None:
-                    self._record_elimination(feature_group, "value_rejection", reason)
+                rejection = self._value_rejection(feature_group)
+                if rejection is not None:
+                    # The stage is a free-form hint; only "input_data" is engine-known, the rest fall back.
+                    stage: EliminationStage = "input_data" if rejection.stage == "input_data" else "value_rejection"
+                    self._record_elimination(feature_group, stage, rejection.reason)
                 continue
 
             if not self._filter_feature_group_by_domain(feature_group, feature):
@@ -441,10 +445,10 @@ class IdentifyFeatureGroupClass:
         """Record the first gate a non-winning name-matching candidate failed; one entry per candidate."""
         self._eliminations.setdefault(feature_group, Elimination(stage=stage, reason=reason))
 
-    def _value_rejection_reason(self, feature_group: type[FeatureGroup]) -> Optional[str]:
-        """The reason the first match pass recorded for this candidate class, if any.
+    def _value_rejection(self, feature_group: type[FeatureGroup]) -> Optional[MatchRejection]:
+        """The MatchRejection the first match pass recorded for this candidate class, if any.
 
-        The candidate's criteria match records its own value rejection under a per-candidate window; this
+        The candidate's criteria match records its own rejection under a per-candidate window; this
         only reads that record back, so no rejection hook is ever reran on the failure path.
         """
         return self._match_rejections.get(feature_group)

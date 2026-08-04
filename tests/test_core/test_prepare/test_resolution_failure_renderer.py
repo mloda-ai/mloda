@@ -93,9 +93,9 @@ DEAD_PREFIX_UNCOVERED_791 = "RendererDeadPrefixFG791_sum_791"
 VALUE_STAGE_REJECTION_REASON_791 = "renderer_value_stage_791 declines every value of this option"
 
 # The stages whose gate CAN see the feature name, so a sibling name of a candidate eliminated there may still
-# resolve. Pinned here as the complement of NAME_INDEPENDENT_STAGES: a ninth stage fails the partition test.
+# resolve. Pinned here as the complement of NAME_INDEPENDENT_STAGES: a tenth stage fails the partition test.
 NAME_DEPENDENT_STAGES_791: frozenset[EliminationStage] = frozenset(
-    {"value_rejection", "matcher_error", "capability", "framework_pin"}
+    {"value_rejection", "input_data", "matcher_error", "capability", "framework_pin"}
 )
 
 # Stands in for a ninth stage shipped without a near-miss label: no entry of the label table covers this token.
@@ -1928,7 +1928,7 @@ class TestALivePrefixKeepsACoveredNameSuggestible:
 
 
 class TestEveryEliminationStageIsClassified:
-    """A ninth stage must be classified and labelled before it ships, or it silently misrenders or misdrops names."""
+    """A tenth stage must be classified and labelled before it ships, or it silently misrenders or misdrops names."""
 
     def test_the_two_stage_sets_partition_the_stage_literal(self) -> None:
         """NAME_INDEPENDENT_STAGES and its name-dependent complement cover EliminationStage exactly once."""

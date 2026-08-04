@@ -51,6 +51,7 @@ class Engine:
         column_ordering: Optional[str] = None,
     ) -> None:
         # setup variables which track the primary sources and the compute platforms
+        # Holds the Feature objects ResolveComputeFrameworks.links rewrites: hash-stale after planning, so only read it before planning (as today).
         self.feature_group_collection: dict[type[FeatureGroup], set[Feature]] = defaultdict(set)
 
         # use global filters

@@ -329,9 +329,11 @@ class FeatureChainParserMixin:
                 prefix_patterns=cls._get_prefix_patterns(),
                 owner_name=cls.__name__,
             )
-        # Swallows: the parser's own non-match verdict, recorded as the candidate's reason.
-        # A framework raise is marked instead and lands in the ValueError handler below.
+        # PropertyValueRejection subclasses ValueError, so this handler sits above the abort check and must
+        # run it: an unmarked rejection is the parser's non-match verdict, recorded as the candidate's reason.
         except PropertyValueRejection as exc:
+            if is_match_abort(exc):
+                raise
             record_match_rejection(cls.__name__, str(exc))
             return False
         # A marked raise crosses this containment; an unmarked ValueError stays a non-match.

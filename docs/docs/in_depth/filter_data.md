@@ -242,8 +242,10 @@ get is therefore decided outside your FeatureGroup. `if features.filters:` cover
 
 Matching is probed per feature, but matched filters attach to the `FeatureSet`. A feature that
 declined a filter is still filtered by it once a sibling of its set matched it, a contained raise
-included; that is logged as a WARNING. Two features matching different non-empty filter sets
-raise `ValueError` instead. To scope a filter, make the deciding option a **group** option:
+included; that is logged as a WARNING. Siblings matching different non-empty filter sets get the
+union attached. Matches of one filter that differ only in the enriched options count as that one
+filter: it attaches once and is not reported. To scope a filter, make the deciding option a
+**group** option:
 differing group options split the features into separate `FeatureSet`s.
 
 `GlobalFilter.probes` records what every probe matched, empty results included, for debugging.

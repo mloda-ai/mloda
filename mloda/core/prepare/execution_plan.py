@@ -31,6 +31,15 @@ import logging
 logger = logging.getLogger(__name__)
 
 
+def _filter_options_sort_key(single_filter: SingleFilter) -> tuple[str, str]:
+    """Deterministic order over enrichment variants; repr keeps primitive option values comparable."""
+    options = single_filter.filter_feature.options
+    return (
+        repr(sorted((str(k), repr(v)) for k, v in options.group.items())),
+        repr(sorted((str(k), repr(v)) for k, v in options.context.items())),
+    )
+
+
 class ExecutionPlan:
     def __init__(
         self,
@@ -998,29 +1007,25 @@ class ExecutionPlan:
         if len(self.global_filter.collection.keys()) == 0:
             return
 
-        relevant_filters: set[SingleFilter] = set()
+        feature_names = {feature.name for feature in feature_set.features}
 
+        # One representative per declared filter: enrichment variants of one declaration share
+        # its uuid; the resolved column name stays in the key because renames change the predicate.
+        representatives: dict[tuple[UUID, str], SingleFilter] = {}
         for (
             filtered_feature_group,
             filtered_feature_name,
         ), single_filters in self.global_filter.collection.items():
-            # check for correct feature group
-            if filtered_feature_group == feature_group:
-                # check if filter feature is a feature of this feature set
-                for feature in feature_set.features:
-                    if feature.name == filtered_feature_name:
-                        if len(relevant_filters) == 0:
-                            # Read-only alias of the live collection set; FeatureSet.add_filters
-                            # copies it once at the storing end (#910).
-                            relevant_filters = single_filters
-                        else:
-                            if relevant_filters != single_filters:
-                                raise ValueError(
-                                    f"""Feature group {feature_group} has different filters for different features {filtered_feature_name}.
-                                      This is currently not allowed. Please make sure that all features of the same feature group have the same filters.
-                                      If this has a business use case, where this does not make sense, please contact the developers.
-                                      """
-                                )
+            if filtered_feature_group != feature_group or filtered_feature_name not in feature_names:
+                continue
+            for single_filter in single_filters:
+                key = (single_filter.uuid, str(single_filter.filter_feature.name))
+                current = representatives.get(key)
+                if current is None or _filter_options_sort_key(single_filter) < _filter_options_sort_key(current):
+                    representatives[key] = single_filter
+
+        # Fresh set so the live collection sets stay untouched.
+        relevant_filters = set(representatives.values())
 
         self._warn_on_unmatched_features(feature_group, feature_set, relevant_filters)
         feature_set.add_filters(relevant_filters)
@@ -1037,7 +1042,15 @@ class ExecutionPlan:
             # Filter and index features enter the collection without being probed.
             if probed is None:
                 continue
-            unmatched = sorted({str(f.filter_feature.name) for f in relevant_filters - probed})
+            # Diff by declared-filter identity so a match under another enrichment still counts.
+            probed_keys = {(f.uuid, str(f.filter_feature.name)) for f in probed}
+            unmatched = sorted(
+                {
+                    str(f.filter_feature.name)
+                    for f in relevant_filters
+                    if (f.uuid, str(f.filter_feature.name)) not in probed_keys
+                }
+            )
             if not unmatched:
                 continue
             key = (feature_group, str(feature.name), tuple(unmatched))

@@ -442,6 +442,54 @@ def test_from_dict_accepts_deeply_nested_tuple() -> None:
     hash(filter_param)
 
 
+# --- Non-string key rejection tests (see issue #959) ---
+
+
+def test_from_dict_rejects_non_string_key() -> None:
+    """Test a non-string key raises ValueError instead of the raw TypeError out of sorted()."""
+    params: dict[Any, Any] = {1: "a", "b": 2}
+
+    with pytest.raises(ValueError, match="1"):
+        FilterParameterImpl.from_dict(params)
+
+
+def test_from_dict_non_string_key_error_names_the_key() -> None:
+    """Test the message names the offending key rather than a neighbouring one."""
+    params: dict[Any, Any] = {"value": 25, ("tuple", "key"): 2}
+
+    with pytest.raises(ValueError) as excinfo:
+        FilterParameterImpl.from_dict(params)
+
+    message = str(excinfo.value)
+    assert "tuple" in message, message
+
+
+def test_from_dict_rejects_non_string_key_even_without_mixed_types() -> None:
+    """Test a key set that sorts fine is still rejected when the keys are not strings."""
+    params: dict[Any, Any] = {1: "a", 2: "b"}
+
+    with pytest.raises(ValueError, match="1"):
+        FilterParameterImpl.from_dict(params)
+
+
+def test_from_dict_rejects_none_key() -> None:
+    """Test None as a key is rejected with a ValueError."""
+    params: dict[Any, Any] = {None: "a"}
+
+    with pytest.raises(ValueError, match="None"):
+        FilterParameterImpl.from_dict(params)
+
+
+def test_from_dict_rejects_non_string_key_before_unhashable_value_check() -> None:
+    """Test the key check fires even when another key carries an unhashable value."""
+    params: dict[Any, Any] = {1: "a", "payload": {"a": 1}}
+
+    with pytest.raises(ValueError) as excinfo:
+        FilterParameterImpl.from_dict(params)
+
+    assert "1" in str(excinfo.value), str(excinfo.value)
+
+
 @pytest.mark.parametrize(
     "params",
     [

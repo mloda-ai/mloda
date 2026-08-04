@@ -55,6 +55,10 @@ class FilterParameterImpl:
 
     @classmethod
     def from_dict(cls, params: dict[str, Any]) -> "FilterParameterImpl":
+        for key in params:
+            # Checked before the sort below, which would otherwise raise a TypeError naming nothing.
+            if not isinstance(key, str):
+                raise ValueError(f"Filter parameter key {key!r} is not a string.")
         normalized = {k: _make_hashable(v) for k, v in params.items()}
         for key, value in normalized.items():
             culprit = _unhashable_type(value)

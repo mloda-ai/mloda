@@ -383,3 +383,41 @@ class TestGlobalFilterUnhashableParameter:
             self.global_filter.add_filter(Feature("col"), FilterType.EQUAL, parameter)
 
         assert len(self.global_filter.filters) == 1
+
+
+class TestGlobalFilterNonStringParameterKey:
+    """A non-string parameter key is rejected by add_filter with a ValueError (issue #959)."""
+
+    def setup_method(self) -> None:
+        self.global_filter = GlobalFilter()
+
+    def test_add_filter_rejects_non_string_parameter_key(self) -> None:
+        """Test a mixed-type key dict raises ValueError rather than the sort's TypeError."""
+        parameter: dict[Any, Any] = {1: "a", "value": 2}
+
+        with pytest.raises(ValueError, match=r"key 1 is not a string"):
+            self.global_filter.add_filter(Feature("col"), FilterType.EQUAL, parameter)
+
+        assert len(self.global_filter.filters) == 0
+
+    def test_add_filter_rejection_names_the_non_string_key(self) -> None:
+        """Test the message names the offending key."""
+        parameter: dict[Any, Any] = {("tuple", "key"): "a", "value": 2}
+
+        with pytest.raises(ValueError) as excinfo:
+            self.global_filter.add_filter(Feature("col"), FilterType.EQUAL, parameter)
+
+        assert "tuple" in str(excinfo.value), str(excinfo.value)
+        assert len(self.global_filter.filters) == 0
+
+    def test_add_filter_still_rejects_non_dict_parameter(self) -> None:
+        """Test the existing non-dict rejection keeps working."""
+        with pytest.raises(ValueError):
+            self.global_filter.add_filter(Feature("col"), FilterType.EQUAL, "not_a_dict")  # type: ignore[arg-type]
+
+    def test_add_filter_still_rejects_empty_parameter(self) -> None:
+        """Test the existing empty-parameter rejection keeps working."""
+        parameter: dict[str, Any] = {}
+
+        with pytest.raises(ValueError):
+            self.global_filter.add_filter(Feature("col"), FilterType.EQUAL, parameter)

@@ -112,7 +112,7 @@ The implementation of the concrete filters is dependent on the feature group. Th
 
 Further, the feature is a data creator, so we create the data here itself. 
 
-``` python
+```python
 from mloda.user import mloda
 from mloda.provider import FeatureGroup, FeatureSet, ComputeFramework, BaseInputData, DataCreator
 from typing import Any, Union, Set, Type, Optional
@@ -130,6 +130,9 @@ class ExampleOrderFilter(FeatureGroup):
                          }
         # The following algorithm is naive and rather should show an example than a normal use case.
         # The filter implementation highly depends on the feature group!
+        # features.filters is None or an empty set if no filter matched this feature set.
+        if not features.filters:
+            return _data_creator
         # Extract the filter value and filter_name information from the filters.
         for filter in features.filters:
             filter_value = filter.parameter.value
@@ -144,6 +147,10 @@ class ExampleOrderFilter(FeatureGroup):
             if key != filter_name
         }
         return filtered_data
+    @classmethod
+    def final_filters(cls) -> bool | None:
+        # This group applies the filter itself and drops the filter column, so framework row elimination must not run.
+        return False
     @classmethod
     def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
         return {PyArrowTable}

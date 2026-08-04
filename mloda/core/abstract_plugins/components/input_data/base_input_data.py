@@ -5,7 +5,11 @@ from typing import Any, ClassVar, Optional
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.abstract_plugins.components.feature_chainer.property_spec import PropertySpec, is_no_default
 from mloda.core.abstract_plugins.components.feature_set import FeatureSet
-from mloda.core.abstract_plugins.components.match_rejection import record_match_rejection
+from mloda.core.abstract_plugins.components.match_rejection import (
+    INPUT_DATA_OWNED_STAGE,
+    INPUT_DATA_STAGE,
+    record_match_rejection,
+)
 from mloda.core.abstract_plugins.components.options import Options
 
 
@@ -148,7 +152,7 @@ class BaseInputData(ABC):
     @classmethod
     def _reader_options_admit(cls, options: Optional[Options], record_absence: bool) -> bool:
         """Check this candidate's merged declarations BEFORE its probe runs; a veto is its own non-match.
-        record_absence gates only absence recordings; a present-value strict rejection records on both paths."""
+        record_absence doubles as the ownership signal: it gates absence recordings and stages present-value ones."""
         for key, spec in cls._merged_reader_option_specs().items():
             if spec.framework_set:
                 continue
@@ -162,7 +166,7 @@ class BaseInputData(ABC):
                 if not cls._absent_reader_option_admits(key, spec, options, record_absence):
                     return False
             elif spec.strict_validation:
-                if not cls._present_reader_option_admits(key, spec, value):
+                if not cls._present_reader_option_admits(key, spec, value, owned=record_absence):
                     return False
         return True
 
@@ -194,7 +198,7 @@ class BaseInputData(ABC):
                         owner,
                         f"required reader option '{key}' is absent, but {owner} declares it required "
                         f"(required_when predicate {getattr(predicate, '__name__', repr(predicate))} is satisfied)",
-                        stage="input_data",
+                        stage=INPUT_DATA_OWNED_STAGE,
                     )
                 return False
             return True
@@ -203,15 +207,15 @@ class BaseInputData(ABC):
                 record_match_rejection(
                     owner,
                     f"required reader option '{key}' is absent, but {owner} declares it required (no default declared)",
-                    stage="input_data",
+                    stage=INPUT_DATA_OWNED_STAGE,
                 )
             return False
         return True
 
     @classmethod
-    def _present_reader_option_admits(cls, key: str, spec: PropertySpec, value: Any) -> bool:
+    def _present_reader_option_admits(cls, key: str, spec: PropertySpec, value: Any, owned: bool) -> bool:
         """Strict validation of a PRESENT value: list/tuple/set/frozenset unpack element-wise,
-        a str is one scalar, a dict one composite value."""
+        a str is one scalar, a dict one composite value; owned stages the recorded rejection."""
         elements = list(value) if isinstance(value, (list, tuple, set, frozenset)) else [value]
         for element in elements:
             if cls._reader_option_element_admits(key, spec, element):
@@ -220,7 +224,7 @@ class BaseInputData(ABC):
             record_match_rejection(
                 owner,
                 f"reader option '{key}' value {element!r} is rejected by the declaration of {owner}",
-                stage="input_data",
+                stage=INPUT_DATA_OWNED_STAGE if owned else INPUT_DATA_STAGE,
             )
             return False
         return True
@@ -293,7 +297,7 @@ class BaseInputData(ABC):
                 _key = cls.deal_with_base_input_data_name_as_cls_or_str(key)
 
                 if _key == subclass.data_access_name():
-                    # The user addressed this reader family by name (ownership), so absence vetoes record.
+                    # The user addressed this reader family by name (ownership), so vetoes record as owned.
                     if not subclass._reader_options_admit(options, record_absence=True):
                         break
                     matched_data_access = subclass.match_subclass_data_access(value, [feature_name], options=options)  # type: ignore[attr-defined]

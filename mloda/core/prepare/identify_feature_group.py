@@ -26,6 +26,8 @@ from mloda.core.abstract_plugins.components.data_access_collection import DataAc
 from mloda.core.abstract_plugins.components.domain import Domain
 from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser import PropertyValueRejection
 from mloda.core.abstract_plugins.components.match_rejection import (
+    INPUT_DATA_OWNED_STAGE,
+    INPUT_DATA_STAGE,
     MATCH_REJECTION_REASONS,
     MatchRejection,
     record_match_rejection,
@@ -401,8 +403,13 @@ class IdentifyFeatureGroupClass:
                     continue
                 rejection = self._value_rejection(feature_group)
                 if rejection is not None:
-                    # The stage is a free-form hint; only "input_data" is engine-known, the rest fall back.
-                    stage: EliminationStage = "input_data" if rejection.stage == "input_data" else "value_rejection"
+                    # The stage is a free-form hint; only the two input-data stages are engine-known and both
+                    # surface as the public "input_data" elimination stage, the rest fall back.
+                    stage: EliminationStage = (
+                        "input_data"
+                        if rejection.stage in (INPUT_DATA_STAGE, INPUT_DATA_OWNED_STAGE)
+                        else "value_rejection"
+                    )
                     self._record_elimination(feature_group, stage, rejection.reason)
                 continue
 

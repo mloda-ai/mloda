@@ -18,6 +18,8 @@ assert ClusteringFeatureGroup.match_feature_group_criteria("customer_behavior__c
 assert not ClusteringFeatureGroup.match_feature_group_criteria("invalid_name", Options())
 ```
 
+The reader veto gate reads the engine's per-candidate rejection window, so a direct `match_feature_group_criteria` call without an active window does not exercise it; engine-shaped assertions go through `IdentifyFeatureGroupClass.evaluate`.
+
 ### 2. Input Feature Extraction
 
 Test that your feature group correctly extracts source features from feature names.

@@ -18,6 +18,11 @@ class MatchRejection:
     stage: str = "value_rejection"
 
 
+# The owned stage marks a veto recorded while the user explicitly addressed the reader family.
+INPUT_DATA_STAGE = "input_data"
+INPUT_DATA_OWNED_STAGE = "input_data_owned"
+
+
 # Active for one candidate's match call: the engine opens a window per candidate. Maps the recording
 # site's owner name to the first structured rejection the real match pass produced, and the
 # engine attributes the harvest to the candidate class object it called.

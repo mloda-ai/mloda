@@ -29,6 +29,7 @@ from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser
 from mloda.core.abstract_plugins.components.feature_chainer.property_spec import property_spec
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.components.index.index import Index
+from mloda.core.abstract_plugins.components.link import JoinSpec, Link
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.components.plugin_option.plugin_collector import PluginCollector
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
@@ -97,6 +98,12 @@ DEGRADED_DOMAIN_FEATURE_791 = "renderer_degraded_domain_revenue_791"
 DEGRADED_DOMAIN_SPARE_791 = "renderer_degraded_domain_profit_791"
 MALFORMED_DOMAIN_FEATURE_791 = "renderer_malformed_domain_revenue_791"
 MALFORMED_DOMAIN_SPARE_791 = "renderer_malformed_domain_profit_791"
+LINKS_GATE_FEATURE_791 = "renderer_links_gate_revenue_791"
+LINKS_GATE_SIBLING_791 = "renderer_links_gate_profit_791"
+VALUE_LINKS_FEATURE_791 = "renderer_value_links_revenue_791"
+VALUE_LINKS_SPARE_791 = "renderer_value_links_profit_791"
+DEGRADED_LINKS_FEATURE_791 = "renderer_degraded_links_revenue_791"
+DEGRADED_LINKS_SPARE_791 = "renderer_degraded_links_profit_791"
 
 # A get_domain() return that is not a Domain at all: the decision gate compares it and drops the candidate.
 MALFORMED_DOMAIN_VALUE_791 = "renderer_not_a_domain_791"
@@ -114,6 +121,7 @@ OTHER_DOMAIN_791 = "renderer_other_domain_791"
 GATE_SCOPE_791 = "RendererKnownNamesFG791"
 
 VALUE_DOMAIN_REJECTION_REASON_791 = "ValueRejectingCrossDomainFG791 declines every value of this option"
+VALUE_LINKS_REJECTION_REASON_791 = "ValueRejectingUnlinkedFG791 declines every value of this option"
 
 # Built around the class names below, because the default matcher also owns a name by class-name PREFIX.
 # The request drops the trailing underscore, so nothing matches it while both declared names stay close to it.
@@ -166,6 +174,13 @@ RENDERER_LOGGER_791 = "mloda.core.prepare.resolution_failure_renderer"
 
 # The matcher's own module logger: a degraded domain read happens during evaluate(), never during rendering.
 IDENTIFY_LOGGER_791 = "mloda.core.prepare.identify_feature_group"
+
+# safe_field's own module logger: a guarded read reports its degrade from wherever the guard sits.
+SAFE_FIELD_LOGGER_791 = "mloda.core.abstract_plugins.components.utils"
+
+# The links gate reads two hooks, so its degrade names both: reporting it as index_columns alone names the
+# wrong hook whenever supports_index is the one that raised.
+LINKS_DEGRADE_FIELD_791 = "index_columns/supports_index"
 
 # Eight names, all close to WIDE_FEATURE_791, so only the cut can bound the rendered line.
 WIDE_CATALOG_NAMES_791 = frozenset(
@@ -246,6 +261,9 @@ class CountingFeatureGroup791(FeatureGroup):
     FRAMEWORK_RULE: ClassVar[Optional[set[type[ComputeFramework]]]] = None
     SUPPORTED_FRAMEWORKS: ClassVar[Optional[frozenset[str]]] = None
     SUPPORTED_NAMES: ClassVar[frozenset[str]] = frozenset()
+    # Both default to what the hooks returned before they were declarative: the links gate passes unconditionally.
+    INDEX_COLUMNS: ClassVar[Optional[list[Index]]] = None
+    SUPPORTS_INDEX_RESULT: ClassVar[Optional[bool]] = None
 
     @classmethod
     def match_feature_group_criteria(
@@ -285,12 +303,12 @@ class CountingFeatureGroup791(FeatureGroup):
     @classmethod
     def index_columns(cls) -> Optional[list[Index]]:
         _record(cls.get_class_name(), "index_columns")
-        return None
+        return cls.INDEX_COLUMNS
 
     @classmethod
     def supports_index(cls, index: Index) -> Optional[bool]:
         _record(cls.get_class_name(), "supports_index")
-        return None
+        return cls.SUPPORTS_INDEX_RESULT
 
     @classmethod
     def feature_names_supported(cls) -> set[str]:
@@ -723,6 +741,26 @@ class OutsideScopeDeclarerFG791(CountingFeatureGroup791):
     FRAMEWORK_RULE = {RendererFwOne791}
 
 
+class LinksGateDeclarerFG791(CountingFeatureGroup791):
+    """Declares and matches the sibling name only, with an index column no link of the runs below reaches.
+
+    Named far from both feature names on purpose: only its declared name may ever reach the suggestion line.
+    """
+
+    MATCHES = frozenset({LINKS_GATE_SIBLING_791})
+    SUPPORTED_NAMES = frozenset({LINKS_GATE_SIBLING_791})
+    FRAMEWORK_RULE = {RendererFwOne791}
+    INDEX_COLUMNS = [Index(("renderer_links_index_791",))]
+    SUPPORTS_INDEX_RESULT = False
+
+
+# The one link every linked run below carries; no group here supports either of its two indexes.
+LINKS_GATE_LINK_791 = Link.inner(
+    JoinSpec(LinksGateDeclarerFG791, "renderer_links_left_791"),
+    JoinSpec(LinksGateDeclarerFG791, "renderer_links_right_791"),
+)
+
+
 class SpareAbstractBaseFG791(CountingFeatureGroup791):
     """Abstract base declaring and matching one name, in the requested domain: it can never be identified.
 
@@ -772,8 +810,34 @@ class ValueRejectingCrossDomainFG791(CountingFeatureGroup791):
         raise PropertyValueRejection(VALUE_DOMAIN_REJECTION_REASON_791)
 
 
+class ValueRejectingUnlinkedFG791(CountingFeatureGroup791):
+    """Declines THIS name's value at the matcher AND matches no link: name-dependent record, name-blind gate."""
+
+    MATCHES = frozenset({VALUE_LINKS_FEATURE_791})
+    SUPPORTED_NAMES = frozenset({VALUE_LINKS_SPARE_791})
+    FRAMEWORK_RULE = {RendererFwOne791}
+    INDEX_COLUMNS = [Index(("renderer_value_links_index_791",))]
+    SUPPORTS_INDEX_RESULT = False
+
+    @classmethod
+    def match_feature_group_criteria(
+        cls,
+        feature_name: FeatureName | str,
+        options: Options,
+        data_access_collection: Optional[DataAccessCollection] = None,
+    ) -> bool:
+        # Name-guarded, so this globally visible class stays inert for every other name it is asked about.
+        if not super().match_feature_group_criteria(feature_name, options, data_access_collection):
+            return False
+        raise PropertyValueRejection(VALUE_LINKS_REJECTION_REASON_791)
+
+
 class RendererDomainBoom791(RuntimeError):
     """Raised by a provider's get_domain() hook."""
+
+
+class RendererIndexBoom791(RuntimeError):
+    """Raised by a provider's index_columns() or supports_index() hook."""
 
 
 class RendererPrefixBoom791(RuntimeError):
@@ -887,6 +951,48 @@ def _build_malformed_domain_group() -> type[CountingFeatureGroup791]:
             return Domain.get_default_domain()
 
     return _armed(BadDomainReturnFG791)
+
+
+def _build_unreadable_index_group() -> type[CountingFeatureGroup791]:
+    """Build a non-matching declarer of a sibling name whose index_columns() raises, so no gate can judge it.
+
+    Named far from both feature names on purpose: only its declared name may ever reach the suggestion line.
+    """
+
+    class UnreadableIndexFG791(RaisingHookGroup791):
+        """Declarer whose index columns can never be read, matching nothing."""
+
+        SUPPORTED_NAMES = frozenset({DEGRADED_LINKS_SPARE_791})
+        FRAMEWORK_RULE = {RendererFwOne791}
+
+        @classmethod
+        def index_columns(cls) -> Optional[list[Index]]:
+            _record(cls.get_class_name(), "index_columns")
+            if cls.ARMED:
+                raise RendererIndexBoom791("index_columns exploded 791")
+            return None
+
+    return _armed(UnreadableIndexFG791)
+
+
+def _build_unreadable_supports_index_group() -> type[CountingFeatureGroup791]:
+    """Build the same declarer one hook later: its index columns read, but supports_index() raises."""
+
+    class UnreadableSupportsIndexFG791(RaisingHookGroup791):
+        """Declarer whose index support can never be decided, matching nothing."""
+
+        SUPPORTED_NAMES = frozenset({DEGRADED_LINKS_SPARE_791})
+        FRAMEWORK_RULE = {RendererFwOne791}
+        INDEX_COLUMNS = [Index(("renderer_degraded_links_index_791",))]
+
+        @classmethod
+        def supports_index(cls, index: Index) -> Optional[bool]:
+            _record(cls.get_class_name(), "supports_index")
+            if cls.ARMED:
+                raise RendererIndexBoom791("supports_index exploded 791")
+            return None
+
+    return _armed(UnreadableSupportsIndexFG791)
 
 
 def _build_raising_prefix_group() -> type[CountingFeatureGroup791]:
@@ -1046,6 +1152,9 @@ def _build_tie_capability_groups() -> tuple[type[CountingFeatureGroup791], type[
 
 
 Scenario = tuple[Feature, FeatureGroupEnvironmentMapping]
+
+# A scenario whose run carries links, which every Scenario above leaves at None.
+LinkedScenario = tuple[Feature, FeatureGroupEnvironmentMapping, set[Link]]
 
 
 def success_scenario() -> Scenario:
@@ -1267,6 +1376,92 @@ def scope_gate_sibling_scenario() -> Scenario:
     )
 
 
+def links_gate_scenario() -> LinkedScenario:
+    """A linked request nothing matches, next to a declarer of the close sibling name no link of the run reaches."""
+    return (
+        Feature(LINKS_GATE_FEATURE_791),
+        {LinksGateDeclarerFG791: {RendererFwOne791}},
+        {LINKS_GATE_LINK_791},
+    )
+
+
+def links_gate_sibling_scenario() -> LinkedScenario:
+    """The same links, now asking for the sibling name a suggestion would hand back."""
+    return (
+        Feature(LINKS_GATE_SIBLING_791),
+        {LinksGateDeclarerFG791: {RendererFwOne791}},
+        {LINKS_GATE_LINK_791},
+    )
+
+
+def linkless_gate_scenario() -> Scenario:
+    """The same declarer on a run carrying NO links, where the links gate cannot fire at all."""
+    return Feature(LINKS_GATE_FEATURE_791), {LinksGateDeclarerFG791: {RendererFwOne791}}
+
+
+def links_hook_cost_scenario() -> LinkedScenario:
+    """One candidate the decision pass takes to the links gate, one it never matches, on a linked run."""
+    return (
+        Feature(LINKS_GATE_SIBLING_791),
+        {LinksGateDeclarerFG791: {RendererFwOne791}, ValueRejectingUnlinkedFG791: {RendererFwOne791}},
+        {LINKS_GATE_LINK_791},
+    )
+
+
+def multiple_with_links_scenario() -> LinkedScenario:
+    """A 'multiple' failure on a linked run, next to a dead declarer and a candidate that never matched."""
+    return (
+        Feature(MULTIPLE_FEATURE_791),
+        {
+            RendererMultipleBFG791: {RendererFwOne791},
+            RendererMultipleAFG791: {RendererFwOne791},
+            SpareNoFrameworkFG791: set(),
+            LinksGateDeclarerFG791: {RendererFwOne791},
+        },
+        {LINKS_GATE_LINK_791},
+    )
+
+
+def abstract_only_with_links_scenario() -> LinkedScenario:
+    """An 'abstract_only' failure on a linked run, next to a candidate that never matched."""
+    return (
+        Feature(ABSTRACT_FEATURE_791),
+        {
+            RendererAbstractBaseFG791: {RendererFwOne791},
+            RendererConcreteSubFG791: set(),
+            LinksGateDeclarerFG791: {RendererFwOne791},
+        },
+        {LINKS_GATE_LINK_791},
+    )
+
+
+def value_rejection_unlinked_scenario() -> LinkedScenario:
+    """A candidate recorded at a name-DEPENDENT stage that the name-blind links gate kills anyway."""
+    return (
+        Feature(VALUE_LINKS_FEATURE_791),
+        {ValueRejectingUnlinkedFG791: {RendererFwOne791}},
+        {LINKS_GATE_LINK_791},
+    )
+
+
+def degraded_index_columns_scenario() -> LinkedScenario:
+    """A linked request whose only declarer of the close sibling name cannot report its index columns."""
+    return (
+        Feature(DEGRADED_LINKS_FEATURE_791),
+        {_build_unreadable_index_group(): {RendererFwOne791}},
+        {LINKS_GATE_LINK_791},
+    )
+
+
+def degraded_supports_index_scenario() -> LinkedScenario:
+    """The same request, whose declarer reports its index columns but cannot decide any index."""
+    return (
+        Feature(DEGRADED_LINKS_FEATURE_791),
+        {_build_unreadable_supports_index_group(): {RendererFwOne791}},
+        {LINKS_GATE_LINK_791},
+    )
+
+
 def value_rejection_cross_domain_scenario() -> Scenario:
     """A candidate recorded at a name-DEPENDENT stage that the name-blind domain gate kills anyway."""
     return (
@@ -1441,11 +1636,28 @@ def _evaluate(scenario: Scenario) -> EvaluationResult:
     return IdentifyFeatureGroupClass.evaluate(feature=feature, accessible_plugins=accessible_plugins, links=None)
 
 
+def _evaluate_linked(scenario: LinkedScenario) -> EvaluationResult:
+    """Evaluate a run that carries links, which _evaluate hardcodes to None."""
+    feature, accessible_plugins, links = scenario
+    return IdentifyFeatureGroupClass.evaluate(feature=feature, accessible_plugins=accessible_plugins, links=links)
+
+
 def _render(scenario: Scenario) -> str:
     feature, _ = scenario
     message = render_resolution_failure(_evaluate(scenario), feature)
     assert message is not None
     return message
+
+
+def _degrade_warnings(caplog: pytest.LogCaptureFixture, field: str) -> list[str]:
+    """WARNINGs naming one degraded field, from whichever guarded read reported it."""
+    return [
+        record.getMessage()
+        for record in caplog.records
+        if record.levelno == logging.WARNING
+        and record.name in (IDENTIFY_LOGGER_791, SAFE_FIELD_LOGGER_791)
+        and field in record.getMessage()
+    ]
 
 
 def _suggestions(message: str) -> list[str] | None:
@@ -2281,11 +2493,12 @@ class TestALivePrefixKeepsACoveredNameSuggestible:
 
 
 class TestANameBlindGateKillsEveryNameItsCandidateDeclares:
-    """domain and scope are name-blind, so a candidate that loses at either resolves NO name it declares.
+    """domain, scope and links are name-blind, so a candidate that loses at one resolves NO name it declares.
 
-    An elimination is recorded only for a candidate that first matched the requested name, so a wrong-domain or
-    out-of-scope group that never matched carries no record at all. Reading deadness off the record alone counts
-    such a group as a live declarer, and the suggestion then hands back a name that fails at the very same gate.
+    An elimination is recorded only for a candidate that first matched the requested name, so a wrong-domain,
+    out-of-scope or unlinked group that never matched carries no record at all. Reading deadness off the record
+    alone counts such a group as a live declarer, and the suggestion then hands back a name that fails at the
+    very same gate.
     """
 
     def test_a_wrong_domain_declarers_sibling_name_is_never_suggested(self) -> None:
@@ -2351,6 +2564,35 @@ class TestANameBlindGateKillsEveryNameItsCandidateDeclares:
             f"{TROUBLESHOOTING_LINE}"
         )
 
+    def test_an_unlinked_declarers_sibling_name_is_never_suggested(self) -> None:
+        """Same shape at the links gate: no index column of the declarer matches the run's links, for any name."""
+        scenario = links_gate_scenario()
+        feature, _, _ = scenario
+        result = _evaluate_linked(scenario)
+
+        # Premise: nothing matched, so this candidate carries no elimination record to judge it by.
+        assert result.failure_kind == "none"
+        assert result.eliminations == {}
+        # Premise: the sibling is the one name this request ranks, so only this rule can drop it.
+        survivors = [name for name in dict.fromkeys(result.facts.known_names) if name != LINKS_GATE_FEATURE_791]
+        ranked = get_close_matches(LINKS_GATE_FEATURE_791, survivors, n=MAX_RENDERED_SUGGESTIONS_791, cutoff=0.5)
+        assert ranked == [LINKS_GATE_SIBLING_791]
+
+        # Suppression is resolution, not just text: requesting the sibling fails at the same gate.
+        sibling = _evaluate_linked(links_gate_sibling_scenario())
+        assert sibling.failure_kind == "none"
+        assert sibling.eliminations[LinksGateDeclarerFG791].stage == "links"
+
+        assert LINKS_GATE_SIBLING_791 in result.facts.dead_only_names
+
+        message = render_resolution_failure(result, feature)
+        assert message is not None
+        assert message == (
+            f"No feature groups found for feature name: '{LINKS_GATE_FEATURE_791}'.\n"
+            "Use resolve_feature(name, options=...) to debug feature resolution.\n"
+            f"{TROUBLESHOOTING_LINE}"
+        )
+
     def test_a_name_dependent_record_does_not_revive_a_wrong_domain_candidate(self) -> None:
         """The record says value_rejection, but the domain gate kills every name the candidate declares."""
         scenario = value_rejection_cross_domain_scenario()
@@ -2379,6 +2621,35 @@ class TestANameBlindGateKillsEveryNameItsCandidateDeclares:
             f"Requested domain: '{REQUESTED_DOMAIN_791}'.\n"
             f"Feature group(s) eliminated while matching '{VALUE_DOMAIN_FEATURE_791}':\n"
             f"  - ValueRejectingCrossDomainFG791 (option value): {VALUE_DOMAIN_REJECTION_REASON_791}\n"
+            "Use resolve_feature(name, options=...) to debug feature resolution.\n"
+            f"{TROUBLESHOOTING_LINE}"
+        )
+
+    def test_a_name_dependent_record_does_not_revive_an_unlinked_candidate(self) -> None:
+        """The record says value_rejection, but the links gate kills every name the candidate declares."""
+        scenario = value_rejection_unlinked_scenario()
+        feature, _, _ = scenario
+        result = _evaluate_linked(scenario)
+
+        # Premise: the recorded stage is name-DEPENDENT, so the record alone keeps this candidate live.
+        assert result.eliminations == {
+            ValueRejectingUnlinkedFG791: Elimination(stage="value_rejection", reason=VALUE_LINKS_REJECTION_REASON_791)
+        }
+        assert "value_rejection" in NAME_DEPENDENT_STAGES_791
+        # Premise: the spare is the one name this request ranks, so only this rule can drop it.
+        droppable = {VALUE_LINKS_FEATURE_791, *result.facts.eliminated_hints}
+        survivors = [name for name in dict.fromkeys(result.facts.known_names) if name not in droppable]
+        ranked = get_close_matches(VALUE_LINKS_FEATURE_791, survivors, n=MAX_RENDERED_SUGGESTIONS_791, cutoff=0.5)
+        assert ranked == [VALUE_LINKS_SPARE_791]
+
+        assert VALUE_LINKS_SPARE_791 in result.facts.dead_only_names
+
+        message = render_resolution_failure(result, feature)
+        assert message is not None
+        assert message == (
+            f"No feature groups found for feature name: '{VALUE_LINKS_FEATURE_791}'.\n"
+            f"Feature group(s) eliminated while matching '{VALUE_LINKS_FEATURE_791}':\n"
+            f"  - ValueRejectingUnlinkedFG791 (option value): {VALUE_LINKS_REJECTION_REASON_791}\n"
             "Use resolve_feature(name, options=...) to debug feature resolution.\n"
             f"{TROUBLESHOOTING_LINE}"
         )
@@ -2417,6 +2688,191 @@ class TestADegradedDomainReadNeverDecidesAgainstACandidate:
         degraded_field = f"{unreadable.get_class_name()}.get_domain"
         assert [warning for warning in warnings if degraded_field in warning], (
             f"Expected a WARNING naming '{degraded_field}', got {warnings}"
+        )
+
+
+class TestADegradedIndexReadNeverDecidesAgainstACandidate:
+    """An index read that raises is not a lost links gate: nothing is known, so nothing is decided.
+
+    The rule the domain read settled, one gate over: the candidate stays live, keeps its names suggestible,
+    and the degrade is reported rather than crashing the failure path.
+    """
+
+    def test_a_raising_index_columns_keeps_the_candidates_names_suggestible(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """evaluate() still returns, the message still renders, and the unreadable candidate keeps its names."""
+        scenario = degraded_index_columns_scenario()
+        feature, accessible_plugins, _ = scenario
+        (unreadable,) = accessible_plugins
+
+        with caplog.at_level(logging.WARNING):
+            result = _evaluate_linked(scenario)
+
+        # Premise: the run carries links, and the candidate never matched, so only the capture reads it.
+        assert result.failure_kind == "none"
+        assert result.eliminations == {}
+        # Premise: the capture really reached the gate, so what follows is about the raise, not about a skip.
+        assert HOOK_CALLS.get(f"{unreadable.get_class_name()}.index_columns", 0) == 1, HOOK_CALLS
+
+        assert DEGRADED_LINKS_SPARE_791 not in result.facts.dead_only_names
+
+        message = render_resolution_failure(result, feature)
+        assert message is not None
+        assert _suggestions(message) == [DEGRADED_LINKS_SPARE_791]
+
+        # The gate reads two hooks, so its degrade names the pair rather than whichever one it starts with.
+        degraded_field = f"{unreadable.get_class_name()}.{LINKS_DEGRADE_FIELD_791}"
+        assert _degrade_warnings(caplog, degraded_field), f"Expected a WARNING naming '{degraded_field}'"
+
+    def test_a_raising_supports_index_keeps_the_candidates_names_suggestible(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """The same rule one hook later: readable index columns whose support can never be decided."""
+        scenario = degraded_supports_index_scenario()
+        feature, accessible_plugins, _ = scenario
+        (unreadable,) = accessible_plugins
+
+        with caplog.at_level(logging.WARNING):
+            result = _evaluate_linked(scenario)
+
+        # Premise: the run carries links, and the candidate never matched, so only the capture reads it.
+        assert result.failure_kind == "none"
+        assert result.eliminations == {}
+        # Premise: the capture really reached the gate, and the first index it asks about is already enough
+        # to leave it undecided, so the count is one and not one per index of the run's single link.
+        assert HOOK_CALLS.get(f"{unreadable.get_class_name()}.supports_index", 0) == 1, HOOK_CALLS
+
+        assert DEGRADED_LINKS_SPARE_791 not in result.facts.dead_only_names
+
+        message = render_resolution_failure(result, feature)
+        assert message is not None
+        assert _suggestions(message) == [DEGRADED_LINKS_SPARE_791]
+
+        # The hook that raised is supports_index, so a degrade reported as index_columns names the wrong one.
+        degraded_field = f"{unreadable.get_class_name()}.{LINKS_DEGRADE_FIELD_791}"
+        assert _degrade_warnings(caplog, degraded_field), f"Expected a WARNING naming '{degraded_field}'"
+
+
+class TestTheLinksGateIsRetestedOnlyWhenTheRunHasLinks:
+    """The links retest costs two provider hooks, so it runs exactly where it can decide something.
+
+    A run without links pays nothing and decides nothing. A run with links runs the gate once per candidate,
+    the decision pass and the capture together. One gate RUN is the invariant, not one hook call: the doubles
+    here override supports_index, so a run costs one index read, while a group that does not override it costs
+    1 + 2 * len(links) reads, because the base supports_index calls index_columns itself.
+    """
+
+    def test_a_linkless_run_never_reads_a_non_matching_candidates_index_columns(self) -> None:
+        """Without links the gate cannot fire, so neither hook may be called at all."""
+        scenario = linkless_gate_scenario()
+        feature, _ = scenario
+        result = _evaluate(scenario)
+
+        # Premise: the run carries no links, and the candidate never matched, so no gate can judge it.
+        assert result.failure_kind == "none"
+        assert result.eliminations == {}
+        # Premise: this candidate's counters are wired, so what follows is about the hooks, not about the keys.
+        assert HOOK_CALLS["LinksGateDeclarerFG791.match_feature_group_criteria"] == 1
+
+        assert "LinksGateDeclarerFG791.index_columns" not in HOOK_CALLS
+        assert "LinksGateDeclarerFG791.supports_index" not in HOOK_CALLS
+        # The gate cannot fire, so the candidate stays live and keeps every name it declares suggestible.
+        assert result.facts.dead_only_names == frozenset()
+
+        message = render_resolution_failure(result, feature)
+        assert message is not None
+        assert _suggestions(message) == [LINKS_GATE_SIBLING_791]
+
+    def test_each_candidates_links_gate_runs_at_most_once_per_evaluation(self) -> None:
+        """One decision-pass run plus one capture run of the same candidate is one gate run, not two."""
+        scenario = links_hook_cost_scenario()
+        _, accessible_plugins, _ = scenario
+        result = _evaluate_linked(scenario)
+
+        # Premise: one candidate reached the decision-side links gate, the other never matched at all.
+        assert result.eliminations[LinksGateDeclarerFG791].stage == "links"
+        assert ValueRejectingUnlinkedFG791 not in result.eliminations
+        # Premise: the capture really does need the second candidate's index columns, so the bound is not vacuous.
+        assert VALUE_LINKS_SPARE_791 in result.facts.dead_only_names
+
+        index_reads = {
+            candidate.get_class_name(): HOOK_CALLS.get(f"{candidate.get_class_name()}.index_columns", 0)
+            for candidate in accessible_plugins
+        }
+        support_reads = {
+            candidate.get_class_name(): HOOK_CALLS.get(f"{candidate.get_class_name()}.supports_index", 0)
+            for candidate in accessible_plugins
+        }
+        # Both are pinned EXACTLY: an upper bound also holds when a hook is never called at all, so an edit that
+        # stopped asking about the non-matching candidate entirely would slip through it. One gate run reads the
+        # index columns once and asks about both indexes of the run's single link.
+        assert index_reads == {"LinksGateDeclarerFG791": 1, "ValueRejectingUnlinkedFG791": 1}, index_reads
+        assert support_reads == {"LinksGateDeclarerFG791": 2, "ValueRejectingUnlinkedFG791": 2}, support_reads
+
+
+class TestADeadNameIsCapturedOnlyForTheMessageThatReadsIt:
+    """_render_none is the only reader of dead_only_names, so only a 'none' failure may pay for it.
+
+    The capture is a sweep over every accessible plugin, and the links retest makes each candidate of that
+    sweep cost a whole gate run: 1 + 2 * len(links) index reads on a group that does not override
+    supports_index. Computing it for a 'multiple' or 'abstract_only' failure buys a fact those messages
+    never read.
+    """
+
+    def test_a_multiple_failure_captures_no_dead_name_and_reads_no_index_hook(self) -> None:
+        """The dead declarer's names are not captured, and the candidate that never matched is not asked."""
+        scenario = multiple_with_links_scenario()
+        feature, _, _ = scenario
+        result = _evaluate_linked(scenario)
+
+        # Premise: two winners make this 'multiple', and a group with no framework at all is dead for every
+        # name it declares, so an unconditional capture would claim its names here.
+        assert result.failure_kind == "multiple"
+        assert set(result.identified) == {RendererMultipleAFG791, RendererMultipleBFG791}
+        assert SpareNoFrameworkFG791 not in result.identified
+        # Premise: this candidate's counters are wired, so what follows is about the hooks, not about the keys.
+        assert HOOK_CALLS["LinksGateDeclarerFG791.match_feature_group_criteria"] == 1
+
+        assert result.facts.dead_only_names == frozenset()
+        assert "LinksGateDeclarerFG791.index_columns" not in HOOK_CALLS
+        assert "LinksGateDeclarerFG791.supports_index" not in HOOK_CALLS
+
+        # Nothing the user sees changes: the message reads the identified candidates and their domains only.
+        module = RendererMultipleAFG791.__module__
+        assert render_resolution_failure(result, feature) == (
+            f"Multiple feature groups found for feature '{MULTIPLE_FEATURE_791}':\n"
+            f"  - RendererMultipleAFG791 ({module}) [domain: renderer_domain_a_791]\n"
+            f"  - RendererMultipleBFG791 ({module}) [domain: renderer_domain_b_791]\n"
+            f"{TROUBLESHOOTING_LINE}"
+        )
+
+    def test_an_abstract_only_failure_captures_no_dead_name_and_reads_no_index_hook(self) -> None:
+        """Same for the other kind: an abstract base and its stranded subclass are both dead, and unread."""
+        scenario = abstract_only_with_links_scenario()
+        feature, _, _ = scenario
+        result = _evaluate_linked(scenario)
+
+        # Premise: the abstract base can never be identified and the concrete subclass has no framework left,
+        # so both are dead for every name they declare and an unconditional capture would claim their names.
+        assert result.failure_kind == "abstract_only"
+        assert result.abstract_matched == {RendererAbstractBaseFG791}
+        assert result.eliminations[RendererConcreteSubFG791].stage == "frameworks_not_enabled"
+        # Premise: this candidate's counters are wired, so what follows is about the hooks, not about the keys.
+        assert HOOK_CALLS["LinksGateDeclarerFG791.match_feature_group_criteria"] == 1
+
+        assert result.facts.dead_only_names == frozenset()
+        assert "LinksGateDeclarerFG791.index_columns" not in HOOK_CALLS
+        assert "LinksGateDeclarerFG791.supports_index" not in HOOK_CALLS
+
+        # Nothing the user sees changes: the message reads the concrete frameworks and the near-miss block only.
+        assert render_resolution_failure(result, feature) == (
+            f"No feature groups found for feature name: '{ABSTRACT_FEATURE_791}'. "
+            "Its concrete implementations require compute framework(s) "
+            "['RendererFwOne791', 'RendererFwTwo791'], "
+            "none of which are available or enabled for this run.\n"
+            f"Feature group(s) eliminated while matching '{ABSTRACT_FEATURE_791}':\n"
+            "  - RendererConcreteSubFG791 (compute framework): none of its compute frameworks are enabled for this run"
         )
 
 

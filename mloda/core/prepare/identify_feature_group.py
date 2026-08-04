@@ -106,6 +106,7 @@ class IdentifyFeatureGroupClass:
     # Per-evaluation memos of the hooks more than one reader wants. evaluate() builds a fresh instance, so
     # they are scoped to one resolution attempt and never cache across runs.
     _domain_outcomes: dict[type[FeatureGroup], tuple[Optional[Domain], Optional[Exception]]]
+    _links_outcomes: dict[type[FeatureGroup], tuple[Optional[bool], Optional[Exception]]]
     _declared_frameworks: dict[type[FeatureGroup], frozenset[type[ComputeFramework]]]
     _supported_names: dict[type[FeatureGroup], frozenset[str]]
     _prefixes: dict[type[FeatureGroup], str]
@@ -120,6 +121,7 @@ class IdentifyFeatureGroupClass:
         self._matcher_errors = {}
         self._eliminations = {}
         self._domain_outcomes = {}
+        self._links_outcomes = {}
         self._declared_frameworks = {}
         self._supported_names = {}
         self._prefixes = {}
@@ -149,21 +151,25 @@ class IdentifyFeatureGroupClass:
         # sat inside the filter loop, so it never ran when the name matched nothing).
         cls._validate_single_framework_pin(feature)
         self = cls(data_access_collection)
-        identified = self._filter_loop(feature, accessible_plugins, links, data_access_collection)
-        result = EvaluationResult(
-            identified=identified,
-            criteria_matched=self._criteria_matched_feature_groups,
-            abstract_matched=self._abstract_matched_feature_groups,
-            candidate_frameworks=self._candidate_frameworks,
-            eliminations=self._eliminations,
-        )
-        if result.failure_kind is not None:
-            # Every elimination (value_rejection included) was already recorded during the single filter pass;
-            # this only captures the non-elimination facts the messages still need.
-            result = replace(result, facts=self._capture_render_facts(result, accessible_plugins, feature))
-        # A captured exception pins its traceback, whose frames pin this instance: a refcount cycle that would
-        # keep both alive until a gc pass. Dropping the outcomes here makes the memo's lifetime what it claims.
-        self._domain_outcomes.clear()
+        try:
+            identified = self._filter_loop(feature, accessible_plugins, links, data_access_collection)
+            result = EvaluationResult(
+                identified=identified,
+                criteria_matched=self._criteria_matched_feature_groups,
+                abstract_matched=self._abstract_matched_feature_groups,
+                candidate_frameworks=self._candidate_frameworks,
+                eliminations=self._eliminations,
+            )
+            if result.failure_kind is not None:
+                # Every elimination (value_rejection included) was already recorded during the single filter pass;
+                # this only captures the non-elimination facts the messages still need.
+                result = replace(result, facts=self._capture_render_facts(result, accessible_plugins, feature, links))
+        finally:
+            # A captured exception pins its traceback, whose frames pin this instance: a refcount cycle that would
+            # keep both alive until a gc pass. Dropping the outcomes makes each memo's lifetime what it claims,
+            # in a finally because a re-raising gate or an escalated match abort leaves without a return.
+            self._domain_outcomes.clear()
+            self._links_outcomes.clear()
         return result
 
     def _capture_render_facts(
@@ -171,21 +177,28 @@ class IdentifyFeatureGroupClass:
         result: EvaluationResult,
         accessible_plugins: FeatureGroupEnvironmentMapping,
         feature: Feature,
+        links: Optional[set[Link]],
     ) -> RenderFacts:
-        """Capture the non-elimination facts the messages still need, precedence-free.
+        """Capture the non-elimination facts the messages still need. Only reached when the pass has no winner.
 
-        The renderer alone owns which message wins, so this does not mirror its branch order: it captures
-        all five facts unconditionally (the failure path is rare). domains feeds the multiple message,
-        concrete_frameworks the abstract_only message, and known_names, eliminated_hints and dead_only_names
-        the none message. Only reached when the pass has no single winner. Every provider hook here is
-        best-effort: a raising one degrades its own fact, never this call or a sibling's fact.
+        The renderer alone owns which message wins, so this does not mirror its branch order: the four cheap
+        facts are captured whatever the failure kind is. domains feeds the multiple message, concrete_frameworks
+        the abstract_only message, and known_names, eliminated_hints and dead_only_names the none message.
+        dead_only_names is the one exception, gated on its own kind: its sweep retests the links gate over every
+        accessible plugin, which on a linked run costs provider hooks per candidate for a fact only the none
+        message reads. Every provider hook here is best-effort: a raising one degrades its own fact, never this
+        call or a sibling's fact.
         """
         return RenderFacts(
             domains=self._capture_domains(result),
             concrete_frameworks=self._concrete_implementation_frameworks(result, accessible_plugins),
             known_names=self._capture_known_names(accessible_plugins),
             eliminated_hints=self._capture_eliminated_hints(result),
-            dead_only_names=self._capture_dead_only_names(result, accessible_plugins, feature),
+            dead_only_names=(
+                self._capture_dead_only_names(result, accessible_plugins, feature, links)
+                if result.failure_kind == "none"
+                else frozenset()
+            ),
         )
 
     def _capture_eliminated_hints(self, result: EvaluationResult) -> frozenset[str]:
@@ -307,10 +320,33 @@ class IdentifyFeatureGroupClass:
             known_names.extend(self._catalog_names_of(fg_class))
         return tuple(known_names)
 
-    def _fails_name_blind_gate(self, feature_group: type[FeatureGroup], feature: Feature) -> bool:
-        """Capture-side retest of the two name-blind gates, scope then domain, that never raises."""
+    def _fails_name_blind_gate(
+        self, feature_group: type[FeatureGroup], feature: Feature, links: Optional[set[Link]]
+    ) -> bool:
+        """Capture-side retest of the three name-blind gates, scope then domain then links, that never raises.
+
+        Links last because it is the costliest: the only one of the three reading a provider hook that neither
+        the catalog nor a sibling fact already needs.
+        """
         if not self._filter_feature_group_by_scope(feature_group, feature):
             return True
+        if self._fails_domain_gate(feature_group, feature):
+            return True
+        if links is None:
+            # Without links the gate passes every candidate, so it decides nothing: returning before the memo
+            # is what keeps a link-free run from reading index_columns() at all.
+            return False
+        # The gate reads two hooks and the guard cannot tell which raised, so the report names the pair rather
+        # than the one it starts with. The fallback leaves the gate undecided: an unreadable index is not a lost
+        # gate, so the candidate stays live.
+        return not safe_field(
+            lambda: self._filter_feature_group_by_links(feature_group, links),
+            True,
+            field=f"{feature_group.get_class_name()}.index_columns/supports_index",
+        )
+
+    def _fails_domain_gate(self, feature_group: type[FeatureGroup], feature: Feature) -> bool:
+        """Capture-side retest of the domain gate alone, which only fires for a domain-carrying request."""
         if feature.domain is None:
             return False
         domain, error = self._domain_outcome(feature_group)
@@ -330,6 +366,7 @@ class IdentifyFeatureGroupClass:
         feature_group: type[FeatureGroup],
         compute_frameworks: set[type[ComputeFramework]],
         feature: Feature,
+        links: Optional[set[Link]],
     ) -> bool:
         """No name at all can resolve to this candidate: it has no framework left, or it lost at a name-blind gate.
 
@@ -344,15 +381,18 @@ class IdentifyFeatureGroupClass:
         if inspect.isabstract(feature_group):
             return True
         # A candidate that never matched the requested name carries no record at all, so the name-blind gates
-        # are tested directly here. links is the one name-blind gate this predicate does not retest: doing so
-        # needs index_columns() and the run's links per candidate, provider hooks the capture makes nowhere else.
-        if self._fails_name_blind_gate(feature_group, feature):
+        # are retested directly here: scope, domain and links, the empty framework set above being the fourth.
+        if self._fails_name_blind_gate(feature_group, feature, links):
             return True
         elimination = result.eliminations.get(feature_group)
         return elimination is not None and elimination.stage in NAME_INDEPENDENT_STAGES
 
     def _capture_dead_only_names(
-        self, result: EvaluationResult, accessible_plugins: FeatureGroupEnvironmentMapping, feature: Feature
+        self,
+        result: EvaluationResult,
+        accessible_plugins: FeatureGroupEnvironmentMapping,
+        feature: Feature,
+        links: Optional[set[Link]],
     ) -> frozenset[str]:
         """Catalog names of dead candidates that no live candidate owns and no live candidate's prefix covers.
 
@@ -365,7 +405,7 @@ class IdentifyFeatureGroupClass:
         live: set[str] = set()
         live_prefixes: set[str] = set()
         for feature_group, compute_frameworks in accessible_plugins.items():
-            if self._is_dead(result, feature_group, compute_frameworks, feature):
+            if self._is_dead(result, feature_group, compute_frameworks, feature, links):
                 # The whole catalog, as the live branch collects it: the default matcher owns a candidate's
                 # class name and its class-name prefix too, and a dead candidate resolves neither.
                 dead.update(self._catalog_names_of(feature_group))
@@ -493,6 +533,35 @@ class IdentifyFeatureGroupClass:
         return f"declares domain '{candidate_domain}', but the run requested '{requested}'"
 
     def _filter_feature_group_by_links(self, feature_group: type[FeatureGroup], links: Optional[set[Link]]) -> bool:
+        """Decision-side links gate: unguarded, so a raising index hook still fails the engine loudly."""
+        supported, error = self._links_outcome(feature_group, links)
+        if error is not None:
+            raise error
+        # None is the memo's unreadable marker, never a verdict, so an outcome without an error always has one.
+        assert supported is not None
+        return supported
+
+    def _links_outcome(
+        self, feature_group: type[FeatureGroup], links: Optional[set[Link]]
+    ) -> tuple[Optional[bool], Optional[Exception]]:
+        """Memoized links-gate OUTCOME, verdict or raise, so one candidate's index hooks run once per evaluation.
+
+        The outcome rather than the verdict, for the reason _domain_outcome caches one: the decision filter
+        re-raises, the render capture degrades. The candidate alone keys it, because links is one value for the
+        whole evaluation. Retains the exception object, so evaluate() clears this memo as it clears that one.
+
+        The verdict is None, not False, when the gate raised: unreadable is not lost, and a reader that skipped
+        the error check would otherwise read a raise as a candidate that failed the gate.
+        """
+        if feature_group not in self._links_outcomes:
+            try:
+                self._links_outcomes[feature_group] = (self._links_gate(feature_group, links), None)
+            except Exception as exc:  # noqa: BLE001  (outcome capture; each reader decides how to react)
+                self._links_outcomes[feature_group] = (None, exc)
+        return self._links_outcomes[feature_group]
+
+    @staticmethod
+    def _links_gate(feature_group: type[FeatureGroup], links: Optional[set[Link]]) -> bool:
         # Case index columns not given, so no validation possible
         if feature_group.index_columns() is None:
             return True

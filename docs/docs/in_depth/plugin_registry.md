@@ -209,7 +209,8 @@ Pass the collector into the API via the `plugin_collector=` keyword, as with str
 
 Manual registrations mutate the process-global default registry, so tests can leak state into each other. mloda ships a pytest plugin (registered through the `pytest11` entry point in its packaging) that provides the `isolated_plugin_registry` fixture: it snapshots the default registry and its installed policy before each test and restores both afterwards, also resetting the policy-denial warning dedup. Any project with mloda installed gets the fixture automatically; no `conftest.py` re-export is needed. Request it in tests that register plugins:
 
-```python title="test_my_plugin.py"
+```py
+# test_my_plugin.py
 def test_my_feature_group_registration(isolated_plugin_registry):
     key = isolated_plugin_registry.register(MyFeatureGroup)
     assert isolated_plugin_registry.get(key) is MyFeatureGroup

@@ -103,17 +103,17 @@ For feature groups not yet modernized, the default matching criteria still apply
 1. **Root Feature with Matching Input Data**: The feature group is a root feature (has no dependencies) and its input data matches the feature.
 
 2. **Class Name Match**: The feature name exactly matches the feature group's class name.
-   ``` python
+   ```py
    feature_name == FeatureGroup.get_class_name()
    ```
 
 3. **Prefix Match**: The feature name starts with the feature group's class name as a prefix.
-   ``` python
+   ```py
    feature_name.startswith(FeatureGroup.prefix())  # Default prefix is "ClassName_"
    ```
 
 4. **Explicitly Supported**: The feature name is in the set of explicitly supported feature names.
-   ``` python
+   ```py
    feature_name in FeatureGroup.feature_names_supported()
    ```
 
@@ -123,7 +123,9 @@ An owned reader veto recorded during rule 1 (the user addressed the reader famil
 
 ### Modern Feature Group (Aggregation)
 
-``` python
+```python
+from mloda.user import Feature, Options
+
 # String-based matching
 feature = Feature("sales__sum_aggr")  # Matches via pattern
 
@@ -141,7 +143,7 @@ feature = Feature(
 
 The group/context parameter separation affects matching behavior:
 
-``` python
+```python
 # These create different Feature Group instances (different group parameters)
 feature1 = Feature("placeholder", Options(
     group={"data_source": "production"},

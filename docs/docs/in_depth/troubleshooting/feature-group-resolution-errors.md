@@ -7,7 +7,7 @@ run would, without raising: the failure lands in `result.error` instead of an
 exception, so for the matching failures on this page the message below is the
 message you get back.
 
-``` python
+```python
 from mloda.provider import resolve_feature
 
 result = resolve_feature("my_feature")  # or resolve_feature(Feature(...)) for a full request
@@ -35,7 +35,7 @@ Inside a run, a feature that does not resolve to exactly one FeatureGroup raises
 subclass, so existing `except ValueError` handlers keep working, but you can now
 catch it specifically and inspect why it failed:
 
-``` python
+```python
 from mloda.provider import FeatureResolutionError
 from mloda.user import mloda
 
@@ -74,7 +74,7 @@ If you previously hit this in a notebook because of a redefined feature group (r
 #### 1. Use PluginCollector to enable or disable feature groups
 Control which feature groups are loaded to prevent conflicts:
 
-``` python
+```py
 from mloda.user import PluginCollector
 
 # Disable specific conflicting feature groups
@@ -106,7 +106,7 @@ def get_domain(cls):
 #### 4. Scope a feature to one source (shared keys across sources)
 When two enabled sources declare the same column (for example a shared join key), requesting that column by bare name is ambiguous. Scope the request to one source. The scope is resolution-only and does not affect feature identity.
 
-``` python
+```py
 # class object, collision-proof
 Feature("subject_token", feature_group=ClaimsReader)
 
@@ -116,7 +116,7 @@ Feature("subject_token", feature_group="ClaimsReader")
 
 The same scope in a JSON config ([feature config](../feature-config.md)):
 
-``` json
+```json
 [
     {"name": "subject_token", "feature_group": "ClaimsReader"}
 ]
@@ -126,7 +126,7 @@ The config form takes the class-name string only, because JSON cannot express a 
 
 Both forms match the scoped class and its subclasses, preferring the most specific one. Naming an abstract family base therefore selects the concrete subclass, so a config can scope to the family without naming a compute-framework-specific class:
 
-``` json
+```json
 [
     {"name": "age__mean_aggr", "feature_group": "AggregatedFeatureGroup"}
 ]
@@ -228,7 +228,7 @@ relevant entries, return a *schema-bearing* empty result: keep the columns and
 drop the rows. On PythonDict that is a dict with empty column lists; on the
 other frameworks it is an empty typed table or frame with the right columns.
 
-``` python
+```py
 class MyFeatureGroup(FeatureGroup):
     @classmethod
     def calculate_feature(cls, data, features):

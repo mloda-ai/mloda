@@ -51,7 +51,7 @@ mloda.run_all(
 )
 ```
 Expected Output (Logged Execution Times)
-``` python
+```text
 ERROR    test_getting_started:test_getting_started.py:29 Time taken: 0.00454258918762207
 ERROR    test_getting_started:test_getting_started.py:29 Time taken: 0.001033782958984375
 ```

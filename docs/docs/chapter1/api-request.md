@@ -37,7 +37,7 @@ result = mloda.run_all(
 result[0]
 ```
 Expected output:
-``` python
+```text
 pyarrow.Table
 V8: double
 id: int64
@@ -64,7 +64,7 @@ Typical examples where this applies:
 The two-phase API lets you pay the planning cost once at startup and then execute
 cheaply per request:
 
-``` python
+```python
 # 1. Prepare once (e.g. at server startup)
 session = mloda.prepare(feature_list, compute_frameworks=["PyArrowTable"], data_access_collection=data_access_collection)
 
@@ -78,7 +78,7 @@ See [mloda API: Two-Phase Execution](../in_depth/mloda-api.md#two-phase-executio
 
 LLMs can generate JSON feature requests without writing Python code:
 
-``` python
+```py
 from mloda.user import load_features_from_config
 
 llm_request = '["id", "V1", "V2", "Amount"]'

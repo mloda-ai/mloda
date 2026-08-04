@@ -84,7 +84,8 @@ my-pkg = "my_pkg.manifest:COMPUTE_FRAMEWORKS"
 
 The manifest module lists the concrete classes explicitly:
 
-```python title="my_pkg/manifest.py"
+```py
+# my_pkg/manifest.py
 from mloda.provider import FeatureGroup
 
 class CustomerChurnFeatureGroup(FeatureGroup):

@@ -13,7 +13,7 @@ Use cases:
 
 ## Basic Usage
 
-``` python
+```py
 from mloda.user import load_features_from_config, mloda
 
 config = '''
@@ -243,7 +243,7 @@ This produces a feature named `pca_result~0`.
 
 By default, context parameters are local to each feature and do not propagate through feature chains. Use `propagate_context_keys` to specify which context keys should flow to dependent features:
 
-``` json
+```json
 [
     {
         "name": "my_feature",
@@ -260,7 +260,7 @@ In this example, `session_id` propagates to any features that depend on `my_feat
 
 ## Complete Example
 
-``` python
+```py
 from mloda.user import load_features_from_config, mloda
 
 config = '''

@@ -10,7 +10,7 @@ One of mloda's key strengths is its ability to decouple feature definitions from
 
 Feature groups specify which compute frameworks they support through the `compute_framework_rule` method:
 
-``` python
+```py
 @classmethod
 def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
     """Define the compute frameworks this feature group supports."""
@@ -25,7 +25,7 @@ feature group runs on SQLite in general, but *this particular operation* is
 unsupported there." For that, override `supports_compute_framework`, a
 per-feature hook evaluated at match time:
 
-``` python
+```py
 @classmethod
 def supports_compute_framework(cls, feature_name, options, compute_framework) -> bool:
     """Reject an operation on a specific framework. Default returns True."""
@@ -84,7 +84,7 @@ instead of a hand-written `supports_compute_framework`.
 
 **The data provider** declares the dimension once with `SUBTYPES`:
 
-``` python
+```py
 class RankFeatureGroup(FeatureChainParserMixin, FeatureGroup):
     SUBTYPES = SubtypeDeclaration(
         key="rank_type",
@@ -108,7 +108,7 @@ Two shapes, enforced at class definition; a half declaration fails at import:
 - Shape B (multi-axis families collapsed into one subtype id): declare the
   universe explicitly with a resolver:
 
-``` python
+```py
 def resolve_window(feature_name: str, options: Options) -> str | None:
     return options.get("window_function")
 
@@ -220,7 +220,7 @@ FeatureGroup
 
 The base class defines the interface and common functionality:
 
-``` python
+```py
 class MyFeatureGroup(FeatureGroup):
     """Base class for MyFeatureGroup."""
     
@@ -239,7 +239,7 @@ Each framework-specific implementation:
 - Specifies which compute frameworks it supports
 - Implements the calculation logic for that framework
 
-``` python
+```py
 class PandasMyFeatureGroup(MyFeatureGroup):
     @classmethod
     def compute_framework_rule(cls):
@@ -278,7 +278,7 @@ For more details on how data transformation works between compute frameworks, se
 
 For a clustering feature group:
 
-``` python
+```py
 # Base class (framework-agnostic)
 class ClusteringFeatureGroup(FeatureGroup):
     def input_features(self, options, feature_name):
@@ -311,7 +311,7 @@ class PyArrowClusteringFeatureGroup(ClusteringFeatureGroup):
 
 For an aggregated feature group with Polars support:
 
-``` python
+```py
 # Base class (framework-agnostic)
 class AggregatedFeatureGroup(FeatureGroup):
     def input_features(self, options, feature_name):
@@ -337,7 +337,7 @@ Note that Polars supports both eager (`PolarsDataFrame`) and lazy (`PolarsLazyDa
 
 For an analytical feature group with DuckDB support:
 
-``` python
+```py
 # Base class (framework-agnostic)
 class AnalyticalFeatureGroup(FeatureGroup):
     def input_features(self, options, feature_name):
@@ -365,7 +365,7 @@ class DuckDBAnalyticalFeatureGroup(AnalyticalFeatureGroup):
 
 For a distributed processing feature group with Spark support:
 
-``` python
+```py
 # Base class (framework-agnostic)
 class DistributedFeatureGroup(FeatureGroup):
     def input_features(self, options, feature_name):
@@ -402,7 +402,7 @@ The `.types` property returns column types aligned with `.columns`. The element 
 - `DuckdbRelation.types` returns DuckDB-native dtype objects.
 - `SqliteRelation.types` returns PyArrow `pa.DataType` objects (from propagated hints, falling back to SQLite affinity inference).
 
-``` python
+```py
 relation.columns   # ["user_id", "amount"]
 relation.types     # backend-specific dtype objects, same order as columns
 ```
@@ -411,7 +411,7 @@ relation.types     # backend-specific dtype objects, same order as columns
 
 `with_row_number` appends a `ROW_NUMBER()` column; `window` appends an arbitrary window expression. Both quote every identifier and raise `ValueError` if the new `alias` collides with an existing column.
 
-``` python
+```py
 from mloda_plugins.compute_framework.base_implementations.sql.sql_window import (
     OrderBy,
     WindowFrame,

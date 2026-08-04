@@ -14,7 +14,7 @@ pip install .
 
 ## 3. Verify Installation
 To verify the installation, run:
-``` python
+```python
 from importlib import metadata
 print(metadata.version("mloda"))
 ```
@@ -23,7 +23,7 @@ print(metadata.version("mloda"))
 
 Try this 30-second example:
 
-``` python
+```python
 from mloda.user import mloda, PluginLoader
 PluginLoader.all()
 

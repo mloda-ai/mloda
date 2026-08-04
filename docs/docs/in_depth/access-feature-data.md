@@ -29,7 +29,7 @@ When the collection holds more than one resource of the same kind, you can name 
 
 You can apply these options like so:
 
-``` python
+```py
 from mloda.user import Credential, DataAccessCollection
 
 data_access = DataAccessCollection()
@@ -74,7 +74,7 @@ print(result)
 
 Output
 
-``` python
+```text
 [  AExample  BExample
 0   Value1         2
 1   Value2         3]
@@ -88,7 +88,7 @@ with `ReadFile`.
 
 To read a structured file type as a document, use the `document_suffixes` option:
 
-``` python
+```py
 Feature("content", options={"document_suffixes": frozenset({".json"})})
 ```
 
@@ -101,7 +101,7 @@ When a `DataAccessCollection` holds multiple files that share the same column na
 
 Use `column_to_file` to pin each column to its canonical file:
 
-``` python
+```py
 from mloda.user import DataAccessCollection, mloda
 
 data_access = DataAccessCollection(
@@ -128,7 +128,7 @@ Rules:
 
 The existing per-feature alternative still works for one-off pinning:
 
-``` python
+```py
 Feature("SK_ID_CURR", options=Options({CsvReader: "application_train.csv"}))
 ```
 
@@ -142,7 +142,7 @@ If data needs to be added specifically for a single feature (or features from th
 We show the ReadFileFeature as example. It uses the input_data ReadFile. 
 In this case, we need to provide the specific reader class: CsvReader.
 
-``` python
+```py
 
 # This feature is already implemented as plugin, so do not run it again. This will raise intentional errors.
 class ReadFileFeature(FeatureGroup):
@@ -192,7 +192,7 @@ print(result)
 
 Output
 
-``` python
+```text
 [  AExample
 0   Value1
 1   Value2]
@@ -232,7 +232,7 @@ for res in result:
 
 Output:
 
-``` python
+```text
   FeatureInputAPITest
 0          TestValue3
 1          TestValue4
@@ -281,7 +281,7 @@ for res in result:
 
 Output
 
-``` python
+```text
   AFeatureInputCreator
 0          TestValue5
 1          TestValue6
@@ -348,7 +348,7 @@ print(result)
 
 Output:
 
-``` python
+```text
 [AFeatureInputCreator
 0           TestValue5
 1           TestValue6,    

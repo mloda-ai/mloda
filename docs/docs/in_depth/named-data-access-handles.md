@@ -8,7 +8,7 @@ For background, see [issue #443](https://github.com/mloda-ai/mloda/issues/443).
 
 A DAC holds resources of four kinds. Each kind has its own keyed dict:
 
-``` py
+```py
 DataAccessCollection(
     connections={"warehouse": warehouse_conn, "analytics": analytics_conn},
     files={"transactions": "/data/tx.parquet", "users": "/data/users.csv"},
@@ -21,7 +21,7 @@ Handle names are arbitrary strings you choose. They are globally unique across k
 
 Mutators mirror the keyed-dict shape:
 
-``` py
+```py
 dac.add_connection("warehouse", warehouse_conn)
 dac.add_file("transactions", "/data/tx.parquet")
 dac.add_folder("raw", "/data/raw/")
@@ -62,7 +62,7 @@ Every kind accepts more than one input shape. Each shape earned its place at a d
 
 The named/auto split applies to the mutators as well:
 
-``` py
+```python
 dac.add_file("/data/tx.parquet")                       # auto-named
 dac.add_file("tx", "/data/tx.parquet")                 # named (when you need a handle)
 ```
@@ -78,14 +78,14 @@ Naming is only required when:
 
 Credentials are the one kind where the named form and the value itself look identical, because a credential *is* a dict. These two lines differ only in brackets but mean completely different things:
 
-``` py
+```py
 credentials={"sqlite": "/data/x.db"}    # named form: handle "sqlite" -> credential "/data/x.db"
 credentials=[{"sqlite": "/data/x.db"}]  # one credential whose mapping is {"sqlite": "/data/x.db"}
 ```
 
 The first shape is almost never what you mean: it registers the string `"/data/x.db"` as the credential, which then fails every connector's `is_valid_credentials` check. The typed `Credential` class removes the ambiguity, so the meaning comes from the type instead of the nesting depth:
 
-``` py
+```python
 from mloda.user import Credential, DataAccessCollection
 
 DataAccessCollection(credentials=Credential(sqlite="/data/x.db"))       # kwargs form
@@ -151,7 +151,7 @@ assert "missing" in str(excinfo.value)
 
 When more than one resource of the same kind matches a feature's requirements, you disambiguate by setting `data_access_handle` on the feature's `Options`:
 
-``` py
+```py
 from mloda.user import DataAccessCollection, Options, Feature, mloda
 
 dac = DataAccessCollection(
@@ -175,7 +175,7 @@ The key works across `read_file`, `read_document`, and `read_db` on a per-featur
 
 `DataAccessCollection.handles()` returns a `{handle: kind}` map of everything registered. Use it for audits, logging, or to surface candidates in your own error messages:
 
-``` py
+```python
 dac.handles()
 # {"warehouse": "connection", "analytics": "connection",
 #  "transactions": "file", "users": "file",
@@ -186,7 +186,7 @@ dac.handles()
 
 `column_to_file` is a file-specific override that takes precedence over the resolver. Its values may be either a **file handle** (key of the `files` dict) or a **file path** (value of the `files` dict); both are accepted and normalized to handles internally:
 
-``` py
+```python
 DataAccessCollection(
     files={"train": "application_train.csv", "bureau": "bureau.csv"},
     column_to_file={

@@ -38,7 +38,7 @@ This means, depending on your needs, you can run them all at once (**batch run**
     Accepts `"alphabetical"` (sort columns A-Z) or `"request_order"`
     (preserve the order features were requested). Default: `None` (no guaranteed order).
 
-``` python
+```py
 from mloda.user import mloda
 
 # Alphabetical ordering
@@ -59,7 +59,7 @@ result = mloda.run_all(
 For realtime or inference scenarios, split configuration from execution.
 `prepare()` builds the execution plan once; `run()` executes it with fresh data each time.
 
-``` python
+```py
 from mloda.user import mloda
 
 # 1. Prepare once
@@ -99,7 +99,7 @@ from mloda.steward import (
 
 Resolve a single feature name (or a `Feature`) to its matching FeatureGroup without running the request, reporting failures in `result.error` instead of raising. It takes `feature` (`str | Feature`) positionally plus keyword-only `options`, `plugin_collector`, `feature_group`, `links`, `data_access_collection`, and `compute_frameworks`, and returns a `ResolvedFeature` (8 fields, including `candidates`, `error`, `supported_compute_frameworks`, `subtype`).
 
-``` python
+```python
 from mloda.steward import resolve_feature
 
 result = resolve_feature("my_feature_name")
@@ -117,7 +117,7 @@ The runtime counterpart to `resolve_feature`: `mlodaAPI.explain(...)` builds the
 
 `explain` re-resolves the plan from scratch. It answers "what would this request resolve to", it is not a record of a prior `run_all` execution. For the plan of a run that actually happened, use the return value directly: `run_all` returns a `RunResult` (a `list` with a read-only `plan` property) and `stream_all` returns a `ResultStream` (generator-compatible, `plan` available before consuming). One planning pass serves both the results and the plan, unlike `explain`, which re-resolves.
 
-``` python
+```py
 from mloda.user import mloda
 
 results = mloda.run_all(["sales__mean_aggr"], compute_frameworks=["PandasDataFrame"])
@@ -127,7 +127,7 @@ for step in results.plan:
 
 To match a `run_all` resolution, pass the same `parallelization_modes`: `run_all` defaults to `{ParallelizationMode.SYNC}`, `prepare`/`explain` default to `None`, and compute frameworks are filtered by mode.
 
-``` python
+```py
 from mloda.user import mloda
 
 # "sales" here stands for a root feature one of your own FeatureGroups provides.
@@ -158,7 +158,7 @@ The requested/injected split above is derived from a per-feature flag, not from 
 - `FeatureSet.get_initial_requested_features()` returns the sorted, deduplicated names of the flagged features in that set.
 - `PlanStep.requested_feature_names` is that accessor's output for a compute step's FeatureSet; `injected_feature_names` is the rest of `feature_names`. Both are sorted, so they do not follow the order of `feature_names`, and both are empty on join and transform steps, which carry no FeatureSet.
 
-``` python
+```py
 from mloda.user import mloda
 
 for step in mloda.explain(["sales__mean_aggr"], compute_frameworks=["PandasDataFrame"]):
@@ -173,7 +173,7 @@ for step in mloda.explain(["sales__mean_aggr"], compute_frameworks=["PandasDataF
 
 `session.resolution_report()` returns the `list[ResolutionRecord]` captured while `prepare()` planned the request, one per feature, available before or after `run()`.
 
-``` python
+```python
 from mloda.user import mlodaAPI
 
 diagnosis = mlodaAPI.diagnose(["sales__mean_aggr"], compute_frameworks=["PandasDataFrame"])
@@ -190,7 +190,7 @@ When the same request is run rather than diagnosed, the failure raises `FeatureR
 
 Import the typed resolution surfaces from `mloda.provider` (also re-exported from `mloda.user` and `mloda.steward`):
 
-``` python
+```python
 from mloda.provider import FeatureResolutionError, ResolutionDiagnosis, ResolutionRecord
 ```
 
@@ -204,7 +204,7 @@ from mloda.provider import FeatureResolutionError, ResolutionDiagnosis, Resoluti
 
 Get documentation for feature groups with optional filtering.
 
-``` python
+```python
 from mloda.steward import get_feature_group_docs
 
 # Get all feature groups
@@ -230,7 +230,7 @@ fgs = get_feature_group_docs(compute_framework="PandasDataframe")
 
 Get documentation for compute frameworks with optional filtering.
 
-``` python
+```python
 from mloda.steward import get_compute_framework_docs
 
 # List every framework (is_available flags whether its backend library is installed)
@@ -252,7 +252,7 @@ available_frameworks = get_compute_framework_docs(available_only=True)
 
 Get documentation for extenders with optional filtering.
 
-``` python
+```python
 from mloda.steward import get_extender_docs
 
 # Get all extenders

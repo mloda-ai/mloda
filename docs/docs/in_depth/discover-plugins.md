@@ -6,7 +6,7 @@ mloda provides functions to discover, inspect, and debug plugins at runtime. The
 
 Use `resolve_feature()` to find which FeatureGroup handles a specific feature name:
 
-``` python
+```python
 from mloda.steward import resolve_feature
 
 # Check which FeatureGroup handles a feature
@@ -51,7 +51,7 @@ too. Pass a `Feature` as the single source of truth for name, `options`, domain,
 compute-framework pin, and scope; passing `options` or `feature_group` alongside
 a `Feature` raises `TypeError`.
 
-``` python
+```python
 from mloda.user import Feature, Options
 
 result = resolve_feature(Feature("sales__sum_aggr", options=Options(group={"partition_by": ["customer_id"]})))
@@ -79,7 +79,7 @@ A FeatureGroup whose `match_feature_group_criteria` or
 supply it. Without `options` the evaluation uses empty `Options`, and such a
 group reports no candidates:
 
-``` python
+```python
 from mloda.steward import resolve_feature
 from mloda.user import Options, PluginLoader
 
@@ -102,7 +102,7 @@ When several FeatureGroups match the same name, such as the framework-specific
 string (the string matches the named class and its subclasses), the same forms
 as `Feature(..., feature_group=...)`:
 
-``` python
+```python
 result = resolve_feature("sales__sum_aggr", feature_group="PandasAggregatedFeatureGroup")
 ```
 
@@ -123,7 +123,7 @@ matched), `candidates` lists the classes that matched. When the environment
 build itself failed (for example a redefinition conflict), no matching runs,
 so `candidates` is empty and the error text carries the details:
 
-``` python
+```python
 result = resolve_feature("my_feature")
 if result.error:
     print(f"Error: {result.error}")
@@ -134,7 +134,7 @@ if result.error:
 
 Get documentation for available feature groups:
 
-``` python
+```python
 from mloda.steward import get_feature_group_docs
 
 # Get all feature groups
@@ -158,7 +158,7 @@ when the declaration is invalid). See
 
 Get documentation for compute frameworks:
 
-``` python
+```python
 from mloda.steward import get_compute_framework_docs
 
 # List every framework (is_available flags whether its backend library is installed)
@@ -172,7 +172,7 @@ available_frameworks = get_compute_framework_docs(available_only=True)
 
 Get documentation for extenders:
 
-``` python
+```python
 from mloda.steward import get_extender_docs
 
 # Get all extenders
@@ -246,7 +246,7 @@ including features it has nothing to do with. The way out is to scope it out of
 the universe. Both filters below drop the class before its declaration is ever
 consulted, so the build succeeds and the feature is an ordinary no-match:
 
-``` python
+```py
 # One broken third-party plugin, and every call reports its failure:
 resolve_feature("timestamp_unix").error
 # "Failed to build the plugin environment: RuntimeError: ... (raised by pkg.module:BrokenFG while declaring its compute frameworks)"

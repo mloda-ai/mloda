@@ -34,7 +34,7 @@ temperature~std
 
 When implementing a feature group that returns multiple columns:
 
-``` python
+```py
 class MultiColumnFeatureGroup(FeatureGroup):
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
@@ -54,7 +54,7 @@ class MultiColumnFeatureGroup(FeatureGroup):
 
 Use the `resolve_multi_column_feature()` utility to automatically discover all columns matching the pattern:
 
-``` python
+```py
 class MultiColumnConsumer(FeatureGroup):
     def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
         return {Feature.not_typed("MultiColumnFeature")}
@@ -84,7 +84,7 @@ class MultiColumnConsumer(FeatureGroup):
 
 For backwards compatibility, you can still access columns manually:
 
-``` python
+```py
 class MultiColumnConsumer(FeatureGroup):
     def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
         return {Feature.not_typed("MultiColumnFeature")}
@@ -106,7 +106,7 @@ class MultiColumnConsumer(FeatureGroup):
 
 You can declare a dependency on a specific sub-column directly, without needing all columns:
 
-``` python
+```py
 class SpecificSubColumnConsumer(FeatureGroup):
     def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
         # Depend on ONLY base_feature~1, not all columns
@@ -142,7 +142,7 @@ The mloda framework automatically handles the selection of columns that follow t
 
 2. This is implemented in the `identify_naming_convention` method in the `ComputeFramework` class:
 
-``` python
+```py
 def identify_naming_convention(self, selected_feature_names: Set[FeatureName], column_names: Set[str]) -> Set[str]:
     feature_name_strings = {f.name for f in selected_feature_names}
     _selected_feature_names: Set[str] = set()

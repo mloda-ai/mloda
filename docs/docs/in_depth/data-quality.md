@@ -55,7 +55,7 @@ class DocSimpleValidateInputFeatures(FeatureGroup):
 
 As we run it, it will return an error.
 
-``` python
+```text
 results = mloda.run_all(
             ["DocSimpleValidateInputFeatures"], {PyArrowTable}
         )
@@ -126,7 +126,7 @@ class DocExamplePanderaValidator(BaseValidator):
 
 The validator should raise an error again.
 
-``` python
+```py
 results = mloda.run_all(
             ["DocCustomValidateInputFeatures"], {PyArrowTable}
         )
@@ -228,7 +228,7 @@ class DocBaseValidateOutputFeaturesBaseNegativePandera(DocBaseValidateOutputFeat
 
 This one should fail:
 
-``` python
+```py
 results = mloda.run_all(
             ["DocBaseValidateOutputFeaturesBaseNegativePandera"], {PyArrowTable}
         )

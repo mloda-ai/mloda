@@ -122,7 +122,7 @@ class GlobalFilter:
             _filter = deepcopy(filter)
             _filter.filter_feature.options = self.unify_options(feat.options, _filter.filter_feature.options)
 
-            if self.criteria(feature_group, _filter, data_access_collection) is False:
+            if not self.criteria(feature_group, _filter, data_access_collection):
                 continue
             if self.domain(_filter, feat.domain, feature_group) is False:
                 continue
@@ -221,8 +221,11 @@ class GlobalFilter:
         Mark-or-contain policy: see IdentifyFeatureGroupClass._filter_feature_group_by_criteria.
         """
         try:
-            return feature_group.match_feature_group_criteria(
-                filter.filter_feature.name, filter.filter_feature.options, data_access_collection
+            # bool() inside the try: reading a plugin's return is itself a plugin call (#927).
+            return bool(
+                feature_group.match_feature_group_criteria(
+                    filter.filter_feature.name, filter.filter_feature.options, data_access_collection
+                )
             )
         except Exception as exc:  # noqa: BLE001  (contained: one broken matcher must not fail the whole run)
             if is_match_abort(exc):

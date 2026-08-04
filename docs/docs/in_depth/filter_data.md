@@ -202,6 +202,10 @@ This means a single `GlobalFilter` can be processed differently by different Fea
 in the same pipeline: one may use the mask engine for inline masking while another uses
 filters for row elimination.
 
+The return is read for truthiness, so any falsy value counts as a non-match, exactly like `False`:
+a hook that falls off the end of a branch and returns `None` attaches no filter, the same verdict
+feature resolution reaches for that name.
+
 If a FeatureGroup's `match_feature_group_criteria` raises while a filter is matched, that filter
 is a non-match for that probe, like a `False` return, and the drop is recorded in
 `GlobalFilter.dropped_filters`. A framework-owned raise still aborts.

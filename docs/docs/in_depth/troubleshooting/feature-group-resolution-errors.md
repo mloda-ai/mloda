@@ -55,6 +55,57 @@ which returns a `ResolutionDiagnosis` for the whole request. See
 [mlodaAPI](../mloda-api.md#diagnose-and-resolution_report) for both, plus the
 fields on `FeatureResolutionError`, `ResolutionDiagnosis`, and `ResolutionRecord`.
 
+## No Feature Groups Found Error
+
+### The Problem
+
+```
+FeatureResolutionError: No feature groups found for feature name: 'sales_revnue'. Requested domain: 'marketing'.
+Feature group(s) eliminated while matching 'sales_revnue':
+  - SalesFeatureGroup (domain): declares domain 'sales', but the run requested 'marketing'
+  - SalesRevenueGroup (compute framework): none of its compute frameworks are enabled for this run
+Did you mean one of: ['sales_revenue']?
+Use resolve_feature(name, options=...) to debug feature resolution.
+For troubleshooting guide, see: https://mloda-ai.github.io/mloda/in_depth/troubleshooting/feature-group-resolution-errors/
+```
+
+No enabled feature group both declared the requested name and survived every matching gate. It is raised as `FeatureResolutionError` during planning; see [Catching resolution failures](#catching-resolution-failures) to inspect it, or follow the message's closing pointer: rerun the name through `resolve_feature`, shown at the top of this page, to get the same message without a run.
+
+### The eliminated candidates block
+
+Each line names a candidate that declared the requested name, the first gate that eliminated it (the parenthesized label), and that gate's reason.
+
+| Label | What eliminated the candidate | Typical fix |
+| --- | --- | --- |
+| `option value` | The group declined an option value in the request. | Fix the value the reason names. |
+| `input data` | The input-data gate declined the request. | Point the request at data the group can read ([Data Access Patterns](../data-access-patterns.md)). |
+| `match hook` | The group's match hook raised; the error is contained and quoted. | Fix the plugin bug it names. |
+| `domain` | The group declares a different domain than the request. | Align the requested domain ([domain solution below](#3-use-domains-to-separate-feature-groups)). |
+| `scope` | The group is outside the requested `feature_group` scope. | Widen or correct the scope ([scope solution below](#4-scope-a-feature-to-one-source-shared-keys-across-sources)). |
+| `compute framework` | None of the group's compute frameworks are usable: its capability hook rejected every enabled framework, or none of its frameworks is enabled for the run. | Enable a framework the group supports. |
+| `compute framework pin` | The `Feature` pins `compute_frameworks` to one the group does not support. | Change or drop the pin. |
+| `links` | No index column of the group matches the run's links. | Align the run's links with the group's index. |
+
+### The Did you mean hint
+
+Suggestions are close matches drawn from the names that live, accessible groups declare. The hint drops what would only repeat: the requested name, names the eliminated-candidates block already covers, and names only eliminated groups declare. A missing hint therefore means no surviving group declares anything close, not that the matcher gave up.
+
+### Only abstract feature group bases matched
+
+A sibling variant fires when the name is declared, but only by abstract feature group bases:
+
+```
+No feature groups found for feature name: 'my_feature'. Only abstract feature group base(s) matched, which cannot be instantiated; no concrete implementation is available or enabled.
+```
+
+or, when concrete implementations exist but their compute frameworks do not:
+
+```
+No feature groups found for feature name: 'my_feature'. Its concrete implementations require compute framework(s) ['PandasDataframe'], none of which are available or enabled for this run.
+```
+
+For the first shape, import or enable a concrete implementation. For the second, enable one of the named compute frameworks. This variant still renders the eliminated-candidates block, but no Did-you-mean suggestion and no trailing resolve_feature or troubleshooting lines.
+
 ## Multiple Feature Groups Error
 
 ### The Problem

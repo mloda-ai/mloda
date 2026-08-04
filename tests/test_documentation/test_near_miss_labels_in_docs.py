@@ -95,6 +95,7 @@ DOC_BULLET_STAGES: dict[str, EliminationStage] = {
     "in_depth/compute-framework-integration.md": "framework_pin",
     "in_depth/data-access-patterns.md": "input_data",
     "in_depth/property-mapping.md": "value_rejection",
+    "in_depth/troubleshooting/feature-group-resolution-errors.md": "domain",
 }
 
 
@@ -141,3 +142,19 @@ class TestProseLabelMentions:
         assert any(spelling in text for spelling in spellings), (
             f"{page} no longer names the '{stage}' near-miss label in prose as any of {list(spellings)}."
         )
+
+
+# The troubleshooting page carries the full label table, so every distinct label must appear on it.
+LABEL_TABLE_PAGE = "in_depth/troubleshooting/feature-group-resolution-errors.md"
+
+
+@pytest.mark.parametrize("label", sorted(ALLOWED_LABELS))
+def test_the_label_table_page_names_every_distinct_stage_label(label: str) -> None:
+    page = DOCS_ROOT / LABEL_TABLE_PAGE
+    assert page.is_file(), f"{page} was moved or renamed; update LABEL_TABLE_PAGE"
+
+    spellings = (f"`{label}`", f"`({label})`")
+    text = page.read_text(encoding="utf-8")
+    assert any(spelling in text for spelling in spellings), (
+        f"{page} does not name the near-miss label '{label}' as any of {list(spellings)}."
+    )

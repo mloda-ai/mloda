@@ -6,11 +6,15 @@ in_features option, so the gate must count the same sources the name path would 
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from typing import Any
+
+import pytest
 
 from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser_mixin import (
     FeatureChainParserMixin,
 )
+from mloda.core.abstract_plugins.components.match_rejection import MATCH_REJECTION_REASONS, MatchRejection
 from mloda.provider import DefaultOptionKeys, PropertySpec
 from mloda.user import Feature, Options
 
@@ -99,3 +103,58 @@ class TestOptionPathGateUnchanged:
         result = _NameSourceGate944.match_feature_group_criteria("any_name", _options(in_features))
 
         assert result is True
+
+
+OWNER_944 = "_NameSourceGate944"
+BELOW_MIN_NAME_944 = "f1__op1_gate944"
+ABOVE_MAX_NAME_944 = "f1&f2&f3&f4__op1_gate944"
+BELOW_MIN_REASON_944 = f"Feature '{BELOW_MIN_NAME_944}' requires at least 2 in_feature(s), but found 1"
+ABOVE_MAX_REASON_944 = f"Feature '{ABOVE_MAX_NAME_944}' allows at most 3 in_feature(s), but found 4"
+
+
+@pytest.fixture
+def rejection_window() -> Iterator[dict[str, MatchRejection]]:
+    """Open a per-test recording window and always close it again."""
+    reasons: dict[str, MatchRejection] = {}
+    token = MATCH_REJECTION_REASONS.set(reasons)
+    yield reasons
+    MATCH_REJECTION_REASONS.reset(token)
+
+
+class TestNameSourceCountRejectionIsRecorded:
+    """A name-carried count outside MIN/MAX is a reportable near-miss, not a silent non-match."""
+
+    def test_below_min_records_the_actionable_reason(self, rejection_window: dict[str, MatchRejection]) -> None:
+        """The reason keeps the pre-gate wording: the declared MIN and the count the name carries."""
+        result = _NameSourceGate944.match_feature_group_criteria(BELOW_MIN_NAME_944, _options())
+
+        assert result is False
+        assert rejection_window == {OWNER_944: MatchRejection(reason=BELOW_MIN_REASON_944, stage="value_rejection")}
+
+    def test_above_max_records_the_actionable_reason(self, rejection_window: dict[str, MatchRejection]) -> None:
+        """The reason keeps the pre-gate wording: the declared MAX and the count the name carries."""
+        result = _NameSourceGate944.match_feature_group_criteria(ABOVE_MAX_NAME_944, _options())
+
+        assert result is False
+        assert rejection_window == {OWNER_944: MatchRejection(reason=ABOVE_MAX_REASON_944, stage="value_rejection")}
+
+    def test_below_min_records_the_name_count_even_with_a_passing_option(
+        self, rejection_window: dict[str, MatchRejection]
+    ) -> None:
+        """The option value would pass the gate, so the reason must report the name's count, not the option's."""
+        _NameSourceGate944.match_feature_group_criteria(BELOW_MIN_NAME_944, _options(["a", "b"]))
+
+        assert rejection_window == {OWNER_944: MatchRejection(reason=BELOW_MIN_REASON_944, stage="value_rejection")}
+
+    def test_a_count_inside_the_range_records_nothing(self, rejection_window: dict[str, MatchRejection]) -> None:
+        result = _NameSourceGate944.match_feature_group_criteria("f1&f2&f3__op1_gate944", _options())
+
+        assert result is True
+        assert rejection_window == {}
+
+    def test_the_option_path_still_records_nothing(self, rejection_window: dict[str, MatchRejection]) -> None:
+        """Pinned contrast: only the name path reports; the option path stays a silent non-match."""
+        result = _NameSourceGate944.match_feature_group_criteria("any_name", _options("single_feature"))
+
+        assert result is False
+        assert rejection_window == {}

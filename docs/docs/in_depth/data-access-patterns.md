@@ -84,6 +84,52 @@ The matched `(ReaderClass, data_access)` pair is stored under the reserved `"Bas
 
 For non-file sources such as HTTP endpoints, subclassing `ReadFile` and overriding `match_subclass_data_access` plus `load_data` is a supported pattern; on that path `suffix()` is never consulted (it is inert). `ApiInputData` injects in-memory data passed through the API request and is not an HTTP client.
 
+### Reader selection vs feature-group resolution
+
+Reader selection answers "which plugin handles this input" the way [feature-group resolution](feature-group-matching.md) answers "which feature group owns this name". It is not a second resolver: it runs nested inside the criteria gate of feature-group resolution, where `match_feature_group_criteria` calls the reader family's `matches()`. The two deliberately share no request, environment, or outcome abstractions; they share only the low-level rejection channel described below.
+
+| Aspect | Feature-group resolution | Reader selection |
+|--------|--------------------------|------------------|
+| **Candidate discovery** | Registered accessible plugins | Structural walk over the family's final readers (`is_final_reader()`); no reader code executed |
+| **Auto-loading** | Up-front plugin loading | Lazy per-family `_auto_load_group`, triggered only when no final readers are found |
+| **Accessibility policy** | Strict mode, collector policy, enabled compute frameworks | None: every final reader of the family is a candidate |
+| **Matching** | Criteria, domain, scope, capability, framework-pin, and links gates | Per-reader file, suffix, column-validation, and pinning rules |
+| **Ambiguity** | Multiple winners resolved by subclass preference, then reported | First match wins; a second conflicting reader for the same feature raises |
+| **Outcome and diagnostics** | Structured evaluation result rendered into failure messages | A matched `(ReaderClass, data_access)` pair written into options; declines surface through the shared rejection channel |
+
+### Declining with an attributable reason
+
+A reader that owns an input but cannot serve the requested feature can record why it declined; the reason then appears in the near-miss block of the "No feature groups found" error message. `record_match_rejection` is exported via `mloda.provider`:
+
+``` python
+from mloda.provider import record_match_rejection
+from mloda_plugins.feature_group.input_data.read_files.csv import CsvReader
+
+class SensorCsvReader(CsvReader):
+    @classmethod
+    def validate_columns(cls, file_name: str, feature_names: list[str]) -> bool:
+        columns = cls.get_column_names(file_name)
+        missing = [name for name in feature_names if name not in columns]
+        if missing:
+            record_match_rejection(
+                cls.get_class_name(),
+                f"{cls.get_class_name()} owns {file_name} but it lacks: {', '.join(missing)}",
+            )
+            return False
+        return True
+```
+
+Rules for reader authors:
+
+- Record only when ownership is established but the content fails: right suffix but a missing column, valid credentials but a declined feature.
+- Plain non-matches (wrong suffix, invalid credentials, `NotImplementedError`) stay silent.
+- Never raise to decline: anything but `NotImplementedError` in the DB match hooks aborts matching for every reader sharing the `DataAccessCollection`. Record, then return a falsy value.
+- Recording outside an engine-opened window is a no-op, so readers stay usable standalone.
+- A reader that ultimately matches discards its recorded reasons; only a decline surfaces them.
+- Name the reader and the concrete input in the reason, as the example does.
+
+`ReadFile` column validation and the `ReadDB` feature check (`check_feature_in_data_access`) already record automatically; a custom reader only needs this for its own decline points.
+
 ## MatchData Pattern
 
 ### Purpose

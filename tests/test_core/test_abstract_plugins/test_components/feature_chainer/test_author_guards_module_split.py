@@ -78,16 +78,15 @@ PARSER_KEPT_METHODS = (
     "validate_property_mapping_defaults",
 )
 
-# Module-level names of the parser that carry a __module__ to check.
+# Module-level names of the parser that carry a __module__ to check. The match-rejection channel
+# lives in components.match_rejection now; the parser only re-exports record_match_rejection.
 PARSER_KEPT_MODULE_LEVEL = (
-    "record_match_rejection",
     "option_key_is_present",
     "PropertyValueRejection",
 )
 
 # Module-level parser constants, which have no __module__ to check.
 PARSER_KEPT_CONSTANTS = (
-    "MATCH_REJECTION_REASONS",
     "CHAIN_SEPARATOR",
     "COLUMN_SEPARATOR",
     "INPUT_SEPARATOR",

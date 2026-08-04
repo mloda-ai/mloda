@@ -152,6 +152,8 @@ def test_import_provider_base_classes() -> None:
         COLUMNWISE_HOOKS,
         COLUMN_DISCOVERY_HOOKS,
         missing_columnwise_hooks,
+        # Match rejection recording
+        record_match_rejection,
         # Transformers
         BaseTransformer,
         ComputeFrameworkTransformer,
@@ -193,6 +195,8 @@ def test_import_provider_base_classes() -> None:
     assert COLUMNWISE_HOOKS
     assert COLUMN_DISCOVERY_HOOKS > COLUMNWISE_HOOKS
     assert callable(missing_columnwise_hooks)
+    # Match rejection recording
+    assert callable(record_match_rejection)
     # Transformers
     assert BaseTransformer is not None
     assert ComputeFrameworkTransformer is not None

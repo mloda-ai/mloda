@@ -24,9 +24,9 @@ from mloda.core.prepare.resolution_failure_renderer import (
 )
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.abstract_plugins.components.domain import Domain
-from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser import (
+from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser import PropertyValueRejection
+from mloda.core.abstract_plugins.components.match_rejection import (
     MATCH_REJECTION_REASONS,
-    PropertyValueRejection,
     record_match_rejection,
 )
 from mloda.core.abstract_plugins.components.utils import (

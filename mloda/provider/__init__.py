@@ -87,6 +87,9 @@ from mloda.core.abstract_plugins.components.feature_chainer.property_spec import
     property_spec,
 )
 
+# Match rejection recording
+from mloda.core.abstract_plugins.components.match_rejection import record_match_rejection
+
 # Subtype declaration
 from mloda.core.abstract_plugins.components.subtype_declaration import SubtypeDeclaration
 
@@ -168,6 +171,8 @@ __all__ = [
     "is_positive_int",
     "property_spec",
     "NO_DEFAULT",
+    # Match rejection recording
+    "record_match_rejection",
     # Subtype declaration
     "SubtypeDeclaration",
     # Transformers

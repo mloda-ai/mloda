@@ -1,0 +1,21 @@
+"""Per-candidate match-rejection window shared by feature-group matching and input-data reader selection.
+Neutral home so reader code does not depend on the feature-chainer module."""
+
+from __future__ import annotations
+
+import contextvars
+
+# Active for one candidate's match call: the engine opens a window per candidate. Maps the recording
+# site's owner name to the first structured rejection reason the real match pass produced, and the
+# engine attributes the harvest to the candidate class object it called.
+MATCH_REJECTION_REASONS: contextvars.ContextVar[dict[str, str] | None] = contextvars.ContextVar(
+    "mloda_match_rejection_reasons", default=None
+)
+
+
+def record_match_rejection(owner_name: str, reason: str) -> None:
+    """Record a match rejection; the first reason per owner wins, and outside an active evaluation it is a no-op."""
+    reasons = MATCH_REJECTION_REASONS.get()
+    if reasons is None:
+        return
+    reasons.setdefault(owner_name, reason)

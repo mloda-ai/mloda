@@ -23,7 +23,7 @@ from typing import Optional
 import pytest
 
 from mloda.core.abstract_plugins.components.feature import Feature
-from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser import MATCH_REJECTION_REASONS
+from mloda.core.abstract_plugins.components.match_rejection import MATCH_REJECTION_REASONS
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework

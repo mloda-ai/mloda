@@ -1,6 +1,6 @@
 from typing import Any, ClassVar
 from mloda.user import DataAccessCollection
-from mloda.provider import FeatureSet, BaseInputData, ReaderOptionSpec
+from mloda.provider import FeatureSet, BaseInputData, ReaderOptionSpec, record_match_rejection
 from mloda.user import Options
 
 
@@ -117,6 +117,7 @@ class ReadDB(BaseInputData):
 
     @classmethod
     def match_read_db_data_access(cls, data_accesses: list[Any], feature_names: list[str]) -> Any:
+        """Valid credentials with a declined feature record an attributable decline before moving on."""
         if len(feature_names) > 1:
             raise ValueError(
                 f"ReadDB.match_read_db_data_access expects exactly one feature name, "
@@ -130,6 +131,12 @@ class ReadDB(BaseInputData):
                     try:
                         if cls.check_feature_in_data_access(feature_names[0], data_access):
                             return data_access
+                        # Attributable decline: ownership established, content failed; plain non-matches stay silent.
+                        record_match_rejection(
+                            cls.get_class_name(),
+                            f"{cls.get_class_name()} accepted the credentials but declined "
+                            f"the feature '{feature_names[0]}'",
+                        )
                         continue
                     except NotImplementedError:
                         pass

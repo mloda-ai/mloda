@@ -22,7 +22,7 @@ import pytest
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.abstract_plugins.components.default_options_key import DefaultOptionKeys
 from mloda.core.abstract_plugins.components.feature import Feature
-from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser import (
+from mloda.core.abstract_plugins.components.match_rejection import (
     MATCH_REJECTION_REASONS,
     record_match_rejection,
 )

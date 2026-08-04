@@ -3,7 +3,7 @@ from pathlib import Path
 from typing import Any, ClassVar
 from mloda.user import DataAccessCollection
 from mloda.provider import FeatureSet
-from mloda.provider import BaseInputData, ReaderOptionSpec
+from mloda.provider import BaseInputData, ReaderOptionSpec, record_match_rejection
 from mloda.user import Options
 
 
@@ -162,12 +162,18 @@ class ReadFile(BaseInputData):
 
     @classmethod
     def validate_columns(cls, file_name: str, feature_names: list[str]) -> bool:
+        """A suffix-owned file lacking a requested column records an attributable decline before returning False."""
         try:
             columns = cls.get_column_names(file_name)
         except NotImplementedError:
             return True
 
-        for feature in feature_names:
-            if feature not in columns:
-                return False
+        missing = [feature for feature in feature_names if feature not in columns]
+        if missing:
+            # Attributable decline: ownership established, content failed; plain non-matches stay silent.
+            record_match_rejection(
+                cls.get_class_name(),
+                f"{cls.get_class_name()} owns {file_name} but it lacks the column(s): {', '.join(missing)}",
+            )
+            return False
         return True

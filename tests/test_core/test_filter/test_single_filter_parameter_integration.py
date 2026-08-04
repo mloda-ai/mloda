@@ -1,5 +1,9 @@
 """Tests for SingleFilter integration with FilterParameterImpl."""
 
+from typing import Any
+
+import pytest
+
 from mloda.user import SingleFilter
 from mloda.user import FilterType
 from mloda.core.filter.filter_parameter import FilterParameter, FilterParameterImpl
@@ -274,3 +278,46 @@ def test_filter_equality_with_unordered_parameters() -> None:
         parameter={"max": 50, "max_exclusive": True, "min": 25},
     )
     assert single_filter1 == single_filter2
+
+
+# --- Unhashable parameter rejection tests (see issue #925) ---
+#
+# SingleFilter is hashed as soon as it enters a set, so an unhashable parameter value has to be
+# refused while constructing the filter, where the caller can still see which key is at fault.
+
+
+def test_single_filter_rejects_dict_parameter_value() -> None:
+    """Test constructing a filter with a dict parameter value raises ValueError instead of building it."""
+    parameter: dict[str, Any] = {"value": {"a": 1}}
+
+    with pytest.raises(ValueError, match="value"):
+        SingleFilter(filter_feature="config", filter_type=FilterType.EQUAL, parameter=parameter)
+
+
+def test_single_filter_rejects_nested_unhashable_parameter_value() -> None:
+    """Test a dict nested in a list parameter value is refused at construction."""
+    parameter: dict[str, Any] = {"values": [{"a": 1}]}
+
+    with pytest.raises(ValueError, match="values"):
+        SingleFilter(filter_feature="category", filter_type=FilterType.CATEGORICAL_INCLUSION, parameter=parameter)
+
+
+def test_single_filter_rejection_names_the_offending_key() -> None:
+    """Test the raised message names the key holding the unhashable value."""
+    parameter: dict[str, Any] = {"min": 25, "payload": {"a": 1}}
+
+    with pytest.raises(ValueError, match="payload"):
+        SingleFilter(filter_feature="age", filter_type=FilterType.RANGE, parameter=parameter)
+
+
+def test_single_filter_still_accepts_collection_parameter_values() -> None:
+    """Test hashable collection parameters keep constructing and hashing after the rejection."""
+    parameter: dict[str, Any] = {"values": {"A", "B"}}
+    single_filter = SingleFilter(
+        filter_feature="category",
+        filter_type=FilterType.CATEGORICAL_INCLUSION,
+        parameter=parameter,
+    )
+
+    assert isinstance(hash(single_filter), int)
+    assert sorted(single_filter.parameter.values or []) == ["A", "B"]

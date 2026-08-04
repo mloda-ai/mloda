@@ -320,3 +320,82 @@ def test_list_and_tuple_values_are_equal_and_hash_equal() -> None:
     assert from_list == from_tuple
     assert hash(from_list) == hash(from_tuple)
     assert len({from_list, from_tuple}) == 1
+
+
+# --- Unhashable value rejection tests (see issue #925) ---
+#
+# Contract: a value that cannot be hashed is rejected at construction with a ValueError naming the
+# offending key, instead of surfacing later as an opaque `TypeError: unhashable type` at hash time.
+
+
+def test_from_dict_rejects_dict_value() -> None:
+    """Test a dict value is rejected, since normalization leaves it raw and unhashable."""
+    params: dict[str, Any] = {"value": {"a": 1}}
+
+    with pytest.raises(ValueError, match="value"):
+        FilterParameterImpl.from_dict(params)
+
+
+def test_from_dict_rejects_dict_nested_in_list_value() -> None:
+    """Test a list value holding a dict is rejected, since the shallow tuple conversion misses it."""
+    params: dict[str, Any] = {"values": [{"a": 1}]}
+
+    with pytest.raises(ValueError, match="values"):
+        FilterParameterImpl.from_dict(params)
+
+
+def test_from_dict_rejects_list_nested_in_list_value() -> None:
+    """Test a list value holding a list is rejected."""
+    params: dict[str, Any] = {"values": [[1, 2]]}
+
+    with pytest.raises(ValueError, match="values"):
+        FilterParameterImpl.from_dict(params)
+
+
+def test_from_dict_rejects_dict_nested_in_tuple_value() -> None:
+    """Test a tuple value holding a dict is rejected, even though the tuple itself is a hashable type."""
+    params: dict[str, Any] = {"values": ({"a": 1},)}
+
+    with pytest.raises(ValueError, match="values"):
+        FilterParameterImpl.from_dict(params)
+
+
+def test_from_dict_rejects_unhashable_leaf_value() -> None:
+    """Test an unhashable scalar such as bytearray is rejected."""
+    params: dict[str, Any] = {"value": bytearray(b"abc")}
+
+    with pytest.raises(ValueError, match="value"):
+        FilterParameterImpl.from_dict(params)
+
+
+def test_from_dict_rejects_unhashable_range_bound() -> None:
+    """Test the rejection is not limited to the value/values keys."""
+    params: dict[str, Any] = {"min": {"a": 1}, "max": 50}
+
+    with pytest.raises(ValueError, match="min"):
+        FilterParameterImpl.from_dict(params)
+
+
+def test_from_dict_error_names_the_offending_key() -> None:
+    """Test the message names the key that carries the unhashable value, not a neighbouring key."""
+    params: dict[str, Any] = {"min": 1, "payload": {"a": 1}}
+
+    with pytest.raises(ValueError, match="payload"):
+        FilterParameterImpl.from_dict(params)
+
+
+def test_from_dict_accepts_every_hashable_value_shape() -> None:
+    """Test the rejection leaves the supported value shapes untouched."""
+    shapes: list[dict[str, Any]] = [
+        {"value": 25},
+        {"value": None},
+        {"value": "EU"},
+        {"values": "EU"},
+        {"values": ["A", "B"]},
+        {"values": {"A", "B"}},
+        {"values": ("A", "B")},
+        {"min": 0, "max": 100, "max_exclusive": True},
+    ]
+
+    for params in shapes:
+        assert isinstance(hash(FilterParameterImpl.from_dict(params)), int)

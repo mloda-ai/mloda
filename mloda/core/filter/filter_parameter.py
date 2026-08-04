@@ -1,3 +1,4 @@
+from collections.abc import Hashable
 from dataclasses import dataclass
 from typing import Any, Optional, Protocol, cast, runtime_checkable
 
@@ -34,13 +35,27 @@ def _make_hashable(value: Any) -> Any:
     return value
 
 
+def _is_hashable(value: Any) -> bool:
+    """A tuple reports as Hashable through its type, so its elements decide whether hashing works."""
+    if isinstance(value, tuple):
+        return all(_is_hashable(element) for element in value)
+    return isinstance(value, Hashable)
+
+
 @dataclass(frozen=True)
 class FilterParameterImpl:
     _raw: tuple[tuple[str, Any], ...]
 
     @classmethod
     def from_dict(cls, params: dict[str, Any]) -> "FilterParameterImpl":
-        return cls(_raw=tuple(sorted((k, _make_hashable(v)) for k, v in params.items())))
+        normalized = {k: _make_hashable(v) for k, v in params.items()}
+        for key, value in normalized.items():
+            if not _is_hashable(value):
+                raise ValueError(
+                    f"Filter parameter '{key}' has an unhashable value, "
+                    "allowed are scalars and flat lists, sets or tuples of scalars."
+                )
+        return cls(_raw=tuple(sorted(normalized.items())))
 
     @property
     def value(self) -> Optional[Any]:

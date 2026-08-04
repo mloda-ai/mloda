@@ -46,7 +46,6 @@ class GlobalFilter:
         self.dropped_filters: dict[tuple[type[FeatureGroup], str], str] = {}
         self.probes: dict[tuple[type[FeatureGroup], FeatureName, UUID], set[SingleFilter]] = {}
         self.matched_filter_uuids: set[UUID] = set()
-        # Rendered divergence messages already emitted this setup; cleared by reset_match_tracking.
         self._warned_divergences: set[str] = set()
 
     def reset_match_tracking(self) -> None:
@@ -131,15 +130,14 @@ class GlobalFilter:
                 continue
             # we don't check links, because this is not necessary as this is covered by the feature and feature group before
 
-            # Reported after the gates: the warning only ever describes a filter that actually attaches (issue #921).
-            # The deepcopy's options were unified above, so compare against the original declared options.
+            # After the gates, against the original declared options: only an attaching filter is described.
             self._warn_on_diverging_options(feature_group, feat.options, filter.filter_feature.options)
             self.matched_filter_uuids.add(filter.uuid)
             matched_filters.add(_filter)
         return matched_filters
 
     def warn_on_unmatched_filters(self) -> None:
-        """Warn once per filter that matched no feature group during the whole setup."""
+        """Warn once per filter that matched no feature group this setup."""
         for filter in sorted(self.filters, key=lambda f: f.name):
             if filter.uuid not in self.matched_filter_uuids:
                 logger.warning(f"Filter feature '{filter.name}' matched no feature group.")

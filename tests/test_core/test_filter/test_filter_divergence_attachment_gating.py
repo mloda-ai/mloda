@@ -1,8 +1,6 @@
-"""Pin attachment-gated divergence warnings and the unmatched-filter diagnostic (#921).
+"""Divergence warnings fire only for attaching filters; unmatched filters are reported after setup.
 
-The divergence warning must fire only for a filter that clears every matching gate, and a filter
-that never matches any feature group must be named by ``GlobalFilter.warn_on_unmatched_filters``,
-which the engine drives after setup. The fdg_ prefix keeps this module's keys unique.
+The fdg_ prefix keeps this module's keys unique.
 """
 
 from __future__ import annotations
@@ -165,11 +163,7 @@ def _run(
     filter_target: str,
     filter_options: Options,
 ) -> dict[str, Any]:
-    """Run FDG_HOST under a global EQUAL filter on ``filter_target``; return plain-data observations.
-
-    The probe class, the collector and the GlobalFilter are deleted from THIS frame before the asserts,
-    so a failing assert cannot pin the throwaway class into a traceback and trip the no-leak fixture.
-    """
+    """Run FDG_HOST under a global EQUAL filter on ``filter_target``; deletes probe refs in this frame."""
     collector = PluginCollector.enabled_feature_groups({_engine_probe(served, mapping)})
     global_filter = GlobalFilter()
     global_filter.add_filter(Feature(filter_target, filter_options), FilterType.EQUAL, {"value": 1})
@@ -190,14 +184,8 @@ def _run(
 def test_required_when_rejected_filter_is_reported_as_unmatched_without_divergence_warning(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
-    """The #921 shape: a required_when key the filter declares as None rejects the match attributably.
-
-    Found while writing this: required_when is enforced by the guard installed at class definition
-    (feature_chain_author_guards.install_required_when_guard wrapping match_feature_group_criteria),
-    so GlobalFilter.criteria sees the rejection as an ordinary criteria non-match. A flagless
-    present-as-None key reads as absent (option_key_is_present), so the always-firing predicate
-    rejects the filter feature while the host, which supplies the value, matches.
-    """
+    """A required_when key declared as None reads as absent, so the guard rejects the filter feature
+    through the ordinary criteria gate while the host, which supplies the value, matches."""
     mapping = {
         FDG_REQ_KEY: PropertySpec(
             "A group key required whenever the group matches.",
@@ -246,11 +234,8 @@ def _run_reusing(
     mapping: dict[str, PropertySpec] | None = None,
     host_options: Options | None = None,
 ) -> None:
-    """One engine run of FDG_HOST against a throwaway probe, reusing the caller's GlobalFilter.
-
-    The probe class and its collector are deleted from THIS frame; the caller must delete its
-    GlobalFilter reference before asserting, since the collection pins attached probe classes.
-    """
+    """One engine run of FDG_HOST reusing the caller's GlobalFilter; the caller deletes its own
+    GlobalFilter reference before asserting, since the collection pins attached probe classes."""
     collector = PluginCollector.enabled_feature_groups({_engine_probe(served, mapping)})
     results = mloda.run_all(
         [Feature(FDG_HOST, host_options or Options())],

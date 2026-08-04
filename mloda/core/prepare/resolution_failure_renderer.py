@@ -1,5 +1,6 @@
 """Projection of a failed EvaluationResult into its message; imports the types, never the matcher."""
 
+import logging
 from difflib import get_close_matches
 
 from mloda.core.abstract_plugins.components.utils import safe_field, as_str
@@ -7,6 +8,8 @@ from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.prepare.resolution_types import EliminationStage, EvaluationResult
 
+
+logger = logging.getLogger(__name__)
 
 TROUBLESHOOTING_URL = "https://mloda-ai.github.io/mloda/in_depth/troubleshooting/feature-group-resolution-errors/"
 
@@ -52,13 +55,24 @@ _STAGE_LABELS: dict[EliminationStage, str] = {
 }
 
 
+def _stage_label(stage: EliminationStage) -> str:
+    """Near-miss label of one elimination stage, degrading to the raw token when no label covers it."""
+    label = _STAGE_LABELS.get(stage)
+    if label is None:
+        # An unlabeled stage is a build defect, so it is reported; crashing the failure path is worse than an
+        # unlabeled line.
+        logger.warning("Elimination stage '%s' carries no near-miss label.", stage)
+        return stage
+    return label
+
+
 def _render_near_miss_block(result: EvaluationResult, feature: Feature) -> str | None:
     """Shared section naming each eliminated near-miss candidate, its gate label, and its reason."""
     if not result.eliminations:
         return None
     lines = "\n".join(
-        f"  - {fg.__name__} ({_STAGE_LABELS[result.eliminations[fg].stage]}): {result.eliminations[fg].reason}"
-        for fg in sorted(result.eliminations, key=_candidate_sort_key)
+        f"  - {fg.__name__} ({_stage_label(elimination.stage)}): {elimination.reason}"
+        for fg, elimination in sorted(result.eliminations.items(), key=lambda item: _candidate_sort_key(item[0]))
     )
     return f"Feature group(s) eliminated while matching '{str(feature.name)}':\n{lines}"
 

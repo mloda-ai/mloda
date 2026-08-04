@@ -10,6 +10,7 @@ hook. The feature groups below count every such hook, so a renderer that calls o
 All names are suffixed ``_791`` because test feature groups become global subclasses.
 """
 
+import logging
 from abc import abstractmethod
 from ast import literal_eval
 from collections.abc import Callable, Iterator
@@ -35,7 +36,7 @@ from mloda.core.api.plugin_docs import resolve_feature
 from mloda.core.prepare import resolution_types
 from mloda.core.prepare.accessible_plugins import FeatureGroupEnvironmentMapping
 from mloda.core.prepare.identify_feature_group import IdentifyFeatureGroupClass
-from mloda.core.prepare.resolution_failure_renderer import render_resolution_failure
+from mloda.core.prepare.resolution_failure_renderer import _STAGE_LABELS, render_resolution_failure
 from mloda.core.prepare.resolution_types import (
     CandidateFrameworks,
     Elimination,
@@ -96,6 +97,14 @@ VALUE_STAGE_REJECTION_REASON_791 = "renderer_value_stage_791 declines every valu
 NAME_DEPENDENT_STAGES_791: frozenset[EliminationStage] = frozenset(
     {"value_rejection", "matcher_error", "capability", "framework_pin"}
 )
+
+# Stands in for a ninth stage shipped without a near-miss label: no entry of the label table covers this token.
+UNLABELED_STAGE_791 = "renderer_unlabeled_stage_791"
+UNLABELED_STAGE_FEATURE_791 = "renderer_unlabeled_stage_feature_791"
+UNLABELED_STAGE_REASON_791 = "eliminated at a stage this build has no label for"
+
+# The renderer's own module logger: the degrade must be reported by the module that degrades.
+RENDERER_LOGGER_791 = "mloda.core.prepare.resolution_failure_renderer"
 
 # Eight names, all close to WIDE_FEATURE_791, so only the cut can bound the rendered line.
 WIDE_CATALOG_NAMES_791 = frozenset(
@@ -1919,7 +1928,7 @@ class TestALivePrefixKeepsACoveredNameSuggestible:
 
 
 class TestEveryEliminationStageIsClassified:
-    """A ninth stage must be classified before it ships: an unclassified one silently keeps or drops names."""
+    """A ninth stage must be classified and labelled before it ships, or it silently misrenders or misdrops names."""
 
     def test_the_two_stage_sets_partition_the_stage_literal(self) -> None:
         """NAME_INDEPENDENT_STAGES and its name-dependent complement cover EliminationStage exactly once."""
@@ -1928,3 +1937,75 @@ class TestEveryEliminationStageIsClassified:
 
         assert name_independent.isdisjoint(NAME_DEPENDENT_STAGES_791)
         assert name_independent | NAME_DEPENDENT_STAGES_791 == stages
+
+    def test_every_stage_carries_a_near_miss_label(self) -> None:
+        """dict[EliminationStage, str] does not force an entry per member, so the table is pinned complete here."""
+        assert set(_STAGE_LABELS) == set(get_args(EliminationStage))
+
+
+class TestAnUnlabeledStageStillRenders:
+    """Rendering is a best-effort projection: every other field degrades via safe_field, so a label must too."""
+
+    def test_a_stage_without_a_label_falls_back_to_its_raw_token(self) -> None:
+        """The near-miss line names the candidate, the raw stage token and the reason; the rest still renders."""
+        feature = Feature(UNLABELED_STAGE_FEATURE_791)
+        result = EvaluationResult(
+            identified={},
+            eliminations={
+                RendererSuccessFG791: Elimination(
+                    stage=cast(EliminationStage, UNLABELED_STAGE_791),
+                    reason=UNLABELED_STAGE_REASON_791,
+                )
+            },
+        )
+
+        # Premise: this failure reaches the near-miss block, and no label covers the stage it carries.
+        assert result.failure_kind == "none"
+        assert UNLABELED_STAGE_791 not in _STAGE_LABELS
+
+        message = render_resolution_failure(result, feature)
+
+        assert message == (
+            f"No feature groups found for feature name: '{UNLABELED_STAGE_FEATURE_791}'.\n"
+            f"Feature group(s) eliminated while matching '{UNLABELED_STAGE_FEATURE_791}':\n"
+            f"  - RendererSuccessFG791 ({UNLABELED_STAGE_791}): {UNLABELED_STAGE_REASON_791}\n"
+            "Use resolve_feature(name, options=...) to debug feature resolution.\n"
+            f"{TROUBLESHOOTING_LINE}"
+        )
+
+    def test_a_stage_without_a_label_warns_and_still_renders(self, caplog: pytest.LogCaptureFixture) -> None:
+        """A missing label is a build defect, not an expected degrade, so the renderer warns while degrading."""
+        feature = Feature(UNLABELED_STAGE_FEATURE_791)
+        result = EvaluationResult(
+            identified={},
+            eliminations={
+                RendererSuccessFG791: Elimination(
+                    stage=cast(EliminationStage, UNLABELED_STAGE_791),
+                    reason=UNLABELED_STAGE_REASON_791,
+                )
+            },
+        )
+
+        # Premise: this failure reaches the near-miss block, and no label covers the stage it carries.
+        assert result.failure_kind == "none"
+        assert UNLABELED_STAGE_791 not in _STAGE_LABELS
+
+        with caplog.at_level(logging.WARNING, logger=RENDERER_LOGGER_791):
+            message = render_resolution_failure(result, feature)
+
+        warnings = [
+            record.getMessage()
+            for record in caplog.records
+            if record.levelno == logging.WARNING and record.name == RENDERER_LOGGER_791
+        ]
+        assert len(warnings) == 1, f"Expected exactly one WARNING from the renderer, got {warnings}"
+        assert UNLABELED_STAGE_791 in warnings[0], "The warning must name the stage token that carries no label"
+
+        # The warning reports the degrade, it never replaces it: the whole message still renders unchanged.
+        assert message == (
+            f"No feature groups found for feature name: '{UNLABELED_STAGE_FEATURE_791}'.\n"
+            f"Feature group(s) eliminated while matching '{UNLABELED_STAGE_FEATURE_791}':\n"
+            f"  - RendererSuccessFG791 ({UNLABELED_STAGE_791}): {UNLABELED_STAGE_REASON_791}\n"
+            "Use resolve_feature(name, options=...) to debug feature resolution.\n"
+            f"{TROUBLESHOOTING_LINE}"
+        )

@@ -1,6 +1,7 @@
-from collections.abc import Hashable
 from dataclasses import dataclass
 from typing import Any, Optional, Protocol, cast, runtime_checkable
+
+from mloda.core.abstract_plugins.components.utils import safe_field
 
 
 @runtime_checkable
@@ -35,11 +36,17 @@ def _make_hashable(value: Any) -> Any:
     return value
 
 
-def _is_hashable(value: Any) -> bool:
-    """A tuple reports as Hashable through its type, so its elements decide whether hashing works."""
+def _unhashable_type(value: Any) -> str | None:
+    """Name of the first part of `value` that does not hash, None when the whole value hashes."""
+    # Probe the real hash, not isinstance(value, Hashable): a __hash__ that raises reports as hashable.
+    if safe_field(lambda: isinstance(hash(value), int), False):
+        return None
     if isinstance(value, tuple):
-        return all(_is_hashable(element) for element in value)
-    return isinstance(value, Hashable)
+        for element in value:
+            found = _unhashable_type(element)
+            if found is not None:
+                return found
+    return type(value).__name__
 
 
 @dataclass(frozen=True)
@@ -50,10 +57,11 @@ class FilterParameterImpl:
     def from_dict(cls, params: dict[str, Any]) -> "FilterParameterImpl":
         normalized = {k: _make_hashable(v) for k, v in params.items()}
         for key, value in normalized.items():
-            if not _is_hashable(value):
+            culprit = _unhashable_type(value)
+            if culprit is not None:
                 raise ValueError(
-                    f"Filter parameter '{key}' has an unhashable value, "
-                    "allowed are scalars and flat lists, sets or tuples of scalars."
+                    f"Filter parameter '{key}' holds an unhashable {culprit}; "
+                    "filter values must be hashable: scalars, or lists, sets or tuples of hashables."
                 )
         return cls(_raw=tuple(sorted(normalized.items())))
 

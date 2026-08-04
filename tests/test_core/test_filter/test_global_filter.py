@@ -342,7 +342,7 @@ class TestGlobalFilterUnhashableParameter:
         """Test a dict value raises ValueError rather than the set insertion's TypeError."""
         parameter: dict[str, Any] = {"value": {"a": 1}}
 
-        with pytest.raises(ValueError, match="value"):
+        with pytest.raises(ValueError, match=r"'value'"):
             self.global_filter.add_filter(Feature("col"), FilterType.EQUAL, parameter)
 
         assert len(self.global_filter.filters) == 0
@@ -379,7 +379,7 @@ class TestGlobalFilterUnhashableParameter:
         self.global_filter.add_filter(Feature("age"), FilterType.RANGE, {"min": 25, "max": 50})
         parameter: dict[str, Any] = {"value": {"a": 1}}
 
-        with pytest.raises(ValueError, match="value"):
+        with pytest.raises(ValueError, match=r"'value'"):
             self.global_filter.add_filter(Feature("col"), FilterType.EQUAL, parameter)
 
         assert len(self.global_filter.filters) == 1

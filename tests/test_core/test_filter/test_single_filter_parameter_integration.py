@@ -281,16 +281,13 @@ def test_filter_equality_with_unordered_parameters() -> None:
 
 
 # --- Unhashable parameter rejection tests (see issue #925) ---
-#
-# SingleFilter is hashed as soon as it enters a set, so an unhashable parameter value has to be
-# refused while constructing the filter, where the caller can still see which key is at fault.
 
 
 def test_single_filter_rejects_dict_parameter_value() -> None:
     """Test constructing a filter with a dict parameter value raises ValueError instead of building it."""
     parameter: dict[str, Any] = {"value": {"a": 1}}
 
-    with pytest.raises(ValueError, match="value"):
+    with pytest.raises(ValueError, match=r"'value'"):
         SingleFilter(filter_feature="config", filter_type=FilterType.EQUAL, parameter=parameter)
 
 
@@ -319,5 +316,8 @@ def test_single_filter_still_accepts_collection_parameter_values() -> None:
         parameter=parameter,
     )
 
-    assert isinstance(hash(single_filter), int)
-    assert sorted(single_filter.parameter.values or []) == ["A", "B"]
+    hash(single_filter)
+
+    values = single_filter.parameter.values
+    assert values is not None
+    assert sorted(values) == ["A", "B"]

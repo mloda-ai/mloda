@@ -25,7 +25,7 @@ The reader veto gate reads the engine's per-candidate rejection window, so a dir
 Test that your feature group correctly extracts source features from feature names.
 
 **Example:**
-``` python
+```py
 # Test extracting source features from a feature name
 input_features = feature_group.input_features(Options(), FeatureName("sales__sum_aggr"))
 assert Feature("sales") in input_features
@@ -36,7 +36,7 @@ assert Feature("sales") in input_features
 Test that your feature group correctly transforms input data into output features.
 
 **Example:**
-``` python
+```py
 from mloda.user import Feature
 from mloda.provider import FeatureSet
 from mloda_plugins.feature_group.experimental.clustering.pandas import PandasClusteringFeatureGroup
@@ -53,7 +53,7 @@ assert "feature1,feature2__cluster_kmeans_2" in result.columns
 Test that your feature group correctly parses features from configuration options.
 
 **Example:**
-``` python
+```py
 # Test creating features from options
 options = Options({
     "aggregation_type": "sum",
@@ -68,7 +68,7 @@ assert feature_name == "sales__sum_aggr"
 Test that your feature group works correctly with the mloda API.
 
 **Example:**
-``` python
+```py
 from mloda.user import mloda
 from mloda.user.pandas import PandasDataFrame
 
@@ -82,7 +82,7 @@ assert "source_feature__my_operation" in result[0].columns
 When testing a FeatureGroup that depends on another FeatureGroup, you can inject mock data by combining `disabled_feature_groups` with `api_data`:
 
 **Example:**
-``` python
+```py
 from mloda.user import mlodaAPI, PluginCollector
 
 # Disable the real dependency FeatureGroup

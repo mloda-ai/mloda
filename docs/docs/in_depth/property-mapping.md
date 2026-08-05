@@ -15,7 +15,7 @@ Two rules carry most of the model:
 
 ## The spec type
 
-``` python
+```python
 from mloda.provider import PropertySpec
 
 PROPERTY_MAPPING = {
@@ -48,7 +48,7 @@ returns and the type the schema is validated against, so reach for it directly w
 the class itself (subclassing, `isinstance` checks, or constructing a spec programmatically).
 Both are exported from `mloda.provider`.
 
-``` python
+```python
 from mloda.provider import property_spec
 
 PROPERTY_MAPPING = {
@@ -249,7 +249,9 @@ candidate feature group).
 Container syntax is not part of the contract. For membership and `element_validator`, every
 sequence unpacks element-wise and identically:
 
-``` python
+```python
+from mloda.user import Options
+
 # All four hand the element_validator exactly "a" and then "b".
 Options(context={"ops": ["a", "b"]})
 Options(context={"ops": ("a", "b")})
@@ -304,7 +306,7 @@ Under `strict_validation=True`, a declared non-`None` `default` must be a value 
 accepts, either by membership or through the `element_validator`. This closes the gap where
 omitting the key would apply an unrevalidated default.
 
-``` python
+```py
 # ValueError at construction: "mul" is not accepted.
 PropertySpec(
     "Arithmetic operation",
@@ -332,7 +334,7 @@ Optionality is the `default` field, and the three states are distinct:
 | `default=None` | The key is **optional**; no value is applied when it is absent. |
 | `default=<value>` | The key is **optional**; the value is materialized when it is absent (see [Applying declared defaults](#applying-declared-defaults)), and is checked under strict. |
 
-``` python
+```python
 from mloda.provider import PropertySpec
 
 PROPERTY_MAPPING = {
@@ -351,7 +353,7 @@ every field is always present, so a plain `None` cannot say both "no default dec
 To ask whether a spec declares a default, use `is_no_default`, also exported from
 `mloda.provider`:
 
-``` python
+```py
 from mloda.provider import is_no_default
 
 if is_no_default(spec.default):
@@ -420,7 +422,7 @@ Filter matching is the one place the same classmethod sees both views: `GlobalFi
 enriched from the resolved feature's effective ones (`unify_options`), so a key the filter feature
 omits arrives materialized where feature resolution saw it declared.
 
-``` python
+```py
 graph_type = feature.options.get("graph_type")  # the declared default when the caller omitted it
 ```
 
@@ -437,7 +439,7 @@ required-presence and `required_when` checks and is seen by membership, `element
 `match_guard`, while every flagless spec is unchanged. The flag defaults to `False`, so the existing
 `is not None` presence tests keep working.)
 
-``` python
+```py
 graph_type = feature.options.get("graph_type", "spring")  # explicit value; else the spec default; else "spring"
 ```
 
@@ -445,7 +447,7 @@ graph_type = feature.options.get("graph_type", "spring")  # explicit value; else
 
 There is no `group` field: a group parameter is `context=False`.
 
-``` python
+```python
 PROPERTY_MAPPING = {
     # Context parameter (the default): does not affect feature group splitting
     "aggregation_type": PropertySpec(
@@ -495,7 +497,7 @@ match-time name capture (parsed by the plugin from the name, or supplied downstr
 `deferred_binding=True`, which exempts it from this check only and leaves it required on the
 config path. `ClusteringFeatureGroup` marks its name-parsed `k_value` key this way:
 
-``` python
+```python
 from mloda.provider import PropertySpec
 
 PROPERTY_MAPPING = {
@@ -534,7 +536,7 @@ effective `Options` and returns `True` when the option is required. This works f
 config-based and string-based features alike (for the latter, the operation parsed from the
 feature name is merged in first, so predicates see values from both sources).
 
-``` python
+```python
 _ORDER_DEPENDENT = {"first", "last"}
 
 def _needs_order_by(options: Options) -> bool:
@@ -650,7 +652,7 @@ By default context parameters are local: they do not flow through dependency cha
 which is correct for feature-specific config. For cross-cutting metadata (session
 IDs, environment flags), use `propagate_context_keys`:
 
-``` python
+```python
 Options(
     context={"session_id": "abc", "window_function": "sum"},
     propagate_context_keys=frozenset({"session_id"}),  # only session_id flows on
@@ -684,7 +686,7 @@ consumer and its input feature, default forwarding is group-to-group only: a con
 `context` key is not compared against a same-named child `group` key, so the two are
 independent roles, not a conflict:
 
-``` python
+```python
 consumer = Options(context={"algo": "sum"})
 child = Options(group={"algo": "mean"})
 

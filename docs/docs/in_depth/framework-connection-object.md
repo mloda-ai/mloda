@@ -39,7 +39,7 @@ Other frameworks don't require connection objects:
 
 The base `ComputeFramework` class provides methods to manage connection objects:
 
-``` python
+```py
 class ComputeFramework:
     def __init__(self) -> None:
         # Connection object for frameworks that need persistent connections
@@ -62,7 +62,7 @@ class ComputeFramework:
 
 Framework transformers receive the connection object as a parameter:
 
-``` python
+```py
 @classmethod
 def transform_other_fw_to_fw(cls, data: Any, framework_connection_object: Optional[Any] = None) -> Any:
     """
@@ -79,7 +79,7 @@ def transform_other_fw_to_fw(cls, data: Any, framework_connection_object: Option
 
 ### Using DuckDB with mloda API
 
-``` python
+```py
 from mloda.user import mloda
 from mloda.user import DataAccessCollection
 import duckdb
@@ -100,7 +100,7 @@ result = mloda.run_all(
 
 ### Using Spark with mloda API
 
-``` python
+```py
 from mloda.user import mloda
 from mloda.user import DataAccessCollection
 from pyspark.sql import SparkSession
@@ -127,7 +127,7 @@ result = mloda.run_all(
 
 The `DuckDBPyarrowTransformer` requires a connection object for PyArrow → DuckDB transformations:
 
-``` python
+```py
 class DuckDBPyarrowTransformer(BaseTransformer):
     @classmethod
     def transform_other_fw_to_fw(cls, data: Any, framework_connection_object: Optional[Any] = None) -> Any:
@@ -148,7 +148,7 @@ class DuckDBPyarrowTransformer(BaseTransformer):
 When implementing a new compute framework that requires a connection object:
 
 1. **Override `set_framework_connection_object`**:
-``` python
+```py
 def set_framework_connection_object(self, framework_connection_object: Optional[Any] = None) -> None:
     if framework_connection_object is not None:
         if not isinstance(framework_connection_object, ExpectedConnectionType):
@@ -163,20 +163,20 @@ def set_framework_connection_object(self, framework_connection_object: Optional[
 When implementing transformers for stateful frameworks:
 
 1. **Accept the connection object parameter**:
-``` python
+```py
 @classmethod
 def transform_other_fw_to_fw(cls, data: Any, framework_connection_object: Optional[Any] = None) -> Any:
     # Implementation here
 ```
 
 2. **Validate the connection object** when required:
-``` python
+```py
 if framework_connection_object is None:
     raise ValueError("Connection object is required for this transformation.")
 ```
 
 3. **Use the connection object** for the transformation:
-``` python
+```py
 return framework_connection_object.from_other_format(data)
 ```
 ## Troubleshooting

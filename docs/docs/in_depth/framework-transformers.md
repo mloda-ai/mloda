@@ -49,7 +49,7 @@ PluginLoader.disable_auto_load("compute_framework")
 
 The `PandasPyArrowTransformer` is a concrete implementation of `BaseTransformer` that handles conversions between Pandas DataFrames and PyArrow Tables.
 
-``` python
+```py
 class PandasPyArrowTransformer(BaseTransformer):
     """
     Transformer for converting between Pandas DataFrame and PyArrow Table.
@@ -65,7 +65,7 @@ Key features:
 
 The `DuckDBPyArrowTransformer` is a concrete implementation of `BaseTransformer`, via `SqlBasePyArrowTransformer`, that handles conversions between DuckDB Relations and PyArrow Tables.
 
-``` python
+```py
 class DuckDBPyArrowTransformer(SqlBasePyArrowTransformer):
     """
     Transformer for converting between DuckDB relations and PyArrow Table.
@@ -84,7 +84,7 @@ Key features:
 
 The `SparkPyArrowTransformer` is a concrete implementation of `BaseTransformer` that handles conversions between Spark DataFrames and PyArrow Tables.
 
-``` python
+```py
 class SparkPyArrowTransformer(BaseTransformer):
     """
     Transformer for converting between Spark DataFrame and PyArrow Table.
@@ -214,7 +214,7 @@ The `ComputeFramework` class uses the transformer system to convert data between
 
 The transformation is handled automatically by the `apply_compute_framework_transformer` method:
 
-``` python
+```py
 def apply_compute_framework_transformer(self, data: Any) -> Any:
     _from_fw = type(data)
     _to_fw = self.expected_data_framework()

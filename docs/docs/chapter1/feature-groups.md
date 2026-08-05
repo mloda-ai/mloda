@@ -54,7 +54,7 @@ result = mloda.run_all(
 result[0]
 ```
 Expected output:
-``` python
+```text
 pyarrow.Table
 Example_V28: double
 Example_id: int64

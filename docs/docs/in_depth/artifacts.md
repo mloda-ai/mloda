@@ -69,7 +69,7 @@ print(artifacts)
 
 Result:
 
-``` python
+```text
 {'BaseExampleArtifactFeature': 'BasicArtifact'}
 ```
 
@@ -84,7 +84,7 @@ mloda.run_all([feat], {PyArrowTable})
 
 Result:
 
-``` python
+```text
 "BasicArtifact is the loaded artifact."
 ```
 
@@ -117,7 +117,8 @@ result = session.run(artifacts=saved_artifacts)
 
 #### Cross-validation pattern
 
-``` title="pseudocode"
+```py
+# pseudocode
 session = mloda.prepare(["MyArtifactFeature"], {PyArrowTable})
 
 for fold_data in folds:

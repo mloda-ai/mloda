@@ -31,7 +31,7 @@ feature_list = ["id","V1","V2","V3"]
 
 Expected Error when running.
 
-``` python
+```text
 mloda.run_all(
     feature_list,
     data_access_collection=data_access_collection
@@ -73,7 +73,7 @@ result = mloda.run_all(
 result[0]
 ```
 Expected output:
-``` python
+```text
 pyarrow.Table
 id: int64
 id: [[0,1,2,3,...]]
@@ -164,7 +164,7 @@ For example, without `polars` installed, `from mloda.user.polars import PolarsDa
 ##### Framework Examples
 
 Example using PythonDictFramework:
-``` python
+```python
 from mloda.user import mloda
 from mloda.user import Feature
 
@@ -183,7 +183,7 @@ A feature group running on PythonDictFramework may also return row-wise data as 
 
 `columnar_to_rows`, `homogenize_rows`, `is_columnar`, `result_rows`, `row_count`, `rows_to_columnar`, and `validate_columnar_dict` come from `mloda.user.python_dict`, next to `PythonDictFramework` itself. `columnar_to_rows` is strict: it raises `ValueError` on anything that is not a valid columnar dict. `result_rows` is the blessed tolerant unwrapper for PythonDict-framework `run_all` output (columnar dicts and row-dict lists): it flattens the partition list into row dicts, and a dict that satisfies `is_columnar` is always treated as a columnar partition, never as a row. It rejects other frameworks' result objects (convert those to rows first).
 
-``` python
+```py
 from mloda.user import mloda
 from mloda.user.python_dict import result_rows
 
@@ -193,7 +193,7 @@ rows = result_rows(mloda.run_all(...))
 Strictness stays in the library; `result_rows` packages the forgiving application-side policy.
 
 Example using Polars frameworks:
-``` python
+```python
 from mloda.user import mloda
 from mloda.user import Feature
 
@@ -211,7 +211,7 @@ result[0]  # Returns polars.DataFrame
 ```
 
 Example using DuckDB framework:
-``` python
+```py
 from mloda.user import mloda
 from mloda.user import Feature, DataAccessCollection
 import duckdb
@@ -236,7 +236,7 @@ result[0]  # Returns duckdb.DuckDBPyRelation
 **Note**: DuckDB framework requires a connection object and does not support mloda framework inherent multiprocessing. Multiprocessing from DuckDB still works. It's optimized for analytical workloads and provides SQL-like operations on data.
 
 Example using Iceberg framework:
-``` python
+```py
 from mloda.user import mloda
 from mloda.user import Feature, DataAccessCollection
 from pyiceberg.catalog import load_catalog
@@ -266,7 +266,7 @@ result[0]  # Returns pyiceberg.table.Table or pyarrow.Table
 **Note**: Iceberg framework requires a catalog connection object for table operations. It's optimized for data lake scenarios with schema evolution, time travel capabilities, and large-scale analytics. The framework uses PyArrow as an interchange format for compatibility with other mloda frameworks.
 
 Example using Spark framework:
-``` python
+```py
 from mloda.user import mloda
 from mloda.user import Feature, DataAccessCollection
 from pyspark.sql import SparkSession

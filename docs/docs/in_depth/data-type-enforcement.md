@@ -185,7 +185,8 @@ feature = Feature.int64_of(
 
 Type mismatches raise `DataTypeMismatchError`:
 
-```python title="Error handling example"
+```py
+# Error handling example
 from mloda.user import mloda
 from mloda.user import Feature
 from mloda.provider import DataTypeMismatchError

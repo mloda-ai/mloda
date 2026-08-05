@@ -15,7 +15,7 @@ That however means that a data project typically contains multiple filters. For 
 
 This class is supposed to create similarity in the framework and by framework users.
 
-``` python
+```py
 class FilterType(Enum):
     MIN = "min"
     MAX = "max"
@@ -76,7 +76,7 @@ global_filter.filters
 
 Result
 
-``` python
+```text
 {<SingleFilter(feature_name=example_order_id, type=equal, parameters=FilterParameterImpl(_raw=(('value', 1),)))>}
 ```
 
@@ -99,7 +99,7 @@ global_filter.filters
 
 Result
 
-``` python
+```text
 {<SingleFilter(feature_name=time_travel, type=range, parameters=FilterParameterImpl(_raw=(('max', datetime.datetime(2022, 12, 31, 0, 0, tzinfo=datetime.timezone.utc)), ('max_exclusive', True), ('min', datetime.datetime(2022, 1, 1, 0, 0, tzinfo=datetime.timezone.utc)))))>,
  <SingleFilter(feature_name=reference_time, type=range, parameters=FilterParameterImpl(_raw=(('max', datetime.datetime(2023, 12, 31, 0, 0, tzinfo=datetime.timezone.utc)), ('max_exclusive', True), ('min', datetime.datetime(2023, 1, 1, 0, 0, tzinfo=datetime.timezone.utc)))))>}
 ```

@@ -28,7 +28,7 @@ BaseInputData is an **abstract base class** that defines how feature groups **lo
 For detailed examples of these use cases, see the [data access documentation](access-feature-data.md).
 
 ### Example Implementation
-``` python
+```py
 from mloda.provider import BaseInputData, FeatureGroup, FeatureSet
 
 class ReadFileFeature(FeatureGroup):
@@ -74,7 +74,7 @@ Readers are classified structurally; no reader code is executed for classificati
 
 A feature selects a specific reader with an Option whose key equals the reader's class name (`BaseInputData.data_access_name()`, i.e. `cls.__name__`, unique per class, so sibling readers cannot collide):
 
-``` python
+```py
 Feature("value", options={UbaAirReader.__name__: url})
 ```
 
@@ -101,7 +101,7 @@ Reader selection answers "which plugin handles this input" the way [feature-grou
 
 A reader that owns an input but cannot serve the requested feature can record why it declined; the reason then appears in the near-miss block of the "No feature groups found" error message, labeled `(input data)`. `record_match_rejection` is exported via `mloda.provider`. A custom reader owns its own suffix and overrides `load_data` wholesale; its own decline points sit beyond the automatic column validation, for example a required schema marker in the header:
 
-``` python
+```python
 from typing import Any
 
 from mloda.provider import INPUT_DATA_STAGE, FeatureSet, record_match_rejection
@@ -175,7 +175,7 @@ MatchData is **only** used in these specific scenarios:
 - Enabling flexible connection configuration for stateful frameworks
 
 ### Example Implementation
-``` python
+```py
 from mloda.provider import MatchData, FeatureGroup
 
 class DuckDBFeatureGroup(FeatureGroup, MatchData):
@@ -225,7 +225,7 @@ BaseInputData and MatchData serve **different purposes** and are used in **diffe
 3. **Only applies** to specific compute frameworks like DuckDB that require persistent connections
 
 ### Combined Usage Example
-``` python
+```py
 class DuckDBAnalyticsFeature(FeatureGroup, MatchData):
     @classmethod
     def input_data(cls) -> Optional[BaseInputData]:
@@ -249,7 +249,7 @@ class DuckDBAnalyticsFeature(FeatureGroup, MatchData):
 **Use Case**: Reading CSV files with Pandas
 **Pattern**: Only BaseInputData is needed
 
-``` python
+```py
 class CsvProcessingFeature(FeatureGroup):
     @classmethod
     def input_data(cls) -> Optional[BaseInputData]:
@@ -261,7 +261,7 @@ class CsvProcessingFeature(FeatureGroup):
 **Use Case**: Analytics with DuckDB requiring connection objects
 **Pattern**: Both BaseInputData and MatchData are needed
 
-``` python
+```py
 class DuckDBAnalyticsFeature(FeatureGroup, MatchData):
     @classmethod
     def input_data(cls) -> Optional[BaseInputData]:
@@ -280,7 +280,7 @@ For database connection patterns, see [Framework Connection Object](framework-co
 **Use Case**: Creating synthetic data with Pandas
 **Pattern**: Only BaseInputData is needed
 
-``` python
+```py
 class SyntheticDataFeature(FeatureGroup):
     @classmethod
     def input_data(cls) -> Optional[BaseInputData]:

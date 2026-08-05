@@ -2,7 +2,7 @@
 
 `stream_all` lets you consume results incrementally instead of waiting for every feature group to finish.  Each time a feature group completes, its result is yielded immediately so you can begin processing it while the remaining groups are still computing.  It accepts the same parameters as `run_all` (see [mloda API](mloda-api.md)).
 
-``` python3
+```py
 from mloda.user import mloda
 
 for result in mloda.stream_all(["FeatureA", "FeatureB", "FeatureC"]):
@@ -15,7 +15,7 @@ for result in mloda.stream_all(["FeatureA", "FeatureB", "FeatureC"]):
 
 `run_all` returns all results at once after every feature group has finished:
 
-``` python3
+```py
 from mloda.user import mloda
 
 results = mloda.run_all(["FeatureA", "FeatureB", "FeatureC"])
@@ -24,7 +24,7 @@ results = mloda.run_all(["FeatureA", "FeatureB", "FeatureC"])
 
 `stream_all` yields each result as soon as its group is done:
 
-``` python3
+```py
 from mloda.user import mloda
 
 for result in mloda.stream_all(["FeatureA", "FeatureB", "FeatureC"]):
@@ -64,7 +64,7 @@ All patterns below build on the [two-phase execution API (`prepare()` / `run()`)
 
 The recommended pattern for continuous processing. Call `prepare()` once to build the execution plan, then loop `run()` for each micro-batch. The plan is reused across calls, so only the first call pays the planning cost.
 
-``` python3
+```py
 from mloda.user import mloda
 
 def data_source():
@@ -91,7 +91,7 @@ This works with any iterable source.
 
 Combines plan reuse with per-group streaming. Call `prepare()` once, then `stream_run()` for each micro-batch. Each feature group's result is yielded as soon as it completes, while the execution plan is reused across calls.
 
-``` python3
+```py
 from mloda.user import mloda
 
 def sensor_source():
@@ -123,7 +123,7 @@ for batch in sensor_source():
 
 When you don't need plan reuse and want a single-call streaming API, use `mloda.stream_all()`. It internally calls `prepare()` + `stream_run()`.
 
-``` python3
+```py
 from mloda.user import mloda
 
 for result in mloda.stream_all(["FeatureA", "FeatureB", "FeatureC"], api_data=batch):

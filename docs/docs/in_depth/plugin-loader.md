@@ -74,7 +74,8 @@ Separately installed packages publish plugins through three entry-point groups, 
 
 A package declares one entry per group it ships plugins for. The entry points at a module attribute, the manifest: a plain sequence of plugin classes. The entry-point name (`my-pkg` below) is a package label only, never a registry key; registered classes keep the usual `module:qualname` keys.
 
-```toml title="pyproject.toml"
+```toml
+# pyproject.toml
 [project.entry-points."mloda.feature_groups"]
 my-pkg = "my_pkg.manifest:FEATURE_GROUPS"
 
@@ -84,7 +85,8 @@ my-pkg = "my_pkg.manifest:COMPUTE_FRAMEWORKS"
 
 The manifest module lists the concrete classes explicitly:
 
-```python title="my_pkg/manifest.py"
+```py
+# my_pkg/manifest.py
 from mloda.provider import FeatureGroup
 
 class CustomerChurnFeatureGroup(FeatureGroup):

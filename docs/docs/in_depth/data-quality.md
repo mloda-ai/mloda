@@ -55,7 +55,7 @@ class DocSimpleValidateInputFeatures(FeatureGroup):
 
 As we run it, it will return an error.
 
-``` python
+```text
 results = mloda.run_all(
             ["DocSimpleValidateInputFeatures"], {PyArrowTable}
         )
@@ -126,10 +126,11 @@ class DocExamplePanderaValidator(BaseValidator):
 
 The validator should raise an error again.
 
-``` python
+```text
 results = mloda.run_all(
             ["DocCustomValidateInputFeatures"], {PyArrowTable}
         )
+SchemaError: Column 'DocBaseValidateInputFeaturesBase' failed element-wise validator: in_range(1, 2)
 ```
 
 ###### Log only validator and Extender use
@@ -228,10 +229,11 @@ class DocBaseValidateOutputFeaturesBaseNegativePandera(DocBaseValidateOutputFeat
 
 This one should fail:
 
-``` python
+```text
 results = mloda.run_all(
             ["DocBaseValidateOutputFeaturesBaseNegativePandera"], {PyArrowTable}
         )
+SchemaError: Column 'DocBaseValidateOutputFeaturesBaseNegativePandera' failed element-wise validator: in_range(1, 2)
 ```
 
 ###### Log only validator and Extender use

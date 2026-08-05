@@ -248,17 +248,40 @@ def _keeps_the_mark(node: ast.Raise, bound: str | None) -> bool:
     return _escalates(node.exc)
 
 
+# A nested def or lambda runs later or never, and a nested try may catch the raise it holds.
+# ast.TryStar is 3.11+, so the name is read off the module instead of written.
+_DEFERRED: tuple[type[ast.AST], ...] = (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)
+_NESTED_TRY: tuple[type[ast.AST], ...] = (ast.Try, getattr(ast, "TryStar", ast.Try))
+
+
+def _runs_here(body: list[ast.stmt], boundaries: tuple[type[ast.AST], ...]) -> list[ast.AST]:
+    """The nodes of ``body`` that run where they stand, pruned at ``boundaries``."""
+    found: list[ast.AST] = []
+    stack: list[ast.AST] = list(body)
+    while stack:
+        current = stack.pop()
+        if isinstance(current, boundaries):
+            continue
+        found.append(current)
+        stack.extend(ast.iter_child_nodes(current))
+    return found
+
+
 def _handler_escalates(handler: ast.ExceptHandler) -> bool:
     """A re-raise that keeps the mark, gated on the abort check or standing on every path out of the handler."""
-    nodes = [node for statement in handler.body for node in ast.walk(statement)]
-    if not any(isinstance(node, ast.Raise) and _keeps_the_mark(node, handler.name) for node in nodes):
+    escaping = _runs_here(handler.body, _DEFERRED + _NESTED_TRY)
+    if not any(isinstance(node, ast.Raise) and _keeps_the_mark(node, handler.name) for node in escaping):
         return False
-    calls: set[str] = set()
-    for statement in handler.body:
-        calls |= _scan(statement)[0]
+    # A return leaves the function from any depth, so a nested try contains neither it nor the check beside it.
+    own = _runs_here(handler.body, _DEFERRED)
+    calls = {
+        func.id if isinstance(func, ast.Name) else func.attr
+        for func in (node.func for node in own if isinstance(node, ast.Call))
+        if isinstance(func, (ast.Name, ast.Attribute))
+    }
     if _ABORT_CHECK in calls:
         return True
-    return not any(isinstance(node, (ast.Return, ast.Break, ast.Continue)) for node in nodes)
+    return not any(isinstance(node, (ast.Return, ast.Break, ast.Continue)) for node in own)
 
 
 class _Containment(NamedTuple):
@@ -1121,6 +1144,85 @@ def test_handler_classifier_flags_a_reraise_the_handler_can_skip() -> None:
     assert [site.kind for site in sites] == ["unannotated"]
 
 
+# Nesting scopes it: a raise the handler never runs, and a return that never leaves it, are not the handler's.
+
+
+def test_handler_classifier_flags_a_reraise_inside_a_nested_try() -> None:
+    """A re-raise the nested try can catch again escalates nothing out of the handler holding it."""
+    source = (
+        "def match_feature_group_criteria(cls, feature, options):\n"
+        "    try:\n"
+        "        return probe(feature)\n"
+        "    except ValueError as exc:\n"
+        "        try:\n"
+        "            if is_match_abort(exc):\n"
+        "                raise\n"
+        "        except Exception:  # Swallows: the nested try catches the re-raise above it.\n"
+        "            pass\n"
+        "        return False\n"
+    )
+
+    sites = _handlers(source)
+
+    assert [(site.lineno, site.kind) for site in sites] == [(4, "unannotated"), (8, "swallowing")]
+
+
+def test_handler_classifier_flags_a_reraise_inside_a_nested_def() -> None:
+    """A re-raise in a function defined by the handler runs later or never, so the handler still swallows."""
+    source = (
+        "def match_feature_group_criteria(cls, feature, options):\n"
+        "    try:\n"
+        "        return probe(feature)\n"
+        "    except ValueError as exc:\n"
+        "        def escalate_later():\n"
+        "            if is_match_abort(exc):\n"
+        "                raise exc\n"
+        "        register(escalate_later)\n"
+        "        return False\n"
+    )
+
+    sites = _handlers(source)
+
+    assert [(site.lineno, site.kind) for site in sites] == [(4, "unannotated")]
+
+
+def test_handler_classifier_counts_a_return_inside_a_nested_try() -> None:
+    """A return leaves the function from any depth, so it still skips the re-raise below it."""
+    source = (
+        "def match_feature_group_criteria(cls, feature, options):\n"
+        "    try:\n"
+        "        return probe(feature)\n"
+        "    except ImportError:\n"
+        "        try:\n"
+        "            return probe(options)\n"
+        "        except OSError:  # Swallows: a missing file is a non-match for this reader only.\n"
+        "            pass\n"
+        "        raise\n"
+    )
+
+    sites = _handlers(source)
+
+    assert [(site.lineno, site.kind) for site in sites] == [(4, "unannotated"), (7, "swallowing")]
+
+
+def test_handler_classifier_ignores_a_return_inside_a_nested_def() -> None:
+    """A return in a function the handler defines leaves that function, so the raise still stands on every path."""
+    source = (
+        "def match_feature_group_criteria(cls, feature, options):\n"
+        "    try:\n"
+        "        return probe(feature)\n"
+        "    except ImportError:\n"
+        "        def fallback():\n"
+        "            return None\n"
+        "        register(fallback)\n"
+        "        raise\n"
+    )
+
+    sites = _handlers(source)
+
+    assert [(site.lineno, site.kind) for site in sites] == [(4, "escalating")]
+
+
 # ``except`` is not the only way to drop an exception: suppress() and an escaping finally do it too.
 
 
@@ -1350,6 +1452,33 @@ def test_shadow_classifier_flags_a_broad_handler_above_the_abort_check() -> None
 
     assert unresolved == []
     assert [(site.caught, site.shadowed_type) for site in shadowed] == [("Exception", "ValueError")]
+
+
+def test_shadow_classifier_flags_a_handler_whose_only_reraise_sits_in_a_nested_try() -> None:
+    """The earlier clause checks the marker for its own cleanup, not for the exception the clause below it wants."""
+    source = (
+        "def match_feature_group_criteria(cls, feature, options):\n"
+        "    try:\n"
+        "        return probe(feature)\n"
+        "    except KeyError:\n"
+        "        try:\n"
+        "            cleanup()\n"
+        "        except Exception as inner:\n"
+        "            if is_match_abort(inner):\n"
+        "                raise\n"
+        "        return False\n"
+        "    except Exception as exc:\n"
+        "        if is_match_abort(exc):\n"
+        "            raise\n"
+        "        return False\n"
+    )
+
+    shadowed, unresolved = _shadowing(source)
+
+    assert unresolved == []
+    assert [(site.lineno, site.caught, site.shadowed_lineno, site.shadowed_type) for site in shadowed] == [
+        (4, "KeyError", 11, "Exception")
+    ]
 
 
 def test_shadow_classifier_resolves_a_project_exception_through_its_declared_base() -> None:

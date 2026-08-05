@@ -28,6 +28,7 @@ PROBE_MODULE = registry_isolation_probe.__name__
 
 SYNTHETIC_MODULE = "tests._registry_isolation_module_owned_probe"
 SYNTHETIC_CLASS = "ModuleOwnedRegistryProbe995FeatureGroup"
+OWN_MODULE_CLASS = "OwnModuleBoundRegistryProbe995FeatureGroup"
 
 FIXTURE_NAME = "_no_feature_group_registry_pollution"
 # Assembled rather than written out, so this module is never itself a hit of the pattern it scans for.
@@ -129,6 +130,20 @@ def _module_bound_subclass() -> Iterator[str]:
 
 
 @contextmanager
+def _subclass_bound_in_this_module() -> Iterator[str]:
+    """Bind a FeatureGroup subclass into THIS module, the shape a test that writes to its own module leaves."""
+    this_module = sys.modules[__name__]
+    cls = type(OWN_MODULE_CLASS, (FeatureGroup,), {"__module__": __name__})
+    setattr(this_module, OWN_MODULE_CLASS, cls)
+    del cls
+    try:
+        yield OWN_MODULE_CLASS
+    finally:
+        delattr(this_module, OWN_MODULE_CLASS)
+        gc.collect()
+
+
+@contextmanager
 def _counted_collections(counts: list[int]) -> Iterator[None]:
     """Record the generation of every collection that runs, with automatic collections paused."""
 
@@ -136,13 +151,15 @@ def _counted_collections(counts: list[int]) -> Iterator[None]:
         if phase == "start":
             counts.append(info["generation"])
 
+    was_enabled = gc.isenabled()  # restore what was found, so nesting this cannot re-enable a paused GC
     gc.disable()
     gc.callbacks.append(on_collect)
     try:
         yield
     finally:
         gc.callbacks.remove(on_collect)
-        gc.enable()
+        if was_enabled:
+            gc.enable()
 
 
 class TestModuleOwnedSubclassesSkipTheCollection:
@@ -161,6 +178,16 @@ class TestModuleOwnedSubclassesSkipTheCollection:
 
         assert reported == [], f"a class this module does not own must not be reported, got {reported}"
         assert collections == [], f"a module-owned class must cost no collection, got generations {collections}"
+
+    def test_a_subclass_bound_in_the_calling_module_is_still_reported(self) -> None:
+        """Skipping the collection must not skip the report: no collection can reclaim a bound class."""
+        before = get_all_subclasses(FeatureGroup)
+        with _subclass_bound_in_this_module() as name:
+            reported = [cls.__name__ for cls in reclaim_leaked_feature_groups(before, __name__)]
+
+        assert reported == [name], (
+            f"a class this module bound into itself outlives the test and must be reported, got {reported}"
+        )
 
     def test_a_just_defined_subclass_is_reclaimed_by_the_young_generation(self) -> None:
         """The counterpart: the transient shape the reclaim exists for never escalates past generation 0."""

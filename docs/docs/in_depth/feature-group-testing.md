@@ -66,6 +66,11 @@ options = Options(context={
     "in_features": "sales"
 })
 assert PandasAggregatedFeatureGroup.match_feature_group_criteria("sales__sum_aggr", options)
+
+# Assert the negative too, or the test passes on a name the group never claims
+assert not PandasAggregatedFeatureGroup.match_feature_group_criteria("sales__sum_aggr", Options(context={
+    "aggregation_type": "not_an_aggregation"
+}))
 ```
 
 ### 5. Integration with mloda API

@@ -119,7 +119,8 @@ def sensor_source():
         }
     }
 
-features = ["temperature__mean_aggr", "pressure__max_aggr", "vibration__sum_aggr"]
+# One name per Feature Group, so each completed group yields its own result
+features = ["temperature", "temperature__mean_aggr", "pressure__mean_imputed"]
 
 session = mloda.prepare(
     features,

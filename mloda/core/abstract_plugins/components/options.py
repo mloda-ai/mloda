@@ -4,7 +4,7 @@ import logging
 from typing import Any, Optional, TYPE_CHECKING, cast
 from copy import deepcopy
 
-from mloda.core.abstract_plugins.components.hashable_dict import _deep_equal, _deep_hashable
+from mloda.core.abstract_plugins.components.hashable_dict import _deep_equal, _deep_hashable, register_deep_node
 from mloda.core.abstract_plugins.components.validators.options_validator import OptionsValidator
 from mloda.core.abstract_plugins.components.default_options_key import DefaultOptionKeys
 
@@ -440,3 +440,7 @@ class Options:
         self.last_forwarded_group_keys = frozenset(inherited)
         self.inherited_context_keys = self.inherited_context_keys | frozenset(inherited_context)
         return frozenset(inherited)
+
+
+# group only: equality and hashing ignore context.
+register_deep_node(Options, lambda node: node.group)

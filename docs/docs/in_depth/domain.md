@@ -33,7 +33,7 @@ class ExampleFeature(FeatureGroup):
     @classmethod
     def get_domain(cls) -> Domain:
         """This function should return the domain for the feature group"""
-        return "example_domain"
+        return Domain("example_domain")
 ```
 For feature groups, the default domain is default_domain.
 

@@ -13,6 +13,12 @@ clause, a ``contextlib.suppress`` block, and a ``finally`` that returns. A mark 
 re-raises the caught object itself, so each must re-raise on ``is_match_abort`` or carry a
 ``# Swallows: <reason>`` comment.
 
+Both judge one site alone, which misses the clauses of one ``try`` shadowing each other: Python runs the
+first matching handler, so an earlier one catching a subclass of a later clause's type wins over it and the
+abort check below never runs. A third pass compares the clauses on each ``try``. Types resolve by name
+through the builtins and the class definitions under ``mloda/``, never by importing the module under test; a
+type neither resolves is reported instead of passed.
+
 Not covered: plugin code under ``mloda_plugins``; dynamic dispatch, which is why SEEDS is hand-written;
 decorators.
 """
@@ -20,6 +26,7 @@ decorators.
 from __future__ import annotations
 
 import ast
+import builtins
 import io
 import tokenize
 from collections import deque
@@ -153,6 +160,32 @@ class HandlerSite(NamedTuple):
         return f"{self.module}:{self.lineno} {self.function}()"
 
 
+class ShadowSite(NamedTuple):
+    """An ``except`` clause that catches ahead of a later clause on the same ``try``, whose mark survives."""
+
+    module: str
+    lineno: int
+    function: str
+    caught: str
+    shadowed_lineno: int
+    shadowed_type: str
+
+    def location(self) -> str:
+        return f"{self.module}:{self.lineno} {self.function}()"
+
+
+class UnresolvedType(NamedTuple):
+    """An ``except`` type beside an escalating clause that neither the builtins nor ``mloda/`` resolves."""
+
+    module: str
+    lineno: int
+    function: str
+    name: str
+
+    def location(self) -> str:
+        return f"{self.module}:{self.lineno} {self.function}()"
+
+
 class ExternalCall(NamedTuple):
     """A call from the match path into a raising function defined outside the declared modules."""
 
@@ -172,6 +205,8 @@ class _Sweep(NamedTuple):
     external: tuple[ExternalCall, ...]
     handlers: tuple[HandlerSite, ...]
     swallowing_external: tuple[ExternalCall, ...]
+    shadowed: tuple[ShadowSite, ...]
+    unresolved: tuple[UnresolvedType, ...]
 
 
 def _scan(node: ast.AST) -> tuple[frozenset[str], bool]:
@@ -410,6 +445,85 @@ def classify_handlers(source: str, module: str, functions: frozenset[str] | None
     return sorted(sites)
 
 
+def _collect_handler_groups(
+    node: ast.AST, functions: list[str], out: list[tuple[list[ast.ExceptHandler], list[str]]]
+) -> None:
+    """Walk ``node``, recording each try's handler list with its enclosing function chain."""
+    for child in ast.iter_child_nodes(node):
+        if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            _collect_handler_groups(child, [*functions, child.name], out)
+        else:
+            # getattr, not isinstance: ast.TryStar carries the same handler list and exists only from 3.11.
+            handlers = getattr(child, "handlers", None)
+            if isinstance(handlers, list) and handlers:
+                out.append((handlers, functions))
+            _collect_handler_groups(child, functions, out)
+
+
+def _caught_types(handler: ast.ExceptHandler) -> tuple[str, ...]:
+    """The types ``handler`` catches; a bare except catches everything, so it stands for BaseException."""
+    if handler.type is None:
+        return ("BaseException",)
+    expressions = handler.type.elts if isinstance(handler.type, ast.Tuple) else [handler.type]
+    # Anything but a plain name is kept verbatim, so it resolves to nothing and is reported rather than passed.
+    return tuple(node.id if isinstance(node, ast.Name) else ast.unparse(node) for node in expressions)
+
+
+def _ancestor_names(name: str) -> frozenset[str] | None:
+    """Every name ``name`` is or inherits from, or None when the chain leaves the builtins and ``mloda/``."""
+    resolved: set[str] = set()
+    pending = [name]
+    while pending:
+        current = pending.pop()
+        if current in resolved:
+            continue
+        resolved.add(current)
+        builtin = getattr(builtins, current, None)
+        if isinstance(builtin, type):
+            resolved |= {ancestor.__name__ for ancestor in builtin.__mro__}
+            continue
+        bases = _index().class_bases.get(current)
+        if bases is None:
+            return None
+        pending.extend(bases)
+    return frozenset(resolved)
+
+
+def classify_shadowing(
+    source: str, module: str, functions: frozenset[str] | None = None
+) -> tuple[list[ShadowSite], list[UnresolvedType]]:
+    """Find the clauses of one ``try`` that catch ahead of a later clause a mark survives, and the unresolved."""
+    tree = ast.parse(source, filename=module)
+    groups: list[tuple[list[ast.ExceptHandler], list[str]]] = []
+    _collect_handler_groups(tree, [], groups)
+
+    shadowed: set[ShadowSite] = set()
+    unresolved: set[UnresolvedType] = set()
+    for handlers, chain in groups:
+        if not chain:
+            continue
+        if functions is not None and not any(name in functions for name in chain):
+            continue
+        function = chain[-1]
+        for index, later in enumerate(handlers):
+            if not _handler_escalates(later):
+                continue
+            for earlier in handlers[:index]:
+                if _handler_escalates(earlier):
+                    continue
+                for caught in _caught_types(earlier):
+                    ancestors = _ancestor_names(caught)
+                    if ancestors is None:
+                        unresolved.add(UnresolvedType(module, earlier.lineno, function, caught))
+                        continue
+                    for guarded in _caught_types(later):
+                        if _ancestor_names(guarded) is None:
+                            unresolved.add(UnresolvedType(module, later.lineno, function, guarded))
+                        elif guarded in ancestors:
+                            shadowed.add(ShadowSite(module, earlier.lineno, function, caught, later.lineno, guarded))
+    return sorted(shadowed), sorted(unresolved)
+
+
 class _Index(NamedTuple):
     """Every definition under ``mloda/``, plus the names whose call can raise and the ones that can swallow."""
 
@@ -417,6 +531,7 @@ class _Index(NamedTuple):
     constructors: dict[str, list[_Definition]]
     raising: frozenset[str]
     swallowing: frozenset[str]
+    class_bases: dict[str, frozenset[str]]
 
 
 def _raising_names(calls_per_name: dict[str, frozenset[str]], direct: frozenset[str]) -> frozenset[str]:
@@ -442,6 +557,7 @@ def _index() -> _Index:
     functions: dict[str, list[_Definition]] = {}
     constructors: dict[str, list[_Definition]] = {}
     calls: dict[str, set[str]] = {}
+    bases: dict[str, set[str]] = {}
     direct: set[str] = set()
     direct_swallowers: set[str] = set()
     for path in sorted(_CORE_ROOT.rglob("*.py")):
@@ -461,12 +577,17 @@ def _index() -> _Index:
                 for child in node.body:
                     if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef)) and child.name in _CONSTRUCTORS:
                         constructors.setdefault(node.name, []).append(_Definition(module, child))
+                # Keyed by name like everything else here, so two same-named classes pool their bases.
+                bases.setdefault(node.name, set()).update(
+                    base.id if isinstance(base, ast.Name) else ast.unparse(base) for base in node.bases
+                )
     frozen = {name: frozenset(called) for name, called in calls.items()}
     return _Index(
         functions,
         constructors,
         _raising_names(frozen, frozenset(direct)),
         _raising_names(frozen, frozenset(direct_swallowers)),
+        {name: frozenset(inherited) for name, inherited in bases.items()},
     )
 
 
@@ -510,11 +631,16 @@ def sweep() -> _Sweep:
 
     sites: list[RaiseSite] = []
     handlers: list[HandlerSite] = []
+    shadowed: list[ShadowSite] = []
+    unresolved: list[UnresolvedType] = []
     for module in sorted({module for module, _ in reachable}):
         names = frozenset(name for reached_module, name in reachable if reached_module == module)
         source = (_REPO_ROOT / module).read_text(encoding="utf-8")
         sites.extend(classify_raises(source, module, names))
         handlers.extend(classify_handlers(source, module, names))
+        module_shadowed, module_unresolved = classify_shadowing(source, module, names)
+        shadowed.extend(module_shadowed)
+        unresolved.extend(module_unresolved)
 
     return _Sweep(
         tuple(sorted(sites)),
@@ -522,6 +648,8 @@ def sweep() -> _Sweep:
         tuple(sorted(external)),
         tuple(sorted(handlers)),
         tuple(sorted(swallowing)),
+        tuple(sorted(shadowed)),
+        tuple(sorted(unresolved)),
     )
 
 
@@ -1144,4 +1272,213 @@ def test_the_sweep_flags_a_blanket_handler_spliced_into_the_real_seam() -> None:
     assert [site.kind for site in spliced] == ["unannotated"], (
         f"a blanket handler spliced into the seam itself was not flagged: {spliced}"
     )
+    assert spliced[0].function == function
+
+
+# The clauses of one try, judged against each other: each looks well-formed alone, but the first match wins.
+
+
+def _shadowing(source: str) -> tuple[list[ShadowSite], list[UnresolvedType]]:
+    return classify_shadowing(source, "snippet.py", frozenset({"match_feature_group_criteria"}))
+
+
+def test_no_handler_shadows_an_abort_check_on_the_same_try() -> None:
+    shadowed = list(sweep().shadowed)
+
+    assert shadowed == [], (
+        "Handlers that catch ahead of a clause below them a marked exception survives:\n"
+        + "\n".join(
+            f"  {site.location()}: except {site.caught} shadows the {site.shadowed_type} clause on line "
+            f"{site.shadowed_lineno}"
+            for site in shadowed
+        )
+        + "\n\nPython runs the first matching clause, so the check below never sees the marked exception. Run "
+        f"{_ABORT_CHECK} in the earlier clause too, or narrow it to a type the later one does not cover."
+    )
+
+
+def test_every_except_type_beside_an_escalating_clause_resolves() -> None:
+    """An unresolvable type decides nothing, so it is reported here instead of passing the shadow check."""
+    unresolved = list(sweep().unresolved)
+
+    assert unresolved == [], (
+        "Handler types on a try with an escalating clause that neither the builtins nor a class under mloda/ "
+        "resolves, so whether they shadow it is unknown:\n"
+        + "\n".join(f"  {site.location()}: {site.name}" for site in unresolved)
+    )
+
+
+def test_shadow_classifier_flags_a_narrow_handler_above_the_abort_check() -> None:
+    source = (
+        "def match_feature_group_criteria(cls, feature, options):\n"
+        "    try:\n"
+        "        return probe(feature)\n"
+        "    except KeyError:  # Swallows: a missing key is this candidate's own defect.\n"
+        "        return False\n"
+        "    except Exception as exc:\n"
+        "        if is_match_abort(exc):\n"
+        "            raise\n"
+        "        return False\n"
+    )
+
+    shadowed, unresolved = _shadowing(source)
+
+    assert unresolved == []
+    assert [(site.lineno, site.caught, site.shadowed_lineno, site.shadowed_type) for site in shadowed] == [
+        (4, "KeyError", 6, "Exception")
+    ]
+
+
+def test_shadow_classifier_resolves_a_project_exception_through_its_declared_base() -> None:
+    """The shape fixed in match_parser_criteria: PropertyValueRejection subclasses ValueError statically."""
+    source = (
+        "def match_feature_group_criteria(cls, feature, options):\n"
+        "    try:\n"
+        "        return probe(feature)\n"
+        "    except PropertyValueRejection:  # Swallows: the parser's non-match verdict.\n"
+        "        return False\n"
+        "    except ValueError as exc:\n"
+        "        if is_match_abort(exc):\n"
+        "            raise\n"
+        "        return False\n"
+    )
+
+    shadowed, unresolved = _shadowing(source)
+
+    assert unresolved == []
+    assert [(site.caught, site.shadowed_type) for site in shadowed] == [("PropertyValueRejection", "ValueError")]
+
+
+def test_shadow_classifier_accepts_an_earlier_handler_that_runs_the_abort_check() -> None:
+    source = (
+        "def match_feature_group_criteria(cls, feature, options):\n"
+        "    try:\n"
+        "        return probe(feature)\n"
+        "    except PropertyValueRejection as exc:\n"
+        "        if is_match_abort(exc):\n"
+        "            raise\n"
+        "        return False\n"
+        "    except ValueError as exc:\n"
+        "        if is_match_abort(exc):\n"
+        "            raise\n"
+        "        return False\n"
+    )
+
+    assert _shadowing(source) == ([], [])
+
+
+def test_shadow_classifier_accepts_an_earlier_handler_of_an_unrelated_type() -> None:
+    source = (
+        "def match_feature_group_criteria(cls, feature, options):\n"
+        "    try:\n"
+        "        return probe(feature)\n"
+        "    except KeyError:  # Swallows: a missing key is this candidate's own defect.\n"
+        "        return False\n"
+        "    except ValueError as exc:\n"
+        "        if is_match_abort(exc):\n"
+        "            raise\n"
+        "        return False\n"
+    )
+
+    assert _shadowing(source) == ([], [])
+
+
+def test_shadow_classifier_reads_every_type_of_an_earlier_tuple() -> None:
+    """One shadowing member is enough; the clause catches on any of them."""
+    source = (
+        "def match_feature_group_criteria(cls, feature, options):\n"
+        "    try:\n"
+        "        return probe(feature)\n"
+        "    except (KeyError, TypeError):  # Swallows: this candidate's own defect.\n"
+        "        return False\n"
+        "    except TypeError as exc:\n"
+        "        if is_match_abort(exc):\n"
+        "            raise\n"
+        "        return False\n"
+    )
+
+    shadowed, unresolved = _shadowing(source)
+
+    assert unresolved == []
+    assert [(site.caught, site.shadowed_type) for site in shadowed] == [("TypeError", "TypeError")]
+
+
+def test_shadow_classifier_flags_a_narrow_handler_above_a_bare_except() -> None:
+    """A bare except catches everything, so every earlier clause shadows the re-raise it holds."""
+    source = (
+        "def match_feature_group_criteria(cls, feature, options):\n"
+        "    try:\n"
+        "        return probe(feature)\n"
+        "    except KeyError:  # Swallows: a missing key is this candidate's own defect.\n"
+        "        return False\n"
+        "    except:\n"
+        "        raise\n"
+    )
+
+    shadowed, unresolved = _shadowing(source)
+
+    assert unresolved == []
+    assert [(site.caught, site.shadowed_type) for site in shadowed] == [("KeyError", "BaseException")]
+
+
+def test_shadow_classifier_reports_a_type_it_cannot_resolve() -> None:
+    """A dotted type resolves to no static base chain, so it is reported rather than read as no shadow."""
+    source = (
+        "def match_feature_group_criteria(cls, feature, options):\n"
+        "    try:\n"
+        "        return probe(feature)\n"
+        "    except third_party.Weird:  # Swallows: not ours to judge.\n"
+        "        return False\n"
+        "    except Exception as exc:\n"
+        "        if is_match_abort(exc):\n"
+        "            raise\n"
+        "        return False\n"
+    )
+
+    shadowed, unresolved = _shadowing(source)
+
+    assert shadowed == []
+    assert [(site.lineno, site.name) for site in unresolved] == [(4, "third_party.Weird")]
+
+
+def _splice_narrow_handler(source: str, function: str) -> tuple[str, int]:
+    """Insert a narrow handler above ``function``'s first escalating clause; in memory only, never written back."""
+    targets = [
+        node
+        for node in ast.walk(ast.parse(source))
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == function
+    ]
+    assert len(targets) == 1, f"{function} is not a single definition in this module: {len(targets)} found"
+    escalating = [
+        handler
+        for node in ast.walk(targets[0])
+        for handler in getattr(node, "handlers", [])
+        if _handler_escalates(handler)
+    ]
+    assert escalating, f"{function} holds no escalating handler to shadow; splice into another definition"
+    first = escalating[0]
+    pad = " " * first.col_offset
+    block = [f"{pad}except KeyError:", f"{pad}    return False"]
+    lines = source.splitlines()
+    at = first.lineno - 1
+    return "\n".join([*lines[:at], *block, *lines[at:]]) + "\n", first.lineno
+
+
+def test_the_sweep_flags_a_narrow_handler_spliced_above_the_real_seam_check() -> None:
+    """End to end: the real reachable set and the classifier on real source, mutated in memory only."""
+    module = "mloda/core/prepare/identify_feature_group.py"
+    function = "_filter_feature_group_by_criteria"
+    names = frozenset(name for reached_module, name in sweep().reachable if reached_module == module)
+    assert function in names, f"{function} is no longer reachable; splice into another reached definition"
+
+    source = (_REPO_ROOT / module).read_text(encoding="utf-8")
+    assert classify_shadowing(source, module, names) == ([], [])
+
+    mutated, lineno = _splice_narrow_handler(source, function)
+    spliced, unresolved = classify_shadowing(mutated, module, names)
+
+    assert unresolved == []
+    assert [(site.lineno, site.caught, site.shadowed_type) for site in spliced] == [
+        (lineno, "KeyError", "Exception")
+    ], f"a narrow handler spliced above the seam's own abort check was not flagged: {spliced}"
     assert spliced[0].function == function

@@ -39,13 +39,23 @@ def record_match_rejection(owner_name: str, reason: str, stage: str = "value_rej
     reasons.setdefault(owner_name, MatchRejection(reason, stage))
 
 
-def restamp_match_rejection(owner_name: str, from_stage: str, to_stage: str) -> None:
-    """Re-stamp the owner's recorded stage; a no-op outside a window, without a recording, or on a stage mismatch."""
+def match_rejection_owners() -> frozenset[str]:
+    """Owner names already recorded in the active window; empty outside one."""
+    reasons = MATCH_REJECTION_REASONS.get()
+    if reasons is None:
+        return frozenset()
+    return frozenset(reasons)
+
+
+def restamp_match_rejections_since(known_owners: frozenset[str], from_stage: str, to_stage: str) -> None:
+    """Re-stamp owners recorded after the snapshot whose stage is exactly from_stage; no-op outside a window."""
+    # Scoping by snapshot delta, not by owner name, covers whatever name an inner delegation stamped.
     reasons = MATCH_REJECTION_REASONS.get()
     if reasons is None:
         return
-    rejection = reasons.get(owner_name)
-    if rejection is not None and rejection.stage == from_stage:
+    for owner_name, rejection in list(reasons.items()):
+        if owner_name in known_owners or rejection.stage != from_stage:
+            continue
         reasons[owner_name] = MatchRejection(rejection.reason, to_stage)
 
 

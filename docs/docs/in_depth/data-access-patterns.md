@@ -145,7 +145,7 @@ Rules for reader authors:
 - Never raise to decline: anything but `NotImplementedError` in the DB match hooks aborts matching for every reader sharing the `DataAccessCollection`. Record, then return a falsy value.
 - Recording outside an engine-opened window is a no-op, so readers stay usable standalone.
 - Recorded reasons are discarded at the enclosing candidate level: when the reader ultimately matches, when a sibling reader matches, or, for unowned recordings, when the feature group matches by another rule. An owned veto instead gates the name-based rules (see the paragraph below). Only a decline surfaces them.
-- Name the reader and the concrete input in the reason, as the example does, and pass `cls.get_class_name()` as the owner name: the ownership gate keys on it.
+- Name the reader and the concrete input in the reason, as the example does. The owner name is only a per-window dedupe key (the first recording per owner wins), so any name works, including an overridden `data_access_name()`.
 
 `ReadFile` column validation and the `ReadDB` feature check (`check_feature_in_data_access`) already record automatically; a custom reader only needs this for its own decline points.
 

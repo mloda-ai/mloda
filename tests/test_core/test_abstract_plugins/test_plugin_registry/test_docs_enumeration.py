@@ -33,6 +33,9 @@ from mloda.core.api.plugin_docs import (
     get_feature_group_docs,
 )
 
+# Docs enumeration source-hashes every FeatureGroup subclass; a cold cache under xdist load can exceed the default timeout.
+pytestmark = pytest.mark.timeout(30)
+
 
 @pytest.fixture(autouse=True)
 def _reap_pending_dead_plugin_classes() -> None:

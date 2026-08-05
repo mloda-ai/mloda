@@ -19,6 +19,9 @@ from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.user import PluginLoader
 
+# Docs enumeration source-hashes every FeatureGroup subclass; a cold cache under xdist load can exceed the default timeout.
+pytestmark = pytest.mark.timeout(30)
+
 SAFE_FIELD_LOGGER = "mloda.core.abstract_plugins.components.utils"
 
 

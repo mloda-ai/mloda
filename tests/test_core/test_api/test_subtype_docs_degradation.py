@@ -19,6 +19,7 @@ from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.provider import FeatureGroup, SubtypeDeclaration, property_spec
 from mloda.steward import FeatureGroupInfo, get_feature_group_docs, resolve_feature
+from mloda.user import PluginCollector
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import (
     PythonDictFramework,
 )
@@ -114,10 +115,11 @@ class SbfixDocBogusSupportedFG(FeatureGroup):
         return None
 
 
-def _sbfix_doc_for(name: str) -> FeatureGroupInfo:
-    exact = [doc for doc in get_feature_group_docs(name=name) if doc.name == name]
-    assert len(exact) == 1, f"expected exactly one doc for {name}, got {[doc.name for doc in exact]}"
-    return exact[0]
+def _sbfix_doc_for(fg_class: type[FeatureGroup]) -> FeatureGroupInfo:
+    """Fetch the FeatureGroupInfo of one class object, independent of what else is registered."""
+    docs = get_feature_group_docs(plugin_collector=PluginCollector.enabled_feature_groups(fg_class))
+    assert len(docs) == 1, f"expected exactly one doc for {fg_class!r}, got {[doc.name for doc in docs]}"
+    return docs[0]
 
 
 class TestSbfixRaisingHookFailsClosed:
@@ -155,7 +157,7 @@ class TestSbfixBogusSupportedSurfacedInDocs:
     """Docs surface the undeclared 'supported' framework as subtype_error."""
 
     def test_docs_report_subtype_error_with_empty_support(self) -> None:
-        doc = _sbfix_doc_for("SbfixDocBogusSupportedFG")
+        doc = _sbfix_doc_for(SbfixDocBogusSupportedFG)
         assert doc.subtype_key == SBFIX_DOC_KEY
         assert doc.subtype_support == {}
         assert doc.subtype_error is not None

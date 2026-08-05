@@ -1,5 +1,6 @@
 """Pinning tests for the cycle-2 subtype persona surfaces of issue #639 (docs and resolve_feature)."""
 
+import gc
 from abc import abstractmethod
 from typing import Optional
 
@@ -12,7 +13,7 @@ from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.provider import FeatureChainParserMixin, FeatureGroup, SubtypeDeclaration, property_spec
 from mloda.steward import FeatureGroupInfo, ResolvedFeature, get_feature_group_docs, resolve_feature
-from mloda.user import PluginLoader
+from mloda.user import PluginCollector, PluginLoader
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import (
     PythonDictFramework,
@@ -242,11 +243,11 @@ def load_plugins() -> None:
     PluginLoader.all()
 
 
-def _doc_for(name: str) -> FeatureGroupInfo:
-    """Fetch the single FeatureGroupInfo whose name matches exactly."""
-    exact = [doc for doc in get_feature_group_docs(name=name) if doc.name == name]
-    assert len(exact) == 1, f"expected exactly one doc for {name}, got {[doc.name for doc in exact]}"
-    return exact[0]
+def _doc_for(fg_class: type[FeatureGroup]) -> FeatureGroupInfo:
+    """Fetch the FeatureGroupInfo of one class object, independent of what else is registered."""
+    docs = get_feature_group_docs(plugin_collector=PluginCollector.enabled_feature_groups(fg_class))
+    assert len(docs) == 1, f"expected exactly one doc for {fg_class!r}, got {[doc.name for doc in docs]}"
+    return docs[0]
 
 
 class TestSubDeclDocContractAFeatureGroupInfoFields:
@@ -296,7 +297,7 @@ class TestSubDeclDocContractBFeatureGroupDocs:
     """Contract B: get_feature_group_docs populates the subtype fields from SUBTYPES."""
 
     def test_keyed_family_reports_key_universe_and_support(self) -> None:
-        doc = _doc_for("SubDeclDocWindowFG")
+        doc = _doc_for(SubDeclDocWindowFG)
         assert doc.subtype_key == WINDOW_KEY
         assert doc.subtypes == sorted(WINDOW_UNIVERSE)
         assert doc.parametric_subtypes == []
@@ -307,7 +308,7 @@ class TestSubDeclDocContractBFeatureGroupDocs:
         assert doc.subtype_error is None
 
     def test_parametric_families_are_enumerable_without_probing(self) -> None:
-        doc = _doc_for("SubDeclDocRankFG")
+        doc = _doc_for(SubDeclDocRankFG)
         assert doc.subtype_key == RANK_KEY
         assert doc.subtypes == sorted(RANK_UNIVERSE)
         assert doc.parametric_subtypes == sorted(RANK_FAMILIES)
@@ -318,7 +319,7 @@ class TestSubDeclDocContractBFeatureGroupDocs:
         assert doc.subtype_error is None
 
     def test_family_without_subtype_dimension_keeps_defaults(self) -> None:
-        doc = _doc_for("SubDeclDocPlainFG")
+        doc = _doc_for(SubDeclDocPlainFG)
         assert doc.subtype_key is None
         assert doc.subtypes == []
         assert doc.parametric_subtypes == []
@@ -326,7 +327,7 @@ class TestSubDeclDocContractBFeatureGroupDocs:
         assert doc.subtype_error is None
 
     def test_abstract_base_reports_universe_without_support(self) -> None:
-        doc = _doc_for("SubDeclDocAbstractWindowFG")
+        doc = _doc_for(SubDeclDocAbstractWindowFG)
         assert doc.subtype_key == ABSTRACT_KEY
         assert doc.subtypes == sorted(ABSTRACT_UNIVERSE)
         assert doc.parametric_subtypes == []
@@ -334,13 +335,13 @@ class TestSubDeclDocContractBFeatureGroupDocs:
         assert doc.subtype_error is None
 
     def test_raising_matrix_is_surfaced_not_swallowed(self) -> None:
-        bad = _doc_for("SubDeclDocHookOverrideFG")
+        bad = _doc_for(SubDeclDocHookOverrideFG)
         assert bad.subtypes == sorted(HOOKED_UNIVERSE)
         assert bad.subtype_support == {}
         assert bad.subtype_error is not None
         assert "supports_compute_framework" in bad.subtype_error
 
-        healthy = _doc_for("SubDeclDocWindowFG")
+        healthy = _doc_for(SubDeclDocWindowFG)
         assert healthy.subtype_error is None
 
 
@@ -439,10 +440,34 @@ class TestSubDeclDocContractFHookOverrideSurfacedInDocs:
     """Contract F: docs surface a hook-overriding family as subtype_error instead of a fabricated matrix."""
 
     def test_hook_override_reported_as_subtype_error(self) -> None:
-        hooked = _doc_for("SubDeclDocHookOverrideFG")
+        hooked = _doc_for(SubDeclDocHookOverrideFG)
         assert hooked.subtype_key == HOOKED_KEY
         assert hooked.subtypes == sorted(HOOKED_UNIVERSE)
         assert hooked.parametric_subtypes == []
         assert hooked.subtype_support == {}
         assert hooked.subtype_error is not None
         assert "supports_compute_framework" in hooked.subtype_error
+
+
+class TestSubDeclDocRegistryIndependentLookup:
+    """Doc lookup must key on class identity, not on a name unique across the live registry."""
+
+    def test_same_named_decoy_does_not_shadow_the_real_class(self) -> None:
+        def make_decoy() -> type[FeatureGroup]:
+            """Nested so the decoy does not shadow the module-level SubDeclDocHookOverrideFG."""
+
+            class SubDeclDocHookOverrideFG(FeatureGroup):
+                """Decoy sharing get_class_name() with the module-level fixture."""
+
+            return SubDeclDocHookOverrideFG
+
+        decoy = make_decoy()
+        try:
+            doc = _doc_for(SubDeclDocHookOverrideFG)
+            assert doc.subtype_key == HOOKED_KEY
+            assert doc.subtypes == sorted(HOOKED_UNIVERSE)
+            assert doc.subtype_support == {}
+            assert doc.subtype_error is not None
+        finally:
+            del decoy
+            gc.collect()

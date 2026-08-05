@@ -325,7 +325,8 @@ class BaseInputData(ABC):
             if not issubclass(key, BaseInputData):
                 # Contained: this runs per candidate over every option key, so an odd key is a non-match (#845).
                 raise ValueError(f"Key {key} is not a subclass of BaseInputData.")
-            key = key.get_class_name()
+            # Options normalizes a class key the same way, so an overridden alias stays the one identity.
+            key = key.data_access_name()
 
         if not isinstance(key, str):
             # Contained: this runs per candidate over every option key, so one odd key must not abort the run (#845).

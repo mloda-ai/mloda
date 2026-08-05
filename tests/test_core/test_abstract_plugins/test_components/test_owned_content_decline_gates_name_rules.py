@@ -29,6 +29,9 @@ from mloda_plugins.feature_group.input_data.read_db import ReadDB
 from mloda_plugins.feature_group.input_data.read_file import ReadFile
 
 
+MODULE_SUFFIX_MARKERS = ("vg961", "vg1006")
+"""Markers a module-level file reader's suffixes must carry, so none of them can fire on a foreign path."""
+
 VG961_FILE_FEATURE = "vg961_file_column"
 VG961_FILE_SUFFIX = ".vg961csv"
 
@@ -36,12 +39,15 @@ VG961_DB_FEATURE = "vg961_db_column"
 VG961_DB_MARKER = "vg961_db_marker"
 
 VG1006_FILE_FEATURE = "vg1006_file_column"
-VG1006_FILE_SUFFIX = ".vg961vg1006"
+VG1006_FILE_SUFFIX = ".vg1006csv"
 VG1006_ALIAS_NAME = "vg1006_alias_access"
 
 VG1006_UNIT_OWNER = "vg1006_unit_owner"
 VG1006_UNIT_OTHER_OWNER = "vg1006_unit_other_owner"
 VG1006_UNIT_REASON = "vg1006 unit reason"
+
+VG1006_FOREIGN_OWNER = "vg1006_foreign_owner"
+VG1006_FOREIGN_REASON = "vg1006 foreign reason"
 
 
 class Vg961FileFamily(ReadFile):
@@ -243,6 +249,25 @@ class TestProbeScopedRestamp:
         assert rejection_window[VG1006_UNIT_OTHER_OWNER].stage == INPUT_DATA_OWNED_STAGE
 
 
+class TestProbeScopedRestampAtTheCallSite:
+    """feature_scope_data_access snapshots the window before its probe, so it promotes only that probe's delta."""
+
+    def test_a_recording_predating_the_probe_keeps_its_stage_while_the_probe_decline_is_owned(
+        self, tmp_path: Path, rejection_window: dict[str, MatchRejection]
+    ) -> None:
+        """One window, one foreign recording seeded first: only the addressed reader's own decline is promoted."""
+        path = tmp_path / f"data{VG1006_FILE_SUFFIX}"
+        path.write_text("vg1006_other_a,vg1006_other_b\n1,2\n", encoding="utf-8")
+        record_match_rejection(VG1006_FOREIGN_OWNER, VG1006_FOREIGN_REASON, stage=INPUT_DATA_STAGE)
+        options = Options({VG1006_ALIAS_NAME: str(path)})
+
+        matched = Vg1006AliasFamily.feature_scope_data_access(options, VG1006_FILE_FEATURE)
+
+        assert matched is False
+        assert rejection_window[VG1006_FOREIGN_OWNER].stage == INPUT_DATA_STAGE
+        assert rejection_window[VG1006_ALIAS_NAME].stage == INPUT_DATA_OWNED_STAGE
+
+
 class TestOwnedContentDeclineGatesNameRules:
     """Engine level, deliberately WITHOUT a window fixture: the engine owns the per-candidate window."""
 
@@ -372,11 +397,23 @@ class TestAliasedDataAccessNameOwnership:
         assert feature.options.get("BaseInputData") == (Vg1006AliasReader, str(path_b))
 
 
+class TestReaderClassKeyNormalization:
+    """A class-object option key must normalize like Options normalizes it, through data_access_name()."""
+
+    def test_a_class_key_of_an_aliasing_reader_normalizes_to_its_alias(self) -> None:
+        """The helper agrees with the Options normalization, so a class key still addresses the aliased reader."""
+        assert BaseInputData.deal_with_base_input_data_name_as_cls_or_str(Vg1006AliasReader) == VG1006_ALIAS_NAME
+
+    def test_a_class_key_of_a_non_aliasing_reader_stays_its_class_name(self) -> None:
+        """A reader that does not override data_access_name() is unaffected by the normalization."""
+        assert BaseInputData.deal_with_base_input_data_name_as_cls_or_str(Vg961CsvReader) == "Vg961CsvReader"
+
+
 class TestModuleLeakPolicy:
-    """The module's leak policy, machine-checked over every module-level final reader."""
+    """The module's marker-based leak policy, machine-checked over every module-level final reader."""
 
     def test_module_level_readers_cannot_fire_on_foreign_options(self) -> None:
-        """Every final reader owns vg961-marked suffixes or requires the vg961 credentials marker, never absence."""
+        """Every final reader owns marker-carrying suffixes or requires the module-unique credentials marker."""
         module_level = [
             cls for cls in get_all_subclasses(BaseInputData) if cls.__module__ == __name__ and cls.is_final_reader()
         ]
@@ -384,9 +421,11 @@ class TestModuleLeakPolicy:
         assert module_level, "expected this module's final readers to be reachable through __subclasses__()"
         for cls in module_level:
             if issubclass(cls, ReadFile):
-                assert all("vg961" in s for s in cls.suffix()), f"{cls.__name__} must own only vg961-marked suffixes"
+                assert all(any(marker in s for marker in MODULE_SUFFIX_MARKERS) for s in cls.suffix()), (
+                    f"{cls.__name__} must own only suffixes carrying one of {MODULE_SUFFIX_MARKERS}"
+                )
             else:
-                assert issubclass(cls, ReadDB), f"{cls.__name__} must be a vg961 file or db reader"
+                assert issubclass(cls, ReadDB), f"{cls.__name__} must be a module-marked file or db reader"
                 assert cls.is_valid_credentials({"vg961_foreign": "x"}) is False, (
                     f"{cls.__name__} must stay inert on foreign credentials"
                 )

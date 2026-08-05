@@ -72,7 +72,7 @@ Readers are classified structurally; no reader code is executed for classificati
 
 ### Selecting among sibling readers
 
-A feature selects a specific reader with an Option whose key equals the reader's class name (`BaseInputData.data_access_name()`, i.e. `cls.__name__`, unique per class, so sibling readers cannot collide):
+A feature selects a specific reader with an Option whose key equals the reader's `BaseInputData.data_access_name()`, which defaults to `cls.__name__` (unique per class, so sibling readers cannot collide) and which a reader that overrides it keeps unique within its family itself:
 
 ```py
 Feature("value", options={UbaAirReader.__name__: url})
@@ -145,7 +145,7 @@ Rules for reader authors:
 - Never raise to decline: anything but `NotImplementedError` in the DB match hooks aborts matching for every reader sharing the `DataAccessCollection`. Record, then return a falsy value.
 - Recording outside an engine-opened window is a no-op, so readers stay usable standalone.
 - Recorded reasons are discarded at the enclosing candidate level: when the reader ultimately matches, when a sibling reader matches, or, for unowned recordings, when the feature group matches by another rule. An owned veto instead gates the name-based rules (see the paragraph below). Only a decline surfaces them.
-- Name the reader and the concrete input in the reason, as the example does. The owner name is only a per-window dedupe key (the first recording per owner wins), so any name works, including an overridden `data_access_name()`.
+- Name the reader and the concrete input in the reason, as the example does. Any label works as the owner name, an overridden `data_access_name()` included, but it must be distinct among the reader's own decline points: the first recording per owner wins, so a later reason under a name already used in the same window is dropped and never reaches the owned stage.
 
 `ReadFile` column validation and the `ReadDB` feature check (`check_feature_in_data_access`) already record automatically; a custom reader only needs this for its own decline points.
 

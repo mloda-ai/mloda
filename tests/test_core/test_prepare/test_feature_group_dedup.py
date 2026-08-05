@@ -39,6 +39,9 @@ from mloda.core.prepare.accessible_plugins import (
 from mloda.core.prepare.resolution_types import ResolutionDiagnosis
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 
+# Docs enumeration source-hashes every FeatureGroup subclass; a cold cache under xdist load can exceed the default timeout.
+pytestmark = pytest.mark.timeout(30)
+
 
 # Module-level reference store. This simulates IPython's ``_oh``/``Out[N]`` history,
 # which keeps strong refs to all cell-evaluated objects. It MUST be module-scoped so

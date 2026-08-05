@@ -14,6 +14,9 @@ from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.components.domain import Domain
 from mloda.core.abstract_plugins.components.options import Options
 
+# Docs enumeration source-hashes every FeatureGroup subclass; a cold cache under xdist load can exceed the default timeout.
+pytestmark = pytest.mark.timeout(30)
+
 
 class _EqTestFeatureGroup(FeatureGroup):
     """Concrete FeatureGroup subclass for __eq__ testing.

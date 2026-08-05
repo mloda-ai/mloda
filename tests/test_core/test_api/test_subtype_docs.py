@@ -18,6 +18,9 @@ from mloda_plugins.compute_framework.base_implementations.python_dict.python_dic
     PythonDictFramework,
 )
 
+# Docs enumeration source-hashes every FeatureGroup subclass; a cold cache under xdist load can exceed the default timeout.
+pytestmark = pytest.mark.timeout(30)
+
 
 WINDOW_KEY = "sbdd_window_function"
 WINDOW_UNIVERSE = frozenset({"median", "sum", "lag"})

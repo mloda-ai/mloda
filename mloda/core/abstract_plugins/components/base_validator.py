@@ -55,7 +55,7 @@ class BaseValidator(ABC):
         if self.log_level == "error":
             raise _exception
         # The non-error levels contain the raise, so the diagnosis goes on the record as text: exc_info= pins
-        # the (type, exception, traceback) triple, and a retained record then keeps the raising frames alive.
+        # the traceback, and a retained record then keeps the raising frames alive.
         reason = contained_raise_reason(_exception)
         if self.log_level == "warning":
             logger.warning("%s (%s)", _error, reason)

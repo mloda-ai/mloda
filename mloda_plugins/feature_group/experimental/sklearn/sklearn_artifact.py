@@ -233,7 +233,7 @@ class SklearnArtifact(BaseArtifact):
 
             except Exception as e:
                 # The reason as text, not the exception: an object in LogRecord.args pins its traceback,
-                # and a retained record then holds the frames of the failed load.
+                # so a retained record would hold the frames of the failed load.
                 logger.warning("Failed to load artifact from %s: %s", file_path, contained_raise_reason(e))
                 continue
 

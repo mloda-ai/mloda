@@ -210,8 +210,8 @@ result = mloda.run_all(
 result[0]  # Returns polars.DataFrame
 ```
 
-The three backend examples that follow are sketches, not executed: each needs a configured backend
-(a DuckDB database, an Iceberg catalog, a Spark cluster) and a source that provides `id`.
+The backend examples that follow are sketches, not executed: each needs a configured backend and a
+source that provides `id`.
 
 Example using DuckDB framework:
 ```py

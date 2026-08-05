@@ -291,5 +291,5 @@ result = mloda.run_all(
 )
 ```
 
-`sales__sum_aggr` resolves to the aggregation Feature Group, which reads its source from the name; the
-`in_features` array states the same source explicitly, and `context_options` rides along as metadata.
+`sales__sum_aggr` resolves to the aggregation Feature Group, which reads its source from the name.
+`in_features` states the same source explicitly, and `context_options` rides along as metadata.

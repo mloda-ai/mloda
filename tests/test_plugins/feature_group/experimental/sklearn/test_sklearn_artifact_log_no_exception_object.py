@@ -1,7 +1,7 @@
 """An unreadable artifact file is logged as text, never as the exception object.
 
-The object would land in LogRecord.args, and a retained record then pins ``exc.__traceback__``,
-whose frames hold the loader locals of a dynamically loaded feature group.
+The object would land in LogRecord.args and pin ``exc.__traceback__``, whose frames hold the loader
+locals of a dynamically loaded feature group.
 """
 
 from __future__ import annotations

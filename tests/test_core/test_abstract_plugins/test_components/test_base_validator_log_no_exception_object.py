@@ -1,7 +1,6 @@
 """A validation failure contained by a non-error log level is logged as text, never with exc_info.
 
-``exc_info=<exception>`` puts (type, exc, traceback) on the record, and a retained record then pins
-the traceback frames and through them the validator and the data it was judging.
+``exc_info`` puts the traceback on the record, whose frames hold the validator and the data it judged.
 """
 
 from __future__ import annotations

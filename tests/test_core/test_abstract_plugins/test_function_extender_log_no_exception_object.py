@@ -1,7 +1,6 @@
 """A contained extender failure is logged as text, never with exc_info.
 
-``exc_info=True`` puts (type, exc, traceback) on the record, and a retained record then pins the
-traceback frames and through them the extender and the wrapped callable.
+``exc_info`` puts the traceback on the record, whose frames hold the extender and the wrapped callable.
 """
 
 from __future__ import annotations

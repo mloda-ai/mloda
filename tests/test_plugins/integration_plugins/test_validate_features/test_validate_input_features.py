@@ -138,8 +138,7 @@ class TestValidateInputFeatures:
         if ParallelizationMode.MULTIPROCESSING not in modes:
             MlodaTestRunner.run_api_simple(features, parallelization_modes=modes, flight_server=flight_server)
 
-            # The diagnosis is text on the record, so the exception type and its message stay readable
-            # while nothing pins the traceback.
+            # The diagnosis is text on the record, so the type and message stay readable with no pinned traceback.
             assert (
                 "raised SchemaError: Column 'BaseValidateInputFeaturesBase' failed element-wise validator number 0: in_range(1, 2) failure cases: 3"
                 in caplog.text

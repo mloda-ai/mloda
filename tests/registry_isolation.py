@@ -16,10 +16,8 @@ from mloda.core.abstract_plugins.feature_group import FeatureGroup
 def _is_owned_by_its_module(cls: type[FeatureGroup]) -> bool:
     """Is this class still bound under its own name in its live module, and so owned by that module?
 
-    A test that imports a plugin module registers every FeatureGroup it defines. Those are not the
-    transient, cycle-held classes this helper reclaims: they live as long as the module does, and no
-    collection would ever take them. Reading the binding costs a dict lookup, while the collection it
-    skips costs about a second (#995).
+    A module-owned class lives as long as the module does, so no collection would ever reclaim it.
+    The dict lookup here skips a collection that costs about a second (#995).
     """
     if "." in cls.__qualname__:  # defined inside a function or class body, so never a module attribute
         return False
@@ -42,8 +40,8 @@ def reclaim_leaked_feature_groups(before: set[type[FeatureGroup]], module_name: 
     if not new_reclaimable():
         return []
     # Youngest generation first: a class the test just defined is almost always still in gen 0, where a
-    # collection is bounded by the young generation instead of the whole heap. Only a class that automatic
-    # collections promoted needs the older generations, and a full collection is the last resort (#995).
+    # collection is bounded by the young generation instead of the whole heap. Only a promoted class needs
+    # the older generations (#995).
     for generation in (0, 1, 2):
         gc.collect(generation)
         if not new_reclaimable():

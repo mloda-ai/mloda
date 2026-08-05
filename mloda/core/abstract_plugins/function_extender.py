@@ -182,7 +182,7 @@ def _invoke_extender(ext: Extender, inner_func: Any, *args: Any, **kwargs: Any) 
             raise
         name = ext.name if hasattr(ext, "name") else ""
         # Text, not exc_info=True: the record would pin the traceback, and its frames hold the extender and
-        # the wrapped callable. The fallback below still runs, so this reports a contained failure.
+        # the wrapped callable.
         logger.warning("%s %s %s", ext.__class__.__name__, name, contained_raise_reason(e))
         if state["result"] is not sentinel:
             # Inner already ran successfully; the extender failed afterwards.

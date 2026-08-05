@@ -193,6 +193,7 @@ class CfwManager:
 
     def take_error_exception(self) -> Any:
         """Hands over the original exception object, if captured, and drops the register's reference."""
+        # error and msg stay set on purpose, so a later flag read still raises the typed fallback.
         exception = self.exception
         self.exception = None
         return exception

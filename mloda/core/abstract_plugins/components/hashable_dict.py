@@ -23,7 +23,9 @@ class _CycleMarker:
 
 
 # A cyclic value hashes instead of raising RecursionError. Mirrors the id() visited guard in
-# Feature._reduce. _deep_equal carries the matching guard for the == that such a collision reaches.
+# Feature._reduce. _deep_equal mirrors this normalization for the == that such a collision reaches;
+# residual: set values, containers whose type overrides __eq__, and cycles routed through a nested
+# Options/HashableDict (where the path resets) are still plain ==.
 _CYCLE = _CycleMarker()
 
 
@@ -56,22 +58,45 @@ def _deep_hashable(value: Any, seen: frozenset[int] = frozenset()) -> Any:
     return value
 
 
-def _deep_equal(a: Any, b: Any, seen: frozenset[tuple[int, int]] = frozenset()) -> bool:
-    """Compare two values structurally, treating a repeated id pair on the recursion path as equal."""
-    if a is b:
-        return True
-    if type(a) is not type(b) or type(a) not in (dict, list, tuple):
-        return bool(a == b)
-    pair = (id(a), id(b))
-    if pair in seen:
-        return True
-    seen = seen | {pair}
+_CONTAINER_KINDS = (dict, list, tuple)
+
+
+def _container_kind(value: Any) -> type | None:
+    """The base container type value is walked as, or None when its own __eq__ must decide."""
+    # Exact types cannot override __eq__, so they skip the isinstance scan; this is the hot path.
+    if type(value) in _CONTAINER_KINDS:
+        return type(value)
+    for kind in _CONTAINER_KINDS:
+        if isinstance(value, kind) and type(value).__eq__ is kind.__eq__:
+            return kind
+    return None
+
+
+def _deep_equal(a: Any, b: Any) -> bool:
+    """Compare two values structurally, matching a back-reference only against another back-reference."""
+    return _walk_equal(a, b, set(), set())
+
+
+def _walk_equal(a: Any, b: Any, path_a: set[int], path_b: set[int]) -> bool:
+    kind = _container_kind(a)
+    if kind is None or _container_kind(b) is not kind:
+        return a is b or bool(a == b)
+    on_a, on_b = id(a) in path_a, id(b) in path_b
+    if on_a or on_b:
+        # A back-reference matches only another back-reference, as _deep_hashable's marker does.
+        return on_a and on_b
     if len(a) != len(b):
         return False
-    if type(a) is dict:
+    path_a.add(id(a))
+    path_b.add(id(b))
+    if kind is dict:
         # Keys keep their own hash and __eq__; only values are walked.
-        return all(k in b and _deep_equal(v, b[k], seen) for k, v in a.items())
-    return all(_deep_equal(x, y, seen) for x, y in zip(a, b))
+        equal = all(k in b and _walk_equal(v, b[k], path_a, path_b) for k, v in a.items())
+    else:
+        equal = all(_walk_equal(x, y, path_a, path_b) for x, y in zip(a, b))
+    path_a.discard(id(a))
+    path_b.discard(id(b))
+    return equal
 
 
 class HashableDict:

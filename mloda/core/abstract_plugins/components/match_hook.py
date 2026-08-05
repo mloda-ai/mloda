@@ -51,4 +51,6 @@ def call_match_hook(
     except Exception as exc:  # noqa: BLE001  (contained: one broken matcher must not poison the whole run)
         if is_match_abort(exc):
             raise
-        return MatchHookOutcome(False, None, exc)
+        # The outcome outlives this except block, and the traceback's frames pin the plugin class and its raw
+        # return. with_traceback, not the attribute: a frozen-dataclass exception rejects the assignment.
+        return MatchHookOutcome(False, None, exc.with_traceback(None))

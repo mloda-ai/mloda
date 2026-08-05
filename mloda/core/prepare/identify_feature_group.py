@@ -635,14 +635,15 @@ class IdentifyFeatureGroupClass:
                         feature.name,
                     )
                     self._matcher_errors[feature_group] = reason
-        finally:
+            # Inside the try, where outcome is bound: only the reset belongs on a path the body never reached.
             recorded = MATCH_REJECTION_REASONS.get() or {}
+            if not outcome.matched and recorded:
+                # Everything recorded during this candidate's window belongs to this candidate, whatever
+                # owner name an inner delegation stamped; first recorded reason wins (insertion order).
+                self._match_rejections[feature_group] = next(iter(recorded.values()))
+            return outcome.matched
+        finally:
             MATCH_REJECTION_REASONS.reset(token)
-        if not outcome.matched and recorded:
-            # Everything recorded during this candidate's window belongs to this candidate, whatever
-            # owner name an inner delegation stamped; first recorded reason wins (insertion order).
-            self._match_rejections[feature_group] = next(iter(recorded.values()))
-        return outcome.matched
 
     def _filter_feature_group_by_domain(self, feature_group: type[FeatureGroup], feature: Feature) -> bool:
         """Decision-side domain gate: unguarded, so a raising get_domain() still fails the engine loudly."""

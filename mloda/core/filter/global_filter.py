@@ -248,7 +248,10 @@ class GlobalFilter:
         )
 
     def _report_falsy_match(self, feature_group: type[FeatureGroup], filter_feature_name: str, returned: Any) -> None:
-        """Report the detached filter: WARNING on a key's first report, DEBUG after, like `_record_dropped_filter`."""
+        """Report the detached filter: WARNING on a key's first report, DEBUG after, like `_record_dropped_filter`.
+
+        Both fields are plugin-owned reads and this runs past the hook call's containment, so each degrades alone.
+        """
         key = (feature_group, filter_feature_name)
         first = key not in self._reported_falsy_matches
         self._reported_falsy_matches.add(key)
@@ -256,9 +259,9 @@ class GlobalFilter:
             logging.WARNING if first else logging.DEBUG,
             "%s returned a falsy non-bool (%s) while matching filter feature '%s'; that filter is not attached. "
             "Return True explicitly to keep it.",
-            feature_group.get_class_name(),
+            safe_field(lambda: feature_group.get_class_name(), "<unnamed feature group>"),
             # The type name only: the value's own __repr__ is plugin code and must not run here.
-            type(returned).__name__,
+            safe_field(lambda: type(returned).__name__, "<unreadable type>"),
             filter_feature_name,
         )
 

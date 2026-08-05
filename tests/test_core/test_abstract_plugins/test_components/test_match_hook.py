@@ -17,6 +17,7 @@ import pytest
 
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.abstract_plugins.components.feature import Feature
+from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser import PropertyValueRejection
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.components.match_hook import MatchHookOutcome, call_match_hook
 from mloda.core.abstract_plugins.components.options import Options
@@ -42,6 +43,7 @@ RAISE_TYPE_NAME = "RuntimeError"
 RAISE_MESSAGE = "boom_991_match_hook_raised"
 BOOL_RAISE_MESSAGE = "boom_991_bool_exploded"
 ABORT_MESSAGE = "abort_991_marked_match_abort"
+REJECTION_MESSAGE = "reject_991_property_value"
 
 T = TypeVar("T")
 
@@ -289,6 +291,73 @@ class TestTheHelperContainsARaise:
             f"a marked abort must not be contained, got: {snapshot.escaped}"
         )
         assert snapshot.escaped_is_the_raised_object, "the marked exception itself must escape, not a wrapper"
+
+
+@dataclass(frozen=True)
+class _ContainedErrorSnapshot:
+    """Plain-data readout of the exception one contained raise hands back. Holds no exception object."""
+
+    escaped: Optional[str]
+    is_the_raised_object: bool
+    has_traceback: bool
+    type_name: Optional[str]
+    message: Optional[str]
+    is_a_property_value_rejection: bool
+
+
+def _drive_contained_error(marker: Exception) -> _ContainedErrorSnapshot:
+    """Contain one raise and read the exception the outcome carries, traceback included, out as plain data."""
+    fg = _make_probe_fg(partial(_raise, marker))
+    outcome: Optional[MatchHookOutcome] = None
+    error: Optional[Exception] = None
+    try:
+        outcome, escaped = _capture(partial(call_match_hook, fg, PROBE_FEATURE, Options(), None))
+        error = None if outcome is None else outcome.error
+        return _ContainedErrorSnapshot(
+            escaped=escaped,
+            is_the_raised_object=error is marker,
+            has_traceback=error is not None and error.__traceback__ is not None,
+            type_name=None if error is None else type(error).__name__,
+            message=None if error is None else str(error),
+            is_a_property_value_rejection=isinstance(error, PropertyValueRejection),
+        )
+    finally:
+        # The frames hold the helper's own `feature_group` and `returned` locals, which pin the probe class.
+        marker.__traceback__ = None
+        del fg, outcome, error
+        gc.collect()
+
+
+class TestTheContainedRaiseCarriesNoTraceback:
+    """The outcome crosses a module boundary, so what it carries must not keep the plugin's frames alive."""
+
+    def test_the_contained_exception_arrives_without_its_traceback(self) -> None:
+        """On the seams' own try, the exception died at the implicit del closing the except block."""
+        marker = RuntimeError(RAISE_MESSAGE)
+
+        snapshot = _drive_contained_error(marker)
+
+        assert snapshot.escaped is None, f"an unmarked raise must not cross the helper: {snapshot.escaped}"
+        assert snapshot.has_traceback is False, (
+            "the traceback's frames hold the helper's own feature_group and returned locals, so an outcome the "
+            "caller keeps pins the plugin class and the raw return; clear __traceback__ before handing it back"
+        )
+        assert snapshot.is_the_raised_object, "the exception itself must come back, never a copy or a wrapper"
+        assert snapshot.type_name == RAISE_TYPE_NAME, f"the type must survive the strip: {snapshot.type_name}"
+        assert snapshot.message == RAISE_MESSAGE, f"the message must survive the strip: {snapshot.message}"
+
+    def test_a_subclass_raise_still_answers_isinstance(self) -> None:
+        """The resolution seam tells a rejection from a defect by type, so a wrapper would silently reclassify it."""
+        marker = PropertyValueRejection(REJECTION_MESSAGE)
+
+        snapshot = _drive_contained_error(marker)
+
+        assert snapshot.escaped is None, f"an unmarked raise must not cross the helper: {snapshot.escaped}"
+        assert snapshot.has_traceback is False, "a rejection is handed back tracebackless like any contained raise"
+        assert snapshot.is_a_property_value_rejection, (
+            f"isinstance against the subclass must still hold after the strip, got: {snapshot.type_name}"
+        )
+        assert snapshot.message == REJECTION_MESSAGE, f"the message must survive the strip: {snapshot.message}"
 
 
 def _asked(args: tuple[Any, ...], kwargs: dict[str, Any]) -> tuple[str, str]:

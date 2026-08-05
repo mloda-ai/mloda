@@ -642,3 +642,237 @@ def test_a_none_returning_hook_attaches_no_filter_end_to_end() -> None:
     assert payload is not None
     assert payload["names"] == [E2E_MAIN], f"the filter feature must not attach: {payload!r}"
     assert payload["filter_count"] == 0, f"no filter may match: {payload!r}"
+
+
+# Issue #991: the report of a detached filter reads two plugin-owned fields, and a report is not worth a run.
+
+TYPE_NAME_RAISE_MESSAGE = "boom_991_type_name_exploded"
+CLASS_NAME_RAISE_MESSAGE = "boom_991_get_class_name_exploded"
+NONE_TYPE_NAME = "NoneType"  # the field that stays readable when the group cannot say what it is called
+
+
+class UnnameableTypeMeta991(type):
+    """A metaclass whose __name__ read raises, so type(returned).__name__ is itself a plugin call."""
+
+    @property
+    def __name__(cls) -> str:  # type: ignore[override]
+        raise RuntimeError(TYPE_NAME_RAISE_MESSAGE)
+
+
+class UnnameableFalsy991(metaclass=UnnameableTypeMeta991):
+    """A falsy non-bool return whose type name cannot be read: the field the report wants is the one that raises."""
+
+    def __bool__(self) -> bool:
+        return False
+
+    def __repr__(self) -> str:
+        # Fixed text: a snapshot must be able to show this value without triggering the raise.
+        return "<UnnameableFalsy991>"
+
+
+def _make_unnameable_group_fg() -> type[FeatureGroup]:
+    """A throwaway group that answers None for the filter feature and cannot say what it is called."""
+    gc.collect()
+
+    class UnnameableGroupFG991(FeatureGroup):
+        @classmethod
+        def feature_names_supported(cls) -> set[str]:
+            return {HOST_FEATURE}
+
+        # The @final on get_class_name is a mypy pin; a plugin can still install this override at runtime.
+        @classmethod  # type: ignore[misc]
+        def get_class_name(cls) -> str:
+            raise RuntimeError(CLASS_NAME_RAISE_MESSAGE)
+
+        @classmethod
+        def match_feature_group_criteria(
+            cls,
+            feature_name: FeatureName | str,
+            options: Options,
+            data_access_collection: Optional[DataAccessCollection] = None,
+        ) -> Any:  # Any, not bool: the None below is the falsy non-bool whose report then names the group.
+            if str(feature_name) == FILTER_FEATURE:
+                return None
+            return str(feature_name) in cls.feature_names_supported()
+
+    return UnnameableGroupFG991
+
+
+@dataclass(frozen=True)
+class _DegradedReportSnapshot:
+    """Plain-data readout of criteria when a field the report itself reads is unreadable. Holds no class."""
+
+    is_false: bool
+    shown: str
+    escaped: Optional[str]
+    drops: int
+    warnings: tuple[str, ...]
+
+
+def _drive_criteria_of(
+    build: Callable[[], type[FeatureGroup]], caplog: pytest.LogCaptureFixture
+) -> _DegradedReportSnapshot:
+    """Call criteria once against a group `build` makes; the finally unbinds every name that pins the class."""
+    caplog.clear()
+    fg = build()
+    global_filter = GlobalFilter()
+    try:
+        with caplog.at_level(logging.DEBUG, logger=GF_LOGGER_NAME):
+            value, escaped = _capture(partial(global_filter.criteria, fg, _single(FILTER_FEATURE), None))
+        return _DegradedReportSnapshot(
+            is_false=value is False,
+            shown=_shown(value),
+            escaped=escaped,
+            # A count, not the keys: reading a key back would call the unreadable class name again.
+            drops=len(global_filter.dropped_filters),
+            warnings=_messages(caplog, logging.WARNING),
+        )
+    finally:
+        del fg, global_filter
+        gc.collect()
+
+
+@dataclass(frozen=True)
+class _MatchingPassSnapshot:
+    """Plain-data readout of one identify_matched_filters call. Holds no class and no filter object."""
+
+    escaped: Optional[str]
+    names: tuple[str, ...]
+    drops: int
+
+
+def _drive_matching_pass(build: Callable[[], type[FeatureGroup]]) -> _MatchingPassSnapshot:
+    """Match one registered filter against HOST_FEATURE and read the attached filter names out as text."""
+    fg = build()
+    global_filter = GlobalFilter()
+    global_filter.add_filter(FILTER_FEATURE, FilterType.EQUAL, {"value": 1})
+    matched = None
+    try:
+        matched, escaped = _capture(partial(global_filter.identify_matched_filters, fg, Feature(HOST_FEATURE), None))
+        return _MatchingPassSnapshot(
+            escaped=escaped,
+            names=() if matched is None else tuple(sorted(single.name for single in matched)),
+            drops=len(global_filter.dropped_filters),
+        )
+    finally:
+        del fg, global_filter, matched
+        gc.collect()
+
+
+class TestReportingADetachedFilterStaysContained:
+    """The report runs after the hook call, so its own plugin reads must degrade instead of ending the run."""
+
+    def test_criteria_survives_an_unreadable_type_name(self, caplog: pytest.LogCaptureFixture) -> None:
+        """`type(returned).__name__` is a read of a plugin-owned metaclass, not a safe formatting step."""
+        snapshot = _drive_criteria_of(partial(_make_non_bool_matcher_fg, UnnameableFalsy991()), caplog)
+
+        assert snapshot.escaped is None, (
+            f"reporting a non-match must not cross GlobalFilter.criteria and kill the run: {snapshot.escaped}"
+        )
+        assert snapshot.is_false, f"a falsy return is still a plain non-match, got: {snapshot.shown}"
+        assert snapshot.drops == 0, f"a falsy non-bool is a non-match, never a recorded drop, got: {snapshot.drops}"
+        assert len(snapshot.warnings) == 1, f"the detached filter must still be reported, got: {snapshot.warnings}"
+        message = snapshot.warnings[0]
+        assert PROBE_CLASS_NAME in message, f"the field that IS readable must still be named: {message}"
+        assert FILTER_FEATURE in message, f"the warning must name the filter feature: {message}"
+
+    def test_criteria_survives_an_unreadable_group_name(self, caplog: pytest.LogCaptureFixture) -> None:
+        """get_class_name is plugin-owned too: its @final is a mypy pin, and a runtime override raises here."""
+        snapshot = _drive_criteria_of(_make_unnameable_group_fg, caplog)
+
+        assert snapshot.escaped is None, (
+            f"reporting a non-match must not cross GlobalFilter.criteria and kill the run: {snapshot.escaped}"
+        )
+        assert snapshot.is_false, f"a falsy return is still a plain non-match, got: {snapshot.shown}"
+        assert snapshot.drops == 0, f"a falsy non-bool is a non-match, never a recorded drop, got: {snapshot.drops}"
+        assert len(snapshot.warnings) == 1, f"the detached filter must still be reported, got: {snapshot.warnings}"
+        message = snapshot.warnings[0]
+        assert NONE_TYPE_NAME in message, f"the field that IS readable must still be named: {message}"
+        assert FILTER_FEATURE in message, f"the warning must name the filter feature: {message}"
+
+    def test_the_matching_pass_survives_an_unreadable_type_name(self) -> None:
+        """The API boundary: one unreadable field on one candidate must not end the whole matching pass."""
+        snapshot = _drive_matching_pass(partial(_make_non_bool_matcher_fg, UnnameableFalsy991()))
+
+        assert snapshot.escaped is None, f"nothing may cross identify_matched_filters: {snapshot.escaped}"
+        assert snapshot.names == (), f"a falsy return must attach no filter, got: {list(snapshot.names)}"
+        assert snapshot.drops == 0, f"a falsy non-bool is a non-match, never a recorded drop, got: {snapshot.drops}"
+
+    def test_the_matching_pass_survives_an_unreadable_group_name(self) -> None:
+        """Same at the boundary for the other plugin-owned field the report reads."""
+        snapshot = _drive_matching_pass(_make_unnameable_group_fg)
+
+        assert snapshot.escaped is None, f"nothing may cross identify_matched_filters: {snapshot.escaped}"
+        assert snapshot.names == (), f"a falsy return must attach no filter, got: {list(snapshot.names)}"
+        assert snapshot.drops == 0, f"a falsy non-bool is a non-match, never a recorded drop, got: {snapshot.drops}"
+
+
+def _make_unreadable_report_e2e_fg() -> type[FeatureGroup]:
+    """The e2e twin of the probe above: it answers the filter feature with a value it cannot name."""
+    gc.collect()
+
+    class UnreadableReportE2EFG991(FeatureGroup):
+        @classmethod
+        def input_data(cls) -> DataCreator:
+            return DataCreator({E2E_MAIN, E2E_TARGET})
+
+        @classmethod
+        def match_feature_group_criteria(
+            cls,
+            feature_name: FeatureName | str,
+            options: Options,
+            data_access_collection: Optional[DataAccessCollection] = None,
+        ) -> Any:  # Any, not bool: the falsy non-bool below is what the filter seam then tries to report.
+            if str(feature_name) == E2E_TARGET:
+                return UnnameableFalsy991()
+            return str(feature_name) == E2E_MAIN
+
+        @classmethod
+        def final_filters(cls) -> bool:
+            # The payload is not filterable data, so post-calculation row elimination must not run against it.
+            return False
+
+        @classmethod
+        def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+            payload = {
+                "names": sorted(str(f.name) for f in features.features),
+                "filter_count": len(features.filters) if features.filters else 0,
+            }
+            return {str(feature.name): [payload] for feature in features.features}
+
+    return UnreadableReportE2EFG991
+
+
+def _run_built(build: Callable[[], type[FeatureGroup]]) -> tuple[Optional[dict[str, Any]], Optional[str]]:
+    """Run E2E_MAIN under a filter matched by a group `build` makes; the escape is text, never an exception."""
+    fg = build()
+    collector = PluginCollector.enabled_feature_groups({fg})
+    global_filter = GlobalFilter()
+    global_filter.add_filter(E2E_TARGET, FilterType.EQUAL, {"value": 1})
+    results, escaped = _capture(
+        partial(
+            mloda.run_all,
+            [Feature(E2E_MAIN)],
+            compute_frameworks={PythonDictFramework},
+            plugin_collector=collector,
+            global_filter=global_filter,
+        )
+    )
+    del fg, collector
+    gc.collect()
+    if results is None:
+        return None, escaped
+    assert len(results) == 1, f"expected exactly one result frame, got: {results!r}"
+    payload = _single_row(results[0], E2E_MAIN)
+    assert isinstance(payload, dict)
+    return payload, escaped
+
+
+def test_an_unreadable_report_field_does_not_take_the_run_down_end_to_end() -> None:
+    """Through mloda.run_all: a filter that only fails to attach must never end the run it was declared for."""
+    payload, escaped = _run_built(_make_unreadable_report_e2e_fg)
+
+    assert escaped is None, f"reporting a detached filter must not take the run down: {escaped}"
+    assert payload is not None
+    assert payload["names"] == [E2E_MAIN], f"the filter feature must not attach: {payload!r}"
+    assert payload["filter_count"] == 0, f"no filter may match: {payload!r}"

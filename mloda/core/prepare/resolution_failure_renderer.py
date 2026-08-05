@@ -88,6 +88,8 @@ def _render_near_miss_block(result: EvaluationResult, feature: Feature) -> str |
 
 def _render_multiple(result: EvaluationResult, feature: Feature, callout: str | None) -> str:
     # Every identified candidate gets a line; only a candidate with a captured domain gets the suffix.
+    # The resolve_feature pointer is deliberately omitted: the message already names every candidate,
+    # which is what the pointer would surface.
     lines = "\n".join(
         f"  - {fg.__name__} ({fg.__module__})"
         + (f" [domain: {result.facts.domains[fg]}]" if fg in result.facts.domains else "")
@@ -103,7 +105,8 @@ def _render_multiple(result: EvaluationResult, feature: Feature, callout: str | 
 
 
 def _pointer_lines(callout: str | None) -> str:
-    """The trailing resolve_feature pointer and troubleshooting-link lines."""
+    """The trailing resolve_feature pointer and troubleshooting-link lines; the returned string starts
+    with a newline so callers append it bare."""
     # Only the scope widens the pointer: resolve_feature takes the domain on the Feature, not as a keyword.
     pointer_args = "name, options=..., feature_group=..." if callout else "name, options=..."
     return (

@@ -610,7 +610,10 @@ class IdentifyFeatureGroupClass:
         group_before = dict(feature.options.group)
         context_before = dict(feature.options.context)
         try:
-            matched = feature_group.match_feature_group_criteria(feature.name, feature.options, data_access_collection)
+            # bool() inside the try: reading a plugin's return is itself a plugin call (#927).
+            matched = bool(
+                feature_group.match_feature_group_criteria(feature.name, feature.options, data_access_collection)
+            )
         except Exception as exc:  # noqa: BLE001  (contained: one broken matcher must not poison other features)
             if is_match_abort(exc):
                 raise

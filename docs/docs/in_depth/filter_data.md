@@ -202,9 +202,15 @@ This means a single `GlobalFilter` can be processed differently by different Fea
 in the same pipeline: one may use the mask engine for inline masking while another uses
 filters for row elimination.
 
-If a FeatureGroup's `match_feature_group_criteria` raises while a filter is matched, that filter
-is a non-match for that probe, like a `False` return, and the drop is recorded in
-`GlobalFilter.dropped_filters`. A framework-owned raise still aborts.
+The return is read for truthiness, so any falsy value is a non-match, exactly like `False`: a hook
+that falls off the end of a branch and returns `None` attaches no filter. A falsy value that is not
+`False` is reported once per FeatureGroup and filter feature, so the detached filter is visible;
+return `True` explicitly to keep it.
+
+If a FeatureGroup's `match_feature_group_criteria` raises while a filter is matched, or returns a
+value whose truthiness test raises, that filter is a non-match for that probe, like a `False`
+return, and the drop is recorded in `GlobalFilter.dropped_filters`. A framework-owned raise still
+aborts.
 
 The option divergence warning fires only for a filter that actually attaches, once per distinct
 message per setup. A filter that matches no FeatureGroup at all is reported once after setup

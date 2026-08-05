@@ -611,6 +611,8 @@ class FeatureGroup(ABC):
         feature group, and False otherwise. The criteria may include the feature name,
         options, and data access collection.
 
+        Every caller reads the return for truthiness, so any falsy value is a non-match and any truthy a match.
+
         The if statement contains the rules. Each case has different use cases.
         You can disallow them by removing them. However, often you can just use the default.
         If you want to implement a concrete implementation, e.g. just accept specific names,

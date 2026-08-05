@@ -779,6 +779,108 @@ class TestReaderOptionsAreValidatedAtClassDefinition:
         assert "framework_set" in message
         assert "allow_explicit_none" in message
 
+    def test_reserved_key_redeclared_without_framework_set_rejected(self) -> None:
+        """Dropping the flag on the reserved key hands the framework-written key to the admit path."""
+        with pytest.raises(ValueError) as exc_info:
+
+            class RodReservedShadowReader(BaseInputData):
+                READER_OPTIONS: ClassVar[dict[str, PropertySpec]] = {
+                    "BaseInputData": PropertySpec("shadowed", allow_explicit_none=True, default=None),
+                }
+
+        message = str(exc_info.value)
+        del exc_info
+        assert "RodReservedShadowReader" in message
+        assert "BaseInputData" in message
+        assert "framework_set" in message
+        assert "reserved" in message
+
+    def test_reserved_key_redeclared_with_no_default_rejected(self) -> None:
+        """The harmful shape: a NO_DEFAULT redeclaration makes the reader veto itself on every match."""
+        with pytest.raises(ValueError) as exc_info:
+
+            class RodReservedShadowNoDefaultReader(BaseInputData):
+                READER_OPTIONS: ClassVar[dict[str, PropertySpec]] = {
+                    "BaseInputData": PropertySpec("shadowed"),
+                }
+
+        message = str(exc_info.value)
+        del exc_info
+        assert "RodReservedShadowNoDefaultReader" in message
+        assert "BaseInputData" in message
+        assert "framework_set" in message
+        assert "reserved" in message
+
+    def test_reserved_key_redeclared_plainly_rejected(self) -> None:
+        """framework_set=False is the whole defect; no second flag is needed to trigger it."""
+        with pytest.raises(ValueError) as exc_info:
+
+            class RodReservedShadowPlainReader(BaseInputData):
+                READER_OPTIONS: ClassVar[dict[str, PropertySpec]] = {
+                    "BaseInputData": PropertySpec("shadowed", default=None),
+                }
+
+        message = str(exc_info.value)
+        del exc_info
+        assert "RodReservedShadowPlainReader" in message
+        assert "BaseInputData" in message
+        assert "framework_set" in message
+        assert "reserved" in message
+
+    def test_reserved_key_shadowed_by_a_plain_mixin_rejected(self) -> None:
+        """A plain mixin runs no guard of its own, yet wins the merge ahead of the base; the subclass must raise."""
+
+        class RodShadowMixin:
+            READER_OPTIONS: ClassVar[dict[str, PropertySpec]] = {
+                "BaseInputData": PropertySpec("shadowed"),
+            }
+
+        with pytest.raises(ValueError) as exc_info:
+
+            class RodMixinShadowedReader(RodShadowMixin, BaseInputData):
+                pass
+
+        message = str(exc_info.value)
+        del exc_info
+        assert "RodMixinShadowedReader" in message
+        assert "BaseInputData" in message
+        assert "framework_set" in message
+        assert "reserved" in message
+
+    def test_reserved_key_mixin_losing_the_merge_defines_fine(self) -> None:
+        """Base-first ordering ranks the mixin BELOW the base, so the framework declaration wins and nothing raises."""
+
+        class RodLosingShadowMixin:
+            READER_OPTIONS: ClassVar[dict[str, PropertySpec]] = {
+                "BaseInputData": PropertySpec("shadowed"),
+            }
+
+        class RodMixinLosesMergeReader(BaseInputData, RodLosingShadowMixin):
+            pass
+
+        mro = RodMixinLosesMergeReader.__mro__
+        spec = RodMixinLosesMergeReader.reader_option_specs()["BaseInputData"]
+
+        assert mro.index(BaseInputData) < mro.index(RodLosingShadowMixin)
+        assert spec.framework_set is True
+        assert spec.default is None
+
+    def test_reserved_key_redeclared_with_framework_set_defines_fine(self) -> None:
+        """Control: a legitimate redeclaration keeping the flag, a sharpened explanation, still defines."""
+
+        class RodReservedKeptFrameworkReader(BaseInputData):
+            READER_OPTIONS: ClassVar[dict[str, PropertySpec]] = {
+                "BaseInputData": PropertySpec(
+                    "The matched (ReaderClass, data_access) pair, sharpened for this family.",
+                    default=None,
+                    framework_set=True,
+                ),
+            }
+
+        spec = RodReservedKeptFrameworkReader.reader_option_specs()["BaseInputData"]
+        assert spec.framework_set is True
+        assert spec.default is None
+
     def test_a_strict_allowed_values_declaration_defines_fine(self) -> None:
         """Strict specs are the point of the collapse; a valued one with an in-space default defines."""
 

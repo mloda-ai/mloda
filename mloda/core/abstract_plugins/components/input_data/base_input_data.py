@@ -24,10 +24,12 @@ from mloda.core.abstract_plugins.components.utils import (
 
 logger = logging.getLogger(__name__)
 
+RESERVED_READER_OPTION_KEY = "BaseInputData"
+
 
 class BaseInputData(ABC):
     READER_OPTIONS: ClassVar[dict[str, PropertySpec]] = {
-        "BaseInputData": PropertySpec(
+        RESERVED_READER_OPTION_KEY: PropertySpec(
             "The matched (ReaderClass, data_access) pair, written by add_base_input_data_to_options "
             "and read back by init_reader.",
             default=None,
@@ -46,9 +48,27 @@ class BaseInputData(ABC):
         cls._validate_reader_options()
 
     @classmethod
+    def _validate_reserved_reader_option_key(cls) -> None:
+        """The reserved key must survive the MRO MERGE, not just cls's own dict: a plain mixin is never
+        validated itself, yet its declaration outranks the base's and is what selection reads."""
+        for klass in cls.__mro__:
+            declared = klass.__dict__.get("READER_OPTIONS", {})
+            if RESERVED_READER_OPTION_KEY not in declared:
+                continue
+            spec = declared[RESERVED_READER_OPTION_KEY]
+            if not isinstance(spec, PropertySpec) or not spec.framework_set:
+                raise ValueError(
+                    f"{cls.__name__} merges READER_OPTIONS['{RESERVED_READER_OPTION_KEY}'] to the declaration on "
+                    f"{klass.__name__}, which is not a PropertySpec with framework_set=True; the framework writes "
+                    f"this reserved key itself, so the admit path would judge a value no user ever supplies."
+                )
+            return
+
+    @classmethod
     def _validate_reader_options(cls) -> None:
         """Reject a reader-invalid declaration where it is written, not later deep in reader matching;
-        checks only this class's own declaration so a bad child under a valid parent still raises."""
+        the per-key checks read only this class's own declaration so a bad child under a valid parent raises."""
+        cls._validate_reserved_reader_option_key()
         for key, spec in cls.__dict__.get("READER_OPTIONS", {}).items():
             if not isinstance(spec, PropertySpec):
                 raise ValueError(
@@ -386,8 +406,8 @@ class BaseInputData(ABC):
         Adding the found data access class to the options.
         """
 
-        if "BaseInputData" in options:
-            existing_data = options.get("BaseInputData")
+        if RESERVED_READER_OPTION_KEY in options:
+            existing_data = options.get(RESERVED_READER_OPTION_KEY)
             # `is True`, not a truth test: a non-bool __eq__ result (numpy array) must not raise unmarked here.
             if (existing_data == (cls_to_be_added, matched_data_access)) is True:
                 return
@@ -406,7 +426,7 @@ class BaseInputData(ABC):
                     f"existing={existing_label}"
                 )
             )
-        options.add_to_group("BaseInputData", (cls_to_be_added, matched_data_access))
+        options.add_to_group(RESERVED_READER_OPTION_KEY, (cls_to_be_added, matched_data_access))
 
     def init_reader(self, options: Optional[Options]) -> tuple["BaseInputData", Any]:
         if options is None:
@@ -420,7 +440,7 @@ class BaseInputData(ABC):
                 "  })"
             )
 
-        reader_data_access = options.get("BaseInputData")
+        reader_data_access = options.get(RESERVED_READER_OPTION_KEY)
 
         if reader_data_access is None:
             raise ValueError(

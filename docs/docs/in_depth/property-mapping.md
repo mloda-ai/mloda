@@ -82,7 +82,7 @@ does not understand can be absorbed silently.
 | Match time (guard installed at class definition) | `required_when` | A conditionally required option is present | `Options` | Non-match (`False`) |
 | Class definition (mixin) | Universal-matcher diagnostic | An all-optional `PROPERTY_MAPPING` inherits the configuration matcher, so it matches any name with empty options | The class | `logger.warning`, unless `ALLOW_UNIVERSAL_MATCHER = True` |
 | Author time (reader surface) | `mypy --strict` | `READER_OPTIONS` holds `PropertySpec` values | The constructor call | mypy error at the declaration |
-| Class definition (`BaseInputData.__init_subclass__`) | Spec type + surface guard | Every value IS a `PropertySpec` and declares nothing inert on a reader (`match_guard`, `deferred_binding`, `context=False`, enforcement fields on a `framework_set` key) | Every value in that class's declaration | `ValueError` naming class, key and field |
+| Class definition (`BaseInputData.__init_subclass__`) | Spec type + surface guard | Every value IS a `PropertySpec` and declares nothing inert on a reader (`match_guard`, `deferred_binding`, `context=False`, enforcement fields on a `framework_set` key); the reserved key's **winning** declaration across the MRO keeps `framework_set=True` | Every value in that class's declaration, plus the reserved key as the MRO merge resolves it | `ValueError` naming class, key and field |
 | Match time (reader selection) | Presence + strict validation | Required keys are present and present strict values pass, element-wise; `framework_set` keys exempt | The candidate's merged specs and the options | Reader non-match. Addressed-reader and supplied-value failures record a `stage="input_data"` rejection; unaddressed absence and an unjudgeable predicate decline silently |
 | Match time (reader code) | `reader_option(key, options)` | Supplied value, else the declared `default` | The key name and the options | `ValueError` for an undeclared key or an absent `NO_DEFAULT` one |
 
@@ -146,7 +146,9 @@ consequences keep the shared type honest on this surface:
   `"BaseInputData"` pair written by `add_base_input_data_to_options` and read by `init_reader`.
   Such keys are exempt from enforcement, so enforcement fields on them are rejected too, as is
   `allow_explicit_none`, which the admit path never reads on a framework-written key; on
-  `PROPERTY_MAPPING` the field is rejected outright.
+  `PROPERTY_MAPPING` the field is rejected outright. The reserved key is checked as the MRO merge
+  resolves it: its **winning** declaration must keep `framework_set=True`, so neither a subclass nor a
+  plain mixin can turn the framework-written key into a user-enforced one.
 
 `READER_OPTIONS` merges across the MRO (`reader_option_specs()`, most-derived declaration winning),
 so a concrete reader inherits its family's keys and redeclares nothing, and

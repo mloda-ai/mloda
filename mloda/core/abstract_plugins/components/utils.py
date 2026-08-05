@@ -26,7 +26,7 @@ def contained_raise_log_level(exc: BaseException) -> int:
 def escalate_match_abort(exc: E) -> E:
     """Mark a framework-owned raise so the match seam re-raises it instead of containing it as a non-match.
 
-    Mark-or-contain policy: see IdentifyFeatureGroupClass._filter_feature_group_by_criteria.
+    Mark-or-contain policy: see call_match_hook.
     """
     # __dict__, not setattr: setattr raises on a frozen-dataclass exception, and failing to mark must not
     # replace the exception being marked.

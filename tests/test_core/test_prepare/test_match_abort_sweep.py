@@ -43,6 +43,7 @@ assert _CORE_ROOT.is_dir(), f"core root not found; check the parents index for t
 # Modules the match path runs through, repo-relative. The graph never leaves this set, so a module missing
 # here is a blind spot; test_every_declared_module_is_reachable keeps stale entries out.
 MATCH_PATH_MODULES: dict[str, str] = {
+    "mloda/core/abstract_plugins/components/match_hook.py": "the helper that owns the call and the containment",
     "mloda/core/prepare/identify_feature_group.py": "the containment seam itself",
     "mloda/core/abstract_plugins/feature_group.py": "the default matcher every group inherits",
     "mloda/core/abstract_plugins/components/feature_chainer/feature_chain_parser_mixin.py": "the chain-parser matcher",
@@ -893,12 +894,12 @@ def test_the_swallowing_closure_is_transitive() -> None:
 
 def test_known_escalating_handlers_are_enumerated() -> None:
     """Canary: the handlers that re-raise today are all seen, so a silently empty handler sweep cannot pass."""
-    seam = "mloda/core/prepare/identify_feature_group.py"
+    match_hook = "mloda/core/abstract_plugins/components/match_hook.py"
     feature_group = "mloda/core/abstract_plugins/feature_group.py"
     mixin = "mloda/core/abstract_plugins/components/feature_chainer/feature_chain_parser_mixin.py"
     guards = "mloda/core/abstract_plugins/components/feature_chainer/feature_chain_author_guards.py"
     expected = {
-        (seam, "_filter_feature_group_by_criteria"),
+        (match_hook, "call_match_hook"),
         (feature_group, "is_root"),
         (mixin, "match_parser_criteria"),
         (guards, "check_required_when"),
@@ -1490,8 +1491,8 @@ def _splice_narrow_handler(source: str, function: str) -> tuple[str, int]:
 
 def test_the_sweep_flags_a_narrow_handler_spliced_above_the_real_seam_check() -> None:
     """End to end: the real reachable set and the classifier on real source, mutated in memory only."""
-    module = "mloda/core/prepare/identify_feature_group.py"
-    function = "_filter_feature_group_by_criteria"
+    module = "mloda/core/abstract_plugins/components/match_hook.py"
+    function = "call_match_hook"
     names = frozenset(name for reached_module, name in sweep().reachable if reached_module == module)
     assert function in names, f"{function} is no longer reachable; splice into another reached definition"
 

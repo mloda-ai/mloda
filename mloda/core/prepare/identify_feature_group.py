@@ -33,11 +33,11 @@ from mloda.core.abstract_plugins.components.match_rejection import (
     MatchRejection,
     record_match_rejection,
 )
+from mloda.core.abstract_plugins.components.match_hook import call_match_hook
 from mloda.core.abstract_plugins.components.utils import (
     as_str,
     contained_raise_log_level,
     contained_raise_reason,
-    is_match_abort,
     safe_field,
 )
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
@@ -596,61 +596,53 @@ class IdentifyFeatureGroupClass:
     ) -> bool:
         """A raise out of the match hook is a non-match for that candidate only, not a run-wide abort (#845).
 
-        Policy: mark a raise with escalate_match_abort when it reports a misconfiguration, a contradiction or a
-        framework defect; leave it contained when it is one candidate's own judgment or own defect. Every raise
-        the match path reaches must say which, at the raise: tests/test_core/test_prepare/test_match_abort_sweep.py
-        enforces that. A mark only survives if every handler in between re-raises it (``safe_field`` does not). A
-        contained raise is kept as text, never as an exception object whose traceback would pin the plugin
-        class. The per-candidate rejection window, reset in the finally, keys reasons by candidate class.
-        An option-write conflict during reader selection escalates as a contradiction, decided at the
-        reader-selection raise.
+        A contained raise is kept as text, never as an exception object whose traceback would pin the plugin
+        class. The recording runs inside the per-candidate rejection window, reset in the finally, which keys
+        reasons by candidate class.
+
+        Mark-or-contain policy: see call_match_hook.
         """
         token = MATCH_REJECTION_REASONS.set({})
         # Shallow copies, taken per candidate so an earlier match's write survives a later candidate's raise.
         group_before = dict(feature.options.group)
         context_before = dict(feature.options.context)
         try:
-            # bool() inside the try: reading a plugin's return is itself a plugin call (#927).
-            matched = bool(
-                feature_group.match_feature_group_criteria(feature.name, feature.options, data_access_collection)
-            )
-        except Exception as exc:  # noqa: BLE001  (contained: one broken matcher must not poison other features)
-            if is_match_abort(exc):
-                raise
-            # Only the contained branch rolls back: a matcher that returns True keeps its write, which is how a
-            # matched reader is linked through mloda.
-            feature.options.group.clear()
-            feature.options.group.update(group_before)
-            feature.options.context.clear()
-            feature.options.context.update(context_before)
-            if isinstance(exc, PropertyValueRejection):
-                # Text, not exc: a retained record must not pin the traceback, its frames and the plugin class.
-                logger.debug(
-                    "%s rejected an option value while matching '%s': %s",
-                    feature_group.get_class_name(),
-                    feature.name,
-                    safe_field(functools.partial(str, exc), type(exc).__name__),
-                )
-                record_match_rejection(feature_group.get_class_name(), str(exc))
-            else:
-                reason = contained_raise_reason(exc)
-                logger.log(
-                    contained_raise_log_level(exc),
-                    "%s %s while matching '%s'; treating it as a non-match.",
-                    feature_group.get_class_name(),
-                    reason,
-                    feature.name,
-                )
-                self._matcher_errors[feature_group] = reason
-            matched = False
+            outcome = call_match_hook(feature_group, feature.name, feature.options, data_access_collection)
+            exc = outcome.error
+            if exc is not None:
+                # Only the contained branch rolls back: a matcher that returns True keeps its write,
+                # which is how a matched reader is linked through mloda.
+                feature.options.group.clear()
+                feature.options.group.update(group_before)
+                feature.options.context.clear()
+                feature.options.context.update(context_before)
+                if isinstance(exc, PropertyValueRejection):
+                    # Text, not exc: a retained record must not pin the traceback, its frames and the plugin class.
+                    logger.debug(
+                        "%s rejected an option value while matching '%s': %s",
+                        feature_group.get_class_name(),
+                        feature.name,
+                        safe_field(functools.partial(str, exc), type(exc).__name__),
+                    )
+                    record_match_rejection(feature_group.get_class_name(), str(exc))
+                else:
+                    reason = contained_raise_reason(exc)
+                    logger.log(
+                        contained_raise_log_level(exc),
+                        "%s %s while matching '%s'; treating it as a non-match.",
+                        feature_group.get_class_name(),
+                        reason,
+                        feature.name,
+                    )
+                    self._matcher_errors[feature_group] = reason
         finally:
             recorded = MATCH_REJECTION_REASONS.get() or {}
             MATCH_REJECTION_REASONS.reset(token)
-        if not matched and recorded:
+        if not outcome.matched and recorded:
             # Everything recorded during this candidate's window belongs to this candidate, whatever
             # owner name an inner delegation stamped; first recorded reason wins (insertion order).
             self._match_rejections[feature_group] = next(iter(recorded.values()))
-        return matched
+        return outcome.matched
 
     def _filter_feature_group_by_domain(self, feature_group: type[FeatureGroup], feature: Feature) -> bool:
         """Decision-side domain gate: unguarded, so a raising get_domain() still fails the engine loudly."""

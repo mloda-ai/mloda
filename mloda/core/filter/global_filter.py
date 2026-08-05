@@ -13,7 +13,8 @@ from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.abstract_plugins.components.feature import Feature
-from mloda.core.abstract_plugins.components.utils import contained_raise_reason, is_match_abort
+from mloda.core.abstract_plugins.components.match_hook import call_match_hook
+from mloda.core.abstract_plugins.components.utils import contained_raise_reason
 from mloda.core.filter.filter_type_enum import FilterType
 from mloda.core.filter.single_filter import SingleFilter
 from mloda.core.abstract_plugins.components.default_options_key import DefaultOptionKeys
@@ -220,22 +221,18 @@ class GlobalFilter:
         would pin the plugin class. The level ignores the exception type, unlike the seam, because nothing else
         surfaces the reason here. No option rollback: the hook sees a per-match deepcopy.
 
-        Mark-or-contain policy: see IdentifyFeatureGroupClass._filter_feature_group_by_criteria.
+        Mark-or-contain policy: see call_match_hook.
         """
-        try:
-            # bool() inside the try: reading a plugin's return is itself a plugin call (#927).
-            returned = feature_group.match_feature_group_criteria(
-                filter.filter_feature.name, filter.filter_feature.options, data_access_collection
-            )
-            matched = bool(returned)
-            if not matched and not isinstance(returned, bool):
-                self._report_falsy_match(feature_group, str(filter.filter_feature.name), returned)
-            return matched
-        except Exception as exc:  # noqa: BLE001  (contained: one broken matcher must not fail the whole run)
-            if is_match_abort(exc):
-                raise
-            self._record_dropped_filter(feature_group, str(filter.filter_feature.name), contained_raise_reason(exc))
+        outcome = call_match_hook(
+            feature_group, filter.filter_feature.name, filter.filter_feature.options, data_access_collection
+        )
+        if outcome.error is not None:
+            reason = contained_raise_reason(outcome.error)
+            self._record_dropped_filter(feature_group, str(filter.filter_feature.name), reason)
             return False
+        if not outcome.matched and not isinstance(outcome.returned, bool):
+            self._report_falsy_match(feature_group, str(filter.filter_feature.name), outcome.returned)
+        return outcome.matched
 
     def _record_dropped_filter(self, feature_group: type[FeatureGroup], filter_feature_name: str, reason: str) -> None:
         """Record the drop: WARNING on a key's first drop, DEBUG after, as the hook is probed per served feature."""

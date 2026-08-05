@@ -10,7 +10,7 @@ if TYPE_CHECKING:
 
 from mloda.core.abstract_plugins.components.domain import Domain
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
-from mloda.core.abstract_plugins.components.hashable_dict import _CYCLE, _deep_equal, _deep_hashable
+from mloda.core.abstract_plugins.components.hashable_dict import _CYCLE, HashableDict, _deep_equal, _deep_hashable
 from mloda.core.abstract_plugins.components.index.index import Index
 from mloda.core.abstract_plugins.components.link import Link
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
@@ -408,6 +408,9 @@ class Feature:
             )
         if isinstance(value, Options):
             return ("options", Feature._reduce(value.group, seen))
+        if isinstance(value, HashableDict):
+            # _reduce's output is an equality key, so a node keeps its type tag here.
+            return ("hashable_dict", Feature._reduce(value.data, seen))
         if isinstance(value, (dict, list, tuple, frozenset, set)):
             # _reduce handles containers itself, so it needs the same cycle guard as _deep_hashable.
             if id(value) in seen:

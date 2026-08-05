@@ -1,4 +1,5 @@
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 from mloda.core.abstract_plugins.components.utils import unhashable_part
 
@@ -24,22 +25,35 @@ class _CycleMarker:
 
 # A cyclic value hashes instead of raising RecursionError. Mirrors the id() visited guard in
 # Feature._reduce. _deep_equal mirrors this normalization for the == that such a collision reaches;
-# residual: set values and containers whose type overrides __eq__ are still plain ==.
+# residual: set values and containers whose type overrides __eq__ (including subclasses of a
+# registered node) fall back to plain == and reset the path. A cycle routed through a nested Feature
+# also resets the path and still raises RecursionError: Feature equality reads more fields than a
+# dict target can express, so it is not a registered node and carries its own guard in _reduce.
 _CYCLE = _CycleMarker()
 
 # Nodes (Options, HashableDict) register themselves here: hashable_dict cannot import options,
 # since options imports it.
-_NODE_KINDS: list[tuple[type, Callable[[Any], dict[Any, Any]]]] = []
+_NODE_KINDS: dict[type, Callable[[Any], dict[Any, Any]]] = {}
+_NODE_TYPES: tuple[type, ...] = ()
 
 
 def register_deep_node(kind: type, target: Callable[[Any], dict[Any, Any]]) -> None:
-    """Values of ``kind`` are walked into via ``target``, so the visited path survives the nesting."""
-    _NODE_KINDS.append((kind, target))
+    """Values of ``kind`` are walked into via ``target``, so the visited path survives the nesting.
+
+    ``target`` must return the same dict object on every call for the same value: termination
+    depends on that dict's id landing in the visited path, and a rebuilt dict recurses unbounded.
+    Re-registering a kind replaces its entry.
+    """
+    global _NODE_TYPES
+    _NODE_KINDS[kind] = target
+    _NODE_TYPES = tuple(_NODE_KINDS)
 
 
 def _node_target(value: Any, dunder: str) -> tuple[type, dict[Any, Any]] | None:
     """The registered kind and the dict it is walked as, or None when its own dunder must decide."""
-    for kind, target in _NODE_KINDS:
+    if not isinstance(value, _NODE_TYPES):
+        return None
+    for kind, target in _NODE_KINDS.items():
         if isinstance(value, kind) and getattr(type(value), dunder) is getattr(kind, dunder):
             return kind, target(value)
     return None
@@ -99,15 +113,18 @@ def _deep_equal(a: Any, b: Any) -> bool:
 
 
 def _walk_equal(a: Any, b: Any, path_a: set[int], path_b: set[int]) -> bool:
-    node_a = _node_target(a, "__eq__")
-    if node_a is not None:
-        node_b = _node_target(b, "__eq__")
-        # Only matching kinds are walked; a differing or absent node keeps its own type identity.
-        if node_b is not None and node_b[0] is node_a[0]:
-            return _walk_equal(node_a[1], node_b[1], path_a, path_b)
-        return a is b or bool(a == b)
+    # _container_kind's exact-type fast path runs first; no registered kind is a dict/list/tuple
+    # subclass, so consulting the node registry only when it finds nothing is equivalent.
     kind = _container_kind(a)
-    if kind is None or _container_kind(b) is not kind:
+    if kind is None:
+        node_a = _node_target(a, "__eq__")
+        if node_a is not None:
+            node_b = _node_target(b, "__eq__")
+            # Only matching kinds are walked; a differing or absent node keeps its own type identity.
+            if node_b is not None and node_b[0] is node_a[0]:
+                return _walk_equal(node_a[1], node_b[1], path_a, path_b)
+        return a is b or bool(a == b)
+    if _container_kind(b) is not kind:
         return a is b or bool(a == b)
     on_a, on_b = id(a) in path_a, id(b) in path_b
     if on_a or on_b:

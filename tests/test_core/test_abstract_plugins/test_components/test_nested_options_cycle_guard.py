@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.hashable_dict import HashableDict
 from mloda.core.abstract_plugins.components.options import Options
 
@@ -35,6 +36,40 @@ def _hashable_dict_cycle_via_options(marker: Any = None) -> HashableDict:
     inner["back"] = Options(group={"o": hashable})
     inner["marker"] = marker
     return hashable
+
+
+def _feature_with_child_option(value: Any) -> Feature:
+    feature = Feature(name="y", options={})
+    feature.child_options = Options(group={"k": value})
+    return feature
+
+
+class InheritingOptions(Options):
+    """Subclass adding nothing: both dunders stay Options'."""
+
+
+class InheritingHashableDict(HashableDict):
+    """Subclass adding nothing: both dunders stay HashableDict's."""
+
+
+class DisagreeingOptions(Options):
+    """Subclass whose own __eq__ refuses every comparison."""
+
+    def __eq__(self, other: object) -> bool:
+        return False
+
+    def __hash__(self) -> int:
+        return Options.__hash__(self)
+
+
+class DisagreeingHashableDict(HashableDict):
+    """Subclass whose own __eq__ refuses every comparison."""
+
+    def __eq__(self, other: object) -> bool:
+        return False
+
+    def __hash__(self) -> int:
+        return HashableDict.__hash__(self)
 
 
 def _acyclic_unrolled(marker: Any = None) -> Options:
@@ -142,3 +177,78 @@ class TestAcyclicNestedNodesUnchanged:
 
         assert left == right
         assert hash(left) == hash(right)
+
+
+class TestChildOptionsKeepsNestedNodeTypeIdentity:
+    def test_a_hashable_dict_child_option_is_not_equal_to_a_plain_dict(self) -> None:
+        assert _feature_with_child_option(HashableDict({"a": 1})) != _feature_with_child_option({"a": 1})
+        assert _feature_with_child_option({"a": 1}) != _feature_with_child_option(HashableDict({"a": 1}))
+
+    def test_a_hashable_dict_and_a_plain_dict_child_option_do_not_collapse_in_a_set(self) -> None:
+        features = {_feature_with_child_option(HashableDict({"a": 1})), _feature_with_child_option({"a": 1})}
+        assert len(features) == 2
+
+    def test_an_options_child_option_is_not_equal_to_a_plain_dict(self) -> None:
+        assert _feature_with_child_option(Options(group={"a": 1})) != _feature_with_child_option({"a": 1})
+        assert _feature_with_child_option({"a": 1}) != _feature_with_child_option(Options(group={"a": 1}))
+
+    def test_an_options_child_option_is_not_equal_to_a_hashable_dict(self) -> None:
+        assert _feature_with_child_option(Options(group={"a": 1})) != _feature_with_child_option(HashableDict({"a": 1}))
+        assert _feature_with_child_option(HashableDict({"a": 1})) != _feature_with_child_option(Options(group={"a": 1}))
+
+    def test_an_options_and_a_hashable_dict_child_option_do_not_collapse_in_a_set(self) -> None:
+        features = {
+            _feature_with_child_option(Options(group={"a": 1})),
+            _feature_with_child_option(HashableDict({"a": 1})),
+        }
+        assert len(features) == 2
+
+    def test_equal_hashable_dict_child_options_compare_equal_and_hash_alike(self) -> None:
+        left = _feature_with_child_option(HashableDict({"a": [1, {"b": 2}]}))
+        right = _feature_with_child_option(HashableDict({"a": [1, {"b": 2}]}))
+
+        assert left == right
+        assert hash(left) == hash(right)
+
+    def test_differing_hashable_dict_child_options_compare_unequal(self) -> None:
+        assert _feature_with_child_option(HashableDict({"a": 1})) != _feature_with_child_option(HashableDict({"a": 2}))
+
+    def test_a_cycle_in_a_hashable_dict_child_option_does_not_raise(self) -> None:
+        feature = _feature_with_child_option(_hashable_dict_cycle())
+        assert isinstance(hash(feature), int)
+        assert feature == feature
+
+    def test_a_cycle_in_an_options_child_option_does_not_raise(self) -> None:
+        feature = _feature_with_child_option(_options_cycle())
+        assert isinstance(hash(feature), int)
+        assert feature == feature
+
+
+class TestNodeSubclassesFollowTheirOwnDunders:
+    def test_an_inheriting_options_subclass_is_walked_as_options(self) -> None:
+        left = Options(group={"k": InheritingOptions(group={"a": 1})})
+        right = Options(group={"k": Options(group={"a": 1})})
+
+        assert left == right
+        assert right == left
+        assert hash(left) == hash(right)
+
+    def test_an_inheriting_hashable_dict_subclass_is_walked_as_hashable_dict(self) -> None:
+        left = Options(group={"k": InheritingHashableDict({"a": 1})})
+        right = Options(group={"k": HashableDict({"a": 1})})
+
+        assert left == right
+        assert right == left
+        assert hash(left) == hash(right)
+
+    def test_an_options_subclass_overriding_eq_decides_for_itself(self) -> None:
+        left = Options(group={"k": DisagreeingOptions(group={"a": 1})})
+        right = Options(group={"k": DisagreeingOptions(group={"a": 1})})
+
+        assert left != right
+
+    def test_a_hashable_dict_subclass_overriding_eq_decides_for_itself(self) -> None:
+        left = Options(group={"k": DisagreeingHashableDict({"a": 1})})
+        right = Options(group={"k": DisagreeingHashableDict({"a": 1})})
+
+        assert left != right

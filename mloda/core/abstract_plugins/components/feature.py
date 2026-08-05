@@ -10,7 +10,7 @@ if TYPE_CHECKING:
 
 from mloda.core.abstract_plugins.components.domain import Domain
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
-from mloda.core.abstract_plugins.components.hashable_dict import _make_hashable
+from mloda.core.abstract_plugins.components.hashable_dict import _deep_hashable
 from mloda.core.abstract_plugins.components.index.index import Index
 from mloda.core.abstract_plugins.components.link import Link
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
@@ -357,7 +357,7 @@ class Feature:
         """A value-equal Feature owning the mutable containers __eq__/__hash__ read (#910).
 
         options and child_options are rebuilt while every option VALUE stays shared by reference:
-        _make_hashable falls back to repr() for an unhashable non-container leaf and the default repr
+        _deep_hashable falls back to repr() for an unhashable non-container leaf and the default repr
         embeds the object address, so deep-copying a value would silently shift this Feature's hash and
         break the very dedup the copy protects. Both containers are written in place by the engine
         (intake forwarding, strict_type_enforcement, matcher writes), which is what the copy stops.
@@ -415,7 +415,7 @@ class Feature:
             return frozenset(Feature._reduce(item, seen) for item in value)
         if isinstance(value, (list, tuple)):
             return tuple(Feature._reduce(item, seen) for item in value)
-        return _make_hashable(value)
+        return _deep_hashable(value)
 
     def is_different_data_type(self, other: Feature) -> bool:
         return self.name == other.name and self.data_type != other.data_type
@@ -428,7 +428,7 @@ class Feature:
         relevant = {key: context[key] for key in split_keys if key in context}
         if not relevant:
             return ()
-        return _make_hashable(relevant)
+        return _deep_hashable(relevant)
 
     def _grouping_hash(self, split_keys: frozenset[str] | None, include_data_type: bool) -> int:
         keys = self.options.inherited_context_keys if split_keys is None else split_keys

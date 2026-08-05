@@ -390,7 +390,7 @@ def _leaf_feature(leaf: _SfoUnhashableLeaf) -> Feature:
 def test_a_filter_feature_with_an_unhashable_option_value_keeps_its_hash() -> None:
     """Structural pin: the ownership copy must SHARE every option value, never copy it.
 
-    _make_hashable falls back to repr() for an unhashable non-container leaf and the default repr
+    _deep_hashable falls back to repr() for an unhashable non-container leaf and the default repr
     embeds the object address, so swapping the copy for a deepcopy silently shifts the stored hash.
     """
     feature = _leaf_feature(_SfoUnhashableLeaf())

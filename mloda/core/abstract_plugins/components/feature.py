@@ -10,7 +10,7 @@ if TYPE_CHECKING:
 
 from mloda.core.abstract_plugins.components.domain import Domain
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
-from mloda.core.abstract_plugins.components.hashable_dict import _deep_hashable
+from mloda.core.abstract_plugins.components.hashable_dict import _CYCLE, _deep_hashable
 from mloda.core.abstract_plugins.components.index.index import Index
 from mloda.core.abstract_plugins.components.link import Link
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
@@ -407,6 +407,11 @@ class Feature:
             )
         if isinstance(value, Options):
             return ("options", Feature._reduce(value.group, seen))
+        if isinstance(value, (dict, list, tuple, frozenset, set)):
+            # _reduce handles containers itself, so it needs the same cycle guard as _deep_hashable.
+            if id(value) in seen:
+                return _CYCLE
+            seen = seen | {id(value)}
         if isinstance(value, dict):
             return tuple(
                 sorted(((key, Feature._reduce(val, seen)) for key, val in value.items()), key=lambda kv: kv[0])

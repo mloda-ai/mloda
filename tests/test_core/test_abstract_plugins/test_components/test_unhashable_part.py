@@ -12,7 +12,8 @@ import pytest
 from mloda.core.abstract_plugins.components import feature as feature_module
 from mloda.core.abstract_plugins.components import hashable_dict as hashable_dict_module
 from mloda.core.abstract_plugins.components import options as options_module
-from mloda.core.abstract_plugins.components.hashable_dict import HashableDict, _deep_hashable
+from mloda.core.abstract_plugins.components.feature import Feature
+from mloda.core.abstract_plugins.components.hashable_dict import _CYCLE, HashableDict, _deep_hashable
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.components.utils import unhashable_part
 from mloda.core.filter import filter_parameter as filter_parameter_module
@@ -241,6 +242,59 @@ class TestPublicEntryPoints:
         right = Options(group={"leaf": _RaisingHash("acme")})
         assert left == right
         assert hash(left) == hash(right)
+
+
+class TestDeepHashableCycleGuard:
+    """A self-referential container collapses to a back-reference marker instead of recursing forever."""
+
+    def test_self_referential_list_hashes(self) -> None:
+        cyclic: list[Any] = []
+        cyclic.append(cyclic)
+        assert isinstance(hash(Options(group={"a": cyclic})), int)
+
+    def test_self_referential_dict_hashes(self) -> None:
+        cyclic: dict[str, Any] = {}
+        cyclic["self"] = cyclic
+        assert _deep_hashable(cyclic) == (("self", _CYCLE),)
+
+    def test_structurally_equal_cycles_hash_alike(self) -> None:
+        left: list[Any] = []
+        left.append(left)
+        right: list[Any] = []
+        right.append(right)
+        assert hash(Options(group={"a": left})) == hash(Options(group={"a": right}))
+
+    def test_mutually_referential_containers_hash(self) -> None:
+        left: list[Any] = []
+        right: dict[str, Any] = {"left": left}
+        left.append(right)
+        assert isinstance(hash(HashableDict({"a": left})), int)
+
+    def test_cycle_nested_under_a_tuple_hashes(self) -> None:
+        cyclic: list[Any] = []
+        cyclic.append(cyclic)
+        assert isinstance(hash(HashableDict({"a": (cyclic,)})), int)
+
+    def test_the_back_reference_becomes_the_cycle_marker(self) -> None:
+        cyclic: list[Any] = []
+        cyclic.append(cyclic)
+        assert _deep_hashable(cyclic) == (_CYCLE,)
+
+    def test_the_marker_is_not_reproducible_from_user_data(self) -> None:
+        cyclic: list[Any] = []
+        cyclic.append(cyclic)
+        assert _deep_hashable([["<cycle>"]]) != _deep_hashable(cyclic)
+
+    def test_repeated_sibling_is_not_treated_as_a_cycle(self) -> None:
+        shared = [1, 2]
+        assert _deep_hashable([shared, shared]) == ((1, 2), (1, 2))
+
+    def test_feature_hashes_a_cyclic_child_option_value(self) -> None:
+        cyclic: list[Any] = []
+        cyclic.append(cyclic)
+        feature = Feature(name="f")
+        feature.child_options = Options(group={"a": cyclic})
+        assert isinstance(hash(feature), int)
 
 
 class TestCrossModuleImportsFollowTheRename:

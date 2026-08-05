@@ -44,6 +44,15 @@ class BaseInputData(ABC):
         pass
 
     def __init_subclass__(cls, **kwargs: Any) -> None:
+        """Guards run at class definition only: mutating READER_OPTIONS afterwards or overriding
+        __init_subclass__ without calling super() defeats them."""
+        # Checked before super(): a cooperative later-in-MRO hook may warm the cache during the
+        # super() chain; here cls.__dict__ still holds only what the class body wrote.
+        if "_reader_option_specs_cache" in cls.__dict__:
+            raise ValueError(
+                f"{cls.__name__} assigns _reader_option_specs_cache in its class body; the merge cache "
+                f"is framework-written and must never be declared by a reader."
+            )
         super().__init_subclass__(**kwargs)
         cls._validate_reader_options()
 
@@ -67,54 +76,79 @@ class BaseInputData(ABC):
     @classmethod
     def _validate_reader_options(cls) -> None:
         """Reject a reader-invalid declaration where it is written, not later deep in reader matching;
-        the per-key checks read only this class's own declaration so a bad child under a valid parent raises."""
+        checks this class's own declaration plus any plain-mixin declaration reaching its merge."""
         cls._validate_reserved_reader_option_key()
-        for key, spec in cls.__dict__.get("READER_OPTIONS", {}).items():
-            if not isinstance(spec, PropertySpec):
+        for key, spec in cls._reader_options_declaration(cls).items():
+            cls._validate_reader_option_spec(cls.__name__, key, spec)
+        for klass in cls.__mro__[1:]:
+            # Real inheritance only: an ABC.register virtual subclass answers issubclass True
+            # without ever running __init_subclass__, so it never validated itself.
+            if BaseInputData in klass.__mro__:
+                continue
+            for key, spec in cls._reader_options_declaration(klass).items():
+                cls._validate_reader_option_spec(klass.__name__, key, spec, via=cls.__name__)
+
+    @staticmethod
+    def _reader_options_declaration(klass: type) -> dict[str, Any]:
+        """The class's own READER_OPTIONS, rejected loudly when it is not a dict."""
+        declared = klass.__dict__.get("READER_OPTIONS", {})
+        if not isinstance(declared, dict):
+            raise ValueError(
+                f"{klass.__name__}.READER_OPTIONS is a {type(declared).__name__}, not a dict. "
+                f"Declare a dict mapping option keys to PropertySpec instances."
+            )
+        return declared
+
+    @staticmethod
+    def _validate_reader_option_spec(owner: str, key: str, spec: Any, via: Optional[str] = None) -> None:
+        """The per-key reader rules; owner names the class the declaration is written on,
+        via names the class definition that reached it through the merge."""
+        suffix = "" if via is None else f" (reached defining {via})"
+        if not isinstance(spec, PropertySpec):
+            raise ValueError(
+                f"{owner}.READER_OPTIONS['{key}'] is a {type(spec).__name__}, not a PropertySpec. "
+                f"Construct PropertySpec(...) instead.{suffix}"
+            )
+        if spec.match_guard is not None:
+            raise ValueError(
+                f"{owner}.READER_OPTIONS['{key}'] declares a match_guard, which is name-matching "
+                f"machinery and silently inert on a reader.{suffix}"
+            )
+        if spec.deferred_binding:
+            raise ValueError(
+                f"{owner}.READER_OPTIONS['{key}'] declares deferred_binding=True, which is the "
+                f"name-capture exemption; a reader key has no name path.{suffix}"
+            )
+        if spec.context is False:
+            raise ValueError(
+                f"{owner}.READER_OPTIONS['{key}'] declares context=False, which places a "
+                f"materialized value; readers place none.{suffix}"
+            )
+        if spec.framework_set:
+            if spec.strict_validation:
                 raise ValueError(
-                    f"{cls.__name__}.READER_OPTIONS['{key}'] is a {type(spec).__name__}, not a PropertySpec. "
-                    f"Construct PropertySpec(...) instead."
+                    f"{owner}.READER_OPTIONS['{key}'] combines framework_set=True with "
+                    f"strict_validation=True; the framework-written key is exempt from user-value "
+                    f"validation, so strictness would be silently inert.{suffix}"
                 )
-            if spec.match_guard is not None:
+            if spec.required_when is not None:
                 raise ValueError(
-                    f"{cls.__name__}.READER_OPTIONS['{key}'] declares a match_guard, which is name-matching "
-                    f"machinery and silently inert on a reader."
+                    f"{owner}.READER_OPTIONS['{key}'] combines framework_set=True with a "
+                    f"required_when predicate; the framework-written key is exempt from user-value "
+                    f"validation, so the predicate would be silently inert.{suffix}"
                 )
-            if spec.deferred_binding:
+            if spec.allow_explicit_none:
                 raise ValueError(
-                    f"{cls.__name__}.READER_OPTIONS['{key}'] declares deferred_binding=True, which is the "
-                    f"name-capture exemption; a reader key has no name path."
+                    f"{owner}.READER_OPTIONS['{key}'] combines framework_set=True with "
+                    f"allow_explicit_none=True; the admit path skips the framework-written key, "
+                    f"so the flag cannot affect reader selection.{suffix}"
                 )
-            if spec.context is False:
+            if is_no_default(spec.default):
                 raise ValueError(
-                    f"{cls.__name__}.READER_OPTIONS['{key}'] declares context=False, which places a "
-                    f"materialized value; readers place none."
+                    f"{owner}.READER_OPTIONS['{key}'] declares framework_set=True without a "
+                    f"declared default; the framework-written key must declare its absent-state "
+                    f"default explicitly, None included.{suffix}"
                 )
-            if spec.framework_set:
-                if spec.strict_validation:
-                    raise ValueError(
-                        f"{cls.__name__}.READER_OPTIONS['{key}'] combines framework_set=True with "
-                        f"strict_validation=True; the framework-written key is exempt from user-value "
-                        f"validation, so strictness would be silently inert."
-                    )
-                if spec.required_when is not None:
-                    raise ValueError(
-                        f"{cls.__name__}.READER_OPTIONS['{key}'] combines framework_set=True with a "
-                        f"required_when predicate; the framework-written key is exempt from user-value "
-                        f"validation, so the predicate would be silently inert."
-                    )
-                if spec.allow_explicit_none:
-                    raise ValueError(
-                        f"{cls.__name__}.READER_OPTIONS['{key}'] combines framework_set=True with "
-                        f"allow_explicit_none=True; the admit path skips the framework-written key, "
-                        f"so the flag cannot affect reader selection."
-                    )
-                if is_no_default(spec.default):
-                    raise ValueError(
-                        f"{cls.__name__}.READER_OPTIONS['{key}'] declares framework_set=True without a "
-                        f"declared default; the framework-written key must declare its absent-state "
-                        f"default explicitly, None included."
-                    )
 
     @classmethod
     def _merged_reader_option_specs(cls) -> dict[str, PropertySpec]:

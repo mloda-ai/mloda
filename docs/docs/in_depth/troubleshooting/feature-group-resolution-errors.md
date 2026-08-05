@@ -96,15 +96,19 @@ A sibling variant fires when an abstract base matched the name and no concrete g
 
 ```
 No feature groups found for feature name: 'my_feature'. Only abstract feature group base(s) matched, which cannot be instantiated; no concrete implementation is available or enabled.
+Use resolve_feature(name, options=...) to debug feature resolution.
+For troubleshooting guide, see: https://mloda-ai.github.io/mloda/in_depth/troubleshooting/feature-group-resolution-errors/
 ```
 
 or, when concrete implementations exist but their compute frameworks do not:
 
 ```
 No feature groups found for feature name: 'my_feature'. Its concrete implementations require compute framework(s) ['PandasDataFrame'], none of which are available or enabled for this run.
+Use resolve_feature(name, options=...) to debug feature resolution.
+For troubleshooting guide, see: https://mloda-ai.github.io/mloda/in_depth/troubleshooting/feature-group-resolution-errors/
 ```
 
-For the first shape, import or enable a concrete implementation. For the second, enable one of the named compute frameworks; the list comes from the base's accessible concrete implementations, so check that the one you enable actually serves the name. Eliminated candidates, if any, still render in the eliminated-candidates block; the Did-you-mean suggestion and the trailing pointer lines never do.
+For the first shape, import or enable a concrete implementation. For the second, enable one of the named compute frameworks; the list comes from the base's accessible concrete implementations, so check that the one you enable actually serves the name. Eliminated candidates, if any, still render in the eliminated-candidates block, and the message closes with the same pointer and troubleshooting-link lines as the ordinary form. Only the Did-you-mean suggestion never renders here: the requested name is declared, so there is nothing to suggest.
 
 ## Multiple Feature Groups Error
 

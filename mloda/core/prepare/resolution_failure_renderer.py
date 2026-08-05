@@ -102,6 +102,16 @@ def _render_multiple(result: EvaluationResult, feature: Feature, callout: str | 
     )
 
 
+def _pointer_lines(callout: str | None) -> str:
+    """The trailing resolve_feature pointer and troubleshooting-link lines."""
+    # Only the scope widens the pointer: resolve_feature takes the domain on the Feature, not as a keyword.
+    pointer_args = "name, options=..., feature_group=..." if callout else "name, options=..."
+    return (
+        f"\nUse resolve_feature({pointer_args}) to debug feature resolution."
+        f"\nFor troubleshooting guide, see: {TROUBLESHOOTING_URL}"
+    )
+
+
 def _render_abstract_only(
     result: EvaluationResult, feature: Feature, callout: str | None, domain_note: str | None
 ) -> str:
@@ -129,7 +139,7 @@ def _render_abstract_only(
     near_miss = _render_near_miss_block(result, feature)
     if near_miss is not None:
         msg += f"\n{near_miss}"
-    return msg
+    return msg + _pointer_lines(callout)
 
 
 def _render_none(result: EvaluationResult, feature: Feature, callout: str | None, domain_note: str | None) -> str:
@@ -152,13 +162,7 @@ def _render_none(result: EvaluationResult, feature: Feature, callout: str | None
     if similar:
         msg += f"\nDid you mean one of: {similar}?"
 
-    # Only the scope widens the pointer: resolve_feature takes the domain on the Feature, not as a keyword.
-    pointer_args = "name, options=..., feature_group=..." if callout else "name, options=..."
-    msg += (
-        f"\nUse resolve_feature({pointer_args}) to debug feature resolution."
-        f"\nFor troubleshooting guide, see: {TROUBLESHOOTING_URL}"
-    )
-    return msg
+    return msg + _pointer_lines(callout)
 
 
 def render_resolution_failure(result: EvaluationResult, feature: Feature) -> str | None:

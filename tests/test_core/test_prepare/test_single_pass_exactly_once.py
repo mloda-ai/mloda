@@ -1244,7 +1244,9 @@ class TestMalformedHookValuesDegradeLikeARaise:
         assert render_resolution_failure(result, feature) == (
             f"No feature groups found for feature name: '{BAD_DECLARATION_FEATURE_782}'. "
             "Its concrete implementations require compute framework(s) ['SinglePassFwTwo_782'], "
-            "none of which are available or enabled for this run."
+            "none of which are available or enabled for this run.\n"
+            "Use resolve_feature(name, options=...) to debug feature resolution.\n"
+            f"{TROUBLESHOOTING_LINE_782}"
         )
 
     def test_malformed_framework_declaration_alone_falls_back_to_the_bare_abstract_message(self) -> None:
@@ -1259,7 +1261,9 @@ class TestMalformedHookValuesDegradeLikeARaise:
         assert render_resolution_failure(result, feature) == (
             f"No feature groups found for feature name: '{BAD_DECLARATION_FEATURE_782}'. "
             "Only abstract feature group base(s) matched, which cannot be instantiated; "
-            "no concrete implementation is available or enabled."
+            "no concrete implementation is available or enabled.\n"
+            "Use resolve_feature(name, options=...) to debug feature resolution.\n"
+            f"{TROUBLESHOOTING_LINE_782}"
         )
 
 

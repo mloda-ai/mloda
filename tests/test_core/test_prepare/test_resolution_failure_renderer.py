@@ -1194,6 +1194,12 @@ def abstract_bare_scenario() -> Scenario:
     return Feature(ABSTRACT_FEATURE_791), {RendererAbstractBaseFG791: {RendererFwOne791}}
 
 
+def scoped_abstract_bare_scenario() -> Scenario:
+    """Abstract-only failure while scoped to the abstract base itself."""
+    feature = Feature(ABSTRACT_FEATURE_791, feature_group=RendererAbstractBaseFG791)
+    return feature, {RendererAbstractBaseFG791: {RendererFwOne791}}
+
+
 def ordinary_none_scenario() -> Scenario:
     """No match: one candidate rejects an option value, another supplies the name catalog."""
     feature = Feature(
@@ -1586,6 +1592,7 @@ FAILING_SCENARIOS: dict[str, Callable[[], Scenario]] = {
     "capability": capability_scenario,
     "abstract_with_frameworks": abstract_with_frameworks_scenario,
     "abstract_bare": abstract_bare_scenario,
+    "scoped_abstract_bare": scoped_abstract_bare_scenario,
     "ordinary_none": ordinary_none_scenario,
     "scoped_none": scoped_none_scenario,
     "capability_narrow_enabled": capability_narrow_enabled_scenario,
@@ -1727,7 +1734,10 @@ class TestRenderResolutionFailureMessages:
             "['RendererFwOne791', 'RendererFwTwo791'], "
             "none of which are available or enabled for this run.\n"
             f"Feature group(s) eliminated while matching '{ABSTRACT_FEATURE_791}':\n"
-            "  - RendererConcreteSubFG791 (compute framework): none of its compute frameworks are enabled for this run"
+            "  - RendererConcreteSubFG791 (compute framework): "
+            "none of its compute frameworks are enabled for this run\n"
+            "Use resolve_feature(name, options=...) to debug feature resolution.\n"
+            f"{TROUBLESHOOTING_LINE}"
         )
 
     def test_abstract_only_without_concrete_implementation(self) -> None:
@@ -1737,8 +1747,24 @@ class TestRenderResolutionFailureMessages:
         assert message == (
             f"No feature groups found for feature name: '{ABSTRACT_FEATURE_791}'. "
             "Only abstract feature group base(s) matched, which cannot be instantiated; "
-            "no concrete implementation is available or enabled."
+            "no concrete implementation is available or enabled.\n"
+            "Use resolve_feature(name, options=...) to debug feature resolution.\n"
+            f"{TROUBLESHOOTING_LINE}"
         )
+
+    def test_scoped_abstract_only_renders_callout_and_scoped_pointer(self) -> None:
+        """A scoped abstract-only failure carries the scope callout and the widened resolve_feature pointer."""
+        scenario = scoped_abstract_bare_scenario()
+        feature, _ = scenario
+        result = _evaluate(scenario)
+
+        assert result.failure_kind == "abstract_only"
+
+        message = render_resolution_failure(result, feature)
+        assert message is not None
+        assert "Scoped to feature group: 'RendererAbstractBaseFG791'." in message
+        assert "Use resolve_feature(name, options=..., feature_group=...) to debug feature resolution." in message
+        assert message.endswith(TROUBLESHOOTING_LINE)
 
     def test_ordinary_none_renders_rejections_suggestion_and_pointers(self) -> None:
         """The near-miss block, then 'Did you mean', then the resolve_feature and troubleshooting lines."""
@@ -2022,7 +2048,9 @@ class TestFactCaptureNeverTakesEvaluateDown:
             "no concrete implementation is available or enabled.\n"
             f"Feature group(s) eliminated while matching '{RAISING_ABSTRACT_FEATURE_791}':\n"
             "  - RendererRaisingConcreteSubFG791 (compute framework): "
-            "none of its compute frameworks are enabled for this run"
+            "none of its compute frameworks are enabled for this run\n"
+            "Use resolve_feature(name, options=...) to debug feature resolution.\n"
+            f"{TROUBLESHOOTING_LINE}"
         )
 
     def test_resolve_feature_still_reports_candidates_when_get_domain_raises(self) -> None:
@@ -2872,7 +2900,10 @@ class TestADeadNameIsCapturedOnlyForTheMessageThatReadsIt:
             "['RendererFwOne791', 'RendererFwTwo791'], "
             "none of which are available or enabled for this run.\n"
             f"Feature group(s) eliminated while matching '{ABSTRACT_FEATURE_791}':\n"
-            "  - RendererConcreteSubFG791 (compute framework): none of its compute frameworks are enabled for this run"
+            "  - RendererConcreteSubFG791 (compute framework): "
+            "none of its compute frameworks are enabled for this run\n"
+            "Use resolve_feature(name, options=...) to debug feature resolution.\n"
+            f"{TROUBLESHOOTING_LINE}"
         )
 
 
@@ -2963,7 +2994,9 @@ class TestADomainCarryingFailureNamesTheRequestedDomain:
             f"No feature groups found for feature name: '{ABSTRACT_DECLARER_NAME_791}'. "
             "Only abstract feature group base(s) matched, which cannot be instantiated; "
             "no concrete implementation is available or enabled. "
-            f"Requested domain: '{REQUESTED_DOMAIN_791}'."
+            f"Requested domain: '{REQUESTED_DOMAIN_791}'.\n"
+            "Use resolve_feature(name, options=...) to debug feature resolution.\n"
+            f"{TROUBLESHOOTING_LINE}"
         )
 
 
@@ -3004,7 +3037,9 @@ class TestAnAbstractBaseIsNeverALiveDeclarer:
             "Only abstract feature group base(s) matched, which cannot be instantiated; "
             "no concrete implementation is available or enabled.\n"
             f"Feature group(s) eliminated while matching '{ABSTRACT_DECLARER_NAME_791}':\n"
-            "  - SpareDeadTwinFG791 (compute framework): none of its compute frameworks are enabled for this run"
+            "  - SpareDeadTwinFG791 (compute framework): none of its compute frameworks are enabled for this run\n"
+            "Use resolve_feature(name, options=...) to debug feature resolution.\n"
+            f"{TROUBLESHOOTING_LINE}"
         )
 
         assert ABSTRACT_DECLARER_NAME_791 in result.facts.dead_only_names

@@ -142,6 +142,10 @@ class Engine:
             planned_queue, resolver.resolver_links.get_link_trekker()
         )
 
+        if self.global_filter:
+            # The rewrite mutates filter Features shared with GlobalFilter's hash-keyed sets.
+            self.global_filter.rehash_after_framework_rewrite()
+
         execution_planner = ExecutionPlan(self.global_filter, self.api_input_data_collection)
         execution_planner.create_execution_plan(planned_queue, graph, resolver.resolver_links.get_link_trekker())
         return execution_planner

@@ -55,6 +55,11 @@ class GlobalFilter:
         self.matched_filter_uuids.clear()
         self._warned_divergences.clear()
 
+    def rehash_after_framework_rewrite(self) -> None:
+        """Reinsert stored filters so their hashes reflect frameworks planning rewrote in place."""
+        self.collection = {key: set(list(value)) for key, value in self.collection.items()}
+        self.probes = {key: set(list(value)) for key, value in self.probes.items()}
+
     def record_probe(
         self,
         feature_group: type[FeatureGroup],

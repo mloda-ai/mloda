@@ -479,11 +479,34 @@ class ExecutionPlan:
                 required_uuids,
                 destination_framework_uuids,
                 source_framework_uuids,
+                self.join_runs_on_right_side(link, destination_framework_uuids, source_framework_uuids, graph),
             )
 
         # This makes sure that we do not write on the same datasets due to overlapping joins at once.
         self.joinstep_collection.add(js)
         return js
+
+    def join_runs_on_right_side(
+        self, link: Link, destination_uuids: set[UUID], source_uuids: set[UUID], graph: Graph
+    ) -> bool:
+        """True when the join executes in the right feature group's framework, so merge sides are swapped."""
+        if link.left_feature_group == link.right_feature_group:
+            return False
+        if not destination_uuids or not source_uuids:
+            return False
+
+        destination_fgs = {graph.get_nodes()[uuid].feature_group_class for uuid in destination_uuids}
+        source_fgs = {graph.get_nodes()[uuid].feature_group_class for uuid in source_uuids}
+
+        destination_is_right = all(
+            issubclass(fg, link.right_feature_group) and not issubclass(fg, link.left_feature_group)
+            for fg in destination_fgs
+        )
+        source_is_left = all(
+            issubclass(fg, link.left_feature_group) and not issubclass(fg, link.right_feature_group)
+            for fg in source_fgs
+        )
+        return destination_is_right and source_is_left
 
     def find_fg_per_uuid(
         self, pre_execution_plan: list[LinkFrameworkTrekker | FeatureGroupStep], uuid: UUID

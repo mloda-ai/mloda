@@ -18,8 +18,10 @@ class JoinStep(Step):
         required_uuids: set[UUID],
         destination_framework_uuids: set[UUID],
         source_framework_uuids: set[UUID],
+        swap_merge_sides: bool = False,
     ) -> None:
         self.link = link
+        self.swap_merge_sides = swap_merge_sides
         self.destination_framework = destination_framework
         self.source_framework = source_framework
         self.required_uuids = required_uuids
@@ -37,7 +39,11 @@ class JoinStep(Step):
         framework_connection = cfw.get_framework_connection_object()
         merge_engine_instance = merge_engine_class(framework_connection)
 
-        cfw.data = merge_engine_instance.merge(cfw.data, from_cfw_data, self.link)
+        # Link indices are bound to the feature groups, so the left group's data must stay the left argument.
+        if self.swap_merge_sides:
+            cfw.data = merge_engine_instance.merge(from_cfw_data, cfw.data, self.link)
+        else:
+            cfw.data = merge_engine_instance.merge(cfw.data, from_cfw_data, self.link)
         cfw.set_column_names()
 
     def _upload_data_if_needed(self, cfw: ComputeFramework, cfw_register: CfwManager) -> None:

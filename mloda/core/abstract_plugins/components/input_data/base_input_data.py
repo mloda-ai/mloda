@@ -8,8 +8,9 @@ from mloda.core.abstract_plugins.components.feature_set import FeatureSet
 from mloda.core.abstract_plugins.components.match_rejection import (
     INPUT_DATA_OWNED_STAGE,
     INPUT_DATA_STAGE,
+    match_rejection_owners,
     record_match_rejection,
-    restamp_match_rejection,
+    restamp_match_rejections_since,
 )
 from mloda.core.abstract_plugins.components.options import Options
 
@@ -308,12 +309,13 @@ class BaseInputData(ABC):
                     # The user addressed this reader family by name (ownership), so vetoes record as owned.
                     if not subclass._reader_options_admit(options, record_absence=True):
                         break
+                    known_owners = match_rejection_owners()
                     matched_data_access = subclass.match_subclass_data_access(value, [feature_name], options=options)  # type: ignore[attr-defined]
                     if matched_data_access:
                         cls.add_base_input_data_to_options(subclass, matched_data_access, options)
                         return True
-                    # The addressed reader matched nothing, so a recorded content decline becomes an owned veto.
-                    restamp_match_rejection(subclass.get_class_name(), INPUT_DATA_STAGE, INPUT_DATA_OWNED_STAGE)
+                    # The addressed probe matched nothing, so whatever content decline it recorded becomes owned.
+                    restamp_match_rejections_since(known_owners, INPUT_DATA_STAGE, INPUT_DATA_OWNED_STAGE)
                     break  # This case is if a feature requests an input feature, which should have scoped access.
         return False
 
@@ -323,7 +325,8 @@ class BaseInputData(ABC):
             if not issubclass(key, BaseInputData):
                 # Contained: this runs per candidate over every option key, so an odd key is a non-match (#845).
                 raise ValueError(f"Key {key} is not a subclass of BaseInputData.")
-            key = key.get_class_name()
+            # Options normalizes a class key the same way, so an overridden alias stays the one identity.
+            key = key.data_access_name()
 
         if not isinstance(key, str):
             # Contained: this runs per candidate over every option key, so one odd key must not abort the run (#845).

@@ -144,7 +144,8 @@ consequences keep the shared type honest on this surface:
   reader does not have, so `BaseInputData.__init_subclass__` rejects them instead of leaving them
   silently inert (#865). `framework_set=True` marks the one framework-written key, the reserved
   `"BaseInputData"` pair written by `add_base_input_data_to_options` and read by `init_reader`.
-  Such keys are exempt from enforcement, so enforcement fields on them are rejected too; on
+  Such keys are exempt from enforcement, so enforcement fields on them are rejected too, as is
+  `allow_explicit_none`, which the admit path never reads on a framework-written key; on
   `PROPERTY_MAPPING` the field is rejected outright.
 
 `READER_OPTIONS` merges across the MRO (`reader_option_specs()`, most-derived declaration winning),

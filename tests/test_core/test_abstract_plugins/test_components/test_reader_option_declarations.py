@@ -150,6 +150,14 @@ class TestReservedFrameworkKey:
         assert BaseInputData.reader_option_specs()["BaseInputData"].default is None
         assert BaseInputData.reader_option_default("BaseInputData") is None
 
+    def test_reserved_key_does_not_declare_allow_explicit_none(self) -> None:
+        """The flag is inert on a framework-written key, so the base must not declare it."""
+        assert BaseInputData.reader_option_specs()["BaseInputData"].allow_explicit_none is False
+
+    def test_base_declaration_passes_its_own_guard(self) -> None:
+        """``__init_subclass__`` never validates the base itself; this pin keeps the base honest."""
+        BaseInputData._validate_reader_options()
+
     def test_reserved_key_is_the_key_the_framework_actually_writes(self) -> None:
         """``add_base_input_data_to_options`` writes exactly the keys declared ``framework_set``.
 
@@ -749,6 +757,27 @@ class TestReaderOptionsAreValidatedAtClassDefinition:
         assert "rod_fw_bare_key" in message
         assert "framework_set" in message
         assert "default" in message
+
+    def test_framework_set_with_allow_explicit_none_rejected(self) -> None:
+        """The admit path skips framework keys before reading the flag, so declaring it is inert."""
+        with pytest.raises(ValueError) as exc_info:
+
+            class RodFrameworkAllowNoneReader(BaseInputData):
+                READER_OPTIONS: ClassVar[dict[str, PropertySpec]] = {
+                    "rod_fw_allow_none_key": PropertySpec(
+                        "Framework-written.",
+                        allow_explicit_none=True,
+                        default=None,
+                        framework_set=True,
+                    ),
+                }
+
+        message = str(exc_info.value)
+        del exc_info
+        assert "RodFrameworkAllowNoneReader" in message
+        assert "rod_fw_allow_none_key" in message
+        assert "framework_set" in message
+        assert "allow_explicit_none" in message
 
     def test_a_strict_allowed_values_declaration_defines_fine(self) -> None:
         """Strict specs are the point of the collapse; a valued one with an in-space default defines."""

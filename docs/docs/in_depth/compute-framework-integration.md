@@ -29,7 +29,7 @@ per-feature hook evaluated at match time:
 @classmethod
 def supports_compute_framework(cls, feature_name, options, compute_framework) -> bool:
     """Reject an operation on a specific framework. Default returns True."""
-    if compute_framework is SQLiteFramework and is_median_op(feature_name, options):
+    if compute_framework is SqliteFramework and is_median_op(feature_name, options):
         return False  # median is unsupported on SQLite
     return True
 ```
@@ -48,8 +48,9 @@ feature only**:
 ```
 No feature groups found for feature name: 'X'.
 Feature group(s) eliminated while matching 'X':
-  - MedianFeatureGroup (compute framework pin): pinned compute framework 'SQLiteFramework' is not among its supported ['DuckDBFramework', 'PandasDataFrame']
+  - MedianFeatureGroup (compute framework pin): pinned compute framework 'SqliteFramework' is not among its supported ['DuckDBFramework', 'PandasDataFrame']
 Use resolve_feature(name, options=...) to debug feature resolution.
+For troubleshooting guide, see: https://mloda-ai.github.io/mloda/in_depth/troubleshooting/feature-group-resolution-errors/
 ```
 
 The rejected framework is named as a near-miss with its reason rather than

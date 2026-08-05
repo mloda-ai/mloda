@@ -88,6 +88,8 @@ def _render_near_miss_block(result: EvaluationResult, feature: Feature) -> str |
 
 def _render_multiple(result: EvaluationResult, feature: Feature, callout: str | None) -> str:
     # Every identified candidate gets a line; only a candidate with a captured domain gets the suffix.
+    # The resolve_feature pointer is deliberately omitted: the message already names every candidate,
+    # which is what the pointer would surface.
     lines = "\n".join(
         f"  - {fg.__name__} ({fg.__module__})"
         + (f" [domain: {result.facts.domains[fg]}]" if fg in result.facts.domains else "")
@@ -99,6 +101,17 @@ def _render_multiple(result: EvaluationResult, feature: Feature, callout: str | 
         f"{lines}\n"
         f"{scope_line}"
         f"For troubleshooting guide, see: {TROUBLESHOOTING_URL}"
+    )
+
+
+def _pointer_lines(callout: str | None) -> str:
+    """The trailing resolve_feature pointer and troubleshooting-link lines; the returned string starts
+    with a newline so callers append it bare."""
+    # Only the scope widens the pointer: resolve_feature takes the domain on the Feature, not as a keyword.
+    pointer_args = "name, options=..., feature_group=..." if callout else "name, options=..."
+    return (
+        f"\nUse resolve_feature({pointer_args}) to debug feature resolution."
+        f"\nFor troubleshooting guide, see: {TROUBLESHOOTING_URL}"
     )
 
 
@@ -129,7 +142,7 @@ def _render_abstract_only(
     near_miss = _render_near_miss_block(result, feature)
     if near_miss is not None:
         msg += f"\n{near_miss}"
-    return msg
+    return msg + _pointer_lines(callout)
 
 
 def _render_none(result: EvaluationResult, feature: Feature, callout: str | None, domain_note: str | None) -> str:
@@ -152,13 +165,7 @@ def _render_none(result: EvaluationResult, feature: Feature, callout: str | None
     if similar:
         msg += f"\nDid you mean one of: {similar}?"
 
-    # Only the scope widens the pointer: resolve_feature takes the domain on the Feature, not as a keyword.
-    pointer_args = "name, options=..., feature_group=..." if callout else "name, options=..."
-    msg += (
-        f"\nUse resolve_feature({pointer_args}) to debug feature resolution."
-        f"\nFor troubleshooting guide, see: {TROUBLESHOOTING_URL}"
-    )
-    return msg
+    return msg + _pointer_lines(callout)
 
 
 def render_resolution_failure(result: EvaluationResult, feature: Feature) -> str | None:

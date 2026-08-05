@@ -144,7 +144,7 @@ all_fgs = get_feature_group_docs()
 fgs = get_feature_group_docs(name="timestamp")
 
 # Filter by compute framework
-fgs = get_feature_group_docs(compute_framework="PandasDataframe")
+fgs = get_feature_group_docs(compute_framework="PandasDataFrame")
 ```
 
 Each `FeatureGroupInfo` also carries the subtype declaration: `subtype_key`

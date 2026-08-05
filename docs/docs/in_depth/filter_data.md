@@ -229,6 +229,9 @@ def calculate_feature(cls, data, features: FeatureSet):
             # ... use however you need
 ```
 
+`single_filter.name` is the resolved column name, i.e. after the FeatureGroup's `set_feature_name`
+rename, and is read-only.
+
 Guard on truthiness, not on `is not None`. `features.filters` has three states:
 
 | State | When |

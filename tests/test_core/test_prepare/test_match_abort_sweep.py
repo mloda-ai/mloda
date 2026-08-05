@@ -2657,33 +2657,42 @@ def test_finally_classifier_ignores_a_bare_raise_in_the_finally() -> None:
 
 
 def _splice_returning_finally(source: str, function: str) -> tuple[str, int, int]:
-    """Insert a return at the top of the finally beside ``function``'s escalating clause; in memory only."""
+    """Give ``function``'s first try beside an escalating clause a returning finally; in memory only."""
     targets = [
         node
         for node in ast.walk(ast.parse(source))
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == function
     ]
     assert len(targets) == 1, f"{function} is not a single definition in this module: {len(targets)} found"
-    tries = [
-        node
-        for node in ast.walk(targets[0])
-        if isinstance(node, ast.Try)
-        if node.finalbody and any(_handler_escalates(clause) for clause in node.handlers)
-    ]
-    assert tries, f"{function} holds no finally beside an escalating clause; splice into another definition"
+    tries = sorted(
+        (
+            node
+            for node in ast.walk(targets[0])
+            if isinstance(node, ast.Try)
+            if any(_handler_escalates(clause) for clause in node.handlers)
+        ),
+        key=lambda node: node.lineno,
+    )
+    assert tries, f"{function} holds no try with an escalating clause; splice into another definition"
     node = tries[0]
     clause = next(clause for clause in node.handlers if _handler_escalates(clause))
-    first = node.finalbody[0]
     lines = source.splitlines()
-    at = first.lineno - 1
-    block = f"{' ' * first.col_offset}return False"
-    return "\n".join([*lines[:at], block, *lines[at:]]) + "\n", node.lineno, clause.lineno
+    if node.finalbody:
+        # A second finally on one try does not parse, so an existing one takes the return at its top instead.
+        first = node.finalbody[0]
+        at, block = first.lineno - 1, [f"{' ' * first.col_offset}return False"]
+    else:
+        arms: list[ast.stmt | ast.excepthandler] = [*node.body, *node.handlers, *node.orelse]
+        pad = " " * node.col_offset
+        # After the last line the try spans, at the try's own indentation: both line numbers stay put.
+        at, block = max(part.end_lineno or part.lineno for part in arms), [f"{pad}finally:", f"{pad}    return False"]
+    return "\n".join([*lines[:at], *block, *lines[at:]]) + "\n", node.lineno, clause.lineno
 
 
 def test_the_sweep_flags_a_returning_finally_spliced_into_the_real_seam() -> None:
     """End to end: the real reachable set and the classifier on real source, mutated in memory only."""
-    module = "mloda/core/prepare/identify_feature_group.py"
-    function = "_filter_feature_group_by_criteria"
+    module = "mloda/core/abstract_plugins/components/match_hook.py"
+    function = "call_match_hook"
     names = frozenset(name for reached_module, name in sweep().reachable if reached_module == module)
     assert function in names, f"{function} is no longer reachable; splice into another reached definition"
 

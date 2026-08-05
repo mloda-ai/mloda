@@ -956,6 +956,263 @@ class TestReaderOptionsAreValidatedAtClassDefinition:
         assert "rod_bad_key" in message
 
 
+class TestMixinReaderOptionsAreValidatedAtSubclassDefinition:
+    """A plain mixin's ``READER_OPTIONS`` reaches the merge, so the subclass definition validates it too."""
+
+    def test_mixin_string_value_rejected_at_subclass_definition(self) -> None:
+        """A non-spec mixin value raises where the subclass is written, naming the mixin and the key."""
+
+        class RodStrValueMixin:
+            READER_OPTIONS: ClassVar[dict[str, PropertySpec]] = {"rod_mixin_bad_key": "not a spec"}  # type: ignore[dict-item]  # wrong type is the point
+
+        with pytest.raises(ValueError) as exc_info:
+
+            class RodStrMixinReader(RodStrValueMixin, BaseInputData):
+                pass
+
+        message = str(exc_info.value)
+        del exc_info
+        assert "RodStrValueMixin" in message
+        assert "rod_mixin_bad_key" in message
+        assert "PropertySpec" in message
+
+    def test_mixin_match_guard_spec_rejected_at_subclass_definition(self) -> None:
+        """A mixin spec declaring ``match_guard`` is rejected like an own declaration."""
+
+        class RodGuardedMixin:
+            READER_OPTIONS: ClassVar[dict[str, PropertySpec]] = {
+                "rod_mixin_guarded_key": PropertySpec("Guarded.", match_guard=_rod_match_guard, default=None),
+            }
+
+        with pytest.raises(ValueError) as exc_info:
+
+            class RodGuardedMixinReader(RodGuardedMixin, BaseInputData):
+                pass
+
+        message = str(exc_info.value)
+        del exc_info
+        assert "RodGuardedMixin" in message
+        assert "rod_mixin_guarded_key" in message
+        assert "match_guard" in message
+
+    def test_mixin_framework_set_with_strict_validation_rejected(self) -> None:
+        """The framework_set combination rules apply to a mixin declaration too."""
+
+        class RodFrameworkStrictMixin:
+            READER_OPTIONS: ClassVar[dict[str, PropertySpec]] = {
+                "rod_mixin_fw_strict_key": PropertySpec(
+                    "Framework-written.",
+                    allowed_values=("a", "b"),
+                    strict_validation=True,
+                    default="a",
+                    framework_set=True,
+                ),
+            }
+
+        with pytest.raises(ValueError) as exc_info:
+
+            class RodFrameworkStrictMixinReader(RodFrameworkStrictMixin, BaseInputData):
+                pass
+
+        message = str(exc_info.value)
+        del exc_info
+        assert "RodFrameworkStrictMixin" in message
+        assert "rod_mixin_fw_strict_key" in message
+        assert "framework_set" in message
+        assert "strict_validation" in message
+
+    def test_mixin_framework_set_without_a_declared_default_rejected(self) -> None:
+        """A mixin framework key without a declared default is rejected like an own one."""
+
+        class RodFrameworkBareMixin:
+            READER_OPTIONS: ClassVar[dict[str, PropertySpec]] = {
+                "rod_mixin_fw_bare_key": PropertySpec("Framework-written.", framework_set=True),
+            }
+
+        with pytest.raises(ValueError) as exc_info:
+
+            class RodFrameworkBareMixinReader(RodFrameworkBareMixin, BaseInputData):
+                pass
+
+        message = str(exc_info.value)
+        del exc_info
+        assert "RodFrameworkBareMixin" in message
+        assert "rod_mixin_fw_bare_key" in message
+        assert "framework_set" in message
+        assert "default" in message
+
+    def test_a_valid_mixin_declaration_defines_fine_and_merges(self) -> None:
+        """Control: a valid mixin spec passes the guard and its key merges into the subclass."""
+
+        class RodValidMixin:
+            READER_OPTIONS: ClassVar[dict[str, PropertySpec]] = {
+                "rod_mixin_valid_key": PropertySpec("Valid, declared on the mixin.", default="mixin_default"),
+            }
+
+        class RodValidMixinReader(RodValidMixin, BaseInputData):
+            pass
+
+        assert "rod_mixin_valid_key" in RodValidMixinReader.declared_reader_option_keys()
+        assert (
+            RodValidMixinReader.reader_option_specs()["rod_mixin_valid_key"]
+            is RodValidMixin.READER_OPTIONS["rod_mixin_valid_key"]
+        )
+        assert RodValidMixinReader.reader_option_default("rod_mixin_valid_key") == "mixin_default"
+
+    def test_a_bad_mixin_on_a_subclass_of_a_valid_reader_still_raises(self) -> None:
+        """The guard runs per class definition, so a valid parent buys no free pass for a bad mixin."""
+
+        class RodDeepGoodReader(BaseInputData):
+            READER_OPTIONS: ClassVar[dict[str, PropertySpec]] = {
+                "rod_deep_good_key": PropertySpec("Valid.", default=None),
+            }
+
+        class RodDeepBadMixin:
+            READER_OPTIONS: ClassVar[dict[str, PropertySpec]] = {"rod_deep_bad_key": "not a spec"}  # type: ignore[dict-item]  # wrong type is the point
+
+        with pytest.raises(ValueError) as exc_info:
+
+            class RodDeepBadMixinReader(RodDeepBadMixin, RodDeepGoodReader):
+                pass
+
+        message = str(exc_info.value)
+        del exc_info
+        assert "RodDeepBadMixin" in message
+        assert "rod_deep_bad_key" in message
+
+    def test_a_plain_subclass_without_mixins_still_defines_fine(self) -> None:
+        """Control: the mixin guard changes nothing for a declaration-free subclass."""
+
+        class RodPlainNoMixinReader(BaseInputData):
+            pass
+
+        assert RodPlainNoMixinReader.declared_reader_option_keys() == {"BaseInputData"}
+
+    def test_a_virtually_registered_mixin_is_still_validated(self) -> None:
+        """``BaseInputData.register`` must not exempt a plain mixin from the merge validation."""
+
+        class RodVirtRegisteredBadMixin:
+            """Registered virtually below; never a real reader, so the registry leak stays inert."""
+
+            READER_OPTIONS: ClassVar[dict[str, PropertySpec]] = {"rod_virt_bad_key": "not a spec"}  # type: ignore[dict-item]  # wrong type is the point
+
+        BaseInputData.register(RodVirtRegisteredBadMixin)
+
+        with pytest.raises(ValueError) as exc_info:
+
+            class RodVirtRegisteredMixinReader(RodVirtRegisteredBadMixin, BaseInputData):
+                pass
+
+        message = str(exc_info.value)
+        del exc_info
+        assert "RodVirtRegisteredBadMixin" in message
+        assert "rod_virt_bad_key" in message
+
+    def test_a_mixin_rejection_names_the_triggering_subclass(self) -> None:
+        """The error must name the class statement that triggered validation, not only the mixin."""
+
+        class RodTrigBadMixin:
+            READER_OPTIONS: ClassVar[dict[str, PropertySpec]] = {"rod_trig_bad_key": "not a spec"}  # type: ignore[dict-item]  # wrong type is the point
+
+        with pytest.raises(ValueError) as exc_info:
+
+            class RodTrigReader(RodTrigBadMixin, BaseInputData):
+                pass
+
+        message = str(exc_info.value)
+        del exc_info
+        assert "RodTrigBadMixin" in message
+        assert "RodTrigReader" in message
+
+
+class TestNonMappingReaderOptionsAreRejected:
+    """A ``READER_OPTIONS`` that is not a dict is a loud ``ValueError`` where written, not an ``AttributeError``."""
+
+    def test_a_list_valued_own_declaration_raises_value_error_naming_the_class(self) -> None:
+        """A list-shaped own declaration is rejected as not-a-dict, naming the declaring class."""
+        with pytest.raises(ValueError) as exc_info:
+
+            class RodListOwnDeclReader(BaseInputData):
+                READER_OPTIONS = ["rod_list_entry"]  # type: ignore[assignment]  # wrong shape is the point
+
+        message = str(exc_info.value)
+        del exc_info
+        assert "RodListOwnDeclReader" in message
+        assert "READER_OPTIONS" in message
+        assert "dict" in message
+
+    def test_a_list_valued_mixin_declaration_raises_value_error_naming_the_mixin(self) -> None:
+        """A list-shaped mixin declaration reaching the merge is rejected the same way."""
+
+        class RodListDeclMixin:
+            READER_OPTIONS = ["rod_list_entry"]
+
+        with pytest.raises(ValueError) as exc_info:
+
+            class RodListDeclMixinReader(RodListDeclMixin, BaseInputData):  # type: ignore[misc]  # wrong shape is the point
+                pass
+
+        message = str(exc_info.value)
+        del exc_info
+        assert "RodListDeclMixin" in message
+        assert "READER_OPTIONS" in message
+        assert "dict" in message
+
+
+class TestCacheAttributeAssignmentIsRejected:
+    """A class body assigning ``_reader_option_specs_cache`` bypasses the merge and is rejected where written."""
+
+    def test_dict_cache_assignment_rejected_at_class_definition(self) -> None:
+        """A hand-built cache dict raises, naming the class and the attribute."""
+        with pytest.raises(ValueError) as exc_info:
+
+            class RodCacheAssignReader(BaseInputData):
+                _reader_option_specs_cache: ClassVar[dict[str, PropertySpec] | None] = {
+                    "BaseInputData": PropertySpec("Shadowed.", default=None, framework_set=True),
+                }
+
+        message = str(exc_info.value)
+        del exc_info
+        assert "RodCacheAssignReader" in message
+        assert "_reader_option_specs_cache" in message
+
+    def test_none_cache_assignment_rejected_at_class_definition(self) -> None:
+        """Even a ``None`` assignment is rejected; any class-body write to the cache is a mistake."""
+        with pytest.raises(ValueError) as exc_info:
+
+            class RodCacheNoneReader(BaseInputData):
+                _reader_option_specs_cache: ClassVar[dict[str, PropertySpec] | None] = None
+
+        message = str(exc_info.value)
+        del exc_info
+        assert "RodCacheNoneReader" in message
+        assert "_reader_option_specs_cache" in message
+
+    def test_a_cooperative_hook_warming_the_cache_is_not_rejected(self) -> None:
+        """Only a class-body assignment is a mistake; a cooperative hook warming the cache defines fine."""
+
+        class RodIntrospectingMixin:
+            def __init_subclass__(cls, **kwargs: Any) -> None:
+                """Warms the merge cache after the base guard's super() chain, like real introspection."""
+                super().__init_subclass__(**kwargs)
+                cls.reader_option_specs()  # type: ignore[attr-defined]
+
+        class RodCoopWarmedReader(BaseInputData, RodIntrospectingMixin):
+            pass
+
+        assert "BaseInputData" in RodCoopWarmedReader.reader_option_specs()
+
+    def test_a_subclass_not_touching_the_cache_defines_fine(self) -> None:
+        """Control: only a class body writing the attribute is rejected, not ordinary subclassing."""
+
+        class RodCacheUntouchedReader(BaseInputData):
+            READER_OPTIONS: ClassVar[dict[str, PropertySpec]] = {
+                "rod_cache_untouched_key": PropertySpec("Valid.", default=None),
+            }
+
+        assert RodCacheUntouchedReader.reader_option_default("rod_cache_untouched_key") is None
+
+
 class TestDeclarationsDoNotAffectDiscovery:
     """The synthetic declaring classes stay invisible to reader selection."""
 

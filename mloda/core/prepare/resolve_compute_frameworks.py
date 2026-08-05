@@ -18,20 +18,42 @@ class ResolveComputeFrameworks:
         for p in planned_queue:
             if isinstance(p, tuple):
                 if not isinstance(p[0], Link):
-                    # Filter features carry no trekker entry, so the probe must scan the set.
-                    feature, trekked_links = next(iter(p[1])), []
-                    for candidate in p[1]:
-                        trekked_links = self.access_link_by_child_uuid(candidate.uuid, link_trekker)
-                        if trekked_links:
-                            feature = candidate
-                            break
-                    if trekked_links:
-                        new_compute_frameworks = self.resolve_trekked_links(trekked_links, feature.compute_frameworks)
-                        for f in p[1]:
-                            f.compute_frameworks = set(new_compute_frameworks)
+                    trekker_members: dict[LinkFrameworkTrekker, list[Any]] = defaultdict(list)
+                    feature_trekkers: dict[UUID, list[LinkFrameworkTrekker]] = defaultdict(list)
+                    for f in p[1]:
+                        for trekker in self.access_link_by_child_uuid(f.uuid, link_trekker):
+                            trekker_members[trekker].append(f)
+                            feature_trekkers[f.uuid].append(trekker)
 
-                        self.trekker_right_left_adjuster(link_trekker, {_f.uuid for _f in p[1]})
+                    resolved: dict[LinkFrameworkTrekker, type[ComputeFramework]] = {}
+                    for trekker, members in trekker_members.items():
+                        resolved_cfw = self.resolve_trekker_for_group(trekker, members)
+                        if resolved_cfw is not None:
+                            resolved[trekker] = resolved_cfw
+                        # Adjust immediately so inversions collected for this trekker apply only to its sharing members.
+                        self.trekker_right_left_adjuster(link_trekker, {m.uuid for m in members})
 
+                    group_cfws = set(resolved.values())
+                    any_rewritten = False
+                    for f in p[1]:
+                        if f.uuid not in feature_trekkers:
+                            if group_cfws:
+                                f.compute_frameworks = set(group_cfws)
+                                any_rewritten = True
+                            continue
+                        new_cfws = {resolved[trekker] for trekker in feature_trekkers[f.uuid] if trekker in resolved}
+                        if not new_cfws:
+                            mismatches = sorted(
+                                f"{link}: neither {left.__name__} nor {right.__name__}"
+                                for link, left, right in feature_trekkers[f.uuid]
+                            )
+                            raise ValueError(
+                                f"No compute framework agreement for feature {f.name}. Unresolvable links: {mismatches}"
+                            )
+                        f.compute_frameworks = new_cfws
+                        any_rewritten = True
+
+                    if any_rewritten:
                         # Rehash via list so hashes are recomputed (set(p[1]) reuses stale ones), keeping set and aliases valid.
                         members = list(p[1])
                         p[1].clear()
@@ -127,35 +149,30 @@ class ResolveComputeFrameworks:
 
         self.to_invert_trekker_collection = []
 
-    def resolve_trekked_links(
-        self, trekked_links: list[LinkFrameworkTrekker], compute_frameworks: set[type[ComputeFramework]]
-    ) -> set[type[ComputeFramework]]:
-        new_cfws = set()
+    def resolve_trekker_for_group(
+        self, trekker: LinkFrameworkTrekker, members: list[Any]
+    ) -> type[ComputeFramework] | None:
+        link, left_cfw, right_cfw = trekker
 
-        for link, left_cfw, right_cfw in trekked_links:
-            if link.jointype == JoinType.RIGHT:
-                if right_cfw in compute_frameworks:
-                    new_cfws.add(right_cfw)
-                elif left_cfw in compute_frameworks:
-                    new_cfws.add(right_cfw)
-                    self.to_invert_trekker_collection.append((link, left_cfw, right_cfw))
-                continue
+        left_in_all = all(left_cfw in m.compute_frameworks for m in members)
+        right_in_all = all(right_cfw in m.compute_frameworks for m in members)
 
-            if link.jointype in JoinType:
-                if left_cfw in compute_frameworks and right_cfw in compute_frameworks:
-                    # We keep the left framework if possible. This can be dropped maybe later with more tests.
-                    new_cfws.add(left_cfw)
-                elif left_cfw in compute_frameworks:
-                    new_cfws.add(left_cfw)
-                elif right_cfw in compute_frameworks:
-                    new_cfws.add(right_cfw)
-                    self.to_invert_trekker_collection.append((link, left_cfw, right_cfw))
-                continue
+        if link.jointype == JoinType.RIGHT:
+            if right_in_all:
+                return right_cfw
+            if left_in_all:
+                self.to_invert_trekker_collection.append(trekker)
+                return right_cfw
+            return None
 
-            raise ValueError(
-                f"This jointype is not implemented: {link.jointype}. Possible types are: {[member.value for member in JoinType]}"
-            )
+        if link.jointype in JoinType:
+            if left_in_all:
+                return left_cfw
+            if right_in_all:
+                self.to_invert_trekker_collection.append(trekker)
+                return right_cfw
+            return None
 
-        if not new_cfws:
-            raise ValueError("No new compute frameworks have been found.")
-        return new_cfws
+        raise ValueError(
+            f"This jointype is not implemented: {link.jointype}. Possible types are: {[member.value for member in JoinType]}"
+        )

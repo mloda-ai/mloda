@@ -1,4 +1,4 @@
-from typing import Any
+from typing import Any, Callable
 
 from mloda.core.abstract_plugins.components.utils import unhashable_part
 
@@ -24,9 +24,25 @@ class _CycleMarker:
 
 # A cyclic value hashes instead of raising RecursionError. Mirrors the id() visited guard in
 # Feature._reduce. _deep_equal mirrors this normalization for the == that such a collision reaches;
-# residual: set values, containers whose type overrides __eq__, and cycles routed through a nested
-# Options/HashableDict (where the path resets) are still plain ==.
+# residual: set values and containers whose type overrides __eq__ are still plain ==.
 _CYCLE = _CycleMarker()
+
+# Nodes (Options, HashableDict) register themselves here: hashable_dict cannot import options,
+# since options imports it.
+_NODE_KINDS: list[tuple[type, Callable[[Any], dict[Any, Any]]]] = []
+
+
+def register_deep_node(kind: type, target: Callable[[Any], dict[Any, Any]]) -> None:
+    """Values of ``kind`` are walked into via ``target``, so the visited path survives the nesting."""
+    _NODE_KINDS.append((kind, target))
+
+
+def _node_target(value: Any, dunder: str) -> tuple[type, dict[Any, Any]] | None:
+    """The registered kind and the dict it is walked as, or None when its own dunder must decide."""
+    for kind, target in _NODE_KINDS:
+        if isinstance(value, kind) and getattr(type(value), dunder) is getattr(kind, dunder):
+            return kind, target(value)
+    return None
 
 
 def _deep_hashable(value: Any, seen: frozenset[int] = frozenset()) -> Any:
@@ -48,6 +64,11 @@ def _deep_hashable(value: Any, seen: frozenset[int] = frozenset()) -> Any:
         return tuple(_deep_hashable(item, seen) for item in value)
     if isinstance(value, set):
         return frozenset(_deep_hashable(item, seen) for item in value)
+    # A node normalizes to the same shape as its plain dict: collisions between unequal values are
+    # legal, and not tagging the type keeps hash consistent with equality for inherited dunders.
+    node = _node_target(value, "__hash__")
+    if node is not None:
+        return _deep_hashable(node[1], seen)
     # A leaf whose hash raises TypeError is coerced to repr so grouping never crashes; any other raise
     # propagates. filter_parameter rejects broadly instead.
     # Residual constraint: two values that are __eq__-equal but unhashable must have
@@ -78,6 +99,13 @@ def _deep_equal(a: Any, b: Any) -> bool:
 
 
 def _walk_equal(a: Any, b: Any, path_a: set[int], path_b: set[int]) -> bool:
+    node_a = _node_target(a, "__eq__")
+    if node_a is not None:
+        node_b = _node_target(b, "__eq__")
+        # Only matching kinds are walked; a differing or absent node keeps its own type identity.
+        if node_b is not None and node_b[0] is node_a[0]:
+            return _walk_equal(node_a[1], node_b[1], path_a, path_b)
+        return a is b or bool(a == b)
     kind = _container_kind(a)
     if kind is None or _container_kind(b) is not kind:
         return a is b or bool(a == b)
@@ -113,3 +141,6 @@ class HashableDict:
 
     def items(self) -> Any:
         return self.data.items()
+
+
+register_deep_node(HashableDict, lambda node: node.data)

@@ -18,8 +18,13 @@ class ResolveComputeFrameworks:
         for p in planned_queue:
             if isinstance(p, tuple):
                 if not isinstance(p[0], Link):
-                    feature = next(iter(p[1]))
-                    trekked_links = self.access_link_by_child_uuid(feature.uuid, link_trekker)
+                    # Filter features carry no trekker entry, so the probe must scan the set.
+                    feature, trekked_links = next(iter(p[1])), []
+                    for candidate in p[1]:
+                        trekked_links = self.access_link_by_child_uuid(candidate.uuid, link_trekker)
+                        if trekked_links:
+                            feature = candidate
+                            break
                     if trekked_links:
                         new_compute_frameworks = self.resolve_trekked_links(trekked_links, feature.compute_frameworks)
                         for f in p[1]:

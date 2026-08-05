@@ -14,13 +14,14 @@ re-raises the caught object itself, so each must re-raise on ``is_match_abort`` 
 ``# Swallows: <reason>`` comment.
 
 Both judge one site alone, which misses the clauses of one ``try`` shadowing each other: Python runs the
-first matching handler, so an earlier one catching a subclass of a later clause's type wins over it and the
-abort check below never runs. A third pass compares the clauses on each ``try``. Types resolve by name
-through the builtins and the class definitions under ``mloda/``, never by importing the module under test; a
-type neither resolves is reported instead of passed.
+first matching handler, so an earlier one whose type meets a later clause's, in either inheritance
+direction, wins over it and the abort check below never runs. A third pass compares the clauses on each
+``try``. Types resolve by name through the builtins and the class definitions under ``mloda/``, never by
+importing the module under test; a type neither resolves is reported instead of passed.
 
 Not covered: plugin code under ``mloda_plugins``; dynamic dispatch, which is why SEEDS is hand-written;
-decorators.
+decorators; ``except*`` groups in the third pass, whose clauses split an exception group between them
+instead of racing for it, so first-match reasoning does not hold there.
 """
 
 from __future__ import annotations
@@ -175,7 +176,7 @@ class ShadowSite(NamedTuple):
 
 
 class UnresolvedType(NamedTuple):
-    """An ``except`` type beside an escalating clause that neither the builtins nor ``mloda/`` resolves."""
+    """An ``except`` type beside an escalating clause whose base chain leaves the builtins and ``mloda/``."""
 
     module: str
     lineno: int
@@ -453,10 +454,9 @@ def _collect_handler_groups(
         if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef)):
             _collect_handler_groups(child, [*functions, child.name], out)
         else:
-            # getattr, not isinstance: ast.TryStar carries the same handler list and exists only from 3.11.
-            handlers = getattr(child, "handlers", None)
-            if isinstance(handlers, list) and handlers:
-                out.append((handlers, functions))
+            # ast.Try only: an except* group delivers to every matching clause, so none of them shadows another.
+            if isinstance(child, ast.Try) and child.handlers:
+                out.append((child.handlers, functions))
             _collect_handler_groups(child, functions, out)
 
 
@@ -517,9 +517,12 @@ def classify_shadowing(
                         unresolved.add(UnresolvedType(module, earlier.lineno, function, caught))
                         continue
                     for guarded in _caught_types(later):
-                        if _ancestor_names(guarded) is None:
+                        guarded_ancestors = _ancestor_names(guarded)
+                        if guarded_ancestors is None:
                             unresolved.add(UnresolvedType(module, later.lineno, function, guarded))
-                        elif guarded in ancestors:
+                        # Either direction hides the check: a subclass takes part of the later clause's
+                        # traffic, a superclass takes all of it and leaves the clause dead.
+                        elif guarded in ancestors or caught in guarded_ancestors:
                             shadowed.add(ShadowSite(module, earlier.lineno, function, caught, later.lineno, guarded))
     return sorted(shadowed), sorted(unresolved)
 
@@ -1293,7 +1296,7 @@ def test_no_handler_shadows_an_abort_check_on_the_same_try() -> None:
             for site in shadowed
         )
         + "\n\nPython runs the first matching clause, so the check below never sees the marked exception. Run "
-        f"{_ABORT_CHECK} in the earlier clause too, or narrow it to a type the later one does not cover."
+        f"{_ABORT_CHECK} in the earlier clause too, or make the two catch disjoint types."
     )
 
 
@@ -1302,8 +1305,8 @@ def test_every_except_type_beside_an_escalating_clause_resolves() -> None:
     unresolved = list(sweep().unresolved)
 
     assert unresolved == [], (
-        "Handler types on a try with an escalating clause that neither the builtins nor a class under mloda/ "
-        "resolves, so whether they shadow it is unknown:\n"
+        "Handler types on a try with an escalating clause whose base chain leaves the builtins and the classes "
+        "under mloda/, so whether they shadow it is unknown:\n"
         + "\n".join(f"  {site.location()}: {site.name}" for site in unresolved)
     )
 
@@ -1327,6 +1330,26 @@ def test_shadow_classifier_flags_a_narrow_handler_above_the_abort_check() -> Non
     assert [(site.lineno, site.caught, site.shadowed_lineno, site.shadowed_type) for site in shadowed] == [
         (4, "KeyError", 6, "Exception")
     ]
+
+
+def test_shadow_classifier_flags_a_broad_handler_above_the_abort_check() -> None:
+    """The reverse inheritance direction is worse, not safe: the clause below it can never run at all."""
+    source = (
+        "def match_feature_group_criteria(cls, feature, options):\n"
+        "    try:\n"
+        "        return probe(feature)\n"
+        "    except Exception:  # Swallows: a broken probe is this candidate's own defect.\n"
+        "        return False\n"
+        "    except ValueError as exc:\n"
+        "        if is_match_abort(exc):\n"
+        "            raise\n"
+        "        return False\n"
+    )
+
+    shadowed, unresolved = _shadowing(source)
+
+    assert unresolved == []
+    assert [(site.caught, site.shadowed_type) for site in shadowed] == [("Exception", "ValueError")]
 
 
 def test_shadow_classifier_resolves_a_project_exception_through_its_declared_base() -> None:
@@ -1452,7 +1475,8 @@ def _splice_narrow_handler(source: str, function: str) -> tuple[str, int]:
     escalating = [
         handler
         for node in ast.walk(targets[0])
-        for handler in getattr(node, "handlers", [])
+        if isinstance(node, ast.Try)
+        for handler in node.handlers
         if _handler_escalates(handler)
     ]
     assert escalating, f"{function} holds no escalating handler to shadow; splice into another definition"

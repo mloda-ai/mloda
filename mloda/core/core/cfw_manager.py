@@ -191,9 +191,11 @@ class CfwManager:
         """Retrieves the error flag."""
         return self.error
 
-    def get_error_exception(self) -> Any:
-        """Retrieves the original exception object, if captured."""
-        return self.exception
+    def take_error_exception(self) -> Any:
+        """Hands over the original exception object, if captured, and drops the register's reference."""
+        exception = self.exception
+        self.exception = None
+        return exception
 
     def get_error_msg(self) -> Any:
         """Retrieves the error message."""

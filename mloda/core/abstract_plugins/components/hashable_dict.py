@@ -23,8 +23,7 @@ class _CycleMarker:
 
 
 # A cyclic value hashes instead of raising RecursionError. Mirrors the id() visited guard in
-# Feature._reduce. Equality is not cycle-safe: two separately built cyclic values reduce alike,
-# so a dict/set insertion of both still reaches the recursive == of Options/HashableDict.
+# Feature._reduce. _deep_equal carries the matching guard for the == that such a collision reaches.
 _CYCLE = _CycleMarker()
 
 
@@ -57,6 +56,24 @@ def _deep_hashable(value: Any, seen: frozenset[int] = frozenset()) -> Any:
     return value
 
 
+def _deep_equal(a: Any, b: Any, seen: frozenset[tuple[int, int]] = frozenset()) -> bool:
+    """Compare two values structurally, treating a repeated id pair on the recursion path as equal."""
+    if a is b:
+        return True
+    if type(a) is not type(b) or type(a) not in (dict, list, tuple):
+        return bool(a == b)
+    pair = (id(a), id(b))
+    if pair in seen:
+        return True
+    seen = seen | {pair}
+    if len(a) != len(b):
+        return False
+    if type(a) is dict:
+        # Keys keep their own hash and __eq__; only values are walked.
+        return all(k in b and _deep_equal(v, b[k], seen) for k, v in a.items())
+    return all(_deep_equal(x, y, seen) for x, y in zip(a, b))
+
+
 class HashableDict:
     def __init__(self, data: dict[Any, Any]) -> None:
         self.data = data
@@ -67,7 +84,7 @@ class HashableDict:
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, HashableDict):
             return False
-        return self.data == other.data
+        return _deep_equal(self.data, other.data)
 
     def items(self) -> Any:
         return self.data.items()

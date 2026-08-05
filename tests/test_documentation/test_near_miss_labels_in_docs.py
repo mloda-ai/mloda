@@ -89,12 +89,16 @@ def test_the_scanner_pattern_matches_a_rendered_near_miss_bullet() -> None:
     assert match.group("reason") == SCANNER_REASON
 
 
+# The troubleshooting page carries the full label table; the table guard below and DOC_BULLET_STAGES share it.
+LABEL_TABLE_PAGE = "in_depth/troubleshooting/feature-group-resolution-errors.md"
+
 # Pages reproducing a rendered near-miss bullet, pinned to their stage. This is the floor under the scan
 # above, which passes when it finds nothing, and the stage pin its set-membership check cannot be.
 DOC_BULLET_STAGES: dict[str, EliminationStage] = {
     "in_depth/compute-framework-integration.md": "framework_pin",
     "in_depth/data-access-patterns.md": "input_data",
     "in_depth/property-mapping.md": "value_rejection",
+    LABEL_TABLE_PAGE: "domain",
 }
 
 
@@ -141,3 +145,25 @@ class TestProseLabelMentions:
         assert any(spelling in text for spelling in spellings), (
             f"{page} no longer names the '{stage}' near-miss label in prose as any of {list(spellings)}."
         )
+
+
+# A markdown table row whose first column is a backticked value; only the label table backticks its first column.
+LABEL_TABLE_ROW_PATTERN = re.compile(r"^\|\s*`(?P<label>[^`]+)`\s*\|")
+
+
+def test_the_label_table_rows_are_exactly_the_distinct_stage_labels() -> None:
+    """Equality both ways: a deleted or renamed row fails, and so does a row naming a label no stage carries."""
+    page = DOCS_ROOT / LABEL_TABLE_PAGE
+    assert page.is_file(), f"{page} was moved or renamed; update LABEL_TABLE_PAGE"
+
+    rows = {
+        match.group("label")
+        for line in page.read_text(encoding="utf-8").splitlines()
+        if (match := LABEL_TABLE_ROW_PATTERN.match(line)) is not None
+    }
+
+    missing = ALLOWED_LABELS - rows
+    assert not missing, f"{page} label table lost the row(s) for label(s) {sorted(missing)}."
+
+    stale = rows - ALLOWED_LABELS
+    assert not stale, f"{page} label table names label(s) no stage carries: {sorted(stale)}."

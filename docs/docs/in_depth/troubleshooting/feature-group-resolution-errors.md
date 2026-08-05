@@ -55,6 +55,57 @@ which returns a `ResolutionDiagnosis` for the whole request. See
 [mlodaAPI](../mloda-api.md#diagnose-and-resolution_report) for both, plus the
 fields on `FeatureResolutionError`, `ResolutionDiagnosis`, and `ResolutionRecord`.
 
+## No Feature Groups Found Error
+
+### The Problem
+
+```
+FeatureResolutionError: No feature groups found for feature name: 'sales_revnue'. Requested domain: 'marketing'.
+Feature group(s) eliminated while matching 'sales_revnue':
+  - MarketingRevenueGroup (compute framework): none of its compute frameworks are enabled for this run
+  - SalesFeatureGroup (domain): declares domain 'sales', but the run requested 'marketing'
+Did you mean one of: ['sales_revenue']?
+Use resolve_feature(name, options=...) to debug feature resolution.
+For troubleshooting guide, see: https://mloda-ai.github.io/mloda/in_depth/troubleshooting/feature-group-resolution-errors/
+```
+
+No enabled feature group both declared the requested name and survived every matching gate. It is raised as `FeatureResolutionError` during planning; see [Catching resolution failures](#catching-resolution-failures) to inspect it, or follow the message's closing pointer and rerun the request through `resolve_feature`. Pass the same `Feature` and run arguments, as the top of this page describes; the bare name alone would drop the domain and default to all frameworks, changing the outcome.
+
+### The eliminated candidates block
+
+Each line names a candidate the matcher considered and dropped: the first gate that eliminated it (the parenthesized label) and that gate's reason. A line does not prove the candidate declared the requested name; a candidate whose match hook raised or whose input-data gate declined is recorded regardless.
+
+| Label | What eliminated the candidate | Typical fix |
+| --- | --- | --- |
+| `option value` | The group declined an option value in the request. | Fix the value the reason names. |
+| `input data` | The input-data gate declined the request. | Point the request at data the group can read ([Data Access Patterns](../data-access-patterns.md)). |
+| `match hook` | The group's match hook raised; the error is contained and quoted. | Fix the plugin bug it names. |
+| `domain` | The group declares a different domain than the request. | Align the requested domain ([domain solution below](#3-use-domains-to-separate-feature-groups)). |
+| `scope` | The group is outside the requested `feature_group` scope. | Widen or correct the scope ([scope solution below](#4-scope-a-feature-to-one-source-shared-keys-across-sources)). |
+| `compute framework` | None of the group's compute frameworks are usable: its capability hook rejected every enabled framework, or none of its frameworks is enabled for the run. | Enable a framework the group supports. |
+| `compute framework pin` | The `Feature` pins `compute_frameworks` to one that is not among the group's supported set for this run. | Change or drop the pin. |
+| `links` | No index column of the group matches the run's links. | Align the run's links with the group's index. |
+
+### The Did you mean hint
+
+Suggestions are close matches drawn from the catalog of accessible groups: declared feature names, class names, and class-name prefixes. The hint drops what would only repeat or mislead: the requested name itself, names the eliminated-candidates block already covers, and names only unreachable groups declare (abstract, no enabled framework, or outside the requested domain, scope, or links). A missing hint therefore means no reachable group declares anything close. In the example above, 'sales_revenue' survives because a third, still-reachable group declares it; the two eliminated candidates could not have contributed it.
+
+### Only abstract feature group bases matched
+
+A sibling variant fires when an abstract base matched the name and no concrete group won:
+
+```
+No feature groups found for feature name: 'my_feature'. Only abstract feature group base(s) matched, which cannot be instantiated; no concrete implementation is available or enabled.
+```
+
+or, when concrete implementations exist but their compute frameworks do not:
+
+```
+No feature groups found for feature name: 'my_feature'. Its concrete implementations require compute framework(s) ['PandasDataFrame'], none of which are available or enabled for this run.
+```
+
+For the first shape, import or enable a concrete implementation. For the second, enable one of the named compute frameworks; the list comes from the base's accessible concrete implementations, so check that the one you enable actually serves the name. Eliminated candidates, if any, still render in the eliminated-candidates block; the Did-you-mean suggestion and the trailing pointer lines never do.
+
 ## Multiple Feature Groups Error
 
 ### The Problem
@@ -98,9 +149,11 @@ plugin_loader.load_group("feature_group") # load plugins only from mloda_plugins
 
 #### 3. Use Domains to Separate Feature Groups
 ```python
+from mloda.user import Domain
+
 @classmethod
 def get_domain(cls):
-    return "sales"  # Makes this FG only handle 'sales' domain features
+    return Domain("sales")  # Makes this FG only handle 'sales' domain features
 ```
 
 #### 4. Scope a feature to one source (shared keys across sources)

@@ -4,7 +4,7 @@ import logging
 from typing import Any, Optional, TYPE_CHECKING, cast
 from copy import deepcopy
 
-from mloda.core.abstract_plugins.components.hashable_dict import _deep_hashable
+from mloda.core.abstract_plugins.components.hashable_dict import _deep_equal, _deep_hashable
 from mloda.core.abstract_plugins.components.validators.options_validator import OptionsValidator
 from mloda.core.abstract_plugins.components.default_options_key import DefaultOptionKeys
 
@@ -175,7 +175,7 @@ class Options:
         """
         if not isinstance(other, Options):
             return False
-        return self.group == other.group
+        return _deep_equal(self.group, other.group)
 
     def get(self, key: str, default: Any = None) -> Any:
         """Get a value, searching group then context; return ``default`` only when the key is absent from both.

@@ -140,7 +140,9 @@ class ExecutionOrchestrator:
             error = self.cfw_register.get_error()
             if error:
                 logger.error(self.cfw_register.get_error_exc_info())
-                original = self.cfw_register.get_error_exception()
+                # The register outlives the raise; on SYNC/THREADING a retained exception pins its
+                # traceback frames and through them the plugin class (pickling drops __traceback__).
+                original = self.cfw_register.take_error_exception()
                 if isinstance(original, BaseException):
                     raise original
                 raise MlodaRunError(self.cfw_register.get_error_msg())

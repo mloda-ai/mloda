@@ -30,6 +30,7 @@ from mloda.core.runtime.flight.runner_flight_server import ParallelRunnerFlightS
 from mloda.core.abstract_plugins.feature_group import FeatureGroup, format_feature_group_class
 from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.feature_collection import Features
+from mloda.core.abstract_plugins.components.hashable_dict import _deep_equal
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.components.link import JoinType, Link
 from mloda.core.abstract_plugins.components.validators.link_validator import LinkValidator
@@ -403,7 +404,10 @@ class Engine:
     ) -> None:
         """Warn when a merge holds only post-materialization: the declared (pre-default) options differ."""
         survivor_declared = self._declared_options_by_uuid.get(existing_feature.uuid, existing_feature.options)
-        if declared_options.group == survivor_declared.group and declared_options.context == survivor_declared.context:
+        # Reached only when the feature equality probe matched, so cyclic values arrive here too.
+        if _deep_equal(declared_options.group, survivor_declared.group) and _deep_equal(
+            declared_options.context, survivor_declared.context
+        ):
             return
         logger.warning(
             f"Feature '{feature.name}' was requested twice with default-equivalent options: the requests "

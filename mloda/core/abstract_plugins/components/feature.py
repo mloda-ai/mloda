@@ -10,7 +10,7 @@ if TYPE_CHECKING:
 
 from mloda.core.abstract_plugins.components.domain import Domain
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
-from mloda.core.abstract_plugins.components.hashable_dict import _CYCLE, _deep_hashable
+from mloda.core.abstract_plugins.components.hashable_dict import _CYCLE, _deep_equal, _deep_hashable
 from mloda.core.abstract_plugins.components.index.index import Index
 from mloda.core.abstract_plugins.components.link import Link
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
@@ -330,7 +330,8 @@ class Feature:
         return (
             self.name == other.name
             and self.options == other.options
-            and self.options.context == other.options.context
+            # __hash__ excludes context, so this probe meets cyclic contexts and needs the cycle-safe walk.
+            and _deep_equal(self.options.context, other.options.context)
             and self.domain == other.domain
             and self.compute_frameworks == other.compute_frameworks
             and self.data_type == other.data_type

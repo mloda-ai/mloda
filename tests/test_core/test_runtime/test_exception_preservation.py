@@ -207,7 +207,7 @@ def test_check_for_error_raises_mloda_run_error_when_no_exception_captured() -> 
     """``_check_for_error`` must raise the typed ``MlodaRunError`` fallback.
 
     When a run reports an error but no original exception object was captured
-    (``get_error_exception()`` returns ``None`` -- e.g. the internal critical
+    (``take_error_exception()`` returns ``None`` -- e.g. the internal critical
     ``error_out`` path), the loop must raise ``MlodaRunError`` rather than a bare
     ``Exception``.
 
@@ -224,7 +224,7 @@ def test_check_for_error_raises_mloda_run_error_when_no_exception_captured() -> 
 
     cfw_register = MagicMock()
     cfw_register.get_error.return_value = True
-    cfw_register.get_error_exception.return_value = None
+    cfw_register.take_error_exception.return_value = None
     cfw_register.get_error_msg.return_value = "critical error_out"
     cfw_register.get_error_exc_info.return_value = "critical error_out"
     orchestrator.cfw_register = cfw_register

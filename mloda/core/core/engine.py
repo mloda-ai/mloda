@@ -143,10 +143,6 @@ class Engine:
             planned_queue, resolver.resolver_links.get_link_trekker()
         )
 
-        if self.global_filter:
-            # Setup and planning both mutate filter Features shared with GlobalFilter's hash-keyed sets.
-            self.global_filter.rehash_stored_filters()
-
         execution_planner = ExecutionPlan(self.global_filter, self.api_input_data_collection)
         execution_planner.create_execution_plan(planned_queue, graph, resolver.resolver_links.get_link_trekker())
         return execution_planner
@@ -348,6 +344,9 @@ class Engine:
                 # Intake may materialize declared defaults into the filter feature's options: group fills shift
                 # SingleFilter's hash, context fills shift its equality, so intake must run before it is stored.
                 self.add_feature_to_collection(feature_group_class, match.filter_feature, features.child_uuid)
+                # The stored filter needs its own Feature: planner rewrites of the queue twin must not shift its hash.
+                # The copy stays shallow on purpose, a deepcopy would shift that hash instead.
+                match.filter_feature = match.handle_filter_feature(match.filter_feature)
                 self.global_filter.add_filter_to_collection(feature_group_class, feature.name, match)
 
             # After the loop, so the recorded filters are the renamed ones.

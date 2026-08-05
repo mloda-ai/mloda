@@ -24,13 +24,18 @@ class ResolveComputeFrameworks:
                     trekker_members[trekker].append(f)
                     feature_trekkers[f.uuid].append(trekker)
 
+        # Snapshot before resolving: invert_link mutates data_ordered while the loop runs.
+        trekked_uuids = {trekker: set(uuids) for trekker, uuids in link_trekker.data_ordered.items()}
+
         resolved: dict[LinkFrameworkTrekker, type[ComputeFramework]] = {}
         for trekker, members in trekker_members.items():
-            resolved_cfw = self.resolve_trekker_for_group(trekker, members)
+            if trekker not in trekked_uuids:
+                raise ValueError(f"Trekker bookkeeping is inconsistent: no uuids recorded for link {trekker[0]}.")
+            resolved_cfw = self.resolve_trekker(trekker, members)
             if resolved_cfw is not None:
                 resolved[trekker] = resolved_cfw
             # Invert every uuid of the trekker at once, so a link keeps a single orientation across all groups.
-            self.trekker_right_left_adjuster(link_trekker, set(link_trekker.data_ordered.get(trekker, set())))
+            self.trekker_right_left_adjuster(link_trekker, trekked_uuids[trekker])
 
         for p in groups:
             self.rewrite_group_frameworks(p, resolved, feature_trekkers)
@@ -56,6 +61,13 @@ class ResolveComputeFrameworks:
         for f in group[1]:
             if f.uuid not in feature_trekkers:
                 if group_cfws:
+                    supported = set(f.compute_frameworks) if f.compute_frameworks is not None else group_cfws
+                    unsupported = group_cfws - supported
+                    if unsupported:
+                        names = sorted(cfw.__name__ for cfw in unsupported)
+                        raise ValueError(
+                            f"Feature {f.name} does not support the compute framework(s) {names} chosen for its group."
+                        )
                     f.compute_frameworks = set(group_cfws)
                     any_rewritten = True
                 continue
@@ -158,9 +170,7 @@ class ResolveComputeFrameworks:
 
         self.to_invert_trekker_collection = []
 
-    def resolve_trekker_for_group(
-        self, trekker: LinkFrameworkTrekker, members: list[Any]
-    ) -> type[ComputeFramework] | None:
+    def resolve_trekker(self, trekker: LinkFrameworkTrekker, members: list[Any]) -> type[ComputeFramework] | None:
         link, left_cfw, right_cfw = trekker
 
         left_in_all = all(left_cfw in m.compute_frameworks for m in members)

@@ -37,7 +37,12 @@ from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.feature_set import FeatureSet
 from mloda.core.abstract_plugins.components.options import Options, _isolate_forwarded_value
 from mloda.core.abstract_plugins.components.index.index import Index
-from mloda.core.abstract_plugins.components.utils import get_all_subclasses, is_match_abort, safe_field
+from mloda.core.abstract_plugins.components.utils import (
+    contained_raise_reason,
+    get_all_subclasses,
+    is_match_abort,
+    safe_field,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -812,11 +817,12 @@ class FeatureGroup(ABC):
             # mean the feature group does not match, so it is not a root.
             if is_match_abort(exc):
                 raise
+            # Text, not exc: a retained record must not pin the traceback, its frames and the plugin class.
             logger.debug(
-                "%s.input_features raised an exception for feature '%s'",
+                "%s.input_features %s for feature '%s'; treating it as a non-root.",
                 type(self).__name__,
+                contained_raise_reason(exc),
                 feature_name,
-                exc_info=True,
             )
         return False
 

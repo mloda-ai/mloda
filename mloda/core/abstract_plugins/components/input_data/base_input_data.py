@@ -15,6 +15,7 @@ from mloda.core.abstract_plugins.components.options import Options
 
 from mloda.core.abstract_plugins.components.utils import (
     contained_raise_log_level,
+    contained_raise_reason,
     escalate_match_abort,
     get_all_subclasses,
 )
@@ -189,12 +190,13 @@ class BaseInputData(ABC):
                 is_required = bool(predicate(options if options is not None else Options()))
             # Swallows: a predicate that raises cannot judge, so the reader is a non-match, not the run.
             except Exception as exc:
+                # Text, not exc: a retained record must not pin the traceback, its frames and the plugin class.
                 logger.log(
                     contained_raise_log_level(exc),
-                    "required_when predicate %s for reader option '%s' raised %s; treating reader %s as a non-match.",
+                    "required_when predicate %s for reader option '%s' %s; treating reader %s as a non-match.",
                     getattr(predicate, "__name__", repr(predicate)),
                     key,
-                    exc,
+                    contained_raise_reason(exc),
                     owner,
                 )
                 return False
@@ -245,10 +247,10 @@ class BaseInputData(ABC):
             except Exception as exc:  # Swallows: a validator that raises cannot judge the value, so it is rejected.
                 logger.log(
                     contained_raise_log_level(exc),
-                    "element_validator for reader option '%s' of %s raised %s; treating value as rejected.",
+                    "element_validator for reader option '%s' of %s %s; treating value as rejected.",
                     key,
                     cls.get_class_name(),
-                    exc,
+                    contained_raise_reason(exc),
                 )
                 return False
         try:

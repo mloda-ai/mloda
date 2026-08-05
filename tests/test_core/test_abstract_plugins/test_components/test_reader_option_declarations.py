@@ -189,23 +189,6 @@ class TestReservedFrameworkKey:
         assert specs["rod_key_a"].framework_set is False
         assert specs["rod_key_b"].framework_set is False
 
-    def test_the_reserved_key_stays_framework_written_on_every_reader(self) -> None:
-        """The invariant the redeclaration guard protects: a merged reserved key is never user-set."""
-
-        class RodReservedInvariantReader(BaseInputData):
-            READER_OPTIONS: ClassVar[dict[str, PropertySpec]] = {
-                "BaseInputData": PropertySpec(
-                    "The matched (ReaderClass, data_access) pair, sharpened for this family.",
-                    default=None,
-                    framework_set=True,
-                ),
-            }
-
-        parent, child, _ = _decl_family()
-
-        for reader in (RodReservedInvariantReader, parent, child):
-            assert reader.reader_option_specs()["BaseInputData"].framework_set is True
-
 
 class TestMroMerge:
     """Declarations merge across ``cls.__mro__``, most-derived class winning on a collision."""
@@ -810,6 +793,7 @@ class TestReaderOptionsAreValidatedAtClassDefinition:
         assert "RodReservedShadowReader" in message
         assert "BaseInputData" in message
         assert "framework_set" in message
+        assert "reserved" in message
 
     def test_reserved_key_redeclared_with_no_default_rejected(self) -> None:
         """The harmful shape: a NO_DEFAULT redeclaration makes the reader veto itself on every match."""
@@ -825,6 +809,7 @@ class TestReaderOptionsAreValidatedAtClassDefinition:
         assert "RodReservedShadowNoDefaultReader" in message
         assert "BaseInputData" in message
         assert "framework_set" in message
+        assert "reserved" in message
 
     def test_reserved_key_redeclared_plainly_rejected(self) -> None:
         """framework_set=False is the whole defect; no second flag is needed to trigger it."""
@@ -840,6 +825,45 @@ class TestReaderOptionsAreValidatedAtClassDefinition:
         assert "RodReservedShadowPlainReader" in message
         assert "BaseInputData" in message
         assert "framework_set" in message
+        assert "reserved" in message
+
+    def test_reserved_key_shadowed_by_a_plain_mixin_rejected(self) -> None:
+        """A plain mixin runs no guard of its own, yet wins the merge ahead of the base; the subclass must raise."""
+
+        class RodShadowMixin:
+            READER_OPTIONS: ClassVar[dict[str, PropertySpec]] = {
+                "BaseInputData": PropertySpec("shadowed"),
+            }
+
+        with pytest.raises(ValueError) as exc_info:
+
+            class RodMixinShadowedReader(RodShadowMixin, BaseInputData):
+                pass
+
+        message = str(exc_info.value)
+        del exc_info
+        assert "RodMixinShadowedReader" in message
+        assert "BaseInputData" in message
+        assert "framework_set" in message
+        assert "reserved" in message
+
+    def test_reserved_key_mixin_losing_the_merge_defines_fine(self) -> None:
+        """Base-first ordering ranks the mixin BELOW the base, so the framework declaration wins and nothing raises."""
+
+        class RodLosingShadowMixin:
+            READER_OPTIONS: ClassVar[dict[str, PropertySpec]] = {
+                "BaseInputData": PropertySpec("shadowed"),
+            }
+
+        class RodMixinLosesMergeReader(BaseInputData, RodLosingShadowMixin):
+            pass
+
+        mro = RodMixinLosesMergeReader.__mro__
+        spec = RodMixinLosesMergeReader.reader_option_specs()["BaseInputData"]
+
+        assert mro.index(BaseInputData) < mro.index(RodLosingShadowMixin)
+        assert spec.framework_set is True
+        assert spec.default is None
 
     def test_reserved_key_redeclared_with_framework_set_defines_fine(self) -> None:
         """Control: a legitimate redeclaration keeping the flag, a sharpened explanation, still defines."""

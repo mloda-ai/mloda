@@ -55,8 +55,11 @@ class GlobalFilter:
         self.matched_filter_uuids.clear()
         self._warned_divergences.clear()
 
-    def rehash_after_framework_rewrite(self) -> None:
-        """Reinsert stored filters so their hashes reflect frameworks planning rewrote in place."""
+    def rehash_stored_filters(self) -> None:
+        """Reinsert stored filters whose hashes went stale: Engine._add_filter_feature renames matched filter
+        features while their SingleFilters sit in probes, and planning rewrites shared filter Features' frameworks."""
+        # list() forces a rehash; set(value) would reuse the stale stored hashes.
+        # Duplicates that became equal after the rewrite intentionally merge here (same declared filter, same predicate).
         self.collection = {key: set(list(value)) for key, value in self.collection.items()}
         self.probes = {key: set(list(value)) for key, value in self.probes.items()}
 

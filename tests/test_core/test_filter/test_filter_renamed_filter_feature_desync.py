@@ -38,7 +38,7 @@ class RnfilRenamingFG(FeatureGroup):
 _ENABLED = PluginCollector.enabled_feature_groups({RnfilRenamingFG})
 
 
-def test_filter_on_renamed_filter_feature_filters_rows(flight_server: Any) -> None:
+def test_filter_on_renamed_filter_feature_filters_rows() -> None:
     """A min filter on the pre-rename name must apply to the renamed column."""
     features = Features([Feature("rnfil_value")])
 
@@ -49,7 +49,6 @@ def test_filter_on_renamed_filter_feature_filters_rows(flight_server: Any) -> No
         features,
         compute_frameworks={PythonDictFramework},
         parallelization_modes={ParallelizationMode.SYNC},
-        flight_server=flight_server,
         global_filter=global_filter,
         plugin_collector=_ENABLED,
     )

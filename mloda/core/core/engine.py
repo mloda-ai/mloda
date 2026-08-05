@@ -143,8 +143,8 @@ class Engine:
         )
 
         if self.global_filter:
-            # The rewrite mutates filter Features shared with GlobalFilter's hash-keyed sets.
-            self.global_filter.rehash_after_framework_rewrite()
+            # Setup and planning both mutate filter Features shared with GlobalFilter's hash-keyed sets.
+            self.global_filter.rehash_stored_filters()
 
         execution_planner = ExecutionPlan(self.global_filter, self.api_input_data_collection)
         execution_planner.create_execution_plan(planned_queue, graph, resolver.resolver_links.get_link_trekker())

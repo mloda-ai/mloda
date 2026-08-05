@@ -54,6 +54,12 @@ class BaseInputData(ABC):
                     f"{cls.__name__}.READER_OPTIONS['{key}'] is a {type(spec).__name__}, not a PropertySpec. "
                     f"Construct PropertySpec(...) instead."
                 )
+            if key == "BaseInputData" and not spec.framework_set:
+                raise ValueError(
+                    f"{cls.__name__}.READER_OPTIONS['{key}'] redeclares the reserved key without "
+                    f"framework_set=True; the framework writes this key itself, so the admit path would "
+                    f"judge a value no user ever supplies."
+                )
             if spec.match_guard is not None:
                 raise ValueError(
                     f"{cls.__name__}.READER_OPTIONS['{key}'] declares a match_guard, which is name-matching "

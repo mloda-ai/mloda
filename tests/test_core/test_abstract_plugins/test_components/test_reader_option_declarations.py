@@ -189,6 +189,23 @@ class TestReservedFrameworkKey:
         assert specs["rod_key_a"].framework_set is False
         assert specs["rod_key_b"].framework_set is False
 
+    def test_the_reserved_key_stays_framework_written_on_every_reader(self) -> None:
+        """The invariant the redeclaration guard protects: a merged reserved key is never user-set."""
+
+        class RodReservedInvariantReader(BaseInputData):
+            READER_OPTIONS: ClassVar[dict[str, PropertySpec]] = {
+                "BaseInputData": PropertySpec(
+                    "The matched (ReaderClass, data_access) pair, sharpened for this family.",
+                    default=None,
+                    framework_set=True,
+                ),
+            }
+
+        parent, child, _ = _decl_family()
+
+        for reader in (RodReservedInvariantReader, parent, child):
+            assert reader.reader_option_specs()["BaseInputData"].framework_set is True
+
 
 class TestMroMerge:
     """Declarations merge across ``cls.__mro__``, most-derived class winning on a collision."""
@@ -778,6 +795,67 @@ class TestReaderOptionsAreValidatedAtClassDefinition:
         assert "rod_fw_allow_none_key" in message
         assert "framework_set" in message
         assert "allow_explicit_none" in message
+
+    def test_reserved_key_redeclared_without_framework_set_rejected(self) -> None:
+        """Dropping the flag on the reserved key hands the framework-written key to the admit path."""
+        with pytest.raises(ValueError) as exc_info:
+
+            class RodReservedShadowReader(BaseInputData):
+                READER_OPTIONS: ClassVar[dict[str, PropertySpec]] = {
+                    "BaseInputData": PropertySpec("shadowed", allow_explicit_none=True, default=None),
+                }
+
+        message = str(exc_info.value)
+        del exc_info
+        assert "RodReservedShadowReader" in message
+        assert "BaseInputData" in message
+        assert "framework_set" in message
+
+    def test_reserved_key_redeclared_with_no_default_rejected(self) -> None:
+        """The harmful shape: a NO_DEFAULT redeclaration makes the reader veto itself on every match."""
+        with pytest.raises(ValueError) as exc_info:
+
+            class RodReservedShadowNoDefaultReader(BaseInputData):
+                READER_OPTIONS: ClassVar[dict[str, PropertySpec]] = {
+                    "BaseInputData": PropertySpec("shadowed"),
+                }
+
+        message = str(exc_info.value)
+        del exc_info
+        assert "RodReservedShadowNoDefaultReader" in message
+        assert "BaseInputData" in message
+        assert "framework_set" in message
+
+    def test_reserved_key_redeclared_plainly_rejected(self) -> None:
+        """framework_set=False is the whole defect; no second flag is needed to trigger it."""
+        with pytest.raises(ValueError) as exc_info:
+
+            class RodReservedShadowPlainReader(BaseInputData):
+                READER_OPTIONS: ClassVar[dict[str, PropertySpec]] = {
+                    "BaseInputData": PropertySpec("shadowed", default=None),
+                }
+
+        message = str(exc_info.value)
+        del exc_info
+        assert "RodReservedShadowPlainReader" in message
+        assert "BaseInputData" in message
+        assert "framework_set" in message
+
+    def test_reserved_key_redeclared_with_framework_set_defines_fine(self) -> None:
+        """Control: a legitimate redeclaration keeping the flag, a sharpened explanation, still defines."""
+
+        class RodReservedKeptFrameworkReader(BaseInputData):
+            READER_OPTIONS: ClassVar[dict[str, PropertySpec]] = {
+                "BaseInputData": PropertySpec(
+                    "The matched (ReaderClass, data_access) pair, sharpened for this family.",
+                    default=None,
+                    framework_set=True,
+                ),
+            }
+
+        spec = RodReservedKeptFrameworkReader.reader_option_specs()["BaseInputData"]
+        assert spec.framework_set is True
+        assert spec.default is None
 
     def test_a_strict_allowed_values_declaration_defines_fine(self) -> None:
         """Strict specs are the point of the collapse; a valued one with an in-space default defines."""

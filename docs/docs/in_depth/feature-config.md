@@ -13,7 +13,7 @@ Use cases:
 
 ## Basic Usage
 
-```py
+```python
 from mloda.user import load_features_from_config, mloda
 
 config = '''
@@ -24,8 +24,14 @@ config = '''
 '''
 
 features = load_features_from_config(config)
-result = mloda.run_all(features, compute_frameworks=["PandasDataFrame"])
+result = mloda.run_all(
+    features,
+    compute_frameworks=["PandasDataFrame"],
+    api_data={"SampleData": {"simple_feature": [1, 2], "configured_feature": [3, 4]}},
+)
 ```
+
+The config only builds the `Feature` objects; every name in it still needs a source, here `api_data`.
 
 ## JSON Format
 
@@ -260,24 +266,18 @@ In this example, `session_id` propagates to any features that depend on `my_feat
 
 ## Complete Example
 
-```py
+```python
 from mloda.user import load_features_from_config, mloda
 
 config = '''
 [
     "customer_id",
     {
-        "name": "sales_aggregated",
-        "in_features": ["daily_sales"],
+        "name": "sales__sum_aggr",
+        "in_features": ["sales"],
         "context_options": {
-            "aggregation_type": "sum",
-            "window_days": 7
+            "report": "weekly"
         }
-    },
-    {
-        "name": "encoded_category",
-        "in_features": ["category"],
-        "column_index": 0
     }
 ]
 '''
@@ -287,6 +287,9 @@ features = load_features_from_config(config)
 result = mloda.run_all(
     features,
     compute_frameworks=["PandasDataFrame"],
-    api_data={"customer_data": {"customer_id": [1, 2, 3]}}
+    api_data={"customer_data": {"customer_id": [1, 2, 3], "sales": [10.0, 20.0, 30.0]}}
 )
 ```
+
+`sales__sum_aggr` resolves to the aggregation Feature Group, which reads its source from the name; the
+`in_features` array states the same source explicitly, and `context_options` rides along as metadata.

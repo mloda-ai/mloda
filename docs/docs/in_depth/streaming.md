@@ -2,10 +2,14 @@
 
 `stream_all` lets you consume results incrementally instead of waiting for every feature group to finish.  Each time a feature group completes, its result is yielded immediately so you can begin processing it while the remaining groups are still computing.  It accepts the same parameters as `run_all` (see [mloda API](mloda-api.md)).
 
-```py
+```python
 from mloda.user import mloda
 
-for result in mloda.stream_all(["FeatureA", "FeatureB", "FeatureC"]):
+sensor_batch = {"SensorData": {"timestamp": [1, 2], "value": [10.5, 11.2]}}
+
+for result in mloda.stream_all(
+    ["value", "value__mean_aggr"], compute_frameworks=["PandasDataFrame"], api_data=sensor_batch
+):
     print(result)
 ```
 
@@ -15,19 +19,29 @@ for result in mloda.stream_all(["FeatureA", "FeatureB", "FeatureC"]):
 
 `run_all` returns all results at once after every feature group has finished:
 
-```py
+```python
 from mloda.user import mloda
 
-results = mloda.run_all(["FeatureA", "FeatureB", "FeatureC"])
-# results is a list — all groups are already complete
+results = mloda.run_all(
+    ["value", "value__mean_aggr"], compute_frameworks=["PandasDataFrame"], api_data=sensor_batch
+)
+# results is a list, all groups are already complete
 ```
 
 `stream_all` yields each result as soon as its group is done:
 
-```py
+```python
 from mloda.user import mloda
 
-for result in mloda.stream_all(["FeatureA", "FeatureB", "FeatureC"]):
+
+def process(result):
+    """Stands in for your own consumer."""
+    print(result)
+
+
+for result in mloda.stream_all(
+    ["value", "value__mean_aggr"], compute_frameworks=["PandasDataFrame"], api_data=sensor_batch
+):
     # each result arrives as its feature group finishes
     process(result)
 ```
@@ -64,7 +78,7 @@ All patterns below build on the [two-phase execution API (`prepare()` / `run()`)
 
 The recommended pattern for continuous processing. Call `prepare()` once to build the execution plan, then loop `run()` for each micro-batch. The plan is reused across calls, so only the first call pays the planning cost.
 
-```py
+```python
 from mloda.user import mloda
 
 def data_source():
@@ -74,7 +88,8 @@ def data_source():
 
 # Prepare once with a representative schema
 session = mloda.prepare(
-    ["ProcessedSensor"],
+    ["value__mean_aggr"],
+    compute_frameworks=["PandasDataFrame"],
     api_data={"SensorData": {"timestamp": [0], "value": [0.0]}},
 )
 
@@ -82,7 +97,7 @@ session = mloda.prepare(
 for batch in data_source():
     results = session.run(api_data=batch)
     for result in results:
-        consume(result)
+        process(result)
 ```
 
 This works with any iterable source.
@@ -91,7 +106,7 @@ This works with any iterable source.
 
 Combines plan reuse with per-group streaming. Call `prepare()` once, then `stream_run()` for each micro-batch. Each feature group's result is yielded as soon as it completes, while the execution plan is reused across calls.
 
-```py
+```python
 from mloda.user import mloda
 
 def sensor_source():
@@ -99,22 +114,23 @@ def sensor_source():
         "Sensors": {
             "timestamp": [1, 2, 3],
             "temperature": [22.1, 22.5, 23.0],
-            "pressure": [1013, 1012, 1014],
+            "pressure": [1013.0, 1012.0, 1014.0],
             "vibration": [0.01, 0.02, 0.015],
         }
     }
 
-features = ["TemperatureStats", "PressureAnomaly", "VibrationFFT"]
+features = ["temperature__mean_aggr", "pressure__max_aggr", "vibration__sum_aggr"]
 
 session = mloda.prepare(
     features,
-    api_data={"Sensors": {"timestamp": [0], "temperature": [0.0], "pressure": [0], "vibration": [0.0]}},
+    compute_frameworks=["PandasDataFrame"],
+    api_data={"Sensors": {"timestamp": [0], "temperature": [0.0], "pressure": [0.0], "vibration": [0.0]}},
 )
 
 for batch in sensor_source():
     for result in session.stream_run(api_data=batch):
         # Each panel updates as its feature group completes
-        dashboard.update_panel(result)
+        process(result)
 ```
 
 `stream_run()` has the same parameters as `run()`. `list(session.stream_run(...))` produces the same results as `session.run(...)`.
@@ -123,10 +139,12 @@ for batch in sensor_source():
 
 When you don't need plan reuse and want a single-call streaming API, use `mloda.stream_all()`. It internally calls `prepare()` + `stream_run()`.
 
-```py
+```python
 from mloda.user import mloda
 
-for result in mloda.stream_all(["FeatureA", "FeatureB", "FeatureC"], api_data=batch):
+for result in mloda.stream_all(
+    ["value", "value__mean_aggr"], compute_frameworks=["PandasDataFrame"], api_data=sensor_batch
+):
     process(result)
 ```
 

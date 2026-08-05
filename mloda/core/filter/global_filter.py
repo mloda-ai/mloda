@@ -278,6 +278,7 @@ class GlobalFilter:
     def compute_framework(self, filter: SingleFilter, feat: Feature) -> bool:
         # case that the filter feature has no cf set -> feature defines it
         if not filter.filter_feature.compute_frameworks:
+            # Hash-safe: the target is a per-match deepcopy, added to matched_filters only after all mutations.
             filter.filter_feature.compute_frameworks = feat.compute_frameworks
             return True
 

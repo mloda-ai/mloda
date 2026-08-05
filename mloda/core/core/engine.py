@@ -51,6 +51,7 @@ class Engine:
         column_ordering: Optional[str] = None,
     ) -> None:
         # setup variables which track the primary sources and the compute platforms
+        # Holds the Feature objects ResolveComputeFrameworks.links rewrites: hash-stale after planning, so only read it before planning (as today).
         self.feature_group_collection: dict[type[FeatureGroup], set[Feature]] = defaultdict(set)
 
         # use global filters
@@ -463,6 +464,7 @@ class Engine:
                     f"Feature {feature.name} does not support compute framework {feature.compute_frameworks}."
                 )
         else:
+            # Hash-safe only because this runs before add_feature_to_collection stores the feature.
             feature.compute_frameworks = compute_frameworks
         return feature
 

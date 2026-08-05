@@ -1,6 +1,6 @@
 from copy import deepcopy
 from typing import Any
-from collections import defaultdict
+from collections import Counter, defaultdict
 from uuid import UUID
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.prepare.graph.graph import Graph
@@ -23,9 +23,24 @@ class ResolveComputeFrameworks:
                     if trekked_links:
                         new_compute_frameworks = self.resolve_trekked_links(trekked_links, feature.compute_frameworks)
                         for f in p[1]:
-                            f.compute_frameworks = new_compute_frameworks
+                            f.compute_frameworks = set(new_compute_frameworks)
 
                         self.trekker_right_left_adjuster(link_trekker, {_f.uuid for _f in p[1]})
+
+                        # Rehash via list so hashes are recomputed (set(p[1]) reuses stale ones), keeping set and aliases valid.
+                        members = list(p[1])
+                        p[1].clear()
+                        p[1].update(members)
+                        if len(p[1]) != len(members):
+                            names = sorted(
+                                name
+                                for name, count in Counter(str(member.name) for member in members).items()
+                                if count > 1
+                            )
+                            raise ValueError(
+                                "Compute framework rewrite collapsed features that were previously distinct "
+                                f"only by compute_frameworks. Affected: {names}"
+                            )
 
             new_planned_queue.append(p)
 

@@ -243,6 +243,40 @@ class TestPublicEntryPoints:
         assert hash(left) == hash(right)
 
 
+class TestDeepHashableCycleGuard:
+    """A self-referential container collapses to a back-reference marker instead of recursing forever."""
+
+    def test_self_referential_list_hashes(self) -> None:
+        cyclic: list[Any] = []
+        cyclic.append(cyclic)
+        assert isinstance(hash(Options(group={"a": cyclic})), int)
+
+    def test_self_referential_dict_hashes(self) -> None:
+        cyclic: dict[str, Any] = {}
+        cyclic["self"] = cyclic
+        assert isinstance(hash(Options(group={"a": cyclic})), int)
+
+    def test_mutually_referential_containers_hash(self) -> None:
+        left: list[Any] = []
+        right: dict[str, Any] = {"left": left}
+        left.append(right)
+        assert isinstance(hash(HashableDict({"a": left})), int)
+
+    def test_cycle_nested_under_a_tuple_hashes(self) -> None:
+        cyclic: list[Any] = []
+        cyclic.append(cyclic)
+        assert isinstance(hash(HashableDict({"a": (cyclic,)})), int)
+
+    def test_the_back_reference_becomes_the_cycle_marker(self) -> None:
+        cyclic: list[Any] = []
+        cyclic.append(cyclic)
+        assert _deep_hashable(cyclic) == (("<cycle>",),)
+
+    def test_repeated_sibling_is_not_treated_as_a_cycle(self) -> None:
+        shared = [1, 2]
+        assert _deep_hashable([shared, shared]) == ((1, 2), (1, 2))
+
+
 class TestCrossModuleImportsFollowTheRename:
     """options and feature import the deep policy under its new name."""
 

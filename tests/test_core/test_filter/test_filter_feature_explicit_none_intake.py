@@ -245,16 +245,16 @@ def test_group_key_filter_is_stored_once_when_the_host_is_reached_twice() -> Non
 def test_group_key_two_hosts_with_unequal_reach_keep_one_filter_each() -> None:
     """Two hosts of one group, one reached twice and one once, keep a filter each and the run finishes.
 
-    Fails pre-fix: the twice-reached host collects two entries against the once-reached host's one,
-    and ``ExecutionPlan.add_single_filters_to_feature_set`` aborts the run over the unequal sets
-    (``ValueError: ... has different filters for different features``). This is the hard symptom the
-    symmetric dedup tests cannot reach, because two equally stale sets still compare equal.
+    Fails pre-fix: the twice-reached host collects two entries against the once-reached host's one.
+    The plan no longer rejects unequal sets, it attaches the deduplicated union, so the entry-count
+    assertions are what guard the intake dedup now. Two equally stale sets still compare equal,
+    which is why the symmetric dedup tests cannot reach this shape.
     """
     observed = _run(GRP_PROBE, via_derived=True, second_host=True)
     collection = observed["collection"]
     counts = {name: entry["entries"] for name, entry in collection.items()}
     assert counts == {GRP_PROBE.root: 1, GRP_PROBE.root_b: 1}, (
-        f"each host must hold exactly one filter, else the plan rejects the unequal sets: {collection!r}"
+        f"each host must hold exactly one filter; the entry counts are what guard the dedup now: {collection!r}"
     )
     payload = observed["payload"]
     assert {GRP_PROBE.root, GRP_PROBE.root_b} <= set(payload["names"]), (

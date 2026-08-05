@@ -3,6 +3,7 @@ from typing import Any, Generator, Optional
 from uuid import UUID
 
 from mloda.core.abstract_plugins.components.error_utils import internal_invariant_error
+from mloda.core.abstract_plugins.components.utils import safe_field
 from mloda.core.abstract_plugins.components.index.index import Index
 
 from mloda.core.abstract_plugins.components.input_data.api.api_input_data_collection import (
@@ -29,6 +30,16 @@ import logging
 
 
 logger = logging.getLogger(__name__)
+
+
+def _filter_options_sort_key(single_filter: SingleFilter) -> tuple[str, str]:
+    """Order enrichment variants: stable for values with a value-based repr, repr-identity ordering
+    otherwise; a raising repr degrades to the value's type name."""
+    options = single_filter.filter_feature.options
+    return (
+        repr(sorted((str(k), safe_field(lambda: repr(v), type(v).__name__)) for k, v in options.group.items())),
+        repr(sorted((str(k), safe_field(lambda: repr(v), type(v).__name__)) for k, v in options.context.items())),
+    )
 
 
 class ExecutionPlan:
@@ -998,32 +1009,42 @@ class ExecutionPlan:
         if len(self.global_filter.collection.keys()) == 0:
             return
 
-        relevant_filters: set[SingleFilter] = set()
+        feature_names = {feature.name for feature in feature_set.features}
+        probed_union = self._probed_filters_for_set(feature_group, feature_set)
 
+        # One representative per declared filter: enrichment variants of one declaration share
+        # its uuid; the resolved column name stays in the key because renames change the predicate.
+        representatives: dict[tuple[UUID, str], tuple[tuple[int, str, str], SingleFilter]] = {}
         for (
             filtered_feature_group,
             filtered_feature_name,
         ), single_filters in self.global_filter.collection.items():
-            # check for correct feature group
-            if filtered_feature_group == feature_group:
-                # check if filter feature is a feature of this feature set
-                for feature in feature_set.features:
-                    if feature.name == filtered_feature_name:
-                        if len(relevant_filters) == 0:
-                            # Read-only alias of the live collection set; FeatureSet.add_filters
-                            # copies it once at the storing end (#910).
-                            relevant_filters = single_filters
-                        else:
-                            if relevant_filters != single_filters:
-                                raise ValueError(
-                                    f"""Feature group {feature_group} has different filters for different features {filtered_feature_name}.
-                                      This is currently not allowed. Please make sure that all features of the same feature group have the same filters.
-                                      If this has a business use case, where this does not make sense, please contact the developers.
-                                      """
-                                )
+            if filtered_feature_group != feature_group or filtered_feature_name not in feature_names:
+                continue
+            for single_filter in single_filters:
+                key = (single_filter.uuid, str(single_filter.filter_feature.name))
+                # A variant this run's features probed outranks stale ones a reused GlobalFilter kept.
+                rank = (0 if single_filter in probed_union else 1, *_filter_options_sort_key(single_filter))
+                current = representatives.get(key)
+                if current is None or rank < current[0]:
+                    representatives[key] = (rank, single_filter)
+
+        # Fresh set; the elements remain the collection's live objects.
+        relevant_filters = {single_filter for _, single_filter in representatives.values()}
 
         self._warn_on_unmatched_features(feature_group, feature_set, relevant_filters)
         feature_set.add_filters(relevant_filters)
+
+    def _probed_filters_for_set(self, feature_group: type[FeatureGroup], feature_set: FeatureSet) -> set[SingleFilter]:
+        """Union of the filters this set's features probed; unprobed features contribute nothing."""
+        probed_union: set[SingleFilter] = set()
+        if self.global_filter is None:
+            return probed_union
+        for feature in feature_set.features:
+            probed = self.global_filter.probes.get((feature_group, feature.name, feature.uuid))
+            if probed is not None:
+                probed_union |= probed
+        return probed_union
 
     def _warn_on_unmatched_features(
         self, feature_group: type[FeatureGroup], feature_set: FeatureSet, relevant_filters: set[SingleFilter]
@@ -1037,7 +1058,15 @@ class ExecutionPlan:
             # Filter and index features enter the collection without being probed.
             if probed is None:
                 continue
-            unmatched = sorted({str(f.filter_feature.name) for f in relevant_filters - probed})
+            # Diff by declared-filter identity so a match under another enrichment still counts.
+            probed_keys = {(f.uuid, str(f.filter_feature.name)) for f in probed}
+            unmatched = sorted(
+                {
+                    str(f.filter_feature.name)
+                    for f in relevant_filters
+                    if (f.uuid, str(f.filter_feature.name)) not in probed_keys
+                }
+            )
             if not unmatched:
                 continue
             key = (feature_group, str(feature.name), tuple(unmatched))

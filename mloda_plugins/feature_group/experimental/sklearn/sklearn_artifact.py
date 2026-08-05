@@ -9,6 +9,7 @@ import tempfile
 from pathlib import Path
 from typing import Any, Optional
 
+from mloda.core.abstract_plugins.components.utils import contained_raise_reason
 from mloda.provider import BaseArtifact
 from mloda.provider import FeatureSet
 from mloda.provider import property_spec
@@ -231,7 +232,9 @@ class SklearnArtifact(BaseArtifact):
                     loaded_artifacts[artifact_key] = artifact_data
 
             except Exception as e:
-                logger.warning("Failed to load artifact from %s: %s", file_path, e)
+                # The reason as text, not the exception: an object in LogRecord.args pins its traceback,
+                # and a retained record then holds the frames of the failed load.
+                logger.warning("Failed to load artifact from %s: %s", file_path, contained_raise_reason(e))
                 continue
 
         if loaded_artifacts:

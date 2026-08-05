@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
 from typing import Any
 
+from mloda.core.abstract_plugins.components.utils import contained_raise_reason
 
 import logging
 
@@ -53,11 +54,14 @@ class BaseValidator(ABC):
     def handle_log_level(self, _error: str, _exception: Exception) -> None:
         if self.log_level == "error":
             raise _exception
-        elif self.log_level == "warning":
-            logger.warning(_error, exc_info=_exception)
+        # The non-error levels contain the raise, so the diagnosis goes on the record as text: exc_info= pins
+        # the (type, exception, traceback) triple, and a retained record then keeps the raising frames alive.
+        reason = contained_raise_reason(_exception)
+        if self.log_level == "warning":
+            logger.warning("%s (%s)", _error, reason)
         elif self.log_level == "info":
-            logger.info(_error, exc_info=_exception)
+            logger.info("%s (%s)", _error, reason)
         elif self.log_level == "debug":
-            logger.debug(_error, exc_info=_exception)
+            logger.debug("%s (%s)", _error, reason)
         else:
             raise Exception(f"Invalid log level: {self.log_level} in {self.__class__.__name__}.")

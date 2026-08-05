@@ -1545,6 +1545,12 @@ def abstract_domain_gate_scenario() -> Scenario:
     )
 
 
+def abstract_domain_and_scope_gate_scenario() -> Scenario:
+    """The same abstract-only failure, requested with a feature_group scope on top of the domain."""
+    feature = Feature(ABSTRACT_DECLARER_NAME_791, domain=REQUESTED_DOMAIN_791, feature_group=SpareAbstractBaseFG791)
+    return feature, {SpareAbstractBaseFG791: {RendererFwOne791}}
+
+
 def raising_dead_names_scenario() -> Scenario:
     """A dead candidate whose feature_names_supported() raises, so it can contribute no name at all."""
     return Feature(RAISING_DEAD_NAMES_FEATURE_791), {_build_raising_dead_names_group(): set()}
@@ -1613,6 +1619,7 @@ FAILING_SCENARIOS: dict[str, Callable[[], Scenario]] = {
     "dead_class_name": dead_class_name_scenario,
     "abstract_declarer_typo": abstract_declarer_typo_scenario,
     "abstract_domain_gate": abstract_domain_gate_scenario,
+    "abstract_domain_and_scope_gate": abstract_domain_and_scope_gate_scenario,
     "raising_dead_names": raising_dead_names_scenario,
     "raising_domain_multiple": raising_domain_multiple_scenario,
     "raising_prefix_none": raising_prefix_none_scenario,
@@ -2996,6 +3003,28 @@ class TestADomainCarryingFailureNamesTheRequestedDomain:
             "no concrete implementation is available or enabled. "
             f"Requested domain: '{REQUESTED_DOMAIN_791}'.\n"
             "Use resolve_feature(name, options=...) to debug feature resolution.\n"
+            f"{TROUBLESHOOTING_LINE}"
+        )
+
+    def test_a_scoped_abstract_only_failure_states_scope_then_domain(self) -> None:
+        """Both callouts compose on the sentence line, scope first, and the pointer widens for the scope."""
+        scenario = abstract_domain_and_scope_gate_scenario()
+        feature, _ = scenario
+        result = _evaluate(scenario)
+
+        # Premise: the request carries both gates the user set, and the failure is still abstract-only.
+        assert feature.domain is not None
+        assert feature.feature_group_scope is SpareAbstractBaseFG791
+        assert result.failure_kind == "abstract_only"
+
+        message = render_resolution_failure(result, feature)
+        assert message == (
+            f"No feature groups found for feature name: '{ABSTRACT_DECLARER_NAME_791}'. "
+            "Only abstract feature group base(s) matched, which cannot be instantiated; "
+            "no concrete implementation is available or enabled. "
+            "Scoped to feature group: 'SpareAbstractBaseFG791'. "
+            f"Requested domain: '{REQUESTED_DOMAIN_791}'.\n"
+            "Use resolve_feature(name, options=..., feature_group=...) to debug feature resolution.\n"
             f"{TROUBLESHOOTING_LINE}"
         )
 

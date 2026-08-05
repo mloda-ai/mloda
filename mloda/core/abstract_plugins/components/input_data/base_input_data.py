@@ -9,6 +9,7 @@ from mloda.core.abstract_plugins.components.match_rejection import (
     INPUT_DATA_OWNED_STAGE,
     INPUT_DATA_STAGE,
     record_match_rejection,
+    restamp_match_rejection,
 )
 from mloda.core.abstract_plugins.components.options import Options
 
@@ -311,6 +312,8 @@ class BaseInputData(ABC):
                     if matched_data_access:
                         cls.add_base_input_data_to_options(subclass, matched_data_access, options)
                         return True
+                    # The addressed reader matched nothing, so a recorded content decline becomes an owned veto.
+                    restamp_match_rejection(subclass.get_class_name(), INPUT_DATA_STAGE, INPUT_DATA_OWNED_STAGE)
                     break  # This case is if a feature requests an input feature, which should have scoped access.
         return False
 

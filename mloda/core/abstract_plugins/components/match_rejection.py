@@ -39,6 +39,16 @@ def record_match_rejection(owner_name: str, reason: str, stage: str = "value_rej
     reasons.setdefault(owner_name, MatchRejection(reason, stage))
 
 
+def restamp_match_rejection(owner_name: str, from_stage: str, to_stage: str) -> None:
+    """Re-stamp the owner's recorded stage; a no-op outside a window, without a recording, or on a stage mismatch."""
+    reasons = MATCH_REJECTION_REASONS.get()
+    if reasons is None:
+        return
+    rejection = reasons.get(owner_name)
+    if rejection is not None and rejection.stage == from_stage:
+        reasons[owner_name] = MatchRejection(rejection.reason, to_stage)
+
+
 def has_match_rejection(stage: str) -> bool:
     """True iff the active window holds a rejection with exactly this stage; False without an active window."""
     reasons = MATCH_REJECTION_REASONS.get()

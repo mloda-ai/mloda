@@ -3,9 +3,29 @@ from typing import Any
 from mloda.core.abstract_plugins.components.utils import unhashable_part
 
 
-# Stand-in for a container already on the recursion path, so a cyclic value hashes
-# instead of raising RecursionError. Mirrors the id() visited guard in Feature._reduce.
-_CYCLE = ("<cycle>",)
+class _CycleMarker:
+    """Stand-in for a container already on the recursion path.
+
+    Its own type keeps it distinct from every normalized user value, so a literal ``"<cycle>"``
+    cannot collide with a real back-reference. Hash is constant so it stays stable across processes.
+    """
+
+    __slots__ = ()
+
+    def __hash__(self) -> int:
+        return hash("mloda-deep-hashable-cycle")
+
+    def __eq__(self, other: object) -> bool:
+        return isinstance(other, _CycleMarker)
+
+    def __repr__(self) -> str:
+        return "<cycle>"
+
+
+# A cyclic value hashes instead of raising RecursionError. Mirrors the id() visited guard in
+# Feature._reduce. Equality is not cycle-safe: two separately built cyclic values reduce alike,
+# so a dict/set insertion of both still reaches the recursive == of Options/HashableDict.
+_CYCLE = _CycleMarker()
 
 
 def _deep_hashable(value: Any, seen: frozenset[int] = frozenset()) -> Any:

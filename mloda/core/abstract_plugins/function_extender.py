@@ -5,6 +5,8 @@ import functools
 import inspect
 import logging
 
+from mloda.core.abstract_plugins.components.utils import contained_raise_reason
+
 if TYPE_CHECKING:
     from mloda.core.abstract_plugins.components.feature_set import FeatureSet
     from mloda.core.abstract_plugins.components.options import Options
@@ -179,7 +181,9 @@ def _invoke_extender(ext: Extender, inner_func: Any, *args: Any, **kwargs: Any) 
             # extender. Propagate unchanged; do not swallow, do not re-run.
             raise
         name = ext.name if hasattr(ext, "name") else ""
-        logger.warning(f"{ext.__class__.__name__} {name} {type(e).__name__}: {e}", exc_info=True)
+        # Text, not exc_info=True: the record would pin the traceback, and its frames hold the extender and
+        # the wrapped callable.
+        logger.warning("%s %s %s", ext.__class__.__name__, name, contained_raise_reason(e))
         if state["result"] is not sentinel:
             # Inner already ran successfully; the extender failed afterwards.
             # Return the already-computed result; do NOT re-run inner.

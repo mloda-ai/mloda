@@ -38,18 +38,24 @@ This means, depending on your needs, you can run them all at once (**batch run**
     Accepts `"alphabetical"` (sort columns A-Z) or `"request_order"`
     (preserve the order features were requested). Default: `None` (no guaranteed order).
 
-```py
+```python
 from mloda.user import mloda
+
+api_data = {"SampleData": {"FeatureA": [1], "FeatureB": [2], "FeatureC": [3]}}
 
 # Alphabetical ordering
 result = mloda.run_all(
     ["FeatureC", "FeatureA", "FeatureB"],
+    compute_frameworks=["PandasDataFrame"],
+    api_data=api_data,
     column_ordering="alphabetical"  # Result columns: FeatureA, FeatureB, FeatureC
 )
 
 # Preserve request order
 result = mloda.run_all(
     ["FeatureC", "FeatureA", "FeatureB"],
+    compute_frameworks=["PandasDataFrame"],
+    api_data=api_data,
     column_ordering="request_order"  # Result columns: FeatureC, FeatureA, FeatureB
 )
 ```
@@ -59,19 +65,19 @@ result = mloda.run_all(
 For realtime or inference scenarios, split configuration from execution.
 `prepare()` builds the execution plan once; `run()` executes it with fresh data each time.
 
-```py
+```python
 from mloda.user import mloda
 
-# 1. Prepare once
+# 1. Prepare once, with a representative shape of the data
 session = mloda.prepare(
-    ["MyFeature"],
+    ["col__mean_aggr"],
     compute_frameworks=["PandasDataFrame"],
-    api_data=initial_api_data,
+    api_data={"MyKey": {"col": [0.0]}},
 )
 
 # 2. Run multiple times with different data
-result_1 = session.run(api_data={"MyKey": {"col": [1, 2]}})
-result_2 = session.run(api_data={"MyKey": {"col": [3, 4]}})
+result_1 = session.run(api_data={"MyKey": {"col": [1.0, 2.0]}})
+result_2 = session.run(api_data={"MyKey": {"col": [3.0, 4.0]}})
 ```
 
 `run()` also accepts an `artifacts` parameter for switching between artifact
@@ -117,21 +123,23 @@ The runtime counterpart to `resolve_feature`: `mlodaAPI.explain(...)` builds the
 
 `explain` re-resolves the plan from scratch. It answers "what would this request resolve to", it is not a record of a prior `run_all` execution. For the plan of a run that actually happened, use the return value directly: `run_all` returns a `RunResult` (a `list` with a read-only `plan` property) and `stream_all` returns a `ResultStream` (generator-compatible, `plan` available before consuming). One planning pass serves both the results and the plan, unlike `explain`, which re-resolves.
 
-```py
+```python
 from mloda.user import mloda
 
-results = mloda.run_all(["sales__mean_aggr"], compute_frameworks=["PandasDataFrame"])
+sales_data = {"SalesData": {"sales": [10.0, 20.0, 30.0]}}
+
+results = mloda.run_all(["sales__mean_aggr"], compute_frameworks=["PandasDataFrame"], api_data=sales_data)
 for step in results.plan:
     print(step.step_kind, step.feature_names)
 ```
 
 To match a `run_all` resolution, pass the same `parallelization_modes`: `run_all` defaults to `{ParallelizationMode.SYNC}`, `prepare`/`explain` default to `None`, and compute frameworks are filtered by mode.
 
-```py
+```python
 from mloda.user import mloda
 
-# "sales" here stands for a root feature one of your own FeatureGroups provides.
-for step in mloda.explain(["sales__mean_aggr"], compute_frameworks=["PandasDataFrame"]):
+# "sales" arrives through api_data here; in your own request it can come from any FeatureGroup.
+for step in mloda.explain(["sales__mean_aggr"], compute_frameworks=["PandasDataFrame"], api_data=sales_data):
     print(step.step_kind, step.feature_names, step.feature_group_name, step.compute_framework_name)
 ```
 
@@ -158,10 +166,10 @@ The requested/injected split above is derived from a per-feature flag, not from 
 - `FeatureSet.get_initial_requested_features()` returns the sorted, deduplicated names of the flagged features in that set.
 - `PlanStep.requested_feature_names` is that accessor's output for a compute step's FeatureSet; `injected_feature_names` is the rest of `feature_names`. Both are sorted, so they do not follow the order of `feature_names`, and both are empty on join and transform steps, which carry no FeatureSet.
 
-```py
+```python
 from mloda.user import mloda
 
-for step in mloda.explain(["sales__mean_aggr"], compute_frameworks=["PandasDataFrame"]):
+for step in mloda.explain(["sales__mean_aggr"], compute_frameworks=["PandasDataFrame"], api_data=sales_data):
     print(step.requested_feature_names, step.injected_feature_names)
 ```
 

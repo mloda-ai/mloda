@@ -7,6 +7,10 @@ one autouse fixture in ``tests/conftest.py``, so every test module is isolated a
 from __future__ import annotations
 
 import gc
+import sys
+import types
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
 
 import pytest
@@ -21,6 +25,10 @@ from tests.registry_isolation import reclaim_leaked_feature_groups
 TESTS_ROOT = Path(__file__).resolve().parent
 
 PROBE_MODULE = registry_isolation_probe.__name__
+
+SYNTHETIC_MODULE = "tests._registry_isolation_module_owned_probe"
+SYNTHETIC_CLASS = "ModuleOwnedRegistryProbe995FeatureGroup"
+OWN_MODULE_CLASS = "OwnModuleBoundRegistryProbe995FeatureGroup"
 
 FIXTURE_NAME = "_no_feature_group_registry_pollution"
 # Assembled rather than written out, so this module is never itself a hit of the pattern it scans for.
@@ -102,6 +110,98 @@ class TestReclaimLeakedFeatureGroups:
         """The cheap path: nothing appeared since the snapshot, so nothing is reported and no collection is needed."""
         before = get_all_subclasses(FeatureGroup)
         assert reclaim_leaked_feature_groups(before, __name__) == []
+
+
+@contextmanager
+def _module_bound_subclass() -> Iterator[str]:
+    """Register a FeatureGroup subclass bound in a live module, the shape an import produces."""
+    module = types.ModuleType(SYNTHETIC_MODULE)
+    sys.modules[SYNTHETIC_MODULE] = module
+    cls = type(SYNTHETIC_CLASS, (FeatureGroup,), {"__module__": SYNTHETIC_MODULE})
+    setattr(module, SYNTHETIC_CLASS, cls)
+    del cls
+    try:
+        yield SYNTHETIC_CLASS
+    finally:
+        delattr(module, SYNTHETIC_CLASS)
+        del sys.modules[SYNTHETIC_MODULE]
+        del module
+        gc.collect()
+
+
+@contextmanager
+def _subclass_bound_in_this_module() -> Iterator[str]:
+    """Bind a FeatureGroup subclass into THIS module, the shape a test that writes to its own module leaves."""
+    this_module = sys.modules[__name__]
+    cls = type(OWN_MODULE_CLASS, (FeatureGroup,), {"__module__": __name__})
+    setattr(this_module, OWN_MODULE_CLASS, cls)
+    del cls
+    try:
+        yield OWN_MODULE_CLASS
+    finally:
+        delattr(this_module, OWN_MODULE_CLASS)
+        gc.collect()
+
+
+@contextmanager
+def _counted_collections(counts: list[int]) -> Iterator[None]:
+    """Record the generation of every collection that runs, with automatic collections paused."""
+
+    def on_collect(phase: str, info: dict[str, int]) -> None:
+        if phase == "start":
+            counts.append(info["generation"])
+
+    was_enabled = gc.isenabled()  # restore what was found, so nesting this cannot re-enable a paused GC
+    gc.disable()
+    gc.callbacks.append(on_collect)
+    try:
+        yield
+    finally:
+        gc.callbacks.remove(on_collect)
+        if was_enabled:
+            gc.enable()
+
+
+class TestModuleOwnedSubclassesSkipTheCollection:
+    """An imported module's own class is not the transient leak this reclaims, so it must not cost a collection."""
+
+    def test_a_module_bound_subclass_costs_no_collection(self) -> None:
+        """The gate reads the binding instead: a full collection per test sat close to the per-test timeout (#995)."""
+        before = get_all_subclasses(FeatureGroup)
+        collections: list[int] = []
+        with _module_bound_subclass() as name:
+            assert name in _registered_names_of(SYNTHETIC_MODULE), (
+                "the probe never registered; the collection assertion would prove nothing"
+            )
+            with _counted_collections(collections):
+                reported = reclaim_leaked_feature_groups(before, __name__)
+
+        assert reported == [], f"a class this module does not own must not be reported, got {reported}"
+        assert collections == [], f"a module-owned class must cost no collection, got generations {collections}"
+
+    def test_a_subclass_bound_in_the_calling_module_is_still_reported(self) -> None:
+        """Skipping the collection must not skip the report: no collection can reclaim a bound class."""
+        before = get_all_subclasses(FeatureGroup)
+        with _subclass_bound_in_this_module() as name:
+            reported = [cls.__name__ for cls in reclaim_leaked_feature_groups(before, __name__)]
+
+        assert reported == [name], (
+            f"a class this module bound into itself outlives the test and must be reported, got {reported}"
+        )
+
+    def test_a_just_defined_subclass_is_reclaimed_by_the_young_generation(self) -> None:
+        """The counterpart: the transient shape the reclaim exists for never escalates past generation 0."""
+        before = get_all_subclasses(FeatureGroup)
+        collections: list[int] = []
+        with _counted_collections(collections):
+            name = _define_throwaway_subclass()
+            reported = reclaim_leaked_feature_groups(before, __name__)
+
+        assert reported == []
+        assert collections == [0], (
+            f"{name} was just defined, so generation 0 must reclaim it and the ladder must stop there; "
+            f"a full collection scans the whole heap and costs about a second. Got generations {collections}"
+        )
 
 
 class TestIsolationFixtureIsGlobal:

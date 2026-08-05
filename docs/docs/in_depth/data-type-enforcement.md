@@ -185,14 +185,19 @@ feature = Feature.int64_of(
 
 Type mismatches raise `DataTypeMismatchError`:
 
-```py
-# Error handling example
+```python
 from mloda.user import mloda
 from mloda.user import Feature
 from mloda.provider import DataTypeMismatchError
 
 try:
-    result = mloda.run_all([Feature.str_of("numeric_column")])
+    result = mloda.run_all(
+        [Feature.str_of("numeric_column")],
+        compute_frameworks=["PandasDataFrame"],
+        api_data={"SampleData": {"numeric_column": [1, 2, 3]}},
+    )
 except DataTypeMismatchError as e:
     print(f"Feature '{e.feature_name}': declared {e.declared.name}, got {e.actual.name}")
 ```
+
+The request needs a source for `numeric_column`; without one, resolution fails before any type is checked.

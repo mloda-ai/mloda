@@ -5,6 +5,8 @@ updating that table turns the suite green with the pages still quoting the old l
 label back off the page, check it against the live table, and name the file and line that went stale.
 """
 
+import gc
+import logging
 import re
 from collections.abc import Iterator
 from pathlib import Path
@@ -13,6 +15,8 @@ import pytest
 
 from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
+from mloda.core.filter.filter_type_enum import FilterType
+from mloda.core.filter.global_filter import GlobalFilter
 from mloda.core.prepare.resolution_failure_renderer import _STAGE_LABELS, render_resolution_failure
 from mloda.core.prepare.resolution_types import Elimination, EliminationStage, EvaluationResult
 
@@ -130,6 +134,111 @@ def test_a_registered_page_still_renders_the_bullet_of_its_own_stage(
     # Containment, not equality: a page may grow a second example, and unknown labels fail the scan above.
     assert _STAGE_LABELS[stage] in labels, (
         f"{page} no longer renders a '{_STAGE_LABELS[stage]}' bullet the scanner reads (found: {sorted(labels)})."
+    )
+
+
+# The other form carrying a stage label: the warning GlobalFilter.warn_on_unmatched_filters emits. Unanchored,
+# so a quoted log prefix still reads.
+UNMATCHED_FILTER_PATTERN = re.compile(
+    r"Filter feature '(?P<filter_feature>[^']+)' matched no feature group\. Nearest miss: "
+    r"(?P<candidate>[A-Z]\w*) \((?P<label>[^)]+)\): (?P<reason>.+)$"
+)
+
+GLOBAL_FILTER_LOGGER = "mloda.core.filter.global_filter"
+
+WARNING_PROBE_CLASS_NAME = "NearMissWarningProbeFG"
+WARNING_HOST_FEATURE = "near_miss_warning_probe_host"
+WARNING_FILTER_FEATURE = "near_miss_warning_probe_filter"
+WARNING_MISSING_SCOPE = "NearMissWarningNoSuchScope"  # names no class, so the scope gate drops the filter
+WARNING_STAGE: EliminationStage = "scope"
+
+
+def _unmatched_filter_warnings(text: str) -> Iterator[tuple[int, re.Match[str]]]:
+    """Yield (1-based line number, match) for every unmatched-filter warning inside a ``` fenced block."""
+    for number, line in _fenced_lines(text):
+        match = UNMATCHED_FILTER_PATTERN.search(line)
+        if match is not None:
+            yield number, match
+
+
+@pytest.mark.parametrize("fpath", _docs_pages(), ids=lambda p: p.relative_to(REPO_ROOT).as_posix())
+def test_rendered_unmatched_filter_warnings_carry_a_current_stage_label(fpath: Path) -> None:
+    """Every label a page reproduces in an unmatched-filter warning is still a value of ``_STAGE_LABELS``."""
+    stale = [
+        f"{fpath}:{number} renders near-miss label '{match.group('label')}'"
+        for number, match in _unmatched_filter_warnings(fpath.read_text(encoding="utf-8"))
+        if match.group("label") not in ALLOWED_LABELS
+    ]
+
+    assert not stale, (
+        f"Doc page(s) render an unmatched-filter label no stage carries (current labels: {sorted(ALLOWED_LABELS)}):\n"
+        + "\n".join(stale)
+    )
+
+
+def _make_warning_probe_fg() -> type[FeatureGroup]:
+    """A throwaway group matching both probe names, built here so no test local ever holds the class."""
+    # Class objects are cyclic; collect leftovers from earlier tests before defining a twin.
+    gc.collect()
+
+    class NearMissWarningProbeFG(FeatureGroup):
+        @classmethod
+        def feature_names_supported(cls) -> set[str]:
+            return {WARNING_HOST_FEATURE, WARNING_FILTER_FEATURE}
+
+    return NearMissWarningProbeFG
+
+
+def _emit_unmatched_filter_warning(caplog: pytest.LogCaptureFixture) -> tuple[str, ...]:
+    """Drive one scope drop through GlobalFilter and return the warnings it logged, leaking no class."""
+    feature_group = _make_warning_probe_fg()
+    global_filter = GlobalFilter()
+    global_filter.add_filter(
+        Feature(WARNING_FILTER_FEATURE, feature_group=WARNING_MISSING_SCOPE), FilterType.EQUAL, {"value": 1}
+    )
+    try:
+        with caplog.at_level(logging.WARNING, logger=GLOBAL_FILTER_LOGGER):
+            # The returned set stays unbound: nothing of this drive may outlive it.
+            global_filter.identify_matched_filters(feature_group, Feature(WARNING_HOST_FEATURE))
+            global_filter.warn_on_unmatched_filters()
+        return tuple(record.getMessage() for record in caplog.records if record.name == GLOBAL_FILTER_LOGGER)
+    finally:
+        del feature_group, global_filter
+        gc.collect()
+
+
+def test_the_scanner_pattern_matches_a_rendered_unmatched_filter_warning(caplog: pytest.LogCaptureFixture) -> None:
+    """A changed warning format would otherwise degrade the scan above into a no-op."""
+    # Located by the probe's own filter feature name, never by the prefix under test.
+    emitted = [message for message in _emit_unmatched_filter_warning(caplog) if WARNING_FILTER_FEATURE in message]
+    assert len(emitted) == 1, f"Expected exactly one unmatched-filter warning, got {emitted}"
+
+    match = UNMATCHED_FILTER_PATTERN.search(emitted[0])
+    assert match is not None, f"UNMATCHED_FILTER_PATTERN no longer matches {emitted[0]!r}, so the scan is a no-op."
+    assert match.group("filter_feature") == WARNING_FILTER_FEATURE
+    assert match.group("candidate") == WARNING_PROBE_CLASS_NAME
+    assert match.group("label") == _STAGE_LABELS[WARNING_STAGE]
+
+
+# The same floor as DOC_BULLET_STAGES, for the warning form: pages reproducing it, pinned to their stage.
+DOC_WARNING_STAGES: dict[str, EliminationStage] = {
+    "in_depth/filter_data.md": "scope",
+}
+
+
+@pytest.mark.parametrize(("relative_path", "stage"), sorted(DOC_WARNING_STAGES.items()), ids=sorted(DOC_WARNING_STAGES))
+def test_a_registered_page_still_renders_the_warning_of_its_own_stage(
+    relative_path: str, stage: EliminationStage
+) -> None:
+    page = DOCS_ROOT / relative_path
+    assert page.is_file(), f"{page} was moved or renamed; update DOC_WARNING_STAGES"
+
+    labels = {match.group("label") for _, match in _unmatched_filter_warnings(page.read_text(encoding="utf-8"))}
+
+    # Containment, not equality: a page may grow a second example.
+    assert _STAGE_LABELS[stage] in labels, (
+        f"{page} no longer renders a '{_STAGE_LABELS[stage]}' unmatched-filter warning the scanner reads "
+        f"(found: {sorted(labels)})."
     )
 
 

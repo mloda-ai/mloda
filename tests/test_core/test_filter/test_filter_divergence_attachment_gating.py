@@ -204,9 +204,12 @@ def test_required_when_rejected_filter_is_reported_as_unmatched_without_divergen
         )
 
     assert observed["collection_size"] == 0, f"the filter must not attach: {observed!r}"
-    assert _warnings_naming(caplog, FDG_REQ_KEY) == []
+    # The unmatched report names the key too, in its nearest-miss suffix; only a divergence warning is forbidden.
+    divergence = [message for message in _warnings_naming(caplog, FDG_REQ_KEY) if UNMATCHED_PHRASE not in message]
+    assert divergence == [], f"a rejected filter must report no divergence, got: {divergence!r}"
     unmatched = [message for message in _warnings_naming(caplog, FDG_TARGET) if UNMATCHED_PHRASE in message]
     assert len(unmatched) == 1, f"exactly one unmatched-filter warning expected, got: {caplog.text!r}"
+    assert FDG_REQ_KEY in unmatched[0], f"the report must carry the nearest miss's own reason, got: {unmatched[0]!r}"
 
 
 def test_engine_reports_a_filter_targeting_a_name_nothing_serves(caplog: pytest.LogCaptureFixture) -> None:

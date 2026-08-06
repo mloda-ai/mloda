@@ -229,6 +229,11 @@ def _ledger(global_filter: GlobalFilter) -> Optional[dict[Any, Any]]:
     return cast(Optional[dict[Any, Any]], getattr(global_filter, "dropped_filters", None))
 
 
+def _reason_of(recorded: Any) -> Any:
+    """Reason of one recorded drop, degrading to the record itself when it carries none."""
+    return getattr(recorded, "reason", recorded)
+
+
 def _messages(caplog: pytest.LogCaptureFixture, level: int) -> tuple[str, ...]:
     """Formatted messages GlobalFilter logged at exactly that level."""
     records = [record for record in caplog.records if record.name == GF_LOGGER_NAME and record.levelno == level]
@@ -291,8 +296,8 @@ def _drive_criteria(
             has_ledger=ledger is not None,
             keyed_by_group_and_filter=ledger is not None and (fg, filter_feature_name) in ledger,
             entries=tuple((str(key[0].get_class_name()), str(key[1])) for key, _ in items),
-            reasons=tuple(str(reason) for _, reason in items),
-            reason_types=tuple(type(reason).__name__ for _, reason in items),
+            reasons=tuple(str(_reason_of(recorded)) for _, recorded in items),
+            reason_types=tuple(type(_reason_of(recorded)).__name__ for _, recorded in items),
             warnings=_messages(caplog, logging.WARNING),
             debugs=_messages(caplog, logging.DEBUG),
         )

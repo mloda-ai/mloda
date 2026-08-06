@@ -57,10 +57,10 @@ class GlobalFilter:
         self._warned_divergences.clear()
 
     def rehash_stored_filters(self) -> None:
-        """Reinsert stored filters whose hashes went stale: Engine._add_filter_feature renames matched filter
-        features while their SingleFilters sit in probes, and planning rewrites shared filter Features' frameworks."""
+        """Reinsert stored filters whose hashes went stale: a stored filter feature owns its option containers
+        but shares every value, so a nested Feature value re-stamped later in setup shifts the stored hash."""
         # list() forces a rehash; set(value) would reuse the stale stored hashes.
-        # Duplicates that became equal after the rewrite intentionally merge here (same declared filter, same predicate).
+        # Duplicates that became equal again intentionally merge here (same declared filter, same predicate).
         self.collection = {key: set(list(value)) for key, value in self.collection.items()}
         self.probes = {key: set(list(value)) for key, value in self.probes.items()}
 
@@ -74,8 +74,9 @@ class GlobalFilter:
         """Record what a probe matched, empty included."""
         if not self.filters:
             return
+        # Rehash via list so hashes are recomputed (update(<set>) reuses the caller's stale ones).
         self.probes.setdefault((feature_group, filtered_feature_name, filtered_feature_uuid), set()).update(
-            matched_filters
+            list(matched_filters)
         )
 
     def add_filter(

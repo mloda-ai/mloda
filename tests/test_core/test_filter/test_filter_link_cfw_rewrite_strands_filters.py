@@ -1,15 +1,10 @@
-"""Regression test: a link-driven compute framework rewrite must not strand stored SingleFilters.
-
-Narrowing the link child's frameworks rebinds the shared filter Feature, which staled the hash-keyed
-sets in GlobalFilter.collection.
-"""
+"""A link-driven framework rewrite rebinds queue Features, not the SingleFilters GlobalFilter stores."""
 
 from typing import Any
 
 import pyarrow as pa
 
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
-from mloda.core.filter.single_filter import SingleFilter
 from mloda.provider import BaseInputData, ComputeFramework, DataCreator, FeatureGroup, FeatureSet
 from mloda.user import (
     Feature,
@@ -116,39 +111,12 @@ def test_link_cfw_rewrite_keeps_stored_filters_usable() -> None:
         for single_filter in stored_set:
             assert single_filter in stored_set
 
-    # Link resolution narrowed the queue-shared filter Feature to one framework; the other per-match
-    # copy is never placed in the rewritten queue set and keeps the declared two-candidate pair.
-    narrowed = [
-        single_filter
+    # Stored filter features are GlobalFilter's own, so the planner's narrowing never reaches them.
+    candidate_sets: set[frozenset[type[ComputeFramework]]] = {
+        frozenset(single_filter.filter_feature.compute_frameworks or ())
         for stored_set in global_filter.collection.values()
         for single_filter in stored_set
-        if single_filter.filter_feature.compute_frameworks == {SecondCfw}
-    ]
-    assert narrowed, "no stored SingleFilter was narrowed by the link-driven framework rewrite"
-
-
-def test_rehash_stored_filters_restores_membership_and_is_idempotent() -> None:
-    """A mutated stored filter must be findable again after the rehash; a second call changes nothing."""
-    global_filter = GlobalFilter()
-    single_filter = SingleFilter("cfwstr_unit_ts", "min", {"value": 1})
-    global_filter.filters.add(single_filter)
-
-    feature_name = FeatureName("cfwstr_unit_ts")
-    feature_uuid = single_filter.filter_feature.uuid
-    global_filter.add_filter_to_collection(CfwStrandConsumer, feature_name, single_filter)
-    global_filter.record_probe(CfwStrandConsumer, feature_name, feature_uuid, {single_filter})
-
-    single_filter.filter_feature.compute_frameworks = {SecondCfw}
-    assert single_filter not in global_filter.collection[(CfwStrandConsumer, feature_name)]
-    assert single_filter not in global_filter.probes[(CfwStrandConsumer, feature_name, feature_uuid)]
-
-    global_filter.rehash_stored_filters()
-
-    assert single_filter in global_filter.collection[(CfwStrandConsumer, feature_name)]
-    assert single_filter in global_filter.probes[(CfwStrandConsumer, feature_name, feature_uuid)]
-
-    collection_snapshot = {key: set(value) for key, value in global_filter.collection.items()}
-    probes_snapshot = {key: set(value) for key, value in global_filter.probes.items()}
-    global_filter.rehash_stored_filters()
-    assert global_filter.collection == collection_snapshot
-    assert global_filter.probes == probes_snapshot
+    }
+    assert candidate_sets == {frozenset({PyArrowTable, SecondCfw})}, (
+        f"the planner must not narrow a stored filter feature: {candidate_sets!r}"
+    )

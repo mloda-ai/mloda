@@ -105,14 +105,17 @@ class TestValidateComputeFrameworksResolved:
         with pytest.raises(ValueError):
             FeatureValidator.validate_compute_frameworks_resolved(compute_frameworks=None, feature_name="TestFeature")
 
-    def test_empty_set_does_not_raise(self) -> None:
-        """Empty set is valid (different from None) and should not raise."""
+    def test_empty_set_raises_and_names_the_feature(self) -> None:
+        """An empty set is unresolved too, and the raise must still say which feature."""
         empty_frameworks: set[type[ComputeFramework]] = set()
 
-        # Act & Assert - should not raise
-        FeatureValidator.validate_compute_frameworks_resolved(
-            compute_frameworks=empty_frameworks, feature_name="TestFeature"
-        )
+        # Act & Assert
+        with pytest.raises(ValueError) as exc_info:
+            FeatureValidator.validate_compute_frameworks_resolved(
+                compute_frameworks=empty_frameworks, feature_name="EmptySetFeature"
+            )
+
+        assert "EmptySetFeature" in str(exc_info.value)
 
     def test_error_message_includes_feature_name(self) -> None:
         """Should include the feature name in error message."""

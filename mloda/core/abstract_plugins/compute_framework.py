@@ -1,5 +1,5 @@
 from abc import ABC
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
 from typing import Any, Optional, final
 from uuid import UUID, uuid4
 from mloda.core.abstract_plugins.components.data_types import DataType
@@ -600,6 +600,20 @@ class ComputeFramework(ABC):
     @final
     def get_class_name(cls) -> str:
         return cls.__name__
+
+    @staticmethod
+    @final
+    def select_deterministic(frameworks: Iterable[type["ComputeFramework"]]) -> type["ComputeFramework"]:
+        """Set iteration over class objects is id-based, so reduce by a total name key instead."""
+        candidates = list(frameworks)
+        if not candidates:
+            raise ValueError("Cannot select a compute framework from an empty collection.")
+
+        # Module and qualname break ties between frameworks sharing a class name; the name alone leaves those to id order.
+        def key(framework: type["ComputeFramework"]) -> tuple[str, str, str]:
+            return (framework.get_class_name(), framework.__module__, framework.__qualname__)
+
+        return min(candidates, key=key)
 
     @final
     def __eq__(self, other: object) -> bool:

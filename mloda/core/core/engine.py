@@ -471,7 +471,7 @@ class Engine:
         This function ensures that the feature always has a compute framework set!
         """
         if feature.compute_frameworks:
-            if feature.get_compute_framework() not in compute_frameworks:
+            if not feature.compute_frameworks & compute_frameworks:
                 raise ValueError(
                     f"Feature {feature.name} does not support compute framework {feature.compute_frameworks}."
                 )

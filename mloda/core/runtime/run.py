@@ -68,6 +68,8 @@ class ExecutionOrchestrator:
         )
 
         self._step_lock = threading.Lock()
+        self._occupied_cfws: dict[UUID, frozenset[UUID]] = {}
+        self._register_modes: set[ParallelizationMode] = set()
 
         self.flight_server = None
         if flight_server:
@@ -99,6 +101,7 @@ class ExecutionOrchestrator:
         self.executor = ComputeFrameworkExecutor(
             self.cfw_register, self.worker_manager, tfs_connection_map=self.tfs_connection_map
         )
+        self._register_modes = self.cfw_register.get_parallelization_modes()
 
         finished_ids: set[UUID] = set()
         to_finish_ids: set[UUID] = set()
@@ -123,7 +126,9 @@ class ExecutionOrchestrator:
                     self._mark_step_as_finished(step.get_uuids(), finished_ids, currently_running_steps)
                 continue
 
-            if not self._can_run_step(step.required_uuids, step.get_uuids(), finished_ids, currently_running_steps):
+            if not self._can_run_step(
+                step.required_uuids, step.get_uuids(), finished_ids, currently_running_steps, step
+            ):
                 continue
             self._execute_step(step)
 
@@ -362,32 +367,71 @@ class ExecutionOrchestrator:
         """
         return self.data_lifecycle_manager.get_artifacts()
 
+    def _cfw_to_occupy(self, step: Any) -> UUID | None:
+        """Resolve the cfw a step needs exclusively, without creating one."""
+        if not isinstance(step, FeatureGroupStep):
+            return None
+
+        # A worker process owns one cfw and drains its command queue in order, so steps dispatched
+        # to it are already serialized.
+        if ParallelizationMode.MULTIPROCESSING in self._register_modes & step.get_parallelization_mode():
+            return None
+
+        class_name = step.compute_framework.get_class_name()
+
+        for tfs_id in step.tfs_ids:
+            cfw_uuid = self.cfw_register.get_cfw_uuid(class_name, tfs_id)
+            if cfw_uuid:
+                return cfw_uuid
+
+        if step.features.any_uuid is None:
+            return None
+        return self.cfw_register.get_cfw_uuid(class_name, step.features.any_uuid)
+
     def _can_run_step(
         self,
         required_uuids: set[UUID],
         step_uuid: set[UUID],
         finished_steps: set[UUID],
         currently_running_steps: set[UUID],
+        step: Any = None,
     ) -> bool:
         """
         Checks if a step can be run. If it can, add it to the currently_running_steps set.
+
+        A cfw instance holds a single data slot and is shared by every step of a chain within one
+        framework, so at most one feature group step may occupy it at a time.
         """
 
         with self._step_lock:
-            if required_uuids.issubset(finished_steps) and not step_uuid.intersection(currently_running_steps):
-                currently_running_steps.update(step_uuid)
-                return True
-            return False
+            if not required_uuids.issubset(finished_steps) or step_uuid.intersection(currently_running_steps):
+                return False
+
+            cfw_uuid = self._cfw_to_occupy(step)
+            if cfw_uuid is not None:
+                if cfw_uuid in self._occupied_cfws:
+                    return False
+                self._occupied_cfws[cfw_uuid] = frozenset(step_uuid)
+
+            currently_running_steps.update(step_uuid)
+            return True
 
     def _mark_step_as_finished(
         self, step_uuid: set[UUID], finished_steps: set[UUID], currently_running_steps: set[UUID]
     ) -> None:
         """
-        Marks a step as finished.
+        Marks a step as finished and releases the cfw it occupied.
+
+        The release happens here, not when the worker finishes, because the result is read off
+        cfw.data in _process_step_result, which runs immediately before this call.
         """
         with self._step_lock:
             currently_running_steps.difference_update(step_uuid)
             finished_steps.update(step_uuid)
+
+            for cfw_uuid, owner in list(self._occupied_cfws.items()):
+                if owner & step_uuid:
+                    del self._occupied_cfws[cfw_uuid]
 
     def get_result(self) -> list[Any]:
         """

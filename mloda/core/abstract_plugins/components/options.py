@@ -13,7 +13,7 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-NON_FORWARDED_KEYS: frozenset[str] = frozenset({DefaultOptionKeys.in_features})
+NON_FORWARDED_KEYS: frozenset[str] = frozenset({DefaultOptionKeys.in_features.value})
 
 
 def _safe_deepcopy(value: Any, memo: dict[int, Any]) -> Any:

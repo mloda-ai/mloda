@@ -1,4 +1,5 @@
 from copy import deepcopy
+from enum import Enum
 from uuid import uuid4
 
 import pytest
@@ -1694,6 +1695,33 @@ class TestNonForwardedKeysConstant:
 
         assert DefaultOptionKeys.in_features not in child.group
         assert DefaultOptionKeys.in_features not in child.context
+        assert child.group["kg_backend"] == "neo4j"
+
+    def test_constant_holds_plain_strings_only(self) -> None:
+        """Every element is a plain str, so exclusion matching never rides on enum hashing or equality."""
+        from mloda.core.abstract_plugins.components.options import NON_FORWARDED_KEYS
+
+        offenders = [(key, type(key)) for key in NON_FORWARDED_KEYS if type(key) is not str]
+        assert offenders == [], f"NON_FORWARDED_KEYS holds non-plain-str elements: {offenders}"
+        assert not any(isinstance(key, Enum) for key in NON_FORWARDED_KEYS)
+
+    def test_literal_string_key_excluded_at_every_flow(self) -> None:
+        """The plain string "in_features" is excluded from the group forward, the context pull, and the push."""
+        group_consumer = Options(group={"in_features": "consumer_source", "kg_backend": "neo4j"})
+        context_consumer = Options(
+            context={"in_features": "consumer_source"},
+            propagate_context_keys=frozenset({"in_features"}),
+        )
+        child = Options()
+
+        child.inherit_from(group_consumer)
+        child.inherit_from(group_consumer, forward_group=frozenset({"in_features"}))
+        child.inherit_from(context_consumer, inherit_context_keys=frozenset({"in_features"}))
+
+        assert "in_features" not in child.group
+        assert "in_features" not in child.context
+        assert "in_features" not in child.inherited_group_keys
+        assert "in_features" not in child.inherited_context_keys
         assert child.group["kg_backend"] == "neo4j"
 
 

@@ -10,12 +10,22 @@ import pathlib
 import re
 
 
-PLUGIN_DIR = pathlib.Path("mloda_plugins/feature_group/experimental")
+# Anchored to this file, not to the cwd: a relative glob run from anywhere but
+# the repo root yields nothing and both scans below pass vacuously (issue #937).
+REPO_ROOT = pathlib.Path(__file__).resolve().parents[2]
+PLUGIN_DIR = REPO_ROOT / "mloda_plugins" / "feature_group" / "experimental"
 
 
 def _collect_python_files() -> list[pathlib.Path]:
-    """Collect all Python files under the experimental plugins directory."""
-    return sorted(PLUGIN_DIR.rglob("*.py"))
+    """Collect all Python files under the experimental plugins directory.
+
+    Never returns an empty list: scanning nothing would let both guards pass
+    while reading no plugin at all.
+    """
+    files = sorted(PLUGIN_DIR.rglob("*.py"))
+    if not files:
+        raise RuntimeError(f"no plugin modules found under {PLUGIN_DIR} - these scans would check nothing")
+    return files
 
 
 class TestNoPatternAttribute:

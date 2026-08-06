@@ -186,15 +186,21 @@ When a user passes a `GlobalFilter`, the framework tests every `SingleFilter` ag
 FeatureGroup that each feature already resolved to, using that feature's options, domain
 and compute framework. Each filter is **deep-copied** first, so everything below happens
 on the copy and never on the filter the user built. The copy is delivered only if it
-clears four gates, in order: the group's own `match_feature_group_criteria()` on the
+clears five gates, in order: the group's own `match_feature_group_criteria()` on the
 filter feature's name and options (plus the run's `DataAccessCollection`), then the filter
 feature's domain against the resolved feature's, then its `feature_group` scope against
 the probed FeatureGroup, honored with the same semantics as feature resolution (the named
-class and its subclasses, class-object and string forms alike), then its compute framework
-against the resolved feature's. The domain and compute framework gates also backfill: a
-filter feature that declares no domain or compute framework inherits the resolved
-feature's (the FeatureGroup's domain when the feature declares none). Declaring the filter's column as an input is **not** the
-test, and links are not re-checked here (feature resolution already covered them).
+class and its subclasses, class-object and string forms alike), then the group's
+`supports_compute_framework()` on the same name and options, which narrows the frameworks
+the filter rides to the hook-accepted ones (its own pin, else the resolved feature's),
+detaching the filter when none are accepted, then its compute framework against the
+resolved feature's. The domain and compute
+framework gates also backfill: a filter feature that declares no domain or compute
+framework inherits the resolved feature's (the FeatureGroup's domain when the feature
+declares none). Pinning a filter feature to more than one compute framework raises
+`ComputeFrameworkPinError` at `add_filter` time; feature resolution applies the same
+validation. Declaring the filter's column as an input is **not** the test, and links are
+not re-checked here (feature resolution already covered them).
 
 `match_feature_group_criteria()` sees the filter feature's own options enriched from the
 resolved feature's effective (post-default) ones (see

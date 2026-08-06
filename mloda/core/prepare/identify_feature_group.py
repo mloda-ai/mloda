@@ -95,6 +95,17 @@ def matches_feature_group_scope(feature_group: type[FeatureGroup], scope: str | 
     )
 
 
+def validate_single_framework_pin(feature: Feature) -> None:
+    """Raise if the user pinned more than one compute framework; this misuse is only a programmer error."""
+    pinned = feature.compute_frameworks
+    if pinned is not None and len(pinned) > 1:
+        names = ", ".join(sorted(cfw.get_class_name() for cfw in pinned))
+        raise ComputeFrameworkPinError(
+            f"Feature '{feature.name}' is pinned to more than one compute framework ({names}); "
+            f"pin at most one compute framework."
+        )
+
+
 class IdentifyFeatureGroupClass:
     _criteria_matched_feature_groups: set[type[FeatureGroup]]
     _abstract_matched_feature_groups: set[type[FeatureGroup]]
@@ -127,17 +138,6 @@ class IdentifyFeatureGroupClass:
         self._prefixes = {}
         self._data_access_collection = data_access_collection
 
-    @staticmethod
-    def _validate_single_framework_pin(feature: Feature) -> None:
-        """Raise if the user pinned more than one compute framework; this misuse is only a programmer error."""
-        pinned = feature.compute_frameworks
-        if pinned is not None and len(pinned) > 1:
-            names = ", ".join(sorted(cfw.get_class_name() for cfw in pinned))
-            raise ComputeFrameworkPinError(
-                f"Feature '{feature.name}' is pinned to more than one compute framework ({names}); "
-                f"pin at most one compute framework."
-            )
-
     @classmethod
     def evaluate(
         cls,
@@ -149,7 +149,7 @@ class IdentifyFeatureGroupClass:
         """Run the matching/filter logic without raising, returning a structured result."""
         # Pre-matching guard: a >1 pin fires regardless of whether any candidate matches (the old check
         # sat inside the filter loop, so it never ran when the name matched nothing).
-        cls._validate_single_framework_pin(feature)
+        validate_single_framework_pin(feature)
         self = cls(data_access_collection)
         try:
             identified = self._filter_loop(feature, accessible_plugins, links, data_access_collection)

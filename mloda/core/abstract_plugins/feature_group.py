@@ -755,6 +755,8 @@ class FeatureGroup(ABC):
         the concrete feature, so it can reject an op on one backend while allowing
         others. If every candidate framework is rejected, the matcher surfaces a
         distinguishable error instead of a generic "no feature group" message.
+        Filter matching consults the same hook and narrows the frameworks an
+        attached filter feature rides.
 
         The default gates a declared canonical subtype by ``supported_subtypes()``;
         everything else (no subtype dimension, unresolved or undeclared subtype) stays open.

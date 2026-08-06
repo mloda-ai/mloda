@@ -214,14 +214,15 @@ def test_copy_of_a_feature_without_frameworks_keeps_none() -> None:
     assert copy(feature).compute_frameworks is None
 
 
-def test_global_filter_aliases_the_features_set_into_a_filter_feature_without_one() -> None:
-    """Characterization: the alias is deliberate."""
+def test_global_filter_adoption_copies_the_features_set_never_aliases_it() -> None:
+    """Ownership: a later write into the adopted set can never reach the host's."""
     feat = _feature_with_framework()
     single_filter = SingleFilter(Feature(CFS_FILTER_FEATURE), FilterType.EQUAL, {"value": 1})
     assert single_filter.filter_feature.compute_frameworks is None
 
     assert GlobalFilter().compute_framework(single_filter, feat) is True
-    assert single_filter.filter_feature.compute_frameworks is feat.compute_frameworks
+    assert single_filter.filter_feature.compute_frameworks == feat.compute_frameworks
+    assert single_filter.filter_feature.compute_frameworks is not feat.compute_frameworks
 
 
 def test_two_independently_built_features_own_separate_sets() -> None:

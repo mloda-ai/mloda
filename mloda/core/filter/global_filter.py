@@ -4,6 +4,7 @@ from itertools import chain
 from typing import Any, Optional
 from uuid import UUID
 
+from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.abstract_plugins.components.domain import Domain
 from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser import option_key_is_present
@@ -17,7 +18,7 @@ from mloda.core.abstract_plugins.components.match_hook import probe_match_criter
 from mloda.core.abstract_plugins.components.utils import contained_raise_reason
 from mloda.core.filter.filter_type_enum import FilterType
 from mloda.core.filter.single_filter import SingleFilter
-from mloda.core.prepare.identify_feature_group import matches_feature_group_scope
+from mloda.core.prepare.identify_feature_group import matches_feature_group_scope, validate_single_framework_pin
 from mloda.core.abstract_plugins.components.default_options_key import DefaultOptionKeys
 
 
@@ -101,8 +102,12 @@ class GlobalFilter:
             This filter_type does not need to match the FilterType, but it should be a string that is meaningful in the concrete
             Featuregroup implementation.
         - parameter: A dictionary of filter-specific options.
+
+        A filter feature pinned to more than one compute framework raises `ComputeFrameworkPinError` here.
         """
         _single_filter = SingleFilter(filter_feature, filter_type, parameter)
+        # Validated at declaration time: the raise must not depend on any probe running (#851).
+        validate_single_framework_pin(_single_filter.filter_feature)
         self.filters.add(_single_filter)
 
     def add_filter_to_collection(
@@ -133,6 +138,7 @@ class GlobalFilter:
         Differences are in details:
             -   we use the options of the feature to enrich the filter feature options,
             -   we set the compute framework of the feature to determine the one of the filter feature,
+            -   we consult the capability hook over the frameworks the filter would ride (its pin, else the feature's),
             -   we do not check links, as this is done earlier already and not needed anymore.
         """
 
@@ -148,7 +154,10 @@ class GlobalFilter:
                 continue
             if self.feature_group_scope(_filter, feature_group) is False:
                 continue
-            if self.compute_framework(_filter, feat) is False:
+            supported = self.capability(_filter, feat, feature_group)
+            if supported is not None and not supported:
+                continue
+            if self.compute_framework(_filter, feat, supported) is False:
                 continue
             # we don't check links, because this is not necessary as this is covered by the feature and feature group before
 
@@ -345,14 +354,34 @@ class GlobalFilter:
         scope = filter.filter_feature.feature_group_scope
         return scope is None or matches_feature_group_scope(feature_group, scope)
 
-    def compute_framework(self, filter: SingleFilter, feat: Feature) -> bool:
+    def capability(
+        self, filter: SingleFilter, feat: Feature, feature_group: type[FeatureGroup]
+    ) -> set[type[ComputeFramework]] | None:
+        """The hook removes rejected frameworks from what the filter would ride, as on the resolution seam.
+        Unguarded, unlike `criteria`: a raising hook fails loudly."""
+        ride_frameworks = filter.filter_feature.compute_frameworks or feat.compute_frameworks
+        if not ride_frameworks:
+            return None
+        return {
+            cfw
+            for cfw in ride_frameworks
+            if feature_group.supports_compute_framework(filter.filter_feature.name, filter.filter_feature.options, cfw)
+        }
+
+    def compute_framework(
+        self, filter: SingleFilter, feat: Feature, supported: set[type[ComputeFramework]] | None = None
+    ) -> bool:
         # case that the filter feature has no cf set -> feature defines it
         if not filter.filter_feature.compute_frameworks:
             # Hash-safe: the target is a per-match deepcopy, added to matched_filters only after all mutations.
-            filter.filter_feature.compute_frameworks = feat.compute_frameworks
+            # Adoption owns its set and, on the engine path, carries only the hook-accepted subset, mirroring
+            # the canonical seam where identified candidates hold only supported frameworks.
+            adopted = supported if supported is not None else feat.compute_frameworks
+            filter.filter_feature.compute_frameworks = set(adopted) if adopted is not None else None
             return True
 
-        # case that the filter feature has an cf -> the feature framework must be one of the pinned ones
+        # case that the filter feature has an cf -> the feature framework must be one of the pinned ones.
+        # Cardinality is validated at add_filter, so membership degenerates to the single pin's equality.
         if feat.get_compute_framework() in filter.filter_feature.compute_frameworks:
             return True
 

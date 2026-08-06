@@ -351,7 +351,6 @@ class TestLinkWithJoinSpec:
         left_spec = JoinSpec(feature_group=MockFeatureGroup, index=left_idx)
         right_spec = JoinSpec(feature_group=AnotherMockFeatureGroup, index=right_idx)
 
-        # Factory method should accept JoinSpec objects
         link = factory(
             left=left_spec,
             right=right_spec,

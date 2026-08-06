@@ -103,8 +103,6 @@ class TestExtenderInfo:
 
 @dataclass(frozen=True)
 class DocKind:
-    """One plugin-docs getter and the info dataclass its entries carry."""
-
     label: str
     get_docs: Callable[..., list[Any]]
     info_class: type[Any]

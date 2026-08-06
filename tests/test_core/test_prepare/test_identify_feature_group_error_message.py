@@ -55,7 +55,6 @@ class TestIdentifyFeatureGroupErrorMessageFormat:
         ],
     )
     def test_error_message_contains(self, expected_fragment: str) -> None:
-        """Each candidate renders as 'ClassName (module.path)' and the message names the failing feature."""
         feature = Feature("conflicting_test_feature")
 
         accessible_plugins: FeatureGroupEnvironmentMapping = {

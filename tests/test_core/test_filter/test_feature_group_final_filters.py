@@ -431,8 +431,6 @@ class CompatibleDtypeFeatureGroup(FeatureGroup):
 
 @dataclass(frozen=True)
 class FinalEliminationCase:
-    """One feature group whose run must end in row elimination, plus the framework it runs on."""
-
     case_id: str
     feature_group: type[FeatureGroup]
     compute_framework: type[ComputeFramework]
@@ -451,8 +449,6 @@ STRING_FILTER_ON_NON_STRING = "expects string comparison but column has type"
 
 @dataclass(frozen=True)
 class FilterColumnValidationCase:
-    """One feature group that breaks the filter-column contract, plus the error its run must raise."""
-
     case_id: str
     feature_group: type[FeatureGroup]
     match: str
@@ -510,13 +506,7 @@ class TestFeatureGroupFinalFilters:
     def test_final_filtering_eliminates_rows(
         self, case: FinalEliminationCase, modes: set[ParallelizationMode], flight_server: Any
     ) -> None:
-        """Every route into row elimination drops the "inactive" rows, leaving [10, 30].
-
-        The rows differ in how elimination is reached: no final_filters() override
-        (engine decides), an override that beats an inline engine, an override that
-        agrees with the engine, and an override whose filter column keeps a
-        filter-compatible dtype. Each case is documented on its FeatureGroup class.
-        """
+        """Every route into row elimination drops the inactive rows; each case is documented on its FeatureGroup."""
         feature_name = case.feature_group.get_class_name()
 
         features = Features([Feature(name=feature_name, initial_requested_data=True)])
@@ -657,11 +647,7 @@ class TestFeatureGroupFinalFilters:
     def test_filter_column_validation_raises(
         self, case: FilterColumnValidationCase, modes: set[ParallelizationMode], flight_server: Any
     ) -> None:
-        """A dropped or retyped filter column is rejected, on the FG=True path and the engine fallback path alike.
-
-        ValueError from _validate_filter_columns is wrapped in a generic Exception
-        by the threading/worker layer (see thread_worker.py).
-        """
+        """FG-override and engine-fallback paths both reject; the worker wraps the ValueError generically."""
         feature_name = case.feature_group.get_class_name()
 
         features = Features([Feature(name=feature_name, initial_requested_data=True)])

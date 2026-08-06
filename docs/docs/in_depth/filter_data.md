@@ -221,14 +221,16 @@ return, and the drop is recorded in `GlobalFilter.dropped_filters`. A typed decl
 records lands in the same ledger, at DEBUG. A framework-owned raise still aborts.
 
 `GlobalFilter.dropped_filters` maps (FeatureGroup, filter feature name) to the gate that dropped the
-filter and that gate's reason. A plain `False` is an ordinary non-match and records nothing. A matcher
-defect takes the key from a stored near-miss; otherwise the first gate a filter loses at keeps it.
+filter and that gate's reason, for the current engine setup only. A plain `False` is an ordinary
+non-match and records nothing. A matcher defect takes the key from a stored near-miss; otherwise the
+deepest gate the filter reached keeps it, and two facts at one depth leave the first one in place.
 
 The option divergence warning fires only for a filter that actually attaches, once per distinct
 message per setup. A filter that matches no FeatureGroup at all is reported once after setup
 ("matched no feature group"), with its nearest miss appended when one was recorded: the deepest gate
 that filter reached, rendered as `<FeatureGroup> (<gate label>): <reason>`, for example `(scope)` when
-a `feature_group` scope excluded it.
+a `feature_group` scope excluded it. Two filters declared on one column name share the ledger key, so
+neither report can quote a fact and both stay the bare sentence.
 
 Matched filters are attached to the `FeatureSet` before `calculate_feature()` is
 called. Inside your calculation you can access them via `features.filters`:

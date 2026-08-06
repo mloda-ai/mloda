@@ -9,7 +9,7 @@ from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.abstract_plugins.components.domain import Domain
 from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser import option_key_is_present
 from mloda.core.abstract_plugins.components.feature_chainer.property_spec import is_no_default
-from mloda.core.abstract_plugins.components.utils import safe_field
+from mloda.core.abstract_plugins.components.utils import as_str, safe_field
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.components.options import Options, _isolate_forwarded_value
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
@@ -38,7 +38,9 @@ _STAGE_DEPTH: dict[EliminationStage, int] = {
     "domain": 3,
     "scope": 4,
     "capability": 5,
+    "frameworks_not_enabled": 5,
     "framework_pin": 6,
+    "links": 7,
 }
 
 
@@ -58,7 +60,7 @@ class GlobalFilter:
            This can be used to check after the fact if a feature is a filter feature for a specific feature group
            e.g. for debugging, logging or quality checks.
         3. `dropped_filters`: maps (feature group, filter feature name) to the `Elimination` naming the gate that
-           dropped it and why; a matcher defect outranks a stored near-miss, otherwise the first gate wins.
+           dropped it and why; a matcher defect outranks a stored near-miss, otherwise the deepest gate reached wins.
         4. `probes`: maps (feature group, feature name, feature uuid) to the filters that probe matched, empty included.
         5. `matched_filter_uuids`: uuids of filters that cleared every gate at least once this setup.
 
@@ -77,9 +79,13 @@ class GlobalFilter:
         self._warned_drops: set[tuple[type[FeatureGroup], str]] = set()
 
     def reset_match_tracking(self) -> None:
-        """Match and divergence-warning tracking is scoped to one engine setup."""
+        """Every match report is scoped to one engine setup, so a later setup names only what it consulted.
+        Each dedupe ledger clears with the facts it guards: one outliving them would lose that report for good."""
         self.matched_filter_uuids.clear()
+        self.dropped_filters.clear()
         self._warned_divergences.clear()
+        self._warned_drops.clear()
+        self._reported_falsy_matches.clear()
 
     def rehash_stored_filters(self) -> None:
         """Reinsert stored filters whose hashes went stale, so each one is findable in its own set again."""
@@ -209,6 +215,10 @@ class GlobalFilter:
 
     def _nearest_miss(self, filter_feature_name: str) -> str | None:
         """The captured fact of the deepest gate this filter reached, as the shared near-miss bullet."""
+        # The ledger keys on the name, so a name two declared filters share makes every fact under it
+        # unattributable to either of them.
+        if sum(1 for filter in self.filters if filter.name == filter_feature_name) > 1:
+            return None
         captured = [
             (feature_group, elimination)
             for (feature_group, name), elimination in self.dropped_filters.items()
@@ -330,8 +340,15 @@ class GlobalFilter:
     def _record_near_miss(
         self, feature_group: type[FeatureGroup], filter_feature_name: str, stage: EliminationStage, reason: str
     ) -> None:
-        """Record the gate one filter lost at against one feature group; the first fact recorded keeps the key."""
-        self.dropped_filters.setdefault((feature_group, filter_feature_name), Elimination(stage=stage, reason=reason))
+        """Record the gate one filter lost at against one feature group; the deepest gate reached keeps the key,
+        matching how `_nearest_miss` reads the ledger back."""
+        key = (feature_group, filter_feature_name)
+        stored = self.dropped_filters.get(key)
+        # A stored defect stays pinned to its key, and equal depth keeps the first fact recorded.
+        if stored is None or (
+            stored.stage != "matcher_error" and _STAGE_DEPTH.get(stored.stage, 0) < _STAGE_DEPTH.get(stage, 0)
+        ):
+            self.dropped_filters[key] = Elimination(stage=stage, reason=reason)
 
     def _record_rejected_filter(
         self, feature_group: type[FeatureGroup], filter_feature_name: str, rejection: MatchRejection
@@ -423,8 +440,9 @@ class GlobalFilter:
             compared = feat.domain.name
         else:
             # A plugin-owned read the gate already made; degraded because a log line is not worth a crash.
+            # as_str inside the guard: an unvalidated name's own __str__ must not run in the f-string below.
             compared = safe_field(
-                lambda: feature_group.get_domain().name,
+                lambda: as_str(feature_group.get_domain().name),
                 "<unreadable domain>",
                 field=f"{feature_group.get_class_name()}.get_domain",
             )

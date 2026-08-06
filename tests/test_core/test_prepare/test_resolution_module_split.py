@@ -43,6 +43,7 @@ RENDERER_NAMES = (
     "_supported_feature_names",
     "_prefix_name",
     "_STAGE_LABELS",
+    "near_miss_text",
     "_render_near_miss_block",
     "_render_multiple",
     "_render_abstract_only",

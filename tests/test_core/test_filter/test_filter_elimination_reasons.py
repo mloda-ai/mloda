@@ -11,7 +11,7 @@ import logging
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from functools import partial
-from typing import Any, ClassVar, TypeVar
+from typing import Any, ClassVar, TypeVar, cast, get_args
 
 import pytest
 
@@ -24,6 +24,7 @@ from mloda.core.abstract_plugins.components.match_rejection import (
 )
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
+from mloda.core.filter.global_filter import _STAGE_DEPTH
 from mloda.core.prepare.accessible_plugins import FeatureGroupEnvironmentMapping
 from mloda.core.prepare.identify_feature_group import IdentifyFeatureGroupClass
 from mloda.core.prepare.resolution_failure_renderer import _STAGE_LABELS, _render_near_miss_block
@@ -45,12 +46,14 @@ GROUP_DOMAIN_CLASS_NAME = "FerGroupDomainFG"
 CAPABILITY_REJECT_CLASS_NAME = "FerCapabilityRejectFG"
 SCOPE_TIE_A_CLASS_NAME = "FerScopeTieAFG"
 SCOPE_TIE_B_CLASS_NAME = "FerScopeTieBFG"
+UNREADABLE_DOMAIN_CLASS_NAME = "FerUnreadableDomainFG"
 
 MISSING_SCOPE = "FerNoSuchScope"  # a scope string naming no accessible class
 SCOPE_REASON = "outside the requested feature group scope"
 UNMATCHED_PHRASE = "matched no feature group"
 NEAREST_MISS_PHRASE = "Nearest miss: "
 FALSY_REPORT_FRAGMENT = "falsy non-bool"
+DROP_REPORT_FRAGMENT = "dropping that filter"  # the drop report's own wording, which no unmatched warning carries
 BARE_MESSAGE = f"Filter feature '{FILTER_FEATURE}' matched no feature group."
 
 RUNTIME_MESSAGE = "fer_runtime_boom"
@@ -62,6 +65,8 @@ UNKNOWN_STAGE = "fer_unknown_stage_hint"  # a free-form hint no engine stage kno
 GROUP_DOMAIN = "fer_group_domain"  # declared by the group-domain probe
 FEATURE_DOMAIN = "fer_feature_domain"  # carried by the resolved host feature
 OTHER_DOMAIN = "fer_other_domain"  # declared by the filter feature; matches neither
+SECOND_DOMAIN = "fer_second_domain"  # a second host domain, so two domain facts differ in their reason
+UNREADABLE_DOMAIN_FALLBACK = "<unreadable domain>"  # what a guarded read of a plugin's domain name degrades to
 
 MATCHER_ERROR_STAGE: EliminationStage = "matcher_error"
 VALUE_REJECTION_STAGE: EliminationStage = "value_rejection"
@@ -69,7 +74,9 @@ INPUT_DATA_ELIMINATION_STAGE: EliminationStage = "input_data"
 DOMAIN_STAGE: EliminationStage = "domain"
 SCOPE_STAGE: EliminationStage = "scope"
 CAPABILITY_STAGE: EliminationStage = "capability"
+FRAMEWORKS_NOT_ENABLED_STAGE: EliminationStage = "frameworks_not_enabled"
 FRAMEWORK_PIN_STAGE: EliminationStage = "framework_pin"
+LINKS_STAGE: EliminationStage = "links"
 
 # The canonical seam's own wording over the one framework the filter would ride.
 CAPABILITY_REASON = f"supports_compute_framework rejected {[PythonDictFramework.__name__]}"
@@ -82,6 +89,20 @@ STAGE_HINT_TABLE: tuple[tuple[str, EliminationStage], ...] = (
     (UNKNOWN_STAGE, VALUE_REJECTION_STAGE),
 )
 STAGE_HINT_IDS = [hint for hint, _ in STAGE_HINT_TABLE]
+
+# The gate order the depth table must express, shallowest rank first; the stages of one rank share a depth.
+EXPECTED_DEPTH_ORDER: tuple[tuple[EliminationStage, ...], ...] = (
+    (MATCHER_ERROR_STAGE,),
+    (INPUT_DATA_ELIMINATION_STAGE,),
+    (VALUE_REJECTION_STAGE,),
+    (DOMAIN_STAGE,),
+    (SCOPE_STAGE,),
+    (CAPABILITY_STAGE, FRAMEWORKS_NOT_ENABLED_STAGE),
+    (FRAMEWORK_PIN_STAGE,),
+    (LINKS_STAGE,),
+)
+
+REPEAT_RUNS = 8  # runs of one scenario, so a readout that rides set iteration order shows up as a differing one
 
 T = TypeVar("T")
 
@@ -100,6 +121,11 @@ def _messages(caplog: pytest.LogCaptureFixture, level: int) -> tuple[str, ...]:
     """Formatted messages GlobalFilter logged at exactly that level."""
     records = [record for record in caplog.records if record.name == GF_LOGGER_NAME and record.levelno == level]
     return tuple(record.getMessage() for record in records)
+
+
+def _carrying(messages: Sequence[str], fragment: str) -> tuple[str, ...]:
+    """The messages carrying `fragment`."""
+    return tuple(message for message in messages if fragment in message)
 
 
 def _stage_reason(stage: str) -> str:
@@ -144,6 +170,21 @@ def _host_feature(domain: str | None = None, pin: type[ComputeFramework] | None 
 def _plain_host() -> Feature:
     """The host carrying neither a domain nor a pin."""
     return _host_feature()
+
+
+def _domain_losing_host() -> Feature:
+    """A host whose own domain sends the filter out at the domain gate."""
+    return _host_feature(domain=FEATURE_DOMAIN, pin=PythonDictFramework)
+
+
+def _pin_losing_host() -> Feature:
+    """A host sharing the filter's domain, so the filter survives to lose at the framework pin."""
+    return _host_feature(domain=OTHER_DOMAIN, pin=PythonDictFramework)
+
+
+def _losing_pair() -> tuple[Feature, Feature]:
+    """Two filters on one name, one losing at the scope gate and one at the framework pin."""
+    return _filter_feature(scope=MISSING_SCOPE), _filter_feature(pin=PandasDataFrame)
 
 
 def _make_plain_fg() -> type[FeatureGroup]:
@@ -244,6 +285,30 @@ def _make_group_domain_fg() -> type[FeatureGroup]:
             return Domain(GROUP_DOMAIN)
 
     return FerGroupDomainFG
+
+
+class _RaisingName:
+    """A plugin's own object in a Domain's name slot, whose text form raises."""
+
+    def __str__(self) -> str:
+        raise RuntimeError(RUNTIME_MESSAGE)
+
+
+def _make_unreadable_domain_fg() -> type[FeatureGroup]:
+    """A plain matcher declaring a group domain whose name no f-string can render."""
+    gc.collect()
+
+    class FerUnreadableDomainFG(FeatureGroup):
+        @classmethod
+        def feature_names_supported(cls) -> set[str]:
+            return {HOST_FEATURE, FILTER_FEATURE}
+
+        @classmethod
+        def get_domain(cls) -> Domain:
+            # cast, because the annotation is exactly what a plugin is free to ignore here.
+            return Domain(cast(str, _RaisingName()))
+
+    return FerUnreadableDomainFG
 
 
 def _make_capability_reject_fg() -> type[FeatureGroup]:
@@ -412,19 +477,24 @@ class _LedgerSnapshot:
     unmatched: tuple[str, ...]
 
 
-def _drive_matching(
-    makes: Sequence[_Factory],
-    caplog: pytest.LogCaptureFixture,
-    filter_feature: Feature | str = FILTER_FEATURE,
-    make_host: Callable[[], Feature] = _plain_host,
-    calls: int = 1,
-    warn_unmatched: bool = False,
-) -> _LedgerSnapshot:
-    """Match one declared filter against every probe, `calls` times each, on ONE fresh GlobalFilter."""
-    caplog.clear()
-    groups = [make() for make in makes]
+def _new_global_filter(filter_features: Sequence[Feature | str]) -> GlobalFilter:
+    """One GlobalFilter declaring an EQUAL filter per given filter feature, each on its own parameter."""
     global_filter = GlobalFilter()
-    global_filter.add_filter(filter_feature, FilterType.EQUAL, {"value": 1})
+    for index, filter_feature in enumerate(filter_features, start=1):
+        global_filter.add_filter(filter_feature, FilterType.EQUAL, {"value": index})
+    return global_filter
+
+
+def _run_setup(
+    global_filter: GlobalFilter,
+    groups: list[type[FeatureGroup]],
+    caplog: pytest.LogCaptureFixture,
+    make_hosts: Sequence[Callable[[], Feature]],
+    calls: int,
+    warn_unmatched: bool,
+) -> _LedgerSnapshot:
+    """One engine setup: match every declared filter against every probe, once per host, `calls` times each."""
+    caplog.clear()
     matched: set[SingleFilter] | None = None
     names: tuple[str, ...] = ()
     escaped: str | None = None
@@ -433,11 +503,17 @@ def _drive_matching(
             for _ in range(calls):
                 # By index: no loop local may keep a probe class alive for a failing assert's traceback.
                 for index in range(len(groups)):
-                    matched, call_escaped = _capture(
-                        partial(global_filter.identify_matched_filters, groups[index], make_host(), None)
-                    )
-                    escaped = escaped or call_escaped
-                    names = (*names, *sorted(single.name for single in matched or ()))
+                    for host_index in range(len(make_hosts)):
+                        matched, call_escaped = _capture(
+                            partial(
+                                global_filter.identify_matched_filters,
+                                groups[index],
+                                make_hosts[host_index](),
+                                None,
+                            )
+                        )
+                        escaped = escaped or call_escaped
+                        names = (*names, *sorted(single.name for single in matched or ()))
             if warn_unmatched:
                 global_filter.warn_on_unmatched_filters()
         rows, ledger_error = _capture(partial(_ledger_rows, global_filter))
@@ -454,8 +530,74 @@ def _drive_matching(
         )
     finally:
         groups.clear()
-        del groups, global_filter, matched
+        del groups, matched
         gc.collect()
+
+
+def _drive(
+    makes: Sequence[_Factory],
+    caplog: pytest.LogCaptureFixture,
+    filter_features: Sequence[Feature | str] = (FILTER_FEATURE,),
+    make_hosts: Sequence[Callable[[], Feature]] = (_plain_host,),
+    calls: int = 1,
+    warn_unmatched: bool = False,
+) -> _LedgerSnapshot:
+    """One setup on ONE fresh GlobalFilter carrying every declared filter."""
+    groups = [make() for make in makes]
+    global_filter = _new_global_filter(filter_features)
+    try:
+        return _run_setup(global_filter, groups, caplog, make_hosts, calls, warn_unmatched)
+    finally:
+        groups.clear()
+        del groups, global_filter
+        gc.collect()
+
+
+def _drive_matching(
+    makes: Sequence[_Factory],
+    caplog: pytest.LogCaptureFixture,
+    filter_feature: Feature | str = FILTER_FEATURE,
+    make_host: Callable[[], Feature] = _plain_host,
+    calls: int = 1,
+    warn_unmatched: bool = False,
+) -> _LedgerSnapshot:
+    """Match one declared filter against every probe, `calls` times each, on ONE fresh GlobalFilter."""
+    return _drive(makes, caplog, (filter_feature,), (make_host,), calls, warn_unmatched)
+
+
+def _drive_setups(
+    makes: Sequence[_Factory],
+    setups: Sequence[Sequence[int]],
+    caplog: pytest.LogCaptureFixture,
+    filter_feature: Feature | str = FILTER_FEATURE,
+    make_host: Callable[[], Feature] = _plain_host,
+) -> tuple[_LedgerSnapshot, ...]:
+    """One readout per engine setup, each consulting the probes it names by index, with a reset between them."""
+    groups = [make() for make in makes]
+    global_filter = _new_global_filter((filter_feature,))
+    snapshots: list[_LedgerSnapshot] = []
+    try:
+        for index in range(len(setups)):
+            if index:
+                global_filter.reset_match_tracking()
+            consulted = [groups[probe] for probe in setups[index]]
+            snapshots.append(_run_setup(global_filter, consulted, caplog, (make_host,), 1, True))
+        return tuple(snapshots)
+    finally:
+        groups.clear()
+        del groups, global_filter
+        gc.collect()
+
+
+def _drive_shared_name(caplog: pytest.LogCaptureFixture, filter_features: Sequence[Feature]) -> _LedgerSnapshot:
+    """Drive filters that all declare one name against a single plain probe whose host loses the pin."""
+    return _drive(
+        [_make_plain_fg],
+        caplog,
+        filter_features=filter_features,
+        make_hosts=(partial(_host_feature, pin=PythonDictFramework),),
+        warn_unmatched=True,
+    )
 
 
 @dataclass(frozen=True)
@@ -855,3 +997,184 @@ class TestTheUnmatchedWarningNamesTheNearestMiss:
 
         assert snapshot.names == (FILTER_FEATURE,), f"the filter must attach, got: {snapshot.names}"
         assert snapshot.unmatched == (), f"an attached filter is not unmatched, got: {snapshot.unmatched}"
+
+
+class TestEveryMatchReportIsScopedToOneSetup:
+    """A GlobalFilter outlives the setup that filled it, so reset_match_tracking clears every match report."""
+
+    def test_the_reset_drops_the_previous_setups_fact(self, caplog: pytest.LogCaptureFixture) -> None:
+        first, second = _drive_setups(
+            [_make_plain_fg, _make_plain_decline_fg],
+            [[0], [1]],
+            caplog,
+            filter_feature=_filter_feature(scope=MISSING_SCOPE),
+        )
+
+        assert first.rows == ((PLAIN_CLASS_NAME, FILTER_FEATURE, SCOPE_STAGE, SCOPE_REASON),), (
+            f"the first setup must capture its scope fact, got: {first.rows}"
+        )
+        assert second.rows == (), f"the reset must clear the previous setup's facts, got: {second.rows}"
+        assert second.unmatched == (BARE_MESSAGE,), (
+            f"with nothing captured this setup, the message is the bare sentence, got: {second.unmatched}"
+        )
+
+    def test_a_group_consulted_only_before_the_reset_is_never_named(self, caplog: pytest.LogCaptureFixture) -> None:
+        from mloda.core.prepare.resolution_failure_renderer import near_miss_text
+
+        first, second = _drive_setups(
+            [_make_plain_fg, _make_scope_tie_b_fg],
+            [[0], [1]],
+            caplog,
+            filter_feature=_filter_feature(scope=MISSING_SCOPE),
+        )
+
+        assert _carrying(first.unmatched, PLAIN_CLASS_NAME) == first.unmatched, (
+            f"the first setup must name the group it consulted, got: {first.unmatched}"
+        )
+        expected_bullet = near_miss_text(SCOPE_TIE_B_CLASS_NAME, SCOPE_STAGE, SCOPE_REASON)
+        assert second.unmatched == (f"{BARE_MESSAGE} {NEAREST_MISS_PHRASE}{expected_bullet}",), (
+            f"only a group this setup consulted may be named, got: {second.unmatched}"
+        )
+
+    def test_a_matcher_defect_warns_once_in_each_setup(self, caplog: pytest.LogCaptureFixture) -> None:
+        """The same probe class in both setups: the WARNING dedupe is per setup, not per process."""
+        first, second = _drive_setups([_make_matcher_error_fg], [[0], [0]], caplog)
+
+        assert len(_carrying(first.warnings, DROP_REPORT_FRAGMENT)) == 1, (
+            f"the defect must warn once in the first setup, got: {first.warnings}"
+        )
+        reported = _carrying(second.warnings, DROP_REPORT_FRAGMENT)
+        assert len(reported) == 1, f"the defect must warn again in a new setup, got: {second.warnings}"
+        assert RUNTIME_MESSAGE in reported[0], f"the report must carry the raise message: {reported[0]}"
+        assert len(second.rows) == 1, f"exactly one fact for the key, got: {second.rows}"
+        _, _, stage, reason = second.rows[0]
+        assert stage == MATCHER_ERROR_STAGE, f"the new setup must re-record the defect, got stage: {stage}"
+        assert RUNTIME_MESSAGE in reason, f"the re-recorded reason must carry the raise message: {reason}"
+
+    def test_a_falsy_non_bool_is_reported_again_in_a_new_setup(self, caplog: pytest.LogCaptureFixture) -> None:
+        first, second = _drive_setups([_make_falsy_decline_fg], [[0], [0]], caplog)
+
+        assert len(_carrying(first.warnings, FALSY_REPORT_FRAGMENT)) == 1, (
+            f"the detached filter must be reported in the first setup, got: {first.warnings}"
+        )
+        assert len(_carrying(second.warnings, FALSY_REPORT_FRAGMENT)) == 1, (
+            f"a new setup must report the detached filter again, got: {second.warnings}"
+        )
+
+
+class TestTwoFiltersOnOneNameAttributeNothing:
+    """The ledger keys on the filter feature NAME, so a shared name cannot attribute a fact to one filter."""
+
+    def test_both_warnings_are_the_bare_sentence(self, caplog: pytest.LogCaptureFixture) -> None:
+        """One filter loses at scope and the other at the pin; neither message may quote the other's fact."""
+        snapshot = _drive_shared_name(caplog, _losing_pair())
+
+        assert snapshot.escaped is None, f"nothing may cross identify_matched_filters: {snapshot.escaped}"
+        assert snapshot.names == (), f"neither filter may attach, got: {snapshot.names}"
+        assert snapshot.unmatched == (BARE_MESSAGE, BARE_MESSAGE), (
+            f"an unattributable fact must not be quoted, got: {snapshot.unmatched}"
+        )
+
+    def test_one_filter_on_that_name_still_names_its_nearest_miss(self, caplog: pytest.LogCaptureFixture) -> None:
+        """The guard covers the ambiguous case only: a single filter still gets its suffix."""
+        from mloda.core.prepare.resolution_failure_renderer import near_miss_text
+
+        snapshot = _drive_shared_name(caplog, (_filter_feature(scope=MISSING_SCOPE),))
+
+        expected = f"{BARE_MESSAGE} {NEAREST_MISS_PHRASE}{near_miss_text(PLAIN_CLASS_NAME, SCOPE_STAGE, SCOPE_REASON)}"
+        assert snapshot.unmatched == (expected,), f"one filter on the name keeps its suffix, got: {snapshot.unmatched}"
+
+    def test_the_pair_renders_the_same_way_on_every_run(self, caplog: pytest.LogCaptureFixture) -> None:
+        """Which of the two facts the ledger keeps rides set iteration order; the messages must not."""
+        runs = tuple(_drive_shared_name(caplog, _losing_pair()).unmatched for _ in range(REPEAT_RUNS))
+
+        assert set(runs) == {(BARE_MESSAGE, BARE_MESSAGE)}, f"the runs diverged: {sorted(set(runs))}"
+
+
+class TestTheDeepestFactKeepsTheKey:
+    """The write policy must match the read policy: within one key, the deepest gate reached is the stored fact."""
+
+    @pytest.mark.parametrize(
+        "make_hosts",
+        [
+            pytest.param((_domain_losing_host, _pin_losing_host), id="domain_first"),
+            pytest.param((_pin_losing_host, _domain_losing_host), id="pin_first"),
+        ],
+    )
+    def test_the_deepest_fact_survives_whichever_host_ran_first(
+        self, make_hosts: tuple[Callable[[], Feature], ...], caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """Two hosts drive one (group, filter) key; input_features is a set, so host order decides nothing."""
+        snapshot = _drive(
+            [_make_plain_fg],
+            caplog,
+            filter_features=(_filter_feature(domain=OTHER_DOMAIN, pin=PandasDataFrame),),
+            make_hosts=make_hosts,
+        )
+
+        assert snapshot.escaped is None, f"nothing may cross identify_matched_filters: {snapshot.escaped}"
+        assert snapshot.ledger_error is None, f"the stored fact must be readable: {snapshot.ledger_error}"
+        assert snapshot.names == (), f"both hosts must lose their gate, got: {snapshot.names}"
+        assert len(snapshot.rows) == 1, f"exactly one fact for the key, got: {snapshot.rows}"
+        _, _, stage, reason = snapshot.rows[0]
+        assert stage == FRAMEWORK_PIN_STAGE, f"the deepest gate reached keeps the key, got stage: {stage}"
+        assert PandasDataFrame.__name__ in reason, f"the reason must name the filter's pinned framework: {reason}"
+
+    def test_two_facts_at_one_depth_keep_the_first(self, caplog: pytest.LogCaptureFixture) -> None:
+        """Deepest-wins must not become last-wins: at equal depth the first fact recorded still owns the key."""
+        snapshot = _drive(
+            [_make_plain_fg],
+            caplog,
+            filter_features=(_filter_feature(domain=OTHER_DOMAIN),),
+            make_hosts=(partial(_host_feature, domain=FEATURE_DOMAIN), partial(_host_feature, domain=SECOND_DOMAIN)),
+        )
+
+        assert snapshot.escaped is None, f"nothing may cross identify_matched_filters: {snapshot.escaped}"
+        assert len(snapshot.rows) == 1, f"exactly one fact for the key, got: {snapshot.rows}"
+        _, _, stage, reason = snapshot.rows[0]
+        assert stage == DOMAIN_STAGE, f"both hosts lose at the domain gate, got stage: {stage}"
+        assert FEATURE_DOMAIN in reason, f"the first fact at one depth keeps the key: {reason}"
+        assert SECOND_DOMAIN not in reason, f"an equally deep fact must not displace it: {reason}"
+
+
+class TestEveryEliminationStageCarriesADepth:
+    """A stage the depth table misses is silently ranked with a matcher defect, the deliberately lowest rank."""
+
+    def test_every_stage_carries_a_depth(self) -> None:
+        """dict[EliminationStage, int] does not force an entry per member, so the table is pinned complete here."""
+        unranked = sorted(set(get_args(EliminationStage)) - set(_STAGE_DEPTH))
+        assert unranked == [], f"_STAGE_DEPTH ranks no depth for {unranked}"
+
+    def test_the_expected_order_names_every_stage(self) -> None:
+        """A tenth stage fails here until someone states where it ranks."""
+        named = {stage for rank in EXPECTED_DEPTH_ORDER for stage in rank}
+        assert named == set(get_args(EliminationStage)), f"the expected order names {sorted(named)}"
+
+    def test_the_depths_rank_the_gates_in_order(self) -> None:
+        missing = [stage for rank in EXPECTED_DEPTH_ORDER for stage in rank if stage not in _STAGE_DEPTH]
+        assert missing == [], f"_STAGE_DEPTH ranks no depth for {missing}"
+
+        ranks = [sorted({_STAGE_DEPTH[stage] for stage in rank}) for rank in EXPECTED_DEPTH_ORDER]
+        for index in range(len(ranks)):
+            assert len(ranks[index]) == 1, f"{EXPECTED_DEPTH_ORDER[index]} must share one depth, got: {ranks[index]}"
+        depths = [rank[0] for rank in ranks]
+        assert depths == sorted(set(depths)), f"each rank must sit strictly deeper than the last, got: {depths}"
+
+
+class TestAnUnreadableGroupDomainDegrades:
+    """get_domain().name is plugin-owned and unvalidated, so the read that renders it must degrade in its guard."""
+
+    def test_an_unreadable_domain_name_degrades_to_the_fallback(self, caplog: pytest.LogCaptureFixture) -> None:
+        snapshot = _drive_matching(
+            [_make_unreadable_domain_fg], caplog, filter_feature=_filter_feature(domain=OTHER_DOMAIN)
+        )
+
+        assert snapshot.escaped is None, f"nothing may cross identify_matched_filters: {snapshot.escaped}"
+        assert snapshot.ledger_error is None, f"the stored fact must be readable: {snapshot.ledger_error}"
+        assert snapshot.names == (), f"a diverging domain must attach no filter, got: {snapshot.names}"
+        assert len(snapshot.rows) == 1, f"the domain fact must still be recorded, got: {snapshot.rows}"
+        name, _, stage, reason = snapshot.rows[0]
+        assert name == UNREADABLE_DOMAIN_CLASS_NAME, f"wrong key: {name}"
+        assert stage == DOMAIN_STAGE, f"the domain gate owns this drop, got stage: {stage}"
+        assert OTHER_DOMAIN in reason, f"the reason must name the filter feature's declared domain: {reason}"
+        assert UNREADABLE_DOMAIN_FALLBACK in reason, f"an unreadable domain name must degrade: {reason}"

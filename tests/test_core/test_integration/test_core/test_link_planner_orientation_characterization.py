@@ -34,7 +34,7 @@ THIRD_PAYLOADS = ["T1", "T3", "T4", "T7"]
 
 MISSING = "-"
 
-# MULTIPROCESSING is opt-in per shape: the flight server still races or fails for the shapes left on these two modes.
+# MULTIPROCESSING is opt-in per shape: the rest fail in the transform hop, on a flight the server has no table for.
 MODES_SYNC_THREADING = pytest.mark.parametrize(
     "modes",
     [{ParallelizationMode.SYNC}, {ParallelizationMode.THREADING}],
@@ -89,11 +89,14 @@ def _pair_features(prefix: str) -> set[Feature]:
     }
 
 
-def _packed_rows(results: Any, column: str) -> list[str]:
-    frames = [_columns(frame) for frame in results]
-    matching = [frame[column] for frame in frames if column in frame]
+def _packed_frame(results: Any, column: str) -> Any:
+    matching = [frame for frame in results if column in _columns(frame)]
     assert len(matching) == 1, f"Expected exactly one result frame carrying {column}, got {len(matching)}."
-    return [str(value) for value in matching[0]]
+    return matching[0]
+
+
+def _packed_rows(results: Any, column: str) -> list[str]:
+    return [str(value) for value in _columns(_packed_frame(results, column))[column]]
 
 
 class OrientCharLeftInPandas(FeatureGroup):
@@ -201,7 +204,7 @@ class OrientCharInvertedChild(FeatureGroup):
 
 
 class OrientCharArrowChild(FeatureGroup):
-    """Runs in the framework of pair B's declared left parent."""
+    """Declares the framework of pair B's declared left parent."""
 
     def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
         return _pair_features("oc_b")
@@ -256,6 +259,24 @@ def _pair_link(pair: tuple[type[FeatureGroup], type[FeatureGroup], str], jointyp
     )
 
 
+def _run_pair_results(
+    pair: tuple[type[FeatureGroup], type[FeatureGroup], str],
+    jointype: str,
+    child: type[FeatureGroup],
+    modes: set[ParallelizationMode],
+    flight_server: Any,
+) -> Any:
+    left_group, right_group, _ = pair
+    return mloda.run_all(
+        [Feature(name=child.get_class_name())],
+        links={_pair_link(pair, jointype)},
+        compute_frameworks={PandasDataFrame, PyArrowTable},
+        plugin_collector=PluginCollector.enabled_feature_groups({left_group, right_group, child}),
+        flight_server=flight_server if ParallelizationMode.MULTIPROCESSING in modes else None,
+        parallelization_modes=modes,
+    )
+
+
 def _run_pair(
     pair: tuple[type[FeatureGroup], type[FeatureGroup], str],
     jointype: str,
@@ -263,16 +284,8 @@ def _run_pair(
     modes: set[ParallelizationMode],
     flight_server: Any,
 ) -> list[str]:
-    left_group, right_group, _ = pair
-    result = mloda.run_all(
-        [Feature(name=child.get_class_name())],
-        links={_pair_link(pair, jointype)},
-        compute_frameworks={PandasDataFrame, PyArrowTable},
-        plugin_collector=PluginCollector.enabled_feature_groups({left_group, right_group, child}),
-        flight_server=flight_server,
-        parallelization_modes=modes,
-    )
-    return _packed_rows(result, child.get_class_name())
+    results = _run_pair_results(pair, jointype, child, modes, flight_server)
+    return _packed_rows(results, child.get_class_name())
 
 
 INNER_ROWS = ["k4|L4|k4|R4", "k3|L3|k3|R3"]
@@ -292,7 +305,6 @@ def test_inner_join_declared_orientation_keeps_left_group_first(
 ) -> None:
     rows = _run_pair(PAIR_A, "inner", OrientCharDeclaredChild, modes, flight_server)
 
-    assert len(rows) == 2
     assert rows == INNER_ROWS
 
 
@@ -302,7 +314,6 @@ def test_inner_join_inverted_orientation_keeps_left_group_first(
 ) -> None:
     rows = _run_pair(PAIR_B, "inner", OrientCharInvertedChild, modes, flight_server)
 
-    assert len(rows) == 2
     assert rows == INNER_ROWS
 
 
@@ -312,7 +323,6 @@ def test_left_join_declared_orientation_keeps_every_left_row(
 ) -> None:
     rows = _run_pair(PAIR_A, "left", OrientCharDeclaredChild, modes, flight_server)
 
-    assert len(rows) == 4
     assert rows == LEFT_JOIN_ROWS
 
 
@@ -322,25 +332,27 @@ def test_left_join_inverted_orientation_keeps_every_left_row(
 ) -> None:
     rows = _run_pair(PAIR_B, "left", OrientCharInvertedChild, modes, flight_server)
 
-    assert len(rows) == 4
     assert rows == LEFT_JOIN_ROWS
 
 
 @MODES_SYNC_THREADING
-def test_right_join_keeps_every_right_row_for_a_child_on_the_left_framework(
+def test_right_join_keeps_every_right_row_for_a_child_declaring_the_left_framework(
     modes: set[ParallelizationMode], flight_server: Any
 ) -> None:
-    rows = _run_pair(PAIR_B, "right", OrientCharArrowChild, modes, flight_server)
+    results = _run_pair_results(PAIR_B, "right", OrientCharArrowChild, modes, flight_server)
+    frame = _packed_frame(results, OrientCharArrowChild.get_class_name())
 
-    assert len(rows) == 3
-    assert rows == RIGHT_JOIN_ROWS
+    # The planner rewrote the child off its declared PyArrowTable, without asking whether it supports the new one.
+    assert type(frame) is PandasDataFrame.expected_data_framework()
+    assert _packed_rows(results, OrientCharArrowChild.get_class_name()) == RIGHT_JOIN_ROWS
 
 
 @MODES_SYNC_THREADING
 def test_right_join_raises_for_a_child_on_the_right_framework(
     modes: set[ParallelizationMode], flight_server: Any
 ) -> None:
-    with pytest.raises(KeyError, match="oc_b_left_key"):
+    # The exception type is incidental: the column-semantics guard reaches the key column before the merge does.
+    with pytest.raises((KeyError, ValueError), match="oc_b_left_key"):
         _run_pair(PAIR_B, "right", OrientCharInvertedChild, modes, flight_server)
 
 
@@ -351,7 +363,6 @@ def test_right_join_should_keep_every_right_row_for_a_child_on_the_right_framewo
 ) -> None:
     rows = _run_pair(PAIR_B, "right", OrientCharInvertedChild, modes, flight_server)
 
-    assert len(rows) == 3
     assert sorted(rows) == sorted(RIGHT_JOIN_ROWS)
 
 
@@ -370,10 +381,9 @@ def test_chained_join_across_three_frameworks_keeps_left_group_order(
         plugin_collector=PluginCollector.enabled_feature_groups(
             {OrientCharLeftInPandas, OrientCharRightInArrow, OrientCharThirdInDict, OrientCharChainChild}
         ),
-        flight_server=flight_server,
+        flight_server=flight_server if ParallelizationMode.MULTIPROCESSING in modes else None,
         parallelization_modes=modes,
     )
     rows = _packed_rows(result, OrientCharChainChild.get_class_name())
 
-    assert len(rows) == 2
     assert rows == CHAIN_ROWS

@@ -2,9 +2,6 @@
 Set iteration over class objects is id-based, so the reduction pins to the lowest class name.
 """
 
-import json
-import subprocess  # nosec B404
-import sys
 from pathlib import Path
 
 import pytest
@@ -18,9 +15,9 @@ from mloda.core.prepare.graph.graph import Graph
 from mloda.core.prepare.resolve_links import ResolveLinks
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
+from tests.helpers.probe_runner import run_probes
 
 _PROBE = Path(__file__).with_name("determinism_probe.py")
-_PROBE_TIMEOUT = 30.0
 # Each probe is a fresh interpreter importing PyArrowTable, so the count is what the gate budget allows.
 _PROBE_PROCESSES = 5
 _PROBE_EXPECTED = {"feature": "PyArrowTable", "trekker_left": "PyArrowTable", "trekker_right": "PyArrowTable"}
@@ -88,26 +85,6 @@ def _link() -> Link:
         JoinSpec(DeterminismLeftFeatureGroup, "idx"),
         JoinSpec(DeterminismRightFeatureGroup, "idx"),
     )
-
-
-def _run_probes(count: int) -> list[dict[str, str]]:
-    assert _PROBE.is_file(), f"{_PROBE} does not exist"
-
-    outputs: list[dict[str, str]] = []
-    for _ in range(count):
-        # Safe: fixed argv, no shell, no user input.
-        completed = subprocess.run(  # nosec B603
-            [sys.executable, str(_PROBE)],
-            capture_output=True,
-            text=True,
-            timeout=_PROBE_TIMEOUT,
-        )
-        assert completed.returncode == 0, f"probe interpreter failed:\n{completed.stderr}"
-        lines = [line for line in completed.stdout.splitlines() if line.strip()]
-        assert len(lines) == 1, f"probe printed {len(lines)} lines, expected exactly one: {completed.stdout!r}"
-        parsed: dict[str, str] = json.loads(lines[0])
-        outputs.append(parsed)
-    return outputs
 
 
 def test_select_deterministic_ignores_input_order() -> None:
@@ -236,7 +213,7 @@ def test_feature_compute_framework_rejects_an_empty_set() -> None:
 # Fresh interpreters cost roughly a second each, so this one needs more than the suite-wide per-test budget.
 @pytest.mark.timeout(60)
 def test_fresh_interpreters_reduce_to_the_same_frameworks() -> None:
-    outputs = _run_probes(_PROBE_PROCESSES)
+    outputs = run_probes(_PROBE, _PROBE_PROCESSES)
 
     assert len(outputs) == _PROBE_PROCESSES, f"expected {_PROBE_PROCESSES} probe results, got {len(outputs)}"
     for position, output in enumerate(outputs):

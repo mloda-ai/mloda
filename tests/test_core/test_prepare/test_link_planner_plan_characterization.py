@@ -1,8 +1,5 @@
 """Characterizes what the link planner plans, and what it declines to plan."""
 
-import json
-import subprocess  # nosec B404
-import sys
 from pathlib import Path
 from typing import Any, Callable, NamedTuple, Optional
 from uuid import UUID
@@ -10,12 +7,6 @@ from uuid import UUID
 import pyarrow as pa
 import pytest
 
-from mloda.core.abstract_plugins.components.feature import Feature
-from mloda.core.abstract_plugins.components.feature_set import FeatureSet
-from mloda.core.abstract_plugins.components.index.index import Index
-from mloda.core.abstract_plugins.components.link import JoinSpec, JoinType, Link
-from mloda.core.abstract_plugins.compute_framework import ComputeFramework
-from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.core.step.feature_group_step import FeatureGroupStep
 from mloda.core.core.step.join_step import JoinStep
 from mloda.core.prepare.execution_plan import ExecutionPlan
@@ -24,14 +15,21 @@ from mloda.core.prepare.graph.properties import NodeProperties
 from mloda.core.prepare.resolve_compute_frameworks import ResolveComputeFrameworks
 from mloda.core.prepare.resolve_links import LinkFrameworkTrekker, LinkTrekker
 from mloda.provider import BaseInputData
+from mloda.provider import ComputeFramework
 from mloda.provider import DataCreator
+from mloda.provider import FeatureGroup
+from mloda.provider import FeatureSet
+from mloda.user import Feature
 from mloda.user import FeatureName
+from mloda.user import Index
+from mloda.user import JoinSpec, JoinType, Link
 from mloda.user import Options
 from mloda.user import ParallelizationMode
 from mloda.user import PluginCollector
 from mloda.user import mloda
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
+from tests.helpers.probe_runner import run_probes
 
 
 SHARED_LEFT_KEY = "link_plan_shared_left_key"
@@ -54,10 +52,16 @@ PAIR_RIGHT_INDEX = Index(("link_plan_pair_right_key",))
 STACK_FACTORIES: list[Callable[[JoinSpec, JoinSpec], Link]] = [Link.append, Link.union]
 LEFT_FRAMEWORK_INVARIANT = "APPEND/UNION left link framework must match"
 
+STACK_INVERSION_REASON = (
+    "the inverted orientation is dropped before the JoinStep is built; a fix has to move the left-framework "
+    "invariant in create_joinstep_in_case_of_append_or_union with it, since neither append nor union commutes"
+)
+
+MODES = pytest.mark.parametrize("modes", [{ParallelizationMode.SYNC}, {ParallelizationMode.THREADING}])
+
 _PROBE = Path(__file__).with_name("link_planner_probe.py")
-_PROBE_TIMEOUT = 30.0
-# Each probe is a fresh interpreter importing three frameworks, so the count stays within the gate budget.
-_PROBE_PROCESSES = 5
+# The reduction is deterministic within a process, so a second cold interpreter is the whole cross-process signal.
+_PROBE_PROCESSES = 2
 _PROBE_EXPECTED = {
     "child": "PyArrowTable",
     "orientation_count": "1",
@@ -95,7 +99,7 @@ def _paired_payloads(data: Any) -> list[str]:
 
 
 class LinkPlanSharedLeft(FeatureGroup):
-    """Pinned to the framework the link declares as its left side."""
+    """Pinned to the framework the link declares as its left side, with descending keys as an order oracle."""
 
     @classmethod
     def input_data(cls) -> Optional[BaseInputData]:
@@ -103,7 +107,7 @@ class LinkPlanSharedLeft(FeatureGroup):
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
-        return {SHARED_LEFT_KEY: [1, 2, 3, 4], SHARED_LEFT_PAYLOAD: ["l1", "l2", "l3", "l4"]}
+        return {SHARED_LEFT_KEY: [4, 3, 2, 1], SHARED_LEFT_PAYLOAD: ["l4", "l3", "l2", "l1"]}
 
     @classmethod
     def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
@@ -290,11 +294,12 @@ def _run(planned: Planned, left_cfw: type[ComputeFramework], right_cfw: type[Com
 
 def _pair_scenario(
     *,
+    link_factory: Callable[[JoinSpec, JoinSpec], Link] = Link.inner,
     left_cfw: type[ComputeFramework] = PyArrowTable,
     right_cfw: type[ComputeFramework] = PandasDataFrame,
     child_cfw: type[ComputeFramework] = PyArrowTable,
 ) -> Planned:
-    link = Link.inner(JoinSpec(LinkPlanPairLeft, PAIR_LEFT_INDEX), JoinSpec(LinkPlanPairRight, PAIR_RIGHT_INDEX))
+    link = link_factory(JoinSpec(LinkPlanPairLeft, PAIR_LEFT_INDEX), JoinSpec(LinkPlanPairRight, PAIR_RIGHT_INDEX))
     return _plan(
         link,
         _feature("link_plan_pair_left_payload", left_cfw, PAIR_LEFT_INDEX),
@@ -354,27 +359,7 @@ def _orientations(planned: Planned) -> list[tuple[str, str]]:
     ]
 
 
-def _run_probes(count: int) -> list[dict[str, str]]:
-    assert _PROBE.is_file(), f"{_PROBE} does not exist"
-
-    outputs: list[dict[str, str]] = []
-    for _ in range(count):
-        # Safe: fixed argv, no shell, no user input.
-        completed = subprocess.run(  # nosec B603
-            [sys.executable, str(_PROBE)],
-            capture_output=True,
-            text=True,
-            timeout=_PROBE_TIMEOUT,
-        )
-        assert completed.returncode == 0, f"probe interpreter failed:\n{completed.stderr}"
-        lines = [line for line in completed.stdout.splitlines() if line.strip()]
-        assert len(lines) == 1, f"probe printed {len(lines)} lines, expected exactly one: {completed.stdout!r}"
-        parsed: dict[str, str] = json.loads(lines[0])
-        outputs.append(parsed)
-    return outputs
-
-
-@pytest.mark.parametrize("modes", [{ParallelizationMode.SYNC}, {ParallelizationMode.THREADING}])
+@MODES
 class TestSharedLinkServingTwoChildren:
     """One link between one parent pair, consumed by a flexible child and a pinned child."""
 
@@ -401,32 +386,21 @@ class TestSharedLinkServingTwoChildren:
             for child in children:
                 name = child.get_class_name()
                 if name in _column_names(result):
-                    collected[name] = sorted(_column_values(result, name))
+                    collected[name] = _column_values(result, name)
         return collected
 
-    def test_each_child_gets_the_two_rows_both_parents_share(
-        self, modes: set[ParallelizationMode], flight_server: Any
-    ) -> None:
-        collected = self._run_both_children(modes, flight_server)
-
-        assert sorted(collected) == [
-            LinkPlanSharedFlexibleChild.get_class_name(),
-            LinkPlanSharedPinnedChild.get_class_name(),
-        ]
-        assert [len(rows) for _, rows in sorted(collected.items())] == [2, 2]
-
-    def test_each_child_pairs_every_key_with_both_parent_payloads(
+    def test_each_child_pairs_every_shared_key_with_both_parent_payloads(
         self, modes: set[ParallelizationMode], flight_server: Any
     ) -> None:
         collected = self._run_both_children(modes, flight_server)
 
         assert collected == {
-            LinkPlanSharedFlexibleChild.get_class_name(): ["l3|r3", "l4|r4"],
-            LinkPlanSharedPinnedChild.get_class_name(): ["l3|r3", "l4|r4"],
+            LinkPlanSharedFlexibleChild.get_class_name(): ["l4|r4", "l3|r3"],
+            LinkPlanSharedPinnedChild.get_class_name(): ["l4|r4", "l3|r3"],
         }
 
 
-def _run_self_join(left_side: str, right_side: str) -> list[Any]:
+def _run_self_join(left_side: str, right_side: str, modes: set[ParallelizationMode], flight_server: Any) -> list[Any]:
     link = Link.left(
         JoinSpec(LinkPlanSelfSource, Index((SELF_LEFT_KEY,))),
         JoinSpec(LinkPlanSelfSource, Index((SELF_RIGHT_KEY,))),
@@ -439,22 +413,30 @@ def _run_self_join(left_side: str, right_side: str) -> list[Any]:
             links={link},
             compute_frameworks=["PyArrowTable"],
             plugin_collector=PluginCollector.enabled_feature_groups({LinkPlanSelfSource, LinkPlanSelfConsumer}),
-            parallelization_modes={ParallelizationMode.SYNC},
+            flight_server=flight_server,
+            parallelization_modes=modes,
         )
     )
 
 
-def test_self_join_keeps_every_row_of_the_node_the_left_discriminator_names() -> None:
-    results = _run_self_join("left", "right")
+@MODES
+def test_self_join_keeps_every_row_of_the_node_the_left_discriminator_names(
+    modes: set[ParallelizationMode], flight_server: Any
+) -> None:
+    results = _run_self_join("left", "right", modes, flight_server)
 
     joined = sorted(_column_values(results[0], LinkPlanSelfConsumer.get_class_name()))
     assert joined == ["1|None", "2|None", "3|r3", "4|r4"]
 
 
-def test_swapped_discriminators_bind_the_other_node_as_the_left_side() -> None:
-    """The bound left node then lacks the left index column, and the merge says so."""
-    with pytest.raises(KeyError, match=SELF_LEFT_KEY):
-        _run_self_join("right", "left")
+@MODES
+def test_swapped_discriminators_bind_the_other_node_as_the_left_side(
+    modes: set[ParallelizationMode], flight_server: Any
+) -> None:
+    """The bound left node then lacks the left index column, and the run says so."""
+    # The exception type is incidental: the column-semantics guard reaches the key column before the merge does.
+    with pytest.raises((KeyError, ValueError), match=SELF_LEFT_KEY):
+        _run_self_join("right", "left", modes, flight_server)
 
 
 def test_planner_binds_the_left_discriminator_node_as_the_join_destination() -> None:
@@ -506,7 +488,7 @@ def test_an_inverted_cross_group_stack_link_still_plans_the_declared_orientation
     assert join_step.swap_merge_sides is False
 
 
-@pytest.mark.xfail(strict=True, reason="the inverted orientation is dropped before the JoinStep is built")
+@pytest.mark.xfail(strict=True, reason=STACK_INVERSION_REASON)
 @pytest.mark.parametrize("link_factory", STACK_FACTORIES)
 def test_an_inverted_cross_group_stack_link_joins_where_its_consumer_runs(
     link_factory: Callable[[JoinSpec, JoinSpec], Link],
@@ -518,6 +500,10 @@ def test_an_inverted_cross_group_stack_link_joins_where_its_consumer_runs(
 
     assert isinstance(join_step, JoinStep)
     assert join_step.destination_framework is PandasDataFrame
+    assert join_step.source_framework is PyArrowTable
+    assert join_step.destination_framework_uuids == {planned.right_uuid}
+    assert join_step.source_framework_uuids == {planned.left_uuid}
+    assert join_step.swap_merge_sides is True
 
 
 @pytest.mark.parametrize("link_factory", STACK_FACTORIES)
@@ -582,13 +568,15 @@ def test_a_trekker_inverted_after_queueing_swaps_the_merge_sides() -> None:
     assert join_step.swap_merge_sides is True
 
 
-def test_a_swapped_joinstep_keeps_the_uuids_the_pairing_returned() -> None:
-    """A child left on the declared left framework makes the pairing outvote the framework filter."""
+def test_a_hand_built_inconsistent_trekker_key_yields_an_inconsistent_joinstep() -> None:
+    """This trekker key contradicts the graph, so create_link_trekker_key never reaches this state."""
     planned = _pair_scenario()
     _trek(planned, PandasDataFrame, PyArrowTable)
 
     join_step = _run(planned, PyArrowTable, PandasDataFrame)
 
+    # The frameworks and the uuid sets disagree: the destination is Pandas while its uuid runs in PyArrow.
+    # A rewrite that carries one record per join decision is free to answer differently here.
     assert isinstance(join_step, JoinStep)
     assert join_step.destination_framework is PandasDataFrame
     assert join_step.destination_framework_uuids == {planned.left_uuid}
@@ -596,10 +584,35 @@ def test_a_swapped_joinstep_keeps_the_uuids_the_pairing_returned() -> None:
     assert join_step.swap_merge_sides is True
 
 
+def test_a_right_join_plans_the_joinstep_where_the_declared_right_side_runs() -> None:
+    """RIGHT swaps the frameworks before the trekker lookup, so only the merge order still follows the trekker."""
+    declared = _pair_scenario(link_factory=Link.right, child_cfw=PandasDataFrame)
+    _trek(declared, PyArrowTable, PandasDataFrame)
+    inverted = _pair_scenario(link_factory=Link.right, child_cfw=PandasDataFrame)
+    _trek(inverted, PandasDataFrame, PyArrowTable)
+
+    declared_step = _run(declared, PyArrowTable, PandasDataFrame)
+    inverted_step = _run(inverted, PyArrowTable, PandasDataFrame)
+
+    assert isinstance(declared_step, JoinStep)
+    assert declared_step.destination_framework is PandasDataFrame
+    assert declared_step.source_framework is PyArrowTable
+    assert declared_step.destination_framework_uuids == {declared.right_uuid}
+    assert declared_step.source_framework_uuids == {declared.left_uuid}
+    assert declared_step.swap_merge_sides is False
+
+    assert isinstance(inverted_step, JoinStep)
+    assert inverted_step.destination_framework is PandasDataFrame
+    assert inverted_step.source_framework is PyArrowTable
+    assert inverted_step.destination_framework_uuids == {inverted.right_uuid}
+    assert inverted_step.source_framework_uuids == {inverted.left_uuid}
+    assert inverted_step.swap_merge_sides is True
+
+
 # Fresh interpreters are slow to start, so this one needs more than the suite-wide per-test budget.
 @pytest.mark.timeout(60)
 def test_fresh_interpreters_plan_the_same_link_orientation() -> None:
-    outputs = _run_probes(_PROBE_PROCESSES)
+    outputs = run_probes(_PROBE, _PROBE_PROCESSES)
 
     assert len(outputs) == _PROBE_PROCESSES, f"expected {_PROBE_PROCESSES} probe results, got {len(outputs)}"
     for position, output in enumerate(outputs):

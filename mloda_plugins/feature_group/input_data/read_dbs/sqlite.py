@@ -7,6 +7,7 @@ import sqlite3
 from mloda.provider import FeatureSet
 from mloda.user import DataType
 from mloda.user import Options
+from mloda_plugins.compute_framework.base_implementations.sql.sql_utils import quote_ident
 from mloda_plugins.feature_group.input_data.read_db import ReadDB
 
 
@@ -171,7 +172,10 @@ class SQLITEReader(ReadDB):
 
         options = None
         for feature in features.get_sorted_features():
-            query += f"{feature.name}, "
+            # Quote the column identifier so a crafted feature name cannot break out
+            # of the identifier position and inject SQL (CWE-89). Consistent with the
+            # quote_ident-based identifier handling in the SQL compute frameworks.
+            query += f"{quote_ident(str(feature.name))}, "
             options = feature.options
 
         query = query[:-2] + " "  # last comma is removed
@@ -183,7 +187,7 @@ class SQLITEReader(ReadDB):
                 "Options were not set. Call this after adding a feature to ensure Options are initialized."
             )
 
-        query += f"{cls.get_table(options)};"
+        query += f"{quote_ident(str(cls.get_table(options)))};"
 
         if query is None:
             raise ValueError("query cannot be None")

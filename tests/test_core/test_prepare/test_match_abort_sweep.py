@@ -1010,6 +1010,7 @@ def match_feature_group_criteria(cls, feature, options):
         [(7, "unannotated", None)],
         id="flags_an_unannotated_raise_inside_an_escalating_handler",
     ),
+    # A '# Contained:' mention inside a docstring is not a decision at the raise.
     pytest.param(
         '''\
 def match_feature_group_criteria(cls, feature, options):
@@ -1050,7 +1051,8 @@ def match_feature_group_criteria(cls, feature, options):
 def test_raise_classifier(source: str, expected: list[tuple[int, str, str | None]]) -> None:
     sites = classify_raises(source, "snippet.py", frozenset({"match_feature_group_criteria"}))
     assert [(site.lineno, site.kind, site.reason) for site in sites] == expected
-    assert {(site.module, site.function) for site in sites} <= {("snippet.py", "match_feature_group_criteria")}
+    identity = ("snippet.py", "match_feature_group_criteria")
+    assert [(site.module, site.function) for site in sites] == [identity] * len(expected)
 
 
 # The handler sweep: same reachable set, one decision per except clause.
@@ -1838,7 +1840,8 @@ def match_feature_group_criteria(cls, feature, options):
 def test_handler_classifier(source: str, expected: list[tuple[int, str, str | None]]) -> None:
     sites = _handlers(source)
     assert [(site.lineno, site.kind, site.reason) for site in sites] == expected
-    assert {(site.module, site.function) for site in sites} <= {("snippet.py", "match_feature_group_criteria")}
+    identity = ("snippet.py", "match_feature_group_criteria")
+    assert [(site.module, site.function) for site in sites] == [identity] * len(expected)
 
 
 def _splice_blanket_handler(source: str, function: str) -> tuple[str, int]:
@@ -2385,7 +2388,9 @@ def match_feature_group_criteria(cls, feature, options):
 def test_finally_classifier(source: str, expected: list[tuple[int, int]]) -> None:
     sites = _finally_shadowing(source)
     assert [(site.lineno, site.discarded_lineno) for site in sites] == expected
-    assert all(site.location() == f"snippet.py:{site.lineno} match_feature_group_criteria()" for site in sites)
+    assert [site.location() for site in sites] == [
+        f"snippet.py:{lineno} match_feature_group_criteria()" for lineno, _ in expected
+    ]
 
 
 def test_the_earlier_passes_clear_a_finally_that_discards_the_reraise() -> None:

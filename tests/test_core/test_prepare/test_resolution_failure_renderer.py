@@ -468,7 +468,7 @@ RendererCutoffAFG791 = _counting_fg(
     frameworks=TWO_FRAMEWORKS_791,
 )
 
-# Second eliminated candidate, contributing two more droppable hints: its class name and its prefix.
+# Second eliminated candidate, contributing its class name and its prefix as further droppable hints.
 RendererCutoffBFG791 = _counting_fg("RendererCutoffBFG791", matches=CUTOFF_FEATURE_791, frameworks=TWO_FRAMEWORKS_791)
 
 # Healthy catalog group, named far enough from the request that only its supported name can be suggested.
@@ -479,7 +479,7 @@ SpareNameCatalogFG791 = _counting_fg(
     frameworks=ONE_FRAMEWORK_791,
 )
 
-# Catalog candidate declaring the shared name; the four siblings below declare exactly the same one.
+# Catalog candidate declaring the shared name; the siblings below declare exactly the same one.
 RendererDuplicateNameFG791 = _counting_fg(
     "RendererDuplicateNameFG791", supported_names=DUPLICATE_CATALOG_NAME_791, frameworks=ONE_FRAMEWORK_791
 )
@@ -487,7 +487,7 @@ RendererDuplicateNameFG791 = _counting_fg(
 RendererDuplicateSiblingAFG791 = _counting_fg("RendererDuplicateSiblingAFG791", base=RendererDuplicateNameFG791)
 RendererDuplicateSiblingBFG791 = _counting_fg("RendererDuplicateSiblingBFG791", base=RendererDuplicateNameFG791)
 RendererDuplicateSiblingCFG791 = _counting_fg("RendererDuplicateSiblingCFG791", base=RendererDuplicateNameFG791)
-# The fifth copy of the shared name, enough to fill every suggestion slot.
+# The last copy: together they are enough to fill every suggestion slot.
 RendererDuplicateSiblingDFG791 = _counting_fg("RendererDuplicateSiblingDFG791", base=RendererDuplicateNameFG791)
 
 # Catalog candidate holding the one genuinely different close name the copies push out.

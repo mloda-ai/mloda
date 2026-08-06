@@ -94,7 +94,7 @@ class CountingStubFeatureGroup(StubFeatureGroup):
 
     @classmethod
     def _enter_hook(cls, hook: str, compute_framework: type[ComputeFramework] | None = None) -> None:
-        """Tally the call, then raise if the hook is armed: a caller asserts on the count of the hook that raised."""
+        """Count before raising: a caller asserts on the count of the very hook that raised."""
         # Read off the ClassVar at call time, so a child counts into whatever its base currently
         # declares. An unset counter counts nowhere and still answers: this is a globally visible
         # FeatureGroup subclass, so other tests' registry sweeps call these hooks.
@@ -237,8 +237,8 @@ def make_fg(
         if value is not None
     }
     if counting_keywords and not issubclass(base, CountingStubFeatureGroup):
-        # Only a counting base reads these ClassVars, so on any other base the keyword is dropped and
-        # the stub answers as if it had never been passed.
+        # Only a counting base reads these ClassVars, so on any other base the keyword would be
+        # silently dropped.
         raise ValueError(f"{', '.join(counting_keywords)} needs a CountingStubFeatureGroup base, got {base.__name__}.")
 
     # The caller's module, so (module, qualname) dedup, _is_live_in_module and the isolation fixture
@@ -289,7 +289,7 @@ def make_raising_fg(
 ) -> type[FeatureGroup]:
     """Mint a transient double in the calling module whose ``hook`` classmethod raises for any arguments.
 
-    No ``(module, name)`` claim and nothing retained: the caller reaps its class within the test
+    Claims no ``(module, name)`` and retains nothing: the caller reaps its class inside the test
     instead of binding it at module level, so the same name can be minted again.
     """
 

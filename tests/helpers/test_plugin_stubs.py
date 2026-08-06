@@ -541,7 +541,7 @@ class TestCountedCapabilityHook:
         assert cls.supports_compute_framework(ALPHA, Options(), PyArrowTable) is False
 
     def test_it_records_both_the_hook_call_and_the_pair(self) -> None:
-        """A hook-name tally cannot see one pair being asked twice, which is what the pair tally is for."""
+        """The hook-name tally alone cannot see one pair being asked twice."""
         counter = HookCounter()
         name = "PluginStubPairCountFG"
         cls = make_fg(name, base=CountingStubFeatureGroup, counter=counter)
@@ -797,7 +797,7 @@ class TestTransientRaisingDouble:
             cls.supports_index(INDEX)
 
     def test_the_same_name_can_be_minted_twice(self) -> None:
-        """No (module, name) claim: the caller reaps its class per test instead of binding it at module level."""
+        """No (module, name) claim, because the caller reaps its class per test."""
         name = "PluginStubTransientTwiceFG"
         first = make_raising_fg(name, COUNTED_HOOK)
         second = make_raising_fg(name, COUNTED_HOOK)

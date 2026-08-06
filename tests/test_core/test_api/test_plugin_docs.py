@@ -326,12 +326,11 @@ class TestGetFeatureGroupDocsDegradedFieldReads:
     frameworks. Degraded entries stay in the catalog and are filtered on their
     degraded values.
 
-    Isolation: every test double is minted inside its test function, under a name of
-    its own, and reaped in a ``finally`` block (``del`` plus ``gc.collect()``), because
-    plugin docs walk the live ``__subclasses__()`` registry and a leaked class would
-    corrupt sibling tests' catalog calls. Only the test-local name holds the double, so
-    no fixture may own it. This mirrors
-    ``test_get_compute_framework_docs_degrades_when_is_available_raises``.
+    Isolation: every test double is minted inside its test function and reaped in a
+    ``finally`` block (``del`` plus ``gc.collect()``), because plugin docs walk the live
+    ``__subclasses__()`` registry and a leaked class would corrupt sibling tests' catalog
+    calls. No fixture may own the double, since only the test-local name holds it. This
+    mirrors ``test_get_compute_framework_docs_degrades_when_is_available_raises``.
     """
 
     @pytest.mark.parametrize("case", DEGRADED_FIELD_CASES, ids=[case.case_id for case in DEGRADED_FIELD_CASES])

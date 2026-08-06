@@ -138,10 +138,11 @@ def test_a_registered_page_still_renders_the_bullet_of_its_own_stage(
 
 
 # The other form carrying a stage label: the warning GlobalFilter.warn_on_unmatched_filters emits. Unanchored,
-# so a quoted log prefix still reads.
+# so a quoted log prefix still reads. The literal prefix does the disambiguating the bullet needs '[A-Z]' for,
+# so the candidate class stays broad and no rendered warning slips past.
 UNMATCHED_FILTER_PATTERN = re.compile(
     r"Filter feature '(?P<filter_feature>[^']+)' matched no feature group\. Nearest miss: "
-    r"(?P<candidate>[A-Z]\w*) \((?P<label>[^)]+)\): (?P<reason>.+)$"
+    r"(?P<candidate>[^\s(]+) \((?P<label>[^)]+)\): (?P<reason>.+)$"
 )
 
 GLOBAL_FILTER_LOGGER = "mloda.core.filter.global_filter"
@@ -152,9 +153,17 @@ WARNING_FILTER_FEATURE = "near_miss_warning_probe_filter"
 WARNING_MISSING_SCOPE = "NearMissWarningNoSuchScope"  # names no class, so the scope gate drops the filter
 WARNING_STAGE: EliminationStage = "scope"
 
+# The scope gate's own wording, in GlobalFilter.identify_matched_filters. Asserted against the live warning
+# below and against the page pinned in DOC_WARNING_STAGES, so rewording it there names the stale page.
+WARNING_SCOPE_REASON = "outside the requested feature group scope"
+
 
 def _unmatched_filter_warnings(text: str) -> Iterator[tuple[int, re.Match[str]]]:
-    """Yield (1-based line number, match) for every unmatched-filter warning inside a ``` fenced block."""
+    """Yield (1-based line number, match) for the first unmatched-filter warning on each fenced line.
+
+    One warning per line, as a log block renders them: a second on the same line is swallowed by the
+    greedy reason of the first and its label goes unchecked.
+    """
     for number, line in _fenced_lines(text):
         match = UNMATCHED_FILTER_PATTERN.search(line)
         if match is not None:
@@ -178,8 +187,6 @@ def test_rendered_unmatched_filter_warnings_carry_a_current_stage_label(fpath: P
 
 def _make_warning_probe_fg() -> type[FeatureGroup]:
     """A throwaway group matching both probe names, built here so no test local ever holds the class."""
-    # Class objects are cyclic; collect leftovers from earlier tests before defining a twin.
-    gc.collect()
 
     class NearMissWarningProbeFG(FeatureGroup):
         @classmethod
@@ -218,22 +225,30 @@ def test_the_scanner_pattern_matches_a_rendered_unmatched_filter_warning(caplog:
     assert match.group("filter_feature") == WARNING_FILTER_FEATURE
     assert match.group("candidate") == WARNING_PROBE_CLASS_NAME
     assert match.group("label") == _STAGE_LABELS[WARNING_STAGE]
+    assert match.group("reason") == WARNING_SCOPE_REASON
 
 
-# The same floor as DOC_BULLET_STAGES, for the warning form: pages reproducing it, pinned to their stage.
-DOC_WARNING_STAGES: dict[str, EliminationStage] = {
-    "in_depth/filter_data.md": "scope",
+# The same floor as DOC_BULLET_STAGES, for the warning form: pages reproducing it, pinned to their stage and
+# to the gate's own reason wording, which no label table covers.
+DOC_WARNING_STAGES: dict[str, tuple[EliminationStage, str]] = {
+    "in_depth/filter_data.md": ("scope", WARNING_SCOPE_REASON),
 }
 
 
-@pytest.mark.parametrize(("relative_path", "stage"), sorted(DOC_WARNING_STAGES.items()), ids=sorted(DOC_WARNING_STAGES))
+@pytest.mark.parametrize(
+    ("relative_path", "stage", "reason"),
+    [(path, stage, reason) for path, (stage, reason) in sorted(DOC_WARNING_STAGES.items())],
+    ids=sorted(DOC_WARNING_STAGES),
+)
 def test_a_registered_page_still_renders_the_warning_of_its_own_stage(
-    relative_path: str, stage: EliminationStage
+    relative_path: str, stage: EliminationStage, reason: str
 ) -> None:
     page = DOCS_ROOT / relative_path
     assert page.is_file(), f"{page} was moved or renamed; update DOC_WARNING_STAGES"
 
-    labels = {match.group("label") for _, match in _unmatched_filter_warnings(page.read_text(encoding="utf-8"))}
+    rendered = [match for _, match in _unmatched_filter_warnings(page.read_text(encoding="utf-8"))]
+    labels = {match.group("label") for match in rendered}
+    reasons = {match.group("reason") for match in rendered}
 
     # Containment, not equality: a page may grow a second example.
     assert _STAGE_LABELS[stage] in labels, (
@@ -241,13 +256,21 @@ def test_a_registered_page_still_renders_the_warning_of_its_own_stage(
         f"(found: {sorted(labels)})."
     )
 
+    # The reason is code-owned too, and only this pin ties the page's copy of it to the gate that emits it.
+    assert reason in reasons, (
+        f"{page} quotes no unmatched-filter warning carrying the '{stage}' reason '{reason}' "
+        f"(found: {sorted(reasons)})."
+    )
+
 
 # data-access-patterns.md is in this table AND in DOC_BULLET_STAGES on purpose: its prose mention sits far
 # from its rendered bullet, so the bullet's failure names a line that leaves the prose mention stale.
+# filter_data.md is pinned twice: its example renders the scope label, its prose also names the capability one.
 PROSE_LABEL_PAGES: tuple[tuple[str, EliminationStage], ...] = (
     ("in_depth/data-access-patterns.md", "input_data"),
     ("in_depth/feature-chain-parser.md", "matcher_error"),
     ("in_depth/feature-group-matching.md", "matcher_error"),
+    ("in_depth/filter_data.md", "capability"),
     ("in_depth/filter_data.md", "scope"),
 )
 

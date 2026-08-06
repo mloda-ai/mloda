@@ -121,6 +121,8 @@ class ResolveComputeFrameworks:
                 raise ValueError(
                     f"No compute framework agreement for feature {f.name}. Unresolvable links: {mismatches}"
                 )
+            if len(new_cfws) > 1:
+                self.raise_on_link_disagreement(f, resolved, feature_trekkers[f.uuid])
             f.compute_frameworks = new_cfws
             any_rewritten = True
 
@@ -137,6 +139,34 @@ class ResolveComputeFrameworks:
                 "Compute framework rewrite collapsed features that were previously distinct "
                 f"only by compute_frameworks. Affected: {names}"
             )
+
+    @staticmethod
+    def raise_on_link_disagreement(
+        feature: Any,
+        resolved: dict[LinkFrameworkTrekker, type[ComputeFramework]],
+        trekkers: list[LinkFrameworkTrekker],
+    ) -> None:
+        """A self-join records every ordered parent pair, so only distinct feature groups can disagree."""
+        cross_group = [
+            trekker
+            for trekker in trekkers
+            if trekker in resolved and trekker[0].left_feature_group != trekker[0].right_feature_group
+        ]
+        cfws = {resolved[trekker] for trekker in cross_group}
+        if len(cfws) < 2:
+            return
+
+        names = sorted(cfw.get_class_name() for cfw in cfws)
+        links = sorted(
+            {
+                f"{link} ({left.get_class_name()}, {right.get_class_name()}) -> "
+                f"{resolved[(link, left, right)].get_class_name()}"
+                for link, left, right in cross_group
+            }
+        )
+        raise ValueError(
+            f"Feature {feature.name} resolves to more than one compute framework {names}. Disagreeing links: {links}"
+        )
 
     def order_queue_by_trekker_order(self, planned_queue: Any, link_trekker: LinkTrekker) -> Any:
         orders = link_trekker.order

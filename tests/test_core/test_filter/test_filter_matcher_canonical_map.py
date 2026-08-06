@@ -663,7 +663,7 @@ class TestScopeGate:
 
 
 class TestFrameworkPinCardinality:
-    """GlobalFilter.compute_framework reads one arbitrary pinned element; the canonical seam validates first."""
+    """GlobalFilter.compute_framework tests membership against the pinned set; the canonical seam validates first."""
 
     def test_an_unpinned_filter_feature_adopts_the_features_frameworks(self) -> None:
         """Enrichment control: no pin on the filter side means the feature's pin is written onto the filter."""
@@ -680,26 +680,21 @@ class TestFrameworkPinCardinality:
             "adoption shares the feature's set object, not a copy"
         )
 
-    def test_a_two_pin_filter_is_judged_by_the_first_yielded_set_element(self) -> None:
-        """No cardinality validation: only the first-yielded pin decides; membership alone loses."""
+    def test_a_two_pin_filter_matches_either_of_its_pins(self) -> None:
+        """No cardinality validation: the gate is a membership test, so every pin of the pair matches."""
         global_filter = GlobalFilter()
         single = _single()
-        pins: set[type[ComputeFramework]] = {PandasDataFrame, PyArrowTable}
-        single.filter_feature.compute_frameworks = pins
-        # Derived from the set itself: iteration over the same unmutated set object is stable in-process, and
-        # which element comes first is not pinned, so the pair of verdicts below is deterministic everywhere.
-        first = next(iter(pins))
-        other = next(pin for pin in pins if pin is not first)
-        feat_first = Feature(HOST_FEATURE)
-        feat_first.compute_frameworks = {first}
-        feat_other = Feature(HOST_FEATURE)
-        feat_other.compute_frameworks = {other}
+        single.filter_feature.compute_frameworks = {PandasDataFrame, PyArrowTable}
+        feat_pandas = Feature(HOST_FEATURE)
+        feat_pandas.compute_frameworks = {PandasDataFrame}
+        feat_pyarrow = Feature(HOST_FEATURE)
+        feat_pyarrow.compute_frameworks = {PyArrowTable}
 
-        first_verdict = global_filter.compute_framework(single, feat_first)
-        other_verdict = global_filter.compute_framework(single, feat_other)
+        pandas_verdict = global_filter.compute_framework(single, feat_pandas)
+        pyarrow_verdict = global_filter.compute_framework(single, feat_pyarrow)
 
-        assert first_verdict is True, f"the first-yielded pin must match its own framework, got: {first_verdict}"
-        assert other_verdict is False, f"a member the gate never reads must lose, got: {other_verdict}"
+        assert pandas_verdict is True, f"a pinned framework must match its own pin, got: {pandas_verdict}"
+        assert pyarrow_verdict is True, f"the second pin must match too, got: {pyarrow_verdict}"
 
     def test_a_two_pin_filter_against_a_third_framework_says_no(self) -> None:
         global_filter = GlobalFilter()
@@ -710,7 +705,7 @@ class TestFrameworkPinCardinality:
 
         verdict = global_filter.compute_framework(single, feat)
 
-        assert verdict is False, "neither pinned framework equals the feature's, whichever the set yields first"
+        assert verdict is False, "the feature's framework is not among the pins"
         assert single.filter_feature.compute_frameworks == {PandasDataFrame, PyArrowTable}, "the pin is not rewritten"
 
     def test_the_flow_detaches_a_mismatched_two_pin_quietly(self) -> None:

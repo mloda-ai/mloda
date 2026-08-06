@@ -497,4 +497,4 @@ class Feature:
     def get_compute_framework(self) -> type[ComputeFramework]:
         FeatureValidator.validate_compute_frameworks_resolved(self.compute_frameworks, str(self.name))
         assert self.compute_frameworks is not None
-        return next(iter(self.compute_frameworks))
+        return ComputeFramework.select_deterministic(self.compute_frameworks)

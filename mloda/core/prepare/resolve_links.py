@@ -417,8 +417,9 @@ class ResolveLinks:
         left_frameworks: Optional[set[type[ComputeFramework]]] = None,
         right_frameworks: Optional[set[type[ComputeFramework]]] = None,
     ) -> LinkFrameworkTrekker:
+        """Both sides reduce exactly like Feature.get_compute_framework; the join lookup compares the two."""
         if left_frameworks is None or right_frameworks is None:
             raise ValueError("Left or right frameworks are not set!")
-        left_framework = next(iter(left_frameworks))
-        right_framework = next(iter(right_frameworks))
+        left_framework = ComputeFramework.select_deterministic(left_frameworks)
+        right_framework = ComputeFramework.select_deterministic(right_frameworks)
         return (link, left_framework, right_framework)

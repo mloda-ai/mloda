@@ -321,8 +321,8 @@ class GlobalFilter:
             filter.filter_feature.compute_frameworks = feat.compute_frameworks
             return True
 
-        # case that the filter feature has an cf -> it must be equal to the feature
-        if next(iter(filter.filter_feature.compute_frameworks)) == feat.get_compute_framework():
+        # case that the filter feature has an cf -> the feature framework must be one of the pinned ones
+        if feat.get_compute_framework() in filter.filter_feature.compute_frameworks:
             return True
 
         return False

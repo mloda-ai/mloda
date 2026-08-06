@@ -16,7 +16,7 @@ class FeatureValidator:
     def validate_compute_frameworks_resolved(
         compute_frameworks: Optional[set[type[ComputeFramework]]], feature_name: str
     ) -> None:
-        if compute_frameworks is None:
+        if not compute_frameworks:
             raise ValueError(
                 f"Feature {feature_name} does not have any compute framework. "
                 "This function can only be called when the frameworks were resolved."

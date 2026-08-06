@@ -561,16 +561,22 @@ class ExecutionPlan:
                 f"Are the indexes for the append or union set correctly? {left_index.index, right_index.index}"
             )
 
-        # Sanity check for framework consistency
         if link_fw[1] != destination_framework:
             raise ValueError(
-                f"Destination framework does not match the left framework of the link. "
-                f"{destination_framework}. This is a sanity check!"
+                internal_invariant_error(
+                    "APPEND/UNION left link framework must match the framework of the left index feature.",
+                    f"link={link}, left_link_framework={link_fw[1].get_class_name()}, "
+                    f"left_feature_framework={destination_framework.get_class_name()}",
+                )
             )
+
         if link_fw[2] != source_framework:
             raise ValueError(
-                f"Source framework does not match the right framework of the link. "
-                f"{source_framework}. This is a sanity check!"
+                internal_invariant_error(
+                    "APPEND/UNION right link framework must match the framework of the right index feature.",
+                    f"link={link}, right_link_framework={link_fw[2].get_class_name()}, "
+                    f"right_feature_framework={source_framework.get_class_name()}",
+                )
             )
 
         return JoinStep(

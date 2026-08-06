@@ -19,9 +19,15 @@ direction, wins over it and the abort check below never runs. A third pass compa
 ``try``. Types resolve by name through the builtins and the class definitions under ``mloda/``, never by
 importing the module under test; a type neither resolves is reported instead of passed.
 
+A fourth pass reads the other pairing on one ``try``: a ``finally`` that discards what is in flight, by leaving
+through a return, break or continue or by raising a replacement, undoes every escalation it encloses: the
+re-raises of its own clauses, and the marked raises in the arms those clauses never catch.
+
 Not covered: plugin code under ``mloda_plugins``; dynamic dispatch, which is why SEEDS is hand-written;
-decorators; ``except*`` groups in the third pass, whose clauses split an exception group between them
-instead of racing for it, so first-match reasoning does not hold there.
+decorators; ``except*`` groups, which neither pass over a ``try`` reads, as their clauses split an exception
+group between them instead of racing for it, so the third pass's first-match reasoning does not hold there
+and the fourth drops them with it; a raise in the body of a nested try that has handlers, assumed caught there, and
+one inside a ``suppress`` block naming ``Exception`` or ``BaseException``, assumed dropped there.
 """
 
 from __future__ import annotations
@@ -29,11 +35,13 @@ from __future__ import annotations
 import ast
 import builtins
 import io
+import sys
 import tokenize
 from collections import deque
+from collections.abc import Sequence
 from functools import lru_cache
 from pathlib import Path
-from typing import Literal, NamedTuple
+from typing import Literal, NamedTuple, TypeGuard, cast
 
 # Anchored via __file__, not the cwd: a cwd-relative root makes every lookup empty and the sweep vacuous.
 _REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -124,6 +132,8 @@ SWALLOWING_HELPERS_OUTSIDE_THE_PATH: dict[tuple[str, str], str] = {
 _ESCALATION = "escalate_match_abort"
 _ABORT_CHECK = "is_match_abort"
 _SUPPRESS = "suppress"
+# The types a suppress must name before a raise inside it can be assumed dropped there.
+_BLANKET_TYPES: frozenset[str] = frozenset({"Exception", "BaseException"})
 _CONTAINED_TAG = "Contained:"
 _MARKED_TAG = "Marked:"
 _SWALLOW_TAG = "Swallows:"
@@ -188,6 +198,18 @@ class UnresolvedType(NamedTuple):
         return f"{self.module}:{self.lineno} {self.function}()"
 
 
+class FinallySite(NamedTuple):
+    """A ``finally`` that discards, undoing an escalation the ``try`` it closes would otherwise let out."""
+
+    module: str
+    lineno: int
+    function: str
+    discarded_lineno: int
+
+    def location(self) -> str:
+        return f"{self.module}:{self.lineno} {self.function}()"
+
+
 class ExternalCall(NamedTuple):
     """A call from the match path into a raising function defined outside the declared modules."""
 
@@ -209,6 +231,28 @@ class _Sweep(NamedTuple):
     swallowing_external: tuple[ExternalCall, ...]
     shadowed: tuple[ShadowSite, ...]
     unresolved: tuple[UnresolvedType, ...]
+    finally_shadowed: tuple[FinallySite, ...]
+
+
+def _call_name(node: ast.AST) -> str | None:
+    """The name a call names, by function or by attribute; None for any other node and for a computed callee."""
+    if not isinstance(node, ast.Call):
+        return None
+    if isinstance(node.func, ast.Name):
+        return node.func.id
+    return node.func.attr if isinstance(node.func, ast.Attribute) else None
+
+
+def _children(node: ast.AST) -> list[ast.AST]:
+    """The children of ``node``, minus its decorators: those run at definition time, not when it is called."""
+    found: list[ast.AST] = []
+    for field, value in ast.iter_fields(node):
+        if field == "decorator_list":
+            continue
+        for child in value if isinstance(value, list) else [value]:
+            if isinstance(child, ast.AST):
+                found.append(child)
+    return found
 
 
 def _scan(node: ast.AST) -> tuple[frozenset[str], bool]:
@@ -218,21 +262,12 @@ def _scan(node: ast.AST) -> tuple[frozenset[str], bool]:
     stack: list[ast.AST] = [node]
     while stack:
         current = stack.pop()
-        if isinstance(current, ast.Call):
-            func = current.func
-            if isinstance(func, ast.Name):
-                names.add(func.id)
-            elif isinstance(func, ast.Attribute):
-                names.add(func.attr)
+        called = _call_name(current)
+        if called is not None:
+            names.add(called)
         elif isinstance(current, ast.Raise) and current.exc is not None:
             raises = True
-        for field, value in ast.iter_fields(current):
-            if field == "decorator_list":
-                # A decorator runs at definition time, not when the match path calls the function.
-                continue
-            for child in value if isinstance(value, list) else [value]:
-                if isinstance(child, ast.AST):
-                    stack.append(child)
+        stack.extend(_children(current))
     return frozenset(names), raises
 
 
@@ -249,26 +284,15 @@ def _keeps_the_mark(node: ast.Raise, bound: str | None) -> bool:
     return _escalates(node.exc)
 
 
-def _handler_escalates(handler: ast.ExceptHandler) -> bool:
-    """A re-raise that keeps the mark, gated on the abort check or standing on every path out of the handler."""
-    nodes = [node for statement in handler.body for node in ast.walk(statement)]
-    if not any(isinstance(node, ast.Raise) and _keeps_the_mark(node, handler.name) for node in nodes):
-        return False
-    calls: set[str] = set()
-    for statement in handler.body:
-        calls |= _scan(statement)[0]
-    if _ABORT_CHECK in calls:
-        return True
-    return not any(isinstance(node, (ast.Return, ast.Break, ast.Continue)) for node in nodes)
+# A nested def or lambda runs later or never, and a nested try may catch the raise it holds.
+# ast.TryStar is 3.11+, so the name is read off the module instead of written.
+_DEFERRED: tuple[type[ast.AST], ...] = (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)
+_NESTED_TRY: tuple[type[ast.AST], ...] = (ast.Try, getattr(ast, "TryStar", ast.Try))
+# A break or continue binds to the innermost loop around it, so one opened here leaves that loop and nothing else.
+_LOOPS: tuple[type[ast.AST], ...] = (ast.For, ast.AsyncFor, ast.While)
 
-
-class _Containment(NamedTuple):
-    """One place an exception can be dropped, with the header lines a trailing reason may sit on."""
-
-    lineno: int
-    col_offset: int
-    header_end: int
-    escalating: bool
+# A typo in that attribute name would fall back to ast.Try on every version and disable the boundary in silence.
+assert sys.version_info < (3, 11) or _NESTED_TRY[1] is not ast.Try, "ast.TryStar no longer resolves off ast"
 
 
 def _is_suppress(expr: ast.expr) -> bool:
@@ -280,19 +304,160 @@ def _is_suppress(expr: ast.expr) -> bool:
     return isinstance(func, ast.Attribute) and func.attr == _SUPPRESS
 
 
-def _finally_escapes(finalbody: list[ast.stmt]) -> bool:
-    """A return, break or continue leaving finally discards whatever exception is in flight."""
-    escapes = (ast.Return, ast.Break, ast.Continue)
-    return any(isinstance(node, escapes) for statement in finalbody for node in ast.walk(statement))
+def _shields(node: ast.AST) -> TypeGuard[ast.With | ast.AsyncWith]:
+    """A ``suppress`` block, whatever it names: it drops exceptions, so it owes a containment decision."""
+    return isinstance(node, (ast.With, ast.AsyncWith)) and any(_is_suppress(item.context_expr) for item in node.items)
+
+
+def _suppresses_everything(expr: ast.expr) -> bool:
+    """A ``suppress`` naming Exception or BaseException; a bare, starred or computed argument decides nothing."""
+    if not _is_suppress(expr):
+        return False
+    return any(isinstance(arg, ast.Name) and arg.id in _BLANKET_TYPES for arg in cast(ast.Call, expr).args)
+
+
+def _shields_everything(node: ast.AST) -> TypeGuard[ast.With | ast.AsyncWith]:
+    """A ``suppress`` block wide enough that what raises inside it never leaves it."""
+    return isinstance(node, (ast.With, ast.AsyncWith)) and any(
+        _suppresses_everything(item.context_expr) for item in node.items
+    )
+
+
+def _evaluated_at(node: ast.AST) -> list[ast.AST]:
+    """What the scans still read off a pruned boundary: a loop's else arm, a definition's defaults."""
+    if isinstance(node, _LOOPS):
+        # The else arm sits outside its own loop, so a break there binds to the loop around this one.
+        return list(cast(ast.For, node).orelse)
+    if isinstance(node, _DEFERRED):
+        # Every member carries the same args field; the body runs later, the defaults run here.
+        arguments = cast(ast.Lambda, node).args
+        return [*arguments.defaults, *(default for default in arguments.kw_defaults if default is not None)]
+    return []
+
+
+def _runs_here(body: list[ast.stmt], boundaries: tuple[type[ast.AST], ...], *, shielded: bool = False) -> list[ast.AST]:
+    """The nodes of ``body`` that run where they stand, pruned at ``boundaries`` and, when shielded, at a suppress."""
+    found: list[ast.AST] = []
+    stack: list[ast.AST] = list(body)
+    while stack:
+        current = stack.pop()
+        if shielded and _shields_everything(current):
+            continue
+        if isinstance(current, boundaries):
+            stack.extend(_evaluated_at(current))
+            continue
+        found.append(current)
+        stack.extend(_children(current))
+    return found
+
+
+def _escapes(body: list[ast.stmt]) -> bool:
+    """A return, break or continue that really leaves ``body``: a return from any depth, a break bound outside it."""
+    if any(isinstance(node, ast.Return) for node in _runs_here(body, _DEFERRED)):
+        return True
+    return any(isinstance(node, (ast.Break, ast.Continue)) for node in _runs_here(body, _DEFERRED + _LOOPS))
+
+
+def _reraises(body: Sequence[ast.AST], bound: str | None, bare_counts: bool, *, in_loops: bool = True) -> bool:
+    """Does a raise the mark survives leave ``body``, with a bare one counting only where it re-raises ``bound``."""
+    for node in body:
+        if isinstance(node, _DEFERRED) or _shields_everything(node):
+            continue
+        # A loop body runs zero times on an empty iterable and a break skips the rest of it and its else arm, so
+        # a raise written in a loop stands on no path out of the body around it.
+        if not in_loops and isinstance(node, _LOOPS):
+            continue
+        if isinstance(node, ast.Raise):
+            if _keeps_the_mark(node, bound) and (bare_counts or node.exc is not None):
+                return True
+            continue
+        if isinstance(node, _NESTED_TRY):
+            # The arms are read off ast.Try: TryStar carries the same ones, and 3.10 cannot name the type.
+            if _nested_try_reraises(cast(ast.Try, node), bound, bare_counts, in_loops=in_loops):
+                return True
+            continue
+        # A raise cannot sit inside an expression; a match_case is neither expression nor statement, so it stays.
+        inside = [child for child in ast.iter_child_nodes(node) if not isinstance(child, ast.expr)]
+        if _reraises(inside, bound, bare_counts, in_loops=in_loops):
+            return True
+    return False
+
+
+def _nested_try_reraises(node: ast.Try, bound: str | None, bare_counts: bool, *, in_loops: bool = True) -> bool:
+    """The arms of a nested try its own clauses never catch: else and finally, plus the body when it has none."""
+    if _escapes(node.finalbody):
+        return False
+    if _reraises(node.orelse, bound, bare_counts, in_loops=in_loops) or _reraises(
+        node.finalbody, bound, bare_counts, in_loops=in_loops
+    ):
+        return True
+    if not node.handlers:
+        return _reraises(node.body, bound, bare_counts, in_loops=in_loops)
+    # A bare raise in a clause re-raises that clause's own exception, not the one the handler above it caught.
+    return any(_reraises(clause.body, bound, False, in_loops=in_loops) for clause in node.handlers)
+
+
+def _reads_a_shadowed_name(call: ast.Call, shadowed: frozenset[str]) -> bool:
+    """Does any argument of ``call``, at any depth and in any form, name an exception bound below the handler."""
+    if not shadowed:
+        return False
+    arguments: list[ast.expr] = [*call.args, *(keyword.value for keyword in call.keywords)]
+    return any(
+        isinstance(node, ast.Name) and node.id in shadowed for argument in arguments for node in ast.walk(argument)
+    )
+
+
+def _called_here(body: list[ast.stmt], bound: str | None) -> frozenset[str]:
+    """The names ``body`` calls on the exception ``bound`` names, past the exceptions bound below it."""
+    # Two rules: a nested clause is read only when it can re-raise the caught exception, and inside one a call
+    # reading the name that clause binds gates its exception, not the caught one. An alias for it, ``failure =
+    # inner`` and then a check on ``failure``, is out of reach of this or any other name-based scan.
+    names: set[str] = set()
+    stack: list[tuple[ast.AST, frozenset[str]]] = [(node, frozenset()) for node in body]
+    while stack:
+        current, shadowed = stack.pop()
+        if isinstance(current, _DEFERRED):
+            stack.extend((node, shadowed) for node in _evaluated_at(current))
+            continue
+        if isinstance(current, ast.ExceptHandler):
+            if not _reraises(current.body, bound, False):
+                continue
+            inside = shadowed | {current.name} if current.name is not None else shadowed
+            stack.extend((node, inside) for node in current.body)
+            continue
+        called = _call_name(current)
+        if called is not None and not _reads_a_shadowed_name(cast(ast.Call, current), shadowed):
+            names.add(called)
+        stack.extend((node, shadowed) for node in _children(current))
+    return frozenset(names)
+
+
+def _handler_escalates(handler: ast.ExceptHandler) -> bool:
+    """A re-raise that keeps the mark, gated on the abort check or standing on every path out of the handler."""
+    if not _reraises(handler.body, handler.name, True):
+        return False
+    if _ABORT_CHECK in _called_here(handler.body, handler.name):
+        return True
+    # Discounting a break bound to a loop opened here only holds for a re-raise standing outside that loop.
+    return not _escapes(handler.body) and _reraises(handler.body, handler.name, True, in_loops=False)
+
+
+class _Containment(NamedTuple):
+    """One place an exception can be dropped, with the header lines a trailing reason may sit on."""
+
+    lineno: int
+    col_offset: int
+    header_end: int
+    escalating: bool
 
 
 def _containment_at(node: ast.AST) -> _Containment | None:
     """The containment this node opens: an except clause, a suppress block, or a finally that escapes."""
     if isinstance(node, ast.ExceptHandler):
         return _Containment(node.lineno, node.col_offset, node.body[0].lineno - 1, _handler_escalates(node))
-    if isinstance(node, (ast.With, ast.AsyncWith)) and any(_is_suppress(item.context_expr) for item in node.items):
+    if _shields(node):
         return _Containment(node.lineno, node.col_offset, node.body[0].lineno - 1, False)
-    if isinstance(node, ast.Try) and _finally_escapes(node.finalbody):
+    if isinstance(node, ast.Try) and _escapes(node.finalbody):
         # ast exposes no position for the finally keyword, so the try line carries the decision.
         return _Containment(node.lineno, node.col_offset, node.body[0].lineno - 1, False)
     return None
@@ -447,18 +612,15 @@ def classify_handlers(source: str, module: str, functions: frozenset[str] | None
     return sorted(sites)
 
 
-def _collect_handler_groups(
-    node: ast.AST, functions: list[str], out: list[tuple[list[ast.ExceptHandler], list[str]]]
-) -> None:
-    """Walk ``node``, recording each try's handler list with its enclosing function chain."""
+def _collect_tries(node: ast.AST, functions: list[str], out: list[tuple[ast.Try, list[str]]]) -> None:
+    """Walk ``node``, recording each ``try`` with its enclosing function chain."""
     for child in ast.iter_child_nodes(node):
         if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            _collect_handler_groups(child, [*functions, child.name], out)
+            _collect_tries(child, [*functions, child.name], out)
         else:
-            # ast.Try only: an except* group delivers to every matching clause, so none of them shadows another.
-            if isinstance(child, ast.Try) and child.handlers:
-                out.append((child.handlers, functions))
-            _collect_handler_groups(child, functions, out)
+            if isinstance(child, ast.Try):
+                out.append((child, functions))
+            _collect_tries(child, functions, out)
 
 
 def _caught_types(handler: ast.ExceptHandler) -> tuple[str, ...]:
@@ -495,21 +657,25 @@ def classify_shadowing(
 ) -> tuple[list[ShadowSite], list[UnresolvedType]]:
     """Find the clauses of one ``try`` that catch ahead of a later clause a mark survives, and the unresolved."""
     tree = ast.parse(source, filename=module)
-    groups: list[tuple[list[ast.ExceptHandler], list[str]]] = []
-    _collect_handler_groups(tree, [], groups)
+    tries: list[tuple[ast.Try, list[str]]] = []
+    _collect_tries(tree, [], tries)
 
     shadowed: set[ShadowSite] = set()
     unresolved: set[UnresolvedType] = set()
-    for handlers, chain in groups:
+    for node, chain in tries:
         if not chain:
             continue
         if functions is not None and not any(name in functions for name in chain):
             continue
+        # ast.Try alone reaches here: an except* group delivers to every matching clause, so none of them shadows
+        # another, and a try with no clause has nothing to compare.
+        if not node.handlers:
+            continue
         function = chain[-1]
-        for index, later in enumerate(handlers):
+        for index, later in enumerate(node.handlers):
             if not _handler_escalates(later):
                 continue
-            for earlier in handlers[:index]:
+            for earlier in node.handlers[:index]:
                 if _handler_escalates(earlier):
                     continue
                 for caught in _caught_types(earlier):
@@ -526,6 +692,71 @@ def classify_shadowing(
                         elif guarded in ancestors or caught in guarded_ancestors:
                             shadowed.add(ShadowSite(module, earlier.lineno, function, caught, later.lineno, guarded))
     return sorted(shadowed), sorted(unresolved)
+
+
+def _finally_discards(finalbody: list[ast.stmt]) -> bool:
+    """The finally drops what is in flight: it leaves, or it raises a replacement over it."""
+    if _escapes(finalbody):
+        return True
+    return any(
+        isinstance(node, ast.Raise) and not _keeps_the_mark(node, None)
+        for node in _runs_here(finalbody, _DEFERRED, shielded=True)
+    )
+
+
+def _enclosed_escalations(body: Sequence[ast.AST]) -> list[int]:
+    """The line of every escalation leaving ``body``: a marked raise, or an escalating clause of a nested try."""
+    lines: list[int] = []
+    for node in body:
+        if isinstance(node, _DEFERRED) or _shields_everything(node):
+            continue
+        if isinstance(node, ast.Raise):
+            if node.exc is not None and _escalates(node.exc):
+                lines.append(node.lineno)
+            continue
+        if isinstance(node, _NESTED_TRY):
+            lines.extend(_nested_try_escalations(cast(ast.Try, node)))
+            continue
+        inside = [child for child in ast.iter_child_nodes(node) if not isinstance(child, ast.expr)]
+        lines.extend(_enclosed_escalations(inside))
+    return lines
+
+
+def _escalations_the_finally_encloses(node: ast.Try) -> list[int]:
+    """Its own escalating clauses, plus the escalations of the arms those clauses never catch."""
+    lines = [clause.lineno for clause in node.handlers if _handler_escalates(clause)]
+    lines.extend(_enclosed_escalations(node.orelse))
+    if not node.handlers:
+        lines.extend(_enclosed_escalations(node.body))
+    return lines
+
+
+def _nested_try_escalations(node: ast.Try) -> list[int]:
+    """The arms _nested_try_reraises reads, named instead of counted; a finally of its own discards them first."""
+    if _finally_discards(node.finalbody):
+        return []
+    return _escalations_the_finally_encloses(node) + _enclosed_escalations(node.finalbody)
+
+
+def classify_finally_shadowing(source: str, module: str, functions: frozenset[str] | None = None) -> list[FinallySite]:
+    """Find the ``try`` statements whose discarding ``finally`` undoes an escalation it encloses."""
+    tree = ast.parse(source, filename=module)
+    tries: list[tuple[ast.Try, list[str]]] = []
+    _collect_tries(tree, [], tries)
+
+    sites: list[FinallySite] = []
+    for node, chain in tries:
+        if not chain:
+            continue
+        if functions is not None and not any(name in functions for name in chain):
+            continue
+        if not _finally_discards(node.finalbody):
+            continue
+        # ast exposes no position for the finally keyword, so the try line carries the decision.
+        sites.extend(
+            FinallySite(module, node.lineno, chain[-1], lineno) for lineno in _escalations_the_finally_encloses(node)
+        )
+    return sorted(sites)
 
 
 class _Index(NamedTuple):
@@ -637,6 +868,7 @@ def sweep() -> _Sweep:
     handlers: list[HandlerSite] = []
     shadowed: list[ShadowSite] = []
     unresolved: list[UnresolvedType] = []
+    finally_shadowed: list[FinallySite] = []
     for module in sorted({module for module, _ in reachable}):
         names = frozenset(name for reached_module, name in reachable if reached_module == module)
         source = (_REPO_ROOT / module).read_text(encoding="utf-8")
@@ -645,6 +877,7 @@ def sweep() -> _Sweep:
         module_shadowed, module_unresolved = classify_shadowing(source, module, names)
         shadowed.extend(module_shadowed)
         unresolved.extend(module_unresolved)
+        finally_shadowed.extend(classify_finally_shadowing(source, module, names))
 
     return _Sweep(
         tuple(sorted(sites)),
@@ -654,6 +887,7 @@ def sweep() -> _Sweep:
         tuple(sorted(swallowing)),
         tuple(sorted(shadowed)),
         tuple(sorted(unresolved)),
+        tuple(sorted(finally_shadowed)),
     )
 
 
@@ -1122,6 +1356,466 @@ def test_handler_classifier_flags_a_reraise_the_handler_can_skip() -> None:
     assert [site.kind for site in sites] == ["unannotated"]
 
 
+# Nesting scopes it: a raise the handler never runs, and a return that never leaves it, are not the handler's.
+
+
+def test_handler_classifier_flags_a_reraise_inside_a_nested_try() -> None:
+    """A re-raise the nested try can catch again escalates nothing out of the handler holding it."""
+    source = (
+        "def match_feature_group_criteria(cls, feature, options):\n"
+        "    try:\n"
+        "        return probe(feature)\n"
+        "    except ValueError as exc:\n"
+        "        try:\n"
+        "            if is_match_abort(exc):\n"
+        "                raise\n"
+        "        except Exception:  # Swallows: the nested try catches the re-raise above it.\n"
+        "            pass\n"
+        "        return False\n"
+    )
+
+    sites = _handlers(source)
+
+    assert [(site.lineno, site.kind) for site in sites] == [(4, "unannotated"), (8, "swallowing")]
+
+
+# A nested try only shields the arms its own handlers can catch; the rest still leaves the handler holding it.
+
+
+def test_handler_classifier_counts_a_reraise_in_a_nested_finally() -> None:
+    """A finally runs on the way out of the nested try, past the clauses that could have caught the re-raise."""
+    source = (
+        "def match_feature_group_criteria(cls, feature, options):\n"
+        "    try:\n"
+        "        return probe(feature)\n"
+        "    except ValueError as exc:\n"
+        "        try:\n"
+        "            cleanup()\n"
+        "        except OSError:  # Swallows: cleanup is best effort here.\n"
+        "            pass\n"
+        "        finally:\n"
+        "            if is_match_abort(exc):\n"
+        "                raise\n"
+        "        return False\n"
+    )
+
+    sites = _handlers(source)
+
+    assert [(site.lineno, site.kind) for site in sites] == [(4, "escalating"), (7, "swallowing")]
+
+
+def test_handler_classifier_counts_a_reraise_in_a_nested_try_without_a_handler() -> None:
+    """A try that only cleans up catches nothing, so the re-raise in its body leaves the handler around it."""
+    source = (
+        "def match_feature_group_criteria(cls, feature, options):\n"
+        "    try:\n"
+        "        return probe(feature)\n"
+        "    except ValueError as exc:\n"
+        "        try:\n"
+        "            if is_match_abort(exc):\n"
+        "                raise\n"
+        "        finally:\n"
+        "            release()\n"
+        "        return False\n"
+    )
+
+    sites = _handlers(source)
+
+    assert [(site.lineno, site.kind) for site in sites] == [(4, "escalating")]
+
+
+def test_handler_classifier_counts_a_nested_handler_reraising_the_outer_bound_name() -> None:
+    """``raise exc`` names the outer handler's own exception, which no clause of the nested try is catching."""
+    source = (
+        "def match_feature_group_criteria(cls, feature, options):\n"
+        "    try:\n"
+        "        return probe(feature)\n"
+        "    except ValueError as exc:\n"
+        "        try:\n"
+        "            cleanup()\n"
+        "        except OSError:  # Swallows: the OSError is dropped; exc takes its place.\n"
+        "            if is_match_abort(exc):\n"
+        "                raise exc\n"
+        "        return False\n"
+    )
+
+    sites = _handlers(source)
+
+    assert [(site.lineno, site.kind) for site in sites] == [(4, "escalating"), (7, "swallowing")]
+
+
+def test_handler_classifier_flags_a_bare_reraise_in_a_nested_handler() -> None:
+    """A bare raise there re-raises that clause's own exception, not the one the outer handler caught."""
+    source = (
+        "def match_feature_group_criteria(cls, feature, options):\n"
+        "    try:\n"
+        "        return probe(feature)\n"
+        "    except ValueError as exc:\n"
+        "        try:\n"
+        "            cleanup()\n"
+        "        except OSError:\n"
+        "            if is_match_abort(exc):\n"
+        "                raise\n"
+        "        return False\n"
+    )
+
+    sites = _handlers(source)
+
+    assert [(site.lineno, site.kind) for site in sites] == [(4, "unannotated"), (7, "escalating")]
+
+
+def test_handler_classifier_flags_an_abort_check_gating_only_a_bare_reraise_in_a_nested_clause() -> None:
+    """That bare raise re-raises the cleanup failure, so the check beside it gates nothing of the caught one."""
+    source = (
+        "def match_feature_group_criteria(cls, feature, options):\n"
+        "    try:\n"
+        "        return probe(feature)\n"
+        "    except ValueError as exc:\n"
+        "        try:\n"
+        "            cleanup()\n"
+        "        except Exception:\n"
+        "            if is_match_abort(exc):\n"
+        "                raise\n"
+        "        if options is None:\n"
+        "            return False\n"
+        "        raise exc\n"
+    )
+
+    sites = _handlers(source)
+
+    assert [(site.lineno, site.kind) for site in sites] == [(4, "unannotated"), (7, "escalating")]
+
+
+def test_handler_classifier_flags_a_handler_whose_abort_check_reads_another_exception() -> None:
+    """The check gates the nested clause's own exception, so it credits nothing to the re-raise the return skips."""
+    source = (
+        "def match_feature_group_criteria(cls, feature, options):\n"
+        "    try:\n"
+        "        return probe(feature)\n"
+        "    except ValueError as exc:\n"
+        "        try:\n"
+        "            cleanup()\n"
+        "        except Exception as inner:  # Swallows: a cleanup failure is not the candidate's verdict.\n"
+        "            if is_match_abort(inner):\n"
+        "                log(inner)\n"
+        "        if options is None:\n"
+        "            return False\n"
+        "        raise exc\n"
+    )
+
+    sites = _handlers(source)
+
+    assert [(site.lineno, site.kind) for site in sites] == [(4, "unannotated"), (7, "swallowing")]
+
+
+def test_handler_classifier_flags_an_abort_check_reading_a_nested_exception_by_keyword() -> None:
+    """The check reads the nested clause's own exception whichever argument form it is passed in."""
+    source = (
+        "def match_feature_group_criteria(cls, feature, options):\n"
+        "    try:\n"
+        "        return probe(feature)\n"
+        "    except ValueError as exc:\n"
+        "        try:\n"
+        "            cleanup()\n"
+        "        except Exception as inner:  # Swallows: a cleanup failure is not the candidate's verdict.\n"
+        "            if is_match_abort(exc=inner):\n"
+        "                raise exc\n"
+        "        if options is None:\n"
+        "            return False\n"
+        "        raise exc\n"
+    )
+
+    sites = _handlers(source)
+
+    assert [(site.lineno, site.kind) for site in sites] == [(4, "unannotated"), (7, "swallowing")]
+
+
+def test_handler_classifier_flags_an_abort_check_reading_an_attribute_of_a_nested_exception() -> None:
+    source = (
+        "def match_feature_group_criteria(cls, feature, options):\n"
+        "    try:\n"
+        "        return probe(feature)\n"
+        "    except ValueError as exc:\n"
+        "        try:\n"
+        "            cleanup()\n"
+        "        except Exception as inner:  # Swallows: a cleanup failure is not the candidate's verdict.\n"
+        "            if is_match_abort(inner.__cause__):\n"
+        "                raise exc\n"
+        "        if options is None:\n"
+        "            return False\n"
+        "        raise exc\n"
+    )
+
+    sites = _handlers(source)
+
+    assert [(site.lineno, site.kind) for site in sites] == [(4, "unannotated"), (7, "swallowing")]
+
+
+def test_handler_classifier_counts_an_abort_check_a_later_nested_clause_rebinds_over() -> None:
+    """The rebinding begins at the nested clause, so it cannot cancel the check that already ran above it."""
+    source = (
+        "def match_feature_group_criteria(cls, feature, options):\n"
+        "    try:\n"
+        "        return probe(feature)\n"
+        "    except ValueError as exc:\n"
+        "        if is_match_abort(exc):\n"
+        "            raise\n"
+        "        try:\n"
+        "            cleanup()\n"
+        "        except Exception as exc:  # Swallows: a cleanup failure is not the candidate's verdict.\n"
+        "            log(exc)\n"
+        "        return False\n"
+    )
+
+    sites = _handlers(source)
+
+    assert [(site.lineno, site.kind) for site in sites] == [(4, "escalating"), (9, "swallowing")]
+
+
+def test_handler_classifier_counts_a_reraise_in_a_nested_else() -> None:
+    """The else runs only once the nested try body has passed, so its clauses never see the re-raise."""
+    source = (
+        "def match_feature_group_criteria(cls, feature, options):\n"
+        "    try:\n"
+        "        return probe(feature)\n"
+        "    except ValueError as exc:\n"
+        "        try:\n"
+        "            cleanup()\n"
+        "        except OSError:  # Swallows: cleanup is best effort here.\n"
+        "            pass\n"
+        "        else:\n"
+        "            if is_match_abort(exc):\n"
+        "                raise\n"
+        "        return False\n"
+    )
+
+    sites = _handlers(source)
+
+    assert [(site.lineno, site.kind) for site in sites] == [(4, "escalating"), (7, "swallowing")]
+
+
+def test_handler_classifier_flags_a_reraise_a_nested_finally_discards() -> None:
+    """A return in the nested finally drops whatever is in flight, so the re-raise above it leaves nothing."""
+    source = (
+        "def match_feature_group_criteria(cls, feature, options):\n"
+        "    try:\n"
+        "        return probe(feature)\n"
+        "    except ValueError as exc:\n"
+        "        try:\n"
+        "            if is_match_abort(exc):\n"
+        "                raise\n"
+        "        finally:\n"
+        "            return False\n"
+    )
+
+    sites = _handlers(source)
+
+    assert [(site.lineno, site.kind) for site in sites] == [(4, "unannotated"), (5, "unannotated")]
+
+
+def test_handler_classifier_flags_a_reraise_inside_a_nested_def() -> None:
+    """A re-raise in a function defined by the handler runs later or never, so the handler still swallows."""
+    source = (
+        "def match_feature_group_criteria(cls, feature, options):\n"
+        "    try:\n"
+        "        return probe(feature)\n"
+        "    except ValueError as exc:\n"
+        "        def escalate_later():\n"
+        "            if is_match_abort(exc):\n"
+        "                raise exc\n"
+        "        register(escalate_later)\n"
+    )
+
+    sites = _handlers(source)
+
+    assert [(site.lineno, site.kind) for site in sites] == [(4, "unannotated")]
+
+
+def test_handler_classifier_flags_an_abort_check_that_only_decorates_a_nested_class() -> None:
+    """A check spent on a decorator gates no re-raise, so the return below it still skips the one at the end."""
+    source = (
+        "def match_feature_group_criteria(cls, feature, options):\n"
+        "    try:\n"
+        "        return probe(feature)\n"
+        "    except ValueError as exc:\n"
+        "        @is_match_abort(exc)\n"
+        "        class Report:\n"
+        "            pass\n"
+        "        if options is None:\n"
+        "            return False\n"
+        "        raise exc\n"
+    )
+
+    sites = _handlers(source)
+
+    assert [(site.lineno, site.kind) for site in sites] == [(4, "unannotated")]
+
+
+def test_handler_classifier_counts_an_abort_check_in_the_default_of_a_nested_def() -> None:
+    """A default argument is evaluated where the def stands, so that check runs in the handler like any other."""
+    source = (
+        "def match_feature_group_criteria(cls, feature, options):\n"
+        "    try:\n"
+        "        return probe(feature)\n"
+        "    except ValueError as exc:\n"
+        "        def report(marked=is_match_abort(exc)):\n"
+        "            return marked\n"
+        "        if options is None:\n"
+        "            return False\n"
+        "        raise exc\n"
+    )
+
+    sites = _handlers(source)
+
+    assert [(site.lineno, site.kind) for site in sites] == [(4, "escalating")]
+
+
+def test_handler_classifier_counts_a_return_inside_a_nested_try() -> None:
+    """A return leaves the function from any depth, so it still skips the re-raise below it."""
+    source = (
+        "def match_feature_group_criteria(cls, feature, options):\n"
+        "    try:\n"
+        "        return probe(feature)\n"
+        "    except ImportError:\n"
+        "        try:\n"
+        "            return probe(options)\n"
+        "        except OSError:  # Swallows: a missing file is a non-match for this reader only.\n"
+        "            pass\n"
+        "        raise\n"
+    )
+
+    sites = _handlers(source)
+
+    assert [(site.lineno, site.kind) for site in sites] == [(4, "unannotated"), (7, "swallowing")]
+
+
+def test_handler_classifier_ignores_a_return_inside_a_nested_def() -> None:
+    """A return in a function the handler defines leaves that function, so the raise still stands on every path."""
+    source = (
+        "def match_feature_group_criteria(cls, feature, options):\n"
+        "    try:\n"
+        "        return probe(feature)\n"
+        "    except ImportError:\n"
+        "        def fallback():\n"
+        "            return None\n"
+        "        register(fallback)\n"
+        "        raise\n"
+    )
+
+    sites = _handlers(source)
+
+    assert [(site.lineno, site.kind) for site in sites] == [(4, "escalating")]
+
+
+def test_handler_classifier_ignores_a_break_bound_to_a_loop_it_opens() -> None:
+    """That break leaves the for, not the handler, so the raise below it still stands on every path out."""
+    source = (
+        "def match_feature_group_criteria(cls, feature, options):\n"
+        "    try:\n"
+        "        return probe(feature)\n"
+        "    except ValueError:\n"
+        "        for candidate in candidates:\n"
+        "            if ready(candidate):\n"
+        "                break\n"
+        "        raise\n"
+    )
+
+    sites = _handlers(source)
+
+    assert [(site.lineno, site.kind) for site in sites] == [(4, "escalating")]
+
+
+def test_handler_classifier_counts_a_break_that_leaves_the_handler() -> None:
+    """The loop is around the try, so the break leaves the handler and skips the re-raise below it."""
+    source = (
+        "def match_feature_group_criteria(cls, feature, options):\n"
+        "    for candidate in options:\n"
+        "        try:\n"
+        "            return probe(candidate)\n"
+        "        except ValueError:\n"
+        "            if options is None:\n"
+        "                break\n"
+        "            raise\n"
+    )
+
+    sites = _handlers(source)
+
+    assert [(site.lineno, site.kind) for site in sites] == [(5, "unannotated")]
+
+
+def test_handler_classifier_counts_a_break_in_the_else_arm_of_a_loop_it_opens() -> None:
+    """The else arm sits outside its own loop, so that break binds to the loop around the try and leaves."""
+    source = (
+        "def match_feature_group_criteria(cls, feature, options):\n"
+        "    for candidate in options:\n"
+        "        try:\n"
+        "            return probe(candidate)\n"
+        "        except ValueError:\n"
+        "            for attempt in retries:\n"
+        "                probe(attempt)\n"
+        "            else:\n"
+        "                break\n"
+        "            raise\n"
+    )
+
+    sites = _handlers(source)
+
+    assert [(site.lineno, site.kind) for site in sites] == [(5, "unannotated")]
+
+
+def test_handler_classifier_flags_a_reraise_in_the_else_arm_a_break_skips() -> None:
+    """A break leaves the loop past its else arm, so the raise written there stands on one path only."""
+    source = (
+        "def match_feature_group_criteria(cls, feature, options):\n"
+        "    try:\n"
+        "        return probe(feature)\n"
+        "    except ValueError as exc:\n"
+        "        for attempt in retries:\n"
+        "            if retry(feature):\n"
+        "                break\n"
+        "        else:\n"
+        "            raise exc\n"
+    )
+
+    sites = _handlers(source)
+
+    assert [(site.lineno, site.kind) for site in sites] == [(4, "unannotated")]
+
+
+def test_handler_classifier_flags_a_reraise_a_break_in_the_same_loop_body_skips() -> None:
+    """The break leaves the loop before the raise below it in the body is ever reached."""
+    source = (
+        "def match_feature_group_criteria(cls, feature, options):\n"
+        "    try:\n"
+        "        return probe(feature)\n"
+        "    except ValueError as exc:\n"
+        "        for attempt in retries:\n"
+        "            if ready(attempt):\n"
+        "                break\n"
+        "            raise exc\n"
+    )
+
+    sites = _handlers(source)
+
+    assert [(site.lineno, site.kind) for site in sites] == [(4, "unannotated")]
+
+
+def test_handler_classifier_flags_a_reraise_in_a_loop_body_that_may_never_run() -> None:
+    """An empty iterable runs the body zero times, so a raise written only there stands on no path out."""
+    source = (
+        "def match_feature_group_criteria(cls, feature, options):\n"
+        "    try:\n"
+        "        return probe(feature)\n"
+        "    except ValueError as exc:\n"
+        "        for attempt in retries:\n"
+        "            raise exc\n"
+    )
+
+    sites = _handlers(source)
+
+    assert [(site.lineno, site.kind) for site in sites] == [(4, "unannotated")]
+
+
 # ``except`` is not the only way to drop an exception: suppress() and an escaping finally do it too.
 
 
@@ -1152,6 +1846,60 @@ def test_handler_classifier_accepts_a_swallows_comment_on_a_suppress() -> None:
 
     assert [site.kind for site in sites] == ["swallowing"]
     assert sites[0].reason == "a malformed name is this candidate's own defect."
+
+
+def test_handler_classifier_flags_a_reraise_inside_a_suppress_block() -> None:
+    """The suppress drops the re-raise written in it, so the handler around it lets nothing out."""
+    source = (
+        "def match_feature_group_criteria(cls, feature, options):\n"
+        "    try:\n"
+        "        return probe(feature)\n"
+        "    except ValueError as exc:\n"
+        "        with suppress(Exception):  # Swallows: cleanup is best effort here.\n"
+        "            if is_match_abort(exc):\n"
+        "                raise\n"
+        "        return False\n"
+    )
+
+    sites = _handlers(source)
+
+    assert [(site.lineno, site.kind) for site in sites] == [(4, "unannotated"), (5, "swallowing")]
+
+
+def test_handler_classifier_counts_a_reraise_inside_a_narrow_suppress() -> None:
+    """suppress(KeyError) never catches the re-raised ValueError, so it does leave the handler."""
+    source = (
+        "def match_feature_group_criteria(cls, feature, options):\n"
+        "    try:\n"
+        "        return probe(feature)\n"
+        "    except ValueError as exc:\n"
+        "        with suppress(KeyError):  # Swallows: a missing key is this candidate's own defect.\n"
+        "            if is_match_abort(exc):\n"
+        "                raise\n"
+        "        return False\n"
+    )
+
+    sites = _handlers(source)
+
+    assert [(site.lineno, site.kind) for site in sites] == [(4, "escalating"), (5, "swallowing")]
+
+
+def test_handler_classifier_counts_an_abort_check_gating_a_return_inside_a_suppress() -> None:
+    """A suppress drops what raises in it, not what returns from it, so the check there still gates the escape."""
+    source = (
+        "def match_feature_group_criteria(cls, feature, options):\n"
+        "    try:\n"
+        "        return probe(feature)\n"
+        "    except ValueError as exc:\n"
+        "        with suppress(Exception):  # Swallows: cleanup is best effort here.\n"
+        "            if not is_match_abort(exc):\n"
+        "                return False\n"
+        "        raise\n"
+    )
+
+    sites = _handlers(source)
+
+    assert [(site.lineno, site.kind) for site in sites] == [(4, "escalating"), (5, "swallowing")]
 
 
 def test_handler_classifier_flags_a_finally_that_returns() -> None:
@@ -1353,6 +2101,58 @@ def test_shadow_classifier_flags_a_broad_handler_above_the_abort_check() -> None
     assert [(site.caught, site.shadowed_type) for site in shadowed] == [("Exception", "ValueError")]
 
 
+def test_shadow_classifier_flags_a_handler_whose_only_reraise_sits_in_a_nested_try() -> None:
+    """The earlier clause checks the marker for its own cleanup, not for the exception the clause below it wants."""
+    source = (
+        "def match_feature_group_criteria(cls, feature, options):\n"
+        "    try:\n"
+        "        return probe(feature)\n"
+        "    except KeyError:\n"
+        "        try:\n"
+        "            cleanup()\n"
+        "        except Exception as inner:\n"
+        "            if is_match_abort(inner):\n"
+        "                raise\n"
+        "        return False\n"
+        "    except Exception as exc:\n"
+        "        if is_match_abort(exc):\n"
+        "            raise\n"
+        "        return False\n"
+    )
+
+    shadowed, unresolved = _shadowing(source)
+
+    assert unresolved == []
+    assert [(site.lineno, site.caught, site.shadowed_lineno, site.shadowed_type) for site in shadowed] == [
+        (4, "KeyError", 11, "Exception")
+    ]
+
+
+def test_shadow_classifier_flags_a_blanket_handler_above_a_check_wrapped_in_a_nested_try() -> None:
+    """The clause below only wraps its re-raise in cleanup, so the blanket clause above still hides the check."""
+    source = (
+        "def match_feature_group_criteria(cls, feature, options):\n"
+        "    try:\n"
+        "        return probe(feature)\n"
+        "    except Exception:  # Swallows: a broken probe is this candidate's own defect.\n"
+        "        return False\n"
+        "    except ValueError as exc:\n"
+        "        try:\n"
+        "            if is_match_abort(exc):\n"
+        "                raise\n"
+        "        finally:\n"
+        "            release()\n"
+        "        return False\n"
+    )
+
+    shadowed, unresolved = _shadowing(source)
+
+    assert unresolved == []
+    assert [(site.lineno, site.caught, site.shadowed_lineno, site.shadowed_type) for site in shadowed] == [
+        (4, "Exception", 6, "ValueError")
+    ]
+
+
 def test_shadow_classifier_resolves_a_project_exception_through_its_declared_base() -> None:
     """The shape fixed in match_parser_criteria: PropertyValueRejection subclasses ValueError statically."""
     source = (
@@ -1507,3 +2307,401 @@ def test_the_sweep_flags_a_narrow_handler_spliced_above_the_real_seam_check() ->
         (lineno, "KeyError", "Exception")
     ], f"a narrow handler spliced above the seam's own abort check was not flagged: {spliced}"
     assert spliced[0].function == function
+
+
+# One try again, the other pairing: a finally that discards drops every escalation it encloses.
+
+
+def _finally_shadowing(source: str) -> list[FinallySite]:
+    return classify_finally_shadowing(source, "snippet.py", frozenset({"match_feature_group_criteria"}))
+
+
+def test_no_finally_discards_an_abort_check_on_the_same_try() -> None:
+    discarded = list(sweep().finally_shadowed)
+
+    assert discarded == [], (
+        "Try statements whose finally discards an escalation the try around it would otherwise let out:\n"
+        + "\n".join(
+            f"  {site.location()}: the finally discards the escalation on line {site.discarded_lineno}"
+            for site in discarded
+        )
+        + "\n\nA return, break or continue leaving finally, or a raise replacing what is in flight, drops the marked "
+        f"exception the {_ABORT_CHECK} clause re-raised, so it never leaves the function. Let the finally fall off "
+        "its end, or drop the escalation and declare the swallow at its site."
+    )
+
+
+def test_finally_classifier_flags_a_returning_finally_beside_an_abort_check() -> None:
+    """The return in finally discards the marked exception the clause above it deliberately re-raised."""
+    source = (
+        "def match_feature_group_criteria(cls, feature, options):\n"
+        "    # Swallows: the cleanup verdict outranks the probe's, by this reader's contract.\n"
+        "    try:\n"
+        "        return probe(feature)\n"
+        "    except Exception as exc:\n"
+        "        if is_match_abort(exc):\n"
+        "            raise\n"
+        "    finally:\n"
+        "        return False\n"
+    )
+
+    sites = _finally_shadowing(source)
+
+    # Anchored at the try line: ast exposes no position for the finally keyword.
+    assert sites == [FinallySite("snippet.py", 3, "match_feature_group_criteria", 5)]
+    assert sites[0].location() == "snippet.py:3 match_feature_group_criteria()"
+
+
+def test_the_earlier_passes_clear_a_finally_that_discards_the_reraise() -> None:
+    """Both sites are well-formed alone, which is why the pairing needs a pass of its own."""
+    source = (
+        "def match_feature_group_criteria(cls, feature, options):\n"
+        "    # Swallows: the cleanup verdict outranks the probe's, by this reader's contract.\n"
+        "    try:\n"
+        "        return probe(feature)\n"
+        "    except Exception as exc:\n"
+        "        if is_match_abort(exc):\n"
+        "            raise\n"
+        "    finally:\n"
+        "        return False\n"
+    )
+
+    assert [(site.lineno, site.kind) for site in _handlers(source)] == [(3, "swallowing"), (5, "escalating")]
+    assert _shadowing(source) == ([], [])
+
+
+def test_finally_classifier_flags_a_break_leaving_the_finally() -> None:
+    """A break discards the exception in flight exactly as a return does, and so does a continue."""
+    source = (
+        "def match_feature_group_criteria(cls, feature, options):\n"
+        "    for candidate in options:\n"
+        "        try:\n"
+        "            return probe(candidate)\n"
+        "        except Exception as exc:\n"
+        "            if is_match_abort(exc):\n"
+        "                raise\n"
+        "        finally:\n"
+        "            break\n"
+        "    return False\n"
+    )
+
+    assert [(site.lineno, site.discarded_lineno) for site in _finally_shadowing(source)] == [(3, 5)]
+
+
+def test_finally_classifier_ignores_a_returning_finally_beside_a_swallowing_handler() -> None:
+    """No clause re-raises here, so the try is the plain finally-swallow site; reporting it twice is noise."""
+    source = (
+        "def match_feature_group_criteria(cls, feature, options):\n"
+        "    try:\n"
+        "        return probe(feature)\n"
+        "    except Exception:\n"
+        "        return False\n"
+        "    finally:\n"
+        "        return False\n"
+    )
+
+    assert _finally_shadowing(source) == []
+
+
+def test_finally_classifier_ignores_a_finally_that_does_not_escape() -> None:
+    """A plain cleanup call leaves the exception in flight, so the re-raise above it still leaves the function."""
+    source = (
+        "def match_feature_group_criteria(cls, feature, options):\n"
+        "    try:\n"
+        "        return probe(feature)\n"
+        "    except Exception as exc:\n"
+        "        if is_match_abort(exc):\n"
+        "            raise\n"
+        "        return False\n"
+        "    finally:\n"
+        "        release()\n"
+    )
+
+    assert _finally_shadowing(source) == []
+
+
+def test_finally_classifier_ignores_a_discarding_finally_with_no_escalation() -> None:
+    """A handler-less try is read through its body now, so the empty case is the one holding nothing marked."""
+    source = (
+        "def match_feature_group_criteria(cls, feature, options):\n"
+        "    try:\n"
+        "        # Contained: a missing feature is this candidate's own defect.\n"
+        "        raise ValueError('no feature')\n"
+        "    finally:\n"
+        "        return False\n"
+    )
+
+    assert _finally_shadowing(source) == []
+
+
+# What the finally encloses is what it discards: hoisting the try, or moving the raise, changes nothing.
+
+
+def test_finally_classifier_flags_a_finally_hoisted_to_the_try_around_the_check() -> None:
+    """Wrapping the flagged try in one that owns the finally is the refactor the gate invites, and it discards
+    the same re-raise."""
+    source = (
+        "def match_feature_group_criteria(cls, feature, options):\n"
+        "    try:\n"
+        "        # Swallows: the cleanup verdict outranks the probe's, by this reader's contract.\n"
+        "        try:\n"
+        "            return probe(feature)\n"
+        "        except Exception as exc:\n"
+        "            if is_match_abort(exc):\n"
+        "                raise\n"
+        "    finally:\n"
+        "        return False\n"
+    )
+
+    assert _finally_shadowing(source) == [FinallySite("snippet.py", 2, "match_feature_group_criteria", 6)]
+
+
+def test_finally_classifier_flags_a_marked_raise_in_the_body_of_a_discarding_try() -> None:
+    """A clause is not the only escalation a finally can undo: with no clause to catch it, the raise is its own."""
+    source = (
+        "def match_feature_group_criteria(cls, feature, options):\n"
+        "    try:\n"
+        "        if options is None:\n"
+        "            raise escalate_match_abort(ValueError('no options'))\n"
+        "        return probe(feature)\n"
+        "    finally:\n"
+        "        return False\n"
+    )
+
+    assert _finally_shadowing(source) == [FinallySite("snippet.py", 2, "match_feature_group_criteria", 4)]
+
+
+def test_finally_classifier_ignores_a_marked_raise_a_suppress_in_the_body_swallows() -> None:
+    """That raise never leaves the suppress, so the finally around it has no escalation to undo."""
+    source = (
+        "def match_feature_group_criteria(cls, feature, options):\n"
+        "    try:\n"
+        "        with suppress(Exception):  # Swallows: the probe is best effort here.\n"
+        "            if options is None:\n"
+        "                raise escalate_match_abort(ValueError('no options'))\n"
+        "        return probe(feature)\n"
+        "    finally:\n"
+        "        return False\n"
+    )
+
+    assert _finally_shadowing(source) == []
+
+
+def test_finally_classifier_flags_a_marked_raise_a_narrow_suppress_does_not_catch() -> None:
+    """suppress(KeyError) lets the marked ValueError past, so the discarding finally is what drops it."""
+    source = (
+        "def match_feature_group_criteria(cls, feature, options):\n"
+        "    try:\n"
+        "        with suppress(KeyError):  # Swallows: a missing key is this candidate's own defect.\n"
+        "            raise escalate_match_abort(ValueError('no options'))\n"
+        "        return probe(feature)\n"
+        "    finally:\n"
+        "        return False\n"
+    )
+
+    assert _finally_shadowing(source) == [FinallySite("snippet.py", 2, "match_feature_group_criteria", 4)]
+
+
+def test_finally_classifier_reads_past_a_nested_try_to_the_marked_raise_beside_it() -> None:
+    """The nested try's clause decides its own body only; the raise beside it still reaches the finally."""
+    source = (
+        "def match_feature_group_criteria(cls, feature, options):\n"
+        "    try:\n"
+        "        try:\n"
+        "            release()\n"
+        "        except OSError:  # Swallows: cleanup is best effort here.\n"
+        "            pass\n"
+        "        raise escalate_match_abort(ValueError('no options'))\n"
+        "    finally:\n"
+        "        return False\n"
+    )
+
+    assert _finally_shadowing(source) == [FinallySite("snippet.py", 2, "match_feature_group_criteria", 7)]
+
+
+def test_finally_classifier_flags_a_marked_raise_in_the_else_arm() -> None:
+    """The else runs once the body has passed, so its own clauses never see the raise and only the finally is left."""
+    source = (
+        "def match_feature_group_criteria(cls, feature, options):\n"
+        "    try:\n"
+        "        probe(feature)\n"
+        "    except OSError:  # Swallows: a missing file is a non-match for this reader only.\n"
+        "        return False\n"
+        "    else:\n"
+        "        raise escalate_match_abort(ValueError('no options'))\n"
+        "    finally:\n"
+        "        return False\n"
+    )
+
+    assert _finally_shadowing(source) == [FinallySite("snippet.py", 2, "match_feature_group_criteria", 7)]
+
+
+def test_finally_classifier_reports_every_escalating_clause_of_one_discarding_try() -> None:
+    """One site per escalation, not one per try: the finally discards both clauses, so both are named."""
+    source = (
+        "def match_feature_group_criteria(cls, feature, options):\n"
+        "    try:\n"
+        "        return probe(feature)\n"
+        "    except KeyError as exc:\n"
+        "        if is_match_abort(exc):\n"
+        "            raise\n"
+        "    except ValueError as exc:\n"
+        "        if is_match_abort(exc):\n"
+        "            raise\n"
+        "    finally:\n"
+        "        return False\n"
+    )
+
+    assert [(site.lineno, site.discarded_lineno) for site in _finally_shadowing(source)] == [(2, 4), (2, 7)]
+
+
+def test_a_swallows_comment_on_the_try_does_not_silence_the_finally_pass() -> None:
+    """The reason answers the handler pass alone: this pass reads no comments, and the clause still re-raises."""
+    header = "def match_feature_group_criteria(cls, feature, options):\n"
+    reason = "    # Swallows: the cleanup verdict outranks the probe's, by this reader's contract.\n"
+    body = (
+        "    try:\n"
+        "        return probe(feature)\n"
+        "    except Exception as exc:\n"
+        "        if is_match_abort(exc):\n"
+        "            raise\n"
+        "    finally:\n"
+        "        return False\n"
+    )
+
+    assert _finally_shadowing(header + body) == [FinallySite("snippet.py", 2, "match_feature_group_criteria", 4)]
+    # The same site, one line down: the reason changes the line numbers and nothing else.
+    assert _finally_shadowing(header + reason + body) == [
+        FinallySite("snippet.py", 3, "match_feature_group_criteria", 5)
+    ]
+
+
+# Discarding is what counts, so a return or break that never leaves the finally discards nothing.
+
+
+def test_finally_classifier_ignores_a_break_bound_to_a_loop_inside_the_finally() -> None:
+    """That break leaves the while, not the finally, so what is in flight is still in flight after it."""
+    source = (
+        "def match_feature_group_criteria(cls, feature, options):\n"
+        "    try:\n"
+        "        return probe(feature)\n"
+        "    except Exception as exc:\n"
+        "        if is_match_abort(exc):\n"
+        "            raise\n"
+        "    finally:\n"
+        "        while pending(feature):\n"
+        "            if drained(feature):\n"
+        "                break\n"
+        "            drain(feature)\n"
+    )
+
+    assert _finally_shadowing(source) == []
+    # The same reading feeds the handler pass, which would otherwise demand a reason for a finally that drops nothing.
+    assert [(site.lineno, site.kind) for site in _handlers(source)] == [(4, "escalating")]
+
+
+def test_finally_classifier_ignores_a_return_inside_a_def_in_the_finally() -> None:
+    """That return leaves fallback(), not the function, so it discards nothing the finally is holding."""
+    source = (
+        "def match_feature_group_criteria(cls, feature, options):\n"
+        "    try:\n"
+        "        return probe(feature)\n"
+        "    except Exception as exc:\n"
+        "        if is_match_abort(exc):\n"
+        "            raise\n"
+        "    finally:\n"
+        "        def fallback():\n"
+        "            return None\n"
+        "        register(fallback)\n"
+    )
+
+    assert _finally_shadowing(source) == []
+    assert [(site.lineno, site.kind) for site in _handlers(source)] == [(4, "escalating")]
+
+
+# Leaving is not the only way out of a finally: a raise there replaces what is in flight, unless it is a bare one.
+
+
+def test_finally_classifier_flags_a_finally_that_raises_a_replacement() -> None:
+    """The replacement carries no marker, and a '# Contained:' reason answers only the raise pass."""
+    source = (
+        "def match_feature_group_criteria(cls, feature, options):\n"
+        "    try:\n"
+        "        return probe(feature)\n"
+        "    except Exception as exc:\n"
+        "        if is_match_abort(exc):\n"
+        "            raise\n"
+        "    finally:\n"
+        "        # Contained: a failed cleanup is this candidate's own defect.\n"
+        "        raise ValueError('cleanup failed')\n"
+    )
+
+    assert _finally_shadowing(source) == [FinallySite("snippet.py", 2, "match_feature_group_criteria", 4)]
+
+
+def test_finally_classifier_ignores_a_bare_raise_in_the_finally() -> None:
+    """A bare raise re-raises what is in flight, marker and all, so it replaces nothing."""
+    source = (
+        "def match_feature_group_criteria(cls, feature, options):\n"
+        "    try:\n"
+        "        return probe(feature)\n"
+        "    except Exception as exc:\n"
+        "        if is_match_abort(exc):\n"
+        "            raise\n"
+        "    finally:\n"
+        "        if failed(feature):\n"
+        "            raise\n"
+    )
+
+    assert _finally_shadowing(source) == []
+
+
+def _splice_returning_finally(source: str, function: str) -> tuple[str, int, int]:
+    """Give ``function``'s first try beside an escalating clause a returning finally; in memory only."""
+    targets = [
+        node
+        for node in ast.walk(ast.parse(source))
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == function
+    ]
+    assert len(targets) == 1, f"{function} is not a single definition in this module: {len(targets)} found"
+    tries = sorted(
+        (
+            node
+            for node in ast.walk(targets[0])
+            if isinstance(node, ast.Try)
+            if any(_handler_escalates(clause) for clause in node.handlers)
+        ),
+        key=lambda node: node.lineno,
+    )
+    assert tries, f"{function} holds no try with an escalating clause; splice into another definition"
+    node = tries[0]
+    clause = next(clause for clause in node.handlers if _handler_escalates(clause))
+    lines = source.splitlines()
+    if node.finalbody:
+        # A second finally on one try does not parse, so an existing one takes the return at its top instead.
+        first = node.finalbody[0]
+        at, block = first.lineno - 1, [f"{' ' * first.col_offset}return False"]
+    else:
+        arms: list[ast.stmt | ast.excepthandler] = [*node.body, *node.handlers, *node.orelse]
+        pad = " " * node.col_offset
+        # After the last line the try spans, at the try's own indentation: both line numbers stay put.
+        at, block = max(part.end_lineno or part.lineno for part in arms), [f"{pad}finally:", f"{pad}    return False"]
+    return "\n".join([*lines[:at], *block, *lines[at:]]) + "\n", node.lineno, clause.lineno
+
+
+def test_the_sweep_flags_a_returning_finally_spliced_into_the_real_seam() -> None:
+    """End to end: the real reachable set and the classifier on real source, mutated in memory only."""
+    module = "mloda/core/abstract_plugins/components/match_hook.py"
+    function = "call_match_hook"
+    names = frozenset(name for reached_module, name in sweep().reachable if reached_module == module)
+    assert function in names, f"{function} is no longer reachable; splice into another reached definition"
+
+    source = (_REPO_ROOT / module).read_text(encoding="utf-8")
+    assert classify_finally_shadowing(source, module, names) == []
+
+    mutated, lineno, discarded = _splice_returning_finally(source, function)
+    spliced = classify_finally_shadowing(mutated, module, names)
+
+    assert spliced == [FinallySite(module, lineno, function, discarded)], (
+        f"a return spliced into the seam's own finally was not flagged: {spliced}"
+    )

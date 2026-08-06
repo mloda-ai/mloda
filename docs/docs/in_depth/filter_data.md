@@ -186,12 +186,14 @@ When a user passes a `GlobalFilter`, the framework tests every `SingleFilter` ag
 FeatureGroup that each feature already resolved to, using that feature's options, domain
 and compute framework. Each filter is **deep-copied** first, so everything below happens
 on the copy and never on the filter the user built. The copy is delivered only if it
-clears three gates, in order: the group's own `match_feature_group_criteria()` on the
+clears four gates, in order: the group's own `match_feature_group_criteria()` on the
 filter feature's name and options (plus the run's `DataAccessCollection`), then the filter
-feature's domain against the resolved feature's, then its compute framework against the
-resolved feature's. The last two gates also backfill: a filter feature that declares no
-domain or compute framework inherits the resolved feature's (the FeatureGroup's domain
-when the feature declares none). Declaring the filter's column as an input is **not** the
+feature's domain against the resolved feature's, then its `feature_group` scope against
+the probed FeatureGroup, honored with the same semantics as feature resolution (the named
+class and its subclasses, class-object and string forms alike), then its compute framework
+against the resolved feature's. The domain and compute framework gates also backfill: a
+filter feature that declares no domain or compute framework inherits the resolved
+feature's (the FeatureGroup's domain when the feature declares none). Declaring the filter's column as an input is **not** the
 test, and links are not re-checked here (feature resolution already covered them).
 
 `match_feature_group_criteria()` sees the filter feature's own options enriched from the
@@ -254,7 +256,8 @@ declined a filter is still filtered by it once a sibling of its set matched it, 
 included; that is logged as a WARNING. Siblings matching different non-empty filter sets get the
 union attached. Matches of one filter that differ only in the enriched options count as that one
 filter, attached once and not reported, only while they resolve to the same column: a per-sibling
-rename makes them distinct predicates and both attach. To scope a filter, make the deciding
+rename makes them distinct predicates and both attach. A filter feature declared with
+`feature_group=` attaches only within that feature group family. To scope a filter, make the deciding
 option a **group** option: differing group options split the features into separate `FeatureSet`s.
 
 `GlobalFilter.probes` records what every probe matched, empty results included, for debugging.

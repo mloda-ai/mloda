@@ -17,6 +17,7 @@ from mloda.core.abstract_plugins.components.match_hook import call_match_hook
 from mloda.core.abstract_plugins.components.utils import contained_raise_reason
 from mloda.core.filter.filter_type_enum import FilterType
 from mloda.core.filter.single_filter import SingleFilter
+from mloda.core.prepare.identify_feature_group import matches_feature_group_scope
 from mloda.core.abstract_plugins.components.default_options_key import DefaultOptionKeys
 
 
@@ -122,6 +123,7 @@ class GlobalFilter:
         We need to figure out if the filter feature is a part of the feature class and thus can be used as filter.
 
         This is quite similar to identifying the feature itself.
+        The filter feature's feature_group scope is honored via the canonical predicate, as in feature resolution.
         Differences are in details:
             -   we use the options of the feature to enrich the filter feature options,
             -   we set the compute framework of the feature to determine the one of the filter feature,
@@ -137,6 +139,8 @@ class GlobalFilter:
             if not self.criteria(feature_group, _filter, data_access_collection):
                 continue
             if self.domain(_filter, feat.domain, feature_group) is False:
+                continue
+            if self.feature_group_scope(_filter, feature_group) is False:
                 continue
             if self.compute_framework(_filter, feat) is False:
                 continue
@@ -305,6 +309,10 @@ class GlobalFilter:
             return True
 
         return False
+
+    def feature_group_scope(self, filter: SingleFilter, feature_group: type[FeatureGroup]) -> bool:
+        scope = filter.filter_feature.feature_group_scope
+        return scope is None or matches_feature_group_scope(feature_group, scope)
 
     def compute_framework(self, filter: SingleFilter, feat: Feature) -> bool:
         # case that the filter feature has no cf set -> feature defines it

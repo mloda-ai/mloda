@@ -80,7 +80,7 @@ Combine strings and objects:
 | `context_options` | object | No | Context parameters (metadata, doesn't affect resolution) |
 | `propagate_context_keys` | array | No | Context keys that propagate to dependent features |
 | `column_index` | integer | No | Index for multi-output features (adds `~N` suffix) |
-| `feature_group` | string | No | Feature Group class name the feature resolves to (resolution-only scope) |
+| `feature_group` | string | No | Feature Group class name the feature resolves to (scope read by feature resolution and filter matching) |
 
 ## Configuration Approaches
 
@@ -138,7 +138,7 @@ The string matches the named class and its subclasses, preferring the most speci
 
 The scope narrows candidates but does not break ties between them. If the run enables two compute frameworks whose concrete subclasses both match, the family base stays ambiguous and raises, exactly as the bare name does; enable one framework for the run. Two classes with the same name in different modules likewise both match and stay ambiguous, and the root `FeatureGroup` base is rejected.
 
-The scope is resolution-only and excluded from feature identity, so requesting the same name scoped to two different sources in one list raises `ValueError: Duplicate feature setup: <name>` rather than silently dropping one; see [Feature Group resolution errors](troubleshooting/feature-group-resolution-errors.md).
+The scope is read by feature resolution and by filter matching, and stays excluded from feature identity, so requesting the same name scoped to two different sources in one list raises `ValueError: Duplicate feature setup: <name>` rather than silently dropping one; see [Feature Group resolution errors](troubleshooting/feature-group-resolution-errors.md).
 
 `feature_group` is a top-level field next to `name`: writing it inside `options`, `group_options`, or `context_options` is rejected with a validation error.
 

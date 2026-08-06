@@ -137,9 +137,49 @@ class TestSQLITEReader:
         query = SQLITEReader.build_query(feature_set)
 
         columns_part = query[len("select ") :].split(" from")[0]
-        columns = [col.strip() for col in columns_part.split(",")]
+        # Identifiers are double-quoted (quote_ident); strip the quotes to compare names.
+        columns = [col.strip().strip('"') for col in columns_part.split(",")]
 
         assert columns == sorted(names), f"build_query emitted columns {columns}, expected {sorted(names)}"
+
+    def test_build_query_quotes_identifiers_blocks_injection(self, temp_sqlite_db: Any) -> None:
+        """A crafted feature name must not break out of the SELECT identifier position (CWE-89).
+
+        Before quoting, a name like ``name FROM test_table UNION SELECT ...`` interpolated
+        raw into ``select {name} from test_table`` and executed as attacker SQL. With
+        quote_ident it becomes a single (non-existent) double-quoted identifier, so the DB
+        rejects it instead of leaking another table.
+        """
+        # Seed a secret table the injection would try to exfiltrate.
+        conn = sqlite3.connect(temp_sqlite_db)
+        conn.execute("CREATE TABLE IF NOT EXISTS secrets (api_key TEXT)")
+        conn.execute("DELETE FROM secrets")
+        conn.execute("INSERT INTO secrets VALUES ('SUPER_SECRET_KEY')")
+        conn.commit()
+        conn.close()
+
+        malicious = "name FROM test_table UNION SELECT api_key FROM secrets --"
+        feature_set = FeatureSet()
+        feature_set.add(
+            Feature(
+                malicious,
+                options=Options(context={"BaseInputData": (SQLITEReader, {"table_name": "test_table"})}),
+            )
+        )
+
+        query = SQLITEReader.build_query(feature_set)
+
+        # The whole crafted string is confined to one quoted identifier: no bare UNION/-- escapes.
+        assert '"name FROM test_table UNION SELECT api_key FROM secrets --"' in query
+        assert "UNION SELECT api_key" not in query.replace(
+            '"name FROM test_table UNION SELECT api_key FROM secrets --"', ""
+        )
+
+        # Executing it must NOT exfiltrate the secret. The crafted name stays inside the
+        # quoted identifier, so no UNION runs and 'SUPER_SECRET_KEY' never appears.
+        result, _ = SQLITEReader.read_db({"sqlite": temp_sqlite_db}, query)
+        leaked = {cell for row in result for cell in row}
+        assert "SUPER_SECRET_KEY" not in leaked
 
     def test_get_table_missing_options(self) -> None:
         with pytest.raises(ValueError, match="Options were not set."):

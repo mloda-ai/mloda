@@ -11,7 +11,6 @@ from typing import Any, Optional
 
 import pytest
 
-from mloda.core.abstract_plugins.components.default_options_key import DefaultOptionKeys
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.filter.global_filter import GlobalFilter
@@ -165,24 +164,6 @@ def test_the_surviving_none_warning_names_the_value_intake_materializes(caplog: 
     assert _messages(caplog, DWG_KEY) == [
         f"Options are not the same. {DWG_KEY} is different. None (intake fills '{DWG_DEFAULT}') != '{DWG_HOST_VAL}'"
     ]
-
-
-def test_stays_silent_for_a_non_forwarded_key_while_an_ordinary_key_still_warns(
-    caplog: pytest.LogCaptureFixture,
-) -> None:
-    """unify_options can never converge a non-forwarded key, so reporting its divergence is unactionable."""
-    blocked = DefaultOptionKeys.in_features.value
-    with caplog.at_level(logging.WARNING):
-        _emit(
-            None,
-            Options(group={blocked: DWG_HOST_VAL, DWG_KEY: DWG_HOST_VAL}),
-            Options(group={blocked: DWG_FILTER_VAL, DWG_KEY: DWG_FILTER_VAL}),
-        )
-
-    assert _messages(caplog, blocked) == [], "a non-forwarded key must not be reported"
-    assert _messages(caplog, DWG_KEY) == [
-        f"Options are not the same. {DWG_KEY} is different. {DWG_FILTER_VAL} != {DWG_HOST_VAL}"
-    ], "an ordinary diverging key must still warn"
 
 
 def test_the_plain_divergence_message_is_unchanged(caplog: pytest.LogCaptureFixture) -> None:

@@ -144,7 +144,7 @@ class Engine:
         )
 
         if self.global_filter:
-            # Setup re-stamps nested Feature option values that a stored filter feature shares by reference.
+            # Setup still shifts a stored hash: a copied option Feature reaches the host's Feature via child_options.
             self.global_filter.rehash_stored_filters()
 
         execution_planner = ExecutionPlan(self.global_filter, self.api_input_data_collection)

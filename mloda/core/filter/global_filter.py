@@ -1,4 +1,4 @@
-from copy import deepcopy
+from copy import copy, deepcopy
 from datetime import datetime, timezone
 from itertools import chain
 from typing import Any, Optional
@@ -10,7 +10,7 @@ from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser
 from mloda.core.abstract_plugins.components.feature_chainer.property_spec import is_no_default
 from mloda.core.abstract_plugins.components.utils import safe_field
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
-from mloda.core.abstract_plugins.components.options import NON_FORWARDED_KEYS, Options
+from mloda.core.abstract_plugins.components.options import Options, _isolate_forwarded_value
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.match_hook import call_match_hook
@@ -24,6 +24,11 @@ from mloda.core.abstract_plugins.components.default_options_key import DefaultOp
 import logging
 
 logger = logging.getLogger(__name__)
+
+
+def _copy_feature_leaf(value: Any) -> Any:
+    """Detach a Feature leaf from the host; any other leaf stays shared by reference."""
+    return copy(value) if isinstance(value, Feature) else value
 
 
 class GlobalFilter:
@@ -58,8 +63,7 @@ class GlobalFilter:
         self._warned_divergences.clear()
 
     def rehash_stored_filters(self) -> None:
-        """Reinsert stored filters whose hashes went stale: a stored filter feature owns its option containers
-        but shares every value, so a nested Feature value re-stamped later in setup shifts the stored hash."""
+        """Reinsert stored filters whose hashes went stale, so each one is findable in its own set again."""
         # list() forces a rehash; set(value) would reuse the stale stored hashes.
         # Duplicates that became equal again intentionally merge here (same declared filter, same predicate).
         self.collection = {key: set(list(value)) for key, value in self.collection.items()}
@@ -159,18 +163,17 @@ class GlobalFilter:
                 logger.warning(f"Filter feature '{filter.name}' matched no feature group.")
 
     def unify_options(self, feat_options: Options, filter_options: Options) -> Options:
-        """Add the feature's options the filter feature omits, minus NON_FORWARDED_KEYS."""
+        """Add the host options the filter feature omits, never rewriting a declared value. Layered on that repair,
+        a best-effort detachment of each imported value: the container spine is rebuilt and a Feature leaf copied,
+        as far as ``_isolate_forwarded_value`` reaches. ``rehash_stored_filters`` covers the Features it misses."""
+        memo: dict[int, Any] = {}
         # Preserve each key's category so context keys do not leak into group (issue #712).
-        # Imported values stay shared by reference, so a shared Feature value under any key keeps a stored
-        # filter's hash live; the post-planning rehash still covers that.
         for key, value in feat_options.group.items():
-            if key in NON_FORWARDED_KEYS or key in filter_options:
-                continue
-            filter_options.add_to_group(key, value)
+            if key not in filter_options:
+                filter_options.add_to_group(key, _isolate_forwarded_value(value, memo, _copy_feature_leaf))
         for key, value in feat_options.context.items():
-            if key in NON_FORWARDED_KEYS or key in filter_options:
-                continue
-            filter_options.add_to_context(key, value)
+            if key not in filter_options:
+                filter_options.add_to_context(key, _isolate_forwarded_value(value, memo, _copy_feature_leaf))
         return filter_options
 
     def _warn_on_diverging_options(
@@ -178,9 +181,6 @@ class GlobalFilter:
     ) -> None:
         """Report keys the filter feature declares differently, unless intake provably erases the difference."""
         for key, value in chain(feat_options.group.items(), feat_options.context.items()):
-            # unify_options never imports these, so the divergence cannot be acted on.
-            if key in NON_FORWARDED_KEYS:
-                continue
             if key not in filter_options:
                 continue
             declared = filter_options[key]

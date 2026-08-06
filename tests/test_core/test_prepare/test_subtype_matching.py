@@ -171,20 +171,57 @@ def _identify(
     return identify_winner(feature, accessible_plugins)
 
 
+_ROUTING_CASES = [
+    pytest.param(
+        "value__median_subdeclmw",
+        SubDeclMatchWindowFG,
+        "'median' is unsupported on SubDeclMatchFwBeta and must be routed around",
+        id="keyed_literal_subtype",
+    ),
+    pytest.param(
+        "value__ntile_2_subdeclmw",
+        SubDeclMatchWindowFG,
+        "Family 'ntile' is unsupported on SubDeclMatchFwBeta, so 'ntile_2' must be routed around",
+        id="keyed_parametric_instance",
+    ),
+    pytest.param(
+        "value__ntile_2_subdeclmrank",
+        SubDeclMatchRankLikeFG,
+        "'ntile' is only supported on SubDeclMatchFwAlpha",
+        id="rank_like_parametric_instance",
+    ),
+    pytest.param(
+        "subdeclm_price__rows_7_frame",
+        SubDeclMatchFrameSpecFG,
+        "'rows_7' is unsupported on SubDeclMatchFwBeta",
+        id="frame_spec_resolved_literal",
+    ),
+    pytest.param(
+        "value__median_subdeclmcompiled",
+        SubDeclMatchCompiledWindowFG,
+        "'median' is unsupported on SubDeclMatchFwBeta and must be routed around even when PREFIX_PATTERN "
+        "is compiled; the dropped pattern fails open",
+        id="compiled_prefix_pattern",
+    ),
+]
+
+
+@pytest.mark.parametrize(("feature_name", "expected_feature_group", "reason"), _ROUTING_CASES)
+def test_unsupported_subtype_routes_around_incapable_framework(
+    feature_name: str, expected_feature_group: type[FeatureGroup], reason: str
+) -> None:
+    feature = Feature(feature_name)
+    accessible_plugins: FeatureGroupEnvironmentMapping = {
+        expected_feature_group: {SubDeclMatchFwAlpha, SubDeclMatchFwBeta},
+    }
+
+    feature_group_class, compute_frameworks = _identify(feature, accessible_plugins)
+    assert feature_group_class is expected_feature_group
+    assert compute_frameworks == {SubDeclMatchFwAlpha}, f"{reason}; got {compute_frameworks}"
+
+
 class TestMatchTimeIntegration:
     """The declaration is enforced through IdentifyFeatureGroupClass."""
-
-    def test_unsupported_subtype_is_routed_to_capable_framework(self) -> None:
-        feature = Feature("value__median_subdeclmw")
-        accessible_plugins: FeatureGroupEnvironmentMapping = {
-            SubDeclMatchWindowFG: {SubDeclMatchFwAlpha, SubDeclMatchFwBeta},
-        }
-
-        feature_group_class, compute_frameworks = _identify(feature, accessible_plugins)
-        assert feature_group_class is SubDeclMatchWindowFG
-        assert compute_frameworks == {SubDeclMatchFwAlpha}, (
-            f"'median' is unsupported on SubDeclMatchFwBeta and must be routed around; got {compute_frameworks}"
-        )
 
     def test_pin_to_incapable_framework_raises_capability_error(self) -> None:
         feature = Feature("value__median_subdeclmw")
@@ -206,19 +243,6 @@ class TestMatchTimeIntegration:
         assert SubDeclMatchFwBeta.get_class_name() in message
         assert SubDeclMatchFwAlpha.get_class_name() in message
         assert "Did you mean" not in message
-
-    def test_parametric_instance_is_routed_around(self) -> None:
-        feature = Feature("value__ntile_2_subdeclmw")
-        accessible_plugins: FeatureGroupEnvironmentMapping = {
-            SubDeclMatchWindowFG: {SubDeclMatchFwAlpha, SubDeclMatchFwBeta},
-        }
-
-        feature_group_class, compute_frameworks = _identify(feature, accessible_plugins)
-        assert feature_group_class is SubDeclMatchWindowFG
-        assert compute_frameworks == {SubDeclMatchFwAlpha}, (
-            f"Family 'ntile' is unsupported on SubDeclMatchFwBeta, so 'ntile_2' must be routed around; "
-            f"got {compute_frameworks}"
-        )
 
     def test_unknown_subtype_keeps_every_framework(self) -> None:
         assert SubDeclMatchWindowFG.canonical_subtype("zzz") == "zzz"
@@ -260,18 +284,6 @@ class TestRankLikeFamily:
     def test_parametric_instance_canonicalizes_to_family(self) -> None:
         assert SubDeclMatchRankLikeFG.canonical_subtype("ntile_2") == "ntile"
 
-    def test_parametric_instance_routes_only_to_capable_framework(self) -> None:
-        feature = Feature("value__ntile_2_subdeclmrank")
-        accessible_plugins: FeatureGroupEnvironmentMapping = {
-            SubDeclMatchRankLikeFG: {SubDeclMatchFwAlpha, SubDeclMatchFwBeta},
-        }
-
-        feature_group_class, compute_frameworks = _identify(feature, accessible_plugins)
-        assert feature_group_class is SubDeclMatchRankLikeFG
-        assert compute_frameworks == {SubDeclMatchFwAlpha}, (
-            f"'ntile' is only supported on SubDeclMatchFwAlpha; got {compute_frameworks}"
-        )
-
     def test_supported_subtype_runs_on_both_frameworks(self) -> None:
         feature = Feature("value__dense_subdeclmrank")
         accessible_plugins: FeatureGroupEnvironmentMapping = {
@@ -295,18 +307,6 @@ class TestFrameSpecLikeFamily:
         # 'rows_7' is a declared literal; 'rows' looking like a family stem must not swallow it.
         assert SubDeclMatchFrameSpecFG.canonical_subtype("rows_7") == "rows_7"
         assert SubDeclMatchFrameSpecFG.canonical_subtype("rows_9") == "rows"
-
-    def test_routing_honors_supported_narrowing(self) -> None:
-        feature = Feature("subdeclm_price__rows_7_frame")
-        accessible_plugins: FeatureGroupEnvironmentMapping = {
-            SubDeclMatchFrameSpecFG: {SubDeclMatchFwAlpha, SubDeclMatchFwBeta},
-        }
-
-        feature_group_class, compute_frameworks = _identify(feature, accessible_plugins)
-        assert feature_group_class is SubDeclMatchFrameSpecFG
-        assert compute_frameworks == {SubDeclMatchFwAlpha}, (
-            f"'rows_7' is unsupported on SubDeclMatchFwBeta; got {compute_frameworks}"
-        )
 
     def test_supported_literal_runs_on_both_frameworks(self) -> None:
         feature = Feature("subdeclm_price__rows_1_frame")
@@ -369,19 +369,6 @@ class TestCompiledPrefixPatternParity:
         assert compiled_subtype == string_subtype, (
             f"A compiled PREFIX_PATTERN must resolve the subtype like the string form '{string_subtype}'; "
             f"the guard drops the re.Pattern and returns {compiled_subtype}."
-        )
-
-    def test_unsupported_subtype_routes_around_incapable_framework(self) -> None:
-        feature = Feature("value__median_subdeclmcompiled")
-        accessible_plugins: FeatureGroupEnvironmentMapping = {
-            SubDeclMatchCompiledWindowFG: {SubDeclMatchFwAlpha, SubDeclMatchFwBeta},
-        }
-
-        feature_group_class, compute_frameworks = _identify(feature, accessible_plugins)
-        assert feature_group_class is SubDeclMatchCompiledWindowFG
-        assert compute_frameworks == {SubDeclMatchFwAlpha}, (
-            f"'median' is unsupported on SubDeclMatchFwBeta and must be routed around even when PREFIX_PATTERN "
-            f"is compiled; the dropped pattern fails open and keeps {compute_frameworks}"
         )
 
     def test_supported_subtype_runs_on_both_frameworks(self) -> None:

@@ -46,14 +46,16 @@ class ConflictingFeatureGroupB(StubFeatureGroup):
 class TestIdentifyFeatureGroupErrorMessageFormat:
     """Tests for the error message format when multiple feature groups are found."""
 
-    def test_error_message_contains_formatted_class_names(self) -> None:
-        """Test that the ValueError message contains formatted class names.
-
-        When multiple feature groups match the same feature, the error message
-        should contain formatted class names like:
-          - ConflictingFeatureGroupA (module.path) [domain: domain_a]
-          - ConflictingFeatureGroupB (module.path) [domain: domain_b]
-        """
+    @pytest.mark.parametrize(
+        "expected_fragment",
+        [
+            pytest.param("  - ConflictingFeatureGroupA", id="formatted_class_name"),
+            pytest.param("(tests.test_core.test_prepare.test_identify_feature_group_error_message)", id="module_path"),
+            pytest.param("'conflicting_test_feature'", id="feature_name"),
+        ],
+    )
+    def test_error_message_contains(self, expected_fragment: str) -> None:
+        """Each candidate renders as 'ClassName (module.path)' and the message names the failing feature."""
         feature = Feature("conflicting_test_feature")
 
         accessible_plugins: FeatureGroupEnvironmentMapping = {
@@ -71,36 +73,8 @@ class TestIdentifyFeatureGroupErrorMessageFormat:
 
         error_message = str(exc_info.value)
 
-        assert "  - ConflictingFeatureGroupA" in error_message, (
-            f"Error message should contain formatted class name '  - ConflictingFeatureGroupA', "
-            f"but got: {error_message}"
-        )
-
-    def test_error_message_contains_module_path_in_parentheses(self) -> None:
-        """Test that the error message contains module path in parentheses.
-
-        Expected format includes module path like:
-          - ClassName (tests.test_core.test_prepare.test_identify_feature_group_error_message)
-        """
-        feature = Feature("conflicting_test_feature")
-
-        accessible_plugins: FeatureGroupEnvironmentMapping = {
-            ConflictingFeatureGroupA: {MockComputeFramework},
-            ConflictingFeatureGroupB: {MockComputeFramework},
-        }
-
-        with pytest.raises(ValueError) as exc_info:
-            evaluate_or_raise(
-                feature=feature,
-                accessible_plugins=accessible_plugins,
-                links=None,
-                data_access_collection=None,
-            )
-
-        error_message = str(exc_info.value)
-
-        assert "(tests.test_core.test_prepare.test_identify_feature_group_error_message)" in error_message, (
-            f"Error message should contain module path in parentheses, but got: {error_message}"
+        assert expected_fragment in error_message, (
+            f"Error message should contain '{expected_fragment}', but got: {error_message}"
         )
 
     def test_error_message_contains_domain_info(self) -> None:
@@ -160,29 +134,6 @@ class TestIdentifyFeatureGroupErrorMessageFormat:
 
         assert "{<class" not in error_message, (
             f"Error message should NOT contain raw class representation '{{<class', but got: {error_message}"
-        )
-
-    def test_error_message_contains_feature_name(self) -> None:
-        """Test that the error message mentions the feature name."""
-        feature = Feature("conflicting_test_feature")
-
-        accessible_plugins: FeatureGroupEnvironmentMapping = {
-            ConflictingFeatureGroupA: {MockComputeFramework},
-            ConflictingFeatureGroupB: {MockComputeFramework},
-        }
-
-        with pytest.raises(ValueError) as exc_info:
-            evaluate_or_raise(
-                feature=feature,
-                accessible_plugins=accessible_plugins,
-                links=None,
-                data_access_collection=None,
-            )
-
-        error_message = str(exc_info.value)
-
-        assert "'conflicting_test_feature'" in error_message, (
-            f"Error message should contain feature name in quotes, but got: {error_message}"
         )
 
 

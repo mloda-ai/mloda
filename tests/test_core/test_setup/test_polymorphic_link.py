@@ -14,6 +14,8 @@ Expected behavior after implementation:
 
 from typing import Any, Optional, cast
 
+import pytest
+
 from mloda.provider import FeatureGroup
 from mloda.core.prepare.graph.graph import Graph
 from mloda.user import FeatureName
@@ -99,39 +101,28 @@ class ChildGroupA(ParentGroupA):
 class TestLinkMatchesPolymorphic:
     """Unit tests for Link.matches() polymorphic behavior."""
 
-    def test_exact_match(self) -> None:
-        """Test that exact class match still works."""
-        # Link defined with ConcreteGroupA and ConcreteGroupB
+    @pytest.mark.parametrize(
+        ("link_left", "link_right", "queried_left", "queried_right"),
+        [
+            pytest.param(ConcreteGroupA, ConcreteGroupB, ConcreteGroupA, ConcreteGroupB, id="exact"),
+            pytest.param(BaseGroupA, BaseGroupB, ConcreteGroupA, ConcreteGroupB, id="subclass_both_sides"),
+            pytest.param(BaseGroupA, BaseGroupB, BaseGroupA, BaseGroupB, id="base_class_itself"),
+            pytest.param(BaseGroupA, ConcreteGroupB, ConcreteGroupA, ConcreteGroupB, id="one_base_one_exact"),
+        ],
+    )
+    def test_matches_declared_or_subclassed_groups(
+        self,
+        link_left: type[FeatureGroup],
+        link_right: type[FeatureGroup],
+        queried_left: type[FeatureGroup],
+        queried_right: type[FeatureGroup],
+    ) -> None:
         link = Link.inner(
-            JoinSpec(ConcreteGroupA, Index(("id",))),
-            JoinSpec(ConcreteGroupB, Index(("id",))),
+            JoinSpec(link_left, Index(("id",))),
+            JoinSpec(link_right, Index(("id",))),
         )
 
-        # Should match the exact same classes
-        assert link.matches(ConcreteGroupA, ConcreteGroupB) is True
-
-    def test_polymorphic_match_subclass(self) -> None:
-        """Test that link with base class matches concrete subclass."""
-        # Link defined with BASE classes
-        link = Link.inner(
-            JoinSpec(BaseGroupA, Index(("id",))),
-            JoinSpec(BaseGroupB, Index(("id",))),
-        )
-
-        # Should match when we provide CONCRETE subclasses
-        # This is the KEY polymorphic behavior: base type accepts subtype
-        assert link.matches(ConcreteGroupA, ConcreteGroupB) is True
-
-    def test_polymorphic_match_base_class_itself(self) -> None:
-        """Test that link with base class matches the base class itself."""
-        # Link defined with base classes
-        link = Link.inner(
-            JoinSpec(BaseGroupA, Index(("id",))),
-            JoinSpec(BaseGroupB, Index(("id",))),
-        )
-
-        # Should match the base classes themselves (exact match is also valid)
-        assert link.matches(BaseGroupA, BaseGroupB) is True
+        assert link.matches(queried_left, queried_right) is True
 
     def test_no_match_wrong_hierarchy(self) -> None:
         """Test that link does NOT match unrelated classes."""
@@ -181,18 +172,6 @@ class TestLinkMatchesPolymorphic:
         # Left side does NOT match (UnrelatedGroup is not subclass of BaseGroupA)
         # Right side matches (ConcreteGroupB is subclass of BaseGroupB)
         assert link.matches(UnrelatedGroup, ConcreteGroupB) is False
-
-    def test_polymorphic_match_mixed(self) -> None:
-        """Test polymorphic match with one exact match and one subclass match."""
-        # Link defined with one base and one concrete
-        link = Link.inner(
-            JoinSpec(BaseGroupA, Index(("id",))),
-            JoinSpec(ConcreteGroupB, Index(("id",))),
-        )
-
-        # Left: subclass of BaseGroupA (polymorphic match)
-        # Right: exact match with ConcreteGroupB
-        assert link.matches(ConcreteGroupA, ConcreteGroupB) is True
 
     def test_different_join_types_work_same(self) -> None:
         """Test that polymorphic matching works for all join types."""

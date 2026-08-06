@@ -8,6 +8,7 @@ These tests MUST fail initially because JoinSpec does not exist yet.
 They will pass once JoinSpec is implemented as a frozen dataclass.
 """
 
+from collections.abc import Callable
 from dataclasses import FrozenInstanceError
 from typing import Any, Optional
 
@@ -17,6 +18,7 @@ from mloda.provider import FeatureGroup
 from mloda.user import FeatureName
 from mloda.user import Index
 from mloda.user import JoinSpec  # This import will fail
+from mloda.user import JoinType, Link
 from mloda.user import Options
 
 
@@ -329,10 +331,20 @@ class TestLinkWithJoinSpec:
         assert link.right_index is right_idx
         assert link.right_index == right_idx
 
-    def test_link_factory_method_inner_with_join_spec(self) -> None:
-        """Test Link.inner factory method works with JoinSpec objects."""
-        from mloda.user import Link, JoinType
-
+    @pytest.mark.parametrize(
+        ("factory", "expected_jointype"),
+        [
+            pytest.param(Link.inner, JoinType.INNER, id="inner"),
+            pytest.param(Link.left, JoinType.LEFT, id="left"),
+            pytest.param(Link.right, JoinType.RIGHT, id="right"),
+            pytest.param(Link.outer, JoinType.OUTER, id="outer"),
+            pytest.param(Link.append, JoinType.APPEND, id="append"),
+            pytest.param(Link.union, JoinType.UNION, id="union"),
+        ],
+    )
+    def test_link_factory_method_with_join_spec(
+        self, factory: Callable[..., Link], expected_jointype: JoinType
+    ) -> None:
         left_idx = Index(("id",))
         right_idx = Index(("id",))
 
@@ -340,112 +352,12 @@ class TestLinkWithJoinSpec:
         right_spec = JoinSpec(feature_group=AnotherMockFeatureGroup, index=right_idx)
 
         # Factory method should accept JoinSpec objects
-        link = Link.inner(
+        link = factory(
             left=left_spec,
             right=right_spec,
         )
 
-        assert link.jointype == JoinType.INNER
-        assert link.left_feature_group is MockFeatureGroup
-        assert link.right_feature_group is AnotherMockFeatureGroup
-
-    def test_link_factory_method_left_with_join_spec(self) -> None:
-        """Test Link.left factory method works with JoinSpec objects."""
-        from mloda.user import Link, JoinType
-
-        left_idx = Index(("id",))
-        right_idx = Index(("id",))
-
-        left_spec = JoinSpec(feature_group=MockFeatureGroup, index=left_idx)
-        right_spec = JoinSpec(feature_group=AnotherMockFeatureGroup, index=right_idx)
-
-        # Factory method should accept JoinSpec objects
-        link = Link.left(
-            left=left_spec,
-            right=right_spec,
-        )
-
-        assert link.jointype == JoinType.LEFT
-        assert link.left_feature_group is MockFeatureGroup
-        assert link.right_feature_group is AnotherMockFeatureGroup
-
-    def test_link_factory_method_right_with_join_spec(self) -> None:
-        """Test Link.right factory method works with JoinSpec objects."""
-        from mloda.user import Link, JoinType
-
-        left_idx = Index(("id",))
-        right_idx = Index(("id",))
-
-        left_spec = JoinSpec(feature_group=MockFeatureGroup, index=left_idx)
-        right_spec = JoinSpec(feature_group=AnotherMockFeatureGroup, index=right_idx)
-
-        # Factory method should accept JoinSpec objects
-        link = Link.right(
-            left=left_spec,
-            right=right_spec,
-        )
-
-        assert link.jointype == JoinType.RIGHT
-        assert link.left_feature_group is MockFeatureGroup
-        assert link.right_feature_group is AnotherMockFeatureGroup
-
-    def test_link_factory_method_outer_with_join_spec(self) -> None:
-        """Test Link.outer factory method works with JoinSpec objects."""
-        from mloda.user import Link, JoinType
-
-        left_idx = Index(("id",))
-        right_idx = Index(("id",))
-
-        left_spec = JoinSpec(feature_group=MockFeatureGroup, index=left_idx)
-        right_spec = JoinSpec(feature_group=AnotherMockFeatureGroup, index=right_idx)
-
-        # Factory method should accept JoinSpec objects
-        link = Link.outer(
-            left=left_spec,
-            right=right_spec,
-        )
-
-        assert link.jointype == JoinType.OUTER
-        assert link.left_feature_group is MockFeatureGroup
-        assert link.right_feature_group is AnotherMockFeatureGroup
-
-    def test_link_factory_method_append_with_join_spec(self) -> None:
-        """Test Link.append factory method works with JoinSpec objects."""
-        from mloda.user import Link, JoinType
-
-        left_idx = Index(("id",))
-        right_idx = Index(("id",))
-
-        left_spec = JoinSpec(feature_group=MockFeatureGroup, index=left_idx)
-        right_spec = JoinSpec(feature_group=AnotherMockFeatureGroup, index=right_idx)
-
-        # Factory method should accept JoinSpec objects
-        link = Link.append(
-            left=left_spec,
-            right=right_spec,
-        )
-
-        assert link.jointype == JoinType.APPEND
-        assert link.left_feature_group is MockFeatureGroup
-        assert link.right_feature_group is AnotherMockFeatureGroup
-
-    def test_link_factory_method_union_with_join_spec(self) -> None:
-        """Test Link.union factory method works with JoinSpec objects."""
-        from mloda.user import Link, JoinType
-
-        left_idx = Index(("id",))
-        right_idx = Index(("id",))
-
-        left_spec = JoinSpec(feature_group=MockFeatureGroup, index=left_idx)
-        right_spec = JoinSpec(feature_group=AnotherMockFeatureGroup, index=right_idx)
-
-        # Factory method should accept JoinSpec objects
-        link = Link.union(
-            left=left_spec,
-            right=right_spec,
-        )
-
-        assert link.jointype == JoinType.UNION
+        assert link.jointype == expected_jointype
         assert link.left_feature_group is MockFeatureGroup
         assert link.right_feature_group is AnotherMockFeatureGroup
 

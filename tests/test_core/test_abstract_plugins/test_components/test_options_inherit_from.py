@@ -1681,6 +1681,30 @@ class TestNonForwardedKeysConstant:
         assert isinstance(NON_FORWARDED_KEYS, frozenset)
         assert DefaultOptionKeys.in_features in NON_FORWARDED_KEYS
 
+    def test_constant_holds_plain_string_values_not_enum_members(self) -> None:
+        """The constant stores the key STRING, so membership does not depend on the
+        DefaultOptionKeys str mixin supplying str.__hash__ for enum members."""
+        from mloda.core.abstract_plugins.components.options import NON_FORWARDED_KEYS
+
+        assert all(type(key) is str for key in NON_FORWARDED_KEYS)
+        assert DefaultOptionKeys.in_features.value in NON_FORWARDED_KEYS
+
+    def test_in_features_literal_string_key_never_forwarded(self) -> None:
+        """Options keyed with the literal string form are still excluded: this would fail
+        if the constant and the plain-string dict-key form ever diverged."""
+        consumer = Options(
+            group={"in_features": "consumer_source", "kg_backend": "neo4j"},
+            context={},
+        )
+        child = Options()
+
+        child.inherit_from(consumer)
+        child.inherit_from(consumer, forward_group=frozenset({"in_features"}))
+
+        assert "in_features" not in child.group
+        assert "in_features" not in child.context
+        assert child.group["kg_backend"] == "neo4j"
+
     def test_in_features_never_forwarded_regression_pin(self) -> None:
         """Regression pin: in_features never flows through any inherit_from flow."""
         consumer = Options(

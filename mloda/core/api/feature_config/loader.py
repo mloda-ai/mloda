@@ -60,7 +60,11 @@ def process_nested_features(options: dict[str, Any]) -> dict[str, Any]:
     """
     processed: dict[str, Any] = {}
     for key, value in options.items():
-        if key == "in_features" and isinstance(value, dict):
+        # str() on both sides: the enum value is the option key, so comparing
+        # through it rather than a literal keeps this branch matching if that
+        # value is renamed. Not `key == DefaultOptionKeys.in_features`, which
+        # holds only while DefaultOptionKeys mixes in str (see #1063).
+        if str(key) == str(DefaultOptionKeys.in_features) and isinstance(value, dict):
             processed[key] = build_nested_feature(value)
         elif isinstance(value, dict):
             # Recursively process nested dicts

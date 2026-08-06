@@ -73,7 +73,29 @@ def _store_matches(global_filter: GlobalFilter, host: Feature) -> set[SingleFilt
 
 def test_the_parametrized_key_list_is_populated() -> None:
     """Guard: an emptied NON_FORWARDED_KEYS would silently skip every case below instead of failing it."""
-    assert DefaultOptionKeys.in_features in NON_FORWARDED_KEYS
+    assert DefaultOptionKeys.in_features.value in NON_FORWARDED_KEYS
+
+
+def test_unify_options_skips_an_enum_member_keyed_group_key() -> None:
+    """Production option dicts key in_features with the enum member, not with the plain string."""
+    unified = GlobalFilter().unify_options(
+        Options(group={DefaultOptionKeys.in_features: NFK_HOST_VALUE, NFK_ORDINARY: 1}),
+        Options(),
+    )
+
+    assert DefaultOptionKeys.in_features not in unified, f"the enum-member key must not be imported: {unified}"
+    assert unified.group == {NFK_ORDINARY: 1}, f"every other host group key must still arrive: {unified.group}"
+
+
+def test_unify_options_skips_an_enum_member_keyed_context_key() -> None:
+    """The context import excludes the enum-member key just as the group import does."""
+    unified = GlobalFilter().unify_options(
+        Options(context={DefaultOptionKeys.in_features: NFK_HOST_VALUE, NFK_ORDINARY: 1}),
+        Options(),
+    )
+
+    assert DefaultOptionKeys.in_features not in unified, f"the enum-member key must not be imported: {unified}"
+    assert unified.context == {NFK_ORDINARY: 1}, f"every other host context key must still arrive: {unified.context}"
 
 
 @pytest.mark.parametrize("blocked", _BLOCKED_KEYS)

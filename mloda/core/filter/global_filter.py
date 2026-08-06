@@ -10,7 +10,7 @@ from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser
 from mloda.core.abstract_plugins.components.feature_chainer.property_spec import is_no_default
 from mloda.core.abstract_plugins.components.utils import safe_field
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
-from mloda.core.abstract_plugins.components.options import NON_FORWARDED_KEYS, Options
+from mloda.core.abstract_plugins.components.options import Options, is_non_forwarded_key
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.match_hook import call_match_hook
@@ -164,11 +164,11 @@ class GlobalFilter:
         # Imported values stay shared by reference, so a shared Feature value under any key keeps a stored
         # filter's hash live; the post-planning rehash still covers that.
         for key, value in feat_options.group.items():
-            if key in NON_FORWARDED_KEYS or key in filter_options:
+            if is_non_forwarded_key(key) or key in filter_options:
                 continue
             filter_options.add_to_group(key, value)
         for key, value in feat_options.context.items():
-            if key in NON_FORWARDED_KEYS or key in filter_options:
+            if is_non_forwarded_key(key) or key in filter_options:
                 continue
             filter_options.add_to_context(key, value)
         return filter_options
@@ -179,7 +179,7 @@ class GlobalFilter:
         """Report keys the filter feature declares differently, unless intake provably erases the difference."""
         for key, value in chain(feat_options.group.items(), feat_options.context.items()):
             # unify_options never imports these, so the divergence cannot be acted on.
-            if key in NON_FORWARDED_KEYS:
+            if is_non_forwarded_key(key):
                 continue
             if key not in filter_options:
                 continue

@@ -16,6 +16,11 @@ logger = logging.getLogger(__name__)
 NON_FORWARDED_KEYS: frozenset[str] = frozenset({DefaultOptionKeys.in_features.value})
 
 
+def is_non_forwarded_key(key: Any) -> bool:
+    """Match a never-forwarded key in either its string or its DefaultOptionKeys form."""
+    return str(key) in NON_FORWARDED_KEYS
+
+
 def _safe_deepcopy(value: Any, memo: dict[int, Any]) -> Any:
     """Deep-copy a single value, falling back to sharing the value by reference when it cannot be
     deep-copied for ANY reason (e.g. unpicklable objects, or values whose deepcopy raises under some
@@ -367,7 +372,6 @@ class Options:
 
         memo: dict[int, Any] = {}
 
-        excluded = NON_FORWARDED_KEYS
         validate_forwarding_directives(forward_group, forward_group_exclude)
 
         if forward_group is False:
@@ -386,7 +390,7 @@ class Options:
 
         inherited: set[str] = set()
         for key in sorted(group_keys):
-            if key in excluded or key not in consumer.group:
+            if is_non_forwarded_key(key) or key not in consumer.group:
                 continue
             if key in new_context and new_context[key] != consumer.group[key]:
                 owner_clause = f" on input feature '{owner}'" if owner is not None else " on the input feature"
@@ -411,7 +415,7 @@ class Options:
 
         inherited_context: set[str] = set()
         for key in inherit_context_keys:
-            if key in excluded or key not in consumer.context:
+            if is_non_forwarded_key(key) or key not in consumer.context:
                 continue
             value = _isolate_forwarded_value(consumer.context[key], memo)
             OptionsValidator.validate_can_add_to_context(key, value, new_group, new_context)
@@ -420,7 +424,9 @@ class Options:
 
         if consumer.propagate_context_keys and forward_group is not False:
             propagating = {
-                k: v for k, v in consumer.context.items() if k in consumer.propagate_context_keys and k not in excluded
+                k: v
+                for k, v in consumer.context.items()
+                if k in consumer.propagate_context_keys and not is_non_forwarded_key(k)
             }
 
             OptionsValidator.validate_no_context_group_conflicts(set(propagating.keys()), set(new_group.keys()))

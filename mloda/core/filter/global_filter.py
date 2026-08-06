@@ -13,7 +13,7 @@ from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.components.options import Options, _isolate_forwarded_value
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.abstract_plugins.components.feature import Feature
-from mloda.core.abstract_plugins.components.match_hook import call_match_hook
+from mloda.core.abstract_plugins.components.match_hook import probe_match_criteria
 from mloda.core.abstract_plugins.components.utils import contained_raise_reason
 from mloda.core.filter.filter_type_enum import FilterType
 from mloda.core.filter.single_filter import SingleFilter
@@ -41,7 +41,7 @@ class GlobalFilter:
            names and the uuid to the used single filter. This is used to track which features are associated with which filters for a specific feature group.
            This can be used to check after the fact if a feature is a filter feature for a specific feature group
            e.g. for debugging, logging or quality checks.
-        3. `dropped_filters`: maps (feature group, filter feature name) to the reason a contained raise dropped it.
+        3. `dropped_filters`: maps (feature group, filter feature name) to the reason a matcher defect or a typed decline dropped it; a defect's reason outranks a stored decline's.
         4. `probes`: maps (feature group, feature name, feature uuid) to the filters that probe matched, empty included.
         5. `matched_filter_uuids`: uuids of filters that cleared every gate at least once this setup.
 
@@ -56,6 +56,8 @@ class GlobalFilter:
         self._warned_divergences: set[str] = set()
         # Own state, not dropped_filters: a falsy non-bool is an ordinary non-match, never a recorded drop.
         self._reported_falsy_matches: set[tuple[type[FeatureGroup], str]] = set()
+        # WARNING dedupe for defect drops; the ledger itself no longer decides first-ness.
+        self._warned_drops: set[tuple[type[FeatureGroup], str]] = set()
 
     def reset_match_tracking(self) -> None:
         """Match and divergence-warning tracking is scoped to one engine setup."""
@@ -237,28 +239,50 @@ class GlobalFilter:
     ) -> bool:
         """A raising match hook is a non-match for this filter only, mirroring the resolution seam (#845).
 
-        The drop is recorded in `dropped_filters` and kept as text, never an exception object whose traceback
-        would pin the plugin class. The level ignores the exception type, unlike the seam, because nothing else
-        surfaces the reason here. No option rollback: the hook sees a per-match deepcopy.
+        The shared probe owns the window and the containment; this seam keeps the filter policy: no option
+        rollback (the hook sees a per-match deepcopy) and a defect outranks a harvested decline. A matcher
+        defect warns whatever its exception type, unlike the resolution seam, because nothing else surfaces
+        it here. A typed decline can flip an attachment verdict, since the default hook's owned-reader veto
+        gates under the probe's window.
 
         Mark-or-contain policy: see call_match_hook.
         """
-        outcome = call_match_hook(
-            feature_group, filter.filter_feature.name, filter.filter_feature.options, data_access_collection
+        probe = probe_match_criteria(
+            feature_group,
+            filter.filter_feature.name,
+            filter.filter_feature.options,
+            data_access_collection,
         )
-        if outcome.error is not None:
-            reason = contained_raise_reason(outcome.error)
+        if probe.matcher_error is not None:
+            reason = contained_raise_reason(probe.matcher_error)
             self._record_dropped_filter(feature_group, str(filter.filter_feature.name), reason)
             return False
-        if not outcome.matched and not isinstance(outcome.returned, bool):
-            self._report_falsy_match(feature_group, str(filter.filter_feature.name), outcome.returned)
-        return outcome.matched
+        # value_rejection is excluded: its returned is the containment's synthetic None, not the hook's.
+        if probe.value_rejection is None and not probe.matched and not isinstance(probe.returned, bool):
+            self._report_falsy_match(feature_group, str(filter.filter_feature.name), probe.returned)
+        if probe.rejection is not None:
+            self._record_rejected_filter(feature_group, str(filter.filter_feature.name), probe.rejection.reason)
+            return False
+        return probe.matched
+
+    def _record_rejected_filter(self, feature_group: type[FeatureGroup], filter_feature_name: str, reason: str) -> None:
+        """Record a typed decline in the same ledger at DEBUG: a deliberate rejection is a near-miss, not a defect."""
+        self.dropped_filters.setdefault((feature_group, filter_feature_name), reason)
+        logger.debug(
+            "%s rejected filter feature '%s': %s; dropping that filter for this feature group.",
+            # A plugin-owned read past the hook call's containment, so it degrades instead of escaping the seam.
+            safe_field(lambda: feature_group.get_class_name(), "<unnamed feature group>"),
+            filter_feature_name,
+            reason,
+        )
 
     def _record_dropped_filter(self, feature_group: type[FeatureGroup], filter_feature_name: str, reason: str) -> None:
-        """Record the drop: WARNING on a key's first drop, DEBUG after, as the hook is probed per served feature."""
+        """Record the drop: defect drops warn once per key and take the key from a stored decline."""
         key = (feature_group, filter_feature_name)
-        first = key not in self.dropped_filters
-        self.dropped_filters.setdefault(key, reason)
+        first = key not in self._warned_drops
+        self._warned_drops.add(key)
+        if first:
+            self.dropped_filters[key] = reason
         logger.log(
             logging.WARNING if first else logging.DEBUG,
             "%s %s while matching filter feature '%s'; dropping that filter for this feature group.",

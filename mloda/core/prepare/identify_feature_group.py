@@ -25,15 +25,12 @@ from mloda.core.prepare.resolution_failure_renderer import (
 )
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.abstract_plugins.components.domain import Domain
-from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser import PropertyValueRejection
 from mloda.core.abstract_plugins.components.match_rejection import (
     INPUT_DATA_OWNED_STAGE,
     INPUT_DATA_STAGE,
-    MATCH_REJECTION_REASONS,
     MatchRejection,
-    record_match_rejection,
 )
-from mloda.core.abstract_plugins.components.match_hook import call_match_hook
+from mloda.core.abstract_plugins.components.match_hook import probe_match_criteria
 from mloda.core.abstract_plugins.components.utils import (
     as_str,
     contained_raise_log_level,
@@ -596,54 +593,47 @@ class IdentifyFeatureGroupClass:
     ) -> bool:
         """A raise out of the match hook is a non-match for that candidate only, not a run-wide abort (#845).
 
-        A contained raise is kept as text, never as an exception object whose traceback would pin the plugin
-        class. The recording runs inside the per-candidate rejection window, reset in the finally, which keys
-        reasons by candidate class.
+        The shared probe owns the per-candidate window and the containment; this seam keeps only its own
+        policy: the option rollback on a contained raise and the per-candidate recording, never as an
+        exception object whose traceback would pin the plugin class.
 
         Mark-or-contain policy: see call_match_hook.
         """
-        token = MATCH_REJECTION_REASONS.set({})
         # Shallow copies, taken per candidate so an earlier match's write survives a later candidate's raise.
         group_before = dict(feature.options.group)
         context_before = dict(feature.options.context)
-        try:
-            outcome = call_match_hook(feature_group, feature.name, feature.options, data_access_collection)
-            exc = outcome.error
-            if exc is not None:
-                # Only the contained branch rolls back: a matcher that returns True keeps its write,
-                # which is how a matched reader is linked through mloda.
-                feature.options.group.clear()
-                feature.options.group.update(group_before)
-                feature.options.context.clear()
-                feature.options.context.update(context_before)
-                if isinstance(exc, PropertyValueRejection):
-                    # Text, not exc: a retained record must not pin the traceback, its frames and the plugin class.
-                    logger.debug(
-                        "%s rejected an option value while matching '%s': %s",
-                        feature_group.get_class_name(),
-                        feature.name,
-                        safe_field(functools.partial(str, exc), type(exc).__name__),
-                    )
-                    record_match_rejection(feature_group.get_class_name(), str(exc))
-                else:
-                    reason = contained_raise_reason(exc)
-                    logger.log(
-                        contained_raise_log_level(exc),
-                        "%s %s while matching '%s'; treating it as a non-match.",
-                        feature_group.get_class_name(),
-                        reason,
-                        feature.name,
-                    )
-                    self._matcher_errors[feature_group] = reason
-            # Inside the try, where outcome is bound: only the reset belongs on a path the body never reached.
-            recorded = MATCH_REJECTION_REASONS.get() or {}
-            if not outcome.matched and recorded:
-                # Everything recorded during this candidate's window belongs to this candidate, whatever
-                # owner name an inner delegation stamped; first recorded reason wins (insertion order).
-                self._match_rejections[feature_group] = next(iter(recorded.values()))
-            return outcome.matched
-        finally:
-            MATCH_REJECTION_REASONS.reset(token)
+        probe = probe_match_criteria(feature_group, feature.name, feature.options, data_access_collection)
+        if probe.matcher_error is not None or probe.value_rejection is not None:
+            # Only the contained branch rolls back: a matcher that returns True keeps its write,
+            # which is how a matched reader is linked through mloda.
+            feature.options.group.clear()
+            feature.options.group.update(group_before)
+            feature.options.context.clear()
+            feature.options.context.update(context_before)
+        if probe.value_rejection is not None:
+            exc = probe.value_rejection
+            # Text, not exc: a retained record must not pin the traceback, its frames and the plugin class.
+            logger.debug(
+                "%s rejected an option value while matching '%s': %s",
+                feature_group.get_class_name(),
+                feature.name,
+                safe_field(functools.partial(str, exc), type(exc).__name__),
+            )
+        elif probe.matcher_error is not None:
+            reason = contained_raise_reason(probe.matcher_error)
+            logger.log(
+                contained_raise_log_level(probe.matcher_error),
+                "%s %s while matching '%s'; treating it as a non-match.",
+                feature_group.get_class_name(),
+                reason,
+                feature.name,
+            )
+            self._matcher_errors[feature_group] = reason
+        if not probe.matched and probe.rejection is not None:
+            # Everything recorded during this candidate's window belongs to this candidate, whatever
+            # owner name an inner delegation stamped.
+            self._match_rejections[feature_group] = probe.rejection
+        return probe.matched
 
     def _filter_feature_group_by_domain(self, feature_group: type[FeatureGroup], feature: Feature) -> bool:
         """Decision-side domain gate: unguarded, so a raising get_domain() still fails the engine loudly."""

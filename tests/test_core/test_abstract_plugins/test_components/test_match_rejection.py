@@ -21,13 +21,12 @@ from typing import Any
 import pytest
 
 from mloda import provider
-from mloda.core.abstract_plugins.components import match_rejection
+from mloda.core.abstract_plugins.components import match_hook, match_rejection
 from mloda.core.abstract_plugins.components.feature_chainer import feature_chain_parser
 from mloda.core.abstract_plugins.components.match_rejection import (
     MATCH_REJECTION_REASONS,
     record_match_rejection,
 )
-from mloda.core.prepare import identify_feature_group
 from mloda.provider import record_match_rejection as provider_record_match_rejection
 
 
@@ -57,8 +56,8 @@ class TestNeutralModuleOwnsTheChannel:
         assert getattr(feature_chain_parser, "record_match_rejection") is match_rejection.record_match_rejection
 
     def test_the_engine_harvests_through_the_new_home(self) -> None:
-        """identify_feature_group uses the neutral module's contextvar object, so the harvest still works."""
-        assert getattr(identify_feature_group, "MATCH_REJECTION_REASONS") is match_rejection.MATCH_REJECTION_REASONS
+        """The shared probe both seams read uses the neutral module's contextvar object, so the harvest works."""
+        assert getattr(match_hook, "MATCH_REJECTION_REASONS") is match_rejection.MATCH_REJECTION_REASONS
 
 
 class TestRecording:

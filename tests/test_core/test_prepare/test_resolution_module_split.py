@@ -53,6 +53,7 @@ RENDERER_NAMES = (
 # What stays in the matcher module, with its definition, and the only names a call site may import from it.
 MATCHER_KEPT_NAMES = (
     "matches_feature_group_scope",
+    "validate_single_framework_pin",
     "FeatureResolutionError",
     "ComputeFrameworkPinError",
     "IdentifyFeatureGroupClass",

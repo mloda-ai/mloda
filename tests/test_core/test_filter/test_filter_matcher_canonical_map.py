@@ -43,6 +43,7 @@ MISSING_SCOPE_728 = "CmapNoSuchScope728"  # a scope string naming no accessible 
 SCOPE_REASON = "outside the requested feature group scope"
 PIN_MESSAGE_PART = "more than one compute framework"
 CAPABILITY_REASON_PART = "supports_compute_framework rejected"
+CAPABILITY_RAISE_TEXT = "cmap capability hook raise 728"  # carried by the raising hook's RuntimeError
 LINKS_REASON = "no index column matches the run's links"
 
 GROUP_DOMAIN_728 = "cmap_group_domain_728"  # declared by the group-domain probe
@@ -67,6 +68,7 @@ T = TypeVar("T")
 # A factory handing back the throwaway class and a reader for its call counter, so no drive types the class.
 _CounterFactory = Callable[[], tuple[type[FeatureGroup], Callable[[], int]]]
 _ObservedOptions = tuple[tuple[tuple[str, str], ...], ...]
+_RecorderFactory = Callable[[], tuple[type[FeatureGroup], Callable[[], _ObservedOptions]]]
 
 # Scope probes hand the driver one class or a (base, child) pair; picks receive the uniform tuple form.
 _ScopeClasses = tuple[type[FeatureGroup], ...]
@@ -180,6 +182,129 @@ def _make_capability_reject_fg() -> tuple[type[FeatureGroup], Callable[[], int]]
             return False
 
     return CapabilityRejectMatcherFG728, lambda: CapabilityRejectMatcherFG728.calls
+
+
+def _make_capability_accept_fg() -> tuple[type[FeatureGroup], Callable[[], int]]:
+    """A throwaway matcher whose capability hook counts its calls and accepts every framework."""
+    gc.collect()
+
+    class CapabilityAcceptMatcherFG728(FeatureGroup):
+        calls: ClassVar[int] = 0
+
+        @classmethod
+        def feature_names_supported(cls) -> set[str]:
+            return {HOST_FEATURE, FILTER_FEATURE}
+
+        @classmethod
+        def supports_compute_framework(
+            cls,
+            feature_name: FeatureName | str,
+            options: Options,
+            compute_framework: type[ComputeFramework],
+        ) -> bool:
+            cls.calls += 1
+            return True
+
+    return CapabilityAcceptMatcherFG728, lambda: CapabilityAcceptMatcherFG728.calls
+
+
+def _make_capability_reject_pythondict_fg() -> tuple[type[FeatureGroup], Callable[[], int]]:
+    """A throwaway matcher whose capability hook counts its calls and rejects PythonDictFramework alone."""
+    gc.collect()
+
+    class CapabilityRejectPythonDictFG728(FeatureGroup):
+        calls: ClassVar[int] = 0
+
+        @classmethod
+        def feature_names_supported(cls) -> set[str]:
+            return {HOST_FEATURE, FILTER_FEATURE}
+
+        @classmethod
+        def supports_compute_framework(
+            cls,
+            feature_name: FeatureName | str,
+            options: Options,
+            compute_framework: type[ComputeFramework],
+        ) -> bool:
+            cls.calls += 1
+            return compute_framework is not PythonDictFramework
+
+    return CapabilityRejectPythonDictFG728, lambda: CapabilityRejectPythonDictFG728.calls
+
+
+def _make_capability_filter_reject_fg(
+    rejected: frozenset[type[ComputeFramework]],
+) -> tuple[type[FeatureGroup], Callable[[], int]]:
+    """A throwaway matcher rejecting the given frameworks for FILTER_FEATURE alone, counting those hook calls."""
+    gc.collect()
+
+    class CapabilityFilterRejectFG728(FeatureGroup):
+        filter_calls: ClassVar[int] = 0
+
+        @classmethod
+        def feature_names_supported(cls) -> set[str]:
+            return {HOST_FEATURE, FILTER_FEATURE}
+
+        @classmethod
+        def supports_compute_framework(
+            cls,
+            feature_name: FeatureName | str,
+            options: Options,
+            compute_framework: type[ComputeFramework],
+        ) -> bool:
+            if str(feature_name) != FILTER_FEATURE:
+                return True
+            cls.filter_calls += 1
+            return compute_framework not in rejected
+
+    return CapabilityFilterRejectFG728, lambda: CapabilityFilterRejectFG728.filter_calls
+
+
+def _make_capability_raising_fg() -> type[FeatureGroup]:
+    """A throwaway matcher whose capability hook raises."""
+    gc.collect()
+
+    class CapabilityRaisingMatcherFG728(FeatureGroup):
+        @classmethod
+        def feature_names_supported(cls) -> set[str]:
+            return {HOST_FEATURE, FILTER_FEATURE}
+
+        @classmethod
+        def supports_compute_framework(
+            cls,
+            feature_name: FeatureName | str,
+            options: Options,
+            compute_framework: type[ComputeFramework],
+        ) -> bool:
+            raise RuntimeError(CAPABILITY_RAISE_TEXT)
+
+    return CapabilityRaisingMatcherFG728
+
+
+def _make_capability_option_recorder_fg() -> tuple[type[FeatureGroup], Callable[[], _ObservedOptions]]:
+    """A throwaway matcher recording the option view its capability hook observes for FILTER_FEATURE."""
+    gc.collect()
+
+    class CapabilityOptionRecorderFG728(FeatureGroup):
+        observed: ClassVar[list[tuple[tuple[str, str], ...]]] = []
+
+        @classmethod
+        def feature_names_supported(cls) -> set[str]:
+            return {HOST_FEATURE, FILTER_FEATURE}
+
+        @classmethod
+        def supports_compute_framework(
+            cls,
+            feature_name: FeatureName | str,
+            options: Options,
+            compute_framework: type[ComputeFramework],
+        ) -> bool:
+            if str(feature_name) == FILTER_FEATURE:
+                keys = (SHARED_KEY_728, GROUP_ONLY_KEY_728, CONTEXT_ONLY_KEY_728)
+                cls.observed.append(tuple((key, str(options.get(key))) for key in keys))
+            return True
+
+    return CapabilityOptionRecorderFG728, lambda: tuple(CapabilityOptionRecorderFG728.observed)
 
 
 def _make_own_index_fg() -> tuple[type[FeatureGroup], Callable[[], int]]:
@@ -313,32 +438,36 @@ def _drive_two_scope_duplicate_declarations() -> _TwoScopedSnapshot:
         gc.collect()
 
 
-def _drive_two_pin_matching() -> _MatchingSnapshot:
-    """Match one two-pin filter against a PythonDict-pinned host."""
-    fg = _make_plain_matcher_fg()
+@dataclass(frozen=True)
+class _DeclarationSnapshot:
+    """Plain-data readout of one add_filter attempt. Holds no filter object."""
+
+    escaped: str | None
+    stored_count: int
+
+
+def _drive_two_pin_declaration() -> _DeclarationSnapshot:
+    """Declare one two-pin filter feature; the shared validator must reject it before anything is stored."""
     global_filter = GlobalFilter()
     pinned = Feature(FILTER_FEATURE)
     pinned.compute_frameworks = {PandasDataFrame, PyArrowTable}
-    global_filter.add_filter(pinned, FilterType.EQUAL, {"value": 1})
-    host = Feature(HOST_FEATURE)
-    host.compute_frameworks = {PythonDictFramework}
-    matched = None
     try:
-        matched, escaped = _capture(partial(global_filter.identify_matched_filters, fg, host, None))
-        return _MatchingSnapshot(
-            escaped=escaped,
-            names=() if matched is None else tuple(sorted(single.name for single in matched)),
-        )
+        _, escaped = _capture(partial(global_filter.add_filter, pinned, FilterType.EQUAL, {"value": 1}))
+        return _DeclarationSnapshot(escaped=escaped, stored_count=len(global_filter.filters))
     finally:
-        del fg, global_filter, matched
+        del global_filter, pinned
         gc.collect()
 
 
-def _drive_matching_counted(make: _CounterFactory, pin_host: bool) -> _MatchingSnapshot:
-    """Match one unpinned registered filter against HOST_FEATURE and read the probe's call counter."""
+def _drive_matching_counted(make: _CounterFactory, pin_host: bool, pin_filter: bool = False) -> _MatchingSnapshot:
+    """Match one registered filter against HOST_FEATURE, pinning either side when asked, and read the call counter."""
     fg, read_calls = make()
     global_filter = GlobalFilter()
-    global_filter.add_filter(FILTER_FEATURE, FilterType.EQUAL, {"value": 1})
+    filter_feature: Feature | str = FILTER_FEATURE
+    if pin_filter:
+        filter_feature = Feature(FILTER_FEATURE)
+        filter_feature.compute_frameworks = {PythonDictFramework}
+    global_filter.add_filter(filter_feature, FilterType.EQUAL, {"value": 1})
     host = Feature(HOST_FEATURE)
     if pin_host:
         host.compute_frameworks = {PythonDictFramework}
@@ -352,6 +481,73 @@ def _drive_matching_counted(make: _CounterFactory, pin_host: bool) -> _MatchingS
         )
     finally:
         del fg, read_calls, global_filter, matched
+        gc.collect()
+
+
+def _framework_names(frameworks: set[type[ComputeFramework]] | None) -> tuple[str, ...] | None:
+    """The frameworks as sorted class-name text; an unpinned None stays None."""
+    if frameworks is None:
+        return None
+    return tuple(sorted(cfw.__name__ for cfw in frameworks))
+
+
+@dataclass(frozen=True)
+class _NarrowingSnapshot:
+    """Plain-data readout of one two-framework matching pass. Holds no class and no filter object."""
+
+    escaped: str | None
+    names: tuple[str, ...]
+    # None when no copy attached; an attached copy's None pin also folds to None and fails the subset assert loudly.
+    matched_frameworks: tuple[str, ...] | None
+    host_frameworks: tuple[str, ...] | None
+    stored_frameworks: tuple[str, ...] | None
+    calls: int
+
+
+def _drive_matching_two_framework_host(make: _CounterFactory) -> _NarrowingSnapshot:
+    """Match one unpinned registered filter against a host riding PandasDataFrame and PyArrowTable."""
+    fg, read_calls = make()
+    global_filter = GlobalFilter()
+    global_filter.add_filter(FILTER_FEATURE, FilterType.EQUAL, {"value": 1})
+    host = Feature(HOST_FEATURE)
+    host.compute_frameworks = {PandasDataFrame, PyArrowTable}
+    matched = None
+    try:
+        matched, escaped = _capture(partial(global_filter.identify_matched_filters, fg, host, None))
+        names: tuple[str, ...] = ()
+        matched_frameworks: tuple[str, ...] | None = None
+        for single in matched or ():
+            names = (*names, single.name)
+            matched_frameworks = _framework_names(single.filter_feature.compute_frameworks)
+        return _NarrowingSnapshot(
+            escaped=escaped,
+            names=tuple(sorted(names)),
+            matched_frameworks=matched_frameworks,
+            host_frameworks=_framework_names(host.compute_frameworks),
+            stored_frameworks=_framework_names(next(iter(global_filter.filters)).filter_feature.compute_frameworks),
+            calls=read_calls(),
+        )
+    finally:
+        del fg, read_calls, global_filter, matched
+        gc.collect()
+
+
+def _drive_matching_raising_hook() -> _MatchingSnapshot:
+    """Match one unpinned registered filter against a PythonDict-pinned host on the raising-hook probe."""
+    fg = _make_capability_raising_fg()
+    global_filter = GlobalFilter()
+    global_filter.add_filter(FILTER_FEATURE, FilterType.EQUAL, {"value": 1})
+    host = Feature(HOST_FEATURE)
+    host.compute_frameworks = {PythonDictFramework}
+    matched = None
+    try:
+        matched, escaped = _capture(partial(global_filter.identify_matched_filters, fg, host, None))
+        return _MatchingSnapshot(
+            escaped=escaped,
+            names=() if matched is None else tuple(sorted(single.name for single in matched)),
+        )
+    finally:
+        del fg, global_filter, matched
         gc.collect()
 
 
@@ -520,9 +716,13 @@ def _options_as_pairs(options: Options) -> tuple[tuple[tuple[str, str], ...], tu
     return group, context
 
 
-def _drive_enriched_matching(filter_options: Options | None = None) -> _EnrichmentSnapshot:
+def _drive_enriched_matching(
+    filter_options: Options | None = None,
+    make: _RecorderFactory = _make_option_recorder_fg,
+    pin_host: bool = False,
+) -> _EnrichmentSnapshot:
     """Match the filter feature, declaring the given options (default: the shared key in group), against the host."""
-    fg, read_observed = _make_option_recorder_fg()
+    fg, read_observed = make()
     global_filter = GlobalFilter()
     declared = Options(group={SHARED_KEY_728: FILTER_VALUE}) if filter_options is None else filter_options
     global_filter.add_filter(Feature(FILTER_FEATURE, declared), FilterType.EQUAL, {"value": 1})
@@ -533,6 +733,8 @@ def _drive_enriched_matching(filter_options: Options | None = None) -> _Enrichme
             context={CONTEXT_ONLY_KEY_728: CONTEXT_ONLY_VALUE},
         ),
     )
+    if pin_host:
+        host.compute_frameworks = {PythonDictFramework}
     matched = None
     try:
         matched, escaped = _capture(partial(global_filter.identify_matched_filters, fg, host, None))
@@ -663,10 +865,10 @@ class TestScopeGate:
 
 
 class TestFrameworkPinCardinality:
-    """GlobalFilter.compute_framework tests membership against the pinned set; the canonical seam validates first."""
+    """Both seams validate the pin cardinality before matching via one shared validator; one pin gates on equality."""
 
     def test_an_unpinned_filter_feature_adopts_the_features_frameworks(self) -> None:
-        """Enrichment control: no pin on the filter side means the feature's pin is written onto the filter."""
+        """Enrichment control: no pin on the filter side means the feature's frameworks are copied onto the filter."""
         global_filter = GlobalFilter()
         single = _single()
         feat = Feature(HOST_FEATURE)
@@ -675,44 +877,47 @@ class TestFrameworkPinCardinality:
         verdict = global_filter.compute_framework(single, feat)
 
         assert verdict is True, "an unpinned filter feature must accept the feature's framework"
-        assert single.filter_feature.compute_frameworks == {PythonDictFramework}, "the feature's pin is adopted"
-        assert single.filter_feature.compute_frameworks is feat.compute_frameworks, (
-            "adoption shares the feature's set object, not a copy"
+        assert single.filter_feature.compute_frameworks == {PythonDictFramework}, "the feature's frameworks are adopted"
+        assert single.filter_feature.compute_frameworks is not feat.compute_frameworks, (
+            "the adopted set must be an owned copy, never the feature's own set object"
         )
 
-    def test_a_two_pin_filter_matches_either_of_its_pins(self) -> None:
-        """No cardinality validation: the gate is a membership test, so every pin of the pair matches."""
+    def test_a_single_pin_filter_gates_on_equality_with_the_features_framework(self) -> None:
+        """Pinned control: a single pin is the only cardinality that reaches this gate."""
         global_filter = GlobalFilter()
-        single = _single()
-        single.filter_feature.compute_frameworks = {PandasDataFrame, PyArrowTable}
-        feat_pandas = Feature(HOST_FEATURE)
-        feat_pandas.compute_frameworks = {PandasDataFrame}
-        feat_pyarrow = Feature(HOST_FEATURE)
-        feat_pyarrow.compute_frameworks = {PyArrowTable}
-
-        pandas_verdict = global_filter.compute_framework(single, feat_pandas)
-        pyarrow_verdict = global_filter.compute_framework(single, feat_pyarrow)
-
-        assert pandas_verdict is True, f"a pinned framework must match its own pin, got: {pandas_verdict}"
-        assert pyarrow_verdict is True, f"the second pin must match too, got: {pyarrow_verdict}"
-
-    def test_a_two_pin_filter_against_a_third_framework_says_no(self) -> None:
-        global_filter = GlobalFilter()
-        single = _single()
-        single.filter_feature.compute_frameworks = {PandasDataFrame, PyArrowTable}
+        matching = _single()
+        matching.filter_feature.compute_frameworks = {PythonDictFramework}
+        diverging = _single()
+        diverging.filter_feature.compute_frameworks = {PandasDataFrame}
         feat = Feature(HOST_FEATURE)
         feat.compute_frameworks = {PythonDictFramework}
 
-        verdict = global_filter.compute_framework(single, feat)
+        equal_verdict = global_filter.compute_framework(matching, feat)
+        diverging_verdict = global_filter.compute_framework(diverging, feat)
 
-        assert verdict is False, "the feature's framework is not among the pins"
-        assert single.filter_feature.compute_frameworks == {PandasDataFrame, PyArrowTable}, "the pin is not rewritten"
+        assert equal_verdict is True, f"a pin equal to the feature's framework must pass, got: {equal_verdict}"
+        assert diverging_verdict is False, f"a diverging pin must lose, got: {diverging_verdict}"
+        assert diverging.filter_feature.compute_frameworks == {PandasDataFrame}, "the pin is not rewritten"
 
-    def test_the_flow_detaches_a_mismatched_two_pin_quietly(self) -> None:
-        snapshot = _drive_two_pin_matching()
+    def test_add_filter_rejects_a_two_pin_declaration_and_stores_nothing(self) -> None:
+        snapshot = _drive_two_pin_declaration()
 
-        assert snapshot.escaped is None, f"nothing may cross identify_matched_filters: {snapshot.escaped}"
-        assert snapshot.names == (), f"a mismatched two-pin filter must not attach, got: {snapshot.names}"
+        assert snapshot.escaped is not None, "add_filter must validate the pin cardinality at declaration time"
+        assert snapshot.escaped.startswith(f"{ComputeFrameworkPinError.__name__}: "), (
+            f"the declaration raise must be the canonical pin error, got: {snapshot.escaped}"
+        )
+        assert PIN_MESSAGE_PART in snapshot.escaped, f"the raise must name the misuse: {snapshot.escaped}"
+        assert FILTER_FEATURE in snapshot.escaped, f"the raise must name the pinned feature: {snapshot.escaped}"
+        assert snapshot.stored_count == 0, f"a rejected declaration must store nothing, got {snapshot.stored_count}"
+
+    def test_both_seams_raise_one_shared_pin_message(self) -> None:
+        """Byte-identical text for the same feature: the validation is shared, not duplicated."""
+        declared = _drive_two_pin_declaration()
+        canonical = _drive_canonical_two_pin_message()
+
+        assert declared.escaped == f"{ComputeFrameworkPinError.__name__}: {canonical}", (
+            f"both seams must speak the shared validator's message, got: {declared.escaped!r} vs {canonical!r}"
+        )
 
     def test_the_canonical_seam_rejects_the_same_two_pin_outright(self) -> None:
         """Validate-before-matching itself is pinned in
@@ -723,15 +928,95 @@ class TestFrameworkPinCardinality:
         assert FILTER_FEATURE in message, f"the raise must name the pinned feature: {message}"
 
 
-class TestCapabilityHookAbsence:
-    """The filter path never consults supports_compute_framework; the canonical seam splits frameworks on it."""
+class TestCapabilityHook:
+    """The filter seam consults the hook per ride framework (the pin, else the host's) and narrows to the accepted
+    subset, which the attached copy rides; the canonical seam consults it over a candidate's accessible frameworks."""
 
-    def test_the_filter_seam_attaches_without_asking_the_hook(self) -> None:
+    def test_the_filter_seam_asks_the_hook_and_detaches_on_rejection(self) -> None:
         snapshot = _drive_matching_counted(_make_capability_reject_fg, pin_host=True)
 
         assert snapshot.escaped is None, f"nothing may cross identify_matched_filters: {snapshot.escaped}"
-        assert snapshot.names == (FILTER_FEATURE,), f"a rejecting hook must not detach here, got: {snapshot.names}"
-        assert snapshot.calls == 0, f"identify_matched_filters must never consult the hook, got {snapshot.calls} calls"
+        assert snapshot.names == (), f"a hook rejecting every framework must detach the filter, got: {snapshot.names}"
+        assert snapshot.calls == 1, f"a single-framework ride means exactly one consultation, got {snapshot.calls}"
+
+    def test_an_accepting_hook_attaches_and_was_consulted(self) -> None:
+        """Differential control: consultation alone must not detach."""
+        snapshot = _drive_matching_counted(_make_capability_accept_fg, pin_host=True)
+
+        assert snapshot.escaped is None, f"nothing may cross identify_matched_filters: {snapshot.escaped}"
+        assert snapshot.names == (FILTER_FEATURE,), f"an accepting hook must keep the filter, got: {snapshot.names}"
+        assert snapshot.calls == 1, f"a single-framework ride means exactly one consultation, got {snapshot.calls}"
+
+    def test_a_hook_rejecting_one_of_two_ride_frameworks_narrows_the_attached_copy(self) -> None:
+        """The hook contract: a rejected framework leaves the candidate set for this feature only; the rest ride on."""
+        make = partial(_make_capability_filter_reject_fg, frozenset({PandasDataFrame}))
+        snapshot = _drive_matching_two_framework_host(make)
+
+        assert snapshot.escaped is None, f"nothing may cross identify_matched_filters: {snapshot.escaped}"
+        assert snapshot.names == (FILTER_FEATURE,), f"one accepted framework must keep the filter: {snapshot.names}"
+        assert snapshot.matched_frameworks == (PyArrowTable.__name__,), (
+            f"the attached copy must ride the accepted subset alone, got: {snapshot.matched_frameworks}"
+        )
+        assert snapshot.host_frameworks == (PandasDataFrame.__name__, PyArrowTable.__name__), (
+            f"narrowing must never write the host's own frameworks, got: {snapshot.host_frameworks}"
+        )
+        assert snapshot.stored_frameworks is None, (
+            f"the stored original must stay unpinned, got: {snapshot.stored_frameworks}"
+        )
+        assert snapshot.calls == 2, f"the split has no short-circuit: one ask per ride framework, got {snapshot.calls}"
+
+    def test_a_hook_rejecting_both_ride_frameworks_detaches(self) -> None:
+        """The empty accepted subset generalizes the single-framework rejection: nothing is left to ride."""
+        make = partial(_make_capability_filter_reject_fg, frozenset({PandasDataFrame, PyArrowTable}))
+        snapshot = _drive_matching_two_framework_host(make)
+
+        assert snapshot.escaped is None, f"nothing may cross identify_matched_filters: {snapshot.escaped}"
+        assert snapshot.names == (), f"an empty accepted subset must detach the filter, got: {snapshot.names}"
+        assert snapshot.calls == 2, f"both ride frameworks must have been asked about, got {snapshot.calls} calls"
+
+    def test_the_capability_hook_observes_the_enriched_option_view(self) -> None:
+        """The hook reads the union with declared values on top, exactly as the criteria hook does."""
+        snapshot = _drive_enriched_matching(make=_make_capability_option_recorder_fg, pin_host=True)
+
+        assert snapshot.escaped is None, f"nothing may cross identify_matched_filters: {snapshot.escaped}"
+        assert snapshot.names == (FILTER_FEATURE,), f"the accepting recorder must keep the filter: {snapshot.names}"
+        assert snapshot.observed == (
+            (
+                (SHARED_KEY_728, FILTER_VALUE),
+                (GROUP_ONLY_KEY_728, GROUP_ONLY_VALUE),
+                (CONTEXT_ONLY_KEY_728, CONTEXT_ONLY_VALUE),
+            ),
+        ), f"one hook call, seeing the enriched view, got: {snapshot.observed}"
+
+    def test_a_rejected_pin_detaches_despite_equality_with_the_hosts_framework(self) -> None:
+        snapshot = _drive_matching_counted(_make_capability_reject_pythondict_fg, pin_host=True, pin_filter=True)
+
+        assert snapshot.escaped is None, f"nothing may cross identify_matched_filters: {snapshot.escaped}"
+        assert snapshot.names == (), f"a rejected pin must detach even when equal to the host's: {snapshot.names}"
+        assert snapshot.calls == 1, f"the pin is the whole ride set, so exactly one consultation, got {snapshot.calls}"
+
+    def test_a_raising_hook_escapes_the_filter_seam(self) -> None:
+        """Unguarded, as on the canonical seam: never a quiet detach."""
+        snapshot = _drive_matching_raising_hook()
+
+        assert snapshot.escaped is not None, "a raising capability hook must escape identify_matched_filters"
+        assert snapshot.escaped.startswith("RuntimeError"), f"the escape must name the raised type: {snapshot.escaped}"
+        assert CAPABILITY_RAISE_TEXT in snapshot.escaped, f"the escape must carry the hook's text: {snapshot.escaped}"
+
+    def test_the_same_raising_hook_escapes_the_canonical_seam(self) -> None:
+        snapshot = _drive_canonical(_make_capability_raising_fg)
+
+        assert snapshot.escaped is not None, "a raising capability hook must escape evaluate"
+        assert snapshot.escaped.startswith("RuntimeError"), f"the escape must name the raised type: {snapshot.escaped}"
+        assert CAPABILITY_RAISE_TEXT in snapshot.escaped, f"the escape must carry the hook's text: {snapshot.escaped}"
+
+    def test_a_frameworkless_host_with_an_unpinned_filter_attaches_vacuously(self) -> None:
+        """No pin and no host framework leaves the hook nothing to split; the direct-probe drives rely on this."""
+        snapshot = _drive_matching_counted(_make_capability_reject_fg, pin_host=False)
+
+        assert snapshot.escaped is None, f"nothing may cross identify_matched_filters: {snapshot.escaped}"
+        assert snapshot.names == (FILTER_FEATURE,), f"a frameworkless match must stay vacuous, got: {snapshot.names}"
+        assert snapshot.calls == 0, f"there is no framework to ask the hook about, got {snapshot.calls} calls"
 
     def test_the_canonical_seam_asks_the_hook_and_eliminates_at_capability(self) -> None:
         snapshot = _drive_canonical_counted(_make_capability_reject_fg, with_links=False)

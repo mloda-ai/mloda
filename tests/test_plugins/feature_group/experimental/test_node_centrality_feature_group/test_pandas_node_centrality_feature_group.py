@@ -105,6 +105,7 @@ class TestPandasNodeCentralityFeatureGroup:
 
     @pytest.mark.parametrize("algorithm", ["closeness", "betweenness", "eigenvector", "pagerank"])
     def test_calculate_bounded_centrality(self, sample_data: pd.DataFrame, algorithm: str) -> None:
+        """These take (adj_matrix, nodes) and score every node within [0, 1]; degree is separate, it may exceed 1."""
         # Get unique nodes
         nodes = pd.concat([sample_data["source"], sample_data["target"]]).unique()
 

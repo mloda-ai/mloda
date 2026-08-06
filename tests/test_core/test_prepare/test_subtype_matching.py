@@ -276,7 +276,7 @@ class TestMatchTimeIntegration:
 
 
 class TestRankLikeFamily:
-    """Definition of done: a keyed parametric registry-like family routes by declaration alone."""
+    """Universe, parametric canonicalization, and both-framework support for a keyed registry-like family."""
 
     def test_universe_enumerates_family_without_probing(self) -> None:
         assert SubDeclMatchRankLikeFG.subtype_universe() == RANK_UNIVERSE
@@ -295,7 +295,7 @@ class TestRankLikeFamily:
 
 
 class TestFrameSpecLikeFamily:
-    """Definition of done: a shape B registry-like family resolves from names and routes by narrowing."""
+    """Universe, name resolution, literal-vs-family canonicalization, and both-framework support for shape B."""
 
     def test_universe_unions_literals_and_family(self) -> None:
         assert SubDeclMatchFrameSpecFG.subtype_universe() == FRAME_UNIVERSE

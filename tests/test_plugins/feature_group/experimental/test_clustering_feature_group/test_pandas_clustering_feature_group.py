@@ -70,6 +70,7 @@ class TestPandasClusteringFeatureGroup:
 
     @pytest.mark.parametrize("algorithm", ["kmeans", "hierarchical", "spectral"])
     def test_perform_clustering_with_fixed_k(self, sample_data: pd.DataFrame, algorithm: str) -> None:
+        """These take an explicit k and return exactly that many clusters; dbscan and affinity infer k instead."""
         # Extract features
         X = sample_data[["feature1", "feature2"]].values
 

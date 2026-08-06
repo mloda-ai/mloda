@@ -234,8 +234,6 @@ class TestLinkWithJoinSpec:
 
     def test_link_instantiation_with_join_spec_objects(self) -> None:
         """Test Link can be instantiated with JoinSpec objects for left and right."""
-        from mloda.user import Link, JoinType
-
         left_idx = Index(("user_id",))
         right_idx = Index(("user_id",))
 
@@ -255,8 +253,6 @@ class TestLinkWithJoinSpec:
 
     def test_link_left_feature_group_from_join_spec(self) -> None:
         """Test Link.left_feature_group returns the feature_group from left JoinSpec."""
-        from mloda.user import Link, JoinType
-
         left_idx = Index(("user_id",))
         right_idx = Index(("order_id",))
 
@@ -274,8 +270,6 @@ class TestLinkWithJoinSpec:
 
     def test_link_right_feature_group_from_join_spec(self) -> None:
         """Test Link.right_feature_group returns the feature_group from right JoinSpec."""
-        from mloda.user import Link, JoinType
-
         left_idx = Index(("user_id",))
         right_idx = Index(("order_id",))
 
@@ -293,8 +287,6 @@ class TestLinkWithJoinSpec:
 
     def test_link_left_index_from_join_spec(self) -> None:
         """Test Link.left_index returns the index from left JoinSpec."""
-        from mloda.user import Link, JoinType
-
         left_idx = Index(("user_id",))
         right_idx = Index(("order_id",))
 
@@ -313,8 +305,6 @@ class TestLinkWithJoinSpec:
 
     def test_link_right_index_from_join_spec(self) -> None:
         """Test Link.right_index returns the index from right JoinSpec."""
-        from mloda.user import Link, JoinType
-
         left_idx = Index(("user_id",))
         right_idx = Index(("order_id",))
 
@@ -362,8 +352,6 @@ class TestLinkWithJoinSpec:
 
     def test_link_with_join_spec_and_pointers(self) -> None:
         """Test Link works with JoinSpec objects and pointer arguments."""
-        from mloda.user import Link, JoinType
-
         left_idx = Index(("id",))
         right_idx = Index(("id",))
 
@@ -387,8 +375,6 @@ class TestLinkWithJoinSpec:
 
     def test_link_with_multi_index_join_spec(self) -> None:
         """Test Link works with JoinSpec objects containing multi-column indexes."""
-        from mloda.user import Link, JoinType
-
         left_idx = Index(("user_id", "timestamp"))
         right_idx = Index(("user_id", "timestamp"))
 

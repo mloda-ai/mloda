@@ -145,8 +145,8 @@ class TestDocsGetterSharedBehaviour:
         all_results = kind.get_docs()
         assert len(all_results) > 0, f"Need at least one {kind.label} for filtering"
 
-        target_name = all_results[0].name
-        assert len(target_name) > 3, f"Need a {kind.label} name long enough to slice a substring from"
+        target_name = next((entry.name for entry in all_results if len(entry.name) > 3), None)
+        assert target_name is not None, f"Need a {kind.label} name long enough to slice a substring from"
 
         partial = target_name[:3]
         filtered = kind.get_docs(name=partial)

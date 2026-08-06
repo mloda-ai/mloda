@@ -8,15 +8,16 @@ independent concerns.
 The matrix of (FG final_filters, Engine final_filters, uses mask_engine) combinations:
 
   FG=False, Engine=True,  mask=yes -- test_inline_filter_without_custom_compute_framework
-  FG=None,  Engine=True,  mask=no  -- test_final_filtering_eliminates_rows[regular_default_fg]
+  FG=None,  Engine=True,  mask=no  -- test_final_filtering_eliminates_rows, case regular_default_fg
   FG=False, Engine=False, mask=yes -- test_fg_skip_with_inline_engine
-  FG=True,  Engine=False, mask=no  -- test_final_filtering_eliminates_rows[fg_overrides_inline_engine]
-  FG=True,  Engine=True,  mask=no  -- test_final_filtering_eliminates_rows[fg_and_engine_agree]
+  FG=True,  Engine=False, mask=no  -- test_final_filtering_eliminates_rows, case fg_overrides_inline_engine
+  FG=True,  Engine=True,  mask=no  -- test_final_filtering_eliminates_rows, case fg_and_engine_agree
+  FG=True,  Engine=True,  mask=no  -- test_final_filtering_eliminates_rows, case compatible_dtype
   FG=True,  Engine=True,  mask=yes -- test_inline_mask_with_final_elimination
 
 Validation (filter column must be present when row elimination applies):
-  FG=True,  drops filter column       -- test_filter_column_validation_raises[fg_force_final_drops_column]
-  FG=None,  drops filter column       -- test_filter_column_validation_raises[default_fg_drops_column]
+  FG=True,  drops filter column       -- test_filter_column_validation_raises, case fg_force_final_drops_column
+  FG=None,  drops filter column       -- test_filter_column_validation_raises, case default_fg_drops_column
 """
 
 from dataclasses import dataclass

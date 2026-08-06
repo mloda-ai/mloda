@@ -40,7 +40,9 @@ class TestCheckPointerDiscriminatorErrors:
         return ExecutionPlan()
 
     @pytest.mark.parametrize(("discriminator", "none_side", "expected_match"), _DISCRIMINATOR_CASES)
-    def test_discriminator_none_error(self, discriminator: dict[str, str], none_side: str, expected_match: str) -> None:
+    def test_discriminator_invariant_error_message(
+        self, discriminator: dict[str, str], none_side: str, expected_match: str
+    ) -> None:
         ep = self._make_execution_plan()
         graph = MagicMock(spec=Graph)
 

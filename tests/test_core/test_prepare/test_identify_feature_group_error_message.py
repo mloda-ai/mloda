@@ -4,13 +4,11 @@ The formatting lives in mloda/core/prepare/resolution_failure_renderer.py: _rend
 candidate as "ClassName (module.path)" instead of a raw dict/class representation.
 """
 
-from typing import Optional
+from typing import ClassVar, Optional
 
 import pytest
 
-from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.abstract_plugins.components.default_options_key import DefaultOptionKeys
-from mloda.core.abstract_plugins.components.domain import Domain
 from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser_mixin import (
     FeatureChainParserMixin,
@@ -21,6 +19,7 @@ from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.prepare.accessible_plugins import FeatureGroupEnvironmentMapping
+from tests.helpers.plugin_stubs import StubFeatureGroup
 from tests.test_core.test_prepare.identify_seam import evaluate_or_raise
 
 
@@ -30,55 +29,18 @@ class MockComputeFramework(ComputeFramework):
     pass
 
 
-class ConflictingFeatureGroupA(FeatureGroup):
-    """First conflicting feature group with custom domain 'domain_a'.
+class ConflictingFeatureGroupA(StubFeatureGroup):
+    """First conflicting feature group with custom domain 'domain_a'."""
 
-    This feature group matches any feature named 'conflicting_test_feature'.
-    """
-
-    @classmethod
-    def get_domain(cls) -> Domain:
-        return Domain("domain_a")
-
-    @classmethod
-    def match_feature_group_criteria(
-        cls,
-        feature_name: FeatureName | str,
-        options: Options,
-        data_access_collection: Optional[DataAccessCollection] = None,
-    ) -> bool:
-        if isinstance(feature_name, FeatureName):
-            feature_name = str(feature_name)
-        return feature_name == "conflicting_test_feature"
-
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
-        return None
+    DOMAIN_NAME: ClassVar[str] = "domain_a"
+    MATCHED_NAMES: ClassVar[frozenset[str]] = frozenset({"conflicting_test_feature"})
 
 
-class ConflictingFeatureGroupB(FeatureGroup):
-    """Second conflicting feature group with custom domain 'domain_b'.
+class ConflictingFeatureGroupB(StubFeatureGroup):
+    """Second conflicting feature group with custom domain 'domain_b', creating a conflict scenario."""
 
-    This feature group also matches any feature named 'conflicting_test_feature',
-    creating a conflict scenario.
-    """
-
-    @classmethod
-    def get_domain(cls) -> Domain:
-        return Domain("domain_b")
-
-    @classmethod
-    def match_feature_group_criteria(
-        cls,
-        feature_name: FeatureName | str,
-        options: Options,
-        data_access_collection: Optional[DataAccessCollection] = None,
-    ) -> bool:
-        if isinstance(feature_name, FeatureName):
-            feature_name = str(feature_name)
-        return feature_name == "conflicting_test_feature"
-
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
-        return None
+    DOMAIN_NAME: ClassVar[str] = "domain_b"
+    MATCHED_NAMES: ClassVar[frozenset[str]] = frozenset({"conflicting_test_feature"})
 
 
 class TestIdentifyFeatureGroupErrorMessageFormat:
@@ -224,26 +186,12 @@ class TestIdentifyFeatureGroupErrorMessageFormat:
         )
 
 
-class KnownFeatureGroup(FeatureGroup):
+class KnownFeatureGroup(StubFeatureGroup):
     """Feature group that matches 'known_feature' for testing fuzzy match suggestions."""
 
-    @classmethod
-    def feature_names_supported(cls) -> set[str]:
-        return {"known_feature", "another_feature"}
-
-    @classmethod
-    def match_feature_group_criteria(
-        cls,
-        feature_name: FeatureName | str,
-        options: Options,
-        data_access_collection: Optional[DataAccessCollection] = None,
-    ) -> bool:
-        if isinstance(feature_name, FeatureName):
-            feature_name = str(feature_name)
-        return feature_name == "known_feature"
-
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
-        return None
+    # Matching stays narrower than the supported names: 'another_feature' is only a suggestion source.
+    MATCHED_NAMES: ClassVar[frozenset[str]] = frozenset({"known_feature"})
+    SUPPORTED_NAMES: ClassVar[frozenset[str]] = frozenset({"known_feature", "another_feature"})
 
 
 class TestNoFeatureGroupFoundErrorMessage:

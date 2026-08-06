@@ -14,6 +14,30 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+# Anchored to this file, not to the cwd: a relative "docs" glob run from
+# anywhere but the repo root yields nothing, and these tests then pass while
+# checking zero files (issue #937).
+REPO_ROOT = Path(__file__).resolve().parents[2]
+DOCS_DIR = REPO_ROOT / "docs"
+
+
+def _markdown_files(root: Path) -> list[Path]:
+    """Every markdown file under ``root``, never an empty list.
+
+    Two ``parametrize`` calls consume this at import time, where an empty list
+    silently collapses to zero test cases instead of failing. Raising here
+    turns that into a collection error naming the directory we looked in.
+    """
+    files = sorted(root.rglob("*.md"))
+    if not files:
+        raise RuntimeError(f"no markdown files found under {root} - the documentation tests would check nothing")
+    return files
+
+
+def _doc_id(fpath: Path) -> str:
+    """Repo-relative test id, so ids do not carry an absolute machine path."""
+    return fpath.relative_to(REPO_ROOT).as_posix()
+
 
 # We need this to test DokuExtender
 class DokuExtender(Extender):
@@ -82,14 +106,14 @@ def run_md_file_isolated(fpath: Path) -> None:
 
 @pytest.mark.timeout(120)
 def test_files_good() -> None:
-    run_md_files_isolated(sorted(Path("docs").glob("**/*.md")))
+    run_md_files_isolated(_markdown_files(DOCS_DIR))
 
 
 CODE_BLOCK_PATTERN = re.compile(r"```(?:python|py)\n(.*?)```", re.DOTALL)
 TEST_IMPORT_PATTERN = re.compile(r"^\s*from\s+tests\..*$", re.MULTILINE)
 
 
-@pytest.mark.parametrize("fpath", sorted(Path("docs/docs").rglob("*.md")), ids=str)
+@pytest.mark.parametrize("fpath", _markdown_files(DOCS_DIR / "docs"), ids=_doc_id)
 def test_no_test_imports_in_docs(fpath: Path) -> None:
     text = fpath.read_text(encoding="utf-8")
     violations = []
@@ -114,7 +138,7 @@ def test_test_imports_in_illustrative_blocks_are_scanned() -> None:
     )
 
 
-DOCS_ROOT = Path("docs/docs")
+DOCS_ROOT = DOCS_DIR / "docs"
 ABSOLUTE_LINK_PATTERN = re.compile(r"\[([^\]]*)\]\(https://mloda-ai\.github\.io/mloda/[^)]*\)")
 MARKDOWN_LINK_PATTERN = re.compile(r"\[([^\]]*)\]\(([^)]+)\)")
 HEADING_PATTERN = re.compile(r"^#{1,6}\s+(.+)$", re.MULTILINE)
@@ -132,14 +156,14 @@ def _extract_headings(md_path: Path) -> set[str]:
     return {_heading_to_anchor(m.group(1)) for m in HEADING_PATTERN.finditer(text)}
 
 
-@pytest.mark.parametrize("fpath", sorted(DOCS_ROOT.rglob("*.md")), ids=str)
+@pytest.mark.parametrize("fpath", _markdown_files(DOCS_ROOT), ids=_doc_id)
 def test_no_absolute_site_links(fpath: Path) -> None:
     text = fpath.read_text(encoding="utf-8")
     matches = ABSOLUTE_LINK_PATTERN.findall(text)
     assert not matches, f"{fpath} contains absolute mloda-ai.github.io links (should be relative): {matches}"
 
 
-@pytest.mark.parametrize("fpath", sorted(DOCS_ROOT.rglob("*.md")), ids=str)
+@pytest.mark.parametrize("fpath", _markdown_files(DOCS_ROOT), ids=_doc_id)
 def test_internal_link_targets_exist(fpath: Path) -> None:
     text = fpath.read_text(encoding="utf-8")
     errors: list[str] = []

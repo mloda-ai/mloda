@@ -6,7 +6,11 @@ from typing import Any
 import yaml
 
 
-MKDOCS_YML = Path("docs/mkdocs.yml")
+# Anchored to this file, not to the cwd. Run from anywhere but the repo root, a
+# relative path here died with a bare FileNotFoundError that named the symptom
+# rather than the cause (issue #937).
+REPO_ROOT = Path(__file__).resolve().parents[2]
+MKDOCS_YML = REPO_ROOT / "docs" / "mkdocs.yml"
 
 
 def _load_mkdocs_config() -> dict[str, Any]:

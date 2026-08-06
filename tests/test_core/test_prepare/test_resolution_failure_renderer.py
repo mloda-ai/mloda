@@ -15,7 +15,7 @@ import inspect
 import logging
 from abc import abstractmethod
 from ast import literal_eval
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Iterable, Iterator
 from difflib import get_close_matches
 from typing import Any, Optional, cast, get_args
 
@@ -257,10 +257,42 @@ class CountingFeatureGroup791(CountingStubFeatureGroup):
     COUNTER = HOOK_COUNTER_791
 
 
-def _counting_fg(name: str, **kwargs: Any) -> type[StubFeatureGroup]:
-    """Mint a counting stub of this module; make_fg reads the calling module through this frame."""
-    kwargs.setdefault("base", CountingFeatureGroup791)
-    return make_fg(name, **kwargs)
+def _counting_fg(
+    name: str,
+    *,
+    matches: str | Iterable[str] | None = None,
+    domain: str | None = None,
+    frameworks: set[type[ComputeFramework]] | None = None,
+    supported_names: str | Iterable[str] | None = None,
+    supported_frameworks: str | Iterable[str] | None = None,
+    index_columns: list[Index] | None = None,
+    supports_index: bool | None = None,
+    abstract: bool = False,
+    base: type[StubFeatureGroup] = CountingFeatureGroup791,
+    doc: str | None = None,
+) -> type[StubFeatureGroup]:
+    """Mint a counting stub of this module; make_fg reads the calling module through this frame.
+
+    Every keyword is spelled out with make_fg's own type: a **kwargs passthrough would let a wrongly
+    typed value (framework names instead of classes) mint a green but inert stub.
+    """
+    minted = make_fg(
+        name,
+        matches=matches,
+        domain=domain,
+        frameworks=frameworks,
+        supported_names=supported_names,
+        supported_frameworks=supported_frameworks,
+        index_columns=index_columns,
+        supports_index=supports_index,
+        abstract=abstract,
+        base=base,
+        doc=doc,
+    )
+    # Pins the one-frame walk to this wrapper: moved into a helper module, every stub would be owned by
+    # that module and the registry-isolation fixture, which filters on this one, would stop seeing them.
+    assert minted.__module__ == __name__, f"{name} was minted into {minted.__module__}, not {__name__}"
+    return minted
 
 
 RendererSuccessFG791 = _counting_fg("RendererSuccessFG791", matches=SUCCESS_FEATURE_791, frameworks=ONE_FRAMEWORK_791)

@@ -150,8 +150,8 @@ class CountingStubFeatureGroup(StubFeatureGroup):
         cls._enter_hook("supports_index")
         if cls.SUPPORTS_INDEX_RESULT is not None:
             return cls.SUPPORTS_INDEX_RESULT
-        # The FeatureGroup answer, spelled out rather than delegated: super() reads it off
-        # index_columns(), whose call the caller would then see counted a second time.
+        # Reads the ClassVar, not index_columns(), which is what super() would call: delegating would
+        # count that hook a second time and would make an armed index_columns reachable through here.
         if cls.INDEX_COLUMNS is None:
             return None
         return any(index.is_a_part_of(column) for column in cls.INDEX_COLUMNS)

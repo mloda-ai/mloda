@@ -5,7 +5,8 @@ during its single first pass: per-candidate compute-framework capability
 (``EvaluationResult.candidate_frameworks``) plus the remaining facts (``EvaluationResult.facts``).
 ``render_resolution_failure(result, feature)`` is then a PURE projection of that result: it reads
 only the result and the ``Feature``, never re-runs matching and never calls a provider-overridable
-hook. The feature groups below count every such hook, so a renderer that calls one is caught.
+hook. The feature groups below count every such hook through the shared counting stub base, so a
+renderer that calls one is caught.
 
 All names are suffixed ``_791`` because test feature groups become global subclasses.
 """
@@ -16,7 +17,7 @@ from abc import abstractmethod
 from ast import literal_eval
 from collections.abc import Callable, Iterator
 from difflib import get_close_matches
-from typing import Any, ClassVar, Optional, cast, get_args
+from typing import Any, Optional, cast, get_args
 
 import pytest
 
@@ -46,6 +47,7 @@ from mloda.core.prepare.resolution_types import (
     EvaluationResult,
     RenderFacts,
 )
+from tests.helpers.plugin_stubs import CountingStubFeatureGroup, HookCounter, StubFeatureGroup, make_fg
 
 
 SUCCESS_FEATURE_791 = "renderer_success_791"
@@ -212,24 +214,15 @@ TROUBLESHOOTING_LINE = (
 
 SUGGESTION_PREFIX = "Did you mean one of: "
 
+HOOK_COUNTER_791 = HookCounter()
+
 # Call counters for every provider-overridable hook, keyed "<ClassName>.<hook>". Reset per test.
-HOOK_CALLS: dict[str, int] = {}
+# A live alias, never rebound: HookCounter.clear() empties its dicts in place.
+HOOK_CALLS: dict[str, int] = HOOK_COUNTER_791.calls
 
 # supports_compute_framework calls keyed by the (candidate, framework) PAIR it was asked about.
 # HOOK_CALLS only knows the hook name, so it cannot see a pair being asked twice. Reset per test.
-PAIR_CALLS: dict[tuple[str, str], int] = {}
-
-
-def _record(class_name: str, hook: str) -> None:
-    """Count one call of a provider-overridable hook."""
-    key = f"{class_name}.{hook}"
-    HOOK_CALLS[key] = HOOK_CALLS.get(key, 0) + 1
-
-
-def _record_pair(class_name: str, framework_name: str) -> None:
-    """Count one capability-hook call for a single (candidate, framework) pair."""
-    key = (class_name, framework_name)
-    PAIR_CALLS[key] = PAIR_CALLS.get(key, 0) + 1
+PAIR_CALLS: dict[tuple[str, str], int] = HOOK_COUNTER_791.pairs
 
 
 def _malformed(value: Any) -> Any:
@@ -253,120 +246,59 @@ class RendererFwThree791(ComputeFramework):
     """Third dummy compute framework, used only to pin a feature away from every candidate."""
 
 
-class CountingFeatureGroup791(FeatureGroup):
+# The two framework rules the stubs below pick from; make_fg copies the set it is given, so sharing is safe.
+ONE_FRAMEWORK_791: set[type[ComputeFramework]] = {RendererFwOne791}
+TWO_FRAMEWORKS_791: set[type[ComputeFramework]] = {RendererFwOne791, RendererFwTwo791}
+
+
+class CountingFeatureGroup791(CountingStubFeatureGroup):
     """Feature group base that counts every provider-overridable hook the renderer must not call."""
 
-    MATCHES: ClassVar[frozenset[str]] = frozenset()
-    DOMAIN_NAME: ClassVar[Optional[str]] = None
-    FRAMEWORK_RULE: ClassVar[Optional[set[type[ComputeFramework]]]] = None
-    SUPPORTED_FRAMEWORKS: ClassVar[Optional[frozenset[str]]] = None
-    SUPPORTED_NAMES: ClassVar[frozenset[str]] = frozenset()
-    # Both default to what the hooks returned before they were declarative: the links gate passes unconditionally.
-    INDEX_COLUMNS: ClassVar[Optional[list[Index]]] = None
-    SUPPORTS_INDEX_RESULT: ClassVar[Optional[bool]] = None
-
-    @classmethod
-    def match_feature_group_criteria(
-        cls,
-        feature_name: FeatureName | str,
-        options: Options,
-        data_access_collection: Optional[DataAccessCollection] = None,
-    ) -> bool:
-        _record(cls.get_class_name(), "match_feature_group_criteria")
-        return str(feature_name) in cls.MATCHES
-
-    @classmethod
-    def get_domain(cls) -> Domain:
-        _record(cls.get_class_name(), "get_domain")
-        if cls.DOMAIN_NAME is None:
-            return Domain.get_default_domain()
-        return Domain(cls.DOMAIN_NAME)
-
-    @classmethod
-    def compute_framework_rule(cls) -> set[type[ComputeFramework]] | None:
-        _record(cls.get_class_name(), "compute_framework_rule")
-        return cls.FRAMEWORK_RULE
-
-    @classmethod
-    def supports_compute_framework(
-        cls,
-        feature_name: FeatureName | str,
-        options: Options,
-        compute_framework: type[ComputeFramework],
-    ) -> bool:
-        _record(cls.get_class_name(), "supports_compute_framework")
-        _record_pair(cls.get_class_name(), compute_framework.get_class_name())
-        if cls.SUPPORTED_FRAMEWORKS is None:
-            return True
-        return compute_framework.get_class_name() in cls.SUPPORTED_FRAMEWORKS
-
-    @classmethod
-    def index_columns(cls) -> Optional[list[Index]]:
-        _record(cls.get_class_name(), "index_columns")
-        return cls.INDEX_COLUMNS
-
-    @classmethod
-    def supports_index(cls, index: Index) -> Optional[bool]:
-        _record(cls.get_class_name(), "supports_index")
-        return cls.SUPPORTS_INDEX_RESULT
-
-    @classmethod
-    def feature_names_supported(cls) -> set[str]:
-        _record(cls.get_class_name(), "feature_names_supported")
-        return set(cls.SUPPORTED_NAMES)
-
-    @classmethod
-    def prefix(cls) -> str:
-        _record(cls.get_class_name(), "prefix")
-        return f"{cls.get_class_name()}_"
-
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
-        return None
+    COUNTER = HOOK_COUNTER_791
 
 
-class RendererSuccessFG791(CountingFeatureGroup791):
-    """Sole winner of the success scenario."""
-
-    MATCHES = frozenset({SUCCESS_FEATURE_791})
-    FRAMEWORK_RULE = {RendererFwOne791}
-
-
-class RendererMultipleAFG791(CountingFeatureGroup791):
-    """First of two unrelated siblings matching the same name, in domain 'renderer_domain_a_791'."""
-
-    MATCHES = frozenset({MULTIPLE_FEATURE_791})
-    DOMAIN_NAME = "renderer_domain_a_791"
-    FRAMEWORK_RULE = {RendererFwOne791}
+def _counting_fg(name: str, **kwargs: Any) -> type[StubFeatureGroup]:
+    """Mint a counting stub of this module; make_fg reads the calling module through this frame."""
+    kwargs.setdefault("base", CountingFeatureGroup791)
+    return make_fg(name, **kwargs)
 
 
-class RendererMultipleBFG791(CountingFeatureGroup791):
-    """Second sibling matching the same name, in domain 'renderer_domain_b_791'."""
+RendererSuccessFG791 = _counting_fg("RendererSuccessFG791", matches=SUCCESS_FEATURE_791, frameworks=ONE_FRAMEWORK_791)
 
-    MATCHES = frozenset({MULTIPLE_FEATURE_791})
-    DOMAIN_NAME = "renderer_domain_b_791"
-    FRAMEWORK_RULE = {RendererFwOne791}
+RendererMultipleAFG791 = _counting_fg(
+    "RendererMultipleAFG791",
+    matches=MULTIPLE_FEATURE_791,
+    domain="renderer_domain_a_791",
+    frameworks=ONE_FRAMEWORK_791,
+)
 
+RendererMultipleBFG791 = _counting_fg(
+    "RendererMultipleBFG791",
+    matches=MULTIPLE_FEATURE_791,
+    domain="renderer_domain_b_791",
+    frameworks=ONE_FRAMEWORK_791,
+)
 
-class RendererCapabilityAFG791(CountingFeatureGroup791):
-    """Mirrored capability candidate: supports RendererFwOne791, rejects RendererFwTwo791."""
+# Mirrored capability candidates: each supports exactly the framework the other rejects.
+RendererCapabilityAFG791 = _counting_fg(
+    "RendererCapabilityAFG791",
+    matches=CAPABILITY_FEATURE_791,
+    frameworks=TWO_FRAMEWORKS_791,
+    supported_frameworks="RendererFwOne791",
+)
 
-    MATCHES = frozenset({CAPABILITY_FEATURE_791})
-    FRAMEWORK_RULE = {RendererFwOne791, RendererFwTwo791}
-    SUPPORTED_FRAMEWORKS = frozenset({"RendererFwOne791"})
-
-
-class RendererCapabilityBFG791(CountingFeatureGroup791):
-    """Mirrored capability candidate: supports RendererFwTwo791, rejects RendererFwOne791."""
-
-    MATCHES = frozenset({CAPABILITY_FEATURE_791})
-    FRAMEWORK_RULE = {RendererFwOne791, RendererFwTwo791}
-    SUPPORTED_FRAMEWORKS = frozenset({"RendererFwTwo791"})
+RendererCapabilityBFG791 = _counting_fg(
+    "RendererCapabilityBFG791",
+    matches=CAPABILITY_FEATURE_791,
+    frameworks=TWO_FRAMEWORKS_791,
+    supported_frameworks="RendererFwTwo791",
+)
 
 
 class RendererAbstractBaseFG791(CountingFeatureGroup791):
     """Abstract base that matches the name but can never be instantiated."""
 
-    MATCHES = frozenset({ABSTRACT_FEATURE_791})
+    MATCHED_NAMES = frozenset({ABSTRACT_FEATURE_791})
     FRAMEWORK_RULE = {RendererFwOne791}
 
     @classmethod
@@ -378,7 +310,7 @@ class RendererAbstractBaseFG791(CountingFeatureGroup791):
 class RendererConcreteSubFG791(RendererAbstractBaseFG791):
     """Concrete implementation of the abstract base, declaring two compute frameworks."""
 
-    MATCHES = frozenset({ABSTRACT_FEATURE_791})
+    MATCHED_NAMES = frozenset({ABSTRACT_FEATURE_791})
     FRAMEWORK_RULE = {RendererFwOne791, RendererFwTwo791}
 
     @classmethod
@@ -386,18 +318,19 @@ class RendererConcreteSubFG791(RendererAbstractBaseFG791):
         return "concrete"
 
 
-class RendererKnownNamesFG791(CountingFeatureGroup791):
-    """Name catalog for the 'Did you mean' suggestion."""
-
-    MATCHES = frozenset({KNOWN_FEATURE_791})
-    SUPPORTED_NAMES = frozenset({KNOWN_FEATURE_791})
-    FRAMEWORK_RULE = {RendererFwOne791}
+# Name catalog for the 'Did you mean' suggestion.
+RendererKnownNamesFG791 = _counting_fg(
+    "RendererKnownNamesFG791",
+    matches=KNOWN_FEATURE_791,
+    supported_names=KNOWN_FEATURE_791,
+    frameworks=ONE_FRAMEWORK_791,
+)
 
 
 class RendererBareOnlyFG791(CountingFeatureGroup791):
     """Matches its bare name only: any group option makes it reject the feature."""
 
-    MATCHES = frozenset({FORWARDING_FEATURE_791})
+    MATCHED_NAMES = frozenset({FORWARDING_FEATURE_791})
     FRAMEWORK_RULE = {RendererFwOne791}
 
     @classmethod
@@ -431,17 +364,17 @@ class RendererStrictFG791(FeatureChainParserMixin, FeatureGroup):
         options: Options,
         data_access_collection: Optional[DataAccessCollection] = None,
     ) -> bool:
-        _record(cls.get_class_name(), "match_feature_group_criteria")
+        HOOK_COUNTER_791.record(cls.get_class_name(), "match_feature_group_criteria")
         return super().match_feature_group_criteria(feature_name, options, data_access_collection)
 
     @classmethod
     def get_domain(cls) -> Domain:
-        _record(cls.get_class_name(), "get_domain")
+        HOOK_COUNTER_791.record(cls.get_class_name(), "get_domain")
         return super().get_domain()
 
     @classmethod
     def compute_framework_rule(cls) -> set[type[ComputeFramework]] | None:
-        _record(cls.get_class_name(), "compute_framework_rule")
+        HOOK_COUNTER_791.record(cls.get_class_name(), "compute_framework_rule")
         return {RendererFwOne791}
 
     @classmethod
@@ -451,32 +384,32 @@ class RendererStrictFG791(FeatureChainParserMixin, FeatureGroup):
         options: Options,
         compute_framework: type[ComputeFramework],
     ) -> bool:
-        _record(cls.get_class_name(), "supports_compute_framework")
+        HOOK_COUNTER_791.record(cls.get_class_name(), "supports_compute_framework")
         return super().supports_compute_framework(feature_name, options, compute_framework)
 
     @classmethod
     def index_columns(cls) -> Optional[list[Index]]:
-        _record(cls.get_class_name(), "index_columns")
+        HOOK_COUNTER_791.record(cls.get_class_name(), "index_columns")
         return None
 
     @classmethod
     def supports_index(cls, index: Index) -> Optional[bool]:
-        _record(cls.get_class_name(), "supports_index")
+        HOOK_COUNTER_791.record(cls.get_class_name(), "supports_index")
         return None
 
     @classmethod
     def feature_names_supported(cls) -> set[str]:
-        _record(cls.get_class_name(), "feature_names_supported")
+        HOOK_COUNTER_791.record(cls.get_class_name(), "feature_names_supported")
         return set()
 
     @classmethod
     def prefix(cls) -> str:
-        _record(cls.get_class_name(), "prefix")
+        HOOK_COUNTER_791.record(cls.get_class_name(), "prefix")
         return f"{cls.get_class_name()}_"
 
     @classmethod
     def _strict_validation_rejection_reason(cls, feature_name: str | FeatureName, options: Options) -> str | None:
-        _record(cls.get_class_name(), "_strict_validation_rejection_reason")
+        HOOK_COUNTER_791.record(cls.get_class_name(), "_strict_validation_rejection_reason")
         return super()._strict_validation_rejection_reason(feature_name, options)
 
     def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
@@ -503,124 +436,101 @@ class RendererMissingOptionFG791(FeatureChainParserMixin, FeatureGroup):
 MISSING_OPTION_REASON_791 = "required option(s) some_key_791m are absent after declared defaults and name bindings"
 
 
-class RendererNarrowEnabledFG791(CountingFeatureGroup791):
-    """Declares two available frameworks; the run enables only the one this candidate rejects."""
+# Declares two available frameworks; the run enables only the one this candidate rejects.
+RendererNarrowEnabledFG791 = _counting_fg(
+    "RendererNarrowEnabledFG791",
+    matches=NARROW_ENABLED_FEATURE_791,
+    frameworks=TWO_FRAMEWORKS_791,
+    supported_frameworks="RendererFwTwo791",
+)
 
-    MATCHES = frozenset({NARROW_ENABLED_FEATURE_791})
-    FRAMEWORK_RULE = {RendererFwOne791, RendererFwTwo791}
-    SUPPORTED_FRAMEWORKS = frozenset({"RendererFwTwo791"})
+# Declares two available frameworks; the run enables neither of them.
+RendererNoneEnabledFG791 = _counting_fg(
+    "RendererNoneEnabledFG791",
+    matches=NONE_ENABLED_FEATURE_791,
+    frameworks=TWO_FRAMEWORKS_791,
+    supported_frameworks="RendererFwTwo791",
+)
 
+# Declares the requested name itself, then loses every framework the run could have enabled.
+RendererStrandedFG791 = _counting_fg(
+    "RendererStrandedFG791",
+    matches=STRANDED_FEATURE_791,
+    supported_names=STRANDED_FEATURE_791,
+    frameworks=TWO_FRAMEWORKS_791,
+)
 
-class RendererNoneEnabledFG791(CountingFeatureGroup791):
-    """Declares two available frameworks; the run enables neither of them."""
+# Eliminated candidate declaring the requested name, so the name catalog carries the exact echo.
+RendererCutoffAFG791 = _counting_fg(
+    "RendererCutoffAFG791",
+    matches=CUTOFF_FEATURE_791,
+    supported_names=CUTOFF_FEATURE_791,
+    frameworks=TWO_FRAMEWORKS_791,
+)
 
-    MATCHES = frozenset({NONE_ENABLED_FEATURE_791})
-    FRAMEWORK_RULE = {RendererFwOne791, RendererFwTwo791}
-    SUPPORTED_FRAMEWORKS = frozenset({"RendererFwTwo791"})
+# Second eliminated candidate, contributing two more droppable hints: its class name and its prefix.
+RendererCutoffBFG791 = _counting_fg("RendererCutoffBFG791", matches=CUTOFF_FEATURE_791, frameworks=TWO_FRAMEWORKS_791)
 
+# Healthy catalog group, named far enough from the request that only its supported name can be suggested.
+SpareNameCatalogFG791 = _counting_fg(
+    "SpareNameCatalogFG791",
+    matches=CUTOFF_CATALOG_NAME_791,
+    supported_names=CUTOFF_CATALOG_NAME_791,
+    frameworks=ONE_FRAMEWORK_791,
+)
 
-class RendererStrandedFG791(CountingFeatureGroup791):
-    """Declares the requested name itself, then loses every framework the run could have enabled."""
+# Catalog candidate declaring the shared name; the four siblings below declare exactly the same one.
+RendererDuplicateNameFG791 = _counting_fg(
+    "RendererDuplicateNameFG791", supported_names=DUPLICATE_CATALOG_NAME_791, frameworks=ONE_FRAMEWORK_791
+)
 
-    MATCHES = frozenset({STRANDED_FEATURE_791})
-    SUPPORTED_NAMES = frozenset({STRANDED_FEATURE_791})
-    FRAMEWORK_RULE = {RendererFwOne791, RendererFwTwo791}
+RendererDuplicateSiblingAFG791 = _counting_fg("RendererDuplicateSiblingAFG791", base=RendererDuplicateNameFG791)
+RendererDuplicateSiblingBFG791 = _counting_fg("RendererDuplicateSiblingBFG791", base=RendererDuplicateNameFG791)
+RendererDuplicateSiblingCFG791 = _counting_fg("RendererDuplicateSiblingCFG791", base=RendererDuplicateNameFG791)
+# The fifth copy of the shared name, enough to fill every suggestion slot.
+RendererDuplicateSiblingDFG791 = _counting_fg("RendererDuplicateSiblingDFG791", base=RendererDuplicateNameFG791)
 
+# Catalog candidate holding the one genuinely different close name the copies push out.
+RendererDuplicateSpareFG791 = _counting_fg(
+    "RendererDuplicateSpareFG791", supported_names=DUPLICATE_SPARE_NAME_791, frameworks=ONE_FRAMEWORK_791
+)
 
-class RendererCutoffAFG791(CountingFeatureGroup791):
-    """Eliminated candidate declaring the requested name, so the name catalog carries the exact echo."""
+# Declares the requested name but matches nothing, so nothing records it as an elimination.
+RendererDeclaredUnmatchedFG791 = _counting_fg(
+    "RendererDeclaredUnmatchedFG791", supported_names=DECLARED_UNMATCHED_FEATURE_791, frameworks=ONE_FRAMEWORK_791
+)
 
-    MATCHES = frozenset({CUTOFF_FEATURE_791})
-    SUPPORTED_NAMES = frozenset({CUTOFF_FEATURE_791})
-    FRAMEWORK_RULE = {RendererFwOne791, RendererFwTwo791}
+# Catalog candidate declaring more close names than the message may ever list.
+RendererWideCatalogFG791 = _counting_fg(
+    "RendererWideCatalogFG791", supported_names=WIDE_CATALOG_NAMES_791, frameworks=ONE_FRAMEWORK_791
+)
 
+# The reported repro: declares the requested name AND a sibling, then loses every framework.
+RendererDeadSiblingFG791 = _counting_fg(
+    "RendererDeadSiblingFG791",
+    matches=DEAD_SIBLING_FEATURE_791,
+    supported_names=(DEAD_SIBLING_FEATURE_791, DEAD_SIBLING_SPARE_791),
+    frameworks=TWO_FRAMEWORKS_791,
+)
 
-class RendererCutoffBFG791(CountingFeatureGroup791):
-    """Second eliminated candidate, contributing two more droppable hints: its class name and its prefix."""
+# Dead contributor of two names: one it shares with the live group below, one only it declares.
+RendererSharedDeadFG791 = _counting_fg(
+    "RendererSharedDeadFG791",
+    matches=SHARED_TYPO_FEATURE_791,
+    supported_names=(SHARED_LIVE_NAME_791, SHARED_DEAD_NAME_791),
+    frameworks=TWO_FRAMEWORKS_791,
+)
 
-    MATCHES = frozenset({CUTOFF_FEATURE_791})
-    FRAMEWORK_RULE = {RendererFwOne791, RendererFwTwo791}
-
-
-class SpareNameCatalogFG791(CountingFeatureGroup791):
-    """Healthy catalog group, named far enough from the request that only its supported name can be suggested."""
-
-    MATCHES = frozenset({CUTOFF_CATALOG_NAME_791})
-    SUPPORTED_NAMES = frozenset({CUTOFF_CATALOG_NAME_791})
-    FRAMEWORK_RULE = {RendererFwOne791}
-
-
-class RendererDuplicateNameFG791(CountingFeatureGroup791):
-    """Catalog candidate declaring the shared name; the four siblings below declare exactly the same one."""
-
-    SUPPORTED_NAMES = frozenset({DUPLICATE_CATALOG_NAME_791})
-    FRAMEWORK_RULE = {RendererFwOne791}
-
-
-class RendererDuplicateSiblingAFG791(RendererDuplicateNameFG791):
-    """Second contributor of the shared name."""
-
-
-class RendererDuplicateSiblingBFG791(RendererDuplicateNameFG791):
-    """Third contributor of the shared name."""
-
-
-class RendererDuplicateSiblingCFG791(RendererDuplicateNameFG791):
-    """Fourth contributor of the shared name."""
-
-
-class RendererDuplicateSiblingDFG791(RendererDuplicateNameFG791):
-    """Fifth contributor of the shared name, enough copies to fill every suggestion slot."""
-
-
-class RendererDuplicateSpareFG791(CountingFeatureGroup791):
-    """Catalog candidate holding the one genuinely different close name the copies push out."""
-
-    SUPPORTED_NAMES = frozenset({DUPLICATE_SPARE_NAME_791})
-    FRAMEWORK_RULE = {RendererFwOne791}
-
-
-class RendererDeclaredUnmatchedFG791(CountingFeatureGroup791):
-    """Declares the requested name but matches nothing, so nothing records it as an elimination."""
-
-    SUPPORTED_NAMES = frozenset({DECLARED_UNMATCHED_FEATURE_791})
-    FRAMEWORK_RULE = {RendererFwOne791}
-
-
-class RendererWideCatalogFG791(CountingFeatureGroup791):
-    """Catalog candidate declaring more close names than the message may ever list."""
-
-    SUPPORTED_NAMES = WIDE_CATALOG_NAMES_791
-    FRAMEWORK_RULE = {RendererFwOne791}
-
-
-class RendererDeadSiblingFG791(CountingFeatureGroup791):
-    """The reported repro: declares the requested name AND a sibling, then loses every framework."""
-
-    MATCHES = frozenset({DEAD_SIBLING_FEATURE_791})
-    SUPPORTED_NAMES = frozenset({DEAD_SIBLING_FEATURE_791, DEAD_SIBLING_SPARE_791})
-    FRAMEWORK_RULE = {RendererFwOne791, RendererFwTwo791}
-
-
-class RendererSharedDeadFG791(CountingFeatureGroup791):
-    """Dead contributor of two names: one it shares with the live group below, one only it declares."""
-
-    MATCHES = frozenset({SHARED_TYPO_FEATURE_791})
-    SUPPORTED_NAMES = frozenset({SHARED_LIVE_NAME_791, SHARED_DEAD_NAME_791})
-    FRAMEWORK_RULE = {RendererFwOne791, RendererFwTwo791}
-
-
-class RendererSharedLiveFG791(CountingFeatureGroup791):
-    """Live contributor of the shared name: it matches nothing here, so nothing ever eliminates it."""
-
-    SUPPORTED_NAMES = frozenset({SHARED_LIVE_NAME_791})
-    FRAMEWORK_RULE = {RendererFwOne791}
+# Live contributor of the shared name: it matches nothing here, so nothing ever eliminates it.
+RendererSharedLiveFG791 = _counting_fg(
+    "RendererSharedLiveFG791", supported_names=SHARED_LIVE_NAME_791, frameworks=ONE_FRAMEWORK_791
+)
 
 
 class RendererValueStageFG791(CountingFeatureGroup791):
     """Eliminated at value_rejection, a name-DEPENDENT stage: it declined THIS name's value."""
 
-    MATCHES = frozenset({VALUE_STAGE_FEATURE_791})
+    MATCHED_NAMES = frozenset({VALUE_STAGE_FEATURE_791})
     SUPPORTED_NAMES = frozenset({VALUE_STAGE_SPARE_791})
     FRAMEWORK_RULE = {RendererFwOne791}
 
@@ -637,31 +547,28 @@ class RendererValueStageFG791(CountingFeatureGroup791):
         raise PropertyValueRejection(VALUE_STAGE_REJECTION_REASON_791)
 
 
-class RendererCapabilityStageFG791(CountingFeatureGroup791):
-    """Eliminated at capability: the per-feature hook rejected the one framework the run enabled."""
+# Eliminated at capability: the per-feature hook rejected the one framework the run enabled.
+RendererCapabilityStageFG791 = _counting_fg(
+    "RendererCapabilityStageFG791",
+    matches=CAPABILITY_STAGE_FEATURE_791,
+    supported_names=CAPABILITY_STAGE_SPARE_791,
+    frameworks=ONE_FRAMEWORK_791,
+    supported_frameworks="RendererFwThree791",
+)
 
-    MATCHES = frozenset({CAPABILITY_STAGE_FEATURE_791})
-    SUPPORTED_NAMES = frozenset({CAPABILITY_STAGE_SPARE_791})
-    FRAMEWORK_RULE = {RendererFwOne791}
-    SUPPORTED_FRAMEWORKS = frozenset({"RendererFwThree791"})
+# Declares and matches BOTH names, then loses every framework: whichever one is requested, it is eliminated.
+RendererDisabledPairFG791 = _counting_fg(
+    "RendererDisabledPairFG791",
+    matches=(DISABLED_PAIR_FEATURE_791, DISABLED_PAIR_SPARE_791),
+    supported_names=(DISABLED_PAIR_FEATURE_791, DISABLED_PAIR_SPARE_791),
+    frameworks=TWO_FRAMEWORKS_791,
+)
 
-
-class RendererDisabledPairFG791(CountingFeatureGroup791):
-    """Declares and matches BOTH names, then loses every framework: whichever one is requested, it is eliminated."""
-
-    MATCHES = frozenset({DISABLED_PAIR_FEATURE_791, DISABLED_PAIR_SPARE_791})
-    SUPPORTED_NAMES = frozenset({DISABLED_PAIR_FEATURE_791, DISABLED_PAIR_SPARE_791})
-    FRAMEWORK_RULE = {RendererFwOne791, RendererFwTwo791}
-
-
-class SpareNoFrameworkFG791(CountingFeatureGroup791):
-    """Declares the spare name and matches nothing, so nothing records the empty framework set that kills it.
-
-    Named far from both feature names on purpose: only its declared name may ever reach the suggestion line.
-    """
-
-    SUPPORTED_NAMES = frozenset({DISABLED_PAIR_SPARE_791})
-    FRAMEWORK_RULE = {RendererFwOne791}
+# Declares the spare name and matches nothing, so nothing records the empty framework set that kills it.
+# Named far from both feature names on purpose: only its declared name may ever reach the suggestion line.
+SpareNoFrameworkFG791 = _counting_fg(
+    "SpareNoFrameworkFG791", supported_names=DISABLED_PAIR_SPARE_791, frameworks=ONE_FRAMEWORK_791
+)
 
 
 class RendererLivePrefixFG791(CountingFeatureGroup791):
@@ -676,28 +583,26 @@ class RendererLivePrefixFG791(CountingFeatureGroup791):
         options: Options,
         data_access_collection: Optional[DataAccessCollection] = None,
     ) -> bool:
-        _record(cls.get_class_name(), "match_feature_group_criteria")
+        cls._enter_hook("match_feature_group_criteria")
         return cls.feature_name_contains_class_name_as_prefix(str(feature_name))
 
 
-class RendererDeadPrefixFG791(CountingFeatureGroup791):
-    """Dead declarer of two names: one the live prefix above covers, one only its own dead prefix covers."""
+# Dead declarer of two names: one the live prefix above covers, one only its own dead prefix covers.
+RendererDeadPrefixFG791 = _counting_fg(
+    "RendererDeadPrefixFG791",
+    matches=LIVE_PREFIX_FEATURE_791,
+    supported_names=(LIVE_PREFIX_COVERED_791, DEAD_PREFIX_UNCOVERED_791),
+    frameworks=TWO_FRAMEWORKS_791,
+)
 
-    MATCHES = frozenset({LIVE_PREFIX_FEATURE_791})
-    SUPPORTED_NAMES = frozenset({LIVE_PREFIX_COVERED_791, DEAD_PREFIX_UNCOVERED_791})
-    FRAMEWORK_RULE = {RendererFwOne791, RendererFwTwo791}
-
-
-class CrossDomainDeclarerFG791(CountingFeatureGroup791):
-    """Declares and matches the sibling name only, from a domain no request here asks for.
-
-    Named far from both feature names on purpose: only its declared name may ever reach the suggestion line.
-    """
-
-    MATCHES = frozenset({DOMAIN_GATE_SIBLING_791})
-    SUPPORTED_NAMES = frozenset({DOMAIN_GATE_SIBLING_791})
-    DOMAIN_NAME = OTHER_DOMAIN_791
-    FRAMEWORK_RULE = {RendererFwOne791}
+# Named far from both feature names on purpose: only its declared name may ever reach the suggestion line.
+CrossDomainDeclarerFG791 = _counting_fg(
+    "CrossDomainDeclarerFG791",
+    matches=DOMAIN_GATE_SIBLING_791,
+    supported_names=DOMAIN_GATE_SIBLING_791,
+    domain=OTHER_DOMAIN_791,
+    frameworks=ONE_FRAMEWORK_791,
+)
 
 
 class RendererCrossDomainNameFG791(CountingFeatureGroup791):
@@ -716,42 +621,39 @@ class RendererCrossDomainNameFG791(CountingFeatureGroup791):
         options: Options,
         data_access_collection: Optional[DataAccessCollection] = None,
     ) -> bool:
-        _record(cls.get_class_name(), "match_feature_group_criteria")
+        cls._enter_hook("match_feature_group_criteria")
         # The two class-identity rules of the default matcher, and the two names the catalog captures for it.
         name = str(feature_name)
         return cls.feature_name_equal_to_class_name(name) or cls.feature_name_contains_class_name_as_prefix(name)
 
 
-class RendererLiveNameDeclarerFG791(CountingFeatureGroup791):
-    """Live declarer of the wrong-domain group's two class-identity names, in the requested domain."""
+# Live declarer of the wrong-domain group's two class-identity names, in the requested domain.
+RendererLiveNameDeclarerFG791 = _counting_fg(
+    "RendererLiveNameDeclarerFG791",
+    supported_names=(DEAD_CLASS_NAME_791, DEAD_CLASS_PREFIX_791),
+    domain=REQUESTED_DOMAIN_791,
+    frameworks=ONE_FRAMEWORK_791,
+)
 
-    SUPPORTED_NAMES = frozenset({DEAD_CLASS_NAME_791, DEAD_CLASS_PREFIX_791})
-    DOMAIN_NAME = REQUESTED_DOMAIN_791
-    FRAMEWORK_RULE = {RendererFwOne791}
+# Declares and matches the sibling name only, from outside the scope every request here asks for.
+# Named far from both feature names on purpose: only its declared name may ever reach the suggestion line.
+OutsideScopeDeclarerFG791 = _counting_fg(
+    "OutsideScopeDeclarerFG791",
+    matches=SCOPE_GATE_SIBLING_791,
+    supported_names=SCOPE_GATE_SIBLING_791,
+    frameworks=ONE_FRAMEWORK_791,
+)
 
-
-class OutsideScopeDeclarerFG791(CountingFeatureGroup791):
-    """Declares and matches the sibling name only, from outside the scope every request here asks for.
-
-    Named far from both feature names on purpose: only its declared name may ever reach the suggestion line.
-    """
-
-    MATCHES = frozenset({SCOPE_GATE_SIBLING_791})
-    SUPPORTED_NAMES = frozenset({SCOPE_GATE_SIBLING_791})
-    FRAMEWORK_RULE = {RendererFwOne791}
-
-
-class LinksGateDeclarerFG791(CountingFeatureGroup791):
-    """Declares and matches the sibling name only, with an index column no link of the runs below reaches.
-
-    Named far from both feature names on purpose: only its declared name may ever reach the suggestion line.
-    """
-
-    MATCHES = frozenset({LINKS_GATE_SIBLING_791})
-    SUPPORTED_NAMES = frozenset({LINKS_GATE_SIBLING_791})
-    FRAMEWORK_RULE = {RendererFwOne791}
-    INDEX_COLUMNS = [Index(("renderer_links_index_791",))]
-    SUPPORTS_INDEX_RESULT = False
+# Its index column is one that no link of the runs below reaches.
+# Named far from both feature names on purpose: only its declared name may ever reach the suggestion line.
+LinksGateDeclarerFG791 = _counting_fg(
+    "LinksGateDeclarerFG791",
+    matches=LINKS_GATE_SIBLING_791,
+    supported_names=LINKS_GATE_SIBLING_791,
+    frameworks=ONE_FRAMEWORK_791,
+    index_columns=[Index(("renderer_links_index_791",))],
+    supports_index=False,
+)
 
 
 # The one link every linked run below carries; no group here supports either of its two indexes.
@@ -761,38 +663,31 @@ LINKS_GATE_LINK_791 = Link.inner(
 )
 
 
-class SpareAbstractBaseFG791(CountingFeatureGroup791):
-    """Abstract base declaring and matching one name, in the requested domain: it can never be identified.
+# Abstract, so it can never be identified.
+# Named far from both feature names on purpose: only its declared name may ever reach the suggestion line.
+SpareAbstractBaseFG791 = _counting_fg(
+    "SpareAbstractBaseFG791",
+    matches=ABSTRACT_DECLARER_NAME_791,
+    supported_names=ABSTRACT_DECLARER_NAME_791,
+    domain=REQUESTED_DOMAIN_791,
+    frameworks=ONE_FRAMEWORK_791,
+    abstract=True,
+)
 
-    Named far from both feature names on purpose: only its declared name may ever reach the suggestion line.
-    """
-
-    MATCHES = frozenset({ABSTRACT_DECLARER_NAME_791})
-    SUPPORTED_NAMES = frozenset({ABSTRACT_DECLARER_NAME_791})
-    DOMAIN_NAME = REQUESTED_DOMAIN_791
-    FRAMEWORK_RULE = {RendererFwOne791}
-
-    @classmethod
-    @abstractmethod
-    def _renderer_spare_abstract_hook_791(cls) -> str:
-        """Abstract hook that keeps this base uninstantiable."""
-
-
-class SpareDeadTwinFG791(CountingFeatureGroup791):
-    """Concrete declarer of the same name, left without a single enabled framework by every run below.
-
-    Named far from both feature names on purpose: only its declared name may ever reach the suggestion line.
-    """
-
-    MATCHES = frozenset({ABSTRACT_DECLARER_NAME_791})
-    SUPPORTED_NAMES = frozenset({ABSTRACT_DECLARER_NAME_791})
-    FRAMEWORK_RULE = {RendererFwOne791}
+# Concrete declarer of the same name, left without a single enabled framework by every run below.
+# Named far from both feature names on purpose: only its declared name may ever reach the suggestion line.
+SpareDeadTwinFG791 = _counting_fg(
+    "SpareDeadTwinFG791",
+    matches=ABSTRACT_DECLARER_NAME_791,
+    supported_names=ABSTRACT_DECLARER_NAME_791,
+    frameworks=ONE_FRAMEWORK_791,
+)
 
 
 class ValueRejectingCrossDomainFG791(CountingFeatureGroup791):
     """Declines THIS name's value at the matcher AND sits in another domain: name-dependent record, name-blind gate."""
 
-    MATCHES = frozenset({VALUE_DOMAIN_FEATURE_791})
+    MATCHED_NAMES = frozenset({VALUE_DOMAIN_FEATURE_791})
     SUPPORTED_NAMES = frozenset({VALUE_DOMAIN_SPARE_791})
     DOMAIN_NAME = OTHER_DOMAIN_791
     FRAMEWORK_RULE = {RendererFwOne791}
@@ -813,7 +708,7 @@ class ValueRejectingCrossDomainFG791(CountingFeatureGroup791):
 class ValueRejectingUnlinkedFG791(CountingFeatureGroup791):
     """Declines THIS name's value at the matcher AND matches no link: name-dependent record, name-blind gate."""
 
-    MATCHES = frozenset({VALUE_LINKS_FEATURE_791})
+    MATCHED_NAMES = frozenset({VALUE_LINKS_FEATURE_791})
     SUPPORTED_NAMES = frozenset({VALUE_LINKS_SPARE_791})
     FRAMEWORK_RULE = {RendererFwOne791}
     INDEX_COLUMNS = [Index(("renderer_value_links_index_791",))]
@@ -832,50 +727,15 @@ class ValueRejectingUnlinkedFG791(CountingFeatureGroup791):
         raise PropertyValueRejection(VALUE_LINKS_REJECTION_REASON_791)
 
 
-class RendererDomainBoom791(RuntimeError):
-    """Raised by a provider's get_domain() hook."""
+# A group built per test still outlives it: pytest keeps a failing test's traceback, and that traceback keeps
+# the builder's frame, and so the class, alive and globally visible in FeatureGroup.__subclasses__(). A group
+# whose declaration hook raised forever would then take down every later test in the worker that enumerates the
+# plugin universe, because PreFilterPlugins fails closed on a raising compute_framework_definition(). Disarming
+# is what makes a leaked class inert.
+RAISING_GROUPS_BUILT: list[type[CountingFeatureGroup791]] = []
 
 
-class RendererIndexBoom791(RuntimeError):
-    """Raised by a provider's index_columns() or supports_index() hook."""
-
-
-class RendererPrefixBoom791(RuntimeError):
-    """Raised by a provider's prefix() hook."""
-
-
-class RendererNamesBoom791(RuntimeError):
-    """Raised by a provider's feature_names_supported() hook."""
-
-
-class RendererRejectionBoom791(RuntimeError):
-    """Raised by a provider's _strict_validation_rejection_reason() hook."""
-
-
-class RendererFrameworkRuleBoom791(RuntimeError):
-    """Raised by a provider's compute_framework_rule() hook."""
-
-
-class RaisingHookGroup791(CountingFeatureGroup791):
-    """Base for the groups whose fact-capture hook raises or returns a malformed value.
-
-    Its subclasses are ALWAYS built inside a function.
-
-    ``ARMED`` is what makes that safe. A group built per test still outlives it: pytest keeps a failing
-    test's traceback, and that traceback keeps the builder's frame (and so the class) alive and globally
-    visible in ``FeatureGroup.__subclasses__()``. A group whose declaration hook raised forever would then
-    take down every later test in the worker that enumerates the plugin universe -- ``PreFilterPlugins``
-    fails closed on a raising ``compute_framework_definition()``. The autouse fixture disarms every group
-    it built, so a leaked class is inert.
-    """
-
-    ARMED: ClassVar[bool] = True
-
-
-RAISING_GROUPS_BUILT: list[type[RaisingHookGroup791]] = []
-
-
-def _armed(group: type[RaisingHookGroup791]) -> type[RaisingHookGroup791]:
+def _armed(group: type[CountingFeatureGroup791]) -> type[CountingFeatureGroup791]:
     """Track a freshly built raising group so the autouse fixture can disarm it after the test."""
     RAISING_GROUPS_BUILT.append(group)
     return group
@@ -884,23 +744,17 @@ def _armed(group: type[RaisingHookGroup791]) -> type[RaisingHookGroup791]:
 def _build_raising_domain_groups() -> tuple[type[CountingFeatureGroup791], type[CountingFeatureGroup791]]:
     """Build a (raising get_domain, healthy get_domain) pair that both match the same feature name."""
 
-    class RendererRaisingDomainFG791(RaisingHookGroup791):
+    class RendererRaisingDomainFG791(CountingFeatureGroup791):
         """Candidate whose get_domain() hook raises."""
 
-        MATCHES = frozenset({RAISING_DOMAIN_FEATURE_791})
+        MATCHED_NAMES = frozenset({RAISING_DOMAIN_FEATURE_791})
         FRAMEWORK_RULE = {RendererFwOne791}
-
-        @classmethod
-        def get_domain(cls) -> Domain:
-            _record(cls.get_class_name(), "get_domain")
-            if cls.ARMED:
-                raise RendererDomainBoom791("get_domain exploded 791")
-            return Domain.get_default_domain()
+        RAISING_HOOKS = frozenset({"get_domain"})
 
     class RendererHealthyDomainFG791(CountingFeatureGroup791):
         """Candidate whose get_domain() hook works, standing next to the raising one."""
 
-        MATCHES = frozenset({RAISING_DOMAIN_FEATURE_791})
+        MATCHED_NAMES = frozenset({RAISING_DOMAIN_FEATURE_791})
         DOMAIN_NAME = HEALTHY_DOMAIN_791
         FRAMEWORK_RULE = {RendererFwOne791}
 
@@ -913,18 +767,12 @@ def _build_unreadable_domain_group() -> type[CountingFeatureGroup791]:
     Named far from both feature names on purpose: only its declared name may ever reach the suggestion line.
     """
 
-    class UnreadableDomainFG791(RaisingHookGroup791):
+    class UnreadableDomainFG791(CountingFeatureGroup791):
         """Declarer whose domain can never be read, matching nothing."""
 
         SUPPORTED_NAMES = frozenset({DEGRADED_DOMAIN_SPARE_791})
         FRAMEWORK_RULE = {RendererFwOne791}
-
-        @classmethod
-        def get_domain(cls) -> Domain:
-            _record(cls.get_class_name(), "get_domain")
-            if cls.ARMED:
-                raise RendererDomainBoom791("get_domain exploded 791")
-            return Domain.get_default_domain()
+        RAISING_HOOKS = frozenset({"get_domain"})
 
     return _armed(UnreadableDomainFG791)
 
@@ -935,16 +783,17 @@ def _build_malformed_domain_group() -> type[CountingFeatureGroup791]:
     Named far from both feature names on purpose: only its declared name may ever reach the suggestion line.
     """
 
-    class BadDomainReturnFG791(RaisingHookGroup791):
+    class BadDomainReturnFG791(CountingFeatureGroup791):
         """Declarer whose domain read is well-formed as a call and malformed as a value."""
 
-        MATCHES = frozenset({MALFORMED_DOMAIN_SPARE_791})
+        MATCHED_NAMES = frozenset({MALFORMED_DOMAIN_SPARE_791})
         SUPPORTED_NAMES = frozenset({MALFORMED_DOMAIN_SPARE_791})
         FRAMEWORK_RULE = {RendererFwOne791}
 
         @classmethod
         def get_domain(cls) -> Domain:
-            _record(cls.get_class_name(), "get_domain")
+            # A malformed RETURN, which RAISING_HOOKS cannot express: an armed hook only ever raises.
+            cls._enter_hook("get_domain")
             if cls.ARMED:
                 bad_domain: Domain = _malformed(MALFORMED_DOMAIN_VALUE_791)
                 return bad_domain
@@ -959,18 +808,12 @@ def _build_unreadable_index_group() -> type[CountingFeatureGroup791]:
     Named far from both feature names on purpose: only its declared name may ever reach the suggestion line.
     """
 
-    class UnreadableIndexFG791(RaisingHookGroup791):
+    class UnreadableIndexFG791(CountingFeatureGroup791):
         """Declarer whose index columns can never be read, matching nothing."""
 
         SUPPORTED_NAMES = frozenset({DEGRADED_LINKS_SPARE_791})
         FRAMEWORK_RULE = {RendererFwOne791}
-
-        @classmethod
-        def index_columns(cls) -> Optional[list[Index]]:
-            _record(cls.get_class_name(), "index_columns")
-            if cls.ARMED:
-                raise RendererIndexBoom791("index_columns exploded 791")
-            return None
+        RAISING_HOOKS = frozenset({"index_columns"})
 
     return _armed(UnreadableIndexFG791)
 
@@ -978,19 +821,13 @@ def _build_unreadable_index_group() -> type[CountingFeatureGroup791]:
 def _build_unreadable_supports_index_group() -> type[CountingFeatureGroup791]:
     """Build the same declarer one hook later: its index columns read, but supports_index() raises."""
 
-    class UnreadableSupportsIndexFG791(RaisingHookGroup791):
+    class UnreadableSupportsIndexFG791(CountingFeatureGroup791):
         """Declarer whose index support can never be decided, matching nothing."""
 
         SUPPORTED_NAMES = frozenset({DEGRADED_LINKS_SPARE_791})
         FRAMEWORK_RULE = {RendererFwOne791}
         INDEX_COLUMNS = [Index(("renderer_degraded_links_index_791",))]
-
-        @classmethod
-        def supports_index(cls, index: Index) -> Optional[bool]:
-            _record(cls.get_class_name(), "supports_index")
-            if cls.ARMED:
-                raise RendererIndexBoom791("supports_index exploded 791")
-            return None
+        RAISING_HOOKS = frozenset({"supports_index"})
 
     return _armed(UnreadableSupportsIndexFG791)
 
@@ -998,17 +835,11 @@ def _build_unreadable_supports_index_group() -> type[CountingFeatureGroup791]:
 def _build_raising_prefix_group() -> type[CountingFeatureGroup791]:
     """Build a catalog group whose prefix() hook raises."""
 
-    class RendererRaisingPrefixFG791(RaisingHookGroup791):
+    class RendererRaisingPrefixFG791(CountingFeatureGroup791):
         """Catalog candidate whose prefix() hook raises."""
 
         FRAMEWORK_RULE = {RendererFwOne791}
-
-        @classmethod
-        def prefix(cls) -> str:
-            _record(cls.get_class_name(), "prefix")
-            if cls.ARMED:
-                raise RendererPrefixBoom791("prefix exploded 791")
-            return f"{cls.get_class_name()}_"
+        RAISING_HOOKS = frozenset({"prefix"})
 
     return _armed(RendererRaisingPrefixFG791)
 
@@ -1016,18 +847,12 @@ def _build_raising_prefix_group() -> type[CountingFeatureGroup791]:
 def _build_raising_names_group() -> type[CountingFeatureGroup791]:
     """Build a catalog group whose feature_names_supported() hook raises."""
 
-    class RendererRaisingNamesFG791(RaisingHookGroup791):
+    class RendererRaisingNamesFG791(CountingFeatureGroup791):
         """Catalog candidate whose feature_names_supported() hook raises."""
 
         FRAMEWORK_RULE = {RendererFwOne791}
         SUPPORTED_NAMES = frozenset({BOOM_SUPPORTED_NAME_791})
-
-        @classmethod
-        def feature_names_supported(cls) -> set[str]:
-            _record(cls.get_class_name(), "feature_names_supported")
-            if cls.ARMED:
-                raise RendererNamesBoom791("feature_names_supported exploded 791")
-            return set()
+        RAISING_HOOKS = frozenset({"feature_names_supported"})
 
     return _armed(RendererRaisingNamesFG791)
 
@@ -1035,19 +860,13 @@ def _build_raising_names_group() -> type[CountingFeatureGroup791]:
 def _build_raising_dead_names_group() -> type[CountingFeatureGroup791]:
     """Build a group that is eliminated with no framework left AND whose feature_names_supported() raises."""
 
-    class RendererRaisingDeadNamesFG791(RaisingHookGroup791):
+    class RendererRaisingDeadNamesFG791(CountingFeatureGroup791):
         """Dead candidate whose declared names can never be read."""
 
-        MATCHES = frozenset({RAISING_DEAD_NAMES_FEATURE_791})
+        MATCHED_NAMES = frozenset({RAISING_DEAD_NAMES_FEATURE_791})
         SUPPORTED_NAMES = frozenset({RAISING_DEAD_NAMES_SPARE_791})
         FRAMEWORK_RULE = {RendererFwOne791, RendererFwTwo791}
-
-        @classmethod
-        def feature_names_supported(cls) -> set[str]:
-            _record(cls.get_class_name(), "feature_names_supported")
-            if cls.ARMED:
-                raise RendererNamesBoom791("feature_names_supported exploded 791")
-            return set(cls.SUPPORTED_NAMES)
+        RAISING_HOOKS = frozenset({"feature_names_supported"})
 
     return _armed(RendererRaisingDeadNamesFG791)
 
@@ -1055,16 +874,17 @@ def _build_raising_dead_names_group() -> type[CountingFeatureGroup791]:
 def _build_raising_rejection_group() -> type[CountingFeatureGroup791]:
     """Build a group whose _strict_validation_rejection_reason() hook raises."""
 
-    class RendererRaisingRejectionFG791(RaisingHookGroup791):
+    class RendererRaisingRejectionFG791(CountingFeatureGroup791):
         """Candidate whose value-rejection diagnostic hook raises."""
 
         FRAMEWORK_RULE = {RendererFwOne791}
+        RAISING_HOOKS = frozenset({"_strict_validation_rejection_reason"})
 
         @classmethod
         def _strict_validation_rejection_reason(cls, feature_name: str | FeatureName, options: Options) -> str | None:
-            _record(cls.get_class_name(), "_strict_validation_rejection_reason")
-            if cls.ARMED:
-                raise RendererRejectionBoom791("_strict_validation_rejection_reason exploded 791")
+            # Declared on FeatureChainParserMixin, so it is none of the counted hooks: enter it by hand to keep
+            # the count-then-raise ordering the armed hooks have.
+            cls._enter_hook("_strict_validation_rejection_reason")
             return None
 
     return _armed(RendererRaisingRejectionFG791)
@@ -1073,10 +893,10 @@ def _build_raising_rejection_group() -> type[CountingFeatureGroup791]:
 def _build_raising_framework_rule_groups() -> tuple[type[CountingFeatureGroup791], type[CountingFeatureGroup791]]:
     """Build an abstract base plus a concrete subclass whose compute_framework_rule() hook raises."""
 
-    class RendererRaisingAbstractBaseFG791(RaisingHookGroup791):
+    class RendererRaisingAbstractBaseFG791(CountingFeatureGroup791):
         """Abstract base that matches the name but can never be instantiated."""
 
-        MATCHES = frozenset({RAISING_ABSTRACT_FEATURE_791})
+        MATCHED_NAMES = frozenset({RAISING_ABSTRACT_FEATURE_791})
         FRAMEWORK_RULE = {RendererFwOne791}
 
         @classmethod
@@ -1087,14 +907,8 @@ def _build_raising_framework_rule_groups() -> tuple[type[CountingFeatureGroup791
     class RendererRaisingConcreteSubFG791(RendererRaisingAbstractBaseFG791):
         """Concrete implementation whose framework declaration raises."""
 
-        MATCHES = frozenset({RAISING_ABSTRACT_FEATURE_791})
-
-        @classmethod
-        def compute_framework_rule(cls) -> set[type[ComputeFramework]] | None:
-            _record(cls.get_class_name(), "compute_framework_rule")
-            if cls.ARMED:
-                raise RendererFrameworkRuleBoom791("compute_framework_rule exploded 791")
-            return cls.FRAMEWORK_RULE
+        MATCHED_NAMES = frozenset({RAISING_ABSTRACT_FEATURE_791})
+        RAISING_HOOKS = frozenset({"compute_framework_rule"})
 
         @classmethod
         def _renderer_raising_abstract_hook_791(cls) -> str:
@@ -1114,7 +928,7 @@ def _build_tie_domain_groups() -> tuple[type[CountingFeatureGroup791], type[Coun
     group_a = _make_tie_group(
         TIE_MODULE_A_791,
         {
-            "MATCHES": frozenset({TIE_FEATURE_791}),
+            "MATCHED_NAMES": frozenset({TIE_FEATURE_791}),
             "DOMAIN_NAME": "renderer_tie_domain_a_791",
             "FRAMEWORK_RULE": {RendererFwOne791},
         },
@@ -1122,7 +936,7 @@ def _build_tie_domain_groups() -> tuple[type[CountingFeatureGroup791], type[Coun
     group_b = _make_tie_group(
         TIE_MODULE_B_791,
         {
-            "MATCHES": frozenset({TIE_FEATURE_791}),
+            "MATCHED_NAMES": frozenset({TIE_FEATURE_791}),
             "DOMAIN_NAME": "renderer_tie_domain_b_791",
             "FRAMEWORK_RULE": {RendererFwOne791},
         },
@@ -1135,7 +949,7 @@ def _build_tie_capability_groups() -> tuple[type[CountingFeatureGroup791], type[
     group_a = _make_tie_group(
         TIE_MODULE_A_791,
         {
-            "MATCHES": frozenset({TIE_CAPABILITY_FEATURE_791}),
+            "MATCHED_NAMES": frozenset({TIE_CAPABILITY_FEATURE_791}),
             "FRAMEWORK_RULE": {RendererFwOne791, RendererFwTwo791},
             "SUPPORTED_FRAMEWORKS": frozenset({"RendererFwOne791"}),
         },
@@ -1143,7 +957,7 @@ def _build_tie_capability_groups() -> tuple[type[CountingFeatureGroup791], type[
     group_b = _make_tie_group(
         TIE_MODULE_B_791,
         {
-            "MATCHES": frozenset({TIE_CAPABILITY_FEATURE_791}),
+            "MATCHED_NAMES": frozenset({TIE_CAPABILITY_FEATURE_791}),
             "FRAMEWORK_RULE": {RendererFwOne791, RendererFwTwo791},
             "SUPPORTED_FRAMEWORKS": frozenset({"RendererFwTwo791"}),
         },
@@ -1685,8 +1499,7 @@ def _suggestions(message: str) -> list[str] | None:
 @pytest.fixture(autouse=True)
 def reset_hook_calls() -> Iterator[None]:
     """Counter state must not leak between tests, and no raising hook may outlive the test that built it."""
-    HOOK_CALLS.clear()
-    PAIR_CALLS.clear()
+    HOOK_COUNTER_791.clear()
     yield
     for group in RAISING_GROUPS_BUILT:
         group.ARMED = False

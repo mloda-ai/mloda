@@ -1,6 +1,7 @@
 import gc
 import inspect
 import logging
+from dataclasses import dataclass
 from typing import Any
 
 import pytest
@@ -18,6 +19,7 @@ from mloda.core.api.plugin_docs import (
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.user import PluginLoader
+from tests.helpers.plugin_stubs import make_raising_fg
 
 # Docs enumeration source-hashes every FeatureGroup subclass; a cold cache under xdist load can exceed the default timeout.
 pytestmark = pytest.mark.timeout(30)
@@ -241,6 +243,80 @@ class TestGetFeatureGroupDocs:
         assert len(upper_filtered) == expected
 
 
+@dataclass(frozen=True)
+class DegradedFieldCase:
+    """One broken hook, the docs field it degrades and the base-class fallback that field lands on."""
+
+    hook: str
+    class_name: str
+    field: str
+    expected: str | list[str] | set[str]
+    doc: str | None = None
+
+    @property
+    def case_id(self) -> str:
+        """Names the hook; a hook read twice is told apart by the docstring the double carries."""
+        return self.hook if self.doc is not None else f"{self.hook}_without_docstring"
+
+
+DEGRADED_FIELD_CASES: list[DegradedFieldCase] = [
+    DegradedFieldCase(
+        hook="get_class_name",
+        class_name="_DocsGetClassNameBoomFG",
+        field="name",
+        expected="_DocsGetClassNameBoomFG",
+        doc="Test double whose get_class_name() raises.",
+    ),
+    DegradedFieldCase(
+        # The fallback is base-class-derived, not "": an empty description would hide the broken
+        # plugin from every search= query, which is the masking risk the degradation avoids.
+        hook="description",
+        class_name="_DocsDescriptionBoomFG",
+        field="description",
+        expected="Test double whose description() raises.",
+        doc="Test double whose description() raises.",
+    ),
+    DegradedFieldCase(
+        # No docstring to fall back on, so the fallback walks one step further, to the class name.
+        hook="description",
+        class_name="_DocsDescriptionNoDocstringFG",
+        field="description",
+        expected="_DocsDescriptionNoDocstringFG",
+    ),
+    DegradedFieldCase(
+        hook="compute_framework_definition",
+        class_name="_DocsFrameworkBoomFG",
+        field="compute_frameworks",
+        expected=[],
+        doc="Test double whose compute_framework_definition() raises.",
+    ),
+    DegradedFieldCase(
+        # The realistic break: the definition hook is @final, so a real plugin breaks framework
+        # discovery by raising from the overridable rule hook that final method calls.
+        hook="compute_framework_rule",
+        class_name="_DocsFrameworkRuleBoomFG",
+        field="compute_frameworks",
+        expected=[],
+        doc="Test double whose compute_framework_rule() raises.",
+    ),
+    DegradedFieldCase(
+        hook="feature_names_supported",
+        class_name="_DocsFeatureNamesBoomFG",
+        field="supported_feature_names",
+        expected=set(),
+        doc="Test double whose feature_names_supported() raises.",
+    ),
+    DegradedFieldCase(
+        # The base-class convention "<__name__>_".
+        hook="prefix",
+        class_name="_DocsPrefixBoomFG",
+        field="prefix",
+        expected="_DocsPrefixBoomFG_",
+        doc="Test double whose prefix() raises.",
+    ),
+]
+
+
 class TestGetFeatureGroupDocsDegradedFieldReads:
     """A FeatureGroup with one broken introspection hook degrades that field, it does not sink the catalog.
 
@@ -250,108 +326,29 @@ class TestGetFeatureGroupDocsDegradedFieldReads:
     frameworks. Degraded entries stay in the catalog and are filtered on their
     degraded values.
 
-    Isolation: every test double is defined inside its test function and reaped in
-    a ``finally`` block (``del`` plus ``gc.collect()``), because plugin docs walk the
-    live ``__subclasses__()`` registry and a leaked class would corrupt sibling
-    tests' catalog calls. This mirrors ``test_get_compute_framework_docs_degrades_when_is_available_raises``.
+    Isolation: every test double is minted inside its test function, under a name of
+    its own, and reaped in a ``finally`` block (``del`` plus ``gc.collect()``), because
+    plugin docs walk the live ``__subclasses__()`` registry and a leaked class would
+    corrupt sibling tests' catalog calls. Only the test-local name holds the double, so
+    no fixture may own it. This mirrors
+    ``test_get_compute_framework_docs_degrades_when_is_available_raises``.
     """
 
-    def test_get_class_name_raising_degrades_to_dunder_name(self) -> None:
-        """A broken get_class_name() falls back to the class __name__."""
+    @pytest.mark.parametrize("case", DEGRADED_FIELD_CASES, ids=[case.case_id for case in DEGRADED_FIELD_CASES])
+    def test_raising_hook_degrades_its_field_to_the_base_class_fallback(self, case: DegradedFieldCase) -> None:
+        """One broken hook degrades one documented field, the class stays in the catalog."""
+        # The hook is a string here, so a misspelled one would mint a healthy double whose
+        # undegraded field can still match the fallback.
+        assert hasattr(FeatureGroup, case.hook), f"{case.hook} is not a FeatureGroup hook"
 
-        class _DocsGetClassNameBoomFG(FeatureGroup):
-            """Test double whose get_class_name() raises."""
-
-            @classmethod  # type: ignore[misc]
-            def get_class_name(cls) -> str:
-                raise RuntimeError("boom")
-
+        double = make_raising_fg(case.class_name, case.hook, doc=case.doc)
         try:
             by_name = {fg.name: fg for fg in get_feature_group_docs()}
-            assert "_DocsGetClassNameBoomFG" in by_name, "Degraded class must still be documented under its __name__"
-            assert by_name["_DocsGetClassNameBoomFG"].name == "_DocsGetClassNameBoomFG"
+            assert case.class_name in by_name, f"{case.hook} raising must not drop the class from the catalog"
+            degraded: str | list[str] | set[str] = getattr(by_name[case.class_name], case.field)
+            assert degraded == case.expected
         finally:
-            del _DocsGetClassNameBoomFG
-            gc.collect()
-
-    def test_description_raising_degrades_to_class_docstring(self) -> None:
-        """A broken description() falls back to the class docstring, as compute frameworks already do.
-
-        The fallback is base-class-derived, not "": an empty description would hide the
-        broken plugin from every ``search=`` query, which is exactly the masking risk the
-        degradation is meant to avoid.
-        """
-
-        class _DocsDescriptionBoomFG(FeatureGroup):
-            """Test double whose description() raises."""
-
-            @classmethod
-            def description(cls) -> str:
-                raise RuntimeError("boom")
-
-        try:
-            by_name = {fg.name: fg for fg in get_feature_group_docs()}
-            assert "_DocsDescriptionBoomFG" in by_name, "Degraded class must still be documented"
-            assert by_name["_DocsDescriptionBoomFG"].description == "Test double whose description() raises."
-        finally:
-            del _DocsDescriptionBoomFG
-            gc.collect()
-
-    def test_description_raising_without_docstring_degrades_to_class_name(self) -> None:
-        """With no docstring to fall back on, a broken description() degrades to the class name."""
-
-        class _DocsDescriptionNoDocstringFG(FeatureGroup):
-            @classmethod
-            def description(cls) -> str:
-                raise RuntimeError("boom")
-
-        try:
-            by_name = {fg.name: fg for fg in get_feature_group_docs()}
-            assert "_DocsDescriptionNoDocstringFG" in by_name, "Degraded class must still be documented"
-            assert by_name["_DocsDescriptionNoDocstringFG"].description == "_DocsDescriptionNoDocstringFG"
-        finally:
-            del _DocsDescriptionNoDocstringFG
-            gc.collect()
-
-    def test_compute_framework_definition_raising_degrades_to_empty_list(self) -> None:
-        """A broken compute_framework_definition() falls back to an empty framework list."""
-
-        class _DocsFrameworkBoomFG(FeatureGroup):
-            """Test double whose compute_framework_definition() raises."""
-
-            @classmethod  # type: ignore[misc]
-            def compute_framework_definition(cls) -> set[type[ComputeFramework]]:
-                raise RuntimeError("boom")
-
-        try:
-            by_name = {fg.name: fg for fg in get_feature_group_docs()}
-            assert "_DocsFrameworkBoomFG" in by_name, "Degraded class must still be documented"
-            assert by_name["_DocsFrameworkBoomFG"].compute_frameworks == []
-        finally:
-            del _DocsFrameworkBoomFG
-            gc.collect()
-
-    def test_compute_framework_rule_raising_degrades_to_empty_list(self) -> None:
-        """The realistic break: compute_framework_definition() is @final, but the rule hook it calls is not.
-
-        A plugin cannot override the final definition hook, so the way a real plugin breaks
-        framework discovery is by raising from the overridable compute_framework_rule().
-        That exception surfaces through the final method and must degrade the same way.
-        """
-
-        class _DocsFrameworkRuleBoomFG(FeatureGroup):
-            """Test double whose compute_framework_rule() raises."""
-
-            @classmethod
-            def compute_framework_rule(cls) -> set[type[ComputeFramework]] | None:
-                raise RuntimeError("boom")
-
-        try:
-            by_name = {fg.name: fg for fg in get_feature_group_docs()}
-            assert "_DocsFrameworkRuleBoomFG" in by_name, "Degraded class must still be documented"
-            assert by_name["_DocsFrameworkRuleBoomFG"].compute_frameworks == []
-        finally:
-            del _DocsFrameworkRuleBoomFG
+            del double
             gc.collect()
 
     def test_degraded_compute_framework_rule_excluded_by_compute_framework_filter(self) -> None:
@@ -380,42 +377,6 @@ class TestGetFeatureGroupDocsDegradedFieldReads:
             assert "_DocsFrameworkRuleFilterBoomFG" not in {fg.name for fg in filtered}
         finally:
             del _DocsFrameworkRuleFilterBoomFG
-            gc.collect()
-
-    def test_feature_names_supported_raising_degrades_to_empty_set(self) -> None:
-        """A broken feature_names_supported() falls back to an empty set."""
-
-        class _DocsFeatureNamesBoomFG(FeatureGroup):
-            """Test double whose feature_names_supported() raises."""
-
-            @classmethod
-            def feature_names_supported(cls) -> set[str]:
-                raise RuntimeError("boom")
-
-        try:
-            by_name = {fg.name: fg for fg in get_feature_group_docs()}
-            assert "_DocsFeatureNamesBoomFG" in by_name, "Degraded class must still be documented"
-            assert by_name["_DocsFeatureNamesBoomFG"].supported_feature_names == set()
-        finally:
-            del _DocsFeatureNamesBoomFG
-            gc.collect()
-
-    def test_prefix_raising_degrades_to_class_name_prefix(self) -> None:
-        """A broken prefix() falls back to the base-class convention "<__name__>_"."""
-
-        class _DocsPrefixBoomFG(FeatureGroup):
-            """Test double whose prefix() raises."""
-
-            @classmethod
-            def prefix(cls) -> str:
-                raise RuntimeError("boom")
-
-        try:
-            by_name = {fg.name: fg for fg in get_feature_group_docs()}
-            assert "_DocsPrefixBoomFG" in by_name, "Degraded class must still be documented"
-            assert by_name["_DocsPrefixBoomFG"].prefix == "_DocsPrefixBoomFG_"
-        finally:
-            del _DocsPrefixBoomFG
             gc.collect()
 
     def test_broken_feature_group_does_not_sink_the_catalog(self) -> None:

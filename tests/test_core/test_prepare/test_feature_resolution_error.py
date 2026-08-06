@@ -12,17 +12,12 @@ runs in parallel, so a shared name would leak into another module's candidate un
 
 import copy
 import pickle  # nosec B403
-from typing import Optional
 
 import pytest
 
-from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.abstract_plugins.components.feature import Feature
-from mloda.core.abstract_plugins.components.feature_name import FeatureName
-from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.components.plugin_option.plugin_collector import PluginCollector
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
-from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.prepare.accessible_plugins import FeatureGroupEnvironmentMapping
 from mloda.core.prepare.identify_feature_group import (
     FeatureResolutionError,
@@ -30,6 +25,7 @@ from mloda.core.prepare.identify_feature_group import (
 )
 from mloda.core.prepare.resolution_failure_renderer import render_resolution_failure
 from mloda.user import mlodaAPI
+from tests.helpers.plugin_stubs import make_fg
 from tests.test_core.test_prepare.identify_seam import evaluate_or_raise
 
 
@@ -43,52 +39,11 @@ class ResolutionErrorFw_809(ComputeFramework):
     """Dummy compute framework for the typed-resolution-error tests."""
 
 
-class ResolutionErrorKnownFG_809(FeatureGroup):
-    """Concrete feature group matching exactly one unique feature name."""
+ResolutionErrorKnownFG_809 = make_fg("ResolutionErrorKnownFG_809", matches=KNOWN_FEATURE_809)
 
-    @classmethod
-    def match_feature_group_criteria(
-        cls,
-        feature_name: FeatureName | str,
-        options: Options,
-        data_access_collection: Optional[DataAccessCollection] = None,
-    ) -> bool:
-        return str(feature_name) == KNOWN_FEATURE_809
+ResolutionErrorSiblingAFG_809 = make_fg("ResolutionErrorSiblingAFG_809", matches=MULTIPLE_FEATURE_809)
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
-        return None
-
-
-class ResolutionErrorSiblingAFG_809(FeatureGroup):
-    """First of two unrelated siblings matching the same name, forcing an ambiguous match."""
-
-    @classmethod
-    def match_feature_group_criteria(
-        cls,
-        feature_name: FeatureName | str,
-        options: Options,
-        data_access_collection: Optional[DataAccessCollection] = None,
-    ) -> bool:
-        return str(feature_name) == MULTIPLE_FEATURE_809
-
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
-        return None
-
-
-class ResolutionErrorSiblingBFG_809(FeatureGroup):
-    """Second unrelated sibling matching the same name, forcing an ambiguous match."""
-
-    @classmethod
-    def match_feature_group_criteria(
-        cls,
-        feature_name: FeatureName | str,
-        options: Options,
-        data_access_collection: Optional[DataAccessCollection] = None,
-    ) -> bool:
-        return str(feature_name) == MULTIPLE_FEATURE_809
-
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
-        return None
+ResolutionErrorSiblingBFG_809 = make_fg("ResolutionErrorSiblingBFG_809", matches=MULTIPLE_FEATURE_809)
 
 
 def _no_match_accessible_plugins() -> FeatureGroupEnvironmentMapping:

@@ -14,67 +14,88 @@ class ResolveComputeFrameworks:
         self.to_invert_trekker_collection: list[LinkFrameworkTrekker] = []
 
     def links(self, planned_queue: Any, link_trekker: LinkTrekker) -> Any:
-        new_planned_queue = []
-        for p in planned_queue:
-            if isinstance(p, tuple):
-                if not isinstance(p[0], Link):
-                    trekker_members: dict[LinkFrameworkTrekker, list[Any]] = defaultdict(list)
-                    feature_trekkers: dict[UUID, list[LinkFrameworkTrekker]] = defaultdict(list)
-                    for f in p[1]:
-                        for trekker in self.access_link_by_child_uuid(f.uuid, link_trekker):
-                            trekker_members[trekker].append(f)
-                            feature_trekkers[f.uuid].append(trekker)
+        groups = [p for p in planned_queue if isinstance(p, tuple) and not isinstance(p[0], Link)]
 
-                    resolved: dict[LinkFrameworkTrekker, type[ComputeFramework]] = {}
-                    for trekker, members in trekker_members.items():
-                        resolved_cfw = self.resolve_trekker_for_group(trekker, members)
-                        if resolved_cfw is not None:
-                            resolved[trekker] = resolved_cfw
-                        # Adjust immediately so inversions collected for this trekker apply only to its sharing members.
-                        self.trekker_right_left_adjuster(link_trekker, {m.uuid for m in members})
+        trekker_members: dict[LinkFrameworkTrekker, list[Any]] = defaultdict(list)
+        feature_trekkers: dict[UUID, list[LinkFrameworkTrekker]] = defaultdict(list)
+        for p in groups:
+            for f in p[1]:
+                for trekker in self.access_link_by_child_uuid(f.uuid, link_trekker):
+                    trekker_members[trekker].append(f)
+                    feature_trekkers[f.uuid].append(trekker)
 
-                    group_cfws = set(resolved.values())
-                    any_rewritten = False
-                    for f in p[1]:
-                        if f.uuid not in feature_trekkers:
-                            if group_cfws:
-                                f.compute_frameworks = set(group_cfws)
-                                any_rewritten = True
-                            continue
-                        new_cfws = {resolved[trekker] for trekker in feature_trekkers[f.uuid] if trekker in resolved}
-                        if not new_cfws:
-                            mismatches = sorted(
-                                f"{link}: neither {left.__name__} nor {right.__name__}"
-                                for link, left, right in feature_trekkers[f.uuid]
-                            )
-                            raise ValueError(
-                                f"No compute framework agreement for feature {f.name}. Unresolvable links: {mismatches}"
-                            )
-                        f.compute_frameworks = new_cfws
-                        any_rewritten = True
+        # Snapshot before resolving: invert_link mutates data_ordered while the loop runs.
+        trekked_uuids = {trekker: set(uuids) for trekker, uuids in link_trekker.data_ordered.items()}
 
-                    if any_rewritten:
-                        # Rehash via list so hashes are recomputed (set(p[1]) reuses stale ones), keeping set and aliases valid.
-                        members = list(p[1])
-                        p[1].clear()
-                        p[1].update(members)
-                        if len(p[1]) != len(members):
-                            names = sorted(
-                                name
-                                for name, count in Counter(str(member.name) for member in members).items()
-                                if count > 1
-                            )
-                            raise ValueError(
-                                "Compute framework rewrite collapsed features that were previously distinct "
-                                f"only by compute_frameworks. Affected: {names}"
-                            )
+        resolved: dict[LinkFrameworkTrekker, type[ComputeFramework]] = {}
+        for trekker, members in trekker_members.items():
+            if trekker not in trekked_uuids:
+                raise ValueError(f"Trekker bookkeeping is inconsistent: no uuids recorded for link {trekker[0]}.")
+            resolved_cfw = self.resolve_trekker(trekker, members)
+            if resolved_cfw is not None:
+                resolved[trekker] = resolved_cfw
+            # Invert every uuid of the trekker at once, so a link keeps a single orientation across all groups.
+            self.trekker_right_left_adjuster(link_trekker, trekked_uuids[trekker])
 
-            new_planned_queue.append(p)
+        for p in groups:
+            self.rewrite_group_frameworks(p, resolved, feature_trekkers)
+
+        new_planned_queue = list(planned_queue)
 
         link_trekker.order_links_by_frameworks()
 
         new_planned_queue = self.order_queue_by_trekker_order(new_planned_queue, link_trekker)
         return new_planned_queue
+
+    def rewrite_group_frameworks(
+        self,
+        group: Any,
+        resolved: dict[LinkFrameworkTrekker, type[ComputeFramework]],
+        feature_trekkers: dict[UUID, list[LinkFrameworkTrekker]],
+    ) -> None:
+        group_cfws = {
+            resolved[trekker] for f in group[1] for trekker in feature_trekkers.get(f.uuid, []) if trekker in resolved
+        }
+
+        any_rewritten = False
+        for f in group[1]:
+            if f.uuid not in feature_trekkers:
+                if group_cfws:
+                    supported = set(f.compute_frameworks) if f.compute_frameworks is not None else group_cfws
+                    unsupported = group_cfws - supported
+                    if unsupported:
+                        names = sorted(cfw.__name__ for cfw in unsupported)
+                        raise ValueError(
+                            f"Feature {f.name} does not support the compute framework(s) {names} chosen for its group."
+                        )
+                    f.compute_frameworks = set(group_cfws)
+                    any_rewritten = True
+                continue
+            new_cfws = {resolved[trekker] for trekker in feature_trekkers[f.uuid] if trekker in resolved}
+            if not new_cfws:
+                mismatches = sorted(
+                    f"{link}: neither {left.__name__} nor {right.__name__}"
+                    for link, left, right in feature_trekkers[f.uuid]
+                )
+                raise ValueError(
+                    f"No compute framework agreement for feature {f.name}. Unresolvable links: {mismatches}"
+                )
+            f.compute_frameworks = new_cfws
+            any_rewritten = True
+
+        if not any_rewritten:
+            return
+
+        # Rehash via list so hashes are recomputed (set(group[1]) reuses stale ones), keeping set and aliases valid.
+        members = list(group[1])
+        group[1].clear()
+        group[1].update(members)
+        if len(group[1]) != len(members):
+            names = sorted(name for name, count in Counter(str(member.name) for member in members).items() if count > 1)
+            raise ValueError(
+                "Compute framework rewrite collapsed features that were previously distinct "
+                f"only by compute_frameworks. Affected: {names}"
+            )
 
     def order_queue_by_trekker_order(self, planned_queue: Any, link_trekker: LinkTrekker) -> Any:
         orders = link_trekker.order
@@ -149,9 +170,7 @@ class ResolveComputeFrameworks:
 
         self.to_invert_trekker_collection = []
 
-    def resolve_trekker_for_group(
-        self, trekker: LinkFrameworkTrekker, members: list[Any]
-    ) -> type[ComputeFramework] | None:
+    def resolve_trekker(self, trekker: LinkFrameworkTrekker, members: list[Any]) -> type[ComputeFramework] | None:
         link, left_cfw, right_cfw = trekker
 
         left_in_all = all(left_cfw in m.compute_frameworks for m in members)

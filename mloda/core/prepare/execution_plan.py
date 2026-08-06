@@ -412,10 +412,14 @@ class ExecutionPlan:
                 children_uuids.update(uuids)
             # this part is not working!
 
+        swap_merge_sides = False
+
         if len(children_uuids) == 0:
             # No child needs the declared orientation, so destination and source are the other way around.
             destination_framework = link_fw[2]
             source_framework = link_fw[1]
+            # The join then executes in the right feature group's framework, so the merge arguments are inverted.
+            swap_merge_sides = True
 
             for stored_links, uuids in link_trekker.data.items():
                 if (link, destination_framework, source_framework) == stored_links:
@@ -479,6 +483,7 @@ class ExecutionPlan:
                 required_uuids,
                 destination_framework_uuids,
                 source_framework_uuids,
+                swap_merge_sides,
             )
 
         # This makes sure that we do not write on the same datasets due to overlapping joins at once.

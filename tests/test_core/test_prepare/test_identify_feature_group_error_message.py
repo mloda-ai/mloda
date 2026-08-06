@@ -30,14 +30,14 @@ class MockComputeFramework(ComputeFramework):
 
 
 class ConflictingFeatureGroupA(StubFeatureGroup):
-    """First conflicting feature group with custom domain 'domain_a'."""
+    """One of two rivals for the same feature name, so resolution has to report a conflict."""
 
     DOMAIN_NAME: ClassVar[str] = "domain_a"
     MATCHED_NAMES: ClassVar[frozenset[str]] = frozenset({"conflicting_test_feature"})
 
 
 class ConflictingFeatureGroupB(StubFeatureGroup):
-    """Second conflicting feature group with custom domain 'domain_b', creating a conflict scenario."""
+    """The other rival, so the failure message has two candidates to render."""
 
     DOMAIN_NAME: ClassVar[str] = "domain_b"
     MATCHED_NAMES: ClassVar[frozenset[str]] = frozenset({"conflicting_test_feature"})

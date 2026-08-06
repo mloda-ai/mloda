@@ -1,8 +1,4 @@
-"""Shared FeatureGroup stubs for tests.
-
-``StubFeatureGroup`` answers every FeatureGroup hook from a ClassVar, and ``make_fg`` mints a subclass
-of it in the calling module, so a test declares a plugin by keyword instead of writing a class body.
-"""
+"""Shared FeatureGroup stubs: a test declares a plugin by keyword instead of writing a class body."""
 
 from __future__ import annotations
 
@@ -35,7 +31,6 @@ class StubFeatureGroup(FeatureGroup):
         options: Options,
         data_access_collection: DataAccessCollection | None = None,
     ) -> bool:
-        """MATCHED_NAMES is the whole matcher."""
         # Replaces the FeatureGroup default, which matches the class name, its prefix and the input
         # data, so an unconfigured stub adds no matcher to the suite.
         return str(feature_name) in cls.MATCHED_NAMES
@@ -74,7 +69,7 @@ _MINTED_NAMES: set[tuple[str, str]] = set()
 
 
 def _claim(module: str, name: str) -> None:
-    """Reserve one (module, name) pair per process; a repeat is the collision the guard exists for."""
+    """Reserve one (module, name) pair per process."""
     if (module, name) in _MINTED_NAMES:
         raise ValueError(f"A stub named {name} was already minted in {module}. Give this one its own name.")
     _MINTED_NAMES.add((module, name))

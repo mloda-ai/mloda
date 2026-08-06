@@ -1,8 +1,4 @@
-"""Contract for the shared FeatureGroup stub helper (tests/helpers/plugin_stubs.py).
-
-A stub is a global FeatureGroup subclass, so identity (name, calling module) and registry safety
-(no duplicate names, no reference kept by the factory) are as much of the contract as behaviour.
-"""
+"""Contract for the shared FeatureGroup stub helper (tests/helpers/plugin_stubs.py)."""
 
 from __future__ import annotations
 
@@ -44,7 +40,6 @@ FRAMEWORKS: set[type[ComputeFramework]] = {PythonDictFramework, PyArrowTable}
 
 
 def _matches(cls: type[FeatureGroup], feature_name: str) -> bool:
-    """The verdict of match_feature_group_criteria for one feature name."""
     return cls.match_feature_group_criteria(feature_name, Options())
 
 
@@ -55,12 +50,11 @@ def _as_stub(cls: type[FeatureGroup]) -> type[StubFeatureGroup]:
 
 
 def _mint_and_drop(name: str) -> weakref.ref[type[FeatureGroup]]:
-    """Mint a stub and hand back only a weak reference; this frame keeps no strong one."""
+    """Hand back only a weak reference: this frame keeps no strong one."""
     return weakref.ref(make_fg(name))
 
 
 def _collect_until_dead(reference: weakref.ref[type[FeatureGroup]]) -> None:
-    """Run the youngest-first collection ladder, stopping as soon as the referent is gone."""
     for generation in (0, 1, 2):
         gc.collect(generation)
         if reference() is None:

@@ -36,6 +36,8 @@ GROUP_DOMAIN_CLASS_NAME = "GroupDomainMatcherFG728"
 CAPABILITY_CLASS_NAME = "CapabilityRejectMatcherFG728"
 OWN_INDEX_CLASS_NAME = "OwnIndexMatcherFG728"
 SCOPE_BASE_CLASS_NAME = "ScopeBaseMatcherFG728"
+SCOPE_TARGET_A_CLASS_NAME = "ScopeTargetAMatcherFG728"
+SCOPE_TARGET_B_CLASS_NAME = "ScopeTargetBMatcherFG728"
 
 MISSING_SCOPE_728 = "CmapNoSuchScope728"  # a scope string naming no accessible class
 SCOPE_REASON = "outside the requested feature group scope"
@@ -121,6 +123,23 @@ def _make_plain_and_unrelated_fg() -> tuple[type[FeatureGroup], type[FeatureGrou
         pass
 
     return _make_plain_matcher_fg(), UnrelatedScopeFG728
+
+
+def _make_two_scope_target_fgs() -> tuple[type[FeatureGroup], type[FeatureGroup]]:
+    """Two unrelated throwaway matchers, each the class-object scope of one duplicate declaration."""
+    gc.collect()
+
+    class ScopeTargetAMatcherFG728(FeatureGroup):
+        @classmethod
+        def feature_names_supported(cls) -> set[str]:
+            return {HOST_FEATURE, FILTER_FEATURE}
+
+    class ScopeTargetBMatcherFG728(FeatureGroup):
+        @classmethod
+        def feature_names_supported(cls) -> set[str]:
+            return {HOST_FEATURE, FILTER_FEATURE}
+
+    return ScopeTargetAMatcherFG728, ScopeTargetBMatcherFG728
 
 
 def _make_group_domain_fg() -> type[FeatureGroup]:
@@ -216,12 +235,18 @@ class _MatchingSnapshot:
     names: tuple[str, ...]
     calls: int = 0
     scopes: tuple[str, ...] = ()
-    stored_scope: str = "None"
+    # None means the driver never read the stored scope; a genuinely unscoped read folds to the text "None".
+    stored_scope: str | None = None
 
 
 def _scope_as_text(scope: str | type[FeatureGroup] | None) -> str:
     """The scope as plain text: a class-object scope reads as its class name."""
     return scope.__name__ if isinstance(scope, type) else str(scope)
+
+
+def _matched_scope_texts(matched: set[SingleFilter] | None) -> tuple[str, ...]:
+    """The matched copies' scopes as sorted plain text."""
+    return tuple(sorted(_scope_as_text(single.filter_feature.feature_group_scope) for single in matched or ()))
 
 
 def _fixed_scope(scope: str | None) -> _ScopePick:
@@ -251,6 +276,40 @@ def _drive_scoped_matching(make: _ScopeFactory, pick_scope: _ScopePick, probe_in
         return _MatchingSnapshot(escaped=escaped, names=names, scopes=scopes, stored_scope=stored)
     finally:
         del made, classes, scope, global_filter, matched
+        gc.collect()
+
+
+@dataclass(frozen=True)
+class _TwoScopedSnapshot:
+    """Plain-data readout of two probes over one two-declaration GlobalFilter. Holds no class and no filter."""
+
+    escaped: tuple[str | None, str | None]
+    scopes_by_probe: tuple[tuple[str, ...], tuple[str, ...]]
+    stored_count: int
+
+
+def _drive_two_scope_duplicate_declarations() -> _TwoScopedSnapshot:
+    """Declare one predicate twice, once per class scope, then probe each scope class in turn."""
+    fg_a, fg_b = _make_two_scope_target_fgs()
+    global_filter = GlobalFilter()
+    global_filter.add_filter(Feature(FILTER_FEATURE, feature_group=fg_a), FilterType.EQUAL, {"value": 1})
+    global_filter.add_filter(Feature(FILTER_FEATURE, feature_group=fg_b), FilterType.EQUAL, {"value": 1})
+    matched_a = None
+    matched_b = None
+    try:
+        matched_a, escaped_a = _capture(
+            partial(global_filter.identify_matched_filters, fg_a, Feature(HOST_FEATURE), None)
+        )
+        matched_b, escaped_b = _capture(
+            partial(global_filter.identify_matched_filters, fg_b, Feature(HOST_FEATURE), None)
+        )
+        return _TwoScopedSnapshot(
+            escaped=(escaped_a, escaped_b),
+            scopes_by_probe=(_matched_scope_texts(matched_a), _matched_scope_texts(matched_b)),
+            stored_count=len(global_filter.filters),
+        )
+    finally:
+        del fg_a, fg_b, global_filter, matched_a, matched_b
         gc.collect()
 
 
@@ -532,12 +591,12 @@ class TestScopeGate:
         assert snapshot.escaped is None, f"nothing may cross identify_matched_filters: {snapshot.escaped}"
         assert snapshot.names == (), f"a scope naming no class must detach the filter, got: {snapshot.names}"
 
-    def test_the_matched_copy_carries_the_scope_the_gate_read(self) -> None:
+    def test_a_string_scope_naming_the_probed_class_attaches_and_rides_the_matched_copy(self) -> None:
         """The scope survives SingleFilter's copy and the per-match deepcopy: read by the gate, never rewritten."""
         snapshot = _drive_scoped_matching(_make_plain_matcher_fg, _fixed_scope(PLAIN_CLASS_NAME))
 
         assert snapshot.escaped is None, f"nothing may cross identify_matched_filters: {snapshot.escaped}"
-        assert snapshot.names == (FILTER_FEATURE,), f"a matching scope must attach, got: {snapshot.names}"
+        assert snapshot.names == (FILTER_FEATURE,), f"the probe's own name is in its MRO, got: {snapshot.names}"
         assert snapshot.scopes == (PLAIN_CLASS_NAME,), f"the scope must ride the matched copy, got: {snapshot.scopes}"
 
     def test_a_class_scope_naming_the_probed_class_attaches(self) -> None:
@@ -558,12 +617,6 @@ class TestScopeGate:
         assert snapshot.escaped is None, f"nothing may cross identify_matched_filters: {snapshot.escaped}"
         assert snapshot.names == (), f"an unrelated class scope must detach the filter, got: {snapshot.names}"
 
-    def test_a_string_scope_naming_the_probed_class_attaches(self) -> None:
-        snapshot = _drive_scoped_matching(_make_plain_matcher_fg, _fixed_scope(PLAIN_CLASS_NAME))
-
-        assert snapshot.escaped is None, f"nothing may cross identify_matched_filters: {snapshot.escaped}"
-        assert snapshot.names == (FILTER_FEATURE,), f"the probe's own name is in its MRO, got: {snapshot.names}"
-
     def test_a_string_scope_naming_the_base_attaches_to_the_subclass_probe(self) -> None:
         snapshot = _drive_scoped_matching(_make_scope_family_fg, _fixed_scope(SCOPE_BASE_CLASS_NAME), probe_index=1)
 
@@ -582,6 +635,21 @@ class TestScopeGate:
         assert snapshot.names == (FILTER_FEATURE,), f"the scoped filter must attach, got: {snapshot.names}"
         assert snapshot.stored_scope == PLAIN_CLASS_NAME, (
             f"the gate must never write the stored filter, got: {snapshot.stored_scope}"
+        )
+
+    def test_two_declarations_differing_only_in_scope_stay_two_filters_each_matching_its_scope(self) -> None:
+        """One predicate declared once per scope class: both survive the filters set, each probe attaches its own."""
+        snapshot = _drive_two_scope_duplicate_declarations()
+
+        assert snapshot.escaped == (None, None), f"nothing may cross identify_matched_filters: {snapshot.escaped}"
+        assert snapshot.stored_count == 2, (
+            f"two declarations differing only in scope must stay two stored filters, got {snapshot.stored_count}"
+        )
+        assert snapshot.scopes_by_probe[0] == (SCOPE_TARGET_A_CLASS_NAME,), (
+            f"probing A must attach exactly the A-scoped filter, got: {snapshot.scopes_by_probe[0]}"
+        )
+        assert snapshot.scopes_by_probe[1] == (SCOPE_TARGET_B_CLASS_NAME,), (
+            f"probing B must attach exactly the B-scoped filter, got: {snapshot.scopes_by_probe[1]}"
         )
 
     def test_the_canonical_seam_eliminates_the_same_scope_at_the_scope_gate(self) -> None:

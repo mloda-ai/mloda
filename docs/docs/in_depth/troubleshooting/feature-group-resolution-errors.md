@@ -161,7 +161,7 @@ def get_domain(cls):
 ```
 
 #### 4. Scope a feature to one source (shared keys across sources)
-When two enabled sources declare the same column (for example a shared join key), requesting that column by bare name is ambiguous. Scope the request to one source. The scope is resolution-only and does not affect feature identity.
+When two enabled sources declare the same column (for example a shared join key), requesting that column by bare name is ambiguous. Scope the request to one source. The scope is read by feature resolution and by filter matching, and does not affect feature identity.
 
 ```py
 # class object, collision-proof
@@ -195,7 +195,7 @@ Caveats:
 - The class object is collision-proof; the string form is not. Two classes with the same name in different modules both match the string, so the request stays ambiguous and raises.
 - Neither form pins one exact class: a subclass of the named class is preferred over it. To resolve to a specific implementation, name that implementation.
 - The root `FeatureGroup` base is rejected in either form: it names no family.
-- The scope is resolution-only and excluded from Feature identity, so two requests for the same column name scoped to different sources compare equal. Requesting both in one features list raises `ValueError: Duplicate feature setup: <name>` rather than silently dropping one, so you are told, not surprised. Inside a single `input_features()` returning a set literal, a second same-name feature with a different scope is silently deduplicated by the Python set itself before the engine ever sees it, so never scope the same name twice within one feature group. To read the same column from two sources side by side, give them distinct derived feature names.
+- The scope is read by feature resolution and by filter matching, and stays excluded from Feature identity, so two requests for the same column name scoped to different sources compare equal. Requesting both in one features list raises `ValueError: Duplicate feature setup: <name>` rather than silently dropping one, so you are told, not surprised. Inside a single `input_features()` returning a set literal, a second same-name feature with a different scope is silently deduplicated by the Python set itself before the engine ever sees it, so never scope the same name twice within one feature group. To read the same column from two sources side by side, give them distinct derived feature names.
 
 ## FeatureGroup Redefinition Errors
 

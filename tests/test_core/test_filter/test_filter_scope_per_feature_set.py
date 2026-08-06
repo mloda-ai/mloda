@@ -339,3 +339,84 @@ def test_the_uniform_case_warns_about_nothing(caplog: pytest.LogCaptureFixture) 
         f"both features of the uniform set must get the one filter: {snapshot!r}"
     )
     assert snapshot.warnings == (), f"a uniform feature set must not warn: {snapshot.warnings}"
+
+
+# End-to-end scope pin through engine._add_filter_feature: real rows, one filter scoped to one of two groups.
+FSP_SCOPED_TARGET = "fsp_scoped_target_feat"  # served by the scope-named group; its rows get filtered
+FSP_OTHER_TARGET = "fsp_other_target_feat"  # served by the sibling group; its rows must stay complete
+FSP_SHARED_FILTER = "fsp_shared_filter_feat"  # both groups can serve the filter feature, only the scope decides
+FSP_SCOPED_CLASS_NAME = "FspScopedTargetFG"
+
+FSP_ALL_ROWS = [10, 20, 30]
+FSP_KEPT_ROWS = [10, 30]
+FSP_FILTER_ROWS = [1, 0, 1]  # equal(value=1) keeps rows 0 and 2
+
+
+def _target_rows(features: FeatureSet) -> dict[str, list[int]]:
+    """Fixed rows per served feature; the shared filter column decides which rows survive."""
+    rows = {FSP_SCOPED_TARGET: FSP_ALL_ROWS, FSP_OTHER_TARGET: FSP_ALL_ROWS, FSP_SHARED_FILTER: FSP_FILTER_ROWS}
+    return {str(feature.name): list(rows[str(feature.name)]) for feature in features.features}
+
+
+def _make_scoped_target_pair() -> tuple[type[FeatureGroup], type[FeatureGroup]]:
+    """Two throwaway root groups: each serves its own target and can serve the shared filter feature."""
+    gc.collect()
+
+    class FspScopedTargetFG(FeatureGroup):
+        @classmethod
+        def input_data(cls) -> DataCreator:
+            return DataCreator({FSP_SCOPED_TARGET, FSP_SHARED_FILTER})
+
+        @classmethod
+        def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+            return _target_rows(features)
+
+    class FspOtherTargetFG(FeatureGroup):
+        @classmethod
+        def input_data(cls) -> DataCreator:
+            return DataCreator({FSP_OTHER_TARGET, FSP_SHARED_FILTER})
+
+        @classmethod
+        def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+            return _target_rows(features)
+
+    return FspScopedTargetFG, FspOtherTargetFG
+
+
+def _drive_scoped_filter_run() -> dict[str, list[int]]:
+    """Run both targets with one filter string-scoped to the first group; plain column data comes back."""
+    fg_scoped, fg_other = _make_scoped_target_pair()
+    collector = PluginCollector.enabled_feature_groups({fg_scoped, fg_other})
+    global_filter = GlobalFilter()
+    global_filter.add_filter(
+        Feature(FSP_SHARED_FILTER, feature_group=FSP_SCOPED_CLASS_NAME), FilterType.EQUAL, {"value": 1}
+    )
+    requested: list[Feature | str] = [FSP_SCOPED_TARGET, FSP_OTHER_TARGET]
+
+    results = mloda.run_all(
+        requested,
+        compute_frameworks={PythonDictFramework},
+        plugin_collector=collector,
+        global_filter=global_filter,
+    )
+
+    columns = {
+        column: list(frame[column])
+        for frame in results
+        for column in (FSP_SCOPED_TARGET, FSP_OTHER_TARGET)
+        if column in frame
+    }
+    del fg_scoped, fg_other, collector, global_filter, results
+    gc.collect()
+    return columns
+
+
+def test_a_scoped_filter_filters_only_the_scope_named_groups_output() -> None:
+    """Through the public API: the scoped group's rows are eliminated, the sibling group's rows stay complete."""
+    columns = _drive_scoped_filter_run()
+
+    assert set(columns) == {FSP_SCOPED_TARGET, FSP_OTHER_TARGET}, f"both targets must come back: {columns}"
+    assert columns[FSP_SCOPED_TARGET] == FSP_KEPT_ROWS, (
+        f"the group inside the scope must have its rows filtered: {columns}"
+    )
+    assert columns[FSP_OTHER_TARGET] == FSP_ALL_ROWS, f"the group outside the scope must keep every row: {columns}"

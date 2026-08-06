@@ -56,7 +56,8 @@ class Feature:
         initial_requested_data (bool): Whether the data was initially requested.
         link (Optional[Link]): The link associated with the feature.
         index (Optional[Index]): The index associated with the feature.
-        feature_group_scope (str | type[FeatureGroup] | None): Resolution-only scope; excluded from identity.
+        feature_group_scope (str | type[FeatureGroup] | None): Read by feature resolution and filter
+            matching; excluded from identity.
 
     Quick start (recommended progression)::
 
@@ -141,7 +142,8 @@ class Feature:
         self.link = link
         self.index = index  # Index is a feature currently only used for append/union features.
 
-        # feature_group_scope is resolution-only metadata, excluded from equality and hash like link/index.
+        # feature_group_scope is read by feature resolution and by filter matching,
+        # excluded from equality and hash like link/index.
         self.feature_group_scope = self._set_feature_group_scope(feature_group)
 
         # Resolution-only metadata stamped by the engine: one (consumer class name, consumer

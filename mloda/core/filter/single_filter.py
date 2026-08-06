@@ -71,15 +71,18 @@ class SingleFilter:
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, SingleFilter):
             return False
+        # Feature excludes feature_group_scope from its own identity, but the scope decides
+        # filter attachment, so the DECLARATION identity must include it.
         return (
             self.filter_feature == other.filter_feature
             and self.filter_type == other.filter_type
             and self.parameter == other.parameter
+            and self.filter_feature.feature_group_scope == other.filter_feature.feature_group_scope
         )
 
     def __hash__(self) -> int:
         # Combine the hashes of the feature, type, and parameter for a unique hash value
-        return hash((self.filter_feature, self.filter_type, self.parameter))
+        return hash((self.filter_feature, self.filter_type, self.parameter, self.filter_feature.feature_group_scope))
 
     def __repr__(self) -> str:
         return f"<SingleFilter(feature_name={self.filter_feature.name}, type={self.filter_type}, parameters={self.parameter})>"

@@ -59,6 +59,28 @@ class TestDefaultOptionKeys:
         for member in DefaultOptionKeys:
             assert member == member.name
 
+    def test_str_mixin_makes_members_interchangeable_with_their_value(self) -> None:
+        """The str mixin is load-bearing, not incidental.
+
+        `str` precedes `Enum` in the MRO, so members take str.__hash__/__eq__ and hash by
+        VALUE, not by member name. Dozens of call sites across mloda/ and mloda_plugins/
+        test an enum member against option dicts that hold plain strings, for example
+        `DefaultOptionKeys.in_features in options` in the feature-config loader and
+        `options.get(DefaultOptionKeys.strict_type_enforcement)` in the datatype validator.
+        Removing the mixin, or reordering the bases, would silently unmatch every one of
+        them. Only `is_non_forwarded_key` is independent of this, because it compares
+        `str(key)`.
+        """
+        for member in DefaultOptionKeys:
+            assert hash(member) == hash(member.value)
+            assert member in {member.value}
+            assert member.value in {member}
+            # The str-keyed dict is how option dicts are annotated; a member must reach both ways.
+            member_keyed: dict[str, int] = {member: 1}
+            value_keyed: dict[str, int] = {member.value: 1}
+            assert member_keyed[member.value] == 1
+            assert value_keyed[member] == 1
+
 
 class TestDefaultOptionKeysStrBehavior:
     def test_str_returns_value(self) -> None:

@@ -17,10 +17,14 @@ import pytest
 from mloda.core.abstract_plugins.components.error_utils import MlodaRunError
 from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.feature_set import FeatureSet
+from mloda.core.abstract_plugins.components.link import JoinSpec, Link
 from mloda.core.abstract_plugins.components.parallelization_modes import ParallelizationMode
 from mloda.core.core.cfw_manager import CfwManager
 from mloda.core.core.step.feature_group_step import FeatureGroupStep
-from mloda.core.runtime.run import ExecutionOrchestrator
+from mloda.core.core.step.join_step import JoinStep
+from mloda.core.core.step.transform_frame_work_step import TransformFrameworkStep
+from mloda.core.runtime.run import ExecutionOrchestrator, _describe_step
+from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
 from tests.helpers.plugin_stubs import make_fg
 
@@ -60,6 +64,23 @@ class InFlightStep:
             self.step_is_done = True
 
 
+class ProducerStep:
+    """A parent step that runs, finishes, and hands its uuid to a child as a satisfied token."""
+
+    def __init__(self) -> None:
+        self.uuid = uuid4()
+        self.required_uuids: set[UUID] = set()
+        self.step_is_done = False
+
+    def get_uuids(self) -> set[UUID]:
+        return {self.uuid}
+
+
+def _finish_on_execute(step: Any) -> None:
+    """Stands in for sync_execute_step, which sets step_is_done before returning."""
+    step.step_is_done = True
+
+
 def _orchestrator(*steps: Any) -> ExecutionOrchestrator:
     """Wire a SYNC-mode orchestrator over the given steps; no compute framework is ever created."""
     orchestrator = ExecutionOrchestrator(ReiterablePlan(*steps))
@@ -72,11 +93,6 @@ def _feature_group_step(feature_name: str, required_uuids: set[UUID]) -> Feature
     return FeatureGroupStep(StallFeatureGroup, FeatureSet([Feature(feature_name)]), required_uuids, PythonDictFramework)
 
 
-def _unique_identifiers(step: FeatureGroupStep) -> tuple[str, ...]:
-    """Tokens that point at this step and no other: its feature names and its uuids."""
-    return (*step.features.get_all_names(), str(step.uuid), *(str(uuid) for uuid in step.get_uuids()))
-
-
 def test_compute_raises_when_a_required_uuid_is_never_produced() -> None:
     dangling = uuid4()
     step = _feature_group_step("stall_orphan_feature", {dangling})
@@ -87,10 +103,7 @@ def test_compute_raises_when_a_required_uuid_is_never_produced() -> None:
 
     message = str(exc_info.value)
     assert str(dangling) in message, f"the unsatisfied completion token must be named; got: {message}"
-    identifiers = ("FeatureGroupStep", StallFeatureGroup.get_class_name(), *_unique_identifiers(step))
-    assert any(token in message for token in identifiers), (
-        f"the waiting step must be identifiable via one of {identifiers}; got: {message}"
-    )
+    assert "stall_orphan_feature" in message, f"the waiting step must be named by its feature; got: {message}"
 
 
 def test_compute_stream_raises_when_a_required_uuid_is_never_produced() -> None:
@@ -118,11 +131,108 @@ def test_stall_message_describes_every_step_waiting_on_the_dropped_link_token() 
 
     message = str(exc_info.value)
     assert str(link_token) in message, f"the dropped link token must be named; got: {message}"
-    for step in (left, right):
-        identifiers = _unique_identifiers(step)
-        assert any(token in message for token in identifiers), (
-            f"every waiting step must be described via one of {identifiers}; got: {message}"
-        )
+    for feature_name in ("stall_left_feature", "stall_right_feature"):
+        assert feature_name in message, f"every root-cause step must be described; {feature_name} missing: {message}"
+
+
+def test_stall_after_a_finished_step_names_only_the_token_still_missing() -> None:
+    """The real bug shape: a parent runs and finishes, then its child stalls on the dropped token."""
+    producer = ProducerStep()
+    dangling = uuid4()
+    child = _feature_group_step("stall_child_feature", {producer.uuid, dangling})
+    orchestrator = _orchestrator(producer, child)
+    orchestrator._execute_step = Mock(side_effect=_finish_on_execute)
+
+    with pytest.raises(MlodaRunError) as exc_info:
+        orchestrator.compute()
+
+    message = str(exc_info.value)
+    orchestrator._execute_step.assert_called_once_with(producer)
+    assert "stall_child_feature" in message, f"the stalled child must be described; got: {message}"
+    assert str(dangling) in message, f"the unsatisfied completion token must be named; got: {message}"
+    assert str(producer.uuid) not in message, (
+        f"a token the finished parent already produced is not a cause; got: {message}"
+    )
+
+
+def test_stall_message_names_the_root_cause_not_the_transitively_blocked_step() -> None:
+    dangling = uuid4()
+    root_cause = _feature_group_step("stall_root_cause_feature", {dangling})
+    transitive = _feature_group_step("stall_transitive_feature", set())
+    transitive.required_uuids = set(root_cause.get_uuids())
+    orchestrator = _orchestrator(root_cause, transitive)
+
+    with pytest.raises(MlodaRunError) as exc_info:
+        orchestrator.compute()
+
+    message = str(exc_info.value)
+    assert "stall_root_cause_feature" in message, f"the root-cause step must be described; got: {message}"
+    assert "stall_transitive_feature" not in message, (
+        f"a step blocked only by a producible token is not a cause; got: {message}"
+    )
+
+
+def test_stall_message_is_bounded_when_many_steps_share_one_dangling_token() -> None:
+    dangling = uuid4()
+    steps = [_feature_group_step(f"stall_capped_feature_{index:02d}", {dangling}) for index in range(40)]
+    orchestrator = _orchestrator(*steps)
+
+    with pytest.raises(MlodaRunError) as exc_info:
+        orchestrator.compute()
+
+    message = str(exc_info.value)
+    assert str(dangling) in message, f"the unsatisfied completion token must be named; got: {message}"
+    assert "more" in message, f"a truncated listing must say how many steps it left out; got: {message}"
+    assert len(message) < 4000, f"the stall message must stay bounded; got {len(message)} chars"
+
+
+def test_stall_message_falls_back_to_unfinished_steps_when_every_token_is_producible() -> None:
+    """A cycle has no never-produced token, so the root-cause filter must not render an empty list."""
+    first = _feature_group_step("stall_cycle_first_feature", set())
+    second = _feature_group_step("stall_cycle_second_feature", set())
+    first.required_uuids = set(second.get_uuids())
+    second.required_uuids = set(first.get_uuids())
+    orchestrator = _orchestrator(first, second)
+
+    with pytest.raises(MlodaRunError) as exc_info:
+        orchestrator.compute()
+
+    message = str(exc_info.value)
+    for feature_name in ("stall_cycle_first_feature", "stall_cycle_second_feature"):
+        assert feature_name in message, f"a deadlocked cycle must name both steps; {feature_name} missing: {message}"
+
+
+def test_describe_step_renders_a_join_step() -> None:
+    link = Link.inner(JoinSpec(StallFeatureGroup, "stall_idx"), JoinSpec(StallFeatureGroup, "stall_idx"))
+    step = JoinStep(link, PythonDictFramework, PyArrowTable, set(), set(), set())
+
+    rendered = _describe_step(step)
+
+    assert str(link.uuid) in rendered, f"the link must be identifiable; got: {rendered}"
+    assert PythonDictFramework.get_class_name() in rendered, f"the destination framework is missing: {rendered}"
+    assert PyArrowTable.get_class_name() in rendered, f"the source framework is missing: {rendered}"
+
+
+def test_describe_step_renders_a_transform_framework_step() -> None:
+    step = TransformFrameworkStep(
+        PythonDictFramework, PyArrowTable, set(), StallFeatureGroup, StallFeatureGroup, None, set()
+    )
+
+    rendered = _describe_step(step)
+
+    assert PythonDictFramework.get_class_name() in rendered, f"the source framework is missing: {rendered}"
+    assert PyArrowTable.get_class_name() in rendered, f"the target framework is missing: {rendered}"
+    assert rendered.index(PythonDictFramework.get_class_name()) < rendered.index(PyArrowTable.get_class_name()), (
+        f"the from framework must be rendered before the to framework; got: {rendered}"
+    )
+
+
+def test_describe_step_survives_a_step_without_the_attributes_it_reads() -> None:
+    """An error path may not raise: a stall message must survive a step that answers nothing."""
+    rendered = _describe_step(Mock(spec=FeatureGroupStep))
+
+    assert isinstance(rendered, str)
+    assert rendered, "a step must always render to something non-empty"
 
 
 def test_compute_does_not_raise_while_a_step_is_in_flight() -> None:
@@ -152,12 +262,14 @@ def test_compute_stream_does_not_raise_while_a_step_is_in_flight() -> None:
 
 
 def test_compute_returns_on_empty_plan() -> None:
+    """Pins a second, independent hang: an empty plan spun forever in compute()."""
     orchestrator = _orchestrator()
 
     orchestrator.compute()
 
 
 def test_compute_stream_yields_nothing_on_empty_plan() -> None:
+    """Pins the ordering: the empty-plan break runs before the stall check, which would raise here."""
     orchestrator = _orchestrator()
 
     assert list(orchestrator.compute_stream()) == []

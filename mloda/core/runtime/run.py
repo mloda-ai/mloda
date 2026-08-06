@@ -30,20 +30,41 @@ from mloda.core.abstract_plugins.feature_group import format_feature_group_class
 logger = logging.getLogger(__name__)
 
 
+_MAX_RENDERED_ENTRIES = 10
+
+
+def _capped_join(entries: Sequence[str], separator: str, limit: int = _MAX_RENDERED_ENTRIES) -> str:
+    """Join at most ``limit`` entries and name how many were left out."""
+    if len(entries) <= limit:
+        return separator.join(entries)
+    return f"{separator.join(entries[:limit])}{separator}... and {len(entries) - limit} more"
+
+
 def _describe_step(step: Any) -> str:
-    """Render a step for error messages without relying on its repr."""
+    """Render a step for error messages without relying on its repr.
+
+    Every branch falls back to the generic rendering: an error renderer may not raise.
+    """
     if isinstance(step, FeatureGroupStep):
-        return (
-            f"FeatureGroupStep {format_feature_group_class(step.feature_group)} "
-            f"for features {list(step.features.get_all_names())}"
-        )
+        feature_group = getattr(step, "feature_group", None)
+        features = getattr(step, "features", None)
+        if feature_group is not None and features is not None:
+            names = ", ".join(str(name) for name in features.get_all_names())
+            return f"FeatureGroupStep {format_feature_group_class(feature_group)} for features {names}"
     if isinstance(step, JoinStep):
-        return (
-            f"JoinStep {step.link} into {step.destination_framework.get_class_name()} "
-            f"from {step.source_framework.get_class_name()}"
-        )
+        link = getattr(step, "link", None)
+        destination_framework = getattr(step, "destination_framework", None)
+        source_framework = getattr(step, "source_framework", None)
+        if link is not None and destination_framework is not None and source_framework is not None:
+            return (
+                f"JoinStep {link} into {destination_framework.get_class_name()} "
+                f"from {source_framework.get_class_name()}"
+            )
     if isinstance(step, TransformFrameworkStep):
-        return f"TransformFrameworkStep {step.from_framework.get_class_name()} to {step.to_framework.get_class_name()}"
+        from_framework = getattr(step, "from_framework", None)
+        to_framework = getattr(step, "to_framework", None)
+        if from_framework is not None and to_framework is not None:
+            return f"TransformFrameworkStep {from_framework.get_class_name()} to {to_framework.get_class_name()}"
     return f"{type(step).__name__} {getattr(step, 'uuid', None)}"
 
 
@@ -168,25 +189,31 @@ class ExecutionOrchestrator:
         raise MlodaRunError(self._stalled_plan_message(finished_ids))
 
     def _stalled_plan_message(self, finished_ids: set[UUID]) -> str:
-        """Name every unfinished step, what it waits for, and which tokens no step produces."""
+        """Name the root-cause steps, what they wait for, and which tokens no step produces."""
         producible: set[UUID] = set()
-        unfinished: list[Any] = []
+        unfinished: list[tuple[Any, set[UUID]]] = []
         for step in self.execution_planner:
             producible.update(step.get_uuids())
             if not self._is_step_done(step.get_uuids(), finished_ids):
-                unfinished.append(step)
+                unfinished.append((step, step.required_uuids - finished_ids))
 
-        waiting: list[str] = []
         never_produced: set[UUID] = set()
-        for step in unfinished:
-            missing = step.required_uuids - finished_ids
+        for _, missing in unfinished:
             never_produced.update(missing - producible)
-            waiting.append(f"{_describe_step(step)} waits for {sorted(str(uuid) for uuid in missing)}")
 
+        # A step waiting only on producible tokens is blocked by another step, not a cause. A cycle
+        # produces every token it waits for, so that filter can select nothing: then all are causes.
+        root_causes = [entry for entry in unfinished if entry[1] & never_produced] or unfinished
+
+        waiting = [
+            f"{_describe_step(step)} waits for {_capped_join(sorted(str(uuid) for uuid in missing), ', ')}"
+            for step, missing in root_causes
+        ]
+        tokens = _capped_join(sorted(str(uuid) for uuid in never_produced), ", ")
         return internal_invariant_error(
             "the execution plan stalled: no step can run and none is in flight.",
-            f"Unfinished steps: {'; '.join(waiting)}. "
-            f"Required tokens no step of the plan produces: {sorted(str(uuid) for uuid in never_produced)}.",
+            f"Stalled steps: {_capped_join(waiting, '; ')}. "
+            f"Required tokens no step of the plan produces: {tokens or 'none'}.",
             "A step producing a required token is missing from the plan, e.g. a dropped join step.",
         )
 

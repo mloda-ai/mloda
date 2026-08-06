@@ -30,7 +30,7 @@ from mloda.core.abstract_plugins.components.match_rejection import (
     INPUT_DATA_STAGE,
     MatchRejection,
 )
-from mloda.core.abstract_plugins.components.match_hook import call_match_hook, probe_match_criteria
+from mloda.core.abstract_plugins.components.match_hook import probe_match_criteria
 from mloda.core.abstract_plugins.components.utils import (
     as_str,
     contained_raise_log_level,
@@ -602,9 +602,7 @@ class IdentifyFeatureGroupClass:
         # Shallow copies, taken per candidate so an earlier match's write survives a later candidate's raise.
         group_before = dict(feature.options.group)
         context_before = dict(feature.options.context)
-        probe = probe_match_criteria(
-            feature_group, feature.name, feature.options, data_access_collection, hook=call_match_hook
-        )
+        probe = probe_match_criteria(feature_group, feature.name, feature.options, data_access_collection)
         if probe.matcher_error is not None or probe.value_rejection is not None:
             # Only the contained branch rolls back: a matcher that returns True keeps its write,
             # which is how a matched reader is linked through mloda.

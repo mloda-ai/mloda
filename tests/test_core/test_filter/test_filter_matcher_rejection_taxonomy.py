@@ -45,6 +45,8 @@ RECORD_THEN_VALUE_CLASS_NAME = "RtxRecordThenValueRaiseFG728"
 STAGE_DECLINE_CLASS_NAME = "RtxStageDeclineFG728"
 RECORD_THEN_ERROR_CLASS_NAME = "RtxRecordThenErrorFG728"
 OWNED_VETO_CLASS_NAME = "RtxOwnedVetoFG728"
+FALSY_DECLINE_CLASS_NAME = "RtxFalsyDeclineFG728"
+DECLINE_THEN_DEFECT_CLASS_NAME = "RtxDeclineThenDefectFG728"
 
 VALUE_REJECT_MESSAGE = "rtx_value_rejected_728"
 REASON_A = "rtx_reason_a_728"
@@ -55,6 +57,14 @@ ESCALATE_MESSAGE = "rtx_escalated_728"
 OWNED_REASON = "rtx_owned_veto_reason_728"
 VALUE_REJECTION_STAGE = "value_rejection"
 VALUE_REJECTION_TYPE_NAME = "PropertyValueRejection"
+DEFECT_MESSAGE = "rtx_defect_after_decline_728"
+HOSTILE_STR_MESSAGE = "rtx_hostile_str_boom_728"
+MARKER_KEY = "rtx_marker_key_728"
+MARKER_VALUE = "rtx_marker_value_728"
+UNNAMEABLE_MESSAGE = "rtx_unnameable_boom_728"
+OUTER_OWNER = "rtx_outer_owner_728"
+OUTER_REASON = "rtx_outer_reason_728"
+FALSY_REPORT_FRAGMENT = "falsy non-bool"
 
 T = TypeVar("T")
 
@@ -319,6 +329,145 @@ def _make_plain_error_fg() -> tuple[type[FeatureGroup], Callable[[], bool]]:
     return RtxPlainErrorFG728, _window_not_observed
 
 
+def _make_falsy_decline_fg() -> tuple[type[FeatureGroup], Callable[[], bool]]:
+    """A throwaway group whose hook records a rejection for the filter feature and returns None."""
+    gc.collect()
+
+    class RtxFalsyDeclineFG728(FeatureGroup):
+        @classmethod
+        def feature_names_supported(cls) -> set[str]:
+            return {HOST_FEATURE}
+
+        @classmethod
+        def match_feature_group_criteria(
+            cls,
+            feature_name: FeatureName | str,
+            options: Options,
+            data_access_collection: DataAccessCollection | None = None,
+        ) -> Any:  # Any, not bool: the falsy non-bool return beside the recorded decline is the case under test.
+            if str(feature_name) == FILTER_FEATURE:
+                record_match_rejection(cls.__name__, REASON_A)
+                return None
+            return str(feature_name) in cls.feature_names_supported()
+
+    return RtxFalsyDeclineFG728, _window_not_observed
+
+
+def _make_decline_then_defect_fg() -> tuple[type[FeatureGroup], Callable[[], bool]]:
+    """A throwaway group whose hook declines with a recorded reason once, then raises on the next ask."""
+    gc.collect()
+
+    class RtxDeclineThenDefectFG728(FeatureGroup):
+        declined: ClassVar[bool] = False
+
+        @classmethod
+        def feature_names_supported(cls) -> set[str]:
+            return {HOST_FEATURE}
+
+        @classmethod
+        def match_feature_group_criteria(
+            cls,
+            feature_name: FeatureName | str,
+            options: Options,
+            data_access_collection: DataAccessCollection | None = None,
+        ) -> bool:
+            if str(feature_name) == FILTER_FEATURE:
+                if not cls.declined:
+                    cls.declined = True
+                    record_match_rejection(cls.__name__, REASON_A)
+                    return False
+                raise RuntimeError(DEFECT_MESSAGE)
+            return str(feature_name) in cls.feature_names_supported()
+
+    return RtxDeclineThenDefectFG728, _window_not_observed
+
+
+class RtxHostileStrRejection728(PropertyValueRejection):
+    """A typed rejection whose reason text raises when read; __repr__ is fixed so snapshots stay safe."""
+
+    def __str__(self) -> str:
+        raise RuntimeError(HOSTILE_STR_MESSAGE)
+
+    def __repr__(self) -> str:
+        return "<RtxHostileStrRejection728>"
+
+
+def _make_marking_hostile_str_fg() -> tuple[type[FeatureGroup], Callable[[], bool]]:
+    """A throwaway group whose hook writes a marker option, then raises the unreadable rejection."""
+    gc.collect()
+
+    class RtxMarkingHostileStrFG728(FeatureGroup):
+        @classmethod
+        def feature_names_supported(cls) -> set[str]:
+            return {HOST_FEATURE}
+
+        @classmethod
+        def match_feature_group_criteria(
+            cls,
+            feature_name: FeatureName | str,
+            options: Options,
+            data_access_collection: DataAccessCollection | None = None,
+        ) -> bool:
+            if str(feature_name) == FILTER_FEATURE:
+                options.add_to_group(MARKER_KEY, MARKER_VALUE)
+                raise RtxHostileStrRejection728(VALUE_REJECT_MESSAGE)
+            return str(feature_name) in cls.feature_names_supported()
+
+    return RtxMarkingHostileStrFG728, _window_not_observed
+
+
+def _make_unnameable_decline_fg() -> tuple[type[FeatureGroup], Callable[[], bool]]:
+    """A throwaway group whose hook records a rejection and returns False, but cannot say what it is called."""
+    gc.collect()
+
+    class RtxUnnameableDeclineFG728(FeatureGroup):
+        @classmethod
+        def feature_names_supported(cls) -> set[str]:
+            return {HOST_FEATURE}
+
+        # The @final on get_class_name is a mypy pin; a plugin can still install this override at runtime.
+        @classmethod  # type: ignore[misc]
+        def get_class_name(cls) -> str:
+            raise RuntimeError(UNNAMEABLE_MESSAGE)
+
+        @classmethod
+        def match_feature_group_criteria(
+            cls,
+            feature_name: FeatureName | str,
+            options: Options,
+            data_access_collection: DataAccessCollection | None = None,
+        ) -> bool:
+            if str(feature_name) == FILTER_FEATURE:
+                record_match_rejection(cls.__name__, REASON_A)
+                return False
+            return str(feature_name) in cls.feature_names_supported()
+
+    return RtxUnnameableDeclineFG728, _window_not_observed
+
+
+def _make_plain_decline_fg() -> tuple[type[FeatureGroup], Callable[[], bool]]:
+    """A throwaway group whose hook returns a literal False for the filter feature, recording nothing."""
+    gc.collect()
+
+    class RtxPlainDeclineFG728(FeatureGroup):
+        @classmethod
+        def feature_names_supported(cls) -> set[str]:
+            return {HOST_FEATURE}
+
+        @classmethod
+        def match_feature_group_criteria(
+            cls,
+            feature_name: FeatureName | str,
+            options: Options,
+            data_access_collection: DataAccessCollection | None = None,
+        ) -> bool:
+            if str(feature_name) == FILTER_FEATURE:
+                return False
+            return str(feature_name) in cls.feature_names_supported()
+
+    return RtxPlainDeclineFG728, _window_not_observed
+
+
 @dataclass(frozen=True)
 class _RtxCriteriaSnapshot:
     """Plain-data readout of one criteria call. Holds no class and no exception object."""
@@ -333,15 +482,19 @@ class _RtxCriteriaSnapshot:
     window_active: bool
 
 
-def _drive_criteria(make: _RtxFactory, caplog: pytest.LogCaptureFixture) -> _RtxCriteriaSnapshot:
-    """Call criteria once on a fresh GlobalFilter; the finally unbinds every name that pins the class."""
+def _drive_criteria(make: _RtxFactory, caplog: pytest.LogCaptureFixture, calls: int = 1) -> _RtxCriteriaSnapshot:
+    """Call criteria `calls` times on ONE fresh GlobalFilter; the finally unbinds every name that pins the class."""
     caplog.clear()
     fg, read_window = make()
     global_filter = GlobalFilter()
     items: list[tuple[Any, Any]] = []
     try:
+        value: Any = None
+        escaped: str | None = None
         with caplog.at_level(logging.DEBUG, logger=GF_LOGGER_NAME):
-            value, escaped = _capture(partial(global_filter.criteria, fg, _single(FILTER_FEATURE), None))
+            for _ in range(calls):
+                value, call_escaped = _capture(partial(global_filter.criteria, fg, _single(FILTER_FEATURE), None))
+                escaped = escaped or call_escaped
         items = sorted(global_filter.dropped_filters.items(), key=lambda item: str(item[0]))
         return _RtxCriteriaSnapshot(
             is_false=value is False,
@@ -355,6 +508,57 @@ def _drive_criteria(make: _RtxFactory, caplog: pytest.LogCaptureFixture) -> _Rtx
         )
     finally:
         del fg, read_window, global_filter, items
+        gc.collect()
+
+
+@dataclass(frozen=True)
+class _RtxCountedSnapshot:
+    """Criteria readout as counts only: reading a ledger key back would call the hostile class name."""
+
+    is_false: bool
+    escaped: str | None
+    drops: int
+
+
+def _drive_criteria_counted(make: _RtxFactory) -> _RtxCountedSnapshot:
+    """Call criteria once, reading only len(dropped_filters); the finally unbinds every name pinning the class."""
+    fg, read_window = make()
+    global_filter = GlobalFilter()
+    try:
+        value, escaped = _capture(partial(global_filter.criteria, fg, _single(FILTER_FEATURE), None))
+        return _RtxCountedSnapshot(
+            is_false=value is False,
+            escaped=escaped,
+            drops=len(global_filter.dropped_filters),
+        )
+    finally:
+        del fg, read_window, global_filter
+        gc.collect()
+
+
+@dataclass(frozen=True)
+class _RtxResolutionSnapshot:
+    """Plain-data readout of one _filter_feature_group_by_criteria call. Holds no class."""
+
+    is_false: bool
+    escaped: str | None
+    option_keys: tuple[str, ...]
+
+
+def _drive_resolution(make: _RtxFactory) -> _RtxResolutionSnapshot:
+    """Call the resolution seam directly; the finally unbinds the identifier, which keys records by class."""
+    fg, read_window = make()
+    identifier = IdentifyFeatureGroupClass()
+    feature = Feature(FILTER_FEATURE)
+    try:
+        value, escaped = _capture(partial(identifier._filter_feature_group_by_criteria, fg, feature, None))
+        return _RtxResolutionSnapshot(
+            is_false=value is False,
+            escaped=escaped,
+            option_keys=tuple(sorted(str(key) for key in feature.options.keys())),
+        )
+    finally:
+        del fg, read_window, identifier, feature
         gc.collect()
 
 
@@ -540,6 +744,26 @@ class TestMatchAndEscalationLeaveNoDrop:
         assert entry_count == 0, f"a propagating abort is not a drop, got {entry_count} entries"
         assert window_active, "the seam must give the matcher an active rejection window"
 
+    def test_the_window_is_reset_after_the_abort_escapes(self) -> None:
+        """The probe's finally owns the reset, so even a propagating abort leaves no open window behind."""
+        marker = escalate_match_abort(PropertyValueRejection(ESCALATE_MESSAGE))
+        fg, read_window = _make_escalating_rejection_fg(marker)
+        global_filter = GlobalFilter()
+        caught: BaseException | None = None
+        try:
+            global_filter.criteria(fg, _single(FILTER_FEATURE), None)
+        except BaseException as exc:  # noqa: BLE001  (the escape itself is the fact under test)
+            caught = exc
+        is_marker = caught is marker
+        window_after_is_none = MATCH_REJECTION_REASONS.get() is None
+        # Drop the retained traceback: its frames pin the throwaway class through the hook's `cls`.
+        marker.__traceback__ = None
+        del fg, read_window, global_filter, caught
+        gc.collect()
+
+        assert is_marker, "the marked abort must escape criteria for the reset to be the fact under test"
+        assert window_after_is_none, "the probe must reset MATCH_REJECTION_REASONS even on the abort path"
+
 
 class TestOwnedVetoParity:
     """The default hook's owned-veto gate sees the filter seam's active window."""
@@ -655,3 +879,99 @@ class TestCriteriaProbeOutcome:
 
         assert snapshot.matched is False, "a declining matcher is a non-match"
         assert snapshot.window_after_is_none, "the probe must reset MATCH_REJECTION_REASONS on exit"
+
+
+class TestDeclineDefectAndReportCompose:
+    """A recorded decline must neither eat the falsy report nor shield its key from a later defect."""
+
+    def test_a_falsy_non_bool_decline_still_reports_the_detached_filter(self, caplog: pytest.LogCaptureFixture) -> None:
+        """One hook call, two facts: the typed decline is recorded AND the falsy non-bool return still warns."""
+        snapshot = _drive_criteria(_make_falsy_decline_fg, caplog)
+
+        assert snapshot.escaped is None, f"nothing may cross GlobalFilter.criteria: {snapshot.escaped}"
+        assert snapshot.is_false, "a recorded decline with a falsy return is a non-match for that filter"
+        assert len(snapshot.warnings) == 1, (
+            f"the falsy non-bool report must survive the recorded decline, got: {snapshot.warnings}"
+        )
+        message = snapshot.warnings[0]
+        assert FALSY_REPORT_FRAGMENT in message, f"the warning must call the return a falsy non-bool: {message}"
+        assert FALSY_DECLINE_CLASS_NAME in message, f"the warning must name the feature group: {message}"
+        assert FILTER_FEATURE in message, f"the warning must name the filter feature: {message}"
+        assert snapshot.entries == ((FALSY_DECLINE_CLASS_NAME, FILTER_FEATURE),), (
+            f"the typed decline must still be recorded, got: {snapshot.entries}"
+        )
+        assert snapshot.reasons == (REASON_A,), f"the drop must hold the recorded reason, got: {snapshot.reasons}"
+        assert any(REASON_A in line for line in snapshot.debugs), (
+            f"the decline's DEBUG line must still be present, got: {snapshot.debugs}"
+        )
+
+    def test_a_defect_after_a_decline_still_warns_and_takes_the_ledger(self, caplog: pytest.LogCaptureFixture) -> None:
+        """A later crash is worse news than the decline before it: it must own the key's reason and its WARNING."""
+        snapshot = _drive_criteria(_make_decline_then_defect_fg, caplog, calls=2)
+
+        assert snapshot.escaped is None, f"nothing may cross GlobalFilter.criteria: {snapshot.escaped}"
+        assert snapshot.is_false, "a raising hook is a non-match for that filter"
+        assert snapshot.entries == ((DECLINE_THEN_DEFECT_CLASS_NAME, FILTER_FEATURE),), (
+            f"exactly one entry for the key, got: {snapshot.entries}"
+        )
+        reason = snapshot.reasons[0]
+        assert RUNTIME_TYPE_NAME in reason, f"the defect must take the key's reason from the decline, got: {reason}"
+        assert DEFECT_MESSAGE in reason, f"the reason must carry the defect message: {reason}"
+        assert len(snapshot.warnings) == 1, (
+            f"the defect must warn even though the decline held the key first, got: {snapshot.warnings}"
+        )
+        assert DEFECT_MESSAGE in snapshot.warnings[0], (
+            f"the WARNING must carry the defect message: {snapshot.warnings[0]}"
+        )
+
+
+class TestHostilePluginReadsStayContained:
+    """A hostile plugin-owned read (a rejection's __str__, get_class_name) degrades instead of escaping a seam."""
+
+    def test_a_hostile_rejection_str_does_not_skip_the_resolution_rollback(self) -> None:
+        """The probe reads str(exc) unguarded today, escaping before the seam's option rollback runs."""
+        snapshot = _drive_resolution(_make_marking_hostile_str_fg)
+
+        assert snapshot.escaped is None, (
+            f"an unreadable rejection text must not cross the resolution seam: {snapshot.escaped}"
+        )
+        assert snapshot.is_false, "a value rejection is a non-match for that candidate"
+        assert MARKER_KEY not in snapshot.option_keys, (
+            f"the write must not survive the contained rejection, got: {snapshot.option_keys}"
+        )
+
+    def test_an_unnameable_group_still_gets_its_decline_recorded(self) -> None:
+        """The decline's DEBUG report reads get_class_name, a plugin-owned field that must degrade, not raise."""
+        snapshot = _drive_criteria_counted(_make_unnameable_decline_fg)
+
+        assert snapshot.escaped is None, f"reporting a decline must not cross GlobalFilter.criteria: {snapshot.escaped}"
+        assert snapshot.is_false, "a recorded decline is a non-match for that filter"
+        assert snapshot.drops == 1, f"the decline must still be recorded, got {snapshot.drops} entries"
+
+
+class TestAnOuterWindowSurvivesTheProbe:
+    """The probe stacks its own window: an outer recording is neither harvested nor lost."""
+
+    def test_an_outer_record_is_not_harvested_and_survives(self) -> None:
+        token = MATCH_REJECTION_REASONS.set({})
+        try:
+            record_match_rejection(OUTER_OWNER, OUTER_REASON)
+            fg, read_window = _make_plain_decline_fg()
+            global_filter = GlobalFilter()
+            try:
+                value, escaped = _capture(partial(global_filter.criteria, fg, _single(FILTER_FEATURE), None))
+                drops = len(global_filter.dropped_filters)
+                outer = MATCH_REJECTION_REASONS.get() or {}
+                outer_entries = tuple(sorted((owner, rejection.reason) for owner, rejection in outer.items()))
+            finally:
+                del fg, read_window, global_filter
+                gc.collect()
+        finally:
+            MATCH_REJECTION_REASONS.reset(token)
+
+        assert escaped is None, f"nothing may cross GlobalFilter.criteria: {escaped}"
+        assert value is False, "a plain decline is a non-match for that filter"
+        assert drops == 0, f"the outer record must not be harvested as this probe's rejection, got {drops} entries"
+        assert outer_entries == ((OUTER_OWNER, OUTER_REASON),), (
+            f"the outer window must still hold exactly its own record, got: {outer_entries}"
+        )

@@ -213,8 +213,8 @@ return `True` explicitly to keep it.
 
 If a FeatureGroup's `match_feature_group_criteria` raises while a filter is matched, or returns a
 value whose truthiness test raises, that filter is a non-match for that probe, like a `False`
-return, and the drop is recorded in `GlobalFilter.dropped_filters`. A framework-owned raise still
-aborts.
+return, and the drop is recorded in `GlobalFilter.dropped_filters`. A typed decline the matcher
+records lands in the same ledger, at DEBUG. A framework-owned raise still aborts.
 
 The option divergence warning fires only for a filter that actually attaches, once per distinct
 message per setup. A filter that matches no FeatureGroup at all is reported once after setup

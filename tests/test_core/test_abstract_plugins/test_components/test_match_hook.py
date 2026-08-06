@@ -19,18 +19,17 @@ from mloda.core.abstract_plugins.components.data_access_collection import DataAc
 from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser import PropertyValueRejection
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
+from mloda.core.abstract_plugins.components import match_hook as match_hook_module
 from mloda.core.abstract_plugins.components.match_hook import MatchHookOutcome, call_match_hook
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.components.utils import escalate_match_abort
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
-from mloda.core.filter import global_filter as global_filter_module
 from mloda.core.filter.filter_type_enum import FilterType
 from mloda.core.filter.global_filter import GlobalFilter
-from mloda.core.prepare import identify_feature_group as identify_feature_group_module
 from mloda.core.prepare.identify_feature_group import IdentifyFeatureGroupClass
 
 
-# The name each seam must hold in its own namespace, so a spy can observe the one call it makes.
+# The probe's module binding of the helper: the one point where a spy can intercept the hook call.
 HELPER_NAME = "call_match_hook"
 
 PROBE_CLASS_NAME = "MatchHookProbeFG991"
@@ -380,13 +379,13 @@ class _Spy:
 
 
 def test_the_filter_seam_calls_the_helper_once_per_filter(monkeypatch: pytest.MonkeyPatch) -> None:
-    """identify_matched_filters asks the shared helper once per registered filter, and reaches the hook no other way."""
-    assert hasattr(global_filter_module, HELPER_NAME), (
-        f"{global_filter_module.__name__} must import {HELPER_NAME} into its own namespace and route the hook "
-        "call through it; nothing here can observe a call the seam makes itself."
+    """The filter seam routes through the probe, whose module binding is the interception point, once per filter."""
+    assert hasattr(match_hook_module, HELPER_NAME), (
+        f"{match_hook_module.__name__} must hold {HELPER_NAME}, the binding the probe routes the hook call "
+        "through; nothing here can observe a call the probe makes itself."
     )
     spy = _Spy()
-    monkeypatch.setattr(global_filter_module, HELPER_NAME, spy)
+    monkeypatch.setattr(match_hook_module, HELPER_NAME, spy)
     fg = _make_probe_fg(lambda: True)
     global_filter = GlobalFilter()
     global_filter.add_filter(FILTER_FEATURE_A, FilterType.EQUAL, {"value": 1})
@@ -410,13 +409,13 @@ def test_the_filter_seam_calls_the_helper_once_per_filter(monkeypatch: pytest.Mo
 
 
 def test_the_resolution_seam_calls_the_helper_once_per_candidate(monkeypatch: pytest.MonkeyPatch) -> None:
-    """The resolution seam asks the same helper, once per candidate, and reaches the hook no other way."""
-    assert hasattr(identify_feature_group_module, HELPER_NAME), (
-        f"{identify_feature_group_module.__name__} must import {HELPER_NAME} into its own namespace and route "
-        "the hook call through it; nothing here can observe a call the seam makes itself."
+    """The resolution seam routes through the probe, whose module binding is the interception point, per candidate."""
+    assert hasattr(match_hook_module, HELPER_NAME), (
+        f"{match_hook_module.__name__} must hold {HELPER_NAME}, the binding the probe routes the hook call "
+        "through; nothing here can observe a call the probe makes itself."
     )
     spy = _Spy()
-    monkeypatch.setattr(identify_feature_group_module, HELPER_NAME, spy)
+    monkeypatch.setattr(match_hook_module, HELPER_NAME, spy)
     fg = _make_probe_fg(lambda: True)
     identifier = IdentifyFeatureGroupClass()
     verdict: Any = None

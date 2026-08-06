@@ -7,7 +7,7 @@ Each keeps only its own recording and rollback now, driven by the outcome this h
 
 from __future__ import annotations
 
-from collections.abc import Callable
+import functools
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Optional
 
@@ -20,7 +20,7 @@ from mloda.core.abstract_plugins.components.match_rejection import (
     record_match_rejection,
 )
 from mloda.core.abstract_plugins.components.options import Options
-from mloda.core.abstract_plugins.components.utils import is_match_abort
+from mloda.core.abstract_plugins.components.utils import is_match_abort, safe_field
 
 if TYPE_CHECKING:
     from mloda.core.abstract_plugins.feature_group import FeatureGroup
@@ -72,7 +72,7 @@ class CriteriaProbeOutcome:
     returned: Any
     # Disjoint: the one contained raise is a typed decline (value_rejection) or the candidate's own defect.
     matcher_error: Optional[Exception]
-    value_rejection: Optional[Exception]
+    value_rejection: Optional[PropertyValueRejection]
     rejection: Optional[MatchRejection]
 
 
@@ -81,28 +81,19 @@ def probe_match_criteria(
     feature_name: FeatureName | str,
     options: Options,
     data_access_collection: Optional[DataAccessCollection] = None,
-    *,
-    hook: Optional[
-        Callable[[type[FeatureGroup], FeatureName | str, Options, Optional[DataAccessCollection]], MatchHookOutcome]
-    ] = None,
 ) -> CriteriaProbeOutcome:
-    """Ask one candidate under its own rejection window; a marked abort propagates, the finally only resets.
-
-    ``hook`` exists for the seams: each passes its own module binding of ``call_match_hook``, so the seam
-    tests can intercept the route there.
-    """
+    """Ask one candidate under its own rejection window; a marked abort propagates, the finally only resets."""
     token = MATCH_REJECTION_REASONS.set({})
     try:
-        outcome = (
-            call_match_hook(feature_group, feature_name, options, data_access_collection)
-            if hook is None
-            else hook(feature_group, feature_name, options, data_access_collection)
-        )
+        outcome = call_match_hook(feature_group, feature_name, options, data_access_collection)
         value_rejection = outcome.error if isinstance(outcome.error, PropertyValueRejection) else None
         matcher_error = outcome.error if value_rejection is None else None
         if value_rejection is not None:
-            # Parity with the canonical seam: the class name owns the record and the reason is str(exc).
-            record_match_rejection(feature_group.get_class_name(), str(value_rejection))
+            # Parity with the canonical seam: the class name owns the record and the reason is str(exc);
+            # the owner name is harvested by value, never by key, so a degraded name is harmless.
+            owner = safe_field(lambda: feature_group.get_class_name(), "<unnamed feature group>")
+            reason = safe_field(functools.partial(str, value_rejection), type(value_rejection).__name__)
+            record_match_rejection(owner, reason)
         recorded = MATCH_REJECTION_REASONS.get() or {}
         # Harvest only on a non-match; the first recorded reason wins (insertion order).
         rejection = next(iter(recorded.values())) if not outcome.matched and recorded else None

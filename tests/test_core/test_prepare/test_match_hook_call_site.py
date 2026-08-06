@@ -32,7 +32,7 @@ FILTER_SEAM = ("mloda/core/filter/global_filter.py", "criteria")
 RESOLUTION_SEAM = ("mloda/core/prepare/identify_feature_group.py", "_filter_feature_group_by_criteria")
 SEAMS = (FILTER_SEAM, RESOLUTION_SEAM)
 
-# The context var whose per-candidate window the resolution seam opens, and resets in its finally.
+# The context var whose per-candidate window the shared probe opens, and resets in its finally.
 CONTEXT_VAR = "MATCH_REJECTION_REASONS"
 
 SUPPRESS = "suppress"
@@ -230,9 +230,9 @@ def test_neither_seam_drops_an_exception_without_an_except(module: str, function
     )
 
 
-def test_the_resolution_seam_keeps_only_the_context_var_reset_in_its_finally() -> None:
+def test_the_probe_keeps_only_the_context_var_reset_in_its_finally() -> None:
     """``outcome`` is bound only where nothing raised, so every read of it belongs inside the same try."""
-    module, function = RESOLUTION_SEAM
+    module, function = HELPER_MODULE, "probe_match_criteria"
     definition = _definition(module, function)
     blocks = [node for node in ast.walk(definition) if isinstance(node, ast.Try) and node.finalbody]
 

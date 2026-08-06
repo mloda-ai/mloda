@@ -186,25 +186,24 @@ When a user passes a `GlobalFilter`, the framework tests every `SingleFilter` ag
 FeatureGroup that each feature already resolved to, using that feature's options, domain
 and compute framework. Each filter is **deep-copied** first, so everything below happens
 on the copy and never on the filter the user built. The copy is delivered only if it
-clears five gates, in order: the group's own `match_feature_group_criteria()` on the
-filter feature's name and options (plus the run's `DataAccessCollection`), then the filter
-feature's domain against the resolved feature's, then its `feature_group` scope against
-the probed FeatureGroup, honored with the same semantics as feature resolution (the named
-class and its subclasses, class-object and string forms alike), then the group's
-`supports_compute_framework()` on the same name and options, which narrows the frameworks
-the filter rides to the hook-accepted ones (its own pin, else the resolved feature's),
-detaching the filter when none are accepted, then its compute framework against the
-resolved feature's. The domain and compute
-framework gates also backfill: a filter feature that declares no domain or compute
-framework inherits the resolved feature's (the FeatureGroup's domain when the feature
-declares none). Pinning a filter feature to more than one compute framework raises
-`ComputeFrameworkPinError` at `add_filter` time; feature resolution applies the same
-validation. Declaring the filter's column as an input is **not** the test, and links are
-not re-checked here (feature resolution already covered them).
+clears these gates, in the order they run:
+
+| Gate | Shared with feature resolution | Filter policy |
+|------|--------------------------------|---------------|
+| criteria | [one shared probe](feature-group-matching.md) | asked about the filter feature's name and its enriched options, plus the run's `DataAccessCollection` |
+| domain | the comparison | a filter feature declaring no domain adopts the resolved feature's, or the FeatureGroup's when the feature declares none |
+| scope | `matches_feature_group_scope`: the named class and its subclasses, class-object and string forms alike | none |
+| capability | the `supports_compute_framework` hook and its narrowing | asked over the frameworks the filter would ride (its own pin, else the resolved feature's), detaching it when none are accepted |
+| compute framework pin | the cardinality validator, raising `ComputeFrameworkPinError` on more than one pin | validated at `add_filter`, not at probe time; the pin must equal the feature's resolved framework |
+
+Links are deliberately not re-checked: feature resolution already covered them. Declaring
+the filter's column as an input is **not** the test either.
 
 `match_feature_group_criteria()` sees the filter feature's own options enriched from the
 resolved feature's effective (post-default) ones (see
-[Applying declared defaults](property-mapping.md#applying-declared-defaults)). If two
+[Applying declared defaults](property-mapping.md#applying-declared-defaults)), where
+feature resolution passes declared options alone. The option divergence warning fires only
+for a filter that actually attaches, once per distinct message per setup. If two
 FeatureGroups both match the same original filter, they each receive independent copies.
 This means a single `GlobalFilter` can be processed differently by different FeatureGroups
 in the same pipeline: one may use the mask engine for inline masking while another uses
@@ -214,23 +213,6 @@ The return is read for truthiness, so any falsy value is a non-match, exactly li
 that falls off the end of a branch and returns `None` attaches no filter. A falsy value that is not
 `False` is reported once per FeatureGroup and filter feature, so the detached filter is visible;
 return `True` explicitly to keep it.
-
-If a FeatureGroup's `match_feature_group_criteria` raises while a filter is matched, or returns a
-value whose truthiness test raises, that filter is a non-match for that probe, like a `False`
-return, and the drop is recorded in `GlobalFilter.dropped_filters`. A typed decline the matcher
-records lands in the same ledger, at DEBUG. A framework-owned raise still aborts.
-
-`GlobalFilter.dropped_filters` maps (FeatureGroup, filter feature name) to the gate that dropped the
-filter and that gate's reason, for the current engine setup only. A plain `False` is an ordinary
-non-match and records nothing. A matcher defect takes the key from a stored near-miss; otherwise the
-deepest gate the filter reached keeps it, and two facts at one depth leave the first one in place.
-
-The option divergence warning fires only for a filter that actually attaches, once per distinct
-message per setup. A filter that matches no FeatureGroup at all is reported once after setup
-("matched no feature group"), with its nearest miss appended when one was recorded: the deepest gate
-that filter reached, rendered as `<FeatureGroup> (<gate label>): <reason>`, for example `(scope)` when
-a `feature_group` scope excluded it. Two filters declared on one column name share the ledger key, so
-neither report can quote a fact and both stay the bare sentence.
 
 Matched filters are attached to the `FeatureSet` before `calculate_feature()` is
 called. Inside your calculation you can access them via `features.filters`:
@@ -262,6 +244,33 @@ compute framework, option set, data type and dependency level), and any earlier 
 a reused `GlobalFilter` keeps the matches it has recorded. Which of the two empty states you
 get is therefore decided outside your FeatureGroup. `if features.filters:` covers both;
 `if features.filters is not None:` passes with nothing to iterate.
+
+### Why a filter did not attach
+
+If a FeatureGroup's `match_feature_group_criteria` raises while a filter is matched, or returns a
+value whose truthiness test raises, that filter is a non-match for that probe, like a `False`
+return, and the drop is recorded in `GlobalFilter.dropped_filters`. A typed decline the matcher
+records lands in the same ledger, at DEBUG. A framework-owned raise still aborts.
+
+`GlobalFilter.dropped_filters` maps (FeatureGroup, filter feature name) to the gate that dropped the
+filter and that gate's reason, for the current engine setup only. A plain `False` is an ordinary
+non-match and records nothing. A matcher defect takes the key from a stored near-miss; otherwise the
+deepest gate the filter reached keeps it, and two facts at one depth leave the first one in place.
+
+A filter that matches no FeatureGroup at all is reported once after setup, with its nearest miss
+appended when one was recorded: across FeatureGroups the deepest gate wins, and a matcher defect
+ranks last.
+
+```text
+Filter feature 'price' matched no feature group. Nearest miss: SalesTotal (scope): outside the requested feature group scope
+```
+
+The parenthesized label, `(scope)` here, names the gate in the vocabulary of the "No feature groups
+found" error's
+[near-miss bullets](troubleshooting/feature-group-resolution-errors.md#the-eliminated-candidates-block).
+
+Two filters declared on one column name share the ledger key, so neither report can quote a fact and
+both stay the bare sentence.
 
 ### Filter scope is the `FeatureSet`
 

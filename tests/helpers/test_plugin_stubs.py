@@ -13,6 +13,7 @@ from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
+from mloda.core.api.plugin_docs import _safe_version
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
 
@@ -164,6 +165,13 @@ class TestDeclaredAttributes:
         cls = make_fg("PluginStubNamedFrameworksFG", frameworks=FRAMEWORKS)
         assert cls.compute_framework_rule() == FRAMEWORKS
 
+    def test_frameworks_are_copied_not_aliased(self) -> None:
+        """Mutating the passed set afterwards must not rewrite the minted class's rule."""
+        passed: set[type[ComputeFramework]] = {PythonDictFramework}
+        cls = make_fg("PluginStubFrameworksCopyFG", frameworks=passed)
+        passed.add(PyArrowTable)
+        assert cls.compute_framework_rule() == {PythonDictFramework}
+
     def test_no_supported_names_means_the_empty_set(self) -> None:
         cls = make_fg("PluginStubDefaultSupportedFG")
         assert cls.feature_names_supported() == set()
@@ -217,6 +225,32 @@ class TestBaseParameter:
         assert _matches(child, ALPHA) is False
         assert child.get_domain() == Domain(OVERRIDE_DOMAIN)
 
+    def test_a_base_outside_the_stub_hierarchy_raises(self) -> None:
+        """A plain base reads none of the stub ClassVars, so every keyword is silently dropped."""
+
+        class PluginStubPlainFG(FeatureGroup):
+            pass
+
+        with pytest.raises(ValueError, match="StubFeatureGroup") as raised:
+            make_fg("PluginStubPlainChildFG", base=PluginStubPlainFG, matches=ALPHA)  # type: ignore[arg-type]
+        assert "PluginStubPlainFG" in str(raised.value)
+
+
+class TestEmptyIsAValueNotAnOmission:
+    """An omitted keyword inherits from base=; an explicitly empty one declares the value empty."""
+
+    def test_an_omitted_matches_inherits_the_base_names(self) -> None:
+        parent = make_fg("PluginStubInheritMatchesParentFG", matches=ALPHA)
+        child = make_fg("PluginStubInheritMatchesChildFG", base=parent)
+        assert _matches(child, ALPHA) is True
+
+    def test_an_explicitly_empty_matches_clears_the_inherited_names(self) -> None:
+        parent = make_fg("PluginStubEmptyMatchesParentFG", matches=(ALPHA, BETA))
+        child = make_fg("PluginStubEmptyMatchesChildFG", base=parent, matches=frozenset())
+        assert _as_stub(child).MATCHED_NAMES == frozenset()
+        assert _matches(child, ALPHA) is False
+        assert _matches(child, BETA) is False
+
 
 class TestStubFeatureGroupBase:
     """The base class alone is inert: it matches nothing and answers the FeatureGroup defaults."""
@@ -236,3 +270,19 @@ class TestStubFeatureGroupBase:
         assert StubFeatureGroup.DOMAIN_NAME is None
         assert StubFeatureGroup.FRAMEWORK_RULE is None
         assert StubFeatureGroup.SUPPORTED_NAMES == frozenset()
+
+
+class TestNoRetrievableSource:
+    """A minted class has no source: a stub that needs a real version() must be written as a class statement."""
+
+    def test_source_and_version_are_unavailable(self) -> None:
+        cls = make_fg("PluginStubNoSourceFG")
+        with pytest.raises(OSError):
+            inspect.getsource(cls)
+        with pytest.raises(OSError):
+            cls.version()
+
+    def test_the_docs_version_accessor_degrades_instead_of_raising(self) -> None:
+        """get_feature_group_docs reads the version field through _safe_version, so a stub degrades, not raises."""
+        cls = make_fg("PluginStubDocsVersionFG")
+        assert _safe_version(cls) == "unavailable"

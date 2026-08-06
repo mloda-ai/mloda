@@ -85,30 +85,44 @@ def _name_set(names: str | Iterable[str]) -> frozenset[str]:
 def make_fg(
     name: str,
     *,
-    matches: str | Iterable[str] = (),
+    matches: str | Iterable[str] | None = None,
     domain: str | None = None,
     frameworks: set[type[ComputeFramework]] | None = None,
-    supported_names: str | Iterable[str] = (),
+    supported_names: str | Iterable[str] | None = None,
     abstract: bool = False,
-    base: type[FeatureGroup] = StubFeatureGroup,
+    base: type[StubFeatureGroup] = StubFeatureGroup,
     doc: str | None = None,
-) -> type[FeatureGroup]:
-    """Mint a FeatureGroup subclass named ``name`` in the calling module, configured by keyword."""
+) -> type[StubFeatureGroup]:
+    """Mint a FeatureGroup subclass named ``name`` in the calling module, configured by keyword.
+
+    Bind the result at module level under exactly ``name``: that binding is what makes the class
+    picklable and what ``_is_live_in_module`` and the registry-isolation fixture read.
+    One ``(module, name)`` pair per process, so this cannot be called from a fixture or from a
+    parametrized test.
+    A minted class has no retrievable source, so ``version()`` is unavailable and the docs path
+    reports it as such; a stub needing a real version must be written as a class statement.
+    """
+    if not issubclass(base, StubFeatureGroup):
+        # A foreign base reads none of the stub ClassVars, so every keyword is silently dropped and
+        # FeatureGroup's default matcher, which matches the class's own name, is back in the suite.
+        raise ValueError(f"base must be a StubFeatureGroup subclass, got {base.__name__}.")
+
     # The caller's module, so (module, qualname) dedup, _is_live_in_module and the isolation fixture
     # read a minted stub exactly like a hand-written class.
     module: str = sys._getframe(1).f_globals["__name__"]
     _claim(module, name)
 
     namespace: dict[str, Any] = {"__module__": module, "__qualname__": name}
-    # Only a supplied keyword lands in the namespace; injecting an empty one would shadow the base's
-    # ClassVar instead of inheriting it.
-    if matches:
+    # An omitted keyword is None and inherits the base's ClassVar; an explicitly empty one is a
+    # value, and shadows it with the empty declaration.
+    if matches is not None:
         namespace["MATCHED_NAMES"] = _name_set(matches)
     if domain is not None:
         namespace["DOMAIN_NAME"] = domain
     if frameworks is not None:
-        namespace["FRAMEWORK_RULE"] = frameworks
-    if supported_names:
+        # A copy: mutating the caller's set afterwards must not rewrite the minted class's rule.
+        namespace["FRAMEWORK_RULE"] = set(frameworks)
+    if supported_names is not None:
         namespace["SUPPORTED_NAMES"] = _name_set(supported_names)
     if doc is not None:
         namespace["__doc__"] = doc
@@ -118,4 +132,4 @@ def make_fg(
     # The base's metaclass, not type: FeatureGroup is an ABC, and only ABCMeta turns the injected
     # abstract member into a real instantiation error.
     metaclass: type[Any] = type(base)
-    return cast("type[FeatureGroup]", metaclass(name, (base,), namespace))
+    return cast("type[StubFeatureGroup]", metaclass(name, (base,), namespace))

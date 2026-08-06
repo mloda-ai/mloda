@@ -190,11 +190,11 @@ clears these gates, in the order they run:
 
 | Gate | Shared with feature resolution | Filter policy |
 |------|--------------------------------|---------------|
-| criteria | [one shared probe](feature-group-matching.md) | asked about the filter feature's name and its enriched options, plus the run's `DataAccessCollection` |
-| domain | the comparison | a filter feature declaring no domain adopts the resolved feature's, or the FeatureGroup's when the feature declares none |
-| scope | `matches_feature_group_scope`: the named class and its subclasses, class-object and string forms alike | none |
-| capability | the `supports_compute_framework` hook and its narrowing | asked over the frameworks the filter would ride (its own pin, else the resolved feature's), detaching it when none are accepted |
-| compute framework pin | the cardinality validator, raising `ComputeFrameworkPinError` on more than one pin | validated at `add_filter`, not at probe time; the pin must equal the feature's resolved framework |
+| criteria | [one shared probe](feature-group-matching.md#modern-unified-matching) | asked about the filter feature's name and its enriched options, plus the run's `DataAccessCollection` |
+| domain | `Domain` equality only: resolution compares the FeatureGroup's domain to the feature's, and passes any candidate for a domainless feature | the filter feature's domain must equal the resolved feature's, or the FeatureGroup's when the feature declares none; a domainless filter copy adopts that domain, though never a default group domain |
+| scope | `matches_feature_group_scope`: the named class and its subclasses, class-object and string forms alike | none, beyond reading the filter feature's own `feature_group=` |
+| capability (`compute framework`) | the `supports_compute_framework` hook and its narrowing | asked over the frameworks the filter would ride (its own pin, else the resolved feature's), skipped when neither carries one; nothing accepted detaches the filter, and an unpinned copy rides the accepted subset, or the feature's frameworks when the hook was never consulted |
+| compute framework pin | only the pin-cardinality validator, which raises `ComputeFrameworkPinError` at `add_filter`, not at this gate | the resolved feature's framework must be the filter feature's pin; resolution instead tests the feature's pin against the candidate's supported frameworks |
 
 Links are deliberately not re-checked: feature resolution already covered them. Declaring
 the filter's column as an input is **not** the test either.

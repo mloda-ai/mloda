@@ -40,12 +40,53 @@ class ResolveComputeFrameworks:
         for p in groups:
             self.rewrite_group_frameworks(p, resolved, feature_trekkers)
 
+        self.reject_self_merging_links(groups, link_trekker)
+
         new_planned_queue = list(planned_queue)
 
         link_trekker.order_links_by_frameworks()
 
         new_planned_queue = self.order_queue_by_trekker_order(new_planned_queue, link_trekker)
         return new_planned_queue
+
+    def reject_self_merging_links(self, groups: Any, link_trekker: LinkTrekker) -> None:
+        """Reject a scheduled link that joins in one framework none of its children run in.
+
+        Both join sides would then filter to the same uuids and the merge degenerates into a
+        self merge, dropping one parent's columns.
+        """
+        features_by_uuid = {f.uuid: f for p in groups for f in p[1]}
+
+        for (link, left_cfw, right_cfw), child_uuids in link_trekker.data.items():
+            if left_cfw != right_cfw:
+                continue
+
+            # A self join takes case_link_equal_feature_groups, which suppresses the join step.
+            if link.left_feature_group == link.right_feature_group:
+                continue
+
+            # APPEND and UNION pick one uuid per side by index and feature group, never by framework.
+            if link.jointype in (JoinType.APPEND, JoinType.UNION):
+                continue
+
+            children = [features_by_uuid[uuid] for uuid in child_uuids if uuid in features_by_uuid]
+            if not children:
+                continue
+
+            if any(child.compute_frameworks is None or left_cfw in child.compute_frameworks for child in children):
+                continue
+
+            cfw_name = left_cfw.__name__
+            left_name = link.left_feature_group.__name__
+            right_name = link.right_feature_group.__name__
+            names = sorted(str(child.name) for child in children)
+            raise ValueError(
+                f"Link {link.jointype.value} {left_name} {right_name} joins in {cfw_name}, "
+                f"which none of its children run in: {names}. "
+                "Both join sides would resolve to the same input. "
+                "Give the joined feature groups distinct compute frameworks, "
+                f"or bring the children of this link onto {cfw_name}."
+            )
 
     def rewrite_group_frameworks(
         self,

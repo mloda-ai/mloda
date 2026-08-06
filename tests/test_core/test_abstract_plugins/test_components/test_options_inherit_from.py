@@ -1,4 +1,5 @@
 from copy import deepcopy
+from enum import Enum
 from uuid import uuid4
 
 import pytest
@@ -1664,60 +1665,92 @@ class TestInheritFromCrossCategoryForwardConflictHint:
             child.inherit_from(consumer)
 
 
-class TestNonForwardedKeysConstant:
-    """
-    Test suite for the shared never-forwarded key set (NEW SPEC).
+class _DeMixedOptionKey(Enum):
+    """Stands in for a DefaultOptionKeys that no longer mixes in str."""
 
-    The hardcoded {DefaultOptionKeys.in_features} exclusion set, once duplicated across
-    Options.inherit_from and the resolution-failure forwarding hint, becomes a public
-    module-level constant NON_FORWARDED_KEYS in options.py. The hint itself is gone
-    (#791/#782); Options.inherit_from is now the only consumer of the constant.
-    """
+    in_features = "in_features"
+
+    def __str__(self) -> str:
+        return str(self.value)
+
+
+class TestNonForwardedKeysConstant:
+    """The never-forwarded key set and its matcher, consumed by Options.inherit_from."""
 
     def test_constant_is_importable_frozenset_containing_in_features(self) -> None:
         """NON_FORWARDED_KEYS is importable from options.py and contains in_features."""
         from mloda.core.abstract_plugins.components.options import NON_FORWARDED_KEYS
 
         assert isinstance(NON_FORWARDED_KEYS, frozenset)
-        assert DefaultOptionKeys.in_features in NON_FORWARDED_KEYS
-
-    def test_constant_holds_plain_string_values_not_enum_members(self) -> None:
-        """The constant stores the key STRING, so membership does not depend on the
-        DefaultOptionKeys str mixin supplying str.__hash__ for enum members."""
-        from mloda.core.abstract_plugins.components.options import NON_FORWARDED_KEYS
-
-        assert all(type(key) is str for key in NON_FORWARDED_KEYS)
         assert DefaultOptionKeys.in_features.value in NON_FORWARDED_KEYS
 
-    def test_in_features_literal_string_key_never_forwarded(self) -> None:
-        """Options keyed with the literal string form are still excluded: this would fail
-        if the constant and the plain-string dict-key form ever diverged."""
-        consumer = Options(
-            group={"in_features": "consumer_source", "kg_backend": "neo4j"},
-            context={},
-        )
-        child = Options()
+    def test_constant_holds_plain_strings_only(self) -> None:
+        """Every element is a plain str, so exclusion matching never rides on enum hashing or equality."""
+        from mloda.core.abstract_plugins.components.options import NON_FORWARDED_KEYS
 
-        child.inherit_from(consumer)
-        child.inherit_from(consumer, forward_group=frozenset({"in_features"}))
+        offenders = [(key, type(key)) for key in NON_FORWARDED_KEYS if type(key) is not str]
+        assert offenders == [], f"NON_FORWARDED_KEYS holds non-plain-str elements: {offenders}"
 
-        assert "in_features" not in child.group
-        assert "in_features" not in child.context
-        assert child.group["kg_backend"] == "neo4j"
+    def test_is_non_forwarded_key_matches_both_key_forms(self) -> None:
+        """The matcher accepts the enum member and the plain string, and rejects anything else."""
+        from mloda.core.abstract_plugins.components.options import is_non_forwarded_key
+
+        assert is_non_forwarded_key(DefaultOptionKeys.in_features) is True
+        assert is_non_forwarded_key("in_features") is True
+        assert is_non_forwarded_key("kg_backend") is False
+        assert is_non_forwarded_key(Options) is False
+        assert is_non_forwarded_key(7) is False
+
+    def test_is_non_forwarded_key_does_not_ride_on_the_str_mixin(self) -> None:
+        """A de-mixed DefaultOptionKeys stand-in still matches, so exclusion cannot rely on str inheritance."""
+        from mloda.core.abstract_plugins.components.options import is_non_forwarded_key
+
+        assert not isinstance(_DeMixedOptionKey.in_features, str), "guard: the stand-in must not mix in str"
+        assert is_non_forwarded_key(_DeMixedOptionKey.in_features) is True
 
     def test_in_features_never_forwarded_regression_pin(self) -> None:
-        """Regression pin: in_features never flows through any inherit_from flow."""
-        consumer = Options(
+        """Regression pin: an enum-member-keyed in_features never flows through any inherit_from flow."""
+        group_consumer = Options(
             group={DefaultOptionKeys.in_features: "consumer_source", "kg_backend": "neo4j"},
             context={},
         )
+        context_consumer = Options(
+            context={DefaultOptionKeys.in_features: "consumer_source"},
+            propagate_context_keys=frozenset({DefaultOptionKeys.in_features}),
+        )
         child = Options()
 
-        child.inherit_from(consumer)
-        child.inherit_from(consumer, forward_group=frozenset({DefaultOptionKeys.in_features}))
+        child.inherit_from(group_consumer)
+        child.inherit_from(group_consumer, forward_group=frozenset({DefaultOptionKeys.in_features}))
+        child.inherit_from(context_consumer, inherit_context_keys=frozenset({DefaultOptionKeys.in_features}))
 
         assert DefaultOptionKeys.in_features not in child.group
         assert DefaultOptionKeys.in_features not in child.context
+        assert DefaultOptionKeys.in_features not in child.inherited_group_keys
+        assert DefaultOptionKeys.in_features not in child.inherited_context_keys
+        assert child.group["kg_backend"] == "neo4j"
+
+    def test_literal_string_key_excluded_at_every_flow(self) -> None:
+        """The plain string "in_features" is excluded from the group forward, the context pull, and the push."""
+        from mloda.core.abstract_plugins.components.options import NON_FORWARDED_KEYS
+
+        assert "in_features" in NON_FORWARDED_KEYS, "literal below must track DefaultOptionKeys.in_features"
+
+        group_consumer = Options(group={"in_features": "consumer_source", "kg_backend": "neo4j"})
+        context_consumer = Options(
+            context={"in_features": "consumer_source"},
+            propagate_context_keys=frozenset({"in_features"}),
+        )
+        child = Options()
+
+        child.inherit_from(group_consumer)
+        child.inherit_from(group_consumer, forward_group=frozenset({"in_features"}))
+        child.inherit_from(context_consumer, inherit_context_keys=frozenset({"in_features"}))
+
+        assert "in_features" not in child.group
+        assert "in_features" not in child.context
+        assert "in_features" not in child.inherited_group_keys
+        assert "in_features" not in child.inherited_context_keys
         assert child.group["kg_backend"] == "neo4j"
 
 

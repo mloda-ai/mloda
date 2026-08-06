@@ -130,6 +130,12 @@ def _dropped_entries(global_filter: GlobalFilter) -> tuple[tuple[str, str], ...]
     return tuple(sorted((key[0].get_class_name(), key[1]) for key in global_filter.dropped_filters))
 
 
+def _reason_text(recorded: Any) -> str:
+    """Reason text of one recorded drop, or a marker naming what the ledger stored instead of a fact."""
+    reason = getattr(recorded, "reason", None)
+    return str(reason) if reason is not None else f"<no reason on {type(recorded).__name__}>"
+
+
 def _make_non_bool_matcher_fg(returned: Any) -> type[FeatureGroup]:
     """A throwaway group whose hook returns the caller's value for FILTER_FEATURE and matches HOST_FEATURE."""
     # Class objects are cyclic; collect leftovers from earlier tests before defining a twin.
@@ -207,7 +213,7 @@ def _drive_criteria(returned: Any, caplog: pytest.LogCaptureFixture, calls: int 
             shown=_shown(value),
             escaped=escaped,
             entries=_dropped_entries(global_filter),
-            reasons=tuple(global_filter.dropped_filters.values()),
+            reasons=tuple(_reason_text(recorded) for recorded in global_filter.dropped_filters.values()),
             warnings=_messages(caplog, logging.WARNING),
             debugs=_messages(caplog, logging.DEBUG),
         )

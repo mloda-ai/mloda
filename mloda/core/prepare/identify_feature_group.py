@@ -17,6 +17,7 @@ from mloda.core.prepare.resolution_types import (
     PARTIAL_RECORDS_CAP,
     RenderFacts,
     ResolutionRecord,
+    rejection_elimination_stage,
 )
 from mloda.core.prepare.resolution_failure_renderer import (
     render_resolution_failure,
@@ -25,11 +26,7 @@ from mloda.core.prepare.resolution_failure_renderer import (
 )
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.abstract_plugins.components.domain import Domain
-from mloda.core.abstract_plugins.components.match_rejection import (
-    INPUT_DATA_OWNED_STAGE,
-    INPUT_DATA_STAGE,
-    MatchRejection,
-)
+from mloda.core.abstract_plugins.components.match_rejection import MatchRejection
 from mloda.core.abstract_plugins.components.match_hook import probe_match_criteria
 from mloda.core.abstract_plugins.components.utils import (
     as_str,
@@ -441,14 +438,10 @@ class IdentifyFeatureGroupClass:
                     continue
                 rejection = self._value_rejection(feature_group)
                 if rejection is not None:
-                    # The stage is a free-form hint; only the two input-data stages are engine-known and both
-                    # surface as the public "input_data" elimination stage, the rest fall back.
-                    stage: EliminationStage = (
-                        "input_data"
-                        if rejection.stage in (INPUT_DATA_STAGE, INPUT_DATA_OWNED_STAGE)
-                        else "value_rejection"
+                    # The shared mapper owns the projection, so both seams spell the taxonomy the same way.
+                    self._record_elimination(
+                        feature_group, rejection_elimination_stage(rejection.stage), rejection.reason
                     )
-                    self._record_elimination(feature_group, stage, rejection.reason)
                 continue
 
             if not self._filter_feature_group_by_domain(feature_group, feature):

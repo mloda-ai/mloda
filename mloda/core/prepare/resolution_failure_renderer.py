@@ -75,12 +75,17 @@ def _stage_label(stage: EliminationStage) -> str:
     return label
 
 
+def near_miss_text(candidate_name: str, stage: EliminationStage, reason: str) -> str:
+    """One near-miss as '<Candidate> (<stage label>): <reason>'."""
+    return f"{candidate_name} ({_stage_label(stage)}): {reason}"
+
+
 def _render_near_miss_block(result: EvaluationResult, feature: Feature) -> str | None:
     """Shared section naming each eliminated near-miss candidate, its gate label, and its reason."""
     if not result.eliminations:
         return None
     lines = "\n".join(
-        f"  - {fg.__name__} ({_stage_label(elimination.stage)}): {elimination.reason}"
+        f"  - {near_miss_text(fg.__name__, elimination.stage, elimination.reason)}"
         for fg, elimination in sorted(result.eliminations.items(), key=lambda item: _candidate_sort_key(item[0]))
     )
     return f"Feature group(s) eliminated while matching '{str(feature.name)}':\n{lines}"

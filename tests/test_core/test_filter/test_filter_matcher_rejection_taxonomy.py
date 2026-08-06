@@ -101,6 +101,12 @@ def _stage_reason(stage: str) -> str:
     return f"rtx_stage_reason_728_{stage}"
 
 
+def _reason_text(recorded: Any) -> str:
+    """Reason text of one recorded drop, or a marker naming what the ledger stored instead of a fact."""
+    reason = getattr(recorded, "reason", None)
+    return str(reason) if reason is not None else f"<no reason on {type(recorded).__name__}>"
+
+
 def _window_not_observed() -> bool:
     """Reader for probes that never record: their tests assert nothing about the window."""
     return False
@@ -501,7 +507,7 @@ def _drive_criteria(make: _RtxFactory, caplog: pytest.LogCaptureFixture, calls: 
             is_true=value is True,
             escaped=escaped,
             entries=tuple((str(key[0].get_class_name()), str(key[1])) for key, _ in items),
-            reasons=tuple(str(reason) for _, reason in items),
+            reasons=tuple(_reason_text(recorded) for _, recorded in items),
             warnings=_messages(caplog, logging.WARNING),
             debugs=_messages(caplog, logging.DEBUG),
             window_active=read_window(),

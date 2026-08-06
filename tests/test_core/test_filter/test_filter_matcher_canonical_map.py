@@ -10,7 +10,7 @@ import gc
 from collections.abc import Callable
 from dataclasses import dataclass
 from functools import partial
-from typing import ClassVar, TypeVar
+from typing import Any, ClassVar, TypeVar
 
 import pytest
 
@@ -87,6 +87,16 @@ def _capture(call: Callable[[], T]) -> tuple[T | None, str | None]:
 def _single(filter_feature: Feature | str = FILTER_FEATURE) -> SingleFilter:
     """A minimal EQUAL filter on the module's filter feature, or on a caller-built Feature."""
     return SingleFilter(filter_feature, FilterType.EQUAL, {"value": 1})
+
+
+def _drop_row(feature_group: type[FeatureGroup], recorded: Any) -> tuple[str, str, str]:
+    """(class name, stage, reason) of one recorded drop. Any: the ledger's value type is pinned in a sibling suite."""
+    return feature_group.get_class_name(), str(recorded.stage), str(recorded.reason)
+
+
+def _drop_rows(global_filter: GlobalFilter) -> tuple[tuple[str, str, str], ...]:
+    """Every recorded drop as plain text, folded exactly as the canonical eliminations are."""
+    return tuple(sorted(_drop_row(key[0], recorded) for key, recorded in global_filter.dropped_filters.items()))
 
 
 def _make_plain_matcher_fg() -> type[FeatureGroup]:
@@ -362,6 +372,9 @@ class _MatchingSnapshot:
     scopes: tuple[str, ...] = ()
     # None means the driver never read the stored scope; a genuinely unscoped read folds to the text "None".
     stored_scope: str | None = None
+    # (class name, stage, reason) per recorded drop, and the read's own failure when a drop carries no stage.
+    drops: tuple[tuple[str, str, str], ...] = ()
+    drops_error: str | None = None
 
 
 def _scope_as_text(scope: str | type[FeatureGroup] | None) -> str:
@@ -398,7 +411,15 @@ def _drive_scoped_matching(make: _ScopeFactory, pick_scope: _ScopePick, probe_in
             names = tuple(sorted(single.name for single in matched))
             scopes = tuple(sorted(_scope_as_text(single.filter_feature.feature_group_scope) for single in matched))
         stored = _scope_as_text(next(iter(global_filter.filters)).filter_feature.feature_group_scope)
-        return _MatchingSnapshot(escaped=escaped, names=names, scopes=scopes, stored_scope=stored)
+        drops, drops_error = _capture(partial(_drop_rows, global_filter))
+        return _MatchingSnapshot(
+            escaped=escaped,
+            names=names,
+            scopes=scopes,
+            stored_scope=stored,
+            drops=drops or (),
+            drops_error=drops_error,
+        )
     finally:
         del made, classes, scope, global_filter, matched
         gc.collect()
@@ -474,10 +495,13 @@ def _drive_matching_counted(make: _CounterFactory, pin_host: bool, pin_filter: b
     matched = None
     try:
         matched, escaped = _capture(partial(global_filter.identify_matched_filters, fg, host, None))
+        drops, drops_error = _capture(partial(_drop_rows, global_filter))
         return _MatchingSnapshot(
             escaped=escaped,
             names=() if matched is None else tuple(sorted(single.name for single in matched)),
             calls=read_calls(),
+            drops=drops or (),
+            drops_error=drops_error,
         )
     finally:
         del fg, read_calls, global_filter, matched
@@ -863,6 +887,19 @@ class TestScopeGate:
             f"exactly one scope elimination, got: {snapshot.eliminations}"
         )
 
+    def test_the_filter_seam_records_the_stage_the_canonical_seam_eliminates_at(self) -> None:
+        """Same candidate, same gate, same words: one shared fact rather than two seams describing a scope drop."""
+        filter_side = _drive_scoped_matching(_make_plain_matcher_fg, _fixed_scope(MISSING_SCOPE_728))
+        canonical = _drive_canonical(_make_plain_matcher_fg, scope=MISSING_SCOPE_728)
+
+        assert filter_side.drops_error is None, f"a recorded drop must carry a stage: {filter_side.drops_error}"
+        assert filter_side.drops == ((PLAIN_CLASS_NAME, "scope", SCOPE_REASON),), (
+            f"the filter seam must record the scope drop, got: {filter_side.drops}"
+        )
+        assert filter_side.drops == canonical.eliminations, (
+            f"both seams must name one stage and one reason, got: {filter_side.drops} vs {canonical.eliminations}"
+        )
+
 
 class TestFrameworkPinCardinality:
     """Both seams validate the pin cardinality before matching via one shared validator; one pin gates on equality."""
@@ -1029,6 +1066,21 @@ class TestCapabilityHook:
         assert stage == "capability", f"the empty supported split owns the reason, got stage: {stage}"
         assert CAPABILITY_REASON_PART in reason, f"the reason must name the rejecting hook: {reason}"
         assert snapshot.calls >= 1, "evaluate must have consulted the hook"
+
+    def test_the_filter_seam_records_the_stage_the_canonical_seam_eliminates_at(self) -> None:
+        """The ride set and the candidate's accessible set are the same one framework here, so the words match too."""
+        filter_side = _drive_matching_counted(_make_capability_reject_fg, pin_host=True)
+        canonical = _drive_canonical_counted(_make_capability_reject_fg, with_links=False)
+
+        assert filter_side.drops_error is None, f"a recorded drop must carry a stage: {filter_side.drops_error}"
+        assert len(filter_side.drops) == 1, f"exactly one recorded drop, got: {filter_side.drops}"
+        name, stage, reason = filter_side.drops[0]
+        assert name == CAPABILITY_CLASS_NAME, f"the drop must name the candidate, got: {name}"
+        assert stage == "capability", f"the empty accepted subset owns the drop, got stage: {stage}"
+        assert CAPABILITY_REASON_PART in reason, f"the reason must name the rejecting hook: {reason}"
+        assert filter_side.drops == canonical.eliminations, (
+            f"both seams must name one stage and one reason, got: {filter_side.drops} vs {canonical.eliminations}"
+        )
 
 
 class TestDomainDefaulting:

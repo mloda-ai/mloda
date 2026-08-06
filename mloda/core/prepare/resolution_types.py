@@ -4,6 +4,7 @@ from dataclasses import dataclass, field
 from typing import Literal
 
 from mloda.core.prepare.accessible_plugins import FeatureGroupEnvironmentMapping
+from mloda.core.abstract_plugins.components.match_rejection import INPUT_DATA_OWNED_STAGE, INPUT_DATA_STAGE
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 
@@ -31,6 +32,15 @@ EliminationStage = Literal[
 # A stage belongs here when its gate's hook cannot receive the feature name, so the outcome is the same for
 # every name the candidate declares.
 NAME_INDEPENDENT_STAGES: frozenset[EliminationStage] = frozenset({"domain", "scope", "frameworks_not_enabled", "links"})
+
+
+def rejection_elimination_stage(recorded_stage: str) -> EliminationStage:
+    """The elimination stage a recorded rejection's free-form stage hint maps onto."""
+    # Only the two input-data hints are engine-known; every other hint is provider text this side never
+    # validates, so it falls back. Shared, so the two seams cannot drift into two taxonomies.
+    if recorded_stage in (INPUT_DATA_STAGE, INPUT_DATA_OWNED_STAGE):
+        return "input_data"
+    return "value_rejection"
 
 
 @dataclass(frozen=True)

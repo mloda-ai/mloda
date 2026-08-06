@@ -23,10 +23,28 @@ from mloda.core.core.step.feature_group_step import FeatureGroupStep
 from mloda.core.core.step.join_step import JoinStep
 from mloda.core.core.step.transform_frame_work_step import TransformFrameworkStep
 from mloda.core.abstract_plugins.components.feature_set import FeatureSet
-from mloda.core.abstract_plugins.components.error_utils import MlodaRunError
+from mloda.core.abstract_plugins.components.error_utils import MlodaRunError, internal_invariant_error
+from mloda.core.abstract_plugins.feature_group import format_feature_group_class
 
 
 logger = logging.getLogger(__name__)
+
+
+def _describe_step(step: Any) -> str:
+    """Render a step for error messages without relying on its repr."""
+    if isinstance(step, FeatureGroupStep):
+        return (
+            f"FeatureGroupStep {format_feature_group_class(step.feature_group)} "
+            f"for features {list(step.features.get_all_names())}"
+        )
+    if isinstance(step, JoinStep):
+        return (
+            f"JoinStep {step.link} into {step.destination_framework.get_class_name()} "
+            f"from {step.source_framework.get_class_name()}"
+        )
+    if isinstance(step, TransformFrameworkStep):
+        return f"TransformFrameworkStep {step.from_framework.get_class_name()} to {step.to_framework.get_class_name()}"
+    return f"{type(step).__name__} {getattr(step, 'uuid', None)}"
 
 
 class ExecutionOrchestrator:
@@ -110,7 +128,10 @@ class ExecutionOrchestrator:
 
     def _run_planner_pass(
         self, finished_ids: set[UUID], to_finish_ids: set[UUID], currently_running_steps: set[UUID]
-    ) -> None:
+    ) -> bool:
+        """Run one pass over the plan. Returns True if a step was executed or marked finished."""
+        made_progress = False
+
         for step in self.execution_planner:
             to_finish_ids.update(step.get_uuids())
 
@@ -124,6 +145,7 @@ class ExecutionOrchestrator:
             if self.currently_running_step(step.get_uuids(), currently_running_steps):
                 if self._process_step_result(step):
                     self._mark_step_as_finished(step.get_uuids(), finished_ids, currently_running_steps)
+                    made_progress = True
                 continue
 
             if not self._can_run_step(
@@ -131,6 +153,42 @@ class ExecutionOrchestrator:
             ):
                 continue
             self._execute_step(step)
+            made_progress = True
+
+        return made_progress
+
+    def _raise_if_stalled(
+        self, made_progress: bool, finished_ids: set[UUID], currently_running_steps: set[UUID]
+    ) -> None:
+        """Abort a pass that scheduled nothing, finished nothing and left nothing in flight."""
+        # A dispatched step sits in currently_running_steps while step_is_done is still False,
+        # so a pass that only polls it is progress.
+        if made_progress or currently_running_steps:
+            return
+        raise MlodaRunError(self._stalled_plan_message(finished_ids))
+
+    def _stalled_plan_message(self, finished_ids: set[UUID]) -> str:
+        """Name every unfinished step, what it waits for, and which tokens no step produces."""
+        producible: set[UUID] = set()
+        unfinished: list[Any] = []
+        for step in self.execution_planner:
+            producible.update(step.get_uuids())
+            if not self._is_step_done(step.get_uuids(), finished_ids):
+                unfinished.append(step)
+
+        waiting: list[str] = []
+        never_produced: set[UUID] = set()
+        for step in unfinished:
+            missing = step.required_uuids - finished_ids
+            never_produced.update(missing - producible)
+            waiting.append(f"{_describe_step(step)} waits for {sorted(str(uuid) for uuid in missing)}")
+
+        return internal_invariant_error(
+            "the execution plan stalled: no step can run and none is in flight.",
+            f"Unfinished steps: {'; '.join(waiting)}. "
+            f"Required tokens no step of the plan produces: {sorted(str(uuid) for uuid in never_produced)}.",
+            "A step producing a required token is missing from the plan, e.g. a dropped join step.",
+        )
 
     def _finalize(self) -> None:
         self.data_lifecycle_manager.set_artifacts(self.cfw_register.get_artifacts())
@@ -171,7 +229,12 @@ class ExecutionOrchestrator:
                 if self._check_for_error():
                     break
 
-                self._run_planner_pass(finished_ids, to_finish_ids, currently_running_steps)
+                made_progress = self._run_planner_pass(finished_ids, to_finish_ids, currently_running_steps)
+
+                if len(to_finish_ids) == 0:
+                    break
+
+                self._raise_if_stalled(made_progress, finished_ids, currently_running_steps)
 
                 if ParallelizationMode.MULTIPROCESSING in self.cfw_register.get_parallelization_modes():
                     time.sleep(0.01)
@@ -184,7 +247,7 @@ class ExecutionOrchestrator:
 
         Each yielded tuple is ``(step_uuid, result)`` where *result* is a fully
         materialized compute-framework object (e.g. ``pa.Table``).  Results are
-        emitted at feature-group granularity — there is no intra-group partial
+        emitted at feature-group granularity, there is no intra-group partial
         streaming.
         """
         finished_ids, to_finish_ids, currently_running_steps = self._init_run()
@@ -193,12 +256,14 @@ class ExecutionOrchestrator:
                 if self._check_for_error():
                     break
 
-                self._run_planner_pass(finished_ids, to_finish_ids, currently_running_steps)
+                made_progress = self._run_planner_pass(finished_ids, to_finish_ids, currently_running_steps)
 
                 yield from self.data_lifecycle_manager.pop_result_data_collection()
 
                 if len(to_finish_ids) == 0:
                     break
+
+                self._raise_if_stalled(made_progress, finished_ids, currently_running_steps)
 
                 time.sleep(0.01)
 

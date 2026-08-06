@@ -198,9 +198,7 @@ test, and links are not re-checked here (feature resolution already covered them
 
 `match_feature_group_criteria()` sees the filter feature's own options enriched from the
 resolved feature's effective (post-default) ones (see
-[Applying declared defaults](property-mapping.md#applying-declared-defaults)).
-`DefaultOptionKeys.in_features` is the exception: it is the resolved feature's own dependency
-declaration and is never imported into the filter feature's options. If two
+[Applying declared defaults](property-mapping.md#applying-declared-defaults)). If two
 FeatureGroups both match the same original filter, they each receive independent copies.
 This means a single `GlobalFilter` can be processed differently by different FeatureGroups
 in the same pipeline: one may use the mask engine for inline masking while another uses

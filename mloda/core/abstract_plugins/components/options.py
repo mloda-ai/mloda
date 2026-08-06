@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from typing import Any, Optional, TYPE_CHECKING, cast
 from copy import deepcopy
 
@@ -27,12 +28,13 @@ def _safe_deepcopy(value: Any, memo: dict[int, Any]) -> Any:
         return value
 
 
-def _isolate_forwarded_value(value: Any, memo: dict[int, Any]) -> Any:
-    """Copy the mutable-container spine so nested-container mutation cannot leak back to the
+def _isolate_forwarded_value(value: Any, memo: dict[int, Any], leaf: Callable[[Any], Any] | None = None) -> Any:
+    """Copy the container spine so nested-container mutation cannot leak back to the
     consumer, while sharing every non-container leaf (validators, models, handles, unpicklable
     objects) by reference to preserve the identity the framework relies on for dedup, hashing,
-    and conflict detection. Custom container types (anything other than dict/list/set/tuple) are
-    shared by reference (documented limitation)."""
+    and conflict detection; a given ``leaf`` replaces that sharing with its own result. Custom
+    container types (anything other than dict/list/set/tuple/frozenset) are shared by reference
+    (documented limitation)."""
     vid = id(value)
     if vid in memo:
         return memo[vid]
@@ -40,23 +42,27 @@ def _isolate_forwarded_value(value: Any, memo: dict[int, Any]) -> Any:
         result: dict[Any, Any] = {}
         memo[vid] = result
         for k, v in value.items():
-            result[k] = _isolate_forwarded_value(v, memo)
+            result[k] = _isolate_forwarded_value(v, memo, leaf)
         return result
     if isinstance(value, list):
         result_list: list[Any] = []
         memo[vid] = result_list
         for v in value:
-            result_list.append(_isolate_forwarded_value(v, memo))
+            result_list.append(_isolate_forwarded_value(v, memo, leaf))
         return result_list
     if isinstance(value, set):
-        result_set = {_isolate_forwarded_value(v, memo) for v in value}
+        result_set = {_isolate_forwarded_value(v, memo, leaf) for v in value}
         memo[vid] = result_set
         return result_set
+    if isinstance(value, frozenset):
+        result_frozenset = frozenset(_isolate_forwarded_value(v, memo, leaf) for v in value)
+        memo[vid] = result_frozenset
+        return result_frozenset
     if isinstance(value, tuple):
-        result_tuple = tuple(_isolate_forwarded_value(v, memo) for v in value)
+        result_tuple = tuple(_isolate_forwarded_value(v, memo, leaf) for v in value)
         memo[vid] = result_tuple
         return result_tuple
-    return value
+    return value if leaf is None else leaf(value)
 
 
 def _normalize_reader_class_keys(d: dict[str, Any]) -> dict[str, Any]:
@@ -338,8 +344,8 @@ class Options:
         Every key actually forwarded (including keys self already held with an equal value) is
         unioned into self.inherited_group_keys, so provenance accumulates across consumers.
 
-        Forwarded values are isolated by a container-spine copy as they are stored: the mutable
-        container spine (dict/list/set/tuple) is copied recursively so nested mutation on the child
+        Forwarded values are isolated by a container-spine copy as they are stored: the
+        container spine (dict/list/set/tuple/frozenset) is copied recursively so nested mutation on the child
         never leaks back to the consumer or to a sibling input feature, while every non-container
         leaf (validators, models, handles, unpicklable values) is shared by reference to preserve
         the identity the framework relies on for dedup, hashing, and conflict detection. Custom

@@ -21,17 +21,13 @@ All fixture names carry an ``016`` suffix: test feature groups become global sub
 parallel, so a shared name would leak into another module's candidate universe.
 """
 
-from abc import abstractmethod
-from typing import Any, Optional
+from typing import Optional
 
 import pytest
 
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
-from mloda.core.abstract_plugins.components.domain import Domain
 from mloda.core.abstract_plugins.components.feature import Feature
-from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.components.link import Link
-from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.components.plugin_option.plugin_collector import PluginCollector
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
@@ -52,6 +48,7 @@ from mloda.core.prepare.resolution_types import (
     EvaluationResult,
     ResolutionRecord,
 )
+from tests.helpers.plugin_stubs import make_fg
 from tests.test_core.test_prepare.identify_seam import evaluate_or_raise
 
 
@@ -70,85 +67,19 @@ class ResolveOrRaiseFwBeta016(ComputeFramework):
     """Second dummy compute framework, distinct from ResolveOrRaiseFw016."""
 
 
-class ResolveOrRaiseMatchFG016(FeatureGroup):
-    """Concrete feature group matching exactly one unique helper-test feature name."""
+ResolveOrRaiseMatchFG016 = make_fg("ResolveOrRaiseMatchFG016", matches=RESOLVE_MATCH_FEATURE_016)
 
-    @classmethod
-    def match_feature_group_criteria(
-        cls,
-        feature_name: FeatureName | str,
-        options: Options,
-        data_access_collection: Optional[DataAccessCollection] = None,
-    ) -> bool:
-        return str(feature_name) == RESOLVE_MATCH_FEATURE_016
+ResolveOrRaiseSiblingAFG016 = make_fg(
+    "ResolveOrRaiseSiblingAFG016", matches=RESOLVE_MULTIPLE_FEATURE_016, domain="resolve_or_raise_016_a"
+)
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
-        return None
+ResolveOrRaiseSiblingBFG016 = make_fg(
+    "ResolveOrRaiseSiblingBFG016", matches=RESOLVE_MULTIPLE_FEATURE_016, domain="resolve_or_raise_016_b"
+)
 
-
-class ResolveOrRaiseSiblingAFG016(FeatureGroup):
-    """First of two unrelated siblings matching the same name (distinct domain 'resolve_or_raise_016_a')."""
-
-    @classmethod
-    def get_domain(cls) -> Domain:
-        return Domain("resolve_or_raise_016_a")
-
-    @classmethod
-    def match_feature_group_criteria(
-        cls,
-        feature_name: FeatureName | str,
-        options: Options,
-        data_access_collection: Optional[DataAccessCollection] = None,
-    ) -> bool:
-        return str(feature_name) == RESOLVE_MULTIPLE_FEATURE_016
-
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
-        return None
-
-
-class ResolveOrRaiseSiblingBFG016(FeatureGroup):
-    """Second unrelated sibling matching the same name (distinct domain 'resolve_or_raise_016_b')."""
-
-    @classmethod
-    def get_domain(cls) -> Domain:
-        return Domain("resolve_or_raise_016_b")
-
-    @classmethod
-    def match_feature_group_criteria(
-        cls,
-        feature_name: FeatureName | str,
-        options: Options,
-        data_access_collection: Optional[DataAccessCollection] = None,
-    ) -> bool:
-        return str(feature_name) == RESOLVE_MULTIPLE_FEATURE_016
-
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
-        return None
-
-
-class ResolveOrRaiseAbstractFG016(FeatureGroup):
-    """Abstract base matching a unique name; uninstantiable via an unimplemented abstract hook.
-
-    No concrete subclass is registered, so this base is the only name-match and can never win.
-    """
-
-    @classmethod
-    def match_feature_group_criteria(
-        cls,
-        feature_name: FeatureName | str,
-        options: Options,
-        data_access_collection: Optional[DataAccessCollection] = None,
-    ) -> bool:
-        return str(feature_name) == RESOLVE_ABSTRACT_FEATURE_016
-
-    @classmethod
-    @abstractmethod
-    def _resolve_or_raise_016_abstract_hook(cls, data: Any) -> Any:
-        """Abstract hook that makes this base uninstantiable."""
-        ...
-
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
-        return None
+ResolveOrRaiseAbstractFG016 = make_fg(
+    "ResolveOrRaiseAbstractFG016", matches=RESOLVE_ABSTRACT_FEATURE_016, abstract=True
+)
 
 
 def _match_plugins() -> FeatureGroupEnvironmentMapping:

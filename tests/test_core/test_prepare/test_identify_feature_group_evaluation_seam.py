@@ -6,18 +6,10 @@ raising path now lives in the engine seam, mirrored here by the ``evaluate_or_ra
 suite pins evaluate()'s non-raising contract against that raising counterpart.
 """
 
-from abc import abstractmethod
-from typing import Any, Optional
-
 import pytest
 
-from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
-from mloda.core.abstract_plugins.components.domain import Domain
 from mloda.core.abstract_plugins.components.feature import Feature
-from mloda.core.abstract_plugins.components.feature_name import FeatureName
-from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
-from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.api.plugin_docs import resolve_feature
 from mloda.core.api.request import mlodaAPI
 from mloda.core.prepare.accessible_plugins import FeatureGroupEnvironmentMapping
@@ -28,6 +20,7 @@ from mloda.core.prepare.identify_feature_group import (
 from mloda.core.prepare.resolution_types import EvaluationResult
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
+from tests.helpers.plugin_stubs import make_fg
 from tests.test_core.test_prepare.identify_seam import evaluate_or_raise
 
 
@@ -49,85 +42,13 @@ class SeamFwBeta(ComputeFramework):
     """Second dummy compute framework, distinct from SeamFwAlpha."""
 
 
-class SeamSingleFG(FeatureGroup):
-    """Concrete feature group matching exactly one unique feature name."""
+SeamSingleFG = make_fg("SeamSingleFG", matches=SEAM_SINGLE_FEATURE)
 
-    @classmethod
-    def match_feature_group_criteria(
-        cls,
-        feature_name: FeatureName | str,
-        options: Options,
-        data_access_collection: Optional[DataAccessCollection] = None,
-    ) -> bool:
-        return str(feature_name) == SEAM_SINGLE_FEATURE
+SeamSiblingAFG = make_fg("SeamSiblingAFG", matches=SEAM_MULTIPLE_FEATURE, domain="seam_a")
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
-        return None
+SeamSiblingBFG = make_fg("SeamSiblingBFG", matches=SEAM_MULTIPLE_FEATURE, domain="seam_b")
 
-
-class SeamSiblingAFG(FeatureGroup):
-    """First of two unrelated siblings matching the same name (distinct domain 'seam_a')."""
-
-    @classmethod
-    def get_domain(cls) -> Domain:
-        return Domain("seam_a")
-
-    @classmethod
-    def match_feature_group_criteria(
-        cls,
-        feature_name: FeatureName | str,
-        options: Options,
-        data_access_collection: Optional[DataAccessCollection] = None,
-    ) -> bool:
-        return str(feature_name) == SEAM_MULTIPLE_FEATURE
-
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
-        return None
-
-
-class SeamSiblingBFG(FeatureGroup):
-    """Second unrelated sibling matching the same name (distinct domain 'seam_b')."""
-
-    @classmethod
-    def get_domain(cls) -> Domain:
-        return Domain("seam_b")
-
-    @classmethod
-    def match_feature_group_criteria(
-        cls,
-        feature_name: FeatureName | str,
-        options: Options,
-        data_access_collection: Optional[DataAccessCollection] = None,
-    ) -> bool:
-        return str(feature_name) == SEAM_MULTIPLE_FEATURE
-
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
-        return None
-
-
-class SeamAbstractOnlyFG(FeatureGroup):
-    """Abstract base matching a unique name; uninstantiable via an unimplemented abstract hook.
-
-    No concrete subclass is registered, so this base is the only name-match and can never win.
-    """
-
-    @classmethod
-    def match_feature_group_criteria(
-        cls,
-        feature_name: FeatureName | str,
-        options: Options,
-        data_access_collection: Optional[DataAccessCollection] = None,
-    ) -> bool:
-        return str(feature_name) == SEAM_ABSTRACT_FEATURE
-
-    @classmethod
-    @abstractmethod
-    def _seam_abstract_hook(cls, data: Any) -> Any:
-        """Abstract hook that makes this base uninstantiable."""
-        ...
-
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
-        return None
+SeamAbstractOnlyFG = make_fg("SeamAbstractOnlyFG", matches=SEAM_ABSTRACT_FEATURE, abstract=True)
 
 
 class TestEvaluationSeamNeverRaises:

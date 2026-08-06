@@ -15,11 +15,10 @@ Follows the construction conventions in test_identify_feature_group_error_messag
 
 import inspect
 from abc import abstractmethod
-from typing import Any, Optional
+from typing import Any, ClassVar, Optional
 
 import pytest
 
-from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.components.options import Options
@@ -27,6 +26,7 @@ from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.prepare.accessible_plugins import FeatureGroupEnvironmentMapping
 from mloda.core.prepare.identify_feature_group import matches_feature_group_scope
+from tests.helpers.plugin_stubs import StubFeatureGroup, make_fg
 from tests.test_core.test_prepare.identify_seam import evaluate_or_raise
 from mloda.provider import BaseInputData, DataCreator, FeatureSet
 from mloda.user import PluginCollector, mloda
@@ -43,86 +43,33 @@ class SecondMockComputeFramework(ComputeFramework):
     """A second mock compute framework, for rival subclasses of different frameworks."""
 
 
-class ScopeSourceA(FeatureGroup):
+class ScopeSourceA(StubFeatureGroup):
     """Source A: matches the shared "subject_token" plus its own "scoping_value_a"."""
 
-    @classmethod
-    def feature_names_supported(cls) -> set[str]:
-        return {"subject_token", "scoping_value_a"}
-
-    @classmethod
-    def match_feature_group_criteria(
-        cls,
-        feature_name: FeatureName | str,
-        options: Options,
-        data_access_collection: Optional[DataAccessCollection] = None,
-    ) -> bool:
-        name = str(feature_name)
-        return name in {"subject_token", "scoping_value_a"}
-
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
-        return None
+    MATCHED_NAMES: ClassVar[frozenset[str]] = frozenset({"subject_token", "scoping_value_a"})
+    SUPPORTED_NAMES: ClassVar[frozenset[str]] = MATCHED_NAMES
 
 
-class ScopeSourceB(FeatureGroup):
+class ScopeSourceB(StubFeatureGroup):
     """Source B: matches the shared "subject_token" plus its own "scoping_value_b"."""
 
-    @classmethod
-    def feature_names_supported(cls) -> set[str]:
-        return {"subject_token", "scoping_value_b"}
-
-    @classmethod
-    def match_feature_group_criteria(
-        cls,
-        feature_name: FeatureName | str,
-        options: Options,
-        data_access_collection: Optional[DataAccessCollection] = None,
-    ) -> bool:
-        name = str(feature_name)
-        return name in {"subject_token", "scoping_value_b"}
-
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
-        return None
+    MATCHED_NAMES: ClassVar[frozenset[str]] = frozenset({"subject_token", "scoping_value_b"})
+    SUPPORTED_NAMES: ClassVar[frozenset[str]] = MATCHED_NAMES
 
 
-class InaccessibleScopeSource(FeatureGroup):
-    """A FeatureGroup that matches "subject_token" but is never added to accessible_plugins."""
+InaccessibleScopeSource = make_fg(
+    "InaccessibleScopeSource",
+    matches="subject_token",
+    supported_names="subject_token",
+    doc="A FeatureGroup that is never added to accessible_plugins.",
+)
 
-    @classmethod
-    def feature_names_supported(cls) -> set[str]:
-        return {"subject_token"}
-
-    @classmethod
-    def match_feature_group_criteria(
-        cls,
-        feature_name: FeatureName | str,
-        options: Options,
-        data_access_collection: Optional[DataAccessCollection] = None,
-    ) -> bool:
-        return str(feature_name) == "subject_token"
-
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
-        return None
-
-
-class _DupNameBase(FeatureGroup):
-    """Base for two feature groups that will share the identical class name."""
-
-    @classmethod
-    def feature_names_supported(cls) -> set[str]:
-        return {"subject_token"}
-
-    @classmethod
-    def match_feature_group_criteria(
-        cls,
-        feature_name: FeatureName | str,
-        options: Options,
-        data_access_collection: Optional[DataAccessCollection] = None,
-    ) -> bool:
-        return str(feature_name) == "subject_token"
-
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
-        return None
+_DupNameBase = make_fg(
+    "_DupNameBase",
+    matches="subject_token",
+    supported_names="subject_token",
+    doc="Base for two feature groups that will share the identical class name.",
+)
 
 
 def _both_sources() -> FeatureGroupEnvironmentMapping:
@@ -301,21 +248,11 @@ class ScopedCapabilityFw(ComputeFramework):
     """Compute framework rejected by RejectAllScopedSource at match time."""
 
 
-class RejectAllScopedSource(FeatureGroup):
+class RejectAllScopedSource(StubFeatureGroup):
     """Matches "subject_token" but declares every compute framework unsupported."""
 
-    @classmethod
-    def compute_framework_rule(cls) -> set[type[ComputeFramework]] | None:
-        return {ScopedCapabilityFw}
-
-    @classmethod
-    def match_feature_group_criteria(
-        cls,
-        feature_name: FeatureName | str,
-        options: Options,
-        data_access_collection: Optional[DataAccessCollection] = None,
-    ) -> bool:
-        return str(feature_name) == "subject_token"
+    MATCHED_NAMES: ClassVar[frozenset[str]] = frozenset({"subject_token"})
+    FRAMEWORK_RULE: ClassVar[set[type[ComputeFramework]]] = {ScopedCapabilityFw}
 
     @classmethod
     def supports_compute_framework(
@@ -325,9 +262,6 @@ class RejectAllScopedSource(FeatureGroup):
         compute_framework: type[ComputeFramework],
     ) -> bool:
         return False
-
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
-        return None
 
 
 def test_capability_rejection_error_names_the_scope() -> None:
@@ -475,29 +409,16 @@ def test_string_scope_does_not_widen_to_unrelated_groups() -> None:
     assert resolved_feature_group is ScopeSourceASub
 
 
-class ScopeAbstractFamilyBase(FeatureGroup):
+class ScopeAbstractFamilyBase(StubFeatureGroup):
     """Abstract family base: matches "subject_token" but cannot be instantiated."""
 
-    @classmethod
-    def feature_names_supported(cls) -> set[str]:
-        return {"subject_token"}
-
-    @classmethod
-    def match_feature_group_criteria(
-        cls,
-        feature_name: FeatureName | str,
-        options: Options,
-        data_access_collection: Optional[DataAccessCollection] = None,
-    ) -> bool:
-        return str(feature_name) == "subject_token"
+    MATCHED_NAMES: ClassVar[frozenset[str]] = frozenset({"subject_token"})
+    SUPPORTED_NAMES: ClassVar[frozenset[str]] = frozenset({"subject_token"})
 
     @classmethod
     @abstractmethod
     def _family_hook(cls) -> str:
         """Abstract hook that makes this base abstract."""
-
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
-        return None
 
 
 class ScopeConcreteFamilyMember(ScopeAbstractFamilyBase):

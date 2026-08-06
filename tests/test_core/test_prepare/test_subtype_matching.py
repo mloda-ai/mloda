@@ -1,7 +1,7 @@
 """Pinning tests for match-time enforcement of SubtypeDeclaration (issue #639)."""
 
 import re
-from typing import Optional
+from typing import ClassVar, Optional
 
 import pytest
 
@@ -14,6 +14,7 @@ from mloda.core.prepare.accessible_plugins import FeatureGroupEnvironmentMapping
 from mloda.core.prepare.identify_feature_group import IdentifyFeatureGroupClass
 from mloda.core.prepare.resolution_types import CandidateFrameworks
 from mloda.provider import FeatureChainParserMixin, FeatureGroup, SubtypeDeclaration, property_spec
+from tests.helpers.plugin_stubs import StubFeatureGroup, make_fg
 from tests.test_core.test_prepare.identify_seam import identify_winner
 
 
@@ -105,24 +106,12 @@ class SubDeclMatchCompiledSuffixFG(FeatureChainParserMixin, FeatureGroup):
         return {SubDeclMatchFwAlpha, SubDeclMatchFwBeta}
 
 
-class SubDeclMatchPlainFG(FeatureGroup):
-    """Family without any subtype dimension."""
-
-    @classmethod
-    def compute_framework_rule(cls) -> set[type[ComputeFramework]] | None:
-        return {SubDeclMatchFwAlpha, SubDeclMatchFwBeta}
-
-    @classmethod
-    def match_feature_group_criteria(
-        cls,
-        feature_name: FeatureName | str,
-        options: Options,
-        data_access_collection: Optional[DataAccessCollection] = None,
-    ) -> bool:
-        return str(feature_name) == MATCH_PLAIN_FEATURE
-
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
-        return None
+SubDeclMatchPlainFG = make_fg(
+    "SubDeclMatchPlainFG",
+    matches=MATCH_PLAIN_FEATURE,
+    frameworks={SubDeclMatchFwAlpha, SubDeclMatchFwBeta},
+    doc="Family without any subtype dimension.",
+)
 
 
 class SubDeclMatchRankLikeFG(FeatureChainParserMixin, FeatureGroup):
@@ -155,7 +144,7 @@ def _subdeclm_frame_resolver(feature_name: str, options: Options) -> Optional[st
     return match.group(1)
 
 
-class SubDeclMatchFrameSpecFG(FeatureGroup):
+class SubDeclMatchFrameSpecFG(StubFeatureGroup):
     """Registry-like shape B family: flattened frame spec with a name resolver."""
 
     SUBTYPES = SubtypeDeclaration(
@@ -164,10 +153,7 @@ class SubDeclMatchFrameSpecFG(FeatureGroup):
         parametric_families={"rows": "Row-count frames"},
         supported={SubDeclMatchFwBeta.get_class_name(): {"rows_1"}},
     )
-
-    @classmethod
-    def compute_framework_rule(cls) -> set[type[ComputeFramework]] | None:
-        return {SubDeclMatchFwAlpha, SubDeclMatchFwBeta}
+    FRAMEWORK_RULE: ClassVar[set[type[ComputeFramework]]] = {SubDeclMatchFwAlpha, SubDeclMatchFwBeta}
 
     @classmethod
     def match_feature_group_criteria(
@@ -177,9 +163,6 @@ class SubDeclMatchFrameSpecFG(FeatureGroup):
         data_access_collection: Optional[DataAccessCollection] = None,
     ) -> bool:
         return str(feature_name).startswith("subdeclm_") and str(feature_name).endswith("_frame")
-
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
-        return None
 
 
 def _identify(

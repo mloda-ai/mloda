@@ -24,6 +24,7 @@ tests/
 ├── test_parallelization_modes_support.py  # Every parallelization mode is supported
 ├── test_project_structure.py       # Repository layout invariants
 ├── test_registry_isolation.py      # Plugin registry isolation between tests
+├── helpers/                        # Shared stub plugins tests import (see plugin_stubs.py)
 ├── test_core/                      # Tests for core functionality
 │   ├── test_abstract_plugins/      # Tests for abstract plugin interfaces
 │   │   ├── test_components/        # Tests for component implementations

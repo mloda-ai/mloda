@@ -75,3 +75,54 @@ def test_getting_started_text_guides_before_notebooks() -> None:
             f"Last .md at index {last_md}, first .ipynb at index {first_ipynb}. "
             f"Order: {paths}"
         )
+
+
+def _collect_nav_paths(node: Any, found: set[str]) -> None:
+    """Collect every path string referenced anywhere in the nav tree.
+
+    The nav mixes three shapes at any depth: a plain string (``index.md``), a
+    single-key dict whose value is a path, and a dict whose value is a nested
+    list of more of the same. Recursing over all three keeps the collector
+    honest as the nav grows sections.
+    """
+    if isinstance(node, str):
+        found.add(node)
+    elif isinstance(node, dict):
+        for value in node.values():
+            _collect_nav_paths(value, found)
+    elif isinstance(node, list):
+        for item in node:
+            _collect_nav_paths(item, found)
+
+
+def _nav_markdown_paths() -> set[str]:
+    found: set[str] = set()
+    _collect_nav_paths(_load_mkdocs_config().get("nav", []), found)
+    # Only .md is asserted on: the nav also points at notebooks that are
+    # generated from .py sources during the docs build and are not in the tree.
+    return {path for path in found if path.endswith(".md")}
+
+
+def test_every_docs_page_is_reachable_from_the_nav() -> None:
+    """A page not listed in nav still builds, but is invisible on the site."""
+    docs_dir = MKDOCS_YML.parent / "docs"
+    on_disk = {path.relative_to(docs_dir).as_posix() for path in docs_dir.rglob("*.md")}
+
+    unreachable = sorted(on_disk - _nav_markdown_paths())
+
+    assert not unreachable, (
+        "These documentation pages exist under docs/docs/ but are not reachable "
+        "from the nav: block in docs/mkdocs.yml, so they build but never appear "
+        f"on the published site: {unreachable}"
+    )
+
+
+def test_every_nav_markdown_entry_points_at_a_real_page() -> None:
+    """The other direction: a typo in nav silently drops a page from the site."""
+    docs_dir = MKDOCS_YML.parent / "docs"
+
+    missing = sorted(path for path in _nav_markdown_paths() if not (docs_dir / path).is_file())
+
+    assert not missing, (
+        f"The nav: block in docs/mkdocs.yml references markdown pages that do not exist under docs/docs/: {missing}"
+    )

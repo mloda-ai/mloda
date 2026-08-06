@@ -10,7 +10,7 @@ from typing import Any
 import pytest
 
 from mloda.user import Feature
-from mloda.core.api.feature_config.loader import load_features_from_config
+from mloda.core.api.feature_config.loader import load_features_from_config, process_nested_features
 from mloda.provider import DefaultOptionKeys
 
 
@@ -634,3 +634,42 @@ def test_load_adds_in_features_to_in_features_option() -> None:
     in_features_value = result[1].options.context.get(DefaultOptionKeys.in_features)
     assert isinstance(in_features_value, frozenset)
     assert in_features_value == frozenset({"latitude", "longitude"})
+
+
+def test_nested_feature_branch_follows_the_enum_value(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Renaming DefaultOptionKeys.in_features must move the nested-build branch with it (issue #1067).
+
+    The DefaultOptionKeys docstring treats the enum value as both the option key
+    and the default column name, so a rename is an expected kind of change. While
+    process_nested_features compared against the literal "in_features", a rename
+    silently stopped converting nested dicts into Feature objects and nothing
+    failed. Repointing the enum value here is the only way to catch that: a test
+    that merely spells the key through the enum passes either way.
+    """
+    monkeypatch.setattr(DefaultOptionKeys.in_features, "_value_", "mloda_source_feature")
+    renamed = str(DefaultOptionKeys.in_features)
+    assert renamed == "mloda_source_feature", "the rename did not take effect"
+
+    processed = process_nested_features({renamed: {"name": "nested_feature"}})
+
+    assert isinstance(processed[renamed], Feature), (
+        f"a nested dict under {renamed!r} was left as a plain dict, so the branch is still "
+        "matching a hardcoded key rather than DefaultOptionKeys.in_features"
+    )
+    assert processed[renamed].name == "nested_feature"
+
+
+def test_nested_feature_dict_becomes_a_feature_under_the_current_key() -> None:
+    """The same branch, under the key as it is spelled today."""
+    processed = process_nested_features({str(DefaultOptionKeys.in_features): {"name": "nested_feature"}})
+
+    built = processed[str(DefaultOptionKeys.in_features)]
+    assert isinstance(built, Feature)
+    assert built.name == "nested_feature"
+
+
+def test_unrelated_dict_options_are_still_recursed_not_built() -> None:
+    """A dict under any other key keeps recursing rather than becoming a Feature."""
+    processed = process_nested_features({"scaler": {"nested": {"name": "not_a_source"}}})
+
+    assert processed["scaler"] == {"nested": {"name": "not_a_source"}}

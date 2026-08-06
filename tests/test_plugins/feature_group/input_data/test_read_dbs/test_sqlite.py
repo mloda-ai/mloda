@@ -147,8 +147,15 @@ class TestSQLITEReader:
 
         Before quoting, a name like ``name FROM test_table UNION SELECT ...`` interpolated
         raw into ``select {name} from test_table`` and executed as attacker SQL. With
-        quote_ident it becomes a single (non-existent) double-quoted identifier, so the DB
-        rejects it instead of leaking another table.
+        quote_ident the whole string collapses into one double-quoted identifier, so the
+        UNION never runs and the ``secrets`` table is never read.
+
+        Note what SQLite actually does with that identifier: it does *not* reject it.
+        SQLite resolves an unmatched double-quoted token to a string literal (the legacy
+        double-quoted-string misfeature, disabled only by compiling with SQLITE_DQS=0), so
+        the query succeeds and returns the crafted text itself as the column value on every
+        row. That is harmless here (the payload is data, not SQL), and the assertion below
+        pins the property that matters: the secret never comes back.
         """
         # Seed a secret table the injection would try to exfiltrate.
         conn = sqlite3.connect(temp_sqlite_db)

@@ -168,6 +168,24 @@ class SQLITEReader(ReadDB):
 
     @classmethod
     def build_query(cls, features: FeatureSet) -> str:
+        """Build the SELECT for the requested features against the resolved table.
+
+        Identifiers are quoted (see the inline notes below), which has two consequences
+        worth knowing about:
+
+        - An unknown column no longer raises ``no such column``. SQLite resolves an
+          unmatched double-quoted token to a string literal, so a misspelled feature name
+          yields a column filled with the name itself instead of an error. Features that
+          arrive through reader auto-discovery cannot hit this, because
+          ``check_feature_in_data_access`` has already matched the name against
+          ``PRAGMA table_info``. It is reachable when the caller pre-sets
+          ``BaseInputData``/``table_name`` in Options and so skips that lookup.
+        - A schema-qualified table name (``main.test_table``) is quoted as one identifier
+          and will not resolve. Every table name produced by discovery is a bare name from
+          ``sqlite_master``, so this only affects a caller passing a qualified name
+          explicitly. Splitting on ``.`` is deliberately not done here: it would reopen the
+          identifier position this quoting closes.
+        """
         query = "select "
 
         options = None

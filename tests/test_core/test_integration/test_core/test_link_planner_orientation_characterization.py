@@ -40,6 +40,10 @@ MODES_SYNC_THREADING = pytest.mark.parametrize(
     [{ParallelizationMode.SYNC}, {ParallelizationMode.THREADING}],
 )
 
+# Carried by the left join alone. Each run spawns one cold interpreter per step, which makes a run here the most
+# expensive shape in the suite, and what the mode adds is the flight hop, not the join semantics the other two
+# modes already pin per join type. The left join is the shape that proves the most over that hop: its expectation
+# is the inner one plus the unmatched rows, so a padded cell has to survive the round trip as well as the order.
 MODES_WITH_MULTIPROCESSING = pytest.mark.parametrize(
     "modes",
     [
@@ -299,7 +303,7 @@ RIGHT_SIDE_BINDING_REASON = (
 )
 
 
-@MODES_WITH_MULTIPROCESSING
+@MODES_SYNC_THREADING
 def test_inner_join_declared_orientation_keeps_left_group_first(
     modes: set[ParallelizationMode], flight_server: Any
 ) -> None:

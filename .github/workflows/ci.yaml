@@ -57,7 +57,10 @@ jobs:
       env:
         PYTEST_WORKERS: 2
       run: tox ${{ matrix.toxenv }}
-      timeout-minutes: 3
+      # Catches a wedged job, not a slow one. A green full env already spends ~3.5 minutes here (uv sync, ~9000
+      # tests over 2 workers, then mypy and bandit), so a budget that close to the runtime turns every test the
+      # suite gains into a red gate. Per-test hangs stay covered by pytest's own --timeout=10.
+      timeout-minutes: 6
 
   notebooks:
     # Runs the marimo example notebooks; slower than the unit-test matrix.

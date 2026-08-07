@@ -619,7 +619,7 @@ class TestValueRejectionIsATypedDrop:
         assert snapshot.escaped is None, f"the raise must not cross GlobalFilter.criteria: {snapshot.escaped}"
         assert snapshot.is_false, "a rejected value is a non-match for that filter"
         assert snapshot.entries == ((VALUE_REJECTION_CLASS_NAME, FILTER_FEATURE),), (
-            f"exactly one drop, keyed by group and filter feature, got: {snapshot.entries}"
+            f"exactly one drop, whose key names the group and the filter feature, got: {snapshot.entries}"
         )
         assert snapshot.reasons == (VALUE_REJECT_MESSAGE,), (
             f"the drop must hold exactly str(exc), no 'raised' prefix, got: {snapshot.reasons}"
@@ -689,7 +689,7 @@ class TestHarvestPrecedence:
         assert snapshot.escaped is None, f"the raise must not cross GlobalFilter.criteria: {snapshot.escaped}"
         assert snapshot.is_false, "the rejection is still a non-match for that filter"
         assert snapshot.entries == ((RECORD_THEN_VALUE_CLASS_NAME, FILTER_FEATURE),), (
-            f"exactly one drop, keyed by group and filter feature, got: {snapshot.entries}"
+            f"exactly one drop, whose key names the group and the filter feature, got: {snapshot.entries}"
         )
         assert snapshot.reasons == (REASON_A,), (
             f"the FIRST recorded reason wins the drop, not the raise and not a wrapper, got: {snapshot.reasons}"
@@ -705,7 +705,7 @@ class TestHarvestPrecedence:
         assert snapshot.is_false, "a raising hook is a non-match for that filter"
         assert snapshot.window_active, "the seam must give the matcher an active rejection window"
         assert snapshot.entries == ((RECORD_THEN_ERROR_CLASS_NAME, FILTER_FEATURE),), (
-            f"exactly one drop, keyed by group and filter feature, got: {snapshot.entries}"
+            f"exactly one drop, whose key names the group and the filter feature, got: {snapshot.entries}"
         )
         reason = snapshot.reasons[0]
         assert RUNTIME_TYPE_NAME in reason, f"the reason must name the exception type: {reason}"
@@ -786,7 +786,7 @@ class TestOwnedVetoParity:
         assert snapshot.escaped is None, f"nothing may cross GlobalFilter.criteria: {snapshot.escaped}"
         assert snapshot.is_false, "the owned veto must gate the default hook's name rules"
         assert snapshot.entries == ((OWNED_VETO_CLASS_NAME, FILTER_FEATURE),), (
-            f"the veto is a typed drop, keyed by group and filter feature, got: {snapshot.entries}"
+            f"the veto is a typed drop, whose key names the group and the filter feature, got: {snapshot.entries}"
         )
         assert snapshot.reasons == (OWNED_REASON,), f"the drop must hold the veto's reason, got: {snapshot.reasons}"
         assert snapshot.warnings == (), f"an owned veto is a verdict, not a defect, got: {snapshot.warnings}"

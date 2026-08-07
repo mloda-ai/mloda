@@ -512,7 +512,7 @@ class TestRaisingBoolIsContained:
         assert snapshot.escaped is None, f"the raise must not cross GlobalFilter.criteria: {snapshot.escaped}"
         assert snapshot.is_false, f"an unreadable return is a non-match for that filter, got: {snapshot.shown}"
         assert snapshot.entries == ((PROBE_CLASS_NAME, FILTER_FEATURE),), (
-            f"exactly one drop, keyed by group and filter feature, got: {snapshot.entries}"
+            f"exactly one drop, whose key names the group and the filter feature, got: {snapshot.entries}"
         )
         assert len(snapshot.warnings) == 1, f"exactly one WARNING must report the drop, got: {snapshot.warnings}"
         message = snapshot.warnings[0]

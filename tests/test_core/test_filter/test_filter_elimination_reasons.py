@@ -57,6 +57,9 @@ FALSY_REPORT_FRAGMENT = "falsy non-bool"
 DROP_REPORT_FRAGMENT = "dropping that filter"  # the drop report's own wording, which no unmatched warning carries
 BARE_MESSAGE = f"Filter feature '{FILTER_FEATURE}' matched no feature group."
 
+ORDER_FIRST_FEATURE = "fer_order_feat"  # sorts before its twin by name
+ORDER_SECOND_FEATURE = "fer_order_feat two"  # its space beats the other's closing quote, so its message sorts first
+
 RUNTIME_MESSAGE = "fer_runtime_boom"
 RUNTIME_TYPE_NAME = "RuntimeError"
 DEFECT_MESSAGE = "fer_defect_after_decline"
@@ -135,6 +138,11 @@ def _messages(caplog: pytest.LogCaptureFixture, level: int) -> tuple[str, ...]:
 def _carrying(messages: Sequence[str], fragment: str) -> tuple[str, ...]:
     """The messages carrying `fragment`."""
     return tuple(message for message in messages if fragment in message)
+
+
+def _bare_message(filter_feature_name: str) -> str:
+    """BARE_MESSAGE for another filter feature name, so the sentence is spelled once."""
+    return BARE_MESSAGE.replace(FILTER_FEATURE, filter_feature_name)
 
 
 def _stage_reason(stage: str) -> str:
@@ -1105,6 +1113,7 @@ class TestTwoFiltersOnOneNameAreAttributedSeparately:
     """The ledger keys on the declaring filter's uuid, so a shared name still attributes each fact to its filter."""
 
     def test_the_ledger_key_carries_the_declaring_filters_uuid(self, caplog: pytest.LogCaptureFixture) -> None:
+        """The ABSENT_UUID assert guards the arity: with the cast in `_ledger_keys`, a key losing its uuid fails here."""
         snapshot = _drive_shared_name(caplog, _losing_pair())
 
         assert snapshot.escaped is None, f"nothing may cross identify_matched_filters: {snapshot.escaped}"
@@ -1154,10 +1163,29 @@ class TestTwoFiltersOnOneNameAreAttributedSeparately:
         assert set(runs) == {_losing_pair_messages()}, f"the runs must emit both messages sorted: {sorted(set(runs))}"
 
 
-class TestTheReportLedgersAreKeyedPerDeclaration:
-    """The report dedupe follows the fact it guards, so a shared name never mutes the second declaration."""
+class TestTheUnmatchedWarningsAreOrderedByFilterFeatureName:
+    """The name orders the warnings; the rendered message only breaks the tie between filters sharing a name."""
 
-    def test_two_defects_on_one_name_record_and_warn_twice(self, caplog: pytest.LogCaptureFixture) -> None:
+    def test_the_name_orders_the_warnings_not_the_rendered_message(self, caplog: pytest.LogCaptureFixture) -> None:
+        """Two names whose messages sort the other way round, so an order taken from the message shows up here."""
+        expected = (_bare_message(ORDER_FIRST_FEATURE), _bare_message(ORDER_SECOND_FEATURE))
+        assert tuple(sorted(expected)) != expected, "the messages must sort the other way, else this pins nothing"
+
+        snapshot = _drive(
+            [_make_plain_fg],
+            caplog,
+            filter_features=(ORDER_FIRST_FEATURE, ORDER_SECOND_FEATURE),
+            warn_unmatched=True,
+        )
+
+        assert snapshot.unmatched == expected, f"the filter feature name must order the warnings: {snapshot.unmatched}"
+
+
+class TestTheReportsDedupePerColumnNotPerDeclaration:
+    """Both reports render from the group, the reason and the name alone, so a second declaration adds no line."""
+
+    def test_two_defects_on_one_name_record_twice_and_report_once(self, caplog: pytest.LogCaptureFixture) -> None:
+        """The ledger keeps its fact per declaration; the byte-identical repeat of the report falls to DEBUG."""
         snapshot = _drive_shared_name(caplog, (FILTER_FEATURE, FILTER_FEATURE), makes=(_make_matcher_error_fg,))
 
         assert snapshot.escaped is None, f"nothing may cross identify_matched_filters: {snapshot.escaped}"
@@ -1166,23 +1194,21 @@ class TestTheReportLedgersAreKeyedPerDeclaration:
         assert {row[2] for row in snapshot.rows} == {MATCHER_ERROR_STAGE}, (
             f"both declarations lost to the same defect, got: {snapshot.rows}"
         )
-        assert len(_carrying(snapshot.warnings, DROP_REPORT_FRAGMENT)) == 2, (
-            f"each dropped declaration must be reported, got: {snapshot.warnings}"
-        )
-        assert _carrying(snapshot.debugs, DROP_REPORT_FRAGMENT) == (), (
-            f"the second declaration must not be downgraded to DEBUG, got: {snapshot.debugs}"
+        reported = _carrying(snapshot.warnings, DROP_REPORT_FRAGMENT)
+        assert len(reported) == 1, f"the column's drop must be reported once, got: {snapshot.warnings}"
+        assert _carrying(snapshot.debugs, DROP_REPORT_FRAGMENT) == reported, (
+            f"the repeat is that same line and belongs at DEBUG, got: {snapshot.debugs}"
         )
 
-    def test_two_falsy_returns_on_one_name_are_each_reported(self, caplog: pytest.LogCaptureFixture) -> None:
+    def test_two_falsy_returns_on_one_name_are_reported_once(self, caplog: pytest.LogCaptureFixture) -> None:
         snapshot = _drive_shared_name(caplog, (FILTER_FEATURE, FILTER_FEATURE), makes=(_make_falsy_decline_fg,))
 
         assert snapshot.escaped is None, f"nothing may cross identify_matched_filters: {snapshot.escaped}"
         assert snapshot.rows == (), f"a falsy non-bool is a non-match, never a fact, got: {snapshot.rows}"
-        assert len(_carrying(snapshot.warnings, FALSY_REPORT_FRAGMENT)) == 2, (
-            f"each detached declaration must be reported, got: {snapshot.warnings}"
-        )
-        assert _carrying(snapshot.debugs, FALSY_REPORT_FRAGMENT) == (), (
-            f"the second declaration must not be downgraded to DEBUG, got: {snapshot.debugs}"
+        reported = _carrying(snapshot.warnings, FALSY_REPORT_FRAGMENT)
+        assert len(reported) == 1, f"the column's detached filter must be reported once, got: {snapshot.warnings}"
+        assert _carrying(snapshot.debugs, FALSY_REPORT_FRAGMENT) == reported, (
+            f"the repeat is that same line and belongs at DEBUG, got: {snapshot.debugs}"
         )
 
 

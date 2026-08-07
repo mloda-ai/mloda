@@ -324,7 +324,7 @@ class TestDroppedFilterIsRecorded:
         assert snapshot.escaped is None, f"the raise must not cross GlobalFilter.criteria: {snapshot.escaped}"
         assert snapshot.has_ledger, "GlobalFilter must expose a dropped_filters ledger"
         assert snapshot.entries == ((UNIT_CLASS_NAME, FILTER_FEATURE_RAISING),), (
-            f"exactly one drop, keyed by group and filter feature, got: {snapshot.entries}"
+            f"exactly one drop, whose key names the group and the filter feature, got: {snapshot.entries}"
         )
         assert snapshot.keyed_by_group_and_filter, "the key must be the group CLASS, not its name or a stand-in"
         assert snapshot.reason_types == ("str",), (

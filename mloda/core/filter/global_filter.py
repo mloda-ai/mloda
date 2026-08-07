@@ -47,6 +47,11 @@ _STAGE_DEPTH: dict[EliminationStage, int] = {
 # One declared filter against one feature group: the name alone collapses two filters on one column.
 _LedgerKey = tuple[type[FeatureGroup], str, UUID]
 
+# Both reports render from (feature group, reason, filter name) only, so two declarations on one column produce
+# byte-identical lines and repeating one adds no signal. Nothing is lost: the ledger records per declaration
+# unconditionally and no longer derives its write from the report dedupe.
+_ReportKey = tuple[type[FeatureGroup], str]
+
 
 def _copy_feature_leaf(value: Any) -> Any:
     """Detach a Feature leaf from the host; any other leaf stays shared by reference."""
@@ -77,10 +82,10 @@ class GlobalFilter:
         self.probes: dict[tuple[type[FeatureGroup], FeatureName, UUID], set[SingleFilter]] = {}
         self.matched_filter_uuids: set[UUID] = set()
         self._warned_divergences: set[str] = set()
-        # Own state, not dropped_filters: a falsy non-bool is an ordinary non-match, never a recorded drop.
-        self._reported_falsy_matches: set[_LedgerKey] = set()
-        # WARNING dedupe for defect drops; the ledger itself no longer decides first-ness.
-        self._warned_drops: set[_LedgerKey] = set()
+        # Per column, not per declaration: own state, and a falsy non-bool is an ordinary non-match, never a drop.
+        self._reported_falsy_matches: set[_ReportKey] = set()
+        # Per column, not per declaration: a WARNING dedupe; the ledger itself no longer decides first-ness.
+        self._warned_drops: set[_ReportKey] = set()
 
     def reset_match_tracking(self) -> None:
         """Every match report is scoped to one engine setup, so a later setup names only what it consulted.
@@ -206,7 +211,7 @@ class GlobalFilter:
 
     def warn_on_unmatched_filters(self) -> None:
         """Warn once per filter that matched no feature group this setup, naming its nearest miss."""
-        messages: list[str] = []
+        messages: list[tuple[str, str]] = []
         for filter in self.filters:
             if filter.uuid in self.matched_filter_uuids:
                 continue
@@ -214,9 +219,10 @@ class GlobalFilter:
             nearest = self._nearest_miss(filter.uuid)
             if nearest is not None:
                 message += f" Nearest miss: {nearest}"
-            messages.append(message)
-        # `filters` is a set and two filters can share a name, so only the rendered message orders them stably.
-        for message in sorted(messages):
+            messages.append((filter.name, message))
+        # `filters` is a set, so the emission is sorted. The name stays primary; the rendered message only breaks
+        # the tie, which is what makes two filters sharing one name deterministic.
+        for _, message in sorted(messages):
             logger.warning(message)
 
     def _nearest_miss(self, filter_uuid: UUID) -> str | None:
@@ -316,6 +322,8 @@ class GlobalFilter:
         gates under the probe's window.
 
         Mark-or-contain policy: see call_match_hook.
+        `filter` must be one of this GlobalFilter's declared filters or a per-match copy of one: the drop ledger
+        keys on its uuid.
         """
         probe = probe_match_criteria(
             feature_group,
@@ -339,6 +347,11 @@ class GlobalFilter:
     def _ledger_key(feature_group: type[FeatureGroup], filter: SingleFilter) -> _LedgerKey:
         """The declaring filter's own key; the per-match deepcopy carries the declaration's uuid."""
         return feature_group, filter.name, filter.uuid
+
+    @staticmethod
+    def _report_key(feature_group: type[FeatureGroup], filter: SingleFilter) -> _ReportKey:
+        """The column's key, uuid-free: what a report line can tell apart, unlike `_ledger_key`."""
+        return feature_group, filter.name
 
     def _record_near_miss(
         self, feature_group: type[FeatureGroup], filter: SingleFilter, stage: EliminationStage, reason: str
@@ -372,8 +385,9 @@ class GlobalFilter:
         stored = self.dropped_filters.get(key)
         if stored is None or stored.stage != "matcher_error":
             self.dropped_filters[key] = Elimination(stage="matcher_error", reason=reason)
-        first = key not in self._warned_drops
-        self._warned_drops.add(key)
+        report_key = self._report_key(feature_group, filter)
+        first = report_key not in self._warned_drops
+        self._warned_drops.add(report_key)
         logger.log(
             logging.WARNING if first else logging.DEBUG,
             "%s %s while matching filter feature '%s'; dropping that filter for this feature group.",
@@ -387,7 +401,7 @@ class GlobalFilter:
 
         Both fields are plugin-owned reads and this runs past the hook call's containment, so each degrades alone.
         """
-        key = self._ledger_key(feature_group, filter)
+        key = self._report_key(feature_group, filter)
         first = key not in self._reported_falsy_matches
         self._reported_falsy_matches.add(key)
         logger.log(

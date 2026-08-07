@@ -258,6 +258,10 @@ ordinary non-match and records nothing. A matcher defect takes the key from a st
 otherwise the deepest gate the filter reached keeps it, and two facts at one depth leave the first one
 in place.
 
+The uuid is `SingleFilter.uuid` of the declaration in `GlobalFilter.filters`, which is what joins a
+recorded fact back to the filter that lost. The key previously carried no uuid, so code unpacking it
+as `for (feature_group, name), elimination in ...` must now unpack three parts.
+
 A filter that matches no FeatureGroup at all is reported once after setup, with its nearest miss
 appended when one was recorded: across FeatureGroups the deepest gate wins, and a matcher defect
 ranks last.

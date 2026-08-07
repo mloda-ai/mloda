@@ -293,11 +293,6 @@ LEFT_JOIN_ROWS = INNER_ROWS + [f"k2|L2|{MISSING}|{MISSING}", f"k1|L1|{MISSING}|{
 RIGHT_JOIN_ROWS = ["k3|L3|k3|R3", "k4|L4|k4|R4", f"{MISSING}|{MISSING}|k5|R5"]
 CHAIN_ROWS = ["k4|L4|R4|T4", "k3|L3|R3|T3"]
 
-RIGHT_SIDE_BINDING_REASON = (
-    "plain RIGHT joins bind the merge arguments to the resolved frameworks instead of the "
-    "declared sides, so the declared left index is looked up in the right group's data"
-)
-
 
 @MODES_WITH_MULTIPROCESSING
 def test_inner_join_declared_orientation_keeps_left_group_first(
@@ -352,17 +347,7 @@ def test_right_join_rejects_a_child_declaring_only_the_left_framework(
 
 
 @MODES_SYNC_THREADING
-def test_right_join_raises_for_a_child_on_the_right_framework(
-    modes: set[ParallelizationMode], flight_server: Any
-) -> None:
-    # The exception type is incidental: the column-semantics guard reaches the key column before the merge does.
-    with pytest.raises((KeyError, ValueError), match="oc_b_left_key"):
-        _run_pair(PAIR_B, "right", OrientCharInvertedChild, modes, flight_server)
-
-
-@pytest.mark.xfail(strict=True, reason=RIGHT_SIDE_BINDING_REASON)
-@MODES_SYNC_THREADING
-def test_right_join_should_keep_every_right_row_for_a_child_on_the_right_framework(
+def test_right_join_keeps_every_right_row_for_a_child_on_the_right_framework(
     modes: set[ParallelizationMode], flight_server: Any
 ) -> None:
     rows = _run_pair(PAIR_B, "right", OrientCharInvertedChild, modes, flight_server)

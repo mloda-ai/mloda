@@ -9,6 +9,7 @@ from __future__ import annotations
 import gc
 import logging
 from collections.abc import Callable, Sequence
+from copy import deepcopy
 from dataclasses import dataclass
 from functools import partial
 from typing import Any, ClassVar, TypeVar, cast, get_args
@@ -56,6 +57,9 @@ FALSY_REPORT_FRAGMENT = "falsy non-bool"
 DROP_REPORT_FRAGMENT = "dropping that filter"  # the drop report's own wording, which no unmatched warning carries
 BARE_MESSAGE = f"Filter feature '{FILTER_FEATURE}' matched no feature group."
 
+ORDER_FIRST_FEATURE = "fer_order_feat"  # sorts before its twin by name
+ORDER_SECOND_FEATURE = "fer_order_feat two"  # its space beats the other's closing quote, so its message sorts first
+
 RUNTIME_MESSAGE = "fer_runtime_boom"
 RUNTIME_TYPE_NAME = "RuntimeError"
 DEFECT_MESSAGE = "fer_defect_after_decline"
@@ -80,6 +84,14 @@ LINKS_STAGE: EliminationStage = "links"
 
 # The canonical seam's own wording over the one framework the filter would ride.
 CAPABILITY_REASON = f"supports_compute_framework rejected {[PythonDictFramework.__name__]}"
+
+# The pin gate's own wording over the filter's declared pin and the framework the host resolved to.
+PIN_REASON = (
+    f"pinned compute framework '{PandasDataFrame.__name__}' "
+    f"is not the feature's resolved '{PythonDictFramework.__name__}'"
+)
+
+ABSENT_UUID = "<no uuid in the key>"  # what a ledger key carrying no filter identity reads as
 
 # (recorded free-form hint, the elimination stage it maps onto).
 STAGE_HINT_TABLE: tuple[tuple[str, EliminationStage], ...] = (
@@ -128,6 +140,11 @@ def _carrying(messages: Sequence[str], fragment: str) -> tuple[str, ...]:
     return tuple(message for message in messages if fragment in message)
 
 
+def _bare_message(filter_feature_name: str) -> str:
+    """BARE_MESSAGE for another filter feature name, so the sentence is spelled once."""
+    return BARE_MESSAGE.replace(FILTER_FEATURE, filter_feature_name)
+
+
 def _stage_reason(stage: str) -> str:
     """The reason text the stage-recording probe stores for one recorded hint."""
     return f"fer_stage_reason_{stage}"
@@ -145,6 +162,16 @@ def _ledger_rows(global_filter: GlobalFilter) -> tuple[tuple[str, str, str, str]
         stage, reason = _fact_of(recorded)
         rows.append((key[0].get_class_name(), key[1], stage, reason))
     return tuple(sorted(rows))
+
+
+def _ledger_keys(global_filter: GlobalFilter) -> tuple[tuple[str, str, str], ...]:
+    """(group class name, filter feature name, filter uuid) per ledger key, sorted. Holds no class."""
+    keys: list[tuple[str, str, str]] = []
+    # cast: the key's arity is what this pins, so it must be read without its declared shape.
+    for key in cast(dict[tuple[Any, ...], Any], global_filter.dropped_filters):
+        uuid_part = str(key[2]) if len(key) > 2 else ABSENT_UUID
+        keys.append((str(key[0].get_class_name()), str(key[1]), uuid_part))
+    return tuple(sorted(keys))
 
 
 def _filter_feature(
@@ -472,6 +499,8 @@ class _LedgerSnapshot:
     # Set when reading a stored fact raised, which is how a bare-string ledger reports itself.
     ledger_error: str | None
     rows: tuple[tuple[str, str, str, str], ...]
+    keys: tuple[tuple[str, str, str], ...]
+    declared_uuids: tuple[str, ...]
     warnings: tuple[str, ...]
     debugs: tuple[str, ...]
     unmatched: tuple[str, ...]
@@ -524,6 +553,8 @@ def _run_setup(
             fact_types=tuple(sorted(type(fact).__name__ for fact in global_filter.dropped_filters.values())),
             ledger_error=ledger_error,
             rows=rows or (),
+            keys=_ledger_keys(global_filter),
+            declared_uuids=tuple(sorted(str(single.uuid) for single in global_filter.filters)),
             warnings=warnings,
             debugs=_messages(caplog, logging.DEBUG),
             unmatched=tuple(message for message in warnings if UNMATCHED_PHRASE in message),
@@ -589,14 +620,30 @@ def _drive_setups(
         gc.collect()
 
 
-def _drive_shared_name(caplog: pytest.LogCaptureFixture, filter_features: Sequence[Feature]) -> _LedgerSnapshot:
-    """Drive filters that all declare one name against a single plain probe whose host loses the pin."""
+def _drive_shared_name(
+    caplog: pytest.LogCaptureFixture,
+    filter_features: Sequence[Feature | str],
+    makes: Sequence[_Factory] = (_make_plain_fg,),
+) -> _LedgerSnapshot:
+    """Drive filters that all declare one name against a single probe whose host loses the pin."""
     return _drive(
-        [_make_plain_fg],
+        makes,
         caplog,
         filter_features=filter_features,
         make_hosts=(partial(_host_feature, pin=PythonDictFramework),),
         warn_unmatched=True,
+    )
+
+
+def _losing_pair_messages() -> tuple[str, ...]:
+    """The two unmatched messages the losing pair must render, sorted as the warning emits them."""
+    from mloda.core.prepare.resolution_failure_renderer import near_miss_text
+
+    return tuple(
+        sorted(
+            f"{BARE_MESSAGE} {NEAREST_MISS_PHRASE}{near_miss_text(PLAIN_CLASS_NAME, stage, reason)}"
+            for stage, reason in ((SCOPE_STAGE, SCOPE_REASON), (FRAMEWORK_PIN_STAGE, PIN_REASON))
+        )
     )
 
 
@@ -1062,21 +1109,45 @@ class TestEveryMatchReportIsScopedToOneSetup:
         )
 
 
-class TestTwoFiltersOnOneNameAttributeNothing:
-    """The ledger keys on the filter feature NAME, so a shared name cannot attribute a fact to one filter."""
+class TestTwoFiltersOnOneNameAreAttributedSeparately:
+    """The ledger keys on the declaring filter's uuid, so a shared name still attributes each fact to its filter."""
 
-    def test_both_warnings_are_the_bare_sentence(self, caplog: pytest.LogCaptureFixture) -> None:
-        """One filter loses at scope and the other at the pin; neither message may quote the other's fact."""
+    def test_the_ledger_key_carries_the_declaring_filters_uuid(self, caplog: pytest.LogCaptureFixture) -> None:
+        """The ABSENT_UUID assert guards the arity: with the cast in `_ledger_keys`, a key losing its uuid fails here."""
         snapshot = _drive_shared_name(caplog, _losing_pair())
 
         assert snapshot.escaped is None, f"nothing may cross identify_matched_filters: {snapshot.escaped}"
+        assert len(snapshot.declared_uuids) == 2, f"two declared filters, got: {snapshot.declared_uuids}"
+        assert ABSENT_UUID not in {key[2] for key in snapshot.keys}, (
+            f"the key must name the filter that lost, got: {snapshot.keys}"
+        )
+        assert tuple(key[2] for key in snapshot.keys) == snapshot.declared_uuids, (
+            f"one key per declared filter, each under its own uuid, got: {snapshot.keys}"
+        )
+
+    def test_each_filter_records_its_own_fact(self, caplog: pytest.LogCaptureFixture) -> None:
+        """One filter loses at scope and the other at the pin, against one feature group: two facts, not one."""
+        snapshot = _drive_shared_name(caplog, _losing_pair())
+
+        assert snapshot.escaped is None, f"nothing may cross identify_matched_filters: {snapshot.escaped}"
+        assert snapshot.ledger_error is None, f"the stored fact must be readable: {snapshot.ledger_error}"
         assert snapshot.names == (), f"neither filter may attach, got: {snapshot.names}"
-        assert snapshot.unmatched == (BARE_MESSAGE, BARE_MESSAGE), (
-            f"an unattributable fact must not be quoted, got: {snapshot.unmatched}"
+        assert len(snapshot.rows) == 2, f"one fact per declared filter, got: {snapshot.rows}"
+        assert {row[2] for row in snapshot.rows} == {SCOPE_STAGE, FRAMEWORK_PIN_STAGE}, (
+            f"each filter must keep the gate it lost at, got: {snapshot.rows}"
+        )
+        assert {(row[0], row[1]) for row in snapshot.rows} == {(PLAIN_CLASS_NAME, FILTER_FEATURE)}, (
+            f"both facts stay under the group and the shared name, got: {snapshot.rows}"
+        )
+
+    def test_each_warning_names_its_own_nearest_miss(self, caplog: pytest.LogCaptureFixture) -> None:
+        snapshot = _drive_shared_name(caplog, _losing_pair())
+
+        assert tuple(sorted(snapshot.unmatched)) == _losing_pair_messages(), (
+            f"each filter must be told its own nearest miss, got: {snapshot.unmatched}"
         )
 
     def test_one_filter_on_that_name_still_names_its_nearest_miss(self, caplog: pytest.LogCaptureFixture) -> None:
-        """The guard covers the ambiguous case only: a single filter still gets its suffix."""
         from mloda.core.prepare.resolution_failure_renderer import near_miss_text
 
         snapshot = _drive_shared_name(caplog, (_filter_feature(scope=MISSING_SCOPE),))
@@ -1085,10 +1156,69 @@ class TestTwoFiltersOnOneNameAttributeNothing:
         assert snapshot.unmatched == (expected,), f"one filter on the name keeps its suffix, got: {snapshot.unmatched}"
 
     def test_the_pair_renders_the_same_way_on_every_run(self, caplog: pytest.LogCaptureFixture) -> None:
-        """Which of the two facts the ledger keeps rides set iteration order; the messages must not."""
+        """`filters` is a set, so an unsorted emission would reorder the two messages between runs."""
         runs = tuple(_drive_shared_name(caplog, _losing_pair()).unmatched for _ in range(REPEAT_RUNS))
 
-        assert set(runs) == {(BARE_MESSAGE, BARE_MESSAGE)}, f"the runs diverged: {sorted(set(runs))}"
+        assert len(set(runs)) == 1, f"the emitted order rides set iteration order: {sorted(set(runs))}"
+        assert set(runs) == {_losing_pair_messages()}, f"the runs must emit both messages sorted: {sorted(set(runs))}"
+
+
+class TestTheUnmatchedWarningsAreOrderedByFilterFeatureName:
+    """The name orders the warnings; the rendered message only breaks the tie between filters sharing a name."""
+
+    def test_the_name_orders_the_warnings_not_the_rendered_message(self, caplog: pytest.LogCaptureFixture) -> None:
+        """Two names whose messages sort the other way round, so an order taken from the message shows up here."""
+        expected = (_bare_message(ORDER_FIRST_FEATURE), _bare_message(ORDER_SECOND_FEATURE))
+        assert tuple(sorted(expected)) != expected, "the messages must sort the other way, else this pins nothing"
+
+        snapshot = _drive(
+            [_make_plain_fg],
+            caplog,
+            filter_features=(ORDER_FIRST_FEATURE, ORDER_SECOND_FEATURE),
+            warn_unmatched=True,
+        )
+
+        assert snapshot.unmatched == expected, f"the filter feature name must order the warnings: {snapshot.unmatched}"
+
+
+class TestTheReportsDedupePerColumnNotPerDeclaration:
+    """Both reports render from the group, the reason and the name alone, so a second declaration adds no line."""
+
+    def test_two_defects_on_one_name_record_twice_and_report_once(self, caplog: pytest.LogCaptureFixture) -> None:
+        """The ledger keeps its fact per declaration; the byte-identical repeat of the report falls to DEBUG."""
+        snapshot = _drive_shared_name(caplog, (FILTER_FEATURE, FILTER_FEATURE), makes=(_make_matcher_error_fg,))
+
+        assert snapshot.escaped is None, f"nothing may cross identify_matched_filters: {snapshot.escaped}"
+        assert snapshot.ledger_error is None, f"the stored fact must be readable: {snapshot.ledger_error}"
+        assert len(snapshot.rows) == 2, f"one defect fact per declaration, got: {snapshot.rows}"
+        assert {row[2] for row in snapshot.rows} == {MATCHER_ERROR_STAGE}, (
+            f"both declarations lost to the same defect, got: {snapshot.rows}"
+        )
+        reported = _carrying(snapshot.warnings, DROP_REPORT_FRAGMENT)
+        assert len(reported) == 1, f"the column's drop must be reported once, got: {snapshot.warnings}"
+        assert _carrying(snapshot.debugs, DROP_REPORT_FRAGMENT) == reported, (
+            f"the repeat is that same line and belongs at DEBUG, got: {snapshot.debugs}"
+        )
+
+    def test_two_falsy_returns_on_one_name_are_reported_once(self, caplog: pytest.LogCaptureFixture) -> None:
+        snapshot = _drive_shared_name(caplog, (FILTER_FEATURE, FILTER_FEATURE), makes=(_make_falsy_decline_fg,))
+
+        assert snapshot.escaped is None, f"nothing may cross identify_matched_filters: {snapshot.escaped}"
+        assert snapshot.rows == (), f"a falsy non-bool is a non-match, never a fact, got: {snapshot.rows}"
+        reported = _carrying(snapshot.warnings, FALSY_REPORT_FRAGMENT)
+        assert len(reported) == 1, f"the column's detached filter must be reported once, got: {snapshot.warnings}"
+        assert _carrying(snapshot.debugs, FALSY_REPORT_FRAGMENT) == reported, (
+            f"the repeat is that same line and belongs at DEBUG, got: {snapshot.debugs}"
+        )
+
+
+class TestFilterIdentitySurvivesThePerMatchDeepcopy:
+    """Every gate records against a per-match deepcopy, so the copy must carry the declaration's uuid."""
+
+    def test_the_deepcopy_keeps_the_declarations_uuid(self) -> None:
+        declared = SingleFilter(_filter_feature(), FilterType.EQUAL, {"value": 1})
+
+        assert deepcopy(declared).uuid == declared.uuid, "the per-match copy must keep the declaration's identity"
 
 
 class TestTheDeepestFactKeepsTheKey:

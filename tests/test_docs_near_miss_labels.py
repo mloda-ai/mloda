@@ -3,6 +3,10 @@
 Renaming a ``_STAGE_LABELS`` value reddens the renderer's hardcoded label table, which names no doc page, so
 updating that table turns the suite green with the pages still quoting the old label. These guards read the
 label back off the page, check it against the live table, and name the file and line that went stale.
+
+String parsing over docs/docs plus a ``_STAGE_LABELS`` import and one backend-free render, so it lives
+outside tests/test_documentation, which the default tox env ignores. Same placement as test_docs_fences.py,
+and for the same reason: a rename that leaves a page stale has to redden a plain ``tox``, not only python314.
 """
 
 import gc
@@ -23,7 +27,7 @@ from mloda.core.prepare.resolution_types import Elimination, EliminationStage, E
 
 # Anchored to this file, not to the cwd: a relative glob run from anywhere but
 # the repo root yields nothing and these guards pass vacuously (issue #937).
-REPO_ROOT = Path(__file__).resolve().parents[2]
+REPO_ROOT = Path(__file__).resolve().parents[1]
 DOCS_ROOT = REPO_ROOT / "docs" / "docs"
 FENCE_PATTERN = re.compile(r"^\s*```")
 
@@ -76,7 +80,7 @@ def _near_miss_bullets(text: str) -> Iterator[tuple[int, re.Match[str]]]:
 def test_rendered_near_miss_bullets_carry_a_current_stage_label(fpath: Path) -> None:
     """Every label a page reproduces in a near-miss bullet is still a value of ``_STAGE_LABELS``."""
     stale = [
-        f"{fpath}:{number} renders near-miss label '{match.group('label')}'"
+        f"{fpath.relative_to(REPO_ROOT)}:{number} renders near-miss label '{match.group('label')}'"
         for number, match in _near_miss_bullets(fpath.read_text(encoding="utf-8"))
         if match.group("label") not in ALLOWED_LABELS
     ]

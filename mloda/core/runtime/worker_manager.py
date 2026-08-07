@@ -23,6 +23,10 @@ class WorkerManager:
         self.process_register: dict[UUID, tuple[Any, Any, Any]] = {}
         self.result_queues_collection: set[Any] = set()
         self.result_uuids_collection: set[UUID] = set()
+        # cfw_uuid -> step uuids dispatched to that worker. Needed because a worker that
+        # exits cleanly is invisible to find_dead_workers, so the only way to notice the
+        # loss is that steps were assigned to it and no result ever arrived.
+        self.assigned_steps: dict[UUID, set[UUID]] = {}
 
     def add_thread_task(self, task: threading.Thread) -> None:
         """Add task to list and call task.start()."""
@@ -72,6 +76,10 @@ class WorkerManager:
             if isinstance(msg, str):
                 self.result_uuids_collection.add(UUID(msg))
 
+    def record_assignment(self, cfw_uuid: UUID, step_uuids: set[UUID]) -> None:
+        """Remember that these steps were dispatched to this worker."""
+        self.assigned_steps.setdefault(cfw_uuid, set()).update(step_uuids)
+
     def find_dead_workers(self) -> list[tuple[UUID, int]]:
         """Return (cfw_uuid, exitcode) for workers that died abnormally (exitcode not in {None, 0})."""
         dead: list[tuple[UUID, int]] = []
@@ -80,6 +88,29 @@ class WorkerManager:
             if exitcode is not None and exitcode != 0:
                 dead.append((cfw_uuid, exitcode))
         return dead
+
+    def find_orphaned_steps(self) -> list[tuple[UUID, int, list[UUID]]]:
+        """Return (cfw_uuid, exitcode, orphaned step uuids) per exited worker still owing results.
+
+        Complements ``find_dead_workers``, which only reports a non-zero exitcode. A worker
+        that takes the data-drop path breaks its own loop and exits with code 0, so it is
+        invisible there while the steps dispatched to it stay in ``currently_running_steps``
+        forever and the run loop waits on a process that is gone.
+
+        Any exitcode counts here, including 0: once a process has exited it will never
+        produce a result, so an assigned step with no result is lost whatever the code.
+        Results are checked against ``result_uuids_collection``, so a step whose result
+        arrived before the exit is not reported.
+        """
+        orphaned: list[tuple[UUID, int, list[UUID]]] = []
+        for cfw_uuid, (process, _, _) in self.process_register.items():
+            exitcode = process.exitcode
+            if exitcode is None:
+                continue
+            pending = self.assigned_steps.get(cfw_uuid, set()) - self.result_uuids_collection
+            if pending:
+                orphaned.append((cfw_uuid, exitcode, sorted(pending, key=str)))
+        return orphaned
 
     def is_step_done(self, step_uuid: UUID) -> bool:
         """Return step_uuid in result_uuids_collection."""

@@ -51,7 +51,7 @@ Join Types specify how two datasets are merged based on their keys. The framewor
 -   Inner Join,
 -   Left Join,
 -   Outer Join,
--   Right Join (use sparingly; prefer left joins when possible).
+-   Right Join (use sparingly; prefer left joins when possible). The declared left feature group's data is always the merge engine's left argument, whichever compute framework the join executes in.
 -   ASOF Join (point-in-time / as-of: equi match on the by-keys, nearest time match on the time columns).
 
 ```python

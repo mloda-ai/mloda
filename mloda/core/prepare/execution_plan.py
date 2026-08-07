@@ -439,12 +439,25 @@ class ExecutionPlan:
         destination_framework_uuids: set[UUID] = set()
         source_framework_uuids: set[UUID] = set()
 
+        declared_left_frameworks: set[type[ComputeFramework]] = set()
+        declared_right_frameworks: set[type[ComputeFramework]] = set()
+
         for uuid in required_uuids:
-            if graph.get_nodes()[uuid].feature.get_compute_framework() == destination_framework:
+            node = graph.get_nodes()[uuid]
+            node_framework = node.feature.get_compute_framework()
+
+            if node_framework == destination_framework:
                 destination_framework_uuids.add(uuid)
 
-            if graph.get_nodes()[uuid].feature.get_compute_framework() == source_framework:
+            if node_framework == source_framework:
                 source_framework_uuids.add(uuid)
+
+            # Links match polymorphically, so a subclass of a declared side counts as that side.
+            if issubclass(node.feature_group_class, link.left_feature_group):
+                declared_left_frameworks.add(node_framework)
+
+            if issubclass(node.feature_group_class, link.right_feature_group):
+                declared_right_frameworks.add(node_framework)
 
         # The order shows which items should be added first.
         # Thus, we need to make sure that higher ordered links are calculated first.
@@ -483,12 +496,32 @@ class ExecutionPlan:
                 required_uuids,
                 destination_framework_uuids,
                 source_framework_uuids,
-                swap_merge_sides,
+                self.swap_merge_sides_by_declared_side(
+                    destination_framework, declared_left_frameworks, declared_right_frameworks, swap_merge_sides
+                ),
             )
 
         # This makes sure that we do not write on the same datasets due to overlapping joins at once.
         self.joinstep_collection.add(js)
         return js
+
+    def swap_merge_sides_by_declared_side(
+        self,
+        destination_framework: type[ComputeFramework],
+        declared_left_frameworks: set[type[ComputeFramework]],
+        declared_right_frameworks: set[type[ComputeFramework]],
+        fallback: bool,
+    ) -> bool:
+        """The declared left group's data must stay the merge engine's left argument, wherever the join runs."""
+        holds_left = destination_framework in declared_left_frameworks
+        holds_right = destination_framework in declared_right_frameworks
+
+        if holds_left and not holds_right:
+            return False
+        if holds_right and not holds_left:
+            return True
+        # Self links and sides sharing one framework are not decidable from the declared sides.
+        return fallback
 
     def find_fg_per_uuid(
         self, pre_execution_plan: list[LinkFrameworkTrekker | FeatureGroupStep], uuid: UUID

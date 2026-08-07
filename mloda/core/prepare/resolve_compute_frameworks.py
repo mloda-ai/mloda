@@ -123,6 +123,7 @@ class ResolveComputeFrameworks:
                 )
             if len(new_cfws) > 1:
                 self.raise_on_link_disagreement(f, resolved, feature_trekkers[f.uuid])
+            self.raise_on_unsupported_resolution(f, new_cfws)
             f.compute_frameworks = new_cfws
             any_rewritten = True
 
@@ -166,6 +167,34 @@ class ResolveComputeFrameworks:
         )
         raise ValueError(
             f"Feature {feature.name} resolves to more than one compute framework {names}. Disagreeing links: {links}"
+        )
+
+    @staticmethod
+    def raise_on_unsupported_resolution(feature: Any, new_cfws: set[type[ComputeFramework]]) -> None:
+        """Reject a link resolution the feature does not declare, instead of rewriting it onto one.
+
+        The sibling branch for a feature with no trekker already refuses to move a feature onto a
+        framework outside its declared set. Without this the trekker branch disagreed: it overwrote
+        compute_frameworks with whatever the links resolved to, so a feature group could run in a
+        framework its own compute_framework_rule excludes, with no error and no warning.
+
+        ``compute_frameworks is None`` means the feature declared no restriction, so anything resolves.
+        """
+        if feature.compute_frameworks is None:
+            return
+
+        declared = set(feature.compute_frameworks)
+        unsupported = new_cfws - declared
+        if not unsupported:
+            return
+
+        resolved_names = sorted(cfw.get_class_name() for cfw in unsupported)
+        declared_names = sorted(cfw.get_class_name() for cfw in declared)
+        raise ValueError(
+            f"Feature {feature.name} declares the compute framework(s) {declared_names}, "
+            f"but its links resolve to {resolved_names}. "
+            "Give the feature group a compute_framework_rule that includes the resolved framework, "
+            "or bring the linked parents onto a framework it declares."
         )
 
     def order_queue_by_trekker_order(self, planned_queue: Any, link_trekker: LinkTrekker) -> Any:

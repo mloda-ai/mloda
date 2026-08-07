@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta, timezone
+import logging
 from typing import Any
 
 import pytest
@@ -51,6 +52,38 @@ class TestGlobalFilter:
     def test_filter_config_empty(self) -> None:
         """Test that the GlobalFilter starts with an empty config."""
         assert len(self.global_filter.filters) == 0
+
+    def test_drop_reports_dedupe_by_rendered_message(self, caplog: pytest.LogCaptureFixture) -> None:
+        class ExampleFeatureGroup:
+            @classmethod
+            def get_class_name(cls) -> str:
+                return "ExampleFeatureGroup"
+
+        caplog.set_level(logging.DEBUG)
+
+        self.global_filter._record_dropped_filter(ExampleFeatureGroup, "age", "reason one")
+        self.global_filter._record_dropped_filter(ExampleFeatureGroup, "age", "reason two")
+        self.global_filter._record_dropped_filter(ExampleFeatureGroup, "age", "reason two")
+
+        records = [record for record in caplog.records if "dropping that filter" in record.message]
+        assert [record.levelno for record in records] == [logging.WARNING, logging.WARNING, logging.DEBUG]
+
+    def test_falsy_reports_dedupe_by_rendered_message_and_reset(self, caplog: pytest.LogCaptureFixture) -> None:
+        class ExampleFeatureGroup:
+            @classmethod
+            def get_class_name(cls) -> str:
+                return "ExampleFeatureGroup"
+
+        caplog.set_level(logging.DEBUG)
+
+        self.global_filter._report_falsy_match(ExampleFeatureGroup, "age", None)
+        self.global_filter._report_falsy_match(ExampleFeatureGroup, "age", None)
+        self.global_filter._report_falsy_match(ExampleFeatureGroup, "age", "")
+        self.global_filter.reset_match_tracking()
+        self.global_filter._report_falsy_match(ExampleFeatureGroup, "age", None)
+
+        records = [record for record in caplog.records if "filter is not attached" in record.message]
+        assert [record.levelno for record in records] == [logging.WARNING, logging.DEBUG, logging.WARNING, logging.WARNING]
 
 
 class TestGlobalFilterTimeTravel:

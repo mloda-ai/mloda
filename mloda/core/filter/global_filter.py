@@ -44,6 +44,10 @@ _STAGE_DEPTH: dict[EliminationStage, int] = {
 }
 
 
+# One declared filter against one feature group: the name alone collapses two filters on one column.
+_LedgerKey = tuple[type[FeatureGroup], str, UUID]
+
+
 def _copy_feature_leaf(value: Any) -> Any:
     """Detach a Feature leaf from the host; any other leaf stays shared by reference."""
     return copy(value) if isinstance(value, Feature) else value
@@ -59,8 +63,8 @@ class GlobalFilter:
            names and the uuid to the used single filter. This is used to track which features are associated with which filters for a specific feature group.
            This can be used to check after the fact if a feature is a filter feature for a specific feature group
            e.g. for debugging, logging or quality checks.
-        3. `dropped_filters`: maps (feature group, filter feature name) to the `Elimination` naming the gate that
-           dropped it and why; a matcher defect outranks a stored near-miss, otherwise the deepest gate reached wins.
+        3. `dropped_filters`: maps (feature group, filter feature name, filter uuid) to the `Elimination` naming the
+           gate that dropped it and why; a matcher defect outranks a stored near-miss, else the deepest gate wins.
         4. `probes`: maps (feature group, feature name, feature uuid) to the filters that probe matched, empty included.
         5. `matched_filter_uuids`: uuids of filters that cleared every gate at least once this setup.
 
@@ -69,14 +73,14 @@ class GlobalFilter:
         """
         self.filters: set[SingleFilter] = set()
         self.collection: dict[tuple[type[FeatureGroup], FeatureName], set[SingleFilter]] = {}
-        self.dropped_filters: dict[tuple[type[FeatureGroup], str], Elimination] = {}
+        self.dropped_filters: dict[_LedgerKey, Elimination] = {}
         self.probes: dict[tuple[type[FeatureGroup], FeatureName, UUID], set[SingleFilter]] = {}
         self.matched_filter_uuids: set[UUID] = set()
         self._warned_divergences: set[str] = set()
         # Own state, not dropped_filters: a falsy non-bool is an ordinary non-match, never a recorded drop.
-        self._reported_falsy_matches: set[tuple[type[FeatureGroup], str]] = set()
+        self._reported_falsy_matches: set[_LedgerKey] = set()
         # WARNING dedupe for defect drops; the ledger itself no longer decides first-ness.
-        self._warned_drops: set[tuple[type[FeatureGroup], str]] = set()
+        self._warned_drops: set[_LedgerKey] = set()
 
     def reset_match_tracking(self) -> None:
         """Every match report is scoped to one engine setup, so a later setup names only what it consulted.
@@ -171,26 +175,25 @@ class GlobalFilter:
             # We are making a deepcopy so that, we do not change the original filter.
             _filter = deepcopy(filter)
             _filter.filter_feature.options = self.unify_options(feat.options, _filter.filter_feature.options)
-            filter_name = str(_filter.filter_feature.name)
 
             # criteria records its own drops: only it can tell a defect from a decline from a plain non-match.
             if not self.criteria(feature_group, _filter, data_access_collection):
                 continue
             if self.domain(_filter, feat.domain, feature_group) is False:
                 self._record_near_miss(
-                    feature_group, filter_name, "domain", self._domain_reason(_filter, feat, feature_group)
+                    feature_group, _filter, "domain", self._domain_reason(_filter, feat, feature_group)
                 )
                 continue
             if self.feature_group_scope(_filter, feature_group) is False:
-                self._record_near_miss(feature_group, filter_name, "scope", "outside the requested feature group scope")
+                self._record_near_miss(feature_group, _filter, "scope", "outside the requested feature group scope")
                 continue
             supported = self.capability(_filter, feat, feature_group)
             if supported is not None and not supported:
-                self._record_near_miss(feature_group, filter_name, "capability", self._capability_reason(_filter, feat))
+                self._record_near_miss(feature_group, _filter, "capability", self._capability_reason(_filter, feat))
                 continue
             if self.compute_framework(_filter, feat, supported) is False:
                 self._record_near_miss(
-                    feature_group, filter_name, "framework_pin", self._framework_pin_reason(_filter, feat)
+                    feature_group, _filter, "framework_pin", self._framework_pin_reason(_filter, feat)
                 )
                 continue
             # we don't check links, because this is not necessary as this is covered by the feature and feature group before
@@ -203,27 +206,22 @@ class GlobalFilter:
 
     def warn_on_unmatched_filters(self) -> None:
         """Warn once per filter that matched no feature group this setup, naming its nearest miss."""
-        for filter in sorted(self.filters, key=lambda f: f.name):
+        messages: list[str] = []
+        for filter in self.filters:
             if filter.uuid in self.matched_filter_uuids:
                 continue
             message = f"Filter feature '{filter.name}' matched no feature group."
-            # SingleFilter.name reads through to filter_feature.name, which is what the recorders key on.
-            nearest = self._nearest_miss(filter.name)
+            nearest = self._nearest_miss(filter.uuid)
             if nearest is not None:
                 message += f" Nearest miss: {nearest}"
+            messages.append(message)
+        # `filters` is a set and two filters can share a name, so only the rendered message orders them stably.
+        for message in sorted(messages):
             logger.warning(message)
 
-    def _nearest_miss(self, filter_feature_name: str) -> str | None:
+    def _nearest_miss(self, filter_uuid: UUID) -> str | None:
         """The captured fact of the deepest gate this filter reached, as the shared near-miss bullet."""
-        # The ledger keys on the name, so a name two declared filters share makes every fact under it
-        # unattributable to either of them.
-        if sum(1 for filter in self.filters if filter.name == filter_feature_name) > 1:
-            return None
-        captured = [
-            (feature_group, elimination)
-            for (feature_group, name), elimination in self.dropped_filters.items()
-            if name == filter_feature_name
-        ]
+        captured = [(key[0], elimination) for key, elimination in self.dropped_filters.items() if key[2] == filter_uuid]
         if not captured:
             return None
         feature_group, elimination = min(captured, key=self._nearest_miss_key)
@@ -327,22 +325,27 @@ class GlobalFilter:
         )
         if probe.matcher_error is not None:
             reason = contained_raise_reason(probe.matcher_error)
-            self._record_dropped_filter(feature_group, str(filter.filter_feature.name), reason)
+            self._record_dropped_filter(feature_group, filter, reason)
             return False
         # value_rejection is excluded: its returned is the containment's synthetic None, not the hook's.
         if probe.value_rejection is None and not probe.matched and not isinstance(probe.returned, bool):
-            self._report_falsy_match(feature_group, str(filter.filter_feature.name), probe.returned)
+            self._report_falsy_match(feature_group, filter, probe.returned)
         if probe.rejection is not None:
-            self._record_rejected_filter(feature_group, str(filter.filter_feature.name), probe.rejection)
+            self._record_rejected_filter(feature_group, filter, probe.rejection)
             return False
         return probe.matched
 
+    @staticmethod
+    def _ledger_key(feature_group: type[FeatureGroup], filter: SingleFilter) -> _LedgerKey:
+        """The declaring filter's own key; the per-match deepcopy carries the declaration's uuid."""
+        return feature_group, filter.name, filter.uuid
+
     def _record_near_miss(
-        self, feature_group: type[FeatureGroup], filter_feature_name: str, stage: EliminationStage, reason: str
+        self, feature_group: type[FeatureGroup], filter: SingleFilter, stage: EliminationStage, reason: str
     ) -> None:
         """Record the gate one filter lost at against one feature group; the deepest gate reached keeps the key,
         matching how `_nearest_miss` reads the ledger back."""
-        key = (feature_group, filter_feature_name)
+        key = self._ledger_key(feature_group, filter)
         stored = self.dropped_filters.get(key)
         # A stored defect stays pinned to its key, and equal depth keeps the first fact recorded.
         if stored is None or (
@@ -351,41 +354,40 @@ class GlobalFilter:
             self.dropped_filters[key] = Elimination(stage=stage, reason=reason)
 
     def _record_rejected_filter(
-        self, feature_group: type[FeatureGroup], filter_feature_name: str, rejection: MatchRejection
+        self, feature_group: type[FeatureGroup], filter: SingleFilter, rejection: MatchRejection
     ) -> None:
         """Record a typed decline in the same ledger at DEBUG: a deliberate rejection is a near-miss, not a defect."""
-        self._record_near_miss(
-            feature_group, filter_feature_name, rejection_elimination_stage(rejection.stage), rejection.reason
-        )
+        self._record_near_miss(feature_group, filter, rejection_elimination_stage(rejection.stage), rejection.reason)
         logger.debug(
             "%s rejected filter feature '%s': %s; dropping that filter for this feature group.",
             # A plugin-owned read past the hook call's containment, so it degrades instead of escaping the seam.
             safe_field(lambda: feature_group.get_class_name(), "<unnamed feature group>"),
-            filter_feature_name,
+            filter.name,
             rejection.reason,
         )
 
-    def _record_dropped_filter(self, feature_group: type[FeatureGroup], filter_feature_name: str, reason: str) -> None:
-        """Record the drop: defect drops warn once per key and take the key from a stored near-miss."""
-        key = (feature_group, filter_feature_name)
+    def _record_dropped_filter(self, feature_group: type[FeatureGroup], filter: SingleFilter, reason: str) -> None:
+        """Record the drop over a stored near-miss but never over another defect; `_warned_drops` picks the level."""
+        key = self._ledger_key(feature_group, filter)
+        stored = self.dropped_filters.get(key)
+        if stored is None or stored.stage != "matcher_error":
+            self.dropped_filters[key] = Elimination(stage="matcher_error", reason=reason)
         first = key not in self._warned_drops
         self._warned_drops.add(key)
-        if first:
-            self.dropped_filters[key] = Elimination(stage="matcher_error", reason=reason)
         logger.log(
             logging.WARNING if first else logging.DEBUG,
             "%s %s while matching filter feature '%s'; dropping that filter for this feature group.",
             feature_group.get_class_name(),
             reason,
-            filter_feature_name,
+            filter.name,
         )
 
-    def _report_falsy_match(self, feature_group: type[FeatureGroup], filter_feature_name: str, returned: Any) -> None:
+    def _report_falsy_match(self, feature_group: type[FeatureGroup], filter: SingleFilter, returned: Any) -> None:
         """Report the detached filter: WARNING on a key's first report, DEBUG after, like `_record_dropped_filter`.
 
         Both fields are plugin-owned reads and this runs past the hook call's containment, so each degrades alone.
         """
-        key = (feature_group, filter_feature_name)
+        key = self._ledger_key(feature_group, filter)
         first = key not in self._reported_falsy_matches
         self._reported_falsy_matches.add(key)
         logger.log(
@@ -395,7 +397,7 @@ class GlobalFilter:
             safe_field(lambda: feature_group.get_class_name(), "<unnamed feature group>"),
             # The type name only: the value's own __repr__ is plugin code and must not run here.
             safe_field(lambda: type(returned).__name__, "<unreadable type>"),
-            filter_feature_name,
+            filter.name,
         )
 
     def domain(self, filter: SingleFilter, feature_domain: None | Domain, feature_group: type[FeatureGroup]) -> bool:

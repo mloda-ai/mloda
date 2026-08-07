@@ -15,6 +15,7 @@ from __future__ import annotations
 import gc
 import logging
 from collections.abc import Callable
+from copy import deepcopy
 from dataclasses import dataclass
 from functools import partial
 from typing import Any, Optional, TypeVar
@@ -201,12 +202,14 @@ def _drive_criteria(returned: Any, caplog: pytest.LogCaptureFixture, calls: int 
     caplog.clear()
     fg = _make_non_bool_matcher_fg(returned)
     global_filter = GlobalFilter()
+    # The engine probes a per-match deepcopy of one declaration, so all `calls` share one ledger key.
+    declared = _single(FILTER_FEATURE)
     try:
         value: Any = None
         escaped: Optional[str] = None
         with caplog.at_level(logging.DEBUG, logger=GF_LOGGER_NAME):
             for _ in range(calls):
-                value, escaped = _capture(partial(global_filter.criteria, fg, _single(FILTER_FEATURE), None))
+                value, escaped = _capture(partial(global_filter.criteria, fg, deepcopy(declared), None))
         return _CriteriaSnapshot(
             is_false=value is False,
             is_true=value is True,
@@ -218,7 +221,7 @@ def _drive_criteria(returned: Any, caplog: pytest.LogCaptureFixture, calls: int 
             debugs=_messages(caplog, logging.DEBUG),
         )
     finally:
-        del fg, global_filter
+        del fg, global_filter, declared
         gc.collect()
 
 

@@ -610,7 +610,7 @@ def test_a_right_join_plans_the_joinstep_where_the_declared_right_side_runs() ->
 
 
 def test_a_right_join_reached_through_a_reversed_key_keeps_the_declared_merge_sides() -> None:
-    """The reversed key already puts the declared left side in the destination, so the merge sides must not swap."""
+    """Hand built: no planner path reverses this key, so keep the shape; a reversed key must not swap the sides."""
     planned = _pair_scenario(link_factory=Link.right)
     _trek(planned, PandasDataFrame, PyArrowTable)
 

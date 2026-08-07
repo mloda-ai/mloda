@@ -239,6 +239,15 @@ class ExecutionOrchestrator:
             dead = self.worker_manager.find_dead_workers()
             if dead:
                 raise MlodaRunError(f"Worker process(es) died unexpectedly: {dead}")
+            # A clean exit is invisible above, so check assignments too: a worker that is
+            # gone will never answer, and waiting on it hangs the run instead of failing it.
+            orphaned = self.worker_manager.find_orphaned_steps()
+            if orphaned:
+                detail = "; ".join(
+                    f"cfw {cfw_uuid} exited with code {exitcode} owing step(s) {', '.join(str(step) for step in steps)}"
+                    for cfw_uuid, exitcode, steps in orphaned
+                )
+                raise MlodaRunError(f"Worker process(es) exited with steps still assigned: {detail}")
             return False
         return True
 

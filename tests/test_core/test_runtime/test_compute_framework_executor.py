@@ -843,6 +843,9 @@ class TestMultiExecuteStep:
         step.children_if_root = []
         step.compute_framework = Mock()
         step.compute_framework.get_class_name.return_value = "TestCFW"
+        # multi_execute_step records the dispatch, so the step must answer get_uuids()
+        # with real uuids like a FeatureGroupStep does.
+        step.get_uuids.return_value = {uuid4()}
 
         cfw_uuid = uuid4()
         cfw_register.get_cfw_uuid.return_value = cfw_uuid
@@ -871,6 +874,9 @@ class TestMultiExecuteStep:
         step.children_if_root = []
         step.compute_framework = Mock()
         step.compute_framework.get_class_name.return_value = "TestCFW"
+        # multi_execute_step records the dispatch, so the step must answer get_uuids()
+        # with real uuids like a FeatureGroupStep does.
+        step.get_uuids.return_value = {uuid4()}
 
         cfw_uuid = uuid4()
         cfw_register.get_cfw_uuid.return_value = cfw_uuid
@@ -904,6 +910,9 @@ class TestMultiExecuteStep:
         step.children_if_root = []
         step.compute_framework = Mock()
         step.compute_framework.get_class_name.return_value = "TestCFW"
+        # multi_execute_step records the dispatch, so the step must answer get_uuids()
+        # with real uuids like a FeatureGroupStep does.
+        step.get_uuids.return_value = {uuid4()}
 
         cfw_uuid = uuid4()
         cfw_register.get_cfw_uuid.return_value = cfw_uuid
@@ -932,6 +941,9 @@ class TestMultiExecuteStep:
         step.children_if_root = []
         step.compute_framework = Mock()
         step.compute_framework.get_class_name.return_value = "TestCFW"
+        # multi_execute_step records the dispatch, so the step must answer get_uuids()
+        # with real uuids like a FeatureGroupStep does.
+        step.get_uuids.return_value = {uuid4()}
 
         cfw_uuid = uuid4()
         cfw_register.get_cfw_uuid.return_value = cfw_uuid
@@ -956,6 +968,9 @@ class TestMultiExecuteStep:
         step.from_framework = Mock()
         step.from_framework.get_class_name.return_value = "FromCFW"
         step.required_uuids = [uuid4()]
+        # multi_execute_step records the dispatch, so the step must answer get_uuids()
+        # with real uuids like a TransformFrameworkStep does.
+        step.get_uuids.return_value = {uuid4()}
 
         from_cfw_uuid = uuid4()
         cfw_register.get_cfw_uuid.side_effect = [from_cfw_uuid, from_cfw_uuid]

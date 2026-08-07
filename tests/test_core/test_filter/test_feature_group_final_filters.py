@@ -8,17 +8,19 @@ independent concerns.
 The matrix of (FG final_filters, Engine final_filters, uses mask_engine) combinations:
 
   FG=False, Engine=True,  mask=yes -- test_inline_filter_without_custom_compute_framework
-  FG=None,  Engine=True,  mask=no  -- test_regular_feature_group_still_uses_final_filters
+  FG=None,  Engine=True,  mask=no  -- test_final_filtering_eliminates_rows, case regular_default_fg
   FG=False, Engine=False, mask=yes -- test_fg_skip_with_inline_engine
-  FG=True,  Engine=False, mask=no  -- test_fg_force_final_overrides_inline_engine
-  FG=True,  Engine=True,  mask=no  -- test_fg_force_final_with_final_engine
+  FG=True,  Engine=False, mask=no  -- test_final_filtering_eliminates_rows, case fg_overrides_inline_engine
+  FG=True,  Engine=True,  mask=no  -- test_final_filtering_eliminates_rows, case fg_and_engine_agree
+  FG=True,  Engine=True,  mask=no  -- test_final_filtering_eliminates_rows, case compatible_dtype
   FG=True,  Engine=True,  mask=yes -- test_inline_mask_with_final_elimination
 
 Validation (filter column must be present when row elimination applies):
-  FG=True,  drops filter column       -- test_dropped_filter_column_raises_error
-  FG=None,  drops filter column       -- test_default_fg_drops_filter_column_raises_error
+  FG=True,  drops filter column       -- test_filter_column_validation_raises, case fg_force_final_drops_column
+  FG=None,  drops filter column       -- test_filter_column_validation_raises, case default_fg_drops_column
 """
 
+from dataclasses import dataclass
 from typing import Any, Optional
 
 import pytest
@@ -428,6 +430,41 @@ class CompatibleDtypeFeatureGroup(FeatureGroup):
         )
 
 
+@dataclass(frozen=True)
+class FinalEliminationCase:
+    case_id: str
+    feature_group: type[FeatureGroup]
+    compute_framework: type[ComputeFramework]
+
+
+FINAL_ELIMINATION_CASES: list[FinalEliminationCase] = [
+    FinalEliminationCase("regular_default_fg", RegularFeatureGroupForFilterTest, PyArrowTable),
+    FinalEliminationCase("fg_overrides_inline_engine", ForceFinalOnInlineEngine, PyArrowTableInlineEngine),
+    FinalEliminationCase("fg_and_engine_agree", ForceFinalOnFinalEngine, PyArrowTable),
+    FinalEliminationCase("compatible_dtype", CompatibleDtypeFeatureGroup, PyArrowTable),
+]
+
+MISSING_FILTER_COLUMN = "missing filter column.*status.*bug in the FeatureGroup"
+STRING_FILTER_ON_NON_STRING = "expects string comparison but column has type"
+
+
+@dataclass(frozen=True)
+class FilterColumnValidationCase:
+    case_id: str
+    feature_group: type[FeatureGroup]
+    match: str
+
+
+FILTER_COLUMN_VALIDATION_CASES: list[FilterColumnValidationCase] = [
+    FilterColumnValidationCase("fg_force_final_drops_column", DropsFilterColumnFeatureGroup, MISSING_FILTER_COLUMN),
+    FilterColumnValidationCase("default_fg_drops_column", DefaultFGDropsFilterColumn, MISSING_FILTER_COLUMN),
+    FilterColumnValidationCase("fg_force_final_dtype_mismatch", MutatesFilterColumnToInt, STRING_FILTER_ON_NON_STRING),
+    FilterColumnValidationCase(
+        "default_fg_dtype_mismatch", DefaultFGMutatesFilterColumnToInt, STRING_FILTER_ON_NON_STRING
+    ),
+]
+
+
 @PARALLELIZATION_MODES_SYNC_THREADING
 class TestFeatureGroupFinalFilters:
     """Tests that FeatureGroup.final_filters() controls inline vs. final filter application."""
@@ -466,18 +503,12 @@ class TestFeatureGroupFinalFilters:
             data = res.to_pydict()
             assert data[feature_name] == [10, 10, 30, 30]
 
-    def test_regular_feature_group_still_uses_final_filters(
-        self, modes: set[ParallelizationMode], flight_server: Any
+    @pytest.mark.parametrize("case", FINAL_ELIMINATION_CASES, ids=[case.case_id for case in FINAL_ELIMINATION_CASES])
+    def test_final_filtering_eliminates_rows(
+        self, case: FinalEliminationCase, modes: set[ParallelizationMode], flight_server: Any
     ) -> None:
-        """A FeatureGroup without final_filters() override should still have rows eliminated.
-
-        RegularFeatureGroupForFilterTest does NOT override final_filters(), so the
-        framework's default behavior applies: the PyArrowFilterEngine (which returns
-        final_filters() -> True) filters rows after calculate_feature().
-
-        With filter status=="active", only the two "active" rows should remain.
-        """
-        feature_name = "RegularFeatureGroupForFilterTest"
+        """Every route into row elimination drops the inactive rows; each case is documented on its FeatureGroup."""
+        feature_name = case.feature_group.get_class_name()
 
         features = Features([Feature(name=feature_name, initial_requested_data=True)])
 
@@ -486,7 +517,7 @@ class TestFeatureGroupFinalFilters:
 
         result = MlodaTestRunner.run_api(
             features,
-            compute_frameworks={PyArrowTable},
+            compute_frameworks={case.compute_framework},
             parallelization_modes=modes,
             flight_server=flight_server,
             global_filter=global_filter,
@@ -494,7 +525,6 @@ class TestFeatureGroupFinalFilters:
 
         for res in result.results:
             data = res.to_pydict()
-            # Final filtering should have eliminated the "inactive" rows
             assert data[feature_name] == [10, 30]
 
     def test_mixed_final_and_inline_filters_in_same_run(
@@ -577,62 +607,6 @@ class TestFeatureGroupFinalFilters:
             # Both FG and engine say skip: inline masking preserves all 4 rows
             assert data[feature_name] == [10, 10, 30, 30]
 
-    def test_fg_force_final_overrides_inline_engine(self, modes: set[ParallelizationMode], flight_server: Any) -> None:
-        """FG=True, Engine=False. FG overrides engine. Rows eliminated.
-
-        ForceFinalOnInlineEngine explicitly returns final_filters()=True, while
-        PyArrowTableInlineEngine's filter engine returns False. The FeatureGroup's
-        decision should override the engine: final filtering is applied and
-        non-matching rows are eliminated, leaving only [10, 30].
-        """
-        feature_name = "ForceFinalOnInlineEngine"
-
-        features = Features([Feature(name=feature_name, initial_requested_data=True)])
-
-        global_filter = GlobalFilter()
-        global_filter.add_filter("status", "equal", {"value": "active"})
-
-        result = MlodaTestRunner.run_api(
-            features,
-            compute_frameworks={PyArrowTableInlineEngine},
-            parallelization_modes=modes,
-            flight_server=flight_server,
-            global_filter=global_filter,
-        )
-
-        for res in result.results:
-            data = res.to_pydict()
-            # FG overrides engine: rows eliminated despite engine saying skip
-            assert data[feature_name] == [10, 30]
-
-    def test_fg_force_final_with_final_engine(self, modes: set[ParallelizationMode], flight_server: Any) -> None:
-        """FG=True, Engine=True. Both agree to apply final filtering. Rows eliminated.
-
-        ForceFinalOnFinalEngine explicitly returns final_filters()=True and runs on
-        standard PyArrowTable (whose PyArrowFilterEngine also returns True). Since
-        both agree, final filtering is applied and non-matching rows are eliminated,
-        leaving only [10, 30].
-        """
-        feature_name = "ForceFinalOnFinalEngine"
-
-        features = Features([Feature(name=feature_name, initial_requested_data=True)])
-
-        global_filter = GlobalFilter()
-        global_filter.add_filter("status", "equal", {"value": "active"})
-
-        result = MlodaTestRunner.run_api(
-            features,
-            compute_frameworks={PyArrowTable},
-            parallelization_modes=modes,
-            flight_server=flight_server,
-            global_filter=global_filter,
-        )
-
-        for res in result.results:
-            data = res.to_pydict()
-            # Both FG and engine agree: rows eliminated
-            assert data[feature_name] == [10, 30]
-
     def test_inline_mask_with_final_elimination(self, modes: set[ParallelizationMode], flight_server: Any) -> None:
         """FG=True, Engine=True, uses mask engine. Masking AND elimination are independent.
 
@@ -668,75 +642,21 @@ class TestFeatureGroupFinalFilters:
             # Inline masking changed values (15 not 10/5), elimination removed inactive row
             assert data[feature_name] == [15, 15, 30]
 
-    def test_dropped_filter_column_raises_error(self, modes: set[ParallelizationMode], flight_server: Any) -> None:
-        """FG=True but filter column missing from output. Framework must raise ValueError.
-
-        DropsFilterColumnFeatureGroup returns final_filters()=True but omits the
-        "status" column from its output table. The framework's validation should
-        catch this and raise a clear error instead of crashing in the filter engine.
-        """
-        feature_name = "DropsFilterColumnFeatureGroup"
-
-        features = Features([Feature(name=feature_name, initial_requested_data=True)])
-
-        global_filter = GlobalFilter()
-        global_filter.add_filter("status", "equal", {"value": "active"})
-
-        # ValueError from _validate_filter_columns is wrapped in a generic
-        # Exception by the threading/worker layer (see thread_worker.py).
-        with pytest.raises(Exception, match="missing filter column.*status.*bug in the FeatureGroup"):
-            MlodaTestRunner.run_api(
-                features,
-                compute_frameworks={PyArrowTable},
-                parallelization_modes=modes,
-                flight_server=flight_server,
-                global_filter=global_filter,
-            )
-
-    def test_default_fg_drops_filter_column_raises_error(
-        self, modes: set[ParallelizationMode], flight_server: Any
+    @pytest.mark.parametrize(
+        "case", FILTER_COLUMN_VALIDATION_CASES, ids=[case.case_id for case in FILTER_COLUMN_VALIDATION_CASES]
+    )
+    def test_filter_column_validation_raises(
+        self, case: FilterColumnValidationCase, modes: set[ParallelizationMode], flight_server: Any
     ) -> None:
-        """FG=None (default), Engine=True, filter column missing. Framework must raise ValueError.
-
-        DefaultFGDropsFilterColumn does not override final_filters(), so the
-        engine fallback path applies row elimination. The validation must catch
-        the missing column on this path too, not only when the FG returns True.
-        """
-        feature_name = "DefaultFGDropsFilterColumn"
+        """FG-override and engine-fallback paths both reject; the worker wraps the ValueError generically."""
+        feature_name = case.feature_group.get_class_name()
 
         features = Features([Feature(name=feature_name, initial_requested_data=True)])
 
         global_filter = GlobalFilter()
         global_filter.add_filter("status", "equal", {"value": "active"})
 
-        # ValueError from _validate_filter_columns is wrapped in a generic
-        # Exception by the threading/worker layer (see thread_worker.py).
-        with pytest.raises(Exception, match="missing filter column.*status.*bug in the FeatureGroup"):
-            MlodaTestRunner.run_api(
-                features,
-                compute_frameworks={PyArrowTable},
-                parallelization_modes=modes,
-                flight_server=flight_server,
-                global_filter=global_filter,
-            )
-
-    def test_string_filter_on_int_column_raises_error(
-        self, modes: set[ParallelizationMode], flight_server: Any
-    ) -> None:
-        """FG=True, string filter on int column. Framework must raise ValueError.
-
-        MutatesFilterColumnToInt returns final_filters()=True but maps the
-        "status" column from strings to integers. The filter expects
-        status=="active" (string), so the dtype mismatch should be detected.
-        """
-        feature_name = "MutatesFilterColumnToInt"
-
-        features = Features([Feature(name=feature_name, initial_requested_data=True)])
-
-        global_filter = GlobalFilter()
-        global_filter.add_filter("status", "equal", {"value": "active"})
-
-        with pytest.raises(Exception, match="expects string comparison but column has type"):
+        with pytest.raises(Exception, match=case.match):
             MlodaTestRunner.run_api(
                 features,
                 compute_frameworks={PyArrowTable},
@@ -769,52 +689,3 @@ class TestFeatureGroupFinalFilters:
                 flight_server=flight_server,
                 global_filter=global_filter,
             )
-
-    def test_default_fg_dtype_mismatch_raises_error(self, modes: set[ParallelizationMode], flight_server: Any) -> None:
-        """FG=None (default), Engine=True, dtype mismatch. Framework must raise ValueError.
-
-        DefaultFGMutatesFilterColumnToInt does not override final_filters(),
-        so the engine fallback path applies. The dtype mismatch should be caught
-        on this path too, not only when the FG returns True.
-        """
-        feature_name = "DefaultFGMutatesFilterColumnToInt"
-
-        features = Features([Feature(name=feature_name, initial_requested_data=True)])
-
-        global_filter = GlobalFilter()
-        global_filter.add_filter("status", "equal", {"value": "active"})
-
-        with pytest.raises(Exception, match="expects string comparison but column has type"):
-            MlodaTestRunner.run_api(
-                features,
-                compute_frameworks={PyArrowTable},
-                parallelization_modes=modes,
-                flight_server=flight_server,
-                global_filter=global_filter,
-            )
-
-    def test_compatible_dtype_passes_validation(self, modes: set[ParallelizationMode], flight_server: Any) -> None:
-        """FG=True with compatible dtypes. No error should be raised.
-
-        CompatibleDtypeFeatureGroup returns final_filters()=True and the
-        "status" column is string, matching the filter value type. Row
-        elimination should proceed normally.
-        """
-        feature_name = "CompatibleDtypeFeatureGroup"
-
-        features = Features([Feature(name=feature_name, initial_requested_data=True)])
-
-        global_filter = GlobalFilter()
-        global_filter.add_filter("status", "equal", {"value": "active"})
-
-        result = MlodaTestRunner.run_api(
-            features,
-            compute_frameworks={PyArrowTable},
-            parallelization_modes=modes,
-            flight_server=flight_server,
-            global_filter=global_filter,
-        )
-
-        for res in result.results:
-            data = res.to_pydict()
-            assert data[feature_name] == [10, 30]

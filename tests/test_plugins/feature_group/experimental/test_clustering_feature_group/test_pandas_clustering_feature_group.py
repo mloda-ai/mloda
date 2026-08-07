@@ -68,13 +68,14 @@ class TestPandasClusteringFeatureGroup:
         assert len(updated_data["cluster_result"]) == len(sample_data)
         assert (updated_data["cluster_result"].values == result).all()
 
-    def test_perform_kmeans_clustering(self, sample_data: pd.DataFrame) -> None:
-        """Test the _perform_kmeans_clustering method."""
+    @pytest.mark.parametrize("algorithm", ["kmeans", "hierarchical", "spectral"])
+    def test_perform_clustering_with_fixed_k(self, sample_data: pd.DataFrame, algorithm: str) -> None:
+        """These take an explicit k and return exactly that many clusters; dbscan and affinity infer k instead."""
         # Extract features
         X = sample_data[["feature1", "feature2"]].values
 
-        # Perform K-means clustering
-        result = PandasClusteringFeatureGroup._perform_kmeans_clustering(X, 2)
+        cluster = getattr(PandasClusteringFeatureGroup, f"_perform_{algorithm}_clustering")
+        result = cluster(X, 2)
 
         # Check that the result has the expected shape
         assert len(result) == len(sample_data)
@@ -97,34 +98,6 @@ class TestPandasClusteringFeatureGroup:
         # So we check that there are at least 2 unique clusters (excluding noise)
         unique_clusters = np.unique(result)
         assert len(unique_clusters[unique_clusters >= 0]) >= 1
-
-    def test_perform_hierarchical_clustering(self, sample_data: pd.DataFrame) -> None:
-        """Test the _perform_hierarchical_clustering method."""
-        # Extract features
-        X = sample_data[["feature1", "feature2"]].values
-
-        # Perform hierarchical clustering
-        result = PandasClusteringFeatureGroup._perform_hierarchical_clustering(X, 2)
-
-        # Check that the result has the expected shape
-        assert len(result) == len(sample_data)
-
-        # Check that there are exactly 2 unique clusters
-        assert len(np.unique(result)) == 2
-
-    def test_perform_spectral_clustering(self, sample_data: pd.DataFrame) -> None:
-        """Test the _perform_spectral_clustering method."""
-        # Extract features
-        X = sample_data[["feature1", "feature2"]].values
-
-        # Perform spectral clustering
-        result = PandasClusteringFeatureGroup._perform_spectral_clustering(X, 2)
-
-        # Check that the result has the expected shape
-        assert len(result) == len(sample_data)
-
-        # Check that there are exactly 2 unique clusters
-        assert len(np.unique(result)) == 2
 
     def test_perform_affinity_clustering(self, sample_data: pd.DataFrame) -> None:
         """Test the _perform_affinity_clustering method."""

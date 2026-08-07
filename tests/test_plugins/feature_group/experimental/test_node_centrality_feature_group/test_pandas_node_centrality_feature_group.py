@@ -103,8 +103,9 @@ class TestPandasNodeCentralityFeatureGroup:
         assert centrality["C"] > 0
         assert centrality["D"] > 0
 
-    def test_calculate_closeness_centrality(self, sample_data: pd.DataFrame) -> None:
-        """Test the _calculate_closeness_centrality method."""
+    @pytest.mark.parametrize("algorithm", ["closeness", "betweenness", "eigenvector", "pagerank"])
+    def test_calculate_bounded_centrality(self, sample_data: pd.DataFrame, algorithm: str) -> None:
+        """These take (adj_matrix, nodes) and score every node within [0, 1]; degree is separate, it may exceed 1."""
         # Get unique nodes
         nodes = pd.concat([sample_data["source"], sample_data["target"]]).unique()
 
@@ -113,68 +114,8 @@ class TestPandasNodeCentralityFeatureGroup:
             sample_data, nodes, "source", "target", "weight", "undirected"
         )
 
-        # Calculate closeness centrality
-        centrality = PandasNodeCentralityFeatureGroup._calculate_closeness_centrality(adj_matrix, nodes)
-
-        # Check that the centrality has the correct shape
-        assert len(centrality) == len(nodes)
-
-        # Check that the centrality values are between 0 and 1
-        assert (centrality >= 0).all()
-        assert (centrality <= 1).all()
-
-    def test_calculate_betweenness_centrality(self, sample_data: pd.DataFrame) -> None:
-        """Test the _calculate_betweenness_centrality method."""
-        # Get unique nodes
-        nodes = pd.concat([sample_data["source"], sample_data["target"]]).unique()
-
-        # Create adjacency matrix
-        adj_matrix = PandasNodeCentralityFeatureGroup._create_adjacency_matrix(
-            sample_data, nodes, "source", "target", "weight", "undirected"
-        )
-
-        # Calculate betweenness centrality
-        centrality = PandasNodeCentralityFeatureGroup._calculate_betweenness_centrality(adj_matrix, nodes)
-
-        # Check that the centrality has the correct shape
-        assert len(centrality) == len(nodes)
-
-        # Check that the centrality values are between 0 and 1
-        assert (centrality >= 0).all()
-        assert (centrality <= 1).all()
-
-    def test_calculate_eigenvector_centrality(self, sample_data: pd.DataFrame) -> None:
-        """Test the _calculate_eigenvector_centrality method."""
-        # Get unique nodes
-        nodes = pd.concat([sample_data["source"], sample_data["target"]]).unique()
-
-        # Create adjacency matrix
-        adj_matrix = PandasNodeCentralityFeatureGroup._create_adjacency_matrix(
-            sample_data, nodes, "source", "target", "weight", "undirected"
-        )
-
-        # Calculate eigenvector centrality
-        centrality = PandasNodeCentralityFeatureGroup._calculate_eigenvector_centrality(adj_matrix, nodes)
-
-        # Check that the centrality has the correct shape
-        assert len(centrality) == len(nodes)
-
-        # Check that the centrality values are between 0 and 1
-        assert (centrality >= 0).all()
-        assert (centrality <= 1).all()
-
-    def test_calculate_pagerank_centrality(self, sample_data: pd.DataFrame) -> None:
-        """Test the _calculate_pagerank_centrality method."""
-        # Get unique nodes
-        nodes = pd.concat([sample_data["source"], sample_data["target"]]).unique()
-
-        # Create adjacency matrix
-        adj_matrix = PandasNodeCentralityFeatureGroup._create_adjacency_matrix(
-            sample_data, nodes, "source", "target", "weight", "undirected"
-        )
-
-        # Calculate PageRank centrality
-        centrality = PandasNodeCentralityFeatureGroup._calculate_pagerank_centrality(adj_matrix, nodes)
+        calculate = getattr(PandasNodeCentralityFeatureGroup, f"_calculate_{algorithm}_centrality")
+        centrality = calculate(adj_matrix, nodes)
 
         # Check that the centrality has the correct shape
         assert len(centrality) == len(nodes)

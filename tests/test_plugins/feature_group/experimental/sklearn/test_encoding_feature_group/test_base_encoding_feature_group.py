@@ -15,40 +15,16 @@ from mloda_plugins.feature_group.experimental.sklearn.encoding.pandas import Pan
 class TestEncodingFeatureGroup:
     """Test cases for the base EncodingFeatureGroup class."""
 
-    def test_match_feature_group_criteria_valid_onehot(self) -> None:
-        """Test that valid onehot encoding feature names match the criteria."""
-        valid_names = [
-            "category__onehot_encoded",
-            "status__onehot_encoded",
-            "product_type__onehot_encoded",
-        ]
-
-        for name in valid_names:
-            assert EncodingFeatureGroup.match_feature_group_criteria(FeatureName(name), Options({})), (
-                f"Feature name '{name}' should match criteria"
-            )
-
-    def test_match_feature_group_criteria_valid_label(self) -> None:
-        """Test that valid label encoding feature names match the criteria."""
-        valid_names = [
-            "category__label_encoded",
-            "status__label_encoded",
-            "priority__label_encoded",
-        ]
-
-        for name in valid_names:
-            assert EncodingFeatureGroup.match_feature_group_criteria(FeatureName(name), Options({})), (
-                f"Feature name '{name}' should match criteria"
-            )
-
-    def test_match_feature_group_criteria_valid_ordinal(self) -> None:
-        """Test that valid ordinal encoding feature names match the criteria."""
-        valid_names = [
-            "category__ordinal_encoded",
-            "grade__ordinal_encoded",
-            "size__ordinal_encoded",
-        ]
-
+    @pytest.mark.parametrize(
+        "valid_names",
+        [
+            ["category__onehot_encoded", "status__onehot_encoded", "product_type__onehot_encoded"],
+            ["category__label_encoded", "status__label_encoded", "priority__label_encoded"],
+            ["category__ordinal_encoded", "grade__ordinal_encoded", "size__ordinal_encoded"],
+        ],
+        ids=["onehot", "label", "ordinal"],
+    )
+    def test_match_feature_group_criteria_valid(self, valid_names: list[str]) -> None:
         for name in valid_names:
             assert EncodingFeatureGroup.match_feature_group_criteria(FeatureName(name), Options({})), (
                 f"Feature name '{name}' should match criteria"

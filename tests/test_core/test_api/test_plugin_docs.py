@@ -1,6 +1,7 @@
 import gc
 import inspect
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
@@ -100,24 +101,99 @@ class TestExtenderInfo:
         assert info.wraps == ["pandas", "polars"]
 
 
-class TestGetFeatureGroupDocs:
-    def test_get_feature_group_docs_returns_list(self) -> None:
-        """Test that get_feature_group_docs returns a list."""
-        result = get_feature_group_docs()
-        assert isinstance(result, list)
+@dataclass(frozen=True)
+class DocKind:
+    label: str
+    get_docs: Callable[..., list[Any]]
+    info_class: type[Any]
 
-    def test_get_feature_group_docs_returns_non_empty_list(self) -> None:
-        """Test that get_feature_group_docs returns a non-empty list (feature groups exist in codebase)."""
-        result = get_feature_group_docs()
-        assert len(result) > 0, "Expected at least one feature group to be discovered"
 
-    def test_get_feature_group_docs_returns_feature_group_info_objects(self) -> None:
-        """Test that all items in the returned list are FeatureGroupInfo instances."""
-        result = get_feature_group_docs()
+DOC_KINDS: list[DocKind] = [
+    DocKind("feature group", get_feature_group_docs, FeatureGroupInfo),
+    DocKind("compute framework", get_compute_framework_docs, ComputeFrameworkInfo),
+    DocKind("extender", get_extender_docs, ExtenderInfo),
+]
+
+
+@pytest.mark.parametrize("kind", DOC_KINDS, ids=[kind.label.replace(" ", "_") for kind in DOC_KINDS])
+class TestDocsGetterSharedBehaviour:
+    """Enumeration and the name=/search= filters behave the same for every doc kind."""
+
+    def test_returns_list(self, kind: DocKind) -> None:
+        assert isinstance(kind.get_docs(), list)
+
+    def test_returns_non_empty_list(self, kind: DocKind) -> None:
+        assert len(kind.get_docs()) > 0, f"Expected at least one {kind.label} to be discovered"
+
+    def test_returns_info_objects(self, kind: DocKind) -> None:
+        result = kind.get_docs()
         assert len(result) > 0, "Need at least one result to validate type"
         for item in result:
-            assert isinstance(item, FeatureGroupInfo)
+            assert isinstance(item, kind.info_class)
 
+    def test_name_filter_exact(self, kind: DocKind) -> None:
+        all_results = kind.get_docs()
+        assert len(all_results) > 0, f"Need at least one {kind.label} for filtering"
+
+        target_name = all_results[0].name
+        filtered = kind.get_docs(name=target_name)
+
+        assert len(filtered) >= 1
+        assert all(target_name.lower() in entry.name.lower() for entry in filtered)
+
+    def test_name_filter_partial(self, kind: DocKind) -> None:
+        all_results = kind.get_docs()
+        assert len(all_results) > 0, f"Need at least one {kind.label} for filtering"
+
+        target_name = next((entry.name for entry in all_results if len(entry.name) > 3), None)
+        assert target_name is not None, f"Need a {kind.label} name long enough to slice a substring from"
+
+        partial = target_name[:3]
+        filtered = kind.get_docs(name=partial)
+
+        assert len(filtered) >= 1
+        assert all(partial.lower() in entry.name.lower() for entry in filtered)
+
+    def test_name_filter_case_insensitive(self, kind: DocKind) -> None:
+        all_results = kind.get_docs()
+        assert len(all_results) > 0, f"Need at least one {kind.label} for filtering"
+
+        target_name = all_results[0].name
+        filtered_lower = kind.get_docs(name=target_name.lower())
+        filtered_upper = kind.get_docs(name=target_name.upper())
+
+        assert len(filtered_lower) == len(filtered_upper)
+        assert len(filtered_lower) >= 1
+
+    def test_search_filter(self, kind: DocKind) -> None:
+        all_results = kind.get_docs()
+        assert len(all_results) > 0, f"Need at least one {kind.label} for filtering"
+
+        description_words = all_results[0].description.split()
+        assert len(description_words) > 0, f"Need a {kind.label} description to take a search term from"
+
+        search_term = description_words[0]
+        filtered = kind.get_docs(search=search_term)
+
+        assert len(filtered) >= 1
+        assert all(search_term.lower() in entry.description.lower() for entry in filtered)
+
+    def test_search_filter_case_insensitive(self, kind: DocKind) -> None:
+        all_results = kind.get_docs()
+        assert len(all_results) > 0, f"Need at least one {kind.label} for filtering"
+
+        description_words = all_results[0].description.split()
+        assert len(description_words) > 0, f"Need a {kind.label} description to take a search term from"
+
+        search_term = description_words[0]
+        filtered_lower = kind.get_docs(search=search_term.lower())
+        filtered_upper = kind.get_docs(search=search_term.upper())
+
+        assert len(filtered_lower) == len(filtered_upper)
+        assert len(filtered_lower) >= 1
+
+
+class TestGetFeatureGroupDocs:
     def test_get_feature_group_docs_has_required_fields(self) -> None:
         """Test that each FeatureGroupInfo has all required fields populated."""
         result = get_feature_group_docs()
@@ -132,87 +208,6 @@ class TestGetFeatureGroupDocs:
             assert isinstance(fg_info.compute_frameworks, list)
             assert isinstance(fg_info.supported_feature_names, set)
             assert isinstance(fg_info.prefix, str) and len(fg_info.prefix) > 0
-
-    def test_get_feature_group_docs_name_filter_exact(self) -> None:
-        """Test that name filter works with exact match."""
-        # First get all to find a name to filter on
-        all_results = get_feature_group_docs()
-        assert len(all_results) > 0, "Need at least one feature group for filtering"
-
-        # Pick the first one and filter by exact name
-        target_name = all_results[0].name
-        filtered = get_feature_group_docs(name=target_name)
-
-        assert len(filtered) >= 1
-        assert all(target_name.lower() in fg.name.lower() for fg in filtered)
-
-    def test_get_feature_group_docs_name_filter_partial(self) -> None:
-        """Test that name filter works with partial match."""
-        # First get all to find a name to filter on
-        all_results = get_feature_group_docs()
-        assert len(all_results) > 0, "Need at least one feature group for filtering"
-
-        # Pick the first one and use a substring of its name
-        target_name = all_results[0].name
-        if len(target_name) > 3:
-            partial = target_name[:3]
-            filtered = get_feature_group_docs(name=partial)
-
-            assert len(filtered) >= 1
-            assert all(partial.lower() in fg.name.lower() for fg in filtered)
-
-    def test_get_feature_group_docs_name_filter_case_insensitive(self) -> None:
-        """Test that name filter is case-insensitive."""
-        all_results = get_feature_group_docs()
-        assert len(all_results) > 0, "Need at least one feature group for filtering"
-
-        target_name = all_results[0].name
-
-        # Filter with lowercase
-        filtered_lower = get_feature_group_docs(name=target_name.lower())
-        # Filter with uppercase
-        filtered_upper = get_feature_group_docs(name=target_name.upper())
-
-        # Both should return the same results
-        assert len(filtered_lower) == len(filtered_upper)
-        assert len(filtered_lower) >= 1
-
-    def test_get_feature_group_docs_search_filter(self) -> None:
-        """Test that search filter works on description."""
-        all_results = get_feature_group_docs()
-        assert len(all_results) > 0, "Need at least one feature group for filtering"
-
-        # Find a feature group with a description we can search for
-        target = all_results[0]
-        # Pick a word from the description (if multi-word)
-        description_words = target.description.split()
-        if len(description_words) > 0:
-            search_term = description_words[0]
-            filtered = get_feature_group_docs(search=search_term)
-
-            # Should find at least the target
-            assert len(filtered) >= 1
-            # All results should have the search term in their description
-            assert all(search_term.lower() in fg.description.lower() for fg in filtered)
-
-    def test_get_feature_group_docs_search_filter_case_insensitive(self) -> None:
-        """Test that search filter is case-insensitive."""
-        all_results = get_feature_group_docs()
-        assert len(all_results) > 0, "Need at least one feature group for filtering"
-
-        target = all_results[0]
-        description_words = target.description.split()
-        if len(description_words) > 0:
-            search_term = description_words[0]
-
-            # Filter with lowercase
-            filtered_lower = get_feature_group_docs(search=search_term.lower())
-            # Filter with uppercase
-            filtered_upper = get_feature_group_docs(search=search_term.upper())
-
-            # Both should return the same results
-            assert len(filtered_lower) == len(filtered_upper)
-            assert len(filtered_lower) >= 1
 
     def test_get_feature_group_docs_compute_framework_filter_case_insensitive(self) -> None:
         """Test that the compute_framework filter matches the framework name case-insensitively.
@@ -697,23 +692,6 @@ class TestDegradedReadLogging:
 
 
 class TestGetComputeFrameworkDocs:
-    def test_get_compute_framework_docs_returns_list(self) -> None:
-        """Test that get_compute_framework_docs returns a list."""
-        result = get_compute_framework_docs()
-        assert isinstance(result, list)
-
-    def test_get_compute_framework_docs_returns_non_empty_list(self) -> None:
-        """Test that get_compute_framework_docs returns a non-empty list (compute frameworks exist in codebase)."""
-        result = get_compute_framework_docs()
-        assert len(result) > 0, "Expected at least one compute framework to be discovered"
-
-    def test_get_compute_framework_docs_returns_compute_framework_info_objects(self) -> None:
-        """Test that all items in the returned list are ComputeFrameworkInfo instances."""
-        result = get_compute_framework_docs()
-        assert len(result) > 0, "Need at least one result to validate type"
-        for item in result:
-            assert isinstance(item, ComputeFrameworkInfo)
-
     def test_get_compute_framework_docs_has_required_fields(self) -> None:
         """Test that each ComputeFrameworkInfo has all required fields populated."""
         result = get_compute_framework_docs()
@@ -728,87 +706,6 @@ class TestGetComputeFrameworkDocs:
             assert isinstance(cfw_info.expected_data_framework, str)
             assert isinstance(cfw_info.has_merge_engine, bool)
             assert isinstance(cfw_info.has_filter_engine, bool)
-
-    def test_get_compute_framework_docs_name_filter_exact(self) -> None:
-        """Test that name filter works with exact match."""
-        # First get all to find a name to filter on
-        all_results = get_compute_framework_docs()
-        assert len(all_results) > 0, "Need at least one compute framework for filtering"
-
-        # Pick the first one and filter by exact name
-        target_name = all_results[0].name
-        filtered = get_compute_framework_docs(name=target_name)
-
-        assert len(filtered) >= 1
-        assert all(target_name.lower() in cfw.name.lower() for cfw in filtered)
-
-    def test_get_compute_framework_docs_name_filter_partial(self) -> None:
-        """Test that name filter works with partial match."""
-        # First get all to find a name to filter on
-        all_results = get_compute_framework_docs()
-        assert len(all_results) > 0, "Need at least one compute framework for filtering"
-
-        # Pick the first one and use a substring of its name
-        target_name = all_results[0].name
-        if len(target_name) > 3:
-            partial = target_name[:3]
-            filtered = get_compute_framework_docs(name=partial)
-
-            assert len(filtered) >= 1
-            assert all(partial.lower() in cfw.name.lower() for cfw in filtered)
-
-    def test_get_compute_framework_docs_name_filter_case_insensitive(self) -> None:
-        """Test that name filter is case-insensitive."""
-        all_results = get_compute_framework_docs()
-        assert len(all_results) > 0, "Need at least one compute framework for filtering"
-
-        target_name = all_results[0].name
-
-        # Filter with lowercase
-        filtered_lower = get_compute_framework_docs(name=target_name.lower())
-        # Filter with uppercase
-        filtered_upper = get_compute_framework_docs(name=target_name.upper())
-
-        # Both should return the same results
-        assert len(filtered_lower) == len(filtered_upper)
-        assert len(filtered_lower) >= 1
-
-    def test_get_compute_framework_docs_search_filter(self) -> None:
-        """Test that search filter works on description."""
-        all_results = get_compute_framework_docs()
-        assert len(all_results) > 0, "Need at least one compute framework for filtering"
-
-        # Find a compute framework with a description we can search for
-        target = all_results[0]
-        # Pick a word from the description (if multi-word)
-        description_words = target.description.split()
-        if len(description_words) > 0:
-            search_term = description_words[0]
-            filtered = get_compute_framework_docs(search=search_term)
-
-            # Should find at least the target
-            assert len(filtered) >= 1
-            # All results should have the search term in their description
-            assert all(search_term.lower() in cfw.description.lower() for cfw in filtered)
-
-    def test_get_compute_framework_docs_search_filter_case_insensitive(self) -> None:
-        """Test that search filter is case-insensitive."""
-        all_results = get_compute_framework_docs()
-        assert len(all_results) > 0, "Need at least one compute framework for filtering"
-
-        target = all_results[0]
-        description_words = target.description.split()
-        if len(description_words) > 0:
-            search_term = description_words[0]
-
-            # Filter with lowercase
-            filtered_lower = get_compute_framework_docs(search=search_term.lower())
-            # Filter with uppercase
-            filtered_upper = get_compute_framework_docs(search=search_term.upper())
-
-            # Both should return the same results
-            assert len(filtered_lower) == len(filtered_upper)
-            assert len(filtered_lower) >= 1
 
     def test_get_compute_framework_docs_available_only_true_filters_correctly(self) -> None:
         """Test that available_only=True filters to only available frameworks."""
@@ -929,23 +826,6 @@ class TestSafeVersionGuard:
 
 
 class TestGetExtenderDocs:
-    def test_get_extender_docs_returns_list(self) -> None:
-        """Test that get_extender_docs returns a list."""
-        result = get_extender_docs()
-        assert isinstance(result, list)
-
-    def test_get_extender_docs_returns_non_empty_list(self) -> None:
-        """Test that get_extender_docs returns a non-empty list (extenders exist in codebase)."""
-        result = get_extender_docs()
-        assert len(result) > 0, "Expected at least one extender to be discovered"
-
-    def test_get_extender_docs_returns_extender_info_objects(self) -> None:
-        """Test that all items in the returned list are ExtenderInfo instances."""
-        result = get_extender_docs()
-        assert len(result) > 0, "Need at least one result to validate type"
-        for item in result:
-            assert isinstance(item, ExtenderInfo)
-
     def test_get_extender_docs_has_required_fields(self) -> None:
         """Test that each ExtenderInfo has all required fields populated."""
         result = get_extender_docs()
@@ -957,87 +837,6 @@ class TestGetExtenderDocs:
             assert isinstance(ext_info.description, str) and len(ext_info.description) > 0
             assert isinstance(ext_info.module, str) and len(ext_info.module) > 0
             assert isinstance(ext_info.wraps, list)
-
-    def test_get_extender_docs_name_filter_exact(self) -> None:
-        """Test that name filter works with exact match."""
-        # First get all to find a name to filter on
-        all_results = get_extender_docs()
-        assert len(all_results) > 0, "Need at least one extender for filtering"
-
-        # Pick the first one and filter by exact name
-        target_name = all_results[0].name
-        filtered = get_extender_docs(name=target_name)
-
-        assert len(filtered) >= 1
-        assert all(target_name.lower() in ext.name.lower() for ext in filtered)
-
-    def test_get_extender_docs_name_filter_partial(self) -> None:
-        """Test that name filter works with partial match."""
-        # First get all to find a name to filter on
-        all_results = get_extender_docs()
-        assert len(all_results) > 0, "Need at least one extender for filtering"
-
-        # Pick the first one and use a substring of its name
-        target_name = all_results[0].name
-        if len(target_name) > 3:
-            partial = target_name[:3]
-            filtered = get_extender_docs(name=partial)
-
-            assert len(filtered) >= 1
-            assert all(partial.lower() in ext.name.lower() for ext in filtered)
-
-    def test_get_extender_docs_name_filter_case_insensitive(self) -> None:
-        """Test that name filter is case-insensitive."""
-        all_results = get_extender_docs()
-        assert len(all_results) > 0, "Need at least one extender for filtering"
-
-        target_name = all_results[0].name
-
-        # Filter with lowercase
-        filtered_lower = get_extender_docs(name=target_name.lower())
-        # Filter with uppercase
-        filtered_upper = get_extender_docs(name=target_name.upper())
-
-        # Both should return the same results
-        assert len(filtered_lower) == len(filtered_upper)
-        assert len(filtered_lower) >= 1
-
-    def test_get_extender_docs_search_filter(self) -> None:
-        """Test that search filter works on description."""
-        all_results = get_extender_docs()
-        assert len(all_results) > 0, "Need at least one extender for filtering"
-
-        # Find an extender with a description we can search for
-        target = all_results[0]
-        # Pick a word from the description (if multi-word)
-        description_words = target.description.split()
-        if len(description_words) > 0:
-            search_term = description_words[0]
-            filtered = get_extender_docs(search=search_term)
-
-            # Should find at least the target
-            assert len(filtered) >= 1
-            # All results should have the search term in their description
-            assert all(search_term.lower() in ext.description.lower() for ext in filtered)
-
-    def test_get_extender_docs_search_filter_case_insensitive(self) -> None:
-        """Test that search filter is case-insensitive."""
-        all_results = get_extender_docs()
-        assert len(all_results) > 0, "Need at least one extender for filtering"
-
-        target = all_results[0]
-        description_words = target.description.split()
-        if len(description_words) > 0:
-            search_term = description_words[0]
-
-            # Filter with lowercase
-            filtered_lower = get_extender_docs(search=search_term.lower())
-            # Filter with uppercase
-            filtered_upper = get_extender_docs(search=search_term.upper())
-
-            # Both should return the same results
-            assert len(filtered_lower) == len(filtered_upper)
-            assert len(filtered_lower) >= 1
 
     def test_get_extender_docs_wraps_filter(self) -> None:
         """Test that wraps filter works when filtering by wrapped function type."""

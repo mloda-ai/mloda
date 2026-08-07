@@ -20,73 +20,37 @@ class MockComputeFramework(ComputeFramework):
     pass
 
 
+_DISCRIMINATOR_CASES = [
+    pytest.param(
+        {"key": "value"}, "right", "Internal error.*right_discriminator is None", id="right_side_none_is_actionable"
+    ),
+    pytest.param(
+        {"key": "value"}, "left", "Internal error.*left_discriminator is None", id="left_side_none_is_actionable"
+    ),
+    pytest.param({"CsvReader": "file_a.csv"}, "right", "CsvReader.*file_a.csv", id="contains_actual_values"),
+    pytest.param({"key": "value"}, "right", "mloda-ai/mloda/issues", id="contains_report_url"),
+    pytest.param({"key": "value"}, "right", "both.*left_discriminator and right_discriminator", id="contains_guidance"),
+]
+
+
 class TestCheckPointerDiscriminatorErrors:
     """Tests for check_pointer discriminator invariant messages."""
 
     def _make_execution_plan(self) -> ExecutionPlan:
         return ExecutionPlan()
 
-    def test_right_discriminator_none_error_is_actionable(self) -> None:
+    @pytest.mark.parametrize(("discriminator", "none_side", "expected_match"), _DISCRIMINATOR_CASES)
+    def test_discriminator_invariant_error_message(
+        self, discriminator: dict[str, str], none_side: str, expected_match: str
+    ) -> None:
         ep = self._make_execution_plan()
         graph = MagicMock(spec=Graph)
 
         link = MagicMock(spec=Link)
-        link.left_discriminator = {"key": "value"}
-        link.right_discriminator = None
+        link.left_discriminator = None if none_side == "left" else discriminator
+        link.right_discriminator = None if none_side == "right" else discriminator
 
         link_fw = (link, MockComputeFramework, MockComputeFramework)
 
-        with pytest.raises(ValueError, match="Internal error.*right_discriminator is None"):
-            ep.check_pointer({"key": "value"}, link_fw, graph, uuid4())
-
-    def test_left_discriminator_none_error_is_actionable(self) -> None:
-        ep = self._make_execution_plan()
-        graph = MagicMock(spec=Graph)
-
-        link = MagicMock(spec=Link)
-        link.left_discriminator = None
-        link.right_discriminator = {"key": "value"}
-
-        link_fw = (link, MockComputeFramework, MockComputeFramework)
-
-        with pytest.raises(ValueError, match="Internal error.*left_discriminator is None"):
-            ep.check_pointer({"key": "value"}, link_fw, graph, uuid4())
-
-    def test_discriminator_error_contains_actual_values(self) -> None:
-        ep = self._make_execution_plan()
-        graph = MagicMock(spec=Graph)
-
-        link = MagicMock(spec=Link)
-        link.left_discriminator = {"CsvReader": "file_a.csv"}
-        link.right_discriminator = None
-
-        link_fw = (link, MockComputeFramework, MockComputeFramework)
-
-        with pytest.raises(ValueError, match="CsvReader.*file_a.csv"):
-            ep.check_pointer({"CsvReader": "file_a.csv"}, link_fw, graph, uuid4())
-
-    def test_discriminator_error_contains_report_url(self) -> None:
-        ep = self._make_execution_plan()
-        graph = MagicMock(spec=Graph)
-
-        link = MagicMock(spec=Link)
-        link.left_discriminator = {"key": "value"}
-        link.right_discriminator = None
-
-        link_fw = (link, MockComputeFramework, MockComputeFramework)
-
-        with pytest.raises(ValueError, match="mloda-ai/mloda/issues"):
-            ep.check_pointer({"key": "value"}, link_fw, graph, uuid4())
-
-    def test_discriminator_error_contains_guidance(self) -> None:
-        ep = self._make_execution_plan()
-        graph = MagicMock(spec=Graph)
-
-        link = MagicMock(spec=Link)
-        link.left_discriminator = {"key": "value"}
-        link.right_discriminator = None
-
-        link_fw = (link, MockComputeFramework, MockComputeFramework)
-
-        with pytest.raises(ValueError, match="both.*left_discriminator and right_discriminator"):
-            ep.check_pointer({"key": "value"}, link_fw, graph, uuid4())
+        with pytest.raises(ValueError, match=expected_match):
+            ep.check_pointer(discriminator, link_fw, graph, uuid4())

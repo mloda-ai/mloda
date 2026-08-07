@@ -306,3 +306,6 @@ class ComputeFrameworkExecutor:
             process, command_queue, result_queue = existing
 
         self.worker_manager.send_command(cfw_uuid, step)
+        # Record the assignment so a worker that exits still owing these results is
+        # detectable, including the clean exit the data-drop path produces.
+        self.worker_manager.record_assignment(cfw_uuid, set(step.get_uuids()))

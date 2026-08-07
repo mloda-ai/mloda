@@ -408,6 +408,106 @@ class TestWorkerManagerDeadWorkerDetection:
         assert manager.find_dead_workers() == []
 
 
+class TestWorkerManagerOrphanedStepDetection:
+    """A worker that exits while steps are still assigned to it must be detectable.
+
+    find_dead_workers only reports a non-zero exitcode. The data-drop path breaks the
+    worker loop and the process exits with code 0, so it is invisible there while the steps
+    dispatched to it stay in currently_running_steps with no result ever arriving.
+    """
+
+    @staticmethod
+    def _exited(manager: WorkerManager, exitcode: int) -> UUID:
+        """Register a worker whose process has already exited with *exitcode*."""
+        cfw_uuid = uuid4()
+        process = MagicMock()
+        process.exitcode = exitcode
+        process.is_alive.return_value = False
+        manager.process_register[cfw_uuid] = (process, MagicMock(), MagicMock())
+        return cfw_uuid
+
+    def test_a_clean_exit_owing_a_step_is_reported(self) -> None:
+        """Exitcode 0 is the case find_dead_workers cannot see, so it is the case that matters."""
+        manager = WorkerManager()
+        cfw_uuid = self._exited(manager, 0)
+        step_uuid = uuid4()
+        manager.record_assignment(cfw_uuid, {step_uuid})
+
+        # Premise: the existing check stays silent, which is why this one has to exist.
+        assert manager.find_dead_workers() == []
+
+        assert manager.find_orphaned_steps() == [(cfw_uuid, 0, [step_uuid])]
+
+    def test_an_abnormal_exit_owing_a_step_is_reported_too(self) -> None:
+        """Any exitcode counts: an exited process will never answer, whatever the code."""
+        manager = WorkerManager()
+        cfw_uuid = self._exited(manager, -9)
+        step_uuid = uuid4()
+        manager.record_assignment(cfw_uuid, {step_uuid})
+
+        assert manager.find_orphaned_steps() == [(cfw_uuid, -9, [step_uuid])]
+
+    def test_a_step_whose_result_already_arrived_is_not_reported(self) -> None:
+        """The worker finished its work and then exited; nothing was lost."""
+        manager = WorkerManager()
+        cfw_uuid = self._exited(manager, 0)
+        step_uuid = uuid4()
+        manager.record_assignment(cfw_uuid, {step_uuid})
+        manager.result_uuids_collection.add(step_uuid)
+
+        assert manager.find_orphaned_steps() == []
+
+    def test_only_the_steps_still_owed_are_named(self) -> None:
+        """A partially-drained worker reports the remainder, not everything it was sent."""
+        manager = WorkerManager()
+        cfw_uuid = self._exited(manager, 0)
+        done, pending = uuid4(), uuid4()
+        manager.record_assignment(cfw_uuid, {done, pending})
+        manager.result_uuids_collection.add(done)
+
+        assert manager.find_orphaned_steps() == [(cfw_uuid, 0, [pending])]
+
+    def test_a_live_worker_is_never_orphaned(self) -> None:
+        """A running worker still owes results; that is work in progress, not a loss."""
+        manager = WorkerManager()
+        cfw_uuid = uuid4()
+        process = MagicMock()
+        process.exitcode = None
+        process.is_alive.return_value = True
+        manager.process_register[cfw_uuid] = (process, MagicMock(), MagicMock())
+        manager.record_assignment(cfw_uuid, {uuid4()})
+
+        assert manager.find_orphaned_steps() == []
+
+    def test_an_exited_worker_with_no_assignments_is_not_reported(self) -> None:
+        """A worker stopped after draining its queue exits owing nothing."""
+        manager = WorkerManager()
+        self._exited(manager, 0)
+
+        assert manager.find_orphaned_steps() == []
+
+    def test_record_assignment_accumulates_across_dispatches(self) -> None:
+        """multi_execute_step runs once per step, so assignments must union, not replace."""
+        manager = WorkerManager()
+        cfw_uuid = self._exited(manager, 0)
+        first, second = uuid4(), uuid4()
+        manager.record_assignment(cfw_uuid, {first})
+        manager.record_assignment(cfw_uuid, {second})
+
+        assert manager.assigned_steps[cfw_uuid] == {first, second}
+        assert manager.find_orphaned_steps() == [(cfw_uuid, 0, sorted([first, second], key=str))]
+
+    def test_each_exited_worker_is_reported_separately(self) -> None:
+        """The run loop names every affected cfw, not only the first one found."""
+        manager = WorkerManager()
+        first_cfw = self._exited(manager, 0)
+        second_cfw = self._exited(manager, 0)
+        manager.record_assignment(first_cfw, {uuid4()})
+        manager.record_assignment(second_cfw, {uuid4()})
+
+        assert {entry[0] for entry in manager.find_orphaned_steps()} == {first_cfw, second_cfw}
+
+
 class TestWorkerManagerDropCompletion:
     """Test waiting for drop completion messages."""
 

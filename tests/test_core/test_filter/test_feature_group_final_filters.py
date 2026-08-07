@@ -689,3 +689,29 @@ class TestFeatureGroupFinalFilters:
                 flight_server=flight_server,
                 global_filter=global_filter,
             )
+
+    def test_compatible_dtype_passes_validation(self, modes: set[ParallelizationMode], flight_server: Any) -> None:
+        """FG=True with compatible numeric dtypes. No error should be raised.
+
+        CompatibleDtypeFeatureGroup returns final_filters()=True and the
+        "rank" column is integer (int64), matching the integer filter value
+        type (rank == 1). Row elimination should proceed normally.
+        """
+        feature_name = "CompatibleDtypeFeatureGroup"
+
+        features = Features([Feature(name=feature_name, initial_requested_data=True)])
+
+        global_filter = GlobalFilter()
+        global_filter.add_filter("rank", "equal", {"value": 1})
+
+        result = MlodaTestRunner.run_api(
+            features,
+            compute_frameworks={PyArrowTable},
+            parallelization_modes=modes,
+            flight_server=flight_server,
+            global_filter=global_filter,
+        )
+
+        for res in result.results:
+            data = res.to_pydict()
+            assert data[feature_name] == [10, 30]

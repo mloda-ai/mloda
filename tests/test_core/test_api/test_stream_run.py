@@ -3,9 +3,6 @@
 These tests verify:
 1. mlodaAPI has a stream_run method that is callable
 2. stream_run returns a generator (types.GeneratorType), not a list
-
-All tests are expected to FAIL because:
-- mlodaAPI does not have a stream_run method yet
 """
 
 import types
@@ -13,6 +10,10 @@ import types
 
 from mloda.user import Feature, Features, ParallelizationMode, mlodaAPI
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
+
+# stream_run plans eagerly, so ``EngineRunnerTest1`` must be a loaded FeatureGroup subclass at call
+# time. Import its defining module here rather than relying on another test package's conftest.
+import tests.test_core.test_integration.test_core.test_runner_one_compute_framework  # noqa: F401
 
 
 class TestStreamRunImport:

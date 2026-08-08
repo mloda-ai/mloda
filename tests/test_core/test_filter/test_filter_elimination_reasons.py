@@ -1062,21 +1062,37 @@ class TestEveryMatchReportIsScopedToOneSetup:
         )
 
 
-class TestTwoFiltersOnOneNameAttributeNothing:
-    """The ledger keys on the filter feature NAME, so a shared name cannot attribute a fact to one filter."""
+class TestTwoFiltersOnOneNameAreExplainedIndependently:
+    """The ledger keys on the filter's uuid, so a shared name still attributes each fact to its own filter."""
 
-    def test_both_warnings_are_the_bare_sentence(self, caplog: pytest.LogCaptureFixture) -> None:
-        """One filter loses at scope and the other at the pin; neither message may quote the other's fact."""
+    def test_each_warning_quotes_its_own_fact(self, caplog: pytest.LogCaptureFixture) -> None:
+        """One filter loses at scope and the other at the pin; each message quotes its own gate."""
+        from mloda.core.prepare.resolution_failure_renderer import near_miss_text
+
         snapshot = _drive_shared_name(caplog, _losing_pair())
 
         assert snapshot.escaped is None, f"nothing may cross identify_matched_filters: {snapshot.escaped}"
         assert snapshot.names == (), f"neither filter may attach, got: {snapshot.names}"
-        assert snapshot.unmatched == (BARE_MESSAGE, BARE_MESSAGE), (
-            f"an unattributable fact must not be quoted, got: {snapshot.unmatched}"
+
+        scope_expected = (
+            f"{BARE_MESSAGE} {NEAREST_MISS_PHRASE}{near_miss_text(PLAIN_CLASS_NAME, SCOPE_STAGE, SCOPE_REASON)}"
+        )
+        pin_prefix = f"{BARE_MESSAGE} {NEAREST_MISS_PHRASE}{PLAIN_CLASS_NAME} ({_STAGE_LABELS[FRAMEWORK_PIN_STAGE]}):"
+
+        # Both filters carry one name, so warn_on_unmatched_filters' sort key cannot order them: assert unordered.
+        assert len(snapshot.unmatched) == 2, f"one warning per declared filter, got: {snapshot.unmatched}"
+        assert scope_expected in snapshot.unmatched, (
+            f"the scope-losing filter must quote its own scope fact, got: {snapshot.unmatched}"
+        )
+        assert any(message.startswith(pin_prefix) for message in snapshot.unmatched), (
+            f"the pinned filter must quote its own framework-pin fact, got: {snapshot.unmatched}"
+        )
+        assert BARE_MESSAGE not in snapshot.unmatched, (
+            f"no filter may be left without a reason now that facts are attributable, got: {snapshot.unmatched}"
         )
 
     def test_one_filter_on_that_name_still_names_its_nearest_miss(self, caplog: pytest.LogCaptureFixture) -> None:
-        """The guard covers the ambiguous case only: a single filter still gets its suffix."""
+        """The single-filter case is unchanged by the re-keying."""
         from mloda.core.prepare.resolution_failure_renderer import near_miss_text
 
         snapshot = _drive_shared_name(caplog, (_filter_feature(scope=MISSING_SCOPE),))
@@ -1085,10 +1101,11 @@ class TestTwoFiltersOnOneNameAttributeNothing:
         assert snapshot.unmatched == (expected,), f"one filter on the name keeps its suffix, got: {snapshot.unmatched}"
 
     def test_the_pair_renders_the_same_way_on_every_run(self, caplog: pytest.LogCaptureFixture) -> None:
-        """Which of the two facts the ledger keeps rides set iteration order; the messages must not."""
-        runs = tuple(_drive_shared_name(caplog, _losing_pair()).unmatched for _ in range(REPEAT_RUNS))
+        """Both facts are stored now, so set iteration order can no longer decide which one survives."""
+        runs = tuple(frozenset(_drive_shared_name(caplog, _losing_pair()).unmatched) for _ in range(REPEAT_RUNS))
 
-        assert set(runs) == {(BARE_MESSAGE, BARE_MESSAGE)}, f"the runs diverged: {sorted(set(runs))}"
+        assert len(set(runs)) == 1, f"the runs diverged: {[sorted(run) for run in sorted(set(runs), key=sorted)]}"
+        assert len(runs[0]) == 2, f"each run must report both filters, got: {sorted(runs[0])}"
 
 
 class TestTheDeepestFactKeepsTheKey:

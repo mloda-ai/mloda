@@ -252,10 +252,12 @@ value whose truthiness test raises, that filter is a non-match for that probe, l
 return, and the drop is recorded in `GlobalFilter.dropped_filters`. A typed decline the matcher
 records lands in the same ledger, at DEBUG. A framework-owned raise still aborts.
 
-`GlobalFilter.dropped_filters` maps (FeatureGroup, filter feature name) to the gate that dropped the
-filter and that gate's reason, for the current engine setup only. A plain `False` is an ordinary
-non-match and records nothing. A matcher defect takes the key from a stored near-miss; otherwise the
-deepest gate the filter reached keeps it, and two facts at one depth leave the first one in place.
+`GlobalFilter.dropped_filters` maps (FeatureGroup, filter feature name, filter uuid) to the gate that
+dropped the filter and that gate's reason, for the current engine setup only. The uuid is the filter's
+identity, so two filters declared over one column each keep their own entry. A plain `False` is an
+ordinary non-match and records nothing. A matcher defect takes the key from a stored near-miss;
+otherwise the deepest gate the filter reached keeps it, and two facts at one depth leave the first one
+in place.
 
 A filter that matches no FeatureGroup at all is reported once after setup, with its nearest miss
 appended when one was recorded: across FeatureGroups the deepest gate wins, and a matcher defect
@@ -269,8 +271,8 @@ The parenthesized label, `(scope)` here, names the gate in the vocabulary of the
 found" error's
 [near-miss bullets](troubleshooting/feature-group-resolution-errors.md#the-eliminated-candidates-block).
 
-Two filters declared on one column name share the ledger key, so neither report can quote a fact and
-both stay the bare sentence.
+Two filters declared on one column name are explained independently, each quoting the gate its own
+declaration reached.
 
 ### Filter scope is the `FeatureSet`
 

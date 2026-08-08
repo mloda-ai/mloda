@@ -276,14 +276,16 @@ def _drive_criteria(
     global_filter = GlobalFilter()
     ledger: Optional[dict[Any, Any]] = None
     items: list[tuple[Any, Any]] = []
+    # ONE filter across every call: the ledger keys on the filter's uuid, so a fresh SingleFilter per call
+    # would be a fresh declaration rather than a repeat. identify_matched_filters likewise deepcopies the
+    # stored filter, which carries its uuid, so this is the shape a real repeat has.
+    single = _single(filter_feature_name, options)
     try:
         results: list[Optional[bool]] = []
         escaped: Optional[str] = None
         with caplog.at_level(logging.DEBUG, logger=GF_LOGGER_NAME):
             for _ in range(calls):
-                value, failure = _capture_type_name(
-                    partial(global_filter.criteria, fg, _single(filter_feature_name, options), None)
-                )
+                value, failure = _capture_type_name(partial(global_filter.criteria, fg, single, None))
                 results.append(value)
                 if failure is not None:
                     escaped = failure
@@ -294,7 +296,7 @@ def _drive_criteria(
             results=tuple(results),
             escaped=escaped,
             has_ledger=ledger is not None,
-            keyed_by_group_and_filter=ledger is not None and (fg, filter_feature_name) in ledger,
+            keyed_by_group_and_filter=ledger is not None and (fg, filter_feature_name, single.uuid) in ledger,
             entries=tuple((str(key[0].get_class_name()), str(key[1])) for key, _ in items),
             reasons=tuple(str(_reason_of(recorded)) for _, recorded in items),
             reason_types=tuple(type(_reason_of(recorded)).__name__ for _, recorded in items),

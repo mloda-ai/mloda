@@ -494,12 +494,15 @@ def _drive_criteria(make: _RtxFactory, caplog: pytest.LogCaptureFixture, calls: 
     fg, read_window = make()
     global_filter = GlobalFilter()
     items: list[tuple[Any, Any]] = []
+    # ONE filter across every call: the ledger keys on the filter's uuid, so a fresh SingleFilter per call
+    # would be a fresh declaration rather than a repeat against the same key.
+    single = _single(FILTER_FEATURE)
     try:
         value: Any = None
         escaped: str | None = None
         with caplog.at_level(logging.DEBUG, logger=GF_LOGGER_NAME):
             for _ in range(calls):
-                value, call_escaped = _capture(partial(global_filter.criteria, fg, _single(FILTER_FEATURE), None))
+                value, call_escaped = _capture(partial(global_filter.criteria, fg, single, None))
                 escaped = escaped or call_escaped
         items = sorted(global_filter.dropped_filters.items(), key=lambda item: str(item[0]))
         return _RtxCriteriaSnapshot(

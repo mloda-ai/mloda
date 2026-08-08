@@ -74,9 +74,13 @@ class GlobalFilter:
         self.matched_filter_uuids: set[UUID] = set()
         self._warned_divergences: set[str] = set()
         # Own state, not dropped_filters: a falsy non-bool is an ordinary non-match, never a recorded drop.
-        self._reported_falsy_matches: set[tuple[type[FeatureGroup], str]] = set()
-        # WARNING dedupe for defect drops; the ledger itself no longer decides first-ness.
-        self._warned_drops: set[tuple[type[FeatureGroup], str]] = set()
+        # Keyed by the rendered line, like _warned_divergences: two reports under one column can differ.
+        self._reported_falsy_matches: set[str] = set()
+        # WARNING dedupe for defect drops, also keyed by the rendered line.
+        self._warned_drops: set[str] = set()
+        # Which keys the ledger has already taken a defect for; separate from the log dedupe above,
+        # because the ledger is per declaration while the log is per distinct message.
+        self._recorded_drops: set[tuple[type[FeatureGroup], str]] = set()
 
     def reset_match_tracking(self) -> None:
         """Every match report is scoped to one engine setup, so a later setup names only what it consulted.
@@ -85,6 +89,7 @@ class GlobalFilter:
         self.dropped_filters.clear()
         self._warned_divergences.clear()
         self._warned_drops.clear()
+        self._recorded_drops.clear()
         self._reported_falsy_matches.clear()
 
     def rehash_stored_filters(self) -> None:
@@ -366,37 +371,35 @@ class GlobalFilter:
         )
 
     def _record_dropped_filter(self, feature_group: type[FeatureGroup], filter_feature_name: str, reason: str) -> None:
-        """Record the drop: defect drops warn once per key and take the key from a stored near-miss."""
+        """Record the drop: the ledger takes the first defect per key and outranks a stored near-miss,
+        while the log dedupes on the rendered line, so a second drop with a new reason is still reported."""
         key = (feature_group, filter_feature_name)
-        first = key not in self._warned_drops
-        self._warned_drops.add(key)
-        if first:
+        if key not in self._recorded_drops:
+            self._recorded_drops.add(key)
             self.dropped_filters[key] = Elimination(stage="matcher_error", reason=reason)
-        logger.log(
-            logging.WARNING if first else logging.DEBUG,
-            "%s %s while matching filter feature '%s'; dropping that filter for this feature group.",
-            feature_group.get_class_name(),
-            reason,
-            filter_feature_name,
+        message = (
+            f"{feature_group.get_class_name()} {reason} while matching filter feature "
+            f"'{filter_feature_name}'; dropping that filter for this feature group."
         )
+        first = message not in self._warned_drops
+        self._warned_drops.add(message)
+        logger.log(logging.WARNING if first else logging.DEBUG, "%s", message)
 
     def _report_falsy_match(self, feature_group: type[FeatureGroup], filter_feature_name: str, returned: Any) -> None:
-        """Report the detached filter: WARNING on a key's first report, DEBUG after, like `_record_dropped_filter`.
+        """Report the detached filter: WARNING on a line's first report, DEBUG after, like `_record_dropped_filter`.
 
         Both fields are plugin-owned reads and this runs past the hook call's containment, so each degrades alone.
         """
-        key = (feature_group, filter_feature_name)
-        first = key not in self._reported_falsy_matches
-        self._reported_falsy_matches.add(key)
-        logger.log(
-            logging.WARNING if first else logging.DEBUG,
-            "%s returned a falsy non-bool (%s) while matching filter feature '%s'; that filter is not attached. "
-            "Return True explicitly to keep it.",
-            safe_field(lambda: feature_group.get_class_name(), "<unnamed feature group>"),
+        message = (
+            f"{safe_field(lambda: feature_group.get_class_name(), '<unnamed feature group>')} "
             # The type name only: the value's own __repr__ is plugin code and must not run here.
-            safe_field(lambda: type(returned).__name__, "<unreadable type>"),
-            filter_feature_name,
+            f"returned a falsy non-bool ({safe_field(lambda: type(returned).__name__, '<unreadable type>')}) "
+            f"while matching filter feature '{filter_feature_name}'; that filter is not attached. "
+            "Return True explicitly to keep it."
         )
+        first = message not in self._reported_falsy_matches
+        self._reported_falsy_matches.add(message)
+        logger.log(logging.WARNING if first else logging.DEBUG, "%s", message)
 
     def domain(self, filter: SingleFilter, feature_domain: None | Domain, feature_group: type[FeatureGroup]) -> bool:
         # We have matched already the feature group and the feature.

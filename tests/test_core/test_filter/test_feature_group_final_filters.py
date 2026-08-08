@@ -21,7 +21,7 @@ Validation (filter column must be present when row elimination applies):
 """
 
 from dataclasses import dataclass
-from typing import Any, Optional
+from typing import Any, Optional, cast
 
 import pytest
 import pyarrow as pa
@@ -402,10 +402,16 @@ class DefaultFGMutatesFilterColumnToInt(FeatureGroup):
 
 
 class CompatibleDtypeFeatureGroup(FeatureGroup):
-    """FG returns final_filters()=True with compatible dtypes.
+    """FG returns final_filters()=True with a column dtype that differs from the filter value's.
 
-    The filter expects status=="active" (string) and the column is also string.
-    This should pass without error.
+    The filter compares against a Python ``str``, whose natural Arrow type is
+    ``string``; the column is ``large_string``. The two are different Arrow types,
+    so validation has a real difference to accept rather than the trivially equal
+    case ``ForceFinalOnFinalEngine`` already covers, and elimination still has to
+    work across the difference.
+
+    The negative direction is covered by ``MutatesFilterColumnToInt`` and
+    ``DefaultFGMutatesFilterColumnToInt``.
     """
 
     @classmethod
@@ -426,7 +432,13 @@ class CompatibleDtypeFeatureGroup(FeatureGroup):
             {
                 cls.get_class_name(): [10, 20, 30, 40],
                 "status": ["active", "inactive", "active", "inactive"],
-            }
+            },
+            schema=pa.schema(
+                [
+                    pa.field(cls.get_class_name(), pa.int64()),
+                    pa.field("status", pa.large_string()),
+                ]
+            ),
         )
 
 
@@ -463,6 +475,25 @@ FILTER_COLUMN_VALIDATION_CASES: list[FilterColumnValidationCase] = [
         "default_fg_dtype_mismatch", DefaultFGMutatesFilterColumnToInt, STRING_FILTER_ON_NON_STRING
     ),
 ]
+
+
+def test_compatible_dtype_case_differs_from_the_agreement_case() -> None:
+    """The compatible-dtype case must carry a real dtype difference to be worth running.
+
+    It was byte-identical to ``ForceFinalOnFinalEngine`` apart from its name, so it
+    re-ran an already covered path and validation had nothing to accept.
+    """
+    agree = ForceFinalOnFinalEngine.calculate_feature(None, cast(FeatureSet, None))
+    compatible = CompatibleDtypeFeatureGroup.calculate_feature(None, cast(FeatureSet, None))
+
+    agree_status = agree.schema.field("status").type
+    compatible_status = compatible.schema.field("status").type
+
+    assert agree_status != compatible_status, "compatible_dtype must not repeat the agreement case's dtype"
+    # Different Arrow types, but both still classify as string, so a string filter
+    # value is compatible with either and the case is a positive one.
+    assert ComputeFramework._is_string_dtype(str(agree_status).lower())
+    assert ComputeFramework._is_string_dtype(str(compatible_status).lower())
 
 
 @PARALLELIZATION_MODES_SYNC_THREADING

@@ -57,7 +57,9 @@ jobs:
       env:
         PYTEST_WORKERS: 2
       run: tox ${{ matrix.toxenv }}
-      timeout-minutes: 3
+      # The slowest envs run ~185s, so a 3-minute cap failed steps whose tox
+      # reported OK. Kept well above that, and still short enough to kill a hang.
+      timeout-minutes: 10
 
   notebooks:
     # Runs the marimo example notebooks; slower than the unit-test matrix.

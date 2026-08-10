@@ -10,6 +10,7 @@ from __future__ import annotations
 import gc
 import logging
 from collections.abc import Callable
+from copy import deepcopy
 from dataclasses import dataclass
 from functools import partial
 from typing import Any, Optional, TypeVar, cast
@@ -274,6 +275,8 @@ def _drive_criteria(
     caplog.clear()
     fg = make_fg()
     global_filter = GlobalFilter()
+    # The engine probes a per-match deepcopy of one declaration, so all `calls` share one ledger key.
+    declared = _single(filter_feature_name, options)
     ledger: Optional[dict[Any, Any]] = None
     items: list[tuple[Any, Any]] = []
     try:
@@ -281,9 +284,7 @@ def _drive_criteria(
         escaped: Optional[str] = None
         with caplog.at_level(logging.DEBUG, logger=GF_LOGGER_NAME):
             for _ in range(calls):
-                value, failure = _capture_type_name(
-                    partial(global_filter.criteria, fg, _single(filter_feature_name, options), None)
-                )
+                value, failure = _capture_type_name(partial(global_filter.criteria, fg, deepcopy(declared), None))
                 results.append(value)
                 if failure is not None:
                     escaped = failure
@@ -294,7 +295,7 @@ def _drive_criteria(
             results=tuple(results),
             escaped=escaped,
             has_ledger=ledger is not None,
-            keyed_by_group_and_filter=ledger is not None and (fg, filter_feature_name) in ledger,
+            keyed_by_group_and_filter=ledger is not None and (fg, filter_feature_name, declared.uuid) in ledger,
             entries=tuple((str(key[0].get_class_name()), str(key[1])) for key, _ in items),
             reasons=tuple(str(_reason_of(recorded)) for _, recorded in items),
             reason_types=tuple(type(_reason_of(recorded)).__name__ for _, recorded in items),
@@ -302,7 +303,7 @@ def _drive_criteria(
             debugs=_messages(caplog, logging.DEBUG),
         )
     finally:
-        del fg, global_filter, ledger, items
+        del fg, global_filter, declared, ledger, items
         gc.collect()
 
 
@@ -317,13 +318,13 @@ class TestDroppedFilterIsRecorded:
         assert ledger == {}, f"a fresh GlobalFilter has dropped nothing, got: {ledger!r}"
 
     def test_contained_raise_records_group_filter_and_reason(self, caplog: pytest.LogCaptureFixture) -> None:
-        """One entry, keyed by (feature group, filter feature name), carrying the WARNING's own reason text."""
+        """One entry, keyed by (feature group, filter feature name, filter uuid), carrying the WARNING's reason."""
         snapshot = _drive_criteria(_make_raising_filter_matcher_fg, FILTER_FEATURE_RAISING, caplog)
 
         assert snapshot.escaped is None, f"the raise must not cross GlobalFilter.criteria: {snapshot.escaped}"
         assert snapshot.has_ledger, "GlobalFilter must expose a dropped_filters ledger"
         assert snapshot.entries == ((UNIT_CLASS_NAME, FILTER_FEATURE_RAISING),), (
-            f"exactly one drop, keyed by group and filter feature, got: {snapshot.entries}"
+            f"exactly one drop, whose key names the group and the filter feature, got: {snapshot.entries}"
         )
         assert snapshot.keyed_by_group_and_filter, "the key must be the group CLASS, not its name or a stand-in"
         assert snapshot.reason_types == ("str",), (

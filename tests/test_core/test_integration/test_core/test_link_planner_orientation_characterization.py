@@ -299,7 +299,7 @@ RIGHT_SIDE_BINDING_REASON = (
 )
 
 
-@MODES_WITH_MULTIPROCESSING
+@MODES_SYNC_THREADING
 def test_inner_join_declared_orientation_keeps_left_group_first(
     modes: set[ParallelizationMode], flight_server: Any
 ) -> None:

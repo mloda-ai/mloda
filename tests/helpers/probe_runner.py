@@ -12,18 +12,28 @@ def run_probes(probe: Path, count: int) -> list[dict[str, str]]:
     """Run ``probe`` ``count`` times, each in its own interpreter, and parse the one json line it prints."""
     assert probe.is_file(), f"{probe} does not exist"
 
-    outputs: list[dict[str, str]] = []
-    for _ in range(count):
+    processes = [
         # Safe: fixed argv, no shell, no user input.
-        completed = subprocess.run(  # nosec B603
+        subprocess.Popen(  # nosec B603
             [sys.executable, str(probe)],
-            capture_output=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
             text=True,
-            timeout=_PROBE_TIMEOUT,
         )
-        assert completed.returncode == 0, f"probe interpreter failed:\n{completed.stderr}"
-        lines = [line for line in completed.stdout.splitlines() if line.strip()]
-        assert len(lines) == 1, f"probe printed {len(lines)} lines, expected exactly one: {completed.stdout!r}"
-        parsed: dict[str, str] = json.loads(lines[0])
-        outputs.append(parsed)
+        for _ in range(count)
+    ]
+
+    outputs: list[dict[str, str]] = []
+    try:
+        for process in processes:
+            stdout, stderr = process.communicate(timeout=_PROBE_TIMEOUT)
+            assert process.returncode == 0, f"probe interpreter failed:\n{stderr}"
+            lines = [line for line in stdout.splitlines() if line.strip()]
+            assert len(lines) == 1, f"probe printed {len(lines)} lines, expected exactly one: {stdout!r}"
+            parsed: dict[str, str] = json.loads(lines[0])
+            outputs.append(parsed)
+    finally:
+        for process in processes:
+            if process.poll() is None:
+                process.kill()
     return outputs

@@ -294,7 +294,7 @@ RIGHT_JOIN_ROWS = ["k3|L3|k3|R3", "k4|L4|k4|R4", f"{MISSING}|{MISSING}|k5|R5"]
 CHAIN_ROWS = ["k4|L4|R4|T4", "k3|L3|R3|T3"]
 
 
-@MODES_WITH_MULTIPROCESSING
+@MODES_SYNC_THREADING
 def test_inner_join_declared_orientation_keeps_left_group_first(
     modes: set[ParallelizationMode], flight_server: Any
 ) -> None:

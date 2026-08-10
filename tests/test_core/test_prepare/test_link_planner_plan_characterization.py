@@ -585,7 +585,7 @@ def test_a_hand_built_inconsistent_trekker_key_yields_an_inconsistent_joinstep()
 
 
 def test_a_right_join_plans_the_joinstep_where_the_declared_right_side_runs() -> None:
-    """RIGHT swaps the frameworks before the trekker lookup, so only the merge order still follows the trekker."""
+    """RIGHT swaps the frameworks, so the destination holds the declared right side and the merge sides swap back."""
     declared = _pair_scenario(link_factory=Link.right, child_cfw=PandasDataFrame)
     _trek(declared, PyArrowTable, PandasDataFrame)
     inverted = _pair_scenario(link_factory=Link.right, child_cfw=PandasDataFrame)
@@ -599,7 +599,7 @@ def test_a_right_join_plans_the_joinstep_where_the_declared_right_side_runs() ->
     assert declared_step.source_framework is PyArrowTable
     assert declared_step.destination_framework_uuids == {declared.right_uuid}
     assert declared_step.source_framework_uuids == {declared.left_uuid}
-    assert declared_step.swap_merge_sides is False
+    assert declared_step.swap_merge_sides is True
 
     assert isinstance(inverted_step, JoinStep)
     assert inverted_step.destination_framework is PandasDataFrame
@@ -607,6 +607,35 @@ def test_a_right_join_plans_the_joinstep_where_the_declared_right_side_runs() ->
     assert inverted_step.destination_framework_uuids == {inverted.right_uuid}
     assert inverted_step.source_framework_uuids == {inverted.left_uuid}
     assert inverted_step.swap_merge_sides is True
+
+
+def test_a_right_join_reached_through_a_reversed_key_keeps_the_declared_merge_sides() -> None:
+    """Hand built: no planner path reverses this key, so keep the shape; a reversed key must not swap the sides."""
+    planned = _pair_scenario(link_factory=Link.right)
+    _trek(planned, PandasDataFrame, PyArrowTable)
+
+    join_step = _run(planned, PandasDataFrame, PyArrowTable)
+
+    assert isinstance(join_step, JoinStep)
+    assert join_step.destination_framework is PyArrowTable
+    assert join_step.source_framework is PandasDataFrame
+    assert join_step.destination_framework_uuids == {planned.left_uuid}
+    assert join_step.source_framework_uuids == {planned.right_uuid}
+    assert join_step.swap_merge_sides is False
+
+
+def test_a_left_join_inverted_after_queueing_swaps_the_merge_sides() -> None:
+    planned = _pair_scenario(link_factory=Link.left, child_cfw=PandasDataFrame)
+    _trek(planned, PandasDataFrame, PyArrowTable)
+
+    join_step = _run(planned, PyArrowTable, PandasDataFrame)
+
+    assert isinstance(join_step, JoinStep)
+    assert join_step.destination_framework is PandasDataFrame
+    assert join_step.source_framework is PyArrowTable
+    assert join_step.destination_framework_uuids == {planned.right_uuid}
+    assert join_step.source_framework_uuids == {planned.left_uuid}
+    assert join_step.swap_merge_sides is True
 
 
 # Fresh interpreters are slow to start, so this one needs more than the suite-wide per-test budget.

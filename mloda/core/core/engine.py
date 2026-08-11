@@ -148,7 +148,12 @@ class Engine:
             self.global_filter.rehash_stored_filters()
 
         execution_planner = ExecutionPlan(self.global_filter, self.api_input_data_collection)
-        execution_planner.create_execution_plan(planned_queue, graph, resolver.resolver_links.get_link_trekker())
+        execution_planner.create_execution_plan(
+            planned_queue,
+            graph,
+            resolver.resolver_links.get_link_trekker(),
+            resolver.resolver_compute_framework.declared_frameworks,
+        )
         return execution_planner
 
     def setup_features_recursion(self, features: Features, requested: bool = True) -> None:

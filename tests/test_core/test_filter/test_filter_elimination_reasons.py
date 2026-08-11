@@ -67,6 +67,15 @@ SECOND_DEFECT_MESSAGE = "fer_second_boom"
 DEFECT_MESSAGE = "fer_defect_after_decline"
 DECLINE_REASON = "fer_decline_reason"
 UNKNOWN_STAGE = "fer_unknown_stage_hint"  # a free-form hint no engine stage knows
+PERCENT_DEFECT_MESSAGE = "fer_percent_%s_%d_boom"  # a raise message whose % must not be read as a format directive
+
+REPORT_OPTION_KEY = "fer_report_option_key"  # the option the host carries and the option-keyed probe reads back
+REPORT_VALUE_A = "fer_report_val_a"
+REPORT_VALUE_B = "fer_report_val_b"
+OPTION_KEYED_DEFECT = "fer_option_keyed_defect"  # prefix of the option-keyed raise message
+
+CLASS_NAME_RAISE_MESSAGE = "fer_class_name_boom"  # raised by the group that cannot say what it is called
+UNNAMED_GROUP_FALLBACK = "<unnamed feature group>"  # what a guarded read of a group's class name degrades to
 
 GROUP_DOMAIN = "fer_group_domain"  # declared by the group-domain probe
 FEATURE_DOMAIN = "fer_feature_domain"  # carried by the resolved host feature
@@ -152,6 +161,11 @@ def _stage_reason(stage: str) -> str:
     return f"fer_stage_reason_{stage}"
 
 
+def _defect_message(value: str) -> str:
+    """The raise message the option-keyed defect probe makes for one probed option value."""
+    return f"{OPTION_KEYED_DEFECT}_{value}"
+
+
 def _fact_of(recorded: Any) -> tuple[str, str]:
     """(stage, reason) of one recorded fact. Any, because the ledger's value type is what this suite pins."""
     return str(recorded.stage), str(recorded.reason)
@@ -199,6 +213,11 @@ def _host_feature(domain: str | None = None, pin: type[ComputeFramework] | None 
 def _plain_host() -> Feature:
     """The host carrying neither a domain nor a pin."""
     return _host_feature()
+
+
+def _keyed_host_feature(value: str) -> Feature:
+    """A host carrying the option value unify_options merges onto a filter feature that omits it."""
+    return Feature(HOST_FEATURE, Options(group={REPORT_OPTION_KEY: value}))
 
 
 def _domain_losing_host() -> Feature:
@@ -457,6 +476,57 @@ def _make_falsy_decline_fg() -> type[FeatureGroup]:
     return FerFalsyDeclineFG
 
 
+def _make_option_keyed_defect_fg() -> type[FeatureGroup]:
+    """A throwaway group whose raise message is keyed off the probed options, so what it reads decides the reason."""
+    gc.collect()
+
+    class FerOptionKeyedDefectFG(FeatureGroup):
+        @classmethod
+        def feature_names_supported(cls) -> set[str]:
+            return {HOST_FEATURE}
+
+        @classmethod
+        def match_feature_group_criteria(
+            cls,
+            feature_name: FeatureName | str,
+            options: Options,
+            data_access_collection: DataAccessCollection | None = None,
+        ) -> bool:
+            if str(feature_name) == FILTER_FEATURE:
+                raise RuntimeError(_defect_message(str(options.get(REPORT_OPTION_KEY))))
+            return str(feature_name) in cls.feature_names_supported()
+
+    return FerOptionKeyedDefectFG
+
+
+def _make_unnameable_defect_fg() -> type[FeatureGroup]:
+    """A throwaway group that raises for the filter feature and cannot say what it is called either."""
+    gc.collect()
+
+    class FerUnnameableDefectFG(FeatureGroup):
+        @classmethod
+        def feature_names_supported(cls) -> set[str]:
+            return {HOST_FEATURE}
+
+        # The @final on get_class_name is a mypy pin; a plugin can still install this override at runtime.
+        @classmethod  # type: ignore[misc]
+        def get_class_name(cls) -> str:
+            raise RuntimeError(CLASS_NAME_RAISE_MESSAGE)
+
+        @classmethod
+        def match_feature_group_criteria(
+            cls,
+            feature_name: FeatureName | str,
+            options: Options,
+            data_access_collection: DataAccessCollection | None = None,
+        ) -> bool:
+            if str(feature_name) == FILTER_FEATURE:
+                raise RuntimeError(RUNTIME_MESSAGE)
+            return str(feature_name) in cls.feature_names_supported()
+
+    return FerUnnameableDefectFG
+
+
 def _make_decline_then_defect_fg() -> type[FeatureGroup]:
     """A throwaway group whose hook declines with a recorded reason once, then raises on the next ask."""
     gc.collect()
@@ -697,6 +767,37 @@ def _losing_pair_messages() -> tuple[str, ...]:
             for stage, reason in ((SCOPE_STAGE, SCOPE_REASON), (FRAMEWORK_PIN_STAGE, PIN_REASON))
         )
     )
+
+
+@dataclass(frozen=True)
+class _DegradedDropSnapshot:
+    """Plain-data readout of a drop whose group cannot name itself. Holds no class and reads no ledger key."""
+
+    escaped: str | None
+    names: tuple[str, ...]
+    drops: int
+    warnings: tuple[str, ...]
+
+
+def _drive_unnameable_drop(make: _Factory, caplog: pytest.LogCaptureFixture) -> _DegradedDropSnapshot:
+    """Match one declared filter against a group whose class name raises; the ledger is counted, never keyed."""
+    caplog.clear()
+    fg = make()
+    global_filter = _new_global_filter((FILTER_FEATURE,))
+    matched: set[SingleFilter] | None = None
+    try:
+        with caplog.at_level(logging.DEBUG, logger=GF_LOGGER_NAME):
+            matched, escaped = _capture(partial(global_filter.identify_matched_filters, fg, _plain_host(), None))
+        return _DegradedDropSnapshot(
+            escaped=escaped,
+            names=tuple(sorted(single.name for single in matched or ())),
+            # A count, not the keys: reading a key back would call the unreadable class name again.
+            drops=len(global_filter.dropped_filters),
+            warnings=_messages(caplog, logging.WARNING),
+        )
+    finally:
+        del fg, global_filter, matched
+        gc.collect()
 
 
 @dataclass(frozen=True)
@@ -1311,6 +1412,40 @@ class TestTheReportsDedupeOnTheRenderedLine:
         )
 
 
+class TestTheHostFeaturesOptionsReachTheReport:
+    """unify_options merges the host's options onto the per-match filter copy, so one declaration renders per host."""
+
+    def test_one_declaration_probed_against_two_hosts_warns_per_host(self, caplog: pytest.LogCaptureFixture) -> None:
+        """The probed value comes from the host, not from the declaration, and each rendered reason is its own."""
+        snapshot = _drive(
+            [_make_option_keyed_defect_fg],
+            caplog,
+            make_hosts=(partial(_keyed_host_feature, REPORT_VALUE_A), partial(_keyed_host_feature, REPORT_VALUE_B)),
+        )
+
+        assert snapshot.escaped is None, f"nothing may cross identify_matched_filters: {snapshot.escaped}"
+        reported = _carrying(snapshot.warnings, DROP_REPORT_FRAGMENT)
+        assert len(reported) == 2, f"each host's reason must warn, got: {reported}, at DEBUG: {snapshot.debugs}"
+        assert len(_carrying(reported, _defect_message(REPORT_VALUE_A))) == 1, f"the first host's reason: {reported}"
+        assert len(_carrying(reported, _defect_message(REPORT_VALUE_B))) == 1, f"the second host's reason: {reported}"
+        assert _carrying(snapshot.debugs, DROP_REPORT_FRAGMENT) == (), (
+            f"neither line repeats the other, so nothing belongs at DEBUG, got: {snapshot.debugs}"
+        )
+
+
+class TestAReasonCarryingAPercentIsLoggedVerbatim:
+    """The line is logged pre-rendered, so logging must not re-format it against args it does not have."""
+
+    def test_a_percent_in_the_reason_reaches_the_warning_unchanged(self, caplog: pytest.LogCaptureFixture) -> None:
+        """A re-formatted line fails inside logging's own handler, where nothing would fail a test."""
+        snapshot = _drive_matching([partial(_make_varying_defect_fg, (PERCENT_DEFECT_MESSAGE,))], caplog)
+
+        assert snapshot.escaped is None, f"nothing may cross identify_matched_filters: {snapshot.escaped}"
+        reported = _carrying(snapshot.warnings, DROP_REPORT_FRAGMENT)
+        assert len(reported) == 1, f"the drop must warn once, got: {snapshot.warnings}"
+        assert PERCENT_DEFECT_MESSAGE in reported[0], f"the reason must survive byte for byte: {reported[0]}"
+
+
 class TestFilterIdentitySurvivesThePerMatchDeepcopy:
     """Every gate records against a per-match deepcopy, so the copy must carry the declaration's uuid."""
 
@@ -1407,3 +1542,20 @@ class TestAnUnreadableGroupDomainDegrades:
         assert stage == DOMAIN_STAGE, f"the domain gate owns this drop, got stage: {stage}"
         assert OTHER_DOMAIN in reason, f"the reason must name the filter feature's declared domain: {reason}"
         assert UNREADABLE_DOMAIN_FALLBACK in reason, f"an unreadable domain name must degrade: {reason}"
+
+
+class TestAnUnreadableGroupNameOnTheDropPathDegrades:
+    """get_class_name is plugin-overridable, so the drop report's read of it degrades like its siblings' do."""
+
+    def test_a_drop_whose_group_cannot_name_itself_still_warns(self, caplog: pytest.LogCaptureFixture) -> None:
+        """The report runs past the hook call's containment, so its own read must not end the matching pass."""
+        snapshot = _drive_unnameable_drop(_make_unnameable_defect_fg, caplog)
+
+        assert snapshot.escaped is None, f"nothing may cross identify_matched_filters: {snapshot.escaped}"
+        assert snapshot.names == (), f"a raising hook must attach no filter, got: {snapshot.names}"
+        assert snapshot.drops == 1, f"the drop must still be recorded, got: {snapshot.drops}"
+        reported = _carrying(snapshot.warnings, DROP_REPORT_FRAGMENT)
+        assert len(reported) == 1, f"the drop must still be reported once, got: {snapshot.warnings}"
+        assert UNNAMED_GROUP_FALLBACK in reported[0], f"an unreadable group name must degrade: {reported[0]}"
+        assert RUNTIME_MESSAGE in reported[0], f"the fields that ARE readable must still be named: {reported[0]}"
+        assert FILTER_FEATURE in reported[0], f"the report must name the filter feature: {reported[0]}"

@@ -306,6 +306,68 @@ class TestPythonDictMergeEngineOneToMany:
         }
 
 
+class TestPythonDictDirectionalJoinShape:
+    """Column precedence and output column order of the left/right joins.
+
+    Both directions share one merge helper, so these pin the two axes that helper can
+    silently get wrong: which side wins an overlapping non-key column, and which side's
+    columns come first in the result.
+    """
+
+    @pytest.fixture
+    def overlap_left_data(self) -> Any:
+        """Left dataset whose payload column name collides with the right one."""
+        return {"idx": [1, 3], "v": ["a", "b"]}
+
+    @pytest.fixture
+    def overlap_right_data(self) -> Any:
+        """Right dataset whose payload column name collides with the left one."""
+        return {"idx": [1, 2], "v": ["x", "z"]}
+
+    @pytest.mark.parametrize(
+        ("jointype", "expected"),
+        [
+            (JoinType.LEFT, {"idx": [1, 3], "v": ["x", "b"]}),
+            (JoinType.RIGHT, {"idx": [1, 2], "v": ["x", "z"]}),
+        ],
+        ids=["left", "right"],
+    )
+    def test_directional_join_overlapping_column_takes_right_value(
+        self,
+        jointype: JoinType,
+        expected: dict[str, list[Any]],
+        overlap_left_data: Any,
+        overlap_right_data: Any,
+        index_obj: Any,
+    ) -> None:
+        """The right side wins a shared non-key column in both directions; left-winning gives 'a' on the matched row."""
+        engine = PythonDictMergeEngine()
+
+        result = engine.merge(overlap_left_data, overlap_right_data, make_merge_link(jointype, index_obj, index_obj))
+
+        assert result == expected
+
+    @pytest.mark.parametrize(
+        ("jointype", "expected_columns"),
+        [
+            (JoinType.LEFT, ["idx", "lv", "rv"]),
+            (JoinType.RIGHT, ["idx", "rv", "lv"]),
+        ],
+        ids=["left", "right"],
+    )
+    def test_directional_join_orders_columns_primary_side_first(
+        self, jointype: JoinType, expected_columns: list[str], index_obj: Any
+    ) -> None:
+        """Columns follow the driving side first: left-then-right for LEFT, right-then-left for RIGHT."""
+        engine = PythonDictMergeEngine()
+        left_data = {"idx": [1, 3], "lv": ["a", "b"]}
+        right_data = {"idx": [1, 2], "rv": ["x", "z"]}
+
+        result = engine.merge(left_data, right_data, make_merge_link(jointype, index_obj, index_obj))
+
+        assert list(result.keys()) == expected_columns
+
+
 class TestPythonDictMergeEngineMultiIndex(MultiIndexMergeEngineTestBase):
     """Test PythonDictMergeEngine multi-index support using shared test scenarios."""
 

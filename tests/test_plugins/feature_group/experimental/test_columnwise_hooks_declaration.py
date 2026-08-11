@@ -16,6 +16,7 @@ that, so no family base is allowed to reach into the deep core path again.
 from __future__ import annotations
 
 import ast
+import gc
 import importlib
 import inspect
 from pathlib import Path
@@ -30,6 +31,7 @@ from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser
     FeatureChainParserMixin,
     missing_columnwise_hooks,
 )
+from mloda_plugins.feature_group.columnwise_hooks import ColumnwiseHooks
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.base import AggregatedFeatureGroup
 from mloda_plugins.feature_group.experimental.clustering.base import ClusteringFeatureGroup
 from mloda_plugins.feature_group.experimental.data_quality.missing_value.base import MissingValueFeatureGroup
@@ -253,9 +255,9 @@ def test_declaration_matches_the_hooks_each_base_module_calls() -> None:
 def test_no_family_module_calls_a_hook_its_base_does_not_declare() -> None:
     """Widened anti-drift sweep: a hook called ANYWHERE in a family must appear in that family's declaration.
 
-    The base-module sweep above only sees base.py, but the hooks are called from framework modules too
-    (missing_value/python_dict.py already calls the discovery hook). A framework module reaching for a
-    hook its family base never declared is exactly the drift the declaration is supposed to prevent.
+    The base-module sweep above only sees base.py; this one sees every module under the tree. Today all
+    hook-calling modules are the 12 base.py files, so it adds nothing, and that is the point: the day a
+    framework module reaches for a hook its family base never declared, this fails instead of the run.
     """
     declarations = _family_declarations()
     offenders: list[str] = []
@@ -311,3 +313,32 @@ def test_shipped_family_class_reports_no_missing_hook(plugin_class: type[Any]) -
     assert missing_columnwise_hooks(plugin_class) == expected, (
         f"missing_columnwise_hooks disagrees with the direct hook comparison for {plugin_class.__name__}"
     )
+
+
+def test_class_without_the_discovery_hook_is_reported_and_raises() -> None:
+    """If the report goes empty here, an unimplemented hook passes the pre-flight check and fails mid-run instead."""
+
+    class _DiscoveryHookProbe(ColumnwiseHooks, AggregatedFeatureGroup):
+        """Owns the writer only, so the declared discovery hook stays unimplemented."""
+
+        @classmethod
+        def _add_result_to_data(cls, data: Any, feature_name: str, result: Any) -> Any:
+            return data
+
+    try:
+        assert DISCOVERY_HOOK in _DiscoveryHookProbe.REQUIRED_COLUMNWISE_HOOKS, (
+            f"precondition: mixing in ColumnwiseHooks must declare {DISCOVERY_HOOK} required"
+        )
+        assert missing_columnwise_hooks(_DiscoveryHookProbe) == [DISCOVERY_HOOK], (
+            f"missing_columnwise_hooks must report {DISCOVERY_HOOK} missing: a runtime {DISCOVERY_HOOK} on "
+            "ColumnwiseHooks shadows the raising default the reader compares against, blinding the check"
+        )
+        with pytest.raises(NotImplementedError) as exc_info:
+            _DiscoveryHookProbe._check_source_features_exist({"col_a": [1]}, ["col_a"])
+        assert DISCOVERY_HOOK in str(exc_info.value), (
+            f"the reported hook must be the one that fails at runtime: {exc_info.value}"
+        )
+    finally:
+        # A FeatureGroup subclass lingers in __subclasses__() until collected, and other suites sweep those.
+        del _DiscoveryHookProbe
+        gc.collect()

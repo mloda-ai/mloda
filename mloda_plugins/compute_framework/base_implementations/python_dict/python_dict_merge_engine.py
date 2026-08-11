@@ -273,8 +273,9 @@ class PythonDictMergeEngine(BaseMergeEngine):
         secondary_groups = self._group_by_key(secondary_rows, secondary_cols)
 
         out_columns = self._ordered_columns(primary_data.keys(), secondary_data.keys())
+        secondary_key_columns = set(secondary_cols)
         fill_columns = [
-            col for col in secondary_data.keys() if col not in set(secondary_cols) and col not in primary_data
+            col for col in secondary_data.keys() if col not in secondary_key_columns and col not in primary_data
         ]
 
         result = []

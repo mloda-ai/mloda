@@ -6,10 +6,10 @@ tree to a family base directory, and a framework adapter belongs to no family.
 
 from __future__ import annotations
 
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, cast
 
-from mloda.provider import FeatureGroup
-from mloda.user.python_dict import row_count
+from mloda.provider import COLUMN_DISCOVERY_HOOKS, FeatureGroup
+from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_utils import row_count
 
 
 class ColumnwiseHooks:
@@ -18,23 +18,31 @@ class ColumnwiseHooks:
     # True: raise as soon as ANY source name is missing. False: raise only when NONE of them exists.
     STRICT_SOURCE_FEATURES: bool = True
 
-    @classmethod
-    def _get_available_columns(cls, data: Any) -> set[str]:
-        raise NotImplementedError(f"{cls.__name__} must implement _get_available_columns")
+    # The check below routes through the discovery hook, so every class mixing this in owes all three.
+    REQUIRED_COLUMNWISE_HOOKS = COLUMN_DISCOVERY_HOOKS
+
+    if TYPE_CHECKING:
+        # Declaration only: a runtime body here would shadow the raising default on
+        # FeatureChainParserMixin, which missing_columnwise_hooks compares against by identity.
+        @classmethod
+        def _get_available_columns(cls, data: Any) -> set[str]: ...
 
     @classmethod
     def _check_source_features_exist(cls, data: Any, feature_names: list[str]) -> None:
         """Check that the resolved source features exist, as strictly as the family declares."""
         available = cls._get_available_columns(data)
         missing = [name for name in feature_names if name not in available]
+        # Sorted by str so the message is deterministic for every framework and survives mixed-type
+        # column labels, at the cost of a pandas frame's natural column order.
         if cls.STRICT_SOURCE_FEATURES:
             if missing:
                 raise ValueError(
-                    f"Source features not found in data: {missing}. Available columns: {sorted(available)}"
+                    f"Source features not found in data: {missing}. Available columns: {sorted(available, key=str)}"
                 )
         elif len(missing) == len(feature_names):
             raise ValueError(
-                f"None of the source features {feature_names} found in data. Available columns: {sorted(available)}"
+                f"None of the source features {feature_names} found in data."
+                f" Available columns: {sorted(available, key=str)}"
             )
 
 
@@ -64,8 +72,6 @@ class SklearnPandasColumnwiseHooks(PandasColumnwiseHooks):
                 named_columns = cast("type[FeatureGroup]", cls).apply_naming_convention(result, feature_name)
                 for col_name, col_data in named_columns.items():
                     data[col_name] = col_data
-        elif hasattr(result, "shape") and len(result.shape) == 1:
-            data[feature_name] = result
         else:
             data[feature_name] = result
 
@@ -82,9 +88,7 @@ class PyArrowColumnwiseHooks(ColumnwiseHooks):
     @classmethod
     def _add_result_to_data(cls, data: Any, feature_name: str, result: Any) -> Any:
         if feature_name in data.schema.names:
-            column_index = data.schema.names.index(feature_name)
-            data = data.remove_column(column_index)
-            return data.append_column(feature_name, result)
+            data = data.remove_column(data.schema.names.index(feature_name))
         return data.append_column(feature_name, result)
 
 

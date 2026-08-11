@@ -84,7 +84,7 @@ def matches_feature_group_scope(feature_group: type[FeatureGroup], scope: str | 
     """
     if isinstance(scope, type):
         return issubclass(feature_group, scope)
-    # Name first: get_class_name() is @final and just returns __name__, while issubclass() on an ABCMeta
+    # Name first: __name__ is an attribute read no plugin can raise out of, while issubclass() on an ABCMeta
     # class is the expensive check, so the name gate keeps it off nearly every MRO entry.
     return any(
         ancestor.__name__ == scope and ancestor is not FeatureGroup and issubclass(ancestor, FeatureGroup)
@@ -203,7 +203,8 @@ class IdentifyFeatureGroupClass:
         'Did you mean' suggestion that merely echoes a candidate its near-miss block already names."""
         hints: set[str] = set()
         for feature_group in result.eliminations:
-            hints.add(feature_group.get_class_name())
+            # __name__, unlike the catalog: this suppresses what the near-miss block renders, which is __name__.
+            hints.add(feature_group.__name__)
             prefix = self._prefix_of(feature_group)
             if prefix:
                 hints.add(prefix)
@@ -228,7 +229,7 @@ class IdentifyFeatureGroupClass:
 
     def _domain_name(self, feature_group: type[FeatureGroup]) -> str | None:
         """Best-effort domain name. None when get_domain() raised or returned no Domain: renders without a suffix."""
-        field = f"{feature_group.get_class_name()}.get_domain"
+        field = f"{feature_group.__name__}.get_domain"
         domain, error = self._domain_outcome(feature_group)
         # error, not domain, is what tells a raise apart from a malformed return: both leave domain unusable.
         if error is not None:
@@ -249,7 +250,7 @@ class IdentifyFeatureGroupClass:
             self._declared_frameworks[feature_group] = safe_field(
                 lambda: frozenset(feature_group.compute_framework_definition()),
                 frozenset(),
-                field=f"{feature_group.get_class_name()}.compute_framework_definition",
+                field=f"{feature_group.__name__}.compute_framework_definition",
             )
         return self._declared_frameworks[feature_group]
 
@@ -262,7 +263,7 @@ class IdentifyFeatureGroupClass:
         return safe_field(
             lambda: {as_str(cfw.get_class_name()) for cfw in self._declared_frameworks_of(feature_group)},
             set(),
-            field=f"{feature_group.get_class_name()}.compute_framework_definition",
+            field=f"{feature_group.__name__}.compute_framework_definition",
         )
 
     def _capture_domains(self, result: EvaluationResult) -> dict[type[FeatureGroup], str]:
@@ -304,8 +305,16 @@ class IdentifyFeatureGroupClass:
 
     def _catalog_names_of(self, feature_group: type[FeatureGroup]) -> list[str]:
         """One candidate's whole contribution to the name catalog, in capture order."""
-        # get_class_name() is @final, so it cannot raise on a provider's behalf and needs no guard.
-        names = [feature_group.get_class_name(), *self._supported_names_of(feature_group)]
+        # get_class_name(), because that is the name the default matcher accepts, so a renaming override stays
+        # reachable. Guarded, and falling back to __name__: a placeholder would seed a name no candidate carries.
+        names = [
+            safe_field(
+                lambda: as_str(feature_group.get_class_name()),
+                feature_group.__name__,
+                field=f"{feature_group.__name__}.get_class_name",
+            ),
+            *self._supported_names_of(feature_group),
+        ]
         prefix = self._prefix_of(feature_group)
         if prefix:
             names.append(prefix)
@@ -339,7 +348,7 @@ class IdentifyFeatureGroupClass:
         return not safe_field(
             lambda: self._filter_feature_group_by_links(feature_group, links),
             True,
-            field=f"{feature_group.get_class_name()}.index_columns/supports_index",
+            field=f"{feature_group.__name__}.index_columns/supports_index",
         )
 
     def _fails_domain_gate(self, feature_group: type[FeatureGroup], feature: Feature) -> bool:
@@ -608,7 +617,8 @@ class IdentifyFeatureGroupClass:
             # Text, not exc: a retained record must not pin the traceback, its frames and the plugin class.
             logger.debug(
                 "%s rejected an option value while matching '%s': %s",
-                feature_group.get_class_name(),
+                # A plugin-owned read past the hook call's containment, so it degrades instead of escaping the seam.
+                safe_field(lambda: feature_group.get_class_name(), "<unnamed feature group>"),
                 feature.name,
                 safe_field(functools.partial(str, exc), type(exc).__name__),
             )
@@ -617,7 +627,7 @@ class IdentifyFeatureGroupClass:
             logger.log(
                 contained_raise_log_level(probe.matcher_error),
                 "%s %s while matching '%s'; treating it as a non-match.",
-                feature_group.get_class_name(),
+                safe_field(lambda: feature_group.get_class_name(), "<unnamed feature group>"),
                 reason,
                 feature.name,
             )

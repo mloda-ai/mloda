@@ -17,7 +17,7 @@ from abc import abstractmethod
 from ast import literal_eval
 from collections.abc import Callable, Iterable, Iterator
 from difflib import get_close_matches
-from typing import Any, Optional, cast, get_args
+from typing import Any, ClassVar, Optional, cast, get_args
 
 import pytest
 
@@ -47,7 +47,7 @@ from mloda.core.prepare.resolution_types import (
     EvaluationResult,
     RenderFacts,
 )
-from tests.helpers.plugin_stubs import CountingStubFeatureGroup, HookCounter, StubFeatureGroup, make_fg
+from tests.helpers.plugin_stubs import CountingStubFeatureGroup, HookCounter, StubFeatureGroup, StubHookError, make_fg
 
 
 SUCCESS_FEATURE_791 = "renderer_success_791"
@@ -203,6 +203,19 @@ MAX_RENDERED_SUGGESTIONS_791 = 5
 HEALTHY_DOMAIN_791 = "renderer_healthy_domain_791"
 BOOM_SUPPORTED_NAME_791 = "renderer_boom_supported_name_791"
 
+# The candidate that cannot say what it is called: the capture path reads get_class_name() to LABEL guarded reads.
+UNNAMEABLE_FEATURE_791 = "renderer_unnameable_791"  # requested name, matched by nothing
+UNNAMEABLE_SPARE_791 = "renderer_unnameable_spare_791"  # the one name it declares and can still report
+UNNAMEABLE_ABSTRACT_FEATURE_791 = "renderer_unnameable_abstract_791"
+UNNAMEABLE_SCOPE_FEATURE_791 = "renderer_unnameable_scope_791"  # requested under a scope that cannot name itself
+CLASS_NAME_RAISE_MESSAGE_791 = "renderer_class_name_boom_791"
+# What a guarded name read degrades to: a placeholder names no candidate, so no catalog may carry one.
+UNNAMED_GROUP_FALLBACK_791 = "<unnamed feature group>"
+
+# The candidate whose readable name is not its Python class name; the default matcher owns the readable one.
+RENAMED_CLASS_NAME_791 = "RendererReadableNameFG791"  # what its get_class_name() answers, and what resolves to it
+RENAMED_TYPO_791 = "RendererRedableNameFG791"  # a typo of that name, matched by nothing
+
 # Same-named tie candidates get an explicit __module__ so only the module can break the sort tie.
 TIE_MODULE_A_791 = "tests.renderer_tie_module_a_791"
 TIE_MODULE_B_791 = "tests.renderer_tie_module_b_791"
@@ -254,7 +267,8 @@ TWO_FRAMEWORKS_791: set[type[ComputeFramework]] = {RendererFwOne791, RendererFwT
 class CountingFeatureGroup791(CountingStubFeatureGroup):
     """Feature group base that counts every provider-overridable hook the renderer must not call."""
 
-    COUNTER = HOOK_COUNTER_791
+    # Annotated as the base declares it, so a stub that cannot be tallied can unset it.
+    COUNTER: ClassVar[HookCounter | None] = HOOK_COUNTER_791
 
 
 def _counting_fg(
@@ -949,6 +963,110 @@ def _build_raising_framework_rule_groups() -> tuple[type[CountingFeatureGroup791
     return RendererRaisingAbstractBaseFG791, _armed(RendererRaisingConcreteSubFG791)
 
 
+def _build_unnameable_group() -> type[CountingFeatureGroup791]:
+    """Build an accessible declarer of a sibling name whose get_class_name() raises, matching nothing."""
+
+    class RendererUnnameableFG791(CountingFeatureGroup791):
+        """Declarer that can never say what it is called."""
+
+        # Unset: the tally keys on the very name this group cannot answer.
+        COUNTER = None
+        SUPPORTED_NAMES = frozenset({UNNAMEABLE_SPARE_791})
+        # The requested domain, so the name-blind retest's domain gate decides nothing and the links gate is reached.
+        DOMAIN_NAME = REQUESTED_DOMAIN_791
+        FRAMEWORK_RULE = {RendererFwOne791}
+
+        # The @final on get_class_name is a mypy pin; a plugin can still install this override at runtime.
+        @classmethod  # type: ignore[misc]
+        def get_class_name(cls) -> str:
+            if cls.ARMED:
+                raise StubHookError(CLASS_NAME_RAISE_MESSAGE_791)
+            return cls.__name__
+
+    return _armed(RendererUnnameableFG791)
+
+
+def _build_unnameable_abstract_groups() -> tuple[type[CountingFeatureGroup791], type[CountingFeatureGroup791]]:
+    """Build an abstract base plus a concrete subclass that cannot say what it is called."""
+
+    class RendererUnnameableAbstractBaseFG791(CountingFeatureGroup791):
+        """Abstract base that matches the name but can never be instantiated."""
+
+        MATCHED_NAMES = frozenset({UNNAMEABLE_ABSTRACT_FEATURE_791})
+        FRAMEWORK_RULE = {RendererFwOne791}
+
+        @classmethod
+        @abstractmethod
+        def _renderer_unnameable_abstract_hook_791(cls) -> str:
+            """Abstract hook that keeps this base uninstantiable."""
+
+    class RendererUnnameableConcreteSubFG791(RendererUnnameableAbstractBaseFG791):
+        """Concrete implementation whose declared frameworks are readable and whose own name is not."""
+
+        COUNTER = None
+        # Matches the name too, so a run that enables none of its frameworks eliminates it as a near-miss.
+        MATCHED_NAMES = frozenset({UNNAMEABLE_ABSTRACT_FEATURE_791})
+        FRAMEWORK_RULE = {RendererFwOne791}
+
+        @classmethod  # type: ignore[misc]
+        def get_class_name(cls) -> str:
+            if cls.ARMED:
+                raise StubHookError(CLASS_NAME_RAISE_MESSAGE_791)
+            return cls.__name__
+
+        @classmethod
+        def _renderer_unnameable_abstract_hook_791(cls) -> str:
+            return "concrete"
+
+    return RendererUnnameableAbstractBaseFG791, _armed(RendererUnnameableConcreteSubFG791)
+
+
+def _build_unnameable_scope_group() -> type[CountingFeatureGroup791]:
+    """Build the class a request names as its feature_group scope, which cannot say what it is called."""
+
+    class RendererUnnameableScopeFG791(CountingFeatureGroup791):
+        """Scope class that can never say what it is called, and that matches nothing."""
+
+        # Unset: the tally keys on the very name this group cannot answer.
+        COUNTER = None
+        FRAMEWORK_RULE = {RendererFwOne791}
+
+        @classmethod  # type: ignore[misc]
+        def get_class_name(cls) -> str:
+            if cls.ARMED:
+                raise StubHookError(CLASS_NAME_RAISE_MESSAGE_791)
+            return cls.__name__
+
+    return _armed(RendererUnnameableScopeFG791)
+
+
+def _build_renamed_group() -> type[CountingFeatureGroup791]:
+    """Build a candidate whose readable class name is not its Python one, matching by the default class rules."""
+
+    class RendererRenamedFG791(CountingFeatureGroup791):
+        """Declarer that answers a different, readable name and resolves under exactly that one."""
+
+        FRAMEWORK_RULE = {RendererFwOne791}
+
+        @classmethod  # type: ignore[misc]
+        def get_class_name(cls) -> str:
+            return RENAMED_CLASS_NAME_791 if cls.ARMED else cls.__name__
+
+        @classmethod
+        def match_feature_group_criteria(
+            cls,
+            feature_name: FeatureName | str,
+            options: Options,
+            data_access_collection: Optional[DataAccessCollection] = None,
+        ) -> bool:
+            cls._enter_hook("match_feature_group_criteria")
+            # The two class-identity rules of the default matcher, both of which read get_class_name().
+            name = str(feature_name)
+            return cls.feature_name_equal_to_class_name(name) or cls.feature_name_contains_class_name_as_prefix(name)
+
+    return _armed(RendererRenamedFG791)
+
+
 def _make_tie_group(module: str, namespace: dict[str, Any]) -> type[CountingFeatureGroup791]:
     """Build a candidate named RendererTieFG791 in the given module, so only __module__ breaks the sort tie."""
     created: Any = type("RendererTieFG791", (CountingFeatureGroup791,), {"__module__": module, **namespace})
@@ -1439,6 +1557,32 @@ def raising_framework_rule_abstract_scenario() -> Scenario:
     return Feature(RAISING_ABSTRACT_FEATURE_791), {base: {RendererFwOne791}, concrete: set()}
 
 
+def unnameable_none_scenario() -> LinkedScenario:
+    """A domain-carrying, linked ordinary-none failure next to a candidate that cannot name itself."""
+    return (
+        Feature(UNNAMEABLE_FEATURE_791, domain=REQUESTED_DOMAIN_791),
+        {_build_unnameable_group(): {RendererFwOne791}, RendererKnownNamesFG791: {RendererFwOne791}},
+        {LINKS_GATE_LINK_791},
+    )
+
+
+def unnameable_abstract_scenario() -> Scenario:
+    """An abstract-only failure whose concrete implementation cannot name itself."""
+    base, concrete = _build_unnameable_abstract_groups()
+    return Feature(UNNAMEABLE_ABSTRACT_FEATURE_791), {base: {RendererFwOne791}, concrete: set()}
+
+
+def unnameable_scope_scenario() -> Scenario:
+    """A scoped none failure whose scope is the very class that cannot say what it is called."""
+    scope = _build_unnameable_scope_group()
+    return Feature(UNNAMEABLE_SCOPE_FEATURE_791, feature_group=scope), {scope: {RendererFwOne791}}
+
+
+def renamed_catalog_scenario() -> Scenario:
+    """A none failure whose only candidate answers a readable class name that is not its Python one."""
+    return Feature(RENAMED_TYPO_791), {_build_renamed_group(): {RendererFwOne791}}
+
+
 FAILING_SCENARIOS: dict[str, Callable[[], Scenario]] = {
     "multiple": multiple_scenario,
     "capability": capability_scenario,
@@ -1472,6 +1616,7 @@ FAILING_SCENARIOS: dict[str, Callable[[], Scenario]] = {
     "raising_names_none": raising_names_none_scenario,
     "raising_rejection_none": raising_rejection_none_scenario,
     "raising_framework_rule_abstract": raising_framework_rule_abstract_scenario,
+    "unnameable_abstract": unnameable_abstract_scenario,
 }
 
 # Every (candidate, framework) pair the capability hook may be asked about during one evaluate(), and how
@@ -1918,6 +2063,124 @@ class TestFactCaptureNeverTakesEvaluateDown:
         assert result.feature_group is None
         assert set(result.candidates) == enabled
         assert result.error is not None
+
+
+class TestAnUnreadableCandidateNameNeverTakesTheCaptureDown:
+    """Each guarded read of the capture path LABELS its guard with the candidate's class name, before it runs."""
+
+    def test_an_unnameable_candidate_keeps_every_fact_it_can_still_report(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """evaluate() still returns, the message still renders, and each degraded label costs only itself."""
+        scenario = unnameable_none_scenario()
+        feature, _, _ = scenario
+
+        with caplog.at_level(logging.WARNING):
+            result = _evaluate_linked(scenario)
+
+        assert result.failure_kind == "none"
+        # Premise: the dead-name sweep ran to its end, so the name-blind gates were retested per candidate.
+        assert KNOWN_FEATURE_791 in result.facts.dead_only_names
+
+        # The degrade is scoped: the name it CAN report survives, and the healthy sibling's catalog is untouched.
+        assert UNNAMEABLE_SPARE_791 in result.facts.known_names
+        assert KNOWN_FEATURE_791 in result.facts.known_names
+        # Its prefix() reads the class name too, so that read degrades to "" and contributes no name.
+        assert _degrade_warnings(caplog, ".prefix"), "Expected a WARNING naming the degraded prefix read"
+
+        assert render_resolution_failure(result, feature) is not None
+
+    def test_an_unnameable_concrete_implementation_still_reports_its_frameworks(self) -> None:
+        """A readable framework declaration survives a label the same candidate cannot build."""
+        scenario = unnameable_abstract_scenario()
+        feature, accessible_plugins = scenario
+        # __name__, not get_class_name(): the readout must not ask the candidate the question it cannot answer.
+        _, concrete = [candidate.__name__ for candidate in accessible_plugins]
+
+        result = _evaluate(scenario)
+
+        assert result.failure_kind == "abstract_only"
+        assert result.facts.concrete_frameworks == (RendererFwOne791.__name__,)
+
+        message = render_resolution_failure(result, feature)
+        assert message is not None
+        assert f"require compute framework(s) ['{RendererFwOne791.__name__}']" in message
+        # The near-miss of the same candidate is captured from its elimination, which reads its name too.
+        assert f"  - {concrete} (compute framework): " in message
+
+
+class TestTheRendererNeverAsksTheScopeClassItsName:
+    """The scope is a user-supplied class, and the renderer's contract is to call no provider-overridable hook."""
+
+    def test_a_scope_that_cannot_name_itself_still_renders_its_callout(self) -> None:
+        """evaluate() decided the failure, so the projection of it must not fail on reading a name."""
+        scenario = unnameable_scope_scenario()
+        feature, accessible_plugins = scenario
+        # __name__, not get_class_name(): the callout must not ask the scope the question it cannot answer.
+        (scope_name,) = [candidate.__name__ for candidate in accessible_plugins]
+
+        result = _evaluate(scenario)
+
+        # Premise: evaluate() came back with an ordinary none, so nothing but the rendering is left to fail.
+        assert result.failure_kind == "none"
+        assert feature.feature_group_scope is not None
+
+        message = render_resolution_failure(result, feature)
+        assert message is not None
+        assert message.startswith(
+            f"No feature groups found for feature name: '{UNNAMEABLE_SCOPE_FEATURE_791}'. "
+            f"Scoped to feature group: '{scope_name}'."
+        )
+        assert "Use resolve_feature(name, options=..., feature_group=...) to debug feature resolution." in message
+        assert message.endswith(TROUBLESHOOTING_LINE)
+
+
+class TestTheNameCatalogOffersTheNameTheMatcherAccepts:
+    """The catalog is what a user is told to type, and the default matcher owns a name by get_class_name().
+
+    Capturing the Python class name instead offers a name that resolves to nothing whenever a plugin renames
+    itself, and drops the only name that would have resolved. The fallback for a RAISING override is the other
+    half: the Python class name is a true name of that candidate, while a placeholder names no candidate at all.
+    """
+
+    def test_a_renamed_candidate_is_offered_under_the_name_that_resolves(self) -> None:
+        """An override renames what resolves to the candidate, so the catalog and the suggestion follow it."""
+        scenario = renamed_catalog_scenario()
+        feature, accessible_plugins = scenario
+        (renamed,) = accessible_plugins
+        python_name = renamed.__name__
+
+        result = _evaluate(scenario)
+
+        # Premise: the override's name is what the matcher accepts, and the Python class name resolves nothing.
+        accepted = _evaluate((Feature(RENAMED_CLASS_NAME_791), accessible_plugins))
+        assert set(accepted.identified) == {renamed}
+        assert _evaluate((Feature(python_name), accessible_plugins)).failure_kind == "none"
+
+        assert RENAMED_CLASS_NAME_791 in result.facts.known_names
+        assert python_name not in result.facts.known_names
+
+        message = render_resolution_failure(result, feature)
+        assert message is not None
+        suggestions = _suggestions(message)
+
+        assert suggestions is not None
+        assert RENAMED_CLASS_NAME_791 in suggestions
+        assert python_name not in suggestions
+
+    def test_an_unnameable_candidate_falls_back_to_a_name_it_really_carries(self) -> None:
+        """A raising override leaves the Python class name, which no request can reach through a placeholder."""
+        scenario = unnameable_none_scenario()
+        feature, accessible_plugins, _ = scenario
+        unnameable, _known = [candidate.__name__ for candidate in accessible_plugins]
+
+        result = _evaluate_linked(scenario)
+
+        assert result.failure_kind == "none"
+        assert unnameable in result.facts.known_names
+        assert UNNAMED_GROUP_FALLBACK_791 not in result.facts.known_names
+
+        assert render_resolution_failure(result, feature) is not None
 
 
 class TestCapabilityRenderingUniverse:

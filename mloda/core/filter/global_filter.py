@@ -391,8 +391,10 @@ class GlobalFilter:
         stored = self.dropped_filters.get(key)
         if stored is None or stored.stage != "matcher_error":
             self.dropped_filters[key] = Elimination(stage="matcher_error", reason=reason)
+        # A plugin-owned read past the hook call's containment, so it degrades instead of escaping the seam.
+        group_name = safe_field(lambda: feature_group.get_class_name(), "<unnamed feature group>")
         message = (
-            f"{feature_group.get_class_name()} {reason} while matching filter feature '{filter.name}'; "
+            f"{group_name} {reason} while matching filter feature '{filter.name}'; "
             "dropping that filter for this feature group."
         )
         logger.log(self._claim_report_level(self._warned_drops, message), message)
@@ -457,7 +459,7 @@ class GlobalFilter:
             compared = safe_field(
                 lambda: as_str(feature_group.get_domain().name),
                 "<unreadable domain>",
-                field=f"{feature_group.get_class_name()}.get_domain",
+                field=f"{feature_group.__name__}.get_domain",
             )
         return f"the filter feature's domain '{declared.name}' does not match '{compared}'"
 

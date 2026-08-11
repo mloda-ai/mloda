@@ -9,6 +9,7 @@ from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.core.cfw_manager import CfwManager
 from mloda.core.core.step.abstract_step import Step
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
+from mloda.core.optional_dependency import loaded
 from mloda.core.runtime.flight.flight_server import FlightServer
 
 
@@ -117,11 +118,21 @@ class TransformFrameworkStep(Step):
         cfw.set_data(data)
 
     def transform(self, cfw: ComputeFramework, data: Any, feature_names: set[str]) -> Any:
-        if self.equal_frameworks():
-            return data
-
         _from_fw = self.from_framework.expected_data_framework()
         _to_fw = self.to_framework.expected_data_framework()
+
+        pa = loaded("pyarrow")
+        if (
+            pa is not None
+            and isinstance(data, pa.Table)
+            and isinstance(_from_fw, type)
+            and not isinstance(data, _from_fw)
+        ):
+            # Flight transport hands back a pa.Table whatever the source framework's native type is.
+            _from_fw = pa.Table
+
+        if _from_fw == _to_fw:
+            return data
 
         # Try to find a transformation chain (direct or through PyArrow)
         transformation_chain = self.transformer.get_transformation_chain(_from_fw, _to_fw)
@@ -135,8 +146,3 @@ class TransformFrameworkStep(Step):
         return self.transformer.apply_chain(
             _from_fw, _to_fw, transformation_chain, data, cfw.framework_connection_object
         )
-
-    def equal_frameworks(self) -> bool:
-        if self.from_framework.expected_data_framework() == self.to_framework.expected_data_framework():
-            return True
-        return False

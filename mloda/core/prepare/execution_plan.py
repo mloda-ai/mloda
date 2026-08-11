@@ -310,7 +310,7 @@ class ExecutionPlan:
             # This step is only relevant for multi processing.
             for _ep in new_execution_plan:
                 if isinstance(_ep, FeatureGroupStep):
-                    if _ep.features.any_uuid in need_to_upload_collector:
+                    if not need_to_upload_collector.isdisjoint(_ep.get_uuids()):
                         _ep.need_to_upload = True
 
         return new_execution_plan

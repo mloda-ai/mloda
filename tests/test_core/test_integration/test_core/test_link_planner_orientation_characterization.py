@@ -34,12 +34,6 @@ THIRD_PAYLOADS = ["T1", "T3", "T4", "T7"]
 
 MISSING = "-"
 
-# MULTIPROCESSING is opt-in per shape: the rest fail in the transform hop, on a flight the server has no table for.
-MODES_SYNC_THREADING = pytest.mark.parametrize(
-    "modes",
-    [{ParallelizationMode.SYNC}, {ParallelizationMode.THREADING}],
-)
-
 MODES_WITH_MULTIPROCESSING = pytest.mark.parametrize(
     "modes",
     [
@@ -294,7 +288,7 @@ RIGHT_JOIN_ROWS = ["k3|L3|k3|R3", "k4|L4|k4|R4", f"{MISSING}|{MISSING}|k5|R5"]
 CHAIN_ROWS = ["k4|L4|R4|T4", "k3|L3|R3|T3"]
 
 
-@MODES_SYNC_THREADING
+@MODES_WITH_MULTIPROCESSING
 def test_inner_join_declared_orientation_keeps_left_group_first(
     modes: set[ParallelizationMode], flight_server: Any
 ) -> None:
@@ -303,7 +297,7 @@ def test_inner_join_declared_orientation_keeps_left_group_first(
     assert rows == INNER_ROWS
 
 
-@MODES_SYNC_THREADING
+@MODES_WITH_MULTIPROCESSING
 def test_inner_join_inverted_orientation_keeps_left_group_first(
     modes: set[ParallelizationMode], flight_server: Any
 ) -> None:
@@ -321,7 +315,7 @@ def test_left_join_declared_orientation_keeps_every_left_row(
     assert rows == LEFT_JOIN_ROWS
 
 
-@MODES_SYNC_THREADING
+@MODES_WITH_MULTIPROCESSING
 def test_left_join_inverted_orientation_keeps_every_left_row(
     modes: set[ParallelizationMode], flight_server: Any
 ) -> None:
@@ -330,7 +324,7 @@ def test_left_join_inverted_orientation_keeps_every_left_row(
     assert rows == LEFT_JOIN_ROWS
 
 
-@MODES_SYNC_THREADING
+@MODES_WITH_MULTIPROCESSING
 def test_right_join_rejects_a_child_declaring_only_the_left_framework(
     modes: set[ParallelizationMode], flight_server: Any
 ) -> None:
@@ -346,7 +340,7 @@ def test_right_join_rejects_a_child_declaring_only_the_left_framework(
     assert PandasDataFrame.get_class_name() in message
 
 
-@MODES_SYNC_THREADING
+@MODES_WITH_MULTIPROCESSING
 def test_right_join_keeps_every_right_row_for_a_child_on_the_right_framework(
     modes: set[ParallelizationMode], flight_server: Any
 ) -> None:
@@ -355,7 +349,7 @@ def test_right_join_keeps_every_right_row_for_a_child_on_the_right_framework(
     assert sorted(rows) == sorted(RIGHT_JOIN_ROWS)
 
 
-@MODES_SYNC_THREADING
+@MODES_WITH_MULTIPROCESSING
 def test_chained_join_across_three_frameworks_keeps_left_group_order(
     modes: set[ParallelizationMode], flight_server: Any
 ) -> None:

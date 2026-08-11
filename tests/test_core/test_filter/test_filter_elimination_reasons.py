@@ -527,6 +527,32 @@ def _make_unnameable_defect_fg() -> type[FeatureGroup]:
     return FerUnnameableDefectFG
 
 
+def _make_unnameable_domain_fg() -> type[FeatureGroup]:
+    """A throwaway group that matches the filter feature and cannot say what it is called."""
+    gc.collect()
+
+    class FerUnnameableDomainFG(FeatureGroup):
+        @classmethod
+        def feature_names_supported(cls) -> set[str]:
+            return {HOST_FEATURE, FILTER_FEATURE}
+
+        @classmethod  # type: ignore[misc]
+        def get_class_name(cls) -> str:
+            raise RuntimeError(CLASS_NAME_RAISE_MESSAGE)
+
+        @classmethod
+        def match_feature_group_criteria(
+            cls,
+            feature_name: FeatureName | str,
+            options: Options,
+            data_access_collection: DataAccessCollection | None = None,
+        ) -> bool:
+            # Spelled out because the default matcher reads the class name this group cannot answer.
+            return str(feature_name) in cls.feature_names_supported()
+
+    return FerUnnameableDomainFG
+
+
 def _make_decline_then_defect_fg() -> type[FeatureGroup]:
     """A throwaway group whose hook declines with a recorded reason once, then raises on the next ask."""
     gc.collect()
@@ -776,14 +802,17 @@ class _DegradedDropSnapshot:
     escaped: str | None
     names: tuple[str, ...]
     drops: int
+    facts: tuple[tuple[str, str], ...]
     warnings: tuple[str, ...]
 
 
-def _drive_unnameable_drop(make: _Factory, caplog: pytest.LogCaptureFixture) -> _DegradedDropSnapshot:
+def _drive_unnameable_drop(
+    make: _Factory, caplog: pytest.LogCaptureFixture, filter_feature: Feature | str = FILTER_FEATURE
+) -> _DegradedDropSnapshot:
     """Match one declared filter against a group whose class name raises; the ledger is counted, never keyed."""
     caplog.clear()
     fg = make()
-    global_filter = _new_global_filter((FILTER_FEATURE,))
+    global_filter = _new_global_filter((filter_feature,))
     matched: set[SingleFilter] | None = None
     try:
         with caplog.at_level(logging.DEBUG, logger=GF_LOGGER_NAME):
@@ -793,6 +822,8 @@ def _drive_unnameable_drop(make: _Factory, caplog: pytest.LogCaptureFixture) -> 
             names=tuple(sorted(single.name for single in matched or ())),
             # A count, not the keys: reading a key back would call the unreadable class name again.
             drops=len(global_filter.dropped_filters),
+            # The stored values only, for the same reason: a recorded fact names no class.
+            facts=tuple(sorted(_fact_of(recorded) for recorded in global_filter.dropped_filters.values())),
             warnings=_messages(caplog, logging.WARNING),
         )
     finally:
@@ -1559,3 +1590,24 @@ class TestAnUnreadableGroupNameOnTheDropPathDegrades:
         assert UNNAMED_GROUP_FALLBACK in reported[0], f"an unreadable group name must degrade: {reported[0]}"
         assert RUNTIME_MESSAGE in reported[0], f"the fields that ARE readable must still be named: {reported[0]}"
         assert FILTER_FEATURE in reported[0], f"the report must name the filter feature: {reported[0]}"
+
+
+class TestAnUnreadableGroupNameOnTheDomainDropPathDegrades:
+    """The domain drop's reason guards its plugin-owned read, then LABELS that guard with the class name."""
+
+    def test_a_domain_drop_whose_group_cannot_name_itself_still_records_its_reason(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """The label is built before the guard runs, so it must degrade with the read it names."""
+        snapshot = _drive_unnameable_drop(
+            _make_unnameable_domain_fg, caplog, filter_feature=_filter_feature(domain=OTHER_DOMAIN)
+        )
+
+        assert snapshot.escaped is None, f"nothing may cross identify_matched_filters: {snapshot.escaped}"
+        assert snapshot.names == (), f"a diverging domain must attach no filter, got: {snapshot.names}"
+        assert snapshot.drops == 1, f"the domain fact must still be recorded, got: {snapshot.drops}"
+        stage, reason = snapshot.facts[0]
+        assert stage == DOMAIN_STAGE, f"the domain gate owns this drop, got stage: {stage}"
+        assert OTHER_DOMAIN in reason, f"the reason must name the filter feature's declared domain: {reason}"
+        # Only the label degrades: the read it labels is a different hook, and this group answers it.
+        assert UNREADABLE_DOMAIN_FALLBACK not in reason, f"the group's own domain must still be read: {reason}"

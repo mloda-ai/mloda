@@ -21,7 +21,8 @@ def scope_callout(scope: str | type[FeatureGroup] | None) -> str | None:
     """Render the shared scope callout, or None when the scope is unset."""
     if scope is None:
         return None
-    scope_name = scope.get_class_name() if isinstance(scope, type) else scope
+    # __name__, not get_class_name(): the scope is user-supplied and this projection calls no overridable hook.
+    scope_name = scope.__name__ if isinstance(scope, type) else scope
     return f"Scoped to feature group: '{scope_name}'."
 
 
@@ -42,13 +43,13 @@ def _supported_feature_names(feature_group: type[FeatureGroup]) -> set[str]:
     return safe_field(
         lambda: {as_str(name) for name in feature_group.feature_names_supported()},
         set(),
-        field=f"{feature_group.get_class_name()}.feature_names_supported",
+        field=f"{feature_group.__name__}.feature_names_supported",
     )
 
 
 def _prefix_name(feature_group: type[FeatureGroup]) -> str:
     """Best-effort prefix of one candidate."""
-    return safe_field(lambda: as_str(feature_group.prefix()), "", field=f"{feature_group.get_class_name()}.prefix")
+    return safe_field(lambda: as_str(feature_group.prefix()), "", field=f"{feature_group.__name__}.prefix")
 
 
 _STAGE_LABELS: dict[EliminationStage, str] = {

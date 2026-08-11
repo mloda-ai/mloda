@@ -459,7 +459,7 @@ class GlobalFilter:
             compared = safe_field(
                 lambda: as_str(feature_group.get_domain().name),
                 "<unreadable domain>",
-                field=f"{feature_group.get_class_name()}.get_domain",
+                field=f"{feature_group.__name__}.get_domain",
             )
         return f"the filter feature's domain '{declared.name}' does not match '{compared}'"
 

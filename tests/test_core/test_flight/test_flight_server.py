@@ -54,8 +54,21 @@ class TestFlightServerUnit:
         self.server.tables[b"existing_table"] = self.table
 
         non_existent_ticket = flight.Ticket(b"non_existent_table")
-        with pytest.raises(KeyError):
+        with pytest.raises(KeyError, match=r"Table with key b'non_existent_table' not found.*Held keys"):
             self.server.do_get(self.context, non_existent_ticket)
+
+    def test_do_get_empty_server(self) -> None:
+        """Test error handling when server has no tables."""
+        # Save and clear tables
+        saved_tables = self.server.tables.copy()
+        self.server.tables.clear()
+
+        try:
+            ticket = flight.Ticket(b"some_key")
+            with pytest.raises(ValueError, match=r"Try to get an empty apache flight.*Requested key.*some_key"):
+                self.server.do_get(self.context, ticket)
+        finally:
+            self.server.tables = saved_tables
 
     def test_create_location_uses_loopback_host_by_default(self) -> None:
         location = create_location()

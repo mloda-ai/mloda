@@ -204,7 +204,7 @@ def test_strictness_map_agrees_with_signature_lists() -> None:
 
 @pytest.mark.parametrize("plugin_class", list(STRICTNESS), ids=[cls.__name__ for cls in STRICTNESS])
 def test_class_declares_its_source_feature_strictness(plugin_class: type[Any]) -> None:
-    """The table and the code attribute must not drift, so no class silently flips policy during the migration."""
+    """The table and the declared attribute must not drift, so no class silently flips its presence policy."""
     assert plugin_class.STRICT_SOURCE_FEATURES is STRICTNESS[plugin_class], (
         f"{plugin_class.__name__}.STRICT_SOURCE_FEATURES is {plugin_class.STRICT_SOURCE_FEATURES!r}, "
         f"STRICTNESS says {STRICTNESS[plugin_class]!r}"

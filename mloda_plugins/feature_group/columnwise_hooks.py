@@ -1,7 +1,7 @@
-"""Per-framework implementations of the three column-wise hooks, shared by every family.
+"""Per-framework implementations of the column-wise hooks, shared by every family.
 
-This module sits outside ``experimental/`` on purpose: the hook sweep binds every hook-calling
-module under that tree to a family base directory, and a framework adapter belongs to no family.
+Outside ``experimental/`` on purpose: the hook sweep binds every hook-calling module under that
+tree to a family base directory, and a framework adapter belongs to no family.
 """
 
 from __future__ import annotations
@@ -20,7 +20,6 @@ class ColumnwiseHooks:
 
     @classmethod
     def _get_available_columns(cls, data: Any) -> set[str]:
-        """Get the set of available column names from the data."""
         raise NotImplementedError(f"{cls.__name__} must implement _get_available_columns")
 
     @classmethod
@@ -44,12 +43,10 @@ class PandasColumnwiseHooks(ColumnwiseHooks):
 
     @classmethod
     def _get_available_columns(cls, data: Any) -> set[str]:
-        """Get the set of available column names from the DataFrame."""
         return set(data.columns)
 
     @classmethod
     def _add_result_to_data(cls, data: Any, feature_name: str, result: Any) -> Any:
-        """Add the result to the DataFrame."""
         data[feature_name] = result
         return data
 
@@ -59,7 +56,6 @@ class SklearnPandasColumnwiseHooks(PandasColumnwiseHooks):
 
     @classmethod
     def _add_result_to_data(cls, data: Any, feature_name: str, result: Any) -> Any:
-        """Add the result to the DataFrame, one column per result dimension."""
         if hasattr(result, "shape") and len(result.shape) == 2:
             if result.shape[1] == 1:
                 data[feature_name] = result.flatten()
@@ -81,12 +77,10 @@ class PyArrowColumnwiseHooks(ColumnwiseHooks):
 
     @classmethod
     def _get_available_columns(cls, data: Any) -> set[str]:
-        """Get the set of available column names from the Table schema."""
         return set(data.schema.names)
 
     @classmethod
     def _add_result_to_data(cls, data: Any, feature_name: str, result: Any) -> Any:
-        """Add the result to the Table, replacing the column when it already exists."""
         if feature_name in data.schema.names:
             column_index = data.schema.names.index(feature_name)
             data = data.remove_column(column_index)
@@ -99,19 +93,16 @@ class PythonDictColumnwiseHooks(ColumnwiseHooks):
 
     @classmethod
     def _get_available_columns(cls, data: Any) -> set[str]:
-        """Get the set of available column names from the data."""
         return set(data.keys())
 
     @classmethod
     def _check_source_features_exist(cls, data: Any, feature_names: list[str]) -> None:
-        """Reject empty data before the presence policy runs."""
         if not data:
             raise ValueError("Data cannot be empty")
         super()._check_source_features_exist(data, feature_names)
 
     @classmethod
     def _add_result_to_data(cls, data: Any, feature_name: str, result: Any) -> Any:
-        """Add the row-aligned result to the data."""
         if len(result) != row_count(data):
             raise ValueError(f"Result length {len(result)} does not match data length {row_count(data)}")
 
@@ -125,7 +116,6 @@ class PolarsLazyColumnwiseHooks(ColumnwiseHooks):
 
     @classmethod
     def _get_available_columns(cls, data: Any) -> set[str]:
-        """Get the set of available column names from the LazyFrame schema."""
         if not hasattr(data, "collect_schema"):
             raise ValueError("Data does not have a collect_schema method, cannot get available columns.")
         return set(data.collect_schema().names())

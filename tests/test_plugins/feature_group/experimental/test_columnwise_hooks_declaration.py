@@ -69,8 +69,8 @@ CONTRACT_SYMBOLS = (
 
 # Lower bounds only, so a broken glob or a wrong root cannot make the widened sweeps pass vacuously.
 MIN_EXPERIMENTAL_MODULES = 40
-# The structural invariant: every one of the 12 family bases calls its own hooks. A framework module
-# that calls one too is above this floor, so sharing the hooks out of the tree cannot break the sweep.
+# The floor is one hook-calling module per family base, so sharing the hooks out of the
+# experimental tree cannot make the sweep pass vacuously.
 MIN_HOOK_CALLING_MODULES = 12
 
 # The expected declaration per family base, kept as a table so a changed declaration is a visible diff.

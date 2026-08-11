@@ -307,21 +307,16 @@ class TestPythonDictMergeEngineOneToMany:
 
 
 class TestPythonDictDirectionalJoinShape:
-    """Column precedence and output column order of the left/right joins.
-
-    Both directions share one merge helper, so these pin the two axes that helper can
-    silently get wrong: which side wins an overlapping non-key column, and which side's
-    columns come first in the result.
-    """
+    """Column precedence and output column order of the shared left/right join helper."""
 
     @pytest.fixture
     def overlap_left_data(self) -> Any:
-        """Left dataset whose payload column name collides with the right one."""
+        """Payload column name deliberately collides with the right side."""
         return {"idx": [1, 3], "v": ["a", "b"]}
 
     @pytest.fixture
     def overlap_right_data(self) -> Any:
-        """Right dataset whose payload column name collides with the left one."""
+        """Payload column name deliberately collides with the left side."""
         return {"idx": [1, 2], "v": ["x", "z"]}
 
     @pytest.mark.parametrize(

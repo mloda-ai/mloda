@@ -91,13 +91,13 @@ class FlightServer:
                     pass
 
     def do_get(self, context: Any, ticket: Any) -> Any:
-        if len(self.tables.keys()) == 0:
-            raise ValueError("Try to get an empty apache flight.")
-
         key = ticket.ticket
+        if len(self.tables.keys()) == 0:
+            raise ValueError(f"Table with key {key} not found. Available keys: {list(self.tables.keys())}")
+
         if key in self.tables:
             return _flight().RecordBatchStream(self.tables[key])
-        raise KeyError(f"Table with key {key} not found")
+        raise KeyError(f"Table with key {key} not found. Available keys: {list(self.tables.keys())}")
 
     @staticmethod
     def download_table(location: str, table_key: Any) -> Any:

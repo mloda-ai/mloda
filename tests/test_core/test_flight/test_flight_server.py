@@ -47,15 +47,25 @@ class TestFlightServerUnit:
         result_stream = self.server.do_get(self.context, self.ticket)
         assert isinstance(result_stream, flight.RecordBatchStream)
 
-    def test_do_get_not_found(self) -> None:
-        """Test error handling when table is not found."""
-        # Ensure server has at least one table so we test the KeyError path,
-        # not the ValueError path for empty tables
-        self.server.tables[b"existing_table"] = self.table
+    def test_do_get_empty_tables_error_names_requested_and_available_keys(self) -> None:
+        self.server.tables = {}
+        missing_ticket = flight.Ticket(b"missing_table")
 
-        non_existent_ticket = flight.Ticket(b"non_existent_table")
-        with pytest.raises(KeyError):
-            self.server.do_get(self.context, non_existent_ticket)
+        with pytest.raises(ValueError) as exc_info:
+            self.server.do_get(self.context, missing_ticket)
+
+        assert exc_info.value.args[0] == "Table with key b'missing_table' not found. Available keys: []"
+
+    def test_do_get_missing_key_error_names_requested_and_available_keys(self) -> None:
+        self.server.tables = {b"first_table": self.table, b"second_table": self.table}
+        missing_ticket = flight.Ticket(b"missing_table")
+
+        with pytest.raises(KeyError) as exc_info:
+            self.server.do_get(self.context, missing_ticket)
+
+        assert exc_info.value.args[0] == (
+            "Table with key b'missing_table' not found. Available keys: [b'first_table', b'second_table']"
+        )
 
     def test_create_location_uses_loopback_host_by_default(self) -> None:
         location = create_location()

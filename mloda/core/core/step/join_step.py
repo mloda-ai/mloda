@@ -31,7 +31,8 @@ class JoinStep(Step):
         self.step_is_done = False
 
     def get_uuids(self) -> set[UUID]:
-        return {self.uuid, self.link.uuid}
+        """Only this step's uuid is a completion token; the link uuid is shared by both orientations."""
+        return {self.uuid}
 
     def _merge_data(self, cfw: ComputeFramework, from_cfw_data: Any) -> None:
         """Merges data from another ComputeFramework into the current one."""

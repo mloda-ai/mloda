@@ -1,8 +1,9 @@
+from collections.abc import Sequence
 from copy import copy, deepcopy
 from typing import Any, Generator, Optional
 from uuid import UUID
 
-from mloda.core.abstract_plugins.components.error_utils import internal_invariant_error
+from mloda.core.abstract_plugins.components.error_utils import REPORT_URL, internal_invariant_error
 from mloda.core.abstract_plugins.components.utils import safe_field
 from mloda.core.abstract_plugins.components.index.index import Index
 
@@ -18,6 +19,7 @@ from mloda.core.prepare.joinstep_collection import JoinStepCollection
 from mloda.core.prepare.graph.graph import Graph
 from mloda.core.prepare.resolve_graph import PlannedQueue
 from mloda.core.prepare.resolve_links import LinkFrameworkTrekker, LinkTrekker, inheritance_distance
+from mloda.core.core.step.abstract_step import Step
 from mloda.core.core.step.feature_group_step import FeatureGroupStep
 from mloda.core.core.step.join_step import JoinStep
 from mloda.core.core.step.transform_frame_work_step import TransformFrameworkStep
@@ -40,6 +42,20 @@ def _filter_options_sort_key(single_filter: SingleFilter) -> tuple[str, str]:
         repr(sorted((str(k), safe_field(lambda: repr(v), type(v).__name__)) for k, v in options.group.items())),
         repr(sorted((str(k), safe_field(lambda: repr(v), type(v).__name__)) for k, v in options.context.items())),
     )
+
+
+def _describe_step(step: Step) -> str:
+    """Name a step of the plan for an error message."""
+    if isinstance(step, JoinStep):
+        return f"JoinStep(link={step.link})"
+    if isinstance(step, FeatureGroupStep):
+        return f"FeatureGroupStep({format_feature_group_class(step.feature_group)}, uuid={step.uuid})"
+    if isinstance(step, TransformFrameworkStep):
+        return (
+            f"TransformFrameworkStep({step.from_framework.get_class_name()} -> "
+            f"{step.to_framework.get_class_name()}, uuid={step.uuid})"
+        )
+    return f"{type(step).__name__}(uuid={step.uuid})"
 
 
 def _nearest_frameworks(frameworks_by_distance: dict[int, set[type[ComputeFramework]]]) -> set[type[ComputeFramework]]:
@@ -77,6 +93,7 @@ class ExecutionPlan:
         pre_execution_plan = self.add_feature_group_step(queue, graph.parent_to_children_mapping, child_links)
         fw_execution_plan = self.add_joinstep(pre_execution_plan, link_trekker, graph)
         self.execution_plan = self.add_tfs(fw_execution_plan, graph)
+        self.raise_on_step_cycle(self.execution_plan)
 
     def add_feature_group_step(
         self,
@@ -122,7 +139,88 @@ class ExecutionPlan:
 
         fw_execution_plan = self.handle_append_or_union_joinstep(fw_execution_plan)
 
+        self.expand_link_tokens(fw_execution_plan, link_trekker)
+
         return fw_execution_plan
+
+    def expand_link_tokens(
+        self, fw_execution_plan: list[JoinStep | FeatureGroupStep], link_trekker: LinkTrekker
+    ) -> None:
+        """Replace every waited-on link uuid with the uuids of the JoinSteps planned for that link."""
+        links_by_uuid: dict[UUID, Link] = {trekker[0].uuid: trekker[0] for trekker in link_trekker.data}
+
+        joinstep_uuids: dict[UUID, set[UUID]] = defaultdict(set)
+        for step in fw_execution_plan:
+            if isinstance(step, JoinStep):
+                joinstep_uuids[step.link.uuid].add(step.uuid)
+
+        # The planned steps are a source of link uuids of their own, and handle_append_or_union_joinstep waits on them.
+        link_uuids = set(links_by_uuid) | set(link_trekker.order) | set(joinstep_uuids)
+
+        # Collected first: a raise on a later step must not leave a half expanded plan behind.
+        expansions: list[tuple[JoinStep | FeatureGroupStep, set[UUID], set[UUID]]] = []
+        for step in fw_execution_plan:
+            required_links = step.required_uuids & link_uuids
+            if not required_links:
+                continue
+
+            expanded: set[UUID] = set()
+            for link_uuid in required_links:
+                produced = joinstep_uuids.get(link_uuid)
+                if not produced:
+                    raise ValueError(self._no_joinstep_for_link_error(links_by_uuid.get(link_uuid, link_uuid)))
+                expanded.update(produced)
+
+            # A step must never wait for a token it produces itself.
+            expansions.append((step, required_links, expanded - step.get_uuids()))
+
+        for step, required_links, expanded in expansions:
+            step.required_uuids.difference_update(required_links)
+            step.required_uuids.update(expanded)
+
+    @staticmethod
+    def _no_joinstep_for_link_error(link: Link | UUID) -> str:
+        """A link a step waits for that planned no join step is a configuration problem, not a bug."""
+        return (
+            f"No join step was planned for a link that a step of the plan waits for: {link}\n"
+            "Possible causes:\n"
+            "  - The left_discriminator or right_discriminator values match none of the features' options.\n"
+            "  - The left compute framework of the link is not the compute framework of the child feature.\n"
+            "Resolution: align the discriminator values with the options you set on the features, and declare "
+            "the link on the compute framework the child is computed in.\n"
+            f"If neither applies, please report this issue at {REPORT_URL} with the full traceback."
+        )
+
+    def raise_on_step_cycle(self, steps: Sequence[Step]) -> None:
+        """Required tokens order the steps of the finished plan against each other, and a cycle would never run."""
+        producer_of: dict[UUID, UUID] = {}
+        steps_by_uuid: dict[UUID, Step] = {}
+        for step in steps:
+            steps_by_uuid[step.uuid] = step
+            for token in step.get_uuids():
+                producer_of[token] = step.uuid
+
+        # A token no step produces is not a cycle; the runtime reports it as a missing producer.
+        pending = {
+            step.uuid: {producer_of[token] for token in step.required_uuids if token in producer_of} for step in steps
+        }
+
+        while True:
+            ready = {uuid for uuid, waits_for in pending.items() if not waits_for}
+            if not ready:
+                break
+            for uuid in ready:
+                del pending[uuid]
+            for waits_for in pending.values():
+                waits_for -= ready
+
+        if pending:
+            raise ValueError(
+                internal_invariant_error(
+                    "the steps of the plan form a cycle.",
+                    f"steps={sorted(_describe_step(steps_by_uuid[uuid]) for uuid in pending)}",
+                )
+            )
 
     def handle_append_or_union_joinstep(
         self,
@@ -276,7 +374,7 @@ class ExecutionPlan:
                             match.add(found)
                             break
                     if match:
-                        # parent is served by a join step; the consumer is already ordered after it via the link uuid
+                        # parent is served by a join step; the expanded link token already orders the consumer
                         continue
 
                     # We only want to add TFS for direct parents and not for parent parents.

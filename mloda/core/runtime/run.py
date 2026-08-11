@@ -404,15 +404,8 @@ class ExecutionOrchestrator:
         return self.data_lifecycle_manager.get_result_data(cfw, selected_feature_names, location)
 
     def currently_running_step(self, step_uuids: set[UUID], currently_running_steps: set[UUID]) -> bool:
-        """
-        Checks if a step is currently running.
-
-        Returns:
-            True if the step is currently running, False otherwise.
-        """
-        if next(iter(step_uuids)) not in currently_running_steps:
-            return False
-        return True
+        """True if any uuid of the step is running, the same rule _can_run_step refuses on."""
+        return not step_uuids.isdisjoint(currently_running_steps)
 
     def __enter__(
         self,

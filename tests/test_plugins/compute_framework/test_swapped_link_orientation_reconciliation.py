@@ -114,9 +114,7 @@ class SwappedChildPyArrowLeft(FeatureGroup):
         return {PyArrowTable, PandasDataFrame}
 
 
-# Threading is left out: both orientations produce a JoinStep carrying the same link uuid as its completion
-# token, so a child can start once either join reported done. That predates this scenario.
-@pytest.mark.parametrize("modes", [({ParallelizationMode.SYNC})])
+@pytest.mark.parametrize("modes", [{ParallelizationMode.SYNC}, {ParallelizationMode.THREADING}])
 class TestSwappedLinkOrientationReconciliation:
     def test_both_children_receive_the_joined_columns(
         self, modes: set[ParallelizationMode], flight_server: Any

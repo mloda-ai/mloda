@@ -122,7 +122,65 @@ class ExecutionPlan:
 
         fw_execution_plan = self.handle_append_or_union_joinstep(fw_execution_plan)
 
+        self.expand_link_tokens(fw_execution_plan, link_trekker)
+        self.raise_on_joinstep_cycle(fw_execution_plan)
+
         return fw_execution_plan
+
+    def expand_link_tokens(
+        self, fw_execution_plan: list[JoinStep | FeatureGroupStep], link_trekker: LinkTrekker
+    ) -> None:
+        """Replace every waited-on link uuid with the uuids of the JoinSteps planned for that link."""
+        links_by_uuid: dict[UUID, Link] = {trekker[0].uuid: trekker[0] for trekker in link_trekker.data}
+        link_uuids = set(links_by_uuid) | set(link_trekker.order)
+
+        joinstep_uuids: dict[UUID, set[UUID]] = defaultdict(set)
+        for step in fw_execution_plan:
+            if isinstance(step, JoinStep):
+                joinstep_uuids[step.link.uuid].add(step.uuid)
+
+        for step in fw_execution_plan:
+            required_links = step.required_uuids & link_uuids
+            if not required_links:
+                continue
+
+            expanded: set[UUID] = set()
+            for link_uuid in required_links:
+                produced = joinstep_uuids.get(link_uuid)
+                if not produced:
+                    raise ValueError(
+                        internal_invariant_error(
+                            "a step waits for a link that no join step of the plan produces.",
+                            f"link={links_by_uuid.get(link_uuid, link_uuid)}",
+                        )
+                    )
+                expanded.update(produced)
+
+            step.required_uuids.difference_update(required_links)
+            # A step must never wait for a token it produces itself.
+            step.required_uuids.update(expanded - step.get_uuids())
+
+    def raise_on_joinstep_cycle(self, fw_execution_plan: list[JoinStep | FeatureGroupStep]) -> None:
+        """Expanded tokens order the join steps against each other, and a cycle would never run."""
+        join_steps: dict[UUID, JoinStep] = {step.uuid: step for step in fw_execution_plan if isinstance(step, JoinStep)}
+        pending = {uuid: step.required_uuids & set(join_steps) for uuid, step in join_steps.items()}
+
+        while True:
+            ready = {uuid for uuid, waits_for in pending.items() if not waits_for}
+            if not ready:
+                break
+            for uuid in ready:
+                del pending[uuid]
+            for waits_for in pending.values():
+                waits_for -= ready
+
+        if pending:
+            raise ValueError(
+                internal_invariant_error(
+                    "the join steps of the plan form a cycle.",
+                    f"links={sorted(str(join_steps[uuid].link) for uuid in pending)}",
+                )
+            )
 
     def handle_append_or_union_joinstep(
         self,
@@ -276,7 +334,7 @@ class ExecutionPlan:
                             match.add(found)
                             break
                     if match:
-                        # parent is served by a join step; the consumer is already ordered after it via the link uuid
+                        # parent is served by a join step; the expanded link token already orders the consumer
                         continue
 
                     # We only want to add TFS for direct parents and not for parent parents.

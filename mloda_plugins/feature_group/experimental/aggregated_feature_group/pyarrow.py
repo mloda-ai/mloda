@@ -12,44 +12,23 @@ import pyarrow.compute as pc
 from mloda.provider import ComputeFramework
 
 from mloda.user.pyarrow import PyArrowTable
+from mloda_plugins.feature_group.columnwise_hooks import PyArrowColumnwiseHooks
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.base import AggregatedFeatureGroup
 
 
-class PyArrowAggregatedFeatureGroup(AggregatedFeatureGroup):
+class PyArrowAggregatedFeatureGroup(PyArrowColumnwiseHooks, AggregatedFeatureGroup):
     """
     PyArrow implementation of aggregated feature group.
 
     Supports multiple aggregation types in a single class.
     """
 
+    STRICT_SOURCE_FEATURES = False
+
     @classmethod
     def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
         """Specify that this feature group works with PyArrow."""
         return {PyArrowTable}
-
-    @classmethod
-    def _get_available_columns(cls, data: pa.Table) -> set[str]:
-        """Get the set of available column names from the Table schema."""
-        return set(data.schema.names)
-
-    @classmethod
-    def _check_source_features_exist(cls, data: pa.Table, feature_names: list[str]) -> None:
-        """
-        Check if the resolved features exist in the Table.
-
-        Args:
-            data: The PyArrow Table
-            feature_names: List of resolved feature names (may contain ~N suffixes)
-
-        Raises:
-            ValueError: If none of the resolved features exist in the data
-        """
-        schema_names = set(data.schema.names)
-        missing_features = [name for name in feature_names if name not in schema_names]
-        if len(missing_features) == len(feature_names):
-            raise ValueError(
-                f"None of the source features {feature_names} found in data. Available columns: {list(schema_names)}"
-            )
 
     @classmethod
     def _add_result_to_data(cls, data: pa.Table, feature_name: str, result: Any) -> pa.Table:

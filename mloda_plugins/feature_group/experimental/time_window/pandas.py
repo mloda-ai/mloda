@@ -11,6 +11,7 @@ import numpy as np
 from mloda.provider import ComputeFramework
 from mloda_plugins.compute_framework.base_implementations.pandas import pandas_type_semantics
 from mloda.user.pandas import PandasDataFrame
+from mloda_plugins.feature_group.columnwise_hooks import PandasColumnwiseHooks
 from mloda_plugins.feature_group.experimental.time_window.base import TimeWindowFeatureGroup
 
 
@@ -20,7 +21,9 @@ except ImportError:
     pd = None
 
 
-class PandasTimeWindowFeatureGroup(TimeWindowFeatureGroup):
+class PandasTimeWindowFeatureGroup(PandasColumnwiseHooks, TimeWindowFeatureGroup):
+    STRICT_SOURCE_FEATURES = False
+
     @classmethod
     def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
         return {PandasDataFrame}
@@ -39,35 +42,6 @@ class PandasTimeWindowFeatureGroup(TimeWindowFeatureGroup):
         """Check if the reference time column is a datetime column."""
         semantics = pandas_type_semantics.column_semantics(data, reference_time_column)
         cls._validate_reference_time_column(semantics, reference_time_column)
-
-    @classmethod
-    def _get_available_columns(cls, data: pd.DataFrame) -> set[str]:
-        """Get the set of available column names from the DataFrame."""
-        return set(data.columns)
-
-    @classmethod
-    def _check_source_features_exist(cls, data: pd.DataFrame, feature_names: list[str]) -> None:
-        """
-        Check if the resolved features exist in the DataFrame.
-
-        Args:
-            data: The Pandas DataFrame
-            feature_names: List of resolved feature names (may contain ~N suffixes)
-
-        Raises:
-            ValueError: If none of the resolved features exist in the data
-        """
-        missing_features = [name for name in feature_names if name not in data.columns]
-        if len(missing_features) == len(feature_names):
-            raise ValueError(
-                f"None of the source features {feature_names} found in data. Available columns: {list(data.columns)}"
-            )
-
-    @classmethod
-    def _add_result_to_data(cls, data: pd.DataFrame, feature_name: str, result: Any) -> pd.DataFrame:
-        """Add the result to the DataFrame."""
-        data[feature_name] = result
-        return data
 
     @classmethod
     def _perform_window_operation(

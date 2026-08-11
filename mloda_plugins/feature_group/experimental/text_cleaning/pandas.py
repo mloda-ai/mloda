@@ -27,10 +27,11 @@ except ImportError:
 
 from mloda.provider import ComputeFramework
 from mloda.user.pandas import PandasDataFrame
+from mloda_plugins.feature_group.columnwise_hooks import PandasColumnwiseHooks
 from mloda_plugins.feature_group.experimental.text_cleaning.base import TextCleaningFeatureGroup
 
 
-class PandasTextCleaningFeatureGroup(TextCleaningFeatureGroup):
+class PandasTextCleaningFeatureGroup(PandasColumnwiseHooks, TextCleaningFeatureGroup):
     """
     Pandas implementation of the TextCleaningFeatureGroup.
 
@@ -43,24 +44,6 @@ class PandasTextCleaningFeatureGroup(TextCleaningFeatureGroup):
     def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
         """Define the compute framework for this feature group."""
         return {PandasDataFrame}
-
-    @classmethod
-    def _check_source_features_exist(cls, data: pd.DataFrame, feature_names: list[str]) -> None:
-        """
-        Check if the source features exist in the DataFrame.
-
-        Args:
-            data: The pandas DataFrame
-            feature_names: List of feature names to check
-
-        Raises:
-            ValueError: If a feature does not exist in the DataFrame
-        """
-        missing_features = [f for f in feature_names if f not in data.columns]
-        if missing_features:
-            raise ValueError(
-                f"Source features not found in data: {missing_features}. Available columns: {list(data.columns)}"
-            )
 
     @classmethod
     def _get_source_text(cls, data: pd.DataFrame, feature_name: str) -> pd.Series:
@@ -76,22 +59,6 @@ class PandasTextCleaningFeatureGroup(TextCleaningFeatureGroup):
         """
         # Convert to string if not already
         return data[feature_name].astype(str)
-
-    @classmethod
-    def _add_result_to_data(cls, data: pd.DataFrame, feature_name: str, result: pd.Series) -> pd.DataFrame:
-        """
-        Add the cleaning result to the DataFrame.
-
-        Args:
-            data: The pandas DataFrame
-            feature_name: The name of the feature to add
-            result: The cleaning result as a pandas Series
-
-        Returns:
-            The updated DataFrame with the cleaning result added
-        """
-        data[feature_name] = result
-        return data
 
     @classmethod
     def _apply_operation(cls, data: pd.DataFrame, text: pd.Series, operation: str) -> pd.Series:

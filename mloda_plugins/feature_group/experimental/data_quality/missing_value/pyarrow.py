@@ -12,40 +12,14 @@ import pyarrow.compute as pc
 from mloda.provider import ComputeFramework
 
 from mloda.user.pyarrow import PyArrowTable
+from mloda_plugins.feature_group.columnwise_hooks import PyArrowColumnwiseHooks
 from mloda_plugins.feature_group.experimental.data_quality.missing_value.base import MissingValueFeatureGroup
 
 
-class PyArrowMissingValueFeatureGroup(MissingValueFeatureGroup):
+class PyArrowMissingValueFeatureGroup(PyArrowColumnwiseHooks, MissingValueFeatureGroup):
     @classmethod
     def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
         return {PyArrowTable}
-
-    @classmethod
-    def _get_available_columns(cls, data: pa.Table) -> set[str]:
-        """Get the set of available column names from the Table."""
-        return set(data.schema.names)
-
-    @classmethod
-    def _check_source_features_exist(cls, data: pa.Table, feature_names: list[str]) -> None:
-        """Check if the resolved source features exist in the Table."""
-        missing_features = [f for f in feature_names if f not in data.schema.names]
-        if missing_features:
-            raise ValueError(
-                f"Source features not found in data: {missing_features}. Available columns: {list(data.schema.names)}"
-            )
-
-    @classmethod
-    def _add_result_to_data(cls, data: pa.Table, feature_name: str, result: Any) -> pa.Table:
-        """Add the result to the Table."""
-        if feature_name in data.schema.names:
-            # Column exists - replace it
-            # Remove the existing column and add the new one
-            column_index = data.schema.names.index(feature_name)
-            data = data.remove_column(column_index)
-            return data.append_column(feature_name, result)
-        else:
-            # Column doesn't exist - add it
-            return data.append_column(feature_name, result)
 
     @classmethod
     def _perform_imputation(

@@ -10,6 +10,7 @@ from typing import Any, Optional
 from mloda.provider import ComputeFramework
 
 from mloda.user.pandas import PandasDataFrame
+from mloda_plugins.feature_group.columnwise_hooks import PandasColumnwiseHooks
 from mloda_plugins.feature_group.experimental.data_quality.missing_value.base import MissingValueFeatureGroup
 
 try:
@@ -18,30 +19,10 @@ except ImportError:
     pd = None
 
 
-class PandasMissingValueFeatureGroup(MissingValueFeatureGroup):
+class PandasMissingValueFeatureGroup(PandasColumnwiseHooks, MissingValueFeatureGroup):
     @classmethod
     def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
         return {PandasDataFrame}
-
-    @classmethod
-    def _get_available_columns(cls, data: pd.DataFrame) -> set[str]:
-        """Get the set of available column names from the DataFrame."""
-        return set(data.columns)
-
-    @classmethod
-    def _check_source_features_exist(cls, data: pd.DataFrame, feature_names: list[str]) -> None:
-        """Check if the resolved source features exist in the DataFrame."""
-        missing_features = [f for f in feature_names if f not in data.columns]
-        if missing_features:
-            raise ValueError(
-                f"Source features not found in data: {missing_features}. Available columns: {list(data.columns)}"
-            )
-
-    @classmethod
-    def _add_result_to_data(cls, data: pd.DataFrame, feature_name: str, result: Any) -> pd.DataFrame:
-        """Add the result to the DataFrame."""
-        data[feature_name] = result
-        return data
 
     @classmethod
     def _perform_imputation(

@@ -9,43 +9,17 @@ from typing import Any
 from mloda.provider import ComputeFramework
 
 from mloda.user.pandas import PandasDataFrame
+from mloda_plugins.feature_group.columnwise_hooks import PandasColumnwiseHooks
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.base import AggregatedFeatureGroup
 
 
-class PandasAggregatedFeatureGroup(AggregatedFeatureGroup):
+class PandasAggregatedFeatureGroup(PandasColumnwiseHooks, AggregatedFeatureGroup):
+    STRICT_SOURCE_FEATURES = False
+
     @classmethod
     def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
         """Specify that this feature group works with Pandas."""
         return {PandasDataFrame}
-
-    @classmethod
-    def _get_available_columns(cls, data: Any) -> set[str]:
-        """Get the set of available column names from the DataFrame."""
-        return set(data.columns)
-
-    @classmethod
-    def _check_source_features_exist(cls, data: Any, feature_names: list[str]) -> None:
-        """
-        Check if the resolved features exist in the DataFrame.
-
-        Args:
-            data: The Pandas DataFrame
-            feature_names: List of resolved feature names (may contain ~N suffixes)
-
-        Raises:
-            ValueError: If none of the resolved features exist in the data
-        """
-        missing_features = [name for name in feature_names if name not in data.columns]
-        if len(missing_features) == len(feature_names):
-            raise ValueError(
-                f"None of the source features {feature_names} found in data. Available columns: {list(data.columns)}"
-            )
-
-    @classmethod
-    def _add_result_to_data(cls, data: Any, feature_name: str, result: Any) -> Any:
-        """Add the result to the DataFrame."""
-        data[feature_name] = result
-        return data
 
     @classmethod
     def _perform_aggregation(cls, data: Any, aggregation_type: str, in_features: list[str]) -> Any:

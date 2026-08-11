@@ -202,6 +202,15 @@ def test_strictness_map_agrees_with_signature_lists() -> None:
     assert mismatches == [], f"STRICTNESS disagrees with test_check_source_features_signature for: {mismatches}"
 
 
+@pytest.mark.parametrize("plugin_class", list(STRICTNESS), ids=[cls.__name__ for cls in STRICTNESS])
+def test_class_declares_its_source_feature_strictness(plugin_class: type[Any]) -> None:
+    """The table and the code attribute must not drift, so no class silently flips policy during the migration."""
+    assert plugin_class.STRICT_SOURCE_FEATURES is STRICTNESS[plugin_class], (
+        f"{plugin_class.__name__}.STRICT_SOURCE_FEATURES is {plugin_class.STRICT_SOURCE_FEATURES!r}, "
+        f"STRICTNESS says {STRICTNESS[plugin_class]!r}"
+    )
+
+
 def test_no_base_module_declares_a_hook_in_source() -> None:
     """Static sweep: no base.py under the experimental tree re-adds a hook declaration to a class body."""
     offenders: list[str] = []

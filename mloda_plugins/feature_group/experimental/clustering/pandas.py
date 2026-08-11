@@ -29,53 +29,17 @@ except ImportError:
 
 from mloda.provider import ComputeFramework
 from mloda.user.pandas import PandasDataFrame
+from mloda_plugins.feature_group.columnwise_hooks import PandasColumnwiseHooks
 from mloda_plugins.feature_group.experimental.clustering.base import ClusteringFeatureGroup
 
 
-class PandasClusteringFeatureGroup(ClusteringFeatureGroup):
+class PandasClusteringFeatureGroup(PandasColumnwiseHooks, ClusteringFeatureGroup):
+    STRICT_SOURCE_FEATURES = False
+
     @classmethod
     def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
         """Define the compute framework for this feature group."""
         return {PandasDataFrame}
-
-    @classmethod
-    def _get_available_columns(cls, data: pd.DataFrame) -> set[str]:
-        """Get the set of available column names from the DataFrame."""
-        return set(data.columns)
-
-    @classmethod
-    def _check_source_features_exist(cls, data: pd.DataFrame, feature_names: list[str]) -> None:
-        """
-        Check if the resolved features exist in the DataFrame.
-
-        Args:
-            data: The Pandas DataFrame
-            feature_names: List of resolved feature names (may contain ~N suffixes)
-
-        Raises:
-            ValueError: If none of the resolved features exist in the data
-        """
-        missing_features = [name for name in feature_names if name not in data.columns]
-        if len(missing_features) == len(feature_names):
-            raise ValueError(
-                f"None of the source features {feature_names} found in data. Available columns: {list(data.columns)}"
-            )
-
-    @classmethod
-    def _add_result_to_data(cls, data: "pd.DataFrame", feature_name: str, result: "NDArray[Any]") -> "pd.DataFrame":
-        """
-        Add the clustering result to the DataFrame.
-
-        Args:
-            data: The pandas DataFrame
-            feature_name: The name of the feature to add
-            result: The clustering result (cluster assignments)
-
-        Returns:
-            The updated DataFrame with the clustering result added
-        """
-        data[feature_name] = result
-        return data
 
     @classmethod
     def _perform_clustering(

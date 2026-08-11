@@ -9,6 +9,7 @@ from typing import Any
 from mloda.provider import ComputeFramework
 
 from mloda.user.polars import PolarsLazyDataFrame
+from mloda_plugins.feature_group.columnwise_hooks import PolarsLazyColumnwiseHooks
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.base import AggregatedFeatureGroup
 
 try:
@@ -17,7 +18,7 @@ except ImportError:
     pl = None  # type: ignore[assignment]
 
 
-class PolarsLazyAggregatedFeatureGroup(AggregatedFeatureGroup):
+class PolarsLazyAggregatedFeatureGroup(PolarsLazyColumnwiseHooks, AggregatedFeatureGroup):
     """
     Polars Lazy implementation of aggregated feature group.
 
@@ -25,41 +26,12 @@ class PolarsLazyAggregatedFeatureGroup(AggregatedFeatureGroup):
     aggregation operations through query planning and deferred execution.
     """
 
+    STRICT_SOURCE_FEATURES = False
+
     @classmethod
     def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
         """Specify that this feature group works with Polars Lazy DataFrames."""
         return {PolarsLazyDataFrame}
-
-    @classmethod
-    def _get_available_columns(cls, data: Any) -> set[str]:
-        """Get the set of available column names from the LazyFrame schema."""
-        if hasattr(data, "collect_schema"):
-            return set(data.collect_schema().names())
-        else:
-            raise ValueError("Data does not have a collect_schema method, cannot get available columns.")
-
-    @classmethod
-    def _check_source_features_exist(cls, data: Any, feature_names: list[str]) -> None:
-        """
-        Check if the resolved features exist in the LazyFrame schema.
-
-        Args:
-            data: The Polars LazyFrame
-            feature_names: List of resolved feature names (may contain ~N suffixes)
-
-        Raises:
-            ValueError: If none of the resolved features exist in the data
-        """
-        if hasattr(data, "collect_schema"):
-            schema_names = set(data.collect_schema().names())
-            missing_features = [name for name in feature_names if name not in schema_names]
-            if len(missing_features) == len(feature_names):
-                raise ValueError(
-                    f"None of the source features {feature_names} found in data. "
-                    f"Available columns: {list(schema_names)}"
-                )
-        else:
-            raise ValueError("Data does not have a collect_schema method, cannot check feature existence.")
 
     @classmethod
     def _add_result_to_data(cls, data: Any, feature_name: str, result: Any) -> Any:

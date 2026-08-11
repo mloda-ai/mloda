@@ -259,57 +259,51 @@ class PythonDictMergeEngine(BaseMergeEngine):
 
         return self._to_columnar(result, out_columns)
 
-    def _left_join(
-        self, left_data: Any, right_data: Any, left_cols: tuple[str, ...], right_cols: tuple[str, ...]
+    def _directional_join(
+        self,
+        primary_data: Any,
+        secondary_data: Any,
+        primary_cols: tuple[str, ...],
+        secondary_cols: tuple[str, ...],
+        primary_is_left: bool,
     ) -> Any:
-        """Performs left join, fanning out matches and null-filling unmatched left rows."""
-        left_rows = self._to_rows(left_data)
-        right_rows = self._to_rows(right_data)
-        right_groups = self._group_by_key(right_rows, right_cols)
+        """Drives one side of an outer join, fanning out matches and null-filling unmatched primary rows."""
+        primary_rows = self._to_rows(primary_data)
+        secondary_rows = self._to_rows(secondary_data)
+        secondary_groups = self._group_by_key(secondary_rows, secondary_cols)
 
-        out_columns = self._ordered_columns(left_data.keys(), right_data.keys())
-        right_columns = [col for col in right_data.keys() if col not in set(right_cols) and col not in left_data]
+        out_columns = self._ordered_columns(primary_data.keys(), secondary_data.keys())
+        fill_columns = [
+            col for col in secondary_data.keys() if col not in set(secondary_cols) and col not in primary_data
+        ]
 
         result = []
-        for left in left_rows:
-            key = tuple(left.get(col) for col in left_cols)
-            matches = right_groups.get(key)
+        for primary in primary_rows:
+            key = tuple(primary.get(col) for col in primary_cols)
+            matches = secondary_groups.get(key)
             if matches:
-                for right in matches:
-                    result.append({**left, **right})
+                # Merge order stays left-then-right, so the right side wins overlapping columns either way.
+                for secondary in matches:
+                    result.append({**primary, **secondary} if primary_is_left else {**secondary, **primary})
             else:
-                merged = {**left}
-                for col in right_columns:
+                merged = {**primary}
+                for col in fill_columns:
                     merged[col] = None
                 result.append(merged)
 
         return self._to_columnar(result, out_columns)
+
+    def _left_join(
+        self, left_data: Any, right_data: Any, left_cols: tuple[str, ...], right_cols: tuple[str, ...]
+    ) -> Any:
+        """Performs left join, fanning out matches and null-filling unmatched left rows."""
+        return self._directional_join(left_data, right_data, left_cols, right_cols, primary_is_left=True)
 
     def _right_join(
         self, left_data: Any, right_data: Any, left_cols: tuple[str, ...], right_cols: tuple[str, ...]
     ) -> Any:
         """Performs right join, fanning out matches and null-filling unmatched right rows."""
-        left_rows = self._to_rows(left_data)
-        right_rows = self._to_rows(right_data)
-        left_groups = self._group_by_key(left_rows, left_cols)
-
-        out_columns = self._ordered_columns(right_data.keys(), left_data.keys())
-        left_columns = [col for col in left_data.keys() if col not in set(left_cols) and col not in right_data]
-
-        result = []
-        for right in right_rows:
-            key = tuple(right.get(col) for col in right_cols)
-            matches = left_groups.get(key)
-            if matches:
-                for left in matches:
-                    result.append({**left, **right})
-            else:
-                merged = {**right}
-                for col in left_columns:
-                    merged[col] = None
-                result.append(merged)
-
-        return self._to_columnar(result, out_columns)
+        return self._directional_join(right_data, left_data, right_cols, left_cols, primary_is_left=False)
 
     def _outer_join(
         self, left_data: Any, right_data: Any, left_cols: tuple[str, ...], right_cols: tuple[str, ...]

@@ -14,10 +14,13 @@ from mloda.provider import ComputeFramework
 
 from mloda_plugins.compute_framework.base_implementations.pyarrow import pyarrow_type_semantics
 from mloda.user.pyarrow import PyArrowTable
+from mloda_plugins.feature_group.columnwise_hooks import PyArrowColumnwiseHooks
 from mloda_plugins.feature_group.experimental.time_window.base import TimeWindowFeatureGroup
 
 
-class PyArrowTimeWindowFeatureGroup(TimeWindowFeatureGroup):
+class PyArrowTimeWindowFeatureGroup(PyArrowColumnwiseHooks, TimeWindowFeatureGroup):
+    STRICT_SOURCE_FEATURES = False
+
     @classmethod
     def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
         return {PyArrowTable}
@@ -36,45 +39,6 @@ class PyArrowTimeWindowFeatureGroup(TimeWindowFeatureGroup):
         """Check if the reference time column is a datetime column."""
         semantics = pyarrow_type_semantics.column_semantics(data, reference_time_column)
         cls._validate_reference_time_column(semantics, reference_time_column)
-
-    @classmethod
-    def _get_available_columns(cls, data: pa.Table) -> set[str]:
-        """Get the set of available column names from the Table schema."""
-        return set(data.schema.names)
-
-    @classmethod
-    def _check_source_features_exist(cls, data: pa.Table, feature_names: list[str]) -> None:
-        """
-        Check if the resolved features exist in the Table.
-
-        Args:
-            data: The PyArrow Table
-            feature_names: List of resolved feature names (may contain ~N suffixes)
-
-        Raises:
-            ValueError: If none of the resolved features exist in the data
-        """
-        schema_names = set(data.schema.names)
-        missing_features = [name for name in feature_names if name not in schema_names]
-        if len(missing_features) == len(feature_names):
-            raise ValueError(
-                f"None of the source features {feature_names} found in data. Available columns: {list(schema_names)}"
-            )
-
-    @classmethod
-    def _add_result_to_data(cls, data: pa.Table, feature_name: str, result: Any) -> pa.Table:
-        """Add the result to the Table."""
-        # Check if column already exists
-        if feature_name in data.schema.names:
-            # Column exists, replace it by removing the old one and adding the new one
-            column_index = data.schema.names.index(feature_name)
-            # Remove the existing column
-            data = data.remove_column(column_index)
-            # Add the new column
-            return data.append_column(feature_name, result)
-        else:
-            # Column doesn't exist, add it normally
-            return data.append_column(feature_name, result)
 
     @classmethod
     def _perform_window_operation(

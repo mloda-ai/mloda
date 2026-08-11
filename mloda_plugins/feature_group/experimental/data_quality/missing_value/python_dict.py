@@ -11,10 +11,11 @@ from typing import Any, Optional
 from mloda.provider import ComputeFramework
 
 from mloda.user.python_dict import PythonDictFramework, row_count
+from mloda_plugins.feature_group.columnwise_hooks import PythonDictColumnwiseHooks
 from mloda_plugins.feature_group.experimental.data_quality.missing_value.base import MissingValueFeatureGroup
 
 
-class PythonDictMissingValueFeatureGroup(MissingValueFeatureGroup):
+class PythonDictMissingValueFeatureGroup(PythonDictColumnwiseHooks, MissingValueFeatureGroup):
     """
     PythonDict implementation for missing value imputation feature groups.
 
@@ -25,39 +26,6 @@ class PythonDictMissingValueFeatureGroup(MissingValueFeatureGroup):
     @classmethod
     def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
         return {PythonDictFramework}
-
-    @classmethod
-    def _get_available_columns(cls, data: dict[str, list[Any]]) -> set[str]:
-        """Get the set of available column names from the data."""
-        return set(data.keys())
-
-    @classmethod
-    def _check_source_features_exist(cls, data: dict[str, list[Any]], feature_names: list[str]) -> None:
-        """Check if the resolved source features exist in the data."""
-        if not data:
-            raise ValueError("Data cannot be empty")
-
-        # Get all available features
-        available_features = cls._get_available_columns(data)
-
-        # Check which features are missing
-        missing_features = [f for f in feature_names if f not in available_features]
-        if missing_features:
-            raise ValueError(
-                f"Source features not found in data: {missing_features}. Available columns: {list(available_features)}"
-            )
-
-    @classmethod
-    def _add_result_to_data(
-        cls, data: dict[str, list[Any]], feature_name: str, result: list[Any]
-    ) -> dict[str, list[Any]]:
-        """Add the result to the data."""
-        if len(result) != row_count(data):
-            raise ValueError(f"Result length {len(result)} does not match data length {row_count(data)}")
-
-        data[feature_name] = list(result)
-
-        return data
 
     @classmethod
     def _perform_imputation(

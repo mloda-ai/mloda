@@ -11,7 +11,8 @@ from typing import Any
 
 from mloda.provider import ComputeFramework
 
-from mloda.user.python_dict import PythonDictFramework, row_count
+from mloda.user.python_dict import PythonDictFramework
+from mloda_plugins.feature_group.columnwise_hooks import PythonDictColumnwiseHooks
 from mloda_plugins.feature_group.experimental.text_cleaning.base import TextCleaningFeatureGroup
 
 # Optional NLTK support - gracefully handle if not available
@@ -26,7 +27,7 @@ except ImportError:
     nltk_available = False
 
 
-class PythonDictTextCleaningFeatureGroup(TextCleaningFeatureGroup):
+class PythonDictTextCleaningFeatureGroup(PythonDictColumnwiseHooks, TextCleaningFeatureGroup):
     """
     PythonDict implementation for text cleaning feature groups.
 
@@ -38,19 +39,6 @@ class PythonDictTextCleaningFeatureGroup(TextCleaningFeatureGroup):
     @classmethod
     def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
         return {PythonDictFramework}
-
-    @classmethod
-    def _check_source_features_exist(cls, data: dict[str, list[Any]], feature_names: list[str]) -> None:
-        if not data:
-            raise ValueError("Data cannot be empty")
-
-        available_features = set(data.keys())
-        missing_features = [f for f in feature_names if f not in available_features]
-        if missing_features:
-            raise ValueError(
-                f"Source features not found in data: {missing_features}. "
-                f"Available columns: {sorted(available_features)}"
-            )
 
     @classmethod
     def _get_source_text(cls, data: dict[str, list[Any]], feature_name: str) -> list[str]:
@@ -66,28 +54,6 @@ class PythonDictTextCleaningFeatureGroup(TextCleaningFeatureGroup):
         """
         # Convert to string if not already and handle None values
         return [str(value) if value is not None else "" for value in data.get(feature_name, [])]
-
-    @classmethod
-    def _add_result_to_data(
-        cls, data: dict[str, list[Any]], feature_name: str, result: list[str]
-    ) -> dict[str, list[Any]]:
-        """
-        Add the cleaning result to the data.
-
-        Args:
-            data: The columnar dict data structure
-            feature_name: The name of the feature to add
-            result: The cleaning result as a list of strings
-
-        Returns:
-            The updated data with the cleaning result added
-        """
-        if len(result) != row_count(data):
-            raise ValueError(f"Result length {len(result)} does not match data length {row_count(data)}")
-
-        data[feature_name] = list(result)
-
-        return data
 
     @classmethod
     def _apply_operation(cls, data: dict[str, list[Any]], text: list[str], operation: str) -> list[str]:

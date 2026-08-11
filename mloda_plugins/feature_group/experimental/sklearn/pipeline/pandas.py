@@ -9,10 +9,11 @@ from typing import Any
 from mloda.provider import ComputeFramework
 
 from mloda.user.pandas import PandasDataFrame
+from mloda_plugins.feature_group.columnwise_hooks import SklearnPandasColumnwiseHooks
 from mloda_plugins.feature_group.experimental.sklearn.pipeline.base import SklearnPipelineFeatureGroup
 
 
-class PandasSklearnPipelineFeatureGroup(SklearnPipelineFeatureGroup):
+class PandasSklearnPipelineFeatureGroup(SklearnPandasColumnwiseHooks, SklearnPipelineFeatureGroup):
     """
     Pandas implementation for scikit-learn pipeline feature groups.
 
@@ -24,38 +25,6 @@ class PandasSklearnPipelineFeatureGroup(SklearnPipelineFeatureGroup):
     def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
         """Specify that this feature group works with Pandas."""
         return {PandasDataFrame}
-
-    @classmethod
-    def _check_source_features_exist(cls, data: Any, feature_names: list[str]) -> None:
-        """Check if the features exist in the DataFrame."""
-        missing_features = [f for f in feature_names if f not in data.columns]
-        if missing_features:
-            raise ValueError(
-                f"Source features not found in data: {missing_features}. Available columns: {list(data.columns)}"
-            )
-
-    @classmethod
-    def _add_result_to_data(cls, data: Any, feature_name: str, result: Any) -> Any:
-        """Add the result to the DataFrame."""
-        # Handle different result types from sklearn pipelines
-        if hasattr(result, "shape") and len(result.shape) == 2:
-            # Multi-dimensional result (e.g., from PCA, multiple features)
-            if result.shape[1] == 1:
-                # Single column result
-                data[feature_name] = result.flatten()
-            else:
-                # Multiple columns - use naming convention with ~ separator
-                named_columns = cls.apply_naming_convention(result, feature_name)
-                for col_name, col_data in named_columns.items():
-                    data[col_name] = col_data
-        elif hasattr(result, "shape") and len(result.shape) == 1:
-            # Single dimensional result
-            data[feature_name] = result
-        else:
-            # Scalar or other result type
-            data[feature_name] = result
-
-        return data
 
     @classmethod
     def _extract_training_data(cls, data: Any, source_features: list[Any]) -> Any:

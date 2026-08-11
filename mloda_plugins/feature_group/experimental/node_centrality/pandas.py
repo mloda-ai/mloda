@@ -16,32 +16,15 @@ except ImportError:
 
 from mloda.provider import CHAIN_SEPARATOR, ComputeFramework
 from mloda.user.pandas import PandasDataFrame
+from mloda_plugins.feature_group.columnwise_hooks import PandasColumnwiseHooks
 from mloda_plugins.feature_group.experimental.node_centrality.base import NodeCentralityFeatureGroup
 
 
-class PandasNodeCentralityFeatureGroup(NodeCentralityFeatureGroup):
+class PandasNodeCentralityFeatureGroup(PandasColumnwiseHooks, NodeCentralityFeatureGroup):
     @classmethod
     def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
         """Define the compute framework for this feature group."""
         return {PandasDataFrame}
-
-    @classmethod
-    def _check_source_features_exist(cls, data: pd.DataFrame, feature_names: list[str]) -> None:
-        """
-        Check if the source features exist in the DataFrame.
-
-        Args:
-            data: The pandas DataFrame
-            feature_names: List of feature names to check
-
-        Raises:
-            ValueError: If a feature does not exist in the DataFrame
-        """
-        missing_features = [f for f in feature_names if f not in data.columns]
-        if missing_features:
-            raise ValueError(
-                f"Source features not found in data: {missing_features}. Available columns: {list(data.columns)}"
-            )
 
     @classmethod
     def _add_result_to_data(cls, data: pd.DataFrame, feature_name: str, result: pd.Series) -> pd.DataFrame:

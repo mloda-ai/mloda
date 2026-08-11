@@ -11,29 +11,15 @@ import numpy as np
 from mloda.provider import ComputeFramework
 
 from mloda.user.pandas import PandasDataFrame
+from mloda_plugins.feature_group.columnwise_hooks import PandasColumnwiseHooks
 from mloda_plugins.feature_group.experimental.geo_distance.base import GeoDistanceFeatureGroup
 
 
-class PandasGeoDistanceFeatureGroup(GeoDistanceFeatureGroup):
+class PandasGeoDistanceFeatureGroup(PandasColumnwiseHooks, GeoDistanceFeatureGroup):
     @classmethod
     def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
         """Specify that this feature group works with Pandas."""
         return {PandasDataFrame}
-
-    @classmethod
-    def _check_source_features_exist(cls, data: Any, feature_names: list[str]) -> None:
-        """Check if the source features exist in the DataFrame."""
-        missing_features = [f for f in feature_names if f not in data.columns]
-        if missing_features:
-            raise ValueError(
-                f"Source features not found in data: {missing_features}. Available columns: {list(data.columns)}"
-            )
-
-    @classmethod
-    def _add_result_to_data(cls, data: Any, feature_name: str, result: Any) -> Any:
-        """Add the result to the DataFrame."""
-        data[feature_name] = result
-        return data
 
     @classmethod
     def _calculate_distance(cls, data: Any, distance_type: str, point1_feature: str, point2_feature: str) -> Any:

@@ -211,8 +211,9 @@ filters for row elimination.
 
 The return is read for truthiness, so any falsy value is a non-match, exactly like `False`: a hook
 that falls off the end of a branch and returns `None` attaches no filter. A falsy value that is not
-`False` is reported once per FeatureGroup and declared filter, so the detached filter is visible;
-return `True` explicitly to keep it.
+`False` is reported so the detached filter is visible; return `True` explicitly to keep it. The
+report names the returned type, and each distinct report is a WARNING once per setup (see
+[Why a filter did not attach](#why-a-filter-did-not-attach)).
 
 Matched filters are attached to the `FeatureSet` before `calculate_feature()` is
 called. Inside your calculation you can access them via `features.filters`:
@@ -257,6 +258,11 @@ dropped the filter and that gate's reason, for the current engine setup only. A 
 ordinary non-match and records nothing. A matcher defect takes the key from a stored near-miss;
 otherwise the deepest gate the filter reached keeps it, and two facts at one depth leave the first one
 in place.
+
+Both the defect drop and the falsy-return report are WARNINGs, deduplicated per setup on the rendered
+line: a report reading exactly like an earlier one drops to DEBUG, and one that reads differently, a
+new reason under the same column for instance, warns on its own. That dedupe decides the log level
+only; `dropped_filters` records per declaration either way.
 
 The uuid is `SingleFilter.uuid` of the declaration in `GlobalFilter.filters`, which is what joins a
 recorded fact back to the filter that lost. The key previously carried no uuid, so code unpacking it

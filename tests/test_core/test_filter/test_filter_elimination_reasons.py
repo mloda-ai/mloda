@@ -62,6 +62,8 @@ ORDER_SECOND_FEATURE = "fer_order_feat two"  # its space beats the other's closi
 
 RUNTIME_MESSAGE = "fer_runtime_boom"
 RUNTIME_TYPE_NAME = "RuntimeError"
+FIRST_DEFECT_MESSAGE = "fer_first_boom"  # what a hook raises the first time, so the two reasons read differently
+SECOND_DEFECT_MESSAGE = "fer_second_boom"
 DEFECT_MESSAGE = "fer_defect_after_decline"
 DECLINE_REASON = "fer_decline_reason"
 UNKNOWN_STAGE = "fer_unknown_stage_hint"  # a free-form hint no engine stage knows
@@ -380,6 +382,56 @@ def _make_plain_decline_fg() -> type[FeatureGroup]:
             return str(feature_name) in cls.feature_names_supported()
 
     return FerPlainDeclineFG
+
+
+def _make_varying_defect_fg(reasons: Sequence[str]) -> type[FeatureGroup]:
+    """A throwaway group whose hook raises each of `reasons` once, then repeats the last one for every later call."""
+    gc.collect()
+
+    class FerVaryingDefectFG(FeatureGroup):
+        _pending: ClassVar[list[str]] = list(reasons)
+
+        @classmethod
+        def feature_names_supported(cls) -> set[str]:
+            return {HOST_FEATURE}
+
+        @classmethod
+        def match_feature_group_criteria(
+            cls,
+            feature_name: FeatureName | str,
+            options: Options,
+            data_access_collection: DataAccessCollection | None = None,
+        ) -> bool:
+            if str(feature_name) == FILTER_FEATURE:
+                raise RuntimeError(cls._pending.pop(0) if len(cls._pending) > 1 else cls._pending[0])
+            return str(feature_name) in cls.feature_names_supported()
+
+    return FerVaryingDefectFG
+
+
+def _make_varying_falsy_fg(returns: Sequence[Any]) -> type[FeatureGroup]:
+    """A throwaway group returning each of `returns` once, then repeating the last: the type name is what differs."""
+    gc.collect()
+
+    class FerVaryingFalsyFG(FeatureGroup):
+        _pending: ClassVar[list[Any]] = list(returns)
+
+        @classmethod
+        def feature_names_supported(cls) -> set[str]:
+            return {HOST_FEATURE}
+
+        @classmethod
+        def match_feature_group_criteria(
+            cls,
+            feature_name: FeatureName | str,
+            options: Options,
+            data_access_collection: DataAccessCollection | None = None,
+        ) -> Any:  # Any, not bool: the falsy non-bool return is the case under test.
+            if str(feature_name) == FILTER_FEATURE:
+                return cls._pending.pop(0) if len(cls._pending) > 1 else cls._pending[0]
+            return str(feature_name) in cls.feature_names_supported()
+
+    return FerVaryingFalsyFG
 
 
 def _make_falsy_decline_fg() -> type[FeatureGroup]:
@@ -1181,8 +1233,9 @@ class TestTheUnmatchedWarningsAreOrderedByFilterFeatureName:
         assert snapshot.unmatched == expected, f"the filter feature name must order the warnings: {snapshot.unmatched}"
 
 
-class TestTheReportsDedupePerColumnNotPerDeclaration:
-    """Both reports render from the group, the reason and the name alone, so a second declaration adds no line."""
+class TestTheReportsDedupeOnTheRenderedLine:
+    """A report the reader cannot tell apart from an earlier one falls to DEBUG; anything that reads differently
+    is a new fact and warns. The ledger keys per declaration and never derives its write from that dedupe."""
 
     def test_two_defects_on_one_name_record_twice_and_report_once(self, caplog: pytest.LogCaptureFixture) -> None:
         """The ledger keeps its fact per declaration; the byte-identical repeat of the report falls to DEBUG."""
@@ -1209,6 +1262,52 @@ class TestTheReportsDedupePerColumnNotPerDeclaration:
         assert len(reported) == 1, f"the column's detached filter must be reported once, got: {snapshot.warnings}"
         assert _carrying(snapshot.debugs, FALSY_REPORT_FRAGMENT) == reported, (
             f"the repeat is that same line and belongs at DEBUG, got: {snapshot.debugs}"
+        )
+
+    def test_a_defect_reading_differently_warns_instead_of_falling_to_debug(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """One column, three drops, two distinct reasons: only the reason that repeats verbatim is muted."""
+        snapshot = _drive_matching(
+            [partial(_make_varying_defect_fg, (FIRST_DEFECT_MESSAGE, SECOND_DEFECT_MESSAGE))], caplog, calls=3
+        )
+
+        assert snapshot.escaped is None, f"nothing may cross identify_matched_filters: {snapshot.escaped}"
+        reported = _carrying(snapshot.warnings, DROP_REPORT_FRAGMENT)
+        assert len(reported) == 2, f"each distinct reason must warn on its own, got: {snapshot.warnings}"
+        assert FIRST_DEFECT_MESSAGE in reported[0], f"the first reason must be reported: {reported[0]}"
+        assert SECOND_DEFECT_MESSAGE in reported[1], f"the second reason must be reported: {reported[1]}"
+        assert _carrying(snapshot.debugs, DROP_REPORT_FRAGMENT) == (reported[1],), (
+            f"only the verbatim repeat belongs at DEBUG, got: {snapshot.debugs}"
+        )
+
+    def test_the_pinned_defect_survives_a_second_defect_that_reports(self, caplog: pytest.LogCaptureFixture) -> None:
+        """The report dedupe must not reach the ledger: a defect never overwrites one already stored."""
+        snapshot = _drive_matching(
+            [partial(_make_varying_defect_fg, (FIRST_DEFECT_MESSAGE, SECOND_DEFECT_MESSAGE))], caplog, calls=3
+        )
+
+        assert snapshot.ledger_error is None, f"the stored fact must be readable: {snapshot.ledger_error}"
+        assert len(snapshot.rows) == 1, f"one declaration against one group is one key, got: {snapshot.rows}"
+        _, _, stage, reason = snapshot.rows[0]
+        assert stage == MATCHER_ERROR_STAGE, f"the drop must be recorded as a defect, got stage: {stage}"
+        assert FIRST_DEFECT_MESSAGE in reason, f"the first defect must keep the key, got reason: {reason}"
+        assert SECOND_DEFECT_MESSAGE not in reason, f"a later defect must not overwrite the pinned one: {reason}"
+
+    def test_a_falsy_return_of_another_type_warns_instead_of_falling_to_debug(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """The returned type name is part of the line, so a second type is a new fact and not a repeat."""
+        snapshot = _drive_matching([partial(_make_varying_falsy_fg, (None, ""))], caplog, calls=3)
+
+        assert snapshot.escaped is None, f"nothing may cross identify_matched_filters: {snapshot.escaped}"
+        assert snapshot.rows == (), f"a falsy non-bool is a non-match, never a fact, got: {snapshot.rows}"
+        reported = _carrying(snapshot.warnings, FALSY_REPORT_FRAGMENT)
+        assert len(reported) == 2, f"each returned type must be reported on its own, got: {snapshot.warnings}"
+        assert f"({type(None).__name__})" in reported[0], f"the first type must be named: {reported[0]}"
+        assert f"({str.__name__})" in reported[1], f"the second type must be named: {reported[1]}"
+        assert _carrying(snapshot.debugs, FALSY_REPORT_FRAGMENT) == (reported[1],), (
+            f"only the verbatim repeat belongs at DEBUG, got: {snapshot.debugs}"
         )
 
 

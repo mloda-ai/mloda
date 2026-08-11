@@ -19,6 +19,13 @@ from mloda.core.prepare.joinstep_collection import JoinStepCollection
 from mloda.core.prepare.graph.graph import Graph
 from mloda.core.prepare.resolve_graph import PlannedQueue
 from mloda.core.prepare.resolve_links import LinkFrameworkTrekker, LinkTrekker, inheritance_distance
+from mloda.core.prepare.resolved_join import JoinSignature, PlannedOrientation, ResolvedJoinPlan
+from mloda.core.prepare.resolved_join_builder import (
+    DeclaredFrameworks,
+    build_resolved_join_plan,
+    legacy_join_signatures,
+    log_join_plan_divergence,
+)
 from mloda.core.core.step.abstract_step import Step
 from mloda.core.core.step.feature_group_step import FeatureGroupStep
 from mloda.core.core.step.join_step import JoinStep
@@ -82,16 +89,42 @@ class ExecutionPlan:
         # Report each divergence once, then at DEBUG.
         self.reported_unmatched: set[tuple[type[FeatureGroup], str, tuple[str, ...]]] = set()
 
+        self.planned_orientations: list[tuple[PlannedOrientation, JoinStep]] = []
+        self.declined_orientations: list[LinkFrameworkTrekker] = []
+        self.resolved_join_plan = ResolvedJoinPlan((), ())
+        self.join_signatures_at_build: frozenset[JoinSignature] = frozenset()
+
     def __iter__(self) -> Generator[TransformFrameworkStep | JoinStep | FeatureGroupStep, None, None]:
         yield from self.execution_plan
 
     def __len__(self) -> int:
         return len(self.execution_plan)
 
-    def create_execution_plan(self, queue: PlannedQueue, graph: Graph, link_trekker: LinkTrekker) -> None:
+    def create_execution_plan(
+        self,
+        queue: PlannedQueue,
+        graph: Graph,
+        link_trekker: LinkTrekker,
+        declared_frameworks: DeclaredFrameworks | None = None,
+    ) -> None:
+        self.planned_orientations = []
+        self.declined_orientations = []
+
         child_links = self.invert_link_trekker(link_trekker)
         pre_execution_plan = self.add_feature_group_step(queue, graph.parent_to_children_mapping, child_links)
         fw_execution_plan = self.add_joinstep(pre_execution_plan, link_trekker, graph)
+
+        # Both built before add_tfs, which adds write serialization edges that are not part of the join decision.
+        join_steps = [step for step in fw_execution_plan if isinstance(step, JoinStep)]
+        self.resolved_join_plan = build_resolved_join_plan(
+            self.planned_orientations,
+            self.declined_orientations,
+            graph,
+            declared_frameworks if declared_frameworks is not None else {},
+        )
+        self.join_signatures_at_build = legacy_join_signatures(join_steps)
+        log_join_plan_divergence(self.resolved_join_plan, join_steps)
+
         self.execution_plan = self.add_tfs(fw_execution_plan, graph)
         self.raise_on_step_cycle(self.execution_plan)
 
@@ -504,6 +537,7 @@ class ExecutionPlan:
         link = link_fw[0]
         destination_framework = link_fw[1]
         source_framework = link_fw[2]
+        effective_key = link_fw
 
         if link.jointype == JoinType.RIGHT:
             destination_framework = link_fw[2]
@@ -525,6 +559,7 @@ class ExecutionPlan:
             source_framework = link_fw[1]
             # The join then executes in the right feature group's framework, so the merge arguments are inverted.
             swap_merge_sides = True
+            effective_key = (link, destination_framework, source_framework)
 
             for stored_links, uuids in link_trekker.data.items():
                 if (link, destination_framework, source_framework) == stored_links:
@@ -588,6 +623,7 @@ class ExecutionPlan:
             # result = True
             result = self.is_valid_join_step(link_fw, children_fw, children_uuid, graph)
             if result is False:
+                self.declined_orientations.append(link_fw)
                 return None
             elif result is True:
                 pass
@@ -610,6 +646,8 @@ class ExecutionPlan:
                     destination_framework, declared_left_frameworks, declared_right_frameworks, swap_merge_sides
                 ),
             )
+
+        self.planned_orientations.append((PlannedOrientation(effective_key, frozenset(children_uuids)), js))
 
         # This makes sure that we do not write on the same datasets due to overlapping joins at once.
         self.joinstep_collection.add(js)

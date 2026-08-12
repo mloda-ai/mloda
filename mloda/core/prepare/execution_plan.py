@@ -433,12 +433,19 @@ class ExecutionPlan:
                 raise ValueError(f"Element {ep} is not a valid element.")
             new_execution_plan.append(ep)
 
-            # We define that every parent of a transform framework step needs to be uploaded.
-            # This step is only relevant for multi processing.
-            for _ep in new_execution_plan:
-                if isinstance(_ep, FeatureGroupStep):
-                    if not need_to_upload_collector.isdisjoint(_ep.get_uuids()):
-                        _ep.need_to_upload = True
+        # We define that every parent of a transform framework step needs to be uploaded.
+        # This step is only relevant for multi processing.
+        #
+        # One pass over the finished plan, not one per appended step: the marking is
+        # monotone (only ever set to True, and need_to_upload_collector only grows),
+        # nothing inside add_tfs reads need_to_upload, and no step escapes the list
+        # mid-build - so a step ends up marked iff it is non-disjoint from the FINAL
+        # collector either way. That drops the pass from O(steps^2 * features) to
+        # O(steps * features).
+        for _ep in new_execution_plan:
+            if isinstance(_ep, FeatureGroupStep):
+                if not need_to_upload_collector.isdisjoint(_ep.get_uuids()):
+                    _ep.need_to_upload = True
 
         return new_execution_plan
 

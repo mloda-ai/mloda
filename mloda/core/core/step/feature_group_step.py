@@ -64,8 +64,15 @@ class FeatureGroupStep(Step):
 
         if self.location:
             if self.need_to_upload:
-                if not isinstance(cfw.data, str):
+                # run_calculation may already have uploaded this dataset and
+                # replaced cfw.data with the returned object id string. Uploading
+                # a second time would hand that string to
+                # FlightServer.upload_table, which fails on table.schema.
+                # JoinStep._upload_data_if_needed guards its own upload likewise.
+                if not cfw.data_is_uploaded_object_id():
                     cfw.upload_finished_data(self.location)
+                # Registered either way: the dataset IS uploaded, so downstream
+                # consumers still need the flyway registration.
                 cfw_register.add_uuid_flyway_datasets(cfw.uuid, set(self.children_if_root))
             return data
         return None

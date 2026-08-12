@@ -763,6 +763,18 @@ Available join types:
         return self.upload_table(location, self.uuid)
 
     @final
+    def data_is_uploaded_object_id(self) -> bool:
+        """True when ``self.data`` is an object id string this framework uploaded.
+
+        :meth:`run_calculation` replaces ``self.data`` with the id returned by
+        :meth:`upload_finished_data` once a dataset is complete, so callers that
+        may upload again have to check first: handing the id string back to
+        :meth:`upload_table` would pass a ``str`` to ``FlightServer.upload_table``,
+        which fails on ``table.schema``.
+        """
+        return isinstance(self.data, str) and self.data in self.object_ids
+
+    @final
     def upload_table(self, location: str, object_id: Optional[UUID] = None) -> str:
         pa = require("pyarrow", _PYARROW_REASON)
         if object_id is None:

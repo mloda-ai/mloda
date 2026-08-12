@@ -64,7 +64,8 @@ class FeatureGroupStep(Step):
 
         if self.location:
             if self.need_to_upload:
-                cfw.upload_finished_data(self.location)
+                if not isinstance(cfw.data, str):
+                    cfw.upload_finished_data(self.location)
                 cfw_register.add_uuid_flyway_datasets(cfw.uuid, set(self.children_if_root))
             return data
         return None

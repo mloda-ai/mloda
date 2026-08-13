@@ -34,6 +34,7 @@ from mloda_plugins.compute_framework.base_implementations.pandas.dataframe impor
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
 from tests.helpers.probe_runner import run_probes
+from tests.test_core.test_prepare.join_plan_helpers import feature, trek
 
 
 PAIR_LEFT_INDEX = Index(("resolved_join_pair_left_key",))
@@ -202,28 +203,6 @@ def _planned() -> Planned:
     return Planned(ExecutionPlan(), Graph(), LinkTrekker(), [])
 
 
-def _feature(
-    name: str,
-    cfw: type[ComputeFramework],
-    index: Index | None = None,
-    options: dict[str, Any] | None = None,
-) -> Feature:
-    feature = Feature(name, index=index, options=options)
-    feature.compute_frameworks = {cfw}
-    return feature
-
-
-def _trek(planned: Planned, link: Link, orientation: Orientation, uuid: UUID) -> None:
-    """Production shares one set object between data and data_ordered, and invert_link relies on that."""
-    key = (link, orientation[0], orientation[1])
-    trekked = planned.link_trekker.data.get(key)
-    if trekked is None:
-        trekked = set()
-        planned.link_trekker.data[key] = trekked
-        planned.link_trekker.data_ordered[key] = trekked
-    trekked.add(uuid)
-
-
 def _add_parents(planned: Planned, link: Link, left: Feature, right: Feature) -> None:
     planned.graph.add_node(left.uuid, NodeProperties(left, link.left_feature_group))
     planned.graph.add_node(right.uuid, NodeProperties(right, link.right_feature_group))
@@ -253,15 +232,15 @@ def _branch(
     right_options: dict[str, Any] | None = None,
 ) -> Sides:
     """Two parents joined by ``link`` plus the consumer, the smallest shape run_link accepts."""
-    left = _feature(f"{name}_left", left_cfw, link.left_index, left_options)
-    right = _feature(f"{name}_right", right_cfw, link.right_index, right_options)
-    child = _feature(f"{name}_child", child_cfw)
+    left = feature(f"{name}_left", left_cfw, link.left_index, left_options)
+    right = feature(f"{name}_right", right_cfw, link.right_index, right_options)
+    child = feature(f"{name}_child", child_cfw)
 
     _add_parents(planned, link, left, right)
     planned.queue.append((link, left_cfw, right_cfw))
     _add_child(planned, child, left, right)
 
-    _trek(planned, link, trekked or (left_cfw, right_cfw), child.uuid)
+    trek(planned.link_trekker, link, trekked or (left_cfw, right_cfw), child.uuid)
     return Sides(left.uuid, right.uuid, child.uuid)
 
 
@@ -378,10 +357,10 @@ def _pair_with_declined_orientation() -> Built:
     planned = _planned()
     link = _pair_link()
 
-    left = _feature("resolved_join_declined_left", PyArrowTable, link.left_index)
-    right = _feature("resolved_join_declined_right", PandasDataFrame, link.right_index)
-    kept = _feature("resolved_join_declined_kept_child", PyArrowTable)
-    dropped = _feature("resolved_join_declined_dropped_child", PandasDataFrame)
+    left = feature("resolved_join_declined_left", PyArrowTable, link.left_index)
+    right = feature("resolved_join_declined_right", PandasDataFrame, link.right_index)
+    kept = feature("resolved_join_declined_kept_child", PyArrowTable)
+    dropped = feature("resolved_join_declined_dropped_child", PandasDataFrame)
 
     _add_parents(planned, link, left, right)
     planned.queue.append((link, PyArrowTable, PandasDataFrame))
@@ -389,8 +368,8 @@ def _pair_with_declined_orientation() -> Built:
     _add_child(planned, kept, left, right)
     _add_child(planned, dropped, left, right)
 
-    _trek(planned, link, (PyArrowTable, PandasDataFrame), kept.uuid)
-    _trek(planned, link, (PandasDataFrame, PyArrowTable), dropped.uuid)
+    trek(planned.link_trekker, link, (PyArrowTable, PandasDataFrame), kept.uuid)
+    trek(planned.link_trekker, link, (PandasDataFrame, PyArrowTable), dropped.uuid)
 
     return _finish(planned, link, Sides(left.uuid, right.uuid, kept.uuid))
 
@@ -400,17 +379,17 @@ def _link_with_an_unlinked_third_parent() -> Unlinked:
     planned = _planned()
     link = _pair_link(Link.right)
 
-    left = _feature("resolved_join_unlinked_left", PyArrowTable, link.left_index)
-    right = _feature("resolved_join_unlinked_right", PandasDataFrame, link.right_index)
-    unlinked = _feature("resolved_join_unlinked_third", PandasDataFrame)
-    child = _feature("resolved_join_unlinked_child", PandasDataFrame)
+    left = feature("resolved_join_unlinked_left", PyArrowTable, link.left_index)
+    right = feature("resolved_join_unlinked_right", PandasDataFrame, link.right_index)
+    unlinked = feature("resolved_join_unlinked_third", PandasDataFrame)
+    child = feature("resolved_join_unlinked_child", PandasDataFrame)
 
     _add_parents(planned, link, left, right)
     planned.graph.add_node(unlinked.uuid, NodeProperties(unlinked, ResolvedJoinUnlinked))
     planned.queue.append((ResolvedJoinUnlinked, {unlinked}))
     planned.queue.append((link, PyArrowTable, PandasDataFrame))
     _add_child(planned, child, left, right, unlinked)
-    _trek(planned, link, (PyArrowTable, PandasDataFrame), child.uuid)
+    trek(planned.link_trekker, link, (PyArrowTable, PandasDataFrame), child.uuid)
 
     declared: DeclaredFrameworks = {
         left.uuid: frozenset({PyArrowTable}),
@@ -682,10 +661,10 @@ def test_a_nearest_left_parent_on_a_third_framework_keeps_the_record_on_the_step
     planned = _planned()
     link = _pair_link()
 
-    descendant = _feature("resolved_join_third_fw_descendant", PandasDataFrame, link.left_index)
-    nearest_left = _feature("resolved_join_third_fw_nearest_left", PythonDictFramework, link.left_index)
-    right = _feature("resolved_join_third_fw_right", PyArrowTable, link.right_index)
-    child = _feature("resolved_join_third_fw_child", PandasDataFrame)
+    descendant = feature("resolved_join_third_fw_descendant", PandasDataFrame, link.left_index)
+    nearest_left = feature("resolved_join_third_fw_nearest_left", PythonDictFramework, link.left_index)
+    right = feature("resolved_join_third_fw_right", PyArrowTable, link.right_index)
+    child = feature("resolved_join_third_fw_child", PandasDataFrame)
 
     planned.graph.add_node(descendant.uuid, NodeProperties(descendant, ResolvedJoinPairLeftDescendant))
     planned.graph.add_node(nearest_left.uuid, NodeProperties(nearest_left, ResolvedJoinPairLeft))
@@ -695,7 +674,7 @@ def test_a_nearest_left_parent_on_a_third_framework_keeps_the_record_on_the_step
     planned.queue.append((ResolvedJoinPairRight, {right}))
     planned.queue.append((link, PyArrowTable, PandasDataFrame))
     _add_child(planned, child, descendant, nearest_left, right)
-    _trek(planned, link, (PandasDataFrame, PyArrowTable), child.uuid)
+    trek(planned.link_trekker, link, (PandasDataFrame, PyArrowTable), child.uuid)
 
     planned.plan.create_execution_plan(planned.queue, planned.graph, planned.link_trekker)
 
@@ -801,8 +780,8 @@ def test_a_real_engine_plan_carries_one_record_per_planned_join_step() -> None:
 
 def test_the_resolver_snapshots_the_frameworks_a_feature_declared_before_the_rewrite() -> None:
     link = _pair_link()
-    left = _feature("resolved_join_snapshot_left", PyArrowTable, link.left_index)
-    right = _feature("resolved_join_snapshot_right", PandasDataFrame, link.right_index)
+    left = feature("resolved_join_snapshot_left", PyArrowTable, link.left_index)
+    right = feature("resolved_join_snapshot_right", PandasDataFrame, link.right_index)
     child = Feature("resolved_join_snapshot_child")
     child.compute_frameworks = {PyArrowTable, PandasDataFrame}
 

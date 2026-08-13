@@ -608,6 +608,33 @@ def test_a_declined_orientation_builds_no_record_and_one_declined_entry() -> Non
     assert resolved.declined == (DeclinedOrientation(built.link.uuid, PandasDataFrame, PyArrowTable),)
 
 
+def test_a_decline_reached_through_the_inversion_branch_records_the_orientation_it_attempted() -> None:
+    """The queue key finds no children, run_link flips it, and the declined entry must name the flipped key."""
+    planned = _planned()
+    link = Link.left(
+        JoinSpec(ResolvedJoinSelfSource, Index((SELF_LEFT_KEY,))),
+        JoinSpec(ResolvedJoinSelfSource, Index((SELF_RIGHT_KEY,))),
+        left_discriminator={SELF_SIDE: "left"},
+        right_discriminator={SELF_SIDE: "right"},
+    )
+
+    left = feature("resolved_join_flip_decline_left", PyArrowTable, link.left_index, {SELF_SIDE: "left"})
+    right = feature("resolved_join_flip_decline_right", PandasDataFrame, link.right_index, {SELF_SIDE: "right"})
+    child = feature("resolved_join_flip_decline_child", PyArrowTable)
+
+    _add_parents(planned, link, left, right)
+    planned.queue.append((link, PyArrowTable, PandasDataFrame))
+    planned.queue.append((link, PandasDataFrame, PyArrowTable))
+    _add_child(planned, child, left, right)
+    trek(planned.link_trekker, link, (PyArrowTable, PandasDataFrame), child.uuid)
+
+    planned.plan.create_execution_plan(planned.queue, planned.graph, planned.link_trekker)
+
+    resolved = planned.plan.resolved_join_plan
+    assert len(resolved.records) == 1, "the kept orientation must plan a record for the decline to say anything"
+    assert resolved.declined == (DeclinedOrientation(link.uuid, PyArrowTable, PandasDataFrame),)
+
+
 def test_each_record_names_the_join_step_it_shadows() -> None:
     built = _two_links()
     step_of_link = {step.link.uuid: step.uuid for step in _join_steps(built.plan)}
@@ -680,7 +707,10 @@ def test_a_nearest_left_parent_on_a_third_framework_keeps_the_record_on_the_step
 
     assert len(_join_steps(planned.plan)) == 1, "the shape must plan exactly one JoinStep for this to say anything"
     assert planned.plan.resolved_join_plan.signatures() == planned.plan.join_signatures_at_build
-    assert _one_record(planned.plan, link).destination_side is JoinSide.RIGHT
+    record = _one_record(planned.plan, link)
+    assert record.destination_side is JoinSide.RIGHT
+    assert record.destination.uuids <= record.destination_uuids
+    assert record.source.uuids <= record.source_uuids
 
 
 def test_flipping_the_merge_sides_of_a_join_step_breaks_the_parity() -> None:
@@ -696,6 +726,23 @@ def test_flipping_the_merge_sides_of_a_join_step_breaks_the_parity() -> None:
     assert len(rebuilt.records) == len(_join_steps(built.plan)), "an empty rebuild makes the inequality meaningless"
     assert rebuilt.signatures(), "an empty rebuild makes the inequality meaningless"
     assert rebuilt.signatures() != legacy_join_signatures([join_step])
+
+
+def test_the_parity_guard_raises_only_when_the_signatures_disagree() -> None:
+    from mloda.core.prepare.resolved_join_builder import raise_on_join_plan_divergence
+
+    built = _declared_pair()
+    join_step = _join_steps(built.plan)[0]
+
+    assert raise_on_join_plan_divergence(built.plan.resolved_join_plan, _join_steps(built.plan)) is None
+
+    join_step.swap_merge_sides = not join_step.swap_merge_sides
+    rebuilt = build_resolved_join_plan(
+        built.plan.planned_orientations, built.plan.declined_orientations, built.declared_frameworks
+    )
+
+    with pytest.raises(ValueError):
+        raise_on_join_plan_divergence(rebuilt, [join_step])
 
 
 def test_the_record_leaves_out_the_write_serialization_edges_add_tfs_adds() -> None:
@@ -714,11 +761,13 @@ def test_a_second_planning_pass_does_not_accumulate_records() -> None:
     _branch(planned, link, "resolved_join_twice")
     planned.plan.create_execution_plan(planned.queue, planned.graph, planned.link_trekker)
     first = len(planned.plan.resolved_join_plan.records)
+    assert len(_transform_steps(planned.plan, link)) == 1, "the cross-framework join must plan one hop on pass one"
 
     planned.plan.create_execution_plan(planned.queue, planned.graph, planned.link_trekker)
 
     assert len(planned.plan.resolved_join_plan.records) == first
     assert len(planned.plan.resolved_join_plan.records) == len(_join_steps(planned.plan))
+    assert len(_transform_steps(planned.plan, link)) == 1
 
 
 def test_an_order_edge_makes_the_consumer_records_depend_on_the_producer_record_tokens() -> None:

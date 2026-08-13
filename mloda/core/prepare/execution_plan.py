@@ -25,6 +25,7 @@ from mloda.core.prepare.resolved_join_builder import (
     DeclaredFrameworks,
     build_resolved_join_plan,
     legacy_join_signatures,
+    raise_on_join_plan_divergence,
 )
 from mloda.core.core.step.abstract_step import Step
 from mloda.core.core.step.feature_group_step import FeatureGroupStep
@@ -102,6 +103,9 @@ class ExecutionPlan:
     ) -> None:
         self.planned_orientations = []
         self.declined_orientations = []
+        self.tfs_collection = set()
+        self.joinstep_collection = JoinStepCollection()
+        self.feature_set_collections = []
 
         child_links = self.invert_link_trekker(link_trekker)
         pre_execution_plan = self.add_feature_group_step(queue, graph.parent_to_children_mapping, child_links)
@@ -115,6 +119,7 @@ class ExecutionPlan:
             declared_frameworks if declared_frameworks is not None else {},
         )
         self.join_signatures_at_build = legacy_join_signatures(join_steps)
+        raise_on_join_plan_divergence(self.resolved_join_plan, join_steps)
 
         self.execution_plan = self.add_tfs(fw_execution_plan, graph)
         self.raise_on_step_cycle(self.execution_plan)
@@ -535,6 +540,7 @@ class ExecutionPlan:
 
         # This gets the id of the children which needs the link to be calculated.
         children_uuids: set[UUID] = set()
+        attempted_key = link_fw
 
         for stored_links, uuids in link_trekker.data.items():
             if link_fw == stored_links:
@@ -549,6 +555,7 @@ class ExecutionPlan:
             source_framework = link_fw[1]
             # The join then executes in the right feature group's framework, so the merge arguments are inverted.
             swap_merge_sides = True
+            attempted_key = (link, destination_framework, source_framework)
 
             for stored_links, uuids in link_trekker.data.items():
                 if (link, destination_framework, source_framework) == stored_links:
@@ -602,7 +609,7 @@ class ExecutionPlan:
             # result = True
             result = self.is_valid_join_step(link_fw, children_fw, children_uuid, graph)
             if result is False:
-                self.declined_orientations.append(link_fw)
+                self.declined_orientations.append(attempted_key)
                 return None
             elif result is True:
                 pass

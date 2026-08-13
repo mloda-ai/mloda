@@ -1,7 +1,6 @@
 """The materialized join decision: one record per planned join orientation.
 
-Records are built in shadow mode next to the join steps and do not run anything yet.
-They carry metadata only (classes, uuids, indices, immutable scalars), so each one pickles to a worker.
+Shadow mode, nothing runs yet. Metadata only (classes, uuids, indices, scalars), so a record pickles to a worker.
 """
 
 from collections.abc import Iterable, Mapping
@@ -28,7 +27,7 @@ def signed_uuids(uuids: Iterable[UUID]) -> tuple[str, ...]:
 
 @dataclass(frozen=True)
 class ResolvedJoinSide:
-    """One declared side of a link: its group, its index and the parents that are that group."""
+    """One declared side of a link, with the parents that are that group."""
 
     feature_group: type[FeatureGroup]
     index: Index
@@ -57,7 +56,7 @@ class DeclinedOrientation:
 
 
 class JoinSignature(NamedTuple):
-    """The join a record or a join step names, comparable across the two representations."""
+    """The join a record or a join step names, comparable across both."""
 
     link_uuid: UUID
     jointype: str
@@ -71,7 +70,7 @@ class JoinSignature(NamedTuple):
 
 @dataclass(frozen=True)
 class ResolvedJoin:
-    """One join decision: which declared side the join runs in, what it moves and what it waits for."""
+    """One join decision: the declared side it runs in, what it moves, what it waits for."""
 
     link_uuid: UUID
     jointype: JoinType
@@ -83,7 +82,7 @@ class ResolvedJoin:
     destination_framework: type[ComputeFramework]
     source_framework: type[ComputeFramework]
     consumers: frozenset[UUID]
-    # Join dependency edges only; the write serialization edges add_tfs adds later are not part of this.
+    # Join dependency edges only, not the write serialization edges add_tfs adds later.
     depends_on: frozenset[UUID]
     token: UUID
     # Correlation only, never authoritative: the join step this record shadows.

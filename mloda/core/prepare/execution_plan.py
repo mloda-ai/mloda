@@ -107,7 +107,7 @@ class ExecutionPlan:
         pre_execution_plan = self.add_feature_group_step(queue, graph.parent_to_children_mapping, child_links)
         fw_execution_plan = self.add_joinstep(pre_execution_plan, link_trekker, graph)
 
-        # Both built before add_tfs, which adds write serialization edges that are not part of the join decision.
+        # Built before add_tfs, whose write serialization edges are not part of the join decision.
         join_steps = [step for step in fw_execution_plan if isinstance(step, JoinStep)]
         self.resolved_join_plan = build_resolved_join_plan(
             self.planned_orientations,
@@ -564,7 +564,7 @@ class ExecutionPlan:
         for uuid in children_uuids:
             required_uuids.update(graph.parent_to_children_mapping[uuid])
 
-        # Links match polymorphically; decided once here, before the order-edge link uuids join required_uuids.
+        # Split before the order-edge link uuids join required_uuids.
         split = split_by_declared_side(link, required_uuids, graph)
 
         # This filters the required_uuids to only the one with the final compute framework.

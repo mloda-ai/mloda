@@ -56,7 +56,7 @@ END_RIGHT_KEY = "resolved_join_end_right_key"
 END_RIGHT_PAYLOAD = "resolved_join_end_right_payload"
 
 _PROBE = Path(__file__).with_name("resolved_join_probe.py")
-# Each side reduces from a framework set, so a second cold interpreter is the whole cross-process signal.
+# Each side reduces from a framework set, so a second cold interpreter is the cross-process signal.
 _PROBE_PROCESSES = 2
 _PROBE_EXPECTED = {
     "declined_count": "0",
@@ -353,7 +353,7 @@ def _two_links() -> Built:
 
 
 def _pair_with_declined_orientation() -> Built:
-    """Two children of one link, and only the PyArrow one pairs a left side up with a right side."""
+    """Two children of one link, and only the PyArrow one pairs a left side with a right side."""
     planned = _planned()
     link = _pair_link()
 
@@ -746,7 +746,7 @@ def test_the_record_and_the_legacy_transform_hop_name_opposite_directions() -> N
     transform_steps = _transform_steps(built.plan, built.link)
 
     assert len(transform_steps) == 1
-    # The record binds the hop to the sides the join actually moves; a later lowering step should adopt its answer.
+    # The record binds the hop to the sides the join moves; a later lowering step should adopt its answer.
     assert record.transform_from_feature_group is ResolvedJoinPairLeft
     assert record.transform_to_feature_group is ResolvedJoinPairRight
     assert transform_steps[0].from_feature_group is ResolvedJoinPairRight
@@ -804,7 +804,7 @@ def test_the_resolver_snapshots_the_frameworks_a_feature_declared_before_the_rew
     assert resolver.get_declared_frameworks()[left.uuid] == {PyArrowTable}
 
 
-# Fresh interpreters are slow to start, so this one needs more than the suite-wide per-test budget.
+# Fresh interpreters are slow to start, so this needs more than the suite-wide timeout.
 @pytest.mark.timeout(60)
 def test_fresh_interpreters_build_the_same_record_signature() -> None:
     outputs = run_probes(_PROBE, _PROBE_PROCESSES)

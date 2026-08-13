@@ -1,6 +1,6 @@
-"""Materializes the join decision run_link made as resolved join records, and signs the legacy join steps.
+"""Materializes the join decision run_link made as records, and signs the legacy join steps the same way.
 
-Still shadow mode: the two signature sets are only compared; nothing here changes what the plan runs.
+Shadow mode: the two signature sets are only compared, nothing here changes what the plan runs.
 """
 
 from collections.abc import Iterable, Mapping, Sequence
@@ -76,7 +76,7 @@ def build_resolved_join_plan(
         records.append(record)
         token_by_step[join_step.uuid] = record.token
 
-    # An order edge is keyed by link uuid, so a producer link fans its tokens out over every record it built.
+    # An order edge is keyed by link uuid, so a producer fans its tokens over every record it built.
     resolved = tuple(
         replace(
             record,
@@ -105,7 +105,6 @@ def _legacy_signature(join_step: JoinStep, link_of_step: Mapping[UUID, UUID]) ->
 
 
 def legacy_join_signatures(join_steps: Iterable[JoinStep]) -> frozenset[JoinSignature]:
-    """The same signature read off the legacy join steps."""
     steps = list(join_steps)
     link_of_step = {step.uuid: step.link.uuid for step in steps}
     return frozenset(_legacy_signature(step, link_of_step) for step in steps)

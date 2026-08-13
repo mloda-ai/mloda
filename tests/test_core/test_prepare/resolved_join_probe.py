@@ -1,5 +1,5 @@
 """Prints one json line with the resolved join record a fresh interpreter builds.
-No test_ prefix, so pytest never collects it; the resolved join record tests run it as a script.
+No test_ prefix, so pytest never collects it; the record tests run it as a script.
 """
 
 import json

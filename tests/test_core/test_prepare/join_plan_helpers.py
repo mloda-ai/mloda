@@ -1,4 +1,4 @@
-"""Shared feature and link-trekker helpers for the join plan tests in this package."""
+"""Shared feature and link-trekker helpers for the join plan tests."""
 
 from typing import Any
 from uuid import UUID

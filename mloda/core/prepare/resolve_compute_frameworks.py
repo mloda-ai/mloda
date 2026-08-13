@@ -20,7 +20,7 @@ class ResolveComputeFrameworks:
     def links(self, planned_queue: Any, link_trekker: LinkTrekker) -> Any:
         groups = [p for p in planned_queue if isinstance(p, tuple) and not isinstance(p[0], Link)]
 
-        # The snapshot has to precede rewrite_group_frameworks, which collapses compute_frameworks to the resolution.
+        # Must precede rewrite_group_frameworks, which collapses compute_frameworks to the resolution.
         for p in groups:
             for f in p[1]:
                 self.declared_frameworks[f.uuid] = frozenset(f.compute_frameworks or ())

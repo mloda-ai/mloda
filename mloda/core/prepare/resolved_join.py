@@ -11,10 +11,9 @@ from typing import NamedTuple
 from uuid import UUID
 
 from mloda.core.abstract_plugins.components.index.index import Index
-from mloda.core.abstract_plugins.components.link import JoinType
+from mloda.core.abstract_plugins.components.link import JoinType, Link
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
-from mloda.core.prepare.resolve_links import LinkFrameworkTrekker
 
 
 class JoinSide(Enum):
@@ -39,10 +38,13 @@ class ResolvedJoinSide:
 
 @dataclass(frozen=True)
 class PlannedOrientation:
-    """The trekker key an orientation was planned under, plus the children it serves."""
+    """The join an orientation decided, not just the trekker key it was planned under."""
 
-    key: LinkFrameworkTrekker
+    link: Link
     consumers: frozenset[UUID]
+    destination_side: JoinSide
+    left_uuids: frozenset[UUID]
+    right_uuids: frozenset[UUID]
 
 
 @dataclass(frozen=True)

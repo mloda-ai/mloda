@@ -14,6 +14,9 @@ class ResolveComputeFrameworks:
         self.to_invert_trekker_collection: list[LinkFrameworkTrekker] = []
         self.declared_frameworks: dict[UUID, frozenset[type[ComputeFramework]]] = {}
 
+    def get_declared_frameworks(self) -> dict[UUID, frozenset[type[ComputeFramework]]]:
+        return self.declared_frameworks
+
     def links(self, planned_queue: Any, link_trekker: LinkTrekker) -> Any:
         groups = [p for p in planned_queue if isinstance(p, tuple) and not isinstance(p[0], Link)]
 

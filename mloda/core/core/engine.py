@@ -152,7 +152,7 @@ class Engine:
             planned_queue,
             graph,
             resolver.resolver_links.get_link_trekker(),
-            resolver.resolver_compute_framework.declared_frameworks,
+            resolver.resolver_compute_framework.get_declared_frameworks(),
         )
         return execution_planner
 

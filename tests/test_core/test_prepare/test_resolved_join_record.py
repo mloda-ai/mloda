@@ -80,6 +80,10 @@ class ResolvedJoinPairRight(FeatureGroup):
     pass
 
 
+class ResolvedJoinPairLeftDescendant(ResolvedJoinPairLeft):
+    """Matches the declared left side polymorphically, at inheritance distance one."""
+
+
 class ResolvedJoinOtherLeft(FeatureGroup):
     pass
 
@@ -639,10 +643,30 @@ def test_each_record_names_the_join_step_it_shadows() -> None:
 
 @pytest.mark.parametrize(
     "build",
-    [_declared_pair, _inverted_pair, _right_join, _inverted_left_join, _self_join, _append_pair, _two_links],
-    ids=["inner", "inverted_inner", "right", "inverted_left", "self_join", "append", "two_links"],
+    [
+        _declared_pair,
+        _inverted_pair,
+        _right_join,
+        _inverted_left_join,
+        _self_join,
+        _self_join_with_split_declarations,
+        _append_pair,
+        _two_links,
+        _link_with_an_unlinked_third_parent,
+    ],
+    ids=[
+        "inner",
+        "inverted_inner",
+        "right",
+        "inverted_left",
+        "self_join",
+        "self_join_split_declarations",
+        "append",
+        "two_links",
+        "unlinked_third_parent",
+    ],
 )
-def test_the_records_sign_the_joins_the_legacy_join_steps_sign(build: Callable[[], Built]) -> None:
+def test_the_records_sign_the_joins_the_legacy_join_steps_sign(build: Callable[[], Any]) -> None:
     built = build()
 
     join_steps = _join_steps(built.plan)
@@ -653,14 +677,41 @@ def test_the_records_sign_the_joins_the_legacy_join_steps_sign(build: Callable[[
     assert resolved.signatures() == built.plan.join_signatures_at_build
 
 
+def test_a_nearest_left_parent_on_a_third_framework_keeps_the_record_on_the_steps_side() -> None:
+    """run_link ranks the left side over all required parents; the record must not re-rank over fewer of them."""
+    planned = _planned()
+    link = _pair_link()
+
+    descendant = _feature("resolved_join_third_fw_descendant", PandasDataFrame, link.left_index)
+    nearest_left = _feature("resolved_join_third_fw_nearest_left", PythonDictFramework, link.left_index)
+    right = _feature("resolved_join_third_fw_right", PyArrowTable, link.right_index)
+    child = _feature("resolved_join_third_fw_child", PandasDataFrame)
+
+    planned.graph.add_node(descendant.uuid, NodeProperties(descendant, ResolvedJoinPairLeftDescendant))
+    planned.graph.add_node(nearest_left.uuid, NodeProperties(nearest_left, ResolvedJoinPairLeft))
+    planned.graph.add_node(right.uuid, NodeProperties(right, ResolvedJoinPairRight))
+    planned.queue.append((ResolvedJoinPairLeftDescendant, {descendant}))
+    planned.queue.append((ResolvedJoinPairLeft, {nearest_left}))
+    planned.queue.append((ResolvedJoinPairRight, {right}))
+    planned.queue.append((link, PyArrowTable, PandasDataFrame))
+    _add_child(planned, child, descendant, nearest_left, right)
+    _trek(planned, link, (PandasDataFrame, PyArrowTable), child.uuid)
+
+    planned.plan.create_execution_plan(planned.queue, planned.graph, planned.link_trekker)
+
+    assert len(_join_steps(planned.plan)) == 1, "the shape must plan exactly one JoinStep for this to say anything"
+    assert planned.plan.resolved_join_plan.signatures() == planned.plan.join_signatures_at_build
+    assert _one_record(planned.plan, link).destination_side is JoinSide.RIGHT
+
+
 def test_flipping_the_merge_sides_of_a_join_step_breaks_the_parity() -> None:
-    """The signatures only agree while the record derives its destination side from the graph."""
+    """The signatures only agree while the record derives its destination side from the planned orientation."""
     built = _declared_pair()
     join_step = _join_steps(built.plan)[0]
 
     join_step.swap_merge_sides = not join_step.swap_merge_sides
     rebuilt = build_resolved_join_plan(
-        built.plan.planned_orientations, built.plan.declined_orientations, built.graph, built.declared_frameworks
+        built.plan.planned_orientations, built.plan.declined_orientations, built.declared_frameworks
     )
 
     assert len(rebuilt.records) == len(_join_steps(built.plan)), "an empty rebuild makes the inequality meaningless"
@@ -770,8 +821,8 @@ def test_the_resolver_snapshots_the_frameworks_a_feature_declared_before_the_rew
     resolver.links(queue, link_trekker)
 
     assert child.compute_frameworks == {PyArrowTable}, "the rewrite has to collapse the child for this to say anything"
-    assert resolver.declared_frameworks[child.uuid] == {PyArrowTable, PandasDataFrame}
-    assert resolver.declared_frameworks[left.uuid] == {PyArrowTable}
+    assert resolver.get_declared_frameworks()[child.uuid] == {PyArrowTable, PandasDataFrame}
+    assert resolver.get_declared_frameworks()[left.uuid] == {PyArrowTable}
 
 
 # Fresh interpreters are slow to start, so this one needs more than the suite-wide per-test budget.

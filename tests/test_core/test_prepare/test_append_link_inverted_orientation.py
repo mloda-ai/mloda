@@ -130,10 +130,12 @@ def _assert_is_orientation_configuration_error(message: str, link: Link) -> None
 def test_left_framework_mismatch_is_rejected_as_a_configuration_error(
     link_factory: Callable[[JoinSpec, JoinSpec], Link],
 ) -> None:
-    with pytest.raises(ValueError) as excinfo:
-        _run(_plan_link(link_factory))
+    planned = _plan_link(link_factory)
 
-    assert not str(excinfo.value).startswith("Internal error:")
+    with pytest.raises(ValueError) as excinfo:
+        _run(planned)
+
+    _assert_is_orientation_configuration_error(str(excinfo.value), planned.link_fw[0])
 
 
 @pytest.mark.parametrize("link_factory", STACK_LINK_FACTORIES)

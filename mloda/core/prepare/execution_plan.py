@@ -101,6 +101,7 @@ class ExecutionPlan:
         graph: Graph,
         link_trekker: LinkTrekker,
         declared_frameworks: DeclaredFrameworks | None = None,
+        validate: bool = True,
     ) -> None:
         self.planned_orientations = []
         self.declined_orientations = []
@@ -121,8 +122,7 @@ class ExecutionPlan:
         )
         self.join_signatures_at_build = legacy_join_signatures(join_steps)
         raise_on_join_plan_divergence(self.resolved_join_plan, join_steps)
-        if declared_frameworks is not None:
-            # Only the Engine supplies declared_frameworks; hand-built plans call the guard directly in tests.
+        if validate:
             raise_on_orphaned_join_source(self.resolved_join_plan)
 
         self.execution_plan = self.add_tfs(fw_execution_plan, graph)
@@ -687,10 +687,11 @@ class ExecutionPlan:
         resolved_framework: type[ComputeFramework],
     ) -> str:
         return (
-            f"{link.jointype.value} link {link} cannot run in an inverted orientation.\n"
-            f"The {side} side was queued on {queued_framework.get_class_name()}, but the link's declared {side} "
-            f"index feature resolves to {resolved_framework.get_class_name()}, so this link got scheduled inverted.\n"
-            "Unlike INNER/LEFT/RIGHT links, APPEND and UNION links do not support inversion.\n"
+            f"{link.jointype.value} link {link} cannot run: the {side} side was queued on "
+            f"{queued_framework.get_class_name()}, but the link's declared {side} index feature resolves to "
+            f"{resolved_framework.get_class_name()}.\n"
+            "One possible cause is that the link got scheduled in an inverted orientation; unlike INNER/LEFT/RIGHT "
+            "links, APPEND and UNION links do not support inversion.\n"
             "Resolution: keep the link's declared left/right sides aligned with the compute frameworks its "
             "features resolve to."
         )

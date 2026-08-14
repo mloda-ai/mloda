@@ -120,10 +120,12 @@ def _plan_append(link: Link, consumers: list[type[FeatureGroup]]) -> None:
 
 
 def test_consumer_framework_mismatch_is_rejected_while_building_the_joinstep() -> None:
-    with pytest.raises(ValueError) as excinfo:
-        _plan_append(_append_link(), [SharedAppendPandasConsumer])
+    link = _append_link()
 
-    assert not str(excinfo.value).startswith("Internal error:")
+    with pytest.raises(ValueError) as excinfo:
+        _plan_append(link, [SharedAppendPandasConsumer])
+
+    _assert_is_orientation_configuration_error(str(excinfo.value), link)
 
 
 def test_consumer_framework_mismatch_names_the_link_and_both_frameworks() -> None:
@@ -136,7 +138,9 @@ def test_consumer_framework_mismatch_names_the_link_and_both_frameworks() -> Non
 
 
 def test_a_second_consumer_of_the_same_link_raises_the_same_error() -> None:
-    with pytest.raises(ValueError) as excinfo:
-        _plan_append(_append_link(), [SharedAppendPandasConsumer, SharedAppendFlexibleConsumer])
+    link = _append_link()
 
-    assert not str(excinfo.value).startswith("Internal error:")
+    with pytest.raises(ValueError) as excinfo:
+        _plan_append(link, [SharedAppendPandasConsumer, SharedAppendFlexibleConsumer])
+
+    _assert_is_orientation_configuration_error(str(excinfo.value), link)

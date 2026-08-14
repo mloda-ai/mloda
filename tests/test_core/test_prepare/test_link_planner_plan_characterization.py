@@ -50,7 +50,6 @@ PAIR_LEFT_INDEX = Index(("link_plan_pair_left_key",))
 PAIR_RIGHT_INDEX = Index(("link_plan_pair_right_key",))
 
 STACK_FACTORIES: list[Callable[[JoinSpec, JoinSpec], Link]] = [Link.append, Link.union]
-LEFT_FRAMEWORK_INVARIANT = "APPEND/UNION left link framework must match"
 
 STACK_INVERSION_REASON = (
     "the inverted orientation is dropped before the JoinStep is built; a fix has to move the left-framework "
@@ -525,10 +524,15 @@ def test_an_inverted_self_group_stack_link_is_rejected_naming_link_and_framework
         _run(planned, PandasDataFrame, PyArrowTable)
 
     message = str(excinfo.value)
-    assert LEFT_FRAMEWORK_INVARIANT in message
+    assert not message.startswith("Internal error:")
+    assert "report this issue" not in message.lower()
+    assert "sanity check" not in message
     assert str(planned.link) in message
     assert PyArrowTable.get_class_name() in message
     assert PandasDataFrame.get_class_name() in message
+    assert planned.link.jointype.value in message.lower()
+    assert any(word in message.lower() for word in ("invert", "revers", "swap", "orientation"))
+    assert any(word in message.lower() for word in ("not support", "unsupported", "cannot", "can't", "not allowed"))
 
 
 def test_the_declared_orientation_plans_the_declared_joinstep() -> None:

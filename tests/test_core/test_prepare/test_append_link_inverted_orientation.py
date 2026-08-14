@@ -1,4 +1,5 @@
-"""An APPEND/UNION link framework that disagrees with its index feature violates a planning invariant.
+"""An APPEND/UNION link scheduled in an inverted orientation is a user configuration error:
+neither jointype supports running inverted, unlike INNER/LEFT/RIGHT links.
 
 Frameworks that agree still plan a JoinStep.
 """
@@ -29,8 +30,10 @@ RIGHT_INDEX = Index(("stack_right_key",))
 
 STACK_LINK_FACTORIES: list[Callable[[JoinSpec, JoinSpec], Link]] = [Link.append, Link.union]
 
-LEFT_FRAMEWORK_INVARIANT = "APPEND/UNION left link framework must match"
-RIGHT_FRAMEWORK_INVARIANT = "APPEND/UNION right link framework must match"
+# Substance a message must show to count as the new, plainly-worded configuration error:
+# it must name the concept (orientation/inversion) and say plainly that it is not supported.
+ORIENTATION_WORDS = ("invert", "revers", "swap", "orientation")
+UNSUPPORTED_WORDS = ("not support", "unsupported", "cannot", "can't", "not allowed")
 
 
 class StackSource(FeatureGroup):
@@ -112,15 +115,27 @@ def _run(planned: Planned) -> JoinStep | None:
     return planned.plan.run_link(planned.link_fw, planned.link_trekker, planned.graph, planned.pre_execution_plan)
 
 
+def _assert_is_orientation_configuration_error(message: str, link: Link) -> None:
+    """The new error reads as a plain config problem, not an internal bug report."""
+    assert not message.startswith("Internal error:")
+    assert "report this issue" not in message.lower()
+    assert "sanity check" not in message
+    assert str(link) in message
+    assert PyArrowTable.get_class_name() in message
+    assert PandasDataFrame.get_class_name() in message
+    assert link.jointype.value in message.lower()
+    assert any(word in message.lower() for word in ORIENTATION_WORDS)
+    assert any(word in message.lower() for word in UNSUPPORTED_WORDS)
+
+
 @pytest.mark.parametrize("link_factory", STACK_LINK_FACTORIES)
-def test_left_framework_mismatch_is_rejected_by_the_joinstep_builder(
+def test_left_framework_mismatch_is_rejected_as_a_configuration_error(
     link_factory: Callable[[JoinSpec, JoinSpec], Link],
 ) -> None:
     with pytest.raises(ValueError) as excinfo:
         _run(_plan_link(link_factory))
 
-    assert "create_joinstep_in_case_of_append_or_union" in [entry.name for entry in excinfo.traceback]
-    assert LEFT_FRAMEWORK_INVARIANT in str(excinfo.value)
+    assert not str(excinfo.value).startswith("Internal error:")
 
 
 @pytest.mark.parametrize("link_factory", STACK_LINK_FACTORIES)
@@ -132,12 +147,7 @@ def test_left_framework_mismatch_names_the_link_and_both_frameworks(
     with pytest.raises(ValueError) as excinfo:
         _run(planned)
 
-    message = str(excinfo.value)
-    assert message.startswith("Internal error:")
-    assert "sanity check" not in message
-    assert str(planned.link_fw[0]) in message
-    assert PyArrowTable.get_class_name() in message
-    assert PandasDataFrame.get_class_name() in message
+    _assert_is_orientation_configuration_error(str(excinfo.value), planned.link_fw[0])
 
 
 @pytest.mark.parametrize("link_factory", STACK_LINK_FACTORIES)
@@ -153,15 +163,7 @@ def test_right_framework_mismatch_names_the_link_and_both_frameworks(
     with pytest.raises(ValueError) as excinfo:
         _run(planned)
 
-    assert "create_joinstep_in_case_of_append_or_union" in [entry.name for entry in excinfo.traceback]
-
-    message = str(excinfo.value)
-    assert RIGHT_FRAMEWORK_INVARIANT in message
-    assert message.startswith("Internal error:")
-    assert "sanity check" not in message
-    assert str(planned.link_fw[0]) in message
-    assert PyArrowTable.get_class_name() in message
-    assert PandasDataFrame.get_class_name() in message
+    _assert_is_orientation_configuration_error(str(excinfo.value), planned.link_fw[0])
 
 
 @pytest.mark.parametrize("link_factory", STACK_LINK_FACTORIES)

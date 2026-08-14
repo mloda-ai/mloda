@@ -170,3 +170,21 @@ def test_link_joining_across_distinct_frameworks_delivers_every_parent_column() 
 
     seen = {value for result in results for value in result[MultiLinkChildDistinct.get_class_name()]}
     assert seen == {"mlg_a|mlg_bd|mlg_c"}
+
+
+def test_link_joining_across_distinct_frameworks_with_the_shared_parent_swapped_must_raise() -> None:
+    """Same shape as the test above with the A-B link's sides swapped: no join writes back into
+    the shared parent A, so the branches never reunite (today this silently drops mlg_bd)."""
+    links = {
+        Link.inner(JoinSpec(MultiLinkRootBDistinct, MLG_INDEX), JoinSpec(MultiLinkRootA, MLG_INDEX)),
+        Link.inner(JoinSpec(MultiLinkRootA, MLG_INDEX), JoinSpec(MultiLinkRootC, MLG_INDEX)),
+    }
+
+    with pytest.raises(ValueError):
+        mloda.run_all(
+            [Feature(MultiLinkChildDistinct.get_class_name())],
+            links=links,
+            compute_frameworks={PyArrowTable, PandasDataFrame, SecondCfw},
+            parallelization_modes={ParallelizationMode.SYNC},
+            plugin_collector=_ENABLED_DISTINCT,
+        )

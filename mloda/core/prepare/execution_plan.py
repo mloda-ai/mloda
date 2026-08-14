@@ -27,6 +27,7 @@ from mloda.core.prepare.resolved_join_builder import (
     legacy_join_signatures,
     raise_on_join_plan_divergence,
 )
+from mloda.core.prepare.validate_resolved_join import raise_on_orphaned_join_source
 from mloda.core.core.step.abstract_step import Step
 from mloda.core.core.step.feature_group_step import FeatureGroupStep
 from mloda.core.core.step.join_step import JoinStep
@@ -120,6 +121,10 @@ class ExecutionPlan:
         )
         self.join_signatures_at_build = legacy_join_signatures(join_steps)
         raise_on_join_plan_divergence(self.resolved_join_plan, join_steps)
+        if declared_frameworks is not None:
+            # declared_frameworks is only ever supplied by the real resolution pipeline (Engine); a
+            # hand-built plan omits it and is exercised against this guard directly in its own tests.
+            raise_on_orphaned_join_source(self.resolved_join_plan)
 
         self.execution_plan = self.add_tfs(fw_execution_plan, graph)
         self.raise_on_step_cycle(self.execution_plan)
@@ -675,6 +680,24 @@ class ExecutionPlan:
                     return element.feature_group
         raise ValueError(f"Feature group for UUID {uuid} not found.")
 
+    @staticmethod
+    def _append_or_union_orientation_error(
+        link: Link,
+        side: str,
+        queued_framework: type[ComputeFramework],
+        resolved_framework: type[ComputeFramework],
+    ) -> str:
+        """An APPEND/UNION link scheduled in an inverted orientation is a configuration problem, not a bug."""
+        return (
+            f"{link.jointype.value} link {link} cannot run in an inverted orientation.\n"
+            f"The {side} side was queued to run on {queued_framework.get_class_name()}, but the link's declared "
+            f"{side} index feature resolves to {resolved_framework.get_class_name()}: this link got scheduled "
+            "inverted/reversed.\n"
+            "Unlike INNER/LEFT/RIGHT links, APPEND and UNION links do not support an inverted orientation.\n"
+            "Resolution: do not schedule this link inverted; keep its declared left/right sides aligned with the "
+            "compute frameworks its features resolve to."
+        )
+
     def create_joinstep_in_case_of_append_or_union(
         self,
         link: Link,
@@ -733,22 +756,10 @@ class ExecutionPlan:
             )
 
         if link_fw[1] != destination_framework:
-            raise ValueError(
-                internal_invariant_error(
-                    "APPEND/UNION left link framework must match the framework of the left index feature.",
-                    f"link={link}, left_link_framework={link_fw[1].get_class_name()}, "
-                    f"left_feature_framework={destination_framework.get_class_name()}",
-                )
-            )
+            raise ValueError(self._append_or_union_orientation_error(link, "left", link_fw[1], destination_framework))
 
         if link_fw[2] != source_framework:
-            raise ValueError(
-                internal_invariant_error(
-                    "APPEND/UNION right link framework must match the framework of the right index feature.",
-                    f"link={link}, right_link_framework={link_fw[2].get_class_name()}, "
-                    f"right_feature_framework={source_framework.get_class_name()}",
-                )
-            )
+            raise ValueError(self._append_or_union_orientation_error(link, "right", link_fw[2], source_framework))
 
         return JoinStep(
             link=link,

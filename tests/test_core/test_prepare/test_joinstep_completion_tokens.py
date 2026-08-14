@@ -32,6 +32,7 @@ from mloda.user import PluginCollector
 from mloda.user import mloda
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
+from tests.test_core.test_prepare.join_plan_helpers import feature, trek
 
 
 TOKEN_LEFT_INDEX = Index(("token_left_key",))
@@ -124,12 +125,6 @@ class Branch(NamedTuple):
     right_uuid: UUID
 
 
-def _feature(name: str, cfw: type[ComputeFramework], index: Index | None = None) -> Feature:
-    feature = Feature(name, index=index)
-    feature.compute_frameworks = {cfw}
-    return feature
-
-
 def _step(fg: type[FeatureGroup], feature: Feature, required_uuids: set[UUID]) -> FeatureGroupStep:
     feature_set = FeatureSet()
     feature_set.add(feature)
@@ -166,9 +161,9 @@ def _add_branch(
     plan_the_link: bool = True,
 ) -> Branch:
     """Two parents joined by ``link`` plus the consumer, the smallest shape run_link accepts."""
-    left = _feature(f"{name}_left", left_cfw, link.left_index)
-    right = _feature(f"{name}_right", right_cfw, link.right_index)
-    child = _feature(f"{name}_child", left_cfw)
+    left = feature(f"{name}_left", left_cfw, link.left_index)
+    right = feature(f"{name}_right", right_cfw, link.right_index)
+    child = feature(f"{name}_child", left_cfw)
 
     graph = planned.graph
     graph.add_node(left.uuid, NodeProperties(left, link.left_feature_group))
@@ -190,17 +185,8 @@ def _add_branch(
     planned.pre_execution_plan.append(consumer)
     planned.queue.append((TokenChild, {child}))
 
-    _trek(planned, link, left_cfw, right_cfw, child.uuid)
+    trek(planned.link_trekker, link, (left_cfw, right_cfw), child.uuid)
     return Branch(consumer, left.uuid, right.uuid)
-
-
-def _trek(
-    planned: Planned, link: Link, left_cfw: type[ComputeFramework], right_cfw: type[ComputeFramework], uuid: UUID
-) -> None:
-    """Production shares one set object between data and data_ordered, and invert_link relies on that."""
-    trekked = {uuid}
-    planned.link_trekker.data[(link, left_cfw, right_cfw)] = trekked
-    planned.link_trekker.data_ordered[(link, left_cfw, right_cfw)] = trekked
 
 
 def _add_joinstep(planned: Planned) -> list[JoinStep | FeatureGroupStep]:
@@ -352,8 +338,8 @@ def test_a_chained_append_joinstep_waits_for_the_joinstep_of_the_link_it_was_han
     head = JoinStep(head_link, PyArrowTable, PyArrowTable, {head_uuid, middle_uuid}, {head_uuid}, {middle_uuid})
     tail = JoinStep(tail_link, PyArrowTable, PyArrowTable, {middle_uuid, tail_uuid}, {middle_uuid}, {tail_uuid})
     planned.pre_execution_plan.extend([head, tail])
-    _trek(planned, head_link, PyArrowTable, PyArrowTable, head_uuid)
-    _trek(planned, tail_link, PyArrowTable, PyArrowTable, middle_uuid)
+    trek(planned.link_trekker, head_link, (PyArrowTable, PyArrowTable), head_uuid)
+    trek(planned.link_trekker, tail_link, (PyArrowTable, PyArrowTable), middle_uuid)
 
     _add_joinstep(planned)
 
@@ -407,10 +393,10 @@ def test_raise_on_step_cycle_rejects_three_joinsteps_waiting_on_each_other() -> 
 
 def test_raise_on_step_cycle_rejects_a_cycle_running_through_a_feature_group_step() -> None:
     """A JoinStep waiting on a feature its consumer produces is as unrunnable as a JoinStep pair."""
-    feature = _feature("token_cycle_feature", PyArrowTable)
+    cycle_feature = feature("token_cycle_feature", PyArrowTable)
     join_step = JoinStep(_token_link(), PyArrowTable, PandasDataFrame, set(), set(), set())
-    feature_group_step = _step(TokenChild, feature, {join_step.uuid})
-    join_step.required_uuids.add(feature.uuid)
+    feature_group_step = _step(TokenChild, cycle_feature, {join_step.uuid})
+    join_step.required_uuids.add(cycle_feature.uuid)
     steps: list[Step] = [join_step, feature_group_step]
 
     with pytest.raises(ValueError, match="(?i)cycl"):

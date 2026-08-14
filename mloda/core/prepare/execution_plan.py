@@ -15,10 +15,18 @@ from mloda.core.abstract_plugins.components.input_data.api.api_input_data import
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.filter.global_filter import GlobalFilter
 from mloda.core.filter.single_filter import SingleFilter
+from mloda.core.prepare.declared_sides import split_by_declared_side
 from mloda.core.prepare.joinstep_collection import JoinStepCollection
 from mloda.core.prepare.graph.graph import Graph
 from mloda.core.prepare.resolve_graph import PlannedQueue
-from mloda.core.prepare.resolve_links import LinkFrameworkTrekker, LinkTrekker, inheritance_distance
+from mloda.core.prepare.resolve_links import LinkFrameworkTrekker, LinkTrekker
+from mloda.core.prepare.resolved_join import JoinSide, JoinSignature, PlannedOrientation, ResolvedJoinPlan
+from mloda.core.prepare.resolved_join_builder import (
+    DeclaredFrameworks,
+    build_resolved_join_plan,
+    legacy_join_signatures,
+    raise_on_join_plan_divergence,
+)
 from mloda.core.core.step.abstract_step import Step
 from mloda.core.core.step.feature_group_step import FeatureGroupStep
 from mloda.core.core.step.join_step import JoinStep
@@ -58,13 +66,6 @@ def _describe_step(step: Step) -> str:
     return f"{type(step).__name__}(uuid={step.uuid})"
 
 
-def _nearest_frameworks(frameworks_by_distance: dict[int, set[type[ComputeFramework]]]) -> set[type[ComputeFramework]]:
-    """A declared side is held by its closest subclasses only; farther ones answer for a different side."""
-    if not frameworks_by_distance:
-        return set()
-    return frameworks_by_distance[min(frameworks_by_distance)]
-
-
 class ExecutionPlan:
     def __init__(
         self,
@@ -82,16 +83,44 @@ class ExecutionPlan:
         # Report each divergence once, then at DEBUG.
         self.reported_unmatched: set[tuple[type[FeatureGroup], str, tuple[str, ...]]] = set()
 
+        self.planned_orientations: list[tuple[PlannedOrientation, JoinStep]] = []
+        self.declined_orientations: list[LinkFrameworkTrekker] = []
+        self.resolved_join_plan = ResolvedJoinPlan((), ())
+        self.join_signatures_at_build: frozenset[JoinSignature] = frozenset()
+
     def __iter__(self) -> Generator[TransformFrameworkStep | JoinStep | FeatureGroupStep, None, None]:
         yield from self.execution_plan
 
     def __len__(self) -> int:
         return len(self.execution_plan)
 
-    def create_execution_plan(self, queue: PlannedQueue, graph: Graph, link_trekker: LinkTrekker) -> None:
+    def create_execution_plan(
+        self,
+        queue: PlannedQueue,
+        graph: Graph,
+        link_trekker: LinkTrekker,
+        declared_frameworks: DeclaredFrameworks | None = None,
+    ) -> None:
+        self.planned_orientations = []
+        self.declined_orientations = []
+        self.tfs_collection = set()
+        self.joinstep_collection = JoinStepCollection()
+        self.feature_set_collections = []
+
         child_links = self.invert_link_trekker(link_trekker)
         pre_execution_plan = self.add_feature_group_step(queue, graph.parent_to_children_mapping, child_links)
         fw_execution_plan = self.add_joinstep(pre_execution_plan, link_trekker, graph)
+
+        # Built before add_tfs, whose write serialization edges are not part of the join decision.
+        join_steps = [step for step in fw_execution_plan if isinstance(step, JoinStep)]
+        self.resolved_join_plan = build_resolved_join_plan(
+            self.planned_orientations,
+            self.declined_orientations,
+            declared_frameworks if declared_frameworks is not None else {},
+        )
+        self.join_signatures_at_build = legacy_join_signatures(join_steps)
+        raise_on_join_plan_divergence(self.resolved_join_plan, join_steps)
+
         self.execution_plan = self.add_tfs(fw_execution_plan, graph)
         self.raise_on_step_cycle(self.execution_plan)
 
@@ -511,6 +540,7 @@ class ExecutionPlan:
 
         # This gets the id of the children which needs the link to be calculated.
         children_uuids: set[UUID] = set()
+        attempted_key = link_fw
 
         for stored_links, uuids in link_trekker.data.items():
             if link_fw == stored_links:
@@ -525,6 +555,7 @@ class ExecutionPlan:
             source_framework = link_fw[1]
             # The join then executes in the right feature group's framework, so the merge arguments are inverted.
             swap_merge_sides = True
+            attempted_key = (link, destination_framework, source_framework)
 
             for stored_links, uuids in link_trekker.data.items():
                 if (link, destination_framework, source_framework) == stored_links:
@@ -540,16 +571,15 @@ class ExecutionPlan:
         for uuid in children_uuids:
             required_uuids.update(graph.parent_to_children_mapping[uuid])
 
+        # Split before the order-edge link uuids join required_uuids.
+        split = split_by_declared_side(link, required_uuids, graph)
+
         # This filters the required_uuids to only the one with the final compute framework.
         destination_framework_uuids: set[UUID] = set()
         source_framework_uuids: set[UUID] = set()
 
-        left_frameworks_by_distance: dict[int, set[type[ComputeFramework]]] = defaultdict(set)
-        right_frameworks_by_distance: dict[int, set[type[ComputeFramework]]] = defaultdict(set)
-
         for uuid in required_uuids:
-            node = graph.get_nodes()[uuid]
-            node_framework = node.feature.get_compute_framework()
+            node_framework = graph.get_nodes()[uuid].feature.get_compute_framework()
 
             if node_framework == destination_framework:
                 destination_framework_uuids.add(uuid)
@@ -557,17 +587,8 @@ class ExecutionPlan:
             if node_framework == source_framework:
                 source_framework_uuids.add(uuid)
 
-            # Links match polymorphically, so a subclass of a declared side counts as that side, ranked by distance.
-            if issubclass(node.feature_group_class, link.left_feature_group):
-                left_distance = inheritance_distance(node.feature_group_class, link.left_feature_group)
-                left_frameworks_by_distance[left_distance].add(node_framework)
-
-            if issubclass(node.feature_group_class, link.right_feature_group):
-                right_distance = inheritance_distance(node.feature_group_class, link.right_feature_group)
-                right_frameworks_by_distance[right_distance].add(node_framework)
-
-        declared_left_frameworks = _nearest_frameworks(left_frameworks_by_distance)
-        declared_right_frameworks = _nearest_frameworks(right_frameworks_by_distance)
+        declared_left_frameworks = {graph.get_nodes()[u].feature.get_compute_framework() for u in split.left_uuids}
+        declared_right_frameworks = {graph.get_nodes()[u].feature.get_compute_framework() for u in split.right_uuids}
 
         # The order shows which items should be added first.
         # Thus, we need to make sure that higher ordered links are calculated first.
@@ -588,6 +609,7 @@ class ExecutionPlan:
             # result = True
             result = self.is_valid_join_step(link_fw, children_fw, children_uuid, graph)
             if result is False:
+                self.declined_orientations.append(attempted_key)
                 return None
             elif result is True:
                 pass
@@ -599,6 +621,9 @@ class ExecutionPlan:
                 link, link_fw, required_uuids, graph, pre_execution_plan
             )
         else:
+            swap_sides = self.swap_merge_sides_by_declared_side(
+                destination_framework, declared_left_frameworks, declared_right_frameworks, swap_merge_sides
+            )
             js = JoinStep(
                 link,
                 destination_framework,
@@ -606,10 +631,13 @@ class ExecutionPlan:
                 required_uuids,
                 destination_framework_uuids,
                 source_framework_uuids,
-                self.swap_merge_sides_by_declared_side(
-                    destination_framework, declared_left_frameworks, declared_right_frameworks, swap_merge_sides
-                ),
+                swap_sides,
             )
+
+        side = JoinSide.RIGHT if js.swap_merge_sides else JoinSide.LEFT
+        self.planned_orientations.append(
+            (PlannedOrientation(link, frozenset(children_uuids), side, split.left_uuids, split.right_uuids), js)
+        )
 
         # This makes sure that we do not write on the same datasets due to overlapping joins at once.
         self.joinstep_collection.add(js)

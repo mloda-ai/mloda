@@ -122,8 +122,7 @@ class ExecutionPlan:
         self.join_signatures_at_build = legacy_join_signatures(join_steps)
         raise_on_join_plan_divergence(self.resolved_join_plan, join_steps)
         if declared_frameworks is not None:
-            # declared_frameworks is only ever supplied by the real resolution pipeline (Engine); a
-            # hand-built plan omits it and is exercised against this guard directly in its own tests.
+            # Only the Engine supplies declared_frameworks; hand-built plans call the guard directly in tests.
             raise_on_orphaned_join_source(self.resolved_join_plan)
 
         self.execution_plan = self.add_tfs(fw_execution_plan, graph)
@@ -687,15 +686,13 @@ class ExecutionPlan:
         queued_framework: type[ComputeFramework],
         resolved_framework: type[ComputeFramework],
     ) -> str:
-        """An APPEND/UNION link scheduled in an inverted orientation is a configuration problem, not a bug."""
         return (
             f"{link.jointype.value} link {link} cannot run in an inverted orientation.\n"
-            f"The {side} side was queued to run on {queued_framework.get_class_name()}, but the link's declared "
-            f"{side} index feature resolves to {resolved_framework.get_class_name()}: this link got scheduled "
-            "inverted/reversed.\n"
-            "Unlike INNER/LEFT/RIGHT links, APPEND and UNION links do not support an inverted orientation.\n"
-            "Resolution: do not schedule this link inverted; keep its declared left/right sides aligned with the "
-            "compute frameworks its features resolve to."
+            f"The {side} side was queued on {queued_framework.get_class_name()}, but the link's declared {side} "
+            f"index feature resolves to {resolved_framework.get_class_name()}, so this link got scheduled inverted.\n"
+            "Unlike INNER/LEFT/RIGHT links, APPEND and UNION links do not support inversion.\n"
+            "Resolution: keep the link's declared left/right sides aligned with the compute frameworks its "
+            "features resolve to."
         )
 
     def create_joinstep_in_case_of_append_or_union(

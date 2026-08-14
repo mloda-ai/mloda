@@ -1,6 +1,5 @@
-"""A parent's data read as the source of two joins that share a consumer, with no join in the
-plan writing back into that parent, is the confirmed silent-data-loss shape: two branches that
-can never reunite. `raise_on_orphaned_join_source` does not exist yet; this module fails to import."""
+"""A parent read as the source of two joins that share a consumer, with no join writing back into
+that parent, leaves two branches that can never reunite."""
 
 from typing import Any, NamedTuple
 from uuid import UUID
@@ -56,8 +55,7 @@ class Built(NamedTuple):
 
 
 def _build_orphaned_source_plan() -> Built:
-    """Both joins read the shared parent as their source and write to distinct destinations:
-    the confirmed silent-data-loss shape, reproduced by hand instead of through the full engine."""
+    """Both joins read the shared parent as their source and write to distinct destinations."""
     source = feature("orphan_source", SOURCE_CFW, SHARED_INDEX)
     first_destination = feature("orphan_first_destination", FIRST_DESTINATION_CFW, SHARED_INDEX)
     second_destination = feature("orphan_second_destination", SECOND_DESTINATION_CFW, SHARED_INDEX)
@@ -82,8 +80,8 @@ def _build_orphaned_source_plan() -> Built:
     link_trekker = LinkTrekker()
     # Natural key (declared left, declared right): first_link needs no inversion.
     trek(link_trekker, first_link, (FIRST_DESTINATION_CFW, SOURCE_CFW), consumer.uuid)
-    # Flipped key: second_link's queue entry below is the declared (source, second_destination)
-    # order, so run_link finds nothing there and inverts onto (second_destination, source).
+    # Flipped key: second_link's queue entry below uses the declared order, so run_link finds
+    # nothing there and inverts onto (second_destination, source).
     trek(link_trekker, second_link, (SECOND_DESTINATION_CFW, SOURCE_CFW), consumer.uuid)
 
     queue: list[Any] = [
@@ -141,5 +139,5 @@ def test_raise_on_orphaned_join_source_raises_naming_the_dropped_feature_group()
 
 
 def test_raise_on_orphaned_join_source_accepts_a_plan_with_no_records() -> None:
-    """An empty plan has no source to lose, so the guard must not require records to exist."""
+    """An empty plan has no source to lose."""
     raise_on_orphaned_join_source(ExecutionPlan().resolved_join_plan)

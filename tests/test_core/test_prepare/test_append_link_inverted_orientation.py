@@ -1,5 +1,4 @@
-"""An APPEND/UNION link scheduled in an inverted orientation is a user configuration error:
-neither jointype supports running inverted, unlike INNER/LEFT/RIGHT links.
+"""An APPEND/UNION link scheduled in an inverted orientation is a configuration error, not an internal bug.
 
 Frameworks that agree still plan a JoinStep.
 """
@@ -30,8 +29,7 @@ RIGHT_INDEX = Index(("stack_right_key",))
 
 STACK_LINK_FACTORIES: list[Callable[[JoinSpec, JoinSpec], Link]] = [Link.append, Link.union]
 
-# Substance a message must show to count as the new, plainly-worded configuration error:
-# it must name the concept (orientation/inversion) and say plainly that it is not supported.
+# The message must name the orientation concept and say that it is not supported.
 ORIENTATION_WORDS = ("invert", "revers", "swap", "orientation")
 UNSUPPORTED_WORDS = ("not support", "unsupported", "cannot", "can't", "not allowed")
 
@@ -116,7 +114,7 @@ def _run(planned: Planned) -> JoinStep | None:
 
 
 def _assert_is_orientation_configuration_error(message: str, link: Link) -> None:
-    """The new error reads as a plain config problem, not an internal bug report."""
+    """The error reads as a configuration problem, not an internal bug report."""
     assert not message.startswith("Internal error:")
     assert "report this issue" not in message.lower()
     assert "sanity check" not in message

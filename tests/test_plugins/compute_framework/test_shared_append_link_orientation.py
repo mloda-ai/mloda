@@ -1,4 +1,4 @@
-"""An APPEND consumer resolving to a different framework than the left index feature hits a planning invariant.
+"""An APPEND consumer resolving to a different framework than the left index feature is a configuration error.
 
 A second consumer sharing the same link does not change that outcome.
 """
@@ -24,14 +24,13 @@ from mloda_plugins.compute_framework.base_implementations.pandas.dataframe impor
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 
 
-# Substance a message must show to count as the plainly-worded configuration error: it must name
-# the concept (orientation/inversion) and say plainly that it is not supported.
+# The message must name the orientation concept and say that it is not supported.
 ORIENTATION_WORDS = ("invert", "revers", "swap", "orientation")
 UNSUPPORTED_WORDS = ("not support", "unsupported", "cannot", "can't", "not allowed")
 
 
 def _assert_is_orientation_configuration_error(message: str, link: Link) -> None:
-    """The error reads as a plain config problem, not an internal bug report."""
+    """The error reads as a configuration problem, not an internal bug report."""
     assert not message.startswith("Internal error:")
     assert "report this issue" not in message.lower()
     assert "sanity check" not in message

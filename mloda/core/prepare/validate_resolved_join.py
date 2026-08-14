@@ -1,7 +1,4 @@
-"""Guards a resolved join plan against the confirmed silent-data-loss shape: two joins that both
-read one parent's data as their source, with neither writing its result back into that parent's
-slot, and both feeding a consumer that needs them together.
-"""
+"""Guards a resolved join plan against two joins draining a shared parent that no join writes back into."""
 
 from collections import defaultdict
 from itertools import combinations
@@ -19,7 +16,7 @@ def _side_feature_group_name(record: ResolvedJoin, uuid: UUID) -> str | None:
 
 
 def _shared_feature_group_name(records: tuple[ResolvedJoin, ...], uuid: UUID) -> str:
-    """The class of the contested parent, read off whichever record declares it on a side."""
+    """The contested parent's class, read off whichever record declares it on a side."""
     for record in records:
         name = _side_feature_group_name(record, uuid)
         if name is not None:
@@ -28,7 +25,7 @@ def _shared_feature_group_name(records: tuple[ResolvedJoin, ...], uuid: UUID) ->
 
 
 def _competing_join_label(record: ResolvedJoin, shared_uuid: UUID) -> str:
-    """The record's declared side opposite the shared parent, or its link uuid if neither side matches."""
+    """The declared side opposite the shared parent, falling back to the link uuid."""
     if shared_uuid in record.left.uuids:
         return record.right.feature_group.get_class_name()
     if shared_uuid in record.right.uuids:
@@ -43,17 +40,15 @@ def _orphaned_join_source_error(
     first_label = _competing_join_label(first, shared_uuid)
     second_label = _competing_join_label(second, shared_uuid)
     return (
-        f"{shared_name}'s data is read as the join source by two joins ({first_label} and {second_label}), and "
-        f"neither writes its result back into {shared_name}'s slot: the two branches can never reunite, so a "
-        "consumer needing both loses whichever the runtime does not happen to expose to it.\n"
-        f"Resolution: chain the joins so one of them writes its result back into {shared_name}'s slot, instead "
-        "of both draining it independently."
+        f"{shared_name} is read as the join source by two joins ({first_label} and {second_label}), and neither "
+        f"writes its result back into {shared_name}: the two branches can never reunite, so a consumer needing "
+        "both loses one of them.\n"
+        f"Resolution: chain the joins so that one of them writes its result back into {shared_name}."
     )
 
 
 def raise_on_orphaned_join_source(plan: ResolvedJoinPlan) -> None:
-    """Raise when two joins share a source parent that no join writes back into and share a consumer:
-    the branches can never reunite, so whichever the runtime does not expose is silently dropped."""
+    """Raise when two joins share both a consumer and a source parent that no join writes back into."""
     all_destination_uuids: set[UUID] = set()
     for record in plan.records:
         all_destination_uuids |= record.destination_uuids

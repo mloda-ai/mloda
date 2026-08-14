@@ -40,7 +40,7 @@ def _make_right_trekker(trekked_uuids: set[UUID]) -> tuple[LinkTrekker, Any]:
 
 
 def test_right_join_inversion_onto_undeclared_framework_raises() -> None:
-    """Member declares only left_cfw; the RIGHT-branch inversion still resolves it to right_cfw."""
+    """The feature declares only PandasDataFrame, but the RIGHT-branch inversion resolves it to PyArrowTable."""
     feature = Feature("right_inversion_feature")
     feature.compute_frameworks = {PandasDataFrame}
 

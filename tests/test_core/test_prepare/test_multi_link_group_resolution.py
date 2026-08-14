@@ -174,7 +174,7 @@ def test_link_joining_across_distinct_frameworks_delivers_every_parent_column() 
 
 def test_link_joining_across_distinct_frameworks_with_the_shared_parent_swapped_must_raise() -> None:
     """Same shape as the test above with the A-B link's sides swapped: no join writes back into
-    the shared parent A, so the branches never reunite (today this silently drops mlg_bd)."""
+    the shared parent A, so the branches never reunite."""
     links = {
         Link.inner(JoinSpec(MultiLinkRootBDistinct, MLG_INDEX), JoinSpec(MultiLinkRootA, MLG_INDEX)),
         Link.inner(JoinSpec(MultiLinkRootA, MLG_INDEX), JoinSpec(MultiLinkRootC, MLG_INDEX)),

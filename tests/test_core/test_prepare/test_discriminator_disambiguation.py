@@ -43,3 +43,31 @@ class TestMatchesDiscriminator:
         ep = ExecutionPlan()
         graph, uuid = self._make_graph_with_feature({"CsvReader": "customers.csv", "extra": "value"})
         assert ep._matches_discriminator({"CsvReader": "customers.csv"}, graph, uuid) is True
+
+    def test_multi_key_discriminator_requires_every_key(self) -> None:
+        """A discriminator with several keys must match all of them, not just one."""
+        ep = ExecutionPlan()
+        discriminator = {"reader": "file_a.csv", "region": "us"}
+
+        graph, uuid = self._make_graph_with_feature({"reader": "file_a.csv", "region": "us"})
+        assert ep._matches_discriminator(discriminator, graph, uuid) is True
+
+        # Same region, different reader: the overlap on one key must not be enough.
+        graph, uuid = self._make_graph_with_feature({"reader": "file_b.csv", "region": "us"})
+        assert ep._matches_discriminator(discriminator, graph, uuid) is False
+
+        # Same reader, different region: the mirror case.
+        graph, uuid = self._make_graph_with_feature({"reader": "file_a.csv", "region": "eu"})
+        assert ep._matches_discriminator(discriminator, graph, uuid) is False
+
+    def test_multi_key_discriminator_needs_every_key_present(self) -> None:
+        """Missing a discriminator key is a mismatch, even when the present ones agree."""
+        ep = ExecutionPlan()
+        graph, uuid = self._make_graph_with_feature({"reader": "file_a.csv"})
+        assert ep._matches_discriminator({"reader": "file_a.csv", "region": "us"}, graph, uuid) is False
+
+    def test_empty_discriminator_matches(self) -> None:
+        """An empty discriminator constrains nothing, so every node satisfies it."""
+        ep = ExecutionPlan()
+        graph, uuid = self._make_graph_with_feature({"reader": "file_a.csv"})
+        assert ep._matches_discriminator({}, graph, uuid) is True

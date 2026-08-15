@@ -85,10 +85,6 @@ class ResolvedJoinPairLeftDescendant(ResolvedJoinPairLeft):
     """Matches the declared left side polymorphically, at inheritance distance one."""
 
 
-class ResolvedJoinPairLeftTiedDescendant(ResolvedJoinPairLeft):
-    """A second subclass, tied with ResolvedJoinPairLeftDescendant at inheritance distance one."""
-
-
 class ResolvedJoinOtherLeft(FeatureGroup):
     pass
 
@@ -417,29 +413,38 @@ def _ordered_chain() -> Chain:
     return Chain(planned.plan, producer, consumer)
 
 
-def _tied_left_subclasses_inverted() -> Built:
-    """Two subclasses tie at distance one; only left_winner sits on the trekker key's declared-left framework,
-    so case_link_fw_is_equal_to_children_fw's framework filter alone picks it."""
+def _case_override_inverted() -> Built:
+    """The queue keeps the declared orientation, so run_link rediscovers the inverted one; the child sits on the
+    declared left framework too, so is_valid_join_step's case helper resolves left/right before the remap runs."""
+    planned = _planned()
+    link = _pair_link()
+    sides = _branch(planned, link, "resolved_join_case_override", trekked=(PandasDataFrame, PyArrowTable))
+    return _finish(planned, link, sides)
+
+
+def _case_override_beats_nearer_wrong_framework_left() -> Built:
+    """far_left is farther than nearest_left but is the only one on the framework the join needs; the case helper
+    filters candidates by framework, not distance. destination_side turns RIGHT via that check here, not inversion."""
     planned = _planned()
     link = _pair_link()
 
-    left_winner = feature("resolved_join_tied_left_winner", PyArrowTable, link.left_index)
-    left_loser = feature("resolved_join_tied_left_loser", PandasDataFrame, link.left_index)
-    right = feature("resolved_join_tied_right", PandasDataFrame, link.right_index)
-    child = feature("resolved_join_tied_child", PyArrowTable)
+    nearest_left = feature("resolved_join_nearer_wrong_fw_left", PandasDataFrame, link.left_index)
+    far_left = feature("resolved_join_nearer_wrong_fw_far_left", PyArrowTable, link.left_index)
+    right = feature("resolved_join_nearer_wrong_fw_right", PyArrowTable, link.right_index)
+    child = feature("resolved_join_nearer_wrong_fw_child", PyArrowTable)
 
-    planned.graph.add_node(left_winner.uuid, NodeProperties(left_winner, ResolvedJoinPairLeftDescendant))
-    planned.graph.add_node(left_loser.uuid, NodeProperties(left_loser, ResolvedJoinPairLeftTiedDescendant))
+    planned.graph.add_node(nearest_left.uuid, NodeProperties(nearest_left, ResolvedJoinPairLeft))
+    planned.graph.add_node(far_left.uuid, NodeProperties(far_left, ResolvedJoinPairLeftDescendant))
     planned.graph.add_node(right.uuid, NodeProperties(right, ResolvedJoinPairRight))
-    planned.queue.append((ResolvedJoinPairLeftDescendant, {left_winner}))
-    planned.queue.append((ResolvedJoinPairLeftTiedDescendant, {left_loser}))
+    planned.queue.append((ResolvedJoinPairLeft, {nearest_left}))
+    planned.queue.append((ResolvedJoinPairLeftDescendant, {far_left}))
     planned.queue.append((ResolvedJoinPairRight, {right}))
-    planned.queue.append((link, PyArrowTable, PandasDataFrame))
-    _add_child(planned, child, left_winner, left_loser, right)
-    # Queue keeps the declared orientation, so run_link rediscovers the inverted one.
-    trek(planned.link_trekker, link, (PandasDataFrame, PyArrowTable), child.uuid)
+    planned.queue.append((link, PyArrowTable, PyArrowTable))
+    _add_child(planned, child, nearest_left, far_left, right)
+    # The trekker key matches the queued key directly, so run_link never inverts here.
+    trek(planned.link_trekker, link, (PyArrowTable, PyArrowTable), child.uuid)
 
-    return _finish(planned, link, Sides(left_winner.uuid, right.uuid, child.uuid))
+    return _finish(planned, link, Sides(far_left.uuid, right.uuid, child.uuid))
 
 
 def _join_steps(plan: ExecutionPlan) -> list[JoinStep]:
@@ -688,7 +693,8 @@ def test_each_record_names_the_join_step_it_shadows() -> None:
         _append_pair,
         _two_links,
         _link_with_an_unlinked_third_parent,
-        _tied_left_subclasses_inverted,
+        _case_override_inverted,
+        _case_override_beats_nearer_wrong_framework_left,
     ],
     ids=[
         "inner",
@@ -700,7 +706,8 @@ def test_each_record_names_the_join_step_it_shadows() -> None:
         "append",
         "two_links",
         "unlinked_third_parent",
-        "tied_left_subclasses_inverted",
+        "case_override_inverted",
+        "case_override_beats_nearer_wrong_framework_left",
     ],
 )
 def test_the_records_sign_the_joins_the_legacy_join_steps_sign(build: Callable[[], Any]) -> None:
@@ -744,16 +751,40 @@ def test_a_nearest_left_parent_on_a_third_framework_keeps_the_record_on_the_step
     assert record.source.uuids <= record.source_uuids
 
 
-def test_a_framework_disambiguated_left_winner_lands_on_the_wrong_side_once_inverted() -> None:
-    """left_winner wins the distance tie on framework alone; that win must land on record.left, not be
-    relabeled as record.right by the inversion."""
-    built = _tied_left_subclasses_inverted()
+def test_a_case_override_survives_a_right_destination_side() -> None:
+    """is_valid_join_step's case helper already resolves left/right in declared order; the inversion remap must
+    not re-swap them once destination_side comes out RIGHT."""
+    built = _case_override_inverted()
 
     assert len(_join_steps(built.plan)) == 1, "the shape must plan exactly one JoinStep for this to say anything"
     record = _one_record(built.plan, built.link)
     assert record.destination_side is JoinSide.RIGHT
     assert record.left.uuids == {built.sides.left_uuid}
     assert record.right.uuids == {built.sides.right_uuid}
+
+
+def test_a_case_override_beats_a_nearer_wrong_framework_left() -> None:
+    """split_by_declared_side's nearest-by-distance rule alone would pick nearest_left; the case helper's
+    framework filter must override it and keep far_left, the correct-framework parent, on record.left."""
+    built = _case_override_beats_nearer_wrong_framework_left()
+
+    assert len(_join_steps(built.plan)) == 1, "the shape must plan exactly one JoinStep for this to say anything"
+    record = _one_record(built.plan, built.link)
+    assert record.destination_side is JoinSide.RIGHT
+    assert record.left.uuids == {built.sides.left_uuid}
+    assert record.right.uuids == {built.sides.right_uuid}
+
+
+def test_a_case_override_right_destination_crosses_the_legacy_destination_uuids() -> None:
+    """Known, accepted gap: destination (case-helper order) and destination_uuids (legacy mirror) diverge once a
+    case override lands on a RIGHT destination side; left open for a later epic step, not chased further here."""
+    built = _case_override_inverted()
+
+    record = _one_record(built.plan, built.link)
+
+    assert record.destination_side is JoinSide.RIGHT
+    assert not (record.destination.uuids <= record.destination_uuids)
+    assert not (record.source.uuids <= record.source_uuids)
 
 
 def test_flipping_the_merge_sides_of_a_join_step_breaks_the_parity() -> None:

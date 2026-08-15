@@ -1,4 +1,4 @@
-"""An APPEND consumer resolving to a different framework than the left index feature hits a planning invariant.
+"""An APPEND consumer resolving to a different framework than the left index feature is a configuration error.
 
 A second consumer sharing the same link does not change that outcome.
 """
@@ -24,7 +24,22 @@ from mloda_plugins.compute_framework.base_implementations.pandas.dataframe impor
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 
 
-LEFT_FRAMEWORK_INVARIANT = "APPEND/UNION left link framework must match"
+# The message must name the orientation concept and say that it is not supported.
+ORIENTATION_WORDS = ("invert", "revers", "swap", "orientation")
+UNSUPPORTED_WORDS = ("not support", "unsupported", "cannot", "can't", "not allowed")
+
+
+def _assert_is_orientation_configuration_error(message: str, link: Link) -> None:
+    """The error reads as a configuration problem, not an internal bug report."""
+    assert not message.startswith("Internal error:")
+    assert "report this issue" not in message.lower()
+    assert "sanity check" not in message
+    assert str(link) in message
+    assert PyArrowTable.get_class_name() in message
+    assert PandasDataFrame.get_class_name() in message
+    assert link.jointype.value in message.lower()
+    assert any(word in message.lower() for word in ORIENTATION_WORDS)
+    assert any(word in message.lower() for word in UNSUPPORTED_WORDS)
 
 
 class SharedAppendSource(FeatureGroup):
@@ -105,11 +120,12 @@ def _plan_append(link: Link, consumers: list[type[FeatureGroup]]) -> None:
 
 
 def test_consumer_framework_mismatch_is_rejected_while_building_the_joinstep() -> None:
-    with pytest.raises(ValueError) as excinfo:
-        _plan_append(_append_link(), [SharedAppendPandasConsumer])
+    link = _append_link()
 
-    assert "create_joinstep_in_case_of_append_or_union" in [entry.name for entry in excinfo.traceback]
-    assert LEFT_FRAMEWORK_INVARIANT in str(excinfo.value)
+    with pytest.raises(ValueError) as excinfo:
+        _plan_append(link, [SharedAppendPandasConsumer])
+
+    _assert_is_orientation_configuration_error(str(excinfo.value), link)
 
 
 def test_consumer_framework_mismatch_names_the_link_and_both_frameworks() -> None:
@@ -118,17 +134,13 @@ def test_consumer_framework_mismatch_names_the_link_and_both_frameworks() -> Non
     with pytest.raises(ValueError) as excinfo:
         _plan_append(link, [SharedAppendPandasConsumer])
 
-    message = str(excinfo.value)
-    assert message.startswith("Internal error:")
-    assert "sanity check" not in message
-    assert str(link) in message
-    assert PyArrowTable.get_class_name() in message
-    assert PandasDataFrame.get_class_name() in message
+    _assert_is_orientation_configuration_error(str(excinfo.value), link)
 
 
 def test_a_second_consumer_of_the_same_link_raises_the_same_error() -> None:
-    with pytest.raises(ValueError) as excinfo:
-        _plan_append(_append_link(), [SharedAppendPandasConsumer, SharedAppendFlexibleConsumer])
+    link = _append_link()
 
-    assert "create_joinstep_in_case_of_append_or_union" in [entry.name for entry in excinfo.traceback]
-    assert LEFT_FRAMEWORK_INVARIANT in str(excinfo.value)
+    with pytest.raises(ValueError) as excinfo:
+        _plan_append(link, [SharedAppendPandasConsumer, SharedAppendFlexibleConsumer])
+
+    _assert_is_orientation_configuration_error(str(excinfo.value), link)

@@ -549,6 +549,58 @@ def test_the_declared_orientation_plans_the_declared_joinstep() -> None:
     assert join_step.swap_merge_sides is False
 
 
+def test_a_link_without_a_matching_trekker_key_names_the_link() -> None:
+    planned = _pair_scenario()
+
+    with pytest.raises(ValueError) as excinfo:
+        _run(planned, PyArrowTable, PandasDataFrame)
+
+    assert "has no matching uuids" in str(excinfo.value)
+    assert str(planned.link) in str(excinfo.value)
+
+
+def test_same_class_nodes_without_discriminators_are_rejected_as_ambiguous() -> None:
+    link = Link.inner(
+        JoinSpec(LinkPlanSelfSource, Index((SELF_LEFT_KEY,))),
+        JoinSpec(LinkPlanSelfSource, Index((SELF_RIGHT_KEY,))),
+    )
+    planned = _plan(
+        link,
+        _feature(SELF_LEFT_PAYLOAD, PyArrowTable),
+        _feature(SELF_RIGHT_PAYLOAD, PyArrowTable),
+        _feature("link_plan_self_child", PyArrowTable),
+        LinkPlanSelfSource,
+        LinkPlanSelfSource,
+        LinkPlanSelfConsumer,
+    )
+    _trek(planned, PyArrowTable, PyArrowTable)
+
+    with pytest.raises(ValueError) as excinfo:
+        _run(planned, PyArrowTable, PyArrowTable)
+
+    message = str(excinfo.value)
+    assert "Multiple same-class FeatureGroup nodes" in message
+    assert "left_discriminator and right_discriminator" in message
+
+
+def test_multiple_cross_group_pairings_are_rejected_as_ambiguous() -> None:
+    planned = _pair_scenario()
+    second_right = _feature("link_plan_pair_second_right_payload", PandasDataFrame, PAIR_RIGHT_INDEX)
+    planned.graph.add_node(second_right.uuid, NodeProperties(second_right, LinkPlanPairRight))
+    planned.graph.adjacency_list[second_right.uuid] = [planned.child_uuid]
+    planned.graph.parent_to_children_mapping[planned.child_uuid].add(second_right.uuid)
+    planned.pre_execution_plan.insert(2, _step(LinkPlanPairRight, second_right, PandasDataFrame))
+    planned.plan.feature_set_collections.insert(2, {second_right.uuid})
+    _trek(planned, PyArrowTable, PandasDataFrame)
+
+    with pytest.raises(ValueError) as excinfo:
+        _run(planned, PyArrowTable, PandasDataFrame)
+
+    message = str(excinfo.value)
+    assert "more than one solution for the join" in message
+    assert "links and feature group configuration" in message
+
+
 def test_an_orientation_without_a_valid_pairing_plans_no_joinstep() -> None:
     """No parent is both a left-side feature group and on the left framework, so nothing pairs up."""
     planned = _pair_scenario(child_cfw=PandasDataFrame)

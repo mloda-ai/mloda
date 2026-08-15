@@ -44,6 +44,9 @@ class PlannedOrientation:
     destination_side: JoinSide
     left_uuids: frozenset[UUID]
     right_uuids: frozenset[UUID]
+    # True when is_valid_join_step's case helper (not the generic framework partition) resolved
+    # destination/source: those uuids are already declared left/right, unlike the generic partition.
+    case_override: bool = False
 
 
 @dataclass(frozen=True)

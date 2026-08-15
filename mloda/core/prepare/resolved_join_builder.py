@@ -55,8 +55,7 @@ def build_resolved_join_plan(
         side = orientation.destination_side
         destination = frozenset(join_step.destination_framework_uuids)
         source = frozenset(join_step.source_framework_uuids)
-        # A case-override orientation already resolved destination/source against declared left/right;
-        # only the generic framework partition needs the side-based remap to recover declared order.
+        # The generic framework partition needs the side to recover declared order; a case override already has it.
         resolved_left, resolved_right = (
             (destination, source) if side is JoinSide.LEFT or orientation.case_override else (source, destination)
         )

@@ -86,7 +86,7 @@ class ResolvedJoinPairLeftDescendant(ResolvedJoinPairLeft):
 
 
 class ResolvedJoinPairLeftTiedDescendant(ResolvedJoinPairLeft):
-    """A second subclass at the same inheritance distance as ResolvedJoinPairLeftDescendant, on another framework."""
+    """A second subclass, tied with ResolvedJoinPairLeftDescendant at inheritance distance one."""
 
 
 class ResolvedJoinOtherLeft(FeatureGroup):
@@ -418,8 +418,8 @@ def _ordered_chain() -> Chain:
 
 
 def _tied_left_subclasses_inverted() -> Built:
-    """Two ResolvedJoinPairLeft subclasses tie at distance one; only left_winner sits on the trekker key's
-    declared-left framework, so case_link_fw_is_equal_to_children_fw's framework filter alone must pick it."""
+    """Two subclasses tie at distance one; only left_winner sits on the trekker key's declared-left framework,
+    so case_link_fw_is_equal_to_children_fw's framework filter alone picks it."""
     planned = _planned()
     link = _pair_link()
 
@@ -436,8 +436,7 @@ def _tied_left_subclasses_inverted() -> Built:
     planned.queue.append((ResolvedJoinPairRight, {right}))
     planned.queue.append((link, PyArrowTable, PandasDataFrame))
     _add_child(planned, child, left_winner, left_loser, right)
-    # Queue keeps the declared orientation; the trekker records the swapped pair, inverting via run_link's
-    # empty-children branch, the same technique _inverted_pair/_inverted_left_join use.
+    # Queue keeps the declared orientation, so run_link rediscovers the inverted one.
     trek(planned.link_trekker, link, (PandasDataFrame, PyArrowTable), child.uuid)
 
     return _finish(planned, link, Sides(left_winner.uuid, right.uuid, child.uuid))
@@ -746,8 +745,8 @@ def test_a_nearest_left_parent_on_a_third_framework_keeps_the_record_on_the_step
 
 
 def test_a_framework_disambiguated_left_winner_lands_on_the_wrong_side_once_inverted() -> None:
-    """left_winner alone sits on the trekker key's declared-left framework, so it must win the distance tie over
-    left_loser; the win should land on record.left, not get relabeled as record.right by the inversion."""
+    """left_winner wins the distance tie on framework alone; that win must land on record.left, not be
+    relabeled as record.right by the inversion."""
     built = _tied_left_subclasses_inverted()
 
     assert len(_join_steps(built.plan)) == 1, "the shape must plan exactly one JoinStep for this to say anything"

@@ -647,11 +647,20 @@ class ExecutionPlan:
                 swap_sides,
             )
 
+        # create_joinstep_in_case_of_append_or_union builds its own uuids independently, so an APPEND/UNION
+        # orientation must never claim its (unused) case-override uuids are in declared order.
+        sides_in_declared_order = case_override and link.jointype not in (JoinType.APPEND, JoinType.UNION)
+
         side = JoinSide.RIGHT if js.swap_merge_sides else JoinSide.LEFT
         self.planned_orientations.append(
             (
                 PlannedOrientation(
-                    link, frozenset(children_uuids), side, split.left_uuids, split.right_uuids, case_override
+                    link,
+                    frozenset(children_uuids),
+                    side,
+                    split.left_uuids,
+                    split.right_uuids,
+                    sides_in_declared_order=sides_in_declared_order,
                 ),
                 js,
             )

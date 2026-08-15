@@ -85,6 +85,10 @@ class ResolvedJoinPairLeftDescendant(ResolvedJoinPairLeft):
     """Matches the declared left side polymorphically, at inheritance distance one."""
 
 
+class ResolvedJoinPairLeftTiedDescendant(ResolvedJoinPairLeft):
+    """A second subclass at the same inheritance distance as ResolvedJoinPairLeftDescendant, on another framework."""
+
+
 class ResolvedJoinOtherLeft(FeatureGroup):
     pass
 
@@ -413,6 +417,32 @@ def _ordered_chain() -> Chain:
     return Chain(planned.plan, producer, consumer)
 
 
+def _tied_left_subclasses_inverted() -> Built:
+    """Two ResolvedJoinPairLeft subclasses tie at distance one; only left_winner sits on the trekker key's
+    declared-left framework, so case_link_fw_is_equal_to_children_fw's framework filter alone must pick it."""
+    planned = _planned()
+    link = _pair_link()
+
+    left_winner = feature("resolved_join_tied_left_winner", PyArrowTable, link.left_index)
+    left_loser = feature("resolved_join_tied_left_loser", PandasDataFrame, link.left_index)
+    right = feature("resolved_join_tied_right", PandasDataFrame, link.right_index)
+    child = feature("resolved_join_tied_child", PyArrowTable)
+
+    planned.graph.add_node(left_winner.uuid, NodeProperties(left_winner, ResolvedJoinPairLeftDescendant))
+    planned.graph.add_node(left_loser.uuid, NodeProperties(left_loser, ResolvedJoinPairLeftTiedDescendant))
+    planned.graph.add_node(right.uuid, NodeProperties(right, ResolvedJoinPairRight))
+    planned.queue.append((ResolvedJoinPairLeftDescendant, {left_winner}))
+    planned.queue.append((ResolvedJoinPairLeftTiedDescendant, {left_loser}))
+    planned.queue.append((ResolvedJoinPairRight, {right}))
+    planned.queue.append((link, PyArrowTable, PandasDataFrame))
+    _add_child(planned, child, left_winner, left_loser, right)
+    # Queue keeps the declared orientation; the trekker records the swapped pair, inverting via run_link's
+    # empty-children branch, the same technique _inverted_pair/_inverted_left_join use.
+    trek(planned.link_trekker, link, (PandasDataFrame, PyArrowTable), child.uuid)
+
+    return _finish(planned, link, Sides(left_winner.uuid, right.uuid, child.uuid))
+
+
 def _join_steps(plan: ExecutionPlan) -> list[JoinStep]:
     return [step for step in plan if isinstance(step, JoinStep)]
 
@@ -659,6 +689,7 @@ def test_each_record_names_the_join_step_it_shadows() -> None:
         _append_pair,
         _two_links,
         _link_with_an_unlinked_third_parent,
+        _tied_left_subclasses_inverted,
     ],
     ids=[
         "inner",
@@ -670,6 +701,7 @@ def test_each_record_names_the_join_step_it_shadows() -> None:
         "append",
         "two_links",
         "unlinked_third_parent",
+        "tied_left_subclasses_inverted",
     ],
 )
 def test_the_records_sign_the_joins_the_legacy_join_steps_sign(build: Callable[[], Any]) -> None:
@@ -711,6 +743,18 @@ def test_a_nearest_left_parent_on_a_third_framework_keeps_the_record_on_the_step
     assert record.destination_side is JoinSide.RIGHT
     assert record.destination.uuids <= record.destination_uuids
     assert record.source.uuids <= record.source_uuids
+
+
+def test_a_framework_disambiguated_left_winner_lands_on_the_wrong_side_once_inverted() -> None:
+    """left_winner alone sits on the trekker key's declared-left framework, so it must win the distance tie over
+    left_loser; the win should land on record.left, not get relabeled as record.right by the inversion."""
+    built = _tied_left_subclasses_inverted()
+
+    assert len(_join_steps(built.plan)) == 1, "the shape must plan exactly one JoinStep for this to say anything"
+    record = _one_record(built.plan, built.link)
+    assert record.destination_side is JoinSide.RIGHT
+    assert record.left.uuids == {built.sides.left_uuid}
+    assert record.right.uuids == {built.sides.right_uuid}
 
 
 def test_flipping_the_merge_sides_of_a_join_step_breaks_the_parity() -> None:

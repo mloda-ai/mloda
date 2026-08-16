@@ -61,12 +61,15 @@ for step in session.resolved_plan():
             step.join_inverted,              # True when the destination is the declared right side
             step.compute_framework_name,     # merge destination framework
             step.source_compute_framework_name,
+            step.declared_left_frameworks,   # frameworks the left side's parents declared as candidates
+            step.declared_right_frameworks,  # frameworks the right side's parents declared as candidates
         )
 ```
 
 The declared sides are fixed by the `Link`. `join_destination_side` and `join_inverted` are the
 planner's answer and can differ between requests, because agreement depends on which frameworks the
-surrounding features resolved to.
+surrounding features resolved to. `declared_left_frameworks`/`declared_right_frameworks` are also
+fixed by the declared side, independent of which framework agreement actually picked.
 
 `join_token` is the join's completion token, the same uuid the scheduler tracks and the value a
 stalled-plan error reports, so it correlates an explain record with a scheduling message. The token
@@ -74,4 +77,4 @@ is minted per planning pass and is only meaningful **within one session**: hold 
 above, rather than calling `explain(...)`, which resolves a throwaway plan. For the same reason the
 token is excluded from `PlanStep` equality, so two resolutions of one request still compare equal.
 
-All three are `None` on compute and transform steps.
+All of the above are empty/`None` on compute and transform steps.

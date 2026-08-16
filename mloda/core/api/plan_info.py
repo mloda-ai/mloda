@@ -35,7 +35,10 @@ class PlanStep:
     side the destination landed on, ``join_inverted`` a convenience mirror of the record's own
     ``inverted`` (``join_destination_side == "right"``), and ``join_token`` the join step's
     completion token, minted fresh per planning run and therefore excluded from equality; all three
-    are None without a resolved join plan.
+    are None without a resolved join plan. ``declared_left_frameworks``/``declared_right_frameworks``
+    are the sorted class names of the compute frameworks each declared side's parent features
+    declared as candidates (``record.left.declared_frameworks``/``record.right.declared_frameworks``),
+    also ``()`` without a resolved join plan.
     """
 
     step_kind: Literal["compute", "join", "transform"]
@@ -48,6 +51,8 @@ class PlanStep:
     join_destination_side: Optional[Literal["left", "right"]] = field(default=None, kw_only=True)
     join_inverted: Optional[bool] = field(default=None, kw_only=True)
     join_token: Optional[UUID] = field(default=None, kw_only=True, compare=False)
+    declared_left_frameworks: tuple[str, ...] = field(default=(), kw_only=True)
+    declared_right_frameworks: tuple[str, ...] = field(default=(), kw_only=True)
     requested_feature_names: tuple[str, ...] = ()
     injected_feature_names: tuple[str, ...] = ()
 
@@ -126,6 +131,12 @@ def build_plan_steps(
                     join_destination_side=None if record is None else record.destination_side.value,
                     join_inverted=None if record is None else record.inverted,
                     join_token=None if record is None else record.token,
+                    declared_left_frameworks=()
+                    if record is None
+                    else tuple(sorted(framework.get_class_name() for framework in record.left.declared_frameworks)),
+                    declared_right_frameworks=()
+                    if record is None
+                    else tuple(sorted(framework.get_class_name() for framework in record.right.declared_frameworks)),
                 )
             )
         else:

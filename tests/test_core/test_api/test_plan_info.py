@@ -18,6 +18,9 @@ Contract under test:
     ``join_inverted`` and ``join_token``. All three are None on compute and transform steps, and on
     every step when ``build_plan_steps`` gets a bare iterable that carries no resolved join plan.
     ``join_token`` is minted fresh per planning run, so it stays out of equality.
+  * Join steps also expose ``declared_left_frameworks``/``declared_right_frameworks``: the sorted
+    class-name tuples of each declared side's candidate compute frameworks, both defaulting to
+    ``()`` on compute/transform steps and wherever there is no resolved join plan to read.
   * ``build_plan_steps`` raises ``ValueError`` on a step it does not know, instead of dropping it.
   * ``mlodaAPI.resolved_plan()`` returns ``list[PlanStep]`` on a prepared session, both before
     and after ``run()``, in execution-plan order, and matches the plan that actually executed.
@@ -376,6 +379,8 @@ class TestPlanStepDataclass:
             "join_destination_side",
             "join_inverted",
             "join_token",
+            "declared_left_frameworks",
+            "declared_right_frameworks",
             "requested_feature_names",
             "injected_feature_names",
         ]
@@ -530,11 +535,15 @@ class TestJoinOrientationFieldsOnTheDataclass:
         assert step.join_destination_side is None
         assert step.join_inverted is None
         assert step.join_token is None
+        assert step.declared_left_frameworks == ()
+        assert step.declared_right_frameworks == ()
 
         fields_by_name = {field.name: field for field in dataclasses.fields(PlanStep)}
         assert fields_by_name["join_destination_side"].default is None
         assert fields_by_name["join_inverted"].default is None
         assert fields_by_name["join_token"].default is None
+        assert fields_by_name["declared_left_frameworks"].default == ()
+        assert fields_by_name["declared_right_frameworks"].default == ()
 
     def test_join_orientation_fields_are_optional_scalars(self) -> None:
         annotations = PlanStep.__annotations__
@@ -962,6 +971,14 @@ class TestJoinOrientationOnResolvedPlans:
         assert join.join_inverted is False
         assert join.join_token == records[0].token
 
+    def test_join_step_reports_the_declared_frameworks_per_side(self) -> None:
+        """The left side is pandas-only, the right side pyarrow-only, per the fixture's declarations."""
+        plan = _prepare_cross_framework_join_session().resolved_plan()
+        join = next(step for step in plan if step.step_kind == "join")
+
+        assert join.declared_left_frameworks == ("PandasDataFrame",)
+        assert join.declared_right_frameworks == ("PyArrowTable",)
+
     def test_join_token_is_the_join_steps_own_completion_token(self) -> None:
         session = _prepare_cross_framework_join_session()
         assert session.engine is not None
@@ -982,6 +999,8 @@ class TestJoinOrientationOnResolvedPlans:
             assert step.join_destination_side is None
             assert step.join_inverted is None
             assert step.join_token is None
+            assert step.declared_left_frameworks == ()
+            assert step.declared_right_frameworks == ()
 
     def test_join_orientation_is_none_without_a_resolved_join_plan(self) -> None:
         """build_plan_steps also takes a bare list of steps, which carries no ResolvedJoinPlan to read."""
@@ -994,6 +1013,8 @@ class TestJoinOrientationOnResolvedPlans:
         assert join.join_destination_side is None
         assert join.join_inverted is None
         assert join.join_token is None
+        assert join.declared_left_frameworks == ()
+        assert join.declared_right_frameworks == ()
 
 
 class TestInvertedCrossFrameworkJoin:
@@ -1016,6 +1037,11 @@ class TestInvertedCrossFrameworkJoin:
         assert join.source_feature_group is PlanInfoCrossRightArrow
         assert join.compute_framework is PyArrowTable
         assert join.source_compute_framework is PandasDataFrame
+
+        # The declared sides' candidate frameworks stay fixed by the Link, regardless of
+        # which side the destination lands on.
+        assert join.declared_left_frameworks == ("PandasDataFrame",)
+        assert join.declared_right_frameworks == ("PyArrowTable",)
 
     def test_the_hop_into_an_inverted_join_names_the_destination_side(self) -> None:
         """The hop moves the declared left side into the declared right one, which holds the destination."""

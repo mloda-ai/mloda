@@ -156,6 +156,7 @@ for step in mloda.explain(["sales__mean_aggr"], compute_frameworks=["PandasDataF
 - **join_destination_side** (`str | None`): `"left"` or `"right"`, the declared side the merge destination is on, for a join step.
 - **join_inverted** (`bool | None`): True when the merge destination is the declared right side, for a join step.
 - **join_token** (`UUID | None`): The join's completion token, the uuid the scheduler tracks, for a join step.
+- **declared_left_frameworks** / **declared_right_frameworks** (`tuple[str, ...]`): The compute frameworks each declared side's parent features declared as candidates, for a join step; empty otherwise.
 - **feature_group_name** / **compute_framework_name** / **source_feature_group_name** / **source_compute_framework_name** (`str | None`): Class names of the above, None when unset.
 
 Join semantics: for a join step the `*_feature_group` fields are the link's declared left/right sides, while `compute_framework`/`source_compute_framework` are the merge destination and the framework merged in, which may belong to the declared right side. The declared sides are fixed by the `Link`; `join_destination_side`/`join_inverted` are the planner's orientation answer, which depends on framework agreement. See [Join planner pipeline](join-planner-pipeline.md).

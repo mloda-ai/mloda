@@ -44,6 +44,8 @@ class PlannedOrientation:
     destination_side: JoinSide
     left_uuids: frozenset[UUID]
     right_uuids: frozenset[UUID]
+    # True when destination/source uuids are already in declared left/right order (INNER/LEFT/RIGHT joins only).
+    sides_in_declared_order: bool = False
 
 
 @dataclass(frozen=True)
@@ -92,6 +94,9 @@ class ResolvedJoin:
     def inverted(self) -> bool:
         return self.destination_side is JoinSide.RIGHT
 
+    # Known gap: on a case-override orientation whose destination_side is RIGHT, destination/source below can
+    # name a different uuid set than destination_uuids/source_uuids; see
+    # test_a_case_override_right_destination_crosses_the_legacy_destination_uuids.
     @property
     def destination(self) -> ResolvedJoinSide:
         return self.right if self.inverted else self.left

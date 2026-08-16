@@ -613,6 +613,7 @@ class ExecutionPlan:
         #    raise ValueError("This is not supported yet.")
 
         # This part is for handling specific join cases. Currently, we only deal with equal feature groups.
+        case_override = False
         for children_uuid in children_uuids:
             children_fw = graph.get_nodes()[children_uuid].feature.get_compute_framework()
 
@@ -626,6 +627,7 @@ class ExecutionPlan:
                 pass
             else:
                 destination_framework_uuids, source_framework_uuids = result
+                case_override = True
 
         if link.jointype in (JoinType.APPEND, JoinType.UNION):
             js = self.create_joinstep_in_case_of_append_or_union(
@@ -645,9 +647,23 @@ class ExecutionPlan:
                 swap_sides,
             )
 
+        # create_joinstep_in_case_of_append_or_union builds its own uuids independently, so an APPEND/UNION
+        # orientation must never claim its (unused) case-override uuids are in declared order.
+        sides_in_declared_order = case_override and link.jointype not in (JoinType.APPEND, JoinType.UNION)
+
         side = JoinSide.RIGHT if js.swap_merge_sides else JoinSide.LEFT
         self.planned_orientations.append(
-            (PlannedOrientation(link, frozenset(children_uuids), side, split.left_uuids, split.right_uuids), js)
+            (
+                PlannedOrientation(
+                    link,
+                    frozenset(children_uuids),
+                    side,
+                    split.left_uuids,
+                    split.right_uuids,
+                    sides_in_declared_order=sides_in_declared_order,
+                ),
+                js,
+            )
         )
 
         # This makes sure that we do not write on the same datasets due to overlapping joins at once.

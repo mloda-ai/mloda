@@ -55,11 +55,14 @@ def build_resolved_join_plan(
         side = orientation.destination_side
         destination = frozenset(join_step.destination_framework_uuids)
         source = frozenset(join_step.source_framework_uuids)
-        resolved_left, resolved_right = (destination, source) if side is JoinSide.LEFT else (source, destination)
-        if link.left_feature_group == link.right_feature_group:
-            # run_link resolves a self link's left-discriminated parents into the destination set unconditionally.
-            left_uuids, right_uuids = destination, source
-        elif (
+        # The generic framework partition needs the side to recover declared order; sides_in_declared_order
+        # already has it.
+        resolved_left, resolved_right = (
+            (destination, source)
+            if side is JoinSide.LEFT or orientation.sides_in_declared_order
+            else (source, destination)
+        )
+        if (
             orientation.left_uuids <= resolved_left
             and orientation.right_uuids <= resolved_right
             and orientation.left_uuids != orientation.right_uuids
@@ -67,6 +70,8 @@ def build_resolved_join_plan(
             left_uuids, right_uuids = orientation.left_uuids, orientation.right_uuids
         else:
             # The step's sets, so a record can never name parents outside its own destination/source claim.
+            # A self link's declared sides are identical (split_by_declared_side can't split one feature group
+            # from itself), so it always lands here too.
             left_uuids, right_uuids = resolved_left, resolved_right
 
         record = ResolvedJoin(

@@ -658,11 +658,15 @@ class ExecutionPlan:
                 # on link_fw[2]; unlike the nearest-split-derived swap_sides, that framework
                 # identity cannot disagree with which side the case helper actually bound. Only
                 # fall back to swap_sides when the frameworks coincide and identity cannot decide.
+                # The destination side follows the same identity, so the record and the merge
+                # argument order agree with the parents actually bound.
                 if destination_framework != source_framework:
                     if destination_framework == link_fw[1]:
                         destination_framework_uuids, source_framework_uuids = result
+                        swap_sides = False
                     else:
                         source_framework_uuids, destination_framework_uuids = result
+                        swap_sides = True
                 elif swap_sides:
                     source_framework_uuids, destination_framework_uuids = result
                 else:

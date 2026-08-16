@@ -327,7 +327,7 @@ class ExecutionPlan:
         return fw_execution_plan
 
     def fill_tfs_by_joinstep(self, ep: JoinStep) -> TransformFrameworkStep:
-        """The hop moves the source side into the destination side; swap_merge_sides names which declared side that is."""
+        """The hop moves the source side into the destination side; swap_merge_sides names which side that is."""
         if ep.swap_merge_sides:
             from_feature_group, to_feature_group = ep.link.left_feature_group, ep.link.right_feature_group
         else:

@@ -777,10 +777,8 @@ class TestExplain:
         assert explained == prepared
 
     def test_explain_matches_prepare_resolved_plan_for_a_join_request(self) -> None:
-        """The join token is fresh per planning run, which must not make two resolutions differ.
-
-        Plan order across sessions is not pinned, so this compares multisets.
-        """
+        """The join token is fresh per planning run and plan order across sessions is not pinned, so this
+        compares multisets rather than requiring the two resolutions to match exactly."""
         explained = mlodaAPI.explain(
             ["PlanInfoCrossConsumer"],
             compute_frameworks={PandasDataFrame, PyArrowTable},

@@ -1,6 +1,6 @@
-"""The materialized join decision: one record per planned join orientation.
-
-Shadow mode, nothing runs yet. Metadata only (classes, uuids, indices, scalars), so a record pickles to a worker.
+"""The materialized join decision: one record per planned join orientation, and the JoinStep that
+runs it is built from the record's own fields. Metadata only (classes, uuids, indices, scalars), so
+a record pickles to a worker.
 """
 
 from collections.abc import Iterable, Mapping
@@ -10,7 +10,7 @@ from typing import NamedTuple
 from uuid import UUID
 
 from mloda.core.abstract_plugins.components.index.index import Index
-from mloda.core.abstract_plugins.components.link import JoinType, Link
+from mloda.core.abstract_plugins.components.link import JoinType
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 
@@ -33,19 +33,6 @@ class ResolvedJoinSide:
     index: Index
     uuids: frozenset[UUID]
     declared_frameworks: frozenset[type[ComputeFramework]]
-
-
-@dataclass(frozen=True)
-class PlannedOrientation:
-    """The join an orientation decided, not just the trekker key it was planned under."""
-
-    link: Link
-    consumers: frozenset[UUID]
-    destination_side: JoinSide
-    left_uuids: frozenset[UUID]
-    right_uuids: frozenset[UUID]
-    # True when destination/source uuids are already in declared left/right order (INNER/LEFT/RIGHT joins only).
-    sides_in_declared_order: bool = False
 
 
 @dataclass(frozen=True)
@@ -87,16 +74,11 @@ class ResolvedJoin:
     # Join dependency edges only, not the write serialization edges add_tfs adds later.
     depends_on: frozenset[UUID]
     token: UUID
-    # Correlation only, never authoritative: the join step this record shadows.
-    shadowed_step_uuid: UUID
 
     @property
     def inverted(self) -> bool:
         return self.destination_side is JoinSide.RIGHT
 
-    # Known gap: on a case-override orientation whose destination_side is RIGHT, destination/source below can
-    # name a different uuid set than destination_uuids/source_uuids; see
-    # test_a_case_override_right_destination_crosses_the_legacy_destination_uuids.
     @property
     def destination(self) -> ResolvedJoinSide:
         return self.right if self.inverted else self.left

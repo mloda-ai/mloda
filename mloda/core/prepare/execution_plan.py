@@ -1,7 +1,7 @@
 from collections.abc import Sequence
 from copy import copy, deepcopy
-from typing import Any, Generator, Optional
-from uuid import UUID
+from typing import Any, Generator, NamedTuple, Optional
+from uuid import UUID, uuid4
 
 from mloda.core.abstract_plugins.components.error_utils import REPORT_URL, internal_invariant_error
 from mloda.core.abstract_plugins.components.utils import safe_field
@@ -20,12 +20,19 @@ from mloda.core.prepare.joinstep_collection import JoinStepCollection
 from mloda.core.prepare.graph.graph import Graph
 from mloda.core.prepare.resolve_graph import PlannedQueue
 from mloda.core.prepare.resolve_links import LinkFrameworkTrekker, LinkTrekker
-from mloda.core.prepare.resolved_join import JoinSide, JoinSignature, PlannedOrientation, ResolvedJoinPlan
+from mloda.core.prepare.resolved_join import (
+    DeclinedOrientation,
+    JoinSide,
+    JoinSignature,
+    ResolvedJoin,
+    ResolvedJoinPlan,
+)
 from mloda.core.prepare.resolved_join_builder import (
     DeclaredFrameworks,
-    build_resolved_join_plan,
-    legacy_join_signatures,
+    build_resolved_join_side,
+    joinstep_signatures,
     raise_on_join_plan_divergence,
+    wire_join_dependencies,
 )
 from mloda.core.prepare.validate_resolved_join import raise_on_orphaned_join_source
 from mloda.core.core.step.abstract_step import Step
@@ -67,6 +74,15 @@ def _describe_step(step: Step) -> str:
     return f"{type(step).__name__}(uuid={step.uuid})"
 
 
+class AppendOrUnionSides(NamedTuple):
+    """The left/right feature uuids and frameworks an APPEND or UNION link resolved to."""
+
+    destination_framework: type[ComputeFramework]
+    source_framework: type[ComputeFramework]
+    left_uuid: UUID
+    right_uuid: UUID
+
+
 class ExecutionPlan:
     def __init__(
         self,
@@ -84,8 +100,9 @@ class ExecutionPlan:
         # Report each divergence once, then at DEBUG.
         self.reported_unmatched: set[tuple[type[FeatureGroup], str, tuple[str, ...]]] = set()
 
-        self.planned_orientations: list[tuple[PlannedOrientation, JoinStep]] = []
+        self.planned_records: list[ResolvedJoin] = []
         self.declined_orientations: list[LinkFrameworkTrekker] = []
+        self.declared_frameworks: DeclaredFrameworks = {}
         self.resolved_join_plan = ResolvedJoinPlan((), ())
         self.join_signatures_at_build: frozenset[JoinSignature] = frozenset()
 
@@ -103,11 +120,12 @@ class ExecutionPlan:
         declared_frameworks: DeclaredFrameworks | None = None,
         validate: bool = True,
     ) -> None:
-        self.planned_orientations = []
+        self.planned_records = []
         self.declined_orientations = []
         self.tfs_collection = set()
         self.joinstep_collection = JoinStepCollection()
         self.feature_set_collections = []
+        self.declared_frameworks = declared_frameworks if declared_frameworks is not None else {}
 
         child_links = self.invert_link_trekker(link_trekker)
         pre_execution_plan = self.add_feature_group_step(queue, graph.parent_to_children_mapping, child_links)
@@ -115,18 +133,21 @@ class ExecutionPlan:
 
         # Built before add_tfs, whose write serialization edges are not part of the join decision.
         join_steps = [step for step in fw_execution_plan if isinstance(step, JoinStep)]
-        self.resolved_join_plan = build_resolved_join_plan(
-            self.planned_orientations,
-            self.declined_orientations,
-            declared_frameworks if declared_frameworks is not None else {},
-        )
-        self.join_signatures_at_build = legacy_join_signatures(join_steps)
+        resolved_records = wire_join_dependencies(self.planned_records, join_steps)
+        declined = tuple(DeclinedOrientation(key[0].uuid, key[1], key[2]) for key in self.declined_orientations)
+        self.resolved_join_plan = ResolvedJoinPlan(resolved_records, declined)
+        self.join_signatures_at_build = joinstep_signatures(join_steps)
         raise_on_join_plan_divergence(self.resolved_join_plan, join_steps)
         if validate:
             raise_on_orphaned_join_source(self.resolved_join_plan)
 
         self.execution_plan = self.add_tfs(fw_execution_plan, graph)
         self.raise_on_step_cycle(self.execution_plan)
+
+        # Only read during add_joinstep above; ExecutionPlan gets deepcopy'd on every Engine.compute()
+        # call, so this (potentially O(#features), UUID-keyed) dict and its live reference into
+        # ResolveComputeFrameworks's own dict must not linger past the plan build that needs it.
+        self.declared_frameworks = {}
 
     def add_feature_group_step(
         self,
@@ -612,8 +633,13 @@ class ExecutionPlan:
         # if len(children_uuids) > 1:
         #    raise ValueError("This is not supported yet.")
 
+        # Hoisted above the case-override loop: a case helper's result is in declared left/right
+        # order, so orienting it needs swap_sides.
+        swap_sides = self.swap_merge_sides_by_declared_side(
+            destination_framework, declared_left_frameworks, declared_right_frameworks, swap_merge_sides
+        )
+
         # This part is for handling specific join cases. Currently, we only deal with equal feature groups.
-        case_override = False
         for children_uuid in children_uuids:
             children_fw = graph.get_nodes()[children_uuid].feature.get_compute_framework()
 
@@ -626,45 +652,79 @@ class ExecutionPlan:
             elif result is True:
                 pass
             else:
-                destination_framework_uuids, source_framework_uuids = result
-                case_override = True
+                # case_link_fw_is_equal_to_children_fw and case_link_equal_feature_groups both
+                # guarantee, by construction, that result[0] runs on link_fw[1] and result[1] runs
+                # on link_fw[2]; unlike the nearest-split-derived swap_sides, that framework
+                # identity cannot disagree with which side the case helper actually bound. Only
+                # fall back to swap_sides when the frameworks coincide and identity cannot decide.
+                if destination_framework != source_framework:
+                    if destination_framework == link_fw[1]:
+                        destination_framework_uuids, source_framework_uuids = result
+                    else:
+                        source_framework_uuids, destination_framework_uuids = result
+                elif swap_sides:
+                    source_framework_uuids, destination_framework_uuids = result
+                else:
+                    destination_framework_uuids, source_framework_uuids = result
 
+        join_step_required_uuids: set[UUID]
         if link.jointype in (JoinType.APPEND, JoinType.UNION):
-            js = self.create_joinstep_in_case_of_append_or_union(
-                link, link_fw, required_uuids, graph, pre_execution_plan
-            )
+            sides = self.resolve_append_or_union_sides(link, link_fw, required_uuids, graph, pre_execution_plan)
+            destination_framework = sides.destination_framework
+            source_framework = sides.source_framework
+            side = JoinSide.LEFT
+            destination_framework_uuids = {sides.left_uuid}
+            source_framework_uuids = {sides.right_uuid}
+            left_uuids = frozenset({sides.left_uuid})
+            right_uuids = frozenset({sides.right_uuid})
+            # Append/union gates only on its own two feature uuids, not on the general required_uuids.
+            join_step_required_uuids = {sides.left_uuid, sides.right_uuid}
         else:
-            swap_sides = self.swap_merge_sides_by_declared_side(
-                destination_framework, declared_left_frameworks, declared_right_frameworks, swap_merge_sides
-            )
-            js = JoinStep(
-                link,
-                destination_framework,
-                source_framework,
-                required_uuids,
-                destination_framework_uuids,
-                source_framework_uuids,
-                swap_sides,
-            )
+            side = JoinSide.RIGHT if swap_sides else JoinSide.LEFT
+            destination = frozenset(destination_framework_uuids)
+            source = frozenset(source_framework_uuids)
+            resolved_left, resolved_right = (destination, source) if side is JoinSide.LEFT else (source, destination)
+            if (
+                split.left_uuids <= resolved_left
+                and split.right_uuids <= resolved_right
+                and split.left_uuids != split.right_uuids
+            ):
+                left_uuids, right_uuids = split.left_uuids, split.right_uuids
+            else:
+                # The step's own sets, so a record never names parents outside its destination/source
+                # claim. Self links land here too: their declared sides are identical.
+                left_uuids, right_uuids = resolved_left, resolved_right
+            join_step_required_uuids = required_uuids
 
-        # create_joinstep_in_case_of_append_or_union builds its own uuids independently, so an APPEND/UNION
-        # orientation must never claim its (unused) case-override uuids are in declared order.
-        sides_in_declared_order = case_override and link.jointype not in (JoinType.APPEND, JoinType.UNION)
-
-        side = JoinSide.RIGHT if js.swap_merge_sides else JoinSide.LEFT
-        self.planned_orientations.append(
-            (
-                PlannedOrientation(
-                    link,
-                    frozenset(children_uuids),
-                    side,
-                    split.left_uuids,
-                    split.right_uuids,
-                    sides_in_declared_order=sides_in_declared_order,
-                ),
-                js,
-            )
+        record = ResolvedJoin(
+            link_uuid=link.uuid,
+            jointype=link.jointype,
+            left=build_resolved_join_side(
+                link.left_feature_group, link.left_index, left_uuids, self.declared_frameworks
+            ),
+            right=build_resolved_join_side(
+                link.right_feature_group, link.right_index, right_uuids, self.declared_frameworks
+            ),
+            destination_side=side,
+            destination_uuids=frozenset(destination_framework_uuids),
+            source_uuids=frozenset(source_framework_uuids),
+            destination_framework=destination_framework,
+            source_framework=source_framework,
+            consumers=frozenset(children_uuids),
+            depends_on=frozenset(),
+            token=uuid4(),
         )
+        js = JoinStep(
+            link=link,
+            destination_framework=record.destination_framework,
+            source_framework=record.source_framework,
+            required_uuids=join_step_required_uuids,
+            destination_framework_uuids=set(record.destination_uuids),
+            source_framework_uuids=set(record.source_uuids),
+            swap_merge_sides=record.inverted,
+            token=record.token,
+        )
+        self.planned_records.append(record)
 
         # This makes sure that we do not write on the same datasets due to overlapping joins at once.
         self.joinstep_collection.add(js)
@@ -719,20 +779,16 @@ class ExecutionPlan:
             "features resolve to."
         )
 
-    def create_joinstep_in_case_of_append_or_union(
+    def resolve_append_or_union_sides(
         self,
         link: Link,
         link_fw: LinkFrameworkTrekker,
         required_uuids: set[UUID],
         graph: Graph,
         pre_execution_plan: list[LinkFrameworkTrekker | FeatureGroupStep],
-    ) -> JoinStep:
-        """
-        Create a JoinStep for APPEND or UNION operations in the framework execution plan.
-
-        This function identifies the left and right feature UUIDs required for a join operation,
-        validates the frameworks and indices, and constructs a JoinStep.
-        """
+    ) -> AppendOrUnionSides:
+        """Resolve the left/right feature uuids and frameworks for an APPEND or UNION link; neither
+        inverts, so the resolved sides stay in declared order."""
 
         # Unpack link-related data
         left_index, right_index = link.left_index, link.right_index
@@ -782,14 +838,7 @@ class ExecutionPlan:
         if link_fw[2] != source_framework:
             raise ValueError(self._append_or_union_orientation_error(link, "right", link_fw[2], source_framework))
 
-        return JoinStep(
-            link=link,
-            destination_framework=destination_framework,
-            source_framework=source_framework,
-            required_uuids={left_feature_uuid, right_feature_uuid},
-            destination_framework_uuids={left_feature_uuid},
-            source_framework_uuids={right_feature_uuid},
-        )
+        return AppendOrUnionSides(destination_framework, source_framework, left_feature_uuid, right_feature_uuid)
 
     def reduce_children_to_one_level(self, children_uuids: set[UUID], graph: Graph) -> set[UUID]:
         """

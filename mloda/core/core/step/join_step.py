@@ -19,6 +19,7 @@ class JoinStep(Step):
         destination_framework_uuids: set[UUID],
         source_framework_uuids: set[UUID],
         swap_merge_sides: bool = False,
+        token: Optional[UUID] = None,
     ) -> None:
         self.link = link
         self.swap_merge_sides = swap_merge_sides
@@ -27,7 +28,7 @@ class JoinStep(Step):
         self.required_uuids = required_uuids
         self.destination_framework_uuids = destination_framework_uuids
         self.source_framework_uuids = source_framework_uuids
-        self.uuid = uuid4()
+        self.uuid = token if token is not None else uuid4()
         self.step_is_done = False
 
     def get_uuids(self) -> set[UUID]:

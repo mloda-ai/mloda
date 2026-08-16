@@ -17,7 +17,7 @@ from mloda.core.prepare.graph.properties import NodeProperties
 from mloda.core.prepare.resolve_compute_frameworks import ResolveComputeFrameworks
 from mloda.core.prepare.resolve_links import LinkTrekker
 from mloda.core.prepare.resolved_join import DeclinedOrientation, JoinSide, JoinSignature, ResolvedJoin
-from mloda.core.prepare.resolved_join_builder import build_resolved_join_plan, legacy_join_signatures
+from mloda.core.prepare.resolved_join_builder import joinstep_signatures
 from mloda.provider import BaseInputData
 from mloda.provider import ComputeFramework
 from mloda.provider import DataCreator
@@ -83,6 +83,10 @@ class ResolvedJoinPairRight(FeatureGroup):
 
 class ResolvedJoinPairLeftDescendant(ResolvedJoinPairLeft):
     """Matches the declared left side polymorphically, at inheritance distance one."""
+
+
+class ResolvedJoinPairRightDescendant(ResolvedJoinPairRight):
+    """Matches the declared right side polymorphically, at inheritance distance one."""
 
 
 class ResolvedJoinOtherLeft(FeatureGroup):
@@ -447,6 +451,36 @@ def _case_override_beats_nearer_wrong_framework_left() -> Built:
     return _finish(planned, link, Sides(far_left.uuid, right.uuid, child.uuid))
 
 
+def _case_override_disagrees_with_the_nearest_split() -> Built:
+    """Both sides have a nearer, wrong-framework sibling and a farther, correct-framework one; the case helper
+    selects the farther pair on both sides. destination_framework and source_framework differ here (unlike
+    _case_override_beats_nearer_wrong_framework_left's shared framework), so a swap decision based on the
+    nearest split's frameworks (which never sees the case-selected, farther parents) can disagree with the
+    framework the case helper actually bound to each side."""
+    planned = _planned()
+    link = _pair_link()
+
+    nearest_left = feature("resolved_join_split_disagree_nearest_left", PythonDictFramework, link.left_index)
+    far_left = feature("resolved_join_split_disagree_far_left", PyArrowTable, link.left_index)
+    nearest_right = feature("resolved_join_split_disagree_nearest_right", PyArrowTable, link.right_index)
+    far_right = feature("resolved_join_split_disagree_far_right", PandasDataFrame, link.right_index)
+    child = feature("resolved_join_split_disagree_child", PyArrowTable)
+
+    planned.graph.add_node(nearest_left.uuid, NodeProperties(nearest_left, ResolvedJoinPairLeft))
+    planned.graph.add_node(far_left.uuid, NodeProperties(far_left, ResolvedJoinPairLeftDescendant))
+    planned.graph.add_node(nearest_right.uuid, NodeProperties(nearest_right, ResolvedJoinPairRight))
+    planned.graph.add_node(far_right.uuid, NodeProperties(far_right, ResolvedJoinPairRightDescendant))
+    planned.queue.append((ResolvedJoinPairLeft, {nearest_left}))
+    planned.queue.append((ResolvedJoinPairLeftDescendant, {far_left}))
+    planned.queue.append((ResolvedJoinPairRight, {nearest_right}))
+    planned.queue.append((ResolvedJoinPairRightDescendant, {far_right}))
+    planned.queue.append((link, PyArrowTable, PandasDataFrame))
+    _add_child(planned, child, nearest_left, far_left, nearest_right, far_right)
+    trek(planned.link_trekker, link, (PyArrowTable, PandasDataFrame), child.uuid)
+
+    return _finish(planned, link, Sides(far_left.uuid, far_right.uuid, child.uuid))
+
+
 def _join_steps(plan: ExecutionPlan) -> list[JoinStep]:
     return [step for step in plan if isinstance(step, JoinStep)]
 
@@ -669,18 +703,6 @@ def test_a_decline_reached_through_the_inversion_branch_records_the_orientation_
     assert resolved.declined == (DeclinedOrientation(link.uuid, PyArrowTable, PandasDataFrame),)
 
 
-def test_each_record_names_the_join_step_it_shadows() -> None:
-    built = _two_links()
-    step_of_link = {step.link.uuid: step.uuid for step in _join_steps(built.plan)}
-
-    records = built.plan.resolved_join_plan.records
-
-    assert len(records) == len(step_of_link)
-    for record in records:
-        assert record.shadowed_step_uuid == step_of_link[record.link_uuid]
-        assert record.shadowed_step_uuid != record.token
-
-
 @pytest.mark.parametrize(
     "build",
     [
@@ -695,6 +717,7 @@ def test_each_record_names_the_join_step_it_shadows() -> None:
         _link_with_an_unlinked_third_parent,
         _case_override_inverted,
         _case_override_beats_nearer_wrong_framework_left,
+        _case_override_disagrees_with_the_nearest_split,
     ],
     ids=[
         "inner",
@@ -708,9 +731,10 @@ def test_each_record_names_the_join_step_it_shadows() -> None:
         "unlinked_third_parent",
         "case_override_inverted",
         "case_override_beats_nearer_wrong_framework_left",
+        "case_override_disagrees_with_nearest_split",
     ],
 )
-def test_the_records_sign_the_joins_the_legacy_join_steps_sign(build: Callable[[], Any]) -> None:
+def test_the_records_sign_the_joins_the_join_steps_sign(build: Callable[[], Any]) -> None:
     built = build()
 
     join_steps = _join_steps(built.plan)
@@ -719,6 +743,21 @@ def test_the_records_sign_the_joins_the_legacy_join_steps_sign(build: Callable[[
     assert join_steps, "the shape must plan at least one JoinStep for the parity to say anything"
     assert len(resolved.records) == len(join_steps)
     assert resolved.signatures() == built.plan.join_signatures_at_build
+    assert {record.token for record in resolved.records} == {step.uuid for step in join_steps}
+
+
+def test_raise_on_join_plan_divergence_raises_on_a_mutated_step() -> None:
+    from mloda.core.prepare.resolved_join_builder import raise_on_join_plan_divergence
+
+    built = _declared_pair()
+    join_steps = _join_steps(built.plan)
+
+    assert raise_on_join_plan_divergence(built.plan.resolved_join_plan, join_steps) is None
+
+    join_steps[0].swap_merge_sides = not join_steps[0].swap_merge_sides
+
+    with pytest.raises(ValueError):
+        raise_on_join_plan_divergence(built.plan.resolved_join_plan, join_steps)
 
 
 def test_a_nearest_left_parent_on_a_third_framework_keeps_the_record_on_the_steps_side() -> None:
@@ -773,57 +812,38 @@ def test_a_case_override_beats_a_nearer_wrong_framework_left() -> None:
     assert record.destination_side is JoinSide.RIGHT
     assert record.left.uuids == {built.sides.left_uuid}
     assert record.right.uuids == {built.sides.right_uuid}
+    assert record.destination.uuids <= record.destination_uuids
+    assert record.source.uuids <= record.source_uuids
 
 
-def test_a_case_override_right_destination_crosses_the_legacy_destination_uuids() -> None:
-    """Known, accepted gap: destination (case-helper order) and destination_uuids (legacy mirror) diverge once a
-    case override lands on a RIGHT destination side; left open for a later epic step, not chased further here."""
+def test_a_case_override_right_destination_matches_the_destination_uuids() -> None:
+    """A RIGHT-destination case override keeps destination_uuids in step with destination."""
     built = _case_override_inverted()
 
     record = _one_record(built.plan, built.link)
 
     assert record.destination_side is JoinSide.RIGHT
-    assert not (record.destination.uuids <= record.destination_uuids)
-    assert not (record.source.uuids <= record.source_uuids)
+    assert record.destination.uuids <= record.destination_uuids
+    assert record.source.uuids <= record.source_uuids
 
 
-def test_flipping_the_merge_sides_of_a_join_step_breaks_the_parity() -> None:
-    """The signatures only agree while the record derives its destination side from the planned orientation."""
-    built = _declared_pair()
-    join_step = _join_steps(built.plan)[0]
+def test_a_case_override_disagreeing_with_the_nearest_split_still_binds_the_selected_framework() -> None:
+    built = _case_override_disagrees_with_the_nearest_split()
 
-    join_step.swap_merge_sides = not join_step.swap_merge_sides
-    rebuilt = build_resolved_join_plan(
-        built.plan.planned_orientations, built.plan.declined_orientations, built.declared_frameworks
-    )
-
-    assert len(rebuilt.records) == len(_join_steps(built.plan)), "an empty rebuild makes the inequality meaningless"
-    assert rebuilt.signatures(), "an empty rebuild makes the inequality meaningless"
-    assert rebuilt.signatures() != legacy_join_signatures([join_step])
-
-
-def test_the_parity_guard_raises_only_when_the_signatures_disagree() -> None:
-    from mloda.core.prepare.resolved_join_builder import raise_on_join_plan_divergence
-
-    built = _declared_pair()
-    join_step = _join_steps(built.plan)[0]
-
-    assert raise_on_join_plan_divergence(built.plan.resolved_join_plan, _join_steps(built.plan)) is None
-
-    join_step.swap_merge_sides = not join_step.swap_merge_sides
-    rebuilt = build_resolved_join_plan(
-        built.plan.planned_orientations, built.plan.declined_orientations, built.declared_frameworks
-    )
-
-    with pytest.raises(ValueError):
-        raise_on_join_plan_divergence(rebuilt, [join_step])
+    assert len(_join_steps(built.plan)) == 1, "the shape must plan exactly one JoinStep for this to say anything"
+    record = _one_record(built.plan, built.link)
+    assert record.destination_framework is PyArrowTable
+    assert record.destination_uuids == {built.sides.left_uuid}
+    assert record.source_uuids == {built.sides.right_uuid}
+    assert record.destination.uuids <= record.destination_uuids
+    assert record.source.uuids <= record.source_uuids
 
 
 def test_the_record_leaves_out_the_write_serialization_edges_add_tfs_adds() -> None:
     built = _two_links()
 
     recorded = built.plan.resolved_join_plan.signatures()
-    after_tfs = legacy_join_signatures(_join_steps(built.plan))
+    after_tfs = joinstep_signatures(_join_steps(built.plan))
 
     assert after_tfs != recorded, "add_tfs must add an edge here for this to say anything"
     assert _without_depends(after_tfs) == _without_depends(recorded)
@@ -849,7 +869,6 @@ def test_an_order_edge_makes_the_consumer_records_depend_on_the_producer_record_
     resolved = chain.plan.resolved_join_plan
     producer_records = resolved.records_of_link(chain.producer.uuid)
     consumer_records = resolved.records_of_link(chain.consumer.uuid)
-    step_uuids = {step.uuid for step in _join_steps(chain.plan)}
 
     assert producer_records, "the producer link must build a record for the edge to point at"
     assert consumer_records, "the consumer link must build a record for the edge to hang off"
@@ -858,11 +877,10 @@ def test_an_order_edge_makes_the_consumer_records_depend_on_the_producer_record_
     for record in consumer_records:
         assert record.depends_on == {produced.token for produced in producer_records}
         assert chain.producer.uuid not in record.depends_on, "a record depends on tokens, not on link uuids"
-        assert record.depends_on.isdisjoint(step_uuids), "a record depends on tokens, not on step uuids"
         assert record.signature(resolved.link_of_token()).depends_on_links == (str(chain.producer.uuid),)
 
 
-def test_the_record_and_the_legacy_transform_hop_name_opposite_directions() -> None:
+def test_the_record_and_the_transform_hop_name_opposite_directions() -> None:
     built = _inverted_pair()
 
     record = _one_record(built.plan, built.link)

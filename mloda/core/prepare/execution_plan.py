@@ -1,4 +1,4 @@
-from collections.abc import Mapping, Sequence
+from collections.abc import Sequence
 from copy import copy, deepcopy
 from typing import Any, Generator, NamedTuple, Optional
 from uuid import UUID, uuid4
@@ -326,24 +326,19 @@ class ExecutionPlan:
 
         return fw_execution_plan
 
-    def fill_tfs_by_joinstep(self, ep: JoinStep, records: Mapping[UUID, ResolvedJoin]) -> TransformFrameworkStep:
-        """The hop moves the record's source side into its destination side, whichever side that is."""
-        record = records.get(ep.uuid)
-        if record is None:
-            raise ValueError(
-                internal_invariant_error(
-                    "a planned JoinStep has no resolved join record to name its transform hop.",
-                    f"join_step_uuid={ep.uuid}, link={ep.link}, "
-                    f"record_tokens={sorted(str(token) for token in records)}",
-                )
-            )
+    def fill_tfs_by_joinstep(self, ep: JoinStep) -> TransformFrameworkStep:
+        """The hop moves the source side into the destination side; swap_merge_sides names which declared side that is."""
+        if ep.swap_merge_sides:
+            from_feature_group, to_feature_group = ep.link.left_feature_group, ep.link.right_feature_group
+        else:
+            from_feature_group, to_feature_group = ep.link.right_feature_group, ep.link.left_feature_group
 
         return TransformFrameworkStep(
             from_framework=ep.source_framework,
             to_framework=ep.destination_framework,
             required_uuids=deepcopy(ep.required_uuids),
-            from_feature_group=record.transform_from_feature_group,
-            to_feature_group=record.transform_to_feature_group,
+            from_feature_group=from_feature_group,
+            to_feature_group=to_feature_group,
             link_id=ep.link.uuid,
             source_framework_uuids=ep.source_framework_uuids,
         )
@@ -355,12 +350,11 @@ class ExecutionPlan:
 
         left_join_frameworks: set[JoinStep] = {ep for ep in execution_plan if isinstance(ep, JoinStep)}
         need_to_upload_collector: set[UUID] = set()
-        records_by_token = {record.token: record for record in self.resolved_join_plan.records}
 
         for ep in execution_plan:
             if isinstance(ep, JoinStep):
                 if ep.destination_framework != ep.source_framework:
-                    new_tfs = self.fill_tfs_by_joinstep(ep, records_by_token)
+                    new_tfs = self.fill_tfs_by_joinstep(ep)
 
                     if new_tfs not in self.tfs_collection:
                         self.tfs_collection.add(new_tfs)

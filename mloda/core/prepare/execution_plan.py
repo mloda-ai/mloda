@@ -144,6 +144,11 @@ class ExecutionPlan:
         self.execution_plan = self.add_tfs(fw_execution_plan, graph)
         self.raise_on_step_cycle(self.execution_plan)
 
+        # Only read during add_joinstep above; ExecutionPlan gets deepcopy'd on every Engine.compute()
+        # call, so this (potentially O(#features), UUID-keyed) dict and its live reference into
+        # ResolveComputeFrameworks's own dict must not linger past the plan build that needs it.
+        self.declared_frameworks = {}
+
     def add_feature_group_step(
         self,
         queue: PlannedQueue,
@@ -647,11 +652,22 @@ class ExecutionPlan:
             elif result is True:
                 pass
             else:
-                if swap_sides:
+                # case_link_fw_is_equal_to_children_fw and case_link_equal_feature_groups both
+                # guarantee, by construction, that result[0] runs on link_fw[1] and result[1] runs
+                # on link_fw[2]; unlike the nearest-split-derived swap_sides, that framework
+                # identity cannot disagree with which side the case helper actually bound. Only
+                # fall back to swap_sides when the frameworks coincide and identity cannot decide.
+                if destination_framework != source_framework:
+                    if destination_framework == link_fw[1]:
+                        destination_framework_uuids, source_framework_uuids = result
+                    else:
+                        source_framework_uuids, destination_framework_uuids = result
+                elif swap_sides:
                     source_framework_uuids, destination_framework_uuids = result
                 else:
                     destination_framework_uuids, source_framework_uuids = result
 
+        join_step_required_uuids: set[UUID]
         if link.jointype in (JoinType.APPEND, JoinType.UNION):
             sides = self.resolve_append_or_union_sides(link, link_fw, required_uuids, graph, pre_execution_plan)
             destination_framework = sides.destination_framework
@@ -662,7 +678,7 @@ class ExecutionPlan:
             left_uuids = frozenset({sides.left_uuid})
             right_uuids = frozenset({sides.right_uuid})
             # Append/union gates only on its own two feature uuids, not on the general required_uuids.
-            join_step_required_uuids: set[UUID] = {sides.left_uuid, sides.right_uuid}
+            join_step_required_uuids = {sides.left_uuid, sides.right_uuid}
         else:
             side = JoinSide.RIGHT if swap_sides else JoinSide.LEFT
             destination = frozenset(destination_framework_uuids)
@@ -699,13 +715,13 @@ class ExecutionPlan:
             token=uuid4(),
         )
         js = JoinStep(
-            link,
-            record.destination_framework,
-            record.source_framework,
-            join_step_required_uuids,
-            set(record.destination_uuids),
-            set(record.source_uuids),
-            record.inverted,
+            link=link,
+            destination_framework=record.destination_framework,
+            source_framework=record.source_framework,
+            required_uuids=join_step_required_uuids,
+            destination_framework_uuids=set(record.destination_uuids),
+            source_framework_uuids=set(record.source_uuids),
+            swap_merge_sides=record.inverted,
             token=record.token,
         )
         self.planned_records.append(record)

@@ -41,10 +41,19 @@ def wire_join_dependencies(records: Sequence[ResolvedJoin], join_steps: Iterable
     """Fill in each record's depends_on: which other records' tokens its own JoinStep waits for."""
     steps_by_uuid = {step.uuid: step for step in join_steps}
     all_tokens = {record.token for record in records}
+    if all_tokens != set(steps_by_uuid):
+        raise ValueError(
+            internal_invariant_error(
+                "every resolved join record must have a matching planned JoinStep.",
+                f"record_tokens={sorted(str(token) for token in all_tokens)}, "
+                f"join_step_uuids={sorted(str(uuid) for uuid in steps_by_uuid)}",
+            )
+        )
     resolved = []
     for record in records:
         join_step = steps_by_uuid[record.token]
-        depends_on = frozenset(uuid for uuid in join_step.required_uuids if uuid in all_tokens and uuid != record.token)
+        # A step never waits for its own token: expand_link_tokens already excludes it (expanded - step.get_uuids()).
+        depends_on = frozenset(uuid for uuid in join_step.required_uuids if uuid in all_tokens)
         resolved.append(replace(record, depends_on=depends_on))
     return tuple(resolved)
 

@@ -612,8 +612,13 @@ class ExecutionPlan:
         # if len(children_uuids) > 1:
         #    raise ValueError("This is not supported yet.")
 
+        # Computed before the case-override loop below: a case helper's result is always in declared
+        # left/right order, so it needs swap_sides to know which side of the result is the destination.
+        swap_sides = self.swap_merge_sides_by_declared_side(
+            destination_framework, declared_left_frameworks, declared_right_frameworks, swap_merge_sides
+        )
+
         # This part is for handling specific join cases. Currently, we only deal with equal feature groups.
-        case_override = False
         for children_uuid in children_uuids:
             children_fw = graph.get_nodes()[children_uuid].feature.get_compute_framework()
 
@@ -626,17 +631,16 @@ class ExecutionPlan:
             elif result is True:
                 pass
             else:
-                destination_framework_uuids, source_framework_uuids = result
-                case_override = True
+                if swap_sides:
+                    source_framework_uuids, destination_framework_uuids = result
+                else:
+                    destination_framework_uuids, source_framework_uuids = result
 
         if link.jointype in (JoinType.APPEND, JoinType.UNION):
             js = self.create_joinstep_in_case_of_append_or_union(
                 link, link_fw, required_uuids, graph, pre_execution_plan
             )
         else:
-            swap_sides = self.swap_merge_sides_by_declared_side(
-                destination_framework, declared_left_frameworks, declared_right_frameworks, swap_merge_sides
-            )
             js = JoinStep(
                 link,
                 destination_framework,
@@ -647,10 +651,6 @@ class ExecutionPlan:
                 swap_sides,
             )
 
-        # create_joinstep_in_case_of_append_or_union builds its own uuids independently, so an APPEND/UNION
-        # orientation must never claim its (unused) case-override uuids are in declared order.
-        sides_in_declared_order = case_override and link.jointype not in (JoinType.APPEND, JoinType.UNION)
-
         side = JoinSide.RIGHT if js.swap_merge_sides else JoinSide.LEFT
         self.planned_orientations.append(
             (
@@ -660,7 +660,6 @@ class ExecutionPlan:
                     side,
                     split.left_uuids,
                     split.right_uuids,
-                    sides_in_declared_order=sides_in_declared_order,
                 ),
                 js,
             )

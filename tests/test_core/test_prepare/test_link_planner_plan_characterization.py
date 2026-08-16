@@ -624,19 +624,19 @@ def test_a_trekker_inverted_after_queueing_swaps_the_merge_sides() -> None:
     assert join_step.swap_merge_sides is True
 
 
-def test_a_hand_built_inconsistent_trekker_key_yields_an_inconsistent_joinstep() -> None:
-    """This trekker key contradicts the graph, so create_link_trekker_key never reaches this state."""
+def test_a_hand_built_inconsistent_trekker_key_yields_a_consistent_joinstep() -> None:
+    """This trekker key contradicts the graph, so create_link_trekker_key never reaches this state; run_link still
+    orients the case-override result by the destination side, so destination_framework_uuids runs on
+    destination_framework."""
     planned = _pair_scenario()
     _trek(planned, PandasDataFrame, PyArrowTable)
 
     join_step = _run(planned, PyArrowTable, PandasDataFrame)
 
-    # The frameworks and the uuid sets disagree: the destination is Pandas while its uuid runs in PyArrow.
-    # A rewrite that carries one record per join decision is free to answer differently here.
     assert isinstance(join_step, JoinStep)
     assert join_step.destination_framework is PandasDataFrame
-    assert join_step.destination_framework_uuids == {planned.left_uuid}
-    assert join_step.source_framework_uuids == {planned.right_uuid}
+    assert join_step.destination_framework_uuids == {planned.right_uuid}
+    assert join_step.source_framework_uuids == {planned.left_uuid}
     assert join_step.swap_merge_sides is True
 
 

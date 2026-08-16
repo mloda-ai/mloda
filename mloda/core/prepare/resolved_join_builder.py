@@ -55,13 +55,7 @@ def build_resolved_join_plan(
         side = orientation.destination_side
         destination = frozenset(join_step.destination_framework_uuids)
         source = frozenset(join_step.source_framework_uuids)
-        # The generic framework partition needs the side to recover declared order; sides_in_declared_order
-        # already has it.
-        resolved_left, resolved_right = (
-            (destination, source)
-            if side is JoinSide.LEFT or orientation.sides_in_declared_order
-            else (source, destination)
-        )
+        resolved_left, resolved_right = (destination, source) if side is JoinSide.LEFT else (source, destination)
         if (
             orientation.left_uuids <= resolved_left
             and orientation.right_uuids <= resolved_right

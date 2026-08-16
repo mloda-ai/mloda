@@ -17,7 +17,7 @@ from mloda.core.prepare.graph.properties import NodeProperties
 from mloda.core.prepare.resolve_compute_frameworks import ResolveComputeFrameworks
 from mloda.core.prepare.resolve_links import LinkTrekker
 from mloda.core.prepare.resolved_join import DeclinedOrientation, JoinSide, JoinSignature, ResolvedJoin
-from mloda.core.prepare.resolved_join_builder import build_resolved_join_plan, legacy_join_signatures
+from mloda.core.prepare.resolved_join_builder import legacy_join_signatures
 from mloda.provider import BaseInputData
 from mloda.provider import ComputeFramework
 from mloda.provider import DataCreator
@@ -669,18 +669,6 @@ def test_a_decline_reached_through_the_inversion_branch_records_the_orientation_
     assert resolved.declined == (DeclinedOrientation(link.uuid, PyArrowTable, PandasDataFrame),)
 
 
-def test_each_record_names_the_join_step_it_shadows() -> None:
-    built = _two_links()
-    step_of_link = {step.link.uuid: step.uuid for step in _join_steps(built.plan)}
-
-    records = built.plan.resolved_join_plan.records
-
-    assert len(records) == len(step_of_link)
-    for record in records:
-        assert record.shadowed_step_uuid == step_of_link[record.link_uuid]
-        assert record.shadowed_step_uuid != record.token
-
-
 @pytest.mark.parametrize(
     "build",
     [
@@ -719,6 +707,7 @@ def test_the_records_sign_the_joins_the_legacy_join_steps_sign(build: Callable[[
     assert join_steps, "the shape must plan at least one JoinStep for the parity to say anything"
     assert len(resolved.records) == len(join_steps)
     assert resolved.signatures() == built.plan.join_signatures_at_build
+    assert {record.token for record in resolved.records} == {step.uuid for step in join_steps}
 
 
 def test_a_nearest_left_parent_on_a_third_framework_keeps_the_record_on_the_steps_side() -> None:
@@ -788,38 +777,6 @@ def test_a_case_override_right_destination_matches_the_destination_uuids() -> No
     assert record.source.uuids <= record.source_uuids
 
 
-def test_flipping_the_merge_sides_of_a_join_step_breaks_the_parity() -> None:
-    """The signatures only agree while the record derives its destination side from the planned orientation."""
-    built = _declared_pair()
-    join_step = _join_steps(built.plan)[0]
-
-    join_step.swap_merge_sides = not join_step.swap_merge_sides
-    rebuilt = build_resolved_join_plan(
-        built.plan.planned_orientations, built.plan.declined_orientations, built.declared_frameworks
-    )
-
-    assert len(rebuilt.records) == len(_join_steps(built.plan)), "an empty rebuild makes the inequality meaningless"
-    assert rebuilt.signatures(), "an empty rebuild makes the inequality meaningless"
-    assert rebuilt.signatures() != legacy_join_signatures([join_step])
-
-
-def test_the_parity_guard_raises_only_when_the_signatures_disagree() -> None:
-    from mloda.core.prepare.resolved_join_builder import raise_on_join_plan_divergence
-
-    built = _declared_pair()
-    join_step = _join_steps(built.plan)[0]
-
-    assert raise_on_join_plan_divergence(built.plan.resolved_join_plan, _join_steps(built.plan)) is None
-
-    join_step.swap_merge_sides = not join_step.swap_merge_sides
-    rebuilt = build_resolved_join_plan(
-        built.plan.planned_orientations, built.plan.declined_orientations, built.declared_frameworks
-    )
-
-    with pytest.raises(ValueError):
-        raise_on_join_plan_divergence(rebuilt, [join_step])
-
-
 def test_the_record_leaves_out_the_write_serialization_edges_add_tfs_adds() -> None:
     built = _two_links()
 
@@ -850,7 +807,6 @@ def test_an_order_edge_makes_the_consumer_records_depend_on_the_producer_record_
     resolved = chain.plan.resolved_join_plan
     producer_records = resolved.records_of_link(chain.producer.uuid)
     consumer_records = resolved.records_of_link(chain.consumer.uuid)
-    step_uuids = {step.uuid for step in _join_steps(chain.plan)}
 
     assert producer_records, "the producer link must build a record for the edge to point at"
     assert consumer_records, "the consumer link must build a record for the edge to hang off"
@@ -859,7 +815,6 @@ def test_an_order_edge_makes_the_consumer_records_depend_on_the_producer_record_
     for record in consumer_records:
         assert record.depends_on == {produced.token for produced in producer_records}
         assert chain.producer.uuid not in record.depends_on, "a record depends on tokens, not on link uuids"
-        assert record.depends_on.isdisjoint(step_uuids), "a record depends on tokens, not on step uuids"
         assert record.signature(resolved.link_of_token()).depends_on_links == (str(chain.producer.uuid),)
 
 

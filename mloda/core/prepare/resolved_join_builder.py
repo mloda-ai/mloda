@@ -5,19 +5,16 @@ Shadow mode: the two signature sets must agree and divergence raises; nothing he
 
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import replace
-from uuid import UUID, uuid4
+from uuid import UUID
 
 from mloda.core.abstract_plugins.components.error_utils import internal_invariant_error
 from mloda.core.abstract_plugins.components.index.index import Index
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.core.step.join_step import JoinStep
-from mloda.core.prepare.resolve_links import LinkFrameworkTrekker
 from mloda.core.prepare.resolved_join import (
-    DeclinedOrientation,
     JoinSide,
     JoinSignature,
-    PlannedOrientation,
     ResolvedJoin,
     ResolvedJoinPlan,
     ResolvedJoinSide,
@@ -28,7 +25,7 @@ from mloda.core.prepare.resolved_join import (
 DeclaredFrameworks = Mapping[UUID, frozenset[type[ComputeFramework]]]
 
 
-def _side(
+def build_resolved_join_side(
     feature_group: type[FeatureGroup],
     index: Index,
     uuids: frozenset[UUID],
@@ -41,60 +38,16 @@ def _side(
     return ResolvedJoinSide(feature_group, index, uuids, frozenset(frameworks))
 
 
-def build_resolved_join_plan(
-    planned: Sequence[tuple[PlannedOrientation, JoinStep]],
-    declined: Sequence[LinkFrameworkTrekker],
-    declared_frameworks: DeclaredFrameworks,
-) -> ResolvedJoinPlan:
-    """One record per planned orientation, ordered as the orientations were planned."""
-    records: list[ResolvedJoin] = []
-    token_by_step: dict[UUID, UUID] = {}
-
-    for orientation, join_step in planned:
-        link = orientation.link
-        side = orientation.destination_side
-        destination = frozenset(join_step.destination_framework_uuids)
-        source = frozenset(join_step.source_framework_uuids)
-        resolved_left, resolved_right = (destination, source) if side is JoinSide.LEFT else (source, destination)
-        if (
-            orientation.left_uuids <= resolved_left
-            and orientation.right_uuids <= resolved_right
-            and orientation.left_uuids != orientation.right_uuids
-        ):
-            left_uuids, right_uuids = orientation.left_uuids, orientation.right_uuids
-        else:
-            # The step's sets, so a record can never name parents outside its own destination/source claim.
-            # A self link's declared sides are identical (split_by_declared_side can't split one feature group
-            # from itself), so it always lands here too.
-            left_uuids, right_uuids = resolved_left, resolved_right
-
-        record = ResolvedJoin(
-            link_uuid=link.uuid,
-            jointype=link.jointype,
-            left=_side(link.left_feature_group, link.left_index, left_uuids, declared_frameworks),
-            right=_side(link.right_feature_group, link.right_index, right_uuids, declared_frameworks),
-            destination_side=side,
-            destination_uuids=destination,
-            source_uuids=source,
-            destination_framework=join_step.destination_framework,
-            source_framework=join_step.source_framework,
-            consumers=orientation.consumers,
-            depends_on=frozenset(),
-            token=uuid4(),
-            shadowed_step_uuid=join_step.uuid,
-        )
-        records.append(record)
-        token_by_step[join_step.uuid] = record.token
-
-    # An order edge is keyed by link uuid, so a producer fans its tokens over every record it built.
-    resolved = tuple(
-        replace(
-            record,
-            depends_on=frozenset(token_by_step[uuid] for uuid in step.required_uuids if uuid in token_by_step),
-        )
-        for record, (_, step) in zip(records, planned)
-    )
-    return ResolvedJoinPlan(resolved, tuple(DeclinedOrientation(key[0].uuid, key[1], key[2]) for key in declined))
+def wire_join_dependencies(records: Sequence[ResolvedJoin], join_steps: Iterable[JoinStep]) -> tuple[ResolvedJoin, ...]:
+    """Fill in each record's depends_on: which other records' tokens its own JoinStep waits for."""
+    steps_by_uuid = {step.uuid: step for step in join_steps}
+    all_tokens = {record.token for record in records}
+    resolved = []
+    for record in records:
+        join_step = steps_by_uuid[record.token]
+        depends_on = frozenset(uuid for uuid in join_step.required_uuids if uuid in all_tokens and uuid != record.token)
+        resolved.append(replace(record, depends_on=depends_on))
+    return tuple(resolved)
 
 
 def _legacy_signature(join_step: JoinStep, link_of_step: Mapping[UUID, UUID]) -> JoinSignature:

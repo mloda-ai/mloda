@@ -53,7 +53,7 @@ STACK_FACTORIES: list[Callable[[JoinSpec, JoinSpec], Link]] = [Link.append, Link
 
 STACK_INVERSION_REASON = (
     "the inverted orientation is dropped before the JoinStep is built; a fix has to move the left-framework "
-    "invariant in create_joinstep_in_case_of_append_or_union with it, since neither append nor union commutes"
+    "invariant in resolve_append_or_union_sides with it, since neither append nor union commutes"
 )
 
 MODES = pytest.mark.parametrize("modes", [{ParallelizationMode.SYNC}, {ParallelizationMode.THREADING}])

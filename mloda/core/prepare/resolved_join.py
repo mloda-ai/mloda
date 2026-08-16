@@ -10,7 +10,7 @@ from typing import NamedTuple
 from uuid import UUID
 
 from mloda.core.abstract_plugins.components.index.index import Index
-from mloda.core.abstract_plugins.components.link import JoinType, Link
+from mloda.core.abstract_plugins.components.link import JoinType
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 
@@ -33,17 +33,6 @@ class ResolvedJoinSide:
     index: Index
     uuids: frozenset[UUID]
     declared_frameworks: frozenset[type[ComputeFramework]]
-
-
-@dataclass(frozen=True)
-class PlannedOrientation:
-    """The join an orientation decided, not just the trekker key it was planned under."""
-
-    link: Link
-    consumers: frozenset[UUID]
-    destination_side: JoinSide
-    left_uuids: frozenset[UUID]
-    right_uuids: frozenset[UUID]
 
 
 @dataclass(frozen=True)
@@ -85,8 +74,6 @@ class ResolvedJoin:
     # Join dependency edges only, not the write serialization edges add_tfs adds later.
     depends_on: frozenset[UUID]
     token: UUID
-    # Correlation only, never authoritative: the join step this record shadows.
-    shadowed_step_uuid: UUID
 
     @property
     def inverted(self) -> bool:

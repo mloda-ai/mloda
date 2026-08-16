@@ -16,6 +16,8 @@ _**If we have a feature, which is dependent on an aforementioned setup,**_
 
 We will first discuss the basic building blocks of the **Links** (**Index**, **Join Types**) and then the **merge** in the ComputeFramework.
 
+For how the planner turns a declared Link into an executed merge, and how to inspect the planned join shape, see [Join planner pipeline](join-planner-pipeline.md).
+
 #### Index
 
 The Index class defines the keys (columns) used to merge datasets. An index is a tuple of strings.

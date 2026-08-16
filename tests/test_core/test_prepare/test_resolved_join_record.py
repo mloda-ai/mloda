@@ -880,18 +880,34 @@ def test_an_order_edge_makes_the_consumer_records_depend_on_the_producer_record_
         assert record.signature(resolved.link_of_token()).depends_on_links == (str(chain.producer.uuid),)
 
 
-def test_the_record_and_the_transform_hop_name_opposite_directions() -> None:
+@pytest.mark.parametrize(
+    "build",
+    [_declared_pair, _inverted_pair, _right_join, _inverted_left_join],
+    ids=["inner", "inverted_inner", "right", "inverted_left"],
+)
+def test_the_transform_hop_moves_the_source_side_into_the_destination_side(build: Callable[[], Any]) -> None:
+    """The hop names the record's own direction, not the one the jointype implies."""
+    built = build()
+
+    record = _one_record(built.plan, built.link)
+    transform_steps = _transform_steps(built.plan, built.link)
+
+    assert len(transform_steps) == 1, "the shape must plan exactly one hop for this to say anything"
+    assert transform_steps[0].from_feature_group is record.transform_from_feature_group
+    assert transform_steps[0].to_feature_group is record.transform_to_feature_group
+
+
+def test_an_inverted_hop_carries_data_into_the_declared_right_side() -> None:
+    """The declared right side holds the destination here, so the hop moves the left side into it."""
     built = _inverted_pair()
 
     record = _one_record(built.plan, built.link)
     transform_steps = _transform_steps(built.plan, built.link)
 
+    assert record.destination_side is JoinSide.RIGHT
     assert len(transform_steps) == 1
-    # The record binds the hop to the sides the join moves; a later lowering step should adopt its answer.
-    assert record.transform_from_feature_group is ResolvedJoinPairLeft
-    assert record.transform_to_feature_group is ResolvedJoinPairRight
-    assert transform_steps[0].from_feature_group is ResolvedJoinPairRight
-    assert transform_steps[0].to_feature_group is ResolvedJoinPairLeft
+    assert transform_steps[0].from_feature_group is ResolvedJoinPairLeft
+    assert transform_steps[0].to_feature_group is ResolvedJoinPairRight
 
 
 def test_a_real_engine_plan_carries_one_record_per_planned_join_step() -> None:

@@ -14,6 +14,9 @@ Contract under test:
     defaulting to ``()``. On compute steps they partition ``feature_names`` into the names the user
     asked for (``initial_requested_data`` is True) and the names the engine injected (chained
     sources, link index features). Join and transform steps keep both empty.
+  * Join steps also expose the resolved orientation: ``join_destination_side`` ("left"/"right"),
+    ``join_inverted`` and ``join_token``. All three are None on compute and transform steps, and on
+    every step when ``build_plan_steps`` gets a bare iterable that carries no resolved join plan.
   * ``build_plan_steps`` raises ``ValueError`` on a step it does not know, instead of dropping it.
   * ``mlodaAPI.resolved_plan()`` returns ``list[PlanStep]`` on a prepared session, both before
     and after ``run()``, in execution-plan order, and matches the plan that actually executed.
@@ -33,9 +36,11 @@ import ast
 import dataclasses
 from pathlib import Path
 from typing import Any, Literal, Optional, get_args, get_origin
+from uuid import UUID
 
 import pandas as pd
 import pyarrow as pa
+import pyarrow.compute as pc
 import pytest
 
 # Aliased: a bare ``import mloda.user`` would bind the name ``mloda`` to the package and collide
@@ -242,6 +247,26 @@ class PlanInfoCrossConsumer(FeatureGroup):
         return {cls.get_class_name()}
 
 
+class PlanInfoInvertedConsumer(FeatureGroup):
+    """Consumes the same two join sides on PyArrow, which puts the merge destination on the declared right side."""
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+        return {Feature("plan_info_xleft_val"), Feature("plan_info_xright_val")}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        product = pc.multiply(data["plan_info_xleft_val"], data["plan_info_xright_val"])
+        return data.append_column("PlanInfoInvertedConsumer", product)
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PyArrowTable}
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {cls.get_class_name()}
+
+
 class PlanInfoUnknownStep:
     """Not a FeatureGroupStep/TransformFrameworkStep/JoinStep: build_plan_steps must reject it."""
 
@@ -252,6 +277,9 @@ _NEVER_EXECUTES_PLUGINS = PluginCollector.enabled_feature_groups({PlanInfoNeverE
 _JOIN_PLUGINS = PluginCollector.enabled_feature_groups({PlanInfoLeftSource, PlanInfoRightSource, PlanInfoJoinConsumer})
 _CROSS_JOIN_PLUGINS = PluginCollector.enabled_feature_groups(
     {PlanInfoCrossLeftPandas, PlanInfoCrossRightArrow, PlanInfoCrossConsumer}
+)
+_INVERTED_JOIN_PLUGINS = PluginCollector.enabled_feature_groups(
+    {PlanInfoCrossLeftPandas, PlanInfoCrossRightArrow, PlanInfoInvertedConsumer}
 )
 
 # The chained request from the issue: an aggregated feature over a source feature.
@@ -288,6 +316,21 @@ def _prepare_cross_framework_join_session() -> mlodaAPI:
         compute_frameworks={PandasDataFrame, PyArrowTable},
         links={link},
         plugin_collector=_CROSS_JOIN_PLUGINS,
+    )
+
+
+def _prepare_inverted_cross_framework_join_session() -> mlodaAPI:
+    """Same link, PyArrow consumer: the join runs in the declared right side's framework."""
+    link = Link.inner(
+        JoinSpec(PlanInfoCrossLeftPandas, "plan_info_xjid"),
+        JoinSpec(PlanInfoCrossRightArrow, "plan_info_xjid"),
+    )
+
+    return mloda.prepare(
+        ["PlanInfoInvertedConsumer"],
+        compute_frameworks={PandasDataFrame, PyArrowTable},
+        links={link},
+        plugin_collector=_INVERTED_JOIN_PLUGINS,
     )
 
 
@@ -328,6 +371,9 @@ class TestPlanStepDataclass:
             "source_feature_group",
             "source_compute_framework",
             "join_type",
+            "join_destination_side",
+            "join_inverted",
+            "join_token",
             "requested_feature_names",
             "injected_feature_names",
         ]
@@ -459,6 +505,49 @@ class TestPlanStepRequestedAndInjectedFields:
         assert base != with_requested
         assert base != with_injected
         assert with_requested != with_injected
+
+
+class TestJoinOrientationFieldsOnTheDataclass:
+    """The three join-orientation fields are optional, typed and value-comparable."""
+
+    @staticmethod
+    def _join_step() -> PlanStep:
+        return PlanStep(
+            step_kind="join",
+            feature_names=(),
+            feature_group=PlanInfoLeftSource,
+            compute_framework=PandasDataFrame,
+            source_feature_group=PlanInfoRightSource,
+            source_compute_framework=PandasDataFrame,
+            join_type="inner",
+        )
+
+    def test_join_orientation_fields_default_to_none(self) -> None:
+        step = self._join_step()
+
+        assert step.join_destination_side is None
+        assert step.join_inverted is None
+        assert step.join_token is None
+
+        fields_by_name = {field.name: field for field in dataclasses.fields(PlanStep)}
+        assert fields_by_name["join_destination_side"].default is None
+        assert fields_by_name["join_inverted"].default is None
+        assert fields_by_name["join_token"].default is None
+
+    def test_join_orientation_fields_are_optional_scalars(self) -> None:
+        annotations = PlanStep.__annotations__
+
+        assert set(get_args(annotations["join_destination_side"])) == {str, type(None)}
+        assert set(get_args(annotations["join_inverted"])) == {bool, type(None)}
+        assert set(get_args(annotations["join_token"])) == {UUID, type(None)}
+
+    def test_join_orientation_fields_participate_in_equality(self) -> None:
+        base = self._join_step()
+        token = UUID("00000000-0000-4000-8000-000000000001")
+
+        assert base != dataclasses.replace(base, join_destination_side="right")
+        assert base != dataclasses.replace(base, join_inverted=True)
+        assert base != dataclasses.replace(base, join_token=token)
 
 
 # ---------------------------------------------------------------------------
@@ -830,6 +919,88 @@ class TestCrossFrameworkJoinStepMapping:
         assert kinds.index("join") < kinds.index("compute", kinds.index("join"))
         consumer_index = [step.feature_group for step in plan].index(PlanInfoCrossConsumer)
         assert kinds.index("join") < consumer_index
+
+
+class TestJoinOrientationOnResolvedPlans:
+    """A join step reports which declared side holds the merge destination, and its completion token."""
+
+    def test_join_step_reports_a_left_destination(self) -> None:
+        session = _prepare_cross_framework_join_session()
+        assert session.engine is not None
+        records = session.engine.execution_planner.resolved_join_plan.records
+        assert len(records) == 1, "the fixture must plan exactly one join for this to say anything"
+
+        join = next(step for step in session.resolved_plan() if step.step_kind == "join")
+
+        assert join.join_destination_side == "left"
+        assert join.join_inverted is False
+        assert join.join_token == records[0].token
+
+    def test_join_token_is_the_join_steps_own_completion_token(self) -> None:
+        session = _prepare_cross_framework_join_session()
+        assert session.engine is not None
+        join_steps = session.engine.execution_planner.joinstep_collection.collection
+        assert len(join_steps) == 1
+
+        join = next(step for step in session.resolved_plan() if step.step_kind == "join")
+
+        assert join.join_token == next(iter(join_steps)).uuid
+
+    def test_compute_and_transform_steps_carry_no_join_orientation(self) -> None:
+        plan = _prepare_cross_framework_join_session().resolved_plan()
+
+        non_join_steps = [step for step in plan if step.step_kind != "join"]
+        assert {step.step_kind for step in non_join_steps} == {"compute", "transform"}
+
+        for step in non_join_steps:
+            assert step.join_destination_side is None
+            assert step.join_inverted is None
+            assert step.join_token is None
+
+    def test_join_orientation_is_none_without_a_resolved_join_plan(self) -> None:
+        """build_plan_steps also takes a bare list of steps, which carries no ResolvedJoinPlan to read."""
+        session = _prepare_cross_framework_join_session()
+        assert session.engine is not None
+
+        plan = build_plan_steps(list(session.engine.execution_planner))
+
+        join = next(step for step in plan if step.step_kind == "join")
+        assert join.join_destination_side is None
+        assert join.join_inverted is None
+        assert join.join_token is None
+
+
+class TestInvertedCrossFrameworkJoin:
+    """A PyArrow consumer puts the merge destination on the link's declared right side."""
+
+    def test_join_step_reports_a_right_destination(self) -> None:
+        session = _prepare_inverted_cross_framework_join_session()
+        assert session.engine is not None
+        records = session.engine.execution_planner.resolved_join_plan.records
+        assert len(records) == 1, "the fixture must plan exactly one join for this to say anything"
+
+        join = next(step for step in session.resolved_plan() if step.step_kind == "join")
+
+        assert join.join_destination_side == "right"
+        assert join.join_inverted is True
+        assert join.join_token == records[0].token
+
+        # The declared sides stay declared, whichever side the destination landed on.
+        assert join.feature_group is PlanInfoCrossLeftPandas
+        assert join.source_feature_group is PlanInfoCrossRightArrow
+        assert join.compute_framework is PyArrowTable
+        assert join.source_compute_framework is PandasDataFrame
+
+    def test_the_hop_into_an_inverted_join_names_the_destination_side(self) -> None:
+        """The hop moves the declared left side into the declared right one, which holds the destination."""
+        plan = _prepare_inverted_cross_framework_join_session().resolved_plan()
+
+        transform = next(step for step in plan if step.step_kind == "transform")
+
+        assert transform.feature_group is PlanInfoCrossRightArrow
+        assert transform.source_feature_group is PlanInfoCrossLeftPandas
+        assert transform.compute_framework is PyArrowTable
+        assert transform.source_compute_framework is PandasDataFrame
 
 
 # ---------------------------------------------------------------------------

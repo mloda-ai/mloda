@@ -1,6 +1,7 @@
 from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import Literal, Optional, TYPE_CHECKING
+from uuid import UUID
 
 from mloda.core.core.step.feature_group_step import FeatureGroupStep
 from mloda.core.core.step.join_step import JoinStep
@@ -9,6 +10,7 @@ from mloda.core.core.step.transform_frame_work_step import TransformFrameworkSte
 if TYPE_CHECKING:
     from mloda.core.abstract_plugins.compute_framework import ComputeFramework
     from mloda.core.abstract_plugins.feature_group import FeatureGroup
+    from mloda.core.prepare.resolved_join import ResolvedJoin, ResolvedJoinPlan
 
 
 @dataclass(frozen=True)
@@ -29,7 +31,9 @@ class PlanStep:
 
     join: ``feature_group``/``source_feature_group`` are the link's declared left/right sides, and
     ``join_type`` its join type. ``compute_framework`` is the merge destination and
-    ``source_compute_framework`` the framework merged in.
+    ``source_compute_framework`` the framework merged in. ``join_destination_side`` is the declared
+    side the destination landed on, ``join_inverted`` whether that is the right one, and
+    ``join_token`` the join step's completion token; all three are None without a resolved join plan.
     """
 
     step_kind: Literal["compute", "join", "transform"]
@@ -39,6 +43,9 @@ class PlanStep:
     source_feature_group: Optional[type["FeatureGroup"]]
     source_compute_framework: Optional[type["ComputeFramework"]]
     join_type: Optional[str] = None
+    join_destination_side: Optional[str] = None
+    join_inverted: Optional[bool] = None
+    join_token: Optional[UUID] = None
     requested_feature_names: tuple[str, ...] = ()
     injected_feature_names: tuple[str, ...] = ()
 
@@ -65,8 +72,14 @@ def build_plan_steps(
     """Map the steps of an ExecutionPlan onto PlanStep records, in execution-plan order.
 
     Raises ValueError on an unknown step, mirroring ``ExecutionPlan.add_tfs``: a plan that silently
-    drops a step it does not understand is a lie.
+    drops a step it does not understand is a lie. A bare iterable of steps carries no
+    ``resolved_join_plan``, so its join steps report no orientation instead of raising.
     """
+    resolved_join_plan: Optional["ResolvedJoinPlan"] = getattr(execution_plan, "resolved_join_plan", None)
+    records: dict[UUID, "ResolvedJoin"] = (
+        {} if resolved_join_plan is None else {record.token: record for record in resolved_join_plan.records}
+    )
+
     plan: list[PlanStep] = []
 
     for step in execution_plan:
@@ -98,6 +111,7 @@ def build_plan_steps(
                 )
             )
         elif isinstance(step, JoinStep):
+            record = records.get(step.uuid)
             plan.append(
                 PlanStep(
                     step_kind="join",
@@ -107,6 +121,9 @@ def build_plan_steps(
                     source_feature_group=step.link.right_feature_group,
                     source_compute_framework=step.source_framework,
                     join_type=step.link.jointype.value,
+                    join_destination_side=None if record is None else record.destination_side.value,
+                    join_inverted=None if record is None else record.inverted,
+                    join_token=None if record is None else record.token,
                 )
             )
         else:

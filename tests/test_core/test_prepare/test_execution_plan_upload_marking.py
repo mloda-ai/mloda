@@ -8,6 +8,7 @@ from mloda.core.core.step.join_step import JoinStep
 from mloda.core.prepare.execution_plan import ExecutionPlan
 from mloda.core.prepare.graph.graph import Graph
 from mloda.core.prepare.graph.properties import NodeProperties
+from mloda.core.prepare.resolved_join import JoinSide, ResolvedJoin, ResolvedJoinPlan, ResolvedJoinSide
 from mloda.provider import ComputeFramework
 from mloda.provider import FeatureGroup
 from mloda.provider import FeatureSet
@@ -53,6 +54,7 @@ class UploadMarkUnrelatedFG(UploadMarkBaseFG):
 
 
 class Scenario(NamedTuple):
+    plan: ExecutionPlan
     source_step: FeatureGroupStep
     unrelated_step: FeatureGroupStep
     steps: list[JoinStep | FeatureGroupStep]
@@ -74,6 +76,34 @@ def _fg_step(
         graph.add_node(feature.uuid, NodeProperties(feature, fg))
         graph.parent_to_children_mapping[feature.uuid] = set()
     return FeatureGroupStep(fg, feature_set, set(), cfw)
+
+
+def _record(link: Link, join_step: JoinStep) -> ResolvedJoin:
+    """The declared-orientation record add_tfs reads to name the transform hop's direction."""
+    return ResolvedJoin(
+        link_uuid=link.uuid,
+        jointype=link.jointype,
+        left=ResolvedJoinSide(
+            link.left_feature_group,
+            link.left_index,
+            frozenset(join_step.destination_framework_uuids),
+            frozenset({join_step.destination_framework}),
+        ),
+        right=ResolvedJoinSide(
+            link.right_feature_group,
+            link.right_index,
+            frozenset(join_step.source_framework_uuids),
+            frozenset({join_step.source_framework}),
+        ),
+        destination_side=JoinSide.LEFT,
+        destination_uuids=frozenset(join_step.destination_framework_uuids),
+        source_uuids=frozenset(join_step.source_framework_uuids),
+        destination_framework=join_step.destination_framework,
+        source_framework=join_step.source_framework,
+        consumers=frozenset(),
+        depends_on=frozenset(),
+        token=join_step.uuid,
+    )
 
 
 def _scenario() -> Scenario:
@@ -102,14 +132,17 @@ def _scenario() -> Scenario:
         source_framework_uuids={payload_one.uuid, payload_two.uuid},
     )
 
+    plan = ExecutionPlan()
+    plan.resolved_join_plan = ResolvedJoinPlan((_record(link, join_step),), ())
+
     steps: list[JoinStep | FeatureGroupStep] = [source_step, dest_step, unrelated_step, join_step]
-    return Scenario(source_step, unrelated_step, steps, graph)
+    return Scenario(plan, source_step, unrelated_step, steps, graph)
 
 
 def test_source_step_whose_representative_is_the_index_feature_is_marked_for_upload() -> None:
     scenario = _scenario()
 
-    ExecutionPlan().add_tfs(scenario.steps, scenario.graph)
+    scenario.plan.add_tfs(scenario.steps, scenario.graph)
 
     assert scenario.source_step.need_to_upload is True
 
@@ -117,6 +150,6 @@ def test_source_step_whose_representative_is_the_index_feature_is_marked_for_upl
 def test_step_sharing_no_uuid_with_the_collector_stays_unmarked() -> None:
     scenario = _scenario()
 
-    ExecutionPlan().add_tfs(scenario.steps, scenario.graph)
+    scenario.plan.add_tfs(scenario.steps, scenario.graph)
 
     assert scenario.unrelated_step.need_to_upload is False

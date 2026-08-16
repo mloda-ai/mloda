@@ -1,7 +1,7 @@
-"""Pins the ``ExecutionPlan.add_tfs`` dedup collision: ``TransformFrameworkStep.__eq__``/``__hash__``
-(mloda/core/core/step/transform_frame_work_step.py) ignore ``link_id``, so a join's transform hop
-collides with a same-shaped plain feature-group hop and is silently dropped from ``tfs_collection``.
-The JoinStep then never gets its transform-step dependency wired in, and ``run()`` fails.
+"""Pins that ``TransformFrameworkStep`` identity includes ``link_id``, so a join's transform hop
+no longer collides with a same-shaped plain feature-group hop in ``ExecutionPlan.add_tfs``. Before
+that, the dedup dropped one of the two hops, the JoinStep lost its transform-step dependency, and
+``run()`` failed to find its source data.
 """
 
 from typing import Any, Optional

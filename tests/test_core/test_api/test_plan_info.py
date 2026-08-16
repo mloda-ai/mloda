@@ -14,13 +14,16 @@ Contract under test:
     defaulting to ``()``. On compute steps they partition ``feature_names`` into the names the user
     asked for (``initial_requested_data`` is True) and the names the engine injected (chained
     sources, link index features). Join and transform steps keep both empty.
-  * Join steps also expose the resolved orientation: ``join_destination_side`` ("left"/"right"),
-    ``join_inverted`` and ``join_token``. All three are None on compute and transform steps, and on
-    every step when ``build_plan_steps`` gets a bare iterable that carries no resolved join plan.
+  * Join steps also expose the resolved orientation: ``join_destination_side`` ("left"/"right") and
+    ``join_token`` are dataclass fields; ``join_inverted`` is a derived read-only property
+    (``join_destination_side == "right"``, or None without a side). Both default to None on
+    compute/transform steps and wherever ``build_plan_steps`` gets no ``resolved_join_plan``.
     ``join_token`` is minted fresh per planning run, so it stays out of equality.
-  * Join steps also expose ``declared_left_frameworks``/``declared_right_frameworks``: the sorted
-    class-name tuples of each declared side's candidate compute frameworks, both defaulting to
-    ``()`` on compute/transform steps and wherever there is no resolved join plan to read.
+  * Join steps also expose ``declared_left_frameworks``/``declared_right_frameworks``: sorted class
+    tuples of each declared side's candidate compute frameworks, plus
+    ``declared_left_framework_names``/``declared_right_framework_names`` string mirrors. Both class
+    tuples default to ``()`` without a resolved join plan. ``build_plan_steps`` takes an explicit
+    ``resolved_join_plan`` argument; a bare ``ExecutionPlan`` or list carries none.
   * ``build_plan_steps`` raises ``ValueError`` on a step it does not know, instead of dropping it.
   * ``mlodaAPI.resolved_plan()`` returns ``list[PlanStep]`` on a prepared session, both before
     and after ``run()``, in execution-plan order, and matches the plan that actually executed.
@@ -53,6 +56,7 @@ import pytest
 import mloda.steward as mloda_steward
 import mloda.user as mloda_user
 from mloda.core.api.plan_info import build_plan_steps
+from mloda.core.prepare.resolved_join import ResolvedJoinPlan
 from mloda.provider import BaseInputData, ComputeFramework, DataCreator, FeatureGroup, FeatureSet
 from mloda.user import (
     Feature,
@@ -310,33 +314,29 @@ def _prepare_single_framework_join_session() -> mlodaAPI:
     )
 
 
-def _prepare_cross_framework_join_session() -> mlodaAPI:
-    link = Link.inner(
+def _cross_link() -> Link:
+    return Link.inner(
         JoinSpec(PlanInfoCrossLeftPandas, "plan_info_xjid"),
         JoinSpec(PlanInfoCrossRightArrow, "plan_info_xjid"),
     )
 
+
+def _prepare_cross_join(consumer: str, plugins: PluginCollector) -> mlodaAPI:
     return mloda.prepare(
-        ["PlanInfoCrossConsumer"],
+        [consumer],
         compute_frameworks={PandasDataFrame, PyArrowTable},
-        links={link},
-        plugin_collector=_CROSS_JOIN_PLUGINS,
+        links={_cross_link()},
+        plugin_collector=plugins,
     )
+
+
+def _prepare_cross_framework_join_session() -> mlodaAPI:
+    return _prepare_cross_join("PlanInfoCrossConsumer", _CROSS_JOIN_PLUGINS)
 
 
 def _prepare_inverted_cross_framework_join_session() -> mlodaAPI:
     """Same link, PyArrow consumer: the join runs in the declared right side's framework."""
-    link = Link.inner(
-        JoinSpec(PlanInfoCrossLeftPandas, "plan_info_xjid"),
-        JoinSpec(PlanInfoCrossRightArrow, "plan_info_xjid"),
-    )
-
-    return mloda.prepare(
-        ["PlanInfoInvertedConsumer"],
-        compute_frameworks={PandasDataFrame, PyArrowTable},
-        links={link},
-        plugin_collector=_INVERTED_JOIN_PLUGINS,
-    )
+    return _prepare_cross_join("PlanInfoInvertedConsumer", _INVERTED_JOIN_PLUGINS)
 
 
 # ---------------------------------------------------------------------------
@@ -376,13 +376,12 @@ class TestPlanStepDataclass:
             "source_feature_group",
             "source_compute_framework",
             "join_type",
+            "requested_feature_names",
+            "injected_feature_names",
             "join_destination_side",
-            "join_inverted",
             "join_token",
             "declared_left_frameworks",
             "declared_right_frameworks",
-            "requested_feature_names",
-            "injected_feature_names",
         ]
 
     def test_join_type_defaults_to_none(self) -> None:
@@ -515,7 +514,8 @@ class TestPlanStepRequestedAndInjectedFields:
 
 
 class TestJoinOrientationFieldsOnTheDataclass:
-    """The three join-orientation fields are optional, typed and value-comparable."""
+    """join_destination_side, join_token, declared_left_frameworks and declared_right_frameworks are
+    optional, typed dataclass fields; join_inverted is a derived read-only property, not a field."""
 
     @staticmethod
     def _join_step() -> PlanStep:
@@ -533,14 +533,13 @@ class TestJoinOrientationFieldsOnTheDataclass:
         step = self._join_step()
 
         assert step.join_destination_side is None
-        assert step.join_inverted is None
         assert step.join_token is None
         assert step.declared_left_frameworks == ()
         assert step.declared_right_frameworks == ()
+        assert step.join_inverted is None
 
         fields_by_name = {field.name: field for field in dataclasses.fields(PlanStep)}
         assert fields_by_name["join_destination_side"].default is None
-        assert fields_by_name["join_inverted"].default is None
         assert fields_by_name["join_token"].default is None
         assert fields_by_name["declared_left_frameworks"].default == ()
         assert fields_by_name["declared_right_frameworks"].default == ()
@@ -551,18 +550,61 @@ class TestJoinOrientationFieldsOnTheDataclass:
         side, none_type = get_args(annotations["join_destination_side"])
         assert none_type is type(None)
         assert set(get_args(side)) == {"left", "right"}
-        assert set(get_args(annotations["join_inverted"])) == {bool, type(None)}
         assert set(get_args(annotations["join_token"])) == {UUID, type(None)}
 
-    def test_only_the_orientation_fields_participate_in_equality(self) -> None:
-        """The sides are stable planner answers; the token is a fresh uuid per run, so it must not compare."""
+        assert "join_inverted" not in annotations
+        assert "join_inverted" not in {field.name for field in dataclasses.fields(PlanStep)}
+
+    def test_the_sides_and_declared_frameworks_compare_and_the_token_does_not(self) -> None:
+        """The sides and declared frameworks are stable planner answers; the token is a fresh uuid per run."""
         base = self._join_step()
         token = UUID("00000000-0000-4000-8000-000000000001")
 
         assert base != dataclasses.replace(base, join_destination_side="right")
-        assert base != dataclasses.replace(base, join_inverted=True)
+        assert base != dataclasses.replace(base, declared_left_frameworks=(PandasDataFrame,))
+        assert base != dataclasses.replace(base, declared_right_frameworks=(PyArrowTable,))
         assert base == dataclasses.replace(base, join_token=token)
         assert hash(base) == hash(dataclasses.replace(base, join_token=token))
+        assert hash(base) != hash(dataclasses.replace(base, declared_left_frameworks=(PandasDataFrame,)))
+
+    def test_join_inverted_cannot_be_set_via_replace(self) -> None:
+        """join_inverted is a derived property, so dataclasses.replace must reject it as a field."""
+        base = self._join_step()
+
+        with pytest.raises(TypeError):
+            dataclasses.replace(base, join_inverted=True)  # type: ignore[call-arg]
+
+    def test_join_inverted_is_derived_from_the_destination_side(self) -> None:
+        base = self._join_step()
+
+        assert base.join_inverted is None
+        assert dataclasses.replace(base, join_destination_side="left").join_inverted is False
+        assert dataclasses.replace(base, join_destination_side="right").join_inverted is True
+
+    def test_a_plan_step_round_trips_positionally(self) -> None:
+        step = dataclasses.replace(
+            self._join_step(),
+            join_destination_side="left",
+            join_token=UUID("00000000-0000-4000-8000-000000000001"),
+            declared_left_frameworks=(PandasDataFrame,),
+            declared_right_frameworks=(PyArrowTable,),
+        )
+
+        assert PlanStep(*dataclasses.astuple(step)) == step
+        assert PlanStep(*[getattr(step, field.name) for field in dataclasses.fields(PlanStep)]) == step
+
+    def test_declared_framework_name_properties_mirror_the_classes(self) -> None:
+        base = self._join_step()
+
+        assert base.declared_left_framework_names == ()
+        assert base.declared_right_framework_names == ()
+
+        step = dataclasses.replace(
+            base, declared_left_frameworks=(PandasDataFrame,), declared_right_frameworks=(PyArrowTable,)
+        )
+
+        assert step.declared_left_framework_names == ("PandasDataFrame",)
+        assert step.declared_right_framework_names == ("PyArrowTable",)
 
 
 # ---------------------------------------------------------------------------
@@ -711,7 +753,9 @@ class TestResolvedPlanBeforeAndAfterRun:
         session.run()
 
         assert session.runner is not None
-        executed_plan = build_plan_steps(session.runner.execution_planner)
+        executed_plan = build_plan_steps(
+            session.runner.execution_planner, session.runner.execution_planner.resolved_join_plan
+        )
 
         assert executed_plan == session.resolved_plan()
 
@@ -737,14 +781,10 @@ class TestExplain:
 
         Plan order across sessions is not pinned, so this compares multisets.
         """
-        link = Link.inner(
-            JoinSpec(PlanInfoCrossLeftPandas, "plan_info_xjid"),
-            JoinSpec(PlanInfoCrossRightArrow, "plan_info_xjid"),
-        )
         explained = mlodaAPI.explain(
             ["PlanInfoCrossConsumer"],
             compute_frameworks={PandasDataFrame, PyArrowTable},
-            links={link},
+            links={_cross_link()},
             plugin_collector=_CROSS_JOIN_PLUGINS,
         )
         prepared = _prepare_cross_framework_join_session().resolved_plan()
@@ -964,30 +1004,26 @@ class TestJoinOrientationOnResolvedPlans:
         assert session.engine is not None
         records = session.engine.execution_planner.resolved_join_plan.records
         assert len(records) == 1, "the fixture must plan exactly one join for this to say anything"
+        join_steps = session.engine.execution_planner.joinstep_collection.collection
+        assert len(join_steps) == 1
 
         join = next(step for step in session.resolved_plan() if step.step_kind == "join")
 
         assert join.join_destination_side == "left"
         assert join.join_inverted is False
         assert join.join_token == records[0].token
+        assert join.join_token == next(iter(join_steps)).uuid
 
     def test_join_step_reports_the_declared_frameworks_per_side(self) -> None:
         """The left side is pandas-only, the right side pyarrow-only, per the fixture's declarations."""
         plan = _prepare_cross_framework_join_session().resolved_plan()
         join = next(step for step in plan if step.step_kind == "join")
 
-        assert join.declared_left_frameworks == ("PandasDataFrame",)
-        assert join.declared_right_frameworks == ("PyArrowTable",)
-
-    def test_join_token_is_the_join_steps_own_completion_token(self) -> None:
-        session = _prepare_cross_framework_join_session()
-        assert session.engine is not None
-        join_steps = session.engine.execution_planner.joinstep_collection.collection
-        assert len(join_steps) == 1
-
-        join = next(step for step in session.resolved_plan() if step.step_kind == "join")
-
-        assert join.join_token == next(iter(join_steps)).uuid
+        assert join.declared_left_frameworks == (PandasDataFrame,)
+        assert join.declared_right_frameworks == (PyArrowTable,)
+        assert join.declared_left_framework_names == ("PandasDataFrame",)
+        assert join.declared_right_framework_names == ("PyArrowTable",)
+        assert join.compute_framework in join.declared_left_frameworks
 
     def test_compute_and_transform_steps_carry_no_join_orientation(self) -> None:
         plan = _prepare_cross_framework_join_session().resolved_plan()
@@ -1016,6 +1052,43 @@ class TestJoinOrientationOnResolvedPlans:
         assert join.declared_left_frameworks == ()
         assert join.declared_right_frameworks == ()
 
+    def test_an_execution_plan_alone_carries_no_orientation_either(self) -> None:
+        """A bare ExecutionPlan, with no explicit resolved_join_plan argument, behaves like a bare list."""
+        session = _prepare_cross_framework_join_session()
+        assert session.engine is not None
+
+        plan = build_plan_steps(session.engine.execution_planner)
+
+        join = next(step for step in plan if step.step_kind == "join")
+        assert join.join_destination_side is None
+        assert join.join_inverted is None
+        assert join.join_token is None
+        assert join.declared_left_frameworks == ()
+        assert join.declared_right_frameworks == ()
+
+    def test_a_given_resolved_join_plan_fills_the_orientation(self) -> None:
+        session = _prepare_cross_framework_join_session()
+        assert session.engine is not None
+        planner = session.engine.execution_planner
+        records = planner.resolved_join_plan.records
+        assert len(records) == 1, "the fixture must plan exactly one join for this to say anything"
+
+        plan = build_plan_steps(list(planner), planner.resolved_join_plan)
+
+        join = next(step for step in plan if step.step_kind == "join")
+        assert join.join_destination_side == "left"
+        assert join.join_token == records[0].token
+        assert join.declared_left_frameworks == (PandasDataFrame,)
+        assert join.declared_right_frameworks == (PyArrowTable,)
+
+    def test_a_join_step_missing_from_the_given_plan_raises(self) -> None:
+        session = _prepare_cross_framework_join_session()
+        assert session.engine is not None
+        planner = session.engine.execution_planner
+
+        with pytest.raises(ValueError, match="no resolved join record"):
+            build_plan_steps(list(planner), ResolvedJoinPlan((), ()))
+
 
 class TestInvertedCrossFrameworkJoin:
     """A PyArrow consumer puts the merge destination on the link's declared right side."""
@@ -1040,14 +1113,22 @@ class TestInvertedCrossFrameworkJoin:
 
         # The declared sides' candidate frameworks stay fixed by the Link, regardless of
         # which side the destination lands on.
-        assert join.declared_left_frameworks == ("PandasDataFrame",)
-        assert join.declared_right_frameworks == ("PyArrowTable",)
+        assert join.declared_left_frameworks == (PandasDataFrame,)
+        assert join.declared_right_frameworks == (PyArrowTable,)
+        assert join.compute_framework in join.declared_right_frameworks
 
     def test_the_hop_into_an_inverted_join_names_the_destination_side(self) -> None:
         """The hop moves the declared left side into the declared right one, which holds the destination."""
         plan = _prepare_inverted_cross_framework_join_session().resolved_plan()
 
-        transform = next(step for step in plan if step.step_kind == "transform")
+        kinds = [step.step_kind for step in plan]
+        assert kinds.count("join") == 1
+        assert kinds.count("transform") == 1
+
+        transform_steps = [step for step in plan if step.step_kind == "transform"]
+        assert len(transform_steps) == 1, f"expected one transform step, got {kinds}"
+
+        transform = transform_steps[0]
 
         assert transform.feature_group is PlanInfoCrossRightArrow
         assert transform.source_feature_group is PlanInfoCrossLeftPandas

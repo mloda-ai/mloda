@@ -85,6 +85,10 @@ class ResolvedJoinPairLeftDescendant(ResolvedJoinPairLeft):
     """Matches the declared left side polymorphically, at inheritance distance one."""
 
 
+class ResolvedJoinPairRightDescendant(ResolvedJoinPairRight):
+    """Matches the declared right side polymorphically, at inheritance distance one."""
+
+
 class ResolvedJoinOtherLeft(FeatureGroup):
     pass
 
@@ -447,6 +451,36 @@ def _case_override_beats_nearer_wrong_framework_left() -> Built:
     return _finish(planned, link, Sides(far_left.uuid, right.uuid, child.uuid))
 
 
+def _case_override_disagrees_with_the_nearest_split() -> Built:
+    """Both sides have a nearer, wrong-framework sibling and a farther, correct-framework one; the case helper
+    selects the farther pair on both sides. destination_framework and source_framework differ here (unlike
+    _case_override_beats_nearer_wrong_framework_left's shared framework), so a swap decision based on the
+    nearest split's frameworks (which never sees the case-selected, farther parents) can disagree with the
+    framework the case helper actually bound to each side."""
+    planned = _planned()
+    link = _pair_link()
+
+    nearest_left = feature("resolved_join_split_disagree_nearest_left", PythonDictFramework, link.left_index)
+    far_left = feature("resolved_join_split_disagree_far_left", PyArrowTable, link.left_index)
+    nearest_right = feature("resolved_join_split_disagree_nearest_right", PyArrowTable, link.right_index)
+    far_right = feature("resolved_join_split_disagree_far_right", PandasDataFrame, link.right_index)
+    child = feature("resolved_join_split_disagree_child", PyArrowTable)
+
+    planned.graph.add_node(nearest_left.uuid, NodeProperties(nearest_left, ResolvedJoinPairLeft))
+    planned.graph.add_node(far_left.uuid, NodeProperties(far_left, ResolvedJoinPairLeftDescendant))
+    planned.graph.add_node(nearest_right.uuid, NodeProperties(nearest_right, ResolvedJoinPairRight))
+    planned.graph.add_node(far_right.uuid, NodeProperties(far_right, ResolvedJoinPairRightDescendant))
+    planned.queue.append((ResolvedJoinPairLeft, {nearest_left}))
+    planned.queue.append((ResolvedJoinPairLeftDescendant, {far_left}))
+    planned.queue.append((ResolvedJoinPairRight, {nearest_right}))
+    planned.queue.append((ResolvedJoinPairRightDescendant, {far_right}))
+    planned.queue.append((link, PyArrowTable, PandasDataFrame))
+    _add_child(planned, child, nearest_left, far_left, nearest_right, far_right)
+    trek(planned.link_trekker, link, (PyArrowTable, PandasDataFrame), child.uuid)
+
+    return _finish(planned, link, Sides(far_left.uuid, far_right.uuid, child.uuid))
+
+
 def _join_steps(plan: ExecutionPlan) -> list[JoinStep]:
     return [step for step in plan if isinstance(step, JoinStep)]
 
@@ -683,6 +717,7 @@ def test_a_decline_reached_through_the_inversion_branch_records_the_orientation_
         _link_with_an_unlinked_third_parent,
         _case_override_inverted,
         _case_override_beats_nearer_wrong_framework_left,
+        _case_override_disagrees_with_the_nearest_split,
     ],
     ids=[
         "inner",
@@ -696,9 +731,10 @@ def test_a_decline_reached_through_the_inversion_branch_records_the_orientation_
         "unlinked_third_parent",
         "case_override_inverted",
         "case_override_beats_nearer_wrong_framework_left",
+        "case_override_disagrees_with_nearest_split",
     ],
 )
-def test_the_records_sign_the_joins_the_legacy_join_steps_sign(build: Callable[[], Any]) -> None:
+def test_the_records_sign_the_joins_the_join_steps_sign(build: Callable[[], Any]) -> None:
     built = build()
 
     join_steps = _join_steps(built.plan)
@@ -708,6 +744,20 @@ def test_the_records_sign_the_joins_the_legacy_join_steps_sign(build: Callable[[
     assert len(resolved.records) == len(join_steps)
     assert resolved.signatures() == built.plan.join_signatures_at_build
     assert {record.token for record in resolved.records} == {step.uuid for step in join_steps}
+
+
+def test_raise_on_join_plan_divergence_raises_on_a_mutated_step() -> None:
+    from mloda.core.prepare.resolved_join_builder import raise_on_join_plan_divergence
+
+    built = _declared_pair()
+    join_steps = _join_steps(built.plan)
+
+    assert raise_on_join_plan_divergence(built.plan.resolved_join_plan, join_steps) is None
+
+    join_steps[0].swap_merge_sides = not join_steps[0].swap_merge_sides
+
+    with pytest.raises(ValueError):
+        raise_on_join_plan_divergence(built.plan.resolved_join_plan, join_steps)
 
 
 def test_a_nearest_left_parent_on_a_third_framework_keeps_the_record_on_the_steps_side() -> None:
@@ -777,6 +827,18 @@ def test_a_case_override_right_destination_matches_the_destination_uuids() -> No
     assert record.source.uuids <= record.source_uuids
 
 
+def test_a_case_override_disagreeing_with_the_nearest_split_still_binds_the_selected_framework() -> None:
+    built = _case_override_disagrees_with_the_nearest_split()
+
+    assert len(_join_steps(built.plan)) == 1, "the shape must plan exactly one JoinStep for this to say anything"
+    record = _one_record(built.plan, built.link)
+    assert record.destination_framework is PyArrowTable
+    assert record.destination_uuids == {built.sides.left_uuid}
+    assert record.source_uuids == {built.sides.right_uuid}
+    assert record.destination.uuids <= record.destination_uuids
+    assert record.source.uuids <= record.source_uuids
+
+
 def test_the_record_leaves_out_the_write_serialization_edges_add_tfs_adds() -> None:
     built = _two_links()
 
@@ -818,7 +880,7 @@ def test_an_order_edge_makes_the_consumer_records_depend_on_the_producer_record_
         assert record.signature(resolved.link_of_token()).depends_on_links == (str(chain.producer.uuid),)
 
 
-def test_the_record_and_the_legacy_transform_hop_name_opposite_directions() -> None:
+def test_the_record_and_the_transform_hop_name_opposite_directions() -> None:
     built = _inverted_pair()
 
     record = _one_record(built.plan, built.link)

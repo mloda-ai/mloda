@@ -30,7 +30,7 @@ from mloda.core.prepare.resolved_join import (
 from mloda.core.prepare.resolved_join_builder import (
     DeclaredFrameworks,
     build_resolved_join_side,
-    legacy_join_signatures,
+    joinstep_signatures,
     raise_on_join_plan_divergence,
     wire_join_dependencies,
 )
@@ -136,7 +136,7 @@ class ExecutionPlan:
         resolved_records = wire_join_dependencies(self.planned_records, join_steps)
         declined = tuple(DeclinedOrientation(key[0].uuid, key[1], key[2]) for key in self.declined_orientations)
         self.resolved_join_plan = ResolvedJoinPlan(resolved_records, declined)
-        self.join_signatures_at_build = legacy_join_signatures(join_steps)
+        self.join_signatures_at_build = joinstep_signatures(join_steps)
         raise_on_join_plan_divergence(self.resolved_join_plan, join_steps)
         if validate:
             raise_on_orphaned_join_source(self.resolved_join_plan)
@@ -628,8 +628,8 @@ class ExecutionPlan:
         # if len(children_uuids) > 1:
         #    raise ValueError("This is not supported yet.")
 
-        # Computed before the case-override loop below: a case helper's result is always in declared
-        # left/right order, so it needs swap_sides to know which side of the result is the destination.
+        # Hoisted above the case-override loop: a case helper's result is in declared left/right
+        # order, so orienting it needs swap_sides.
         swap_sides = self.swap_merge_sides_by_declared_side(
             destination_framework, declared_left_frameworks, declared_right_frameworks, swap_merge_sides
         )
@@ -661,8 +661,7 @@ class ExecutionPlan:
             source_framework_uuids = {sides.right_uuid}
             left_uuids = frozenset({sides.left_uuid})
             right_uuids = frozenset({sides.right_uuid})
-            # Append/union never chains through the general required_uuids (order edges included); only
-            # its own two feature uuids gate the merge, matching the pre-split JoinStep's required_uuids.
+            # Append/union gates only on its own two feature uuids, not on the general required_uuids.
             join_step_required_uuids: set[UUID] = {sides.left_uuid, sides.right_uuid}
         else:
             side = JoinSide.RIGHT if swap_sides else JoinSide.LEFT
@@ -676,9 +675,8 @@ class ExecutionPlan:
             ):
                 left_uuids, right_uuids = split.left_uuids, split.right_uuids
             else:
-                # The step's sets, so a record can never name parents outside its own destination/source claim.
-                # A self link's declared sides are identical (split_by_declared_side can't split one feature
-                # group from itself), so it always lands here too.
+                # The step's own sets, so a record never names parents outside its destination/source
+                # claim. Self links land here too: their declared sides are identical.
                 left_uuids, right_uuids = resolved_left, resolved_right
             join_step_required_uuids = required_uuids
 
@@ -773,12 +771,8 @@ class ExecutionPlan:
         graph: Graph,
         pre_execution_plan: list[LinkFrameworkTrekker | FeatureGroupStep],
     ) -> AppendOrUnionSides:
-        """
-        Resolve the left/right feature UUIDs and frameworks for an APPEND or UNION link.
-
-        Identifies the left and right feature UUIDs required for the join and validates the frameworks
-        and indices; append and union never invert, so the resolved sides stay in declared order.
-        """
+        """Resolve the left/right feature uuids and frameworks for an APPEND or UNION link; neither
+        inverts, so the resolved sides stay in declared order."""
 
         # Unpack link-related data
         left_index, right_index = link.left_index, link.right_index

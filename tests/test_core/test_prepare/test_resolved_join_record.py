@@ -17,7 +17,7 @@ from mloda.core.prepare.graph.properties import NodeProperties
 from mloda.core.prepare.resolve_compute_frameworks import ResolveComputeFrameworks
 from mloda.core.prepare.resolve_links import LinkTrekker
 from mloda.core.prepare.resolved_join import DeclinedOrientation, JoinSide, JoinSignature, ResolvedJoin
-from mloda.core.prepare.resolved_join_builder import legacy_join_signatures
+from mloda.core.prepare.resolved_join_builder import joinstep_signatures
 from mloda.provider import BaseInputData
 from mloda.provider import ComputeFramework
 from mloda.provider import DataCreator
@@ -767,7 +767,7 @@ def test_a_case_override_beats_a_nearer_wrong_framework_left() -> None:
 
 
 def test_a_case_override_right_destination_matches_the_destination_uuids() -> None:
-    """A RIGHT-destination case override must keep destination_uuids in step with destination, not crossed."""
+    """A RIGHT-destination case override keeps destination_uuids in step with destination."""
     built = _case_override_inverted()
 
     record = _one_record(built.plan, built.link)
@@ -781,7 +781,7 @@ def test_the_record_leaves_out_the_write_serialization_edges_add_tfs_adds() -> N
     built = _two_links()
 
     recorded = built.plan.resolved_join_plan.signatures()
-    after_tfs = legacy_join_signatures(_join_steps(built.plan))
+    after_tfs = joinstep_signatures(_join_steps(built.plan))
 
     assert after_tfs != recorded, "add_tfs must add an edge here for this to say anything"
     assert _without_depends(after_tfs) == _without_depends(recorded)

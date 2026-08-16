@@ -1,6 +1,5 @@
-"""Materializes the join decision run_link made as records, and signs the legacy join steps the same way.
-
-Shadow mode: the two signature sets must agree and divergence raises; nothing here changes what the plan runs.
+"""Helpers for the ResolvedJoin record: a side builder, dependency-edge wiring, and a signature
+cross-check between a record and the JoinStep built from it. Divergence there is a construction bug.
 """
 
 from collections.abc import Iterable, Mapping, Sequence
@@ -50,8 +49,8 @@ def wire_join_dependencies(records: Sequence[ResolvedJoin], join_steps: Iterable
     return tuple(resolved)
 
 
-def _legacy_signature(join_step: JoinStep, link_of_step: Mapping[UUID, UUID]) -> JoinSignature:
-    """The join a legacy step names, with its destination side read off swap_merge_sides."""
+def _joinstep_signature(join_step: JoinStep, link_of_step: Mapping[UUID, UUID]) -> JoinSignature:
+    """The join a JoinStep's own fields name, with its destination side read off swap_merge_sides."""
     side = JoinSide.RIGHT if join_step.swap_merge_sides else JoinSide.LEFT
     return JoinSignature(
         link_uuid=join_step.link.uuid,
@@ -67,21 +66,21 @@ def _legacy_signature(join_step: JoinStep, link_of_step: Mapping[UUID, UUID]) ->
     )
 
 
-def legacy_join_signatures(join_steps: Iterable[JoinStep]) -> frozenset[JoinSignature]:
+def joinstep_signatures(join_steps: Iterable[JoinStep]) -> frozenset[JoinSignature]:
     steps = list(join_steps)
     link_of_step = {step.uuid: step.link.uuid for step in steps}
-    return frozenset(_legacy_signature(step, link_of_step) for step in steps)
+    return frozenset(_joinstep_signature(step, link_of_step) for step in steps)
 
 
 def raise_on_join_plan_divergence(plan: ResolvedJoinPlan, join_steps: Iterable[JoinStep]) -> object:
     """Returns None when the records and the steps sign the same joins; a divergence is a planning bug."""
     recorded = plan.signatures()
-    legacy = legacy_join_signatures(join_steps)
-    if recorded == legacy:
+    from_steps = joinstep_signatures(join_steps)
+    if recorded == from_steps:
         return None
     raise ValueError(
         internal_invariant_error(
             "the resolved join records and the planned join steps sign different joins.",
-            f"only_in_records={sorted(recorded - legacy)}, only_in_steps={sorted(legacy - recorded)}",
+            f"only_in_records={sorted(recorded - from_steps)}, only_in_steps={sorted(from_steps - recorded)}",
         )
     )

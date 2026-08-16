@@ -625,9 +625,8 @@ def test_a_trekker_inverted_after_queueing_swaps_the_merge_sides() -> None:
 
 
 def test_a_hand_built_inconsistent_trekker_key_yields_a_consistent_joinstep() -> None:
-    """This trekker key contradicts the graph, so create_link_trekker_key never reaches this state; run_link still
-    orients the case-override result by the destination side, so destination_framework_uuids runs on
-    destination_framework."""
+    """This trekker key contradicts the graph, so create_link_trekker_key never reaches this state; run_link
+    still orients the case-override result by the destination side."""
     planned = _pair_scenario()
     _trek(planned, PandasDataFrame, PyArrowTable)
 

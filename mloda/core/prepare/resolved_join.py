@@ -1,6 +1,6 @@
-"""The materialized join decision: one record per planned join orientation.
-
-Shadow mode, nothing runs yet. Metadata only (classes, uuids, indices, scalars), so a record pickles to a worker.
+"""The materialized join decision: one record per planned join orientation, and the JoinStep that
+runs it is built from the record's own fields. Metadata only (classes, uuids, indices, scalars), so
+a record pickles to a worker.
 """
 
 from collections.abc import Iterable, Mapping

@@ -2,6 +2,8 @@
 
 from typing import NamedTuple
 
+import pytest
+
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.core.step.feature_group_step import FeatureGroupStep
 from mloda.core.core.step.join_step import JoinStep
@@ -153,3 +155,11 @@ def test_step_sharing_no_uuid_with_the_collector_stays_unmarked() -> None:
     scenario.plan.add_tfs(scenario.steps, scenario.graph)
 
     assert scenario.unrelated_step.need_to_upload is False
+
+
+def test_cross_framework_join_without_a_resolved_record_raises() -> None:
+    """A bare plan carries no records, so the hop has no orientation to name."""
+    scenario = _scenario()
+
+    with pytest.raises(ValueError, match="no resolved join record to name its transform hop"):
+        ExecutionPlan().add_tfs(scenario.steps, scenario.graph)

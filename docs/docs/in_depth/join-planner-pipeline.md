@@ -49,7 +49,9 @@ than re-deriving it from the join type.
 ```py
 from mloda.user import mloda
 
-for step in mloda.explain(["my_feature"], compute_frameworks=["PandasDataFrame"]):
+session = mloda.prepare(["my_feature"], compute_frameworks=["PandasDataFrame"])
+
+for step in session.resolved_plan():
     if step.step_kind == "join":
         print(
             step.join_type,
@@ -63,10 +65,13 @@ for step in mloda.explain(["my_feature"], compute_frameworks=["PandasDataFrame"]
 ```
 
 The declared sides are fixed by the `Link`. `join_destination_side` and `join_inverted` are the
-planner's answer and can differ from run to run of different requests, because agreement depends on
-which frameworks the surrounding features resolved to.
+planner's answer and can differ between requests, because agreement depends on which frameworks the
+surrounding features resolved to.
 
 `join_token` is the join's completion token, the same uuid the scheduler tracks and the value a
-stalled-plan error reports. It is the join key between an explain record and a scheduling message.
+stalled-plan error reports, so it correlates an explain record with a scheduling message. The token
+is minted per planning pass and is only meaningful **within one session**: hold the session, as
+above, rather than calling `explain(...)`, which resolves a throwaway plan. For the same reason the
+token is excluded from `PlanStep` equality, so two resolutions of one request still compare equal.
 
 All three are `None` on compute and transform steps.

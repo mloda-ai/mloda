@@ -1,5 +1,5 @@
 from collections.abc import Iterable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Literal, Optional, TYPE_CHECKING
 from uuid import UUID
 
@@ -32,8 +32,10 @@ class PlanStep:
     join: ``feature_group``/``source_feature_group`` are the link's declared left/right sides, and
     ``join_type`` its join type. ``compute_framework`` is the merge destination and
     ``source_compute_framework`` the framework merged in. ``join_destination_side`` is the declared
-    side the destination landed on, ``join_inverted`` whether that is the right one, and
-    ``join_token`` the join step's completion token; all three are None without a resolved join plan.
+    side the destination landed on, ``join_inverted`` a convenience mirror of the record's own
+    ``inverted`` (``join_destination_side == "right"``), and ``join_token`` the join step's
+    completion token, minted fresh per planning run and therefore excluded from equality; all three
+    are None without a resolved join plan.
     """
 
     step_kind: Literal["compute", "join", "transform"]
@@ -43,9 +45,9 @@ class PlanStep:
     source_feature_group: Optional[type["FeatureGroup"]]
     source_compute_framework: Optional[type["ComputeFramework"]]
     join_type: Optional[str] = None
-    join_destination_side: Optional[str] = None
-    join_inverted: Optional[bool] = None
-    join_token: Optional[UUID] = None
+    join_destination_side: Optional[Literal["left", "right"]] = field(default=None, kw_only=True)
+    join_inverted: Optional[bool] = field(default=None, kw_only=True)
+    join_token: Optional[UUID] = field(default=None, kw_only=True, compare=False)
     requested_feature_names: tuple[str, ...] = ()
     injected_feature_names: tuple[str, ...] = ()
 

@@ -17,6 +17,7 @@ Contract under test:
   * Join steps also expose the resolved orientation: ``join_destination_side`` ("left"/"right"),
     ``join_inverted`` and ``join_token``. All three are None on compute and transform steps, and on
     every step when ``build_plan_steps`` gets a bare iterable that carries no resolved join plan.
+    ``join_token`` is minted fresh per planning run, so it stays out of equality.
   * ``build_plan_steps`` raises ``ValueError`` on a step it does not know, instead of dropping it.
   * ``mlodaAPI.resolved_plan()`` returns ``list[PlanStep]`` on a prepared session, both before
     and after ``run()``, in execution-plan order, and matches the plan that actually executed.
@@ -34,6 +35,7 @@ claim is registry-wide, so generic names like ``sales`` would leak into every ot
 
 import ast
 import dataclasses
+from collections import Counter
 from pathlib import Path
 from typing import Any, Literal, Optional, get_args, get_origin
 from uuid import UUID
@@ -537,17 +539,21 @@ class TestJoinOrientationFieldsOnTheDataclass:
     def test_join_orientation_fields_are_optional_scalars(self) -> None:
         annotations = PlanStep.__annotations__
 
-        assert set(get_args(annotations["join_destination_side"])) == {str, type(None)}
+        side, none_type = get_args(annotations["join_destination_side"])
+        assert none_type is type(None)
+        assert set(get_args(side)) == {"left", "right"}
         assert set(get_args(annotations["join_inverted"])) == {bool, type(None)}
         assert set(get_args(annotations["join_token"])) == {UUID, type(None)}
 
-    def test_join_orientation_fields_participate_in_equality(self) -> None:
+    def test_only_the_orientation_fields_participate_in_equality(self) -> None:
+        """The sides are stable planner answers; the token is a fresh uuid per run, so it must not compare."""
         base = self._join_step()
         token = UUID("00000000-0000-4000-8000-000000000001")
 
         assert base != dataclasses.replace(base, join_destination_side="right")
         assert base != dataclasses.replace(base, join_inverted=True)
-        assert base != dataclasses.replace(base, join_token=token)
+        assert base == dataclasses.replace(base, join_token=token)
+        assert hash(base) == hash(dataclasses.replace(base, join_token=token))
 
 
 # ---------------------------------------------------------------------------
@@ -716,6 +722,26 @@ class TestExplain:
         prepared = _prepare_chained_session().resolved_plan()
 
         assert explained == prepared
+
+    def test_explain_matches_prepare_resolved_plan_for_a_join_request(self) -> None:
+        """The join token is fresh per planning run, which must not make two resolutions differ.
+
+        Plan order across sessions is not pinned, so this compares multisets.
+        """
+        link = Link.inner(
+            JoinSpec(PlanInfoCrossLeftPandas, "plan_info_xjid"),
+            JoinSpec(PlanInfoCrossRightArrow, "plan_info_xjid"),
+        )
+        explained = mlodaAPI.explain(
+            ["PlanInfoCrossConsumer"],
+            compute_frameworks={PandasDataFrame, PyArrowTable},
+            links={link},
+            plugin_collector=_CROSS_JOIN_PLUGINS,
+        )
+        prepared = _prepare_cross_framework_join_session().resolved_plan()
+
+        assert [step for step in explained if step.step_kind == "join"], "the fixture must plan a join"
+        assert Counter(explained) == Counter(prepared)
 
     def test_explain_returns_plan_steps(self) -> None:
         explained = mlodaAPI.explain(

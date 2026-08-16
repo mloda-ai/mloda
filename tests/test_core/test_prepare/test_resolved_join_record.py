@@ -773,18 +773,19 @@ def test_a_case_override_beats_a_nearer_wrong_framework_left() -> None:
     assert record.destination_side is JoinSide.RIGHT
     assert record.left.uuids == {built.sides.left_uuid}
     assert record.right.uuids == {built.sides.right_uuid}
+    assert record.destination.uuids <= record.destination_uuids
+    assert record.source.uuids <= record.source_uuids
 
 
-def test_a_case_override_right_destination_crosses_the_legacy_destination_uuids() -> None:
-    """Known, accepted gap: destination (case-helper order) and destination_uuids (legacy mirror) diverge once a
-    case override lands on a RIGHT destination side; left open for a later epic step, not chased further here."""
+def test_a_case_override_right_destination_matches_the_destination_uuids() -> None:
+    """A RIGHT-destination case override must keep destination_uuids in step with destination, not crossed."""
     built = _case_override_inverted()
 
     record = _one_record(built.plan, built.link)
 
     assert record.destination_side is JoinSide.RIGHT
-    assert not (record.destination.uuids <= record.destination_uuids)
-    assert not (record.source.uuids <= record.source_uuids)
+    assert record.destination.uuids <= record.destination_uuids
+    assert record.source.uuids <= record.source_uuids
 
 
 def test_flipping_the_merge_sides_of_a_join_step_breaks_the_parity() -> None:

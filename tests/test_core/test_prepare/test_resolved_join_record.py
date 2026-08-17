@@ -515,6 +515,31 @@ def _right_join_farther_right_parent_holds_destination_framework() -> Built:
     return _finish(planned, link, Sides(left.uuid, far_right.uuid, child.uuid))
 
 
+def _right_join_both_sides_claim_destination_framework() -> Built:
+    """The nearest left parent and the sole right parent both sit on the destination framework, so declared-side
+    membership names both sides and cannot decide; the identity tiebreaker must still pick RIGHT."""
+    planned = _planned()
+    link = _pair_link(Link.right)
+
+    nearest_left = feature("resolved_join_both_claim_nearest_left", PandasDataFrame, link.left_index)
+    far_left = feature("resolved_join_both_claim_far_left", PyArrowTable, link.left_index)
+    right = feature("resolved_join_both_claim_right", PandasDataFrame, link.right_index)
+    child = feature("resolved_join_both_claim_child", PandasDataFrame)
+
+    planned.graph.add_node(nearest_left.uuid, NodeProperties(nearest_left, ResolvedJoinPairLeft))
+    planned.graph.add_node(far_left.uuid, NodeProperties(far_left, ResolvedJoinPairLeftDescendant))
+    planned.graph.add_node(right.uuid, NodeProperties(right, ResolvedJoinPairRight))
+    planned.queue.append((ResolvedJoinPairLeft, {nearest_left}))
+    planned.queue.append((ResolvedJoinPairLeftDescendant, {far_left}))
+    planned.queue.append((ResolvedJoinPairRight, {right}))
+    planned.queue.append((link, PyArrowTable, PandasDataFrame))
+    _add_child(planned, child, nearest_left, far_left, right)
+    # The trekker key matches the queued key directly, so run_link never flips here.
+    trek(planned.link_trekker, link, (PyArrowTable, PandasDataFrame), child.uuid)
+
+    return _finish(planned, link, Sides(nearest_left.uuid, right.uuid, child.uuid))
+
+
 def _join_steps(plan: ExecutionPlan) -> list[JoinStep]:
     return [step for step in plan if isinstance(step, JoinStep)]
 
@@ -637,6 +662,24 @@ def test_a_right_joins_destination_stays_right_when_the_nearest_right_parent_is_
     assert record.jointype is JoinType.RIGHT
     assert record.destination_side is JoinSide.RIGHT
     assert record.destination_framework is PandasDataFrame
+    # Pre-fix, the trekker-flip fallback also swapped which uuids land on left/right and left
+    # swap_merge_sides False, which would merge the arguments in the wrong order at execution time.
+    assert record.left.uuids == {built.sides.left_uuid}
+    assert record.right.uuids == {built.sides.right_uuid}
+    join_steps = _join_steps(built.plan)
+    assert len(join_steps) == 1, "the shape must plan exactly one JoinStep for this to say anything"
+    assert join_steps[0].swap_merge_sides is True
+
+
+def test_a_right_joins_destination_stays_right_when_both_declared_sides_claim_the_destination_framework() -> None:
+    """holds_left and holds_right both come out True here; membership alone cannot decide, and the identity
+    tiebreaker must still land the RIGHT join's destination on RIGHT."""
+    built = _right_join_both_sides_claim_destination_framework()
+
+    record = _one_record(built.plan, built.link)
+
+    assert record.jointype is JoinType.RIGHT
+    assert record.destination_side is JoinSide.RIGHT
 
 
 def test_a_parent_the_link_never_mentions_stays_out_of_the_declared_sides() -> None:
@@ -765,6 +808,7 @@ def test_a_decline_reached_through_the_inversion_branch_records_the_orientation_
         _case_override_beats_nearer_wrong_framework_left,
         _case_override_disagrees_with_the_nearest_split,
         _right_join_farther_right_parent_holds_destination_framework,
+        _right_join_both_sides_claim_destination_framework,
     ],
     ids=[
         "inner",
@@ -780,6 +824,7 @@ def test_a_decline_reached_through_the_inversion_branch_records_the_orientation_
         "case_override_beats_nearer_wrong_framework_left",
         "case_override_disagrees_with_nearest_split",
         "right_join_farther_right_parent_holds_destination_framework",
+        "right_join_both_sides_claim_destination_framework",
     ],
 )
 def test_the_records_sign_the_joins_the_join_steps_sign(build: Callable[[], Any]) -> None:

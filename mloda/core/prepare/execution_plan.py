@@ -650,12 +650,12 @@ class ExecutionPlan:
         # Hoisted above the case-override loop: a case helper's result is in declared left/right
         # order, so orienting it needs swap_sides.
         swap_sides = self.swap_merge_sides_by_declared_side(
-            destination_framework,
-            source_framework,
-            link_fw[1],
-            declared_left_frameworks,
-            declared_right_frameworks,
-            swap_merge_sides,
+            destination_framework=destination_framework,
+            source_framework=source_framework,
+            declared_left_framework=link_fw[1],
+            declared_left_frameworks=declared_left_frameworks,
+            declared_right_frameworks=declared_right_frameworks,
+            fallback=swap_merge_sides,
         )
 
         # This part is for handling specific join cases. Currently, we only deal with equal feature groups.
@@ -757,14 +757,19 @@ class ExecutionPlan:
     def swap_merge_sides_by_declared_side(
         destination_framework: type[ComputeFramework],
         source_framework: type[ComputeFramework],
-        left_framework_position: type[ComputeFramework],
+        declared_left_framework: type[ComputeFramework],
         declared_left_frameworks: set[type[ComputeFramework]],
         declared_right_frameworks: set[type[ComputeFramework]],
         fallback: bool,
     ) -> bool:
-        """Declared-side membership decides the side when it names exactly one; a farther, nearest-split-excluded
-        parent can leave both sides silent, so fall back to comparing destination against left_framework_position,
-        skipped as tautological only when both sides share one framework (self links)."""
+        """The declared left group's data must stay the merge engine's left argument, wherever the join runs.
+
+        Declared-side membership decides when exactly one side names the destination framework. When it
+        doesn't decide (both silent or both claim it), the trekker key breaks the tie: destination is
+        always one of the key's two framework positions, and the first position is the declared left side.
+        Links keyed on one single framework make that tautological, so the trekker-flip fallback stays for
+        that case (currently unreachable via the public API, since same-framework RIGHT joins are rejected
+        upstream for equal/polymorphic feature groups; kept as a defensive default, not dead certainty)."""
         holds_left = destination_framework in declared_left_frameworks
         holds_right = destination_framework in declared_right_frameworks
 
@@ -773,7 +778,7 @@ class ExecutionPlan:
         if holds_right and not holds_left:
             return True
         if destination_framework != source_framework:
-            return destination_framework != left_framework_position
+            return destination_framework != declared_left_framework
         return fallback
 
     def find_fg_per_uuid(

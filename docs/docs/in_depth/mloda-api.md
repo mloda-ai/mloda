@@ -160,7 +160,7 @@ for step in mloda.explain(["sales__mean_aggr"], compute_frameworks=["PandasDataF
 - **feature_group_name** / **compute_framework_name** / **source_feature_group_name** / **source_compute_framework_name** (`str | None`): Class names of the above, None when unset.
 - **declared_left_framework_names** / **declared_right_framework_names** (`tuple[str, ...]`): class names of the two tuples above, same order.
 
-Join semantics: for a join step the `*_feature_group` fields are the link's declared left/right sides, while `compute_framework`/`source_compute_framework` are the merge destination and the framework merged in, which may belong to the declared right side. `join_destination_side` is resolved from the two declared sides' framework candidates for every join type except APPEND and UNION, which always report `"left"`; a right join queues its destination on the declared right side, so it reports `"right"` in the common case.
+Join semantics: for a join step the `*_feature_group` fields are the link's declared left/right sides, while `compute_framework`/`source_compute_framework` are the merge destination and the framework merged in, which may belong to the declared right side. `join_destination_side` is resolved from the two declared sides' framework candidates for every join type except APPEND and UNION, which always report `"left"`; a right join queues its destination on the declared right side, so it reports `"right"` in the common case. When declared-side membership doesn't decide (both sides silent or both claim the destination framework), it falls back to the link's trekker-key framework positions instead.
 
 ##### How the engine tracks request provenance
 

@@ -34,7 +34,9 @@ class PlanStep:
     ``join_type`` its join type. ``compute_framework`` is the merge destination and
     ``source_compute_framework`` the framework merged in. ``join_destination_side`` is the declared
     side holding the destination, resolved from the declared sides' framework candidates;
-    APPEND/UNION report "left", and a right join reports "right" in the common case.
+    APPEND/UNION report "left", and a right join reports "right" in the common case. When
+    declared-side membership doesn't decide, it falls back to the link's trekker-key framework
+    positions instead.
     ``join_inverted`` is a derived property (``join_destination_side == "right"``, or None without
     a side). ``join_token`` is the join
     step's completion token, minted fresh per planning run and therefore excluded from equality.

@@ -3,7 +3,7 @@ into every consuming step, not just the one that first created it.
 """
 
 from typing import NamedTuple
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.core.step.feature_group_step import FeatureGroupStep
@@ -73,22 +73,25 @@ class JoinStepDedupScenario(NamedTuple):
     graph: Graph
 
 
-def _join_step(link: Link) -> JoinStep:
+def _join_step(link: Link, source_framework_uuid: UUID, destination_framework_uuid: UUID) -> JoinStep:
     return JoinStep(
         link=link,
         destination_framework=PandasDataFrame,
         source_framework=PyArrowTable,
         required_uuids=set(),
-        destination_framework_uuids=set(),
-        source_framework_uuids=set(),
+        destination_framework_uuids={destination_framework_uuid},
+        source_framework_uuids={source_framework_uuid},
     )
 
 
 def _join_step_dedup_scenario() -> JoinStepDedupScenario:
     """Two JoinSteps over the same link, frameworks, and orientation, so ``fill_tfs_by_joinstep``
-    builds two equal ``TransformFrameworkStep``s."""
+    builds two equal ``TransformFrameworkStep``s. Each carries its own distinct, non-empty
+    source/destination framework uuids, as real JoinSteps do."""
     link = Link.inner(JoinSpec(DedupLeftFG, "id"), JoinSpec(DedupRightFG, "id"))
-    return JoinStepDedupScenario(_join_step(link), _join_step(link), Graph())
+    js1 = _join_step(link, uuid4(), uuid4())
+    js2 = _join_step(link, uuid4(), uuid4())
+    return JoinStepDedupScenario(js1, js2, Graph())
 
 
 def test_both_joinsteps_of_a_deduped_hop_depend_on_the_surviving_transform_step() -> None:
@@ -102,6 +105,10 @@ def test_both_joinsteps_of_a_deduped_hop_depend_on_the_surviving_transform_step(
 
     assert tfs_uuid in scenario.js1.required_uuids
     assert tfs_uuid in scenario.js2.required_uuids
+
+    # Pins current dedup behavior: the survivor is js1's hop verbatim (first-inserted wins),
+    # not a blend of both JoinSteps' source_framework_uuids.
+    assert tfs_steps[0].source_framework_uuid == next(iter(scenario.js1.source_framework_uuids))
 
 
 # ---------------------------------------------------------------------------
@@ -162,3 +169,6 @@ def test_both_feature_group_steps_of_a_deduped_hop_reference_the_surviving_trans
 
     assert scenario.step_a.tfs_ids == {tfs_uuid}
     assert scenario.step_b.tfs_ids == {tfs_uuid}
+
+    assert tfs_uuid in scenario.step_a.required_uuids
+    assert tfs_uuid in scenario.step_b.required_uuids

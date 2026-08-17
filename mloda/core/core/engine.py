@@ -96,7 +96,7 @@ class Engine:
         connection_map: dict[type[ComputeFramework], Any] = {}
         if self.data_access_collection is None:
             return connection_map
-        for tfs in self.execution_planner.tfs_collection:
+        for tfs in self.execution_planner.tfs_collection.values():
             cfw_class = tfs.to_framework
             if cfw_class in connection_map:
                 continue

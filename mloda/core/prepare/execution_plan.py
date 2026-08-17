@@ -357,6 +357,8 @@ class ExecutionPlan:
                 if ep.destination_framework != ep.source_framework:
                     new_tfs = self.fill_tfs_by_joinstep(ep)
 
+                    # Safe to reuse the canonical hop here: link_id is part of its identity, so both joins
+                    # of this link re-find the hopped framework by link.uuid.
                     canonical_tfs = self.tfs_collection.get(new_tfs)
                     if canonical_tfs is None:
                         self.tfs_collection[new_tfs] = new_tfs
@@ -446,10 +448,9 @@ class ExecutionPlan:
                             self.tfs_collection[new_tfs] = new_tfs
                             new_execution_plan.append(new_tfs)
                             canonical_tfs = new_tfs
-                            ep.required_uuids.add(canonical_tfs.uuid)
+                        ep.required_uuids.add(canonical_tfs.uuid)
 
-                        # We update the any_uuid of the feature group to the uuid of the TFS.
-                        # This way we make sure that the TFS is used later.
+                        # Record the surviving hop's uuid so the step resolves its compute framework from it.
                         ep.tfs_ids.add(canonical_tfs.uuid)
 
                         need_to_upload_collector.add(parent)

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import functools
 from typing import Any, Callable, TypeVar
 
 import logging
@@ -43,6 +42,14 @@ def is_match_abort(exc: BaseException) -> bool:
     return exc.__dict__.get(MATCH_ABORT_FLAG, False) is True
 
 
+def safe_exc_str(exc: BaseException) -> str:
+    """str(exc), guarded: a __str__ that itself raises degrades to the exception's type name."""
+    try:
+        return str(exc)
+    except Exception:  # noqa: BLE001  (the exception's own __str__ is plugin-owned and must not escape)
+        return type(exc).__name__
+
+
 def safe_field(
     read: Callable[[], T],
     fallback: T,
@@ -59,14 +66,13 @@ def safe_field(
     except catching as exc:
         if field:
             # str(exc), not exc: a retained log record must not pin the traceback, its frames and the plugin class.
-            logger.warning("Degraded field '%s': %s: %s", field, type(exc).__name__, str(exc))
+            logger.warning("Degraded field '%s': %s: %s", field, type(exc).__name__, safe_exc_str(exc))
         return fallback
 
 
 def contained_raise_reason(exc: BaseException) -> str:
     """Text form of a contained raise: type and message, never the exception object."""
-    # partial, not a lambda: exc binds eagerly, so no closure keeps it and its traceback alive.
-    return f"raised {type(exc).__name__}: {safe_field(functools.partial(str, exc), type(exc).__name__)}"
+    return f"raised {type(exc).__name__}: {safe_exc_str(exc)}"
 
 
 def safe_field_with_error(
@@ -78,7 +84,7 @@ def safe_field_with_error(
     try:
         return read(), None
     except catching as exc:
-        message = str(exc)
+        message = safe_exc_str(exc)
         return fallback, message if message.strip() else type(exc).__name__
 
 

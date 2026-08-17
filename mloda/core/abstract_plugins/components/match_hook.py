@@ -7,7 +7,6 @@ Each keeps only its own recording and rollback now, driven by the outcome this h
 
 from __future__ import annotations
 
-import functools
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Optional
 
@@ -20,7 +19,7 @@ from mloda.core.abstract_plugins.components.match_rejection import (
     record_match_rejection,
 )
 from mloda.core.abstract_plugins.components.options import Options
-from mloda.core.abstract_plugins.components.utils import is_match_abort, safe_field
+from mloda.core.abstract_plugins.components.utils import is_match_abort, safe_exc_str, safe_field
 
 if TYPE_CHECKING:
     from mloda.core.abstract_plugins.feature_group import FeatureGroup
@@ -92,7 +91,7 @@ def probe_match_criteria(
             # Parity with the canonical seam: the class name owns the record and the reason is str(exc);
             # the owner name is harvested by value, never by key, so a degraded name is harmless.
             owner = safe_field(lambda: feature_group.get_class_name(), "<unnamed feature group>")
-            reason = safe_field(functools.partial(str, value_rejection), type(value_rejection).__name__)
+            reason = safe_exc_str(value_rejection)
             record_match_rejection(owner, reason)
         recorded = MATCH_REJECTION_REASONS.get() or {}
         # Harvest only on a non-match; the first recorded reason wins (insertion order).

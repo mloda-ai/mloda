@@ -176,6 +176,42 @@ class TestSafeFieldSuccessPathIsSilent:
         assert _module_messages(caplog) == []
 
 
+class TestSafeFieldSwallowsRaisingStr:
+    """A caught exception whose own __str__ raises must not escape the except block."""
+
+    def test_swallowed_read_with_raising_str_returns_fallback(self, caplog: pytest.LogCaptureFixture) -> None:
+        class Bad(Exception):
+            def __str__(self) -> str:
+                raise RuntimeError("str fails")
+
+        def raises() -> str:
+            raise Bad("original message")
+
+        with caplog.at_level(logging.WARNING, logger=SAFE_FIELD_LOGGER):
+            result = safe_field(raises, "unavailable", field="description")
+
+        assert result == "unavailable"
+
+    def test_swallowed_read_with_raising_str_logs_one_warning_naming_the_type(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        class Bad(Exception):
+            def __str__(self) -> str:
+                raise RuntimeError("str fails")
+
+        def raises() -> str:
+            raise Bad("original message")
+
+        with caplog.at_level(logging.WARNING, logger=SAFE_FIELD_LOGGER):
+            safe_field(raises, "unavailable", field="description")
+
+        messages = _warning_messages(caplog)
+        assert len(messages) == 1, f"Expected exactly one WARNING, got {messages}"
+        # The full format, not a substring check: "Bad" also fills the type-name slot (%s: %s: %s), so a
+        # substring check alone would pass even if the third (guarded-str) slot rendered something else.
+        assert messages[0] == "Degraded field 'description': Bad: Bad"
+
+
 class TestSafeFieldFieldLabelKeepsExistingBehavior:
     """The field label is additive: fallback and narrow-catching semantics are unchanged."""
 

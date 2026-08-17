@@ -1,11 +1,22 @@
+import importlib
 import os
 import subprocess
+import sys
 from pathlib import Path
 from unittest.mock import MagicMock, call, patch
 
 import pytest
 
-from attribution.attributions import add_file_to_git, download_files, get_version, remove_tox, run_tox
+import attribution.attributions as attributions_module
+from attribution.attributions import (
+    add_file_to_git,
+    download_files,
+    get_version,
+    remove_tox,
+    run_sync_version_command,
+    run_tox,
+    update_mloda_version,
+)
 
 
 class TestGetVersion:
@@ -23,6 +34,18 @@ class TestGetVersion:
         pyproject.write_text("[project]\n")
         with pytest.raises(KeyError):
             get_version(str(pyproject))
+
+
+class TestLazyTomlImport:
+    def test_module_imports_without_tomli_available(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Importing the module must not require tomli/tomllib (release Python 3.10 lacks tomli outside tox)."""
+        monkeypatch.setitem(sys.modules, "tomli", None)
+        monkeypatch.setitem(sys.modules, "tomllib", None)
+        try:
+            importlib.reload(attributions_module)
+        finally:
+            monkeypatch.undo()
+            importlib.reload(attributions_module)
 
 
 class TestDownloadFiles:
@@ -94,3 +117,234 @@ class TestAddFileToGit:
     def test_raises_on_git_failure(self, mock_run: MagicMock) -> None:
         with pytest.raises(subprocess.CalledProcessError):
             add_file_to_git(["file.md"], "output/")
+
+
+class TestUpdateMlodaVersion:
+    def test_updates_only_the_mloda_version_cell(self) -> None:
+        content = (
+            "| Name  | Version | License    |\n"
+            "|-------|---------|------------|\n"
+            "| alpha | 1.0.0   | MIT        |\n"
+            "| mloda | 0.9.0   | Apache-2.0 |\n"
+            "| zeta  | 2.3.4   | BSD        |\n"
+        )
+        expected = (
+            "| Name  | Version | License    |\n"
+            "|-------|---------|------------|\n"
+            "| alpha | 1.0.0   | MIT        |\n"
+            "| mloda | 1.0.0   | Apache-2.0 |\n"
+            "| zeta  | 2.3.4   | BSD        |\n"
+        )
+        assert update_mloda_version(content, "1.0.0") == expected
+
+    def test_widens_version_column_when_new_version_is_longer(self) -> None:
+        content = (
+            "| Name  | Version | License    |\n"
+            "|-------|---------|------------|\n"
+            "| alpha | 1.0.0   | MIT        |\n"
+            "| mloda | 0.9.0   | Apache-2.0 |\n"
+            "| zeta  | 2.3.4   | BSD        |\n"
+        )
+        expected = (
+            "| Name  | Version    | License    |\n"
+            "|-------|------------|------------|\n"
+            "| alpha | 1.0.0      | MIT        |\n"
+            "| mloda | 10.100.100 | Apache-2.0 |\n"
+            "| zeta  | 2.3.4      | BSD        |\n"
+        )
+        assert update_mloda_version(content, "10.100.100") == expected
+
+    def test_shrinks_version_column_when_old_version_was_the_widest_cell(self) -> None:
+        content = (
+            "| Name  | Version    | License    |\n"
+            "|-------|------------|------------|\n"
+            "| alpha | 1.0.0      | MIT        |\n"
+            "| mloda | 10.100.100 | Apache-2.0 |\n"
+            "| zeta  | 2.3.4      | BSD        |\n"
+        )
+        expected = (
+            "| Name  | Version | License    |\n"
+            "|-------|---------|------------|\n"
+            "| alpha | 1.0.0   | MIT        |\n"
+            "| mloda | 1.0.0   | Apache-2.0 |\n"
+            "| zeta  | 2.3.4   | BSD        |\n"
+        )
+        assert update_mloda_version(content, "1.0.0") == expected
+
+    def test_idempotent_when_mloda_already_has_target_version(self) -> None:
+        content = (
+            "| Name  | Version | License    |\n"
+            "|-------|---------|------------|\n"
+            "| alpha | 1.0.0   | MIT        |\n"
+            "| mloda | 0.11.0  | Apache-2.0 |\n"
+        )
+        assert update_mloda_version(content, "0.11.0") == content
+
+    def test_raises_value_error_when_mloda_row_is_missing(self) -> None:
+        content = (
+            "| Name  | Version | License |\n"
+            "|-------|---------|---------|\n"
+            "| alpha | 1.0.0   | MIT     |\n"
+            "| zeta  | 2.3.4   | BSD     |\n"
+        )
+        with pytest.raises(ValueError, match="mloda"):
+            update_mloda_version(content, "1.0.0")
+
+    def test_does_not_match_package_name_that_merely_contains_mloda(self) -> None:
+        content = (
+            "| Name         | Version | License    |\n"
+            "|--------------|---------|------------|\n"
+            "| mloda-plugin | 3.3.3   | MIT        |\n"
+            "| mloda        | 0.9.0   | Apache-2.0 |\n"
+        )
+        expected = (
+            "| Name         | Version | License    |\n"
+            "|--------------|---------|------------|\n"
+            "| mloda-plugin | 3.3.3   | MIT        |\n"
+            "| mloda        | 1.5.0   | Apache-2.0 |\n"
+        )
+        assert update_mloda_version(content, "1.5.0") == expected
+
+    def test_raises_clear_error_on_row_with_too_many_cells(self) -> None:
+        content = (
+            "| Name  | Version | License |\n"
+            "|-------|---------|---------|\n"
+            "| mloda | 1.0.0   | MIT     |\n"
+            "| weird | 1.0     | MIT | BSD |\n"
+        )
+        with pytest.raises(ValueError, match="cell"):
+            update_mloda_version(content, "1.0.0")
+
+    def test_raises_clear_error_on_row_with_too_few_cells(self) -> None:
+        content = (
+            "| Name  | Version | License |\n"
+            "|-------|---------|---------|\n"
+            "| mloda | 1.0.0   | MIT     |\n"
+            "| weird | 1.0     |\n"
+        )
+        with pytest.raises(ValueError, match="cell"):
+            update_mloda_version(content, "1.0.0")
+
+    def test_raises_clear_error_on_empty_content(self) -> None:
+        with pytest.raises(ValueError):
+            update_mloda_version("", "1.0.0")
+
+    def test_handles_multiple_trailing_blank_lines(self) -> None:
+        content = (
+            "| Name  | Version | License    |\n"
+            "|-------|---------|------------|\n"
+            "| alpha | 1.0.0   | MIT        |\n"
+            "| mloda | 0.9.0   | Apache-2.0 |\n"
+        )
+        single_trailing_newline = content
+        three_trailing_newlines = content + "\n\n"
+
+        result_single = update_mloda_version(single_trailing_newline, "1.0.0")
+        result_extra = update_mloda_version(three_trailing_newlines, "1.0.0")
+
+        assert result_single == result_extra
+
+
+class TestRunSyncVersionCommand:
+    def test_writes_updated_attribution_file_at_default_path(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.chdir(tmp_path)
+        attribution_dir = tmp_path / "attribution"
+        attribution_dir.mkdir()
+        original = (
+            "| Name  | Version | License    |\n"
+            "|-------|---------|------------|\n"
+            "| alpha | 1.0.0   | MIT        |\n"
+            "| mloda | 0.9.0   | Apache-2.0 |\n"
+        )
+        attribution_file = attribution_dir / "ATTRIBUTION.md"
+        attribution_file.write_text(original)
+
+        run_sync_version_command("2.0.0")
+
+        assert attribution_file.read_text() == update_mloda_version(original, "2.0.0")
+
+    def test_preserves_original_file_when_update_fails(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.chdir(tmp_path)
+        attribution_dir = tmp_path / "attribution"
+        attribution_dir.mkdir()
+        original = (
+            "| Name  | Version | License |\n"
+            "|-------|---------|---------|\n"
+            "| alpha | 1.0.0   | MIT     |\n"
+            "| zeta  | 2.3.4   | BSD     |\n"
+        )
+        attribution_file = attribution_dir / "ATTRIBUTION.md"
+        attribution_file.write_text(original)
+
+        with pytest.raises(ValueError):
+            run_sync_version_command("2.0.0")
+
+        assert attribution_file.read_text() == original
+
+
+class TestMain:
+    def test_main_with_no_args_runs_default_command(self) -> None:
+        from attribution.attributions import main
+
+        with (
+            patch("attribution.attributions.run_default_sync_command") as mock_default,
+            patch("attribution.attributions.run_sync_version_command") as mock_sync,
+        ):
+            main(["prog"])
+
+        mock_default.assert_called_once_with()
+        mock_sync.assert_not_called()
+
+    def test_main_dispatches_sync_version_to_handler(self) -> None:
+        from attribution.attributions import main
+
+        with (
+            patch("attribution.attributions.run_default_sync_command") as mock_default,
+            patch("attribution.attributions.run_sync_version_command") as mock_sync,
+        ):
+            main(["prog", "sync-version", "1.2.3"])
+
+        mock_sync.assert_called_once_with("1.2.3")
+        mock_default.assert_not_called()
+
+    def test_main_rejects_unknown_subcommand_without_running_default(self) -> None:
+        from attribution.attributions import main
+
+        with (
+            patch("attribution.attributions.run_default_sync_command") as mock_default,
+            patch("attribution.attributions.run_sync_version_command") as mock_sync,
+        ):
+            with pytest.raises(ValueError):
+                main(["prog", "bogus"])
+
+        mock_default.assert_not_called()
+        mock_sync.assert_not_called()
+
+    def test_main_rejects_sync_version_with_missing_argument(self) -> None:
+        from attribution.attributions import main
+
+        with (
+            patch("attribution.attributions.run_default_sync_command") as mock_default,
+            patch("attribution.attributions.run_sync_version_command") as mock_sync,
+        ):
+            with pytest.raises(ValueError):
+                main(["prog", "sync-version"])
+
+        mock_default.assert_not_called()
+        mock_sync.assert_not_called()
+
+    @pytest.mark.parametrize("empty_argument", ["", "   "])
+    def test_main_rejects_sync_version_with_empty_argument(self, empty_argument: str) -> None:
+        from attribution.attributions import main
+
+        with (
+            patch("attribution.attributions.run_default_sync_command") as mock_default,
+            patch("attribution.attributions.run_sync_version_command") as mock_sync,
+        ):
+            with pytest.raises(ValueError):
+                main(["prog", "sync-version", empty_argument])
+
+        mock_default.assert_not_called()
+        mock_sync.assert_not_called()

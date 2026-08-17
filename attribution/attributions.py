@@ -5,11 +5,6 @@ import sys
 from typing import Any
 from urllib.request import urlopen
 
-if sys.version_info >= (3, 11):
-    import tomllib
-else:
-    import tomli as tomllib
-
 
 def download_files(base_url: str, files: list[str], output_dir: str = ".") -> None:
     """Downloads files from a given base URL."""
@@ -24,6 +19,11 @@ def download_files(base_url: str, files: list[str], output_dir: str = ".") -> No
 
 def get_version(path: str = "pyproject.toml") -> Any:
     """Extracts the version from a pyproject.toml file."""
+    if sys.version_info >= (3, 11):
+        import tomllib
+    else:
+        import tomli as tomllib
+
     with open(path, "rb") as f:
         return tomllib.load(f)["project"]["version"]
 
@@ -57,14 +57,57 @@ def add_file_to_git(files: list[str], out: str) -> None:
         print(f"{file_path} was successfully added to the git staging area.")
 
 
-if __name__ == "__main__":
-    """
-        This script downloads attribution files from the latest release of mloda and compares them using tox.
-        The version is extracted from the pyproject.toml file, thus you need the latest pull from main.
+def update_mloda_version(content: str, new_version: str) -> str:
+    """Replaces the mloda row's version cell in a pip-licenses markdown table and re-renders the table."""
+    lines = [line for line in content.split("\n") if line.strip() != ""]
+    if len(lines) < 2:
+        raise ValueError("Attribution table content must contain a header row and a separator row.")
+    header_line = lines[0]
+    data_lines = lines[2:]
 
-        You can view the results with git diff.
-    """
+    def parse_row(line: str) -> list[str]:
+        return [cell.strip() for cell in line.strip().strip("|").split("|")]
 
+    header_cells = parse_row(header_line)
+    rows = [parse_row(line) for line in data_lines]
+
+    for line, row in zip(data_lines, rows):
+        if len(row) != len(header_cells):
+            raise ValueError(f"Expected {len(header_cells)} cell(s) per row but found {len(row)} in row: {line!r}")
+
+    mloda_index = None
+    for index, row in enumerate(rows):
+        if row[0] == "mloda":
+            mloda_index = index
+            break
+
+    if mloda_index is None:
+        raise ValueError("No row with package name 'mloda' found in attribution table.")
+
+    rows[mloda_index][1] = new_version
+
+    all_rows = [header_cells] + rows
+    widths = [max(len(row[col]) for row in all_rows) for col in range(len(header_cells))]
+
+    def render_row(cells: list[str]) -> str:
+        return "| " + " | ".join(cell.ljust(width) for cell, width in zip(cells, widths)) + " |"
+
+    separator = "|" + "|".join("-" * (width + 2) for width in widths) + "|"
+    rendered = [render_row(header_cells), separator] + [render_row(row) for row in rows]
+    return "\n".join(rendered) + "\n"
+
+
+def run_sync_version_command(version: str, path: str = "attribution/ATTRIBUTION.md") -> None:
+    """Rewrites the mloda version cell in the attribution file at the given path."""
+    with open(path, "r") as f:
+        content = f.read()
+    updated = update_mloda_version(content, version)
+    with open(path, "w") as f:
+        f.write(updated)
+
+
+def run_default_sync_command() -> None:
+    """Downloads attribution files from the latest mloda release and compares them using tox."""
     files = ["THIRD_PARTY_LICENSES.md"]
     version = get_version()
     print(f"Version: {version}")
@@ -81,3 +124,22 @@ if __name__ == "__main__":
         run_tox()
     finally:
         del os.environ["TOX_WRITE_THIRD_PARTY_LICENSES"]
+
+
+def main(argv: list[str]) -> None:
+    """Dispatches to the default sync workflow or the sync-version subcommand."""
+    if len(argv) <= 1:
+        run_default_sync_command()
+        return
+
+    if argv[1] != "sync-version":
+        raise ValueError(f"Unknown subcommand: {argv[1]!r}")
+
+    if len(argv) < 3 or not argv[2].strip():
+        raise ValueError("sync-version requires a non-empty version argument.")
+
+    run_sync_version_command(argv[2])
+
+
+if __name__ == "__main__":
+    main(sys.argv)

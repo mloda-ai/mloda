@@ -1,6 +1,6 @@
 """Guards a JoinStep's Link against a feature group class that pickle cannot round-trip,
 which otherwise fails deep inside a multiprocessing worker with an opaque
-PicklingError instead of being rejected clearly at plan time. See issue #1117.
+PicklingError instead of being rejected clearly at plan time.
 """
 
 import pickle  # nosec

@@ -1,5 +1,5 @@
 """ExecutionOrchestrator.__enter__ must reject an unpicklable JoinStep link before
-spawning any multiprocessing Manager, and must not touch SYNC mode at all. See #1117.
+spawning any multiprocessing Manager, and must not touch SYNC mode at all.
 """
 
 from __future__ import annotations

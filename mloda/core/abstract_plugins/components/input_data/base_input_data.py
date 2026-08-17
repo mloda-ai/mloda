@@ -279,7 +279,17 @@ class BaseInputData(ABC):
     @classmethod
     def _present_reader_option_admits(cls, key: str, spec: PropertySpec, value: Any, owned: bool) -> bool:
         """Strict validation of a PRESENT value: list/tuple/set/frozenset unpack element-wise,
-        a str is one scalar, a dict one composite value; owned stages the recorded rejection."""
+        a str is one scalar, a dict one composite value; owned stages the recorded rejection.
+        scalar_only=True short-circuits: a list/tuple/set/frozenset value is rejected outright, never unpacked."""
+        if spec.scalar_only and isinstance(value, (list, tuple, set, frozenset)):
+            owner = cls.get_class_name()
+            record_match_rejection(
+                owner,
+                f"reader option '{key}' value {value!r} is a {type(value).__name__}, but the declaration of "
+                f"{owner} marks it scalar_only and rejects a collection outright",
+                stage=INPUT_DATA_OWNED_STAGE if owned else INPUT_DATA_STAGE,
+            )
+            return False
         elements = list(value) if isinstance(value, (list, tuple, set, frozenset)) else [value]
         for element in elements:
             if cls._reader_option_element_admits(key, spec, element):

@@ -90,6 +90,9 @@ class PropertySpec:
     deferred_binding: bool = False
     # Marks a reader-surface key the framework writes rather than the user; rejected on the PROPERTY_MAPPING surface.
     framework_set: bool = False
+    # Reader-only: a list/tuple/set/frozenset value is rejected outright as a collection rather than
+    # unpacked element-wise. Enforced only in BaseInputData._present_reader_option_admits.
+    scalar_only: bool = False
 
     def __post_init__(self) -> None:
         prefix = f"PropertySpec({self.explanation!r})"
@@ -130,6 +133,9 @@ class PropertySpec:
         if not isinstance(self.framework_set, bool):
             raise ValueError(f"{prefix}: framework_set must be a bool, got {type(self.framework_set).__name__}.")
 
+        if not isinstance(self.scalar_only, bool):
+            raise ValueError(f"{prefix}: scalar_only must be a bool, got {type(self.scalar_only).__name__}.")
+
         if self.element_validator is not None and not callable(self.element_validator):
             raise ValueError(f"{prefix}: element_validator must be callable.")
 
@@ -141,6 +147,9 @@ class PropertySpec:
 
         if self.element_validator is not None and not self.strict_validation:
             raise ValueError(f"{prefix}: element_validator is never enforced without strict_validation=True.")
+
+        if self.scalar_only and not self.strict_validation:
+            raise ValueError(f"{prefix}: scalar_only is never enforced without strict_validation=True.")
 
         self._check_value_space(prefix)
         self._check_declared_default(prefix)
@@ -207,6 +216,7 @@ def property_spec(
     match_guard: Callable[[Any], Any] | None = None,
     allow_explicit_none: bool = False,
     deferred_binding: bool = False,
+    scalar_only: bool = False,
 ) -> PropertySpec:
     """Build a ``PropertySpec``; the ``strict=`` keyword sets the ``strict_validation`` field."""
     return PropertySpec(
@@ -220,4 +230,5 @@ def property_spec(
         required_when=required_when,
         allow_explicit_none=allow_explicit_none,
         deferred_binding=deferred_binding,
+        scalar_only=scalar_only,
     )

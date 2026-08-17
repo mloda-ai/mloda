@@ -6,6 +6,7 @@ uuid of the TransformFrameworkStep that actually survives the dedup into the con
 from typing import NamedTuple
 from uuid import UUID
 
+from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.core.step.feature_group_step import FeatureGroupStep
 from mloda.core.core.step.join_step import JoinStep
 from mloda.core.core.step.transform_frame_work_step import TransformFrameworkStep
@@ -32,7 +33,7 @@ class DedupBaseFG(FeatureGroup):
         cls,
         feature_name: FeatureName | str,
         options: Options,
-        data_access_collection: None = None,
+        data_access_collection: DataAccessCollection | None = None,
     ) -> bool:
         return False
 

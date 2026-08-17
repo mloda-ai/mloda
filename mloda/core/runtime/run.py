@@ -25,6 +25,7 @@ from mloda.core.core.step.transform_frame_work_step import TransformFrameworkSte
 from mloda.core.abstract_plugins.components.feature_set import FeatureSet
 from mloda.core.abstract_plugins.components.error_utils import MlodaRunError, internal_invariant_error
 from mloda.core.abstract_plugins.feature_group import format_feature_group_class
+from mloda.core.runtime.validate_multiprocessing_link import raise_on_unpicklable_join_link
 
 
 logger = logging.getLogger(__name__)
@@ -421,6 +422,8 @@ class ExecutionOrchestrator:
             self.cfw_register = CfwManager(parallelization_modes, function_extender)
             self.manager = None
         else:
+            raise_on_unpicklable_join_link(self.execution_planner)
+
             MyManager.register("CfwManager", CfwManager)
             self.manager = MyManager(ctx=mp_spawn_context()).__enter__()
             self.cfw_register = self.manager.CfwManager(parallelization_modes, function_extender)

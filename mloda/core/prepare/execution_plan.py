@@ -89,7 +89,8 @@ class ExecutionPlan:
         global_filter: Optional[GlobalFilter] = None,
         api_input_data_collection: Optional[ApiInputDataCollection] = None,
     ) -> None:
-        self.tfs_collection: set[TransformFrameworkStep] = set()
+        # Maps a step to itself so a dedup hit can recover the already-inserted canonical member.
+        self.tfs_collection: dict[TransformFrameworkStep, TransformFrameworkStep] = {}
         self.joinstep_collection = JoinStepCollection()
         self.global_filter = global_filter
         self.api_input_data_collection = api_input_data_collection
@@ -122,7 +123,7 @@ class ExecutionPlan:
     ) -> None:
         self.planned_records = []
         self.declined_orientations = []
-        self.tfs_collection = set()
+        self.tfs_collection = {}
         self.joinstep_collection = JoinStepCollection()
         self.feature_set_collections = []
         self.declared_frameworks = declared_frameworks if declared_frameworks is not None else {}
@@ -356,10 +357,14 @@ class ExecutionPlan:
                 if ep.destination_framework != ep.source_framework:
                     new_tfs = self.fill_tfs_by_joinstep(ep)
 
-                    if new_tfs not in self.tfs_collection:
-                        self.tfs_collection.add(new_tfs)
+                    # Safe to reuse the canonical hop here: link_id is part of its identity, so both joins
+                    # of this link re-find the hopped framework by link.uuid.
+                    canonical_tfs = self.tfs_collection.get(new_tfs)
+                    if canonical_tfs is None:
+                        self.tfs_collection[new_tfs] = new_tfs
                         new_execution_plan.append(new_tfs)
-                        ep.required_uuids.add(new_tfs.uuid)
+                        canonical_tfs = new_tfs
+                    ep.required_uuids.add(canonical_tfs.uuid)
 
                     need_to_upload_collector.update(ep.source_framework_uuids)
 
@@ -438,14 +443,15 @@ class ExecutionPlan:
                             from_feature_group=parent_node_property.feature_group_class,
                             to_feature_group=ep.feature_group,
                         )
-                        if new_tfs not in self.tfs_collection:
-                            self.tfs_collection.add(new_tfs)
+                        canonical_tfs = self.tfs_collection.get(new_tfs)
+                        if canonical_tfs is None:
+                            self.tfs_collection[new_tfs] = new_tfs
                             new_execution_plan.append(new_tfs)
-                            ep.required_uuids.add(new_tfs.uuid)
+                            canonical_tfs = new_tfs
+                        ep.required_uuids.add(canonical_tfs.uuid)
 
-                        # We update the any_uuid of the feature group to the uuid of the TFS.
-                        # This way we make sure that the TFS is used later.
-                        ep.tfs_ids.add(new_tfs.uuid)
+                        # Record the surviving hop's uuid so the step resolves its compute framework from it.
+                        ep.tfs_ids.add(canonical_tfs.uuid)
 
                         need_to_upload_collector.add(parent)
 

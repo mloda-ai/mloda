@@ -95,14 +95,26 @@ class ReadDB(BaseInputData):
         raise NotImplementedError
 
     @classmethod
+    def _credentials_predicate(cls, credentials: Any) -> bool:
+        """Return True if `credentials` is a match this reader's is_valid_credentials accepts."""
+        try:
+            return cls.is_valid_credentials(credentials)
+        except NotImplementedError:
+            return False
+
+    @classmethod
     def match_subclass_data_access(cls, data_access: Any, feature_names: list[str], options: Options) -> Any:
         data_accesses: list[Any] = []
 
         if isinstance(data_access, DataAccessCollection):
             hint = options.get("data_access_handle") if options is not None else None
-            if hint is not None and data_access.handles().get(hint) not in (None, "credentials"):
-                hint = None
-            creds = data_access.resolve("credentials", hint=hint)
+            if hint is not None:
+                handle_kind = data_access.handles().get(hint)
+                if handle_kind not in (None, "credentials"):
+                    hint = None
+                elif handle_kind == "credentials" and not cls._credentials_predicate(data_access.credentials[hint]):
+                    hint = None
+            creds = data_access.resolve("credentials", predicate=cls._credentials_predicate, hint=hint)
             if creds:
                 data_accesses.append(creds)
         elif isinstance(data_access, dict):

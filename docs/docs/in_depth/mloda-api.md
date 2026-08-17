@@ -153,9 +153,14 @@ for step in mloda.explain(["sales__mean_aggr"], compute_frameworks=["PandasDataF
 - **compute_framework** (`type[ComputeFramework] | None`): Selected ComputeFramework; the destination for a transform step; the merge destination for a join.
 - **source_feature_group** / **source_compute_framework**: Origin of a transform step. For a join: the link's declared right side, and the framework merged in.
 - **join_type** (`str | None`): The link's join type (`"inner"`, `"left"`, ...) for a join step, None otherwise.
+- **join_destination_side** (`Literal["left", "right"] | None`): the declared side that holds the merge destination, for a join step; None otherwise.
+- **join_inverted** (`bool | None`, property): `join_destination_side == "right"`, None without a side.
+- **join_token** (`UUID | None`): the join's completion token, the uuid the scheduler tracks, for a join step; None otherwise. Excluded from equality (fresh per planning run).
+- **declared_left_frameworks** / **declared_right_frameworks** (`tuple[type[ComputeFramework], ...]`): the compute frameworks each declared side's parent features declared as candidates, sorted by class name, for a join step; empty otherwise, and empty when the plan recorded no candidates for the side. APPEND/UNION sides carry only the index-bearing parent.
 - **feature_group_name** / **compute_framework_name** / **source_feature_group_name** / **source_compute_framework_name** (`str | None`): Class names of the above, None when unset.
+- **declared_left_framework_names** / **declared_right_framework_names** (`tuple[str, ...]`): class names of the two tuples above, same order.
 
-Join semantics: for a join step the `*_feature_group` fields are the link's declared left/right sides, while `compute_framework`/`source_compute_framework` are the merge destination and the framework merged in, which may belong to the declared right side.
+Join semantics: for a join step the `*_feature_group` fields are the link's declared left/right sides, while `compute_framework`/`source_compute_framework` are the merge destination and the framework merged in, which may belong to the declared right side. `join_destination_side` is resolved from the two declared sides' framework candidates for every join type except APPEND and UNION, which always report `"left"`; a right join queues its destination on the declared right side, so it reports `"right"` in the common case.
 
 ##### How the engine tracks request provenance
 

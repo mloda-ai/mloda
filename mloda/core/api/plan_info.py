@@ -1,7 +1,9 @@
 from collections.abc import Iterable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Literal, Optional, TYPE_CHECKING
+from uuid import UUID
 
+from mloda.core.abstract_plugins.components.error_utils import internal_invariant_error
 from mloda.core.core.step.feature_group_step import FeatureGroupStep
 from mloda.core.core.step.join_step import JoinStep
 from mloda.core.core.step.transform_frame_work_step import TransformFrameworkStep
@@ -9,6 +11,7 @@ from mloda.core.core.step.transform_frame_work_step import TransformFrameworkSte
 if TYPE_CHECKING:
     from mloda.core.abstract_plugins.compute_framework import ComputeFramework
     from mloda.core.abstract_plugins.feature_group import FeatureGroup
+    from mloda.core.prepare.resolved_join import ResolvedJoin, ResolvedJoinPlan
 
 
 @dataclass(frozen=True)
@@ -29,7 +32,16 @@ class PlanStep:
 
     join: ``feature_group``/``source_feature_group`` are the link's declared left/right sides, and
     ``join_type`` its join type. ``compute_framework`` is the merge destination and
-    ``source_compute_framework`` the framework merged in.
+    ``source_compute_framework`` the framework merged in. ``join_destination_side`` is the declared
+    side holding the destination, resolved from the declared sides' framework candidates;
+    APPEND/UNION report "left", and a right join reports "right" in the common case.
+    ``join_inverted`` is a derived property (``join_destination_side == "right"``, or None without
+    a side). ``join_token`` is the join
+    step's completion token, minted fresh per planning run and therefore excluded from equality.
+    All three are None without a resolved join plan. ``declared_left_frameworks``/
+    ``declared_right_frameworks`` are the classes each declared side's parent features declared as
+    candidates, sorted by class name; ``()`` when no resolved join plan is given, or when the plan
+    recorded no candidates for that side. APPEND/UNION sides carry only the index-bearing parent.
     """
 
     step_kind: Literal["compute", "join", "transform"]
@@ -41,6 +53,10 @@ class PlanStep:
     join_type: Optional[str] = None
     requested_feature_names: tuple[str, ...] = ()
     injected_feature_names: tuple[str, ...] = ()
+    join_destination_side: Optional[Literal["left", "right"]] = None
+    join_token: Optional[UUID] = field(default=None, compare=False)
+    declared_left_frameworks: tuple[type["ComputeFramework"], ...] = ()
+    declared_right_frameworks: tuple[type["ComputeFramework"], ...] = ()
 
     @property
     def feature_group_name(self) -> Optional[str]:
@@ -58,15 +74,33 @@ class PlanStep:
     def source_compute_framework_name(self) -> Optional[str]:
         return None if self.source_compute_framework is None else self.source_compute_framework.get_class_name()
 
+    @property
+    def join_inverted(self) -> Optional[bool]:
+        return None if self.join_destination_side is None else self.join_destination_side == "right"
+
+    @property
+    def declared_left_framework_names(self) -> tuple[str, ...]:
+        return tuple(framework.get_class_name() for framework in self.declared_left_frameworks)
+
+    @property
+    def declared_right_framework_names(self) -> tuple[str, ...]:
+        return tuple(framework.get_class_name() for framework in self.declared_right_frameworks)
+
 
 def build_plan_steps(
     execution_plan: Iterable[TransformFrameworkStep | JoinStep | FeatureGroupStep],
+    resolved_join_plan: Optional["ResolvedJoinPlan"] = None,
 ) -> list[PlanStep]:
     """Map the steps of an ExecutionPlan onto PlanStep records, in execution-plan order.
 
     Raises ValueError on an unknown step, mirroring ``ExecutionPlan.add_tfs``: a plan that silently
-    drops a step it does not understand is a lie.
+    drops a step it does not understand is a lie. Pass the plan's ``resolved_join_plan`` to fill the
+    join orientation fields; without it join steps report none.
     """
+    records: dict[UUID, "ResolvedJoin"] = (
+        {} if resolved_join_plan is None else {record.token: record for record in resolved_join_plan.records}
+    )
+
     plan: list[PlanStep] = []
 
     for step in execution_plan:
@@ -98,6 +132,17 @@ def build_plan_steps(
                 )
             )
         elif isinstance(step, JoinStep):
+            record = None
+            if resolved_join_plan is not None:
+                if step.uuid not in records:
+                    raise ValueError(
+                        internal_invariant_error(
+                            "a planned JoinStep has no resolved join record in the given plan.",
+                            f"join_step_uuid={step.uuid}, link={step.link}, "
+                            f"record_tokens={sorted(str(token) for token in records)}",
+                        )
+                    )
+                record = records[step.uuid]
             plan.append(
                 PlanStep(
                     step_kind="join",
@@ -107,6 +152,14 @@ def build_plan_steps(
                     source_feature_group=step.link.right_feature_group,
                     source_compute_framework=step.source_framework,
                     join_type=step.link.jointype.value,
+                    join_destination_side=None if record is None else record.destination_side.value,
+                    join_token=None if record is None else record.token,
+                    declared_left_frameworks=()
+                    if record is None
+                    else tuple(sorted(record.left.declared_frameworks, key=lambda cf: cf.get_class_name())),
+                    declared_right_frameworks=()
+                    if record is None
+                    else tuple(sorted(record.right.declared_frameworks, key=lambda cf: cf.get_class_name())),
                 )
             )
         else:

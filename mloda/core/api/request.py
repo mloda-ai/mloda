@@ -390,7 +390,7 @@ class mlodaAPI:
         """
         if self.engine is None:
             raise ValueError("Internal error: engine not initialized. This is likely a bug in mloda.")
-        return build_plan_steps(self.engine.execution_planner)
+        return build_plan_steps(self.engine.execution_planner, self.engine.execution_planner.resolved_join_plan)
 
     def resolution_report(self) -> list[ResolutionRecord]:
         """Return this session's per-feature resolution records, captured during planning.

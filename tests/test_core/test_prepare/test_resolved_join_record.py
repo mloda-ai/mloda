@@ -451,7 +451,7 @@ def _case_override_beats_nearer_wrong_framework_left() -> Built:
     return _finish(planned, link, Sides(far_left.uuid, right.uuid, child.uuid))
 
 
-def _case_override_disagrees_with_the_nearest_split() -> Built:
+def _case_override_disagrees_with_the_nearest_split(*, with_declared_frameworks: bool = False) -> Built:
     """Both sides have a nearer, wrong-framework sibling and a farther, correct-framework one; the case helper
     selects the farther pair on both sides. destination_framework and source_framework differ here (unlike
     _case_override_beats_nearer_wrong_framework_left's shared framework), so a swap decision based on the
@@ -478,7 +478,14 @@ def _case_override_disagrees_with_the_nearest_split() -> Built:
     _add_child(planned, child, nearest_left, far_left, nearest_right, far_right)
     trek(planned.link_trekker, link, (PyArrowTable, PandasDataFrame), child.uuid)
 
-    return _finish(planned, link, Sides(far_left.uuid, far_right.uuid, child.uuid))
+    declared_frameworks: DeclaredFrameworks | None = None
+    if with_declared_frameworks:
+        declared_frameworks = {
+            far_left.uuid: frozenset({PyArrowTable}),
+            far_right.uuid: frozenset({PandasDataFrame}),
+        }
+
+    return _finish(planned, link, Sides(far_left.uuid, far_right.uuid, child.uuid), declared_frameworks)
 
 
 def _join_steps(plan: ExecutionPlan) -> list[JoinStep]:
@@ -839,6 +846,45 @@ def test_a_case_override_disagreeing_with_the_nearest_split_still_binds_the_sele
     assert record.source.uuids <= record.source_uuids
 
 
+def test_a_case_override_binds_the_destination_side_from_the_selected_parents() -> None:
+    """The case helper binds far_left to link.left and far_right to link.right; destination_side must follow
+    that binding, not the nearest split's frameworks, which never saw the case-selected, farther parents."""
+    built = _case_override_disagrees_with_the_nearest_split()
+
+    join_steps = _join_steps(built.plan)
+    assert len(join_steps) == 1, "the shape must plan exactly one JoinStep for this to say anything"
+    record = _one_record(built.plan, built.link)
+
+    assert record.destination_side is JoinSide.LEFT
+    assert record.left.uuids == {built.sides.left_uuid}
+    assert record.right.uuids == {built.sides.right_uuid}
+    assert record.destination.uuids <= record.destination_uuids
+    assert record.source.uuids <= record.source_uuids
+    assert join_steps[0].swap_merge_sides is False
+
+
+def test_a_case_override_hop_moves_the_right_group_into_the_left_groups_framework() -> None:
+    """The destination holds the declared left side here, so the hop must move the right group's data into it."""
+    built = _case_override_disagrees_with_the_nearest_split()
+
+    transform_steps = _transform_steps(built.plan, built.link)
+
+    assert len(transform_steps) == 1, "the shape must plan exactly one hop for this to say anything"
+    assert transform_steps[0].from_feature_group is ResolvedJoinPairRight
+    assert transform_steps[0].to_feature_group is ResolvedJoinPairLeft
+    assert transform_steps[0].from_framework is PandasDataFrame
+    assert transform_steps[0].to_framework is PyArrowTable
+
+
+def test_a_case_override_keeps_each_sides_declared_frameworks_on_its_own_side() -> None:
+    built = _case_override_disagrees_with_the_nearest_split(with_declared_frameworks=True)
+
+    record = _one_record(built.plan, built.link)
+
+    assert record.left.declared_frameworks == {PyArrowTable}
+    assert record.right.declared_frameworks == {PandasDataFrame}
+
+
 def test_the_record_leaves_out_the_write_serialization_edges_add_tfs_adds() -> None:
     built = _two_links()
 
@@ -880,18 +926,34 @@ def test_an_order_edge_makes_the_consumer_records_depend_on_the_producer_record_
         assert record.signature(resolved.link_of_token()).depends_on_links == (str(chain.producer.uuid),)
 
 
-def test_the_record_and_the_transform_hop_name_opposite_directions() -> None:
+@pytest.mark.parametrize(
+    "build",
+    [_declared_pair, _inverted_pair, _right_join, _inverted_left_join],
+    ids=["inner", "inverted_inner", "right", "inverted_left"],
+)
+def test_the_transform_hop_moves_the_source_side_into_the_destination_side(build: Callable[[], Any]) -> None:
+    """The hop names the record's own direction, not the one the jointype implies."""
+    built = build()
+
+    record = _one_record(built.plan, built.link)
+    transform_steps = _transform_steps(built.plan, built.link)
+
+    assert len(transform_steps) == 1, "the shape must plan exactly one hop for this to say anything"
+    assert transform_steps[0].from_feature_group is record.transform_from_feature_group
+    assert transform_steps[0].to_feature_group is record.transform_to_feature_group
+
+
+def test_an_inverted_hop_carries_data_into_the_declared_right_side() -> None:
+    """The declared right side holds the destination here, so the hop moves the left side into it."""
     built = _inverted_pair()
 
     record = _one_record(built.plan, built.link)
     transform_steps = _transform_steps(built.plan, built.link)
 
+    assert record.destination_side is JoinSide.RIGHT
     assert len(transform_steps) == 1
-    # The record binds the hop to the sides the join moves; a later lowering step should adopt its answer.
-    assert record.transform_from_feature_group is ResolvedJoinPairLeft
-    assert record.transform_to_feature_group is ResolvedJoinPairRight
-    assert transform_steps[0].from_feature_group is ResolvedJoinPairRight
-    assert transform_steps[0].to_feature_group is ResolvedJoinPairLeft
+    assert transform_steps[0].from_feature_group is ResolvedJoinPairLeft
+    assert transform_steps[0].to_feature_group is ResolvedJoinPairRight
 
 
 def test_a_real_engine_plan_carries_one_record_per_planned_join_step() -> None:

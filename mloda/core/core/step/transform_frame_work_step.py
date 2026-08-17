@@ -45,15 +45,20 @@ class TransformFrameworkStep(Step):
     def __eq__(self, other: Any) -> bool:
         if not isinstance(other, TransformFrameworkStep):
             return False
+        # A join's hop and a plain hop of the same shape are different steps (the join looks
+        # its hop up by link_id), so link_id is part of the identity.
         return (
             self.from_framework == other.from_framework
             and self.to_framework == other.to_framework
             and self.from_feature_group == other.from_feature_group
             and self.to_feature_group == other.to_feature_group
+            and self.link_id == other.link_id
         )
 
     def __hash__(self) -> int:
-        return hash((self.from_framework, self.to_framework, self.from_feature_group, self.to_feature_group))
+        return hash(
+            (self.from_framework, self.to_framework, self.from_feature_group, self.to_feature_group, self.link_id)
+        )
 
     def get_uuids(self) -> set[UUID]:
         return {self.uuid}

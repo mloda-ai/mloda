@@ -4,7 +4,7 @@ spawning any multiprocessing Manager, and must not touch SYNC mode at all. See #
 
 from __future__ import annotations
 
-import pickle
+import pickle  # nosec
 
 import pytest
 

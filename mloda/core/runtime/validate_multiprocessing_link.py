@@ -3,7 +3,7 @@ which otherwise fails deep inside a multiprocessing worker with an opaque
 PicklingError instead of being rejected clearly at plan time. See issue #1117.
 """
 
-import pickle
+import pickle  # nosec
 from collections.abc import Iterable
 from typing import Any
 

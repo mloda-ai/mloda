@@ -1,6 +1,5 @@
-"""add_tfs checks tfs_collection membership with ``not in``, a plain set, which can confirm a dedup
-but cannot hand back the equal member already stored. On the dedup path, neither branch wires the
-uuid of the TransformFrameworkStep that actually survives the dedup into the consuming step(s).
+"""Regression coverage for add_tfs: a deduped TransformFrameworkStep must still wire its uuid
+into every consuming step, not just the one that first created it.
 """
 
 from typing import NamedTuple
@@ -64,7 +63,7 @@ def _feature(name: str, cfw: type[ComputeFramework]) -> Feature:
 
 
 # ---------------------------------------------------------------------------
-# Scenario A: JoinStep branch (execution_plan.py add_tfs, ~line 356-367)
+# Scenario A: add_tfs's JoinStep branch
 # ---------------------------------------------------------------------------
 
 
@@ -86,8 +85,8 @@ def _join_step(link: Link) -> JoinStep:
 
 
 def _join_step_dedup_scenario() -> JoinStepDedupScenario:
-    """Two JoinSteps sharing one Link, same source/destination framework and merge orientation,
-    so ``fill_tfs_by_joinstep`` builds two ``TransformFrameworkStep``s that compare equal."""
+    """Two JoinSteps over the same link, frameworks, and orientation, so ``fill_tfs_by_joinstep``
+    builds two equal ``TransformFrameworkStep``s."""
     link = Link.inner(JoinSpec(DedupLeftFG, "id"), JoinSpec(DedupRightFG, "id"))
     return JoinStepDedupScenario(_join_step(link), _join_step(link), Graph())
 
@@ -106,7 +105,7 @@ def test_both_joinsteps_of_a_deduped_hop_depend_on_the_surviving_transform_step(
 
 
 # ---------------------------------------------------------------------------
-# Scenario B: FeatureGroupStep branch (execution_plan.py add_tfs, ~line 432-446)
+# Scenario B: add_tfs's FeatureGroupStep branch
 # ---------------------------------------------------------------------------
 
 
@@ -135,10 +134,8 @@ def _dest_step(
 
 
 def _feature_group_step_dedup_scenario() -> FeatureGroupStepDedupScenario:
-    """Two FeatureGroupSteps, each with a direct root parent of the same upstream feature group
-    class and compute framework, so the two ``TransformFrameworkStep``s built for them compare
-    equal (same from_framework, to_framework, from_feature_group, to_feature_group, link_id=None).
-    """
+    """Two FeatureGroupSteps with a root parent from the same upstream feature group and compute
+    framework, so their built ``TransformFrameworkStep``s compare equal."""
     graph = Graph()
 
     parent_a = _feature("dedup_upstream_a", PyArrowTable)

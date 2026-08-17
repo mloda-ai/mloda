@@ -49,7 +49,7 @@ def test_enter_with_multiprocessing_rejects_an_unpicklable_link_before_spawning_
     with pytest.raises(ValueError) as excinfo:
         orchestrator.__enter__({ParallelizationMode.MULTIPROCESSING})
 
-    assert type(excinfo.value) is not pickle.PicklingError, (
+    assert not isinstance(excinfo.value, pickle.PicklingError), (
         "the plan-time guard must fire, not the deep multiprocessing pickling failure"
     )
     assert orchestrator.manager is None, "no MyManager/worker process may be created on the rejection path"

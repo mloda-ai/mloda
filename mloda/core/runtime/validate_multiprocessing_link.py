@@ -1,6 +1,7 @@
-"""Guards a JoinStep's Link against a value pickle cannot round-trip, which otherwise fails deep
-inside a multiprocessing worker with an opaque PicklingError instead of being rejected clearly at
-plan time. This only proves resolvability in the current process: a class resolvable here but not
+"""Guards a JoinStep's Link, and a FeatureGroupStep's or TransformFrameworkStep's feature group
+classes, against a value pickle cannot round-trip, which otherwise fails deep inside a
+multiprocessing worker with an opaque PicklingError instead of being rejected clearly at plan
+time. This only proves resolvability in the current process: a class resolvable here but not
 inside a freshly spawned worker (e.g. one under `if __name__ == "__main__":`) can still fail there.
 """
 
@@ -8,7 +9,9 @@ import pickle  # nosec
 from collections.abc import Iterable
 from typing import Any
 
+from mloda.core.core.step.feature_group_step import FeatureGroupStep
 from mloda.core.core.step.join_step import JoinStep
+from mloda.core.core.step.transform_frame_work_step import TransformFrameworkStep
 
 _UNPICKLABLE_ERRORS = (pickle.PicklingError, AttributeError, TypeError)
 
@@ -59,3 +62,31 @@ def raise_on_unpicklable_join_link(steps: Iterable[Any]) -> None:
             raise ValueError(_unpicklable_link_error(step.link.right_feature_group, step))
 
         raise ValueError(_unpicklable_link_generic_error(step))
+
+
+def _unpicklable_step_feature_group_error(feature_group: type[Any], step: Any) -> str:
+    return (
+        f"{type(step).__name__} references {feature_group.__name__} "
+        f"({feature_group.__module__}.{feature_group.__qualname__}), which pickle cannot resolve back by "
+        "that path, so multiprocessing cannot send this step to a worker process. This happens when a "
+        "feature group class is created inside a function or by a dynamic type(...) factory instead of "
+        "being defined at module level.\n"
+        "Resolution: define the feature group class at module level, or run without "
+        "ParallelizationMode.MULTIPROCESSING."
+    )
+
+
+def raise_on_unpicklable_step_feature_group(steps: Iterable[Any]) -> None:
+    """Raise ValueError if a FeatureGroupStep or TransformFrameworkStep in steps carries a feature
+    group class multiprocessing cannot pickle."""
+    for step in steps:
+        if isinstance(step, FeatureGroupStep):
+            if not _is_picklable(step.feature_group):
+                raise ValueError(_unpicklable_step_feature_group_error(step.feature_group, step))
+            continue
+
+        if isinstance(step, TransformFrameworkStep):
+            if not _is_picklable(step.from_feature_group):
+                raise ValueError(_unpicklable_step_feature_group_error(step.from_feature_group, step))
+            if not _is_picklable(step.to_feature_group):
+                raise ValueError(_unpicklable_step_feature_group_error(step.to_feature_group, step))

@@ -23,6 +23,7 @@ class TransformFrameworkStep(Step):
         to_feature_group: type[FeatureGroup],
         link_id: Optional[UUID] = None,
         source_framework_uuids: Optional[set[UUID]] = None,
+        source_uuid: Optional[UUID] = None,
     ) -> None:
         if source_framework_uuids is None:
             source_framework_uuids = set()
@@ -33,6 +34,7 @@ class TransformFrameworkStep(Step):
         self.from_feature_group = from_feature_group
         self.to_feature_group = to_feature_group
         self.link_id = link_id
+        self.source_uuid = source_uuid
         self.transformer = ComputeFrameworkTransformer()
 
         # This variable is only set, if the TFS was requested by a joinstep.
@@ -46,18 +48,28 @@ class TransformFrameworkStep(Step):
         if not isinstance(other, TransformFrameworkStep):
             return False
         # A join's hop and a plain hop of the same shape are different steps (the join looks
-        # its hop up by link_id), so link_id is part of the identity.
+        # its hop up by link_id), so link_id is part of the identity. Likewise, two plain hops
+        # of the same shape but different source features must not dedup into one hop, since
+        # execute() only ever moves one physical source's data.
         return (
             self.from_framework == other.from_framework
             and self.to_framework == other.to_framework
             and self.from_feature_group == other.from_feature_group
             and self.to_feature_group == other.to_feature_group
             and self.link_id == other.link_id
+            and self.source_uuid == other.source_uuid
         )
 
     def __hash__(self) -> int:
         return hash(
-            (self.from_framework, self.to_framework, self.from_feature_group, self.to_feature_group, self.link_id)
+            (
+                self.from_framework,
+                self.to_framework,
+                self.from_feature_group,
+                self.to_feature_group,
+                self.link_id,
+                self.source_uuid,
+            )
         )
 
     def get_uuids(self) -> set[UUID]:

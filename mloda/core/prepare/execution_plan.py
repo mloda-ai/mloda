@@ -442,6 +442,7 @@ class ExecutionPlan:
                             required_uuids={parent},
                             from_feature_group=parent_node_property.feature_group_class,
                             to_feature_group=ep.feature_group,
+                            source_uuid=parent,
                         )
                         canonical_tfs = self.tfs_collection.get(new_tfs)
                         if canonical_tfs is None:

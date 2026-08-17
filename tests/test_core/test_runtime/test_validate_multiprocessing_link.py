@@ -1,9 +1,7 @@
 """Unit tests for raise_on_unpicklable_join_link, hand-building Link/JoinStep objects.
-
-A Link whose feature group class is created inside a local function is genuinely
-unpicklable (its __qualname__ contains "<locals>"), which is what a JoinStep queued
-to a multiprocessing worker would fail deep inside pickle for. See issue #1117.
-"""
+A feature group class created inside a local function has "<locals>" in its
+__qualname__ and is genuinely unpicklable, which is what a JoinStep queued to a
+multiprocessing worker would otherwise fail deep inside pickle for."""
 
 from __future__ import annotations
 

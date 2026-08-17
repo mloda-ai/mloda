@@ -193,6 +193,6 @@ def find_file_paths(
             file_paths.add(str(file_path.resolve()))
 
     if not file_paths:
-        raise ValueError(f"No files found in the root directory: {root_directory}.")
+        raise ValueError(f"No files found in the root directory: {', '.join(str(p) for p in root_directory)}.")
 
     return list(file_paths)

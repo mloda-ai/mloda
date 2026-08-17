@@ -1,3 +1,4 @@
+import re
 import sqlite3
 from typing import Any
 import pytest
@@ -92,7 +93,8 @@ class TestSQLITEReader:
     def test_is_valid_credentials_nonexistent(self, tmp_path: Any) -> None:
         credentials = {"sqlite": str(tmp_path / "nonexistent.db")}
         with pytest.raises(
-            ValueError, match=f"Database file {credentials['sqlite']} does not exist, but key is given."
+            ValueError,
+            match=f"Database file {re.escape(credentials['sqlite'])} does not exist, but key is given.",
         ):
             SQLITEReader.is_valid_credentials(credentials)
 

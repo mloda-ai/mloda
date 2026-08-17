@@ -220,7 +220,8 @@ class TestEmbeddedNewlinesAreStrippedFromExplicitFilePaths:
         """The source value is the clean path, so the reader receives an openable file name."""
         _write(tmp_path, "a.py")
         clean = str(tmp_path / "a.py")
-        raw = f"{clean}\n" if newline_position == "trailing" else f"{tmp_path}\n/a.py"
+        split = len(str(tmp_path))
+        raw = f"{clean}\n" if newline_position == "trailing" else f"{clean[:split]}\n{clean[split:]}"
         options = Options(
             {
                 "file_paths": [raw],

@@ -90,8 +90,10 @@ class PropertySpec:
     deferred_binding: bool = False
     # Marks a reader-surface key the framework writes rather than the user; rejected on the PROPERTY_MAPPING surface.
     framework_set: bool = False
-    # Reader-only: a list/tuple/set/frozenset value is rejected outright as a collection rather than
-    # unpacked element-wise. Enforced only in BaseInputData._present_reader_option_admits.
+    # allowed_values and element_validator apply element-wise to a list/tuple/set/frozenset value (a
+    # str is one scalar, a dict one composite value). Reader-only: scalar_only=True rejects such a
+    # collection outright on a reader key instead of unpacking it. Enforced only in
+    # BaseInputData._present_reader_option_admits.
     scalar_only: bool = False
 
     def __post_init__(self) -> None:
@@ -180,6 +182,12 @@ class PropertySpec:
         if is_no_default(self.default) or self.default is None or not self.strict_validation:
             return
 
+        if self.scalar_only and isinstance(self.default, (list, tuple, set, frozenset)):
+            raise ValueError(
+                f"{prefix}: scalar_only=True with a {type(self.default).__name__} default {self.default!r}; "
+                f"reader_option() would return the collection the flag rejects."
+            )
+
         if self.element_validator is not None:
             try:
                 verdict = self.element_validator(self.default)
@@ -216,7 +224,6 @@ def property_spec(
     match_guard: Callable[[Any], Any] | None = None,
     allow_explicit_none: bool = False,
     deferred_binding: bool = False,
-    scalar_only: bool = False,
 ) -> PropertySpec:
     """Build a ``PropertySpec``; the ``strict=`` keyword sets the ``strict_validation`` field."""
     return PropertySpec(
@@ -230,5 +237,4 @@ def property_spec(
         required_when=required_when,
         allow_explicit_none=allow_explicit_none,
         deferred_binding=deferred_binding,
-        scalar_only=scalar_only,
     )

@@ -36,7 +36,6 @@ PROPERTY_MAPPING = {
 | `context` | `bool` | `True` | `True`: context parameter. `False`: group parameter, which splits feature groups. |
 | `strict_validation` | `bool` | `False` | Enforce the value space at match time. |
 | `element_validator` | `Callable \| None` | `None` | Per-element predicate. Requires `strict_validation=True`. |
-| `scalar_only` | `bool` | `False` | Reader-only: rejects a `list`/`tuple`/`set`/`frozenset` value outright instead of unpacking it element-wise. Requires `strict_validation=True`. |
 | `match_guard` | `Callable \| None` | `None` | Whole-value predicate. A falsy return is a non-match. |
 | `required_when` | `Callable \| None` | `None` | `(Options) -> bool`: the key is required only when it returns truthy. |
 | `allow_explicit_none` | `bool` | `False` | Opt-in so an explicit `None` is honored (not treated as absent) and flows through validation. |
@@ -150,11 +149,12 @@ consequences keep the shared type honest on this surface:
   `PROPERTY_MAPPING` the field is rejected outright. The reserved key is checked as the MRO merge
   resolves it: its **winning** declaration must keep `framework_set=True`, so neither a subclass nor a
   plain mixin can turn the framework-written key into a user-enforced one.
-- **The reverse also holds: a reader-only field has no `PROPERTY_MAPPING` meaning.** `scalar_only=True`
-  (#1154) rejects a collection value outright instead of unpacking it element-wise, which only makes
-  sense at reader selection; `FeatureChainParser` rejects it on `PROPERTY_MAPPING` at class definition,
-  mirroring how `match_guard`, `deferred_binding` and `context=False` are rejected on the reader
-  surface, because `PROPERTY_MAPPING` keys always unpack element-wise.
+- **The reverse also holds: a reader-only field has no `PROPERTY_MAPPING` meaning.** `scalar_only`
+  (`bool`, default `False`, requires `strict_validation=True`) (#1154) rejects a `list`/`tuple`/`set`/
+  `frozenset` value outright instead of unpacking it element-wise, which only makes sense at reader
+  selection; `FeatureChainParser` rejects it on `PROPERTY_MAPPING` at class definition, mirroring how
+  `match_guard`, `deferred_binding` and `context=False` are rejected on the reader surface, because
+  `PROPERTY_MAPPING` keys always unpack element-wise.
 
 `READER_OPTIONS` merges across the MRO (`reader_option_specs()`, most-derived declaration winning),
 so a concrete reader inherits its family's keys and redeclares nothing, and

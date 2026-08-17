@@ -154,6 +154,24 @@ class TestPropertySpecScalarOnlyField:
         assert "scalar_only" in message
         assert "strict_validation" in message
 
+    def test_scalar_only_true_rejects_a_collection_default_at_construction(self) -> None:
+        """``scalar_only=True`` rejects a collection outright, so its OWN declared default must be a scalar too."""
+        with pytest.raises(ValueError) as exc_info:
+            PropertySpec(
+                "x", element_validator=is_positive_int, strict_validation=True, scalar_only=True, default=[3, 5]
+            )
+
+        message = str(exc_info.value)
+        del exc_info
+        assert "scalar_only" in message
+        assert "default" in message
+
+    def test_scalar_only_true_with_a_scalar_default_constructs_fine(self) -> None:
+        """Control: scalar_only only rejects a COLLECTION default; a plain scalar default still constructs."""
+        spec = PropertySpec("x", element_validator=is_positive_int, strict_validation=True, scalar_only=True, default=3)
+
+        assert spec.default == 3
+
 
 class TestTheOldSpecTypeIsGone:
     """The two-type world is over: the ``ReaderOptionSpec`` module and export no longer exist."""

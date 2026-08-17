@@ -285,8 +285,8 @@ class BaseInputData(ABC):
             owner = cls.get_class_name()
             record_match_rejection(
                 owner,
-                f"reader option '{key}' value {value!r} is a {type(value).__name__}, but the declaration of "
-                f"{owner} marks it scalar_only and rejects a collection outright",
+                f"reader option '{key}' value is a {type(value).__name__} of {len(value)} elements, but the "
+                f"declaration of {owner} marks it scalar_only and rejects a collection outright",
                 stage=INPUT_DATA_OWNED_STAGE if owned else INPUT_DATA_STAGE,
             )
             return False

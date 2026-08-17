@@ -565,6 +565,7 @@ class TestScalarOnlyRejectsCollectionsOutright:
         stored = rejection_window[RoeScalarOnlyReader.get_class_name()]
         assert stored.stage == INPUT_DATA_OWNED_STAGE
         assert ROE_SCALAR_KEY in stored.reason
+        assert "scalar_only" in stored.reason
 
     def test_a_valid_scalar_still_matches(self, rejection_window: dict[str, MatchRejection]) -> None:
         """Control: a plain scalar value the validator accepts still matches."""

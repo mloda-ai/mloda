@@ -27,7 +27,10 @@ jobs:
       - name: Install tox
         run: |
           python -m pip install --upgrade pip
-          python -m pip install uv
+          # Pinned: this job now writes uv.lock (via prepareCmd's `uv lock`) into an
+          # unreviewed [skip ci] commit, so an unpinned uv could silently change the
+          # lockfile format underneath that commit.
+          python -m pip install uv==0.11.8
           uv tool install tox --with tox-uv
 
       - name: Generate License Files

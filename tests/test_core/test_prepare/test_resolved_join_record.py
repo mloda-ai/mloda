@@ -488,6 +488,33 @@ def _case_override_disagrees_with_the_nearest_split(*, with_declared_frameworks:
     return _finish(planned, link, Sides(far_left.uuid, far_right.uuid, child.uuid), declared_frameworks)
 
 
+def _right_join_farther_right_parent_holds_destination_framework() -> Built:
+    """split_by_declared_side keeps only the nearest right parent (PythonDictFramework); the farther,
+    subclass right parent that actually sits on the destination framework (PandasDataFrame) is excluded from
+    declared_right_frameworks, so the declared-side check sees neither side on the destination framework and
+    falls back to the trekker-flip flag, which is False here (no trekker flip)."""
+    planned = _planned()
+    link = _pair_link(Link.right)
+
+    left = feature("resolved_join_declared_split_left", PyArrowTable, link.left_index)
+    nearest_right = feature("resolved_join_declared_split_nearest_right", PythonDictFramework, link.right_index)
+    far_right = feature("resolved_join_declared_split_far_right", PandasDataFrame, link.right_index)
+    child = feature("resolved_join_declared_split_child", PandasDataFrame)
+
+    planned.graph.add_node(left.uuid, NodeProperties(left, link.left_feature_group))
+    planned.graph.add_node(nearest_right.uuid, NodeProperties(nearest_right, ResolvedJoinPairRight))
+    planned.graph.add_node(far_right.uuid, NodeProperties(far_right, ResolvedJoinPairRightDescendant))
+    planned.queue.append((link.left_feature_group, {left}))
+    planned.queue.append((ResolvedJoinPairRight, {nearest_right}))
+    planned.queue.append((ResolvedJoinPairRightDescendant, {far_right}))
+    planned.queue.append((link, PyArrowTable, PandasDataFrame))
+    _add_child(planned, child, left, nearest_right, far_right)
+    # The trekker key matches the queued key directly, so run_link never flips here.
+    trek(planned.link_trekker, link, (PyArrowTable, PandasDataFrame), child.uuid)
+
+    return _finish(planned, link, Sides(left.uuid, far_right.uuid, child.uuid))
+
+
 def _join_steps(plan: ExecutionPlan) -> list[JoinStep]:
     return [step for step in plan if isinstance(step, JoinStep)]
 
@@ -598,6 +625,18 @@ def test_a_right_join_binds_the_destination_to_the_declared_right_side() -> None
     assert record.right.uuids == {built.sides.right_uuid}
     assert record.destination.uuids == {built.sides.right_uuid}
     assert record.destination_uuids == {built.sides.right_uuid}
+
+
+def test_a_right_joins_destination_stays_right_when_the_nearest_right_parent_is_on_the_wrong_framework() -> None:
+    """The nearest-only split must not blind the declared-side check to a farther, correct-framework
+    right parent; falling back to the trekker-flip flag here mislabels the RIGHT join's destination LEFT."""
+    built = _right_join_farther_right_parent_holds_destination_framework()
+
+    record = _one_record(built.plan, built.link)
+
+    assert record.jointype is JoinType.RIGHT
+    assert record.destination_side is JoinSide.RIGHT
+    assert record.destination_framework is PandasDataFrame
 
 
 def test_a_parent_the_link_never_mentions_stays_out_of_the_declared_sides() -> None:
@@ -725,6 +764,7 @@ def test_a_decline_reached_through_the_inversion_branch_records_the_orientation_
         _case_override_inverted,
         _case_override_beats_nearer_wrong_framework_left,
         _case_override_disagrees_with_the_nearest_split,
+        _right_join_farther_right_parent_holds_destination_framework,
     ],
     ids=[
         "inner",
@@ -739,6 +779,7 @@ def test_a_decline_reached_through_the_inversion_branch_records_the_orientation_
         "case_override_inverted",
         "case_override_beats_nearer_wrong_framework_left",
         "case_override_disagrees_with_nearest_split",
+        "right_join_farther_right_parent_holds_destination_framework",
     ],
 )
 def test_the_records_sign_the_joins_the_join_steps_sign(build: Callable[[], Any]) -> None:

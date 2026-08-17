@@ -1,4 +1,5 @@
 """get_required_join_uuids must not insert a new key into the collection on a cache miss."""
+
 from __future__ import annotations
 
 from mloda.core.core.step.join_step import JoinStep
@@ -7,7 +8,6 @@ from mloda.provider import FeatureGroup
 from mloda.user import Index, JoinSpec, Link
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
-
 
 _LEFT_INDEX = Index(("left_key",))
 _RIGHT_INDEX = Index(("right_key",))

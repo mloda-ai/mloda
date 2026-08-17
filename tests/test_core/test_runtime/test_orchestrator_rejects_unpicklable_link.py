@@ -4,8 +4,6 @@ spawning any multiprocessing Manager, and must not touch SYNC mode at all.
 
 from __future__ import annotations
 
-import pickle  # nosec
-
 import pytest
 
 from mloda.core.abstract_plugins.components.parallelization_modes import ParallelizationMode
@@ -46,12 +44,9 @@ def _plan_with_unpicklable_link() -> ExecutionPlan:
 def test_enter_with_multiprocessing_rejects_an_unpicklable_link_before_spawning_a_manager() -> None:
     orchestrator = ExecutionOrchestrator(_plan_with_unpicklable_link())
 
-    with pytest.raises(ValueError) as excinfo:
+    with pytest.raises(ValueError):
         orchestrator.__enter__({ParallelizationMode.MULTIPROCESSING})
 
-    assert not isinstance(excinfo.value, pickle.PicklingError), (
-        "the plan-time guard must fire, not the deep multiprocessing pickling failure"
-    )
     assert orchestrator.manager is None, "no MyManager/worker process may be created on the rejection path"
 
 

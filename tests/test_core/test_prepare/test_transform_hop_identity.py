@@ -250,9 +250,7 @@ class TestTransformFrameworkStepIdentityIncludesLinkId:
 
 
 class TestTransformFrameworkStepIdentityIncludesSourceStepUuid:
-    """Two hops of the same shape must key on the owning FeatureGroupStep's uuid
-    (``source_step_uuid``), not collide across different owning steps, and not collide with a
-    join hop of the same shape either."""
+    """Hops of the same shape must key on source_step_uuid: different owning steps, or a join hop, must not collide."""
 
     @staticmethod
     def _step(source_step_uuid: Optional[UUID]) -> TransformFrameworkStep:

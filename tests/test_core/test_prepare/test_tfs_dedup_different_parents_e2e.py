@@ -50,11 +50,7 @@ class DedupParentsConsumerFG(FeatureGroup):
             return {Feature("dedup_col_x")}
         if variant == "y":
             return {Feature("dedup_col_y")}
-        raise ValueError(
-            f"DedupParentsConsumerFG requires options={{'dedup_variant': 'x' | 'y'}}, got "
-            f"dedup_variant={variant!r}. Returning None here would let the request wrongly "
-            f"resolve as a root and fail later with an opaque error in calculate_feature."
-        )
+        raise ValueError(f"DedupParentsConsumerFG requires options={{'dedup_variant': 'x' | 'y'}}, got {variant!r}")
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:

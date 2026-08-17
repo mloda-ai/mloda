@@ -209,7 +209,7 @@ def test_illustrative_py_blocks_match_allowlist() -> None:
     errors: list[str] = []
     for path in _doc_files():
         actual = sum(1 for fence in _iter_fence_openings(path) if fence.info.strip() == ILLUSTRATIVE_TAG)
-        allowed = ILLUSTRATIVE_BLOCK_ALLOWLIST.get(str(path.relative_to(REPO_ROOT)), 0)
+        allowed = ILLUSTRATIVE_BLOCK_ALLOWLIST.get(path.relative_to(REPO_ROOT).as_posix(), 0)
         if actual > allowed:
             errors.append(
                 f"{path}: {actual} ```{ILLUSTRATIVE_TAG} block(s) but only {allowed} allowed. "

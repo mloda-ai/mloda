@@ -16,6 +16,7 @@ from attribution.attributions import (
     run_sync_version_command,
     run_tox,
     update_mloda_version,
+    update_third_party_licenses_version,
 )
 
 
@@ -245,6 +246,151 @@ class TestUpdateMlodaVersion:
         assert result_single == result_extra
 
 
+class TestUpdateThirdPartyLicensesVersion:
+    def test_updates_only_the_mloda_version_line(self) -> None:
+        content = (
+            "Deprecated\n"
+            "1.2.15\n"
+            "MIT License\n"
+            "https://github.com/laurent-laporte-pro/deprecated\n"
+            "The MIT License (MIT)\n"
+            "\n"
+            "Copyright (c) 2017 Laurent LAPORTE\n"
+            "\n"
+            "Permission is hereby granted, free of charge, to any person obtaining a copy\n"
+            'of this software and associated documentation files (the "Software"), to deal\n'
+            "\n"
+            "SOFTWARE.\n"
+            "\n"
+            "mloda\n"
+            "0.10.0\n"
+            "Apache Software License\n"
+            "https://github.com/mloda-ai/mloda\n"
+            "Apache License\n"
+            "\n"
+            "Version 2.0, January 2004\n"
+            "\n"
+            "END OF TERMS AND CONDITIONS\n"
+            "\n"
+            "Jinja2\n"
+            "3.1.5\n"
+            "BSD License\n"
+            "https://github.com/pallets/jinja/\n"
+            "Copyright 2007 Pallets\n"
+            "\n"
+            "Redistribution and use in source and binary forms.\n"
+        )
+        expected = content.replace("mloda\n0.10.0\n", "mloda\n0.11.0\n", 1)
+        assert update_third_party_licenses_version(content, "0.11.0") == expected
+
+    def test_works_when_mloda_is_first_block_in_file(self) -> None:
+        content = (
+            "mloda\n"
+            "0.10.0\n"
+            "Apache Software License\n"
+            "https://github.com/mloda-ai/mloda\n"
+            "Apache License\n"
+            "\n"
+            "Version 2.0, January 2004\n"
+            "\n"
+            "Jinja2\n"
+            "3.1.5\n"
+            "BSD License\n"
+            "https://github.com/pallets/jinja/\n"
+            "Copyright 2007 Pallets\n"
+        )
+        expected = content.replace("mloda\n0.10.0\n", "mloda\n0.11.0\n", 1)
+        assert update_third_party_licenses_version(content, "0.11.0") == expected
+
+    def test_does_not_match_package_name_that_merely_contains_mloda(self) -> None:
+        content = (
+            "mloda-plugin\n"
+            "3.3.3\n"
+            "MIT License\n"
+            "https://github.com/mloda-ai/mloda-plugin\n"
+            "MIT license text.\n"
+            "\n"
+            "mloda\n"
+            "0.9.0\n"
+            "Apache Software License\n"
+            "https://github.com/mloda-ai/mloda\n"
+            "Apache license text.\n"
+        )
+        expected = content.replace("mloda\n0.9.0\n", "mloda\n1.5.0\n", 1)
+        assert update_third_party_licenses_version(content, "1.5.0") == expected
+
+    def test_does_not_match_mloda_line_that_is_not_a_block_start(self) -> None:
+        content = (
+            "alpha\n"
+            "1.0.0\n"
+            "MIT License\n"
+            "https://example.com/alpha\n"
+            "Some license text mentions the word\n"
+            "mloda\n"
+            "in the middle of a paragraph, not as a package name.\n"
+        )
+        with pytest.raises(ValueError, match="mloda"):
+            update_third_party_licenses_version(content, "1.5.0")
+
+    def test_raises_value_error_when_no_mloda_block_exists(self) -> None:
+        content = (
+            "alpha\n"
+            "1.0.0\n"
+            "MIT License\n"
+            "https://example.com/alpha\n"
+            "MIT license text.\n"
+            "\n"
+            "zeta\n"
+            "2.3.4\n"
+            "BSD License\n"
+            "https://example.com/zeta\n"
+            "BSD license text.\n"
+        )
+        with pytest.raises(ValueError, match="mloda"):
+            update_third_party_licenses_version(content, "1.0.0")
+
+    def test_idempotent_when_mloda_already_has_target_version(self) -> None:
+        content = (
+            "alpha\n"
+            "1.0.0\n"
+            "MIT License\n"
+            "https://example.com/alpha\n"
+            "MIT license text.\n"
+            "\n"
+            "mloda\n"
+            "0.11.0\n"
+            "Apache Software License\n"
+            "https://github.com/mloda-ai/mloda\n"
+            "Apache license text.\n"
+        )
+        assert update_third_party_licenses_version(content, "0.11.0") == content
+
+    def test_handles_multiple_trailing_blank_lines(self) -> None:
+        content = (
+            "alpha\n"
+            "1.0.0\n"
+            "MIT License\n"
+            "https://example.com/alpha\n"
+            "MIT license text.\n"
+            "\n"
+            "mloda\n"
+            "0.9.0\n"
+            "Apache Software License\n"
+            "https://github.com/mloda-ai/mloda\n"
+            "Apache license text.\n"
+        )
+        single_trailing_newline = content
+        three_trailing_newlines = content + "\n\n"
+
+        result_single = update_third_party_licenses_version(single_trailing_newline, "1.0.0")
+        result_extra = update_third_party_licenses_version(three_trailing_newlines, "1.0.0")
+
+        expected_single = single_trailing_newline.replace("mloda\n0.9.0\n", "mloda\n1.0.0\n", 1)
+        expected_extra = three_trailing_newlines.replace("mloda\n0.9.0\n", "mloda\n1.0.0\n", 1)
+        assert result_single == expected_single
+        assert result_extra == expected_extra
+
+
 class TestRunSyncVersionCommand:
     def test_writes_updated_attribution_file_at_default_path(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -282,6 +428,137 @@ class TestRunSyncVersionCommand:
             run_sync_version_command("2.0.0")
 
         assert attribution_file.read_text() == original
+
+    def test_no_error_and_no_third_party_file_created_when_third_party_file_absent(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.chdir(tmp_path)
+        attribution_dir = tmp_path / "attribution"
+        attribution_dir.mkdir()
+        original = (
+            "| Name  | Version | License    |\n"
+            "|-------|---------|------------|\n"
+            "| alpha | 1.0.0   | MIT        |\n"
+            "| mloda | 0.9.0   | Apache-2.0 |\n"
+        )
+        attribution_file = attribution_dir / "ATTRIBUTION.md"
+        attribution_file.write_text(original)
+
+        run_sync_version_command("2.0.0")
+
+        assert attribution_file.read_text() == update_mloda_version(original, "2.0.0")
+        assert not (attribution_dir / "THIRD_PARTY_LICENSES.md").exists()
+
+    def test_updates_both_attribution_and_third_party_licenses_when_both_exist(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.chdir(tmp_path)
+        attribution_dir = tmp_path / "attribution"
+        attribution_dir.mkdir()
+
+        original_attribution = (
+            "| Name  | Version | License    |\n"
+            "|-------|---------|------------|\n"
+            "| alpha | 1.0.0   | MIT        |\n"
+            "| mloda | 0.9.0   | Apache-2.0 |\n"
+        )
+        attribution_file = attribution_dir / "ATTRIBUTION.md"
+        attribution_file.write_text(original_attribution)
+
+        original_third_party = (
+            "alpha\n"
+            "1.0.0\n"
+            "MIT License\n"
+            "https://example.com/alpha\n"
+            "MIT license text.\n"
+            "\n"
+            "mloda\n"
+            "0.9.0\n"
+            "Apache Software License\n"
+            "https://github.com/mloda-ai/mloda\n"
+            "Apache license text.\n"
+        )
+        third_party_file = attribution_dir / "THIRD_PARTY_LICENSES.md"
+        third_party_file.write_text(original_third_party)
+
+        run_sync_version_command("2.0.0")
+
+        assert attribution_file.read_text() == update_mloda_version(original_attribution, "2.0.0")
+        assert third_party_file.read_text() == update_third_party_licenses_version(original_third_party, "2.0.0")
+
+    def test_does_not_write_attribution_file_when_third_party_update_fails(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.chdir(tmp_path)
+        attribution_dir = tmp_path / "attribution"
+        attribution_dir.mkdir()
+
+        original_attribution = (
+            "| Name  | Version | License    |\n"
+            "|-------|---------|------------|\n"
+            "| alpha | 1.0.0   | MIT        |\n"
+            "| mloda | 0.9.0   | Apache-2.0 |\n"
+        )
+        attribution_file = attribution_dir / "ATTRIBUTION.md"
+        attribution_file.write_text(original_attribution)
+
+        malformed_third_party = (
+            "alpha\n"
+            "1.0.0\n"
+            "MIT License\n"
+            "https://example.com/alpha\n"
+            "MIT license text.\n"
+            "\n"
+            "zeta\n"
+            "2.3.4\n"
+            "BSD License\n"
+            "https://example.com/zeta\n"
+            "BSD license text.\n"
+        )
+        third_party_file = attribution_dir / "THIRD_PARTY_LICENSES.md"
+        third_party_file.write_text(malformed_third_party)
+
+        with pytest.raises(ValueError):
+            run_sync_version_command("2.0.0")
+
+        assert attribution_file.read_text() == original_attribution
+
+    def test_updates_third_party_file_next_to_a_non_default_attribution_path(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.chdir(tmp_path)
+        custom_dir = tmp_path / "custom_dir"
+        custom_dir.mkdir()
+
+        original_attribution = (
+            "| Name  | Version | License    |\n"
+            "|-------|---------|------------|\n"
+            "| alpha | 1.0.0   | MIT        |\n"
+            "| mloda | 0.9.0   | Apache-2.0 |\n"
+        )
+        attribution_file = custom_dir / "ATTRIBUTION.md"
+        attribution_file.write_text(original_attribution)
+
+        original_third_party = (
+            "alpha\n"
+            "1.0.0\n"
+            "MIT License\n"
+            "https://example.com/alpha\n"
+            "MIT license text.\n"
+            "\n"
+            "mloda\n"
+            "0.9.0\n"
+            "Apache Software License\n"
+            "https://github.com/mloda-ai/mloda\n"
+            "Apache license text.\n"
+        )
+        third_party_file = custom_dir / "THIRD_PARTY_LICENSES.md"
+        third_party_file.write_text(original_third_party)
+
+        run_sync_version_command("2.0.0", path=str(attribution_file))
+
+        assert attribution_file.read_text() == update_mloda_version(original_attribution, "2.0.0")
+        assert third_party_file.read_text() == update_third_party_licenses_version(original_third_party, "2.0.0")
 
 
 class TestMain:

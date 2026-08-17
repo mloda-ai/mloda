@@ -5,7 +5,15 @@ from unittest.mock import MagicMock, call, patch
 
 import pytest
 
-from attribution.attributions import add_file_to_git, download_files, get_version, remove_tox, run_tox
+from attribution.attributions import (
+    add_file_to_git,
+    download_files,
+    get_version,
+    remove_tox,
+    run_sync_version_command,
+    run_tox,
+    update_mloda_version,
+)
 
 
 class TestGetVersion:
@@ -94,3 +102,111 @@ class TestAddFileToGit:
     def test_raises_on_git_failure(self, mock_run: MagicMock) -> None:
         with pytest.raises(subprocess.CalledProcessError):
             add_file_to_git(["file.md"], "output/")
+
+
+class TestUpdateMlodaVersion:
+    def test_updates_only_the_mloda_version_cell(self) -> None:
+        content = (
+            "| Name  | Version | License    |\n"
+            "|-------|---------|------------|\n"
+            "| alpha | 1.0.0   | MIT        |\n"
+            "| mloda | 0.9.0   | Apache-2.0 |\n"
+            "| zeta  | 2.3.4   | BSD        |\n"
+        )
+        expected = (
+            "| Name  | Version | License    |\n"
+            "|-------|---------|------------|\n"
+            "| alpha | 1.0.0   | MIT        |\n"
+            "| mloda | 1.0.0   | Apache-2.0 |\n"
+            "| zeta  | 2.3.4   | BSD        |\n"
+        )
+        assert update_mloda_version(content, "1.0.0") == expected
+
+    def test_widens_version_column_when_new_version_is_longer(self) -> None:
+        content = (
+            "| Name  | Version | License    |\n"
+            "|-------|---------|------------|\n"
+            "| alpha | 1.0.0   | MIT        |\n"
+            "| mloda | 0.9.0   | Apache-2.0 |\n"
+            "| zeta  | 2.3.4   | BSD        |\n"
+        )
+        expected = (
+            "| Name  | Version    | License    |\n"
+            "|-------|------------|------------|\n"
+            "| alpha | 1.0.0      | MIT        |\n"
+            "| mloda | 10.100.100 | Apache-2.0 |\n"
+            "| zeta  | 2.3.4      | BSD        |\n"
+        )
+        assert update_mloda_version(content, "10.100.100") == expected
+
+    def test_shrinks_version_column_when_old_version_was_the_widest_cell(self) -> None:
+        content = (
+            "| Name  | Version    | License    |\n"
+            "|-------|------------|------------|\n"
+            "| alpha | 1.0.0      | MIT        |\n"
+            "| mloda | 10.100.100 | Apache-2.0 |\n"
+            "| zeta  | 2.3.4      | BSD        |\n"
+        )
+        expected = (
+            "| Name  | Version | License    |\n"
+            "|-------|---------|------------|\n"
+            "| alpha | 1.0.0   | MIT        |\n"
+            "| mloda | 1.0.0   | Apache-2.0 |\n"
+            "| zeta  | 2.3.4   | BSD        |\n"
+        )
+        assert update_mloda_version(content, "1.0.0") == expected
+
+    def test_idempotent_when_mloda_already_has_target_version(self) -> None:
+        content = (
+            "| Name  | Version | License    |\n"
+            "|-------|---------|------------|\n"
+            "| alpha | 1.0.0   | MIT        |\n"
+            "| mloda | 0.11.0  | Apache-2.0 |\n"
+        )
+        assert update_mloda_version(content, "0.11.0") == content
+
+    def test_raises_value_error_when_mloda_row_is_missing(self) -> None:
+        content = (
+            "| Name  | Version | License |\n"
+            "|-------|---------|---------|\n"
+            "| alpha | 1.0.0   | MIT     |\n"
+            "| zeta  | 2.3.4   | BSD     |\n"
+        )
+        with pytest.raises(ValueError, match="mloda"):
+            update_mloda_version(content, "1.0.0")
+
+    def test_does_not_match_package_name_that_merely_contains_mloda(self) -> None:
+        content = (
+            "| Name         | Version | License    |\n"
+            "|--------------|---------|------------|\n"
+            "| mloda-plugin | 3.3.3   | MIT        |\n"
+            "| mloda        | 0.9.0   | Apache-2.0 |\n"
+        )
+        expected = (
+            "| Name         | Version | License    |\n"
+            "|--------------|---------|------------|\n"
+            "| mloda-plugin | 3.3.3   | MIT        |\n"
+            "| mloda        | 1.5.0   | Apache-2.0 |\n"
+        )
+        assert update_mloda_version(content, "1.5.0") == expected
+
+
+class TestRunSyncVersionCommand:
+    def test_writes_updated_attribution_file_at_default_path(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.chdir(tmp_path)
+        attribution_dir = tmp_path / "attribution"
+        attribution_dir.mkdir()
+        original = (
+            "| Name  | Version | License    |\n"
+            "|-------|---------|------------|\n"
+            "| alpha | 1.0.0   | MIT        |\n"
+            "| mloda | 0.9.0   | Apache-2.0 |\n"
+        )
+        attribution_file = attribution_dir / "ATTRIBUTION.md"
+        attribution_file.write_text(original)
+
+        run_sync_version_command("2.0.0")
+
+        assert attribution_file.read_text() == update_mloda_version(original, "2.0.0")

@@ -116,7 +116,11 @@ SWALLOWING_HELPERS_OUTSIDE_THE_PATH: dict[tuple[str, str], str] = {
         "the guard around the marker write; failing to mark must not replace the exception being marked"
     ),
     ("mloda/core/abstract_plugins/components/utils.py", "contained_raise_reason"): (
-        "it swallows only through safe_field, whose degrade-one-field contract is declared above"
+        "it swallows only through safe_exc_str, the same guarded str(exc)-or-type-name helper safe_field uses"
+    ),
+    ("mloda/core/abstract_plugins/components/utils.py", "safe_exc_str"): (
+        "guards a single str(exc) call and degrades to the exception's type name; a plugin-owned __str__ "
+        "must not escape the seam that is rendering the exception's own message"
     ),
     ("mloda/core/abstract_plugins/components/utils.py", "get_all_subclasses"): (
         "real edge, collided verdict: it swallows nothing itself; the set.add / set.update names do"

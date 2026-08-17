@@ -1,4 +1,3 @@
-import functools
 import inspect
 from collections.abc import Sequence
 from copy import deepcopy
@@ -32,6 +31,7 @@ from mloda.core.abstract_plugins.components.utils import (
     as_str,
     contained_raise_log_level,
     contained_raise_reason,
+    safe_exc_str,
     safe_field,
 )
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
@@ -233,13 +233,17 @@ class IdentifyFeatureGroupClass:
         domain, error = self._domain_outcome(feature_group)
         # error, not domain, is what tells a raise apart from a malformed return: both leave domain unusable.
         if error is not None:
-            logger.warning("Degraded field '%s': %s: %s", field, type(error).__name__, str(error))
+            logger.warning("Degraded field '%s': %s", field, contained_raise_reason(error))
             return None
         if not isinstance(domain, Domain):
             # Annotated to return a Domain; a provider that returns something else costs only its own suffix.
             logger.warning("Degraded field '%s': expected Domain, got %s", field, type(domain).__name__)
             return None
-        return domain.name
+        try:
+            return domain.name
+        except Exception as exc:  # noqa: BLE001  (plugin-owned property read; same contract as the two guards above)
+            logger.warning("Degraded field '%s': %s", field, contained_raise_reason(exc))
+            return None
 
     def _declared_frameworks_of(self, feature_group: type[FeatureGroup]) -> frozenset[type[ComputeFramework]]:
         """Memoized compute_framework_definition(), which drives compute_framework_rule(): once per candidate.
@@ -361,7 +365,8 @@ class IdentifyFeatureGroupClass:
         if self._domain_name(feature_group) is None:
             # A raise leaves the gate undecided, so nothing is known and the candidate stays live. A malformed
             # return is decided: the gate compares it and drops the candidate, for every name it declares.
-            return error is None
+            # A raising Domain.name is also undecided: error is None yet domain is still a genuine Domain.
+            return error is None and not isinstance(domain, Domain)
         # The gate's own comparison, never a name one: a Domain subclass with a custom __eq__ must not pass the
         # gate and fail this retest.
         return domain != feature.domain
@@ -620,7 +625,7 @@ class IdentifyFeatureGroupClass:
                 # A plugin-owned read past the hook call's containment, so it degrades instead of escaping the seam.
                 safe_field(lambda: feature_group.get_class_name(), "<unnamed feature group>"),
                 feature.name,
-                safe_field(functools.partial(str, exc), type(exc).__name__),
+                safe_exc_str(exc),
             )
         elif probe.matcher_error is not None:
             reason = contained_raise_reason(probe.matcher_error)
@@ -639,7 +644,7 @@ class IdentifyFeatureGroupClass:
         return probe.matched
 
     def _filter_feature_group_by_domain(self, feature_group: type[FeatureGroup], feature: Feature) -> bool:
-        """Decision-side domain gate: unguarded, so a raising get_domain() still fails the engine loudly."""
+        """Decision-side domain gate: unguarded, so a raising get_domain() or Domain.name fails the engine loudly."""
         if not feature.domain:
             return True
         domain, error = self._domain_outcome(feature_group)

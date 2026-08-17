@@ -276,6 +276,36 @@ class TestReadDBCredentialsPredicateFiltering:
         assert warehouse == {"warehouse_dsn": "warehouse://a"}
         assert analytics == {"analytics_dsn": "analytics://b"}
 
+    def test_hint_at_foreign_credentials_declines_instead_of_rescanning(self) -> None:
+        """A reader whose predicate rejects the hinted entry must decline, not rescan for its own unrelated entry."""
+        dac = DataAccessCollection(
+            credentials={
+                "warehouse": {"warehouse_dsn": "warehouse://a"},
+                "analytics": {"analytics_dsn": "analytics://b"},
+            }
+        )
+        options = Options(context={"data_access_handle": "analytics"})
+        resolved = _WarehouseCredsDB.match_subclass_data_access(dac, feature_names=["any"], options=options)
+        assert resolved is None
+
+    def test_hint_at_owned_credentials_still_resolves(self) -> None:
+        """Sanity check: the correct owner still resolves via the same hint."""
+        dac = DataAccessCollection(
+            credentials={
+                "warehouse": {"warehouse_dsn": "warehouse://a"},
+                "analytics": {"analytics_dsn": "analytics://b"},
+            }
+        )
+        options = Options(context={"data_access_handle": "analytics"})
+        resolved = _AnalyticsCredsDB.match_subclass_data_access(dac, feature_names=["any"], options=options)
+        assert resolved == {"analytics_dsn": "analytics://b"}
+
+    def test_not_implemented_credentials_check_resolves_to_none_via_predicate(self) -> None:
+        """Base ReadDB.is_valid_credentials always raises NotImplementedError; the predicate treats it as no match."""
+        dac = DataAccessCollection(credentials={"only": {"whatever": "value"}})
+        resolved = ReadDB.match_subclass_data_access(dac, feature_names=["any"], options=Options())
+        assert resolved is None
+
 
 # ----------------------------------------------------------------------------
 # Typed Credential through the real SQLITEReader matcher (issue #511 pin).

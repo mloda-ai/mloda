@@ -82,6 +82,10 @@ class ReadDB(BaseInputData):
         Matcher exception contract: match_read_db_data_access treats only NotImplementedError
         as a soft no-match; any other exception propagates and aborts matching for every
         reader sharing the DataAccessCollection.
+
+        match_subclass_data_access also enforces this via the _credentials_predicate wrapper,
+        and may invoke it once per registered credentials entry while matching, not only the
+        entry ultimately bound to this reader.
         """
         raise NotImplementedError
 
@@ -113,7 +117,7 @@ class ReadDB(BaseInputData):
                 if handle_kind not in (None, "credentials"):
                     hint = None
                 elif handle_kind == "credentials" and not cls._credentials_predicate(data_access.credentials[hint]):
-                    hint = None
+                    return None
             creds = data_access.resolve("credentials", predicate=cls._credentials_predicate, hint=hint)
             if creds:
                 data_accesses.append(creds)

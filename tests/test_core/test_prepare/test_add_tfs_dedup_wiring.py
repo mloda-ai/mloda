@@ -126,8 +126,8 @@ class FeatureGroupStepDedupScenario(NamedTuple):
 
 
 def _root_node(graph: Graph, feature: Feature, fg: type[FeatureGroup]) -> None:
-    if feature.uuid in graph.get_nodes():
-        return
+    # Graph.add_node is a plain dict assignment and this reset always assigns the same value, so
+    # calling this twice for the same feature (the same_parent=True scenario below) is harmless.
     graph.add_node(feature.uuid, NodeProperties(feature, fg))
     graph.parent_to_children_mapping[feature.uuid] = set()
 

@@ -247,3 +247,58 @@ class TestTransformFrameworkStepIdentityIncludesLinkId:
 
         assert first == second
         assert hash(first) == hash(second)
+
+
+class TestTransformFrameworkStepIdentityIncludesSourceStepUuid:
+    """Two hops of the same shape must key on the owning FeatureGroupStep's uuid
+    (``source_step_uuid``), not collide across different owning steps, and not collide with a
+    join hop of the same shape either."""
+
+    @staticmethod
+    def _step(source_step_uuid: Optional[UUID]) -> TransformFrameworkStep:
+        return TransformFrameworkStep(
+            from_framework=PandasDataFrame,
+            to_framework=PyArrowTable,
+            required_uuids=set(),
+            from_feature_group=HopIdA,
+            to_feature_group=HopIdB,
+            source_step_uuid=source_step_uuid,
+        )
+
+    def test_two_hops_with_different_source_step_uuids_compare_unequal(self) -> None:
+        first = self._step(uuid4())
+        second = self._step(uuid4())
+
+        assert first != second
+        assert hash(first) != hash(second)
+
+    def test_two_hops_with_the_same_source_step_uuid_compare_equal(self) -> None:
+        source_step_uuid = uuid4()
+        first = self._step(source_step_uuid)
+        second = self._step(source_step_uuid)
+
+        assert first == second
+        assert hash(first) == hash(second)
+
+    def test_a_join_hop_and_a_plain_hop_of_the_same_shape_compare_unequal(self) -> None:
+        join_hop = TransformFrameworkStep(
+            from_framework=PandasDataFrame,
+            to_framework=PyArrowTable,
+            required_uuids=set(),
+            from_feature_group=HopIdA,
+            to_feature_group=HopIdB,
+            link_id=uuid4(),
+            source_step_uuid=None,
+        )
+        plain_hop = TransformFrameworkStep(
+            from_framework=PandasDataFrame,
+            to_framework=PyArrowTable,
+            required_uuids=set(),
+            from_feature_group=HopIdA,
+            to_feature_group=HopIdB,
+            link_id=None,
+            source_step_uuid=uuid4(),
+        )
+
+        assert join_hop != plain_hop
+        assert hash(join_hop) != hash(plain_hop)

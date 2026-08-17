@@ -458,8 +458,8 @@ class ExecutionPlan:
                             self.tfs_collection[new_tfs] = new_tfs
                             new_execution_plan.append(new_tfs)
                             canonical_tfs = new_tfs
-                        # Names every parent deduped onto this hop, not just the first, so the hop
-                        # gates scheduling correctly for all of them.
+                        # Records every parent the hop covers; they all share one owning step, so
+                        # this doesn't change the scheduling gate.
                         canonical_tfs.required_uuids.add(parent)
                         ep.required_uuids.add(canonical_tfs.uuid)
 

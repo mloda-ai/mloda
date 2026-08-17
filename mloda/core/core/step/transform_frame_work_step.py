@@ -34,8 +34,8 @@ class TransformFrameworkStep(Step):
         self.from_feature_group = from_feature_group
         self.to_feature_group = to_feature_group
         self.link_id = link_id
-        # Exactly one of link_id (join-branch hops) or source_step_uuid (plain feature-group-branch
-        # hops) is ever set on a given instance, never both.
+        # Hops built by add_tfs carry at most one of link_id (join hops) or source_step_uuid
+        # (plain hops), never both.
         self.source_step_uuid = source_step_uuid
         self.transformer = ComputeFrameworkTransformer()
 

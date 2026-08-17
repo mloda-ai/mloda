@@ -1,6 +1,6 @@
 """Regression coverage for add_tfs: a deduped TransformFrameworkStep must still wire its uuid
-into every consuming step, not just the one that first created it (Scenario A). Scenario B also
-pins that two same-shaped hops from genuinely DIFFERENT parents must NOT dedup (issue #1141).
+into every consuming step, not just the one that first created it (Scenario A), and that two
+same-shaped hops from genuinely different parents must not dedup into one (Scenario B).
 """
 
 from typing import NamedTuple
@@ -146,10 +146,9 @@ def _dest_step(
 
 
 def _feature_group_step_dedup_scenario(same_parent: bool) -> FeatureGroupStepDedupScenario:
-    """Two FeatureGroupSteps whose built ``TransformFrameworkStep``s share the same from/to
-    framework and from/to feature-group shape. ``same_parent=True`` models a legitimate dedup (both
-    steps actually pull from the one upstream feature); ``same_parent=False`` models two genuinely
-    different upstream features (dedup must NOT collapse these)."""
+    """Two FeatureGroupSteps whose built ``TransformFrameworkStep``s share from/to framework and
+    feature-group shape. ``same_parent=True`` pulls both from the same upstream feature (must
+    dedup); ``same_parent=False`` pulls from different upstream features (must not dedup)."""
     graph = Graph()
 
     parent_a = _feature("dedup_upstream_a", PyArrowTable)
@@ -183,11 +182,9 @@ def test_two_feature_group_steps_with_the_same_parent_and_shape_dedup_into_one_t
 
 
 def test_two_feature_group_steps_with_different_parents_get_separate_transform_hops() -> None:
-    """Two FeatureGroupSteps that share a from/to-framework + from/to-feature-group shape but pull
-    from genuinely DIFFERENT parent features must each get their own TransformFrameworkStep. A hop
-    only ever moves one physical source's data (TransformFrameworkStep.execute takes a single
-    from_cfw), so collapsing two different-parent hops into one starves whichever step's uuid loses
-    the dedup of its own source data."""
+    """A hop only ever moves one physical source's data (execute() takes a single from_cfw), so
+    collapsing two different-parent hops into one would starve whichever step's uuid lost the
+    dedup of its own source data."""
     scenario = _feature_group_step_dedup_scenario(same_parent=False)
 
     new_plan = ExecutionPlan().add_tfs([scenario.step_a, scenario.step_b], scenario.graph)

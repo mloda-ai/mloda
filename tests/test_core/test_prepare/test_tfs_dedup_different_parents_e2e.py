@@ -1,7 +1,7 @@
-"""End-to-end regression for issue #1141: add_tfs must not collapse two Pandas->PyArrow
-transform hops that share a from/to-framework + from/to-feature-group shape but pull from
-genuinely different parent features. Before the fix this either crashes at runtime
-(AttributeError on the starved hop's destination) or silently serves one request the other's data.
+"""End-to-end regression: add_tfs must not collapse two Pandas->PyArrow transform hops that
+share a from/to-framework + from/to-feature-group shape but pull from genuinely different parent
+features. Before the fix this either crashes at runtime or silently serves one request the
+other's data.
 """
 
 from typing import Any, Optional
@@ -30,8 +30,8 @@ class DedupParentsRootFG(FeatureGroup):
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
-        # Only the requested column(s), matching the convention that a compute framework's
-        # data holds what was asked for, not every name DataCreator could produce.
+        # Return only the requested column(s): a compute framework's data holds what was
+        # asked for, not everything DataCreator could produce.
         values = {"dedup_col_x": [1, 2, 3], "dedup_col_y": [100, 200, 300]}
         return pd.DataFrame({name: values[name] for name in features.get_all_names()})
 

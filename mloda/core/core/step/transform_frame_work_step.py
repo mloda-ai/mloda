@@ -48,9 +48,8 @@ class TransformFrameworkStep(Step):
         if not isinstance(other, TransformFrameworkStep):
             return False
         # A join's hop and a plain hop of the same shape are different steps (the join looks
-        # its hop up by link_id), so link_id is part of the identity. Likewise, two plain hops
-        # of the same shape but different source features must not dedup into one hop, since
-        # execute() only ever moves one physical source's data.
+        # its hop up by link_id), so link_id is part of the identity; source_uuid is included
+        # for the same reason, since execute() only ever moves one source's data per hop.
         return (
             self.from_framework == other.from_framework
             and self.to_framework == other.to_framework

@@ -149,12 +149,10 @@ consequences keep the shared type honest on this surface:
   `PROPERTY_MAPPING` the field is rejected outright. The reserved key is checked as the MRO merge
   resolves it: its **winning** declaration must keep `framework_set=True`, so neither a subclass nor a
   plain mixin can turn the framework-written key into a user-enforced one.
-- **The reverse also holds: a reader-only field has no `PROPERTY_MAPPING` meaning.** `scalar_only`
-  (`bool`, default `False`, requires `strict_validation=True`) (#1154) rejects a `list`/`tuple`/`set`/
-  `frozenset` value outright instead of unpacking it element-wise, which only makes sense at reader
-  selection; `FeatureChainParser` rejects it on `PROPERTY_MAPPING` at class definition, mirroring how
-  `match_guard`, `deferred_binding` and `context=False` are rejected on the reader surface, because
-  `PROPERTY_MAPPING` keys always unpack element-wise.
+- **The reverse also holds: a reader-only field has no `PROPERTY_MAPPING` meaning.** `scalar_only` (#1154)
+  rejects a collection value outright instead of unpacking it element-wise, so `FeatureChainParser` rejects
+  it on `PROPERTY_MAPPING` at class definition, the same way `match_guard`/`deferred_binding`/`context=False`
+  are rejected on the reader surface.
 
 `READER_OPTIONS` merges across the MRO (`reader_option_specs()`, most-derived declaration winning),
 so a concrete reader inherits its family's keys and redeclares nothing, and

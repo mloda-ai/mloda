@@ -90,10 +90,7 @@ class PropertySpec:
     deferred_binding: bool = False
     # Marks a reader-surface key the framework writes rather than the user; rejected on the PROPERTY_MAPPING surface.
     framework_set: bool = False
-    # allowed_values and element_validator apply element-wise to a list/tuple/set/frozenset value (a
-    # str is one scalar, a dict one composite value). Reader-only: scalar_only=True rejects such a
-    # collection outright on a reader key instead of unpacking it. Enforced only in
-    # BaseInputData._present_reader_option_admits.
+    # Reader-only: rejects a list/tuple/set/frozenset value outright instead of unpacking it element-wise.
     scalar_only: bool = False
 
     def __post_init__(self) -> None:

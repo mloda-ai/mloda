@@ -213,7 +213,7 @@ class TestReadDBHint:
 # ----------------------------------------------------------------------------
 # ReadDB: resolve() must filter candidates through *this* reader's
 # is_valid_credentials before flagging ambiguity, not treat every registered
-# credentials entry as a match (mloda-ai/mloda#1126 pin).
+# credentials entry as a match.
 # ----------------------------------------------------------------------------
 
 
@@ -242,9 +242,7 @@ class _AnalyticsCredsDB(ReadDB):
 
 
 class TestReadDBCredentialsPredicateFiltering:
-    """Pins mloda-ai/mloda#1126: resolve() must filter candidates through this
-    reader's is_valid_credentials before flagging ambiguity.
-    """
+    """resolve() must filter candidates through this reader's is_valid_credentials before flagging ambiguity."""
 
     def test_only_matching_entry_resolves_without_hint(self) -> None:
         dac = DataAccessCollection(

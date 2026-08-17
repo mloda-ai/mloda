@@ -96,7 +96,7 @@ class ReadDB(BaseInputData):
 
     @classmethod
     def _credentials_predicate(cls, credentials: Any) -> bool:
-        """Return True if `credentials` is a match this reader's is_valid_credentials accepts."""
+        """Wraps is_valid_credentials as a predicate, treating NotImplementedError as no match."""
         try:
             return cls.is_valid_credentials(credentials)
         except NotImplementedError:

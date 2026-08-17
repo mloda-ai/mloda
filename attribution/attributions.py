@@ -97,13 +97,42 @@ def update_mloda_version(content: str, new_version: str) -> str:
     return "\n".join(rendered) + "\n"
 
 
+def update_third_party_licenses_version(content: str, new_version: str) -> str:
+    """Replaces the mloda block's version line in a pip-licenses plain-vertical format document."""
+    lines = content.split("\n")
+
+    mloda_index = None
+    for index, line in enumerate(lines):
+        if line.strip() == "mloda" and (index == 0 or lines[index - 1].strip() == ""):
+            mloda_index = index
+            break
+
+    if mloda_index is None:
+        raise ValueError("No block for package 'mloda' found in third-party licenses content.")
+
+    lines[mloda_index + 1] = new_version
+    return "\n".join(lines)
+
+
 def run_sync_version_command(version: str, path: str = "attribution/ATTRIBUTION.md") -> None:
-    """Rewrites the mloda version cell in the attribution file at the given path."""
+    """Atomically rewrites the mloda version in the attribution file and, if present, the sibling third-party licenses file."""
     with open(path, "r") as f:
         content = f.read()
     updated = update_mloda_version(content, version)
+
+    third_party_path = os.path.join(os.path.dirname(path), "THIRD_PARTY_LICENSES.md")
+    updated_third_party = None
+    if os.path.exists(third_party_path):
+        with open(third_party_path, "r") as f:
+            third_party_content = f.read()
+        updated_third_party = update_third_party_licenses_version(third_party_content, version)
+
     with open(path, "w") as f:
         f.write(updated)
+
+    if updated_third_party is not None:
+        with open(third_party_path, "w") as f:
+            f.write(updated_third_party)
 
 
 def run_default_sync_command() -> None:

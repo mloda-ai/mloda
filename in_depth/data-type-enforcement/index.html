@@ -135,11 +135,19 @@
                 </li>
                 <li class="toctree-l2"><a class="reference internal" href="../plugin-loader/">Plugin Loader</a>
                 </li>
+                <li class="toctree-l2"><a class="reference internal" href="../plugin_registry/">Plugin Registry</a>
+                </li>
     </ul>
                   </li>
                   <li class="toctree-l1 current"><a class="reference internal current" href="#">Data Type Enforcement</a>
     <ul class="current">
     <li class="toctree-l2"><a class="reference internal" href="#declaring-feature-types">Declaring Feature Types</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#declaring-a-feature-groups-output-type">Declaring a Feature Group's Output Type</a>
+        <ul>
+    <li class="toctree-l3"><a class="reference internal" href="#errors-are-not-swallowed">Errors are not swallowed</a>
+    </li>
+        </ul>
     </li>
     <li class="toctree-l2"><a class="reference internal" href="#validation-behavior">Validation Behavior</a>
         <ul>
@@ -148,6 +156,8 @@
     <li class="toctree-l3"><a class="reference internal" href="#strict-mode">Strict Mode</a>
     </li>
         </ul>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#implementing-the-hook-in-a-custom-compute-framework">Implementing the Hook in a Custom Compute Framework</a>
     </li>
     <li class="toctree-l2"><a class="reference internal" href="#per-framework-precision-support">Per-Framework Precision Support</a>
     </li>
@@ -158,6 +168,8 @@
     <li class="toctree-l2"><a class="reference internal" href="#error-handling">Error Handling</a>
     </li>
     </ul>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../comparison-contract/">Comparison Contract</a>
                   </li>
                   <li class="toctree-l1"><a class="reference internal" >Troubleshooting</a>
     <ul>
@@ -206,30 +218,56 @@
 <p>mloda supports optional data type declarations on Features, enabling runtime validation that computed data matches declared types.</p>
 <h2 id="declaring-feature-types">Declaring Feature Types</h2>
 <p>Use typed constructors to declare the expected data type:</p>
-<pre><code class="language-python">from mloda.user import Feature
+<pre><code class="language-python">from typing import Any, Optional
+from mloda.user import Feature
 
-# Typed features - will be validated at runtime
+# Typed features: Will be validated at runtime
 feature_int = Feature.int32_of(&quot;user_count&quot;)
 feature_double = Feature.double_of(&quot;price&quot;)
 feature_str = Feature.str_of(&quot;name&quot;)
 
-# Untyped feature - no validation
+# Untyped feature: No validation
 feature_any = Feature.not_typed(&quot;legacy_column&quot;)
 </code></pre>
 <p>Available typed constructors:
-- <code>int32_of()</code>, <code>int64_of()</code> - Integer types
-- <code>float_of()</code>, <code>double_of()</code> - Floating point types
-- <code>str_of()</code> - String type
-- <code>boolean_of()</code> - Boolean type
-- <code>date_of()</code>, <code>timestamp_millis_of()</code>, <code>timestamp_micros_of()</code> - Date/time types
-- <code>decimal_of()</code>, <code>binary_of()</code> - Other types</p>
+- <code>int32_of()</code>, <code>int64_of()</code>: Integer types
+- <code>float_of()</code>, <code>double_of()</code>: Floating point types
+- <code>str_of()</code>: String type
+- <code>boolean_of()</code>: Boolean type
+- <code>date_of()</code>, <code>timestamp_millis_of()</code>, <code>timestamp_micros_of()</code>: Date/time types
+- <code>decimal_of()</code>, <code>binary_of()</code>: Other types</p>
+<h2 id="declaring-a-feature-groups-output-type">Declaring a Feature Group's Output Type</h2>
+<p>The section above is the <em>data user</em> declaring a type on a <code>Feature</code>. A <em>feature group</em> can also
+declare the type it produces, via <code>return_data_type_rule</code>, the provider-side counterpart. mloda
+reconciles the two at planning time.</p>
+<pre><code class="language-python">from mloda.provider import FeatureGroup
+from mloda.user import DataType
+
+
+class UserCount(FeatureGroup):
+    @classmethod
+    def return_data_type_rule(cls, feature) -&gt; DataType | None:
+        return DataType.INT64
+</code></pre>
+<p>The rule returns either:</p>
+<ul>
+<li>a concrete <code>DataType</code>: the group always emits this type;</li>
+<li><code>None</code> (the default): no fixed type / polymorphic.</li>
+</ul>
+<p>Reconciliation with the user's declared type, at planning:</p>
+<ul>
+<li>rule returns a concrete <code>DataType</code> that <strong>differs</strong> from the user's declared type → planning raises a mismatch (loud, early);</li>
+<li>rule returns <code>None</code> → the user's declared type (if any) stands;</li>
+<li>rule returns a concrete type and the user declared none → the rule's type is used.</li>
+</ul>
+<p>A feature that ends up with <code>data_type=None</code> is then skipped by the compute-time validator (below);
+a concrete declared type flows through to runtime checking against the actual column dtype.</p>
+<h3 id="errors-are-not-swallowed">Errors are not swallowed</h3>
+<p><code>return_data_type_rule</code> runs <em>after</em> the feature group has been selected for the feature, so a rule
+that raises is a failure of a committed component, not a non-applicable candidate. mloda does <strong>not</strong>
+catch it, the exception propagates and fails planning. If your rule does work that can legitimately
+fail to determine a type, return <code>None</code> for that case rather than letting it raise.</p>
 <h2 id="validation-behavior">Validation Behavior</h2>
-<p>!!! note "Changed in 0.7.0"
-    Type validation now runs on <strong>all</strong> bundled compute frameworks through a uniform
-    <code>_extract_column_data_type</code> hook. In 0.6.x, type extraction relied on a single
-    PyArrow-schema path, so typed features running on frameworks that did not expose that
-    schema were silently left unvalidated. After upgrading, those features may raise a
-    <code>DataTypeMismatchError</code> for the first time where validation previously did nothing.</p>
 <h3 id="default-lenient-mode">Default (Lenient) Mode</h3>
 <p>By default, validation allows compatible type conversions within categories:</p>
 <table>
@@ -263,6 +301,43 @@ feature_any = Feature.not_typed(&quot;legacy_column&quot;)
 )
 </code></pre>
 <p>In strict mode, only exact type matches or standard widening conversions are allowed.</p>
+<h2 id="implementing-the-hook-in-a-custom-compute-framework">Implementing the Hook in a Custom Compute Framework</h2>
+<p>Enforcement is driven by a single override point on <code>ComputeFramework</code>:</p>
+<pre><code class="language-python">def _extract_column_data_type(self, data: Any, column_name: str) -&gt; Optional[DataType]:
+    ...
+</code></pre>
+<p>When a typed feature is produced, mloda calls this hook for the column and compares
+the returned <code>DataType</code> against the feature's declared type, raising
+<code>DataTypeMismatchError</code> on an incompatible pairing (per the lenient/strict rules above).</p>
+<p>The contract:</p>
+<ul>
+<li><strong>Return a <code>DataType</code></strong> to have the column validated. Map the framework's native type
+  (e.g. <code>pa.DataType</code>, <code>pd.api.types</code>, <code>polars.DataType</code>, a pyspark/pyiceberg type) directly
+  to the unified <code>DataType</code> enum: no string round-trip.</li>
+<li><strong>Return <code>None</code> to skip the column.</strong> The validator treats <code>None</code> as a graceful no-op and
+  performs no check for that column.</li>
+</ul>
+<p>!!! warning "The base implementation is a silent no-op"
+    <code>ComputeFramework._extract_column_data_type</code> returns <code>None</code> by default. A custom framework
+    that does not override it ships with <strong>type enforcement effectively disabled</strong>: declared
+    feature types are silently never checked. Override the hook to opt your framework in.</p>
+<p>A custom framework imports <code>DataType</code> from the public API:</p>
+<pre><code class="language-python">from mloda.user import DataType
+from mloda.provider import ComputeFramework
+
+
+class MyFramework(ComputeFramework):
+    def _extract_column_data_type(self, data: Any, column_name: str) -&gt; Optional[DataType]:
+        native = data.schema.field(column_name).type  # framework-specific access
+        if native == ...:
+            return DataType.INT64
+        # Unknown / unmappable type: skip rather than guess.
+        return None
+</code></pre>
+<p>See <code>PythonDictFramework._extract_column_data_type</code> for a complete reference override, and
+the table below for how each bundled framework handles precisions its backend cannot
+distinguish (it returns the widest type in the family rather than <code>None</code>, so lenient-mode
+validation still applies).</p>
 <h2 id="per-framework-precision-support">Per-Framework Precision Support</h2>
 <p>Not every backend's native type system can distinguish every precision mloda declares. The table below shows which precisions each bundled framework can extract from data. For the rest, the framework's <code>_extract_column_data_type</code> returns the widest type in the family (still correct under lenient mode), and strict-mode tests for the affected precision are skipped with a clear reason.</p>
 <table>
@@ -345,21 +420,26 @@ feature = Feature.int64_of(
 </code></pre>
 <h2 id="error-handling">Error Handling</h2>
 <p>Type mismatches raise <code>DataTypeMismatchError</code>:</p>
-<p>```python title="Error handling example"
-from mloda.user import mloda
+<pre><code class="language-python">from mloda.user import mloda
 from mloda.user import Feature
-from mloda.provider import DataTypeMismatchError</p>
-<p>try:
-    result = mloda.run_all([Feature.str_of("numeric_column")])
+from mloda.provider import DataTypeMismatchError
+
+try:
+    result = mloda.run_all(
+        [Feature.str_of(&quot;numeric_column&quot;)],
+        compute_frameworks=[&quot;PandasDataFrame&quot;],
+        api_data={&quot;SampleData&quot;: {&quot;numeric_column&quot;: [1, 2, 3]}},
+    )
 except DataTypeMismatchError as e:
-    print(f"Feature '{e.feature_name}': declared {e.declared.name}, got {e.actual.name}")
-```</p>
+    print(f&quot;Feature '{e.feature_name}': declared {e.declared.name}, got {e.actual.name}&quot;)
+</code></pre>
+<p>The request needs a source for <code>numeric_column</code>; without one, resolution fails before any type is checked.</p>
               
             </div>
           </div><footer>
     <div class="rst-footer-buttons" role="navigation" aria-label="Footer Navigation">
-        <a href="../plugin-loader/" class="btn btn-neutral float-left" title="Plugin Loader"><span class="icon icon-circle-arrow-left"></span> Previous</a>
-        <a href="../troubleshooting/feature-group-resolution-errors/" class="btn btn-neutral float-right" title="Feature Group Resolution Errors">Next <span class="icon icon-circle-arrow-right"></span></a>
+        <a href="../plugin_registry/" class="btn btn-neutral float-left" title="Plugin Registry"><span class="icon icon-circle-arrow-left"></span> Previous</a>
+        <a href="../comparison-contract/" class="btn btn-neutral float-right" title="Comparison Contract">Next <span class="icon icon-circle-arrow-right"></span></a>
     </div>
 
   <hr/>
@@ -382,10 +462,10 @@ except DataTypeMismatchError as e:
   <span class="rst-current-version" data-toggle="rst-current-version">
     
     
-      <span><a href="../plugin-loader/" style="color: #fcfcfc">&laquo; Previous</a></span>
+      <span><a href="../plugin_registry/" style="color: #fcfcfc">&laquo; Previous</a></span>
     
     
-      <span><a href="../troubleshooting/feature-group-resolution-errors/" style="color: #fcfcfc">Next &raquo;</a></span>
+      <span><a href="../comparison-contract/" style="color: #fcfcfc">Next &raquo;</a></span>
     
   </span>
 </div>

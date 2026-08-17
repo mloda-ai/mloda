@@ -135,17 +135,35 @@
                 </li>
                 <li class="toctree-l2"><a class="reference internal" href="../../plugin-loader/">Plugin Loader</a>
                 </li>
+                <li class="toctree-l2"><a class="reference internal" href="../../plugin_registry/">Plugin Registry</a>
+                </li>
     </ul>
                   </li>
                   <li class="toctree-l1"><a class="reference internal" href="../../data-type-enforcement/">Data Type Enforcement</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../comparison-contract/">Comparison Contract</a>
                   </li>
                   <li class="toctree-l1 current"><a class="reference internal current" >Troubleshooting</a>
     <ul class="current">
                 <li class="toctree-l2 current"><a class="reference internal current" href="#">Feature Group Resolution Errors</a>
     <ul class="current">
-    <li class="toctree-l3"><a class="reference internal" href="#multiple-feature-groups-error">Multiple Feature Groups Error</a>
+    <li class="toctree-l3"><a class="reference internal" href="#catching-resolution-failures">Catching resolution failures</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#no-feature-groups-found-error">No Feature Groups Found Error</a>
         <ul>
     <li class="toctree-l4"><a class="reference internal" href="#the-problem">The Problem</a>
+    </li>
+    <li class="toctree-l4"><a class="reference internal" href="#the-eliminated-candidates-block">The eliminated candidates block</a>
+    </li>
+    <li class="toctree-l4"><a class="reference internal" href="#the-did-you-mean-hint">The Did you mean hint</a>
+    </li>
+    <li class="toctree-l4"><a class="reference internal" href="#only-abstract-feature-group-bases-matched">Only abstract feature group bases matched</a>
+    </li>
+        </ul>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#multiple-feature-groups-error">Multiple Feature Groups Error</a>
+        <ul>
+    <li class="toctree-l4"><a class="reference internal" href="#the-problem_1">The Problem</a>
     </li>
     <li class="toctree-l4"><a class="reference internal" href="#solutions">Solutions</a>
     </li>
@@ -153,9 +171,19 @@
     </li>
     <li class="toctree-l3"><a class="reference internal" href="#featuregroup-redefinition-errors">FeatureGroup Redefinition Errors</a>
         <ul>
-    <li class="toctree-l4"><a class="reference internal" href="#the-problem_1">The Problem</a>
+    <li class="toctree-l4"><a class="reference internal" href="#the-problem_2">The Problem</a>
     </li>
     <li class="toctree-l4"><a class="reference internal" href="#solutions_1">Solutions</a>
+    </li>
+        </ul>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#emptyresulterror">EmptyResultError</a>
+        <ul>
+    <li class="toctree-l4"><a class="reference internal" href="#the-problem_3">The Problem</a>
+    </li>
+    <li class="toctree-l4"><a class="reference internal" href="#when-to-fix-it">When to fix it</a>
+    </li>
+    <li class="toctree-l4"><a class="reference internal" href="#intermediates-are-exempt">Intermediates are exempt</a>
     </li>
         </ul>
     </li>
@@ -204,18 +232,141 @@
             <div class="section" itemprop="articleBody">
               
                 <h1 id="feature-group-resolution-errors">Feature Group Resolution Errors</h1>
-<h2 id="multiple-feature-groups-error">Multiple Feature Groups Error</h2>
+<p>Resolution runs inside a full <code>mloda</code> request, but you do not need to build one
+to reproduce a resolution error. <code>resolve_feature</code> (from <code>mloda.provider</code>) runs
+the <strong>same matcher over the same candidate universe</strong> as a run and reports what a
+run would, without raising: the failure lands in <code>result.error</code> instead of an
+exception, so for the matching failures on this page the message below is the
+message you get back.</p>
+<pre><code class="language-python">from mloda.provider import resolve_feature
+
+result = resolve_feature(&quot;my_feature&quot;)  # or resolve_feature(Feature(...)) for a full request
+if result.error:
+    print(result.error)  # for a matching failure, the same message a run raises
+    print([fg.__name__ for fg in result.candidates])
+</code></pre>
+<p>One failure is reported rather than echoed: a plugin that raises while declaring
+its frameworks fails the environment build, which <code>resolve_feature</code> prefixes with
+<code>Failed to build the plugin environment:</code> where a run raises it bare. See
+<a href="../../discover-plugins/#broken-framework-declarations">Broken framework declarations</a>.</p>
+<p>Its candidate universe is a standalone default, not a replay of a specific run.
+Pass a <code>Feature</code>, <code>options</code>, <code>plugin_collector</code>, <code>links</code>,
+<code>data_access_collection</code>, or <code>compute_frameworks</code> (a run that restricts its
+frameworks needs this to mirror) to reproduce the run you are debugging. See
+<a href="../../discover-plugins/">Discover Plugins</a> for the full signature.</p>
+<h2 id="catching-resolution-failures">Catching resolution failures</h2>
+<p>Inside a run, a feature that does not resolve to exactly one FeatureGroup raises
+<code>FeatureResolutionError</code> during planning (the <code>mloda.run_all(...)</code> /
+<code>mloda.prepare(...)</code> call, before any compute runs). It is a <code>ValueError</code>
+subclass, so existing <code>except ValueError</code> handlers keep working, but you can now
+catch it specifically and inspect why it failed:</p>
+<pre><code class="language-python">from mloda.provider import FeatureResolutionError
+from mloda.user import mloda
+
+try:
+    mloda.run_all([&quot;my_feature&quot;])
+except FeatureResolutionError as err:
+    print(err.feature_name)   # the feature that failed to resolve
+    print(err)                # the human-readable message a run prints
+    for record in err.partial_records:
+        print(record.feature_name, record.requested)  # features resolved before the failure
+    # err.result carries the per-candidate elimination facts (an EvaluationResult)
+</code></pre>
+<p>To inspect a request without catching an exception, use the non-raising
+surfaces: <code>resolve_feature</code> for a single name (above), or <code>mlodaAPI.diagnose(...)</code>,
+which returns a <code>ResolutionDiagnosis</code> for the whole request. See
+<a href="../../mloda-api/#diagnose-and-resolution_report">mlodaAPI</a> for both, plus the
+fields on <code>FeatureResolutionError</code>, <code>ResolutionDiagnosis</code>, and <code>ResolutionRecord</code>.</p>
+<h2 id="no-feature-groups-found-error">No Feature Groups Found Error</h2>
 <h3 id="the-problem">The Problem</h3>
-<pre><code>ValueError: Multiple feature groups found for feature '&lt;feature_name&gt;':
+<pre><code>FeatureResolutionError: No feature groups found for feature name: 'sales_revnue'. Requested domain: 'marketing'.
+Feature group(s) eliminated while matching 'sales_revnue':
+  - MarketingRevenueGroup (compute framework): none of its compute frameworks are enabled for this run
+  - SalesFeatureGroup (domain): declares domain 'sales', but the run requested 'marketing'
+Did you mean one of: ['sales_revenue']?
+Use resolve_feature(name, options=...) to debug feature resolution.
+For troubleshooting guide, see: https://mloda-ai.github.io/mloda/in_depth/troubleshooting/feature-group-resolution-errors/
+</code></pre>
+<p>No enabled feature group both declared the requested name and survived every matching gate. It is raised as <code>FeatureResolutionError</code> during planning; see <a href="#catching-resolution-failures">Catching resolution failures</a> to inspect it, or follow the message's closing pointer and rerun the request through <code>resolve_feature</code>. Pass the same <code>Feature</code> and run arguments, as the top of this page describes; the bare name alone would drop the domain and default to all frameworks, changing the outcome.</p>
+<h3 id="the-eliminated-candidates-block">The eliminated candidates block</h3>
+<p>Each line names a candidate the matcher considered and dropped: the first gate that eliminated it (the parenthesized label) and that gate's reason. A line does not prove the candidate declared the requested name; a candidate whose match hook raised or whose input-data gate declined is recorded regardless.</p>
+<table>
+<thead>
+<tr>
+<th>Label</th>
+<th>What eliminated the candidate</th>
+<th>Typical fix</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>option value</code></td>
+<td>The group declined an option value in the request.</td>
+<td>Fix the value the reason names.</td>
+</tr>
+<tr>
+<td><code>input data</code></td>
+<td>The input-data gate declined the request.</td>
+<td>Point the request at data the group can read (<a href="../../data-access-patterns/">Data Access Patterns</a>).</td>
+</tr>
+<tr>
+<td><code>match hook</code></td>
+<td>The group's match hook raised; the error is contained and quoted.</td>
+<td>Fix the plugin bug it names.</td>
+</tr>
+<tr>
+<td><code>domain</code></td>
+<td>The group declares a different domain than the request.</td>
+<td>Align the requested domain (<a href="#3-use-domains-to-separate-feature-groups">domain solution below</a>).</td>
+</tr>
+<tr>
+<td><code>scope</code></td>
+<td>The group is outside the requested <code>feature_group</code> scope.</td>
+<td>Widen or correct the scope (<a href="#4-scope-a-feature-to-one-source-shared-keys-across-sources">scope solution below</a>).</td>
+</tr>
+<tr>
+<td><code>compute framework</code></td>
+<td>None of the group's compute frameworks are usable: its capability hook rejected every enabled framework, or none of its frameworks is enabled for the run.</td>
+<td>Enable a framework the group supports.</td>
+</tr>
+<tr>
+<td><code>compute framework pin</code></td>
+<td>The <code>Feature</code> pins <code>compute_frameworks</code> to one that is not among the group's supported set for this run.</td>
+<td>Change or drop the pin.</td>
+</tr>
+<tr>
+<td><code>links</code></td>
+<td>No index column of the group matches the run's links.</td>
+<td>Align the run's links with the group's index.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="the-did-you-mean-hint">The Did you mean hint</h3>
+<p>Suggestions are close matches drawn from the catalog of accessible groups: declared feature names, class names, and class-name prefixes. The hint drops what would only repeat or mislead: the requested name itself, names the eliminated-candidates block already covers, and names only unreachable groups declare (abstract, no enabled framework, or outside the requested domain, scope, or links). A missing hint therefore means no reachable group declares anything close. In the example above, 'sales_revenue' survives because a third, still-reachable group declares it; the two eliminated candidates could not have contributed it.</p>
+<h3 id="only-abstract-feature-group-bases-matched">Only abstract feature group bases matched</h3>
+<p>A sibling variant fires when an abstract base matched the name and no concrete group won:</p>
+<pre><code>No feature groups found for feature name: 'my_feature'. Only abstract feature group base(s) matched, which cannot be instantiated; no concrete implementation is available or enabled.
+Use resolve_feature(name, options=...) to debug feature resolution.
+For troubleshooting guide, see: https://mloda-ai.github.io/mloda/in_depth/troubleshooting/feature-group-resolution-errors/
+</code></pre>
+<p>or, when concrete implementations exist but their compute frameworks do not:</p>
+<pre><code>No feature groups found for feature name: 'my_feature'. Its concrete implementations require compute framework(s) ['PandasDataFrame'], none of which are available or enabled for this run.
+Use resolve_feature(name, options=...) to debug feature resolution.
+For troubleshooting guide, see: https://mloda-ai.github.io/mloda/in_depth/troubleshooting/feature-group-resolution-errors/
+</code></pre>
+<p>For the first shape, import or enable a concrete implementation. For the second, enable one of the named compute frameworks; the list comes from the base's accessible concrete implementations, so check that the one you enable actually serves the name. Eliminated candidates, if any, still render in their block, and the message closes with the same pointer lines as the ordinary form. Only the Did-you-mean suggestion is dropped, because the name already matched a base.</p>
+<h2 id="multiple-feature-groups-error">Multiple Feature Groups Error</h2>
+<h3 id="the-problem_1">The Problem</h3>
+<pre><code>FeatureResolutionError: Multiple feature groups found for feature '&lt;feature_name&gt;':
   - FeatureGroupA (...) [domain: ...]
   - FeatureGroupB (...) [domain: ...]
 </code></pre>
-<p>This error occurs when multiple distinct feature groups claim they can handle the same feature. Each feature must resolve to exactly one feature group to prevent conflicts.</p>
+<p>This error occurs when multiple distinct feature groups claim they can handle the same feature. Each feature must resolve to exactly one feature group to prevent conflicts. It is raised as <code>FeatureResolutionError</code> (a <code>ValueError</code> subclass) during planning; see <a href="#catching-resolution-failures">Catching resolution failures</a> to inspect it.</p>
 <p>If you previously hit this in a notebook because of a redefined feature group (re-running a cell that defines <code>class MyFG(FeatureGroup): ...</code>), that case is now auto-deduplicated. If this error still appears, it points to a real conflict between two distinct classes (different <code>(module, qualname)</code>).</p>
 <h3 id="solutions">Solutions</h3>
 <h4 id="1-use-plugincollector-to-enable-or-disable-feature-groups">1. Use PluginCollector to enable or disable feature groups</h4>
 <p>Control which feature groups are loaded to prevent conflicts:</p>
-<pre><code class="language-python">from mloda.user import PluginCollector
+<pre><code class="language-py">from mloda.user import PluginCollector
 
 # Disable specific conflicting feature groups
 collector = PluginCollector.disabled_feature_groups({ConflictingFeatureGroupA, ConflictingFeatureGroupB})
@@ -232,12 +383,41 @@ plugin_loader = PluginLoader()
 plugin_loader.load_group(&quot;feature_group&quot;) # load plugins only from mloda_plugins.feature_group
 </code></pre>
 <h4 id="3-use-domains-to-separate-feature-groups">3. Use Domains to Separate Feature Groups</h4>
-<pre><code class="language-python">@classmethod
+<pre><code class="language-python">from mloda.user import Domain
+
+@classmethod
 def get_domain(cls):
-    return &quot;sales&quot;  # Makes this FG only handle 'sales' domain features
+    return Domain(&quot;sales&quot;)  # Makes this FG only handle 'sales' domain features
 </code></pre>
+<h4 id="4-scope-a-feature-to-one-source-shared-keys-across-sources">4. Scope a feature to one source (shared keys across sources)</h4>
+<p>When two enabled sources declare the same column (for example a shared join key), requesting that column by bare name is ambiguous. Scope the request to one source. The scope is read by feature resolution and by filter matching, and does not affect feature identity.</p>
+<pre><code class="language-py"># class object, collision-proof
+Feature(&quot;subject_token&quot;, feature_group=ClaimsReader)
+
+# class-name string form, the only form a JSON config can carry
+Feature(&quot;subject_token&quot;, feature_group=&quot;ClaimsReader&quot;)
+</code></pre>
+<p>The same scope in a JSON config (<a href="../../feature-config/">feature config</a>):</p>
+<pre><code class="language-json">[
+    {&quot;name&quot;: &quot;subject_token&quot;, &quot;feature_group&quot;: &quot;ClaimsReader&quot;}
+]
+</code></pre>
+<p>The config form takes the class-name string only, because JSON cannot express a class object; the class-object form is Python-only.</p>
+<p>Both forms match the scoped class and its subclasses, preferring the most specific one. Naming an abstract family base therefore selects the concrete subclass, so a config can scope to the family without naming a compute-framework-specific class:</p>
+<pre><code class="language-json">[
+    {&quot;name&quot;: &quot;age__mean_aggr&quot;, &quot;feature_group&quot;: &quot;AggregatedFeatureGroup&quot;}
+]
+</code></pre>
+<p>Caveats:</p>
+<ul>
+<li>The scope narrows candidates; it does not break ties between them. If the run enables two compute frameworks whose concrete subclasses both match, the family base stays ambiguous and raises, exactly as the bare name does. Enable one framework for the run, or pin <code>compute_frameworks</code> on the <code>Feature</code> (Python only).</li>
+<li>The class object is collision-proof; the string form is not. Two classes with the same name in different modules both match the string, so the request stays ambiguous and raises.</li>
+<li>Neither form pins one exact class: a subclass of the named class is preferred over it. To resolve to a specific implementation, name that implementation.</li>
+<li>The root <code>FeatureGroup</code> base is rejected in either form: it names no family.</li>
+<li>The scope is read by feature resolution and by filter matching, and stays excluded from Feature identity, so two requests for the same column name scoped to different sources compare equal. Requesting both in one features list raises <code>ValueError: Duplicate feature setup: &lt;name&gt;</code> rather than silently dropping one, so you are told, not surprised. Inside a single <code>input_features()</code> returning a set literal, a second same-name feature with a different scope is silently deduplicated by the Python set itself before the engine ever sees it, so never scope the same name twice within one feature group. To read the same column from two sources side by side, give them distinct derived feature names.</li>
+</ul>
 <h2 id="featuregroup-redefinition-errors">FeatureGroup Redefinition Errors</h2>
-<h3 id="the-problem_1">The Problem</h3>
+<h3 id="the-problem_2">The Problem</h3>
 <pre><code>ValueError: FeatureGroup redefined with different source code:
   - MyFG (__main__) source hash 5a3f0c12
   - MyFG (__main__) source hash b1e052a3
@@ -253,7 +433,7 @@ If you are running this in a notebook, restart the kernel to clear stale class d
 <h3 id="solutions_1">Solutions</h3>
 <h4 id="1-take-the-most-recent-version-iterative-development">1. Take the most recent version (iterative development)</h4>
 <p>For rapid iteration in notebooks, opt in to "newest wins" using the builder method on <code>PluginCollector</code>:</p>
-<p><strong>Option A</strong> — set the override flag on a fresh collector:</p>
+<p><strong>Option A</strong>: set the override flag on a fresh collector:</p>
 <pre><code class="language-python">from mloda.provider import FeatureGroup
 from mloda.user import PluginCollector
 
@@ -264,7 +444,7 @@ class SomeFG(FeatureGroup):
 
 plugin_collector = PluginCollector().set_allow_redefinition()
 </code></pre>
-<p><strong>Option B</strong> — compose with disable/enable filters:</p>
+<p><strong>Option B</strong>: compose with disable/enable filters:</p>
 <pre><code class="language-python">plugin_collector = (
     PluginCollector.disabled_feature_groups({SomeFG})
     .set_allow_redefinition()
@@ -273,6 +453,49 @@ plugin_collector = PluginCollector().set_allow_redefinition()
 <p>Pass this collector through to <code>mloda.run_all</code>, <code>resolve_feature</code>, or any other entry point that accepts a <code>plugin_collector</code> argument.</p>
 <h4 id="2-restart-the-kernel">2. Restart the kernel</h4>
 <p>Restarting the Jupyter kernel clears <code>Out[N]</code> history and unloads all stale class objects. Use this when you want a fully clean state and do not need to preserve other notebook state.</p>
+<h2 id="emptyresulterror">EmptyResultError</h2>
+<h3 id="the-problem_3">The Problem</h3>
+<pre><code>EmptyResultError: Result carries no schema (no columns): MyFeatureGroup. ...
+</code></pre>
+<p>This error fires when a <strong>final</strong> requested feature group returns a result with
+<em>no schema</em> (zero columns). There is no opt-in or opt-out: the rule applies
+uniformly on every compute framework. Note that <strong>zero rows is not an error</strong>: a
+well-typed frame with the right columns and no rows is a valid result and
+passes through. Only a result that carries no columns at all is rejected.</p>
+<p>On the PythonDict framework, whose native representation is a columnar
+<code>dict[str, list]</code>, the schema is the set of keys: <code>{"col": []}</code> carries a
+schema, while <code>{}</code> (zero columns) is the only schema-less value and raises.
+Returning a row-oriented <code>[]</code> ("nothing to ingest": an empty source directory, a
+query with no hits) also carries no columns and therefore raises. Return
+<code>{"my_feature": []}</code> instead.</p>
+<p>If the schema-less result is genuine (a bug, missing data, wrong filter), this
+error is correct behavior: it protects callers from silently receiving output
+they cannot interpret.</p>
+<h3 id="when-to-fix-it">When to fix it</h3>
+<p>If an empty result is a legitimate answer for your domain, for example: graph
+traversals that may find no path, search queries that may match nothing,
+authorization filters that may deny all rows, or agent memory that may have no
+relevant entries, return a <em>schema-bearing</em> empty result: keep the columns and
+drop the rows. On PythonDict that is a dict with empty column lists; on the
+other frameworks it is an empty typed table or frame with the right columns.</p>
+<pre><code class="language-py">class MyFeatureGroup(FeatureGroup):
+    @classmethod
+    def calculate_feature(cls, data, features):
+        ...
+        return {&quot;my_feature&quot;: []}  # schema-bearing, zero rows: valid
+</code></pre>
+<p>A schema-bearing empty result flows through to the caller without raising. The
+public import <code>from mloda.provider import EmptyResultError</code> (a <code>ValueError</code>
+subclass) supports a typed <code>except</code> when you invoke framework or plugin code
+directly. When calling <code>mloda.run_all</code>, worker errors are wrapped in a generic
+<code>Exception</code> whose message embeds the original traceback, so match on the
+<code>EmptyResultError</code> name in the raised exception's message instead.</p>
+<h3 id="intermediates-are-exempt">Intermediates are exempt</h3>
+<p>The check applies only to features that were explicitly requested by the caller.
+Intermediate feature groups, meaning those whose output feeds another feature
+group rather than the final result, are never subject to <code>EmptyResultError</code>.</p>
+<p>For full details on how the guard works and the schema-presence gate, see
+<a href="../../compute-framework-integration/#empty-results">Empty Results</a>.</p>
 <h2 id="related-documentation">Related Documentation</h2>
 <ul>
 <li><a href="../../feature-group-matching/">Feature Group Matching</a></li>
@@ -283,7 +506,7 @@ plugin_collector = PluginCollector().set_allow_redefinition()
             </div>
           </div><footer>
     <div class="rst-footer-buttons" role="navigation" aria-label="Footer Navigation">
-        <a href="../../data-type-enforcement/" class="btn btn-neutral float-left" title="Data Type Enforcement"><span class="icon icon-circle-arrow-left"></span> Previous</a>
+        <a href="../../comparison-contract/" class="btn btn-neutral float-left" title="Comparison Contract"><span class="icon icon-circle-arrow-left"></span> Previous</a>
         <a href="../../../development/" class="btn btn-neutral float-right" title="Contributors">Next <span class="icon icon-circle-arrow-right"></span></a>
     </div>
 
@@ -307,7 +530,7 @@ plugin_collector = PluginCollector().set_allow_redefinition()
   <span class="rst-current-version" data-toggle="rst-current-version">
     
     
-      <span><a href="../../data-type-enforcement/" style="color: #fcfcfc">&laquo; Previous</a></span>
+      <span><a href="../../comparison-contract/" style="color: #fcfcfc">&laquo; Previous</a></span>
     
     
       <span><a href="../../../development/" style="color: #fcfcfc">Next &raquo;</a></span>

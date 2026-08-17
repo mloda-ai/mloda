@@ -155,9 +155,13 @@
                 </li>
                 <li class="toctree-l2"><a class="reference internal" href="../plugin-loader/">Plugin Loader</a>
                 </li>
+                <li class="toctree-l2"><a class="reference internal" href="../plugin_registry/">Plugin Registry</a>
+                </li>
     </ul>
                   </li>
                   <li class="toctree-l1"><a class="reference internal" href="../data-type-enforcement/">Data Type Enforcement</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../comparison-contract/">Comparison Contract</a>
                   </li>
                   <li class="toctree-l1"><a class="reference internal" >Troubleshooting</a>
     <ul>
@@ -216,24 +220,25 @@
 <p><strong>Advanced</strong>: For a detailed explanation of the underlying data access patterns (BaseInputData vs MatchData), see <a href="../data-access-patterns/">Data Access Patterns</a>.</p>
 </blockquote>
 <h4 id="dataaccesscollection-global-data-access">DataAccessCollection - global data access</h4>
-<p>The DataAccessCollection is designed to control the access to data of any kind. The main purpose of this class is to organize and simplify interactions with these different data elements, making it easier to work to ingest data of various form into the framework. It provides as an interface for accessing and storing of data on a global level.</p>
+<p>The DataAccessCollection is designed to control the access to data of any kind. The main purpose of this class is to organize and simplify interactions with these different data elements, making it easier to work to ingest data of various forms into the framework. It serves as an interface for accessing and storing of data on a global level.</p>
 <p>The DataAccessCollection can only be added via <strong>mlodaAPI</strong>.</p>
 <p>A DAC holds resources of four kinds:</p>
 <ol>
 <li><strong>Files:</strong> the exact location of files, e.g. <code>path/folder/text.txt</code>.</li>
 <li><strong>Folders:</strong> directories where files are located, e.g. <code>path/folder/</code>.</li>
-<li><strong>Credentials:</strong> dicts with the information needed to reach a data source, e.g. <code>{host: example.com, password: example}</code>.</li>
+<li><strong>Credentials:</strong> the information needed to reach a data source, expressed as a typed <code>Credential</code> (recommended) or a plain dict, e.g. <code>Credential(host="example.com", password="example")</code>.</li>
 <li><strong>Connections:</strong> already-initialized connection objects (database connections, Spark sessions, Iceberg catalogs, etc.).</li>
 </ol>
 <p>When the collection holds more than one resource of the same kind, you can name them with stable handles and disambiguate per feature via <code>Options(context={"data_access_handle": "..."})</code>. See <a href="../named-data-access-handles/">Named Data Access Handles</a> for the full naming model, the resolution rule, and the available error shapes; for the simple single-source cases below, naming is optional.</p>
 <p>You can apply these options like so:</p>
-<pre><code class="language-python">
+<pre><code class="language-py">from mloda.user import Credential, DataAccessCollection
+
 data_access = DataAccessCollection()
 
 # Add file paths, folder paths, credentials, and connection objects
 data_access.add_file('path/to/folder/text.txt')
 data_access.add_folder('path/to/folder/')
-data_access.add_credentials({'host': 'example.com', 'password': 'example'})
+data_access.add_credentials(Credential(host='example.com', password='example'))
 data_access.add_connection('InitializedDBConnection')
 
 mloda.run_all(
@@ -264,7 +269,7 @@ result = mloda.run_all(
 print(result)
 </code></pre>
 <p>Output</p>
-<pre><code class="language-python">[  AExample  BExample
+<pre><code class="language-text">[  AExample  BExample
 0   Value1         2
 1   Value2         3]
 </code></pre>
@@ -273,14 +278,14 @@ print(result)
 It skips structured file types (CSV, JSON, Parquet, etc.) by default to avoid conflicts
 with <code>ReadFile</code>.</p>
 <p>To read a structured file type as a document, use the <code>document_suffixes</code> option:</p>
-<pre><code class="language-python">Feature(&quot;content&quot;, options={&quot;document_suffixes&quot;: frozenset({&quot;.json&quot;})})
+<pre><code class="language-py">Feature(&quot;content&quot;, options={&quot;document_suffixes&quot;: frozenset({&quot;.json&quot;})})
 </code></pre>
 <p>This tells ReadDocument to include .json files and ReadFile to auto-exclude them
 for that feature.</p>
 <h4 id="disambiguating-columns-shared-across-multiple-files">Disambiguating columns shared across multiple files</h4>
 <p>When a <code>DataAccessCollection</code> holds multiple files that share the same column name (e.g. <code>id</code> appears in both <code>application_train.csv</code> and <code>bureau.csv</code>), the resolver refuses to guess: it raises <code>ValueError</code> listing the candidate files and asks for <code>data_access_handle</code>. <code>column_to_file</code> is a per-column shortcut that binds columns to files at construction so you don't have to set <code>data_access_handle</code> on every feature.</p>
 <p>Use <code>column_to_file</code> to pin each column to its canonical file:</p>
-<pre><code class="language-python">from mloda.user import DataAccessCollection, mloda
+<pre><code class="language-py">from mloda.user import DataAccessCollection, mloda
 
 data_access = DataAccessCollection(
     files={&quot;train&quot;: &quot;application_train.csv&quot;, &quot;bureau&quot;: &quot;bureau.csv&quot;},
@@ -303,7 +308,7 @@ result = mloda.run_all(
 - If a batch of features has some columns pinned and others not, a <code>ValueError</code> is raised (use <code>column_to_file</code> for all columns or none in a batch).
 - For columns not listed in the map, the consumer falls back to the shared resolver: a single matching file binds, multiple matching files raise <code>ValueError</code> listing the candidates. Set <code>data_access_handle</code> on the feature's <code>Options</code> to disambiguate without <code>column_to_file</code>. See <a href="../named-data-access-handles/">Named Data Access Handles</a>.</p>
 <p>The existing per-feature alternative still works for one-off pinning:</p>
-<pre><code class="language-python">Feature(&quot;SK_ID_CURR&quot;, options=Options({CsvReader: &quot;application_train.csv&quot;}))
+<pre><code class="language-py">Feature(&quot;SK_ID_CURR&quot;, options=Options({CsvReader: &quot;application_train.csv&quot;}))
 </code></pre>
 <h4 id="feature-scope-data-access">Feature Scope Data Access</h4>
 <p>The Feature Scope Data access is instead designed to control the access to data of any kind 
@@ -311,7 +316,7 @@ on a local level. </p>
 <p>If data needs to be added specifically for a single feature (or features from the same feature group), you can use the feature_scope_data_access_name functionality.</p>
 <p>We show the ReadFileFeature as example. It uses the input_data ReadFile. 
 In this case, we need to provide the specific reader class: CsvReader.</p>
-<pre><code class="language-python">
+<pre><code class="language-py">
 # This feature is already implemented as plugin, so do not run it again. This will raise intentional errors.
 class ReadFileFeature(FeatureGroup):
     @classmethod
@@ -354,7 +359,7 @@ result = mloda.run_all(feature_list, compute_frameworks=[&quot;PandasDataFrame&q
 print(result)
 </code></pre>
 <p>Output</p>
-<pre><code class="language-python">[  AExample
+<pre><code class="language-text">[  AExample
 0   Value1
 1   Value2]
 </code></pre>
@@ -373,7 +378,7 @@ For this purpose, we have the ApiData.</p>
 <pre><code class="language-python">from typing import List
 
 from mloda.user import mloda
-from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
+from mloda.user.pandas import PandasDataFrame
 
 # Pass api_data directly as a dict - the framework handles registration internally
 result = mloda.run_all(
@@ -385,7 +390,7 @@ for res in result:
     print(res)
 </code></pre>
 <p>Output:</p>
-<pre><code class="language-python">  FeatureInputAPITest
+<pre><code class="language-text">  FeatureInputAPITest
 0          TestValue3
 1          TestValue4
 </code></pre>
@@ -402,7 +407,7 @@ for res in result:
 <p>One could imagine that for experimenting one wants to see data. Then one could use this feature as input feature to another feature instead of e.g. the true data.</p>
 <pre><code class="language-python">from mloda.user import mloda
 from mloda.provider import FeatureGroup, BaseInputData, FeatureSet, DataCreator
-from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
+from mloda.user.pandas import PandasDataFrame
 
 # Create a Creator FeatureGroup class, which delivers the data needed
 class AFeatureInputCreator(FeatureGroup):
@@ -425,7 +430,7 @@ for res in result:
      print(res)
 </code></pre>
 <p>Output</p>
-<pre><code class="language-python">  AFeatureInputCreator
+<pre><code class="language-text">  AFeatureInputCreator
 0          TestValue5
 1          TestValue6
 </code></pre>
@@ -483,7 +488,7 @@ result = mloda.run_all(
 print(result)
 </code></pre>
 <p>Output:</p>
-<pre><code class="language-python">[AFeatureInputCreator
+<pre><code class="language-text">[AFeatureInputCreator
 0           TestValue5
 1           TestValue6,    
 AInputFeatureGroup
@@ -496,7 +501,7 @@ AInputFeatureGroup
 <p>When input features come from different sources (e.g., ApiData and DataCreator), you can join them using Links. Create a <code>Link</code> in <code>input_features()</code> and attach it to a <code>Feature</code>:</p>
 <pre><code class="language-python">from mloda.user import Link, Index, Feature
 from mloda.provider import FeatureGroup, FeatureSet
-from mloda_plugins.feature_group.input_data.api_data.api_data import ApiInputDataFeature
+from mloda.provider import ApiInputDataFeature
 
 class JoinedFeature(FeatureGroup):
 

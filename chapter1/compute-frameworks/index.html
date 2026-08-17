@@ -85,9 +85,15 @@
     </li>
     <li class="toctree-l2"><a class="reference internal" href="#5-available-compute-frameworks">5. Available Compute Frameworks</a>
         <ul>
-    <li class="toctree-l3"><a class="reference internal" href="#automatic-dependency-detection">Automatic Dependency Detection</a>
+    <li class="toctree-l3"><a class="reference internal" href="#importing-a-compute-framework">Importing a Compute Framework</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#backend-import-and-availability-policy">Backend Import and Availability Policy</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#framework-examples">Framework Examples</a>
     </li>
         </ul>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#columnar-helpers">Columnar helpers</a>
     </li>
     <li class="toctree-l2"><a class="reference internal" href="#6-summary">6. Summary</a>
     </li>
@@ -167,9 +173,13 @@
                 </li>
                 <li class="toctree-l2"><a class="reference internal" href="../../in_depth/plugin-loader/">Plugin Loader</a>
                 </li>
+                <li class="toctree-l2"><a class="reference internal" href="../../in_depth/plugin_registry/">Plugin Registry</a>
+                </li>
     </ul>
                   </li>
                   <li class="toctree-l1"><a class="reference internal" href="../../in_depth/data-type-enforcement/">Data Type Enforcement</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../in_depth/comparison-contract/">Comparison Contract</a>
                   </li>
                   <li class="toctree-l1"><a class="reference internal" >Troubleshooting</a>
     <ul>
@@ -224,7 +234,7 @@
 <li>Testing: Easily compare different compute technologies or frameworks.</li>
 <li>Migrations: Move from one environment to another (e.g., local to cloud or db to other db) without changing the underlying feature definitions.</li>
 </ul>
-<p>This flexibility is one of mloda’s key advantages, allowing users to decouple feature definitions from specific computation technologies—something that traditional feature stores don’t easily offer.</p>
+<p>This flexibility is one of mloda’s key advantages, allowing users to decouple feature definitions from specific computation technologies, something that traditional feature stores don’t easily offer.</p>
 <h4 id="2-balancing-flexibility-and-complexity">2. Balancing Flexibility and Complexity</h4>
 <p>However, this flexibility introduces a bit of complexity. Let's look at an example where we remove the compute_frameworks=["PyArrowTable"] parameter from the mlodaAPI call.</p>
 <h4 id="3-example-without-a-specified-compute-framework">3. Example Without a Specified Compute Framework</h4>
@@ -237,7 +247,7 @@ data_access_collection = DataAccessCollection(files={file_path})
 feature_list = [&quot;id&quot;,&quot;V1&quot;,&quot;V2&quot;,&quot;V3&quot;]
 </code></pre>
 <p>Expected Error when running.</p>
-<pre><code class="language-python">mloda.run_all(
+<pre><code class="language-text">mloda.run_all(
     feature_list,
     data_access_collection=data_access_collection
 )
@@ -275,7 +285,7 @@ result = mloda.run_all(
 result[0]
 </code></pre>
 <p>Expected output:</p>
-<pre><code class="language-python">pyarrow.Table
+<pre><code class="language-text">pyarrow.Table
 id: int64
 id: [[0,1,2,3,...]]
 </code></pre>
@@ -284,8 +294,8 @@ id: [[0,1,2,3,...]]
 <pre><code class="language-python">import pyarrow.compute as pc
 import pyarrow as pa
 
-from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
-from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
+from mloda.user.pyarrow import PyArrowTable
+from mloda.user.pandas import PandasDataFrame
 from mloda.provider import FeatureGroup
 
 
@@ -361,7 +371,14 @@ result[0]
 <td>DuckDB Relations</td>
 <td>SQL interface, fast analytics, OLAP queries</td>
 <td>Analytical workloads, SQL-based transformations, data warehousing</td>
-<td>duckdb</td>
+<td>duckdb, pyarrow</td>
+</tr>
+<tr>
+<td><strong>SqliteFramework</strong></td>
+<td>SQLite relations</td>
+<td>SQL interface, embedded, no server</td>
+<td>Local databases, small SQL workloads</td>
+<td>sqlite3 (stdlib), pyarrow</td>
 </tr>
 <tr>
 <td><strong>IcebergFramework</strong></td>
@@ -379,20 +396,33 @@ result[0]
 </tr>
 <tr>
 <td><strong>PythonDictFramework</strong></td>
-<td>List[Dict[str, Any]]</td>
+<td>dict[str, list[Any]] (columnar)</td>
 <td>Zero dependencies, simple, lightweight</td>
 <td>Minimal environments, education, prototyping</td>
 <td>None (Python stdlib only)</td>
 </tr>
 </tbody>
 </table>
-<h5 id="automatic-dependency-detection">Automatic Dependency Detection</h5>
-<p>mloda automatically detects which compute frameworks are available based on installed dependencies. If a required dependency (like <code>pandas</code> or <code>pyarrow</code>) is not installed, the corresponding compute framework will be automatically excluded from discovery, preventing runtime errors.</p>
-<p>This means you can:
-- Install only the dependencies you need for your specific use case
-- Deploy mloda in minimal environments without all compute framework dependencies
-- Avoid import errors when optional dependencies are missing</p>
-<p>For example, if <code>polars</code> is not installed, <code>PolarsDataFrame</code> will not be available as a compute framework option, and mloda will automatically work with the remaining available frameworks.</p>
+<h5 id="importing-a-compute-framework">Importing a Compute Framework</h5>
+<p>Every stock compute framework is published from one module per backend under <code>mloda.user</code>, so you do not need the deep <code>mloda_plugins.compute_framework.base_implementations...</code> path:</p>
+<pre><code class="language-python">from mloda.user.python_dict import PythonDictFramework
+from mloda.user.pandas import PandasDataFrame
+from mloda.user.polars import PolarsDataFrame, PolarsLazyDataFrame
+from mloda.user.pyarrow import PyArrowTable
+from mloda.user.sqlite import SqliteFramework
+from mloda.user.duckdb import DuckDBFramework
+from mloda.user.iceberg import IcebergFramework
+from mloda.user.spark import SparkFramework
+</code></pre>
+<h5 id="backend-import-and-availability-policy">Backend Import and Availability Policy</h5>
+<p>One policy for every backend: importing <code>mloda.user.&lt;backend&gt;</code> never fails because the backend library is missing. <code>import mloda.user</code> needs no backend at all, importing a backend module always gives you the framework class, and a framework whose library is missing reports itself unavailable through <code>is_available()</code>. Discovery filters on <code>is_available()</code>, so an unavailable framework is never selected. The deep import paths keep working unchanged.</p>
+<p>Why it works this way:</p>
+<ul>
+<li>mloda core declares zero hard dependencies; every backend is an optional extra (<code>pip install mloda[polars]</code>), so you install only what your use case needs and can deploy in minimal environments.</li>
+<li>A framework that is importable but unavailable stays visible in the plugin catalogue, where <code>is_available()</code> reports it as unavailable, instead of vanishing entirely from discovery. The table above says which libraries an extra installs.</li>
+</ul>
+<p>For example, without <code>polars</code> installed, <code>from mloda.user.polars import PolarsDataFrame</code> still works, <code>PolarsDataFrame.is_available()</code> returns <code>False</code>, and mloda plans with the remaining frameworks.</p>
+<h5 id="framework-examples">Framework Examples</h5>
 <p>Example using PythonDictFramework:</p>
 <pre><code class="language-python">from mloda.user import mloda
 from mloda.user import Feature
@@ -403,8 +433,17 @@ result = mloda.run_all(
     [feature],
     data_access_collection=data_access_collection
 )
-result[0]  # Returns List[Dict[str, Any]]
+result[0]  # Returns dict[str, list[Any]] (columnar)
 </code></pre>
+<p>A feature group running on PythonDictFramework may also return row-wise data as a list of dicts; it is normalized to the columnar form, and all rows must have identical keys.</p>
+<h4 id="columnar-helpers">Columnar helpers</h4>
+<p><code>columnar_to_rows</code>, <code>homogenize_rows</code>, <code>is_columnar</code>, <code>result_rows</code>, <code>row_count</code>, <code>rows_to_columnar</code>, and <code>validate_columnar_dict</code> come from <code>mloda.user.python_dict</code>, next to <code>PythonDictFramework</code> itself. <code>columnar_to_rows</code> is strict: it raises <code>ValueError</code> on anything that is not a valid columnar dict. <code>result_rows</code> is the blessed tolerant unwrapper for PythonDict-framework <code>run_all</code> output (columnar dicts and row-dict lists): it flattens the partition list into row dicts, and a dict that satisfies <code>is_columnar</code> is always treated as a columnar partition, never as a row. It rejects other frameworks' result objects (convert those to rows first).</p>
+<pre><code class="language-py">from mloda.user import mloda
+from mloda.user.python_dict import result_rows
+
+rows = result_rows(mloda.run_all(...))
+</code></pre>
+<p>Strictness stays in the library; <code>result_rows</code> packages the forgiving application-side policy.</p>
 <p>Example using Polars frameworks:</p>
 <pre><code class="language-python">from mloda.user import mloda
 from mloda.user import Feature
@@ -421,8 +460,10 @@ result = mloda.run_all(
 )
 result[0]  # Returns polars.DataFrame
 </code></pre>
+<p>The backend examples that follow are sketches, not executed: each needs a configured backend and a
+source that provides <code>id</code>.</p>
 <p>Example using DuckDB framework:</p>
-<pre><code class="language-python">from mloda.user import mloda
+<pre><code class="language-py">from mloda.user import mloda
 from mloda.user import Feature, DataAccessCollection
 import duckdb
 
@@ -444,7 +485,7 @@ result[0]  # Returns duckdb.DuckDBPyRelation
 </code></pre>
 <p><strong>Note</strong>: DuckDB framework requires a connection object and does not support mloda framework inherent multiprocessing. Multiprocessing from DuckDB still works. It's optimized for analytical workloads and provides SQL-like operations on data.</p>
 <p>Example using Iceberg framework:</p>
-<pre><code class="language-python">from mloda.user import mloda
+<pre><code class="language-py">from mloda.user import mloda
 from mloda.user import Feature, DataAccessCollection
 from pyiceberg.catalog import load_catalog
 
@@ -471,7 +512,7 @@ result[0]  # Returns pyiceberg.table.Table or pyarrow.Table
 </code></pre>
 <p><strong>Note</strong>: Iceberg framework requires a catalog connection object for table operations. It's optimized for data lake scenarios with schema evolution, time travel capabilities, and large-scale analytics. The framework uses PyArrow as an interchange format for compatibility with other mloda frameworks.</p>
 <p>Example using Spark framework:</p>
-<pre><code class="language-python">from mloda.user import mloda
+<pre><code class="language-py">from mloda.user import mloda
 from mloda.user import Feature, DataAccessCollection
 from pyspark.sql import SparkSession
 
@@ -502,7 +543,7 @@ result[0]  # Returns pyspark.sql.DataFrame
 <p>For more in-depth information about compute frameworks, check out these advanced topics:</p>
 <ul>
 <li><a href="../../in_depth/framework-transformers/">Framework Transformers</a> - How data is transformed between different compute frameworks</li>
-<li><a href="../../in_depth/compute-framework-integration/">Compute Framework Integration</a> - How feature groups integrate with different compute frameworks</li>
+<li><a href="../../in_depth/compute-framework-integration/">Compute Framework Integration</a> - How feature groups integrate with different compute frameworks, declare unsupported operations, and control empty-result handling</li>
 <li><a href="../../in_depth/framework-connection-object/">Framework Connection Object</a> - How stateful frameworks manage persistent connections and state</li>
 </ul>
 <h4 id="7-discovering-compute-frameworks">7. Discovering Compute Frameworks</h4>

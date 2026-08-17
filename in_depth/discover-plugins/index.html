@@ -135,6 +135,12 @@
     <ul class="current">
     <li class="toctree-l3"><a class="reference internal" href="#resolving-feature-names">Resolving Feature Names</a>
         <ul>
+    <li class="toctree-l4"><a class="reference internal" href="#expressing-the-full-request">Expressing the full request</a>
+    </li>
+    <li class="toctree-l4"><a class="reference internal" href="#option-gated-feature-groups">Option-Gated Feature Groups</a>
+    </li>
+    <li class="toctree-l4"><a class="reference internal" href="#scoping-to-a-feature-group">Scoping to a Feature Group</a>
+    </li>
     <li class="toctree-l4"><a class="reference internal" href="#inspecting-candidates">Inspecting Candidates</a>
     </li>
         </ul>
@@ -145,15 +151,29 @@
     </li>
     <li class="toctree-l3"><a class="reference internal" href="#inspecting-extenders">Inspecting Extenders</a>
     </li>
+    <li class="toctree-l3"><a class="reference internal" href="#graceful-degradation-policy">Graceful Degradation Policy</a>
+        <ul>
+    <li class="toctree-l4"><a class="reference internal" href="#redefinition-conflicts">Redefinition conflicts</a>
+    </li>
+    <li class="toctree-l4"><a class="reference internal" href="#broken-framework-declarations">Broken framework declarations</a>
+    </li>
+    <li class="toctree-l4"><a class="reference internal" href="#shared-helper">Shared helper</a>
+    </li>
+        </ul>
+    </li>
     <li class="toctree-l3"><a class="reference internal" href="#related-documentation">Related Documentation</a>
     </li>
     </ul>
                 </li>
                 <li class="toctree-l2"><a class="reference internal" href="../plugin-loader/">Plugin Loader</a>
                 </li>
+                <li class="toctree-l2"><a class="reference internal" href="../plugin_registry/">Plugin Registry</a>
+                </li>
     </ul>
                   </li>
                   <li class="toctree-l1"><a class="reference internal" href="../data-type-enforcement/">Data Type Enforcement</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../comparison-contract/">Comparison Contract</a>
                   </li>
                   <li class="toctree-l1"><a class="reference internal" >Troubleshooting</a>
     <ul>
@@ -212,12 +232,90 @@ if result.feature_group:
 else:
     print(f&quot;Resolution failed: {result.error}&quot;)
 </code></pre>
+<p>Plugin authors can also import <code>resolve_feature</code> from <code>mloda.provider</code>; it is the same function.</p>
 <p>This is useful for:
 - Debugging feature resolution issues
 - Understanding which plugin handles a feature
 - Identifying conflicts when multiple FeatureGroups match</p>
+<p><code>resolve_feature</code> runs the <strong>same matcher over the same candidate universe as a
+run</strong>: it delegates to the engine's <code>IdentifyFeatureGroupClass</code> and builds its
+plugin universe the way the engine does (availability, strict-registry mode, and
+<code>PluginCollector</code> policy all apply). So the error it reports for an unresolvable
+feature is the error a run would raise, and a feature it resolves is one a run
+resolves. The remaining differences are presentation-only: <code>resolve_feature</code>
+never raises (matching failures land in <code>result.error</code>, not an exception), and
+it returns a structured <code>ResolvedFeature</code> instead of a plan.</p>
+<p>This covers a broken framework declaration too: a plugin that raises while
+declaring its frameworks (<code>compute_framework_rule</code> /
+<code>compute_framework_definition</code>) aborts the environment build on both paths. A run
+raises that failure; <code>resolve_feature</code> reports the same failure in <code>result.error</code>
+with no candidates, because the build never reaches matching. The difference stays
+presentation-only.</p>
+<p>Its candidate universe is a <strong>standalone default</strong>, not a replay of a specific
+run: it defaults to every installed compute framework unless you narrow it (see
+<a href="#expressing-the-full-request">Expressing the full request</a>).</p>
+<h3 id="expressing-the-full-request">Expressing the full request</h3>
+<p>A run resolves a <code>Feature</code>, not just a name, so <code>resolve_feature</code> accepts one
+too. Pass a <code>Feature</code> as the single source of truth for name, <code>options</code>, domain,
+compute-framework pin, and scope; passing <code>options</code> or <code>feature_group</code> alongside
+a <code>Feature</code> raises <code>TypeError</code>.</p>
+<pre><code class="language-python">from mloda.user import Feature, Options
+
+result = resolve_feature(Feature(&quot;sales__sum_aggr&quot;, options=Options(group={&quot;partition_by&quot;: [&quot;customer_id&quot;]})))
+</code></pre>
+<p>Every engine input is expressible, either on the <code>Feature</code> or as a keyword-only
+argument to <code>resolve_feature</code>:</p>
+<ul>
+<li><code>options</code>, domain, compute-framework pin, scope: on the <code>Feature</code> (or, for the
+  string form, <code>options=</code> and <code>feature_group=</code>).</li>
+<li><code>links</code>: a set of <code>Link</code> objects, threaded to the matcher so link-gated groups
+  resolve.</li>
+<li><code>data_access_collection</code>: threaded to the matcher so reader / input-data groups
+  resolve.</li>
+<li><code>plugin_collector</code>: restricts the FeatureGroups considered and threads its
+  <code>allow_redefinition</code> flag into deduplication.</li>
+<li><code>compute_frameworks</code>: restricts the candidate universe's framework set
+  (default: all installed frameworks).</li>
+</ul>
+<h3 id="option-gated-feature-groups">Option-Gated Feature Groups</h3>
+<p>Matching and the compute framework split both run under the options you pass.
+A FeatureGroup whose <code>match_feature_group_criteria</code> or
+<code>supports_compute_framework</code> reads an option therefore only resolves when you
+supply it. Without <code>options</code> the evaluation uses empty <code>Options</code>, and such a
+group reports no candidates:</p>
+<pre><code class="language-python">from mloda.steward import resolve_feature
+from mloda.user import Options, PluginLoader
+
+PluginLoader.all()
+
+# The group-by aggregation FeatureGroups in mloda-registry match only when partition_by is set.
+result = resolve_feature(&quot;sales__sum_aggr&quot;, options=Options(group={&quot;partition_by&quot;: [&quot;customer_id&quot;]}))
+print(result.feature_group, result.supported_compute_frameworks)
+</code></pre>
+<p>Every argument after <code>feature</code> (<code>options</code>, <code>plugin_collector</code>, <code>feature_group</code>,
+<code>links</code>, <code>data_access_collection</code>, <code>compute_frameworks</code>) is keyword-only, so
+pass them by name.</p>
+<h3 id="scoping-to-a-feature-group">Scoping to a Feature Group</h3>
+<p>When several FeatureGroups match the same name, such as the framework-specific
+<code>AggregatedFeatureGroup</code> subclasses, narrow the resolution with the keyword-only
+<code>feature_group</code> argument. It takes a FeatureGroup subclass or its class-name
+string (the string matches the named class and its subclasses), the same forms
+as <code>Feature(..., feature_group=...)</code>:</p>
+<pre><code class="language-python">result = resolve_feature(&quot;sales__sum_aggr&quot;, feature_group=&quot;PandasAggregatedFeatureGroup&quot;)
+</code></pre>
+<p>Scoped failures append <code>Scoped to feature group: '&lt;Name&gt;'.</code> to <code>result.error</code>,
+mirroring the scoped engine error, so a scoped run can be debugged with the
+same scope.</p>
+<p>When exactly one FeatureGroup resolves, <code>ResolvedFeature</code> also reports
+<code>subtype</code> (resolved from the name, the passed options, or the key's declared
+default, e.g. <code>"sum"</code> for <code>sales__sum_aggr</code>) and <code>subtype_family</code> (the
+parametric family name, <code>"ntile"</code> for <code>ntile_2</code>); both are <code>None</code> when
+nothing resolves.</p>
 <h3 id="inspecting-candidates">Inspecting Candidates</h3>
-<p>When resolution fails due to conflicts, check the candidates:</p>
+<p>When resolution reached matching but ended ambiguous (multiple FeatureGroups
+matched), <code>candidates</code> lists the classes that matched. When the environment
+build itself failed (for example a redefinition conflict), no matching runs,
+so <code>candidates</code> is empty and the error text carries the details:</p>
 <pre><code class="language-python">result = resolve_feature(&quot;my_feature&quot;)
 if result.error:
     print(f&quot;Error: {result.error}&quot;)
@@ -234,17 +332,23 @@ all_fgs = get_feature_group_docs()
 fgs = get_feature_group_docs(name=&quot;timestamp&quot;)
 
 # Filter by compute framework
-fgs = get_feature_group_docs(compute_framework=&quot;PandasDataframe&quot;)
+fgs = get_feature_group_docs(compute_framework=&quot;PandasDataFrame&quot;)
 </code></pre>
+<p>Each <code>FeatureGroupInfo</code> also carries the subtype declaration: <code>subtype_key</code>
+(the <code>SUBTYPES.key</code>, <code>None</code> for shape-B and undeclared families), <code>subtypes</code>
+(the sorted universe), <code>parametric_subtypes</code>, <code>subtype_support</code> (supported
+subtypes per framework; empty for abstract bases) and <code>subtype_error</code> (set
+when the declaration is invalid). See
+<a href="../compute-framework-integration/#declaring-capability-per-subtype">Declaring capability per subtype</a>.</p>
 <h2 id="inspecting-compute-frameworks">Inspecting Compute Frameworks</h2>
 <p>Get documentation for compute frameworks:</p>
 <pre><code class="language-python">from mloda.steward import get_compute_framework_docs
 
-# Get all available frameworks
+# List every framework (is_available flags whether its backend library is installed)
 frameworks = get_compute_framework_docs()
 
-# Include unavailable frameworks
-all_frameworks = get_compute_framework_docs(available_only=False)
+# Filter to available frameworks only
+available_frameworks = get_compute_framework_docs(available_only=True)
 </code></pre>
 <h2 id="inspecting-extenders">Inspecting Extenders</h2>
 <p>Get documentation for extenders:</p>
@@ -256,6 +360,100 @@ extenders = get_extender_docs()
 # Filter by wrapped function type
 extenders = get_extender_docs(wraps=&quot;formula&quot;)
 </code></pre>
+<h2 id="graceful-degradation-policy">Graceful Degradation Policy</h2>
+<p>The discovery functions above walk every live plugin subclass and introspect it.
+Plugins can be broken, exotic, or built at runtime (via <code>type()</code>, notebook
+re-execution, or <code>importlib.reload</code>), so introspecting one class can fail. The
+guarded catalog reads follow one shared contract so that a broken plugin
+degrades a field instead of sinking the catalog call.</p>
+<p>Every failure a plugin can cause falls into one of three tiers:</p>
+<ul>
+<li><strong>Annotate.</strong> A single descriptive field cannot be read, but the class is still
+  a valid catalog entry. The entry is listed with a sentinel value and discovery
+  continues. Examples: <code>get_feature_group_docs</code> reports <code>version="unavailable"</code>
+  when source introspection fails (<code>_safe_version</code>); <code>get_compute_framework_docs</code>
+  reports <code>expected_data_framework="unavailable"</code>, <code>has_merge_engine=False</code>,
+  <code>has_filter_engine=False</code>, and <code>is_available=False</code> when the corresponding call
+  raises; <code>get_extender_docs</code> reports <code>wraps=[]</code> when the extender cannot be
+  instantiated. A framework that degrades to <code>is_available=False</code> is excluded by
+  <code>available_only=True</code>, exactly as a genuinely unavailable one would be.</li>
+<li><strong>Skip.</strong> An entry that is not meant to be documented is dropped silently:
+  classes defined in <code>__main__</code>, and the abstract bases (<code>get_extender_docs</code>
+  skips <code>Extender</code> and <code>_CompositeExtender</code> explicitly; the FeatureGroup and
+  ComputeFramework roots never appear because <code>get_all_subclasses</code> omits them).
+  Redefinition duplicates are collapsed rather than listed twice (see below).</li>
+<li><strong>Propagate.</strong> Errors that are not a single plugin's introspection fault are
+  left to surface: bad arguments to the discovery function itself, and failures
+  in mloda's own catalog machinery. These are bugs to fix, not conditions to
+  paper over.</li>
+</ul>
+<h3 id="redefinition-conflicts">Redefinition conflicts</h3>
+<p>When the same <code>(module, qualname)</code> FeatureGroup is defined more than once with
+differing source (typical in notebooks and reload-heavy sessions), the catalog
+and resolution paths intentionally differ:</p>
+<ul>
+<li><strong><code>get_*_docs</code> degrade.</strong> Documentation is a best-effort read-only view, so a
+  conflict collapses to the most recently defined (live) class and listing
+  continues. There is nothing to execute, so ambiguity is harmless.</li>
+<li><strong><code>resolve_feature</code> fails closed.</strong> Resolution feeds execution, so the
+  conflict fails closed like any other environment-build failure: it returns
+  <code>feature_group=None</code> with the conflict described in <code>error</code> and no
+  candidates. The failure is projected from the build error itself, which names
+  the conflicting classes in the message, and no matching runs.</li>
+</ul>
+<h3 id="broken-framework-declarations">Broken framework declarations</h3>
+<p>When a FeatureGroup raises while declaring its frameworks
+(<code>compute_framework_rule</code> / <code>compute_framework_definition</code>), the catalog and
+resolution paths again differ:</p>
+<ul>
+<li><strong><code>get_*_docs</code> degrade.</strong> Listing is a read-only view, so the class stays a
+  catalog entry with <code>compute_frameworks=[]</code>. This is the annotate tier's
+  <code>safe_field</code> guard on that one field.</li>
+<li><strong><code>resolve_feature</code> fails closed.</strong> Resolution feeds execution, so it builds its
+  environment the way a run does: the broken declaration aborts the build. It
+  returns <code>feature_group=None</code> with the provider's failure in <code>error</code> and no
+  candidates, the same failure a run raises.</li>
+</ul>
+<p>Failing closed is process-wide, not group-local: the build declares every
+FeatureGroup's frameworks, so one broken plugin fails <em>every</em> resolution and run,
+including features it has nothing to do with. The way out is to scope it out of
+the universe. Both filters below drop the class before its declaration is ever
+consulted, so the build succeeds and the feature is an ordinary no-match:</p>
+<pre><code class="language-py"># One broken third-party plugin, and every call reports its failure:
+resolve_feature(&quot;timestamp_unix&quot;).error
+# &quot;Failed to build the plugin environment: RuntimeError: ... (raised by pkg.module:BrokenFG while declaring its compute frameworks)&quot;
+
+# Scope it out, and resolution works again:
+resolve_feature(&quot;timestamp_unix&quot;, plugin_collector=PluginCollector().disabled_feature_groups({BrokenFG}))
+</code></pre>
+<p><code>resolve_feature</code> names the culprit class as <code>module:qualname</code> in the error, so you know exactly which plugin to scope out.</p>
+<p>Strict mode is the other filter: an unregistered broken plugin is dropped before
+its declaration is read. Both apply identically to a run, so a scope that rescues
+<code>resolve_feature</code> rescues the run too.</p>
+<h3 id="shared-helper">Shared helper</h3>
+<p>The annotate tier is a single shared helper,
+<code>safe_field(read, fallback, catching=(Exception,), field="")</code> in
+<code>mloda.core.abstract_plugins.components.utils</code>: it calls the <code>read</code> thunk and
+returns <code>fallback</code> if the read raises one of <code>catching</code>, so a catalog function or
+info field reaches for one helper instead of re-deriving a <code>try/except</code>.</p>
+<p>Fallbacks are base-class-derived rather than sentinels, so a degraded entry stays
+usable: a broken <code>description()</code> falls back to the class docstring (or <code>__name__</code>),
+which keeps it findable via <code>search=</code>, and a broken <code>prefix()</code> to <code>"&lt;__name__&gt;_"</code>.
+The reads that feed a filter (<code>get_class_name()</code>, <code>description()</code>, <code>version()</code>)
+also reject a non-str return, so a wrong type degrades too instead of sinking the
+call at the filter.</p>
+<p>Logging is opt-in via <code>field</code>: the labelled <code>get_feature_group_docs</code> reads warn on
+swallow, where a raise does mean a broken plugin. The unlabelled guards stay silent
+because degrading there is by design (source introspection of <code>type()</code>-built
+classes, an availability probe without its optional backend, Iceberg's deliberate
+<code>NotImplementedError</code> from <code>merge_engine()</code>).</p>
+<p><code>get_compute_framework_docs</code> uses the default broad <code>catching</code> (any failure
+degrades the field), while the narrower named guards <code>_safe_version</code> (in
+<code>plugin_docs.py</code>) and <code>_safe_class_source_hash</code> (one layer down in
+<code>accessible_plugins.py</code>) pass the shared <code>SOURCE_INTROSPECTION_ERRORS</code> constant
+(from <code>base_feature_group_version.py</code>) so anything else still propagates. The helper is
+deliberately per-field (annotate the entry) rather than per-class (skip the whole
+entry), because the catalog's job is to list a degraded class, not hide it.</p>
 <h2 id="related-documentation">Related Documentation</h2>
 <ul>
 <li><a href="../plugin-loader/">Plugin Loader</a></li>

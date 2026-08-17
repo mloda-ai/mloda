@@ -75,7 +75,9 @@
     </li>
     <li class="toctree-l2"><a class="reference internal" href="#3-summary">3. Summary</a>
     </li>
-    <li class="toctree-l2"><a class="reference internal" href="#4-discovering-extenders">4. Discovering Extenders</a>
+    <li class="toctree-l2"><a class="reference internal" href="#4-error-handling">4. Error handling</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#5-discovering-extenders">5. Discovering Extenders</a>
     </li>
     </ul>
                   </li>
@@ -145,9 +147,13 @@
                 </li>
                 <li class="toctree-l2"><a class="reference internal" href="../../in_depth/plugin-loader/">Plugin Loader</a>
                 </li>
+                <li class="toctree-l2"><a class="reference internal" href="../../in_depth/plugin_registry/">Plugin Registry</a>
+                </li>
     </ul>
                   </li>
                   <li class="toctree-l1"><a class="reference internal" href="../../in_depth/data-type-enforcement/">Data Type Enforcement</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../in_depth/comparison-contract/">Comparison Contract</a>
                   </li>
                   <li class="toctree-l1"><a class="reference internal" >Troubleshooting</a>
     <ul>
@@ -236,13 +242,29 @@ mloda.run_all(
 )
 </code></pre>
 <p>Expected Output (Logged Execution Times)</p>
-<pre><code class="language-python">ERROR    test_getting_started:test_getting_started.py:29 Time taken: 0.00454258918762207
+<pre><code class="language-text">ERROR    test_getting_started:test_getting_started.py:29 Time taken: 0.00454258918762207
 ERROR    test_getting_started:test_getting_started.py:29 Time taken: 0.001033782958984375
 </code></pre>
 <h4 id="3-summary">3. Summary</h4>
-<p>With this simple extender, you can easily log and monitor the execution time of any functionality within feature groups. By extending the Extender class, you can wrap additional behavior—such as performance monitoring, logging, or auditing—around critical functions to enhance observability and traceability in your data processing workflows.</p>
+<p>With this simple extender, you can easily log and monitor the execution time of any functionality within feature groups. By extending the Extender class, you can wrap additional behavior such as performance monitoring, logging, or auditing around critical functions to enhance observability and traceability in your data processing workflows.</p>
 <p>When multiple extenders are provided, they are automatically chained and executed in priority order (lower values first).</p>
-<h4 id="4-discovering-extenders">4. Discovering Extenders</h4>
+<h4 id="4-error-handling">4. Error handling</h4>
+<p>By default an exception raised inside an extender is <strong>breaking</strong>: it propagates and fails the feature calculation, just like a bug in any other code. This holds whether one extender or several are registered for a hook, so adding a second extender never changes the error semantics.</p>
+<p>An extender that is non-critical (for example observability or telemetry) can opt out by setting <code>raise_on_error = False</code>. When such an extender fails, the error is logged as a warning and the wrapped function still runs, so a failing extender cannot break the calculation:</p>
+<pre><code class="language-python">class MetricsExtender(Extender):
+    def __init__(self) -&gt; None:
+        self.raise_on_error = False  # failures log a warning instead of breaking
+
+    def wraps(self) -&gt; Set[ExtenderHook]:
+        return {ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE}
+
+    def __call__(self, func: Any, *args: Any, **kwargs: Any) -&gt; Any:
+        result = func(*args, **kwargs)
+        record_metric(...)  # if this raises, the calculation still succeeds
+        return result
+</code></pre>
+<p>Only the extender's own failure is caught: an exception raised by the wrapped function (or by a downstream breaking extender) always propagates, and the wrapped function is never run twice. Concrete extenders can also expose the flag as a constructor argument (for example <code>OtelExtender(raise_on_error=True)</code>) to let callers opt back into breaking behavior.</p>
+<h4 id="5-discovering-extenders">5. Discovering Extenders</h4>
 <p>To list all available extenders and their documentation, use the <code>get_extender_docs()</code> function from <code>mloda.steward</code>.</p>
               
             </div>

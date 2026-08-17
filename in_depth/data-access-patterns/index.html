@@ -113,6 +113,14 @@
     </li>
     <li class="toctree-l3"><a class="reference internal" href="#common-baseinputdata-implementations">Common BaseInputData Implementations</a>
     </li>
+    <li class="toctree-l3"><a class="reference internal" href="#writing-an-input-data-reader">Writing an input-data reader</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#selecting-among-sibling-readers">Selecting among sibling readers</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#reader-selection-vs-feature-group-resolution">Reader selection vs feature-group resolution</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#declining-with-an-attributable-reason">Declining with an attributable reason</a>
+    </li>
         </ul>
     </li>
     <li class="toctree-l2"><a class="reference internal" href="#matchdata-pattern">MatchData Pattern</a>
@@ -211,9 +219,13 @@
                 </li>
                 <li class="toctree-l2"><a class="reference internal" href="../plugin-loader/">Plugin Loader</a>
                 </li>
+                <li class="toctree-l2"><a class="reference internal" href="../plugin_registry/">Plugin Registry</a>
+                </li>
     </ul>
                   </li>
                   <li class="toctree-l1"><a class="reference internal" href="../data-type-enforcement/">Data Type Enforcement</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../comparison-contract/">Comparison Contract</a>
                   </li>
                   <li class="toctree-l1"><a class="reference internal" >Troubleshooting</a>
     <ul>
@@ -283,7 +295,7 @@
 </ul>
 <p>For detailed examples of these use cases, see the <a href="../access-feature-data/">data access documentation</a>.</p>
 <h3 id="example-implementation">Example Implementation</h3>
-<pre><code class="language-python">from mloda.provider import BaseInputData, FeatureGroup, FeatureSet
+<pre><code class="language-py">from mloda.provider import BaseInputData, FeatureGroup, FeatureSet
 
 class ReadFileFeature(FeatureGroup):
     @classmethod
@@ -304,8 +316,115 @@ class ReadFileFeature(FeatureGroup):
 <li><strong>ReadDocument</strong>: For unstructured document loading (Markdown, YAML, text). Skips file types owned by ReadFile by default.</li>
 <li><strong>DataCreator</strong>: For generating synthetic data (see <a href="../access-feature-data/#data-creator">access-feature-data</a>)</li>
 <li><strong>ApiInputData</strong>: For runtime data injection (see <a href="../access-feature-data/#apidata">access-feature-data</a>)</li>
-<li><strong>DatabaseConnector</strong>: For database connections</li>
+<li><strong>ReadDB</strong>: For database-backed loading</li>
 </ul>
+<h3 id="writing-an-input-data-reader">Writing an input-data reader</h3>
+<p>Each reader family exposes a recommended hook seam. Overriding <code>load_data</code> wholesale remains supported in every family.</p>
+<ul>
+<li><strong>ReadDB</strong>: implement <code>produce_rows</code>, <code>connect</code>, and <code>is_valid_credentials</code>; optionally <code>prepare_credentials</code> and <code>build_query</code>.</li>
+<li><strong>ReadDocument</strong>: implement <code>produce_document</code> and <code>suffix</code>; optionally <code>document_file_type</code>.</li>
+<li><strong>ReadFile</strong>: override <code>load_data</code> wholesale to return the table. <code>CsvReader</code> resolves to a <code>FileSource</code> descriptor that the target compute framework materializes into its native type.</li>
+</ul>
+<p>CSV inference semantics are defined by pyarrow's default CSV reader; the stdlib reader behind PythonDict follows it. Types are inferred per column: null tokens (pyarrow's default set, e.g. <code>NA</code>, <code>NaN</code>, <code>null</code>) become <code>None</code> in an int/float/bool column but stay literal text in a string column, a column of only empty cells and/or null tokens is all-<code>None</code>, and an int column with a value outside signed int64 range degrades entirely to float.</p>
+<p>The stdlib reader does not yet cover pyarrow's full surface. Where they differ, a column pyarrow types stays a string column in PythonDict: dates, timestamps and times, whitespace-padded numbers (<code>" 1 "</code>), <code>inf</code>/<code>infinity</code>, uppercase <code>NAN</code> (the float value, not the <code>NaN</code> null token), hex literals (<code>0x1f</code>), and a <code>true</code>/<code>1</code> mix (pyarrow reads <code>1</code>/<code>0</code> as bools too).</p>
+<p>Readers are classified structurally; no reader code is executed for classification. <code>is_final_reader()</code> is True when a class overrides <code>load_data</code> wholesale, or when it overrides all hooks named by its family's <code>_final_reader_requires()</code> (for example <code>("produce_rows", "connect")</code> for ReadDB). Family bases (ReadDB, ReadDocument, ReadFile) are never discovered as final readers themselves.</p>
+<p><strong>Warning</strong>: classification is structural (declared is overridden), so an intermediate base that re-declares a hook or <code>load_data</code> with a bare <code>raise NotImplementedError</code> body is classified as a final reader and enters discovery. Intermediate bases must not re-declare bare hooks; re-anchor the family by declaring <code>_final_reader_requires</code> instead.</p>
+<p><code>_final_reader_requires</code> is underscore-named but is a stable, documented extension point for third-party reader families.</p>
+<h3 id="selecting-among-sibling-readers">Selecting among sibling readers</h3>
+<p>A feature selects a specific reader with an Option whose key equals the reader's <code>BaseInputData.data_access_name()</code>, which defaults to <code>cls.__name__</code> (unique per class, so sibling readers cannot collide) and which a reader that overrides it keeps unique within its family itself:</p>
+<pre><code class="language-py">Feature(&quot;value&quot;, options={UbaAirReader.__name__: url})
+</code></pre>
+<p>The reader class itself is also accepted as the key, e.g. <code>Feature("value", options={UbaAirReader: url})</code>; it is normalized to the class-name string when the Options object is constructed, so both forms are one identity.</p>
+<p>The matched <code>(ReaderClass, data_access)</code> pair is stored under the reserved <code>"BaseInputData"</code> options key and consumed by <code>init_reader</code> at load time.</p>
+<p>For non-file sources such as HTTP endpoints, subclassing <code>ReadFile</code> and overriding <code>match_subclass_data_access</code> plus <code>load_data</code> is a supported pattern; on that path <code>suffix()</code> is never consulted (it is inert). <code>ApiInputData</code> injects in-memory data passed through the API request and is not an HTTP client.</p>
+<h3 id="reader-selection-vs-feature-group-resolution">Reader selection vs feature-group resolution</h3>
+<p>Reader selection answers "which plugin handles this input" the way <a href="../feature-group-matching/">feature-group resolution</a> answers "which feature group owns this name". It is not a second resolver: it runs nested inside the criteria gate of feature-group resolution, where <code>match_feature_group_criteria</code> calls the reader family's <code>matches()</code>. The two deliberately share no request, environment, or outcome abstractions; they share only the low-level rejection channel described below.</p>
+<table>
+<thead>
+<tr>
+<th>Aspect</th>
+<th>Feature-group resolution</th>
+<th>Reader selection</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Candidate discovery</strong></td>
+<td>Registered accessible plugins</td>
+<td>Structural walk over the family's final readers (<code>is_final_reader()</code>); no reader code executed</td>
+</tr>
+<tr>
+<td><strong>Auto-loading</strong></td>
+<td>Up-front plugin loading</td>
+<td>Lazy per-family <code>_auto_load_group</code>, triggered only when no final readers are found</td>
+</tr>
+<tr>
+<td><strong>Accessibility policy</strong></td>
+<td>Strict mode, collector policy, enabled compute frameworks</td>
+<td>None: every final reader of the family is a candidate</td>
+</tr>
+<tr>
+<td><strong>Matching</strong></td>
+<td>Criteria, domain, scope, capability, framework-pin, and links gates</td>
+<td>Per-reader file, suffix, column-validation, and pinning rules</td>
+</tr>
+<tr>
+<td><strong>Ambiguity</strong></td>
+<td>Multiple winners resolved by subclass preference, then reported</td>
+<td>First match wins; a second conflicting reader for the same feature raises</td>
+</tr>
+<tr>
+<td><strong>Outcome and diagnostics</strong></td>
+<td>Structured evaluation result rendered into failure messages</td>
+<td>A matched <code>(ReaderClass, data_access)</code> pair written into options; declines surface through the shared rejection channel</td>
+</tr>
+</tbody>
+</table>
+<h3 id="declining-with-an-attributable-reason">Declining with an attributable reason</h3>
+<p>A reader that owns an input but cannot serve the requested feature can record why it declined; the reason then appears in the near-miss block of the "No feature groups found" error message, labeled <code>(input data)</code>. <code>record_match_rejection</code> is exported via <code>mloda.provider</code>. A custom reader owns its own suffix and overrides <code>load_data</code> wholesale; its own decline points sit beyond the automatic column validation, for example a required schema marker in the header:</p>
+<pre><code class="language-python">from typing import Any
+
+from mloda.provider import INPUT_DATA_STAGE, FeatureSet, record_match_rejection
+from mloda_plugins.feature_group.input_data.read_file import ReadFile
+
+class SensorCsvReader(ReadFile):
+    @classmethod
+    def suffix(cls) -&gt; tuple[str, ...]:
+        return (&quot;.sensorcsv&quot;,)
+
+    @classmethod
+    def load_data(cls, data_access: Any, features: FeatureSet) -&gt; Any: ...
+
+    @classmethod
+    def validate_columns(cls, file_name: str, feature_names: list[str]) -&gt; bool:
+        if super().validate_columns(file_name, feature_names) is False:
+            return False
+        with open(file_name, encoding=&quot;utf-8&quot;) as handle:
+            header = handle.readline()
+        if &quot;#sensor-schema&quot; not in header:
+            record_match_rejection(
+                cls.get_class_name(),
+                f&quot;{cls.get_class_name()} matched the suffix of {file_name} &quot;
+                f&quot;but its header lacks the #sensor-schema marker&quot;,
+                stage=INPUT_DATA_STAGE,
+            )
+            return False
+        return True
+</code></pre>
+<p>The recorded decline renders as a near-miss line of the resolution failure:</p>
+<pre><code>  - SensorFeatureGroup (input data): SensorCsvReader matched the suffix of /data/run1.sensorcsv but its header lacks the #sensor-schema marker
+</code></pre>
+<p>Rules for reader authors:</p>
+<ul>
+<li>Record only when ownership is established but the content fails: right suffix but a missing column, valid credentials but a declined feature.</li>
+<li>Plain non-matches (wrong suffix, invalid credentials) stay silent. <code>NotImplementedError</code> from <code>is_valid_credentials</code> is a silent non-match; from <code>check_feature_in_data_access</code> it is an accept (the reader matches on credentials alone).</li>
+<li>Never raise to decline: anything but <code>NotImplementedError</code> in the DB match hooks aborts matching for every reader sharing the <code>DataAccessCollection</code>. Record, then return a falsy value.</li>
+<li>Recording outside an engine-opened window is a no-op, so readers stay usable standalone.</li>
+<li>Recorded reasons are discarded at the enclosing candidate level: when the reader ultimately matches, when a sibling reader matches, or, for unowned recordings, when the feature group matches by another rule. An owned veto instead gates the name-based rules (see the paragraph below). Only a decline surfaces them.</li>
+<li>Name the reader and the concrete input in the reason, as the example does. Any label works as the owner name, an overridden <code>data_access_name()</code> included, but it must be distinct among the reader's own decline points: the first recording per owner wins, so a later reason under a name already used in the same window is dropped and never reaches the owned stage.</li>
+</ul>
+<p><code>ReadFile</code> column validation and the <code>ReadDB</code> feature check (<code>check_feature_in_data_access</code>) already record automatically; a custom reader only needs this for its own decline points.</p>
+<p>A veto recorded while the user explicitly addressed the reader family (an option key equal to the reader's <code>data_access_name()</code>) gates the candidate's name-based match rules: the feature group fails at resolution with that reason instead of resolving by name and crashing at load time in <code>init_reader</code>. A content decline on that path gates the same way: if the addressed reader records a decline and its probe still matches nothing, the recording counts as owned. A decline followed by a match on another input of the same probe stays discarded as usual. An unowned decline on the global probe stays near-miss material only, and the MatchData rule is not gated.</p>
 <h2 id="matchdata-pattern">MatchData Pattern</h2>
 <h3 id="purpose_1">Purpose</h3>
 <p>MatchData is a <strong>specialized matching mechanism</strong> specifically designed for feature groups that require <strong>framework connection objects</strong>. It determines which data access method should be used when stateful connections are needed.</p>
@@ -329,7 +448,7 @@ class ReadFileFeature(FeatureGroup):
 <li>Enabling flexible connection configuration for stateful frameworks</li>
 </ul>
 <h3 id="example-implementation_1">Example Implementation</h3>
-<pre><code class="language-python">from mloda.provider import MatchData, FeatureGroup
+<pre><code class="language-py">from mloda.provider import MatchData, FeatureGroup
 
 class DuckDBFeatureGroup(FeatureGroup, MatchData):
     @classmethod
@@ -408,7 +527,7 @@ class DuckDBFeatureGroup(FeatureGroup, MatchData):
 <li><strong>Only applies</strong> to specific compute frameworks like DuckDB that require persistent connections</li>
 </ol>
 <h3 id="combined-usage-example">Combined Usage Example</h3>
-<pre><code class="language-python">class DuckDBAnalyticsFeature(FeatureGroup, MatchData):
+<pre><code class="language-py">class DuckDBAnalyticsFeature(FeatureGroup, MatchData):
     @classmethod
     def input_data(cls) -&gt; Optional[BaseInputData]:
         # BaseInputData for general data loading
@@ -427,7 +546,7 @@ class DuckDBFeatureGroup(FeatureGroup, MatchData):
 <h3 id="scenario-1-standard-file-processing-baseinputdata-only">Scenario 1: Standard File Processing (BaseInputData Only)</h3>
 <p><strong>Use Case</strong>: Reading CSV files with Pandas
 <strong>Pattern</strong>: Only BaseInputData is needed</p>
-<pre><code class="language-python">class CsvProcessingFeature(FeatureGroup):
+<pre><code class="language-py">class CsvProcessingFeature(FeatureGroup):
     @classmethod
     def input_data(cls) -&gt; Optional[BaseInputData]:
         return ReadFile()  # BaseInputData handles file reading
@@ -435,7 +554,7 @@ class DuckDBFeatureGroup(FeatureGroup, MatchData):
 <h3 id="scenario-2-duckdb-analytics-baseinputdata-matchdata">Scenario 2: DuckDB Analytics (BaseInputData + MatchData)</h3>
 <p><strong>Use Case</strong>: Analytics with DuckDB requiring connection objects
 <strong>Pattern</strong>: Both BaseInputData and MatchData are needed</p>
-<pre><code class="language-python">class DuckDBAnalyticsFeature(FeatureGroup, MatchData):
+<pre><code class="language-py">class DuckDBAnalyticsFeature(FeatureGroup, MatchData):
     @classmethod
     def input_data(cls) -&gt; Optional[BaseInputData]:
         return ReadFile()  # BaseInputData for data loading
@@ -449,7 +568,7 @@ class DuckDBFeatureGroup(FeatureGroup, MatchData):
 <h3 id="scenario-3-in-memory-processing-baseinputdata-only">Scenario 3: In-Memory Processing (BaseInputData Only)</h3>
 <p><strong>Use Case</strong>: Creating synthetic data with Pandas
 <strong>Pattern</strong>: Only BaseInputData is needed</p>
-<pre><code class="language-python">class SyntheticDataFeature(FeatureGroup):
+<pre><code class="language-py">class SyntheticDataFeature(FeatureGroup):
     @classmethod
     def input_data(cls) -&gt; Optional[BaseInputData]:
         return DataCreator({&quot;synthetic_data&quot;})  # BaseInputData for data creation

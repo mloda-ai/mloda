@@ -113,6 +113,14 @@
         <ul>
     <li class="toctree-l4"><a class="reference internal" href="#compute-framework-specification">Compute Framework Specification</a>
     </li>
+    <li class="toctree-l4"><a class="reference internal" href="#declaring-an-operation-unsupported-on-a-framework">Declaring an Operation Unsupported on a Framework</a>
+    </li>
+    <li class="toctree-l4"><a class="reference internal" href="#declaring-capability-per-subtype">Declaring capability per subtype</a>
+    </li>
+    <li class="toctree-l4"><a class="reference internal" href="#empty-results">Empty Results</a>
+    </li>
+    <li class="toctree-l4"><a class="reference internal" href="#timezone-and-unit-validation-merge-and-filter-engines">Timezone and unit validation (merge and filter engines)</a>
+    </li>
     <li class="toctree-l4"><a class="reference internal" href="#framework-specific-implementations">Framework-Specific Implementations</a>
     </li>
         </ul>
@@ -169,9 +177,13 @@
                 </li>
                 <li class="toctree-l2"><a class="reference internal" href="../plugin-loader/">Plugin Loader</a>
                 </li>
+                <li class="toctree-l2"><a class="reference internal" href="../plugin_registry/">Plugin Registry</a>
+                </li>
     </ul>
                   </li>
                   <li class="toctree-l1"><a class="reference internal" href="../data-type-enforcement/">Data Type Enforcement</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../comparison-contract/">Comparison Contract</a>
                   </li>
                   <li class="toctree-l1"><a class="reference internal" >Troubleshooting</a>
     <ul>
@@ -223,12 +235,164 @@
 <h2 id="core-concepts">Core Concepts</h2>
 <h3 id="compute-framework-specification">Compute Framework Specification</h3>
 <p>Feature groups specify which compute frameworks they support through the <code>compute_framework_rule</code> method:</p>
-<pre><code class="language-python">@classmethod
+<pre><code class="language-py">@classmethod
 def compute_framework_rule(cls) -&gt; set[type[ComputeFramework]]:
     &quot;&quot;&quot;Define the compute frameworks this feature group supports.&quot;&quot;&quot;
     return {PandasDataFrame}  # Support only Pandas
     # Or return True to support all available compute frameworks
 </code></pre>
+<h3 id="declaring-an-operation-unsupported-on-a-framework">Declaring an Operation Unsupported on a Framework</h3>
+<p><code>compute_framework_rule</code> is a static, class-level set: it cannot say "this
+feature group runs on SQLite in general, but <em>this particular operation</em> is
+unsupported there." For that, override <code>supports_compute_framework</code>, a
+per-feature hook evaluated at match time:</p>
+<pre><code class="language-py">@classmethod
+def supports_compute_framework(cls, feature_name, options, compute_framework) -&gt; bool:
+    &quot;&quot;&quot;Reject an operation on a specific framework. Default returns True.&quot;&quot;&quot;
+    if compute_framework is SqliteFramework and is_median_op(feature_name, options):
+        return False  # median is unsupported on SQLite
+    return True
+</code></pre>
+<p>Returning <code>False</code> removes that framework from the candidate set <strong>for this
+feature only</strong>:</p>
+<ul>
+<li>If another framework can still run the operation, the matcher routes around
+  the rejected one silently (no error).</li>
+<li>If the only remaining candidate is the rejected framework (for example, the
+  user pinned the feature to it), resolution fails with the standard
+  "No feature groups found" error, which names the near-miss feature group and
+  why it dropped, one line per eliminated candidate under a
+  "Feature group(s) eliminated while matching '...'" block, e.g.</li>
+</ul>
+<pre><code>No feature groups found for feature name: 'X'.
+Feature group(s) eliminated while matching 'X':
+  - MedianFeatureGroup (compute framework pin): pinned compute framework 'SqliteFramework' is not among its supported ['DuckDBFramework', 'PandasDataFrame']
+Use resolve_feature(name, options=...) to debug feature resolution.
+For troubleshooting guide, see: https://mloda-ai.github.io/mloda/in_depth/troubleshooting/feature-group-resolution-errors/
+</code></pre>
+<p>The rejected framework is named as a near-miss with its reason rather than
+vanishing into a generic "unknown feature" message. Prefer this hook over
+raising a generic error from inside <code>calculate_feature</code>: the rejection happens
+during planning rather than at compute time, and the message is built for you.</p>
+<p>The debug inspector <code>resolve_feature(name)</code> reflects the hook too, because it
+runs the <strong>same matcher over the same candidate universe as the engine</strong> (it
+delegates to <code>IdentifyFeatureGroupClass</code>). Its <code>ResolvedFeature</code> result carries
+<code>supported_compute_frameworks</code> and <code>unsupported_compute_frameworks</code> (evaluated
+under default options unless you pass <code>options=</code>, see
+<a href="../discover-plugins/">Discover Plugins</a>).</p>
+<p>Two distinct gaps both resolve to <code>feature_group=None</code> rather than appearing
+runnable:</p>
+<ul>
+<li><strong>Unsupported on every framework.</strong> The feature matches a group, but
+  <code>supports_compute_framework</code> rejects every installed framework. Resolution
+  fails with the capability error above.</li>
+<li><strong>Uninstalled framework.</strong> The only framework a matching group declares is not
+  installed (its backend library is absent, so <code>is_available()</code> is <code>False</code>). The
+  candidate universe drops unavailable frameworks before matching, so the group
+  maps to an empty framework set and resolution fails closed with the ordinary
+  <code>No feature groups found for feature name: '&lt;name&gt;'.</code> error. It does <strong>not</strong>
+  read as runnable on a framework you cannot actually run.</li>
+</ul>
+<h3 id="declaring-capability-per-subtype">Declaring capability per subtype</h3>
+<p>Families with multiple subtypes declare per-backend capability as data
+instead of a hand-written <code>supports_compute_framework</code>.</p>
+<p><strong>The data provider</strong> declares the dimension once with <code>SUBTYPES</code>:</p>
+<pre><code class="language-py">class RankFeatureGroup(FeatureChainParserMixin, FeatureGroup):
+    SUBTYPES = SubtypeDeclaration(
+        key=&quot;rank_type&quot;,
+        parametric_families={&quot;ntile&quot;: &quot;N-tile bucketing&quot;},
+        supported={&quot;PythonDictFramework&quot;: {&quot;dense&quot;, &quot;ordinal&quot;}},
+    )
+    PREFIX_PATTERN = r&quot;.*__([\w]+)_rank$&quot;
+    PROPERTY_MAPPING = {
+        &quot;rank_type&quot;: property_spec(
+            &quot;Rank subtype.&quot;,
+            strict=True,
+            allowed_values={&quot;dense&quot;: &quot;Dense ranking&quot;, &quot;ordinal&quot;: &quot;Ordinal ranking&quot;},
+        ),
+    }
+</code></pre>
+<p>Two shapes, enforced at class definition; a half declaration fails at import:</p>
+<ul>
+<li>Shape A: <code>key</code> names a <code>PROPERTY_MAPPING</code> key with an enumerable value
+  space; <code>parametric_families</code> join the universe by family name.</li>
+<li>Shape B (multi-axis families collapsed into one subtype id): declare the
+  universe explicitly with a resolver:</li>
+</ul>
+<pre><code class="language-py">def resolve_window(feature_name: str, options: Options) -&gt; str | None:
+    return options.get(&quot;window_function&quot;)
+
+SUBTYPES = SubtypeDeclaration(universe={&quot;median&quot;, &quot;sum&quot;}, resolver=resolve_window)
+</code></pre>
+<p><code>supported</code> is a sparse per-framework override: frameworks absent from it
+keep the full universe. A key naming no declared framework is a silent no-op
+for matching but raises from <code>subtype_support_matrix()</code>, so a typo surfaces
+as <code>subtype_error</code> in the audit. The derived
+<code>supports_compute_framework</code> canonicalizes parametric instances (<code>ntile_2</code>
+becomes <code>ntile</code>) and gates declared subtypes by the declaration; undeclared
+subtypes and features without one stay open.</p>
+<p><strong>The data steward</strong> audits capability via <code>subtype_support_matrix()</code>
+(supported subtypes per framework from <code>compute_framework_definition()</code>;
+empty for abstract bases) and <code>get_feature_group_docs()</code> (<code>subtype_key</code>,
+<code>subtypes</code>, <code>parametric_subtypes</code>, <code>subtype_support</code>, <code>subtype_error</code>). A
+hand-overridden <code>supports_compute_framework</code> yields no declared matrix; the
+misfit surfaces as <code>subtype_error</code>.</p>
+<p><strong>The data user</strong> sees the outcome on <code>resolve_feature(name, options=...)</code>:
+<code>subtype</code> (e.g. <code>ntile_2</code>) and <code>subtype_family</code> (<code>ntile</code>, parametric
+instances only).</p>
+<h3 id="empty-results">Empty Results</h3>
+<p>The contract is: a <strong>final</strong> requested feature must return a <em>schema-bearing</em>
+result, meaning at least one column. <strong>Zero rows is a valid result; zero columns
+is not.</strong> A filter that excludes every row, a join with no matches, or a time
+window with no events all return a well-typed frame with the right columns and
+no rows, and mloda passes these through unchanged.</p>
+<p>The error fires only when a final requested result carries <em>no schema at all</em>. If
+<code>calculate_feature</code> produces a result with no columns,
+<code>ComputeFramework.run_validate_output_features</code> raises:</p>
+<pre><code>EmptyResultError: Result carries no schema (no columns): &lt;FeatureGroupClassName&gt;. ...
+</code></pre>
+<p><code>EmptyResultError</code> is a <code>ValueError</code> subclass and is importable from the public
+API: <code>from mloda.provider import EmptyResultError</code>. Intermediate feature groups
+(those whose output feeds another feature group rather than the caller directly)
+are never subject to this check.</p>
+<h4 id="the-schema-presence-gate">The schema-presence gate</h4>
+<p>The guard detects a missing schema via the framework's existing
+<code>ComputeFramework._extract_column_names(self, data) -&gt; set[str]</code>: an empty set
+means no schema, which is the error condition. Every framework already implements
+this off schema metadata, so it works on a zero-row frame and costs nothing extra
+(no row scan, collect, or count). No per-framework opt-in is needed when you
+implement a new compute framework, as long as <code>_extract_column_names</code> returns the
+columns for a zero-row frame.</p>
+<p>There is one representational caveat. The schema-bearing frameworks (PyArrow,
+Pandas, Polars, DuckDB, SQLite, Spark, Iceberg) carry their schema as metadata
+even at zero rows, so a zero-row result keeps its columns and passes. The
+PythonDict framework represents data as a columnar <code>dict[str, list]</code>, where the
+schema is the set of keys and is present even at zero rows: <code>{"col": []}</code> is a
+valid schema-bearing zero-row frame, while <code>{}</code> (zero columns) is the only
+schema-less value. Emptiness is judged purely on schema presence, with no
+opt-in: a zero-column result raises <code>EmptyResultError</code> uniformly on every
+framework. One consequence: on a schema-less result (a zero-column frame),
+column selection returns the result as is, so a misspelled requested column on
+schema-less data does not produce a "column not found" error.</p>
+<h4 id="filter-column-validation">Filter column validation</h4>
+<p><code>_validate_filter_columns</code> skips its column-presence and dtype checks only when
+the data is the schema-less empty result (in practice PythonDict's <code>{}</code>).
+Filtering an empty result is a no-op, so neither the column check nor row
+elimination has anything to do. Data on which the framework cannot see columns
+but that is not an empty result still fails the missing-filter-column check
+loudly.</p>
+<h3 id="timezone-and-unit-validation-merge-and-filter-engines">Timezone and unit validation (merge and filter engines)</h3>
+<p>A custom compute framework's merge and filter engines can opt into the
+<a href="../comparison-contract/">comparison contract</a>, which rejects incompatible
+timezone/unit combinations in equi-joins, as-of joins, and datetime filter bounds.
+The guard is <strong>opt-in</strong>: set <code>provides_column_semantics = True</code> on your
+<code>BaseMergeEngine</code> / <code>BaseFilterEngine</code> subclass and implement
+<code>_column_semantics(data, column)</code> to report the column's native semantics. Leave the
+flag at its default <code>False</code> (for a framework with no temporal intent) and the guard
+is skipped entirely, so you are never forced to implement the hook. An engine that
+opts in but forgets the hook raises a clear error rather than silently skipping
+validation. As-of joins always require <code>_column_semantics</code> regardless of the flag,
+since ordered time columns are intrinsic to the operation.</p>
 <h3 id="framework-specific-implementations">Framework-Specific Implementations</h3>
 <p>Feature groups follow a layered architecture:
 - Base class defines the interface and common functionality
@@ -242,7 +406,7 @@ def compute_framework_rule(cls) -&gt; set[type[ComputeFramework]]:
 <h2 id="implementation-pattern">Implementation Pattern</h2>
 <h3 id="1-base-class">1. Base Class</h3>
 <p>The base class defines the interface and common functionality:</p>
-<pre><code class="language-python">class MyFeatureGroup(FeatureGroup):
+<pre><code class="language-py">class MyFeatureGroup(FeatureGroup):
     &quot;&quot;&quot;Base class for MyFeatureGroup.&quot;&quot;&quot;
 
     def input_features(self, options, feature_name):
@@ -257,7 +421,7 @@ def compute_framework_rule(cls) -&gt; set[type[ComputeFramework]]:
 <p>Each framework-specific implementation:
 - Specifies which compute frameworks it supports
 - Implements the calculation logic for that framework</p>
-<pre><code class="language-python">class PandasMyFeatureGroup(MyFeatureGroup):
+<pre><code class="language-py">class PandasMyFeatureGroup(MyFeatureGroup):
     @classmethod
     def compute_framework_rule(cls):
         &quot;&quot;&quot;Define supported compute frameworks.&quot;&quot;&quot;
@@ -289,7 +453,7 @@ def compute_framework_rule(cls) -&gt; set[type[ComputeFramework]]:
 <p>For more details on how data transformation works between compute frameworks, see <a href="../framework-transformers/">Framework Transformers</a>.</p>
 <h2 id="example">Example</h2>
 <p>For a clustering feature group:</p>
-<pre><code class="language-python"># Base class (framework-agnostic)
+<pre><code class="language-py"># Base class (framework-agnostic)
 class ClusteringFeatureGroup(FeatureGroup):
     def input_features(self, options, feature_name):
         # Extract source features from feature name
@@ -319,7 +483,7 @@ class PyArrowClusteringFeatureGroup(ClusteringFeatureGroup):
         # PyArrow-specific clustering implementation
 </code></pre>
 <p>For an aggregated feature group with Polars support:</p>
-<pre><code class="language-python"># Base class (framework-agnostic)
+<pre><code class="language-py"># Base class (framework-agnostic)
 class AggregatedFeatureGroup(FeatureGroup):
     def input_features(self, options, feature_name):
         # Extract source features from feature name
@@ -341,7 +505,7 @@ class PolarsLazyAggregatedFeatureGroup(AggregatedFeatureGroup):
 </code></pre>
 <p>Note that Polars supports both eager (<code>PolarsDataFrame</code>) and lazy (<code>PolarsLazyDataFrame</code>) evaluation modes, allowing you to choose the appropriate strategy based on your performance requirements.</p>
 <p>For an analytical feature group with DuckDB support:</p>
-<pre><code class="language-python"># Base class (framework-agnostic)
+<pre><code class="language-py"># Base class (framework-agnostic)
 class AnalyticalFeatureGroup(FeatureGroup):
     def input_features(self, options, feature_name):
         # Extract source features from feature name
@@ -365,7 +529,7 @@ class DuckDBAnalyticalFeatureGroup(AnalyticalFeatureGroup):
 </code></pre>
 <p><strong>Important</strong>: DuckDB feature groups require a connection object to be available. The framework will automatically handle connection management, but ensure your data access collection includes the necessary connection information.</p>
 <p>For a distributed processing feature group with Spark support:</p>
-<pre><code class="language-python"># Base class (framework-agnostic)
+<pre><code class="language-py"># Base class (framework-agnostic)
 class DistributedFeatureGroup(FeatureGroup):
     def input_features(self, options, feature_name):
         # Extract source features from feature name
@@ -396,12 +560,12 @@ class SparkDistributedFeatureGroup(DistributedFeatureGroup):
 <li><code>DuckdbRelation.types</code> returns DuckDB-native dtype objects.</li>
 <li><code>SqliteRelation.types</code> returns PyArrow <code>pa.DataType</code> objects (from propagated hints, falling back to SQLite affinity inference).</li>
 </ul>
-<pre><code class="language-python">relation.columns   # [&quot;user_id&quot;, &quot;amount&quot;]
+<pre><code class="language-py">relation.columns   # [&quot;user_id&quot;, &quot;amount&quot;]
 relation.types     # backend-specific dtype objects, same order as columns
 </code></pre>
 <h3 id="window-functions">Window functions</h3>
 <p><code>with_row_number</code> appends a <code>ROW_NUMBER()</code> column; <code>window</code> appends an arbitrary window expression. Both quote every identifier and raise <code>ValueError</code> if the new <code>alias</code> collides with an existing column.</p>
-<pre><code class="language-python">from mloda_plugins.compute_framework.base_implementations.sql.sql_window import (
+<pre><code class="language-py">from mloda_plugins.compute_framework.base_implementations.sql.sql_window import (
     OrderBy,
     WindowFrame,
     Preceding,

@@ -155,9 +155,13 @@
                 </li>
                 <li class="toctree-l2"><a class="reference internal" href="../../in_depth/plugin-loader/">Plugin Loader</a>
                 </li>
+                <li class="toctree-l2"><a class="reference internal" href="../../in_depth/plugin_registry/">Plugin Registry</a>
+                </li>
     </ul>
                   </li>
                   <li class="toctree-l1"><a class="reference internal" href="../../in_depth/data-type-enforcement/">Data Type Enforcement</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../in_depth/comparison-contract/">Comparison Contract</a>
                   </li>
                   <li class="toctree-l1"><a class="reference internal" >Troubleshooting</a>
     <ul>
@@ -1091,16 +1095,20 @@ print(_result)</div>
 <div class="jp-OutputArea-child">
 <div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
 <div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
-<pre>[pyarrow.Table
-age: int64
-state: string
-weight: double
-gender: string
-----
-age: [[31,57,38,67,47,...,41,58,73,74,25]]
-state: [["FL","CA","NY","TX","TX",...,"CA","CA","NY","NY","FL"]]
-weight: [[53.07717743546068,47.84488437429319,68.9278583048704,97.40943188374412,80.39857279514968,...,75.42237139226059,62.266587953254444,64.40075366428398,75.37274314011698,98.47289476170835]]
-gender: [["M","F","M","F","F",...,"M","F","M","F","F"]]]
+<pre>[       weight  age state gender
+0   77.965069   33    TX      F
+1   55.146970   70    CA      M
+2   85.173198   62    CA      F
+3   65.185641   43    TX      F
+4   57.418842   63    FL      F
+..        ...  ...   ...    ...
+95  54.515487   19    NY      M
+96  70.420550   45    TX      M
+97  92.889109   64    TX      M
+98  67.705347   21    CA      F
+99  66.535843   50    FL      M
+
+[100 rows x 4 columns]]
 </pre>
 </div>
 </div>
@@ -1179,17 +1187,17 @@ print(_result)</div>
 │ ---           │
 │ i64           │
 ╞═══════════════╡
-│ 4763          │
-│ 4763          │
-│ 4763          │
-│ 4763          │
-│ 4763          │
+│ 5010          │
+│ 5010          │
+│ 5010          │
+│ 5010          │
+│ 5010          │
 │ …             │
-│ 4763          │
-│ 4763          │
-│ 4763          │
-│ 4763          │
-│ 4763          │
+│ 5010          │
+│ 5010          │
+│ 5010          │
+│ 5010          │
+│ 5010          │
 └───────────────┘]
 </pre>
 </div>
@@ -1262,11 +1270,11 @@ print(_result)</div>
 │ ---                 │
 │ i64                 │
 ╞═════════════════════╡
-│ 266                 │
-│ 266                 │
-│ 266                 │
-│ 266                 │
-│ 266                 │
+│ 253                 │
+│ 253                 │
+│ 253                 │
+│ 253                 │
+│ 253                 │
 └─────────────────────┘]
 </pre>
 </div>

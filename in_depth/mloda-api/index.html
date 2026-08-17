@@ -90,6 +90,14 @@
         <ul>
     <li class="toctree-l3"><a class="reference internal" href="#resolve_feature">resolve_feature</a>
     </li>
+    <li class="toctree-l3"><a class="reference internal" href="#explain-and-resolved_plan">explain and resolved_plan</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#how-the-engine-tracks-request-provenance">How the engine tracks request provenance</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#diagnose-and-resolution_report">diagnose and resolution_report</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#resolution-result-types">Resolution result types</a>
+    </li>
     <li class="toctree-l3"><a class="reference internal" href="#get_feature_group_docs">get_feature_group_docs</a>
     </li>
     <li class="toctree-l3"><a class="reference internal" href="#get_compute_framework_docs">get_compute_framework_docs</a>
@@ -157,9 +165,13 @@
                 </li>
                 <li class="toctree-l2"><a class="reference internal" href="../plugin-loader/">Plugin Loader</a>
                 </li>
+                <li class="toctree-l2"><a class="reference internal" href="../plugin_registry/">Plugin Registry</a>
+                </li>
     </ul>
                   </li>
                   <li class="toctree-l1"><a class="reference internal" href="../data-type-enforcement/">Data Type Enforcement</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../comparison-contract/">Comparison Contract</a>
                   </li>
                   <li class="toctree-l1"><a class="reference internal" >Troubleshooting</a>
     <ul>
@@ -244,15 +256,21 @@
 </ul>
 <pre><code class="language-python">from mloda.user import mloda
 
+api_data = {&quot;SampleData&quot;: {&quot;FeatureA&quot;: [1], &quot;FeatureB&quot;: [2], &quot;FeatureC&quot;: [3]}}
+
 # Alphabetical ordering
 result = mloda.run_all(
     [&quot;FeatureC&quot;, &quot;FeatureA&quot;, &quot;FeatureB&quot;],
+    compute_frameworks=[&quot;PandasDataFrame&quot;],
+    api_data=api_data,
     column_ordering=&quot;alphabetical&quot;  # Result columns: FeatureA, FeatureB, FeatureC
 )
 
 # Preserve request order
 result = mloda.run_all(
     [&quot;FeatureC&quot;, &quot;FeatureA&quot;, &quot;FeatureB&quot;],
+    compute_frameworks=[&quot;PandasDataFrame&quot;],
+    api_data=api_data,
     column_ordering=&quot;request_order&quot;  # Result columns: FeatureC, FeatureA, FeatureB
 )
 </code></pre>
@@ -261,16 +279,16 @@ result = mloda.run_all(
 <code>prepare()</code> builds the execution plan once; <code>run()</code> executes it with fresh data each time.</p>
 <pre><code class="language-python">from mloda.user import mloda
 
-# 1. Prepare once
+# 1. Prepare once, with a representative shape of the data
 session = mloda.prepare(
-    [&quot;MyFeature&quot;],
+    [&quot;col__mean_aggr&quot;],
     compute_frameworks=[&quot;PandasDataFrame&quot;],
-    api_data=initial_api_data,
+    api_data={&quot;MyKey&quot;: {&quot;col&quot;: [0.0]}},
 )
 
 # 2. Run multiple times with different data
-result_1 = session.run(api_data={&quot;MyKey&quot;: {&quot;col&quot;: [1, 2]}})
-result_2 = session.run(api_data={&quot;MyKey&quot;: {&quot;col&quot;: [3, 4]}})
+result_1 = session.run(api_data={&quot;MyKey&quot;: {&quot;col&quot;: [1.0, 2.0]}})
+result_2 = session.run(api_data={&quot;MyKey&quot;: {&quot;col&quot;: [3.0, 4.0]}})
 </code></pre>
 <p><code>run()</code> also accepts an <code>artifacts</code> parameter for switching between artifact
 save and load modes across calls. See <a href="../artifacts/#run-time-artifact-switching-with-preparerun">Artifacts</a> for details.</p>
@@ -287,30 +305,89 @@ save and load modes across calls. See <a href="../artifacts/#run-time-artifact-s
 )
 </code></pre>
 <h5 id="resolve_feature">resolve_feature</h5>
-<p>Resolve a feature name to its matching FeatureGroup class. This is useful for debugging feature resolution or understanding which FeatureGroup handles a specific feature.</p>
+<p>Resolve a single feature name (or a <code>Feature</code>) to its matching FeatureGroup without running the request, reporting failures in <code>result.error</code> instead of raising. It takes <code>feature</code> (<code>str | Feature</code>) positionally plus keyword-only <code>options</code>, <code>plugin_collector</code>, <code>feature_group</code>, <code>links</code>, <code>data_access_collection</code>, and <code>compute_frameworks</code>, and returns a <code>ResolvedFeature</code> (8 fields, including <code>candidates</code>, <code>error</code>, <code>supported_compute_frameworks</code>, <code>subtype</code>).</p>
 <pre><code class="language-python">from mloda.steward import resolve_feature
 
-# Successful resolution
 result = resolve_feature(&quot;my_feature_name&quot;)
 if result.feature_group:
     print(f&quot;Resolved to: {result.feature_group.__name__}&quot;)
 else:
     print(f&quot;Error: {result.error}&quot;)
-
-# Access all matching candidates (before subclass filtering)
-print(f&quot;Candidates: {[fg.__name__ for fg in result.candidates]}&quot;)
 </code></pre>
-<p><strong>Parameters:</strong></p>
+<p>See <a href="../discover-plugins/#resolving-feature-names">Discover Plugins</a> for the full signature, every <code>ResolvedFeature</code> field, and worked examples (options-gated groups, scoping, broken framework declarations). <code>resolve_feature</code> is exported from <code>mloda.provider</code>, <code>mloda.user</code>, and <code>mloda.steward</code>; the <code>ResolvedFeature</code> return type is exported from <code>mloda.steward</code>.</p>
+<h5 id="explain-and-resolved_plan">explain and resolved_plan</h5>
+<p>The runtime counterpart to <code>resolve_feature</code>: <code>mlodaAPI.explain(...)</code> builds the execution plan for a request without running it, and <code>session.resolved_plan()</code> returns the same records for a prepared session (before or after <code>run()</code>). Both return a <code>list[PlanStep]</code> in execution-plan order. Every <code>explain</code> parameter after <code>features</code> is keyword-only.</p>
+<p><code>explain</code> re-resolves the plan from scratch. It answers "what would this request resolve to", it is not a record of a prior <code>run_all</code> execution. For the plan of a run that actually happened, use the return value directly: <code>run_all</code> returns a <code>RunResult</code> (a <code>list</code> with a read-only <code>plan</code> property) and <code>stream_all</code> returns a <code>ResultStream</code> (generator-compatible, <code>plan</code> available before consuming). One planning pass serves both the results and the plan, unlike <code>explain</code>, which re-resolves.</p>
+<pre><code class="language-python">from mloda.user import mloda
+
+sales_data = {&quot;SalesData&quot;: {&quot;sales&quot;: [10.0, 20.0, 30.0]}}
+
+results = mloda.run_all([&quot;sales__mean_aggr&quot;], compute_frameworks=[&quot;PandasDataFrame&quot;], api_data=sales_data)
+for step in results.plan:
+    print(step.step_kind, step.feature_names)
+</code></pre>
+<p>To match a <code>run_all</code> resolution, pass the same <code>parallelization_modes</code>: <code>run_all</code> defaults to <code>{ParallelizationMode.SYNC}</code>, <code>prepare</code>/<code>explain</code> default to <code>None</code>, and compute frameworks are filtered by mode.</p>
+<pre><code class="language-python">from mloda.user import mloda
+
+# &quot;sales&quot; arrives through api_data here; in your own request it can come from any FeatureGroup.
+for step in mloda.explain([&quot;sales__mean_aggr&quot;], compute_frameworks=[&quot;PandasDataFrame&quot;], api_data=sales_data):
+    print(step.step_kind, step.feature_names, step.feature_group_name, step.compute_framework_name)
+</code></pre>
+<p><strong>Returns:</strong> <code>PlanStep</code> dataclass (frozen) with fields:</p>
 <ul>
-<li><strong>feature_name</strong> (<code>str</code>): The name of the feature to resolve.</li>
+<li><strong>step_kind</strong> (<code>Literal["compute", "join", "transform"]</code>).</li>
+<li><strong>feature_names</strong> (<code>tuple[str, ...]</code>): Features computed by a compute step, empty otherwise. This includes engine-injected features (link index features, global-filter features); use the requested/injected split below to tell them apart.</li>
+<li><strong>requested_feature_names</strong> (<code>tuple[str, ...]</code>): The user-requested subset of <code>feature_names</code> on a compute step, empty for join and transform steps.</li>
+<li><strong>injected_feature_names</strong> (<code>tuple[str, ...]</code>): The engine-injected/dependency remainder of <code>feature_names</code> on a compute step, empty for join and transform steps.</li>
+<li><strong>feature_group</strong> (<code>type[FeatureGroup] | None</code>): Resolved FeatureGroup; the destination for a transform step; the link's declared left side for a join.</li>
+<li><strong>compute_framework</strong> (<code>type[ComputeFramework] | None</code>): Selected ComputeFramework; the destination for a transform step; the merge destination for a join.</li>
+<li><strong>source_feature_group</strong> / <strong>source_compute_framework</strong>: Origin of a transform step. For a join: the link's declared right side, and the framework merged in.</li>
+<li><strong>join_type</strong> (<code>str | None</code>): The link's join type (<code>"inner"</code>, <code>"left"</code>, ...) for a join step, None otherwise.</li>
+<li><strong>join_destination_side</strong> (<code>Literal["left", "right"] | None</code>): the declared side that holds the merge destination, for a join step; None otherwise.</li>
+<li><strong>join_inverted</strong> (<code>bool | None</code>, property): <code>join_destination_side == "right"</code>, None without a side.</li>
+<li><strong>join_token</strong> (<code>UUID | None</code>): the join's completion token, the uuid the scheduler tracks, for a join step; None otherwise. Excluded from equality (fresh per planning run).</li>
+<li><strong>declared_left_frameworks</strong> / <strong>declared_right_frameworks</strong> (<code>tuple[type[ComputeFramework], ...]</code>): the compute frameworks each declared side's parent features declared as candidates, sorted by class name, for a join step; empty otherwise, and empty when the plan recorded no candidates for the side. APPEND/UNION sides carry only the index-bearing parent.</li>
+<li><strong>feature_group_name</strong> / <strong>compute_framework_name</strong> / <strong>source_feature_group_name</strong> / <strong>source_compute_framework_name</strong> (<code>str | None</code>): Class names of the above, None when unset.</li>
+<li><strong>declared_left_framework_names</strong> / <strong>declared_right_framework_names</strong> (<code>tuple[str, ...]</code>): class names of the two tuples above, same order.</li>
 </ul>
-<p><strong>Returns:</strong> <code>ResolvedFeature</code> dataclass with fields:</p>
+<p>Join semantics: for a join step the <code>*_feature_group</code> fields are the link's declared left/right sides, while <code>compute_framework</code>/<code>source_compute_framework</code> are the merge destination and the framework merged in, which may belong to the declared right side. <code>join_destination_side</code> is resolved from the two declared sides' framework candidates for every join type except APPEND and UNION, which always report <code>"left"</code>; a right join queues its destination on the declared right side, so it reports <code>"right"</code> in the common case.</p>
+<h5 id="how-the-engine-tracks-request-provenance">How the engine tracks request provenance</h5>
+<p>The requested/injected split above is derived from a per-feature flag, not from re-matching names against the request.</p>
 <ul>
-<li><strong>feature_name</strong> (<code>str</code>): The input feature name.</li>
-<li><strong>feature_group</strong> (<code>Type[FeatureGroup] | None</code>): The resolved FeatureGroup class, or None if resolution failed.</li>
-<li><strong>candidates</strong> (<code>List[Type[FeatureGroup]]</code>): All FeatureGroups that matched before subclass filtering.</li>
-<li><strong>error</strong> (<code>str | None</code>): Error message if resolution failed (no match or multiple conflicts).</li>
+<li><code>Feature.initial_requested_data</code> (bool, default <code>False</code>) marks a feature that the user asked for directly. It also decides which features come back in the run result, which is why a FeatureGroup may set it on a feature it created itself.</li>
+<li><code>mlodaAPI._process_features</code> sets it to <code>True</code> on every feature of the incoming request, before resolution. Features created during resolution (input features of a FeatureGroup, link index features, global-filter features) keep the <code>False</code> default, unless a FeatureGroup opts one in explicitly: <code>input_features</code> may construct a <code>Feature</code> with <code>initial_requested_data=True</code> to surface it in the results, and then it counts as requested in the split too.</li>
+<li><code>FeatureSet.get_initial_requested_features()</code> returns the sorted, deduplicated names of the flagged features in that set.</li>
+<li><code>PlanStep.requested_feature_names</code> is that accessor's output for a compute step's FeatureSet; <code>injected_feature_names</code> is the rest of <code>feature_names</code>. Both are sorted, so they do not follow the order of <code>feature_names</code>, and both are empty on join and transform steps, which carry no FeatureSet.</li>
 </ul>
+<pre><code class="language-python">from mloda.user import mloda
+
+for step in mloda.explain([&quot;sales__mean_aggr&quot;], compute_frameworks=[&quot;PandasDataFrame&quot;], api_data=sales_data):
+    print(step.requested_feature_names, step.injected_feature_names)
+</code></pre>
+<h5 id="diagnose-and-resolution_report">diagnose and resolution_report</h5>
+<p><code>diagnose</code> and <code>resolution_report()</code> are the non-raising counterparts to <code>explain</code> and <code>resolved_plan()</code>: where the plan-based pair returns <code>PlanStep</code> records, these return the resolution facts a failing request would otherwise raise.</p>
+<p><code>mlodaAPI.diagnose(features, ...)</code> runs the whole-request preflight without raising and returns a single <code>ResolutionDiagnosis</code>. It takes the same arguments as <code>explain</code> (every parameter after <code>features</code> is keyword-only). On success its <code>records</code> equal <code>session.resolution_report()</code> and <code>complete</code> is <code>True</code>; on a resolution failure it carries the records resolved before the failing feature plus <code>feature_name</code>, <code>failed_result</code>, and <code>message</code>; on an environment or config failure (redefinition conflict, framework-declaration error, compute-framework pin) it returns <code>records=[]</code>, <code>complete=False</code>, and only <code>message</code>.</p>
+<p><code>session.resolution_report()</code> returns the <code>list[ResolutionRecord]</code> captured while <code>prepare()</code> planned the request, one per feature, available before or after <code>run()</code>.</p>
+<pre><code class="language-python">from mloda.user import mlodaAPI
+
+diagnosis = mlodaAPI.diagnose([&quot;sales__mean_aggr&quot;], compute_frameworks=[&quot;PandasDataFrame&quot;])
+if diagnosis.complete:
+    for record in diagnosis.records:
+        print(record.feature_name, record.requested)
+else:
+    print(diagnosis.feature_name, diagnosis.message)
+</code></pre>
+<p>When the same request is run rather than diagnosed, the failure raises <code>FeatureResolutionError</code> (below).</p>
+<h5 id="resolution-result-types">Resolution result types</h5>
+<p>Import the typed resolution surfaces from <code>mloda.provider</code> (also re-exported from <code>mloda.user</code> and <code>mloda.steward</code>):</p>
+<pre><code class="language-python">from mloda.provider import FeatureResolutionError, ResolutionDiagnosis, ResolutionRecord
+</code></pre>
+<ul>
+<li><strong><code>FeatureResolutionError</code></strong> (a <code>ValueError</code> subclass): raised during planning (<code>mlodaAPI(...)</code> / <code>prepare()</code> / <code>run_all()</code>) when a feature does not resolve to exactly one FeatureGroup. Attributes: <code>feature_name</code> (<code>str</code>), <code>result</code> (<code>EvaluationResult</code>, the captured per-candidate elimination facts), <code>partial_records</code> (<code>tuple[ResolutionRecord, ...]</code>, features resolved before the failure, capped at the last 1000). Because it subclasses <code>ValueError</code>, existing <code>except ValueError</code> handlers keep working; catch <code>FeatureResolutionError</code> to read the attributes. See <a href="../troubleshooting/feature-group-resolution-errors/">Feature Group Resolution Errors</a>.</li>
+<li><strong><code>ResolutionDiagnosis</code></strong> (frozen dataclass): the return value of <code>diagnose</code>, never raised. Fields: <code>records</code> (<code>list[ResolutionRecord]</code>), <code>complete</code> (<code>bool</code>), <code>feature_name</code> (<code>str | None</code>), <code>failed_result</code> (<code>EvaluationResult | None</code>), <code>message</code> (<code>str | None</code>).</li>
+<li><strong><code>ResolutionRecord</code></strong> (frozen dataclass): one per feature, returned inside <code>resolution_report()</code>, <code>ResolutionDiagnosis.records</code>, and <code>FeatureResolutionError.partial_records</code>; never raised. Fields: <code>feature_name</code> (<code>str</code>), <code>requested</code> (<code>bool</code>), <code>result</code> (<code>EvaluationResult</code>).</li>
+</ul>
+<p><code>EvaluationResult</code> is the captured matcher outcome carried by the fields above; it is defined in <code>mloda.core.prepare.resolution_types</code> and is not part of the public <code>__init__</code> exports.</p>
 <h5 id="get_feature_group_docs">get_feature_group_docs</h5>
 <p>Get documentation for feature groups with optional filtering.</p>
 <pre><code class="language-python">from mloda.steward import get_feature_group_docs
@@ -322,7 +399,7 @@ all_fgs = get_feature_group_docs()
 fgs = get_feature_group_docs(name=&quot;timestamp&quot;)
 
 # Filter by compute framework
-fgs = get_feature_group_docs(compute_framework=&quot;PandasDataframe&quot;)
+fgs = get_feature_group_docs(compute_framework=&quot;PandasDataFrame&quot;)
 </code></pre>
 <p><strong>Parameters:</strong></p>
 <ul>
@@ -336,17 +413,17 @@ fgs = get_feature_group_docs(compute_framework=&quot;PandasDataframe&quot;)
 <p>Get documentation for compute frameworks with optional filtering.</p>
 <pre><code class="language-python">from mloda.steward import get_compute_framework_docs
 
-# Get all available frameworks
+# List every framework (is_available flags whether its backend library is installed)
 frameworks = get_compute_framework_docs()
 
-# Include unavailable frameworks
-all_frameworks = get_compute_framework_docs(available_only=False)
+# Only frameworks whose backend library is installed
+available_frameworks = get_compute_framework_docs(available_only=True)
 </code></pre>
 <p><strong>Parameters:</strong></p>
 <ul>
 <li><strong>name</strong> (<code>str</code>, optional): Filter by name (case-insensitive partial match).</li>
 <li><strong>search</strong> (<code>str</code>, optional): Search in description (case-insensitive partial match).</li>
-<li><strong>available_only</strong> (<code>bool</code>, default <code>True</code>): Only return available frameworks.</li>
+<li><strong>available_only</strong> (<code>bool</code>, default <code>False</code>): By default all frameworks are listed (with <code>is_available</code> as the flag); set <code>available_only=True</code> to filter to available frameworks only.</li>
 </ul>
 <p><strong>Returns:</strong> <code>List[ComputeFrameworkInfo]</code> sorted by name.</p>
 <h5 id="get_extender_docs">get_extender_docs</h5>

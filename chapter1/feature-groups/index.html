@@ -73,9 +73,11 @@
     </li>
     <li class="toctree-l2"><a class="reference internal" href="#4-summary">4. Summary</a>
     </li>
-    <li class="toctree-l2"><a class="reference internal" href="#5-advanced-feature-group-topics">5. Advanced Feature Group Topics</a>
+    <li class="toctree-l2"><a class="reference internal" href="#5-the-result-contract">5. The result contract</a>
     </li>
-    <li class="toctree-l2"><a class="reference internal" href="#6-discovering-feature-groups">6. Discovering Feature Groups</a>
+    <li class="toctree-l2"><a class="reference internal" href="#6-advanced-feature-group-topics">6. Advanced Feature Group Topics</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#7-discovering-feature-groups">7. Discovering Feature Groups</a>
     </li>
     </ul>
                   </li>
@@ -149,9 +151,13 @@
                 </li>
                 <li class="toctree-l2"><a class="reference internal" href="../../in_depth/plugin-loader/">Plugin Loader</a>
                 </li>
+                <li class="toctree-l2"><a class="reference internal" href="../../in_depth/plugin_registry/">Plugin Registry</a>
+                </li>
     </ul>
                   </li>
                   <li class="toctree-l1"><a class="reference internal" href="../../in_depth/data-type-enforcement/">Data Type Enforcement</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../in_depth/comparison-contract/">Comparison Contract</a>
                   </li>
                   <li class="toctree-l1"><a class="reference internal" >Troubleshooting</a>
     <ul>
@@ -242,7 +248,7 @@ result = mloda.run_all(
 result[0]
 </code></pre>
 <p>Expected output:</p>
-<pre><code class="language-python">pyarrow.Table
+<pre><code class="language-text">pyarrow.Table
 Example_V28: double
 Example_id: int64
 ...
@@ -252,7 +258,13 @@ Example_id: [[0,2,4,...]]
 </code></pre>
 <h4 id="4-summary">4. Summary</h4>
 <p>In this example, we implemented a custom feature group, Example, that multiplies each feature value by 2. By defining a straightforward input_features method and a calculate_feature method, we were able to extend mloda's feature engineering capabilities with custom transformations. We then executed the request by simply modifying the feature names with a prefix ("Example_"), allowing mloda to handle dependencies and computations automatically.</p>
-<h4 id="5-advanced-feature-group-topics">5. Advanced Feature Group Topics</h4>
+<h4 id="5-the-result-contract">5. The result contract</h4>
+<p>A feature group must return its <strong>columns</strong>, even when it has no rows. Zero rows
+is a valid result; zero columns is not, and raises <code>EmptyResultError</code>. On the
+PythonDict framework this means a row-oriented <code>[]</code> is <em>not</em> a valid empty
+result: return <code>{"my_feature": []}</code> instead, keeping the column and dropping the
+rows. See <a href="../../in_depth/compute-framework-integration/#empty-results">Empty Result Handling</a>.</p>
+<h4 id="6-advanced-feature-group-topics">6. Advanced Feature Group Topics</h4>
 <p>For more in-depth information about feature groups, check out these advanced topics:</p>
 <ul>
 <li><a href="../../in_depth/feature-chain-parser/">Feature Chain Parser</a> - How feature groups work with chained feature names</li>
@@ -264,8 +276,9 @@ Example_id: [[0,2,4,...]]
 <li><a href="../../in_depth/data-type-enforcement/">Data Type Enforcement</a> - Runtime validation of declared feature data types</li>
 <li><a href="../../in_depth/filter_data/#handling-filters-in-a-featuregroup">Filter Handling in FeatureGroups</a> - Row elimination and <code>final_filters()</code></li>
 <li><a href="../../in_depth/mask_engine/">Mask Engine</a> - Inline masking with <code>features.mask_engine</code></li>
+<li><a href="../../in_depth/compute-framework-integration/#empty-results">Empty Result Handling</a> - Zero rows is always valid; a zero-column (schema-less) result raises <code>EmptyResultError</code></li>
 </ul>
-<h4 id="6-discovering-feature-groups">6. Discovering Feature Groups</h4>
+<h4 id="7-discovering-feature-groups">7. Discovering Feature Groups</h4>
 <p>To list all available feature groups and their documentation, use the <code>get_feature_group_docs()</code> function from <code>mloda.steward</code>.</p>
               
             </div>

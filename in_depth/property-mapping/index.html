@@ -121,35 +121,55 @@
                 </li>
                 <li class="toctree-l2 current"><a class="reference internal current" href="#">PROPERTY_MAPPING</a>
     <ul class="current">
-    <li class="toctree-l3"><a class="reference internal" href="#overview">Overview</a>
+    <li class="toctree-l3"><a class="reference internal" href="#the-spec-type">The spec type</a>
     </li>
-    <li class="toctree-l3"><a class="reference internal" href="#basic-structure">Basic Structure</a>
+    <li class="toctree-l3"><a class="reference internal" href="#the-lifecycle-which-invariant-fires-when">The lifecycle: which invariant fires when</a>
     </li>
-    <li class="toctree-l3"><a class="reference internal" href="#parameter-classification">Parameter Classification</a>
-    </li>
-    <li class="toctree-l3"><a class="reference internal" href="#validation-modes">Validation Modes</a>
+    <li class="toctree-l3"><a class="reference internal" href="#one-spec-type-two-surfaces">One spec type, two surfaces</a>
         <ul>
-    <li class="toctree-l4"><a class="reference internal" href="#strict-validation-default-false">Strict Validation (Default: False)</a>
-    </li>
-    <li class="toctree-l4"><a class="reference internal" href="#custom-validation-functions">Custom Validation Functions</a>
-    </li>
-    <li class="toctree-l4"><a class="reference internal" href="#type-validators">Type Validators</a>
-    </li>
-    <li class="toctree-l4"><a class="reference internal" href="#default-values">Default Values</a>
+    <li class="toctree-l4"><a class="reference internal" href="#a-pattern-less-feature-group-sits-in-between">A pattern-less feature group sits in between</a>
     </li>
         </ul>
     </li>
-    <li class="toctree-l3"><a class="reference internal" href="#usage-in-feature-groups">Usage in Feature Groups</a>
-    </li>
-    <li class="toctree-l3"><a class="reference internal" href="#validation-examples">Validation Examples</a>
-    </li>
-    <li class="toctree-l3"><a class="reference internal" href="#conditional-requirements-with-required_when">Conditional Requirements with required_when</a>
+    <li class="toctree-l3"><a class="reference internal" href="#choosing-a-mechanism">Choosing a mechanism</a>
         <ul>
-    <li class="toctree-l4"><a class="reference internal" href="#predicate-contract">Predicate Contract</a>
+    <li class="toctree-l4"><a class="reference internal" href="#positive-integer-options-use-the-shared-predicate">Positive-integer options: use the shared predicate</a>
     </li>
         </ul>
     </li>
-    <li class="toctree-l3"><a class="reference internal" href="#context-propagation">Context Propagation</a>
+    <li class="toctree-l3"><a class="reference internal" href="#what-a-validator-receives">What a validator receives</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#the-shape-of-allowed_values">The shape of allowed_values</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#strict-validation-needs-a-value-space">Strict validation needs a value space</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#declared-defaults-must-be-honored">Declared defaults must be honored</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#optional-keys">Optional keys</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#applying-declared-defaults">Applying declared defaults</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#parameter-classification">Parameter classification</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#how-a-name-parsed-value-binds-to-a-key">How a name-parsed value binds to a key</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#required-presence-on-the-string-named-path">Required presence on the string-named path</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#what-the-end-user-sees-on-a-rejection">What the end user sees on a rejection</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#conditional-requirements-with-required_when">Conditional requirements with required_when</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#guarding-against-a-universal-configuration-matcher">Guarding against a universal configuration matcher</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#migrating-from-the-dict-form">Migrating from the dict form</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#where-each-invariant-is-pinned">Where each invariant is pinned</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#context-propagation">Context propagation</a>
+        <ul>
+    <li class="toctree-l4"><a class="reference internal" href="#group-and-context-are-independent-namespaces">group and context are independent namespaces</a>
+    </li>
+        </ul>
     </li>
     </ul>
                 </li>
@@ -167,9 +187,13 @@
                 </li>
                 <li class="toctree-l2"><a class="reference internal" href="../plugin-loader/">Plugin Loader</a>
                 </li>
+                <li class="toctree-l2"><a class="reference internal" href="../plugin_registry/">Plugin Registry</a>
+                </li>
     </ul>
                   </li>
                   <li class="toctree-l1"><a class="reference internal" href="../data-type-enforcement/">Data Type Enforcement</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../comparison-contract/">Comparison Contract</a>
                   </li>
                   <li class="toctree-l1"><a class="reference internal" >Troubleshooting</a>
     <ul>
@@ -216,163 +240,940 @@
             <div class="section" itemprop="articleBody">
               
                 <h1 id="property_mapping-configuration">PROPERTY_MAPPING Configuration</h1>
-<h2 id="overview">Overview</h2>
-<p>PROPERTY_MAPPING defines parameter validation and classification for modern feature groups using the unified parser approach.</p>
-<h2 id="basic-structure">Basic Structure</h2>
-<pre><code class="language-python">from mloda.provider import DefaultOptionKeys
+<p><code>PROPERTY_MAPPING</code> maps every option key a feature group accepts to a <code>PropertySpec</code>: the
+typed, frozen spec that declares how that option is validated. This page is the single
+source of truth for that model: what a spec may contain, which invariant is checked at
+which moment, what runs against end-user values in what order, and what each failure
+produces.</p>
+<p>Two rules carry most of the model:</p>
+<ol>
+<li><strong>The spec declares the arity, not the caller.</strong> Whether the user writes a list, a
+   tuple, a set, or a frozenset never changes what a validator receives.</li>
+<li><strong>A rejected value is not always an error.</strong> Some failures raise; others just mean
+   "this feature group does not match", which lets a different candidate win.</li>
+</ol>
+<h2 id="the-spec-type">The spec type</h2>
+<pre><code class="language-python">from mloda.provider import PropertySpec
 
 PROPERTY_MAPPING = {
-    &quot;parameter_name&quot;: {
-        &quot;value1&quot;: &quot;Description of value1&quot;,
-        &quot;value2&quot;: &quot;Description of value2&quot;,
-        DefaultOptionKeys.context: True,  # Parameter classification
-        DefaultOptionKeys.strict_validation: True,  # Validation mode
-    },
-    DefaultOptionKeys.in_features: {
-        &quot;explanation&quot;: &quot;Source feature description&quot;,
-        DefaultOptionKeys.context: True,
-        DefaultOptionKeys.strict_validation: False,  # Flexible validation
-    },
+    &quot;operation_type&quot;: PropertySpec(
+        &quot;Arithmetic operation&quot;,
+        allowed_values={&quot;add&quot;: &quot;Addition&quot;, &quot;sub&quot;: &quot;Subtraction&quot;},
+        strict_validation=True,
+        default=&quot;add&quot;,
+    ),
 }
 </code></pre>
-<h2 id="parameter-classification">Parameter Classification</h2>
-<pre><code class="language-python"># Context parameter (doesn't affect Feature Group splitting)
-&quot;aggregation_type&quot;: {
-    &quot;sum&quot;: &quot;Sum aggregation&quot;,
-    DefaultOptionKeys.context: True,
-}
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>Default</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>explanation</code></td>
+<td><code>str</code></td>
+<td>required, positional</td>
+<td>What the option means. Also names the spec in construction errors.</td>
+</tr>
+<tr>
+<td><code>allowed_values</code></td>
+<td><code>Mapping[Any, str]</code>, any other iterable, or <code>None</code></td>
+<td><code>None</code></td>
+<td>The declared value space. A Mapping is <code>{value: description}</code> and is kept as given; any other iterable is materialized to a tuple.</td>
+</tr>
+<tr>
+<td><code>default</code></td>
+<td><code>Any</code></td>
+<td><code>NO_DEFAULT</code></td>
+<td>Materialized into runtime options when the key is absent (see <a href="#applying-declared-defaults">Applying declared defaults</a>). Leaving it at <code>NO_DEFAULT</code> declares <em>no default</em>, which makes the key required. See <a href="#optional-keys">Optional keys</a>. A caller's explicit <code>None</code> is treated as absent, so this default replaces it, unless the key sets <code>allow_explicit_none=True</code>.</td>
+</tr>
+<tr>
+<td><code>context</code></td>
+<td><code>bool</code></td>
+<td><code>True</code></td>
+<td><code>True</code>: context parameter. <code>False</code>: group parameter, which splits feature groups.</td>
+</tr>
+<tr>
+<td><code>strict_validation</code></td>
+<td><code>bool</code></td>
+<td><code>False</code></td>
+<td>Enforce the value space at match time.</td>
+</tr>
+<tr>
+<td><code>element_validator</code></td>
+<td><code>Callable \| None</code></td>
+<td><code>None</code></td>
+<td>Per-element predicate. Requires <code>strict_validation=True</code>.</td>
+</tr>
+<tr>
+<td><code>match_guard</code></td>
+<td><code>Callable \| None</code></td>
+<td><code>None</code></td>
+<td>Whole-value predicate. A falsy return is a non-match.</td>
+</tr>
+<tr>
+<td><code>required_when</code></td>
+<td><code>Callable \| None</code></td>
+<td><code>None</code></td>
+<td><code>(Options) -&gt; bool</code>: the key is required only when it returns truthy.</td>
+</tr>
+<tr>
+<td><code>allow_explicit_none</code></td>
+<td><code>bool</code></td>
+<td><code>False</code></td>
+<td>Opt-in so an explicit <code>None</code> is honored (not treated as absent) and flows through validation.</td>
+</tr>
+<tr>
+<td><code>deferred_binding</code></td>
+<td><code>bool</code></td>
+<td><code>False</code></td>
+<td>Exempts a required key from the string-named path presence check only; its value is bound outside match-time name capture. Not optionality: the key stays required on the config path. See <a href="#required-presence-on-the-string-named-path">Required presence on the string-named path</a>.</td>
+</tr>
+</tbody>
+</table>
+<p><strong><code>property_spec(...)</code> is the authoring path to reach for.</strong> It is a thin builder over the
+same fields, its keyword is <code>strict=</code> (which sets <code>strict_validation</code>), and it keeps the
+declaration readable. <code>PropertySpec</code> is the lower-level form: it is the type the builder
+returns and the type the schema is validated against, so reach for it directly when you need
+the class itself (subclassing, <code>isinstance</code> checks, or constructing a spec programmatically).
+Both are exported from <code>mloda.provider</code>.</p>
+<pre><code class="language-python">from mloda.provider import property_spec
 
-# Group parameter (affects Feature Group splitting)
-&quot;data_source&quot;: {
-    &quot;production&quot;: &quot;Production data&quot;,
-    DefaultOptionKeys.group: True,
-}
-
-# Order-by parameter (defines sort order for sequential operations)
-DefaultOptionKeys.order_by: {
-    &quot;explanation&quot;: &quot;Column(s) controlling row order for rank, offset, or frame_aggregate&quot;,
-    DefaultOptionKeys.context: True,
-    DefaultOptionKeys.strict_validation: False,
+PROPERTY_MAPPING = {
+    &quot;operation_type&quot;: property_spec(
+        &quot;Arithmetic operation&quot;,
+        strict=True,
+        allowed_values={&quot;add&quot;: &quot;Addition&quot;, &quot;sub&quot;: &quot;Subtraction&quot;},
+        default=&quot;add&quot;,
+    ),
 }
 </code></pre>
-<h2 id="validation-modes">Validation Modes</h2>
-<h3 id="strict-validation-default-false">Strict Validation (Default: False)</h3>
-<pre><code class="language-python">&quot;algorithm_type&quot;: {
-    &quot;kmeans&quot;: &quot;K-means clustering&quot;,
-    &quot;dbscan&quot;: &quot;DBSCAN clustering&quot;, 
-    DefaultOptionKeys.strict_validation: True,  # Only listed values allowed
+<p>The type IS the schema. A raw dict spec is rejected at class definition
+(<code>... is a dict, not a PropertySpec</code>), and a field name that does not exist is a plain
+constructor <code>TypeError</code> that mypy already flags where the spec is written. Nothing a spec
+does not understand can be absorbed silently.</p>
+<h2 id="the-lifecycle-which-invariant-fires-when">The lifecycle: which invariant fires when</h2>
+<table>
+<thead>
+<tr>
+<th>Moment</th>
+<th>Mechanism</th>
+<th>Checks</th>
+<th>Receives</th>
+<th>On failure</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Author time</td>
+<td><code>mypy --strict</code></td>
+<td>The field exists and its declared type fits: <code>strict_validaton=True</code> (typo), <code>strict_validation=1</code>, <code>allowed_values=5</code></td>
+<td>The constructor call</td>
+<td>mypy error at the spec literal. Without mypy: an unknown field is a <code>TypeError</code>; a wrong type falls through to the row below</td>
+</tr>
+<tr>
+<td>Construction (<code>PropertySpec(...)</code>)</td>
+<td><code>__post_init__</code></td>
+<td><code>allowed_values</code> is not a str/bytes and is a Mapping or an iterable; <code>strict_validation</code> is a real bool; the validators are callable; <code>element_validator</code> implies strict; strict has a non-empty value space or an <code>element_validator</code>; a strict, non-<code>None</code> <code>default</code> is accepted by the key's own rules</td>
+<td>The spec being built</td>
+<td><code>ValueError</code> at import, prefixed <code>PropertySpec('&lt;explanation&gt;')</code></td>
+</tr>
+<tr>
+<td>Class definition (<code>FeatureGroup.__init_subclass__</code>)</td>
+<td>Spec type</td>
+<td>Every spec IS a <code>PropertySpec</code></td>
+<td>Every value in the mapping</td>
+<td><code>ValueError</code> naming the class and the key</td>
+</tr>
+<tr>
+<td>Match time (parser)</td>
+<td><code>allowed_values</code> membership</td>
+<td>Each element of a <strong>present</strong> option is in the accepted set</td>
+<td>One element</td>
+<td><code>ValueError</code>, surfaced to the end user</td>
+</tr>
+<tr>
+<td>Match time (parser)</td>
+<td><code>element_validator</code></td>
+<td>Each element of a <strong>present</strong> option satisfies a predicate</td>
+<td>One element</td>
+<td><code>ValueError</code>, surfaced to the end user</td>
+</tr>
+<tr>
+<td>Match time (parser)</td>
+<td>Required presence (config path)</td>
+<td>A key that declares no <code>default</code> and no <code>required_when</code> was provided</td>
+<td>The options</td>
+<td>Non-match (<code>False</code>)</td>
+</tr>
+<tr>
+<td>Match time (parser)</td>
+<td>Required presence (string-named path)</td>
+<td>Same, after declared defaults and name bindings resolve; <code>deferred_binding=True</code> and the source (<code>in_features</code>) key are exempt</td>
+<td>The name-bound options</td>
+<td>Non-match (<code>False</code>), with a warning naming the missing key(s)</td>
+</tr>
+<tr>
+<td>Match time (mixin)</td>
+<td><code>match_guard</code></td>
+<td>The whole value has an acceptable shape</td>
+<td>The raw value</td>
+<td>Non-match (<code>False</code>)</td>
+</tr>
+<tr>
+<td>Match time (mixin)</td>
+<td><code>MIN/MAX_IN_FEATURES</code></td>
+<td>In-feature count is within bounds</td>
+<td>The in-features</td>
+<td>Non-match (<code>False</code>)</td>
+</tr>
+<tr>
+<td>Match time (guard installed at class definition)</td>
+<td><code>required_when</code></td>
+<td>A conditionally required option is present</td>
+<td><code>Options</code></td>
+<td>Non-match (<code>False</code>)</td>
+</tr>
+<tr>
+<td>Class definition (mixin)</td>
+<td>Universal-matcher diagnostic</td>
+<td>An all-optional <code>PROPERTY_MAPPING</code> inherits the configuration matcher, so it matches any name with empty options</td>
+<td>The class</td>
+<td><code>logger.warning</code>, unless <code>ALLOW_UNIVERSAL_MATCHER = True</code></td>
+</tr>
+<tr>
+<td>Author time (reader surface)</td>
+<td><code>mypy --strict</code></td>
+<td><code>READER_OPTIONS</code> holds <code>PropertySpec</code> values</td>
+<td>The constructor call</td>
+<td>mypy error at the declaration</td>
+</tr>
+<tr>
+<td>Class definition (<code>BaseInputData.__init_subclass__</code>)</td>
+<td>Spec type + surface guard</td>
+<td>Every value IS a <code>PropertySpec</code> and declares nothing inert on a reader (<code>match_guard</code>, <code>deferred_binding</code>, <code>context=False</code>, enforcement fields on a <code>framework_set</code> key); the reserved key's <strong>winning</strong> declaration across the MRO keeps <code>framework_set=True</code></td>
+<td>Every value in that class's declaration, plus the reserved key as the MRO merge resolves it</td>
+<td><code>ValueError</code> naming class, key and field</td>
+</tr>
+<tr>
+<td>Match time (reader selection)</td>
+<td>Presence + strict validation</td>
+<td>Required keys are present and present strict values pass, element-wise; <code>framework_set</code> keys exempt</td>
+<td>The candidate's merged specs and the options</td>
+<td>Reader non-match. Addressed-reader and supplied-value failures record a <code>stage="input_data"</code> rejection; unaddressed absence and an unjudgeable predicate decline silently</td>
+</tr>
+<tr>
+<td>Match time (reader code)</td>
+<td><code>reader_option(key, options)</code></td>
+<td>Supplied value, else the declared <code>default</code></td>
+<td>The key name and the options</td>
+<td><code>ValueError</code> for an undeclared key or an absent <code>NO_DEFAULT</code> one</td>
+</tr>
+</tbody>
+</table>
+<p>A spec is constructed inside the class body, so its own rules fire before the class exists.
+Class definition is left with exactly one rule: the type itself. Within <code>__post_init__</code> the
+declared-default check runs last, after the shape rules, because it calls the validators the
+shape rules just certified: a non-callable <code>element_validator</code> would otherwise be blamed on
+the default.</p>
+<p>Match-time mechanisms run in table order. <code>element_validator</code> <strong>replaces</strong> membership rather
+than adding to it: when a key declares one, <code>allowed_values</code> is not consulted. Because the
+parser runs before the mixin, an element rejected by membership or by <code>element_validator</code>
+short-circuits, and <code>match_guard</code> is never reached.</p>
+<p>Value validation does not depend on how the feature was created: membership and
+<code>element_validator</code> run on <strong>both</strong> match paths, the configuration-based one and the
+string-named one. Required <strong>presence</strong> runs on both too: the string-named path rejects a
+missing required key exactly like the configuration path does
+(see <a href="#required-presence-on-the-string-named-path">Required presence on the string-named path</a>).
+A key the name encodes, a <code>deferred_binding=True</code> key, a declared-default key, and the source
+(<code>in_features</code>) key are never falsely reported missing. So <code>"income__pca_2d"</code> with no options at
+all still matches, while the same feature group with <code>pca_svd_solver="bogus"</code> in its options is
+rejected either way.</p>
+<p><code>required_when</code> is the one mechanism that does not live inside a matcher. A class that
+declares it gets its resolved <code>match_feature_group_criteria</code> wrapped at class definition,
+and the wrapper runs the predicates after that matcher returns <code>True</code>. Overriding the
+matcher therefore keeps the contract, whether the override delegates or not.</p>
+<p>The last four rows are the whole reader surface, and the match-time ones sit outside the ordered
+sequence above: a user-facing <code>READER_OPTIONS</code> key is consumed during reader selection, and no other
+moment fires for it. The reserved <code>"BaseInputData"</code> key is the exception, written at selection and read
+back at load time by <code>BaseInputData.init_reader</code> and by <code>SQLITEReader.get_table</code>.
+See <a href="#one-spec-type-two-surfaces">One spec type, two surfaces</a>.</p>
+<h2 id="one-spec-type-two-surfaces">One spec type, two surfaces</h2>
+<p>Option keys are declared in two places, with one spec type, and the two surfaces enforce it
+differently because they consume values at different moments.</p>
+<table>
+<thead>
+<tr>
+<th>Surface</th>
+<th>Declared on</th>
+<th>What the framework does with it</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>PROPERTY_MAPPING</code></td>
+<td>a <code>FeatureGroup</code></td>
+<td>Enforces it and applies it: value validation (<code>allowed_values</code>, <code>element_validator</code>), presence and <code>required_when</code>, and materialization of declared defaults into <code>Options</code>.</td>
+</tr>
+<tr>
+<td><code>READER_OPTIONS</code></td>
+<td>a <code>BaseInputData</code> reader</td>
+<td>Enforces it at reader selection: presence, <code>required_when</code> and strict values are checked before a candidate probes, and a failure vetoes that reader, recording per the ownership rule above. Defaults are never materialized; only the reader's own code applies them.</td>
+</tr>
+</tbody>
+</table>
+<p>A reader consumes its option keys during reader <strong>selection</strong> (<code>match_subclass_data_access</code>, reached
+through <code>BaseInputData.matches</code> from the matcher), before the framework materializes anything. Two
+consequences keep the shared type honest on this surface:</p>
+<ul>
+<li><strong><code>default</code> stays a runtime fallback.</strong> A <code>FeatureGroup</code> default enters <code>Options</code> (hashing, twin
+  canonicalization, downstream visibility); a reader default is only returned by
+  <code>reader_option(key, options)</code> and never enters <code>Options</code>. Presence follows the
+  <a href="#applying-declared-defaults">#768 matrix</a>; a <code>NO_DEFAULT</code> key is required at selection, and
+  <code>reader_option</code> raises for it. The declaration is load-bearing: <code>ReadFile</code> and <code>ReadDocument</code>
+  resolve <code>document_suffixes</code> this way (for <code>ReadDocument</code> only in its <code>DataAccessCollection</code>
+  branch; the bare str/Path branch passes no <code>document_suffixes</code>).</li>
+<li><strong>Fields with no reader meaning are rejected where they are written.</strong> <code>match_guard</code>,
+  <code>deferred_binding=True</code> and <code>context=False</code> describe name matching and value placement, which a
+  reader does not have, so <code>BaseInputData.__init_subclass__</code> rejects them instead of leaving them
+  silently inert (#865). <code>framework_set=True</code> marks the one framework-written key, the reserved
+  <code>"BaseInputData"</code> pair written by <code>add_base_input_data_to_options</code> and read by <code>init_reader</code>.
+  Such keys are exempt from enforcement, so enforcement fields on them are rejected too, as is
+  <code>allow_explicit_none</code>, which the admit path never reads on a framework-written key; on
+  <code>PROPERTY_MAPPING</code> the field is rejected outright. The reserved key is checked as the MRO merge
+  resolves it: its <strong>winning</strong> declaration must keep <code>framework_set=True</code>, so neither a subclass nor a
+  plain mixin can turn the framework-written key into a user-enforced one.</li>
+</ul>
+<p><code>READER_OPTIONS</code> merges across the MRO (<code>reader_option_specs()</code>, most-derived declaration winning),
+so a concrete reader inherits its family's keys and redeclares nothing, and
+<code>declared_reader_option_keys()</code> is the merged key set. Both <code>reader_option()</code> and
+<code>reader_option_default()</code> raise for a key no declaration carries, so a typo in <em>reader</em> code is loud
+instead of a silent <code>None</code>.</p>
+<p>What a plugin author may rely on:</p>
+<table>
+<thead>
+<tr>
+<th>Guarantee</th>
+<th>on a <code>FeatureGroup</code></th>
+<th>on a reader</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>The declared value space is enforced against user values</td>
+<td>yes, under <code>strict_validation</code></td>
+<td>yes, under <code>strict_validation</code>, at reader selection</td>
+</tr>
+<tr>
+<td>The declared default is applied by the framework</td>
+<td>yes (see <a href="#applying-declared-defaults">Applying declared defaults</a>)</td>
+<td>no, only the reader's own code applies it, via <code>reader_option</code></td>
+</tr>
+<tr>
+<td>Presence and <code>required_when</code> are checked</td>
+<td>yes</td>
+<td>yes, at selection; addressing the reader makes a failure attributable, a global probe declines silently on absence</td>
+</tr>
+<tr>
+<td>A user's mistyped key surfaces</td>
+<td>for a required key, yes: absence is a non-match, with a warning on the string-named path</td>
+<td>for a required key, yes: absence is an attributable non-match; an optional key's typo still falls back to the declared default</td>
+</tr>
+</tbody>
+</table>
+<p>The surfaces used to be two types: reader selection had no rejection channel, so enforcement
+fields on a reader would have been silently inert (#865). The shared channel (#727) made declines
+attributable and collapsed the types back into one (#949). Migration edge: a bare
+<code>PropertySpec("...")</code> is required at selection; the old bare <code>ReaderOptionSpec("...")</code> is
+<code>PropertySpec("...", default=None)</code>.</p>
+<h3 id="a-pattern-less-feature-group-sits-in-between">A pattern-less feature group sits in between</h3>
+<p>A <code>FeatureGroup</code> that declares no <code>PREFIX_PATTERN</code> or <code>SUFFIX_PATTERN</code> (<code>ConcatenatedFileContent</code> is
+the in-repo example) carries a real <code>PROPERTY_MAPPING</code>, but only part of the enforced surface reaches
+it:</p>
+<ul>
+<li><code>required_when</code> <strong>is</strong> enforced, for absence. Its guard is installed from
+  <code>FeatureGroup.__init_subclass__</code> and wraps the class's resolved <code>match_feature_group_criteria</code>
+  instead of living inside the chain-parser matcher, so an <strong>absent</strong> required key is a non-match at
+  match time, not a late <code>ValueError</code> inside <code>input_features</code>. Requiredness reads presence
+  (<code>options.get(key) is not None</code>), so a present-but-falsy value (<code>target_folder=[]</code>,
+  <code>document_reader_class=""</code>) satisfies the requirement and matches; the hand-rolled <code>ValueError</code>
+  backstops inside <code>input_features</code> are what catch that, which is why they stay.</li>
+<li><code>strict_validation</code> is never reached: value validation lives inside the chain-parser matcher, and a
+  pattern-less group keeps the default class-name matcher, which does not call the parser. The
+  name-path presence rule is unavailable too, because it needs a parsed name and its guard installs
+  only for a class that declares a pattern.</li>
+<li>Declared defaults stay metadata until the group materializes them itself by calling
+  <code>options_with_defaults</code> at its own read site. That call is what makes a declared default real at an
+  <code>input_features</code> read site (see <a href="#applying-declared-defaults">Applying declared defaults</a>).</li>
+</ul>
+<h2 id="choosing-a-mechanism">Choosing a mechanism</h2>
+<table>
+<thead>
+<tr>
+<th>You want to say</th>
+<th>Use</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>"This option accepts exactly these values"</td>
+<td><code>allowed_values</code> + <code>strict_validation=True</code></td>
+</tr>
+<tr>
+<td>"Each value must satisfy a rule I cannot enumerate" (positive int, float in range)</td>
+<td><code>element_validator</code> (requires strict)</td>
+</tr>
+<tr>
+<td>"The value as a whole must have this shape" (a dict, a list of exactly 3, an ordering)</td>
+<td><code>match_guard</code></td>
+</tr>
+<tr>
+<td>"This option is required only when another option says so"</td>
+<td><code>required_when</code></td>
+</tr>
+</tbody>
+</table>
+<h3 id="positive-integer-options-use-the-shared-predicate">Positive-integer options: use the shared predicate</h3>
+<p>Do not hand-roll a positive-integer check. Python bools satisfy <code>isinstance(value, int)</code>, so
+the obvious predicate accepts <code>horizon=True</code>; and <code>str.isdigit()</code> accepts <code>"²"</code>, which then
+raises in <code>int()</code>. <code>mloda.provider</code> exports one predicate that gets both right, and accepts
+numpy integers and decimal strings:</p>
+<pre><code class="language-python">from mloda.provider import PropertySpec, is_positive_int
+
+WINDOW_SIZE: PropertySpec(
+    &quot;Size of the time window (must be positive integer)&quot;,
+    context=True,
+    strict_validation=True,
+    element_validator=is_positive_int,
+)
+</code></pre>
+<p>It accepts positive Python ints, numpy integers and decimal strings, and rejects <code>bool</code>,
+zero, negatives, and non-integers. Shipped plugins (<code>window_size</code>, <code>horizon</code>, <code>k_value</code>,
+<code>dimension</code>) all use it, so the value space stays consistent across feature groups. If a key
+allows an extra sentinel, compose rather than fork it, as clustering does for <code>"auto"</code>:</p>
+<pre><code class="language-python">element_validator=lambda value: value == &quot;auto&quot; or is_positive_int(value),
+</code></pre>
+<p>The two callables differ on both axes, which is what their names say:</p>
+<ul>
+<li><strong><code>element_validator</code></strong> sees <strong>one element</strong>, only under <code>strict_validation</code>, and a falsy
+  return <strong>raises</strong> <code>ValueError</code>. The user gave a value the group claims to own but cannot
+  accept, so they are told.</li>
+<li><strong><code>match_guard</code></strong> sees the <strong>raw whole value</strong>, with or without strict, and a falsy return
+  is a plain <strong>non-match</strong>. The group is saying "not mine", so resolution moves on and
+  another feature group may still take the feature. On a spec that also sets
+  <code>strict_validation=True</code> the guard means "this value is wrong", so its rejection is reported to
+  the user instead of failing silently.</li>
+</ul>
+<p>Both run on both match paths, so declaring both on one spec is about <strong>what</strong> is judged, not
+about where: <code>element_validator</code> judges each element and produces the message, while
+<code>match_guard</code> judges the raw container that element-wise unpacking would otherwise hide.</p>
+<p>Both must be pure functions. They may be called several times during resolution (once per
+candidate feature group).</p>
+<h2 id="what-a-validator-receives">What a validator receives</h2>
+<p>Container syntax is not part of the contract. For membership and <code>element_validator</code>, every
+sequence unpacks element-wise and identically:</p>
+<pre><code class="language-python">from mloda.user import Options
+
+# All four hand the element_validator exactly &quot;a&quot; and then &quot;b&quot;.
+Options(context={&quot;ops&quot;: [&quot;a&quot;, &quot;b&quot;]})
+Options(context={&quot;ops&quot;: (&quot;a&quot;, &quot;b&quot;)})
+Options(context={&quot;ops&quot;: {&quot;a&quot;, &quot;b&quot;}})
+Options(context={&quot;ops&quot;: frozenset({&quot;a&quot;, &quot;b&quot;})})
+</code></pre>
+<ul>
+<li>A <code>str</code> is a <strong>scalar</strong>, not a sequence of characters: <code>"abc"</code> is the single element
+  <code>"abc"</code>.</li>
+<li>A <code>dict</code> is <strong>one composite value</strong>, not a sequence of its keys. Validating its shape is
+  <code>match_guard</code>'s job.</li>
+<li>Elements keep their real type: an <code>int</code> element arrives as <code>1</code>, never <code>"1"</code>.</li>
+<li>An <strong>empty</strong> container is <em>present</em> and vacuously valid: it has no elements, so no
+  validator runs, and it still satisfies the required-presence check. This is distinct from
+  the option being absent.</li>
+</ul>
+<p><code>match_guard</code> is unaffected by any of this: it always receives the raw value with its
+original container type.</p>
+<h2 id="the-shape-of-allowed_values">The shape of <code>allowed_values</code></h2>
+<p>A Mapping is the value-space-with-descriptions form and is kept as given. Any other iterable
+(tuple, list, set, frozenset, generator) is materialized to a <strong>tuple</strong> at construction, so a
+generator is consumed once, up front, and can never make matching stateful. Two shapes raise:</p>
+<ul>
+<li>a <strong><code>str</code> or <code>bytes</code></strong>, which a forgotten comma produces (<code>("add")</code> is the str <code>"add"</code>, not
+  a one-tuple). Membership would silently degrade into a substring test, accepting <code>"a"</code>,
+  <code>"ad"</code> and <code>""</code>.</li>
+<li>a <strong>scalar</strong>, for which <code>value in 5</code> raises a <code>TypeError</code> that the match path swallows into
+  a silent reject-everything.</li>
+</ul>
+<p>The shape is checked whether or not the spec is strict, because a non-strict value space is
+still <em>consumed</em>: it maps a value parsed out of a feature name back onto its
+<code>PROPERTY_MAPPING</code> key. It is a mapping aid there, never an enforcement.</p>
+<p>A spec that declares no <code>allowed_values</code> declares an <strong>empty</strong> value space; the space is never
+inferred from the spec's other fields.</p>
+<h2 id="strict-validation-needs-a-value-space">Strict validation needs a value space</h2>
+<p><code>strict_validation=True</code> needs something to validate against: a non-empty <code>allowed_values</code>, or
+an <code>element_validator</code>. With neither, the accepted set is empty and the key rejects every
+value, so the spec could never match. The constructor refuses to build it.</p>
+<p>An <code>element_validator</code> <strong>replaces</strong> membership, so when a key declares one, <code>allowed_values</code> is
+never consulted at match time and this rule does not apply: even an empty <code>allowed_values</code> is
+inert there, because the validator, not membership, decides.</p>
+<h2 id="declared-defaults-must-be-honored">Declared defaults must be honored</h2>
+<p>Under <code>strict_validation=True</code>, a declared non-<code>None</code> <code>default</code> must be a value the key
+accepts, either by membership or through the <code>element_validator</code>. This closes the gap where
+omitting the key would apply an unrevalidated default.</p>
+<pre><code class="language-py"># ValueError at construction: &quot;mul&quot; is not accepted.
+PropertySpec(
+    &quot;Arithmetic operation&quot;,
+    allowed_values={&quot;add&quot;: &quot;Addition&quot;, &quot;sub&quot;: &quot;Subtraction&quot;},
+    strict_validation=True,
+    default=&quot;mul&quot;,
+)
+</code></pre>
+<p>Fix it by adding the default to the accepted values, or by removing it. <code>required_when</code> does
+NOT exempt a key: when its predicate returns <code>False</code> and the key is omitted, the default still
+applies, so an unaccepted default would still slip through. A declared <code>default=None</code> applies
+no value and is always legal, and the check is a no-op when strict is off.</p>
+<p>A validator that <em>raises</em> when called with the declared default is reported distinctly from
+one that merely <em>rejects</em> it, with the original exception chained as <code>__cause__</code>.</p>
+<h2 id="optional-keys">Optional keys</h2>
+<p>Optionality is the <code>default</code> field, and the three states are distinct:</p>
+<table>
+<thead>
+<tr>
+<th>Written</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>default</code> omitted (stays <code>NO_DEFAULT</code>)</td>
+<td>The key declares no default and is <strong>required</strong>.</td>
+</tr>
+<tr>
+<td><code>default=None</code></td>
+<td>The key is <strong>optional</strong>; no value is applied when it is absent.</td>
+</tr>
+<tr>
+<td><code>default=&lt;value&gt;</code></td>
+<td>The key is <strong>optional</strong>; the value is materialized when it is absent (see <a href="#applying-declared-defaults">Applying declared defaults</a>), and is checked under strict.</td>
+</tr>
+</tbody>
+</table>
+<pre><code class="language-python">from mloda.provider import PropertySpec
+
+PROPERTY_MAPPING = {
+    &quot;pipeline_steps&quot;: PropertySpec(
+        &quot;List of pipeline steps as (name, transformer) tuples&quot;,
+        default=None,  # optional: pipeline_name is the alternative
+    ),
 }
 </code></pre>
-<h3 id="custom-validation-functions">Custom Validation Functions</h3>
-<p>Use <code>validation_function</code> with <code>strict_validation=True</code> to validate individual
-parsed elements. The parser unpacks lists and calls the function on each element:</p>
-<pre><code class="language-python">&quot;window_size&quot;: {
-    &quot;explanation&quot;: &quot;Size of time window&quot;,
-    DefaultOptionKeys.validation_function: lambda x: isinstance(x, int) and x &gt; 0,
-    DefaultOptionKeys.strict_validation: True,
+<p><code>NO_DEFAULT</code> is a sentinel exported from <code>mloda.provider</code>; it exists because on a dataclass
+every field is always present, so a plain <code>None</code> cannot say both "no default declared" and
+"optional with no value". The retired dict form drew the same line with a <em>present</em>
+<code>default: None</code> entry. <code>SklearnPipelineFeatureGroup</code> is the in-repo example.</p>
+<p>To ask whether a spec declares a default, use <code>is_no_default</code>, also exported from
+<code>mloda.provider</code>:</p>
+<pre><code class="language-py">from mloda.provider import is_no_default
+
+if is_no_default(spec.default):
+    ...  # the key declares no default, so it is required
+</code></pre>
+<p>Do <strong>not</strong> write <code>spec.default is NO_DEFAULT</code>. <code>is_no_default</code> is a type test rather than an
+identity test on purpose: a second imported copy of the module (an editable install alongside
+site-packages, or an <code>importlib.reload</code>) carries its own sentinel object, and an identity
+check would read that copy's sentinel as a <em>declared</em> default.</p>
+<p><code>required_when</code> is for a <em>conditional</em> requirement, not for optionality: never write a
+predicate that always returns <code>False</code> to make a key optional.</p>
+<p><code>deferred_binding</code> is not optionality either: the key stays required on the configuration path,
+and the flag only defers its string-named path presence check (see
+<a href="#required-presence-on-the-string-named-path">Required presence on the string-named path</a>).</p>
+<h2 id="applying-declared-defaults">Applying declared defaults</h2>
+<p>A declared default is metadata until the resolved feature group materializes it.
+<code>FeatureGroup.options_with_defaults(options)</code> returns an <code>Options</code> view where every absent key
+with a concrete declared default is filled from its spec (into context or group per the spec).
+A present value is never overridden, even a falsy <code>0</code>/<code>False</code>/<code>""</code>. <code>NO_DEFAULT</code> and
+<code>default=None</code> fill nothing. A strict default is already validated at construction, so the
+materialized value is not re-checked.</p>
+<p>The framework applies this at two sites. At feature <strong>intake</strong>
+(<code>Engine.add_feature_to_collection</code>) a feature's options are rebound through
+<code>options_with_defaults</code> as it enters the collection. At the <strong>compute boundary</strong>
+<code>run_calculate_feature</code> materializes the declared defaults into the <code>FeatureSet</code> before
+<code>calculate_feature</code> and any calculate-feature extender run, so a plugin reads <code>feature.options</code>
+directly. <code>options_with_defaults</code> remains for pre-materialization contexts (e.g. <code>resolve_subtype</code>
+internals) and for read sites the framework hands pre-default options, <code>input_features</code> above all.</p>
+<p>For an engine-driven request intake has already run, so the compute-boundary call is an idempotent
+no-op. It carries the work only for direct <code>FeatureSet</code> use that bypasses the engine, and there the
+collapsing twins raise instead of merging.</p>
+<p>Both sites run <em>after</em> resolution, so materialization never changes <strong>resolution matching</strong> (filter
+matching runs after intake and does observe materialized values, see below). It does change
+how features <strong>group</strong>: intake materialization deliberately canonicalizes default-equivalent twins,
+so a feature that passes a declared default explicitly and one that omits it become equal and merge
+into a single feature (with a warning naming the duplicated request) instead of computing twice.</p>
+<p>One consequence for authors: <code>input_features</code> is called with the DECLARED, pre-default options (the
+engine stashes them before intake rebinds, and a child inherits the same pre-default options), so a
+declared default does NOT reach an <code>input_features</code> read site. A group that wants it there calls
+<code>options_with_defaults</code> itself, as <code>ConcatenatedFileContent</code> does (see
+<a href="#a-pattern-less-feature-group-sits-in-between">A pattern-less feature group sits in between</a>).</p>
+<p>Which stage sees which view of the options:</p>
+<table>
+<thead>
+<tr>
+<th>Stage</th>
+<th>Options view</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Parse, bind, resolution match, resolve (subtype resolution applies defaults internally)</td>
+<td>declared (pre-default)</td>
+</tr>
+<tr>
+<td><code>input_features()</code> and child option inheritance</td>
+<td>declared (pre-default)</td>
+</tr>
+<tr>
+<td>Splitting, planning, filter matching, <code>validate_input_features</code>, compute</td>
+<td>effective (post-default)</td>
+</tr>
+</tbody>
+</table>
+<p>The last row assumes intake has run, which is every engine-driven request. On the direct <code>FeatureSet</code>
+path the safety net materializes inside <code>run_calculate_feature</code>, which is after
+<code>validate_input_features</code>, not before it.</p>
+<p>Filter matching is the one place the same classmethod sees both views: <code>GlobalFilter</code> calls
+<code>match_feature_group_criteria</code> again after intake, passing the filter feature's own options
+enriched from the resolved feature's effective ones (<code>unify_options</code>), so a key the filter feature
+omits arrives materialized where feature resolution saw it declared.</p>
+<pre><code class="language-py">graph_type = feature.options.get(&quot;graph_type&quot;)  # the declared default when the caller omitted it
+</code></pre>
+<p><code>Options.get(key, default)</code> reads dict-style: a present key returns its stored value (even a falsy
+<code>0</code>/<code>False</code>/<code>""</code>), and the call-site <code>default</code> is returned only when the key is absent from both
+group and context. Because the framework has already materialized any declared default before
+<code>calculate_feature</code> runs, reading it back gives a three-level precedence, an explicit caller value
+first, then the declared spec default, then the call-site <code>default</code>. (Subtlety: materialization fills
+any key whose value <code>is None</code>, so an explicit <code>None</code> is replaced by a concrete spec default, while the
+other falsy values <code>0</code>/<code>False</code>/<code>""</code> are kept. That "None means absent" rule is the default; a spec
+opts a single key out with <code>allow_explicit_none=True</code>, after which an explicit <code>None</code> overrides even a
+concrete default and is honored across the match-time value mechanisms: it counts as present for the
+required-presence and <code>required_when</code> checks and is seen by membership, <code>element_validator</code>, and
+<code>match_guard</code>, while every flagless spec is unchanged. The flag defaults to <code>False</code>, so the existing
+<code>is not None</code> presence tests keep working.)</p>
+<pre><code class="language-py">graph_type = feature.options.get(&quot;graph_type&quot;, &quot;spring&quot;)  # explicit value; else the spec default; else &quot;spring&quot;
+</code></pre>
+<h2 id="parameter-classification">Parameter classification</h2>
+<p>There is no <code>group</code> field: a group parameter is <code>context=False</code>.</p>
+<pre><code class="language-python">PROPERTY_MAPPING = {
+    # Context parameter (the default): does not affect feature group splitting
+    &quot;aggregation_type&quot;: PropertySpec(
+        &quot;Aggregation to apply&quot;,
+        allowed_values={&quot;sum&quot;: &quot;Sum aggregation&quot;},
+        strict_validation=True,
+    ),
+    # Group parameter: affects feature group splitting
+    &quot;data_source&quot;: PropertySpec(
+        &quot;Data source to read from&quot;,
+        allowed_values={&quot;production&quot;: &quot;Production data&quot;},
+        context=False,
+        strict_validation=True,
+    ),
 }
 </code></pre>
-<h3 id="type-validators">Type Validators</h3>
-<p>Use <code>type_validator</code> to validate the shape or composite type of the raw option
-value before any list unpacking. Unlike <code>validation_function</code>, it does not
-require <code>strict_validation</code>. The validator receives the value exactly as stored
-in Options and must return a truthy value for the match to succeed:</p>
-<pre><code class="language-python">def _is_list_of_strings(value):
-    return isinstance(value, list) and all(isinstance(item, str) for item in value)
+<p>A caller who places the key explicitly in <code>Options(group=...)</code> or <code>Options(context=...)</code>
+overrides the spec's classification.</p>
+<h2 id="how-a-name-parsed-value-binds-to-a-key">How a name-parsed value binds to a key</h2>
+<p>A value captured from the feature name binds to a PROPERTY_MAPPING key by name: a named capture
+group <code>(?P&lt;key&gt;...)</code> binds to the key of the same name, so a secondary capture and an
+<code>element_validator</code>-only spec (one with no <code>allowed_values</code>) both receive their value. When a
+pattern declares any named group, binding is exclusively by name. A pattern with only positional
+groups falls back to the legacy rule of binding the first capture to the single key whose
+<code>allowed_values</code> already contain it. That fallback is transitional (retired by #772); a positional
+pattern whose keys share a reachable value is rejected at class-definition time, so migrate such a
+pattern to named capture groups.</p>
+<h2 id="required-presence-on-the-string-named-path">Required presence on the string-named path</h2>
+<p>Required presence is checked when a feature matches by its name, not on the configuration path
+alone. A key is flagged when it declares no <code>default</code>, no <code>required_when</code>, and
+<code>deferred_binding=False</code>, and is still absent after declared defaults and name captures are
+resolved. Exempt from the check: a declared default, a <code>required_when</code> key, a
+<code>deferred_binding=True</code> key, and the source key (<code>in_features</code>), whose presence the name prefix
+supplies and whose count <code>MIN/MAX_IN_FEATURES</code> enforces.</p>
+<p>A flagged missing key makes the match a <strong>non-match</strong>: a warning names the group, the feature,
+and the missing key(s), and the resolution-failure report names the missing key(s) too.</p>
+<p>Two migrations remove the warning for a flagged key. Give the pattern a named capture
+<code>(?P&lt;key&gt;...)</code> so the framework binds the key from the name; or, for a key bound outside
+match-time name capture (parsed by the plugin from the name, or supplied downstream), set
+<code>deferred_binding=True</code>, which exempts it from this check only and leaves it required on the
+config path. <code>ClusteringFeatureGroup</code> marks its name-parsed <code>k_value</code> key this way:</p>
+<pre><code class="language-python">from mloda.provider import PropertySpec
 
-&quot;partition_by&quot;: {
-    &quot;explanation&quot;: &quot;List of columns to partition by&quot;,
-    DefaultOptionKeys.context: True,
-    DefaultOptionKeys.strict_validation: False,
-    DefaultOptionKeys.type_validator: _is_list_of_strings,
+PROPERTY_MAPPING = {
+    &quot;k_value&quot;: PropertySpec(
+        &quot;Cluster count parsed from the feature name by the plugin&quot;,
+        deferred_binding=True,  # exempt from the string-named presence check only
+    ),
 }
 </code></pre>
-<p>When both <code>validation_function</code> and <code>type_validator</code> are present on the same
-entry, <code>validation_function</code> runs first (during property mapping validation on
-each parsed element), then <code>type_validator</code> runs on the raw value. Validators
-must be pure functions with no side effects.</p>
-<h3 id="default-values">Default Values</h3>
-<pre><code class="language-python">&quot;method&quot;: {
-    &quot;linear&quot;: &quot;Linear interpolation&quot;,
-    &quot;cubic&quot;: &quot;Cubic interpolation&quot;,
-    DefaultOptionKeys.default: &quot;linear&quot;,  # Default if not specified
-}
+<h2 id="what-the-end-user-sees-on-a-rejection">What the end user sees on a rejection</h2>
+<p>A direct <code>FeatureChainParser</code> call raises <code>ValueError</code> immediately. Going through
+<code>FeatureChainParserMixin.match_feature_group_criteria</code> (the default for most feature groups)
+is different: it catches that <code>ValueError</code> and returns <code>False</code>, because during resolution one
+candidate's "no match" must not abort the search for another candidate that might still accept
+the feature. This holds on both paths: a bad option value on a string-named feature is the same
+non-match as on a configuration-based one.</p>
+<p>If every candidate rejects the feature, the final "No feature groups found" error names each
+discarded candidate and why it dropped:</p>
+<pre><code>Feature group(s) eliminated while matching 'window_size_windowed':
+  - WindowedFeatureGroup (option value): Property value '14' failed validation for 'window_size'
 </code></pre>
-<h2 id="usage-in-feature-groups">Usage in Feature Groups</h2>
-<pre><code class="language-python">class MyFeatureGroup(FeatureGroup):
-    PROPERTY_MAPPING = {
-        &quot;operation_type&quot;: {
-            &quot;sum&quot;: &quot;Sum operation&quot;,
-            &quot;avg&quot;: &quot;Average operation&quot;,
-            DefaultOptionKeys.context: True,
-            DefaultOptionKeys.strict_validation: True,
-        },
-        DefaultOptionKeys.in_features: {
-            &quot;explanation&quot;: &quot;Source feature&quot;,
-            DefaultOptionKeys.context: True,
-        },
-    }
-
-    @classmethod
-    def match_feature_group_criteria(cls, feature_name, options, data_access_collection=None):
-        return FeatureChainParser.match_configuration_feature_chain_parser(
-            feature_name, options, property_mapping=cls.PROPERTY_MAPPING
-        )
-</code></pre>
-<h2 id="validation-examples">Validation Examples</h2>
-<pre><code class="language-python"># Valid - &quot;sum&quot; is in mapping
-Options(context={&quot;operation_type&quot;: &quot;sum&quot;})
-
-# Invalid with strict validation - &quot;custom&quot; not in mapping  
-Options(context={&quot;operation_type&quot;: &quot;custom&quot;})  # Raises ValueError
-
-# Valid with flexible validation - any value allowed
-Options(context={&quot;in_features&quot;: &quot;any_feature_name&quot;})
-</code></pre>
-<h2 id="conditional-requirements-with-required_when">Conditional Requirements with <code>required_when</code></h2>
-<p>Use <code>DefaultOptionKeys.required_when</code> to declare options that are only required under certain conditions. Attach a predicate callable to a PROPERTY_MAPPING entry. The predicate receives an effective <code>Options</code> object and returns <code>True</code> when the option is required.</p>
-<p>This works for both configuration-based and string-based feature creation. For string-based features, the operation value parsed from the feature name is merged into the effective options before predicate evaluation, so predicates see values from both sources.</p>
-<pre><code class="language-python">from mloda.core.abstract_plugins.components.options import Options
-from mloda.provider import DefaultOptionKeys
-
-_ORDER_DEPENDENT = {&quot;first&quot;, &quot;last&quot;}
+<p>This is diagnostic only. It does not change the <code>True</code>/<code>False</code> contract, so a value rejected by
+one feature group can still match another, and multi-group fallback resolution keeps working.
+Authors get this for free.</p>
+<h2 id="conditional-requirements-with-required_when">Conditional requirements with <code>required_when</code></h2>
+<p>Attach a predicate to declare an option required only under certain conditions. It receives an
+effective <code>Options</code> and returns <code>True</code> when the option is required. This works for
+config-based and string-based features alike (for the latter, the operation parsed from the
+feature name is merged in first, so predicates see values from both sources).</p>
+<pre><code class="language-python">_ORDER_DEPENDENT = {&quot;first&quot;, &quot;last&quot;}
 
 def _needs_order_by(options: Options) -&gt; bool:
     return options.get(&quot;aggregation_type&quot;) in _ORDER_DEPENDENT
 
 PROPERTY_MAPPING = {
-    &quot;aggregation_type&quot;: {
-        &quot;sum&quot;: &quot;Sum&quot;, &quot;avg&quot;: &quot;Average&quot;, &quot;first&quot;: &quot;First&quot;, &quot;last&quot;: &quot;Last&quot;,
-        DefaultOptionKeys.context: True,
-        DefaultOptionKeys.strict_validation: True,
-    },
-    &quot;order_by&quot;: {
-        &quot;explanation&quot;: &quot;Column to order by within each partition&quot;,
-        DefaultOptionKeys.context: True,
-        DefaultOptionKeys.strict_validation: False,
-        DefaultOptionKeys.required_when: _needs_order_by,
-    },
+    &quot;aggregation_type&quot;: PropertySpec(
+        &quot;Aggregation to apply&quot;,
+        allowed_values={
+            &quot;sum&quot;: &quot;Sum&quot;, &quot;avg&quot;: &quot;Average&quot;, &quot;first&quot;: &quot;First&quot;, &quot;last&quot;: &quot;Last&quot;,
+        },
+        strict_validation=True,
+    ),
+    &quot;order_by&quot;: PropertySpec(
+        &quot;Column to order by within each partition&quot;,
+        required_when=_needs_order_by,
+    ),
 }
 </code></pre>
-<p>When the predicate returns <code>True</code> and the option is absent, <code>match_feature_group_criteria</code> returns <code>False</code>. When the predicate returns <code>False</code>, the option is not required. Entries with <code>required_when</code> are treated as optional by the base parser.</p>
-<h3 id="predicate-contract">Predicate Contract</h3>
-<p>The predicate must satisfy:</p>
-<ul>
-<li><strong>Signature:</strong> <code>(Options) -&gt; bool</code></li>
-<li><strong>Must be callable.</strong> Non-callable values are skipped with a warning log.</li>
-<li><strong>Must not raise exceptions.</strong> Exceptions from predicates propagate uncaught.</li>
-<li><strong>Must be a pure function</strong> (no side effects).</li>
-<li>Non-bool truthy return values are treated as <code>True</code>.</li>
-</ul>
-<h2 id="context-propagation">Context Propagation</h2>
-<p>By default, context parameters are local: they do not flow through feature dependency chains. This is correct for feature-specific config like aggregation types.</p>
-<p>For cross-cutting metadata (session IDs, environment flags) that should flow through chains, use <code>propagate_context_keys</code> on <code>Options</code>:</p>
+<p>When the predicate returns <code>True</code> and the option is absent, the match fails and the non-match records
+a rejection reason naming the owning class and the missing key, so the resolution-failure report
+carries a near-miss line for it; entries with <code>required_when</code> are otherwise optional. The predicate
+must be pure and must not raise. It is callable by construction, and a non-bool truthy return counts
+as <code>True</code>.</p>
+<p>The enforcement is installed on the class, not on one matcher, so overriding
+<code>match_feature_group_criteria</code> does not lose it: the predicates still run after the override
+returns <code>True</code>. Nested guards (an override that delegates into an already guarded parent) do
+not stack: only the outermost one evaluates, so the predicates run exactly once per match call.
+The matcher must be a <code>classmethod</code>; a <code>staticmethod</code> matcher on a class that declares
+<code>required_when</code> is rejected at class definition.</p>
+<p>The guard is installed at class definition, so mutating <code>PROPERTY_MAPPING</code> or replacing
+<code>match_feature_group_criteria</code> after the class body escapes it.</p>
+<p>This guard, the name-path presence guard, and the class-definition diagnostics below live in
+<code>feature_chain_author_guards.py</code>, which imports <code>feature_chain_parser</code> and never the reverse.</p>
+<h2 id="guarding-against-a-universal-configuration-matcher">Guarding against a universal configuration matcher</h2>
+<p>A key is unconditionally required only when it declares no <code>default</code> and no <code>required_when</code>. A
+<code>PROPERTY_MAPPING</code> with only declared-default keys (and, as the degenerate case, an empty mapping)
+has no such key, so on the configuration path it matches any feature name with empty options. A
+feature group that inherits the mixin's <code>match_feature_group_criteria</code> and declares such a mapping
+is a universal matcher: it claims features it was never meant to.</p>
+<p>At class definition the mixin warns about this, naming the class and the escape hatch. A key that is
+unconditionally required, or conditionally required via <code>required_when</code>, gates the match, so the
+mapping is not warned. For the remaining all-default mappings, universality is confirmed by calling
+the resolved matcher with an unrelated, separator-free name and empty options: a genuinely
+discriminating <code>match_feature_group_criteria</code> is not warned, while a pass-through override that only
+delegates to the base still is.</p>
+<p>Set <code>ALLOW_UNIVERSAL_MATCHER = True</code> on the class to declare the universal match intentional and
+silence the warning. Otherwise give one key no <code>default</code> (making it unconditionally required), or a
+<code>required_when</code> predicate that fires when the option is absent.</p>
+<h2 id="migrating-from-the-dict-form">Migrating from the dict form</h2>
+<p>Spec dicts are gone. Every value in a <code>PROPERTY_MAPPING</code> must be a <code>PropertySpec</code>; an
+unmigrated spec raises at class definition, naming the class, the key, and the remedy.</p>
+<table>
+<thead>
+<tr>
+<th>Retired</th>
+<th>Now</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Any spec dict, including the flattened form (accepted values sharing one dict with the flags)</td>
+<td><code>PropertySpec(...)</code>, with accepted values under <code>allowed_values</code></td>
+</tr>
+<tr>
+<td><code>validation_function</code></td>
+<td><code>element_validator</code></td>
+</tr>
+<tr>
+<td><code>type_validator</code></td>
+<td><code>match_guard</code></td>
+</tr>
+<tr>
+<td>A present <code>default: None</code> entry marking a key optional</td>
+<td>the <code>default=None</code> field (an omitted <code>default</code> means the key is required)</td>
+</tr>
+<tr>
+<td><code>strict_validation</code> as a spec-dict key</td>
+<td>the <code>strict_validation</code> field (<code>strict=</code> on <code>property_spec</code>)</td>
+</tr>
+</tbody>
+</table>
+<p>Misspelled and retired field names need no dedicated machinery any more: they are keyword
+arguments that do not exist, so the constructor raises <code>TypeError</code> at the line where the spec
+is written, and mypy reports them before the code runs.</p>
+<p>One semantic change came with the callable renames. <code>element_validator</code> receives one element
+per call for every container type; the old <code>validation_function</code> saw a stringified sequence
+(<code>"('a', 'b')"</code>). A validator written to inspect a whole container
+(<code>isinstance(x, list) and all(...)</code>) must become a per-element rule, or move to <code>match_guard</code>
+if it really is a whole-value check.</p>
+<h2 id="where-each-invariant-is-pinned">Where each invariant is pinned</h2>
+<table>
+<thead>
+<tr>
+<th>Invariant</th>
+<th>Test</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>PropertySpec</code> construction: defaults, immutability, <code>allowed_values</code> normalization, flag and callable rules, strict needs a value space</td>
+<td><code>tests/.../feature_chainer/test_property_spec_type.py</code></td>
+</tr>
+<tr>
+<td>Unknown or mistyped field caught by mypy at author time</td>
+<td><code>tests/.../feature_chainer/test_property_spec_author_time.py</code></td>
+</tr>
+<tr>
+<td><code>PROPERTY_MAPPING</code> accepts nothing but <code>PropertySpec</code>, and the pipeline behaves as before</td>
+<td><code>tests/.../feature_chainer/test_property_spec_hard_break.py</code></td>
+</tr>
+<tr>
+<td>The constructor IS the schema (no key set left to curate)</td>
+<td><code>tests/.../feature_chainer/test_property_mapping_spec_schema.py</code></td>
+</tr>
+<tr>
+<td>Shape rules, relocated from class definition to construction</td>
+<td><code>tests/.../feature_chainer/test_property_mapping_spec_shape.py</code></td>
+</tr>
+<tr>
+<td>Declared-default invariant</td>
+<td><code>tests/test_core/test_abstract_plugins/test_property_mapping_default_invariant.py</code></td>
+</tr>
+<tr>
+<td>Declared defaults materialized into runtime options</td>
+<td><code>tests/test_core/test_abstract_plugins/test_options_with_defaults.py</code></td>
+</tr>
+<tr>
+<td>Declared defaults materialized at the compute boundary</td>
+<td><code>tests/test_core/test_abstract_plugins/test_materialize_defaults_boundary.py</code></td>
+</tr>
+<tr>
+<td>Declared defaults materialized at intake, canonicalizing default-equivalent twins</td>
+<td><code>tests/test_core/test_abstract_plugins/test_intake_default_canonicalization.py</code></td>
+</tr>
+<tr>
+<td>Filter criteria matching observes effective options</td>
+<td><code>tests/test_core/test_filter/test_filter_criteria_effective_options.py</code></td>
+</tr>
+<tr>
+<td>The reader surface: the single spec type and its surface guards, the reserved framework key, the MRO merge, the loud undeclared key, the presence rule of <code>reader_option()</code></td>
+<td><code>tests/.../test_components/test_reader_option_declarations.py</code></td>
+</tr>
+<tr>
+<td>Reader selection enforcement: strict values, requiredness, the <code>framework_set</code> exemption, the attributable <code>input_data</code> rejection</td>
+<td><code>tests/.../test_components/test_reader_option_enforcement.py</code></td>
+</tr>
+<tr>
+<td>Per-reader declarations, the declared <code>default</code> that is load-bearing at selection, and the bare-path branch it does not reach</td>
+<td><code>tests/.../input_data/test_reader_option_declarations.py</code></td>
+</tr>
+<tr>
+<td>A pattern-less group: enforced <code>required_when</code>, and defaults it applies itself</td>
+<td><code>tests/.../input_data/test_read_context_files_option_declarations.py</code></td>
+</tr>
+<tr>
+<td>Container invariance, no stringification, str-as-scalar, dict-as-composite, empty containers</td>
+<td><code>tests/.../feature_chainer/test_property_mapping_sequence_unpacking.py</code></td>
+</tr>
+<tr>
+<td>Present option values validated on the string-named path too</td>
+<td><code>tests/.../feature_chainer/test_name_path_validates_option_values.py</code></td>
+</tr>
+<tr>
+<td>Required presence on the string-named path: the mandatory non-match, the retired env var stays ignored, and the <code>deferred_binding</code> / <code>in_features</code> exemptions</td>
+<td><code>tests/.../feature_chainer/test_name_path_required_presence.py</code></td>
+</tr>
+<tr>
+<td><code>required_when</code> survives an overridden matcher, runs exactly once, and demands a classmethod</td>
+<td><code>tests/.../feature_chainer/test_required_when_enforced_on_override.py</code></td>
+</tr>
+<tr>
+<td>A <code>required_when</code> non-match records its reason, so the failure report names the key and its owner</td>
+<td><code>tests/test_core/test_prepare/test_required_when_rejection_recording.py</code></td>
+</tr>
+<tr>
+<td>Plugin specs behave identically across containers</td>
+<td><code>tests/test_plugins/feature_group/experimental/test_property_mapping_container_invariance.py</code></td>
+</tr>
+<tr>
+<td><code>property_spec</code> builder surface</td>
+<td><code>tests/.../feature_chainer/test_property_spec_builder.py</code></td>
+</tr>
+<tr>
+<td>Rejection reasons surfaced to the end user</td>
+<td><code>tests/test_core/test_prepare/test_identify_feature_group_error_message.py</code></td>
+</tr>
+<tr>
+<td>The all-optional universal-matcher diagnostic and its <code>ALLOW_UNIVERSAL_MATCHER</code> escape hatch</td>
+<td><code>tests/.../feature_chainer/test_universal_optional_matcher.py</code></td>
+</tr>
+</tbody>
+</table>
+<h2 id="context-propagation">Context propagation</h2>
+<p>By default context parameters are local: they do not flow through dependency chains,
+which is correct for feature-specific config. For cross-cutting metadata (session
+IDs, environment flags), use <code>propagate_context_keys</code>:</p>
 <pre><code class="language-python">Options(
     context={&quot;session_id&quot;: &quot;abc&quot;, &quot;window_function&quot;: &quot;sum&quot;},
-    propagate_context_keys=frozenset({&quot;session_id&quot;}),  # only session_id flows to dependents
+    propagate_context_keys=frozenset({&quot;session_id&quot;}),  # only session_id flows on
 )
 </code></pre>
-<p>Only the specified keys propagate. Everything else stays local. Group propagation is unchanged.</p>
+<p>Only listed keys propagate; the rest stay local. Group options differ: they forward
+to input features by default. A feature group keeps consumer-local keys off its
+upstreams with <code>forward_group_exclude</code>, an allowlist, or <code>forward_group=False</code> on the
+child <code>Feature</code>. <code>propagate_context_keys</code> is the caller-side <strong>push</strong>; its
+counterpart is the child-side <strong>pull</strong> <code>inherit_context_keys</code>. For both author-side
+flows see
+<a href="../feature-chain-parser/#forwarding-options-to-input-features">Forwarding Options to Input Features</a>.</p>
+<p>A forwarded key also splits FeatureSets by value. A context key delivered via the
+push (<code>propagate_context_keys</code>) or the pull (<code>inherit_context_keys</code>) enters the
+child's <code>inherited_context_keys</code>, and features whose value for that key differs (e.g.
+<code>env=prod</code> vs <code>env=staging</code>) then compute in separate FeatureSets, one per value;
+equal values still share one computation. The split is per-FeatureGroup and by value,
+not by provenance: once any feature in that scope forwards the key, every feature in
+scope splits on it, including a sibling that set the same key directly in plain
+context. A key that no feature in scope ever forwards stays metadata and does not
+split. This isolates per-value results that previously collapsed into one computation
+where a single value silently won.</p>
+<h3 id="group-and-context-are-independent-namespaces"><code>group</code> and <code>context</code> are independent namespaces</h3>
+<p><code>group</code> (which drives resolution and splitting) and <code>context</code> (metadata) are
+separate namespaces. Within one <code>Options</code> a key may not live in both. Across a
+consumer and its input feature, default forwarding is group-to-group only: a consumer
+<code>context</code> key is not compared against a same-named child <code>group</code> key, so the two are
+independent roles, not a conflict:</p>
+<pre><code class="language-python">consumer = Options(context={&quot;algo&quot;: &quot;sum&quot;})
+child = Options(group={&quot;algo&quot;: &quot;mean&quot;})
+
+child.inherit_from(consumer)          # resolves silently, no ValueError
+assert child.group[&quot;algo&quot;] == &quot;mean&quot;  # child keeps its own group value
+</code></pre>
+<p>This holds for both differing and equal values, but only on that default path. Once
+a context key is explicitly forwarded (pushed via <code>propagate_context_keys</code> or pulled
+via <code>inherit_context_keys</code>) it enters the child's context, and a same-named child
+<code>group</code> key then raises a cross-category conflict. The reverse of the default path (a
+consumer <strong>group</strong> key forwarded onto a child holding it in <strong>context</strong>) also raises.
+Keep such a key off the child with <code>forward_group_exclude</code>, an allowlist, or
+<code>forward_group=False</code>.</p>
               
             </div>
           </div><footer>

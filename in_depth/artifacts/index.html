@@ -112,6 +112,10 @@
     </li>
     <li class="toctree-l3"><a class="reference internal" href="#cross-validation-pattern">Cross-validation pattern</a>
     </li>
+    <li class="toctree-l3"><a class="reference internal" href="#testing-artifacts">Testing Artifacts</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#complex-artifact-example-sklearnartifact">Complex Artifact Example: SklearnArtifact</a>
+    </li>
     <li class="toctree-l3"><a class="reference internal" href="#conclusion">Conclusion</a>
     </li>
         </ul>
@@ -163,9 +167,13 @@
                 </li>
                 <li class="toctree-l2"><a class="reference internal" href="../plugin-loader/">Plugin Loader</a>
                 </li>
+                <li class="toctree-l2"><a class="reference internal" href="../plugin_registry/">Plugin Registry</a>
+                </li>
     </ul>
                   </li>
                   <li class="toctree-l1"><a class="reference internal" href="../data-type-enforcement/">Data Type Enforcement</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../comparison-contract/">Comparison Contract</a>
                   </li>
                   <li class="toctree-l1"><a class="reference internal" >Troubleshooting</a>
     <ul>
@@ -211,7 +219,7 @@
             <div class="section" itemprop="articleBody">
               
                 <h1 id="artifacts">Artifacts</h1>
-<p>Artifacts are a crucial part of the mloda, enabling the storage and retrieval of intermediate results feature engineering processes.
+<p>Artifacts are a crucial part of the mloda, enabling the storage and retrieval of intermediate results in feature engineering processes.
 Example use cases are embeddings, Feature Matrices, Model Checkpoints and more.</p>
 <h2 id="overview">Overview</h2>
 <p>Artifacts are managed through a set of abstract and concrete classes that define how artifacts are created, saved, and loaded. The primary classes involved in artifact management include:</p>
@@ -254,7 +262,7 @@ class BaseExampleArtifactFeature(FeatureGroup):
 </code></pre>
 <p>Now, we run the query to the feature group to save the artifact. This example is very basic, but could be a much more complex artifact.</p>
 <pre><code class="language-python">from mloda.user import mloda
-from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
+from mloda.user.pyarrow import PyArrowTable
 
 api = mloda([&quot;BaseExampleArtifactFeature&quot;], {PyArrowTable})
 api.run()
@@ -262,7 +270,7 @@ artifacts = api.get_artifacts()
 print(artifacts)
 </code></pre>
 <p>Result:</p>
-<pre><code class="language-python">{'BaseExampleArtifactFeature': 'BasicArtifact'}
+<pre><code class="language-text">{'BaseExampleArtifactFeature': 'BasicArtifact'}
 </code></pre>
 <p>Now, let us use this artifact.</p>
 <pre><code class="language-python">from mloda.user import Feature, mloda
@@ -271,7 +279,7 @@ feat = Feature(name=&quot;BaseExampleArtifactFeature&quot;, options=artifacts)
 mloda.run_all([feat], {PyArrowTable})
 </code></pre>
 <p>Result:</p>
-<pre><code class="language-python">&quot;BasicArtifact is the loaded artifact.&quot;
+<pre><code class="language-text">&quot;BasicArtifact is the loaded artifact.&quot;
 </code></pre>
 <h2 id="run-time-artifact-switching-with-preparerun">Run-time Artifact Switching with prepare/run</h2>
 <p>The two-phase API (<code>prepare()</code> + <code>run()</code>) supports switching between save and
@@ -281,7 +289,7 @@ load mode across <code>run()</code> calls. Pass a previously saved artifact dict
 single session alternates between training (save) and inference (load).</p>
 <h4 id="train-then-predict-in-a-single-session">Train-then-predict in a single session</h4>
 <pre><code class="language-python">from mloda.user import mloda
-from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
+from mloda.user.pyarrow import PyArrowTable
 
 # 1. Prepare once
 session = mloda.prepare([&quot;BaseExampleArtifactFeature&quot;], {PyArrowTable})
@@ -295,31 +303,25 @@ saved_artifacts = session.get_artifacts()
 result = session.run(artifacts=saved_artifacts)
 </code></pre>
 <h4 id="cross-validation-pattern">Cross-validation pattern</h4>
-<p>``` title="pseudocode"
-session = mloda.prepare(["MyArtifactFeature"], {PyArrowTable})</p>
-<p>for fold_data in folds:
+<pre><code class="language-py"># pseudocode
+session = mloda.prepare([&quot;MyArtifactFeature&quot;], {PyArrowTable})
+
+for fold_data in folds:
     # Train fold
     session.run()
-    trained = session.get_artifacts()</p>
-<pre><code># Predict fold
-session.run(artifacts=trained)
+    trained = session.get_artifacts()
+
+    # Predict fold
+    session.run(artifacts=trained)
 </code></pre>
-<pre><code>
-When `artifacts` is not provided (the default), the artifact mode from
-`prepare()` is used.
-
-#### Testing Artifacts
-
-Testing artifact features involves creating test cases that ensure artifacts are correctly saved and loaded. The following example shows how to test the `BaseTestArtifactFeature` class.
-
-[View the test file on GitHub](https://github.com/mloda-ai/mloda/blob/main/tests/test_core/test_artifacts/test_artifacts.py)
-
-#### Complex Artifact Example: SklearnArtifact
-
-For more advanced use cases, artifacts can handle complex data structures and multiple objects. The `SklearnArtifact` demonstrates this with fitted scikit-learn transformers:
-
-```python
-from mloda_plugins.feature_group.experimental.sklearn.sklearn_artifact import SklearnArtifact
+<p>When <code>artifacts</code> is not provided (the default), the artifact mode from
+<code>prepare()</code> is used.</p>
+<h4 id="testing-artifacts">Testing Artifacts</h4>
+<p>Testing artifact features involves creating test cases that ensure artifacts are correctly saved and loaded. The following example shows how to test the <code>BaseTestArtifactFeature</code> class.</p>
+<p><a href="https://github.com/mloda-ai/mloda/blob/main/tests/test_core/test_artifacts/test_artifacts.py">View the test file on GitHub</a></p>
+<h4 id="complex-artifact-example-sklearnartifact">Complex Artifact Example: SklearnArtifact</h4>
+<p>For more advanced use cases, artifacts can handle complex data structures and multiple objects. The <code>SklearnArtifact</code> demonstrates this with fitted scikit-learn transformers:</p>
+<pre><code class="language-python">from mloda_plugins.feature_group.experimental.sklearn.sklearn_artifact import SklearnArtifact
 
 class MySklearnFeatureGroup(FeatureGroup):
     @staticmethod

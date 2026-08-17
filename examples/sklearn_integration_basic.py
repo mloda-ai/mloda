@@ -138,7 +138,7 @@ def _(data_dict, pd):
     from mloda.user import mloda
     from mloda.provider import FeatureGroup, BaseInputData, DataCreator, FeatureSet
     from mloda.user import PluginLoader
-    from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
+    from mloda.user.pandas import PandasDataFrame
 
     # In mloda, we have the concept of feature groups.
     # A feature group is an abstraction between a data framework and processes of a data transformation.

@@ -147,6 +147,8 @@
     </li>
     <li class="toctree-l4"><a class="reference internal" href="#load_all_plugins">load_all_plugins()</a>
     </li>
+    <li class="toctree-l4"><a class="reference internal" href="#load_entry_pointsgroup-str-none-none">load_entry_points(group: str | None = None)</a>
+    </li>
     <li class="toctree-l4"><a class="reference internal" href="#disable_auto_loadgroup-str">disable_auto_load(group: str)</a>
     </li>
     <li class="toctree-l4"><a class="reference internal" href="#list_loaded_modulesplugin_category-optionalstr">list_loaded_modules(plugin_category: Optional[str])</a>
@@ -157,11 +159,25 @@
     </li>
     <li class="toctree-l3"><a class="reference internal" href="#example">Example</a>
     </li>
+    <li class="toctree-l3"><a class="reference internal" href="#entry-points">Entry Points</a>
+        <ul>
+    <li class="toctree-l4"><a class="reference internal" href="#manifest-convention">Manifest Convention</a>
+    </li>
+    <li class="toctree-l4"><a class="reference internal" href="#loading">Loading</a>
+    </li>
+    <li class="toctree-l4"><a class="reference internal" href="#behavior-notes">Behavior Notes</a>
+    </li>
+        </ul>
+    </li>
     </ul>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../plugin_registry/">Plugin Registry</a>
                 </li>
     </ul>
                   </li>
                   <li class="toctree-l1"><a class="reference internal" href="../data-type-enforcement/">Data Type Enforcement</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../comparison-contract/">Comparison Contract</a>
                   </li>
                   <li class="toctree-l1"><a class="reference internal" >Troubleshooting</a>
     <ul>
@@ -208,7 +224,7 @@
             <div class="section" itemprop="articleBody">
               
                 <h1 id="pluginloader">PluginLoader</h1>
-<p>The PluginLoader dynamically loads and manages plugins from the <code>mloda_plugins</code> package.</p>
+<p>The PluginLoader dynamically loads and manages plugins from the <code>mloda_plugins</code> package, and discovers plugins shipped by separately installed packages via <a href="#entry-points">entry points</a>.</p>
 <h2 id="quick-start">Quick Start</h2>
 <pre><code class="language-python">from mloda.user import PluginLoader
 
@@ -221,13 +237,15 @@ loader.load_group(&quot;feature_group&quot;)
 </code></pre>
 <h2 id="main-methods">Main Methods</h2>
 <h3 id="pluginloaderall"><code>PluginLoader.all()</code></h3>
-<p>Creates a loader and loads all available plugins.</p>
+<p>Creates a loader, loads all bundled plugins, then folds in installed <a href="#entry-points">entry points</a>.</p>
 <h3 id="load_groupgroup_name-str"><code>load_group(group_name: str)</code></h3>
 <p>Loads all plugins from a specific group folder, including nested subdirectories. Supports slash-separated paths for subdirectories (e.g. <code>"feature_group/input_data/read_files"</code>).</p>
 <h3 id="load_matchinggroup_name-str-pattern-str"><code>load_matching(group_name: str, pattern: str)</code></h3>
 <p>Loads only files within a group whose filename matches a glob pattern (e.g. <code>"*transformer*"</code>). Useful when only a subset of files in a group is needed.</p>
 <h3 id="load_all_plugins"><code>load_all_plugins()</code></h3>
 <p>Loads all plugin groups.</p>
+<h3 id="load_entry_pointsgroup-str-none-none"><code>load_entry_points(group: str | None = None)</code></h3>
+<p>Discovers plugins from installed packages that declare <a href="#entry-points">entry points</a>. Pass a group name to restrict discovery to one group; <code>None</code> loads all three. Returns the sorted, deduplicated list of registry keys it registered.</p>
 <h3 id="disable_auto_loadgroup-str"><code>disable_auto_load(group: str)</code></h3>
 <p>Prevents a group from being auto-loaded lazily. Call this before any plugin discovery if you want full control over what is loaded.</p>
 <pre><code class="language-python">PluginLoader.disable_auto_load(&quot;feature_group/input_data/read_files&quot;)
@@ -249,12 +267,58 @@ modules = loader.list_loaded_modules()
 graph = loader.display_plugin_graph()
 </code></pre>
 <p>Plugins are automatically discovered from <code>.py</code> files in these directories.</p>
+<h2 id="entry-points">Entry Points</h2>
+<p>Separately installed packages publish plugins through three entry-point groups, one per plugin base type:</p>
+<ul>
+<li><code>mloda.feature_groups</code> for FeatureGroup classes</li>
+<li><code>mloda.compute_frameworks</code> for ComputeFramework classes</li>
+<li><code>mloda.extenders</code> for Extender classes</li>
+</ul>
+<h3 id="manifest-convention">Manifest Convention</h3>
+<p>A package declares one entry per group it ships plugins for. The entry points at a module attribute, the manifest: a plain sequence of plugin classes. The entry-point name (<code>my-pkg</code> below) is a package label only, never a registry key; registered classes keep the usual <code>module:qualname</code> keys.</p>
+<pre><code class="language-toml"># pyproject.toml
+[project.entry-points.&quot;mloda.feature_groups&quot;]
+my-pkg = &quot;my_pkg.manifest:FEATURE_GROUPS&quot;
+
+[project.entry-points.&quot;mloda.compute_frameworks&quot;]
+my-pkg = &quot;my_pkg.manifest:COMPUTE_FRAMEWORKS&quot;
+</code></pre>
+<p>The manifest module lists the concrete classes explicitly:</p>
+<pre><code class="language-py"># my_pkg/manifest.py
+from mloda.provider import FeatureGroup
+
+class CustomerChurnFeatureGroup(FeatureGroup):
+    &quot;&quot;&quot;Shipped by my-pkg; registers under its module:qualname key.&quot;&quot;&quot;
+
+FEATURE_GROUPS = [CustomerChurnFeatureGroup]
+</code></pre>
+<h3 id="loading">Loading</h3>
+<p>Discovery is lazy: installing a package does nothing by itself. Manifests are imported and registered only when <code>load_entry_points()</code> runs, either directly or as the final step of <code>PluginLoader.all()</code>. Discovered classes register into the default registry with provenance <code>source="entry_point"</code> (see <a href="../plugin_registry/">Plugin Registry</a>).</p>
+<pre><code class="language-python">from mloda.user import PluginLoader
+
+loader = PluginLoader()
+
+# All three groups; returns the sorted, deduplicated registry keys that were registered.
+keys = loader.load_entry_points()
+assert keys == sorted(set(keys))
+
+# One group only; unknown group names raise ValueError.
+fg_keys = loader.load_entry_points(group=&quot;mloda.feature_groups&quot;)
+</code></pre>
+<h3 id="behavior-notes">Behavior Notes</h3>
+<ul>
+<li><strong>Validation is loud, by design.</strong> A malformed entry point fails discovery with an error instead of being skipped: a manifest that is not a list or tuple of plugin classes, or that contains classes of the wrong base type for its group, raises <code>TypeError</code> naming the entry point.</li>
+<li><strong>Abstract classes are skipped</strong> silently; manifests may list a shared abstract base alongside its concrete subclasses.</li>
+<li><strong>Collisions raise.</strong> If a different class already holds a manifest class's <code>module:qualname</code> key, loading raises <code>PluginRegistryCollisionError</code>. Loading the same manifests twice is idempotent.</li>
+<li><strong>Missing optional dependencies skip.</strong> If importing a manifest fails on a module listed in <code>OPTIONAL_PLUGIN_DEPENDENCIES</code> (pandas, polars, duckdb, ...), only that entry point is skipped; any other <code>ModuleNotFoundError</code> is re-raised.</li>
+<li><strong>Policies apply, after import.</strong> A registration denied by an installed <a href="../plugin_registry/#governance">plugin policy</a> raises inside <code>register()</code>; the loader catches the denial, skips the class, leaves its key out of the returned list, and logs one warning per denied key per registry instance. The policy gates registration only, not import: the manifest module is imported before the policy applies, so installing a package implies trusting its import side effects.</li>
+</ul>
               
             </div>
           </div><footer>
     <div class="rst-footer-buttons" role="navigation" aria-label="Footer Navigation">
         <a href="../discover-plugins/" class="btn btn-neutral float-left" title="Discover Plugins"><span class="icon icon-circle-arrow-left"></span> Previous</a>
-        <a href="../data-type-enforcement/" class="btn btn-neutral float-right" title="Data Type Enforcement">Next <span class="icon icon-circle-arrow-right"></span></a>
+        <a href="../plugin_registry/" class="btn btn-neutral float-right" title="Plugin Registry">Next <span class="icon icon-circle-arrow-right"></span></a>
     </div>
 
   <hr/>
@@ -280,7 +344,7 @@ graph = loader.display_plugin_graph()
       <span><a href="../discover-plugins/" style="color: #fcfcfc">&laquo; Previous</a></span>
     
     
-      <span><a href="../data-type-enforcement/" style="color: #fcfcfc">Next &raquo;</a></span>
+      <span><a href="../plugin_registry/" style="color: #fcfcfc">Next &raquo;</a></span>
     
   </span>
 </div>

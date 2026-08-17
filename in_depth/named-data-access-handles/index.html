@@ -103,7 +103,13 @@
     <ul class="current">
     <li class="toctree-l2"><a class="reference internal" href="#the-four-kinds-of-resources">The four kinds of resources</a>
     </li>
-    <li class="toctree-l2"><a class="reference internal" href="#naming-is-optional">Naming is optional</a>
+    <li class="toctree-l2"><a class="reference internal" href="#accepted-input-shapes-and-why-each-exists">Accepted input shapes and why each exists</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#typed-credentials-credential">Typed credentials: Credential</a>
+        <ul>
+    <li class="toctree-l3"><a class="reference internal" href="#why-a-typed-class-four-kinds-of-users">Why a typed class: four kinds of users</a>
+    </li>
+        </ul>
     </li>
     <li class="toctree-l2"><a class="reference internal" href="#resolution-rule">Resolution rule</a>
     </li>
@@ -155,9 +161,13 @@
                 </li>
                 <li class="toctree-l2"><a class="reference internal" href="../plugin-loader/">Plugin Loader</a>
                 </li>
+                <li class="toctree-l2"><a class="reference internal" href="../plugin_registry/">Plugin Registry</a>
+                </li>
     </ul>
                   </li>
                   <li class="toctree-l1"><a class="reference internal" href="../data-type-enforcement/">Data Type Enforcement</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../comparison-contract/">Comparison Contract</a>
                   </li>
                   <li class="toctree-l1"><a class="reference internal" >Troubleshooting</a>
     <ul>
@@ -239,15 +249,46 @@ assert dac.handles() == {
     &quot;users&quot;: &quot;file&quot;,
 }
 </code></pre>
-<h2 id="naming-is-optional">Naming is optional</h2>
-<p>You only need to name resources when there are multiple sources of the same kind that the resolver cannot tell apart. In the simple single-source case, pass bare values:</p>
-<pre><code class="language-py">DataAccessCollection(files={&quot;/data/tx.parquet&quot;})       # set or list
-DataAccessCollection(connections={duckdb_conn})        # set
-DataAccessCollection(folders={&quot;/data/raw&quot;})            # set
-DataAccessCollection(credentials=[{&quot;host&quot;: &quot;h&quot;}])      # list (dicts are unhashable)
-</code></pre>
-<p>The same shape applies to the mutators:</p>
-<pre><code class="language-py">dac.add_file(&quot;/data/tx.parquet&quot;)                       # auto-named
+<h2 id="accepted-input-shapes-and-why-each-exists">Accepted input shapes and why each exists</h2>
+<p>Every kind accepts more than one input shape. Each shape earned its place at a different point in the API's history; pick by intent:</p>
+<table>
+<thead>
+<tr>
+<th>Shape</th>
+<th>Example</th>
+<th>Use when</th>
+<th>Why it exists</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Named dict <code>{handle: value}</code></td>
+<td><code>files={"tx": "/data/tx.csv"}</code></td>
+<td>Several sources of one kind</td>
+<td>Stable handles make resolution deterministic and per-feature addressable via <code>data_access_handle</code> (<a href="https://github.com/mloda-ai/mloda/issues/443">#443</a>)</td>
+</tr>
+<tr>
+<td>Bare <code>set</code> / <code>list</code></td>
+<td><code>files={"/data/tx.csv"}</code></td>
+<td>One source of a kind</td>
+<td>Entries get internal auto-handles you never reference; naming a single source was pure boilerplate (<a href="https://github.com/mloda-ai/mloda/pull/449">#449</a>)</td>
+</tr>
+<tr>
+<td>Typed <code>Credential(...)</code></td>
+<td><code>credentials=Credential(sqlite="/x.db")</code></td>
+<td>Any credential (recommended)</td>
+<td>A credential is itself a dict, so the bare dict shape collides with the named form; the type removes the nesting ambiguity (<a href="https://github.com/mloda-ai/mloda/issues/511">#511</a>)</td>
+</tr>
+<tr>
+<td><code>list</code> of credential dicts</td>
+<td><code>credentials=[{"host": "h"}]</code></td>
+<td>Several unnamed credentials</td>
+<td>Credentials have no <code>set</code> form because dicts are unhashable</td>
+</tr>
+</tbody>
+</table>
+<p>The named/auto split applies to the mutators as well:</p>
+<pre><code class="language-python">dac.add_file(&quot;/data/tx.parquet&quot;)                       # auto-named
 dac.add_file(&quot;tx&quot;, &quot;/data/tx.parquet&quot;)                 # named (when you need a handle)
 </code></pre>
 <p>Unnamed entries get internal auto-handles (<code>_auto_file_0</code>, <code>_auto_connection_0</code>, etc.) that you never need to reference. They exist only so the resolver has a unique key per entry. If you later hit ambiguity, the error message will tell you to switch to the named form and pick a <code>data_access_handle</code>.</p>
@@ -256,6 +297,34 @@ dac.add_file(&quot;tx&quot;, &quot;/data/tx.parquet&quot;)                 # nam
 <li>Two or more resources of the same kind match the same consumer (then you must set <code>data_access_handle</code> to pick one), or</li>
 <li>You use <code>column_to_file</code> and prefer to reference files by name rather than path (both work, see below).</li>
 </ul>
+<h2 id="typed-credentials-credential">Typed credentials: <code>Credential</code></h2>
+<p>Credentials are the one kind where the named form and the value itself look identical, because a credential <em>is</em> a dict. These two lines differ only in brackets but mean completely different things:</p>
+<pre><code class="language-py">credentials={&quot;sqlite&quot;: &quot;/data/x.db&quot;}    # named form: handle &quot;sqlite&quot; -&gt; credential &quot;/data/x.db&quot;
+credentials=[{&quot;sqlite&quot;: &quot;/data/x.db&quot;}]  # one credential whose mapping is {&quot;sqlite&quot;: &quot;/data/x.db&quot;}
+</code></pre>
+<p>The first shape is almost never what you mean: it registers the string <code>"/data/x.db"</code> as the credential, which then fails every connector's <code>is_valid_credentials</code> check. The typed <code>Credential</code> class removes the ambiguity, so the meaning comes from the type instead of the nesting depth:</p>
+<pre><code class="language-python">from mloda.user import Credential, DataAccessCollection
+
+DataAccessCollection(credentials=Credential(sqlite=&quot;/data/x.db&quot;))       # kwargs form
+DataAccessCollection(credentials=Credential({&quot;sqlite&quot;: &quot;/data/x.db&quot;}))  # dict form
+DataAccessCollection(credentials=[Credential(sqlite=&quot;/a.db&quot;), {&quot;pg&quot;: {&quot;host&quot;: &quot;h&quot;}}])
+DataAccessCollection(credentials={&quot;pg-prod&quot;: Credential(host=&quot;h&quot;)})     # named form
+dac.add_credentials(Credential(host=&quot;h&quot;))                               # mutators too
+</code></pre>
+<p><code>Credential</code> is unwrapped to a plain dict at registration time, so feature groups and <code>is_valid_credentials</code> implementations keep receiving plain dicts. Nothing changes downstream.</p>
+<p>Two safety behaviors come with it:</p>
+<ul>
+<li><strong>Early mis-wrap error.</strong> Passing a bare dict whose values are not mappings (the mis-wrap shape above) now raises <code>ValueError</code> at construction time, naming the offending handle and showing the three correct alternatives, instead of failing silently later during matcher selection.</li>
+<li><strong>Redacted error output.</strong> <code>repr(Credential(password="hunter2"))</code> prints <code>Credential(password='***')</code>, and the resolver's ambiguity error renders credential candidates with keys visible and values replaced by <code>***</code>. Note that the registered credential itself is a plain dict, so code that prints <code>dac.credentials</code> directly still sees raw values.</li>
+</ul>
+<h3 id="why-a-typed-class-four-kinds-of-users">Why a typed class: four kinds of users</h3>
+<p>The design serves four user groups that hit credentials differently:</p>
+<ol>
+<li><strong>Notebook users</strong> (one data source) write the obvious shape from an example. For them the bare dict either has to work or fail loudly at construction; <code>Credential(sqlite="/data/x.db")</code> gives them a form with no nesting decision to get wrong, and the early error catches the legacy shape.</li>
+<li><strong>Production users</strong> (multiple sources) live in the named-handle registry and disambiguate per feature via <code>data_access_handle</code>. For them <code>Credential</code> keeps the registry values homogeneous, so ambiguity errors and <code>handles()</code> introspection stay trustworthy.</li>
+<li><strong>Plugin authors</strong> implement <code>is_valid_credentials</code> and previously had to isinstance-juggle whatever leaked through (including bare strings from mis-wrapped input). The framework now normalizes at the boundary: whatever the end user typed, the plugin receives a plain dict.</li>
+<li><strong>Ops and data stewards</strong> care about what is in the credential, not its shape. The resolver's ambiguity errors print candidate values, so credential candidates are rendered with redacted values (keys only), keeping passwords out of those messages and the logs that capture them.</li>
+</ol>
 <h2 id="resolution-rule">Resolution rule</h2>
 <p>When a feature group asks the DAC for a resource of a given kind, the resolver applies one rule:</p>
 <ol>
@@ -310,14 +379,14 @@ mloda.run_all(features, compute_frameworks=[&quot;PyArrowTable&quot;], data_acce
     <code>ComputeFramework.pick_connection_from_dac</code> runs at engine setup, not on the per-request path. A single CFW therefore binds a single connection per session. If you need two features in the same session to bind different connections of the same CFW, that is currently out of scope (tracked separately); use a single <code>data_access_handle</code> on the DAC's matching connections, or split the run.</p>
 <h2 id="introspection-handles">Introspection: <code>handles()</code></h2>
 <p><code>DataAccessCollection.handles()</code> returns a <code>{handle: kind}</code> map of everything registered. Use it for audits, logging, or to surface candidates in your own error messages:</p>
-<pre><code class="language-py">dac.handles()
+<pre><code class="language-python">dac.handles()
 # {&quot;warehouse&quot;: &quot;connection&quot;, &quot;analytics&quot;: &quot;connection&quot;,
 #  &quot;transactions&quot;: &quot;file&quot;, &quot;users&quot;: &quot;file&quot;,
 #  &quot;raw&quot;: &quot;folder&quot;, &quot;pg-prod&quot;: &quot;credentials&quot;}
 </code></pre>
 <h2 id="interaction-with-column_to_file">Interaction with <code>column_to_file</code></h2>
 <p><code>column_to_file</code> is a file-specific override that takes precedence over the resolver. Its values may be either a <strong>file handle</strong> (key of the <code>files</code> dict) or a <strong>file path</strong> (value of the <code>files</code> dict); both are accepted and normalized to handles internally:</p>
-<pre><code class="language-py">DataAccessCollection(
+<pre><code class="language-python">DataAccessCollection(
     files={&quot;train&quot;: &quot;application_train.csv&quot;, &quot;bureau&quot;: &quot;bureau.csv&quot;},
     column_to_file={
         &quot;SK_ID_CURR&quot;: &quot;train&quot;,
@@ -337,6 +406,8 @@ mloda.run_all(features, compute_frameworks=[&quot;PyArrowTable&quot;], data_acce
 <li><strong>"Handle 'X' not found for kind 'K'. Available handles of kind 'K': [...]"</strong>: you set <code>data_access_handle='X'</code> but the DAC has no resource of that kind named <code>X</code>. Check the spelling or register it.</li>
 <li><strong>"Handle 'X' is registered under kind 'K1', but kind 'K2' was requested"</strong>: you set <code>data_access_handle='X'</code>, but the registry has <code>X</code> under a different kind. A connection consumer cannot bind to a file handle even if the names match.</li>
 <li><strong>"Ambiguous resolve for kind 'K': N candidates [...]; set 'data_access_handle' in Options to disambiguate"</strong>: more than one entry of the requested kind matched. Set <code>data_access_handle</code> on the feature's <code>Options</code> to pick one, or remove the extras from the DAC.</li>
+<li><strong>"credentials value for handle 'X' is not a mapping"</strong>: you passed a bare <code>{connector_id: slot}</code> dict as <code>credentials</code>, which the named form reads as <code>{handle: credential}</code>. Use <code>credentials=Credential(...)</code>, the list form <code>credentials=[{...}]</code>, or the named form <code>{handle: {connector_id: slot}}</code>. See <a href="#typed-credentials-credential">Typed credentials</a>.</li>
+<li><strong>"HashableDict is no longer accepted as a credential value"</strong>: pre-0.7 call sites wrapped credentials in <code>HashableDict</code>. The credentials path no longer accepts it; pass <code>Credential(...)</code> or a plain dict instead. <code>HashableDict</code> is not removed from the library: it still backs hashability-required internals (for example <code>Options</code> hashing and <code>ApiInputDataCollection</code>). It is simply no longer unwrapped anywhere on the database credential / data-access path, so the <code>Options(group={"BaseInputData": (Reader, ...)})</code> route also expects a plain dict now.</li>
 </ul>
 <h2 id="related">Related</h2>
 <ul>

@@ -119,6 +119,8 @@
     </li>
     <li class="toctree-l3"><a class="reference internal" href="#artifacts">Artifacts</a>
     </li>
+    <li class="toctree-l3"><a class="reference internal" href="#empty-result-guard">Empty-Result Guard</a>
+    </li>
     <li class="toctree-l3"><a class="reference internal" href="#conclusion">Conclusion</a>
     </li>
         </ul>
@@ -175,9 +177,13 @@
                 </li>
                 <li class="toctree-l2"><a class="reference internal" href="../plugin-loader/">Plugin Loader</a>
                 </li>
+                <li class="toctree-l2"><a class="reference internal" href="../plugin_registry/">Plugin Registry</a>
+                </li>
     </ul>
                   </li>
                   <li class="toctree-l1"><a class="reference internal" href="../data-type-enforcement/">Data Type Enforcement</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../comparison-contract/">Comparison Contract</a>
                   </li>
                   <li class="toctree-l1"><a class="reference internal" >Troubleshooting</a>
     <ul>
@@ -237,9 +243,19 @@
 <h6 id="simple-validator">Simple validator</h6>
 <pre><code class="language-python">from typing import Any, Optional, Set
 from mloda.user import mloda
-from mloda.provider import FeatureGroup, FeatureSet
+from mloda.provider import BaseInputData, DataCreator, FeatureGroup, FeatureSet
 from mloda.user import Options, FeatureName, Feature
-from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
+from mloda.user.pyarrow import PyArrowTable
+
+
+class DocBaseValidateInputFeaturesBase(FeatureGroup):
+    @classmethod
+    def input_data(cls) -&gt; Optional[BaseInputData]:
+        return DataCreator({cls.get_class_name()})
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -&gt; Any:
+        return {cls.get_class_name(): [1, 2, 3]}
 
 
 class DocSimpleValidateInputFeatures(FeatureGroup):
@@ -249,17 +265,17 @@ class DocSimpleValidateInputFeatures(FeatureGroup):
         return {cls.get_class_name(): [1, 2, 3]}
 
     def input_features(self, options: Options, feature_name: FeatureName) -&gt; Optional[Set[Feature]]:
-        return {Feature(name=&quot;BaseValidateInputFeaturesBase&quot;, options=options)}
+        return {Feature(name=&quot;DocBaseValidateInputFeaturesBase&quot;, options=options)}
 
     @classmethod
     def validate_input_features(cls, data: Any, features: FeatureSet) -&gt; None:
         &quot;&quot;&quot;This function is a naive implementation of a validator.&quot;&quot;&quot;
 
-        if len(data[&quot;BaseValidateInputFeaturesBase&quot;]) != 3:
+        if len(data[&quot;DocBaseValidateInputFeaturesBase&quot;]) != 3:
             raise ValueError(&quot;Data should have 3 elements&quot;)
 </code></pre>
 <p>As we run it, it will return an error.</p>
-<pre><code class="language-python">results = mloda.run_all(
+<pre><code class="language-text">results = mloda.run_all(
             [&quot;DocSimpleValidateInputFeatures&quot;], {PyArrowTable}
         )
 ValueError: Data should have 3 elements
@@ -278,7 +294,7 @@ This function shows 2 examples:</p>
         &quot;&quot;&quot;This function should be used to validate the input data.&quot;&quot;&quot;
 
         validation_rules = {
-            &quot;BaseValidateInputFeaturesBase&quot;: Column(int, Check.in_range(1, 2)),
+            &quot;DocBaseValidateInputFeaturesBase&quot;: Column(int, Check.in_range(1, 2)),
         }
 
         # Loading from feature config
@@ -320,9 +336,10 @@ class DocExamplePanderaValidator(BaseValidator):
             self.handle_log_level(&quot;SchemaError:&quot;, e)
 </code></pre>
 <p>The validator should raise an error again.</p>
-<pre><code class="language-python">results = mloda.run_all(
+<pre><code class="language-text">results = mloda.run_all(
             [&quot;DocCustomValidateInputFeatures&quot;], {PyArrowTable}
         )
+SchemaError: Column 'DocBaseValidateInputFeaturesBase' failed element-wise validator: in_range(1, 2)
 </code></pre>
 <h6 id="log-only-validator-and-extender-use">Log only validator and Extender use</h6>
 <ul>
@@ -406,9 +423,10 @@ results
         validator.validate(data)
 </code></pre>
 <p>This one should fail:</p>
-<pre><code class="language-python">results = mloda.run_all(
+<pre><code class="language-text">results = mloda.run_all(
             [&quot;DocBaseValidateOutputFeaturesBaseNegativePandera&quot;], {PyArrowTable}
         )
+SchemaError: Column 'DocBaseValidateOutputFeaturesBaseNegativePandera' failed element-wise validator: in_range(1, 2)
 </code></pre>
 <h6 id="log-only-validator-and-extender-use_1">Log only validator and Extender use</h6>
 <p>We can of course also use an extender.</p>
@@ -434,6 +452,18 @@ results = mloda.run_all(
 <h4 id="artifacts">Artifacts</h4>
 <p><code>Artifacts</code> can also be used for validation as the full mloda is available. A use case could be to store statistics of a feature and then validate them later on.
 For more details on artifacts, refer to the <a href="../artifacts/">artifact documentation</a>.</p>
+<h4 id="empty-result-guard">Empty-Result Guard</h4>
+<p><code>run_validate_output_features</code> runs a schema-presence check <strong>before</strong> data-type
+enforcement and before the custom <code>validate_output_features</code> hook. If the result
+carries no schema (zero columns), it raises <code>EmptyResultError</code> immediately. A
+zero-<em>row</em> result with a valid schema is not an error and flows through normally.
+As a consequence, custom output validators are not reached on a schema-less
+result.</p>
+<p>This ordering ensures that schema-level validators never receive a column-less
+result they were not designed to handle, and that the error message is clear and
+actionable rather than a downstream type error.</p>
+<p>For details on the underlying schema-presence gate, see
+<a href="../compute-framework-integration/#empty-results">Empty Results</a>.</p>
 <h4 id="conclusion">Conclusion</h4>
 <p>In conclusion, feature validation is crucial for ensuring data quality in both input and output stages. By leveraging custom validators and extenders, validation can be tailored to specific needs while maintaining flexibility. This process helps detect inconsistencies early, improving the accuracy and robustness of data  and feature pipelines.</p>
 <h2 id="software-testing">Software Testing</h2>

@@ -137,11 +137,17 @@
     </li>
     <li class="toctree-l4"><a class="reference internal" href="#modern-groupcontext-options">Modern Group/Context Options</a>
     </li>
+    <li class="toctree-l4"><a class="reference internal" href="#feature-group-scope">Feature Group Scope</a>
+    </li>
         </ul>
     </li>
     <li class="toctree-l3"><a class="reference internal" href="#worked-example-window-rank-and-percentile-features">Worked Example: Window, Rank, and Percentile Features</a>
     </li>
     <li class="toctree-l3"><a class="reference internal" href="#feature-chaining-with-in_features">Feature Chaining with in_features</a>
+        <ul>
+    <li class="toctree-l4"><a class="reference internal" href="#nested-in_features-feature-dict">Nested in_features feature dict</a>
+    </li>
+        </ul>
     </li>
     <li class="toctree-l3"><a class="reference internal" href="#multi-column-features">Multi-Column Features</a>
     </li>
@@ -171,9 +177,13 @@
                 </li>
                 <li class="toctree-l2"><a class="reference internal" href="../plugin-loader/">Plugin Loader</a>
                 </li>
+                <li class="toctree-l2"><a class="reference internal" href="../plugin_registry/">Plugin Registry</a>
+                </li>
     </ul>
                   </li>
                   <li class="toctree-l1"><a class="reference internal" href="../data-type-enforcement/">Data Type Enforcement</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../comparison-contract/">Comparison Contract</a>
                   </li>
                   <li class="toctree-l1"><a class="reference internal" >Troubleshooting</a>
     <ul>
@@ -240,8 +250,13 @@ config = '''
 '''
 
 features = load_features_from_config(config)
-result = mloda.run_all(features, compute_frameworks=[&quot;PandasDataFrame&quot;])
+result = mloda.run_all(
+    features,
+    compute_frameworks=[&quot;PandasDataFrame&quot;],
+    api_data={&quot;SampleData&quot;: {&quot;simple_feature&quot;: [1, 2], &quot;configured_feature&quot;: [3, 4]}},
+)
 </code></pre>
+<p>The config only builds the <code>Feature</code> objects; every name in it still needs a source, here <code>api_data</code>.</p>
 <h2 id="json-format">JSON Format</h2>
 <p>The configuration must be a JSON array. Each item can be:</p>
 <h3 id="1-simple-string">1. Simple String</h3>
@@ -291,7 +306,7 @@ result = mloda.run_all(features, compute_frameworks=[&quot;PandasDataFrame&quot;
 <td><code>in_features</code></td>
 <td>array</td>
 <td>No</td>
-<td>Source feature names for chained features</td>
+<td>Array of source feature names for chained features</td>
 </tr>
 <tr>
 <td><code>group_options</code></td>
@@ -316,6 +331,12 @@ result = mloda.run_all(features, compute_frameworks=[&quot;PandasDataFrame&quot;
 <td>integer</td>
 <td>No</td>
 <td>Index for multi-output features (adds <code>~N</code> suffix)</td>
+</tr>
+<tr>
+<td><code>feature_group</code></td>
+<td>string</td>
+<td>No</td>
+<td>Feature Group class name the feature resolves to (scope read by feature resolution and filter matching)</td>
 </tr>
 </tbody>
 </table>
@@ -347,6 +368,19 @@ result = mloda.run_all(features, compute_frameworks=[&quot;PandasDataFrame&quot;
 ]
 </code></pre>
 <p>Note: <code>options</code> and <code>group_options</code>/<code>context_options</code> are mutually exclusive.</p>
+<h3 id="feature-group-scope">Feature Group Scope</h3>
+<p>When two enabled sources declare the same column (for example a shared join key), the bare name is ambiguous and resolution fails with "Multiple feature groups found". Use <code>feature_group</code> to scope the request to one source:</p>
+<pre><code class="language-json">[
+    {&quot;name&quot;: &quot;subject_token&quot;, &quot;feature_group&quot;: &quot;ClaimsReader&quot;},
+    {&quot;name&quot;: &quot;claims_amount&quot;},
+    {&quot;name&quot;: &quot;labs_result&quot;}
+]
+</code></pre>
+<p>The config form takes a non-empty class-name string only, since JSON cannot express a class object. In Python, <code>Feature("subject_token", feature_group=ClaimsReader)</code> also accepts the class object.</p>
+<p>The string matches the named class and its subclasses, preferring the most specific one, exactly like the class object. Naming an abstract family base such as <code>"AggregatedFeatureGroup"</code> therefore selects the concrete subclass, so the config does not have to name a compute-framework-specific class.</p>
+<p>The scope narrows candidates but does not break ties between them. If the run enables two compute frameworks whose concrete subclasses both match, the family base stays ambiguous and raises, exactly as the bare name does; enable one framework for the run. Two classes with the same name in different modules likewise both match and stay ambiguous, and the root <code>FeatureGroup</code> base is rejected.</p>
+<p>The scope is read by feature resolution and by filter matching, and stays excluded from feature identity, so requesting the same name scoped to two different sources in one list raises <code>ValueError: Duplicate feature setup: &lt;name&gt;</code> rather than silently dropping one; see <a href="../troubleshooting/feature-group-resolution-errors/">Feature Group resolution errors</a>.</p>
+<p><code>feature_group</code> is a top-level field next to <code>name</code>: writing it inside <code>options</code>, <code>group_options</code>, or <code>context_options</code> is rejected with a validation error.</p>
 <h2 id="worked-example-window-rank-and-percentile-features">Worked Example: Window, Rank, and Percentile Features</h2>
 <p>Row-preserving operations (window aggregation, rank, percentile) cannot be requested by a bare name: the Feature Group only matches when the request also carries the partition/order options its matcher needs. The feature name encodes the operation (<code>{source}__{operation}</code>); the matcher then requires those options to be present. It reads them via <code>options.get</code> (group first, then context), so they resolve from either side, but <code>context_options</code> is the right home.</p>
 <pre><code class="language-json">[
@@ -416,6 +450,25 @@ result = mloda.run_all(features, compute_frameworks=[&quot;PandasDataFrame&quot;
     }
 ]
 </code></pre>
+<h3 id="nested-in_features-feature-dict">Nested in_features feature dict</h3>
+<p>Inside <code>options</code>, <code>group_options</code> or <code>context_options</code>, an <code>in_features</code> key can hold a feature dict instead of a name, which defines the source feature inline:</p>
+<pre><code class="language-json">[
+    {
+        &quot;name&quot;: &quot;scaled_sales&quot;,
+        &quot;options&quot;: {
+            &quot;scaler_type&quot;: &quot;minmax&quot;,
+            &quot;in_features&quot;: {
+                &quot;name&quot;: &quot;aggregated_sales&quot;,
+                &quot;feature_group&quot;: &quot;SalesAggregator&quot;,
+                &quot;options&quot;: {&quot;in_features&quot;: &quot;raw_sales&quot;}
+            }
+        }
+    }
+]
+</code></pre>
+<p>A nested dict supports <code>name</code>, <code>options</code>, <code>in_features</code> and <code>feature_group</code> only, in <code>options</code>, <code>group_options</code> and <code>context_options</code> alike. A nested feature built from <code>group_options</code> stays in the group options, one built from <code>context_options</code> stays in the context options. In a nested <code>in_features</code> dict, the top-level-only fields (<code>column_index</code>, <code>group_options</code>, <code>context_options</code>, <code>propagate_context_keys</code>) are rejected, and so is an unknown key. A feature dict must be the direct value of <code>in_features</code>: an <code>in_features</code> list holds source feature names, not feature dicts.</p>
+<p>The container decides identity: a nested source feature declared under <code>group_options</code> is part of the feature's identity, so it affects Options hashing and equality and therefore Feature Group splitting, while one declared under <code>context_options</code> is not.</p>
+<p>The top-level <code>in_features</code> array cannot be combined with an <code>in_features</code> key inside <code>options</code>, <code>group_options</code> or <code>context_options</code>, and <code>in_features</code> cannot be a key of <code>group_options</code> and <code>context_options</code> at once: declare the source features in one place.</p>
 <h2 id="multi-column-features">Multi-Column Features</h2>
 <p>Access specific columns from multi-output features using <code>column_index</code>:</p>
 <pre><code class="language-json">[
@@ -447,17 +500,11 @@ config = '''
 [
     &quot;customer_id&quot;,
     {
-        &quot;name&quot;: &quot;sales_aggregated&quot;,
-        &quot;in_features&quot;: [&quot;daily_sales&quot;],
+        &quot;name&quot;: &quot;sales__sum_aggr&quot;,
+        &quot;in_features&quot;: [&quot;sales&quot;],
         &quot;context_options&quot;: {
-            &quot;aggregation_type&quot;: &quot;sum&quot;,
-            &quot;window_days&quot;: 7
+            &quot;report&quot;: &quot;weekly&quot;
         }
-    },
-    {
-        &quot;name&quot;: &quot;encoded_category&quot;,
-        &quot;in_features&quot;: [&quot;category&quot;],
-        &quot;column_index&quot;: 0
     }
 ]
 '''
@@ -467,9 +514,11 @@ features = load_features_from_config(config)
 result = mloda.run_all(
     features,
     compute_frameworks=[&quot;PandasDataFrame&quot;],
-    api_data={&quot;customer_data&quot;: {&quot;customer_id&quot;: [1, 2, 3]}}
+    api_data={&quot;customer_data&quot;: {&quot;customer_id&quot;: [1, 2, 3], &quot;sales&quot;: [10.0, 20.0, 30.0]}}
 )
 </code></pre>
+<p><code>sales__sum_aggr</code> resolves to the aggregation Feature Group, which reads its source from the name.
+<code>in_features</code> states the same source explicitly, and <code>context_options</code> rides along as metadata.</p>
               
             </div>
           </div><footer>

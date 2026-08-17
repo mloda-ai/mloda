@@ -137,9 +137,13 @@
                 </li>
                 <li class="toctree-l2"><a class="reference internal" href="../plugin-loader/">Plugin Loader</a>
                 </li>
+                <li class="toctree-l2"><a class="reference internal" href="../plugin_registry/">Plugin Registry</a>
+                </li>
     </ul>
                   </li>
                   <li class="toctree-l1"><a class="reference internal" href="../data-type-enforcement/">Data Type Enforcement</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../comparison-contract/">Comparison Contract</a>
                   </li>
                   <li class="toctree-l1"><a class="reference internal" >Troubleshooting</a>
     <ul>
@@ -209,7 +213,7 @@ class ExampleFeature(FeatureGroup):
     @classmethod
     def get_domain(cls) -&gt; Domain:
         &quot;&quot;&quot;This function should return the domain for the feature group&quot;&quot;&quot;
-        return &quot;example_domain&quot;
+        return Domain(&quot;example_domain&quot;)
 </code></pre>
 <p>For feature groups, the default domain is default_domain.</p>
 <h2 id="domain-propagation">Domain Propagation</h2>

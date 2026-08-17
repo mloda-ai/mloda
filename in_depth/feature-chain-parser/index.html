@@ -141,6 +141,10 @@
     </li>
     <li class="toctree-l4"><a class="reference internal" href="#mixin-configuration">Mixin Configuration</a>
     </li>
+    <li class="toctree-l4"><a class="reference internal" href="#column-wise-data-hooks">Column-Wise Data Hooks</a>
+    </li>
+    <li class="toctree-l4"><a class="reference internal" href="#captureless-patterns-and-name-binding">Captureless Patterns and Name Binding</a>
+    </li>
     <li class="toctree-l4"><a class="reference internal" href="#customization-hooks">Customization Hooks</a>
     </li>
         </ul>
@@ -156,6 +160,20 @@
     <li class="toctree-l4"><a class="reference internal" href="#4-update-calculate_feature-method">4. Update calculate_feature Method</a>
     </li>
     <li class="toctree-l4"><a class="reference internal" href="#5-advanced-property_mapping-features">5. Advanced PROPERTY_MAPPING Features</a>
+    </li>
+        </ul>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#forwarding-options-to-input-features">Forwarding Options to Input Features</a>
+        <ul>
+    <li class="toctree-l4"><a class="reference internal" href="#forwarding-is-the-default">Forwarding is the default</a>
+    </li>
+    <li class="toctree-l4"><a class="reference internal" href="#opting-out-on-the-child">Opting out on the child</a>
+    </li>
+    <li class="toctree-l4"><a class="reference internal" href="#pulling-context-with-inherit_context_keys">Pulling context with inherit_context_keys</a>
+    </li>
+    <li class="toctree-l4"><a class="reference internal" href="#resolution-errors-from-over-forwarding">Resolution errors from over-forwarding</a>
+    </li>
+    <li class="toctree-l4"><a class="reference internal" href="#upstream-feature-deduplication">Upstream feature deduplication</a>
     </li>
         </ul>
     </li>
@@ -191,9 +209,13 @@
                 </li>
                 <li class="toctree-l2"><a class="reference internal" href="../plugin-loader/">Plugin Loader</a>
                 </li>
+                <li class="toctree-l2"><a class="reference internal" href="../plugin_registry/">Plugin Registry</a>
+                </li>
     </ul>
                   </li>
                   <li class="toctree-l1"><a class="reference internal" href="../data-type-enforcement/">Data Type Enforcement</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../comparison-contract/">Comparison Contract</a>
                   </li>
                   <li class="toctree-l1"><a class="reference internal" >Troubleshooting</a>
     <ul>
@@ -347,8 +369,8 @@ feature = Feature(
 <h2 id="featurechainparsermixin">FeatureChainParserMixin</h2>
 <p>The <code>FeatureChainParserMixin</code> provides default implementations for common feature chain parsing operations. Feature groups that use feature chaining should inherit from this mixin to reduce boilerplate code.</p>
 <h3 id="basic-usage">Basic Usage</h3>
-<pre><code class="language-python">from mloda.provider import FeatureGroup, FeatureChainParserMixin
-from mloda.provider import DefaultOptionKeys
+<pre><code class="language-py">from mloda.provider import FeatureGroup, FeatureChainParserMixin
+from mloda.provider import DefaultOptionKeys, PropertySpec
 
 class MyFeatureGroup(FeatureChainParserMixin, FeatureGroup):
     PREFIX_PATTERN = r&quot;.*__my_operation$&quot;
@@ -358,15 +380,12 @@ class MyFeatureGroup(FeatureChainParserMixin, FeatureGroup):
     MAX_IN_FEATURES = 1  # Or None for unlimited
 
     PROPERTY_MAPPING = {
-        &quot;operation_type&quot;: {
-            &quot;sum&quot;: &quot;Sum operation&quot;,
-            &quot;avg&quot;: &quot;Average operation&quot;,
-            DefaultOptionKeys.mloda_context: True,
-        },
-        DefaultOptionKeys.in_features: {
-            &quot;explanation&quot;: &quot;Source feature&quot;,
-            DefaultOptionKeys.mloda_context: True,
-        },
+        &quot;operation_type&quot;: PropertySpec(
+            &quot;Operation to apply&quot;,
+            allowed_values={&quot;sum&quot;: &quot;Sum operation&quot;, &quot;avg&quot;: &quot;Average operation&quot;},
+            strict_validation=True,
+        ),
+        DefaultOptionKeys.in_features: PropertySpec(&quot;Source feature&quot;),
     }
 
     # input_features() inherited from FeatureChainParserMixin
@@ -391,7 +410,7 @@ class MyFeatureGroup(FeatureChainParserMixin, FeatureGroup):
 </tr>
 <tr>
 <td><code>PROPERTY_MAPPING</code></td>
-<td><code>dict</code></td>
+<td><code>dict[str, PropertySpec]</code></td>
 <td>Required</td>
 <td>Parameter validation configuration</td>
 </tr>
@@ -413,12 +432,105 @@ class MyFeatureGroup(FeatureChainParserMixin, FeatureGroup):
 <td><code>"&amp;"</code></td>
 <td>Separator for multiple in_features</td>
 </tr>
+<tr>
+<td><code>RECOGNITION_ONLY_PATTERN</code></td>
+<td><code>bool</code></td>
+<td><code>False</code></td>
+<td>Declares a captureless pattern as recognition-only (binds no key from the name)</td>
+</tr>
+<tr>
+<td><code>REQUIRED_COLUMNWISE_HOOKS</code></td>
+<td><code>frozenset[str]</code></td>
+<td><code>frozenset()</code></td>
+<td>Column-wise data hooks the family requires</td>
+</tr>
 </tbody>
 </table>
+<h3 id="column-wise-data-hooks">Column-Wise Data Hooks</h3>
+<p>Beyond parsing, the mixin declares three column-wise data hooks: <code>_get_available_columns</code>,
+<code>_check_source_features_exist</code> and <code>_add_result_to_data</code>. The concrete compute-framework subclass
+(pandas, PyArrow, Polars, python dict, ...) implements them; the inherited defaults raise
+<code>NotImplementedError</code> naming the class and the hook, so a missing implementation fails loudly
+instead of silently. A group that resolves column names against the data implements the discovery
+hook too; the others only need the check/add pair.</p>
+<p>Whether <code>_check_source_features_exist</code> tolerates partial presence (some source names missing) or
+rejects it is a per-feature-group policy, not a framework rule.</p>
+<p><code>REQUIRED_COLUMNWISE_HOOKS</code> declares which of the three a family needs. A family base sets it to the
+constant matching the hooks its own <code>calculate_feature</code> calls, and its compute-framework subclasses
+implement them. Both constants come from <code>mloda.provider</code>.</p>
+<table>
+<thead>
+<tr>
+<th>Constant</th>
+<th>Declares</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>COLUMNWISE_HOOKS</code></td>
+<td><code>_check_source_features_exist</code> and <code>_add_result_to_data</code></td>
+</tr>
+<tr>
+<td><code>COLUMN_DISCOVERY_HOOKS</code></td>
+<td>those two plus <code>_get_available_columns</code></td>
+</tr>
+</tbody>
+</table>
+<pre><code class="language-python">from mloda.provider import COLUMN_DISCOVERY_HOOKS, FeatureChainParserMixin, FeatureGroup
+from mloda.user.pandas import PandasDataFrame
+
+class RollingBase(FeatureChainParserMixin, FeatureGroup):
+    REQUIRED_COLUMNWISE_HOOKS = COLUMN_DISCOVERY_HOOKS
+
+class PandasRolling(RollingBase):
+    @classmethod
+    def compute_framework_rule(cls):
+        return {PandasDataFrame}
+
+    @classmethod
+    def _get_available_columns(cls, data):
+        return set(data.columns)
+
+    @classmethod
+    def _check_source_features_exist(cls, data, feature_names):
+        if set(feature_names) - set(data.columns):
+            raise ValueError(f&quot;Missing source features, available: {list(data.columns)}&quot;)
+
+    @classmethod
+    def _add_result_to_data(cls, data, feature_name, result):
+        data[feature_name] = result
+        return data
+</code></pre>
+<p><code>missing_columnwise_hooks(cls)</code>, also from <code>mloda.provider</code>, returns the declared hooks a class does
+not implement. Assert it empty in your own test suite to catch a skipped hook there rather than
+mid-run:</p>
+<pre><code class="language-python">from mloda.provider import missing_columnwise_hooks
+
+def test_pandas_rolling_implements_its_hooks():
+    assert missing_columnwise_hooks(PandasRolling) == []
+</code></pre>
+<p>A hook that is not a <code>@classmethod</code> or <code>@staticmethod</code> counts as missing: the <code>cls._hook(...)</code> call
+cannot reach it. A family base reports all of its declared hooks, since it declares the contract its
+subclasses implement, so assert this on the framework-bound class rather than on the base.</p>
+<h3 id="captureless-patterns-and-name-binding">Captureless Patterns and Name Binding</h3>
+<p>A captureless <code>PREFIX_PATTERN</code> (one with no capture group, e.g. <code>r".*__cleaned_text$"</code>) binds no
+<code>PROPERTY_MAPPING</code> key from the feature name. The name identifies the feature group, but every value
+comes from options. The old behavior of fabricating an operation token from the suffix text has been
+retired.</p>
+<ul>
+<li>To bind a key <strong>from the name</strong>, use a named capture: <code>r".*__(?P&lt;operation&gt;pca|tsne)_reduce$"</code>.</li>
+<li>For a <strong>recognition-only</strong> pattern (the name identifies the group but all values come from
+  options), set <code>RECOGNITION_ONLY_PATTERN = True</code>:</li>
+</ul>
+<pre><code class="language-py">RECOGNITION_ONLY_PATTERN = True
+</code></pre>
+<p>Deprecation note: a captureless pattern that also carries a non-empty <code>PROPERTY_MAPPING</code> keeps
+working, but logs a definition-time warning until it either adds a named capture or sets
+<code>RECOGNITION_ONLY_PATTERN = True</code>.</p>
 <h3 id="customization-hooks">Customization Hooks</h3>
 <h4 id="1-custom-validation-with-_validate_string_match">1. Custom Validation with <code>_validate_string_match()</code></h4>
 <p>Override this hook when you need custom validation for string-based feature names:</p>
-<pre><code class="language-python">class ClusteringFeatureGroup(FeatureChainParserMixin, FeatureGroup):
+<pre><code class="language-py">class ClusteringFeatureGroup(FeatureChainParserMixin, FeatureGroup):
     @classmethod
     def _validate_string_match(cls, feature_name: str, operation_config: str, in_feature: str) -&gt; bool:
         &quot;&quot;&quot;Validate clustering-specific patterns.&quot;&quot;&quot;
@@ -431,7 +543,7 @@ class MyFeatureGroup(FeatureChainParserMixin, FeatureGroup):
 </code></pre>
 <h4 id="2-custom-input_features-method">2. Custom <code>input_features()</code> Method</h4>
 <p>Override when you need to add additional input features (e.g., time filter):</p>
-<pre><code class="language-python">class TimeWindowFeatureGroup(FeatureChainParserMixin, FeatureGroup):
+<pre><code class="language-py">class TimeWindowFeatureGroup(FeatureChainParserMixin, FeatureGroup):
     def input_features(self, options: Options, feature_name: FeatureName) -&gt; Optional[Set[Feature]]:
         # Try string-based parsing first
         _, in_feature = FeatureChainParser.parse_feature_name(str(feature_name), [self.PREFIX_PATTERN])
@@ -445,30 +557,21 @@ class MyFeatureGroup(FeatureChainParserMixin, FeatureGroup):
         return set(in_features) | {time_filter_feature}
 </code></pre>
 <h4 id="3-custom-match_feature_group_criteria-method">3. Custom <code>match_feature_group_criteria()</code> Method</h4>
-<p>Override for complex pre-check logic that can't be captured by the hook:</p>
-<pre><code class="language-python">class SklearnPipelineFeatureGroup(FeatureChainParserMixin, FeatureGroup):
+<p>Override for the rules a <code>PROPERTY_MAPPING</code> spec cannot express, then delegate. Conditional
+requirements belong in <code>required_when</code> instead: it is enforced by a guard installed at class
+definition, so it still runs on an override.</p>
+<pre><code class="language-py">class SklearnPipelineFeatureGroup(FeatureChainParserMixin, FeatureGroup):
     @classmethod
     def match_feature_group_criteria(cls, feature_name, options, data_access_collection=None) -&gt; bool:
-        &quot;&quot;&quot;Custom matching with mutual exclusivity validation.&quot;&quot;&quot;
-        has_pipeline_name = options.get(cls.PIPELINE_NAME)
-        has_pipeline_steps = options.get(cls.PIPELINE_STEPS)
-
-        # Pre-check: require pattern in name if no config provided
-        if has_pipeline_name is None and has_pipeline_steps is None:
-            if &quot;sklearn_pipeline_&quot; not in str(feature_name):
-                return False
-
-        # Use base matching
-        base_match = FeatureChainParser.match_configuration_feature_chain_parser(...)
-
-        # Post-check: mutual exclusivity
-        if base_match and has_pipeline_name and has_pipeline_steps:
+        &quot;&quot;&quot;Mutual exclusivity: pipeline_name and pipeline_steps cannot both be set.&quot;&quot;&quot;
+        if options.get(cls.PIPELINE_NAME) is not None and options.get(cls.PIPELINE_STEPS) is not None:
             return False
-        return base_match
+
+        return super().match_feature_group_criteria(feature_name, options, data_access_collection)
 </code></pre>
 <h4 id="4-operation-resolution-with-_resolve_operation">4. Operation Resolution with <code>_resolve_operation()</code></h4>
 <p>Use this helper to extract the operation type from either the feature name pattern or a config key, without calling <code>FeatureChainParser</code> directly:</p>
-<pre><code class="language-python">class AggregatedFeatureGroup(FeatureChainParserMixin, FeatureGroup):
+<pre><code class="language-py">class AggregatedFeatureGroup(FeatureChainParserMixin, FeatureGroup):
     AGGREGATION_TYPE = &quot;aggregation_type&quot;
 
     @classmethod
@@ -479,63 +582,61 @@ class MyFeatureGroup(FeatureChainParserMixin, FeatureGroup):
             # ... use agg_type
 </code></pre>
 <p>The three-arg form <code>cls._resolve_operation(feature_name, options, config_key)</code> is also supported for contexts where the name and options are already separate (e.g., <code>match_feature_group_criteria</code>).</p>
-<h4 id="5-type-validation-with-type_validator">5. Type Validation with <code>type_validator</code></h4>
-<p>Add a <code>DefaultOptionKeys.type_validator</code> callable to a PROPERTY_MAPPING entry to validate the shape or composite type of the raw option value. The mixin calls the validator after basic matching succeeds. If it returns a falsy value, <code>match_feature_group_criteria</code> returns False.</p>
-<p>Use <code>type_validator</code> when you need to validate the whole value (e.g., must be a list of strings). Use <code>validation_function</code> with <code>strict_validation=True</code> when you need to validate individual parsed elements (after list unpacking).</p>
-<pre><code class="language-python">def _is_list_of_strings(value):
+<h4 id="5-whole-value-validation-with-match_guard">5. Whole-Value Validation with <code>match_guard</code></h4>
+<p>Give a spec a <code>match_guard</code> callable to validate the shape of the raw option value. The mixin calls it after basic matching succeeds, and a falsy return makes <code>match_feature_group_criteria</code> return False (a non-match, not an error).</p>
+<p>Reach for <code>match_guard</code> when the constraint is about the value as a whole (a list of strings, a dict, an ordering). Reach for <code>element_validator</code> with <code>strict_validation=True</code> when the constraint is about each element on its own.</p>
+<pre><code class="language-py">def _is_list_of_strings(value):
     return isinstance(value, list) and all(isinstance(item, str) for item in value)
 
 class GroupAggregation(FeatureChainParserMixin, FeatureGroup):
     PROPERTY_MAPPING = {
-        &quot;partition_by&quot;: {
-            DefaultOptionKeys.context: True,
-            DefaultOptionKeys.strict_validation: False,
-            DefaultOptionKeys.type_validator: _is_list_of_strings,
-        },
+        &quot;partition_by&quot;: PropertySpec(
+            &quot;Columns to partition by&quot;,
+            match_guard=_is_list_of_strings,
+        ),
     }
 </code></pre>
-<p>The validator is only called when the option is present (not None). Missing options are handled by the base PROPERTY_MAPPING validation. Validators must be pure functions with no side effects, since they may be called multiple times during feature group resolution. Return values use truthy/falsy semantics. If the validator raises a TypeError, ValueError, or AttributeError, the exception is caught and the value is treated as invalid (match returns False).</p>
+<p>The guard is only called when the option is present (not None). Validators must be pure functions, since they may be called several times during resolution. If the guard raises a TypeError, ValueError, or AttributeError, the exception is caught and the value is treated as invalid (match returns False).</p>
+<p>The full model, which invariant fires at which moment, the precedence between the two callables, and what a validator receives for each container type, lives in one place: <a href="../property-mapping/">PROPERTY_MAPPING Configuration</a>.</p>
 <h2 id="modern-implementation-in-feature-groups">Modern Implementation in Feature Groups</h2>
 <h3 id="1-define-property_mapping-configuration">1. Define PROPERTY_MAPPING Configuration</h3>
 <p>The modern approach uses <code>PROPERTY_MAPPING</code> to define parameter validation and classification:</p>
-<pre><code class="language-python">from mloda.provider import FeatureGroup
+<pre><code class="language-py">from mloda.provider import FeatureGroup
 from mloda.user import FeatureName
-from mloda.provider import DefaultOptionKeys
+from mloda.provider import DefaultOptionKeys, PropertySpec
 
 class MyFeatureGroup(FeatureGroup):
     PREFIX_PATTERN = r&quot;__([a-zA-Z_]+)_operation$&quot;
 
     PROPERTY_MAPPING = {
         # Feature-specific parameter
-        &quot;operation_type&quot;: {
-            &quot;sum&quot;: &quot;Sum aggregation&quot;,
-            &quot;avg&quot;: &quot;Average aggregation&quot;, 
-            &quot;max&quot;: &quot;Maximum aggregation&quot;,
-            DefaultOptionKeys.context: True,  # Context parameter
-            DefaultOptionKeys.strict_validation: True,  # Strict validation
-        },
+        &quot;operation_type&quot;: PropertySpec(
+            &quot;Operation to apply&quot;,
+            allowed_values={
+                &quot;sum&quot;: &quot;Sum aggregation&quot;,
+                &quot;avg&quot;: &quot;Average aggregation&quot;,
+                &quot;max&quot;: &quot;Maximum aggregation&quot;,
+            },
+            context=True,  # Context parameter (the default)
+            strict_validation=True,  # Strict validation
+        ),
         # Source feature parameter
-        DefaultOptionKeys.in_features: {
-            &quot;explanation&quot;: &quot;Source feature for the operation&quot;,
-            DefaultOptionKeys.context: True,  # Context parameter
-            DefaultOptionKeys.strict_validation: False,  # Flexible validation
-        },
+        DefaultOptionKeys.in_features: PropertySpec(
+            &quot;Source feature for the operation&quot;,
+            strict_validation=False,  # Flexible validation
+        ),
     }
 </code></pre>
 <h3 id="2-update-match_feature_group_criteria">2. Update match_feature_group_criteria</h3>
-<p>Replace old pattern-only matching with unified parser:</p>
-<pre><code class="language-python">@classmethod
+<p><code>FeatureChainParserMixin</code> already implements this; override it only to add your own checks, and reach the parser through <code>cls.match_parser_criteria</code>:</p>
+<pre><code class="language-py">@classmethod
 def match_feature_group_criteria(cls, feature_name, options, data_access_collection=None):
-    return FeatureChainParser.match_configuration_feature_chain_parser(
-        feature_name,
-        options,
-        property_mapping=cls.PROPERTY_MAPPING,
-        prefix_patterns=[cls.PREFIX_PATTERN],
-    )
+    return cls.match_parser_criteria(feature_name, options)
 </code></pre>
+<p><code>match_parser_criteria</code> calls the parser with the class's <code>PROPERTY_MAPPING</code> and patterns and turns a rejected option value into a non-match. Calling <code>FeatureChainParser</code> directly from a match hook lets that rejection escape as an exception; the engine contains it as a <code>match hook</code> near-miss for that candidate, but the rejection reason is the more useful one. Containment covers plugin raises only: a framework-owned raise, such as a forwarded option value contradicting the feature name, still aborts the whole resolution.</p>
 <h3 id="3-modernize-input_features-method">3. Modernize input_features Method</h3>
 <p>Handle both string-based and configuration-based features:</p>
-<pre><code class="language-python">def input_features(self, options: Options, feature_name: FeatureName) -&gt; Optional[Set[Feature]]:
+<pre><code class="language-py">def input_features(self, options: Options, feature_name: FeatureName) -&gt; Optional[Set[Feature]]:
     &quot;&quot;&quot;Extract source feature from either configuration-based options or string parsing.&quot;&quot;&quot;
 
     # Try string-based parsing first
@@ -555,7 +656,7 @@ def match_feature_group_criteria(cls, feature_name, options, data_access_collect
 </code></pre>
 <h3 id="4-update-calculate_feature-method">4. Update calculate_feature Method</h3>
 <p>Support dual approach in feature processing:</p>
-<pre><code class="language-python">def calculate_feature(self, features, options):
+<pre><code class="language-py">def calculate_feature(self, features, options):
     for feature in features.features:
         # Try configuration-based approach first
         try:
@@ -576,51 +677,164 @@ def match_feature_group_criteria(cls, feature_name, options, data_access_collect
         # ... implementation logic
 </code></pre>
 <h3 id="5-advanced-property_mapping-features">5. Advanced PROPERTY_MAPPING Features</h3>
-<h4 id="validation-functions">Validation Functions</h4>
-<p>For complex validation beyond simple value lists:</p>
-<pre><code class="language-python">PROPERTY_MAPPING = {
-    &quot;dimension&quot;: {
-        &quot;explanation&quot;: &quot;Number of dimensions for reduction&quot;,
-        DefaultOptionKeys.context: True,
-        DefaultOptionKeys.strict_validation: True,
-        DefaultOptionKeys.validation_function: lambda x: isinstance(x, int) and x &gt; 0,
-    },
+<h4 id="element-validators">Element Validators</h4>
+<p>For per-element rules that a fixed value list cannot express:</p>
+<pre><code class="language-py">PROPERTY_MAPPING = {
+    &quot;dimension&quot;: PropertySpec(
+        &quot;Number of dimensions for reduction&quot;,
+        strict_validation=True,
+        element_validator=lambda x: isinstance(x, int) and x &gt; 0,
+    ),
 }
 </code></pre>
 <h4 id="default-values">Default Values</h4>
 <p>Specify default values for optional parameters:</p>
-<pre><code class="language-python">PROPERTY_MAPPING = {
-    &quot;window_size&quot;: {
-        &quot;7&quot;: &quot;7-day window&quot;,
-        &quot;30&quot;: &quot;30-day window&quot;,
-        DefaultOptionKeys.default: &quot;7&quot;,  # Default value
-        DefaultOptionKeys.context: True,
-    },
+<pre><code class="language-py">PROPERTY_MAPPING = {
+    &quot;window_size&quot;: PropertySpec(
+        &quot;Rolling window length in days&quot;,
+        allowed_values={&quot;7&quot;: &quot;7-day window&quot;, &quot;30&quot;: &quot;30-day window&quot;},
+        default=&quot;7&quot;,  # Default value
+        strict_validation=True,
+    ),
 }
 </code></pre>
+<p>Under strict validation a declared default must itself be an accepted value; that is
+checked when the <code>PropertySpec</code> is constructed. Omitting <code>default</code> makes the key required;
+<code>default=None</code> makes it optional with no value to apply. See
+<a href="../property-mapping/#optional-keys">Optional keys</a>.</p>
 <h4 id="group-vs-context-classification">Group vs Context Classification</h4>
-<pre><code class="language-python">PROPERTY_MAPPING = {
+<p>There is no <code>group</code> field: a group parameter is <code>context=False</code>.</p>
+<pre><code class="language-py">PROPERTY_MAPPING = {
     # Group parameter - affects Feature Group resolution
-    &quot;data_source&quot;: {
-        &quot;production&quot;: &quot;Production data&quot;,
-        &quot;staging&quot;: &quot;Staging data&quot;, 
-        DefaultOptionKeys.group: True,  # Explicit group parameter
-        DefaultOptionKeys.strict_validation: True,
-    },
+    &quot;data_source&quot;: PropertySpec(
+        &quot;Data source to read from&quot;,
+        allowed_values={&quot;production&quot;: &quot;Production data&quot;, &quot;staging&quot;: &quot;Staging data&quot;},
+        context=False,  # Group parameter
+        strict_validation=True,
+    ),
     # Context parameter - doesn't affect resolution
-    &quot;algorithm_type&quot;: {
-        &quot;kmeans&quot;: &quot;K-means clustering&quot;,
-        &quot;dbscan&quot;: &quot;DBSCAN clustering&quot;,
-        DefaultOptionKeys.context: True,  # Context parameter
-        DefaultOptionKeys.strict_validation: False,  # Flexible validation
-    },
+    &quot;algorithm_type&quot;: PropertySpec(
+        &quot;Clustering algorithm&quot;,
+        context=True,  # Context parameter (the default)
+        strict_validation=False,  # Flexible validation
+    ),
 }
 </code></pre>
+<h2 id="forwarding-options-to-input-features">Forwarding Options to Input Features</h2>
+<p>The <a href="../property-mapping/#context-propagation">Context Propagation</a> docs describe the
+<strong>caller side</strong>: context options stay local by default, and <code>propagate_context_keys</code>
+opts specific keys in. This section describes the <strong>author side</strong>: what happens to a
+feature group's own options when it declares an input feature.</p>
+<h3 id="forwarding-is-the-default">Forwarding is the default</h3>
+<p>When your <code>input_features()</code> returns a child <code>Feature</code>, the engine copies <strong>all</strong> of
+the consumer's group options (except <code>in_features</code>) onto that child. Configuration set
+on a requested feature travels down self-resolving chains (for example
+<code>price__mean_imputed__sum_aggr</code>) to the end of the chain without any ceremony:</p>
+<pre><code class="language-python">from typing import Optional
+
+from mloda.provider import FeatureGroup
+from mloda.user import Feature, FeatureName, Options
+
+
+class GraphAnswer(FeatureGroup):
+    def input_features(self, options: Options, feature_name: FeatureName) -&gt; Optional[set[Feature]]:
+        # The child inherits ALL of the consumer's group options by default.
+        return {Feature(&quot;knowledge_graph&quot;)}
+</code></pre>
+<p>Rules:</p>
+<ul>
+<li><code>in_features</code> is never forwarded.</li>
+<li>If the child already carries a forwarded key with an equal value, the merge is a
+  no-op for that key.</li>
+<li>If the child already carries a forwarded key with a <strong>different</strong> value, a
+  <code>ValueError</code> is raised.</li>
+<li>For string-parsed chained features, a consumer-forwarded value that differs from the
+  value parsed from the feature name raises a <code>ValueError</code> (the name-parsed value would
+  win silently otherwise). Carve the key out with <code>forward_group_exclude</code> on the child,
+  or set <code>MLODA_ALLOW_FORWARDED_NAME_MISMATCH=1</code> to downgrade the error to a warning.</li>
+</ul>
+<h3 id="opting-out-on-the-child">Opting out on the child</h3>
+<p>If the child must not see some (or any) of the consumer's group options, set a merge
+directive on the child <code>Feature</code> you return from <code>input_features()</code>:</p>
+<table>
+<thead>
+<tr>
+<th>Directive</th>
+<th>Effect</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>forward_group=False</code></td>
+<td>Nothing flows: no group options and no consumer-side context push. Only an explicit child-side <code>inherit_context_keys</code> pull can still deliver values.</td>
+</tr>
+<tr>
+<td><code>forward_group={"kg_backend"}</code></td>
+<td>Allowlist: only the listed keys flow.</td>
+</tr>
+<tr>
+<td><code>forward_group_exclude={"query_text"}</code></td>
+<td>Everything flows except the listed keys.</td>
+</tr>
+</tbody>
+</table>
+<pre><code class="language-python">from mloda.user import Feature
+
+# Only kg_backend flows; query_text and top_k stay on the consumer.
+allowlisted = Feature(&quot;knowledge_graph&quot;, forward_group={&quot;kg_backend&quot;})
+
+# Everything except query_text and top_k flows.
+carved_out = Feature(&quot;knowledge_graph&quot;, forward_group_exclude={&quot;query_text&quot;, &quot;top_k&quot;})
+
+# Nothing flows.
+isolated = Feature(&quot;knowledge_graph&quot;, forward_group=False)
+</code></pre>
+<ul>
+<li>Allowlist keys absent from the consumer's group options are skipped silently.</li>
+<li><code>forward_group=False</code> combined with a non-empty <code>forward_group_exclude</code> is
+  contradictory and raises a <code>ValueError</code>.</li>
+<li>Merge directives (<code>forward_group</code>, <code>forward_group_exclude</code>, <code>inherit_context_keys</code>)
+  are not part of <code>Feature</code> identity, so declare at most one child per upstream feature
+  name in a single <code>input_features</code> return; duplicates collapse like link/index.</li>
+</ul>
+<h3 id="pulling-context-with-inherit_context_keys">Pulling context with <code>inherit_context_keys</code></h3>
+<p>Context options never flow implicitly, and <code>forward_group</code> does not touch them. If the
+child needs a consumer <strong>context</strong> value, list it in <code>inherit_context_keys</code>; the engine
+copies the listed keys from the consumer's context into the child's context:</p>
+<pre><code class="language-python">from mloda.user import Feature
+
+child = Feature(&quot;knowledge_graph&quot;, inherit_context_keys={&quot;tenant&quot;})
+</code></pre>
+<p>This is the child-side pull, symmetric to the caller-side push
+<code>propagate_context_keys</code>, which continues to work unchanged unless the child declared
+<code>forward_group=False</code>: that skips the push entirely. Keys absent from the consumer's
+context are skipped silently. As with group forwarding, an inherited or pushed key
+whose child value differs raises a <code>ValueError</code>; equal values are a no-op. A child
+that needs its own value for a pushed key opts out of per-level context values with
+<code>forward_group=False</code> (only the literal <code>False</code> blocks the push; an empty allowlist
+does not).</p>
+<h3 id="resolution-errors-from-over-forwarding">Resolution errors from over-forwarding</h3>
+<p>Because forwarding is the default, the consumer's query-specific group keys (for
+example <code>query_text</code>, <code>top_k</code>) land on the child unless you opt out. If the child's
+matcher (its <code>match_feature_group_criteria</code> / <code>PROPERTY_MAPPING</code>) does not accept those
+extra keys, resolution fails with <code>No feature groups found ...</code>. A key whose <em>value</em> was
+rejected is named in the error's value-rejection lines; a key rejected merely for being
+present is not called out, because identifying it would need a second, speculative match
+pass. If a feature resolves without its forwarded group options but not with them, keep
+them off the child with <code>forward_group_exclude</code>, an allowlist, or <code>forward_group=False</code>.</p>
+<h3 id="upstream-feature-deduplication">Upstream feature deduplication</h3>
+<p>The engine deduplicates upstream features that share the same group identity. Declaring
+the same source feature as the input of several parents therefore computes it once,
+<strong>provided the same options flow to it from each parent</strong>. Forwarded options become
+part of the child's group identity, so two parents whose merges produce the same group
+options share a single computed feature, while a plain request of the same name (or one
+carrying different options) is a distinct identity and is computed separately. Keep the
+merge directives identical across parents when you want them to share the computation.</p>
 <h2 id="multiple-result-columns-with-pattern">Multiple Result Columns with ~ Pattern</h2>
 <p>Some feature groups produce multiple result columns from a single input feature. mloda provides utilities to work with these patterns seamlessly.</p>
 <h3 id="producer-side-creating-multi-column-outputs">Producer Side: Creating Multi-Column Outputs</h3>
 <p>Use <code>apply_naming_convention()</code> to create properly named columns:</p>
-<pre><code class="language-python">from mloda.provider import FeatureGroup, FeatureSet
+<pre><code class="language-py">from mloda.provider import FeatureGroup, FeatureSet
 
 class MultiColumnProducer(FeatureGroup):
     @classmethod
@@ -637,7 +851,7 @@ class MultiColumnProducer(FeatureGroup):
 </code></pre>
 <h3 id="consumer-side-discovering-multi-column-features">Consumer Side: Discovering Multi-Column Features</h3>
 <p>Use <code>resolve_multi_column_feature()</code> to automatically discover columns:</p>
-<pre><code class="language-python">class MultiColumnConsumer(FeatureGroup):
+<pre><code class="language-py">class MultiColumnConsumer(FeatureGroup):
     def input_features(self, options: Options, feature_name: FeatureName) -&gt; Optional[Set[Feature]]:
         # Request base feature without ~N suffix
         return {Feature(&quot;category__onehot_encoded&quot;)}

@@ -145,9 +145,13 @@
                 </li>
                 <li class="toctree-l2"><a class="reference internal" href="../../in_depth/plugin-loader/">Plugin Loader</a>
                 </li>
+                <li class="toctree-l2"><a class="reference internal" href="../../in_depth/plugin_registry/">Plugin Registry</a>
+                </li>
     </ul>
                   </li>
                   <li class="toctree-l1"><a class="reference internal" href="../../in_depth/data-type-enforcement/">Data Type Enforcement</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../in_depth/comparison-contract/">Comparison Contract</a>
                   </li>
                   <li class="toctree-l1"><a class="reference internal" >Troubleshooting</a>
     <ul>
@@ -1252,7 +1256,7 @@ Result: 8 columns total
 <span class="kn">from</span><span class="w"> </span><span class="nn">mloda.user</span><span class="w"> </span><span class="kn">import</span> <span class="n">mloda</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">mloda.provider</span><span class="w"> </span><span class="kn">import</span> <span class="n">FeatureGroup</span><span class="p">,</span> <span class="n">BaseInputData</span><span class="p">,</span> <span class="n">DataCreator</span><span class="p">,</span> <span class="n">FeatureSet</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">mloda.user</span><span class="w"> </span><span class="kn">import</span> <span class="n">PluginLoader</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">mloda_plugins.compute_framework.base_implementations.pandas.dataframe</span><span class="w"> </span><span class="kn">import</span> <span class="n">PandasDataFrame</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">mloda.user.pandas</span><span class="w"> </span><span class="kn">import</span> <span class="n">PandasDataFrame</span>
 
 <span class="c1"># In mloda, we have the concept of feature groups.</span>
 <span class="c1"># A feature group is an abstraction between a data framework and processes of a data transformation.</span>
@@ -1304,7 +1308,7 @@ Result: 8 columns total
 from mloda.user import mloda
 from mloda.provider import FeatureGroup, BaseInputData, DataCreator, FeatureSet
 from mloda.user import PluginLoader
-from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
+from mloda.user.pandas import PandasDataFrame
 
 # In mloda, we have the concept of feature groups.
 # A feature group is an abstraction between a data framework and processes of a data transformation.
@@ -1363,18 +1367,18 @@ print(
 <div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
 <div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
 <pre>✅ Transformed dataset with split fit/transform:
-   state__onehot_encoded~2  state__onehot_encoded~1  gender__onehot_encoded~0  \
-0                      1.0                      0.0                       1.0   
-1                      1.0                      0.0                       0.0   
-
-   state__onehot_encoded~0  state__onehot_encoded~3  gender__onehot_encoded~1  
-0                      0.0                      0.0                       0.0  
-1                      0.0                      0.0                       1.0  
    age__mean_imputed__standard_scaled  weight__mean_imputed__standard_scaled
 0                            0.339295                               1.243621
 1                            1.057320                              -0.677472
-Result: ['state__onehot_encoded~2', 'state__onehot_encoded~1', 'gender__onehot_encoded~0', 'state__onehot_encoded~0', 'state__onehot_encoded~3', 'gender__onehot_encoded~1'] 
- [FeatureName('age__mean_imputed__standard_scaled'), FeatureName('weight__mean_imputed__standard_scaled')] columns total
+   state__onehot_encoded~1  gender__onehot_encoded~1  state__onehot_encoded~3  \
+0                      0.0                       0.0                      0.0   
+1                      0.0                       1.0                      0.0   
+
+   gender__onehot_encoded~0  state__onehot_encoded~2  state__onehot_encoded~0  
+0                       1.0                      1.0                      0.0  
+1                       0.0                      1.0                      0.0  
+Result: [FeatureName('age__mean_imputed__standard_scaled'), FeatureName('weight__mean_imputed__standard_scaled')] 
+ ['state__onehot_encoded~1', 'gender__onehot_encoded~1', 'state__onehot_encoded~3', 'gender__onehot_encoded~0', 'state__onehot_encoded~2', 'state__onehot_encoded~0'] columns total
 </pre>
 </div>
 </div>
@@ -1432,13 +1436,13 @@ print(
 <div class="jp-OutputArea-child">
 <div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
 <div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
-<pre>   state__onehot_encoded~0
-0                      0.0
-1                      0.0    weight__mean_imputed__robust_scaled
+<pre>   weight__mean_imputed__robust_scaled
 0                             0.938858
 1                            -0.535025    age__mean_imputed__standard_scaled__max_aggr
 0                                      1.609647
-1                                      1.609647
+1                                      1.609647    state__onehot_encoded~0
+0                      0.0
+1                      0.0
 </pre>
 </div>
 </div>
@@ -1545,13 +1549,13 @@ print(
 <div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
 <div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
 <pre>I, SecondSklearnDataCreator AM NOW USED.
-   state__onehot_encoded~0
-0                      1.0
-1                      1.0    weight__mean_imputed__robust_scaled
+   weight__mean_imputed__robust_scaled
 0                             0.677809
 1                            -0.293511    age__mean_imputed__standard_scaled__max_aggr
 0                                      1.631997
-1                                      1.631997
+1                                      1.631997    state__onehot_encoded~0
+0                      1.0
+1                      1.0
 </pre>
 </div>
 </div>

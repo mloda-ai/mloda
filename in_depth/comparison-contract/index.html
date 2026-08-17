@@ -5,15 +5,15 @@
     <meta http-equiv="X-UA-Compatible" content="IE=edge" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
       <link rel="shortcut icon" href="../../img/favicon.ico" />
-    <title>Streaming - mloda docs</title>
+    <title>Comparison Contract - mloda docs</title>
     <link rel="stylesheet" href="../../css/theme.css" />
     <link rel="stylesheet" href="../../css/theme_extra.css" />
         <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/github.min.css" />
     
       <script>
         // Current page data
-        var mkdocs_page_name = "Streaming";
-        var mkdocs_page_input_path = "in_depth/streaming.md";
+        var mkdocs_page_name = "Comparison Contract";
+        var mkdocs_page_input_path = "in_depth/comparison-contract.md";
         var mkdocs_page_url = null;
       </script>
     
@@ -75,12 +75,10 @@
                   </li>
               </ul>
               <p class="caption"><span class="caption-text">In Depth - Basics</span></p>
-              <ul class="current">
+              <ul>
                   <li class="toctree-l1"><a class="reference internal" href="../mloda-api/">mloda API</a>
                   </li>
-                  <li class="toctree-l1 current"><a class="reference internal current" href="#">Streaming</a>
-    <ul class="current">
-    </ul>
+                  <li class="toctree-l1"><a class="reference internal" href="../streaming/">Streaming</a>
                   </li>
                   <li class="toctree-l1"><a class="reference internal" href="../access-feature-data/">(Feature) data</a>
                   </li>
@@ -94,7 +92,7 @@
                   </li>
               </ul>
               <p class="caption"><span class="caption-text">In Depth - Advanced</span></p>
-              <ul>
+              <ul class="current">
                   <li class="toctree-l1"><a class="reference internal" href="../data-quality/">Data quality</a>
                   </li>
                   <li class="toctree-l1"><a class="reference internal" href="../domain/">Domain concept</a>
@@ -143,7 +141,17 @@
                   </li>
                   <li class="toctree-l1"><a class="reference internal" href="../data-type-enforcement/">Data Type Enforcement</a>
                   </li>
-                  <li class="toctree-l1"><a class="reference internal" href="../comparison-contract/">Comparison Contract</a>
+                  <li class="toctree-l1 current"><a class="reference internal current" href="#">Comparison Contract</a>
+    <ul class="current">
+    <li class="toctree-l2"><a class="reference internal" href="#the-pieces">The pieces</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#where-it-is-applied">Where it is applied</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#per-engine-capability">Per-engine capability</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#deferred">Deferred</a>
+    </li>
+    </ul>
                   </li>
                   <li class="toctree-l1"><a class="reference internal" >Troubleshooting</a>
     <ul>
@@ -178,8 +186,8 @@
         <div class="rst-content"><div role="navigation" aria-label="breadcrumbs navigation">
   <ul class="wy-breadcrumbs">
     <li><a href="../.." class="icon icon-home" aria-label="Docs"></a></li>
-          <li class="breadcrumb-item">In Depth - Basics</li>
-      <li class="breadcrumb-item active">Streaming</li>
+          <li class="breadcrumb-item">In Depth - Advanced</li>
+      <li class="breadcrumb-item active">Comparison Contract</li>
     <li class="wy-breadcrumbs-aside">
     </li>
   </ul>
@@ -188,210 +196,131 @@
           <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
             <div class="section" itemprop="articleBody">
               
-                <h2 id="streaming-with-stream_all">Streaming with <code>stream_all</code></h2>
-<p><code>stream_all</code> lets you consume results incrementally instead of waiting for every feature group to finish.  Each time a feature group completes, its result is yielded immediately so you can begin processing it while the remaining groups are still computing.  It accepts the same parameters as <code>run_all</code> (see <a href="../mloda-api/">mloda API</a>).</p>
-<pre><code class="language-python">from mloda.user import mloda
-
-sensor_batch = {&quot;SensorData&quot;: {&quot;timestamp&quot;: [1, 2], &quot;value&quot;: [10.5, 11.2]}}
-
-for result in mloda.stream_all(
-    [&quot;value&quot;, &quot;value__mean_aggr&quot;], compute_frameworks=[&quot;PandasDataFrame&quot;], api_data=sensor_batch
-):
-    print(result)
-</code></pre>
-<p><code>stream_all</code> returns a <code>ResultStream</code>: it iterates exactly like the old generator and additionally exposes a <code>.plan</code> property with the resolved execution plan. Planning happens eagerly, so an unresolvable request raises at the <code>stream_all</code> call, not at first iteration.</p>
-<h2 id="comparison-with-run_all">Comparison with <code>run_all</code></h2>
-<p><code>run_all</code> returns all results at once after every feature group has finished:</p>
-<pre><code class="language-python">from mloda.user import mloda
-
-results = mloda.run_all(
-    [&quot;value&quot;, &quot;value__mean_aggr&quot;], compute_frameworks=[&quot;PandasDataFrame&quot;], api_data=sensor_batch
-)
-# results is a list, all groups are already complete
-</code></pre>
-<p><code>stream_all</code> yields each result as soon as its group is done:</p>
-<pre><code class="language-python">from mloda.user import mloda
-
-
-def process(result):
-    &quot;&quot;&quot;Stands in for your own consumer.&quot;&quot;&quot;
-    print(result)
-
-
-for result in mloda.stream_all(
-    [&quot;value&quot;, &quot;value__mean_aggr&quot;], compute_frameworks=[&quot;PandasDataFrame&quot;], api_data=sensor_batch
-):
-    # each result arrives as its feature group finishes
-    process(result)
-</code></pre>
-<p>Both produce the same data: <code>list(mloda.stream_all(...))</code> is equivalent to <code>mloda.run_all(...)</code>.</p>
-<h2 id="what-streaming-means-here">What "streaming" means here</h2>
-<p>Streaming operates at <strong>feature-group granularity</strong>.  Each yielded value is a <strong>complete</strong> result table for one feature group (e.g. a <code>pa.Table</code>).  There is no partial or incremental data within a single group; you always receive the full result.</p>
-<h2 id="what-is-not-supported">What is not supported</h2>
+                <h1 id="comparison-contract">Comparison Contract</h1>
+<p>Operations that assume ordered or temporal semantics (as-of joins, equi-joins, range/min/max
+filters, time-window and forecasting reference columns) validate the columns they touch at the
+backend boundary through a shared <strong>comparison contract</strong>. This turns a class of silent-wrongness
+bugs (for example joining or comparing a timezone-aware column against a timezone-naive one) into a
+clear error instead of a cryptic backend failure or a quietly incorrect result.</p>
+<h2 id="the-pieces">The pieces</h2>
 <ul>
-<li><strong>Row-by-row streaming</strong>: individual rows are not yielded as they are computed.</li>
-<li><strong>Partial results</strong>: you cannot observe a feature group's output before it has fully completed.</li>
-<li><strong>Chunked input</strong>: a single feature group's computation is not split into smaller streaming chunks.</li>
+<li><code>ComparisonContract</code> declares the semantics an operation requires: a set of
+  <code>SemanticDimension</code> values (<code>ORDERED</code>, <code>TEMPORAL</code>, <code>NUMERIC</code>), an optional <code>unit</code>, and a
+  <code>tz_policy</code>.</li>
+<li><code>ColumnSemantics</code> is the framework-neutral view of one column: <code>is_ordered</code>, <code>is_temporal</code>,
+  <code>is_numeric</code>, <code>unit</code>, <code>is_tz_aware</code>. Each compute framework derives it from its own native
+  schema (<code>column_semantics(...)</code>).</li>
+<li><code>ComparisonContract.validate(semantics, column)</code> checks a single column against the required
+  dimensions. <code>require_compatible(left, right, ...)</code> checks two columns are comparable, using a
+  <strong>strict timezone model</strong>: mixing timezone-aware and timezone-naive temporal columns is an error,
+  and known time units must match.</li>
 </ul>
-<h2 id="when-to-use-stream_all">When to use <code>stream_all</code></h2>
-<p><code>stream_all</code> is most useful when you request <strong>many independent feature groups</strong> and want to start processing early results while the rest are still running.  Typical scenarios:</p>
-<ul>
-<li>Displaying partial dashboards or reports as data becomes available.</li>
-<li>Feeding completed features into a downstream pipeline without waiting for all groups.</li>
-<li>Reducing peak memory when results can be consumed and released one at a time.</li>
-</ul>
-<p>If you only request a single feature group, <code>stream_all</code> behaves like <code>run_all</code> since there is only one result to yield.</p>
-<h2 id="continuous-data-processing">Continuous data processing</h2>
-<p>mloda processes data in <strong>blocks</strong>, complete datasets that are computed and returned at once. Continuous processing means wrapping an outer loop around mloda's APIs, feeding micro-batches from an external source (Kafka consumer, WebSocket, file watcher, generator) into mloda one block at a time.</p>
-<p>All patterns below build on the <a href="../mloda-api/#two-phase-execution-prepare-run">two-phase execution API (<code>prepare()</code> / <code>run()</code>)</a>.</p>
-<h2 id="pattern-1-micro-batch-loop-with-prepare-run">Pattern 1: Micro-batch loop with <code>prepare()</code> / <code>run()</code></h2>
-<p>The recommended pattern for continuous processing. Call <code>prepare()</code> once to build the execution plan, then loop <code>run()</code> for each micro-batch. The plan is reused across calls, so only the first call pays the planning cost.</p>
-<pre><code class="language-python">from mloda.user import mloda
-
-def data_source():
-    &quot;&quot;&quot;Yields micro-batches from any source (Kafka, WebSocket, file watcher, generator).&quot;&quot;&quot;
-    yield {&quot;SensorData&quot;: {&quot;timestamp&quot;: [1, 2], &quot;value&quot;: [10.5, 11.2]}}
-    yield {&quot;SensorData&quot;: {&quot;timestamp&quot;: [3, 4], &quot;value&quot;: [9.8, 10.1]}}
-
-# Prepare once with a representative schema
-session = mloda.prepare(
-    [&quot;value__mean_aggr&quot;],
-    compute_frameworks=[&quot;PandasDataFrame&quot;],
-    api_data={&quot;SensorData&quot;: {&quot;timestamp&quot;: [0], &quot;value&quot;: [0.0]}},
-)
-
-# Process micro-batches
-for batch in data_source():
-    results = session.run(api_data=batch)
-    for result in results:
-        process(result)
-</code></pre>
-<p>This works with any iterable source.</p>
-<h2 id="pattern-2-micro-batch-loop-with-prepare-stream_run">Pattern 2: Micro-batch loop with <code>prepare()</code> / <code>stream_run()</code></h2>
-<p>Combines plan reuse with per-group streaming. Call <code>prepare()</code> once, then <code>stream_run()</code> for each micro-batch. Each feature group's result is yielded as soon as it completes, while the execution plan is reused across calls.</p>
-<pre><code class="language-python">from mloda.user import mloda
-
-def sensor_source():
-    yield {
-        &quot;Sensors&quot;: {
-            &quot;timestamp&quot;: [1, 2, 3],
-            &quot;temperature&quot;: [22.1, 22.5, 23.0],
-            &quot;pressure&quot;: [1013.0, 1012.0, 1014.0],
-            &quot;vibration&quot;: [0.01, 0.02, 0.015],
-        }
-    }
-
-# One name per Feature Group, so each completed group yields its own result
-features = [&quot;temperature&quot;, &quot;temperature__mean_aggr&quot;, &quot;pressure__mean_imputed&quot;]
-
-session = mloda.prepare(
-    features,
-    compute_frameworks=[&quot;PandasDataFrame&quot;],
-    api_data={&quot;Sensors&quot;: {&quot;timestamp&quot;: [0], &quot;temperature&quot;: [0.0], &quot;pressure&quot;: [0.0], &quot;vibration&quot;: [0.0]}},
-)
-
-for batch in sensor_source():
-    for result in session.stream_run(api_data=batch):
-        # Each panel updates as its feature group completes
-        process(result)
-</code></pre>
-<p><code>stream_run()</code> has the same parameters as <code>run()</code>. <code>list(session.stream_run(...))</code> produces the same results as <code>session.run(...)</code>.</p>
-<h2 id="pattern-3-one-shot-streaming-with-stream_all">Pattern 3: One-shot streaming with <code>stream_all()</code></h2>
-<p>When you don't need plan reuse and want a single-call streaming API, use <code>mloda.stream_all()</code>. It internally calls <code>prepare()</code> + <code>stream_run()</code>.</p>
-<pre><code class="language-python">from mloda.user import mloda
-
-for result in mloda.stream_all(
-    [&quot;value&quot;, &quot;value__mean_aggr&quot;], compute_frameworks=[&quot;PandasDataFrame&quot;], api_data=sensor_batch
-):
-    process(result)
-</code></pre>
-<p><code>stream_all()</code> rebuilds the execution plan on every call. For repeated calls, prefer Pattern 2.</p>
-<h2 id="choosing-between-patterns">Choosing between patterns</h2>
+<h2 id="where-it-is-applied">Where it is applied</h2>
 <table>
 <thead>
 <tr>
-<th></th>
-<th>Pattern 1: <code>prepare()</code> / <code>run()</code></th>
-<th>Pattern 2: <code>prepare()</code> / <code>stream_run()</code></th>
-<th>Pattern 3: <code>stream_all()</code></th>
+<th>Operation</th>
+<th>Check</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td><strong>Plan reuse</strong></td>
-<td>Yes</td>
-<td>Yes</td>
-<td>No</td>
+<td>As-of joins</td>
+<td>time columns must be ordered (opt-in coercion otherwise); the two time columns must be timezone-compatible</td>
 </tr>
 <tr>
-<td><strong>Result delivery</strong></td>
-<td>All at once</td>
-<td>Per feature group</td>
-<td>Per feature group</td>
+<td>Equi-joins (inner/left/right/outer)</td>
+<td>when <strong>both</strong> join keys are temporal, they must be timezone-compatible; string / numeric / id keys are never affected</td>
 </tr>
 <tr>
-<td><strong>Best for</strong></td>
-<td>High-throughput pipelines</td>
-<td>Multi-feature dashboards</td>
-<td>Quick one-shot streaming</td>
+<td>Range / min / max filters</td>
+<td>when a bound is a native <code>datetime</code>, its timezone-awareness must match the filtered column</td>
+</tr>
+<tr>
+<td>Time-window / forecasting</td>
+<td>the reference time column must be temporal and ordered</td>
 </tr>
 </tbody>
 </table>
-<h2 id="capabilities-and-limitations">Capabilities and limitations</h2>
-<p>The table below compares what mloda's block-based streaming achieves versus true row-by-row streaming frameworks (e.g. Flink, Kafka Streams).</p>
+<p>The timezone check only fires when both sides are genuinely temporal, so ordinary non-temporal
+joins and filters are never rejected.</p>
+<h2 id="per-engine-capability">Per-engine capability</h2>
+<p>What each backend can determine from its native schema. <code>column_semantics</code> is an opt-in merge- and
+filter-engine hook: an engine enables the timezone/unit guard by setting <code>provides_column_semantics =
+True</code> and implementing the hook. Engines that leave the flag <code>False</code> (for example a time-agnostic
+custom ComputeFramework) skip the guard entirely and are never forced to implement it. An engine that
+opts in but forgets to implement the hook raises a clear error rather than silently skipping
+validation. All built-in backends below opt in.</p>
 <table>
 <thead>
 <tr>
-<th>Aspect</th>
-<th>mloda (block-based)</th>
-<th>True row-by-row streaming</th>
+<th>Backend</th>
+<th style="text-align: center;">ordered / temporal / numeric</th>
+<th style="text-align: center;">timezone-awareness</th>
+<th style="text-align: center;">time unit</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td><strong>Granularity</strong></td>
-<td>Micro-batch (N rows per block)</td>
-<td>Single row / event</td>
+<td>pandas</td>
+<td style="text-align: center;">yes</td>
+<td style="text-align: center;">yes</td>
+<td style="text-align: center;">yes</td>
 </tr>
 <tr>
-<td><strong>Latency</strong></td>
-<td>Batch interval + compute time</td>
-<td>Sub-millisecond per event</td>
+<td>polars</td>
+<td style="text-align: center;">yes</td>
+<td style="text-align: center;">yes</td>
+<td style="text-align: center;">yes</td>
 </tr>
 <tr>
-<td><strong>State management</strong></td>
-<td>Stateless between batches</td>
-<td>Built-in windowing, sessionization</td>
+<td>pyarrow</td>
+<td style="text-align: center;">yes</td>
+<td style="text-align: center;">yes</td>
+<td style="text-align: center;">yes</td>
 </tr>
 <tr>
-<td><strong>Back-pressure</strong></td>
-<td>Manual (control batch size / loop rate)</td>
-<td>Framework-managed</td>
+<td>duckdb</td>
+<td style="text-align: center;">yes</td>
+<td style="text-align: center;">yes (<code>TIMESTAMP WITH TIME ZONE</code>)</td>
+<td style="text-align: center;">partial</td>
 </tr>
 <tr>
-<td><strong>Fault tolerance</strong></td>
-<td>Retry at batch level (re-run failed batch)</td>
-<td>Per-event acknowledgment, exactly-once semantics</td>
+<td>sqlite</td>
+<td style="text-align: center;">yes</td>
+<td style="text-align: center;">only for native timestamp columns</td>
+<td style="text-align: center;">only for native timestamp columns</td>
 </tr>
 <tr>
-<td><strong>Plan reuse</strong></td>
-<td>Yes, via <code>prepare()</code> / <code>run()</code></td>
-<td>N/A (continuous operators)</td>
+<td>spark</td>
+<td style="text-align: center;">yes</td>
+<td style="text-align: center;">no (deferred)</td>
+<td style="text-align: center;">no</td>
 </tr>
 <tr>
-<td><strong>Feature composition</strong></td>
-<td>Full mloda feature graph per batch</td>
-<td>Limited to streaming operator algebra</td>
+<td>python_dict</td>
+<td style="text-align: center;">yes (value scan)</td>
+<td style="text-align: center;">yes (value scan)</td>
+<td style="text-align: center;">no</td>
 </tr>
 </tbody>
 </table>
-<p>mloda is not a replacement for dedicated streaming frameworks. It is designed for scenarios where you want mloda's feature composition and dependency resolution applied to data that arrives continuously in small batches.</p>
+<h2 id="deferred">Deferred</h2>
+<ul>
+<li><strong>Value inspection on dynamically typed storage.</strong> sqlite stores datetimes as ISO-8601 text, so
+  timezone and unit are not visible from its schema; these are read only when the column is a native
+  temporal type. A value-scanning fallback is intentionally not implemented yet.</li>
+<li><strong>Unit enforcement.</strong> The time unit is derived and carried on <code>ColumnSemantics</code>, but it is not
+  enforced across sides: differing resolutions (for example nanoseconds vs microseconds) are aligned
+  natively by the backends, so <code>require_compatible</code> does not reject them. A unit is only checked when
+  a <code>ComparisonContract.unit</code> is explicitly declared (the single-column <code>validate</code> path).</li>
+</ul>
               
             </div>
           </div><footer>
     <div class="rst-footer-buttons" role="navigation" aria-label="Footer Navigation">
-        <a href="../mloda-api/" class="btn btn-neutral float-left" title="mloda API"><span class="icon icon-circle-arrow-left"></span> Previous</a>
-        <a href="../access-feature-data/" class="btn btn-neutral float-right" title="(Feature) data">Next <span class="icon icon-circle-arrow-right"></span></a>
+        <a href="../data-type-enforcement/" class="btn btn-neutral float-left" title="Data Type Enforcement"><span class="icon icon-circle-arrow-left"></span> Previous</a>
+        <a href="../troubleshooting/feature-group-resolution-errors/" class="btn btn-neutral float-right" title="Feature Group Resolution Errors">Next <span class="icon icon-circle-arrow-right"></span></a>
     </div>
 
   <hr/>
@@ -414,10 +343,10 @@ for result in mloda.stream_all(
   <span class="rst-current-version" data-toggle="rst-current-version">
     
     
-      <span><a href="../mloda-api/" style="color: #fcfcfc">&laquo; Previous</a></span>
+      <span><a href="../data-type-enforcement/" style="color: #fcfcfc">&laquo; Previous</a></span>
     
     
-      <span><a href="../access-feature-data/" style="color: #fcfcfc">Next &raquo;</a></span>
+      <span><a href="../troubleshooting/feature-group-resolution-errors/" style="color: #fcfcfc">Next &raquo;</a></span>
     
   </span>
 </div>

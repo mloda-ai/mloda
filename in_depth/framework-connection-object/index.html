@@ -179,9 +179,13 @@
                 </li>
                 <li class="toctree-l2"><a class="reference internal" href="../plugin-loader/">Plugin Loader</a>
                 </li>
+                <li class="toctree-l2"><a class="reference internal" href="../plugin_registry/">Plugin Registry</a>
+                </li>
     </ul>
                   </li>
                   <li class="toctree-l1"><a class="reference internal" href="../data-type-enforcement/">Data Type Enforcement</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../comparison-contract/">Comparison Contract</a>
                   </li>
                   <li class="toctree-l1"><a class="reference internal" >Troubleshooting</a>
     <ul>
@@ -258,7 +262,7 @@
 <h2 id="how-it-works">How it Works</h2>
 <h3 id="in-computeframework-base-class">In ComputeFramework Base Class</h3>
 <p>The base <code>ComputeFramework</code> class provides methods to manage connection objects:</p>
-<pre><code class="language-python">class ComputeFramework:
+<pre><code class="language-py">class ComputeFramework:
     def __init__(self) -&gt; None:
         # Connection object for frameworks that need persistent connections
         self.framework_connection_object: Optional[Any] = None
@@ -277,7 +281,7 @@
 </code></pre>
 <h3 id="in-framework-transformers">In Framework Transformers</h3>
 <p>Framework transformers receive the connection object as a parameter:</p>
-<pre><code class="language-python">@classmethod
+<pre><code class="language-py">@classmethod
 def transform_other_fw_to_fw(cls, data: Any, framework_connection_object: Optional[Any] = None) -&gt; Any:
     &quot;&quot;&quot;
     Transform data from the secondary framework to the primary framework.
@@ -291,7 +295,9 @@ def transform_other_fw_to_fw(cls, data: Any, framework_connection_object: Option
     &quot;&quot;&quot;
 </code></pre>
 <h3 id="using-duckdb-with-mloda-api">Using DuckDB with mloda API</h3>
-<pre><code class="language-python">from mloda.user import mloda
+<p>The API examples below are sketches, not executed: <code>feature1</code> and <code>feature2</code> stand for columns your own
+tables or readers provide, so a connection alone does not make the request resolve.</p>
+<pre><code class="language-py">from mloda.user import mloda
 from mloda.user import DataAccessCollection
 import duckdb
 
@@ -309,7 +315,7 @@ result = mloda.run_all(
 )
 </code></pre>
 <h3 id="using-spark-with-mloda-api">Using Spark with mloda API</h3>
-<pre><code class="language-python">from mloda.user import mloda
+<pre><code class="language-py">from mloda.user import mloda
 from mloda.user import DataAccessCollection
 from pyspark.sql import SparkSession
 
@@ -332,7 +338,7 @@ result = mloda.run_all(
 </code></pre>
 <h3 id="duckdb-transformer-example">DuckDB Transformer Example</h3>
 <p>The <code>DuckDBPyarrowTransformer</code> requires a connection object for PyArrow → DuckDB transformations:</p>
-<pre><code class="language-python">class DuckDBPyarrowTransformer(BaseTransformer):
+<pre><code class="language-py">class DuckDBPyarrowTransformer(BaseTransformer):
     @classmethod
     def transform_other_fw_to_fw(cls, data: Any, framework_connection_object: Optional[Any] = None) -&gt; Any:
         &quot;&quot;&quot;Transform a PyArrow Table to a DuckDB relation.&quot;&quot;&quot;
@@ -350,7 +356,7 @@ result = mloda.run_all(
 <ol>
 <li><strong>Override <code>set_framework_connection_object</code></strong>:</li>
 </ol>
-<pre><code class="language-python">def set_framework_connection_object(self, framework_connection_object: Optional[Any] = None) -&gt; None:
+<pre><code class="language-py">def set_framework_connection_object(self, framework_connection_object: Optional[Any] = None) -&gt; None:
     if framework_connection_object is not None:
         if not isinstance(framework_connection_object, ExpectedConnectionType):
             raise ValueError(f&quot;Expected connection type, got {type(framework_connection_object)}&quot;)
@@ -364,27 +370,27 @@ result = mloda.run_all(
 <ol>
 <li><strong>Accept the connection object parameter</strong>:</li>
 </ol>
-<pre><code class="language-python">@classmethod
+<pre><code class="language-py">@classmethod
 def transform_other_fw_to_fw(cls, data: Any, framework_connection_object: Optional[Any] = None) -&gt; Any:
     # Implementation here
 </code></pre>
 <ol>
 <li><strong>Validate the connection object</strong> when required:</li>
 </ol>
-<pre><code class="language-python">if framework_connection_object is None:
+<pre><code class="language-py">if framework_connection_object is None:
     raise ValueError(&quot;Connection object is required for this transformation.&quot;)
 </code></pre>
 <ol>
 <li><strong>Use the connection object</strong> for the transformation:</li>
 </ol>
-<pre><code class="language-python">return framework_connection_object.from_other_format(data)
+<pre><code class="language-py">return framework_connection_object.from_other_format(data)
 </code></pre>
 <h2 id="troubleshooting">Troubleshooting</h2>
 <h3 id="common-issues">Common Issues</h3>
 <ol>
 <li><strong>Missing Connection Object</strong>:
    <code>ValueError: A DuckDB connection object is required for this transformation.</code>
-   <strong>Solution</strong>: Ensure you're providing a connection object when using stateful frameworks. Currently, parent features are not receiving the connection details automatic. Thus, you might need to give them a second time to root features!</li>
+   <strong>Solution</strong>: Ensure you're providing a connection object when using stateful frameworks. Currently, parent features are not receiving the connection details automatically. Thus, you might need to give them a second time to root features!</li>
 </ol>
 <h2 id="summary">Summary</h2>
 <p>The Framework Connection Object is a powerful feature that enables mloda to work with stateful compute frameworks while maintaining the flexibility to work with stateless frameworks as well. By understanding when and how to use connection objects, you can:</p>

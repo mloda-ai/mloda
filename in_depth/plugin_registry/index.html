@@ -1,0 +1,437 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+    <meta charset="utf-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+      <link rel="shortcut icon" href="../../img/favicon.ico" />
+    <title>Plugin Registry - mloda docs</title>
+    <link rel="stylesheet" href="../../css/theme.css" />
+    <link rel="stylesheet" href="../../css/theme_extra.css" />
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/github.min.css" />
+    
+      <script>
+        // Current page data
+        var mkdocs_page_name = "Plugin Registry";
+        var mkdocs_page_input_path = "in_depth/plugin_registry.md";
+        var mkdocs_page_url = null;
+      </script>
+    
+    <!--[if lt IE 9]>
+      <script src="../../js/html5shiv.min.js"></script>
+    <![endif]-->
+      <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/highlight.min.js"></script>
+      <script>hljs.highlightAll();</script> 
+</head>
+
+<body class="wy-body-for-nav" role="document">
+
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side stickynav">
+    <div class="wy-side-scroll">
+      <div class="wy-side-nav-search">
+          <a href="../.." class="icon icon-home"> mloda docs
+        </a><div role="search">
+  <form id ="rtd-search-form" class="wy-form" action="../../search.html" method="get">
+      <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" title="Type search term here" />
+  </form>
+</div>
+      </div>
+
+      <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption"><span class="caption-text">Home</span></p>
+              <ul>
+                  <li class="toctree-l1"><a class="reference internal" href="../..">mloda</a>
+                  </li>
+              </ul>
+              <p class="caption"><span class="caption-text">mloda Concepts</span></p>
+              <ul>
+                  <li class="toctree-l1"><a class="reference internal" href="../../examples/mloda_basics/0_table_of_content/">Table of Content</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../examples/mloda_basics/1_ml_mloda_intro/">Intro to the core interfaces of mloda</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../examples/mloda_basics/2_ml_advantage_process_focus/">What makes mloda unique?</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../examples/mloda_basics/3_ml_data_feature_feature_groups/">Data, Feature, FeatureSets and FeatureGroups in mloda</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../examples/mloda_basics/4_ml_data_providers_user_steward/">Provider, User, Steward in mloda</a>
+                  </li>
+              </ul>
+              <p class="caption"><span class="caption-text">Getting Started</span></p>
+              <ul>
+                  <li class="toctree-l1"><a class="reference internal" href="../../chapter1/installation/">Installation</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../chapter1/api-request/">API Request</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../chapter1/feature-groups/">Feature Groups</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../chapter1/compute-frameworks/">Compute Frameworks</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../chapter1/extender/">Extender</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../examples/base_usage/">mloda demo: How can we make feature engineering shareable?</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../examples/sklearn_integration_basic/">mloda + scikit-learn Integration: Basic Example</a>
+                  </li>
+              </ul>
+              <p class="caption"><span class="caption-text">In Depth - Basics</span></p>
+              <ul>
+                  <li class="toctree-l1"><a class="reference internal" href="../mloda-api/">mloda API</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../streaming/">Streaming</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../access-feature-data/">(Feature) data</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../join_data/">Join data</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../filter_data/">Filter data</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../mask_engine/">Mask Engine</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../artifacts/">Artifacts</a>
+                  </li>
+              </ul>
+              <p class="caption"><span class="caption-text">In Depth - Advanced</span></p>
+              <ul class="current">
+                  <li class="toctree-l1"><a class="reference internal" href="../data-quality/">Data quality</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../domain/">Domain concept</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../data-access-patterns/">Data Access Patterns</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../named-data-access-handles/">Named Data Access Handles</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" >Compute Frameworks</a>
+    <ul>
+                <li class="toctree-l2"><a class="reference internal" href="../framework-transformers/">Framework Transformers</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../compute-framework-integration/">Compute Framework Integration</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../framework-connection-object/">Framework Connection Object</a>
+                </li>
+    </ul>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" >Feature Groups</a>
+    <ul>
+                <li class="toctree-l2"><a class="reference internal" href="../feature-config/">Feature Configuration</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../feature-chain-parser/">Feature Chain Parser</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../feature-group-matching/">Feature Group Matching</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../property-mapping/">PROPERTY_MAPPING</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../feature-group-testing/">Feature Group Testing</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../feature-group-version/">Feature Group Versioning</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../multiple_result_columns/">Multiple Result Columns</a>
+                </li>
+    </ul>
+                  </li>
+                  <li class="toctree-l1 current"><a class="reference internal current" >Plugin System</a>
+    <ul class="current">
+                <li class="toctree-l2"><a class="reference internal" href="../discover-plugins/">Discover Plugins</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../plugin-loader/">Plugin Loader</a>
+                </li>
+                <li class="toctree-l2 current"><a class="reference internal current" href="#">Plugin Registry</a>
+    <ul class="current">
+    <li class="toctree-l3"><a class="reference internal" href="#registered-vs-ad-hoc-classes">Registered vs Ad-Hoc Classes</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#contract-tests-over-registered-plugins">Contract Tests over Registered Plugins</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#manual-registration-notebooks-third-party-packages">Manual Registration (Notebooks, Third-Party Packages)</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#strict-mode">Strict Mode</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#governance">Governance</a>
+        <ul>
+    <li class="toctree-l4"><a class="reference internal" href="#plugin-policy">Plugin Policy</a>
+    </li>
+    <li class="toctree-l4"><a class="reference internal" href="#approval-metadata">Approval Metadata</a>
+    </li>
+    <li class="toctree-l4"><a class="reference internal" href="#registration-time-enforcement">Registration-Time Enforcement</a>
+    </li>
+    <li class="toctree-l4"><a class="reference internal" href="#dual-import-caveat">Dual-Import Caveat</a>
+    </li>
+    <li class="toctree-l4"><a class="reference internal" href="#registry-injection">Registry Injection</a>
+    </li>
+        </ul>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#test-isolation-for-plugin-authors">Test Isolation for Plugin Authors</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#related-documentation">Related Documentation</a>
+    </li>
+    </ul>
+                </li>
+    </ul>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../data-type-enforcement/">Data Type Enforcement</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../comparison-contract/">Comparison Contract</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" >Troubleshooting</a>
+    <ul>
+                <li class="toctree-l2"><a class="reference internal" href="../troubleshooting/feature-group-resolution-errors/">Feature Group Resolution Errors</a>
+                </li>
+    </ul>
+                  </li>
+              </ul>
+              <p class="caption"><span class="caption-text">Development</span></p>
+              <ul>
+                  <li class="toctree-l1"><a class="reference internal" href="../../development/">Contributors</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../license/">License - Apache 2.0</a>
+                  </li>
+              </ul>
+              <p class="caption"><span class="caption-text">Need Help?</span></p>
+              <ul>
+                  <li class="toctree-l1"><a class="reference internal" href="../../faq/">FAQ</a>
+                  </li>
+              </ul>
+      </div>
+    </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+      <nav class="wy-nav-top" role="navigation" aria-label="Mobile navigation menu">
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../..">mloda docs</a>
+        
+      </nav>
+      <div class="wy-nav-content">
+        <div class="rst-content"><div role="navigation" aria-label="breadcrumbs navigation">
+  <ul class="wy-breadcrumbs">
+    <li><a href="../.." class="icon icon-home" aria-label="Docs"></a></li>
+          <li class="breadcrumb-item">In Depth - Advanced</li>
+          <li class="breadcrumb-item">Plugin System</li>
+      <li class="breadcrumb-item active">Plugin Registry</li>
+    <li class="wy-breadcrumbs-aside">
+    </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+            <div class="section" itemprop="articleBody">
+              
+                <h1 id="plugin-registry">Plugin Registry</h1>
+<p>The plugin registry is an explicit catalog of FeatureGroup, ComputeFramework, and Extender classes, keyed by a string name (default: <code>"module:qualname"</code>). The <a href="../plugin-loader/">PluginLoader</a> feeds it automatically: every concrete plugin class defined in a loaded module is registered with provenance <code>source="loader"</code>, manual registrations carry <code>source="manual"</code>, and classes discovered from installed <a href="../plugin-loader/#entry-points">entry-point manifests</a> carry <code>source="entry_point"</code>. Provenance is the <code>PluginSource</code> enum on each entry (<code>get_entry(key).source</code>); <code>register()</code> accepts the enum or its string value and rejects anything else with a <code>ValueError</code>. Abstract classes (<code>inspect.isabstract</code>) are infrastructure, never plugins: the loader skips them, and strict and warn modes ignore them. Registries are plain instances, and the engine and catalog APIs use the process-global default, <code>PluginRegistry.default()</code>.</p>
+<h2 id="registered-vs-ad-hoc-classes">Registered vs Ad-Hoc Classes</h2>
+<p>Two kinds of plugin classes exist at runtime:</p>
+<ul>
+<li><strong>Registered</strong>: classes defined in modules loaded by <code>PluginLoader</code>, plus anything registered manually via <code>register_plugin()</code>.</li>
+<li><strong>Ad-hoc</strong>: any other subclass, for example a notebook cell, a test double, or a class in a module that was imported but not loaded.</li>
+</ul>
+<p>Registration is additive. Defining a subclass and importing its module keeps working exactly as before:</p>
+<ul>
+<li><strong>Catalog APIs</strong>: <code>list_registered()</code> reports only registered classes. The <code>get_*_docs()</code> functions keep walking all subclasses by default and accept <code>registered_only=True</code> to restrict the result to the registry.</li>
+<li><strong>Engine resolution</strong>: while strict mode is <code>"off"</code> or <code>"warn"</code> (see below), the engine resolves registered plugins plus local ad-hoc subclasses. Only <code>"strict"</code> filters resolution to registered FeatureGroups.</li>
+</ul>
+<pre><code class="language-python">from mloda.provider import FeatureGroup
+from mloda.user import PluginLoader, list_registered
+
+PluginLoader.all()
+
+registered = list_registered(FeatureGroup)
+assert registered
+
+class AdHocFeatureGroup(FeatureGroup):
+    &quot;&quot;&quot;Defined locally, for example in a notebook cell; never auto-registered.&quot;&quot;&quot;
+
+assert AdHocFeatureGroup not in list_registered(FeatureGroup)
+</code></pre>
+<h2 id="contract-tests-over-registered-plugins">Contract Tests over Registered Plugins</h2>
+<p><code>list_registered()</code> returns the classes of one plugin base type, sorted by registry key. That makes project-wide contract tests a simple loop: load your plugins, then assert a property on every registered class.</p>
+<pre><code class="language-python">from mloda.provider import FeatureGroup
+from mloda.user import PluginLoader, list_registered
+
+PluginLoader.all()
+
+for fg in list_registered(FeatureGroup):
+    name = fg.get_class_name()
+    assert isinstance(name, str)
+    assert name
+</code></pre>
+<p>Replace the assertion with whatever your project requires of every plugin: a docstring, a naming convention, a version scheme.</p>
+<h2 id="manual-registration-notebooks-third-party-packages">Manual Registration (Notebooks, Third-Party Packages)</h2>
+<p>Classes that do not live in loaded plugin modules opt in with <code>register_plugin()</code>. Registering the same class twice is a no-op. Registering a <em>different</em> class under an already taken key raises <code>PluginRegistryCollisionError</code>; this happens when a notebook cell that defines a class is edited and re-run, because the re-run creates a new class object under the same key. Pass <code>replace=True</code> to accept the newest definition. <code>unregister()</code> removes an entry by key.</p>
+<pre><code class="language-python">from mloda.provider import FeatureGroup
+from mloda.steward import PluginRegistry
+from mloda.user import PluginRegistryCollisionError, register_plugin
+
+class MyFeatureGroup(FeatureGroup):
+    &quot;&quot;&quot;First definition.&quot;&quot;&quot;
+
+key = register_plugin(MyFeatureGroup)
+assert PluginRegistry.default().get(key) is MyFeatureGroup
+
+class MyFeatureGroup(FeatureGroup):
+    &quot;&quot;&quot;Edited and re-run, as in a notebook cell: a new class under the same key.&quot;&quot;&quot;
+
+try:
+    register_plugin(MyFeatureGroup)
+    raise AssertionError(&quot;expected a collision&quot;)
+except PluginRegistryCollisionError:
+    pass
+
+register_plugin(MyFeatureGroup, replace=True)
+assert PluginRegistry.default().get(key) is MyFeatureGroup
+
+PluginRegistry.default().unregister(key)
+</code></pre>
+<p><code>register_plugin()</code> also accepts <code>name=</code> for a custom key, for example <code>register_plugin(MyFeatureGroup, name="my_pkg:MyFeatureGroup")</code>. A class holds exactly one key: registering an already registered class under a second key raises <code>PluginRegistryCollisionError</code> naming the existing key; rename by unregistering the existing key first.</p>
+<p>The registry does not watch <code>importlib.reload()</code>: reloading a module creates new class objects while the registry keeps the old ones, so strict mode and <code>registered_only=True</code> would treat the reloaded classes as unregistered. After a reload, re-run the <code>PluginLoader</code> scope that covers the module (loading is idempotent and re-registers) or call <code>register_plugin(..., replace=True)</code> for the affected classes.</p>
+<h2 id="strict-mode">Strict Mode</h2>
+<p>Strict mode controls how the engine treats unregistered plugins during resolution. It is tri-state:</p>
+<ul>
+<li><code>"off"</code> (default): resolution behaves as before; the registry is informational.</li>
+<li><code>"warn"</code>: resolution is unchanged, but every unregistered FeatureGroup is logged with a warning naming the class.</li>
+<li><code>"strict"</code>: resolution only considers FeatureGroups registered in the default registry; unregistered ad-hoc classes are filtered out.</li>
+</ul>
+<p>Set it per run on the <code>PluginCollector</code> you pass into the API (<code>plugin_collector=</code> keyword):</p>
+<pre><code class="language-python">from mloda.user import PluginCollector
+
+plugin_collector = PluginCollector().set_strict_mode(&quot;warn&quot;)
+</code></pre>
+<p>Or process-wide via the environment variable, which also applies when no <code>PluginCollector</code> is passed:</p>
+<pre><code class="language-bash">export MLODA_PLUGIN_REGISTRY_STRICT=warn
+</code></pre>
+<p>An explicit <code>set_strict_mode()</code> overrides the environment variable; invalid values raise a <code>ValueError</code>. Environment variable values are case-insensitive (<code>WARN</code> works); <code>set_strict_mode()</code> accepts only the exact lowercase values.</p>
+<p>Three behavioral notes:</p>
+<ul>
+<li>Strict mode governs engine resolution only. The catalog APIs (<code>get_*_docs()</code>, <code>list_registered()</code>) never consult strict mode: the docs functions keep walking all subclasses unless you pass <code>registered_only=True</code>, so in strict mode the catalog can show plugins the engine will not resolve. Pass <code>registered_only=True</code> to keep catalog and engine views consistent.</li>
+<li>In <code>"warn"</code> mode, each unregistered class is reported once per process, not once per run, so long-running services do not repeat identical warnings forever.</li>
+<li>In <code>"strict"</code> mode, FeatureGroups explicitly enabled on the <code>PluginCollector</code> but missing from the registry are dropped with a warning naming them; if strict filtering removes every FeatureGroup, the run fails with an error that points to <code>register_plugin()</code> and the environment variable.</li>
+</ul>
+<p>Strict mode covers all three plugin kinds:</p>
+<ul>
+<li><strong>FeatureGroups</strong>: resolution filtering as described above; this behavior is unchanged.</li>
+<li><strong>ComputeFrameworks</strong>: requested frameworks must be registered; under <code>"strict"</code> unregistered ones are dropped (the run fails if none survive). Frameworks that ship in the mloda wheel (package root <code>mloda</code> or <code>mloda_plugins</code>, both ship together) are exempt as infrastructure, like abstract classes; third-party packages installed into the shared <code>mloda.*</code> namespace (<code>mloda.community</code>, <code>mloda.enterprise</code>, <code>mloda.registry</code>, <code>mloda.testing</code>) are not in the wheel, so they get no exemption and stay registry-gated.</li>
+<li><strong>Extenders</strong>: function-extender instances passed into the runner must have registered classes; under <code>"strict"</code> unregistered ones are dropped with a warning naming them, under <code>"warn"</code> they are logged once per process.</li>
+</ul>
+<p>Recommended rollout for deployments: stay on <code>"off"</code>, switch CI or staging to <code>"warn"</code> and watch the logs for "not registered" warnings, then move to <code>"strict"</code> once they are gone. Packages that declare <a href="../plugin-loader/#entry-points">entry points</a> register automatically, so the usual path is: add entry-point manifests to your installed plugin packages, watch the warn logs go quiet, then ramp to strict. This repository's own CI (tox) runs with <code>MLODA_PLUGIN_REGISTRY_STRICT=warn</code>.</p>
+<h2 id="governance">Governance</h2>
+<p>Stewards can install a <code>PluginPolicy</code> on a registry to control what may register. All governance symbols (<code>PluginPolicy</code>, <code>ApprovalStatus</code>, <code>PluginPolicyViolationError</code>, <code>PluginRegistry</code>) are exported from <code>mloda.steward</code>.</p>
+<h3 id="plugin-policy">Plugin Policy</h3>
+<p><code>PluginPolicy</code> is a frozen dataclass evaluated deny-first on every registration: <code>denied_keys</code> first, then <code>denied_module_prefixes</code>, then the allowlist (<code>allowed_keys</code> admits individual keys; <code>allowed_module_prefixes</code>, when not <code>None</code>, requires the class module to match a prefix), then <code>require_approval</code>. <code>allows(key, module, approval)</code> exposes the decision directly.</p>
+<p>Module-prefix matching is boundary-aware on both the denied and allowed sides: the prefix <code>"acme.plugins"</code> matches the module <code>acme.plugins</code> itself and submodules such as <code>acme.plugins.churn</code>, but never a sibling like <code>acme.plugins_evil</code>. The trailing-dot form <code>"acme.plugins."</code> matches submodules only. For <code>allowed_module_prefixes</code>, <code>None</code> (the default) leaves modules unrestricted, while the empty tuple <code>()</code> denies everything that is not in <code>allowed_keys</code>.</p>
+<p>Enforcement is uniform across provenance: a denied <code>register()</code> raises <code>PluginPolicyViolationError</code> naming the would-be key, whether the source is manual, loader, or entry-point. The discovery funnels (the loader's module scans and entry-point loading) catch that denial themselves: they skip the denied class, leave it out of their returned keys, and log one warning per denied key per registry instance, so an installed policy never breaks <code>PluginLoader.all()</code>.</p>
+<pre><code class="language-python">from mloda.provider import FeatureGroup
+from mloda.steward import ApprovalStatus, PluginPolicy, PluginRegistry
+
+class GovernedFeatureGroup(FeatureGroup):
+    &quot;&quot;&quot;Allowed below via its canonical module prefix.&quot;&quot;&quot;
+
+registry = PluginRegistry()
+policy = PluginPolicy(allowed_module_prefixes=(GovernedFeatureGroup.__module__,))
+registry.set_policy(policy)
+
+# Outside the allowlist: allows() is False, and register() of such a
+# class raises PluginPolicyViolationError, regardless of source.
+assert not policy.allows(&quot;acme.plugins:Alien&quot;, &quot;acme.plugins&quot;, ApprovalStatus.UNREVIEWED)
+
+# Inside the allowlist: registration succeeds.
+key = registry.register(GovernedFeatureGroup)
+assert registry.get(key) is GovernedFeatureGroup
+</code></pre>
+<p><code>set_policy(None)</code> removes the policy; the installed policy is readable via the <code>policy</code> property.</p>
+<h3 id="approval-metadata">Approval Metadata</h3>
+<p>Every entry carries an <code>owner</code> (default <code>None</code>) and an <code>ApprovalStatus</code> (<code>unreviewed</code>, <code>approved</code>, <code>rejected</code>; default <code>unreviewed</code>). <code>register()</code> accepts <code>owner=</code> and <code>approval=</code>, and <code>set_approval()</code> updates an existing entry. A policy with <code>require_approval=True</code> admits only plugins registered as approved.</p>
+<pre><code class="language-python">from mloda.provider import FeatureGroup
+from mloda.steward import ApprovalStatus, PluginPolicy, PluginRegistry
+
+class ReviewedFeatureGroup(FeatureGroup):
+    &quot;&quot;&quot;Registered pre-approved by the data platform team.&quot;&quot;&quot;
+
+registry = PluginRegistry()
+registry.set_policy(PluginPolicy(require_approval=True))
+
+key = registry.register(ReviewedFeatureGroup, owner=&quot;data-platform&quot;, approval=&quot;approved&quot;)
+entry = registry.get_entry(key)
+assert entry.owner == &quot;data-platform&quot;
+assert entry.approval is ApprovalStatus.APPROVED
+
+# Enforcement is registration-time only: rejecting later does not evict the entry.
+registry.set_approval(key, &quot;rejected&quot;)
+assert registry.get(key) is ReviewedFeatureGroup
+
+# The steward removes it explicitly.
+registry.unregister(key)
+assert registry.get(key) is None
+</code></pre>
+<h3 id="registration-time-enforcement">Registration-Time Enforcement</h3>
+<p>A policy is checked only when <code>register()</code> runs. Installing or tightening a policy later does not evict entries that are already registered: audit them via <code>snapshot()</code> and remove offenders with <code>unregister()</code>. The same applies to approval: <code>set_approval(key, "rejected")</code> records the decision but keeps the entry until the steward unregisters it.</p>
+<p>The policy gates registration only, not import: <code>PluginLoader.all()</code> imports entry-point manifest modules before the policy applies, so installing a package implies trusting its import side effects. A policy keeps denied plugins out of the registry; it is not a sandbox for untrusted code.</p>
+<h3 id="dual-import-caveat">Dual-Import Caveat</h3>
+<p>A module importable under two paths (for example <code>my_pkg.churn</code> via the installed package and <code>churn</code> via a stray <code>sys.path</code> entry) produces two distinct class objects and therefore two registry keys. A key-based allowlist cannot tell them apart. Allowlist by canonical module prefix (<code>allowed_module_prefixes=("my_pkg.",)</code>) so only classes imported under the canonical path register.</p>
+<h3 id="registry-injection">Registry Injection</h3>
+<p>By default the engine consults <code>PluginRegistry.default()</code>. Multi-tenant processes can give each run its own registry via <code>PluginCollector().set_registry()</code>; strict and warn modes then consult the injected registry instead of the process-global default.</p>
+<pre><code class="language-python">from mloda.steward import PluginRegistry
+from mloda.user import PluginCollector
+
+tenant_registry = PluginRegistry()
+plugin_collector = PluginCollector().set_strict_mode(&quot;strict&quot;).set_registry(tenant_registry)
+</code></pre>
+<p>Pass the collector into the API via the <code>plugin_collector=</code> keyword, as with strict mode.</p>
+<h2 id="test-isolation-for-plugin-authors">Test Isolation for Plugin Authors</h2>
+<p>Manual registrations mutate the process-global default registry, so tests can leak state into each other. mloda ships a pytest plugin (registered through the <code>pytest11</code> entry point in its packaging) that provides the <code>isolated_plugin_registry</code> fixture: it snapshots the default registry and its installed policy before each test and restores both afterwards, also resetting the policy-denial warning dedup. Any project with mloda installed gets the fixture automatically; no <code>conftest.py</code> re-export is needed. Request it in tests that register plugins:</p>
+<pre><code class="language-py"># test_my_plugin.py
+def test_my_feature_group_registration(isolated_plugin_registry):
+    key = isolated_plugin_registry.register(MyFeatureGroup)
+    assert isolated_plugin_registry.get(key) is MyFeatureGroup
+</code></pre>
+<p>The fixture yields <code>PluginRegistry.default()</code>, so registrations made through it (or through plain <code>register_plugin()</code>) are rolled back on teardown.</p>
+<h2 id="related-documentation">Related Documentation</h2>
+<ul>
+<li><a href="../plugin-loader/">Plugin Loader</a></li>
+<li><a href="../discover-plugins/">Discover Plugins</a></li>
+</ul>
+              
+            </div>
+          </div><footer>
+    <div class="rst-footer-buttons" role="navigation" aria-label="Footer Navigation">
+        <a href="../plugin-loader/" class="btn btn-neutral float-left" title="Plugin Loader"><span class="icon icon-circle-arrow-left"></span> Previous</a>
+        <a href="../data-type-enforcement/" class="btn btn-neutral float-right" title="Data Type Enforcement">Next <span class="icon icon-circle-arrow-right"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <!-- Copyright etc -->
+  </div>
+
+  Built with <a href="https://www.mkdocs.org/">MkDocs</a> using a <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>.
+</footer>
+          
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+
+  <div class="rst-versions" role="note" aria-label="Versions">
+  <span class="rst-current-version" data-toggle="rst-current-version">
+    
+    
+      <span><a href="../plugin-loader/" style="color: #fcfcfc">&laquo; Previous</a></span>
+    
+    
+      <span><a href="../data-type-enforcement/" style="color: #fcfcfc">Next &raquo;</a></span>
+    
+  </span>
+</div>
+    <script src="../../js/jquery-3.6.0.min.js"></script>
+    <script>var base_url = "../..";</script>
+    <script src="../../js/theme_extra.js"></script>
+    <script src="../../js/theme.js"></script>
+      <script src="../../search/main.js"></script>
+    <script>
+        jQuery(function () {
+            SphinxRtdTheme.Navigation.enable(true);
+        });
+    </script>
+
+</body>
+</html>

@@ -135,6 +135,8 @@
     </li>
         </ul>
     </li>
+    <li class="toctree-l3"><a class="reference internal" href="#reading-the-mloda-package-version">Reading the mloda Package Version</a>
+    </li>
     <li class="toctree-l3"><a class="reference internal" href="#benefits">Benefits</a>
     </li>
     </ul>
@@ -149,9 +151,13 @@
                 </li>
                 <li class="toctree-l2"><a class="reference internal" href="../plugin-loader/">Plugin Loader</a>
                 </li>
+                <li class="toctree-l2"><a class="reference internal" href="../plugin_registry/">Plugin Registry</a>
+                </li>
     </ul>
                   </li>
                   <li class="toctree-l1"><a class="reference internal" href="../data-type-enforcement/">Data Type Enforcement</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../comparison-contract/">Comparison Contract</a>
                   </li>
                   <li class="toctree-l1"><a class="reference internal" >Troubleshooting</a>
     <ul>
@@ -216,6 +222,16 @@ def version(cls) -&gt; str:
     &quot;&quot;&quot;
     return BaseFeatureGroupVersion.version(cls)
 </code></pre>
+<h2 id="reading-the-mloda-package-version">Reading the mloda Package Version</h2>
+<p>Three supported programmatic paths, all backed by <code>mloda.core.version.get_mloda_version()</code>:</p>
+<pre><code class="language-python">from mloda.user import __version__          # also on mloda.provider and mloda.steward
+from mloda.core.version import get_mloda_version
+from mloda.provider import BaseFeatureGroupVersion
+
+get_mloda_version()                          # memoized, &quot;0.0.0&quot; if not installed
+BaseFeatureGroupVersion.mloda_version()      # same value
+</code></pre>
+<p>There is no <code>mloda.__version__</code>: <code>mloda</code> is a PEP 420 namespace root with no <code>__init__.py</code>, so plugin packages can add subpackages under it.</p>
 <h2 id="benefits">Benefits</h2>
 <ul>
 <li><strong>Change Detection</strong>: Easily detect when a feature group implementation has changed</li>

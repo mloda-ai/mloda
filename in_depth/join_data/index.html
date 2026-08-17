@@ -92,6 +92,8 @@
     </li>
     <li class="toctree-l2"><a class="reference internal" href="#convenience-_on-methods">Convenience _on Methods</a>
     </li>
+    <li class="toctree-l2"><a class="reference internal" href="#star-joins-linkstar">Star Joins (Link.star)</a>
+    </li>
     <li class="toctree-l2"><a class="reference internal" href="#same-class-joins-with-discriminators">Same-Class Joins with Discriminators</a>
     </li>
     <li class="toctree-l2"><a class="reference internal" href="#polymorphic-link-matching">Polymorphic Link Matching</a>
@@ -153,9 +155,13 @@
                 </li>
                 <li class="toctree-l2"><a class="reference internal" href="../plugin-loader/">Plugin Loader</a>
                 </li>
+                <li class="toctree-l2"><a class="reference internal" href="../plugin_registry/">Plugin Registry</a>
+                </li>
     </ul>
                   </li>
                   <li class="toctree-l1"><a class="reference internal" href="../data-type-enforcement/">Data Type Enforcement</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../comparison-contract/">Comparison Contract</a>
                   </li>
                   <li class="toctree-l1"><a class="reference internal" >Troubleshooting</a>
     <ul>
@@ -208,7 +214,7 @@
 <li><strong>Same Feature Group, Different Feature Options</strong>: Integrating data from the same feature group configured with different feature options.</li>
 <li><strong>Multiple Links on the Same Compute Framework</strong>: Joining a single base FG to multiple right-side FGs (same class, subclasses, or distinct) all within the same compute framework.</li>
 </ul>
-<p><em><strong>If we have a feature, which is dependent on a aforementioned setup,</strong></em></p>
+<p><em><strong>If we have a feature, which is dependent on an aforementioned setup,</strong></em></p>
 <ul>
 <li>we need to define a Link,</li>
 <li>and the ComputeFramework must support the according merge!</li>
@@ -243,7 +249,7 @@ is_a_part_of = single_column_index.is_a_part_of(multi_column_index) # Returns Tr
 <li>Inner Join,</li>
 <li>Left Join,</li>
 <li>Outer Join,</li>
-<li>Right Join (use sparingly; prefer left joins when possible).</li>
+<li>Right Join (use sparingly; prefer left joins when possible). The declared left feature group's data is the merge engine's left argument, whichever compute framework the join executes in.</li>
 <li>ASOF Join (point-in-time / as-of: equi match on the by-keys, nearest time match on the time columns).</li>
 </ul>
 <pre><code class="language-python">from enum import Enum
@@ -269,22 +275,41 @@ CI</strong> (requires <code>JAVA_HOME</code>); validate it yourself before relyi
 engine and does not support joins.</p>
 <p>Cross-backend caveats to be aware of:</p>
 <ul>
-<li><strong><code>direction='nearest'</code></strong> is supported on <code>pandas</code>, <code>polars</code>, <code>pyarrow</code>, and <code>python_dict</code>. The
-    SQL/Spark backends (<code>duckdb</code>, <code>sqlite</code>, <code>spark</code>) raise <code>ValueError</code> for <code>nearest</code>, as there is
-    no clean SQL form.</li>
+<li><strong><code>direction='nearest'</code></strong> is supported on <code>pandas</code>, <code>polars</code>, and <code>python_dict</code>. <code>pyarrow</code> and the
+    SQL/Spark backends (<code>duckdb</code>, <code>sqlite</code>, <code>spark</code>) raise <code>ValueError</code> for <code>nearest</code>: Acero's
+    <code>join_asof</code> and the SQL forms express only a directional (forward/backward) match.</li>
 <li><strong><code>tolerance</code></strong> accepts <code>float | int | timedelta</code>. A <code>timedelta</code> tolerance is forwarded natively
-    by <code>pandas</code>/<code>polars</code>/<code>pyarrow</code>, but the SQL/Spark backends (<code>duckdb</code>, <code>sqlite</code>, <code>spark</code>) cannot
-    derive a numeric tolerance from a <code>timedelta</code> without knowing the time column's storage and will
-    raise <code>ValueError</code>; provide a numeric tolerance (e.g. epoch seconds matching the time column).
-    This is enforced inside the merge engine at run time, not at <code>Link.asof(...)</code> construction.</li>
+    only by <code>pandas</code>/<code>polars</code>/<code>python_dict</code>. <code>pyarrow</code> and the SQL/Spark backends (<code>duckdb</code>, <code>sqlite</code>,
+    <code>spark</code>) cannot derive a numeric tolerance from a <code>timedelta</code> and raise <code>ValueError</code>; provide a
+    numeric tolerance (e.g. epoch seconds matching the time column). This is enforced inside the merge
+    engine at run time, not at <code>Link.asof(...)</code> construction.</li>
+<li><strong><code>pyarrow</code> is the most restrictive as-of backend.</strong> Backed by Acero's <code>Table.join_asof</code>, it
+    rejects <code>direction='nearest'</code>, requires an <em>integer</em> <code>tolerance</code> (an integer-valued float such as
+    <code>5.0</code> is accepted, <code>5.5</code> is not; <code>timedelta</code> is rejected), and rejects <code>allow_exact_matches=False</code>
+    (Acero's match range always includes the exact-time row). Treat it like the SQL backends
+    (directional match, numeric tolerance), not like <code>pandas</code>/<code>polars</code>.</li>
 <li><strong>Overlapping non-key columns.</strong> If the left and right frames share a column name other than the
-    by-keys/time columns, <code>pandas</code>/<code>pyarrow</code> keep both with <code>_x</code>/<code>_y</code> suffixes, whereas the
+    by-keys/time columns, <code>pandas</code> keeps both with <code>_x</code>/<code>_y</code> suffixes, whereas <code>pyarrow</code> and the
     SQL/<code>polars</code>/<code>python_dict</code> backends keep the left column and drop the right one. Rename
     conflicting columns upstream if you need both.</li>
+<li><strong>Time-column dtype.</strong> As-of time columns must be ordered (datetime, numeric, or timedelta). A
+    non-ordered column (e.g. ISO-date strings / object dtype) raises a clear <code>ValueError</code> naming the
+    column; cast it to a real datetime or numeric before joining. This is enforced uniformly across
+    all backends inside the merge engine at run time.</li>
+<li><strong><code>coerce_time_columns</code></strong> (opt-in flag on <code>Link.asof(...)</code> / <code>Link.asof_on(...)</code> /
+    <code>AsOfJoinConfig</code>, default <code>False</code>). With the default, the strict <code>ValueError</code> above applies.
+    When <code>True</code>, ISO-8601 string time columns are coerced per backend: <code>pandas</code>, <code>polars</code>,
+    <code>pyarrow</code>, and <code>spark</code> cast to native timestamps, <code>python_dict</code> to <code>datetime</code> (a trailing <code>Z</code>
+    is accepted as <code>+00:00</code>), and <code>sqlite</code> to <code>julianday</code> NUMERIC (so a numeric <code>tolerance</code> is in
+    days). <code>duckdb</code> rejects strings carrying a UTC offset or trailing <code>Z</code> (cast manually), and
+    <code>sqlite</code> additionally rejects one-sided string-vs-numeric coercion (cast manually). Coercion
+    fails hard on unparseable or non-ISO values and never produces silent null matches; mixed
+    tz-naive/tz-aware values are rejected where the backend can detect them (via the
+    <a href="../comparison-contract/">comparison contract</a>).</li>
 <li><strong>Ties.</strong> When two right rows share the identical boundary timestamp within a by-key, the chosen
     row is backend-defined (each engine applies its own internal tie rule). <code>python_dict</code>,
-    <code>sqlite</code>, and <code>spark</code> resolve ties deterministically (smallest surviving right column values
-    win); the other backends follow their native <code>merge_asof</code>/<code>ASOF JOIN</code> behavior. Do not rely on
+    <code>duckdb</code>, <code>sqlite</code>, and <code>spark</code> resolve ties deterministically (smallest surviving right column
+    values win); the other backends follow their native <code>merge_asof</code> behavior. Do not rely on
     a specific tied row being selected across backends.</li>
 </ul>
 <h4 id="link">Link</h4>
@@ -354,6 +379,41 @@ link = Link.inner_on(UserFeatureGroup, OrderFeatureGroup, left_index=0, right_in
 <p>Available <code>_on</code> methods: <code>inner_on</code>, <code>left_on</code>, <code>right_on</code>, <code>outer_on</code>, <code>append_on</code>, <code>union_on</code></p>
 <p><strong>Note:</strong> The <code>_on</code> methods raise <code>ValueError</code> if the feature group doesn't define <code>index_columns()</code> or returns an empty list, and <code>IndexError</code> if the specified index position is out of range.</p>
 <p><strong>Note:</strong> Explicit <code>JoinSpec</code> (Option 1 above) works regardless of whether the feature group defines <code>index_columns()</code>. The engine automatically injects the join columns specified in the <code>JoinSpec</code> into that feature group's feature set. The <code>_on</code> shorthand requires <code>index_columns()</code>.</p>
+<h4 id="star-joins-linkstar">Star Joins (Link.star)</h4>
+<p>When several feature groups share one row-index column and all join back to a single hub, <code>Link.star</code> builds the whole set of links in one call instead of a hand-rolled loop of <code>Link.inner(...)</code>:</p>
+<pre><code class="language-python">from mloda.user import Link, JoinType
+from mloda.provider import FeatureGroup
+
+# A hub feature group and two spokes that share the &quot;row_id&quot; column:
+class HubFG(FeatureGroup):
+    pass
+
+class SpokeAFG(FeatureGroup):
+    pass
+
+class SpokeBFG(FeatureGroup):
+    pass
+
+# First feature group is the hub; every remaining group is a spoke joined to it
+# on the shared index column. Returns a set of Links.
+links = Link.star(HubFG, SpokeAFG, SpokeBFG, index_column=&quot;row_id&quot;)
+
+# Equivalent to building, by hand:
+#   Link.inner(JoinSpec(HubFG, Index((&quot;row_id&quot;,))), JoinSpec(SpokeAFG, Index((&quot;row_id&quot;,))))
+#   Link.inner(JoinSpec(HubFG, Index((&quot;row_id&quot;,))), JoinSpec(SpokeBFG, Index((&quot;row_id&quot;,))))
+</code></pre>
+<ul>
+<li><strong><code>index_column</code></strong> is keyword-only and accepts a <code>str</code>, a <code>tuple[str, ...]</code> (multi-column), or an explicit <code>Index</code>. It is normalized once and reused on both sides of every link, so all three forms are equivalent.</li>
+<li><strong><code>jointype</code></strong> is keyword-only and defaults to <code>JoinType.INNER</code>. It accepts a <code>JoinType</code> or its string form and must be one of <code>inner</code>, <code>left</code>, or <code>outer</code>; the same type is applied to every spoke:</li>
+</ul>
+<pre><code class="language-python">links = Link.star(HubFG, SpokeAFG, SpokeBFG, index_column=&quot;row_id&quot;, jointype=JoinType.LEFT)
+</code></pre>
+<ul>
+<li><code>right</code>, <code>append</code>, and <code>union</code> are rejected with a <code>ValueError</code> (a star anchors on the hub, so they do not fit); <code>asof</code> joins need <code>Link.asof(...)</code>.</li>
+<li>At least two feature groups are required (a hub plus one spoke), and the hub class cannot also appear as a spoke. Duplicate spokes collapse in the returned set.</li>
+<li><strong>Scope:</strong> <code>Link.star</code> targets joins between distinct feature-group classes and does not carry discriminators, so it cannot disambiguate multiple same-class nodes. For same-class self-joins, use <code>Link.inner</code> with discriminators (see below).</li>
+</ul>
+<p>The returned set is passed straight to <code>mlodaAPI</code> like any other link set.</p>
 <h4 id="same-class-joins-with-discriminators">Same-Class Joins with Discriminators</h4>
 <p>When joining a feature group with itself (or two nodes of the same class loading different data sources), you need to distinguish between the left and right instances using <strong>discriminators</strong>.</p>
 <p><strong>Discriminators</strong> are optional dictionary parameters (<code>left_discriminator</code> and <code>right_discriminator</code>) that match against feature options:</p>
@@ -428,7 +488,7 @@ link = Link.inner(
 <p>The balanced inheritance rule ensures that joins only occur between "parallel" subclasses - both sides must be at the same level in the inheritance hierarchy relative to the link definition.</p>
 <p>When multiple batches match (e.g. three subclasses all matching a base-class link), the engine disambiguates using <code>right_index</code>: first by exact <code>feature.index</code> match, then by checking whether the feature name appears in the join key columns of <code>right_index</code>. Ensure each link's <code>right_index</code> contains the column name that uniquely identifies its right-side batch.</p>
 <h4 id="mlodaapi">mlodaAPI</h4>
-<pre><code class="language-python">from mloda.user import mloda
+<pre><code class="language-py">from mloda.user import mloda
 
 set_of_links = {link}
 
@@ -442,7 +502,7 @@ mloda.run_all(
 <h4 id="merging-data-in-the-compute-framework">Merging Data in the Compute Framework</h4>
 <p>The compute framework uses the base class BaseMergeEngine as configuration.
 In this example, we show the PandasMergeEngine.</p>
-<pre><code class="language-python">class PandasDataFrame(ComputeFramework):
+<pre><code class="language-py">class PandasDataFrame(ComputeFramework):
     def merge_engine(self) -&gt; Type[BaseMergeEngine]:
         return PandasMergeEngine
 </code></pre>
@@ -456,7 +516,7 @@ In this example, we show the PandasMergeEngine.</p>
 <li><strong>merge_union</strong></li>
 </ul>
 <p>These methods are invoked via the final implementation in the abstract class <strong>BaseMergeEngine</strong>:</p>
-<pre><code class="language-python">@final
+<pre><code class="language-py">@final
 def merge(self, left_data: Any, right_data: Any, jointype: JoinType, left_index: Index, right_index: Index) -&gt; Any:
     if jointype == JoinType.INNER:
         return self.merge_inner(left_data, right_data, left_index, right_index)
@@ -465,7 +525,7 @@ def merge(self, left_data: Any, right_data: Any, jointype: JoinType, left_index:
     ...
 </code></pre>
 <p>A simplified MergeEngine implementation looks like this:</p>
-<pre><code class="language-python">class PandasMergeEngine(BaseMergeEngine):
+<pre><code class="language-py">class PandasMergeEngine(BaseMergeEngine):
     def merge_inner(self, left_data: Any, right_data: Any, left_index: Index, right_index: Index) -&gt; Any:
         return self.join_logic(&quot;inner&quot;, left_data, right_data, left_index, right_index, JoinType.INNER)
 

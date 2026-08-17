@@ -157,9 +157,13 @@
                 </li>
                 <li class="toctree-l2"><a class="reference internal" href="../plugin-loader/">Plugin Loader</a>
                 </li>
+                <li class="toctree-l2"><a class="reference internal" href="../plugin_registry/">Plugin Registry</a>
+                </li>
     </ul>
                   </li>
                   <li class="toctree-l1"><a class="reference internal" href="../data-type-enforcement/">Data Type Enforcement</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../comparison-contract/">Comparison Contract</a>
                   </li>
                   <li class="toctree-l1"><a class="reference internal" >Troubleshooting</a>
     <ul>
@@ -226,7 +230,7 @@ temperature~std
 <h2 id="implementation">Implementation</h2>
 <h3 id="returning-multiple-columns">Returning Multiple Columns</h3>
 <p>When implementing a feature group that returns multiple columns:</p>
-<pre><code class="language-python">class MultiColumnFeatureGroup(FeatureGroup):
+<pre><code class="language-py">class MultiColumnFeatureGroup(FeatureGroup):
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -&gt; Any:
         feature_name = str(features.get_name_of_one_feature())
@@ -241,7 +245,7 @@ temperature~std
 <h3 id="consuming-multiple-columns">Consuming Multiple Columns</h3>
 <h4 id="automatic-column-discovery-recommended">Automatic Column Discovery (Recommended)</h4>
 <p>Use the <code>resolve_multi_column_feature()</code> utility to automatically discover all columns matching the pattern:</p>
-<pre><code class="language-python">class MultiColumnConsumer(FeatureGroup):
+<pre><code class="language-py">class MultiColumnConsumer(FeatureGroup):
     def input_features(self, options: Options, feature_name: FeatureName) -&gt; Optional[Set[Feature]]:
         return {Feature.not_typed(&quot;MultiColumnFeature&quot;)}
 
@@ -266,7 +270,7 @@ temperature~std
 - Cleaner, more maintainable code</p>
 <h4 id="manual-column-access-legacy">Manual Column Access (Legacy)</h4>
 <p>For backwards compatibility, you can still access columns manually:</p>
-<pre><code class="language-python">class MultiColumnConsumer(FeatureGroup):
+<pre><code class="language-py">class MultiColumnConsumer(FeatureGroup):
     def input_features(self, options: Options, feature_name: FeatureName) -&gt; Optional[Set[Feature]]:
         return {Feature.not_typed(&quot;MultiColumnFeature&quot;)}
 
@@ -284,7 +288,7 @@ temperature~std
 </code></pre>
 <h4 id="specific-sub-column-dependency">Specific Sub-Column Dependency</h4>
 <p>You can declare a dependency on a specific sub-column directly, without needing all columns:</p>
-<pre><code class="language-python">class SpecificSubColumnConsumer(FeatureGroup):
+<pre><code class="language-py">class SpecificSubColumnConsumer(FeatureGroup):
     def input_features(self, options: Options, feature_name: FeatureName) -&gt; Optional[Set[Feature]]:
         # Depend on ONLY base_feature~1, not all columns
         return {Feature(&quot;base_feature~1&quot;)}
@@ -320,7 +324,7 @@ temperature~std
 <p>This is implemented in the <code>identify_naming_convention</code> method in the <code>ComputeFramework</code> class:</p>
 </li>
 </ol>
-<pre><code class="language-python">def identify_naming_convention(self, selected_feature_names: Set[FeatureName], column_names: Set[str]) -&gt; Set[str]:
+<pre><code class="language-py">def identify_naming_convention(self, selected_feature_names: Set[FeatureName], column_names: Set[str]) -&gt; Set[str]:
     feature_name_strings = {f.name for f in selected_feature_names}
     _selected_feature_names: Set[str] = set()
 

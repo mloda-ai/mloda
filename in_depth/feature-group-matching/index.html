@@ -163,9 +163,13 @@
                 </li>
                 <li class="toctree-l2"><a class="reference internal" href="../plugin-loader/">Plugin Loader</a>
                 </li>
+                <li class="toctree-l2"><a class="reference internal" href="../plugin_registry/">Plugin Registry</a>
+                </li>
     </ul>
                   </li>
                   <li class="toctree-l1"><a class="reference internal" href="../data-type-enforcement/">Data Type Enforcement</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../comparison-contract/">Comparison Contract</a>
                   </li>
                   <li class="toctree-l1"><a class="reference internal" >Troubleshooting</a>
     <ul>
@@ -217,40 +221,47 @@
 <h2 id="matching-process">Matching Process</h2>
 <p>When a feature is requested, the system checks all available feature groups to find the one that should handle the feature. This is done through the <code>match_feature_group_criteria</code> method in each feature group, which now typically uses the unified parser approach.</p>
 <h2 id="modern-unified-matching">Modern Unified Matching</h2>
-<p>The recommended approach uses <code>FeatureChainParser.match_configuration_feature_chain_parser</code> which provides:</p>
+<p>The recommended approach uses <code>FeatureChainParserMixin</code>, whose default <code>match_feature_group_criteria</code> already does this. Override it only to add your own checks, and reach the parser through <code>cls.match_parser_criteria</code>, which reads <code>PROPERTY_MAPPING</code> (configuration-based matching) and <code>PREFIX_PATTERN</code> / <code>SUFFIX_PATTERN</code> (string-based matching) off the class:</p>
 <h3 id="1-dual-approach-support">1. Dual Approach Support</h3>
 <pre><code class="language-python">from mloda.provider import DefaultOptionKeys
 from mloda.user import Options
 
 @classmethod
 def match_feature_group_criteria(cls, feature_name, options, data_access_collection=None):
-    return FeatureChainParser.match_configuration_feature_chain_parser(
-        feature_name,
-        options,
-        property_mapping=cls.PROPERTY_MAPPING,  # Configuration-based matching
-        prefix_patterns=[cls.PREFIX_PATTERN],   # String-based matching (pattern defaults to CHAIN_SEPARATOR)
-    )
+    return cls.match_parser_criteria(feature_name, options)
 </code></pre>
+<p>Do not call <code>FeatureChainParser.match_configuration_feature_chain_parser</code> directly from a match hook: it raises on an option value the <code>PROPERTY_MAPPING</code> rejects. An exception out of a match hook is contained as a <code>match hook</code> near-miss for that candidate instead of taking the whole resolution down, but a contained crash is a worse reason than a rejection. <code>match_parser_criteria</code> turns that rejection into a non-match, and the reason still reaches the user in the "No feature groups found" error.</p>
+<p>Containment covers plugin raises only: a framework-owned raise (a two-readers conflict, a forwarded value contradicting the feature name, a rejected effective-options build) still aborts the whole resolution, because it reports a misconfiguration you have to fix.</p>
+<p>Filter matching contains the same way: a raise is a non-match for that probe, like a <code>False</code> return, and is recorded in <code>GlobalFilter.dropped_filters</code> as a <code>match hook</code> near-miss, as is a typed decline the matcher records; a framework-owned raise still aborts. Every entry names the gate that dropped the filter and that gate's reason. <a href="../filter_data/#how-filters-reach-your-featuregroup">How filters reach your FeatureGroup</a> tables the gates the two paths share and where filter policy differs.</p>
+<p>The probe runs per feature, but a matched filter attaches to the whole <code>FeatureSet</code>, so a non-match for one feature does not suppress a filter a sibling matched. See <a href="../filter_data/#filter-scope-is-the-featureset">Filter scope</a>.</p>
+<p>Every caller reads the return by truthiness: any falsy value is a non-match, any truthy value a match. Filter matching additionally reports a falsy value that is not <code>False</code>, and each distinct report is a WARNING once per setup.</p>
+<p>The options view depends on the caller: feature resolution passes declared (pre-default) options, while filter matching runs after intake and passes the resolved feature's effective (post-default) options merged onto the filter feature's own. Matching logic that reads option values can see different values on the two paths. See <a href="../property-mapping/#applying-declared-defaults">Applying declared defaults</a>.</p>
 <h3 id="2-property_mapping-configuration">2. PROPERTY_MAPPING Configuration</h3>
 <p>The <code>PROPERTY_MAPPING</code> defines how configuration-based features are validated:</p>
-<pre><code class="language-python">PROPERTY_MAPPING = {
-    &quot;aggregation_type&quot;: {
-        &quot;sum&quot;: &quot;Sum aggregation&quot;,
-        &quot;avg&quot;: &quot;Average aggregation&quot;,
-        &quot;max&quot;: &quot;Maximum aggregation&quot;,
-        DefaultOptionKeys.context: True,
-        DefaultOptionKeys.strict_validation: True,
-    },
-    DefaultOptionKeys.in_features: {
-        &quot;explanation&quot;: &quot;Source feature for aggregation&quot;,
-        DefaultOptionKeys.context: True,
-        DefaultOptionKeys.strict_validation: False,
-    },
+<pre><code class="language-python">from mloda.provider import PropertySpec
+
+PROPERTY_MAPPING = {
+    &quot;aggregation_type&quot;: PropertySpec(
+        &quot;Aggregation to apply&quot;,
+        allowed_values={
+            &quot;sum&quot;: &quot;Sum aggregation&quot;,
+            &quot;avg&quot;: &quot;Average aggregation&quot;,
+            &quot;max&quot;: &quot;Maximum aggregation&quot;,
+        },
+        strict_validation=True,
+    ),
+    DefaultOptionKeys.in_features: PropertySpec(
+        &quot;Source feature for aggregation&quot;,
+        strict_validation=False,
+    ),
 }
 </code></pre>
+<p>Every value in the mapping is a <code>PropertySpec</code>; accepted values go under <code>allowed_values</code>.
+A raw dict spec raises at class definition, and an unknown field is a constructor
+<code>TypeError</code>. See <a href="../property-mapping/">PROPERTY_MAPPING Configuration</a> for the full model.</p>
 <h3 id="3-validation-modes">3. Validation Modes</h3>
 <h4 id="strict-validation">Strict Validation</h4>
-<p>When <code>mloda_strict_validation: True</code>, parameter values must be in the mapping:</p>
+<p>With <code>strict_validation=True</code>, parameter values must be in the value space:</p>
 <pre><code class="language-python"># This will match
 options = Options(context={&quot;aggregation_type&quot;: &quot;sum&quot;})  # &quot;sum&quot; is in mapping
 
@@ -258,7 +269,7 @@ options = Options(context={&quot;aggregation_type&quot;: &quot;sum&quot;})  # &q
 options = Options(context={&quot;aggregation_type&quot;: &quot;custom&quot;})  # &quot;custom&quot; not in mapping
 </code></pre>
 <h4 id="flexible-validation">Flexible Validation</h4>
-<p>When <code>mloda_strict_validation: False</code> (default), any value is accepted:</p>
+<p>With <code>strict_validation=False</code> (the default), any value is accepted:</p>
 <pre><code class="language-python"># Both will match
 options = Options(context={&quot;in_features&quot;: &quot;sales&quot;})      # Any value OK
 options = Options(context={&quot;in_features&quot;: &quot;custom_feature&quot;})  # Any value OK
@@ -266,12 +277,11 @@ options = Options(context={&quot;in_features&quot;: &quot;custom_feature&quot;})
 <h4 id="custom-validation-functions">Custom Validation Functions</h4>
 <p>For complex validation beyond simple value lists:</p>
 <pre><code class="language-python">PROPERTY_MAPPING = {
-    &quot;window_size&quot;: {
-        &quot;explanation&quot;: &quot;Size of the time window&quot;,
-        DefaultOptionKeys.context: True,
-        DefaultOptionKeys.strict_validation: True,
-        DefaultOptionKeys.validation_function: lambda x: isinstance(x, int) and x &gt; 0,
-    },
+    &quot;window_size&quot;: PropertySpec(
+        &quot;Size of the time window&quot;,
+        strict_validation=True,
+        element_validator=lambda x: isinstance(x, int) and x &gt; 0,
+    ),
 }
 </code></pre>
 <h2 id="legacy-default-matching-criteria">Legacy Default Matching Criteria</h2>
@@ -282,23 +292,26 @@ options = Options(context={&quot;in_features&quot;: &quot;custom_feature&quot;})
 </li>
 <li>
 <p><strong>Class Name Match</strong>: The feature name exactly matches the feature group's class name.
-   <code>python
+   <code>py
    feature_name == FeatureGroup.get_class_name()</code></p>
 </li>
 <li>
 <p><strong>Prefix Match</strong>: The feature name starts with the feature group's class name as a prefix.
-   <code>python
+   <code>py
    feature_name.startswith(FeatureGroup.prefix())  # Default prefix is "ClassName_"</code></p>
 </li>
 <li>
 <p><strong>Explicitly Supported</strong>: The feature name is in the set of explicitly supported feature names.
-   <code>python
+   <code>py
    feature_name in FeatureGroup.feature_names_supported()</code></p>
 </li>
 </ol>
+<p>An owned reader veto recorded during rule 1 (the user addressed the reader family by name and its declaration rejected the request, or its probe recorded a content decline and matched nothing) gates the name-based rules 2 to 4; see <a href="../data-access-patterns/">Data Access Patterns</a> for the recording contract.</p>
 <h2 id="matching-examples">Matching Examples</h2>
 <h3 id="modern-feature-group-aggregation">Modern Feature Group (Aggregation)</h3>
-<pre><code class="language-python"># String-based matching
+<pre><code class="language-python">from mloda.user import Feature, Options
+
+# String-based matching
 feature = Feature(&quot;sales__sum_aggr&quot;)  # Matches via pattern
 
 # Configuration-based matching

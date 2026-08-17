@@ -113,11 +113,11 @@
     </li>
     <li class="toctree-l4"><a class="reference internal" href="#computeframeworktransformer">ComputeFrameworkTransformer</a>
     </li>
-    <li class="toctree-l4"><a class="reference internal" href="#pandaspyarrowtransformer">PandasPyarrowTransformer</a>
+    <li class="toctree-l4"><a class="reference internal" href="#pandaspyarrowtransformer">PandasPyArrowTransformer</a>
     </li>
-    <li class="toctree-l4"><a class="reference internal" href="#duckdbpyarrowtransformer">DuckDBPyarrowTransformer</a>
+    <li class="toctree-l4"><a class="reference internal" href="#duckdbpyarrowtransformer">DuckDBPyArrowTransformer</a>
     </li>
-    <li class="toctree-l4"><a class="reference internal" href="#sparkpyarrowtransformer">SparkPyarrowTransformer</a>
+    <li class="toctree-l4"><a class="reference internal" href="#sparkpyarrowtransformer">SparkPyArrowTransformer</a>
     </li>
         </ul>
     </li>
@@ -171,9 +171,13 @@
                 </li>
                 <li class="toctree-l2"><a class="reference internal" href="../plugin-loader/">Plugin Loader</a>
                 </li>
+                <li class="toctree-l2"><a class="reference internal" href="../plugin_registry/">Plugin Registry</a>
+                </li>
     </ul>
                   </li>
                   <li class="toctree-l1"><a class="reference internal" href="../data-type-enforcement/">Data Type Enforcement</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../comparison-contract/">Comparison Contract</a>
                   </li>
                   <li class="toctree-l1"><a class="reference internal" >Troubleshooting</a>
     <ul>
@@ -221,7 +225,7 @@
               
                 <h1 id="framework-transformers">Framework Transformers</h1>
 <h2 id="overview">Overview</h2>
-<p>Framework transformers are a key component of mloda's compute framework system, enabling seamless conversion between different data representations. They allow feature groups to work with multiple compute frameworks by providing bidirectional transformation capabilities.</p>
+<p>Framework transformers are a key component of mloda's compute framework system, enabling seamless conversion between different data representations. They allow feature groups to work with multiple compute frameworks by providing transformations between framework representations, one-way or two-way.</p>
 <h2 id="core-components">Core Components</h2>
 <h3 id="basetransformer">BaseTransformer</h3>
 <p>The <code>BaseTransformer</code> is an abstract base class that defines the interface for transforming data between different compute frameworks. It provides the foundation for all framework transformers in the system.</p>
@@ -250,9 +254,9 @@
 <pre><code class="language-python">from mloda.core.abstract_plugins.plugin_loader.plugin_loader import PluginLoader
 PluginLoader.disable_auto_load(&quot;compute_framework&quot;)
 </code></pre>
-<h3 id="pandaspyarrowtransformer">PandasPyarrowTransformer</h3>
-<p>The <code>PandasPyarrowTransformer</code> is a concrete implementation of <code>BaseTransformer</code> that handles conversions between Pandas DataFrames and PyArrow Tables.</p>
-<pre><code class="language-python">class PandasPyarrowTransformer(BaseTransformer):
+<h3 id="pandaspyarrowtransformer">PandasPyArrowTransformer</h3>
+<p>The <code>PandasPyArrowTransformer</code> is a concrete implementation of <code>BaseTransformer</code> that handles conversions between Pandas DataFrames and PyArrow Tables.</p>
+<pre><code class="language-py">class PandasPyArrowTransformer(BaseTransformer):
     &quot;&quot;&quot;
     Transformer for converting between Pandas DataFrame and PyArrow Table.
     &quot;&quot;&quot;
@@ -261,9 +265,9 @@ PluginLoader.disable_auto_load(&quot;compute_framework&quot;)
 - Converts Pandas DataFrames to PyArrow Tables and vice versa
 - Handles metadata properly during transformations
 - Ensures clean conversion by removing framework-specific metadata</p>
-<h3 id="duckdbpyarrowtransformer">DuckDBPyarrowTransformer</h3>
-<p>The <code>DuckDBPyarrowTransformer</code> is a concrete implementation of <code>BaseTransformer</code> that handles conversions between DuckDB Relations and PyArrow Tables.</p>
-<pre><code class="language-python">class DuckDBPyarrowTransformer(BaseTransformer):
+<h3 id="duckdbpyarrowtransformer">DuckDBPyArrowTransformer</h3>
+<p>The <code>DuckDBPyArrowTransformer</code> is a concrete implementation of <code>BaseTransformer</code>, via <code>SqlBasePyArrowTransformer</code>, that handles conversions between DuckDB Relations and PyArrow Tables.</p>
+<pre><code class="language-py">class DuckDBPyArrowTransformer(SqlBasePyArrowTransformer):
     &quot;&quot;&quot;
     Transformer for converting between DuckDB relations and PyArrow Table.
     &quot;&quot;&quot;
@@ -274,9 +278,9 @@ PluginLoader.disable_auto_load(&quot;compute_framework&quot;)
 - Requires a DuckDB connection object for PyArrow → DuckDB transformations
 - Uses DuckDB's <code>to_arrow_table()</code> and <code>from_arrow()</code> methods for optimal performance</p>
 <p><strong>Important</strong>: The DuckDB transformer requires a connection object when transforming from PyArrow to DuckDB. This is because DuckDB relations must be associated with a specific database connection.</p>
-<h3 id="sparkpyarrowtransformer">SparkPyarrowTransformer</h3>
-<p>The <code>SparkPyarrowTransformer</code> is a concrete implementation of <code>BaseTransformer</code> that handles conversions between Spark DataFrames and PyArrow Tables.</p>
-<pre><code class="language-python">class SparkPyarrowTransformer(BaseTransformer):
+<h3 id="sparkpyarrowtransformer">SparkPyArrowTransformer</h3>
+<p>The <code>SparkPyArrowTransformer</code> is a concrete implementation of <code>BaseTransformer</code> that handles conversions between Spark DataFrames and PyArrow Tables.</p>
+<pre><code class="language-py">class SparkPyArrowTransformer(BaseTransformer):
     &quot;&quot;&quot;
     Transformer for converting between Spark DataFrame and PyArrow Table.
     &quot;&quot;&quot;
@@ -294,7 +298,7 @@ PluginLoader.disable_auto_load(&quot;compute_framework&quot;)
 <li>During initialization, <code>ComputeFrameworkTransformer</code> checks for existing <code>BaseTransformer</code> subclasses</li>
 <li>If none are found, it auto-loads only <code>*transformer*</code> files from the <code>compute_framework</code> group</li>
 <li>Each transformer is registered in a mapping from framework pairs to transformer classes</li>
-<li>The mapping is bidirectional, allowing transformations in both directions</li>
+<li>Each direction is registered only if the transformer implements that direction's hook: two-way transformers register both edges, one-way transformers register only the edge whose hook they implement</li>
 </ol>
 <h3 id="transformation-process">Transformation Process</h3>
 <p>When data needs to be transformed from one framework to another:</p>
@@ -306,34 +310,41 @@ PluginLoader.disable_auto_load(&quot;compute_framework&quot;)
 <li>The transformer converts the data to the target framework format</li>
 </ol>
 <h3 id="example-flow">Example Flow</h3>
-<pre><code>Pandas DataFrame → PandasPyarrowTransformer → PyArrow Table
+<pre><code>Pandas DataFrame → PandasPyArrowTransformer → PyArrow Table
 </code></pre>
 <p>Or in the reverse direction:</p>
-<pre><code>PyArrow Table → PandasPyarrowTransformer → Pandas DataFrame
+<pre><code>PyArrow Table → PandasPyArrowTransformer → Pandas DataFrame
 </code></pre>
 <p>For DuckDB transformations:</p>
-<pre><code>DuckDB Relation → DuckDBPyarrowTransformer → PyArrow Table
+<pre><code>DuckDB Relation → DuckDBPyArrowTransformer → PyArrow Table
 </code></pre>
-<pre><code>PyArrow Table → DuckDBPyarrowTransformer → DuckDB Relation (requires connection)
+<pre><code>PyArrow Table → DuckDBPyArrowTransformer → DuckDB Relation (requires connection)
 </code></pre>
 <p>For Spark transformations:</p>
-<pre><code>Spark DataFrame → SparkPyarrowTransformer → PyArrow Table
+<pre><code>Spark DataFrame → SparkPyArrowTransformer → PyArrow Table
 </code></pre>
-<pre><code>PyArrow Table → SparkPyarrowTransformer → Spark DataFrame (optional SparkSession)
+<pre><code>PyArrow Table → SparkPyArrowTransformer → Spark DataFrame (optional SparkSession)
 </code></pre>
 <h2 id="creating-custom-transformers">Creating Custom Transformers</h2>
 <p>To create a custom transformer for a new pair of frameworks:</p>
 <ol>
 <li>Subclass <code>BaseTransformer</code></li>
-<li>Implement the required methods:</li>
+<li>Implement the four required methods:</li>
 <li><code>framework()</code> - Return the primary framework type</li>
 <li><code>other_framework()</code> - Return the secondary framework type</li>
 <li><code>import_fw()</code> - Import the primary framework module</li>
 <li><code>import_other_fw()</code> - Import the secondary framework module</li>
-<li><code>transform_fw_to_other_fw()</code> - Transform from primary to secondary</li>
-<li><code>transform_other_fw_to_fw()</code> - Transform from secondary to primary</li>
+<li>Implement the direction hooks the transformer supports:</li>
+<li><code>transform_fw_to_other_fw()</code> - Transform from primary to secondary; registers the forward edge</li>
+<li><code>transform_other_fw_to_fw()</code> - Transform from secondary to primary; registers the reverse edge</li>
 </ol>
-<p>Example:</p>
+<p><strong>One-way transformers</strong>: implement only the direction you support. Either hook may be omitted, and only an implemented hook's edge is registered (omit both and nothing is registered, with a warning).</p>
+<ul>
+<li>Never override an unsupported hook with <code>raise NotImplementedError</code>: registration keys off the override itself, not its body, so the dead edge is registered, and a chain routes through it and crashes instead of reporting "no chain exists".</li>
+<li>Override detection resolves through the MRO, so a subclass of a two-way transformer (for example <code>DuckDBPyArrowTransformer</code>) inherits both overrides and cannot drop a direction by omission.</li>
+<li><code>FileSourcePyArrowTransformer</code> and <code>FileSourceDictTransformer</code> are the reference one-way implementations; both omit <code>transform_other_fw_to_fw()</code>.</li>
+</ul>
+<p>Example of a two-way transformer:</p>
 <pre><code class="language-python">from typing import Any, Optional
 
 class CustomTransformer(BaseTransformer):
@@ -371,7 +382,7 @@ class CustomTransformer(BaseTransformer):
 <li>When data is retrieved from a flight server and needs to be converted back</li>
 </ol>
 <p>The transformation is handled automatically by the <code>apply_compute_framework_transformer</code> method:</p>
-<pre><code class="language-python">def apply_compute_framework_transformer(self, data: Any) -&gt; Any:
+<pre><code class="language-py">def apply_compute_framework_transformer(self, data: Any) -&gt; Any:
     _from_fw = type(data)
     _to_fw = self.expected_data_framework()
     transformer_cls = self.transformer.transformer_map.get((_from_fw, _to_fw), None)

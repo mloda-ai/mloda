@@ -151,9 +151,13 @@
                 </li>
                 <li class="toctree-l2"><a class="reference internal" href="../../in_depth/plugin-loader/">Plugin Loader</a>
                 </li>
+                <li class="toctree-l2"><a class="reference internal" href="../../in_depth/plugin_registry/">Plugin Registry</a>
+                </li>
     </ul>
                   </li>
                   <li class="toctree-l1"><a class="reference internal" href="../../in_depth/data-type-enforcement/">Data Type Enforcement</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../in_depth/comparison-contract/">Comparison Contract</a>
                   </li>
                   <li class="toctree-l1"><a class="reference internal" >Troubleshooting</a>
     <ul>
@@ -199,9 +203,9 @@
             <div class="section" itemprop="articleBody">
               
                 <h3 id="api-request-example">API Request Example</h3>
-<p>This example demonstrates a simple request to the mloda API. You describe WHAT data you need - mloda resolves HOW to get it.</p>
+<p>This example demonstrates a simple request to the mloda API. You describe WHAT data you need, mloda resolves HOW to get it.</p>
 <blockquote>
-<p><strong>Tip:</strong> For AI agents or quick prototyping, you can also use inline data with <code>api_data</code> - see the <a href="../installation/#4-quick-start">30-second example</a>.</p>
+<p><strong>Tip:</strong> For AI agents or quick prototyping, you can also use inline data with <code>api_data</code>, see the <a href="../installation/#4-quick-start">30-second example</a>.</p>
 </blockquote>
 <p>In this example, mloda automatically determines that a <strong>CsvReader</strong> feature group will fulfill the request and respond with the resulting DataFrame.</p>
 <h4 id="1-import-the-required-modules">1. Import the Required Modules</h4>
@@ -228,7 +232,7 @@ feature_list = feature_list.split(&quot;,&quot;)
 result[0]
 </code></pre>
 <p>Expected output:</p>
-<pre><code class="language-python">pyarrow.Table
+<pre><code class="language-text">pyarrow.Table
 V8: double
 id: int64
 ...
@@ -243,9 +247,9 @@ id: [[0,1,2,...]]
 batch jobs, but in latency-sensitive scenarios the repeated planning overhead matters.</p>
 <p>Typical examples where this applies:</p>
 <ul>
-<li><strong>ML model serving</strong> — a prediction endpoint computes the same derived features for every incoming request; only the raw input row changes.</li>
-<li><strong>Streaming / event-driven pipelines</strong> — each incoming event needs the same feature transformations applied in real time.</li>
-<li><strong>Interactive applications</strong> — a dashboard or API recalculates features on every user action with fresh parameters.</li>
+<li><strong>ML model serving</strong>: A prediction endpoint computes the same derived features for every incoming request; only the raw input row changes.</li>
+<li><strong>Streaming / event-driven pipelines</strong>: Each incoming event needs the same feature transformations applied in real time.</li>
+<li><strong>Interactive applications</strong>: A dashboard or API recalculates features on every user action with fresh parameters.</li>
 </ul>
 <p>The two-phase API lets you pay the planning cost once at startup and then execute
 cheaply per request:</p>
@@ -255,10 +259,10 @@ session = mloda.prepare(feature_list, compute_frameworks=[&quot;PyArrowTable&quo
 # 2. Execute per request with fresh data
 result = session.run(api_data={&quot;MyKey&quot;: {&quot;col&quot;: [1, 2]}})
 </code></pre>
-<p>See <a href="../../in_depth/mloda-api/#two-phase-execution-prepare-run">mloda API — Two-Phase Execution</a> for details.</p>
+<p>See <a href="../../in_depth/mloda-api/#two-phase-execution-prepare-run">mloda API: Two-Phase Execution</a> for details.</p>
 <h4 id="for-ai-agents-json-based-requests">For AI Agents: JSON-Based Requests</h4>
 <p>LLMs can generate JSON feature requests without writing Python code:</p>
-<pre><code class="language-python">from mloda.user import load_features_from_config
+<pre><code class="language-py">from mloda.user import load_features_from_config
 
 llm_request = '[&quot;id&quot;, &quot;V1&quot;, &quot;V2&quot;, &quot;Amount&quot;]'
 features = load_features_from_config(llm_request, format=&quot;json&quot;)

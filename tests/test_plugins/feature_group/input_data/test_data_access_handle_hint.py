@@ -22,6 +22,7 @@ from mloda_plugins.feature_group.input_data.read_db import ReadDB
 from mloda_plugins.feature_group.input_data.read_dbs.sqlite import SQLITEReader
 from mloda_plugins.feature_group.input_data.read_document import ReadDocument
 from mloda_plugins.feature_group.input_data.read_file import ReadFile
+from mloda_plugins.feature_group.input_data.read_files.csv import CsvReader
 
 
 # ----------------------------------------------------------------------------
@@ -227,6 +228,24 @@ class TestSqliteReaderMatchesTypedCredential:
         assert resolved is not None
         assert isinstance(resolved, dict)
         assert resolved[SQLITEReader.db_path()] == str(db_a)
+
+
+class TestDataAccessHandleRejectsCollectionsOutright:
+    """A collection-shaped data_access_handle must not reach dict.get() as an unhashable key (#1165)."""
+
+    def test_file_reader_rejects_a_list_handle_instead_of_crashing(self, two_csv_files: tuple[str, str]) -> None:
+        path_a, path_b = two_csv_files
+        dac = DataAccessCollection(files={"transactions": path_a, "users": path_b})
+        options = Options(context={"data_access_handle": ["users", "transactions"]})
+        assert CsvReader.match_data_access(["id"], dac, options=options) == (None, None)
+
+    def test_db_reader_rejects_a_list_handle_instead_of_crashing(self, two_sqlite_dbs: tuple[Path, Path]) -> None:
+        db_a, db_b = two_sqlite_dbs
+        dac = DataAccessCollection(
+            credentials={"warehouse": {"db_path": str(db_a)}, "analytics": {"db_path": str(db_b)}}
+        )
+        options = Options(context={"data_access_handle": ["warehouse", "analytics"]})
+        assert SQLITEReader.match_data_access(["id"], dac, options=options) == (None, None)
 
 
 # Sanity check that fixtures are isolated (parallel-safety smoke).

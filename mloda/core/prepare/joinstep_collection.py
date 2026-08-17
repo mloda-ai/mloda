@@ -34,4 +34,4 @@ class JoinStepCollection:
         self.collection[join_step] = required_join_uuids
 
     def get_required_join_uuids(self, join_step: JoinStep) -> set[UUID]:
-        return self.collection[join_step]
+        return self.collection.get(join_step, set())

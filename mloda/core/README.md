@@ -55,6 +55,13 @@ The mloda Core works by:
 
 This approach focuses on defining transformations rather than static states, facilitating smooth transitions between development phases and reducing redundant work.
 
+## Public API surface
+
+Nothing under `mloda.core.*` is public API, whether or not a name carries a leading underscore. The
+public surface is exclusively what `mloda.user`, `mloda.provider` and `mloda.steward` re-export through
+their `__all__` lists. A helper, class or function reachable only via a deep `mloda.core.*` import path
+can be renamed or removed without a deprecation warning or a release-note entry.
+
 ## Development
 When extending or modifying the core functionality, consider the following guidelines:
 

@@ -66,6 +66,9 @@ Tests that drive FeatureGroup resolution target the seam in `tests/test_core/tes
 ripple across test files. Exact failure-message wording is not part of the seam. Plugin authors debugging
 resolution use the public `resolve_feature`; see the
 [resolution errors guide](docs/docs/in_depth/troubleshooting/feature-group-resolution-errors.md).
+This follows a repo-wide rule: nothing under `mloda.core.*` is public API (see
+[`mloda/core/README.md`](mloda/core/README.md#public-api-surface)), so it can change without a
+deprecation warning or a release-note entry.
 
 ### Running Checks Locally
 

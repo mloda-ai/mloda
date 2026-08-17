@@ -352,6 +352,15 @@ class ExecutionPlan:
         left_join_frameworks: set[JoinStep] = {ep for ep in execution_plan if isinstance(ep, JoinStep)}
         need_to_upload_collector: set[UUID] = set()
 
+        # Features produced together by one FeatureGroupStep live on the same physical source cfw
+        # instance, so a hop should key on the owning step, not each member feature's own uuid.
+        owning_step_of: dict[UUID, UUID] = {
+            feature_uuid: ep.uuid
+            for ep in execution_plan
+            if isinstance(ep, FeatureGroupStep)
+            for feature_uuid in ep.get_uuids()
+        }
+
         for ep in execution_plan:
             if isinstance(ep, JoinStep):
                 if ep.destination_framework != ep.source_framework:
@@ -442,12 +451,16 @@ class ExecutionPlan:
                             required_uuids={parent},
                             from_feature_group=parent_node_property.feature_group_class,
                             to_feature_group=ep.feature_group,
+                            source_step_uuid=owning_step_of.get(parent, parent),
                         )
                         canonical_tfs = self.tfs_collection.get(new_tfs)
                         if canonical_tfs is None:
                             self.tfs_collection[new_tfs] = new_tfs
                             new_execution_plan.append(new_tfs)
                             canonical_tfs = new_tfs
+                        # Records every parent the hop covers; they all share one owning step, so
+                        # this doesn't change the scheduling gate.
+                        canonical_tfs.required_uuids.add(parent)
                         ep.required_uuids.add(canonical_tfs.uuid)
 
                         # Record the surviving hop's uuid so the step resolves its compute framework from it.

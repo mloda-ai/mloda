@@ -1,5 +1,6 @@
 """Regression coverage for add_tfs: a deduped TransformFrameworkStep must still wire its uuid
-into every consuming step, not just the one that first created it.
+into every consuming step, not just the one that first created it (Scenario A), and that two
+same-shaped hops from genuinely different parents must not dedup into one (Scenario B).
 """
 
 from typing import NamedTuple
@@ -119,10 +120,15 @@ def test_both_joinsteps_of_a_deduped_hop_depend_on_the_surviving_transform_step(
 class FeatureGroupStepDedupScenario(NamedTuple):
     step_a: FeatureGroupStep
     step_b: FeatureGroupStep
+    parent_a: Feature
+    parent_b: Feature
+    producers: list[FeatureGroupStep]
     graph: Graph
 
 
 def _root_node(graph: Graph, feature: Feature, fg: type[FeatureGroup]) -> None:
+    # Graph.add_node is a plain dict assignment and this reset always assigns the same value, so
+    # calling this twice for the same feature (the same_parent=True scenario below) is harmless.
     graph.add_node(feature.uuid, NodeProperties(feature, fg))
     graph.parent_to_children_mapping[feature.uuid] = set()
 
@@ -140,31 +146,46 @@ def _dest_step(
     return FeatureGroupStep(fg, feature_set, set(), cfw)
 
 
-def _feature_group_step_dedup_scenario() -> FeatureGroupStepDedupScenario:
-    """Two FeatureGroupSteps with a root parent from the same upstream feature group and compute
-    framework, so their built ``TransformFrameworkStep``s compare equal."""
+def _producer_step(fg: type[FeatureGroup], feature: Feature, cfw: type[ComputeFramework]) -> FeatureGroupStep:
+    feature_set = FeatureSet()
+    feature_set.add(feature)
+    return FeatureGroupStep(fg, feature_set, set(), cfw)
+
+
+def _feature_group_step_dedup_scenario(same_parent: bool) -> FeatureGroupStepDedupScenario:
+    """Two FeatureGroupSteps whose built ``TransformFrameworkStep``s share from/to framework and
+    feature-group shape. ``same_parent=True`` pulls both from the same upstream feature (must
+    dedup); ``same_parent=False`` pulls from different upstream features (must not dedup).
+
+    Each parent is also produced by a ``FeatureGroupStep`` (``producers``), so the built hops key
+    on ``owning_step_of`` for real instead of falling back to the raw parent uuid."""
     graph = Graph()
 
     parent_a = _feature("dedup_upstream_a", PyArrowTable)
-    parent_b = _feature("dedup_upstream_b", PyArrowTable)
+    parent_b = parent_a if same_parent else _feature("dedup_upstream_b", PyArrowTable)
     _root_node(graph, parent_a, DedupUpstreamFG)
     _root_node(graph, parent_b, DedupUpstreamFG)
+
+    producer_a = _producer_step(DedupUpstreamFG, parent_a, PyArrowTable)
+    producer_b = producer_a if same_parent else _producer_step(DedupUpstreamFG, parent_b, PyArrowTable)
+    producers = [producer_a] if same_parent else [producer_a, producer_b]
 
     dest_feature_a = _feature("dedup_dest_a", PandasDataFrame)
     dest_feature_b = _feature("dedup_dest_b", PandasDataFrame)
     step_a = _dest_step(DedupDestFG, dest_feature_a, PandasDataFrame, parent_a.uuid, graph)
     step_b = _dest_step(DedupDestFG, dest_feature_b, PandasDataFrame, parent_b.uuid, graph)
 
-    return FeatureGroupStepDedupScenario(step_a, step_b, graph)
+    return FeatureGroupStepDedupScenario(step_a, step_b, parent_a, parent_b, producers, graph)
 
 
-def test_both_feature_group_steps_of_a_deduped_hop_reference_the_surviving_transform_step() -> None:
-    scenario = _feature_group_step_dedup_scenario()
+def test_two_feature_group_steps_with_the_same_parent_and_shape_dedup_into_one_transform_step() -> None:
+    """Guard against an overly-broad fix: genuinely shared parents must still dedup to one hop."""
+    scenario = _feature_group_step_dedup_scenario(same_parent=True)
 
-    new_plan = ExecutionPlan().add_tfs([scenario.step_a, scenario.step_b], scenario.graph)
+    new_plan = ExecutionPlan().add_tfs([*scenario.producers, scenario.step_a, scenario.step_b], scenario.graph)
 
     tfs_steps = [step for step in new_plan if isinstance(step, TransformFrameworkStep)]
-    assert len(tfs_steps) == 1, f"expected the two equal hops to dedup into one, got: {tfs_steps}"
+    assert len(tfs_steps) == 1, f"expected the two same-parent hops to dedup into one, got: {tfs_steps}"
     tfs_uuid = tfs_steps[0].uuid
 
     assert scenario.step_a.tfs_ids == {tfs_uuid}
@@ -172,3 +193,35 @@ def test_both_feature_group_steps_of_a_deduped_hop_reference_the_surviving_trans
 
     assert tfs_uuid in scenario.step_a.required_uuids
     assert tfs_uuid in scenario.step_b.required_uuids
+
+
+def test_two_feature_group_steps_with_different_parents_get_separate_transform_hops() -> None:
+    """A hop only ever moves one physical source's data (execute() takes a single from_cfw), so
+    collapsing two different-parent hops into one would starve whichever step's uuid lost the
+    dedup of its own source data."""
+    scenario = _feature_group_step_dedup_scenario(same_parent=False)
+    producer_a, producer_b = scenario.producers
+
+    new_plan = ExecutionPlan().add_tfs([*scenario.producers, scenario.step_a, scenario.step_b], scenario.graph)
+
+    tfs_steps = [step for step in new_plan if isinstance(step, TransformFrameworkStep)]
+    assert len(tfs_steps) == 2, (
+        f"two feature-group steps with genuinely different parents must NOT collapse into one "
+        f"transform hop, got: {[(s.uuid, s.required_uuids) for s in tfs_steps]}"
+    )
+
+    hop_a = next(step for step in tfs_steps if scenario.parent_a.uuid in step.required_uuids)
+    hop_b = next(step for step in tfs_steps if scenario.parent_b.uuid in step.required_uuids)
+    assert hop_a.uuid != hop_b.uuid
+    assert hop_a.required_uuids == {scenario.parent_a.uuid}
+    assert hop_b.required_uuids == {scenario.parent_b.uuid}
+
+    # Pins the owning-step keying itself, not just its fallback: each hop's source_step_uuid is
+    # the producing FeatureGroupStep's uuid, not the raw parent uuid.
+    assert hop_a.source_step_uuid == producer_a.uuid
+    assert hop_b.source_step_uuid == producer_b.uuid
+
+    assert scenario.step_a.tfs_ids == {hop_a.uuid}
+    assert scenario.step_b.tfs_ids == {hop_b.uuid}
+    assert scenario.step_a.required_uuids == {hop_a.uuid}
+    assert scenario.step_b.required_uuids == {hop_b.uuid}

@@ -50,7 +50,7 @@ plugins:
   - [
       "@semantic-release/exec",
       {
-        "prepareCmd": 'sed -i ''s/^version = .*$/version = "${nextRelease.version}"/'' pyproject.toml',
+        "prepareCmd": 'sed -i ''s/^version = .*$/version = "${nextRelease.version}"/'' pyproject.toml && uv lock',
       },
     ]
   - [
@@ -63,6 +63,6 @@ plugins:
     ]
   - [
       "@semantic-release/git",
-      { "assets": ["pyproject.toml"] },
+      { "assets": ["pyproject.toml", "uv.lock"] },
     ]
 repositoryUrl: "https://github.com/mloda-ai/mloda"

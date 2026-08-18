@@ -83,6 +83,13 @@ class AppendOrUnionSides(NamedTuple):
     right_uuid: UUID
 
 
+class _JoinServedParent(NamedTuple):
+    """Stand-in for a parent delivered by a JoinStep (no TransformFrameworkStep is built for it), so it
+    can still be named in the missing-Links conflict error."""
+
+    from_feature_group: type[FeatureGroup]
+
+
 class ExecutionPlan:
     def __init__(
         self,
@@ -248,25 +255,35 @@ class ExecutionPlan:
 
     @staticmethod
     def _parents_linked_by_join(uuid_a: UUID, uuid_b: UUID, join_steps: set[JoinStep]) -> bool:
-        """Whether some planned JoinStep ties these two parents together on genuine opposite sides.
+        """Whether two parents are linked, directly or transitively, via JoinSteps' genuine sides
+        (not ``required_uuids``, which unions all of a join's consumers' parents, not just its own two)."""
+        if uuid_a == uuid_b:
+            return True
 
-        ``required_uuids`` is excluded: it is the union of ALL parents of everything that consumes
-        the join (see ``run_link``'s ``join_step_required_uuids``), not just the join's own two
-        sides, so two unrelated parents can coincidentally both appear there.
-        """
+        adjacency: dict[UUID, set[UUID]] = defaultdict(set)
         for js in join_steps:
-            a_dest, a_src = uuid_a in js.destination_framework_uuids, uuid_a in js.source_framework_uuids
-            b_dest, b_src = uuid_b in js.destination_framework_uuids, uuid_b in js.source_framework_uuids
-            if (a_dest and b_src) or (a_src and b_dest):
+            for dest_uuid in js.destination_framework_uuids:
+                adjacency[dest_uuid].update(js.source_framework_uuids)
+            for src_uuid in js.source_framework_uuids:
+                adjacency[src_uuid].update(js.destination_framework_uuids)
+
+        visited = {uuid_a}
+        frontier = {uuid_a}
+        while frontier:
+            frontier = set().union(*(adjacency[node] for node in frontier)) - visited
+            if uuid_b in frontier:
                 return True
+            visited |= frontier
         return False
 
     @staticmethod
     def _conflicting_transform_hops_error(
-        ep: FeatureGroupStep, first_hop: TransformFrameworkStep, second_hop: TransformFrameworkStep
+        ep: FeatureGroupStep,
+        first_hop: TransformFrameworkStep | _JoinServedParent,
+        second_hop: TransformFrameworkStep | _JoinServedParent,
     ) -> str:
-        """A FeatureGroupStep can only bind one incoming framework hop; two distinct, unlinked
-        upstream instances is a missing-Link configuration problem, not a bug."""
+        """A FeatureGroupStep can only bind one incoming source; two distinct, unlinked ones is a
+        missing-Link configuration problem, not a bug."""
         feature_name = format_feature_group_class(ep.feature_group)
         first_name = format_feature_group_class(first_hop.from_feature_group)
         second_name = format_feature_group_class(second_hop.from_feature_group)
@@ -489,23 +506,26 @@ Available join types:
                     member_parents = graph.parent_to_children_mapping.get(member_uuid, set())
                     parents |= member_parents - self.get_parent_parents(member_parents, graph)
 
-                # Every distinct hop this step binds, collected before any conflict is decided: whether
-                # a later hop links to an earlier one must not depend on the arbitrary (set-derived)
-                # order the parents are visited in, only on the final, complete set of hops this step
-                # actually binds. The conflict check itself runs once, after this loop.
-                bound_hops: list[tuple[TransformFrameworkStep, UUID]] = []
+                # Explicit hops and join-served parents (delivered pre-merged by a JoinStep, no hop built)
+                # both compete for this step's one binding, so both get grouped by the same linkage test
+                # below. Order-independent: collected here, grouped once after the loop.
+                bound_entries: list[tuple[TransformFrameworkStep | _JoinServedParent, UUID, list[JoinStep]]] = []
+                join_served_entries: list[tuple[type[FeatureGroup], UUID, list[JoinStep]]] = []
+                seen_hop_uuids: set[UUID] = set()
 
                 for parent in parents:
-                    match = set()
                     parent_node_property = graph.get_nodes()[parent]
-
-                    for js in left_join_frameworks:
-                        found = js.matched(ep.compute_framework, parent_node_property.feature.uuid)
-                        if found:
-                            match.add(found)
-                            break
-                    if match:
-                        # parent is served by a join step; the expanded link token already orders the consumer
+                    matching_join_steps = [
+                        js
+                        for js in left_join_frameworks
+                        if js.matched(ep.compute_framework, parent_node_property.feature.uuid)
+                    ]
+                    if matching_join_steps:
+                        # Served by a join, no explicit hop needed; keep every matching join, not just
+                        # the first, so the later linkage check doesn't depend on set iteration order.
+                        join_served_entries.append(
+                            (parent_node_property.feature_group_class, parent, matching_join_steps)
+                        )
                         continue
 
                     if ep.compute_framework != parent_node_property.feature.get_compute_framework():
@@ -523,8 +543,9 @@ Available join types:
                             new_execution_plan.append(new_tfs)
                             canonical_tfs = new_tfs
 
-                        if not any(hop.uuid == canonical_tfs.uuid for hop, _ in bound_hops):
-                            bound_hops.append((canonical_tfs, parent))
+                        if canonical_tfs.uuid not in seen_hop_uuids:
+                            seen_hop_uuids.add(canonical_tfs.uuid)
+                            bound_entries.append((canonical_tfs, parent, []))
 
                         # Records every parent the hop covers; they all share one owning step, so
                         # this doesn't change the scheduling gate.
@@ -536,33 +557,62 @@ Available join types:
 
                         need_to_upload_collector.add(parent)
 
-                # Group the distinct hops by transitive linkage (same source feature-group class, or
-                # tied together by a declared Link): a hop conflicts only with a group it links to
-                # neither by class nor by Link, not with every other hop individually. This also settles
-                # a hop whose own parent uuid never itself became a JoinStep's destination/source uuid
-                # (e.g. an off-framework sibling of the declared side the join actually used) as long as
-                # some other member of its group did; grouping every hop up front, rather than deciding
-                # per pair as each parent is visited, keeps the result independent of the (arbitrary,
-                # set-derived) order the parents were visited in.
-                hop_groups: list[list[tuple[TransformFrameworkStep, UUID]]] = []
-                for hop, hop_parent in bound_hops:
+                # Group entries by transitive linkage: same feature-group class, declared-side sharing via
+                # either entry's matching JoinSteps (catches a case-override hop whose parent lost the
+                # JoinStep's own uuid to a same-role sibling, see `_case_override_beats_nearer_wrong_framework_left`),
+                # or `_parents_linked_by_join`.
+                def _entries_linked(
+                    entry_a: tuple[TransformFrameworkStep | _JoinServedParent, UUID, list[JoinStep]],
+                    entry_b: tuple[TransformFrameworkStep | _JoinServedParent, UUID, list[JoinStep]],
+                ) -> bool:
+                    hop_a, parent_a, matching_a = entry_a
+                    hop_b, parent_b, matching_b = entry_b
+                    if hop_a.from_feature_group is hop_b.from_feature_group:
+                        return True
+                    if any(
+                        issubclass(hop_b.from_feature_group, declared_side)
+                        for js in matching_a
+                        for declared_side in (js.link.left_feature_group, js.link.right_feature_group)
+                    ):
+                        return True
+                    if any(
+                        issubclass(hop_a.from_feature_group, declared_side)
+                        for js in matching_b
+                        for declared_side in (js.link.left_feature_group, js.link.right_feature_group)
+                    ):
+                        return True
+                    return self._parents_linked_by_join(parent_a, parent_b, left_join_frameworks)
+
+                def _add_to_groups(
+                    groups: list[list[tuple[TransformFrameworkStep | _JoinServedParent, UUID, list[JoinStep]]]],
+                    entry: tuple[TransformFrameworkStep | _JoinServedParent, UUID, list[JoinStep]],
+                ) -> None:
                     linked_groups = [
-                        group
-                        for group in hop_groups
-                        if any(
-                            member_hop.from_feature_group is hop.from_feature_group
-                            or self._parents_linked_by_join(member_parent, hop_parent, left_join_frameworks)
-                            for member_hop, member_parent in group
-                        )
+                        group for group in groups if any(_entries_linked(entry, member) for member in group)
                     ]
                     if linked_groups:
                         target_group = linked_groups[0]
-                        target_group.append((hop, hop_parent))
+                        target_group.append(entry)
                         for other_group in linked_groups[1:]:
                             target_group.extend(other_group)
-                            hop_groups.remove(other_group)
+                            groups.remove(other_group)
                     else:
-                        hop_groups.append([(hop, hop_parent)])
+                        groups.append([entry])
+
+                hop_groups: list[list[tuple[TransformFrameworkStep | _JoinServedParent, UUID, list[JoinStep]]]] = []
+                for entry in bound_entries:
+                    _add_to_groups(hop_groups, entry)
+
+                if len(hop_groups) > 1:
+                    raise ValueError(
+                        self._conflicting_transform_hops_error(ep, hop_groups[0][0][0], hop_groups[1][0][0])
+                    )
+
+                # Join-served parents compete for the same binding, so merge them into the same groups too.
+                for served_feature_group, served_parent, matching_join_steps in join_served_entries:
+                    _add_to_groups(
+                        hop_groups, (_JoinServedParent(served_feature_group), served_parent, matching_join_steps)
+                    )
 
                 if len(hop_groups) > 1:
                     raise ValueError(
@@ -809,6 +859,7 @@ Available join types:
             right_uuids = frozenset({sides.right_uuid})
             # Append/union gates only on its own two feature uuids, not on the general required_uuids.
             join_step_required_uuids = {sides.left_uuid, sides.right_uuid}
+            join_uuids_left, join_uuids_right = left_uuids, right_uuids
         else:
             side = JoinSide.RIGHT if swap_sides else JoinSide.LEFT
             destination = frozenset(destination_framework_uuids)
@@ -831,12 +882,21 @@ Available join types:
                 # step/framework hop and is dropped by design.
                 left_uuids, right_uuids = left_from_split, right_from_split
             else:
-                # The step's own sets, so a record never names parents outside its destination/source
-                # claim. A same-framework self link lands here too, since its declared sides are then
-                # identical; a cross-framework self link (parents split across two frameworks) instead
-                # takes the branch above, like any other multi-framework declared side.
+                # The step's own sets; a same-framework self link lands here too. Framework-broad, so
+                # join_uuids_left/right below narrow independently rather than reusing these.
                 left_uuids, right_uuids = resolved_left, resolved_right
             join_step_required_uuids = required_uuids
+
+            # destination_uuids/source_uuids must only ever name genuine declared-side members, regardless
+            # of which branch above ran; any-distance widening keeps a nearer wrong-framework sibling from
+            # hiding a farther, correct one.
+            declared_side_uuids = split.left_uuids_any_distance | split.right_uuids_any_distance
+            join_uuids_left = resolved_left & declared_side_uuids
+            join_uuids_right = resolved_right & declared_side_uuids
+
+        destination_uuids, source_uuids = (
+            (join_uuids_right, join_uuids_left) if side is JoinSide.RIGHT else (join_uuids_left, join_uuids_right)
+        )
 
         record = ResolvedJoin(
             link_uuid=link.uuid,
@@ -848,8 +908,8 @@ Available join types:
                 link.right_feature_group, link.right_index, right_uuids, self.declared_frameworks
             ),
             destination_side=side,
-            destination_uuids=frozenset(destination_framework_uuids),
-            source_uuids=frozenset(source_framework_uuids),
+            destination_uuids=frozenset(destination_uuids),
+            source_uuids=frozenset(source_uuids),
             destination_framework=destination_framework,
             source_framework=source_framework,
             consumers=frozenset(children_uuids),

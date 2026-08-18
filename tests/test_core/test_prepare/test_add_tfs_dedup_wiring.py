@@ -6,6 +6,8 @@ same-shaped hops from genuinely different parents must not dedup into one (Scena
 from typing import NamedTuple
 from uuid import UUID, uuid4
 
+import pytest
+
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.core.step.feature_group_step import FeatureGroupStep
 from mloda.core.core.step.join_step import JoinStep
@@ -23,6 +25,9 @@ from mloda.user import Link
 from mloda.user import Options
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
+from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import (
+    PythonDictFramework,
+)
 
 
 class DedupBaseFG(FeatureGroup):
@@ -275,3 +280,81 @@ def test_parents_linked_by_join_requires_genuine_opposite_sides() -> None:
 
     assert ExecutionPlan._parents_linked_by_join(a, b, {join_step}) is False
     assert ExecutionPlan._parents_linked_by_join(dest, src, {join_step}) is True
+
+
+# ---------------------------------------------------------------------------
+# A parent matching more than one JoinStep must not depend on set iteration order
+# ---------------------------------------------------------------------------
+
+
+class MatchedJsHubFG(DedupBaseFG):
+    """A hub genuinely joined to two different sides, so its uuid is a real side of two JoinSteps."""
+
+
+class MatchedJsAFG(DedupBaseFG):
+    pass
+
+
+class MatchedJsYFG(DedupBaseFG):
+    pass
+
+
+class MatchedJsConsumerFG(DedupBaseFG):
+    pass
+
+
+def _hub_matches_two_joins_scenario(
+    hub_link_token: UUID, other_link_token: UUID
+) -> tuple[list[JoinStep | FeatureGroupStep], Graph]:
+    """Hub parent P genuinely matches both JoinSteps; only the token order differs between calls."""
+    graph = Graph()
+
+    p = _feature("matched_js_hub_p", PandasDataFrame)
+    q = _feature("matched_js_a_q", PyArrowTable)
+    graph.add_node(p.uuid, NodeProperties(p, MatchedJsHubFG))
+    graph.add_node(q.uuid, NodeProperties(q, MatchedJsAFG))
+    graph.parent_to_children_mapping[p.uuid] = set()
+    graph.parent_to_children_mapping[q.uuid] = set()
+
+    hub_link = Link.inner(JoinSpec(MatchedJsAFG, "id"), JoinSpec(MatchedJsHubFG, "id"))
+    other_link = Link.inner(JoinSpec(MatchedJsHubFG, "id2"), JoinSpec(MatchedJsYFG, "id2"))
+
+    hub_join_step = JoinStep(
+        link=hub_link,
+        destination_framework=PandasDataFrame,
+        source_framework=PyArrowTable,
+        required_uuids=set(),
+        destination_framework_uuids={p.uuid},
+        source_framework_uuids={uuid4()},
+        token=hub_link_token,
+    )
+    other_join_step = JoinStep(
+        link=other_link,
+        destination_framework=PandasDataFrame,
+        source_framework=PythonDictFramework,
+        required_uuids=set(),
+        destination_framework_uuids={p.uuid},
+        source_framework_uuids={uuid4()},
+        token=other_link_token,
+    )
+
+    consumer = _feature("matched_js_consumer", PandasDataFrame)
+    feature_set = FeatureSet()
+    feature_set.add(consumer)
+    graph.parent_to_children_mapping[consumer.uuid] = {p.uuid, q.uuid}
+    consumer_step = FeatureGroupStep(MatchedJsConsumerFG, feature_set, set(), PandasDataFrame)
+
+    return [hub_join_step, other_join_step, consumer_step], graph
+
+
+@pytest.mark.parametrize(
+    "hub_link_token, other_link_token",
+    [(UUID(int=1), UUID(int=2)), (UUID(int=2), UUID(int=1))],
+    ids=["hub_link_lower_token", "other_link_lower_token"],
+)
+def test_parent_matching_two_join_steps_does_not_raise_regardless_of_token_order(
+    hub_link_token: UUID, other_link_token: UUID
+) -> None:
+    execution_plan, graph = _hub_matches_two_joins_scenario(hub_link_token, other_link_token)
+
+    ExecutionPlan().add_tfs(execution_plan, graph)

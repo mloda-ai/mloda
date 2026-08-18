@@ -635,6 +635,10 @@ class ExecutionPlan:
 
         declared_left_frameworks = {graph.get_nodes()[u].feature.get_compute_framework() for u in split.left_uuids}
         declared_right_frameworks = {graph.get_nodes()[u].feature.get_compute_framework() for u in split.right_uuids}
+        widened_right_frameworks = {
+            graph.get_nodes()[u].feature.get_compute_framework()
+            for u in split.right_uuids_any_distance - split.left_uuids
+        }
 
         # The order shows which items should be added first.
         # Thus, we need to make sure that higher ordered links are calculated first.
@@ -655,6 +659,7 @@ class ExecutionPlan:
             trekker_left_framework=link_fw[1],
             declared_left_frameworks=declared_left_frameworks,
             declared_right_frameworks=declared_right_frameworks,
+            widened_right_frameworks=widened_right_frameworks,
             fallback=swap_merge_sides,
             jointype=link.jointype,
         )
@@ -773,6 +778,7 @@ class ExecutionPlan:
         trekker_left_framework: type[ComputeFramework],
         declared_left_frameworks: set[type[ComputeFramework]],
         declared_right_frameworks: set[type[ComputeFramework]],
+        widened_right_frameworks: set[type[ComputeFramework]],
         fallback: bool,
         jointype: JoinType,
     ) -> bool:
@@ -794,9 +800,17 @@ class ExecutionPlan:
         It does not reliably mean "declared left", for the same reversed-key reason above. Links keyed on one
         single framework make the tie-break tautological, so the trekker-flip fallback stays for that case:
         it is a common path in practice, not a rare or unreachable one, hit by ordinary same-framework
-        INNER/LEFT/APPEND/UNION/ASOF joins and self-joins throughout the test suite."""
+        INNER/LEFT/APPEND/UNION/ASOF joins and self-joins throughout the test suite. When destination and
+        source frameworks differ, a single-sided membership answer is trusted only after checking the other
+        side's full (any-distance) candidates for a competing claim on the destination framework."""
         holds_left = destination_framework in declared_left_frameworks
         holds_right = destination_framework in declared_right_frameworks
+
+        if jointype == JoinType.RIGHT and destination_framework != source_framework:
+            if holds_left and not holds_right and destination_framework in widened_right_frameworks:
+                # A farther, non-canonical right parent also sits on the destination framework, so the
+                # nearest-only split's silence on the right side is not real ambiguity-free evidence.
+                holds_right = True
 
         if holds_left and not holds_right:
             return False
@@ -942,12 +956,6 @@ class ExecutionPlan:
     def case_link_fw_is_equal_to_children_fw(
         self, link_fw: LinkFrameworkTrekker, children_uuid: UUID, graph: Graph
     ) -> bool | tuple[set[UUID], set[UUID]]:
-        # check that we only support non-right joins for equal/polymorphic feature groups
-        if link_fw[0].jointype == JoinType.RIGHT:
-            raise Exception(
-                f"Right joins are not supported for equal or polymorphic feature groups. link: {link_fw[0]}"
-            )
-
         # get feature which could be left
         parents = graph.parent_to_children_mapping[children_uuid]
         local_feature_set_collection = deepcopy(self.feature_set_collections)
@@ -1028,6 +1036,12 @@ class ExecutionPlan:
                 ]
                 if len(filtered) == 1:
                     return filtered[0]
+
+        # check that we only support non-right joins for equal/polymorphic feature groups
+        if link_fw[0].jointype == JoinType.RIGHT:
+            raise Exception(
+                f"Right joins are not supported for equal or polymorphic feature groups. link: {link_fw[0]}"
+            )
 
         raise ValueError(
             "There are more than one solution for the join. "

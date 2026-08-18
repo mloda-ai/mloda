@@ -63,7 +63,8 @@ def _matches(pattern: str, path: str) -> bool:
 
 
 def _markdown_referenced_by_tests() -> set[str]:
-    """Markdown files that the test suite reads or asserts on, so CI must run when they change."""
+    """Markdown files the test suite references, found via literal "foo.md" strings; a glob- or
+    variable-built path is invisible to this scan."""
     referenced: set[str] = set()
     for source in (PROJECT_ROOT / "tests").rglob("*.py"):
         for line in source.read_text(encoding="utf-8").splitlines():

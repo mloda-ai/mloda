@@ -10,7 +10,7 @@ from pathlib import Path
 import pytest
 from mktestdocs import grab_code_blocks
 
-from tests.test_docs_fences import ILLUSTRATIVE_TAG, RUNNABLE_TAG
+from tests.docs_corpus import ILLUSTRATIVE_TAG, RUNNABLE_TAG
 from tests.test_documentation.test_documentation import run_md_file_isolated
 
 FAILING_SNIPPET = 'raise RuntimeError("doc fence collection contract")'

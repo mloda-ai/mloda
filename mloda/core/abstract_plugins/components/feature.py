@@ -10,7 +10,13 @@ if TYPE_CHECKING:
 
 from mloda.core.abstract_plugins.components.domain import Domain
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
-from mloda.core.abstract_plugins.components.hashable_dict import _CYCLE, HashableDict, _deep_equal, _deep_hashable
+from mloda.core.abstract_plugins.components.hashable_dict import (
+    _CYCLE,
+    HashableDict,
+    _deep_equal,
+    _deep_hashable,
+    _reduce_dict_items,
+)
 from mloda.core.abstract_plugins.components.index.index import Index
 from mloda.core.abstract_plugins.components.link import Link
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
@@ -424,17 +430,8 @@ class Feature:
             seen = seen | {id(value)}
         if isinstance(value, dict):
             items = [(key, Feature._reduce(val, seen)) for key, val in value.items()]
-            # Mixed-type keys are unorderable by kv[0]; fall back to the same type-robust sort _deep_hashable uses.
-            # Inherited caveat from that fallback: repr() is not an equality-safe canonical form for
-            # identity-based reprs (e.g. a bare Feature key has no __repr__ override, so its repr embeds id()).
-            try:
-                return tuple(sorted(items, key=lambda kv: kv[0]))
-            except TypeError:
-                return tuple(
-                    sorted(
-                        items, key=lambda kv: (kv[0].__class__.__module__, kv[0].__class__.__qualname__, repr(kv[0]))
-                    )
-                )
+            # Same canonical reduction as _deep_hashable uses.
+            return _reduce_dict_items(items)
         if isinstance(value, (frozenset, set)):
             return frozenset(Feature._reduce(item, seen) for item in value)
         if isinstance(value, (list, tuple)):

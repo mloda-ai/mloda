@@ -147,6 +147,27 @@ def test_child_options_key_with_mixed_type_dict_keys_matches_across_separate_dic
     assert hash(f1) == hash(f2)
 
 
+def test_child_options_key_with_int_bool_equal_keys_matches_across_separate_dict_objects() -> None:
+    """1 and True are == and hash-equal; Feature._reduce's fallback sort must not split them apart."""
+    f1 = Feature("root")
+    f1.child_options = Options(group={1: "a", 2.5: "b", "s": "c"})  # type: ignore[dict-item]
+
+    f2 = Feature("root")
+    f2.child_options = Options(group={True: "a", 2.5: "b", "s": "c"})  # type: ignore[dict-item]
+
+    assert f1._child_options_key() == f2._child_options_key()
+    assert hash(f1) == hash(f2)
+
+
+def test_feature_options_field_with_int_bool_equal_keys_hashes_consistently_with_equality() -> None:
+    """Same bug reached through Feature.options (hashable_dict.py's fallback), not just child_options."""
+    left = Feature("root", options={1: "a", 2.5: "b", "s": "c"})  # type: ignore[dict-item]
+    right = Feature("root", options={True: "a", 2.5: "b", "s": "c"})  # type: ignore[dict-item]
+
+    assert left == right
+    assert hash(left) == hash(right)
+
+
 def test_nested_feature_cycle_through_plain_container_still_recursionerrors() -> None:
     """Deliberately out-of-scope: a Feature reached only via a plain dict/list is hashed as a leaf with a fresh
     `seen`, so the cycle guard never fires here; pinned to catch accidental behavior changes during normalizer
@@ -157,3 +178,15 @@ def test_nested_feature_cycle_through_plain_container_still_recursionerrors() ->
 
     with pytest.raises(RecursionError):
         hash(o)
+
+
+def test_feature_eq_with_self_as_raw_child_options_key_does_not_raise() -> None:
+    """A bare Feature used directly as a raw dict key must still compare via pure `==`, with no `hash(key)`
+    call: a single-item dict never needs a comparison to sort, so `_reduce_dict_items` takes the native-order
+    path and never touches the key's `__hash__`, which is not cycle-safe when re-entered outside `_reduce`'s
+    own `seen` tracking. Unlike the sibling plain-container case above (Feature reached only through a
+    container, the guard never applies there, RecursionError is accepted), this one must NOT raise."""
+    f = Feature("root")
+    f.child_options = Options(group={f: "v"})  # type: ignore[dict-item]  # a bare Feature used as a raw dict key
+
+    assert f == f

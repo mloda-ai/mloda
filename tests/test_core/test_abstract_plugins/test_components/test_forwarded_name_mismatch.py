@@ -16,13 +16,9 @@ No behavior change when: values are equal, K was set by the author (not
 inherited), the feature is config-based (no string parse), or K is absent from
 the options.
 
-Also covers the context-path counterpart: a value forwarded into
-``options.inherited_context_keys`` via ``inherit_context_keys`` or the
-consumer's ``propagate_context_keys`` must be checked exactly like a
-group-forwarded value, not silently ignored. Its remedy text must differ
-from the group path's: "forward_group_exclude" does not remove a
-context-forwarded value, so the message must omit it and instead name
-"inherit_context_keys" / "propagate_context_keys".
+Also covers the context path: inherited_context_keys must be checked like
+inherited_group_keys, with remedy text naming
+inherit_context_keys/propagate_context_keys instead of forward_group_exclude.
 
 All fixture names carry a "namemis579" (group path) or "ctxmis579" (context
 path) marker so they cannot collide with other tests in the global plugin
@@ -80,11 +76,7 @@ STRING_FEATURE_NAME_CTX = "sales__sum_ctxmis579"
 
 
 class _ContextMismatchChainedGroup(FeatureChainParserMixin):
-    """Context-path counterpart of ``_NameMismatchChainedGroup``.
-
-    The operation key is context-categorized (context=True, the default made explicit here):
-    it is reachable only through the context-forwarding flows, not group forwarding.
-    """
+    """Context-path counterpart of ``_NameMismatchChainedGroup``; context=True, reachable only via context forward."""
 
     PREFIX_PATTERN = r".*__(sum|max)_ctxmis579$"
     PROPERTY_MAPPING = {
@@ -267,13 +259,10 @@ class TestForwardedSingletonUnpack:
 
 
 class TestForwardedContextNameMismatch:
-    """The check must also catch a value forwarded via the context path
-    (inherited_context_keys), not just options.inherited_group_keys.
-    """
+    """The check must also catch a value forwarded via the context path (inherited_context_keys), not just group."""
 
     def test_context_pull_differing_value_raises(self) -> None:
-        """A value pulled into the child's context via inherit_context_keys, contradicting the
-        name-parsed value, must raise."""
+        """A context-pulled value contradicting the name-parsed value must raise."""
         child_options = _context_pull_child_options({CONTEXT_KEY: "max"})
         assert child_options.inherited_context_keys == frozenset({CONTEXT_KEY})  # precondition
 
@@ -286,15 +275,12 @@ class TestForwardedContextNameMismatch:
         assert "sum" in message
         assert "max" in message
         assert "MLODA_ALLOW_FORWARDED_NAME_MISMATCH" in message
-        # A context-forwarded mismatch cannot be fixed with the group-only remedy; the message
-        # must instead name the context-forwarding controls that actually carried the value.
         assert "forward_group_exclude" not in message
         assert "inherit_context_keys" in message
         assert "propagate_context_keys" in message
 
     def test_context_propagate_differing_value_raises(self) -> None:
-        """A value pushed into the child's context via consumer.propagate_context_keys,
-        contradicting the name-parsed value, must also raise."""
+        """A context-pushed value contradicting the name-parsed value must also raise."""
         child_options = _context_propagate_child_options({CONTEXT_KEY: "max"})
         assert child_options.inherited_context_keys == frozenset({CONTEXT_KEY})  # precondition
 
@@ -307,7 +293,6 @@ class TestForwardedContextNameMismatch:
         assert "sum" in message
         assert "max" in message
         assert "MLODA_ALLOW_FORWARDED_NAME_MISMATCH" in message
-        # Same context-only remedy requirement as the pull path above.
         assert "forward_group_exclude" not in message
         assert "inherit_context_keys" in message
         assert "propagate_context_keys" in message

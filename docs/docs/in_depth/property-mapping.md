@@ -1,10 +1,10 @@
 # PROPERTY_MAPPING Configuration
 
-`PROPERTY_MAPPING` maps every option key a feature group accepts to a `PropertySpec`: the
-typed, frozen spec that declares how that option is validated. This page is the single
-source of truth for that model: what a spec may contain, which invariant is checked at
-which moment, what runs against end-user values in what order, and what each failure
-produces.
+`PROPERTY_MAPPING` maps every option key a feature group or a reader accepts to a
+`PropertySpec`: the typed, frozen spec that declares how that option is validated. This page
+is the single source of truth for that model: what a spec may contain, which invariant is
+checked at which moment, what runs against end-user values in what order, and what each
+failure produces.
 
 Two rules carry most of the model:
 
@@ -40,6 +40,8 @@ PROPERTY_MAPPING = {
 | `required_when` | `Callable \| None` | `None` | `(Options) -> bool`: the key is required only when it returns truthy. |
 | `allow_explicit_none` | `bool` | `False` | Opt-in so an explicit `None` is honored (not treated as absent) and flows through validation. |
 | `deferred_binding` | `bool` | `False` | Exempts a required key from the string-named path presence check only; its value is bound outside match-time name capture. Not optionality: the key stays required on the config path. See [Required presence on the string-named path](#required-presence-on-the-string-named-path). |
+| `framework_set` | `bool` | `False` | Reader-only: marks the one framework-written key, which is exempt from enforcement. Rejected on a feature group. |
+| `scalar_only` | `bool` | `False` | Reader-only: reject a list/tuple/set/frozenset value outright instead of unpacking it element-wise. Requires `strict_validation=True`. Rejected on a feature group. |
 
 **`property_spec(...)` is the authoring path to reach for.** It is a thin builder over the
 same fields, its keyword is `strict=` (which sets `strict_validation`), and it keeps the
@@ -66,13 +68,19 @@ The type IS the schema. A raw dict spec is rejected at class definition
 constructor `TypeError` that mypy already flags where the spec is written. Nothing a spec
 does not understand can be absorbed silently.
 
+**Declarations merge across the class hierarchy.** On both surfaces a subclass adds or overrides
+keys and redeclares nothing: the most-derived declaration of a key wins. `declared_option_specs()`
+(feature group) and `reader_option_specs()` (reader) return the merged view; the attribute itself
+stays the class's own declaration. `PROPERTY_MAPPING = None` is rejected at class definition,
+because `None` cannot clear inherited keys.
+
 ## The lifecycle: which invariant fires when
 
 | Moment | Mechanism | Checks | Receives | On failure |
 | --- | --- | --- | --- | --- |
 | Author time | `mypy --strict` | The field exists and its declared type fits: `strict_validaton=True` (typo), `strict_validation=1`, `allowed_values=5` | The constructor call | mypy error at the spec literal. Without mypy: an unknown field is a `TypeError`; a wrong type falls through to the row below |
 | Construction (`PropertySpec(...)`) | `__post_init__` | `allowed_values` is not a str/bytes and is a Mapping or an iterable; `strict_validation` is a real bool; the validators are callable; `element_validator` implies strict; strict has a non-empty value space or an `element_validator`; a strict, non-`None` `default` is accepted by the key's own rules | The spec being built | `ValueError` at import, prefixed `PropertySpec('<explanation>')` |
-| Class definition (`FeatureGroup.__init_subclass__`) | Spec type | Every spec IS a `PropertySpec` | Every value in the mapping | `ValueError` naming the class and the key |
+| Class definition (`__init_subclass__` of `FeatureGroup` or `BaseInputData`) | Spec type + surface rules | Every value in the class's own declaration, and in any plain mixin reaching it through the merge, IS a `PropertySpec` and declares nothing inert on that surface (feature group: `framework_set`, `scalar_only`; reader: `match_guard`, `deferred_binding`, `context=False`, enforcement fields on a `framework_set` key); the reserved reader key's **winning** declaration keeps `framework_set=True`; the declaration is a dict (`None` rejected) | Every value in that class's declaration, plus mixin declarations, plus the reserved key as the merge resolves it | `ValueError` naming class, key and field (and the reaching class for a mixin) |
 | Match time (parser) | `allowed_values` membership | Each element of a **present** option is in the accepted set | One element | `ValueError`, surfaced to the end user |
 | Match time (parser) | `element_validator` | Each element of a **present** option satisfies a predicate | One element | `ValueError`, surfaced to the end user |
 | Match time (parser) | Required presence (config path) | A key that declares no `default` and no `required_when` was provided | The options | Non-match (`False`) |
@@ -81,13 +89,11 @@ does not understand can be absorbed silently.
 | Match time (mixin) | `MIN/MAX_IN_FEATURES` | In-feature count is within bounds | The in-features | Non-match (`False`) |
 | Match time (guard installed at class definition) | `required_when` | A conditionally required option is present | `Options` | Non-match (`False`) |
 | Class definition (mixin) | Universal-matcher diagnostic | An all-optional `PROPERTY_MAPPING` inherits the configuration matcher, so it matches any name with empty options | The class | `logger.warning`, unless `ALLOW_UNIVERSAL_MATCHER = True` |
-| Author time (reader surface) | `mypy --strict` | `READER_OPTIONS` holds `PropertySpec` values | The constructor call | mypy error at the declaration |
-| Class definition (`BaseInputData.__init_subclass__`) | Spec type + surface guard | Every value IS a `PropertySpec` and declares nothing inert on a reader (`match_guard`, `deferred_binding`, `context=False`, enforcement fields on a `framework_set` key); the reserved key's **winning** declaration across the MRO keeps `framework_set=True` | Every value in that class's declaration, plus the reserved key as the MRO merge resolves it | `ValueError` naming class, key and field |
 | Match time (reader selection) | Presence + strict validation | Required keys are present and present strict values pass, element-wise unless `scalar_only` rejects a collection outright; `framework_set` keys exempt | The candidate's merged specs and the options | Reader non-match. Addressed-reader and supplied-value failures record a `stage="input_data"` rejection; unaddressed absence and an unjudgeable predicate decline silently |
 | Match time (reader code) | `reader_option(key, options)` | Supplied value, else the declared `default` | The key name and the options | `ValueError` for an undeclared key or an absent `NO_DEFAULT` one |
 
 A spec is constructed inside the class body, so its own rules fire before the class exists.
-Class definition is left with exactly one rule: the type itself. Within `__post_init__` the
+Class definition checks the type plus the surface rules. Within `__post_init__` the
 declared-default check runs last, after the shape rules, because it calls the validators the
 shape rules just certified: a non-callable `element_validator` would otherwise be blamed on
 the default.
@@ -112,21 +118,22 @@ declares it gets its resolved `match_feature_group_criteria` wrapped at class de
 and the wrapper runs the predicates after that matcher returns `True`. Overriding the
 matcher therefore keeps the contract, whether the override delegates or not.
 
-The last four rows are the whole reader surface, and the match-time ones sit outside the ordered
-sequence above: a user-facing `READER_OPTIONS` key is consumed during reader selection, and no other
-moment fires for it. The reserved `"BaseInputData"` key is the exception, written at selection and read
-back at load time by `BaseInputData.init_reader` and by `SQLITEReader.get_table`.
+The last two rows are the reader's match-time surface, and they sit outside the ordered sequence
+above: a user-facing reader key is consumed during reader selection, and no other moment fires for
+it. The reserved `"BaseInputData"` key is the exception, written at selection and read back at load
+time by `BaseInputData.init_reader` and by `SQLITEReader.get_table`.
 See [One spec type, two surfaces](#one-spec-type-two-surfaces).
 
 ## One spec type, two surfaces
 
-Option keys are declared in two places, with one spec type, and the two surfaces enforce it
-differently because they consume values at different moments.
+One attribute (`PROPERTY_MAPPING`), one spec type (`PropertySpec`), one declaration mechanism (an
+MRO merge with a per-class cache, and one validator parameterized by surface), and two owners that
+consume the values at different moments.
 
 | Surface | Declared on | What the framework does with it |
 | --- | --- | --- |
 | `PROPERTY_MAPPING` | a `FeatureGroup` | Enforces it and applies it: value validation (`allowed_values`, `element_validator`), presence and `required_when`, and materialization of declared defaults into `Options`. |
-| `READER_OPTIONS` | a `BaseInputData` reader | Enforces it at reader selection: presence, `required_when` and strict values are checked before a candidate probes, and a failure vetoes that reader, recording per the ownership rule above. Defaults are never materialized; only the reader's own code applies them. |
+| `PROPERTY_MAPPING` | a `BaseInputData` reader | Enforces it at reader selection: presence, `required_when` and strict values are checked before a candidate probes, and a failure vetoes that reader, recording per the ownership rule above. Defaults are never materialized; only the reader's own code applies them. |
 
 A reader consumes its option keys during reader **selection** (`match_subclass_data_access`, reached
 through `BaseInputData.matches` from the matcher), before the framework materializes anything. Two
@@ -139,26 +146,30 @@ consequences keep the shared type honest on this surface:
   `reader_option` raises for it. The declaration is load-bearing: `ReadFile` and `ReadDocument`
   resolve `document_suffixes` this way (for `ReadDocument` only in its `DataAccessCollection`
   branch; the bare str/Path branch passes no `document_suffixes`).
-- **Fields with no reader meaning are rejected where they are written.** `match_guard`,
+- **The shared validator rejects, per surface, the fields that are inert there.** `match_guard`,
   `deferred_binding=True` and `context=False` describe name matching and value placement, which a
-  reader does not have, so `BaseInputData.__init_subclass__` rejects them instead of leaving them
-  silently inert (#865). `framework_set=True` marks the one framework-written key, the reserved
-  `"BaseInputData"` pair written by `add_base_input_data_to_options` and read by `init_reader`.
-  Such keys are exempt from enforcement, so enforcement fields on them are rejected too, as is
-  `allow_explicit_none`, which the admit path never reads on a framework-written key; on
-  `PROPERTY_MAPPING` the field is rejected outright. The reserved key is checked as the MRO merge
-  resolves it: its **winning** declaration must keep `framework_set=True`, so neither a subclass nor a
-  plain mixin can turn the framework-written key into a user-enforced one.
-- **The reverse also holds: a reader-only field has no `PROPERTY_MAPPING` meaning.** `scalar_only` (#1154)
-  rejects a collection value outright instead of unpacking it element-wise, so `FeatureChainParser` rejects
-  it on `PROPERTY_MAPPING` at class definition, the same way `match_guard`/`deferred_binding`/`context=False`
-  are rejected on the reader surface.
+  reader does not have, so a reader declaration carrying them is rejected at class definition instead
+  of leaving them silently inert (#865). `framework_set=True` marks the one framework-written key, the
+  reserved `"BaseInputData"` pair written by `add_base_input_data_to_options` and read by
+  `init_reader`. Such keys are exempt from enforcement, so enforcement fields on them are rejected
+  too, as is `allow_explicit_none`, which the admit path never reads on a framework-written key; on a
+  feature group the field is rejected outright. The reserved key is checked as the MRO merge resolves
+  it: its **winning** declaration must keep `framework_set=True`, so neither a subclass nor a plain
+  mixin can turn the framework-written key into a user-enforced one.
+- **The reverse also holds: a reader-only field has no feature-group meaning.** `scalar_only` (#1154)
+  rejects a collection value outright instead of unpacking it element-wise, so a feature group
+  declaring it is rejected at class definition, the same way `match_guard`/`deferred_binding`/
+  `context=False` are rejected on the reader surface.
 
-`READER_OPTIONS` merges across the MRO (`reader_option_specs()`, most-derived declaration winning),
-so a concrete reader inherits its family's keys and redeclares nothing, and
-`declared_reader_option_keys()` is the merged key set. Both `reader_option()` and
-`reader_option_default()` raise for a key no declaration carries, so a typo in *reader* code is loud
-instead of a silent `None`.
+The merge holds on both surfaces: `declared_option_specs()` on a feature group and
+`reader_option_specs()` on a reader return the merged declarations, most-derived winning, so a
+concrete class inherits its family's keys and redeclares nothing; `declared_option_keys()` and
+`declared_reader_option_keys()` are the merged key sets. "Nothing declared" is `{}` on both. On a
+feature group it is whether any class beyond `FeatureGroup` itself declared a mapping that turns the
+configuration matcher on (see
+[Guarding against a universal configuration matcher](#guarding-against-a-universal-configuration-matcher)).
+Both `reader_option()` and `reader_option_default()` raise for a key no declaration carries, so a
+typo in *reader* code is loud instead of a silent `None`.
 
 What a plugin author may rely on:
 
@@ -171,9 +182,11 @@ What a plugin author may rely on:
 
 The surfaces used to be two types: reader selection had no rejection channel, so enforcement
 fields on a reader would have been silently inert (#865). The shared channel (#727) made declines
-attributable and collapsed the types back into one (#949). Migration edge: a bare
-`PropertySpec("...")` is required at selection; the old bare `ReaderOptionSpec("...")` is
-`PropertySpec("...", default=None)`.
+attributable and collapsed the types back into one (#949). The surfaces then still diverged in
+inheritance, validation and empty shape under two names; they now share one attribute, one merge
+and one validator, and the old reader name `READER_OPTIONS` raises at class definition naming the
+rename. Migration edge: a bare `PropertySpec("...")` is required at selection; the old bare
+`ReaderOptionSpec("...")` is `PropertySpec("...", default=None)`.
 
 ### A pattern-less feature group sits in between
 
@@ -588,7 +601,9 @@ A key is unconditionally required only when it declares no `default` and no `req
 `PROPERTY_MAPPING` with only declared-default keys (and, as the degenerate case, an empty mapping)
 has no such key, so on the configuration path it matches any feature name with empty options. A
 feature group that inherits the mixin's `match_feature_group_criteria` and declares such a mapping
-is a universal matcher: it claims features it was never meant to.
+is a universal matcher: it claims features it was never meant to. An undeclared feature group (no
+class in its hierarchy beyond `FeatureGroup` declares a `PROPERTY_MAPPING`) has no configuration
+matcher at all, so it is never universal; an explicit empty declaration is.
 
 At class definition the mixin warns about this, naming the class and the escape hatch. A key that is
 unconditionally required, or conditionally required via `required_when`, gates the match, so the
@@ -624,6 +639,22 @@ per call for every container type; the old `validation_function` saw a stringifi
 (`isinstance(x, list) and all(...)`) must become a per-element rule, or move to `match_guard`
 if it really is a whole-value check.
 
+## Migrating to the merged declaration
+
+Both surfaces declare under one attribute, and declarations merge across the class hierarchy.
+
+| Retired | Now |
+| --- | --- |
+| `READER_OPTIONS` on a reader | `PROPERTY_MAPPING`; a leftover `READER_OPTIONS` raises at class definition naming the rename |
+| A subclass declaration replacing its parent's | Declarations merge, most-derived winning. A subclass that meant to drop a parent key must override it with the spec it wants; there is no way to un-declare a key |
+| `PROPERTY_MAPPING = None` | Remove the line, or declare a dict |
+| `{**Parent.PROPERTY_MAPPING, ...}` | Declare only what changes |
+| Reading `cls.PROPERTY_MAPPING` for the effective mapping | `declared_option_specs()` on a feature group, `reader_option_specs()` on a reader |
+
+One behavior change: a subclass that declared its own mapping while omitting parent keys now
+inherits them, so a parent default materializes into `Options` at intake and a parent key without a
+default is required. Check subclass hierarchies that declared their own mapping.
+
 ## Where each invariant is pinned
 
 | Invariant | Test |
@@ -638,7 +669,9 @@ if it really is a whole-value check.
 | Declared defaults materialized at the compute boundary | `tests/test_core/test_abstract_plugins/test_materialize_defaults_boundary.py` |
 | Declared defaults materialized at intake, canonicalizing default-equivalent twins | `tests/test_core/test_abstract_plugins/test_intake_default_canonicalization.py` |
 | Filter criteria matching observes effective options | `tests/test_core/test_filter/test_filter_criteria_effective_options.py` |
-| The reader surface: the single spec type and its surface guards, the reserved framework key, the MRO merge, the loud undeclared key, the presence rule of `reader_option()` | `tests/.../test_components/test_reader_option_declarations.py` |
+| The shared declaration surface: MRO merge and per-class cache, declared-beyond-the-base, one validator per surface, the `None`/non-dict rejection | `tests/.../test_components/test_property_mapping_surface.py` |
+| Feature-group declarations merge across the hierarchy: accessors, materialization, config-path matching and the guards read the merged view | `tests/.../test_feature_group/test_property_mapping_merge.py` |
+| The reader surface: the surface guards, the reserved framework key, the MRO merge, the loud undeclared key, the presence rule of `reader_option()`, and the `READER_OPTIONS` rename as a hard break | `tests/.../test_components/test_reader_option_declarations.py` |
 | Reader selection enforcement: strict values, requiredness, the `framework_set` exemption, the attributable `input_data` rejection | `tests/.../test_components/test_reader_option_enforcement.py` |
 | Per-reader declarations, the declared `default` that is load-bearing at selection, and the bare-path branch it does not reach | `tests/.../input_data/test_reader_option_declarations.py` |
 | A pattern-less group: enforced `required_when`, and defaults it applies itself | `tests/.../input_data/test_read_context_files_option_declarations.py` |

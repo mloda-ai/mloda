@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.components.default_options_key import DefaultOptionKeys
@@ -107,3 +109,51 @@ def test_feature_eq_nested_in_features_options_distinguished() -> None:
     assert child_a != child_b
     assert parent_a != parent_b, "same-named in_features children with different options must not collapse"
     assert len({parent_a, parent_b}) == 2
+
+
+def test_child_options_key_with_mixed_type_dict_keys_does_not_raise() -> None:
+    """Feature._reduce's dict sort must tolerate mixed-type keys like _deep_hashable already does."""
+    f = Feature("root")
+    f.child_options = Options(group={"a": 1, 2: "b"})  # type: ignore[dict-item]  # mixed key types are the point
+
+    result = f._child_options_key()
+
+    assert result == f._child_options_key(), "repeated calls must be deterministic"
+
+
+def test_child_options_key_with_nested_mixed_type_dict_keys_does_not_raise() -> None:
+    """The mixed-type-key sort fallback must thread through recursion, not just the top level."""
+    f = Feature("root")
+    f.child_options = Options(group={"outer": {"a": 1, 2: "b"}})
+
+    result = f._child_options_key()
+
+    assert result == f._child_options_key(), "repeated calls must be deterministic"
+
+    f2 = Feature("root")
+    f2.child_options = Options(group={"outer": {2: "b", "a": 1}})
+
+    assert result == f2._child_options_key(), "nested dict order must not affect the canonical key"
+
+
+def test_child_options_key_with_mixed_type_dict_keys_matches_across_separate_dict_objects() -> None:
+    f1 = Feature("root")
+    f1.child_options = Options(group={"a": 1, 2: "b"})  # type: ignore[dict-item]  # mixed key types are the point
+
+    f2 = Feature("root")
+    f2.child_options = Options(group={2: "b", "a": 1})  # type: ignore[dict-item]  # mixed key types are the point
+
+    assert f1._child_options_key() == f2._child_options_key()
+    assert hash(f1) == hash(f2)
+
+
+def test_nested_feature_cycle_through_plain_container_still_recursionerrors() -> None:
+    """Deliberately out-of-scope: a Feature reached only via a plain dict/list is hashed as a leaf with a fresh
+    `seen`, so the cycle guard never fires here; pinned to catch accidental behavior changes during normalizer
+    unification."""
+    inner: dict[str, Feature] = {}
+    o = Options(group={"n": inner})
+    inner["back"] = Feature(name="z", options=o)
+
+    with pytest.raises(RecursionError):
+        hash(o)

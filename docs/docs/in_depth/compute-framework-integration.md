@@ -209,7 +209,7 @@ Feature groups follow a layered architecture:
 
 ```
 FeatureGroup
-  └── BaseFeatureGroup (e.g., ClusteringFeatureGroup)
+  └── BaseFeatureGroup (e.g., SegmentationFeatureGroup)
         ├── PandasImplementation
         ├── PyArrowImplementation
         └── PythonDictFrameworkImplementation
@@ -277,11 +277,11 @@ For more details on how data transformation works between compute frameworks, se
 
 ## Example
 
-For a clustering feature group:
+For a segmentation feature group:
 
 ```py
 # Base class (framework-agnostic)
-class ClusteringFeatureGroup(FeatureGroup):
+class SegmentationFeatureGroup(FeatureGroup):
     def input_features(self, options, feature_name):
         # Extract source features from feature name
         
@@ -290,31 +290,31 @@ class ClusteringFeatureGroup(FeatureGroup):
         # This will be overridden by framework-specific implementations
 
 # Pandas implementation
-class PandasClusteringFeatureGroup(ClusteringFeatureGroup):
+class PandasSegmentationFeatureGroup(SegmentationFeatureGroup):
     @classmethod
     def compute_framework_rule(cls):
         return {PandasDataFrame}
     
     @classmethod
     def calculate_feature(cls, data, features):
-        # Pandas-specific clustering implementation
+        # Pandas-specific segmentation implementation
         
 # PyArrow implementation
-class PyArrowClusteringFeatureGroup(ClusteringFeatureGroup):
+class PyArrowSegmentationFeatureGroup(SegmentationFeatureGroup):
     @classmethod
     def compute_framework_rule(cls):
         return {PyArrowTable}
     
     @classmethod
     def calculate_feature(cls, data, features):
-        # PyArrow-specific clustering implementation
+        # PyArrow-specific segmentation implementation
 ```
 
-For an aggregated feature group with Polars support:
+For a summary feature group with Polars support:
 
 ```py
 # Base class (framework-agnostic)
-class AggregatedFeatureGroup(FeatureGroup):
+class SummaryFeatureGroup(FeatureGroup):
     def input_features(self, options, feature_name):
         # Extract source features from feature name
         
@@ -323,14 +323,14 @@ class AggregatedFeatureGroup(FeatureGroup):
         # This will be overridden by framework-specific implementations
 
 # Polars Lazy implementation
-class PolarsLazyAggregatedFeatureGroup(AggregatedFeatureGroup):
+class PolarsLazySummaryFeatureGroup(SummaryFeatureGroup):
     @classmethod
     def compute_framework_rule(cls):
         return {PolarsLazyDataFrame}
     
     @classmethod
     def calculate_feature(cls, data, features):
-        # Polars lazy-specific aggregation implementation
+        # Polars lazy-specific summary implementation
         # Uses lazy evaluation for query optimization
 ```
 

@@ -416,12 +416,13 @@ class GlobalFilter:
     def domain(self, filter: SingleFilter, feature_domain: None | Domain, feature_group: type[FeatureGroup]) -> bool:
         # We have matched already the feature group and the feature.
         # Thus, we take the feature group domain if the feature domain is not set.
+        group_domain = self._read_group_domain(feature_group)
         feature_or_group_domain = None
         if feature_domain:
             feature_or_group_domain = feature_domain
         else:
-            if feature_group.get_domain() != Domain.get_default_domain():
-                feature_or_group_domain = feature_group.get_domain()
+            if group_domain is not None and group_domain != Domain.get_default_domain():
+                feature_or_group_domain = group_domain
 
         # no domains given -> ok
         if not filter.filter_feature.domain and not feature_or_group_domain:
@@ -436,7 +437,7 @@ class GlobalFilter:
         # In case that the filter has a domain and the feature not, it means that the
         # the feature group domain must be equal to the filter feature domain
         if filter.filter_feature.domain and not feature_domain:
-            if feature_group.get_domain() == filter.filter_feature.domain:
+            if group_domain == filter.filter_feature.domain:
                 return True
 
         # both domains same -> ok
@@ -444,6 +445,15 @@ class GlobalFilter:
             return True
 
         return False
+
+    @staticmethod
+    def _read_group_domain(feature_group: type[FeatureGroup]) -> Domain | None:
+        """get_domain() is plugin-owned; a raising or malformed read degrades to None instead of failing the gate."""
+
+        def _read() -> Domain | None:
+            return feature_group.get_domain()
+
+        return safe_field(_read, None)
 
     @staticmethod
     def _domain_reason(filter: SingleFilter, feat: Feature, feature_group: type[FeatureGroup]) -> str:

@@ -50,7 +50,7 @@ class Feature:
     Attributes:
         name (FeatureName): The name of the feature.
         options (Options): The options associated with the feature.
-        domain (Optional[Domain]): The domain of the feature.
+        domain (Optional[str | Domain]): The domain of the feature.
         compute_frameworks (Optional[Set[Type[ComputeFramework]]]): The compute frameworks supported by the feature.
         data_type (Optional[DataType]): The data type of the feature.
         initial_requested_data (bool): Whether the data was initially requested.
@@ -99,7 +99,7 @@ class Feature:
         self,
         name: str | FeatureName,
         options: Optional[dict[str, Any] | Options] = None,
-        domain: Optional[str] = None,
+        domain: Optional[str | Domain] = None,
         compute_framework: Optional[str] = None,
         data_type: Optional[DataType | str] = None,
         initial_requested_data: bool = False,
@@ -115,6 +115,10 @@ class Feature:
         self.name = FeatureName(name) if isinstance(name, str) else name
         self.options = Options(options) if isinstance(options, dict) else options
         self.domain = self._set_domain(domain, self.options.get("domain"))
+        if "domain" in self.options.group:
+            # Copy first: options may be a caller-owned Options instance, not a private dict.
+            self.options = copy(self.options)
+            self.options.group.pop("domain", None)
 
         cf = self._set_compute_framework(compute_framework, self.options.get("compute_framework"))
         self.compute_frameworks = {cf} if cf else None
@@ -474,11 +478,11 @@ class Feature:
         """
         return self._grouping_hash(split_keys, include_data_type=False)
 
-    def _set_domain(self, domain: Optional[str], domain_options: Optional[str]) -> None | Domain:
+    def _set_domain(self, domain: Optional[str | Domain], domain_options: Optional[str | Domain]) -> None | Domain:
         if domain:
-            return Domain(domain)
+            return domain if isinstance(domain, Domain) else Domain(domain)
         elif domain_options:
-            return Domain(domain_options)
+            return domain_options if isinstance(domain_options, Domain) else Domain(domain_options)
         return None
 
     def _set_compute_framework(

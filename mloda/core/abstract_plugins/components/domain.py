@@ -31,6 +31,11 @@ class Domain:
     """
 
     def __init__(self, name: str):
+        if not isinstance(name, str):
+            raise TypeError(
+                f"Domain requires a str name, got {type(name).__name__}; "
+                "pass an existing Domain instance through as-is instead of wrapping it again."
+            )
         self.name = name
 
     @classmethod

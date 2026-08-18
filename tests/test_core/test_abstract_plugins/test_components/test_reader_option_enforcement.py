@@ -38,6 +38,9 @@ ROE_STRICT_HANDLE = "roe_strict_handle"
 ROE_FORMAT_KEY = "roe_format"
 ROE_CHAR_KEY = "roe_char_mode"
 
+ROE_SCALAR_ACCESS = "roe_scalar_access"
+ROE_SCALAR_KEY = "roe_scalar"
+
 ROE_VALIDATOR_ACCESS = "roe_validator_access"
 ROE_COUNT_KEY = "roe_count"
 ROE_TOUCHY_KEY = "roe_touchy"
@@ -133,6 +136,26 @@ class RoeStrictValuesReader(RoeStrictFamily):
             allowed_values=("x", "y", "z"),
             strict_validation=True,
             default="x",
+        ),
+    }
+
+    @classmethod
+    def load_data(cls, data_access: Any, features: FeatureSet) -> Any:
+        return {ROE_FEATURE_NAME: [1]}
+
+
+class RoeScalarOnlyReader(_RoeMarkedReader):
+    """Final reader whose key rejects a list/tuple/set/frozenset value outright, never unpacked (#1154)."""
+
+    ROE_ACCESS = ROE_SCALAR_ACCESS
+
+    READER_OPTIONS: ClassVar[dict[str, PropertySpec]] = {
+        ROE_SCALAR_KEY: PropertySpec(
+            "Scalar-only strict key: a container value is rejected before any element-wise check.",
+            element_validator=is_positive_int,
+            strict_validation=True,
+            scalar_only=True,
+            default=3,
         ),
     }
 
@@ -515,6 +538,56 @@ class TestFeatureScopeStrictValues:
             ROE_STRICT_ACCESS,
         )
         assert rejection_window == {}
+
+
+class TestScalarOnlyRejectsCollectionsOutright:
+    """``scalar_only=True`` rejects a list/tuple/set/frozenset value BEFORE any element-wise check (#1154)."""
+
+    @pytest.mark.parametrize(
+        "container",
+        [
+            [3, 5],
+            (3, 5),
+            {3, 5},
+            frozenset({3, 5}),
+        ],
+        ids=["list", "tuple", "set", "frozenset"],
+    )
+    def test_every_element_valid_container_is_still_rejected_outright(
+        self, container: Any, rejection_window: dict[str, MatchRejection]
+    ) -> None:
+        """Every element individually passes the validator, yet scalar_only rejects the shape itself."""
+        options = Options({RoeScalarOnlyReader.__name__: ROE_SCALAR_ACCESS, ROE_SCALAR_KEY: container})
+
+        matched = BaseInputData.feature_scope_data_access(options, ROE_FEATURE_NAME)
+
+        assert matched is False
+        stored = rejection_window[RoeScalarOnlyReader.get_class_name()]
+        assert stored.stage == INPUT_DATA_OWNED_STAGE
+        assert ROE_SCALAR_KEY in stored.reason
+        assert "scalar_only" in stored.reason
+
+    def test_a_valid_scalar_still_matches(self, rejection_window: dict[str, MatchRejection]) -> None:
+        """Control: a plain scalar value the validator accepts still matches."""
+        options = Options({RoeScalarOnlyReader.__name__: ROE_SCALAR_ACCESS, ROE_SCALAR_KEY: 5})
+
+        matched = BaseInputData.feature_scope_data_access(options, ROE_FEATURE_NAME)
+
+        assert matched is True
+        assert rejection_window == {}
+
+    def test_an_invalid_scalar_is_still_rejected_by_the_ordinary_path(
+        self, rejection_window: dict[str, MatchRejection]
+    ) -> None:
+        """Control: scalar_only changes nothing for a plain scalar value the validator rejects."""
+        options = Options({RoeScalarOnlyReader.__name__: ROE_SCALAR_ACCESS, ROE_SCALAR_KEY: -1})
+
+        matched = BaseInputData.feature_scope_data_access(options, ROE_FEATURE_NAME)
+
+        assert matched is False
+        stored = rejection_window[RoeScalarOnlyReader.get_class_name()]
+        assert stored.stage == INPUT_DATA_OWNED_STAGE
+        assert ROE_SCALAR_KEY in stored.reason
 
 
 class TestElementValidator:

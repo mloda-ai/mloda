@@ -90,6 +90,8 @@ class PropertySpec:
     deferred_binding: bool = False
     # Marks a reader-surface key the framework writes rather than the user; rejected on the PROPERTY_MAPPING surface.
     framework_set: bool = False
+    # Reader-only: rejects a list/tuple/set/frozenset value outright instead of unpacking it element-wise.
+    scalar_only: bool = False
 
     def __post_init__(self) -> None:
         prefix = f"PropertySpec({self.explanation!r})"
@@ -130,6 +132,9 @@ class PropertySpec:
         if not isinstance(self.framework_set, bool):
             raise ValueError(f"{prefix}: framework_set must be a bool, got {type(self.framework_set).__name__}.")
 
+        if not isinstance(self.scalar_only, bool):
+            raise ValueError(f"{prefix}: scalar_only must be a bool, got {type(self.scalar_only).__name__}.")
+
         if self.element_validator is not None and not callable(self.element_validator):
             raise ValueError(f"{prefix}: element_validator must be callable.")
 
@@ -141,6 +146,9 @@ class PropertySpec:
 
         if self.element_validator is not None and not self.strict_validation:
             raise ValueError(f"{prefix}: element_validator is never enforced without strict_validation=True.")
+
+        if self.scalar_only and not self.strict_validation:
+            raise ValueError(f"{prefix}: scalar_only is never enforced without strict_validation=True.")
 
         self._check_value_space(prefix)
         self._check_declared_default(prefix)
@@ -170,6 +178,12 @@ class PropertySpec:
         """
         if is_no_default(self.default) or self.default is None or not self.strict_validation:
             return
+
+        if self.scalar_only and isinstance(self.default, (list, tuple, set, frozenset)):
+            raise ValueError(
+                f"{prefix}: scalar_only=True with a {type(self.default).__name__} default {self.default!r}; "
+                f"reader_option() would return the collection the flag rejects."
+            )
 
         if self.element_validator is not None:
             try:

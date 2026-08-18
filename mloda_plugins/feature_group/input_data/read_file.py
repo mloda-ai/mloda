@@ -48,6 +48,9 @@ class ReadFile(BaseInputData):
         "data_access_handle": PropertySpec(
             "Hint naming which DataAccessCollection file handle to prefer while matching.",
             default=None,
+            element_validator=lambda value: isinstance(value, str),
+            strict_validation=True,
+            scalar_only=True,
         ),
     }
 

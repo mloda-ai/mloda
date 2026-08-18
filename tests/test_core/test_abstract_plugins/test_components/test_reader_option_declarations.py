@@ -104,6 +104,75 @@ class TestPropertySpecFrameworkSetField:
         assert "bool" in message
 
 
+class TestPropertySpecScalarOnlyField:
+    """The one spec type carries the reader-surface ``scalar_only`` flag (#1154)."""
+
+    def test_scalar_only_defaults_to_false(self) -> None:
+        """A plain spec admits a list/tuple/set/frozenset element-wise unless declared otherwise."""
+        assert PropertySpec("x").scalar_only is False
+
+    def test_scalar_only_true_constructs_with_strict_validation(self) -> None:
+        """Marking a spec scalar-only is a plain field, paired with its required strict_validation."""
+        spec = PropertySpec("x", element_validator=is_positive_int, strict_validation=True, scalar_only=True, default=3)
+
+        assert spec.scalar_only is True
+
+    def test_scalar_only_is_frozen(self) -> None:
+        """Assigning the field raises ``dataclasses.FrozenInstanceError`` like every other field."""
+        spec = PropertySpec("x", element_validator=is_positive_int, strict_validation=True, scalar_only=True, default=3)
+
+        with pytest.raises(dataclasses.FrozenInstanceError):
+            setattr(spec, "scalar_only", False)
+
+    def test_scalar_only_participates_in_value_equality(self) -> None:
+        """Two specs differing only in ``scalar_only`` are unequal; equal fields stay equal."""
+        assert PropertySpec(
+            "x", element_validator=is_positive_int, strict_validation=True, scalar_only=True, default=3
+        ) != PropertySpec("x", element_validator=is_positive_int, strict_validation=True, default=3)
+        assert PropertySpec(
+            "x", element_validator=is_positive_int, strict_validation=True, scalar_only=True, default=3
+        ) == PropertySpec("x", element_validator=is_positive_int, strict_validation=True, scalar_only=True, default=3)
+
+    @pytest.mark.parametrize("non_bool", ["yes", 1, None])
+    def test_non_bool_scalar_only_rejected_at_construction(self, non_bool: Any) -> None:
+        """A non-bool is a ``ValueError`` naming the field, like the other bool fields."""
+        with pytest.raises(ValueError) as exc_info:
+            _spec("x", scalar_only=non_bool)
+
+        message = str(exc_info.value)
+        del exc_info
+        assert "scalar_only" in message
+        assert "bool" in message
+
+    def test_scalar_only_without_strict_validation_rejected_at_construction(self) -> None:
+        """``scalar_only=True`` can never be enforced without ``strict_validation=True``, mirroring ``element_validator``."""
+        with pytest.raises(ValueError) as exc_info:
+            PropertySpec("x", scalar_only=True)
+
+        message = str(exc_info.value)
+        del exc_info
+        assert "scalar_only" in message
+        assert "strict_validation" in message
+
+    def test_scalar_only_true_rejects_a_collection_default_at_construction(self) -> None:
+        """``scalar_only=True`` rejects a collection outright, so its OWN declared default must be a scalar too."""
+        with pytest.raises(ValueError) as exc_info:
+            PropertySpec(
+                "x", element_validator=is_positive_int, strict_validation=True, scalar_only=True, default=[3, 5]
+            )
+
+        message = str(exc_info.value)
+        del exc_info
+        assert "scalar_only" in message
+        assert "default" in message
+
+    def test_scalar_only_true_with_a_scalar_default_constructs_fine(self) -> None:
+        """Control: scalar_only only rejects a COLLECTION default; a plain scalar default still constructs."""
+        spec = PropertySpec("x", element_validator=is_positive_int, strict_validation=True, scalar_only=True, default=3)
+
+        assert spec.default == 3
+
+
 class TestTheOldSpecTypeIsGone:
     """The two-type world is over: the ``ReaderOptionSpec`` module and export no longer exist."""
 

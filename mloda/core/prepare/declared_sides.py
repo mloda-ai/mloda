@@ -14,6 +14,8 @@ class DeclaredSideSplit(NamedTuple):
 
     left_uuids: frozenset[UUID]
     right_uuids: frozenset[UUID]
+    left_uuids_any_distance: frozenset[UUID]
+    right_uuids_any_distance: frozenset[UUID]
 
 
 def _nearest(uuids_by_distance: dict[int, set[UUID]]) -> frozenset[UUID]:
@@ -21,6 +23,11 @@ def _nearest(uuids_by_distance: dict[int, set[UUID]]) -> frozenset[UUID]:
     if not uuids_by_distance:
         return frozenset()
     return frozenset(uuids_by_distance[min(uuids_by_distance)])
+
+
+def _any_distance(uuids_by_distance: dict[int, set[UUID]]) -> frozenset[UUID]:
+    """Every distance bucket unioned, or an empty side."""
+    return frozenset().union(*uuids_by_distance.values()) if uuids_by_distance else frozenset()
 
 
 def split_by_declared_side(link: Link, uuids: set[UUID], graph: Graph) -> DeclaredSideSplit:
@@ -36,4 +43,9 @@ def split_by_declared_side(link: Link, uuids: set[UUID], graph: Graph) -> Declar
         if issubclass(feature_group_class, link.right_feature_group):
             right_by_distance[inheritance_distance(feature_group_class, link.right_feature_group)].add(uuid)
 
-    return DeclaredSideSplit(_nearest(left_by_distance), _nearest(right_by_distance))
+    return DeclaredSideSplit(
+        _nearest(left_by_distance),
+        _nearest(right_by_distance),
+        _any_distance(left_by_distance),
+        _any_distance(right_by_distance),
+    )

@@ -495,6 +495,42 @@ def _case_override_beats_nearer_wrong_framework_left() -> Built:
     return _finish(planned, link, Sides(far_left.uuid, right.uuid, child.uuid))
 
 
+def _right_join_consumer_shares_declared_left_framework() -> Built:
+    """The consumer sits on the same framework as link_fw[1] (PyArrowTable), which triggers
+    case_link_fw_is_equal_to_children_fw purely on framework equality, even though the link's two
+    feature groups (ResolvedJoinPairLeft / ResolvedJoinPairRight) are unrelated: not equal, not
+    polymorphic. This must still plan successfully."""
+    planned = _planned()
+    link = _pair_link(Link.right)
+    return _finish(planned, link, _branch(planned, link, "resolved_join_right_shares_left_fw", child_cfw=PyArrowTable))
+
+
+def _right_join_ambiguous_polymorphic_left_candidates() -> Built:
+    """Two left-side candidates (the exact declared class and a subclass) both sit on link_fw[1]'s
+    framework, so case_link_fw_is_equal_to_children_fw finds two valid pairs sharing the same right
+    side; right_index disambiguation cannot break the tie since it only inspects the shared right side.
+    This genuine polymorphic ambiguity must still be rejected for a RIGHT join."""
+    planned = _planned()
+    link = _pair_link(Link.right)
+
+    left_exact = feature("resolved_join_ambiguous_left_exact", PyArrowTable, link.left_index)
+    left_sub = feature("resolved_join_ambiguous_left_sub", PyArrowTable, link.left_index)
+    right = feature("resolved_join_ambiguous_right", PandasDataFrame, link.right_index)
+    child = feature("resolved_join_ambiguous_child", PyArrowTable)
+
+    planned.graph.add_node(left_exact.uuid, NodeProperties(left_exact, ResolvedJoinPairLeft))
+    planned.graph.add_node(left_sub.uuid, NodeProperties(left_sub, ResolvedJoinPairLeftDescendant))
+    planned.graph.add_node(right.uuid, NodeProperties(right, ResolvedJoinPairRight))
+    planned.queue.append((ResolvedJoinPairLeft, {left_exact}))
+    planned.queue.append((ResolvedJoinPairLeftDescendant, {left_sub}))
+    planned.queue.append((ResolvedJoinPairRight, {right}))
+    planned.queue.append((link, PyArrowTable, PandasDataFrame))
+    _add_child(planned, child, left_exact, left_sub, right)
+    trek(planned.link_trekker, link, (PyArrowTable, PandasDataFrame), child.uuid)
+
+    return _finish(planned, link, Sides(left_exact.uuid, right.uuid, child.uuid))
+
+
 def _case_override_disagrees_with_the_nearest_split(*, with_declared_frameworks: bool = False) -> Built:
     """Both sides have a nearer, wrong-framework sibling and a farther, correct-framework one; the case helper
     selects the farther pair on both sides. destination_framework and source_framework differ here (unlike
@@ -587,6 +623,37 @@ def _right_join_both_sides_claim_destination_framework() -> Built:
     return _finish(planned, link, Sides(far_left.uuid, right.uuid, child.uuid, nearest_left.uuid))
 
 
+def _right_join_nearest_left_and_farther_right_share_destination_framework() -> Built:
+    """The nearest left parent (distance 0) legitimately sits on the destination framework
+    (PandasDataFrame), but the nearest right parent (distance 0) sits on an unrelated third framework
+    (PythonDictFramework) while a farther, subclass right parent (distance 1) is the one that actually
+    shares the destination framework. Nearest-only declared-side membership sees only the left side on
+    the destination framework and confidently (and wrongly) returns LEFT; the farther right parent must
+    be enough to make membership ambiguous so the RIGHT-jointype tiebreak decides RIGHT."""
+    planned = _planned()
+    link = _pair_link(Link.right)
+
+    nearest_left = feature("resolved_join_mixed_split_nearest_left", PandasDataFrame, link.left_index)
+    far_left = feature("resolved_join_mixed_split_far_left", PyArrowTable, link.left_index)
+    nearest_right = feature("resolved_join_mixed_split_nearest_right", PythonDictFramework, link.right_index)
+    far_right = feature("resolved_join_mixed_split_far_right", PandasDataFrame, link.right_index)
+    child = feature("resolved_join_mixed_split_child", PandasDataFrame)
+
+    planned.graph.add_node(nearest_left.uuid, NodeProperties(nearest_left, ResolvedJoinPairLeft))
+    planned.graph.add_node(far_left.uuid, NodeProperties(far_left, ResolvedJoinPairLeftDescendant))
+    planned.graph.add_node(nearest_right.uuid, NodeProperties(nearest_right, ResolvedJoinPairRight))
+    planned.graph.add_node(far_right.uuid, NodeProperties(far_right, ResolvedJoinPairRightDescendant))
+    planned.queue.append((ResolvedJoinPairLeft, {nearest_left}))
+    planned.queue.append((ResolvedJoinPairLeftDescendant, {far_left}))
+    planned.queue.append((ResolvedJoinPairRight, {nearest_right}))
+    planned.queue.append((ResolvedJoinPairRightDescendant, {far_right}))
+    planned.queue.append((link, PyArrowTable, PandasDataFrame))
+    _add_child(planned, child, nearest_left, far_left, nearest_right, far_right)
+    trek(planned.link_trekker, link, (PyArrowTable, PandasDataFrame), child.uuid)
+
+    return _finish(planned, link, Sides(far_left.uuid, far_right.uuid, child.uuid, nearest_left.uuid))
+
+
 def _right_join_both_declared_sides_share_one_framework_child_on_a_third() -> Built:
     """Regression shape for issue #1137 finding #2: both declared sides sit on the same framework, and only
     the consumer names a third, unrelated framework, so no case-override branch can intervene."""
@@ -625,6 +692,62 @@ def _right_join_declared_left_spans_frameworks_declared_right_is_pyarrow_only() 
     trek(planned.link_trekker, link, (PyArrowTable, PyArrowTable), child.uuid)
 
     return _finish(planned, link, Sides(left_pyarrow.uuid, right.uuid, child.uuid))
+
+
+def _inner_join_ambiguous_split_stays_on_the_tiebreak_answer() -> Built:
+    """Same nearest/farther shape as _case_override_disagrees_with_the_nearest_split, but the consumer
+    sits on a third framework so no case-override branch masks swap_merge_sides_by_declared_side's own
+    answer. The declared-side escalation added for issue #1173 must only ever apply to RIGHT joins; an
+    INNER join's identity tiebreak answer must not flip just because a farther, subclass parent shares a
+    framework with the other declared side."""
+    planned = _planned()
+    link = _pair_link()
+
+    nearest_left = feature("resolved_join_inner_escalation_nearest_left", PythonDictFramework, link.left_index)
+    far_left = feature("resolved_join_inner_escalation_far_left", PyArrowTable, link.left_index)
+    nearest_right = feature("resolved_join_inner_escalation_nearest_right", PyArrowTable, link.right_index)
+    far_right = feature("resolved_join_inner_escalation_far_right", PandasDataFrame, link.right_index)
+    child = feature("resolved_join_inner_escalation_child", PythonDictFramework)
+
+    planned.graph.add_node(nearest_left.uuid, NodeProperties(nearest_left, ResolvedJoinPairLeft))
+    planned.graph.add_node(far_left.uuid, NodeProperties(far_left, ResolvedJoinPairLeftDescendant))
+    planned.graph.add_node(nearest_right.uuid, NodeProperties(nearest_right, ResolvedJoinPairRight))
+    planned.graph.add_node(far_right.uuid, NodeProperties(far_right, ResolvedJoinPairRightDescendant))
+    planned.queue.append((ResolvedJoinPairLeft, {nearest_left}))
+    planned.queue.append((ResolvedJoinPairLeftDescendant, {far_left}))
+    planned.queue.append((ResolvedJoinPairRight, {nearest_right}))
+    planned.queue.append((ResolvedJoinPairRightDescendant, {far_right}))
+    planned.queue.append((link, PyArrowTable, PandasDataFrame))
+    _add_child(planned, child, nearest_left, far_left, nearest_right, far_right)
+    trek(planned.link_trekker, link, (PyArrowTable, PandasDataFrame), child.uuid)
+
+    return _finish(planned, link, Sides(nearest_left.uuid, nearest_right.uuid, child.uuid))
+
+
+def _right_join_declared_right_subclass_also_matches_declared_left() -> Built:
+    """The link's declared left feature group is itself a subclass of its declared right feature group
+    (ResolvedJoinPairRightDescendant IS-A ResolvedJoinPairRight), so the single left-side parent also
+    matches the right side's any-distance split at its own (farther) distance. The widened right-side
+    check added for issue #1173 must not count that same parent as a competing right-side claim; the
+    left-declared parent's own destination-framework membership must decide this cleanly."""
+    planned = _planned()
+    link = Link.right(
+        JoinSpec(ResolvedJoinPairRightDescendant, PAIR_LEFT_INDEX), JoinSpec(ResolvedJoinPairRight, PAIR_RIGHT_INDEX)
+    )
+
+    left_node = feature("resolved_join_subclass_overlap_left", PandasDataFrame, link.left_index)
+    right_node = feature("resolved_join_subclass_overlap_right", PyArrowTable, link.right_index)
+    child = feature("resolved_join_subclass_overlap_child", PythonDictFramework)
+
+    planned.graph.add_node(left_node.uuid, NodeProperties(left_node, ResolvedJoinPairRightDescendant))
+    planned.graph.add_node(right_node.uuid, NodeProperties(right_node, ResolvedJoinPairRight))
+    planned.queue.append((ResolvedJoinPairRightDescendant, {left_node}))
+    planned.queue.append((ResolvedJoinPairRight, {right_node}))
+    planned.queue.append((link, PyArrowTable, PandasDataFrame))
+    _add_child(planned, child, left_node, right_node)
+    trek(planned.link_trekker, link, (PyArrowTable, PandasDataFrame), child.uuid)
+
+    return _finish(planned, link, Sides(left_node.uuid, right_node.uuid, child.uuid))
 
 
 def _join_steps(plan: ExecutionPlan) -> list[JoinStep]:
@@ -771,6 +894,21 @@ def test_a_right_joins_destination_stays_right_when_both_declared_sides_claim_th
     assert record.left.uuids == {built.sides.left_uuid}
     # destination_framework_uuids is a framework filter, not a side filter: the declared-left
     # parent that also sits on the destination framework lands here alongside the declared right.
+    assert record.right.uuids == {built.sides.right_uuid, built.sides.extra_right_uuid}
+    join_steps = _join_steps(built.plan)
+    assert len(join_steps) == 1, "the shape must plan exactly one JoinStep for this to say anything"
+    assert join_steps[0].swap_merge_sides is True
+
+
+def test_a_right_joins_destination_stays_right_when_a_farther_right_parent_shares_the_destination_framework() -> None:
+    built = _right_join_nearest_left_and_farther_right_share_destination_framework()
+
+    record = _one_record(built.plan, built.link)
+
+    assert record.jointype is JoinType.RIGHT
+    assert record.destination_side is JoinSide.RIGHT
+    assert record.destination_framework is PandasDataFrame
+    assert record.left.uuids == {built.sides.left_uuid}
     assert record.right.uuids == {built.sides.right_uuid, built.sides.extra_right_uuid}
     join_steps = _join_steps(built.plan)
     assert len(join_steps) == 1, "the shape must plan exactly one JoinStep for this to say anything"
@@ -1055,6 +1193,22 @@ def test_a_case_override_beats_a_nearer_wrong_framework_left() -> None:
     assert record.source.uuids <= record.source_uuids
 
 
+def test_a_right_join_plans_when_the_consumer_shares_link_fw1_and_the_groups_are_unrelated() -> None:
+    built = _right_join_consumer_shares_declared_left_framework()
+
+    record = _one_record(built.plan, built.link)
+
+    assert record.jointype is JoinType.RIGHT
+    assert record.destination_side is JoinSide.RIGHT
+    assert record.left.uuids == {built.sides.left_uuid}
+    assert record.right.uuids == {built.sides.right_uuid}
+
+
+def test_a_right_join_still_rejects_genuine_polymorphic_left_ambiguity() -> None:
+    with pytest.raises(Exception, match="Right joins are not supported for equal or polymorphic feature groups"):
+        _right_join_ambiguous_polymorphic_left_candidates()
+
+
 def test_a_case_override_right_destination_matches_the_destination_uuids() -> None:
     """A RIGHT-destination case override keeps destination_uuids in step with destination."""
     built = _case_override_inverted()
@@ -1247,3 +1401,28 @@ def test_fresh_interpreters_build_the_same_record_signature() -> None:
     assert len(outputs) == _PROBE_PROCESSES, f"expected {_PROBE_PROCESSES} probe results, got {len(outputs)}"
     for position, output in enumerate(outputs):
         assert output == _PROBE_EXPECTED, f"probe {position} signed {output}, expected {_PROBE_EXPECTED}"
+
+
+def test_an_inner_joins_ambiguous_split_keeps_the_identity_tiebreak_answer() -> None:
+    built = _inner_join_ambiguous_split_stays_on_the_tiebreak_answer()
+
+    record = _one_record(built.plan, built.link)
+
+    assert record.jointype is JoinType.INNER
+    assert record.destination_side is JoinSide.RIGHT
+    assert record.inverted is True
+    join_steps = _join_steps(built.plan)
+    assert len(join_steps) == 1, "the shape must plan exactly one JoinStep for this to say anything"
+    assert join_steps[0].swap_merge_sides is True
+
+
+def test_a_right_joins_declared_left_side_is_not_double_counted_as_a_right_side_claim() -> None:
+    built = _right_join_declared_right_subclass_also_matches_declared_left()
+
+    record = _one_record(built.plan, built.link)
+
+    assert record.jointype is JoinType.RIGHT
+    assert record.destination_side is JoinSide.LEFT
+    join_steps = _join_steps(built.plan)
+    assert len(join_steps) == 1, "the shape must plan exactly one JoinStep for this to say anything"
+    assert join_steps[0].swap_merge_sides is False

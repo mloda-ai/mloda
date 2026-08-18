@@ -605,14 +605,15 @@ def _right_join_both_declared_sides_share_one_framework_child_on_a_third() -> Bu
 
 def _right_join_declared_left_spans_frameworks_declared_right_is_pyarrow_only() -> Built:
     """Regression shape for issue #1137 finding #2 ('hop names PairRight -> PairLeft'): declared left has
-    nearest parents on two frameworks, declared right is PyArrow-only, and the consumer is PyArrow too."""
+    nearest parents on two frameworks, declared right is PyArrow-only, and the consumer sits on a third
+    framework so it does not trip case_link_fw_is_equal_to_children_fw's RIGHT-join guard."""
     planned = _planned()
     link = _pair_link(Link.right)
 
     left_pandas = feature("resolved_join_right_only_pyarrow_left_pandas", PandasDataFrame, link.left_index)
     left_pyarrow = feature("resolved_join_right_only_pyarrow_left_pyarrow", PyArrowTable, link.left_index)
     right = feature("resolved_join_right_only_pyarrow_right", PyArrowTable, link.right_index)
-    child = feature("resolved_join_right_only_pyarrow_child", PyArrowTable)
+    child = feature("resolved_join_right_only_pyarrow_child", PythonDictFramework)
 
     planned.graph.add_node(left_pandas.uuid, NodeProperties(left_pandas, link.left_feature_group))
     planned.graph.add_node(left_pyarrow.uuid, NodeProperties(left_pyarrow, link.left_feature_group))
@@ -787,11 +788,6 @@ def test_a_right_joins_destination_stays_right_when_both_declared_sides_share_on
     assert record.destination_side is JoinSide.RIGHT
 
 
-@pytest.mark.skip(
-    reason="Pre-existing, out-of-scope bug: case_link_fw_is_equal_to_children_fw raises 'Right joins are not "
-    "supported for equal or polymorphic feature groups' unconditionally for JoinType.RIGHT, even though this "
-    "link's feature groups are neither equal nor polymorphic here. Tracked separately from issue #1137."
-)
 def test_a_right_joins_destination_stays_right_when_declared_right_is_the_only_pyarrow_exclusive_side() -> None:
     """Regression pin for issue #1137 finding #2 ('hop names PairRight -> PairLeft'): declared right can
     only ever be PyArrow, so the destination must land there even though declared left also offers PyArrow."""
@@ -955,14 +951,7 @@ def test_a_decline_reached_through_the_inversion_branch_records_the_orientation_
         _right_join_both_sides_claim_destination_framework,
         _link_with_a_declared_left_split_across_frameworks_and_a_colliding_third_parent,
         _right_join_both_declared_sides_share_one_framework_child_on_a_third,
-        pytest.param(
-            _right_join_declared_left_spans_frameworks_declared_right_is_pyarrow_only,
-            marks=pytest.mark.skip(
-                reason="Pre-existing, out-of-scope bug: case_link_fw_is_equal_to_children_fw raises 'Right joins "
-                "are not supported for equal or polymorphic feature groups' unconditionally for JoinType.RIGHT. "
-                "Tracked separately from issue #1137."
-            ),
-        ),
+        _right_join_declared_left_spans_frameworks_declared_right_is_pyarrow_only,
     ],
     ids=[
         "inner",

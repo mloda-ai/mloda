@@ -719,12 +719,16 @@ class ExecutionPlan:
             elif left_from_split and right_from_split and left_from_split != right_from_split:
                 # The full containment check failed (the declared side spans more than one framework), but
                 # intersecting the declared split with the framework-resolved buckets still recovers the
-                # legitimate declared-side members and drops any unrelated parent that only shares a
-                # framework with one side.
+                # declared-side members that fall in this step's own framework bucket, and drops any
+                # unrelated parent that only shares a framework with one side. A declared-side member
+                # sitting in the *other* bucket is not recovered here; it belongs to a different join
+                # step/framework hop and is dropped by design.
                 left_uuids, right_uuids = left_from_split, right_from_split
             else:
                 # The step's own sets, so a record never names parents outside its destination/source
-                # claim. Self links land here too: their declared sides are identical.
+                # claim. A same-framework self link lands here too, since its declared sides are then
+                # identical; a cross-framework self link (parents split across two frameworks) instead
+                # takes the branch above, like any other multi-framework declared side.
                 left_uuids, right_uuids = resolved_left, resolved_right
             join_step_required_uuids = required_uuids
 
@@ -774,15 +778,20 @@ class ExecutionPlan:
     ) -> bool:
         """The declared left group's data must stay the merge engine's left argument, wherever the join runs.
 
-        Declared-side membership decides when exactly one side names the destination framework. When it
-        doesn't decide (both silent or both claim it), a RIGHT join's destination is structurally always
-        the declared right side (`run_link` sets destination_framework to link_fw[2] for JoinType.RIGHT
-        regardless of trekker flip state), so jointype settles the tie first. For other jointypes the
+        Declared-side membership decides first, whenever exactly one side names the destination framework.
+        For a key in declared order, `run_link` sets destination_framework to link_fw[2] for JoinType.RIGHT,
+        and link_fw[2] there is the declared right framework, so membership settles on right. For a key
+        reversed upstream by `LinkTrekker.invert_link`, link_fw[2] instead holds the declared left framework,
+        and membership settles on left just the same, before the jointype check below ever runs; that is why
+        the jointype check is ordered after the membership checks, not before it. See
+        `test_a_right_join_reached_through_a_reversed_key_keeps_the_declared_merge_sides` for that reversed
+        case. Only when membership is genuinely ambiguous (both sides silent, or both claiming the
+        destination framework, which happens when left and right share one framework) does a RIGHT join fall
+        through to jointype, which then always resolves to the declared right side. For other jointypes the
         trekker key breaks the tie instead: destination is always one of the key's two framework positions.
         ``trekker_left_framework`` is that key's first position (``link_fw[1]``): it is the destination
         exactly when `run_link` kept the queued (non-flipped) orientation, and the source when it flipped.
-        It does not reliably mean "declared left", since `LinkTrekker.invert_link` can rewrite the trekker
-        key upstream so the first position holds the declared right framework instead. Links keyed on one
+        It does not reliably mean "declared left", for the same reversed-key reason above. Links keyed on one
         single framework make the tie-break tautological, so the trekker-flip fallback stays for that case:
         it is a common path in practice, not a rare or unreachable one, hit by ordinary same-framework
         INNER/LEFT/APPEND/UNION/ASOF joins and self-joins throughout the test suite."""

@@ -51,6 +51,16 @@ def two_txt_files(tmp_path: Path) -> tuple[str, str]:
 
 
 @pytest.fixture
+def csv_and_txt_files(tmp_path: Path) -> tuple[str, str]:
+    """A .csv path and a .txt path in an isolated tmp dir, for mixed-suffix hinting."""
+    csv_path = tmp_path / "data.csv"
+    txt_path = tmp_path / "notes.txt"
+    csv_path.write_text("id,amount\n1,10\n")
+    txt_path.write_text("hello")
+    return str(csv_path), str(txt_path)
+
+
+@pytest.fixture
 def two_sqlite_dbs(tmp_path: Path) -> tuple[Path, Path]:
     """Two distinct, valid SQLite database files."""
     db_a = tmp_path / "warehouse.sqlite"
@@ -119,6 +129,20 @@ class TestReadFileHint:
         resolved = _CsvLikeReader.match_subclass_data_access(dac, feature_names=["id"], options=Options())
         assert resolved == path_a
 
+    def test_hint_at_foreign_file_declines_instead_of_rescanning(self, csv_and_txt_files: tuple[str, str]) -> None:
+        """Issue #1170: a hint naming a "file" handle this reader's own predicate rejects
+        must make the reader decline (None), not fall back to an unhinted rescan that
+        silently binds a different file the caller never named.
+        """
+        csv_path, txt_path = csv_and_txt_files
+        dac = DataAccessCollection(files={"data": csv_path, "notes": txt_path})
+        options = Options(context={"data_access_handle": "notes"})
+        resolved = _CsvLikeReader.match_subclass_data_access(dac, feature_names=["id"], options=options)
+        # Crux of the bug: today this rescans the collection and wrongly returns csv_path
+        # (the OTHER file, which the caller never hinted at) instead of declining.
+        assert resolved != csv_path
+        assert resolved is None
+
 
 # ----------------------------------------------------------------------------
 # ReadDocument: multi-file ambiguity raises, data_access_handle disambiguates
@@ -147,6 +171,21 @@ class TestReadDocumentHint:
         dac = DataAccessCollection(files={"notes_a": path_a})
         resolved = _TxtDocReader.match_subclass_data_access(dac, feature_names=["content"], options=Options())
         assert resolved == path_a
+
+    def test_hint_at_foreign_file_declines_instead_of_rescanning(self, csv_and_txt_files: tuple[str, str]) -> None:
+        """Issue #1170: a hint naming a "file" handle this reader's own predicate rejects
+        (a .csv file, which ReadDocument excludes as a structured suffix by default) must
+        make the reader decline (None), not fall back to an unhinted rescan that silently
+        binds the .txt file the caller never named.
+        """
+        csv_path, txt_path = csv_and_txt_files
+        dac = DataAccessCollection(files={"notes": txt_path, "data": csv_path})
+        options = Options(context={"data_access_handle": "data"})
+        resolved = _TxtDocReader.match_subclass_data_access(dac, feature_names=["content"], options=options)
+        # Crux of the bug: today this rescans the collection and wrongly returns txt_path
+        # (the OTHER file, which the caller never hinted at) instead of declining.
+        assert resolved != txt_path
+        assert resolved is None
 
 
 # ----------------------------------------------------------------------------

@@ -212,6 +212,103 @@ class TestReadDBHint:
 
 
 # ----------------------------------------------------------------------------
+# ReadDB: resolve() must filter candidates through *this* reader's
+# is_valid_credentials before flagging ambiguity, not treat every registered
+# credentials entry as a match.
+# ----------------------------------------------------------------------------
+
+
+class _WarehouseCredsDB(ReadDB):
+    """DB reader that only accepts credentials carrying its own connector key, not any dict."""
+
+    @classmethod
+    def is_valid_credentials(cls, credentials: dict[str, Any]) -> bool:
+        return isinstance(credentials, dict) and "warehouse_dsn" in credentials
+
+    @classmethod
+    def check_feature_in_data_access(cls, feature_name: str, data_access: Any) -> bool:
+        return True
+
+
+class _AnalyticsCredsDB(ReadDB):
+    """Sibling reader accepting a different connector key than _WarehouseCredsDB."""
+
+    @classmethod
+    def is_valid_credentials(cls, credentials: dict[str, Any]) -> bool:
+        return isinstance(credentials, dict) and "analytics_dsn" in credentials
+
+    @classmethod
+    def check_feature_in_data_access(cls, feature_name: str, data_access: Any) -> bool:
+        return True
+
+
+class TestReadDBCredentialsPredicateFiltering:
+    """resolve() must filter candidates through this reader's is_valid_credentials before flagging ambiguity."""
+
+    def test_only_matching_entry_resolves_without_hint(self) -> None:
+        dac = DataAccessCollection(
+            credentials={
+                "warehouse": {"warehouse_dsn": "warehouse://a"},
+                "analytics": {"analytics_dsn": "analytics://b"},
+            }
+        )
+        resolved = _WarehouseCredsDB.match_subclass_data_access(dac, feature_names=["any"], options=Options())
+        assert resolved == {"warehouse_dsn": "warehouse://a"}
+
+    def test_no_matching_entry_resolves_to_none(self) -> None:
+        dac = DataAccessCollection(
+            credentials={
+                "analytics_one": {"analytics_dsn": "analytics://a"},
+                "analytics_two": {"analytics_dsn": "analytics://b"},
+            }
+        )
+        resolved = _WarehouseCredsDB.match_subclass_data_access(dac, feature_names=["any"], options=Options())
+        assert resolved is None
+
+    def test_sibling_readers_each_resolve_their_own_entry(self) -> None:
+        dac = DataAccessCollection(
+            credentials={
+                "warehouse": {"warehouse_dsn": "warehouse://a"},
+                "analytics": {"analytics_dsn": "analytics://b"},
+            }
+        )
+        warehouse = _WarehouseCredsDB.match_subclass_data_access(dac, feature_names=["any"], options=Options())
+        analytics = _AnalyticsCredsDB.match_subclass_data_access(dac, feature_names=["any"], options=Options())
+        assert warehouse == {"warehouse_dsn": "warehouse://a"}
+        assert analytics == {"analytics_dsn": "analytics://b"}
+
+    def test_hint_at_foreign_credentials_declines_instead_of_rescanning(self) -> None:
+        """A reader whose predicate rejects the hinted entry must decline, not rescan for its own unrelated entry."""
+        dac = DataAccessCollection(
+            credentials={
+                "warehouse": {"warehouse_dsn": "warehouse://a"},
+                "analytics": {"analytics_dsn": "analytics://b"},
+            }
+        )
+        options = Options(context={"data_access_handle": "analytics"})
+        resolved = _WarehouseCredsDB.match_subclass_data_access(dac, feature_names=["any"], options=options)
+        assert resolved is None
+
+    def test_hint_at_owned_credentials_still_resolves(self) -> None:
+        """Sanity check: the correct owner still resolves via the same hint."""
+        dac = DataAccessCollection(
+            credentials={
+                "warehouse": {"warehouse_dsn": "warehouse://a"},
+                "analytics": {"analytics_dsn": "analytics://b"},
+            }
+        )
+        options = Options(context={"data_access_handle": "analytics"})
+        resolved = _AnalyticsCredsDB.match_subclass_data_access(dac, feature_names=["any"], options=options)
+        assert resolved == {"analytics_dsn": "analytics://b"}
+
+    def test_not_implemented_credentials_check_resolves_to_none_via_predicate(self) -> None:
+        """Base ReadDB.is_valid_credentials always raises NotImplementedError; the predicate treats it as no match."""
+        dac = DataAccessCollection(credentials={"only": {"whatever": "value"}})
+        resolved = ReadDB.match_subclass_data_access(dac, feature_names=["any"], options=Options())
+        assert resolved is None
+
+
+# ----------------------------------------------------------------------------
 # Typed Credential through the real SQLITEReader matcher (issue #511 pin).
 # ----------------------------------------------------------------------------
 

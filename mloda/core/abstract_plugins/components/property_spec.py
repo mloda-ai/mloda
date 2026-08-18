@@ -1,4 +1,4 @@
-"""The PROPERTY_MAPPING spec type.
+"""The shared PROPERTY_MAPPING / READER_OPTIONS spec type.
 
 ``PropertySpec`` is the typed, frozen spec and IS the contract: construction enforces every
 invariant (issue #694). ``property_spec`` is a thin builder kept for its authoring surface;
@@ -73,7 +73,7 @@ AllowedValues = Mapping[Any, str] | tuple[Any, ...] | list[Any] | set[Any] | fro
 
 @dataclass(frozen=True)
 class PropertySpec:
-    """Typed, frozen PROPERTY_MAPPING spec. Construction enforces the spec invariants."""
+    """Typed, frozen option spec, shared by PROPERTY_MAPPING and READER_OPTIONS."""
 
     explanation: str
     allowed_values: AllowedValues | None = None

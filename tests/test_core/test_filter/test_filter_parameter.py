@@ -293,6 +293,34 @@ def test_values_property_returns_list_for_set_input() -> None:
     assert sorted(filter_param.values) == ["EU", "NA"]
 
 
+def test_cross_type_equal_set_values_normalize_equal() -> None:
+    """Test set elements normalize by value equality, not repr, so 1 and True land in the same order."""
+    from_int = FilterParameterImpl.from_dict({"values": {1, 2}})
+    from_bool = FilterParameterImpl.from_dict({"values": {True, 2}})
+
+    assert from_int == from_bool
+    assert hash(from_int) == hash(from_bool)
+
+
+def test_cross_type_equal_frozenset_values_normalize_equal() -> None:
+    """Test the same cross-type-equal normalization holds for a frozenset input."""
+    from_int = FilterParameterImpl.from_dict({"values": frozenset({1, 2})})
+    from_bool = FilterParameterImpl.from_dict({"values": frozenset({True, 2})})
+
+    assert from_int == from_bool
+    assert hash(from_int) == hash(from_bool)
+
+
+def test_homogeneous_set_values_still_deduplicate_regardless_of_insertion_order() -> None:
+    """Test the pre-existing homogeneous, natively-orderable behavior (dedup, hashability) survives."""
+    first = FilterParameterImpl.from_dict({"values": {"NA", "EU"}})
+    second = FilterParameterImpl.from_dict({"values": {"EU", "NA"}})
+
+    assert first == second
+    assert hash(first) == hash(second)
+    assert len({first, second}) == 1
+
+
 def test_values_property_returns_list_for_tuple_input() -> None:
     """Test a tuple value comes back out of the public accessor as a list."""
     filter_param = FilterParameterImpl.from_dict({"values": ("EU", "NA")})

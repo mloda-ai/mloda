@@ -23,14 +23,17 @@ class FilterParameter(Protocol):
 
 
 def _normalize_collections(value: Any) -> Any:
-    """Normalize collection values to tuples so the frozen dataclass stays hashable.
+    """Normalize collection values so the frozen dataclass stays hashable.
 
-    Sets are ordered deterministically, str/bytes stay scalar and are never exploded.
+    Lists become tuples, order preserved. Sets/frozensets become frozensets: frozenset equality and
+    hashing are already order- and representation-independent, so cross-type-equal elements (1 and
+    True) normalize the same regardless of which concrete type built either side, unlike a repr-sorted
+    tuple. str/bytes stay scalar and are never exploded.
     """
     if isinstance(value, (str, bytes)):
         return value
     if isinstance(value, (set, frozenset)):
-        return tuple(sorted(value, key=repr))
+        return frozenset(value)
     if isinstance(value, list):
         return tuple(value)
     return value
@@ -63,10 +66,11 @@ class FilterParameterImpl:
 
     @property
     def values(self) -> Optional[list[Any]]:
-        # Stored as a tuple for hashability; hand out the declared list type. Filter engines rely
-        # on this: PySpark's Column.isin only unwraps list/set, so a tuple would silently break it.
+        # Stored as a tuple or frozenset for hashability; hand out the declared list type. Filter
+        # engines rely on this: PySpark's Column.isin only unwraps list/set, so either would silently
+        # break it if handed out raw.
         stored = self._get("values")
-        if isinstance(stored, tuple):
+        if isinstance(stored, (tuple, frozenset)):
             return list(stored)
         return cast(Optional[list[Any]], stored)
 

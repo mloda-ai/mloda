@@ -1,3 +1,4 @@
+import math
 from collections.abc import Callable
 from typing import Any
 
@@ -59,6 +60,41 @@ def _node_target(value: Any, dunder: str) -> tuple[type, dict[Any, Any]] | None:
     return None
 
 
+def _bypasses_native_order(key: Any) -> bool:
+    """frozenset's `<` is a partial order and NaN's `<` is always False; neither raises, so native
+    sort silently returns a non-canonical, insertion-order-dependent result for them. Detected by
+    isinstance/math.isnan only, never by comparing the key itself, which could re-enter an unsafe
+    __eq__/__hash__ (see _reduce_dict_items)."""
+    return isinstance(key, frozenset) or (isinstance(key, float) and math.isnan(key))
+
+
+def _canonical_dict_items(items: list[tuple[Any, Any]]) -> tuple[Any, ...]:
+    """Equality-consistent reduction for dict items: buckets by hash(key), since equal keys always
+    share a hash (a == b implies hash(a) == hash(b)), so cross-type-equal keys (1 and True) always
+    land together regardless of which side used which type. A bucket holding more than one item is
+    a genuine hash collision between UNEQUAL keys (e.g. CPython's hash(-1) == hash(-2) == -2); those
+    items fold into a frozenset instead of a type-keyed tiebreak, so the result never depends on
+    which concrete type represented a key elsewhere in the dict."""
+    buckets: dict[int, list[tuple[Any, Any]]] = {}
+    for item in items:
+        buckets.setdefault(hash(item[0]), []).append(item)
+    return tuple(bucket[0] if len(bucket) == 1 else frozenset(bucket) for _, bucket in sorted(buckets.items()))
+
+
+def _reduce_dict_items(items: list[tuple[Any, Any]]) -> tuple[Any, ...]:
+    """Natural key order when every key is safely orderable and none needs canonical bucketing;
+    the hash-bucket form (see _canonical_dict_items) otherwise. Trying native order first (instead
+    of always hashing) keeps hash() off keys whose own __hash__ isn't cycle-safe when re-entered
+    outside this module's recursion guard (e.g. a Feature used as a raw dict key), matching the
+    pre-existing behavior for the common, natively-orderable case."""
+    if not any(_bypasses_native_order(k) for k, _ in items):
+        try:
+            return tuple(sorted(items, key=lambda kv: kv[0]))
+        except TypeError:
+            pass
+    return _canonical_dict_items(items)
+
+
 # _deep_hashable's output is hash-only and deliberately untagged: collisions between unrelated
 # types are legal for its equality-checked callers (Options.__hash__, HashableDict.__hash__, each
 # paired with a _deep_equal tiebreak), since tagging would break hash/eq consistency for subclasses
@@ -74,14 +110,7 @@ def _deep_hashable(value: Any, seen: frozenset[int] = frozenset()) -> Any:
         seen = seen | {id(value)}
     if isinstance(value, dict):
         items = [(k, _deep_hashable(v, seen)) for k, v in value.items()]
-        # Mixed-type keys (e.g. reader class plus str) are unorderable; fall back to a
-        # type-robust deterministic sort. The common orderable case stays unchanged.
-        try:
-            return tuple(sorted(items))
-        except TypeError:
-            return tuple(
-                sorted(items, key=lambda kv: (kv[0].__class__.__module__, kv[0].__class__.__qualname__, repr(kv[0])))
-            )
+        return _reduce_dict_items(items)
     if isinstance(value, (list, tuple)):
         return tuple(_deep_hashable(item, seen) for item in value)
     if isinstance(value, set):

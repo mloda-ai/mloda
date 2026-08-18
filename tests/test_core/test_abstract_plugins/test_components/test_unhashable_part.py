@@ -243,6 +243,20 @@ class TestPublicEntryPoints:
         assert left == right
         assert hash(left) == hash(right)
 
+    def test_options_with_int_and_bool_equal_keys_hashes_consistently_with_equality(self) -> None:
+        """Options.__hash__ routes through _deep_hashable's fallback; equal Options must hash equal."""
+        left = Options(group={1: "a", 2.5: "b", "s": "c"})  # type: ignore[dict-item]
+        right = Options(group={True: "a", 2.5: "b", "s": "c"})  # type: ignore[dict-item]
+        assert left == right
+        assert hash(left) == hash(right)
+
+    def test_options_with_int_hash_collision_between_unequal_keys_hashes_consistently_with_equality(self) -> None:
+        """Same CPython hash(-1) == hash(-2) collision as the _deep_hashable-level test, reached via Options."""
+        left = Options(group={-2: "a", -1: "b"})  # type: ignore[dict-item]
+        right = Options(group={-2.0: "a", -1: "b"})  # type: ignore[dict-item]
+        assert left == right
+        assert hash(left) == hash(right)
+
 
 class TestDeepHashableCycleGuard:
     """A self-referential container collapses to a back-reference marker instead of recursing forever."""
@@ -295,6 +309,50 @@ class TestDeepHashableCycleGuard:
         feature = Feature(name="f")
         feature.child_options = Options(group={"a": cyclic})
         assert isinstance(hash(feature), int)
+
+
+class TestDeepHashableFallbackSortIsCanonical:
+    """The type-robust fallback sort key for mixed, unorderable dict keys must itself be canonical."""
+
+    def test_int_and_bool_equal_keys_diverge_under_the_type_keyed_fallback(self) -> None:
+        """1 and True are == and hash-equal; a mid-alphabet-qualname third key exposes the reorder."""
+        dict_with_int_key = {1: "a", 2.5: "b", "s": "c"}
+        dict_with_bool_key = {True: "a", 2.5: "b", "s": "c"}
+        assert dict_with_int_key == dict_with_bool_key
+
+        assert _deep_hashable(dict_with_int_key) == _deep_hashable(dict_with_bool_key)
+
+    def test_frozenset_keys_canonicalize_regardless_of_dict_insertion_order(self) -> None:
+        """frozenset's `<` returns False instead of raising, so the exception-triggered fallback never engages."""
+        dict_built_one_way = {frozenset({1, 2}): "x", frozenset({3, 4}): "y"}
+        dict_built_the_other_way = {frozenset({3, 4}): "y", frozenset({1, 2}): "x"}
+        assert dict_built_one_way == dict_built_the_other_way
+
+        assert _deep_hashable(dict_built_one_way) == _deep_hashable(dict_built_the_other_way)
+
+    def test_differently_constructed_equal_frozenset_keys_normalize_identically(self) -> None:
+        """A companion unorderable-type key forces the fallback; equal frozensets built two ways must still match."""
+        dict_with_set_literal_key = {frozenset({1, 2, 3}): "v", "other": "w"}
+        dict_with_list_built_key = {frozenset([3, 2, 1]): "v", "other": "w"}
+        assert dict_with_set_literal_key == dict_with_list_built_key
+
+        assert _deep_hashable(dict_with_set_literal_key) == _deep_hashable(dict_with_list_built_key)
+
+    def test_nan_key_does_not_raise_and_is_deterministic_on_the_same_dict(self) -> None:
+        """Accepted limitation: two distinct nan objects need not normalize alike, only self-consistency is required."""
+        data = {float("nan"): "x", "other": "y"}
+
+        assert _deep_hashable(data) == _deep_hashable(data)
+        assert hash(HashableDict(data)) == hash(HashableDict(data))
+
+    def test_int_hash_collision_between_unequal_keys_still_canonicalizes(self) -> None:
+        """CPython remaps hash(-1) to -2, so -1 and -2 collide; the qualname/repr tiebreak must not leak
+        through when a same-hash-bucket key's type also differs between two equal dicts (#1191 finding 1)."""
+        dict_with_int_key = {-2: "a", -1: "b"}
+        dict_with_float_key = {-2.0: "a", -1: "b"}
+        assert dict_with_int_key == dict_with_float_key
+
+        assert _deep_hashable(dict_with_int_key) == _deep_hashable(dict_with_float_key)
 
 
 class TestCrossModuleImportsFollowTheRename:

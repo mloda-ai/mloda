@@ -6,6 +6,7 @@ one autouse fixture in ``tests/conftest.py``, so every test module is isolated a
 
 from __future__ import annotations
 
+import ast
 import gc
 import sys
 import types
@@ -242,35 +243,144 @@ class TestFixtureIsNotCopied:
         )
 
 
-# Assembled rather than written out, so this module is never itself a hit of the patterns it scans for.
-_DYNAMIC_CREATOR_CREATE_CALL = "DynamicFeatureGroupCreator" + ".create("
-_DYNAMIC_CREATOR_POP_CALL = "_created_classes" + ".pop("
-
-# DynamicFeatureGroupCreator._created_classes is a class-level dict that holds a permanent strong reference
-# to every class it creates, keyed by class_name. A test file that calls .create() and never pops its own
-# class_name back out leaks that class forever, regardless of __module__ or gc.collect(). Scoped to these
-# files (not all of tests/): the dedicated factory tests under
-# tests/test_plugins/feature_group/experimental/dynamic_feature_group_factory/ intentionally rely on
-# _created_classes' cache-reuse-by-name behavior across multiple calls and are out of scope here.
-_DYNAMIC_CREATOR_CALLER_FILES = (
-    TESTS_ROOT / "test_core" / "test_runtime" / "test_validate_multiprocessing_link.py",
-    TESTS_ROOT / "test_core" / "test_runtime" / "test_validate_multiprocessing_step_feature_group.py",
-    TESTS_ROOT / "test_core" / "test_runtime" / "test_orchestrator_rejects_unpicklable_step_feature_group.py",
+# The dedicated factory tests under this directory intentionally rely on DynamicFeatureGroupCreator's
+# cache-reuse-by-name behavior across repeated .create() calls with the same class_name, so they are
+# out of scope for the per-class_name cleanup guard below.
+_DYNAMIC_CREATOR_FACTORY_TESTS_DIR = (
+    TESTS_ROOT / "test_plugins" / "feature_group" / "experimental" / "dynamic_feature_group_factory"
 )
+
+# Assembled rather than written out, so at least this definition line does not spell out the pattern it
+# pre-filters files for. This module's own docstrings below do spell it out in prose, so this module still
+# ends up scanned by _dynamic_creator_caller_files(); that is harmless because the extraction beneath the
+# substring pre-filter is structural (ast.Call matching), so a docstring mention alone can never produce a
+# spurious created/popped name.
+_DYNAMIC_CREATOR_CREATE_CALL = "DynamicFeatureGroupCreator" + ".create("
+
+
+def _string_constant(node: ast.expr) -> str | None:
+    """A plain string literal, or None for anything else."""
+    if not isinstance(node, ast.Constant):
+        return None
+    value = node.value
+    if isinstance(value, str):
+        return value
+    return None
+
+
+def _resolve_strings(node: ast.expr, bindings: dict[str, set[str]]) -> set[str]:
+    """A string literal directly, or a bare Name resolved through `bindings`; anything else resolves to nothing.
+
+    Deliberately best-effort: an f-string, a call, or an attribute access is skipped, not errored.
+    """
+    literal = _string_constant(node)
+    if literal is not None:
+        return {literal}
+    if isinstance(node, ast.Name):
+        return set(bindings.get(node.id, set()))
+    return set()
+
+
+def _string_name_bindings(tree: ast.Module) -> dict[str, set[str]]:
+    """Names resolvable to string literals: module-level `NAME = "..."` assigns and `for NAME in (...)` loops."""
+    bindings: dict[str, set[str]] = {}
+    for statement in tree.body:
+        if not isinstance(statement, ast.Assign) or len(statement.targets) != 1:
+            continue
+        target = statement.targets[0]
+        value = _string_constant(statement.value)
+        if isinstance(target, ast.Name) and value is not None:
+            bindings.setdefault(target.id, set()).add(value)
+
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.For):
+            continue
+        if not isinstance(node.target, ast.Name):
+            continue
+        if not isinstance(node.iter, (ast.Tuple, ast.List)):
+            continue
+        for element in node.iter.elts:
+            bindings.setdefault(node.target.id, set()).update(_resolve_strings(element, bindings))
+
+    return bindings
+
+
+def _is_dynamic_creator_create_call(node: ast.Call) -> bool:
+    """`DynamicFeatureGroupCreator.create(...)`, matched structurally, not by source text."""
+    return (
+        isinstance(node.func, ast.Attribute)
+        and node.func.attr == "create"
+        and isinstance(node.func.value, ast.Name)
+        and node.func.value.id == "DynamicFeatureGroupCreator"
+    )
+
+
+def _is_created_classes_pop_call(node: ast.Call) -> bool:
+    """`<anything>._created_classes.pop(...)`, matched structurally, not by source text."""
+    return (
+        isinstance(node.func, ast.Attribute)
+        and node.func.attr == "pop"
+        and isinstance(node.func.value, ast.Attribute)
+        and node.func.value.attr == "_created_classes"
+    )
+
+
+def _created_class_name(call: ast.Call, bindings: dict[str, set[str]]) -> set[str]:
+    """The resolved string value(s) of this call's `class_name=` keyword, or an empty set if unresolvable."""
+    for keyword in call.keywords:
+        if keyword.arg == "class_name":
+            return _resolve_strings(keyword.value, bindings)
+    return set()
+
+
+def _created_and_popped_names(source: str) -> tuple[set[str], set[str]]:
+    """Every class_name a file's `.create(...)` calls create, and every name its `.pop(...)` calls remove.
+
+    DynamicFeatureGroupCreator._created_classes is a class-level dict holding a permanent strong reference
+    to every class it creates, keyed by class_name; a class_name created but never popped leaks forever.
+    """
+    tree = ast.parse(source)
+    bindings = _string_name_bindings(tree)
+    created: set[str] = set()
+    popped: set[str] = set()
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        if _is_dynamic_creator_create_call(node):
+            created |= _created_class_name(node, bindings)
+        elif _is_created_classes_pop_call(node) and node.args:
+            popped |= _resolve_strings(node.args[0], bindings)
+    return created, popped
+
+
+def _dynamic_creator_caller_files() -> list[Path]:
+    """Every tests/test_*.py file whose source contains a DynamicFeatureGroupCreator.create( call.
+
+    Excludes _DYNAMIC_CREATOR_FACTORY_TESTS_DIR (see the comment on that constant above).
+    """
+    files: list[Path] = []
+    for path in sorted(TESTS_ROOT.rglob("test_*.py")):
+        if "__pycache__" in path.parts:
+            continue
+        if path.is_relative_to(_DYNAMIC_CREATOR_FACTORY_TESTS_DIR):
+            continue
+        if _DYNAMIC_CREATOR_CREATE_CALL in path.read_text(encoding="utf-8"):
+            files.append(path)
+    return files
 
 
 class TestDynamicFeatureGroupCreatorCallersCleanUpAfterThemselves:
-    """A file that calls DynamicFeatureGroupCreator.create(...) must pop its class_name(s) in teardown."""
+    """A file that calls DynamicFeatureGroupCreator.create(class_name=...) must pop that exact name."""
 
-    def test_every_create_call_site_also_pops_its_created_class(self) -> None:
-        """Static text scan: a file with the call but no matching pop leaks a class into _created_classes forever."""
-        offenders = [
-            str(path.relative_to(TESTS_ROOT))
-            for path in _DYNAMIC_CREATOR_CALLER_FILES
-            if _DYNAMIC_CREATOR_CREATE_CALL in path.read_text(encoding="utf-8")
-            and _DYNAMIC_CREATOR_POP_CALL not in path.read_text(encoding="utf-8")
-        ]
+    def test_every_created_class_name_is_popped_in_its_own_file(self) -> None:
+        """AST-extracted per file: a created class_name absent from that file's popped names is a real leak."""
+        offenders: list[tuple[str, str]] = []
+        for path in _dynamic_creator_caller_files():
+            created, popped = _created_and_popped_names(path.read_text(encoding="utf-8"))
+            offenders.extend((str(path.relative_to(TESTS_ROOT)), name) for name in sorted(created - popped))
+
         assert offenders == [], (
-            f"these files call DynamicFeatureGroupCreator.create(...) without ever popping the class(es) they "
-            f"create out of DynamicFeatureGroupCreator._created_classes, which leaks them permanently: {offenders}"
+            f"these (file, class_name) pairs call DynamicFeatureGroupCreator.create(class_name=...) without ever "
+            f"popping that exact name out of DynamicFeatureGroupCreator._created_classes, leaking it "
+            f"permanently: {offenders}"
         )

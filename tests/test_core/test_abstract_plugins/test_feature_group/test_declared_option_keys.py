@@ -12,11 +12,11 @@ from mloda.provider import FeatureGroup, PropertySpec, property_spec
 
 
 class DefaultMappingFeatureGroup(FeatureGroup):
-    """No PROPERTY_MAPPING override -- exercises the None default."""
+    """No PROPERTY_MAPPING override -- exercises the empty default."""
 
 
 class EmptyMappingFeatureGroup(FeatureGroup):
-    """PROPERTY_MAPPING explicitly set to an empty dict -- distinct from the None default."""
+    """PROPERTY_MAPPING explicitly set to an empty dict -- the explicit empty declaration."""
 
     PROPERTY_MAPPING = {}
 
@@ -70,8 +70,8 @@ class MultiKeyMappingFeatureGroup(FeatureGroup):
     }
 
 
-def test_declared_option_keys_returns_empty_frozenset_when_property_mapping_none() -> None:
-    """PROPERTY_MAPPING unset (None, the default) yields an empty frozenset."""
+def test_declared_option_keys_returns_empty_frozenset_when_property_mapping_undeclared() -> None:
+    """PROPERTY_MAPPING unset (the default) yields an empty frozenset."""
     result = DefaultMappingFeatureGroup.declared_option_keys()
 
     assert result == frozenset()

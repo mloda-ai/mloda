@@ -57,7 +57,7 @@ import inspect
 import logging
 import os
 from collections.abc import Callable
-from typing import Any, Optional, cast
+from typing import Any, Optional
 
 from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
@@ -79,6 +79,7 @@ from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser
 from mloda.core.abstract_plugins.components.match_rejection import record_match_rejection
 from mloda.core.abstract_plugins.components.feature_chainer.property_spec import PropertySpec
 from mloda.core.abstract_plugins.components.default_options_key import DefaultOptionKeys
+from mloda.core.abstract_plugins.components.property_mapping import configuration_property_mapping
 from mloda.core.abstract_plugins.components.utils import (
     contained_raise_log_level,
     contained_raise_reason,
@@ -588,10 +589,8 @@ class FeatureChainParserMixin:
 
     @classmethod
     def _get_property_mapping(cls) -> Optional[dict[str, PropertySpec]]:
-        """Get property mapping from class attribute."""
-        if hasattr(cls, "PROPERTY_MAPPING"):
-            return cast(Optional[dict[str, PropertySpec]], cls.PROPERTY_MAPPING)
-        return None
+        """The MRO-merged mapping when declared beyond the surface base, else None."""
+        return configuration_property_mapping(cls)
 
     @classmethod
     def _extract_source_features(cls, feature: Feature) -> list[str]:

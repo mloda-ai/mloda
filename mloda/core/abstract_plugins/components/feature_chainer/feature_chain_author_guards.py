@@ -26,6 +26,7 @@ from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser
 from mloda.core.abstract_plugins.components.match_rejection import record_match_rejection
 from mloda.core.abstract_plugins.components.feature_chainer.parsed_feature_name import ParsedFeatureName
 from mloda.core.abstract_plugins.components.feature_chainer.property_spec import PropertySpec
+from mloda.core.abstract_plugins.components.property_mapping import configuration_property_mapping
 from mloda.core.abstract_plugins.components.utils import (
     contained_raise_log_level,
     contained_raise_reason,
@@ -109,7 +110,7 @@ def validate_name_binding(owner: type[Any]) -> None:
     explicit for it); a captureless one has nothing to misbind. Called from both FeatureGroup and
     FeatureChainParserMixin at class definition.
     """
-    property_mapping = getattr(owner, "PROPERTY_MAPPING", None)
+    property_mapping = configuration_property_mapping(owner)
     if not isinstance(property_mapping, dict):
         return
 
@@ -152,7 +153,7 @@ def warn_captureless_without_binding(owner: type[Any]) -> None:
         return
     if getattr(owner, "RECOGNITION_ONLY_PATTERN", False):
         return
-    property_mapping = getattr(owner, "PROPERTY_MAPPING", None)
+    property_mapping = configuration_property_mapping(owner)
     if not isinstance(property_mapping, dict) or not property_mapping:
         return
     patterns = FeatureChainParser.prefix_patterns_of(owner)
@@ -185,9 +186,9 @@ def warn_universal_optional_matcher(owner: type[Any]) -> None:
     """
     if getattr(owner, "ALLOW_UNIVERSAL_MATCHER", False):
         return
-    property_mapping = getattr(owner, "PROPERTY_MAPPING", None)
-    # A None mapping is not a configuration matcher; an EMPTY dict is the strongest universal
-    # matcher (it validates vacuously), so it stays in scope.
+    property_mapping = configuration_property_mapping(owner)
+    # An undeclared class is not a configuration matcher; an explicit empty declaration is the
+    # strongest universal matcher (it validates vacuously), so it stays in scope.
     if not isinstance(property_mapping, dict):
         return
     for spec in property_mapping.values():
@@ -351,7 +352,7 @@ def install_required_when_guard(owner: type[Any]) -> None:
     Class definition is the install site, so a PROPERTY_MAPPING mutated, or a matcher replaced,
     AFTER the class body is not seen by the guard.
     """
-    property_mapping = getattr(owner, "PROPERTY_MAPPING", None)
+    property_mapping = configuration_property_mapping(owner)
     if not isinstance(property_mapping, dict) or not FeatureChainParser.has_required_when_predicates(property_mapping):
         return
 
@@ -387,7 +388,7 @@ def install_required_when_guard(owner: type[Any]) -> None:
                 guarded_cls.__name__,
                 feature_name,
                 FeatureChainParser.prefix_patterns_of(guarded_cls),
-                getattr(guarded_cls, "PROPERTY_MAPPING", None),
+                configuration_property_mapping(guarded_cls),
                 options,
             )
         finally:
@@ -406,7 +407,7 @@ def install_name_path_presence_guard(owner: type[Any]) -> None:
     duplicated. Nesting order relative to the required_when guard is behaviorally irrelevant:
     each guard ANDs its own predicate onto the inner verdict and passes False through unchanged.
     """
-    property_mapping = getattr(owner, "PROPERTY_MAPPING", None)
+    property_mapping = configuration_property_mapping(owner)
     if not isinstance(property_mapping, dict):
         return
     if not FeatureChainParser.prefix_patterns_of(owner):
@@ -450,7 +451,7 @@ def install_name_path_presence_guard(owner: type[Any]) -> None:
             if options is None:
                 return True
 
-            mapping = getattr(guarded_cls, "PROPERTY_MAPPING", None)
+            mapping = configuration_property_mapping(guarded_cls)
             if not isinstance(mapping, dict):
                 return True
             # Flattened, because a matcher passes a list-valued pattern attribute straight to

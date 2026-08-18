@@ -53,9 +53,10 @@ def _emit(mapping: Optional[dict[str, PropertySpec]], feat_options: Options, fil
     """
     feature_group: Optional[type[FeatureGroup]] = None
     if mapping is not None:
+        declared: dict[str, PropertySpec] = mapping
 
         class DwgProbeFeatureGroup(FeatureGroup):
-            PROPERTY_MAPPING = mapping
+            PROPERTY_MAPPING = declared
 
         feature_group = DwgProbeFeatureGroup
 

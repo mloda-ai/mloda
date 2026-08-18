@@ -257,7 +257,7 @@ class BothCategoriesMixin845f(FeatureChainParserMixin):
 
     PREFIX_PATTERN = BINDING_PATTERN
     # Annotated exactly as FeatureGroup declares it, so the FeatureGroup subclass below stays consistent.
-    PROPERTY_MAPPING: ClassVar[Optional[dict[str, PropertySpec]]] = {
+    PROPERTY_MAPPING: ClassVar[dict[str, PropertySpec]] = {
         BINDING_KEY: property_spec("the key the feature name carries")
     }
 

@@ -123,6 +123,20 @@ def _source_tuple_values(instance: ConcatenatedFileContent, options: Options) ->
     return {source_tuple.source_value for source_tuple in source_tuples}
 
 
+def _make_no_spread_file_type_subclass() -> type[ConcatenatedFileContent]:
+    """A throwaway subclass that declares ONLY its own key; the merge, not a manual spread, must
+    supply every other inherited key (issue #949 Phase 2)."""
+
+    class RcfdNoSpreadFileTypeProbeFeatureGroup(ConcatenatedFileContent):
+        """Declares only file_type; the other four keys must come from the MRO merge, not a spread."""
+
+        PROPERTY_MAPPING = {
+            "file_type": PropertySpec("Markdown files by declaration, no manual spread.", default="md", context=False),
+        }
+
+    return RcfdNoSpreadFileTypeProbeFeatureGroup
+
+
 def _make_markdown_default_subclass() -> type[ConcatenatedFileContent]:
     """A throwaway subclass whose only change is a declared ``file_type`` default of ``"md"``.
 
@@ -155,6 +169,38 @@ class TestDeclarationInventory:
         assert mapping is not None, "ConcatenatedFileContent declares no PROPERTY_MAPPING"
         non_specs = {key: type(value).__name__ for key, value in mapping.items() if not isinstance(value, PropertySpec)}
         assert non_specs == {}
+
+
+class TestDeclarationMergeAcrossSubclassing:
+    """A subclass declaring only its own key still exposes every inherited key (#949 Phase 2)."""
+
+    def test_declared_option_keys_includes_every_parent_key_without_a_manual_spread(
+        self, no_feature_group_registry_pollution: None
+    ) -> None:
+        subclass = _make_no_spread_file_type_subclass()
+        try:
+            result = subclass.declared_option_keys()
+        finally:
+            # Dropped before the assertion (which may fail today): a failing test's own frame would
+            # otherwise pin the throwaway subclass in a traceback that outlives this test's gc.collect().
+            del subclass
+
+        assert result == DECLARED_KEYS
+
+    def test_declared_option_specs_carries_the_subclass_own_file_type_spec(
+        self, no_feature_group_registry_pollution: None
+    ) -> None:
+        subclass = _make_no_spread_file_type_subclass()
+        try:
+            # hasattr, not a direct call: an AttributeError raised on the class itself would pin it via
+            # the exception's own `.obj` attribute, which outlives this test's gc.collect() (#845).
+            has_method = hasattr(subclass, "declared_option_specs")
+            default = subclass.declared_option_specs()["file_type"].default if has_method else None
+        finally:
+            del subclass
+
+        assert has_method, "declared_option_specs is not implemented yet"
+        assert default == "md"
 
 
 class TestDeclaredDefaults:

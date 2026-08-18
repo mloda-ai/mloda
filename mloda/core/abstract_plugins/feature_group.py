@@ -25,6 +25,12 @@ from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser
     option_key_is_present,
 )
 from mloda.core.abstract_plugins.components.feature_chainer.property_spec import PropertySpec, is_no_default
+from mloda.core.abstract_plugins.components.property_mapping import (
+    DeclarationSurface,
+    merged_property_mapping,
+    reject_merge_cache_assignment,
+    validate_property_mapping,
+)
 from mloda.core.abstract_plugins.components.subtype_declaration import SubtypeDeclaration
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.components.input_data.api.api_input_data import ApiInputData
@@ -88,12 +94,12 @@ class FeatureGroup(ABC):
     for the full PROPERTY_MAPPING reference.
     """
 
-    PROPERTY_MAPPING: ClassVar[Optional[dict[str, PropertySpec]]] = None
+    PROPERTY_MAPPING_SURFACE: ClassVar[DeclarationSurface] = DeclarationSurface.FEATURE_GROUP
+
+    PROPERTY_MAPPING: ClassVar[dict[str, PropertySpec]] = {}
     """Override in subclasses to declare configurable parameters.
 
-    Each key is a parameter name. Each value is a ``PropertySpec`` carrying the
-    explanation, the value space (``allowed_values``), flags (``context``,
-    ``strict_validation``), and optional validators. See
+    Declarations merge across the class hierarchy, most-derived winning; see
     ``docs/in_depth/property-mapping.md`` for the full specification.
     """
 
@@ -102,8 +108,9 @@ class FeatureGroup(ABC):
     The derived accessors below are ``@final`` (type-checker enforced) and derived from SUBTYPES."""
 
     def __init_subclass__(cls, **kwargs: Any) -> None:
+        reject_merge_cache_assignment(cls)
         super().__init_subclass__(**kwargs)
-        FeatureChainParser.validate_property_mapping_defaults(cls.__name__, cls.PROPERTY_MAPPING)
+        validate_property_mapping(cls)
         validate_name_binding(cls)
         warn_captureless_without_binding(cls)
         install_name_path_presence_guard(cls)
@@ -155,20 +162,24 @@ class FeatureGroup(ABC):
                     )
 
     @classmethod
+    def declared_option_specs(cls) -> dict[str, PropertySpec]:
+        """The MRO-merged PROPERTY_MAPPING declarations of cls, most-derived winning; a fresh copy."""
+        return dict(merged_property_mapping(cls))
+
+    @classmethod
     def declared_option_keys(cls) -> frozenset[str]:
         """Return the top-level parameter names declared in ``PROPERTY_MAPPING``."""
-        if cls.PROPERTY_MAPPING is None:
-            return frozenset()
-        return frozenset(str(key) for key in cls.PROPERTY_MAPPING)
+        return frozenset(str(key) for key in merged_property_mapping(cls))
 
     @final
     @classmethod
     def declared_option_values(cls, key: str) -> frozenset[str]:
         """Return the stringified enumerable value space of a ``PROPERTY_MAPPING`` key;
         predicate-only and absent keys yield an empty set."""
-        if cls.PROPERTY_MAPPING is None or key not in cls.PROPERTY_MAPPING:
+        mapping = merged_property_mapping(cls)
+        if key not in mapping:
             return frozenset()
-        extracted = FeatureChainParser.extract_property_values(cls.PROPERTY_MAPPING[key])
+        extracted = FeatureChainParser.extract_property_values(mapping[key])
         if not isinstance(extracted, (Mapping, Collection)) or isinstance(extracted, (str, bytes)):
             return frozenset()
         return frozenset(str(value) for value in extracted)
@@ -232,7 +243,7 @@ class FeatureGroup(ABC):
                     return parsed
 
         key = declaration.key
-        spec = (cls.PROPERTY_MAPPING or {}).get(key)
+        spec = merged_property_mapping(cls).get(key)
         value = cls.options_with_defaults(options).get(key)
         if value is None:
             return None
@@ -251,7 +262,7 @@ class FeatureGroup(ABC):
     def options_with_defaults(cls, options: Options) -> Options:
         """Return an Options with every absent PROPERTY_MAPPING key that declares a concrete default
         materialized from its spec (context or group per the spec); present values are never overridden (#766)."""
-        mapping = cls.PROPERTY_MAPPING or {}
+        mapping = merged_property_mapping(cls)
         memo: dict[int, Any] = {}
         fills_group: dict[str, Any] = {}
         fills_context: dict[str, Any] = {}

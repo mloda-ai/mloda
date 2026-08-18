@@ -94,6 +94,11 @@ _MERGED_PROPERTY_MAPPING_RAISES = (
     "already validates every class in the MRO at definition time, so this walk cannot raise for a class "
     "that reached match time"
 )
+_VALIDATE_PROPERTY_SPEC_RAISES = (
+    "real edge: validate_property_spec's ValueError for a malformed or reader-only spec on the FEATURE_GROUP "
+    "surface, reached via _require_spec's public entry point for a caller-supplied mapping that never passed "
+    "the class-definition check; that candidate's own defect, so the seam reads it as a non-match"
+)
 
 RAISING_HELPERS_OUTSIDE_THE_PATH: dict[tuple[str, str], str] = {
     ("mloda/core/abstract_plugins/components/options.py", "__init__"): _CANDIDATE_OWN_DECLARATION,
@@ -111,6 +116,12 @@ RAISING_HELPERS_OUTSIDE_THE_PATH: dict[tuple[str, str], str] = {
     ("mloda/core/runtime/run.py", "join"): _JOIN_COLLISION,
     ("mloda/core/abstract_plugins/components/property_mapping.py", "merged_property_mapping"): (
         _MERGED_PROPERTY_MAPPING_RAISES
+    ),
+    ("mloda/core/abstract_plugins/components/property_mapping.py", "configuration_property_mapping"): (
+        _MERGED_PROPERTY_MAPPING_RAISES
+    ),
+    ("mloda/core/abstract_plugins/components/property_mapping.py", "validate_property_spec"): (
+        _VALIDATE_PROPERTY_SPEC_RAISES
     ),
 }
 
@@ -143,6 +154,9 @@ SWALLOWING_HELPERS_OUTSIDE_THE_PATH: dict[tuple[str, str], str] = {
     ("mloda/core/runtime/run.py", "join"): _JOIN_COLLISION,
     ("mloda/core/abstract_plugins/components/property_mapping.py", "merged_property_mapping"): (
         "name collision: dict.update inside merged_property_mapping, not a real swallow"
+    ),
+    ("mloda/core/abstract_plugins/components/property_mapping.py", "configuration_property_mapping"): (
+        "name collision: dict.update inside merged_property_mapping, reached transitively, not a real swallow"
     ),
 }
 

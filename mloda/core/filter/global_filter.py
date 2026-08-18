@@ -285,7 +285,7 @@ class GlobalFilter:
         """
         if feature_group is None:
             return None
-        spec = (feature_group.PROPERTY_MAPPING or {}).get(key)
+        spec = feature_group.declared_option_specs().get(key)
         if spec is None or is_no_default(spec.default) or spec.default is None:
             return None
         # Absence, not None-ness: an allow_explicit_none key is present, so its None survives.

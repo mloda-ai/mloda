@@ -6,6 +6,8 @@ pickle for."""
 
 from __future__ import annotations
 
+from collections.abc import Iterator
+
 import pytest
 
 from mloda.core.core.step.join_step import JoinStep
@@ -18,6 +20,14 @@ from mloda.core.runtime.validate_multiprocessing_link import raise_on_unpicklabl
 from mloda_plugins.feature_group.experimental.dynamic_feature_group_factory.dynamic_feature_group_factory import (
     DynamicFeatureGroupCreator,
 )
+
+_DYNAMIC_CLASS_NAME = "ReviewProbeDynamicFeatureGroup_ValidateLinkTest"
+
+
+@pytest.fixture(autouse=True)
+def _cleanup_dynamic_feature_groups() -> Iterator[None]:
+    yield
+    DynamicFeatureGroupCreator._created_classes.pop(_DYNAMIC_CLASS_NAME, None)
 
 
 class ValidateLinkLeft(FeatureGroup):
@@ -135,9 +145,7 @@ def test_a_link_with_unpicklable_discriminator_and_picklable_feature_groups_is_r
 
 
 def test_a_link_with_a_dynamic_feature_group_creator_class_is_rejected() -> None:
-    dynamic_fg = DynamicFeatureGroupCreator.create(
-        properties={}, class_name="ReviewProbeDynamicFeatureGroup_ValidateLinkTest"
-    )
+    dynamic_fg = DynamicFeatureGroupCreator.create(properties={}, class_name=_DYNAMIC_CLASS_NAME)
     link = Link.inner(
         JoinSpec(dynamic_fg, Index(("left_key",))),
         JoinSpec(ValidateLinkRight, Index(("right_key",))),

@@ -240,3 +240,37 @@ class TestFixtureIsNotCopied:
         assert list(found) == [TESTS_ROOT / "conftest.py"], (
             f"the single definition must live in tests/conftest.py, found {locations}"
         )
+
+
+# Assembled rather than written out, so this module is never itself a hit of the patterns it scans for.
+_DYNAMIC_CREATOR_CREATE_CALL = "DynamicFeatureGroupCreator" + ".create("
+_DYNAMIC_CREATOR_POP_CALL = "_created_classes" + ".pop("
+
+# DynamicFeatureGroupCreator._created_classes is a class-level dict that holds a permanent strong reference
+# to every class it creates, keyed by class_name. A test file that calls .create() and never pops its own
+# class_name back out leaks that class forever, regardless of __module__ or gc.collect(). Scoped to these
+# files (not all of tests/): the dedicated factory tests under
+# tests/test_plugins/feature_group/experimental/dynamic_feature_group_factory/ intentionally rely on
+# _created_classes' cache-reuse-by-name behavior across multiple calls and are out of scope here.
+_DYNAMIC_CREATOR_CALLER_FILES = (
+    TESTS_ROOT / "test_core" / "test_runtime" / "test_validate_multiprocessing_link.py",
+    TESTS_ROOT / "test_core" / "test_runtime" / "test_validate_multiprocessing_step_feature_group.py",
+    TESTS_ROOT / "test_core" / "test_runtime" / "test_orchestrator_rejects_unpicklable_step_feature_group.py",
+)
+
+
+class TestDynamicFeatureGroupCreatorCallersCleanUpAfterThemselves:
+    """A file that calls DynamicFeatureGroupCreator.create(...) must pop its class_name(s) in teardown."""
+
+    def test_every_create_call_site_also_pops_its_created_class(self) -> None:
+        """Static text scan: a file with the call but no matching pop leaks a class into _created_classes forever."""
+        offenders = [
+            str(path.relative_to(TESTS_ROOT))
+            for path in _DYNAMIC_CREATOR_CALLER_FILES
+            if _DYNAMIC_CREATOR_CREATE_CALL in path.read_text(encoding="utf-8")
+            and _DYNAMIC_CREATOR_POP_CALL not in path.read_text(encoding="utf-8")
+        ]
+        assert offenders == [], (
+            f"these files call DynamicFeatureGroupCreator.create(...) without ever popping the class(es) they "
+            f"create out of DynamicFeatureGroupCreator._created_classes, which leaks them permanently: {offenders}"
+        )

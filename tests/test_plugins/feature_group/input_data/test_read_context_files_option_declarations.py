@@ -124,12 +124,9 @@ def _source_tuple_values(instance: ConcatenatedFileContent, options: Options) ->
 
 
 def _make_no_spread_file_type_subclass() -> type[ConcatenatedFileContent]:
-    """A throwaway subclass that declares ONLY its own key; the merge, not a manual spread, must
-    supply every other inherited key."""
+    """Declares ONLY its own key; the merge, not a manual spread, must supply the rest."""
 
     class RcfdNoSpreadFileTypeProbeFeatureGroup(ConcatenatedFileContent):
-        """Declares only file_type; the other four keys must come from the MRO merge, not a spread."""
-
         PROPERTY_MAPPING = {
             "file_type": PropertySpec("Markdown files by declaration, no manual spread.", default="md", context=False),
         }

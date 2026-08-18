@@ -1,8 +1,7 @@
 """Pins the FeatureGroup PROPERTY_MAPPING merge: a subclass's declared options are the MRO-merged
 view, most-derived winning, not a plain-attribute replacement. Some children below would be
 accidental universal matchers if declared at module level, so they are built fresh per test via
-function-local factories, with the local reference dropped before any assertion that may fail.
-"""
+function-local factories, with the local reference dropped before any assertion that may fail."""
 
 from __future__ import annotations
 
@@ -139,8 +138,6 @@ class TestDeclaredOptionMerge:
 
 
 class TestMaterializationFollowsTheMerge:
-    """options_with_defaults and GlobalFilter._intake_fill read the merged view."""
-
     def test_options_with_defaults_fills_the_inherited_default(self) -> None:
         child = _make_merge_child()
         materialized = child.options_with_defaults(Options())
@@ -257,8 +254,6 @@ class TestGuardsReadTheMergedViewAtCallTime:
 
 
 class TestExplicitNoneOrNonDictPropertyMappingRaisesAtClassDefinition:
-    """PROPERTY_MAPPING = None or a non-dict raises ValueError at class-definition time."""
-
     def test_property_mapping_none_raises_naming_the_class_with_none_and_merge(self) -> None:
         with pytest.raises(ValueError) as exc_info:
 
@@ -359,8 +354,6 @@ class PmfgNoDeclMixin(FeatureChainParserMixin):
 
 
 class TestMixinOnlyClassesKeepWorking:
-    """A bare FeatureChainParserMixin subclass, with or without a declaration."""
-
     def test_mixin_only_class_returns_its_own_mapping(self) -> None:
         mapping = PmfgOnlyMixin._get_property_mapping()
 
@@ -380,10 +373,9 @@ class TestMixinOnlyClassesKeepWorking:
 
 
 class TestMergeReadFreezesAtFirstRead:
-    """Only the read-then-write order is pinned: once declared_option_keys()/declared_option_specs()
-    has read the merge, a later PROPERTY_MAPPING reassignment or in-place mutation on the subclass
-    itself does not change what the merge reports. The cold-write order (write before any read) is
-    deliberately not pinned here."""
+    """Only read-then-write is pinned: once declared_option_keys()/declared_option_specs() has read
+    the merge, a later PROPERTY_MAPPING reassignment or mutation is not seen. Cold-write (write
+    before any read) is deliberately not pinned here."""
 
     def test_late_reassignment_after_a_warm_read_does_not_change_declared_option_keys(self) -> None:
         class PmfgFreezeReassignSub(FeatureGroup):
@@ -465,8 +457,7 @@ class TestResolveSubtypeFollowsTheMerge:
 
 
 class TestTwoDeclaringFeatureGroupBasesMergeLeftmostWins:
-    """Two declaring FeatureGroup bases in a diamond: the leftmost base wins a key collision, and
-    the other base's non-colliding key is still present."""
+    """The other base's non-colliding key is still present."""
 
     def test_leftmost_base_wins_on_a_key_collision_and_the_other_bases_key_is_present(self) -> None:
         left_spec = PropertySpec("left", default="left_default")

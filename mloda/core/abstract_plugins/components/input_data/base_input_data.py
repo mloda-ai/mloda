@@ -73,8 +73,8 @@ class BaseInputData(ABC):
         validated itself, yet its declaration outranks the base's and is what selection reads."""
         for klass in cls.__mro__:
             declared = klass.__dict__.get(PROPERTY_MAPPING_ATTR, {})
-            # A malformed declaration (None, a list, ...) is not this check's concern; own_property_mapping
-            # rejects its shape loudly once validate_property_mapping reaches it.
+            # Shape is not this check's concern; own_property_mapping rejects it once
+            # validate_property_mapping reaches it.
             if not isinstance(declared, dict) or RESERVED_READER_OPTION_KEY not in declared:
                 continue
             spec = declared[RESERVED_READER_OPTION_KEY]

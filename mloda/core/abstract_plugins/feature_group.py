@@ -98,11 +98,8 @@ class FeatureGroup(ABC):
     PROPERTY_MAPPING_SURFACE: ClassVar[DeclarationSurface] = DeclarationSurface.FEATURE_GROUP
 
     PROPERTY_MAPPING: ClassVar[dict[str, PropertySpec]] = {}
-    """Override in subclasses to declare configurable parameters.
-
-    Declarations merge across the class hierarchy, most-derived winning; see
-    ``docs/in_depth/property-mapping.md`` for the full specification.
-    """
+    """Override in subclasses to declare configurable parameters; declarations merge across the
+    class hierarchy, most-derived winning. See ``docs/in_depth/property-mapping.md``."""
 
     SUBTYPES: ClassVar[Optional[SubtypeDeclaration]] = None
     """Declarative subtype dimension of the family; ``None`` means no subtype dimension.

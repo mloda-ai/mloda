@@ -1305,10 +1305,10 @@ class TestDeclarationsDoNotAffectDiscovery:
 
 
 class TestReaderOptionsIsAHardBreak:
-    """``READER_OPTIONS`` is retired outright (renamed to ``PROPERTY_MAPPING``); a class body still writing the old name is a loud break at class definition, never silent inheritance."""
+    """A class body still writing the retired ``READER_OPTIONS`` name breaks loudly at class
+    definition, never silent inheritance."""
 
     def test_a_subclass_declaring_reader_options_raises_naming_both_spellings(self) -> None:
-        """The rename is a hard break: the retired attribute name is rejected where it is written."""
         with pytest.raises(ValueError) as exc_info:
 
             class RodHardBreakReader(BaseInputData):
@@ -1323,8 +1323,6 @@ class TestReaderOptionsIsAHardBreak:
         assert "RodHardBreakReader" in message
 
     def test_a_mixin_declaring_reader_options_raises_naming_the_mixin(self) -> None:
-        """A plain mixin still using the retired spelling is rejected the same way, naming the mixin."""
-
         class RodHardBreakMixin:
             READER_OPTIONS: ClassVar[dict[str, PropertySpec]] = {
                 "rod_hard_break_mixin_key": PropertySpec("Old spelling on a mixin.", default=None),
@@ -1342,5 +1340,4 @@ class TestReaderOptionsIsAHardBreak:
         assert "RodHardBreakMixin" in message
 
     def test_base_input_data_no_longer_has_reader_options(self) -> None:
-        """The retired attribute is gone from the base itself, not merely shadowed by the new one."""
         assert hasattr(BaseInputData, "READER_OPTIONS") is False

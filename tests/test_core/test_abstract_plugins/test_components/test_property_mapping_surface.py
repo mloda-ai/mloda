@@ -1,7 +1,6 @@
 """Pins the shared PROPERTY_MAPPING declaration-surface module: the merge/validation machinery
-both ``BaseInputData`` (READER surface) and ``FeatureGroup`` (FEATURE_GROUP surface) build on.
-Plain classes exercise the generic mechanics; ``BaseInputData`` subclasses exercise the READER
-surface wiring.
+both ``BaseInputData`` and ``FeatureGroup`` build on. Plain classes exercise the generic
+mechanics; ``BaseInputData`` subclasses exercise the READER surface wiring.
 """
 
 from __future__ import annotations
@@ -28,18 +27,14 @@ from mloda.core.abstract_plugins.feature_group import FeatureGroup
 
 
 def _pmsurf_match_guard(value: Any) -> bool:
-    """A match_guard predicate; only its presence on a spec matters here."""
     return True
 
 
 def _pmsurf_required_when(options: Any) -> bool:
-    """A required_when predicate; only its presence on a spec matters here."""
     return False
 
 
 class TestDeclarationSurfaceEnum:
-    """The enum names the two declaration surfaces by their base class."""
-
     def test_feature_group_member_value(self) -> None:
         assert DeclarationSurface.FEATURE_GROUP.value == "FeatureGroup"
 
@@ -51,8 +46,6 @@ class TestDeclarationSurfaceEnum:
 
 
 class TestSurfaceAndCacheAttrConstants:
-    """The attribute-name constants, and BaseInputData's own use of ``SURFACE_ATTR``."""
-
     def test_surface_attr_constant(self) -> None:
         assert SURFACE_ATTR == "PROPERTY_MAPPING_SURFACE"
 
@@ -474,7 +467,6 @@ class TestValidatePropertySpec:
         assert result is spec
 
     def test_no_message_ever_mentions_the_retired_reader_options_spelling(self) -> None:
-        """All error text says PROPERTY_MAPPING, never the retired READER_OPTIONS spelling."""
         messages = []
 
         with pytest.raises(ValueError) as exc_info:
@@ -548,8 +540,6 @@ class TestValidatePropertyMapping:
 
 
 class TestSurfaceMarkerIsFrameworkOwned:
-    """PROPERTY_MAPPING_SURFACE is framework-written; a class body assigning it is rejected."""
-
     def test_feature_group_subclass_assigning_surface_marker_raises(self) -> None:
         with pytest.raises(ValueError) as exc_info:
 
@@ -588,12 +578,8 @@ class TestSurfaceMarkerIsFrameworkOwned:
 
 
 class TestTwoSurfaceBasesInOneMroAreRejected:
-    """A class whose MRO carries two distinct surface bases (FeatureGroup and BaseInputData) is
-    an author mistake: exactly one surface may govern PROPERTY_MAPPING validation for a class."""
-
     def test_feature_group_then_base_input_data_raises(self) -> None:
-        """Naming SURFACE_ATTR pins the dedicated two-surface-bases guard, not an unrelated,
-        incidental rejection (e.g. the reader's framework_set key looking FeatureGroup-invalid)."""
+        """Naming SURFACE_ATTR pins the dedicated guard, not an incidental rejection elsewhere."""
         with pytest.raises(ValueError) as exc_info:
 
             class PmsurfTwoBasesFgFirst(FeatureGroup, BaseInputData):
@@ -621,8 +607,7 @@ class TestTwoSurfaceBasesInOneMroAreRejected:
 
 
 class TestCooperativeHookReadingBeforeSuperIsNotBlamed:
-    """A mixin's __init_subclass__ may read the merge before calling super(); that warm read must
-    not be mistaken for the class body itself assigning the merge cache."""
+    """A mixin's warm read before super() must not be mistaken for the class body assigning the cache."""
 
     def test_feature_group_side_mixin_reading_before_super_defines_fine(self) -> None:
         class PmsurfFgEarlyReadMixin:

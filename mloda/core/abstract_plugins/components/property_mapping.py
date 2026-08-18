@@ -46,8 +46,7 @@ def surface_base(cls: type) -> type | None:
 
 
 class _MergedMapping(dict[str, PropertySpec]):
-    """The framework merge cache: the merged mapping itself, plus whether some class beyond the
-    surface base declared it, so a cooperative pre-super() read is never mistaken for an assignment."""
+    """The merge cache: the merged mapping, plus whether a class beyond the surface base declared it."""
 
     declared_beyond_base: bool = False
 
@@ -70,7 +69,7 @@ def _merged_property_mapping(cls: type) -> _MergedMapping:
 
 
 def merged_property_mapping(cls: type) -> dict[str, PropertySpec]:
-    """The MRO-merged declarations of cls, cached in cls's OWN __dict__; internal, never handed out."""
+    """Public entry point onto the cache above; hands back the same object, not a copy."""
     return _merged_property_mapping(cls)
 
 
@@ -80,16 +79,15 @@ def declares_property_mapping(cls: type) -> bool:
 
 
 def configuration_property_mapping(cls: type) -> dict[str, PropertySpec] | None:
-    """The cached merged mapping itself when declared beyond the surface base, else None; no copy,
-    since internal callers only ever read it."""
+    """The cached merged mapping when declared beyond the surface base, else None; no copy, callers
+    only read it."""
     merged = _merged_property_mapping(cls)
     return merged if merged.declared_beyond_base else None
 
 
 def reject_merge_cache_assignment(cls: type) -> None:
-    """The merge cache is framework-written; a class body assigning it is a mistake. A cache warmed
-    by a cooperative __init_subclass__ hook before calling super() is a _MergedMapping and is not
-    blamed: only a class body literally assigning the attribute produces something else."""
+    """The merge cache is framework-written; assigning it in a class body is rejected. A cache warmed
+    by a cooperative __init_subclass__ hook before super() is a _MergedMapping and is not blamed."""
     if CACHE_ATTR not in cls.__dict__:
         return
     if isinstance(cls.__dict__[CACHE_ATTR], _MergedMapping):
@@ -111,9 +109,8 @@ def reject_surface_marker_assignment(cls: type) -> None:
 
 def _reject_conflicting_surface_bases(cls: type) -> None:
     """Exactly one surface may govern cls; two distinct surface-marked classes in its MRO is an
-    author mistake, whether that is FeatureGroup and BaseInputData both, or a plain mixin carrying
-    the marker alongside either. Runs before any per-key validation, so a reader-only key merged
-    from the wrong surface never produces a misleading error first."""
+    author mistake. Runs before any per-key validation, so a wrong-surface key never produces a
+    misleading error first."""
     bases = [klass for klass in cls.__mro__ if SURFACE_ATTR in klass.__dict__]
     if len(bases) <= 1:
         return

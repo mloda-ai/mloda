@@ -12,9 +12,7 @@ from typing import cast
 import pytest
 from mktestdocs import grab_code_blocks
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
-
-DOCS_ROOT = REPO_ROOT / "docs" / "docs"
+from tests.docs_corpus import REPO_ROOT, doc_files
 
 RUNNABLE_TAG = "python"
 ILLUSTRATIVE_TAG = "py"
@@ -119,12 +117,6 @@ def _iter_fence_openings(path: Path) -> Iterator[Fence]:
     return iter(openings)
 
 
-def _doc_files() -> list[Path]:
-    files = sorted(DOCS_ROOT.rglob("*.md"))
-    assert files, f"no markdown files under {DOCS_ROOT}, the fence checks would pass vacuously"
-    return files
-
-
 def _suggested_tag(tag: str) -> str:
     if tag.lower() == "pycon":
         return OUTPUT_TAG
@@ -183,7 +175,7 @@ def _violations_in_file(path: Path) -> list[str]:
 
 
 def _fence_violations() -> list[str]:
-    return [message for path in _doc_files() for message in _violations_in_file(path)]
+    return [message for path in doc_files() for message in _violations_in_file(path)]
 
 
 def _stale_allowlist_keys(allowlist: Mapping[str, int]) -> list[str]:
@@ -207,7 +199,7 @@ def test_doc_fences_use_the_documented_vocabulary() -> None:
 
 def test_illustrative_py_blocks_match_allowlist() -> None:
     errors: list[str] = []
-    for path in _doc_files():
+    for path in doc_files():
         actual = sum(1 for fence in _iter_fence_openings(path) if fence.info.strip() == ILLUSTRATIVE_TAG)
         allowed = ILLUSTRATIVE_BLOCK_ALLOWLIST.get(path.relative_to(REPO_ROOT).as_posix(), 0)
         if actual > allowed:
@@ -355,11 +347,11 @@ class TestDocCorpusIsNotCwdDependent:
     def test_doc_files_are_found_from_any_working_directory(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        from_repo_root = _doc_files()
+        from_repo_root = doc_files()
         assert from_repo_root, "the doc corpus is empty even from the repo root"
 
         monkeypatch.chdir(tmp_path)
-        from_elsewhere = _doc_files()
+        from_elsewhere = doc_files()
         assert from_elsewhere, (
             "DOCS_ROOT resolves against the process CWD, so from any other directory the fence "
             "vocabulary and allowlist checks pass over an empty corpus"

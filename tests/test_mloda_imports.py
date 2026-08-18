@@ -152,6 +152,7 @@ def test_import_provider_base_classes() -> None:
         COLUMNWISE_HOOKS,
         COLUMN_DISCOVERY_HOOKS,
         missing_columnwise_hooks,
+        declared_columnwise_hooks,
         # Match rejection recording
         record_match_rejection,
         INPUT_DATA_STAGE,
@@ -196,6 +197,7 @@ def test_import_provider_base_classes() -> None:
     assert COLUMNWISE_HOOKS
     assert COLUMN_DISCOVERY_HOOKS > COLUMNWISE_HOOKS
     assert callable(missing_columnwise_hooks)
+    assert callable(declared_columnwise_hooks)
     # Match rejection recording
     assert callable(record_match_rejection)
     assert INPUT_DATA_STAGE == "input_data"

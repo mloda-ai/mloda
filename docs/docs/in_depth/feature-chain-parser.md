@@ -206,6 +206,17 @@ def test_pandas_rolling_implements_its_hooks():
     assert missing_columnwise_hooks(PandasRolling) == []
 ```
 
+`missing_columnwise_hooks(cls) == []` also passes vacuously for a class that never sets
+`REQUIRED_COLUMNWISE_HOOKS`. Use `declared_columnwise_hooks(cls)`, also from `mloda.provider`, to
+assert the declaration itself is what's expected:
+
+```python
+from mloda.provider import declared_columnwise_hooks, COLUMN_DISCOVERY_HOOKS
+
+def test_pandas_rolling_declares_all_hooks():
+    assert declared_columnwise_hooks(PandasRolling) == COLUMN_DISCOVERY_HOOKS
+```
+
 A hook that is not a `@classmethod` or `@staticmethod` counts as missing: the `cls._hook(...)` call
 cannot reach it. A family base reports all of its declared hooks, since it declares the contract its
 subclasses implement, so assert this on the framework-bound class rather than on the base.

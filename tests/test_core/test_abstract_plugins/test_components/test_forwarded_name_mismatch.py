@@ -16,8 +16,14 @@ No behavior change when: values are equal, K was set by the author (not
 inherited), the feature is config-based (no string parse), or K is absent from
 the options.
 
-All fixture names carry a "namemis579" marker so they cannot collide with
-other tests in the global plugin registry.
+Also covers the context-path counterpart (#1159): a value forwarded into
+``options.inherited_context_keys`` via ``inherit_context_keys`` or the
+consumer's ``propagate_context_keys`` must be checked exactly like a
+group-forwarded value, not silently ignored.
+
+All fixture names carry a "namemis579" (group path) or "ctxmis579" (context
+path) marker so they cannot collide with other tests in the global plugin
+registry.
 """
 
 from __future__ import annotations
@@ -63,6 +69,46 @@ def _inherited_child_options(consumer_group: dict[str, Any]) -> Options:
     """Build child options exactly like the engine does: inherit_from the consumer."""
     child_options = Options()
     child_options.inherit_from(Options(group=consumer_group))
+    return child_options
+
+
+CONTEXT_KEY = "operation_ctxmis579"
+STRING_FEATURE_NAME_CTX = "sales__sum_ctxmis579"
+
+
+class _ContextMismatchChainedGroup(FeatureChainParserMixin):
+    """Context-path counterpart of ``_NameMismatchChainedGroup``.
+
+    The operation key is context-categorized (context=True, the default made explicit here):
+    it is reachable only through the context-forwarding flows, not group forwarding.
+    """
+
+    PREFIX_PATTERN = r".*__(sum|max)_ctxmis579$"
+    PROPERTY_MAPPING = {
+        CONTEXT_KEY: PropertySpec(
+            "Operation of the ctxmis579 fixture",
+            allowed_values={
+                "sum": "Sum of the in feature (ctxmis579 fixture)",
+                "max": "Maximum of the in feature (ctxmis579 fixture)",
+            },
+            context=True,
+            strict_validation=True,
+        )
+    }
+
+
+def _context_pull_child_options(consumer_context: dict[str, Any]) -> Options:
+    """Child-side pull: child.inherit_from(consumer, inherit_context_keys=...)."""
+    child_options = Options()
+    child_options.inherit_from(Options(context=consumer_context), inherit_context_keys=frozenset(consumer_context.keys()))
+    return child_options
+
+
+def _context_propagate_child_options(consumer_context: dict[str, Any]) -> Options:
+    """Consumer-side push: consumer.propagate_context_keys flows into the child on inherit_from."""
+    child_options = Options()
+    consumer = Options(context=consumer_context, propagate_context_keys=frozenset(consumer_context.keys()))
+    child_options.inherit_from(consumer)
     return child_options
 
 
@@ -213,3 +259,83 @@ class TestForwardedSingletonUnpack:
             _NameMismatchChainedGroup.match_feature_group_criteria(STRING_FEATURE_NAME, child_options)
 
         assert "forward_group_exclude" in str(exc_info.value)
+
+
+class TestForwardedContextNameMismatch:
+    """Issue #1159: the check must also catch a value forwarded via the context path
+    (inherited_context_keys), not just options.inherited_group_keys.
+    """
+
+    def test_context_pull_differing_value_raises(self) -> None:
+        """A value pulled into the child's context via inherit_context_keys, contradicting the
+        name-parsed value, must raise."""
+        child_options = _context_pull_child_options({CONTEXT_KEY: "max"})
+        assert child_options.inherited_context_keys == frozenset({CONTEXT_KEY})  # precondition
+
+        with pytest.raises(ValueError) as exc_info:
+            _ContextMismatchChainedGroup.match_feature_group_criteria(STRING_FEATURE_NAME_CTX, child_options)
+
+        message = str(exc_info.value)
+        assert STRING_FEATURE_NAME_CTX in message
+        assert CONTEXT_KEY in message
+        assert "sum" in message
+        assert "max" in message
+        assert "MLODA_ALLOW_FORWARDED_NAME_MISMATCH" in message
+
+    def test_context_propagate_differing_value_raises(self) -> None:
+        """A value pushed into the child's context via consumer.propagate_context_keys,
+        contradicting the name-parsed value, must also raise."""
+        child_options = _context_propagate_child_options({CONTEXT_KEY: "max"})
+        assert child_options.inherited_context_keys == frozenset({CONTEXT_KEY})  # precondition
+
+        with pytest.raises(ValueError) as exc_info:
+            _ContextMismatchChainedGroup.match_feature_group_criteria(STRING_FEATURE_NAME_CTX, child_options)
+
+        message = str(exc_info.value)
+        assert STRING_FEATURE_NAME_CTX in message
+        assert CONTEXT_KEY in message
+        assert "sum" in message
+        assert "max" in message
+        assert "MLODA_ALLOW_FORWARDED_NAME_MISMATCH" in message
+
+    def test_context_pull_equal_value_matches(self) -> None:
+        """A pulled context value equal to the name-parsed value matches silently."""
+        child_options = _context_pull_child_options({CONTEXT_KEY: "sum"})
+        assert child_options.inherited_context_keys == frozenset({CONTEXT_KEY})  # precondition
+
+        result = _ContextMismatchChainedGroup.match_feature_group_criteria(STRING_FEATURE_NAME_CTX, child_options)
+
+        assert result is True
+
+    def test_env_var_downgrades_context_mismatch_to_warning(
+        self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """With MLODA_ALLOW_FORWARDED_NAME_MISMATCH=1 a context-path mismatch warns once, no raise."""
+        monkeypatch.setenv("MLODA_ALLOW_FORWARDED_NAME_MISMATCH", "1")
+        child_options = _context_pull_child_options({CONTEXT_KEY: "max"})
+
+        with caplog.at_level(logging.WARNING):
+            result = _ContextMismatchChainedGroup.match_feature_group_criteria(STRING_FEATURE_NAME_CTX, child_options)
+
+        assert result is True
+        records = [
+            record
+            for record in caplog.records
+            if record.levelno == logging.WARNING and CONTEXT_KEY in record.getMessage()
+        ]
+        assert len(records) == 1, (
+            f"Expected exactly one WARNING mentioning '{CONTEXT_KEY}', got {len(records)}: "
+            f"{[record.getMessage() for record in records]}"
+        )
+        message = records[0].getMessage()
+        assert "sum" in message
+        assert "max" in message
+
+    def test_author_set_context_value_does_not_raise(self) -> None:
+        """An author-set context value (not inherited) keeps today's silent name precedence."""
+        child_options = Options(context={CONTEXT_KEY: "max"})
+        assert child_options.inherited_context_keys == frozenset()  # precondition: nothing inherited
+
+        result = _ContextMismatchChainedGroup.match_feature_group_criteria(STRING_FEATURE_NAME_CTX, child_options)
+
+        assert result is True

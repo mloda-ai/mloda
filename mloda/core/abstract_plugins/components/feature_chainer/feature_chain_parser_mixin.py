@@ -269,11 +269,11 @@ class FeatureChainParserMixin:
 
         For string-parsed features, additionally checks consumer-forwarded option
         values against the value parsed from the feature name: if a PROPERTY_MAPPING
-        key arrived via forwarding (it is in ``options.inherited_group_keys``) and its
-        value differs from the name-parsed value, a ``ValueError`` is raised, because
-        the name-parsed value would otherwise silently win. Setting the environment
-        variable ``MLODA_ALLOW_FORWARDED_NAME_MISMATCH=1`` downgrades this error to a
-        warning.
+        key arrived via forwarding (it is in ``options.inherited_group_keys`` or
+        ``options.inherited_context_keys``) and its value differs from the name-parsed
+        value, a ``ValueError`` is raised, because the name-parsed value would
+        otherwise silently win. Setting the environment variable
+        ``MLODA_ALLOW_FORWARDED_NAME_MISMATCH=1`` downgrades this error to a warning.
 
         The options view depends on the caller: feature resolution passes declared (pre-default)
         options, filter matching a post-intake merge. See ``FeatureGroup.match_feature_group_criteria``.
@@ -429,16 +429,18 @@ class FeatureChainParserMixin:
         bindings: dict[str, str],
         options: Options,
     ) -> None:
-        """Reject consumer-forwarded option values that contradict a name-derived binding.
+        """Reject a value forwarded via either the group or the context path that contradicts a
+        name-derived binding.
 
         Iterates every binding, so a secondary capture is protected exactly like the first one. The
         name-parsed value takes precedence, so a differing forwarded value would be silently ignored.
         Raises ValueError unless MLODA_ALLOW_FORWARDED_NAME_MISMATCH downgrades the error to a warning.
         """
-        if not options.inherited_group_keys or not bindings:
+        inherited_keys = options.inherited_group_keys | options.inherited_context_keys
+        if not inherited_keys or not bindings:
             return
         for prop_key, name_value in bindings.items():
-            if prop_key not in options.inherited_group_keys:
+            if prop_key not in inherited_keys:
                 continue
             inherited_value = options.get(prop_key)
             if inherited_value is None:

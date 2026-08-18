@@ -264,7 +264,7 @@ class ClusteringFeatureGroup(FeatureChainParserMixin, FeatureGroup):
 Override when you need to add additional input features (e.g., time filter):
 
 ```py
-class TimeWindowFeatureGroup(FeatureChainParserMixin, FeatureGroup):
+class TimeWindowFeatureGroup(TimeReferenceMixin, FeatureChainParserMixin, FeatureGroup):
     def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
         # Try string-based parsing first
         _, in_feature = FeatureChainParser.parse_feature_name(str(feature_name), [self.PREFIX_PATTERN])

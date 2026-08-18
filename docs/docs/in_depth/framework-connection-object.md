@@ -40,7 +40,7 @@ Other frameworks don't require connection objects:
 The base `ComputeFramework` class provides methods to manage connection objects:
 
 ```py
-class ComputeFramework:
+class ComputeFramework(ABC):
     def __init__(self) -> None:
         # Connection object for frameworks that need persistent connections
         self.framework_connection_object: Optional[Any] = None

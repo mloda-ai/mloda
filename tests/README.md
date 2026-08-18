@@ -11,12 +11,14 @@ Directories to three levels deep; regenerate with
 ```
 tests/
 ├── conftest.py                     # Common pytest fixtures and configuration
+├── docs_corpus.py                  # Helper: shared markdown file list for the doc guard tests
 ├── registry_isolation.py           # Helper: run a body in an isolated plugin registry
 ├── registry_isolation_probe.py     # Helper: subprocess probe for registry isolation
 ├── test_agent_docs_sync.py         # Agent-facing docs stay in sync with the code
 ├── test_attributions.py            # Third-party attributions are complete
 ├── test_ci_paths_ignore.py         # CI path filters do not skip real changes
 ├── test_docs_fences.py             # Fenced code blocks in docs are well-formed
+├── test_docs_near_miss_labels.py   # Rendered near-miss labels in docs match the code
 ├── test_docs_taught_values.py      # Values taught in docs match the code
 ├── test_gc_freeze_contract.py      # GC freeze contract around plugin loading
 ├── test_mloda_imports.py           # Public import surface of the package

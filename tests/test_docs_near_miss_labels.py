@@ -24,24 +24,9 @@ from mloda.core.filter.global_filter import GlobalFilter
 from mloda.core.prepare.resolution_failure_renderer import _STAGE_LABELS, render_resolution_failure
 from mloda.core.prepare.resolution_types import Elimination, EliminationStage, EvaluationResult
 
+from tests.docs_corpus import DOCS_ROOT, REPO_ROOT, doc_files
 
-# Anchored to this file, not to the cwd: a relative glob run from anywhere but
-# the repo root yields nothing and these guards pass vacuously (issue #937).
-REPO_ROOT = Path(__file__).resolve().parents[1]
-DOCS_ROOT = REPO_ROOT / "docs" / "docs"
 FENCE_PATTERN = re.compile(r"^\s*```")
-
-
-def _docs_pages() -> list[Path]:
-    """Every published page, never an empty list.
-
-    ``parametrize`` runs at import time, where an empty list collapses to zero
-    cases instead of failing, so an empty glob must raise rather than return.
-    """
-    pages = sorted(DOCS_ROOT.rglob("*.md"))
-    if not pages:
-        raise RuntimeError(f"no documentation pages found under {DOCS_ROOT} - this guard would check nothing")
-    return pages
 
 
 # Derived, never restated: a renamed label moves this set with it, and a label no page quotes costs nothing.
@@ -76,7 +61,7 @@ def _near_miss_bullets(text: str) -> Iterator[tuple[int, re.Match[str]]]:
             yield number, match
 
 
-@pytest.mark.parametrize("fpath", _docs_pages(), ids=lambda p: p.relative_to(REPO_ROOT).as_posix())
+@pytest.mark.parametrize("fpath", doc_files(), ids=lambda p: p.relative_to(REPO_ROOT).as_posix())
 def test_rendered_near_miss_bullets_carry_a_current_stage_label(fpath: Path) -> None:
     """Every label a page reproduces in a near-miss bullet is still a value of ``_STAGE_LABELS``."""
     stale = [
@@ -174,7 +159,7 @@ def _unmatched_filter_warnings(text: str) -> Iterator[tuple[int, re.Match[str]]]
             yield number, match
 
 
-@pytest.mark.parametrize("fpath", _docs_pages(), ids=lambda p: p.relative_to(REPO_ROOT).as_posix())
+@pytest.mark.parametrize("fpath", doc_files(), ids=lambda p: p.relative_to(REPO_ROOT).as_posix())
 def test_rendered_unmatched_filter_warnings_carry_a_current_stage_label(fpath: Path) -> None:
     """Every label a page reproduces in an unmatched-filter warning is still a value of ``_STAGE_LABELS``."""
     stale = [

@@ -6,7 +6,6 @@ filter matches framework names case-insensitively, and a fenced identifier is ne
 
 import difflib
 import re
-from pathlib import Path
 
 import pytest
 
@@ -18,9 +17,7 @@ from mloda.core.prepare.resolution_failure_renderer import render_resolution_fai
 from mloda.core.prepare.resolution_types import EvaluationResult, RenderFacts
 from mloda.user import PluginLoader
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
-
-DOCS_ROOT = REPO_ROOT / "docs" / "docs"
+from tests.docs_corpus import REPO_ROOT, doc_files
 
 # The doc spellings that teach a framework name: quoted keyword, quoted dict key, and quoted list/set bodies.
 SINGULAR_NAME = re.compile(r"""compute_framework\s*=\s*(?P<quote>["'])(?P<name>[^"']+)(?P=quote)""")
@@ -44,12 +41,6 @@ FRAMEWORK_IDENTIFIER_ALLOWLIST = frozenset({"ComputeFramework", "CustomFramework
 
 GET_DOMAIN_MARKER = "def get_domain"
 DOMAIN_RETURN_MARKER = "return Domain("
-
-
-def _doc_files() -> list[Path]:
-    files = sorted(DOCS_ROOT.rglob("*.md"))
-    assert files, f"no markdown files under {DOCS_ROOT}, the taught-value checks would pass vacuously"
-    return files
 
 
 def _line_of(text: str, offset: int) -> int:
@@ -132,7 +123,7 @@ def test_doc_taught_compute_framework_names_are_loaded_class_names() -> None:
     assert loaded, "no ComputeFramework subclass is loaded, the name check would pass vacuously"
 
     violations: list[str] = []
-    for path in _doc_files():
+    for path in doc_files():
         for lineno, name in _taught_framework_names(path.read_text(encoding="utf-8")):
             if name in loaded:
                 continue
@@ -152,7 +143,7 @@ def test_doc_fenced_framework_identifiers_are_loaded_class_names() -> None:
     known = loaded | FRAMEWORK_IDENTIFIER_ALLOWLIST
 
     violations: list[str] = []
-    for path in _doc_files():
+    for path in doc_files():
         for lineno, name in _framework_like_identifiers(path.read_text(encoding="utf-8")):
             if name in known:
                 continue
@@ -173,7 +164,7 @@ def test_the_identifier_allowlist_names_no_loaded_class() -> None:
 def test_doc_get_domain_examples_return_a_domain_instance() -> None:
     """Domain.__eq__ returns NotImplemented for non-Domain, so a bare-string return matches nothing."""
     violations: list[str] = []
-    for path in _doc_files():
+    for path in doc_files():
         for body in _bad_get_domain_bodies(path.read_text(encoding="utf-8")):
             violations.append(f"{path}: get_domain body without a Domain return: {_excerpt(body)}")
 

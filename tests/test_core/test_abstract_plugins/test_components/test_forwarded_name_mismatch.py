@@ -16,7 +16,7 @@ No behavior change when: values are equal, K was set by the author (not
 inherited), the feature is config-based (no string parse), or K is absent from
 the options.
 
-Also covers the context-path counterpart (#1159): a value forwarded into
+Also covers the context-path counterpart: a value forwarded into
 ``options.inherited_context_keys`` via ``inherit_context_keys`` or the
 consumer's ``propagate_context_keys`` must be checked exactly like a
 group-forwarded value, not silently ignored.
@@ -264,7 +264,7 @@ class TestForwardedSingletonUnpack:
 
 
 class TestForwardedContextNameMismatch:
-    """Issue #1159: the check must also catch a value forwarded via the context path
+    """The check must also catch a value forwarded via the context path
     (inherited_context_keys), not just options.inherited_group_keys.
     """
 

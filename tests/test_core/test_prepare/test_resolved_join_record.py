@@ -179,6 +179,7 @@ class Sides(NamedTuple):
     left_uuid: UUID
     right_uuid: UUID
     child_uuid: UUID
+    extra_right_uuid: UUID | None = None
 
 
 class Built(NamedTuple):
@@ -491,8 +492,9 @@ def _case_override_disagrees_with_the_nearest_split(*, with_declared_frameworks:
 def _right_join_farther_right_parent_holds_destination_framework() -> Built:
     """split_by_declared_side keeps only the nearest right parent (PythonDictFramework); the farther,
     subclass right parent that actually sits on the destination framework (PandasDataFrame) is excluded from
-    declared_right_frameworks, so the declared-side check sees neither side on the destination framework and
-    falls back to the trekker-flip flag, which is False here (no trekker flip)."""
+    declared_right_frameworks, so declared-side membership alone cannot decide. destination_framework and
+    source_framework differ here, so the identity tiebreaker decides directly: destination_framework
+    (PandasDataFrame) is not the trekker key's left framework (PyArrowTable), so the destination stays RIGHT."""
     planned = _planned()
     link = _pair_link(Link.right)
 
@@ -537,7 +539,9 @@ def _right_join_both_sides_claim_destination_framework() -> Built:
     # The trekker key matches the queued key directly, so run_link never flips here.
     trek(planned.link_trekker, link, (PyArrowTable, PandasDataFrame), child.uuid)
 
-    return _finish(planned, link, Sides(nearest_left.uuid, right.uuid, child.uuid))
+    # far_left (PyArrowTable) is the sole source-side uuid; nearest_left also sits on the
+    # destination framework, so it lands on the destination side alongside right.uuid.
+    return _finish(planned, link, Sides(far_left.uuid, right.uuid, child.uuid, nearest_left.uuid))
 
 
 def _join_steps(plan: ExecutionPlan) -> list[JoinStep]:
@@ -654,7 +658,8 @@ def test_a_right_join_binds_the_destination_to_the_declared_right_side() -> None
 
 def test_a_right_joins_destination_stays_right_when_the_nearest_right_parent_is_on_the_wrong_framework() -> None:
     """The nearest-only split must not blind the declared-side check to a farther, correct-framework
-    right parent; falling back to the trekker-flip flag here mislabels the RIGHT join's destination LEFT."""
+    right parent; the identity tiebreaker must decide this case directly, since declared-side
+    membership sees neither side on the destination framework."""
     built = _right_join_farther_right_parent_holds_destination_framework()
 
     record = _one_record(built.plan, built.link)
@@ -680,6 +685,13 @@ def test_a_right_joins_destination_stays_right_when_both_declared_sides_claim_th
 
     assert record.jointype is JoinType.RIGHT
     assert record.destination_side is JoinSide.RIGHT
+    assert record.left.uuids == {built.sides.left_uuid}
+    # destination_framework_uuids is a framework filter, not a side filter: the declared-left
+    # parent that also sits on the destination framework lands here alongside the declared right.
+    assert record.right.uuids == {built.sides.right_uuid, built.sides.extra_right_uuid}
+    join_steps = _join_steps(built.plan)
+    assert len(join_steps) == 1, "the shape must plan exactly one JoinStep for this to say anything"
+    assert join_steps[0].swap_merge_sides is True
 
 
 def test_a_parent_the_link_never_mentions_stays_out_of_the_declared_sides() -> None:

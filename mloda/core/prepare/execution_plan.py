@@ -652,7 +652,7 @@ class ExecutionPlan:
         swap_sides = self.swap_merge_sides_by_declared_side(
             destination_framework=destination_framework,
             source_framework=source_framework,
-            declared_left_framework=link_fw[1],
+            trekker_left_framework=link_fw[1],
             declared_left_frameworks=declared_left_frameworks,
             declared_right_frameworks=declared_right_frameworks,
             fallback=swap_merge_sides,
@@ -757,7 +757,7 @@ class ExecutionPlan:
     def swap_merge_sides_by_declared_side(
         destination_framework: type[ComputeFramework],
         source_framework: type[ComputeFramework],
-        declared_left_framework: type[ComputeFramework],
+        trekker_left_framework: type[ComputeFramework],
         declared_left_frameworks: set[type[ComputeFramework]],
         declared_right_frameworks: set[type[ComputeFramework]],
         fallback: bool,
@@ -766,10 +766,16 @@ class ExecutionPlan:
 
         Declared-side membership decides when exactly one side names the destination framework. When it
         doesn't decide (both silent or both claim it), the trekker key breaks the tie: destination is
-        always one of the key's two framework positions, and the first position is the declared left side.
-        Links keyed on one single framework make that tautological, so the trekker-flip fallback stays for
-        that case (currently unreachable via the public API, since same-framework RIGHT joins are rejected
-        upstream for equal/polymorphic feature groups; kept as a defensive default, not dead certainty)."""
+        always one of the key's two framework positions. ``trekker_left_framework`` is that key's first
+        position (``link_fw[1]``): for non-RIGHT joins it is the destination exactly when `run_link` kept
+        the queued (non-flipped) orientation, and the source when it flipped; RIGHT joins reorient
+        destination/source before this runs, so there it is always the source. It does not reliably mean
+        "declared left" either way, since `LinkTrekker.invert_link` can rewrite the trekker key upstream so
+        the first position holds the declared right framework instead. Links keyed on one single framework
+        make the tie-break tautological, so the trekker-flip fallback stays for that case: it is a common
+        path in practice, not a rare or unreachable one, hit by ordinary same-framework INNER/LEFT/APPEND/
+        UNION/ASOF joins and self-joins throughout the test suite. RIGHT joins usually differ destination
+        from source instead and take the identity tiebreak above."""
         holds_left = destination_framework in declared_left_frameworks
         holds_right = destination_framework in declared_right_frameworks
 
@@ -778,7 +784,7 @@ class ExecutionPlan:
         if holds_right and not holds_left:
             return True
         if destination_framework != source_framework:
-            return destination_framework != declared_left_framework
+            return destination_framework != trekker_left_framework
         return fallback
 
     def find_fg_per_uuid(

@@ -59,6 +59,14 @@ def _node_target(value: Any, dunder: str) -> tuple[type, dict[Any, Any]] | None:
     return None
 
 
+# _deep_hashable's output is hash-only and deliberately untagged: collisions between unrelated
+# types are legal for its equality-checked callers (Options.__hash__, HashableDict.__hash__, each
+# paired with a _deep_equal tiebreak), since tagging would break hash/eq consistency for subclasses
+# with inherited dunders. Feature.similarity_hash/base_similarity_hash (feature.py) are the
+# exception: they feed this hash straight into ExecutionPlan's dict-keyed grouping with no equality
+# tiebreak, so a collision there would silently merge unrelated feature groups.
+# Feature._reduce's output (feature.py) is an equality key instead, so it must stay tagged: its
+# ("feature", ...), ("options", ...), ("hashable_dict", ...) markers are load-bearing, not decoration.
 def _deep_hashable(value: Any, seen: frozenset[int] = frozenset()) -> Any:
     if isinstance(value, (dict, list, tuple, set)):
         if id(value) in seen:

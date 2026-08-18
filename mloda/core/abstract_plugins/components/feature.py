@@ -423,9 +423,18 @@ class Feature:
                 return _CYCLE
             seen = seen | {id(value)}
         if isinstance(value, dict):
-            return tuple(
-                sorted(((key, Feature._reduce(val, seen)) for key, val in value.items()), key=lambda kv: kv[0])
-            )
+            items = [(key, Feature._reduce(val, seen)) for key, val in value.items()]
+            # Mixed-type keys are unorderable by kv[0]; fall back to the same type-robust sort _deep_hashable uses.
+            # Inherited caveat from that fallback: repr() is not an equality-safe canonical form for
+            # identity-based reprs (e.g. a bare Feature key has no __repr__ override, so its repr embeds id()).
+            try:
+                return tuple(sorted(items, key=lambda kv: kv[0]))
+            except TypeError:
+                return tuple(
+                    sorted(
+                        items, key=lambda kv: (kv[0].__class__.__module__, kv[0].__class__.__qualname__, repr(kv[0]))
+                    )
+                )
         if isinstance(value, (frozenset, set)):
             return frozenset(Feature._reduce(item, seen) for item in value)
         if isinstance(value, (list, tuple)):

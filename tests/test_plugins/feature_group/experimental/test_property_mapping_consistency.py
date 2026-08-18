@@ -11,7 +11,7 @@ from typing import Any
 
 import pytest
 
-from mloda.core.abstract_plugins.components.feature_chainer.property_spec import is_no_default
+from mloda.core.abstract_plugins.components.property_spec import is_no_default
 from mloda.provider import DefaultOptionKeys, FeatureChainParser, PropertySpec
 from mloda.user import Options
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.base import AggregatedFeatureGroup

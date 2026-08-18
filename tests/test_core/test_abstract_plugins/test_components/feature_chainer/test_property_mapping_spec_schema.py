@@ -21,7 +21,7 @@ from typing import Any
 
 import pytest
 
-from mloda.core.abstract_plugins.components.feature_chainer.property_spec import PropertySpec
+from mloda.core.abstract_plugins.components.property_spec import PropertySpec
 
 TYPO_STRICT_FIELD = "strict_validaton"  # the headline typo: 'strict_validation' minus one 'i'
 STALE_ELEMENT_VALIDATOR_FIELD = "validation_function"

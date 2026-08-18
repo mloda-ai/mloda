@@ -16,7 +16,7 @@ from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser
     FeatureChainParser,
     PropertyValueRejection,
 )
-from mloda.core.abstract_plugins.components.feature_chainer.property_spec import PropertySpec
+from mloda.core.abstract_plugins.components.property_spec import PropertySpec
 from mloda.user import Options
 
 PARSER_LOGGER_NAME = FeatureChainParser.__module__

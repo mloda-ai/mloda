@@ -14,7 +14,7 @@ from typing import Any, ClassVar
 import pytest
 
 import mloda.provider as mloda_provider
-from mloda.core.abstract_plugins.components.feature_chainer.property_spec import PropertySpec, is_positive_int
+from mloda.core.abstract_plugins.components.property_spec import PropertySpec, is_positive_int
 from mloda.core.abstract_plugins.components.input_data.base_input_data import BaseInputData
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.components.utils import get_all_subclasses

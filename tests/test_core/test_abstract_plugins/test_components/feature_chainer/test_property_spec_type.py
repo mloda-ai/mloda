@@ -16,7 +16,7 @@ from typing import Any
 import pytest
 
 from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser import FeatureChainParser
-from mloda.core.abstract_plugins.components.feature_chainer.property_spec import NO_DEFAULT, PropertySpec
+from mloda.core.abstract_plugins.components.property_spec import NO_DEFAULT, PropertySpec
 from mloda.core.abstract_plugins.components.options import Options
 
 

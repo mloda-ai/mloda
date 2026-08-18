@@ -8,13 +8,19 @@ from __future__ import annotations
 
 import pytest
 
+from mloda.core.abstract_plugins.components.feature_set import FeatureSet
+from mloda.core.core.step.feature_group_step import FeatureGroupStep
 from mloda.core.core.step.join_step import JoinStep
+from mloda.core.core.step.transform_frame_work_step import TransformFrameworkStep
 from mloda.provider import FeatureGroup
 from mloda.user import Index, JoinSpec, Link
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 
-from mloda.core.runtime.validate_multiprocessing_link import raise_on_unpicklable_join_link
+from mloda.core.runtime.validate_multiprocessing_link import (
+    raise_on_unpicklable_join_link,
+    raise_on_unpicklable_multiprocessing_steps,
+)
 from mloda_plugins.feature_group.experimental.dynamic_feature_group_factory.dynamic_feature_group_factory import (
     DynamicFeatureGroupCreator,
 )
@@ -149,3 +155,59 @@ def test_a_link_with_a_dynamic_feature_group_creator_class_is_rejected() -> None
 
     message = str(excinfo.value)
     assert dynamic_fg.__name__ in message, f"the dynamically created class must be named; got: {message}"
+
+
+def test_feature_group_step_with_unpicklable_class_is_rejected() -> None:
+    unpicklable_fg = _make_local_feature_group("DynamicFeatureGroupStepTarget")
+    step = FeatureGroupStep(unpicklable_fg, FeatureSet(), set(), PandasDataFrame)
+
+    with pytest.raises(ValueError) as excinfo:
+        raise_on_unpicklable_multiprocessing_steps([step])
+
+    message = str(excinfo.value)
+    assert f"FeatureGroupStep for {unpicklable_fg.__name__} (" in message, (
+        f"the offending class must be named; got: {message}"
+    )
+
+
+def test_feature_group_step_with_picklable_class_does_not_raise() -> None:
+    step = FeatureGroupStep(ValidateLinkLeft, FeatureSet(), set(), PandasDataFrame)
+    raise_on_unpicklable_multiprocessing_steps([step])
+
+
+def test_transform_framework_step_with_unpicklable_from_class_is_rejected() -> None:
+    unpicklable_from = _make_local_feature_group("DynamicFromFeatureGroup")
+    step = TransformFrameworkStep(
+        PandasDataFrame, PyArrowTable, set(), unpicklable_from, ValidateLinkRight
+    )
+
+    with pytest.raises(ValueError) as excinfo:
+        raise_on_unpicklable_multiprocessing_steps([step])
+
+    message = str(excinfo.value)
+    assert f"TransformFrameworkStep references {unpicklable_from.__name__} (" in message, (
+        f"the offending from-class must be named; got: {message}"
+    )
+
+
+def test_transform_framework_step_with_unpicklable_to_class_is_rejected() -> None:
+    unpicklable_to = _make_local_feature_group("DynamicToFeatureGroup")
+    step = TransformFrameworkStep(
+        PandasDataFrame, PyArrowTable, set(), ValidateLinkLeft, unpicklable_to
+    )
+
+    with pytest.raises(ValueError) as excinfo:
+        raise_on_unpicklable_multiprocessing_steps([step])
+
+    message = str(excinfo.value)
+    assert f"TransformFrameworkStep references {unpicklable_to.__name__} (" in message, (
+        f"the offending to-class must be named; got: {message}"
+    )
+
+
+def test_transform_framework_step_with_picklable_classes_does_not_raise() -> None:
+    step = TransformFrameworkStep(
+        PandasDataFrame, PyArrowTable, set(), ValidateLinkLeft, ValidateLinkRight
+    )
+    raise_on_unpicklable_multiprocessing_steps([step])
+

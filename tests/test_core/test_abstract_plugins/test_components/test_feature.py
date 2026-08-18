@@ -2,6 +2,8 @@ import pytest
 from mloda.provider import ComputeFramework
 from mloda.user import Feature
 from mloda.core.abstract_plugins.components.data_types import DataType
+from mloda.core.abstract_plugins.components.domain import Domain
+from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.components.utils import get_all_subclasses
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame  # noqa: F401
 
@@ -46,6 +48,51 @@ def test_feature_set_domain() -> None:
 
     # Test when neither domain nor domain_options are set
     assert feature._set_domain(None, None) is None
+
+
+def test_feature_set_domain_accepts_already_built_domain() -> None:
+    """Passing a Domain instance for domain must not re-wrap it."""
+    feature = Feature(name="Feature1")
+
+    result = feature._set_domain(Domain("example_domain"), None)
+    assert result.name == "example_domain"  # type: ignore
+
+
+def test_feature_set_domain_options_accepts_already_built_domain() -> None:
+    """Passing a Domain instance for domain_options must not re-wrap it."""
+    feature = Feature(name="Feature1")
+
+    result = feature._set_domain(None, Domain("example_domain_options"))
+    assert result.name == "example_domain_options"  # type: ignore
+
+
+def test_feature_domain_param_matches_domain_str_param() -> None:
+    """Feature(domain=Domain(...)) must resolve identically to Feature(domain="...")."""
+    assert Feature("x", domain=Domain("m")) == Feature("x", domain="m")
+
+
+def test_feature_domain_options_matches_domain_str_param() -> None:
+    """Feature(options={"domain": Domain(...)}) must resolve identically to Feature(domain="...")."""
+    assert Feature("x", options={"domain": Domain("m")}) == Feature("x", domain="m")
+
+
+def test_feature_construction_does_not_mutate_a_shared_options_object() -> None:
+    """A caller-owned Options instance reused across features must keep its "domain" key."""
+    shared = Options({"domain": "sales"})
+
+    first = Feature("a", shared)
+    second = Feature("b", shared)
+
+    assert shared.group.get("domain") == "sales"
+    assert first.domain.name == "sales"  # type: ignore
+    assert second.domain.name == "sales"  # type: ignore
+
+
+def test_feature_domain_param_does_not_double_wrap() -> None:
+    """feature.domain.name must be the plain str, not a nested Domain instance."""
+    feature = Feature("x", domain=Domain("m"))
+    assert isinstance(feature.domain.name, str)  # type: ignore
+    assert feature.domain.name == "m"  # type: ignore
 
 
 def test_feature_data_type_from_string() -> None:

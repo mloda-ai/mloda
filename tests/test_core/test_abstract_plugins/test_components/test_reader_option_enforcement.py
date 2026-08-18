@@ -1,4 +1,4 @@
-"""Pins selection-time enforcement of ``READER_OPTIONS`` specs (issue #949, cycle 2): per-candidate
+"""Pins selection-time enforcement of ``PROPERTY_MAPPING`` specs (issue #949, cycle 2): per-candidate
 vetoes before the probe; absence vetoes record only on the feature-scope (ownership) path.
 Leak policy: leaked final readers are foreign-inert (TestModuleLeakPolicy pins it); absence-firing ones are test-local.
 """
@@ -124,7 +124,7 @@ class RoeStrictValuesReader(RoeStrictFamily):
     ROE_ACCESS = ROE_STRICT_ACCESS
     ROE_HANDLE = ROE_STRICT_HANDLE
 
-    READER_OPTIONS: ClassVar[dict[str, PropertySpec]] = {
+    PROPERTY_MAPPING: ClassVar[dict[str, PropertySpec]] = {
         ROE_FORMAT_KEY: PropertySpec(
             "Strict membership over a Mapping value space, so an unhashable value is a clean rejection.",
             allowed_values={"roe_csv": "comma separated", "roe_parquet": "columnar"},
@@ -149,7 +149,7 @@ class RoeScalarOnlyReader(_RoeMarkedReader):
 
     ROE_ACCESS = ROE_SCALAR_ACCESS
 
-    READER_OPTIONS: ClassVar[dict[str, PropertySpec]] = {
+    PROPERTY_MAPPING: ClassVar[dict[str, PropertySpec]] = {
         ROE_SCALAR_KEY: PropertySpec(
             "Scalar-only strict key: a container value is rejected before any element-wise check.",
             element_validator=is_positive_int,
@@ -169,7 +169,7 @@ class RoeValidatorReader(_RoeMarkedReader):
 
     ROE_ACCESS = ROE_VALIDATOR_ACCESS
 
-    READER_OPTIONS: ClassVar[dict[str, PropertySpec]] = {
+    PROPERTY_MAPPING: ClassVar[dict[str, PropertySpec]] = {
         ROE_COUNT_KEY: PropertySpec(
             "The declared element_validator REPLACES the also-declared membership space.",
             allowed_values=("roe_member",),
@@ -195,7 +195,7 @@ class RoeLenientReader(_RoeMarkedReader):
 
     ROE_ACCESS = ROE_LENIENT_ACCESS
 
-    READER_OPTIONS: ClassVar[dict[str, PropertySpec]] = {
+    PROPERTY_MAPPING: ClassVar[dict[str, PropertySpec]] = {
         ROE_LAX_KEY: PropertySpec(
             "Non-strict despite a declared value space; a present value is never validated.",
             allowed_values=("roe_only",),
@@ -220,7 +220,7 @@ class RoeConditionalReader(RoeCondFamily):
     ROE_ACCESS = ROE_COND_ACCESS
     ROE_HANDLE = ROE_COND_HANDLE
 
-    READER_OPTIONS: ClassVar[dict[str, PropertySpec]] = {
+    PROPERTY_MAPPING: ClassVar[dict[str, PropertySpec]] = {
         ROE_COND_KEY: PropertySpec("Required iff the trigger key is supplied.", required_when=_roe_trigger_required),
     }
 
@@ -234,7 +234,7 @@ class RoeRaisingPredicateReader(_RoeMarkedReader):
 
     ROE_ACCESS = ROE_FUSSY_ACCESS
 
-    READER_OPTIONS: ClassVar[dict[str, PropertySpec]] = {
+    PROPERTY_MAPPING: ClassVar[dict[str, PropertySpec]] = {
         ROE_FUSSY_KEY: PropertySpec("Requiredness undecidable by design.", required_when=_roe_raising_predicate),
     }
 
@@ -250,7 +250,7 @@ class RoeProbeCountingReader(_RoeMarkedReader):
 
     roe_calls: ClassVar[list[Any]] = []
 
-    READER_OPTIONS: ClassVar[dict[str, PropertySpec]] = {
+    PROPERTY_MAPPING: ClassVar[dict[str, PropertySpec]] = {
         ROE_PROBE_KEY: PropertySpec(
             "Strict key of the instrumented reader.",
             allowed_values=("roe_ok",),
@@ -285,7 +285,7 @@ class RoePairVetoedReader(RoePairVetoedFamily):
     ROE_ACCESS = ROE_PAIR_VETOED_ACCESS
     ROE_HANDLE = ROE_PAIR_HANDLE
 
-    READER_OPTIONS: ClassVar[dict[str, PropertySpec]] = {
+    PROPERTY_MAPPING: ClassVar[dict[str, PropertySpec]] = {
         ROE_PAIR_KEY: PropertySpec(
             "Strict key shared by the pair scenario.",
             allowed_values=("roe_ok",),
@@ -319,7 +319,7 @@ class RoeEngineReader(RoeEngineFamily):
 
     ROE_ACCESS = ROE_ENGINE_ACCESS
 
-    READER_OPTIONS: ClassVar[dict[str, PropertySpec]] = {
+    PROPERTY_MAPPING: ClassVar[dict[str, PropertySpec]] = {
         ROE_ENGINE_KEY: PropertySpec(
             "Strict key whose veto must surface as an input_data elimination.",
             allowed_values=("roe_ok",),
@@ -355,7 +355,7 @@ def _roe_required_family(tag: str) -> tuple[type[BaseInputData], type[BaseInputD
         ROE_ACCESS = ROE_REQUIRED_ACCESS
         ROE_HANDLE = ROE_REQUIRED_HANDLE
 
-        READER_OPTIONS: ClassVar[dict[str, PropertySpec]] = {
+        PROPERTY_MAPPING: ClassVar[dict[str, PropertySpec]] = {
             ROE_REQUIRED_KEY: PropertySpec("Unconditionally required: declares no default, no required_when."),
         }
 
@@ -376,7 +376,7 @@ def _roe_nullable_reader(tag: str) -> type[BaseInputData]:
     class RoeLocalNullableReader(_RoeMarkedReader):
         ROE_ACCESS = ROE_NULLABLE_ACCESS
 
-        READER_OPTIONS: ClassVar[dict[str, PropertySpec]] = {
+        PROPERTY_MAPPING: ClassVar[dict[str, PropertySpec]] = {
             ROE_NULLABLE_KEY: PropertySpec(
                 "Required, but an explicit None counts as present.", allow_explicit_none=True
             ),
@@ -961,5 +961,5 @@ class TestModuleLeakPolicy:
                 if spec.framework_set:
                     continue
                 assert not (is_no_default(spec.default) and spec.required_when is None), (
-                    f"{cls.__name__}.READER_OPTIONS['{key}'] would fire on every foreign probe"
+                    f"{cls.__name__}.PROPERTY_MAPPING['{key}'] would fire on every foreign probe"
                 )

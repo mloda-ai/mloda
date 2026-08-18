@@ -436,5 +436,5 @@ class TestModuleLeakPolicy:
                 if spec.framework_set:
                     continue
                 assert not (is_no_default(spec.default) and spec.required_when is None), (
-                    f"{cls.__name__}.READER_OPTIONS['{key}'] would fire on every foreign probe"
+                    f"{cls.__name__}.PROPERTY_MAPPING['{key}'] would fire on every foreign probe"
                 )

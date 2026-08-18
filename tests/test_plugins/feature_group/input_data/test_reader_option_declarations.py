@@ -1,4 +1,4 @@
-"""Pins the per-reader ``READER_OPTIONS`` declarations (issue #949: ``PropertySpec`` values) and
+"""Pins the per-reader ``PROPERTY_MAPPING`` declarations (issue #949: ``PropertySpec`` values) and
 makes the declared ``document_suffixes`` default load-bearing in ReadFile/ReadDocument matching.
 Leak policy: the leaked readers here are never final; matching is called directly, never via mlodaAPI.
 """
@@ -65,7 +65,7 @@ def _json_excluding_read_file() -> type[ReadFile]:
     """ReadFile declaring ``.json`` as a document suffix; lazy so a broken guard fails its users, not collection."""
 
     class RodJsonExcludingReadFile(ReadFile):
-        READER_OPTIONS: ClassVar[dict[str, PropertySpec]] = {
+        PROPERTY_MAPPING: ClassVar[dict[str, PropertySpec]] = {
             "document_suffixes": PropertySpec(
                 "Suffixes handed to document readers; declared non-empty so ReadFile auto-excludes them.",
                 default=frozenset({".json"}),
@@ -84,7 +84,7 @@ def _json_claiming_read_document() -> type[ReadDocument]:
     """ReadDocument reader declaring ``.json`` as a document suffix, so it must claim ``.json`` files."""
 
     class RodJsonClaimingReadDocument(ReadDocument):
-        READER_OPTIONS: ClassVar[dict[str, PropertySpec]] = {
+        PROPERTY_MAPPING: ClassVar[dict[str, PropertySpec]] = {
             "document_suffixes": PropertySpec(
                 "Structured suffixes this document reader owns; declared non-empty to claim .json.",
                 default=frozenset({".json"}),
@@ -131,7 +131,7 @@ class TestReadFileDeclarations:
         assert ReadFile.reader_option_default("data_access_handle") is None
 
     def test_csv_reader_inherits_without_redeclaring(self) -> None:
-        assert "READER_OPTIONS" not in CsvReader.__dict__
+        assert "PROPERTY_MAPPING" not in CsvReader.__dict__
         assert CsvReader.declared_reader_option_keys() == ReadFile.declared_reader_option_keys()
         assert CsvReader.reader_option_default("document_suffixes") == frozenset()
         assert CsvReader.reader_option_default("data_access_handle") is None
@@ -154,7 +154,7 @@ class TestReadDocumentDeclarations:
         assert ReadDocument.reader_option_default("data_access_handle") is None
 
     def test_markdown_reader_inherits_without_redeclaring(self) -> None:
-        assert "READER_OPTIONS" not in MarkdownDocumentReader.__dict__
+        assert "PROPERTY_MAPPING" not in MarkdownDocumentReader.__dict__
         assert MarkdownDocumentReader.declared_reader_option_keys() == ReadDocument.declared_reader_option_keys()
         assert MarkdownDocumentReader.reader_option_default("document_suffixes") == frozenset()
 
@@ -177,7 +177,7 @@ class TestReadDBDeclarations:
             ReadDB.reader_option_default("document_suffixes")
 
     def test_sqlite_reader_inherits_without_redeclaring(self) -> None:
-        assert "READER_OPTIONS" not in SQLITEReader.__dict__
+        assert "PROPERTY_MAPPING" not in SQLITEReader.__dict__
         assert SQLITEReader.declared_reader_option_keys() == ReadDB.declared_reader_option_keys()
         assert SQLITEReader.reader_option_default("data_access_handle") is None
 

@@ -270,15 +270,15 @@ class FeatureChainParser:
             # Contained: a framework_set spec is that candidate's own defect, so the seam reads it as a non-match.
             raise ValueError(
                 f"{owner_name}.PROPERTY_MAPPING['{key}'] declares framework_set=True, which marks a "
-                f"reader-surface (READER_OPTIONS) key written by the framework; PROPERTY_MAPPING keys "
-                f"are user-set."
+                f"reader-surface (BaseInputData PROPERTY_MAPPING) key written by the framework; a "
+                f"FeatureGroup's PROPERTY_MAPPING keys are user-set."
             )
         if spec.scalar_only:
             # Contained: a scalar_only spec is that candidate's own defect, so the seam reads it as a non-match.
             raise ValueError(
                 f"{owner_name}.PROPERTY_MAPPING['{key}'] declares scalar_only=True, which marks a "
-                f"reader-surface (READER_OPTIONS) key rejected outright as a collection; PROPERTY_MAPPING "
-                f"keys always unpack element-wise."
+                f"reader-surface (BaseInputData PROPERTY_MAPPING) key rejected outright as a collection; a "
+                f"FeatureGroup's PROPERTY_MAPPING keys always unpack element-wise."
             )
         return spec
 

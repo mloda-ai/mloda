@@ -40,7 +40,7 @@ class ReadFile(BaseInputData):
 
     _auto_load_group: str = "feature_group/input_data/read_files"
 
-    READER_OPTIONS: ClassVar[dict[str, PropertySpec]] = {
+    PROPERTY_MAPPING: ClassVar[dict[str, PropertySpec]] = {
         "document_suffixes": PropertySpec(
             "Suffixes handed over to document readers; ReadFile auto-excludes them from its own matching.",
             default=frozenset(),

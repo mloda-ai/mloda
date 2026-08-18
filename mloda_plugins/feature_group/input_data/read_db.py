@@ -24,7 +24,7 @@ class ReadDB(BaseInputData):
 
     _auto_load_group: str = "feature_group/input_data/read_dbs"
 
-    READER_OPTIONS: ClassVar[dict[str, PropertySpec]] = {
+    PROPERTY_MAPPING: ClassVar[dict[str, PropertySpec]] = {
         "data_access_handle": PropertySpec(
             "Hint naming which DataAccessCollection credentials handle to prefer while matching.",
             default=None,

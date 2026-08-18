@@ -13,6 +13,12 @@ from mloda.core.abstract_plugins.components.match_rejection import (
     restamp_match_rejections_since,
 )
 from mloda.core.abstract_plugins.components.options import Options
+from mloda.core.abstract_plugins.components.property_mapping import (
+    DeclarationSurface,
+    merged_property_mapping,
+    reject_merge_cache_assignment,
+    validate_property_mapping,
+)
 
 
 from mloda.core.abstract_plugins.components.utils import (
@@ -28,7 +34,9 @@ RESERVED_READER_OPTION_KEY = "BaseInputData"
 
 
 class BaseInputData(ABC):
-    READER_OPTIONS: ClassVar[dict[str, PropertySpec]] = {
+    PROPERTY_MAPPING_SURFACE: ClassVar[DeclarationSurface] = DeclarationSurface.READER
+
+    PROPERTY_MAPPING: ClassVar[dict[str, PropertySpec]] = {
         RESERVED_READER_OPTION_KEY: PropertySpec(
             "The matched (ReaderClass, data_access) pair, written by add_base_input_data_to_options "
             "and read back by init_reader.",
@@ -37,157 +45,60 @@ class BaseInputData(ABC):
         ),
     }
 
-    _reader_option_specs_cache: ClassVar[Optional[dict[str, PropertySpec]]] = None
-    """Merged declarations of ONE class, written into that class's own __dict__ by _merged_reader_option_specs."""
-
     def __init__(self) -> None:
         pass
 
     def __init_subclass__(cls, **kwargs: Any) -> None:
-        """Guards run at class definition only: mutating READER_OPTIONS afterwards or overriding
+        """Guards run at class definition only: mutating PROPERTY_MAPPING afterwards or overriding
         __init_subclass__ without calling super() defeats them."""
         # Checked before super(): a cooperative later-in-MRO hook may warm the cache during the
         # super() chain; here cls.__dict__ still holds only what the class body wrote.
-        if "_reader_option_specs_cache" in cls.__dict__:
-            raise ValueError(
-                f"{cls.__name__} assigns _reader_option_specs_cache in its class body; the merge cache "
-                f"is framework-written and must never be declared by a reader."
-            )
+        reject_merge_cache_assignment(cls)
         super().__init_subclass__(**kwargs)
-        cls._validate_reader_options()
+        for klass in cls.__mro__:
+            if "READER_OPTIONS" in klass.__dict__:
+                raise ValueError(
+                    f"{klass.__name__} declares READER_OPTIONS, which was renamed to PROPERTY_MAPPING; "
+                    f"rename the class attribute to PROPERTY_MAPPING."
+                )
+        cls._validate_reserved_reader_option_key()
+        validate_property_mapping(cls)
 
     @classmethod
     def _validate_reserved_reader_option_key(cls) -> None:
         """The reserved key must survive the MRO MERGE, not just cls's own dict: a plain mixin is never
         validated itself, yet its declaration outranks the base's and is what selection reads."""
         for klass in cls.__mro__:
-            declared = klass.__dict__.get("READER_OPTIONS", {})
-            if RESERVED_READER_OPTION_KEY not in declared:
+            declared = klass.__dict__.get("PROPERTY_MAPPING", {})
+            # A malformed declaration (None, a list, ...) is not this check's concern; own_property_mapping
+            # rejects its shape loudly once validate_property_mapping reaches it.
+            if not isinstance(declared, dict) or RESERVED_READER_OPTION_KEY not in declared:
                 continue
             spec = declared[RESERVED_READER_OPTION_KEY]
             if not isinstance(spec, PropertySpec) or not spec.framework_set:
                 raise ValueError(
-                    f"{cls.__name__} merges READER_OPTIONS['{RESERVED_READER_OPTION_KEY}'] to the declaration on "
+                    f"{cls.__name__} merges PROPERTY_MAPPING['{RESERVED_READER_OPTION_KEY}'] to the declaration on "
                     f"{klass.__name__}, which is not a PropertySpec with framework_set=True; the framework writes "
                     f"this reserved key itself, so the admit path would judge a value no user ever supplies."
                 )
             return
 
     @classmethod
-    def _validate_reader_options(cls) -> None:
-        """Reject a reader-invalid declaration where it is written, not later deep in reader matching;
-        checks this class's own declaration plus any plain-mixin declaration reaching its merge."""
-        cls._validate_reserved_reader_option_key()
-        for key, spec in cls._reader_options_declaration(cls).items():
-            cls._validate_reader_option_spec(cls.__name__, key, spec)
-        for klass in cls.__mro__[1:]:
-            # Real inheritance only: an ABC.register virtual subclass answers issubclass True
-            # without ever running __init_subclass__, so it never validated itself.
-            if BaseInputData in klass.__mro__:
-                continue
-            for key, spec in cls._reader_options_declaration(klass).items():
-                cls._validate_reader_option_spec(klass.__name__, key, spec, via=cls.__name__)
-
-    @staticmethod
-    def _reader_options_declaration(klass: type) -> dict[str, Any]:
-        """The class's own READER_OPTIONS, rejected loudly when it is not a dict."""
-        declared = klass.__dict__.get("READER_OPTIONS", {})
-        if not isinstance(declared, dict):
-            raise ValueError(
-                f"{klass.__name__}.READER_OPTIONS is a {type(declared).__name__}, not a dict. "
-                f"Declare a dict mapping option keys to PropertySpec instances."
-            )
-        return declared
-
-    @staticmethod
-    def _validate_reader_option_spec(owner: str, key: str, spec: Any, via: Optional[str] = None) -> None:
-        """The per-key reader rules; owner names the class the declaration is written on,
-        via names the class definition that reached it through the merge."""
-        suffix = "" if via is None else f" (reached defining {via})"
-        if not isinstance(spec, PropertySpec):
-            raise ValueError(
-                f"{owner}.READER_OPTIONS['{key}'] is a {type(spec).__name__}, not a PropertySpec. "
-                f"Construct PropertySpec(...) instead.{suffix}"
-            )
-        if spec.match_guard is not None:
-            raise ValueError(
-                f"{owner}.READER_OPTIONS['{key}'] declares a match_guard, which is name-matching "
-                f"machinery and silently inert on a reader.{suffix}"
-            )
-        if spec.deferred_binding:
-            raise ValueError(
-                f"{owner}.READER_OPTIONS['{key}'] declares deferred_binding=True, which is the "
-                f"name-capture exemption; a reader key has no name path.{suffix}"
-            )
-        if spec.context is False:
-            raise ValueError(
-                f"{owner}.READER_OPTIONS['{key}'] declares context=False, which places a "
-                f"materialized value; readers place none.{suffix}"
-            )
-        if spec.framework_set:
-            if spec.strict_validation:
-                raise ValueError(
-                    f"{owner}.READER_OPTIONS['{key}'] combines framework_set=True with "
-                    f"strict_validation=True; the framework-written key is exempt from user-value "
-                    f"validation, so strictness would be silently inert.{suffix}"
-                )
-            if spec.required_when is not None:
-                raise ValueError(
-                    f"{owner}.READER_OPTIONS['{key}'] combines framework_set=True with a "
-                    f"required_when predicate; the framework-written key is exempt from user-value "
-                    f"validation, so the predicate would be silently inert.{suffix}"
-                )
-            if spec.allow_explicit_none:
-                raise ValueError(
-                    f"{owner}.READER_OPTIONS['{key}'] combines framework_set=True with "
-                    f"allow_explicit_none=True; the admit path skips the framework-written key, "
-                    f"so the flag cannot affect reader selection.{suffix}"
-                )
-            if is_no_default(spec.default):
-                raise ValueError(
-                    f"{owner}.READER_OPTIONS['{key}'] declares framework_set=True without a "
-                    f"declared default; the framework-written key must declare its absent-state "
-                    f"default explicitly, None included.{suffix}"
-                )
-
-    @classmethod
-    def _merged_reader_option_specs(cls) -> dict[str, PropertySpec]:
-        """The merged declarations of cls, cached in cls's OWN __dict__; internal, never handed out.
-
-        Reader selection is a hot path, so the MRO walk runs once per class. The cache is read back
-        with cls.__dict__.get so a subclass never answers from a warm parent cache, and it lives on
-        the class itself rather than in a class-keyed registry so it holds no reference to any class.
-        """
-        cached: Optional[dict[str, PropertySpec]] = cls.__dict__.get("_reader_option_specs_cache")
-        if cached is not None:
-            return cached
-
-        merged: dict[str, PropertySpec] = {}
-        for klass in reversed(cls.__mro__):
-            merged.update(klass.__dict__.get("READER_OPTIONS", {}))
-        cls._reader_option_specs_cache = merged
-        return merged
-
-    @classmethod
     def reader_option_specs(cls) -> dict[str, PropertySpec]:
-        """The declarations of this reader family, most-derived winning; a fresh dict per call.
-
-        Merged across cls.__mro__ from each class's own __dict__ so an inherited attribute is not
-        merged twice, walking the MRO in reverse so a derived declaration wins on a key collision.
-        """
-        return dict(cls._merged_reader_option_specs())
+        """The declarations of this reader family, most-derived winning; a fresh dict per call."""
+        return dict(merged_property_mapping(cls))
 
     @classmethod
     def declared_reader_option_keys(cls) -> frozenset[str]:
         """Every option key this reader family declares."""
-        return frozenset(cls._merged_reader_option_specs())
+        return frozenset(merged_property_mapping(cls))
 
     @classmethod
     def _declared_reader_option_spec(cls, key: str) -> PropertySpec:
         """The declaration of key; an undeclared key is a typo, not a silent None."""
-        specs = cls._merged_reader_option_specs()
+        specs = merged_property_mapping(cls)
         if key not in specs:
-            raise ValueError(f"Reader option '{key}' is not declared in READER_OPTIONS of {cls.__name__}.")
+            raise ValueError(f"Reader option '{key}' is not declared in PROPERTY_MAPPING of {cls.__name__}.")
         return specs[key]
 
     @classmethod
@@ -216,7 +127,7 @@ class BaseInputData(ABC):
     def _reader_options_admit(cls, options: Optional[Options], record_absence: bool) -> bool:
         """Check this candidate's merged declarations BEFORE its probe runs; a veto is its own non-match.
         record_absence doubles as the ownership signal: it gates absence recordings and stages present-value ones."""
-        for key, spec in cls._merged_reader_option_specs().items():
+        for key, spec in merged_property_mapping(cls).items():
             if spec.framework_set:
                 continue
             if options is None:

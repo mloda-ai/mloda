@@ -89,6 +89,11 @@ _DECIDED_ABOVE_BY_READER_SELECTION = (
 _MATCHES_COLLISION = "name collision: the match path calls the input-data hooks named matches, not Link.matches"
 _UPDATE_COLLISION = "name collision: dict.update, not the link resolver's"
 _JOIN_COLLISION = "name collision: str.join, not the runner's join"
+_MERGED_PROPERTY_MAPPING_RAISES = (
+    "real edge: own_property_mapping's ValueError for a malformed PROPERTY_MAPPING; __init_subclass__ "
+    "already validates every class in the MRO at definition time, so this walk cannot raise for a class "
+    "that reached match time"
+)
 
 RAISING_HELPERS_OUTSIDE_THE_PATH: dict[tuple[str, str], str] = {
     ("mloda/core/abstract_plugins/components/options.py", "__init__"): _CANDIDATE_OWN_DECLARATION,
@@ -104,6 +109,9 @@ RAISING_HELPERS_OUTSIDE_THE_PATH: dict[tuple[str, str], str] = {
     ),
     ("mloda/core/prepare/resolve_links.py", "update"): _UPDATE_COLLISION,
     ("mloda/core/runtime/run.py", "join"): _JOIN_COLLISION,
+    ("mloda/core/abstract_plugins/components/property_mapping.py", "merged_property_mapping"): (
+        _MERGED_PROPERTY_MAPPING_RAISES
+    ),
 }
 
 # Swallowing functions OUTSIDE the declared modules that the match path calls; the containment there is decided
@@ -133,6 +141,9 @@ SWALLOWING_HELPERS_OUTSIDE_THE_PATH: dict[tuple[str, str], str] = {
     ("mloda/core/abstract_plugins/components/link.py", "matches"): _MATCHES_COLLISION,
     ("mloda/core/prepare/resolve_links.py", "update"): _UPDATE_COLLISION,
     ("mloda/core/runtime/run.py", "join"): _JOIN_COLLISION,
+    ("mloda/core/abstract_plugins/components/property_mapping.py", "merged_property_mapping"): (
+        "name collision: dict.update inside merged_property_mapping, not a real swallow"
+    ),
 }
 
 _ESCALATION = "escalate_match_abort"

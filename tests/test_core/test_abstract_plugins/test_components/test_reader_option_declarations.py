@@ -1,4 +1,4 @@
-"""Pins the collapsed ``READER_OPTIONS`` surface on ``BaseInputData`` (issue #949): one spec type,
+"""Pins the collapsed ``PROPERTY_MAPPING`` surface on ``BaseInputData`` (issue #949): one spec type,
 ``PropertySpec`` plus ``framework_set``, read via ``reader_option`` / ``reader_option_default``.
 Leak policy: the throwaway readers here leak deliberately; none is final, so selection never collects them.
 """
@@ -17,6 +17,7 @@ import mloda.provider as mloda_provider
 from mloda.core.abstract_plugins.components.feature_chainer.property_spec import PropertySpec, is_positive_int
 from mloda.core.abstract_plugins.components.input_data.base_input_data import BaseInputData
 from mloda.core.abstract_plugins.components.options import Options
+from mloda.core.abstract_plugins.components.property_mapping import validate_property_mapping
 from mloda.core.abstract_plugins.components.utils import get_all_subclasses
 
 
@@ -42,7 +43,7 @@ def _decl_family() -> tuple[type[BaseInputData], type[BaseInputData], type[BaseI
     class RodDeclParentReader(BaseInputData):
         """Parent declaring key A only; inherits the reserved framework key."""
 
-        READER_OPTIONS: ClassVar[dict[str, PropertySpec]] = {
+        PROPERTY_MAPPING: ClassVar[dict[str, PropertySpec]] = {
             "rod_key_a": PropertySpec("Key A, declared on the parent.", default="parent_a"),
         }
 
@@ -53,14 +54,14 @@ def _decl_family() -> tuple[type[BaseInputData], type[BaseInputData], type[BaseI
     class RodDeclChildReader(RodDeclParentReader):
         """Child declaring key B only; A and the reserved key must still be visible."""
 
-        READER_OPTIONS: ClassVar[dict[str, PropertySpec]] = {
+        PROPERTY_MAPPING: ClassVar[dict[str, PropertySpec]] = {
             "rod_key_b": PropertySpec("Key B, declared on the child.", default="child_b"),
         }
 
     class RodDeclOverrideReader(RodDeclParentReader):
         """Child redeclaring key A with a different default; the most-derived declaration wins."""
 
-        READER_OPTIONS: ClassVar[dict[str, PropertySpec]] = {
+        PROPERTY_MAPPING: ClassVar[dict[str, PropertySpec]] = {
             "rod_key_a": PropertySpec("Key A, redeclared on the child.", default="child_a"),
         }
 
@@ -196,9 +197,9 @@ class TestReservedFrameworkKey:
 
     def test_base_declares_reader_options_locally(self) -> None:
         """The declaration lives on ``BaseInputData``, not only on some subclass."""
-        assert "READER_OPTIONS" in BaseInputData.__dict__
-        assert isinstance(BaseInputData.READER_OPTIONS, dict)
-        assert "BaseInputData" in BaseInputData.READER_OPTIONS
+        assert "PROPERTY_MAPPING" in BaseInputData.__dict__
+        assert isinstance(BaseInputData.PROPERTY_MAPPING, dict)
+        assert "BaseInputData" in BaseInputData.PROPERTY_MAPPING
 
     def test_declared_keys_contain_the_reserved_key(self) -> None:
         """``declared_reader_option_keys()`` on the base contains the reserved key."""
@@ -225,7 +226,8 @@ class TestReservedFrameworkKey:
 
     def test_base_declaration_passes_its_own_guard(self) -> None:
         """``__init_subclass__`` never validates the base itself; this pin keeps the base honest."""
-        BaseInputData._validate_reader_options()
+        validate_property_mapping(BaseInputData)
+        BaseInputData._validate_reserved_reader_option_key()
 
     def test_reserved_key_is_the_key_the_framework_actually_writes(self) -> None:
         """``add_base_input_data_to_options`` writes exactly the keys declared ``framework_set``.
@@ -436,7 +438,7 @@ class TestAllowExplicitNoneIsHonoured:
         """A fresh reader whose one key opts into explicit None."""
 
         class RodOptInNoneReader(BaseInputData):
-            READER_OPTIONS: ClassVar[dict[str, PropertySpec]] = {
+            PROPERTY_MAPPING: ClassVar[dict[str, PropertySpec]] = {
                 "rod_opt_in_none_key": PropertySpec(
                     "Opts into explicit None.", default="declared", allow_explicit_none=True
                 ),
@@ -473,7 +475,7 @@ class TestNoDefaultMakesTheKeyRequired:
         """A fresh reader whose one key declares no default."""
 
         class RodRequiredKeyReader(BaseInputData):
-            READER_OPTIONS: ClassVar[dict[str, PropertySpec]] = {
+            PROPERTY_MAPPING: ClassVar[dict[str, PropertySpec]] = {
                 "rod_required_key": PropertySpec("Required at read time; no declared fallback."),
             }
 
@@ -525,7 +527,7 @@ class TestReaderOptionToleratesNoneOptions:
         """The ``allow_explicit_none`` presence read (``key in options``) must tolerate None too."""
 
         class RodNoneOptionsOptInReader(BaseInputData):
-            READER_OPTIONS: ClassVar[dict[str, PropertySpec]] = {
+            PROPERTY_MAPPING: ClassVar[dict[str, PropertySpec]] = {
                 "rod_none_opt_in_key": PropertySpec(
                     "Opts into explicit None.", default="declared", allow_explicit_none=True
                 ),
@@ -539,7 +541,7 @@ class TestReaderOptionToleratesNoneOptions:
         """A NO_DEFAULT key with no Options raises EXACTLY the absent-key ValueError."""
 
         class RodNoneOptionsRequiredReader(BaseInputData):
-            READER_OPTIONS: ClassVar[dict[str, PropertySpec]] = {
+            PROPERTY_MAPPING: ClassVar[dict[str, PropertySpec]] = {
                 "rod_none_required_key": PropertySpec("Required at read time; no declared fallback."),
             }
 
@@ -570,14 +572,14 @@ class TestMergedSpecCacheStaysFresh:
         """Warming the parent must not answer for a child that redeclares the key."""
 
         class RodColdParentReader(BaseInputData):
-            READER_OPTIONS: ClassVar[dict[str, PropertySpec]] = {
+            PROPERTY_MAPPING: ClassVar[dict[str, PropertySpec]] = {
                 "rod_cache_key": PropertySpec("Declared on the parent.", default="parent"),
             }
 
         assert RodColdParentReader.reader_option("rod_cache_key", Options()) == "parent"
 
         class RodLateChildReader(RodColdParentReader):
-            READER_OPTIONS: ClassVar[dict[str, PropertySpec]] = {
+            PROPERTY_MAPPING: ClassVar[dict[str, PropertySpec]] = {
                 "rod_cache_key": PropertySpec("Redeclared on the child.", default="child"),
             }
 
@@ -588,12 +590,12 @@ class TestMergedSpecCacheStaysFresh:
         """The reverse order: reading the child first leaves the parent's answer alone."""
 
         class RodParentReadSecond(BaseInputData):
-            READER_OPTIONS: ClassVar[dict[str, PropertySpec]] = {
+            PROPERTY_MAPPING: ClassVar[dict[str, PropertySpec]] = {
                 "rod_cache_key": PropertySpec("Declared on the parent.", default="parent"),
             }
 
         class RodChildReadFirst(RodParentReadSecond):
-            READER_OPTIONS: ClassVar[dict[str, PropertySpec]] = {
+            PROPERTY_MAPPING: ClassVar[dict[str, PropertySpec]] = {
                 "rod_cache_key": PropertySpec("Redeclared on the child.", default="child"),
             }
 
@@ -604,14 +606,14 @@ class TestMergedSpecCacheStaysFresh:
         """``declared_reader_option_keys`` shares the cache, so it must not go stale either."""
 
         class RodKeysParentReader(BaseInputData):
-            READER_OPTIONS: ClassVar[dict[str, PropertySpec]] = {
+            PROPERTY_MAPPING: ClassVar[dict[str, PropertySpec]] = {
                 "rod_cache_parent_key": PropertySpec("Parent only.", default=None),
             }
 
         assert RodKeysParentReader.declared_reader_option_keys() == {"rod_cache_parent_key", "BaseInputData"}
 
         class RodKeysChildReader(RodKeysParentReader):
-            READER_OPTIONS: ClassVar[dict[str, PropertySpec]] = {
+            PROPERTY_MAPPING: ClassVar[dict[str, PropertySpec]] = {
                 "rod_cache_child_key": PropertySpec("Child only.", default=None),
             }
 
@@ -626,7 +628,7 @@ class TestMergedSpecCacheStaysFresh:
         """The guard reads the cached mapping, so warming it cannot make a typo silent."""
 
         class RodWarmGuardReader(BaseInputData):
-            READER_OPTIONS: ClassVar[dict[str, PropertySpec]] = {
+            PROPERTY_MAPPING: ClassVar[dict[str, PropertySpec]] = {
                 "rod_cache_key": PropertySpec("Declared.", default="declared"),
             }
 
@@ -639,7 +641,7 @@ class TestMergedSpecCacheStaysFresh:
         """The caller-facing mapping stays a fresh copy: a cache must not be handed out by reference."""
 
         class RodCopyProbeReader(BaseInputData):
-            READER_OPTIONS: ClassVar[dict[str, PropertySpec]] = {
+            PROPERTY_MAPPING: ClassVar[dict[str, PropertySpec]] = {
                 "rod_cache_key": PropertySpec("Declared.", default="declared"),
             }
 
@@ -654,7 +656,7 @@ class TestMergedSpecCacheStaysFresh:
         """Caching is invisible: two reads of the same key on the same class agree."""
 
         class RodRepeatReader(BaseInputData):
-            READER_OPTIONS: ClassVar[dict[str, PropertySpec]] = {
+            PROPERTY_MAPPING: ClassVar[dict[str, PropertySpec]] = {
                 "rod_cache_key": PropertySpec("Declared.", default=frozenset({".json"})),
             }
 
@@ -666,14 +668,14 @@ class TestMergedSpecCacheStaysFresh:
 
 
 class TestReaderOptionsAreValidatedAtClassDefinition:
-    """``READER_OPTIONS`` accepts reader-shaped ``PropertySpec`` instances and NOTHING else, rejected where written."""
+    """``PROPERTY_MAPPING`` accepts reader-shaped ``PropertySpec`` instances and NOTHING else, rejected where written."""
 
     def test_string_value_rejected_at_class_definition(self) -> None:
         """``{"k": "just a string"}`` names the class, the key and the ``PropertySpec`` remedy."""
         with pytest.raises(ValueError) as exc_info:
 
             class RodBadStringSpecReader(BaseInputData):
-                READER_OPTIONS: ClassVar[dict[str, PropertySpec]] = {"rod_bad_key": "just a string"}  # type: ignore[dict-item]  # wrong type is the point
+                PROPERTY_MAPPING: ClassVar[dict[str, PropertySpec]] = {"rod_bad_key": "just a string"}  # type: ignore[dict-item]  # wrong type is the point
 
         message = str(exc_info.value)
         del exc_info
@@ -686,7 +688,7 @@ class TestReaderOptionsAreValidatedAtClassDefinition:
         with pytest.raises(ValueError) as exc_info:
 
             class RodBadDictSpecReader(BaseInputData):
-                READER_OPTIONS: ClassVar[dict[str, PropertySpec]] = {
+                PROPERTY_MAPPING: ClassVar[dict[str, PropertySpec]] = {
                     "rod_bad_key": {"explanation": "x", "default": None}  # type: ignore[dict-item]  # wrong type is the point
                 }
 
@@ -701,7 +703,7 @@ class TestReaderOptionsAreValidatedAtClassDefinition:
         with pytest.raises(ValueError) as exc_info:
 
             class RodBadIntSpecReader(BaseInputData):
-                READER_OPTIONS: ClassVar[dict[str, PropertySpec]] = {"rod_bad_key": 42}  # type: ignore[dict-item]  # wrong type is the point
+                PROPERTY_MAPPING: ClassVar[dict[str, PropertySpec]] = {"rod_bad_key": 42}  # type: ignore[dict-item]  # wrong type is the point
 
         message = str(exc_info.value)
         del exc_info
@@ -714,7 +716,7 @@ class TestReaderOptionsAreValidatedAtClassDefinition:
         with pytest.raises(ValueError) as exc_info:
 
             class RodMatchGuardReader(BaseInputData):
-                READER_OPTIONS: ClassVar[dict[str, PropertySpec]] = {
+                PROPERTY_MAPPING: ClassVar[dict[str, PropertySpec]] = {
                     "rod_guarded_key": PropertySpec("Guarded.", match_guard=_rod_match_guard, default=None),
                 }
 
@@ -729,7 +731,7 @@ class TestReaderOptionsAreValidatedAtClassDefinition:
         with pytest.raises(ValueError) as exc_info:
 
             class RodDeferredBindingReader(BaseInputData):
-                READER_OPTIONS: ClassVar[dict[str, PropertySpec]] = {
+                PROPERTY_MAPPING: ClassVar[dict[str, PropertySpec]] = {
                     "rod_deferred_key": PropertySpec("Deferred.", deferred_binding=True),
                 }
 
@@ -744,7 +746,7 @@ class TestReaderOptionsAreValidatedAtClassDefinition:
         with pytest.raises(ValueError) as exc_info:
 
             class RodContextFalseReader(BaseInputData):
-                READER_OPTIONS: ClassVar[dict[str, PropertySpec]] = {
+                PROPERTY_MAPPING: ClassVar[dict[str, PropertySpec]] = {
                     "rod_group_key": PropertySpec("Group-categorized.", context=False, default=None),
                 }
 
@@ -759,7 +761,7 @@ class TestReaderOptionsAreValidatedAtClassDefinition:
         with pytest.raises(ValueError) as exc_info:
 
             class RodContextZeroReader(BaseInputData):
-                READER_OPTIONS: ClassVar[dict[str, PropertySpec]] = {
+                PROPERTY_MAPPING: ClassVar[dict[str, PropertySpec]] = {
                     "rod_zero_key": _spec("Group-categorized by stealth.", context=0, default=None),
                 }
 
@@ -773,7 +775,7 @@ class TestReaderOptionsAreValidatedAtClassDefinition:
         with pytest.raises(ValueError) as exc_info:
 
             class RodFrameworkStrictReader(BaseInputData):
-                READER_OPTIONS: ClassVar[dict[str, PropertySpec]] = {
+                PROPERTY_MAPPING: ClassVar[dict[str, PropertySpec]] = {
                     "rod_fw_strict_key": PropertySpec(
                         "Framework-written.",
                         allowed_values=("a", "b"),
@@ -795,7 +797,7 @@ class TestReaderOptionsAreValidatedAtClassDefinition:
         with pytest.raises(ValueError) as exc_info:
 
             class RodFrameworkRequiredWhenReader(BaseInputData):
-                READER_OPTIONS: ClassVar[dict[str, PropertySpec]] = {
+                PROPERTY_MAPPING: ClassVar[dict[str, PropertySpec]] = {
                     "rod_fw_required_key": PropertySpec(
                         "Framework-written.",
                         required_when=_rod_never_required,
@@ -816,7 +818,7 @@ class TestReaderOptionsAreValidatedAtClassDefinition:
         with pytest.raises(ValueError) as exc_info:
 
             class RodFrameworkNoDefaultReader(BaseInputData):
-                READER_OPTIONS: ClassVar[dict[str, PropertySpec]] = {
+                PROPERTY_MAPPING: ClassVar[dict[str, PropertySpec]] = {
                     "rod_fw_bare_key": PropertySpec("Framework-written.", framework_set=True),
                 }
 
@@ -832,7 +834,7 @@ class TestReaderOptionsAreValidatedAtClassDefinition:
         with pytest.raises(ValueError) as exc_info:
 
             class RodFrameworkAllowNoneReader(BaseInputData):
-                READER_OPTIONS: ClassVar[dict[str, PropertySpec]] = {
+                PROPERTY_MAPPING: ClassVar[dict[str, PropertySpec]] = {
                     "rod_fw_allow_none_key": PropertySpec(
                         "Framework-written.",
                         allow_explicit_none=True,
@@ -853,7 +855,7 @@ class TestReaderOptionsAreValidatedAtClassDefinition:
         with pytest.raises(ValueError) as exc_info:
 
             class RodReservedShadowReader(BaseInputData):
-                READER_OPTIONS: ClassVar[dict[str, PropertySpec]] = {
+                PROPERTY_MAPPING: ClassVar[dict[str, PropertySpec]] = {
                     "BaseInputData": PropertySpec("shadowed", allow_explicit_none=True, default=None),
                 }
 
@@ -869,7 +871,7 @@ class TestReaderOptionsAreValidatedAtClassDefinition:
         with pytest.raises(ValueError) as exc_info:
 
             class RodReservedShadowNoDefaultReader(BaseInputData):
-                READER_OPTIONS: ClassVar[dict[str, PropertySpec]] = {
+                PROPERTY_MAPPING: ClassVar[dict[str, PropertySpec]] = {
                     "BaseInputData": PropertySpec("shadowed"),
                 }
 
@@ -885,7 +887,7 @@ class TestReaderOptionsAreValidatedAtClassDefinition:
         with pytest.raises(ValueError) as exc_info:
 
             class RodReservedShadowPlainReader(BaseInputData):
-                READER_OPTIONS: ClassVar[dict[str, PropertySpec]] = {
+                PROPERTY_MAPPING: ClassVar[dict[str, PropertySpec]] = {
                     "BaseInputData": PropertySpec("shadowed", default=None),
                 }
 
@@ -900,7 +902,7 @@ class TestReaderOptionsAreValidatedAtClassDefinition:
         """A plain mixin runs no guard of its own, yet wins the merge ahead of the base; the subclass must raise."""
 
         class RodShadowMixin:
-            READER_OPTIONS: ClassVar[dict[str, PropertySpec]] = {
+            PROPERTY_MAPPING: ClassVar[dict[str, PropertySpec]] = {
                 "BaseInputData": PropertySpec("shadowed"),
             }
 
@@ -920,7 +922,7 @@ class TestReaderOptionsAreValidatedAtClassDefinition:
         """Base-first ordering ranks the mixin BELOW the base, so the framework declaration wins and nothing raises."""
 
         class RodLosingShadowMixin:
-            READER_OPTIONS: ClassVar[dict[str, PropertySpec]] = {
+            PROPERTY_MAPPING: ClassVar[dict[str, PropertySpec]] = {
                 "BaseInputData": PropertySpec("shadowed"),
             }
 
@@ -938,7 +940,7 @@ class TestReaderOptionsAreValidatedAtClassDefinition:
         """Control: a legitimate redeclaration keeping the flag, a sharpened explanation, still defines."""
 
         class RodReservedKeptFrameworkReader(BaseInputData):
-            READER_OPTIONS: ClassVar[dict[str, PropertySpec]] = {
+            PROPERTY_MAPPING: ClassVar[dict[str, PropertySpec]] = {
                 "BaseInputData": PropertySpec(
                     "The matched (ReaderClass, data_access) pair, sharpened for this family.",
                     default=None,
@@ -954,7 +956,7 @@ class TestReaderOptionsAreValidatedAtClassDefinition:
         """Strict specs are the point of the collapse; a valued one with an in-space default defines."""
 
         class RodStrictValuesReader(BaseInputData):
-            READER_OPTIONS: ClassVar[dict[str, PropertySpec]] = {
+            PROPERTY_MAPPING: ClassVar[dict[str, PropertySpec]] = {
                 "rod_strict_values_key": PropertySpec(
                     "Strictly validated (value enforcement lands in cycle 2).",
                     allowed_values=("a", "b"),
@@ -969,7 +971,7 @@ class TestReaderOptionsAreValidatedAtClassDefinition:
         """A validator-backed strict spec with a passing default defines fine too."""
 
         class RodStrictValidatorReader(BaseInputData):
-            READER_OPTIONS: ClassVar[dict[str, PropertySpec]] = {
+            PROPERTY_MAPPING: ClassVar[dict[str, PropertySpec]] = {
                 "rod_strict_validator_key": PropertySpec(
                     "Validator-backed strict key.",
                     element_validator=is_positive_int,
@@ -984,7 +986,7 @@ class TestReaderOptionsAreValidatedAtClassDefinition:
         """Control: the check rejects only reader-invalid specs, never a real declaration."""
 
         class RodValidSpecReader(BaseInputData):
-            READER_OPTIONS: ClassVar[dict[str, PropertySpec]] = {
+            PROPERTY_MAPPING: ClassVar[dict[str, PropertySpec]] = {
                 "rod_valid_key": PropertySpec("Valid.", default=frozenset()),
             }
 
@@ -1002,7 +1004,7 @@ class TestReaderOptionsAreValidatedAtClassDefinition:
         """An explicitly empty mapping declares nothing new and is not an error."""
 
         class RodEmptyDeclarationReader(BaseInputData):
-            READER_OPTIONS: ClassVar[dict[str, PropertySpec]] = {}
+            PROPERTY_MAPPING: ClassVar[dict[str, PropertySpec]] = {}
 
         assert RodEmptyDeclarationReader.declared_reader_option_keys() == {"BaseInputData"}
 
@@ -1010,14 +1012,14 @@ class TestReaderOptionsAreValidatedAtClassDefinition:
         """The check runs per class, so inheriting a valid declaration does not buy a free pass."""
 
         class RodGoodBaseReader(BaseInputData):
-            READER_OPTIONS: ClassVar[dict[str, PropertySpec]] = {
+            PROPERTY_MAPPING: ClassVar[dict[str, PropertySpec]] = {
                 "rod_good_key": PropertySpec("Valid.", default=None),
             }
 
         with pytest.raises(ValueError) as exc_info:
 
             class RodBadChildReader(RodGoodBaseReader):
-                READER_OPTIONS: ClassVar[dict[str, PropertySpec]] = {"rod_bad_key": 42}  # type: ignore[dict-item]  # wrong type is the point
+                PROPERTY_MAPPING: ClassVar[dict[str, PropertySpec]] = {"rod_bad_key": 42}  # type: ignore[dict-item]  # wrong type is the point
 
         message = str(exc_info.value)
         del exc_info
@@ -1026,13 +1028,13 @@ class TestReaderOptionsAreValidatedAtClassDefinition:
 
 
 class TestMixinReaderOptionsAreValidatedAtSubclassDefinition:
-    """A plain mixin's ``READER_OPTIONS`` reaches the merge, so the subclass definition validates it too."""
+    """A plain mixin's ``PROPERTY_MAPPING`` reaches the merge, so the subclass definition validates it too."""
 
     def test_mixin_string_value_rejected_at_subclass_definition(self) -> None:
         """A non-spec mixin value raises where the subclass is written, naming the mixin and the key."""
 
         class RodStrValueMixin:
-            READER_OPTIONS: ClassVar[dict[str, PropertySpec]] = {"rod_mixin_bad_key": "not a spec"}  # type: ignore[dict-item]  # wrong type is the point
+            PROPERTY_MAPPING: ClassVar[dict[str, PropertySpec]] = {"rod_mixin_bad_key": "not a spec"}  # type: ignore[dict-item]  # wrong type is the point
 
         with pytest.raises(ValueError) as exc_info:
 
@@ -1049,7 +1051,7 @@ class TestMixinReaderOptionsAreValidatedAtSubclassDefinition:
         """A mixin spec declaring ``match_guard`` is rejected like an own declaration."""
 
         class RodGuardedMixin:
-            READER_OPTIONS: ClassVar[dict[str, PropertySpec]] = {
+            PROPERTY_MAPPING: ClassVar[dict[str, PropertySpec]] = {
                 "rod_mixin_guarded_key": PropertySpec("Guarded.", match_guard=_rod_match_guard, default=None),
             }
 
@@ -1068,7 +1070,7 @@ class TestMixinReaderOptionsAreValidatedAtSubclassDefinition:
         """The framework_set combination rules apply to a mixin declaration too."""
 
         class RodFrameworkStrictMixin:
-            READER_OPTIONS: ClassVar[dict[str, PropertySpec]] = {
+            PROPERTY_MAPPING: ClassVar[dict[str, PropertySpec]] = {
                 "rod_mixin_fw_strict_key": PropertySpec(
                     "Framework-written.",
                     allowed_values=("a", "b"),
@@ -1094,7 +1096,7 @@ class TestMixinReaderOptionsAreValidatedAtSubclassDefinition:
         """A mixin framework key without a declared default is rejected like an own one."""
 
         class RodFrameworkBareMixin:
-            READER_OPTIONS: ClassVar[dict[str, PropertySpec]] = {
+            PROPERTY_MAPPING: ClassVar[dict[str, PropertySpec]] = {
                 "rod_mixin_fw_bare_key": PropertySpec("Framework-written.", framework_set=True),
             }
 
@@ -1114,7 +1116,7 @@ class TestMixinReaderOptionsAreValidatedAtSubclassDefinition:
         """Control: a valid mixin spec passes the guard and its key merges into the subclass."""
 
         class RodValidMixin:
-            READER_OPTIONS: ClassVar[dict[str, PropertySpec]] = {
+            PROPERTY_MAPPING: ClassVar[dict[str, PropertySpec]] = {
                 "rod_mixin_valid_key": PropertySpec("Valid, declared on the mixin.", default="mixin_default"),
             }
 
@@ -1124,7 +1126,7 @@ class TestMixinReaderOptionsAreValidatedAtSubclassDefinition:
         assert "rod_mixin_valid_key" in RodValidMixinReader.declared_reader_option_keys()
         assert (
             RodValidMixinReader.reader_option_specs()["rod_mixin_valid_key"]
-            is RodValidMixin.READER_OPTIONS["rod_mixin_valid_key"]
+            is RodValidMixin.PROPERTY_MAPPING["rod_mixin_valid_key"]
         )
         assert RodValidMixinReader.reader_option_default("rod_mixin_valid_key") == "mixin_default"
 
@@ -1132,12 +1134,12 @@ class TestMixinReaderOptionsAreValidatedAtSubclassDefinition:
         """The guard runs per class definition, so a valid parent buys no free pass for a bad mixin."""
 
         class RodDeepGoodReader(BaseInputData):
-            READER_OPTIONS: ClassVar[dict[str, PropertySpec]] = {
+            PROPERTY_MAPPING: ClassVar[dict[str, PropertySpec]] = {
                 "rod_deep_good_key": PropertySpec("Valid.", default=None),
             }
 
         class RodDeepBadMixin:
-            READER_OPTIONS: ClassVar[dict[str, PropertySpec]] = {"rod_deep_bad_key": "not a spec"}  # type: ignore[dict-item]  # wrong type is the point
+            PROPERTY_MAPPING: ClassVar[dict[str, PropertySpec]] = {"rod_deep_bad_key": "not a spec"}  # type: ignore[dict-item]  # wrong type is the point
 
         with pytest.raises(ValueError) as exc_info:
 
@@ -1163,7 +1165,7 @@ class TestMixinReaderOptionsAreValidatedAtSubclassDefinition:
         class RodVirtRegisteredBadMixin:
             """Registered virtually below; never a real reader, so the registry leak stays inert."""
 
-            READER_OPTIONS: ClassVar[dict[str, PropertySpec]] = {"rod_virt_bad_key": "not a spec"}  # type: ignore[dict-item]  # wrong type is the point
+            PROPERTY_MAPPING: ClassVar[dict[str, PropertySpec]] = {"rod_virt_bad_key": "not a spec"}  # type: ignore[dict-item]  # wrong type is the point
 
         BaseInputData.register(RodVirtRegisteredBadMixin)
 
@@ -1181,7 +1183,7 @@ class TestMixinReaderOptionsAreValidatedAtSubclassDefinition:
         """The error must name the class statement that triggered validation, not only the mixin."""
 
         class RodTrigBadMixin:
-            READER_OPTIONS: ClassVar[dict[str, PropertySpec]] = {"rod_trig_bad_key": "not a spec"}  # type: ignore[dict-item]  # wrong type is the point
+            PROPERTY_MAPPING: ClassVar[dict[str, PropertySpec]] = {"rod_trig_bad_key": "not a spec"}  # type: ignore[dict-item]  # wrong type is the point
 
         with pytest.raises(ValueError) as exc_info:
 
@@ -1195,26 +1197,26 @@ class TestMixinReaderOptionsAreValidatedAtSubclassDefinition:
 
 
 class TestNonMappingReaderOptionsAreRejected:
-    """A ``READER_OPTIONS`` that is not a dict is a loud ``ValueError`` where written, not an ``AttributeError``."""
+    """A ``PROPERTY_MAPPING`` that is not a dict is a loud ``ValueError`` where written, not an ``AttributeError``."""
 
     def test_a_list_valued_own_declaration_raises_value_error_naming_the_class(self) -> None:
         """A list-shaped own declaration is rejected as not-a-dict, naming the declaring class."""
         with pytest.raises(ValueError) as exc_info:
 
             class RodListOwnDeclReader(BaseInputData):
-                READER_OPTIONS = ["rod_list_entry"]  # type: ignore[assignment]  # wrong shape is the point
+                PROPERTY_MAPPING = ["rod_list_entry"]  # type: ignore[assignment]  # wrong shape is the point
 
         message = str(exc_info.value)
         del exc_info
         assert "RodListOwnDeclReader" in message
-        assert "READER_OPTIONS" in message
+        assert "PROPERTY_MAPPING" in message
         assert "dict" in message
 
     def test_a_list_valued_mixin_declaration_raises_value_error_naming_the_mixin(self) -> None:
         """A list-shaped mixin declaration reaching the merge is rejected the same way."""
 
         class RodListDeclMixin:
-            READER_OPTIONS = ["rod_list_entry"]
+            PROPERTY_MAPPING = ["rod_list_entry"]
 
         with pytest.raises(ValueError) as exc_info:
 
@@ -1224,38 +1226,38 @@ class TestNonMappingReaderOptionsAreRejected:
         message = str(exc_info.value)
         del exc_info
         assert "RodListDeclMixin" in message
-        assert "READER_OPTIONS" in message
+        assert "PROPERTY_MAPPING" in message
         assert "dict" in message
 
 
 class TestCacheAttributeAssignmentIsRejected:
-    """A class body assigning ``_reader_option_specs_cache`` bypasses the merge and is rejected where written."""
+    """A class body assigning ``_property_mapping_cache`` bypasses the merge and is rejected where written."""
 
     def test_dict_cache_assignment_rejected_at_class_definition(self) -> None:
         """A hand-built cache dict raises, naming the class and the attribute."""
         with pytest.raises(ValueError) as exc_info:
 
             class RodCacheAssignReader(BaseInputData):
-                _reader_option_specs_cache: ClassVar[dict[str, PropertySpec] | None] = {
+                _property_mapping_cache: ClassVar[dict[str, PropertySpec] | None] = {
                     "BaseInputData": PropertySpec("Shadowed.", default=None, framework_set=True),
                 }
 
         message = str(exc_info.value)
         del exc_info
         assert "RodCacheAssignReader" in message
-        assert "_reader_option_specs_cache" in message
+        assert "_property_mapping_cache" in message
 
     def test_none_cache_assignment_rejected_at_class_definition(self) -> None:
         """Even a ``None`` assignment is rejected; any class-body write to the cache is a mistake."""
         with pytest.raises(ValueError) as exc_info:
 
             class RodCacheNoneReader(BaseInputData):
-                _reader_option_specs_cache: ClassVar[dict[str, PropertySpec] | None] = None
+                _property_mapping_cache: ClassVar[dict[str, PropertySpec] | None] = None
 
         message = str(exc_info.value)
         del exc_info
         assert "RodCacheNoneReader" in message
-        assert "_reader_option_specs_cache" in message
+        assert "_property_mapping_cache" in message
 
     def test_a_cooperative_hook_warming_the_cache_is_not_rejected(self) -> None:
         """Only a class-body assignment is a mistake; a cooperative hook warming the cache defines fine."""
@@ -1275,7 +1277,7 @@ class TestCacheAttributeAssignmentIsRejected:
         """Control: only a class body writing the attribute is rejected, not ordinary subclassing."""
 
         class RodCacheUntouchedReader(BaseInputData):
-            READER_OPTIONS: ClassVar[dict[str, PropertySpec]] = {
+            PROPERTY_MAPPING: ClassVar[dict[str, PropertySpec]] = {
                 "rod_cache_untouched_key": PropertySpec("Valid.", default=None),
             }
 
@@ -1300,3 +1302,46 @@ class TestDeclarationsDoNotAffectDiscovery:
 
         assert local, "expected this module's throwaway readers to be reachable through __subclasses__()"
         assert [cls.__name__ for cls in local if cls.is_final_reader()] == []
+
+
+class TestReaderOptionsIsAHardBreak:
+    """``READER_OPTIONS`` is retired outright (renamed to ``PROPERTY_MAPPING``): a class body still
+    writing the old name is a loud break at class definition, never silent inheritance."""
+
+    def test_a_subclass_declaring_reader_options_raises_naming_both_spellings(self) -> None:
+        """The rename is a hard break: the retired attribute name is rejected where it is written."""
+        with pytest.raises(ValueError) as exc_info:
+
+            class RodHardBreakReader(BaseInputData):
+                READER_OPTIONS: ClassVar[dict[str, PropertySpec]] = {
+                    "rod_hard_break_key": PropertySpec("Old spelling.", default=None),
+                }
+
+        message = str(exc_info.value)
+        del exc_info
+        assert "READER_OPTIONS" in message
+        assert "PROPERTY_MAPPING" in message
+        assert "RodHardBreakReader" in message
+
+    def test_a_mixin_declaring_reader_options_raises_naming_the_mixin(self) -> None:
+        """A plain mixin still using the retired spelling is rejected the same way, naming the mixin."""
+
+        class RodHardBreakMixin:
+            READER_OPTIONS: ClassVar[dict[str, PropertySpec]] = {
+                "rod_hard_break_mixin_key": PropertySpec("Old spelling on a mixin.", default=None),
+            }
+
+        with pytest.raises(ValueError) as exc_info:
+
+            class RodHardBreakMixinReader(RodHardBreakMixin, BaseInputData):
+                pass
+
+        message = str(exc_info.value)
+        del exc_info
+        assert "READER_OPTIONS" in message
+        assert "PROPERTY_MAPPING" in message
+        assert "RodHardBreakMixin" in message
+
+    def test_base_input_data_no_longer_has_reader_options(self) -> None:
+        """The retired attribute is gone from the base itself, not merely shadowed by the new one."""
+        assert hasattr(BaseInputData, "READER_OPTIONS") is False

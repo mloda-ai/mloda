@@ -7,10 +7,11 @@ unvalidated. This sweep resolves each read to its key and flags any key that no 
 declares, accepting only a narrow allowlist of genuinely engine-internal and genuinely dynamic reads.
 
 The check spans TWO declaration surfaces and is deliberately GLOBAL across both: a key passes when
-SOME shipped FeatureGroup declares it in ``PROPERTY_MAPPING`` or SOME shipped reader declares it in
-``READER_OPTIONS``. Readers need their own surface because their keys are consumed at reader-selection
-time, before the framework materializes any ``PROPERTY_MAPPING`` default. Per-group owning-surface
-attribution is out of scope for this sweep.
+SOME shipped FeatureGroup declares it in its ``PROPERTY_MAPPING`` or SOME shipped reader
+(``BaseInputData`` subclass) declares it in its own ``PROPERTY_MAPPING``. Both surfaces share the
+same attribute name; readers still need their own surface because their keys are consumed at
+reader-selection time, before the framework materializes any FeatureGroup ``PROPERTY_MAPPING``
+default. Per-group owning-surface attribution is out of scope for this sweep.
 
 Scope notes:
 
@@ -107,9 +108,10 @@ ALLOWED_DYNAMIC_READS: dict[tuple[str, str], tuple[str, str]] = {
     ),
 }
 
-# Keys that ONLY the reader surface declares: nothing about them is in any PROPERTY_MAPPING, so they are
-# the probe for whether the union really reaches READER_OPTIONS. "BaseInputData" is the reserved key the
-# framework itself writes; the other two are read inside reader matching.
+# Keys that ONLY the reader surface declares: nothing about them is in any FeatureGroup PROPERTY_MAPPING,
+# so they are the probe for whether the union really reaches the reader (BaseInputData) surface's own
+# PROPERTY_MAPPING. "BaseInputData" is the reserved key the framework itself writes; the other two are
+# read inside reader matching.
 READER_ONLY_KEYS: frozenset[str] = frozenset({"BaseInputData", "data_access_handle", "document_suffixes"})
 
 # Individual source files whose reads are asserted key-by-key below, so a scanner blind spot cannot
@@ -154,7 +156,7 @@ def _make_leaked_reader_probe() -> type[BaseInputData]:
     """
 
     class UorLeakedTestTreeReaderProbe(BaseInputData):
-        READER_OPTIONS: ClassVar[dict[str, PropertySpec]] = {
+        PROPERTY_MAPPING: ClassVar[dict[str, PropertySpec]] = {
             _PROBE_READER_KEY: PropertySpec("Test-tree only; must never reach the declared union.", default=None),
         }
 
@@ -406,9 +408,9 @@ def property_mapping_declared_union() -> frozenset[str]:
 
 
 def reader_declared_union() -> frozenset[str]:
-    """Every READER_OPTIONS key declared by ``BaseInputData`` or a shipped reader subclass.
+    """Every PROPERTY_MAPPING key declared by ``BaseInputData`` or a shipped reader subclass.
 
-    Filtered by module prefix for the same reason as the PROPERTY_MAPPING side, with one extra prefix:
+    Filtered by module prefix for the same reason as the FeatureGroup PROPERTY_MAPPING side, with one extra prefix:
     ``BaseInputData`` itself lives under ``mloda.core`` and is what declares the reserved
     ``"BaseInputData"`` key, so the filter admits ``mloda.core`` while still excluding ``tests.*``.
     """
@@ -440,8 +442,8 @@ def test_no_undeclared_static_option_reads() -> None:
         ALLOWED_DYNAMIC_READS,
     )
     assert violations == [], (
-        "Undeclared option reads (declare the key in the plugin's PROPERTY_MAPPING or READER_OPTIONS):\n"
-        + "\n".join(violations)
+        "Undeclared option reads (declare the key in the plugin's PROPERTY_MAPPING, "
+        "FeatureGroup or reader surface):\n" + "\n".join(violations)
     )
 
 
@@ -475,14 +477,15 @@ def test_literal_allowlist_is_load_bearing() -> None:
 
 @pytest.mark.parametrize("key", sorted(READER_ONLY_KEYS))
 def test_declared_union_recognizes_reader_declarations(key: str) -> None:
-    """The union covers the READER_OPTIONS surface, not just PROPERTY_MAPPING."""
+    """The union covers the reader (BaseInputData) surface's own PROPERTY_MAPPING, not just the FeatureGroup one."""
     assert key in reader_declared_union()
     assert key in declared_union()
 
 
 @pytest.mark.parametrize("key", sorted(READER_ONLY_KEYS))
 def test_reader_keys_are_attributable_to_the_reader_surface_alone(key: str) -> None:
-    """No PROPERTY_MAPPING and no framework-reserved key covers these, so only READER_OPTIONS carries them."""
+    """No FeatureGroup PROPERTY_MAPPING and no framework-reserved key covers these, so only the reader
+    surface's own PROPERTY_MAPPING carries them."""
     assert key not in property_mapping_declared_union()
     assert key not in FRAMEWORK_KEYS
 

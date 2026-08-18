@@ -1,5 +1,5 @@
 """Pins issue #954, corrected: ONLY an OWNED reader veto (the user addressed the reader via its
-``data_access_name()`` key and its READER_OPTIONS declined) gates the name-based OR rules of
+``data_access_name()`` key and its PROPERTY_MAPPING declined) gates the name-based OR rules of
 ``match_feature_group_criteria``; unowned global-probe declines, the MatchData rule, sibling probing,
 input-data-free candidates and valid values keep resolving. Leaked vg954 fixtures stay foreign-inert."""
 
@@ -86,7 +86,7 @@ class Vg954GateReader(Vg954GateFamily):
 
     VG954_ACCESS = VG954_GATE_ACCESS
 
-    READER_OPTIONS: ClassVar[dict[str, PropertySpec]] = {
+    PROPERTY_MAPPING: ClassVar[dict[str, PropertySpec]] = {
         VG954_FORMAT_KEY: PropertySpec(
             "Strict membership key: it fires only on a PRESENT out-of-space value.",
             allowed_values=("vg954_ok",),
@@ -124,7 +124,7 @@ class Vg954VetoedSiblingReader(Vg954SiblingFamily):
 
     VG954_ACCESS = VG954_VETOED_ACCESS
 
-    READER_OPTIONS: ClassVar[dict[str, PropertySpec]] = {
+    PROPERTY_MAPPING: ClassVar[dict[str, PropertySpec]] = {
         VG954_SIBLING_KEY: PropertySpec(
             "Strict key of the vetoed sibling; module-level safe because it declares a default.",
             allowed_values=("vg954_ok",),
@@ -217,7 +217,7 @@ class Vg954UnownedReader(Vg954UnownedFamily):
     VG954_ACCESS = VG954_UNOWNED_ACCESS
     VG954_HANDLE = VG954_UNOWNED_HANDLE
 
-    READER_OPTIONS: ClassVar[dict[str, PropertySpec]] = {
+    PROPERTY_MAPPING: ClassVar[dict[str, PropertySpec]] = {
         VG954_UNOWNED_KEY: PropertySpec(
             "Strict membership key with a default, so it is not absence-firing and stays module-level safe.",
             allowed_values=("vg954_ok",),
@@ -276,7 +276,7 @@ def _vg954_required_setup(tag: str) -> tuple[type[BaseInputData], type[FeatureGr
     class Vg954LocalRequiredReader(Vg954LocalRequiredFamily):
         VG954_ACCESS = VG954_REQUIRED_ACCESS
 
-        READER_OPTIONS: ClassVar[dict[str, PropertySpec]] = {
+        PROPERTY_MAPPING: ClassVar[dict[str, PropertySpec]] = {
             VG954_REQUIRED_KEY: PropertySpec("Unconditionally required: declares no default, no required_when."),
         }
 
@@ -497,5 +497,5 @@ class TestModuleLeakPolicy:
                 if spec.framework_set:
                     continue
                 assert not (is_no_default(spec.default) and spec.required_when is None), (
-                    f"{cls.__name__}.READER_OPTIONS['{key}'] would fire on every foreign probe"
+                    f"{cls.__name__}.PROPERTY_MAPPING['{key}'] would fire on every foreign probe"
                 )

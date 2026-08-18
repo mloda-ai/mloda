@@ -35,7 +35,7 @@ class ReadDocument(BaseInputData):
 
     _auto_load_group: str = "feature_group/input_data/read_files"
 
-    READER_OPTIONS: ClassVar[dict[str, PropertySpec]] = {
+    PROPERTY_MAPPING: ClassVar[dict[str, PropertySpec]] = {
         "document_suffixes": PropertySpec(
             "Structured suffixes this document reader claims instead of leaving them to ReadFile.",
             default=frozenset(),

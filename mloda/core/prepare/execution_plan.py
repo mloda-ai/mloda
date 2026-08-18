@@ -424,8 +424,10 @@ class ExecutionPlan:
                 if ep.features.any_uuid is None:
                     raise ValueError(f"Feature group {format_feature_group_class(ep.feature_group)} has no uuid.")
 
-                parents = graph.parent_to_children_mapping[ep.features.any_uuid]
-                parent_parents = self.get_parent_parents(parents, graph)
+                parents: set[UUID] = set()
+                for member_uuid in ep.get_uuids():
+                    member_parents = graph.parent_to_children_mapping.get(member_uuid, set())
+                    parents |= member_parents - self.get_parent_parents(member_parents, graph)
 
                 for parent in parents:
                     match = set()
@@ -438,10 +440,6 @@ class ExecutionPlan:
                             break
                     if match:
                         # parent is served by a join step; the expanded link token already orders the consumer
-                        continue
-
-                    # We only want to add TFS for direct parents and not for parent parents.
-                    if parent in parent_parents:
                         continue
 
                     if ep.compute_framework != parent_node_property.feature.get_compute_framework():
@@ -564,7 +562,7 @@ class ExecutionPlan:
     def get_parent_parents(self, parents: set[UUID], graph: Graph) -> set[UUID]:
         parent_parents = set()
         for parent in parents:
-            parent_parent = graph.parent_to_children_mapping[parent]
+            parent_parent = graph.parent_to_children_mapping.get(parent, set())
             if len(parent_parent) > 0:
                 parent_parents.update(parent_parent)
         return parent_parents

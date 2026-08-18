@@ -225,3 +225,53 @@ def test_two_feature_group_steps_with_different_parents_get_separate_transform_h
     assert scenario.step_b.tfs_ids == {hop_b.uuid}
     assert scenario.step_a.required_uuids == {hop_a.uuid}
     assert scenario.step_b.required_uuids == {hop_b.uuid}
+
+
+# ---------------------------------------------------------------------------
+# Bug A / Bug B regression coverage
+# ---------------------------------------------------------------------------
+
+
+def test_two_hops_from_the_same_feature_group_class_do_not_raise() -> None:
+    """One FeatureGroup class commonly splits into multiple steps by (framework, options,
+    dependency level); two such steps feeding one consumer share one conceptual source and
+    must not be mistaken for the missing-Link case."""
+    graph = Graph()
+
+    parent_a = _feature("dedup_shared_a", PyArrowTable)
+    parent_b = _feature("dedup_shared_b", PyArrowTable)
+    _root_node(graph, parent_a, DedupUpstreamFG)
+    _root_node(graph, parent_b, DedupUpstreamFG)
+
+    producer_a = _producer_step(DedupUpstreamFG, parent_a, PyArrowTable)
+    producer_b = _producer_step(DedupUpstreamFG, parent_b, PyArrowTable)
+
+    dest_feature = _feature("dedup_dest_multi", PandasDataFrame)
+    feature_set = FeatureSet()
+    feature_set.add(dest_feature)
+    graph.parent_to_children_mapping[dest_feature.uuid] = {parent_a.uuid, parent_b.uuid}
+    dest_step = FeatureGroupStep(DedupDestFG, feature_set, set(), PandasDataFrame)
+
+    new_plan = ExecutionPlan().add_tfs([producer_a, producer_b, dest_step], graph)
+
+    tfs_steps = [step for step in new_plan if isinstance(step, TransformFrameworkStep)]
+    assert len(tfs_steps) == 2, f"expected two distinct hops (different producer instances), got: {tfs_steps}"
+    assert dest_step.tfs_ids == {step.uuid for step in tfs_steps}
+
+
+def test_parents_linked_by_join_requires_genuine_opposite_sides() -> None:
+    """required_uuids on a JoinStep holds every parent of its consumers, not just its own two
+    sides; two parents merely co-occurring there must not read as linked."""
+    a, b, dest, src, unrelated = uuid4(), uuid4(), uuid4(), uuid4(), uuid4()
+    link = Link.inner(JoinSpec(DedupLeftFG, "id"), JoinSpec(DedupRightFG, "id"))
+    join_step = JoinStep(
+        link=link,
+        destination_framework=PandasDataFrame,
+        source_framework=PyArrowTable,
+        required_uuids={a, b, unrelated, dest, src},
+        destination_framework_uuids={dest},
+        source_framework_uuids={src},
+    )
+
+    assert ExecutionPlan._parents_linked_by_join(a, b, {join_step}) is False
+    assert ExecutionPlan._parents_linked_by_join(dest, src, {join_step}) is True

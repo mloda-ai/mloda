@@ -246,6 +246,66 @@ class ExecutionPlan:
             f"If neither applies, please report this issue at {REPORT_URL} with the full traceback."
         )
 
+    @staticmethod
+    def _parents_linked_by_join(uuid_a: UUID, uuid_b: UUID, join_steps: set[JoinStep]) -> bool:
+        """Whether some planned JoinStep ties these two parents together on genuine opposite sides.
+
+        ``required_uuids`` is excluded: it is the union of ALL parents of everything that consumes
+        the join (see ``run_link``'s ``join_step_required_uuids``), not just the join's own two
+        sides, so two unrelated parents can coincidentally both appear there.
+        """
+        for js in join_steps:
+            a_dest, a_src = uuid_a in js.destination_framework_uuids, uuid_a in js.source_framework_uuids
+            b_dest, b_src = uuid_b in js.destination_framework_uuids, uuid_b in js.source_framework_uuids
+            if (a_dest and b_src) or (a_src and b_dest):
+                return True
+        return False
+
+    @staticmethod
+    def _conflicting_transform_hops_error(
+        ep: FeatureGroupStep, first_hop: TransformFrameworkStep, second_hop: TransformFrameworkStep
+    ) -> str:
+        """A FeatureGroupStep can only bind one incoming framework hop; two distinct, unlinked
+        upstream instances is a missing-Link configuration problem, not a bug."""
+        feature_name = format_feature_group_class(ep.feature_group)
+        first_name = format_feature_group_class(first_hop.from_feature_group)
+        second_name = format_feature_group_class(second_hop.from_feature_group)
+        first_class_name = first_hop.from_feature_group.get_class_name()
+        second_class_name = second_hop.from_feature_group.get_class_name()
+
+        return f"""
+Feature group '{feature_name}' depends on parents from two different, unlinked source feature
+groups: '{first_name}' and '{second_name}'.
+
+When a feature depends on multiple input features from different sources, you must provide explicit
+Links to specify how to merge them. Without Links, the framework cannot determine how to combine the
+data, and only one of the two sources would ever be read.
+
+Option 1: Explicit JoinSpec (works with any feature group):
+    from mloda.user import Link, JoinSpec
+
+    links = {{
+        Link.inner(
+            JoinSpec({first_class_name}, "shared_column"),
+            JoinSpec({second_class_name}, "shared_column"),
+        )
+    }}
+
+Option 2: Shorthand via index_columns() (requires feature groups to define index_columns()):
+    from mloda.user import Link
+
+    links = {{
+        Link.inner_on({first_class_name}, {second_class_name})
+    }}
+
+Available join types:
+- Link.inner(left, right)    - Keep only matching rows from both sides
+- Link.left(left, right)     - Keep all rows from left, matching from right
+- Link.right(left, right)    - Keep all rows from right, matching from left
+- Link.outer(left, right)    - Keep all rows from both sides
+- Link.inner_on(left, right) - Shorthand using index_columns() definitions
+""".strip()
+
     def raise_on_step_cycle(self, steps: Sequence[Step]) -> None:
         """Required tokens order the steps of the finished plan against each other, and a cycle would never run."""
         producer_of: dict[UUID, UUID] = {}
@@ -429,6 +489,12 @@ class ExecutionPlan:
                     member_parents = graph.parent_to_children_mapping.get(member_uuid, set())
                     parents |= member_parents - self.get_parent_parents(member_parents, graph)
 
+                # Every distinct hop this step binds, collected before any conflict is decided: whether
+                # a later hop links to an earlier one must not depend on the arbitrary (set-derived)
+                # order the parents are visited in, only on the final, complete set of hops this step
+                # actually binds. The conflict check itself runs once, after this loop.
+                bound_hops: list[tuple[TransformFrameworkStep, UUID]] = []
+
                 for parent in parents:
                     match = set()
                     parent_node_property = graph.get_nodes()[parent]
@@ -456,6 +522,10 @@ class ExecutionPlan:
                             self.tfs_collection[new_tfs] = new_tfs
                             new_execution_plan.append(new_tfs)
                             canonical_tfs = new_tfs
+
+                        if not any(hop.uuid == canonical_tfs.uuid for hop, _ in bound_hops):
+                            bound_hops.append((canonical_tfs, parent))
+
                         # Records every parent the hop covers; they all share one owning step, so
                         # this doesn't change the scheduling gate.
                         canonical_tfs.required_uuids.add(parent)
@@ -465,6 +535,39 @@ class ExecutionPlan:
                         ep.tfs_ids.add(canonical_tfs.uuid)
 
                         need_to_upload_collector.add(parent)
+
+                # Group the distinct hops by transitive linkage (same source feature-group class, or
+                # tied together by a declared Link): a hop conflicts only with a group it links to
+                # neither by class nor by Link, not with every other hop individually. This also settles
+                # a hop whose own parent uuid never itself became a JoinStep's destination/source uuid
+                # (e.g. an off-framework sibling of the declared side the join actually used) as long as
+                # some other member of its group did; grouping every hop up front, rather than deciding
+                # per pair as each parent is visited, keeps the result independent of the (arbitrary,
+                # set-derived) order the parents were visited in.
+                hop_groups: list[list[tuple[TransformFrameworkStep, UUID]]] = []
+                for hop, hop_parent in bound_hops:
+                    linked_groups = [
+                        group
+                        for group in hop_groups
+                        if any(
+                            member_hop.from_feature_group is hop.from_feature_group
+                            or self._parents_linked_by_join(member_parent, hop_parent, left_join_frameworks)
+                            for member_hop, member_parent in group
+                        )
+                    ]
+                    if linked_groups:
+                        target_group = linked_groups[0]
+                        target_group.append((hop, hop_parent))
+                        for other_group in linked_groups[1:]:
+                            target_group.extend(other_group)
+                            hop_groups.remove(other_group)
+                    else:
+                        hop_groups.append([(hop, hop_parent)])
+
+                if len(hop_groups) > 1:
+                    raise ValueError(
+                        self._conflicting_transform_hops_error(ep, hop_groups[0][0][0], hop_groups[1][0][0])
+                    )
 
             else:
                 raise ValueError(f"Element {ep} is not a valid element.")

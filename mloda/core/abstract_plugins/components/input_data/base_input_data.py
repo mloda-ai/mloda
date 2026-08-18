@@ -14,9 +14,11 @@ from mloda.core.abstract_plugins.components.match_rejection import (
 )
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.components.property_mapping import (
+    PROPERTY_MAPPING_ATTR,
     DeclarationSurface,
     merged_property_mapping,
     reject_merge_cache_assignment,
+    reject_surface_marker_assignment,
     validate_property_mapping,
 )
 
@@ -54,6 +56,7 @@ class BaseInputData(ABC):
         # Checked before super(): a cooperative later-in-MRO hook may warm the cache during the
         # super() chain; here cls.__dict__ still holds only what the class body wrote.
         reject_merge_cache_assignment(cls)
+        reject_surface_marker_assignment(cls)
         super().__init_subclass__(**kwargs)
         for klass in cls.__mro__:
             if "READER_OPTIONS" in klass.__dict__:
@@ -69,7 +72,7 @@ class BaseInputData(ABC):
         """The reserved key must survive the MRO MERGE, not just cls's own dict: a plain mixin is never
         validated itself, yet its declaration outranks the base's and is what selection reads."""
         for klass in cls.__mro__:
-            declared = klass.__dict__.get("PROPERTY_MAPPING", {})
+            declared = klass.__dict__.get(PROPERTY_MAPPING_ATTR, {})
             # A malformed declaration (None, a list, ...) is not this check's concern; own_property_mapping
             # rejects its shape loudly once validate_property_mapping reaches it.
             if not isinstance(declared, dict) or RESERVED_READER_OPTION_KEY not in declared:

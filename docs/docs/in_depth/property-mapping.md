@@ -71,7 +71,8 @@ does not understand can be absorbed silently.
 **Declarations merge across the class hierarchy.** On both surfaces a subclass adds or overrides
 keys and redeclares nothing: the most-derived declaration of a key wins. `declared_option_specs()`
 (feature group) and `reader_option_specs()` (reader) return the merged view; the attribute itself
-stays the class's own declaration. `PROPERTY_MAPPING = None` is rejected at class definition,
+stays the class's own declaration. The merged view is computed at class definition and cached, so a
+later write to the attribute is not seen. `PROPERTY_MAPPING = None` is rejected at class definition,
 because `None` cannot clear inherited keys.
 
 ## The lifecycle: which invariant fires when
@@ -164,10 +165,10 @@ consequences keep the shared type honest on this surface:
 The merge holds on both surfaces: `declared_option_specs()` on a feature group and
 `reader_option_specs()` on a reader return the merged declarations, most-derived winning, so a
 concrete class inherits its family's keys and redeclares nothing; `declared_option_keys()` and
-`declared_reader_option_keys()` are the merged key sets. "Nothing declared" is `{}` on both. On a
-feature group it is whether any class beyond `FeatureGroup` itself declared a mapping that turns the
-configuration matcher on (see
-[Guarding against a universal configuration matcher](#guarding-against-a-universal-configuration-matcher)).
+`declared_reader_option_keys()` are the merged key sets. The merged view of an undeclared class is
+`{}` on both surfaces. Whether a feature group has a configuration matcher is a separate question: it
+does when some class beyond `FeatureGroup` itself declared a mapping, an explicit empty one included
+(see [Guarding against a universal configuration matcher](#guarding-against-a-universal-configuration-matcher)).
 Both `reader_option()` and `reader_option_default()` raise for a key no declaration carries, so a
 typo in *reader* code is loud instead of a silent `None`.
 
@@ -650,6 +651,7 @@ Both surfaces declare under one attribute, and declarations merge across the cla
 | `PROPERTY_MAPPING = None` | Remove the line, or declare a dict |
 | `{**Parent.PROPERTY_MAPPING, ...}` | Declare only what changes |
 | Reading `cls.PROPERTY_MAPPING` for the effective mapping | `declared_option_specs()` on a feature group, `reader_option_specs()` on a reader |
+| Assigning or mutating `PROPERTY_MAPPING` after the class body | Unsupported: the merge is read at class definition and cached; declare everything in the class body |
 
 One behavior change: a subclass that declared its own mapping while omitting parent keys now
 inherits them, so a parent default materializes into `Options` at intake and a parent key without a

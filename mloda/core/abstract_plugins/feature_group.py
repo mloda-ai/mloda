@@ -29,6 +29,7 @@ from mloda.core.abstract_plugins.components.property_mapping import (
     DeclarationSurface,
     merged_property_mapping,
     reject_merge_cache_assignment,
+    reject_surface_marker_assignment,
     validate_property_mapping,
 )
 from mloda.core.abstract_plugins.components.subtype_declaration import SubtypeDeclaration
@@ -109,6 +110,7 @@ class FeatureGroup(ABC):
 
     def __init_subclass__(cls, **kwargs: Any) -> None:
         reject_merge_cache_assignment(cls)
+        reject_surface_marker_assignment(cls)
         super().__init_subclass__(**kwargs)
         validate_property_mapping(cls)
         validate_name_binding(cls)

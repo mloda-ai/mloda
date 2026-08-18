@@ -17,6 +17,7 @@ from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser_mixin import (
     FeatureChainParserMixin,
 )
+from mloda.core.abstract_plugins.components.subtype_declaration import SubtypeDeclaration
 from mloda.core.filter.global_filter import GlobalFilter
 from mloda.user import Options
 
@@ -97,14 +98,10 @@ class TestDeclaredOptionMerge:
     def test_child_declared_option_specs_returns_every_inherited_spec(self) -> None:
         child = _make_merge_child()
         try:
-            # hasattr, not a direct call: an AttributeError on the class itself would pin it via the
-            # exception's own `.obj` attribute, which outlives this test's teardown gc.collect().
-            has_method = hasattr(child, "declared_option_specs")
-            specs = child.declared_option_specs() if has_method else {}
+            specs = child.declared_option_specs()
         finally:
             del child
 
-        assert has_method, "declared_option_specs is not implemented yet"
         assert set(specs) == {PMFG_A_KEY, PMFG_B_KEY, PMFG_C_KEY}
         assert specs[PMFG_A_KEY].default == "parent_a_default"
         assert specs[PMFG_C_KEY].default == "child_c_default"
@@ -112,17 +109,12 @@ class TestDeclaredOptionMerge:
     def test_declared_option_specs_returns_a_fresh_copy_each_call(self) -> None:
         child = _make_merge_child()
         try:
-            has_method = hasattr(child, "declared_option_specs")
-            if has_method:
-                first = child.declared_option_specs()
-                first["pmfg_injected"] = PropertySpec("injected", default=None)
-                second = child.declared_option_specs()
-            else:
-                second = {}
+            first = child.declared_option_specs()
+            first["pmfg_injected"] = PropertySpec("injected", default=None)
+            second = child.declared_option_specs()
         finally:
             del child
 
-        assert has_method, "declared_option_specs is not implemented yet"
         assert "pmfg_injected" not in second
 
     def test_parent_declared_option_keys_excludes_the_child_only_key(self) -> None:
@@ -131,12 +123,10 @@ class TestDeclaredOptionMerge:
     def test_a_second_child_redeclaring_a_key_sees_its_own_spec(self) -> None:
         child2 = _make_merge_child2()
         try:
-            has_method = hasattr(child2, "declared_option_specs")
-            specs = child2.declared_option_specs() if has_method else {}
+            specs = child2.declared_option_specs()
         finally:
             del child2
 
-        assert has_method, "declared_option_specs is not implemented yet"
         assert specs[PMFG_A_KEY].default == "child2_a_default"
 
     def test_child_own_property_mapping_attribute_is_only_its_own_declaration(self) -> None:
@@ -282,17 +272,13 @@ class TestExplicitNoneOrNonDictPropertyMappingRaisesAtClassDefinition:
         assert "merge" in message
 
     def test_property_mapping_non_dict_raises_naming_the_class(self) -> None:
-        """Widened to (ValueError, AttributeError): today's ``.items()`` call on a list raises
-        AttributeError, not the target ValueError; the type assertion below fails for that reason."""
-        with pytest.raises((ValueError, AttributeError)) as exc_info:
+        with pytest.raises(ValueError) as exc_info:
 
             class PmfgListDecl(FeatureGroup):
                 PROPERTY_MAPPING = ["x"]  # type: ignore[assignment]
 
-        error_type = type(exc_info.value)
         message = str(exc_info.value)
         del exc_info
-        assert error_type is ValueError, f"expected ValueError, got {error_type.__name__}: {message}"
         assert "PmfgListDecl" in message
 
 
@@ -388,3 +374,140 @@ class TestMixinOnlyClassesKeepWorking:
 
     def test_mixin_subclass_without_a_declaration_returns_none(self) -> None:
         assert PmfgNoDeclMixin._get_property_mapping() is None
+
+
+# --- The merge is read (and cached) at class definition; a later write does not invalidate it. ---
+
+
+class TestMergeReadFreezesAtFirstRead:
+    """Only the read-then-write order is pinned: once declared_option_keys()/declared_option_specs()
+    has read the merge, a later PROPERTY_MAPPING reassignment or in-place mutation on the subclass
+    itself does not change what the merge reports. The cold-write order (write before any read) is
+    deliberately not pinned here."""
+
+    def test_late_reassignment_after_a_warm_read_does_not_change_declared_option_keys(self) -> None:
+        class PmfgFreezeReassignSub(FeatureGroup):
+            PROPERTY_MAPPING: ClassVar[dict[str, PropertySpec]] = {
+                "pmfg_freeze_original": PropertySpec("x", default=None),
+            }
+
+        before = PmfgFreezeReassignSub.declared_option_keys()
+        PmfgFreezeReassignSub.PROPERTY_MAPPING = {
+            "pmfg_freeze_late": PropertySpec("y", default=None),
+        }
+        after = PmfgFreezeReassignSub.declared_option_keys()
+        del PmfgFreezeReassignSub
+
+        assert before == {"pmfg_freeze_original"}
+        assert after == before
+
+    def test_late_in_place_mutation_after_a_warm_read_does_not_change_declared_option_specs(self) -> None:
+        class PmfgFreezeMutateSub(FeatureGroup):
+            PROPERTY_MAPPING: ClassVar[dict[str, PropertySpec]] = {
+                "pmfg_freeze_mutate_key": PropertySpec("x", default=None),
+            }
+
+        before = PmfgFreezeMutateSub.declared_option_specs()
+        PmfgFreezeMutateSub.PROPERTY_MAPPING["pmfg_freeze_late_added"] = PropertySpec("z", default=None)
+        after = PmfgFreezeMutateSub.declared_option_specs()
+        del PmfgFreezeMutateSub
+
+        assert "pmfg_freeze_late_added" not in before
+        assert "pmfg_freeze_late_added" not in after
+
+
+# --- Unpinned merge consumers: declared_option_values, resolve_subtype, two declaring bases, a
+# plain mixin declaring PROPERTY_MAPPING = None. ---
+
+
+class TestDeclaredOptionValuesFollowsTheMerge:
+    """declared_option_values reads the MRO-merged spec, not only the class's own declaration."""
+
+    def test_child_declared_option_values_returns_the_inherited_allowed_values(self) -> None:
+        class PmfgValuesParentLocal(FeatureGroup):
+            PROPERTY_MAPPING: ClassVar[dict[str, PropertySpec]] = {
+                "pmfg_values_key": PropertySpec(
+                    "x", allowed_values=("alpha", "beta", "gamma"), strict_validation=True, default="alpha"
+                ),
+            }
+
+        class PmfgValuesChildLocal(PmfgValuesParentLocal):
+            pass
+
+        result = PmfgValuesChildLocal.declared_option_values("pmfg_values_key")
+        del PmfgValuesChildLocal
+        del PmfgValuesParentLocal
+
+        assert result == {"alpha", "beta", "gamma"}
+
+
+class TestResolveSubtypeFollowsTheMerge:
+    """resolve_subtype reads the SUBTYPES key through the MRO-merged PROPERTY_MAPPING, not only the
+    declaring class's own dict; built compactly via shape A (SubtypeDeclaration(key=...))."""
+
+    def test_child_resolve_subtype_reads_the_inherited_subtype_key(self) -> None:
+        class PmfgSubtypeParentLocal(FeatureGroup):
+            PROPERTY_MAPPING: ClassVar[dict[str, PropertySpec]] = {
+                "pmfg_subtype_key": PropertySpec(
+                    "x", allowed_values=("alpha", "beta"), strict_validation=True, default="alpha"
+                ),
+            }
+            SUBTYPES: ClassVar[SubtypeDeclaration] = SubtypeDeclaration(key="pmfg_subtype_key")
+
+        class PmfgSubtypeChildLocal(PmfgSubtypeParentLocal):
+            pass
+
+        result = PmfgSubtypeChildLocal.resolve_subtype("PmfgSubtypeChildLocal", Options({"pmfg_subtype_key": "beta"}))
+        del PmfgSubtypeChildLocal
+        del PmfgSubtypeParentLocal
+
+        assert result == "beta"
+
+
+class TestTwoDeclaringFeatureGroupBasesMergeLeftmostWins:
+    """Two declaring FeatureGroup bases in a diamond: the leftmost base wins a key collision, and
+    the other base's non-colliding key is still present."""
+
+    def test_leftmost_base_wins_on_a_key_collision_and_the_other_bases_key_is_present(self) -> None:
+        left_spec = PropertySpec("left", default="left_default")
+        right_spec_a = PropertySpec("right_a", default="right_a_default")
+        right_spec_b = PropertySpec("right_b", default="right_b_default")
+
+        class PmfgTwoBaseLeftLocal(FeatureGroup):
+            PROPERTY_MAPPING: ClassVar[dict[str, PropertySpec]] = {"pmfg_two_base_a": left_spec}
+
+        class PmfgTwoBaseRightLocal(FeatureGroup):
+            PROPERTY_MAPPING: ClassVar[dict[str, PropertySpec]] = {
+                "pmfg_two_base_a": right_spec_a,
+                "pmfg_two_base_b": right_spec_b,
+            }
+
+        class PmfgTwoBaseBothLocal(PmfgTwoBaseLeftLocal, PmfgTwoBaseRightLocal):
+            pass
+
+        specs = PmfgTwoBaseBothLocal.declared_option_specs()
+        del PmfgTwoBaseBothLocal
+        del PmfgTwoBaseRightLocal
+        del PmfgTwoBaseLeftLocal
+
+        assert specs["pmfg_two_base_a"] is left_spec
+        assert "pmfg_two_base_b" in specs
+
+
+class TestPlainMixinDeclaringNonePropertyMappingRaises:
+    """A plain mixin declaring PROPERTY_MAPPING = None mixed into a FeatureGroup subclass raises,
+    naming the mixin (not the FeatureGroup subclass) and the None value."""
+
+    def test_mixin_none_declaration_raises_naming_the_mixin_and_none(self) -> None:
+        class PmfgNoneMixinLocal:
+            PROPERTY_MAPPING = None
+
+        with pytest.raises(ValueError) as exc_info:
+
+            class PmfgNoneMixedLocal(PmfgNoneMixinLocal, FeatureGroup):  # type: ignore[misc]  # wrong shape is the point
+                pass
+
+        message = str(exc_info.value)
+        del exc_info
+        assert "PmfgNoneMixinLocal" in message
+        assert "None" in message

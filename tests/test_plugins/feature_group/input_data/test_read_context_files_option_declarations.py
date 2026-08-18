@@ -192,14 +192,10 @@ class TestDeclarationMergeAcrossSubclassing:
     ) -> None:
         subclass = _make_no_spread_file_type_subclass()
         try:
-            # hasattr, not a direct call: an AttributeError raised on the class itself would pin it via
-            # the exception's own `.obj` attribute, which outlives this test's gc.collect().
-            has_method = hasattr(subclass, "declared_option_specs")
-            default = subclass.declared_option_specs()["file_type"].default if has_method else None
+            default = subclass.declared_option_specs()["file_type"].default
         finally:
             del subclass
 
-        assert has_method, "declared_option_specs is not implemented yet"
         assert default == "md"
 
 

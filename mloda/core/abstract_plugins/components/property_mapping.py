@@ -45,39 +45,80 @@ def surface_base(cls: type) -> type | None:
     return None
 
 
-def merged_property_mapping(cls: type) -> dict[str, PropertySpec]:
+class _MergedMapping(dict[str, PropertySpec]):
+    """The framework merge cache: the merged mapping itself, plus whether some class beyond the
+    surface base declared it, so a cooperative pre-super() read is never mistaken for an assignment."""
+
+    declared_beyond_base: bool = False
+
+
+def _merged_property_mapping(cls: type) -> _MergedMapping:
     """The MRO-merged declarations of cls, cached in cls's OWN __dict__; internal, never handed out."""
-    cached: dict[str, PropertySpec] | None = cls.__dict__.get(CACHE_ATTR)
+    cached: _MergedMapping | None = cls.__dict__.get(CACHE_ATTR)
     if cached is not None:
         return cached
 
-    merged: dict[str, PropertySpec] = {}
+    base = surface_base(cls)
+    merged = _MergedMapping()
     for klass in reversed(cls.__mro__):
         merged.update(own_property_mapping(klass))
+    merged.declared_beyond_base = any(
+        klass is not base and PROPERTY_MAPPING_ATTR in klass.__dict__ for klass in cls.__mro__
+    )
     setattr(cls, CACHE_ATTR, merged)
     return merged
 
 
+def merged_property_mapping(cls: type) -> dict[str, PropertySpec]:
+    """The MRO-merged declarations of cls, cached in cls's OWN __dict__; internal, never handed out."""
+    return _merged_property_mapping(cls)
+
+
 def declares_property_mapping(cls: type) -> bool:
     """True when some class OTHER THAN the surface base declares its own PROPERTY_MAPPING."""
-    base = surface_base(cls)
-    return any(klass is not base and PROPERTY_MAPPING_ATTR in klass.__dict__ for klass in cls.__mro__)
+    return _merged_property_mapping(cls).declared_beyond_base
 
 
 def configuration_property_mapping(cls: type) -> dict[str, PropertySpec] | None:
-    """The merged mapping when declared beyond the surface base, else None."""
-    if not declares_property_mapping(cls):
-        return None
-    return dict(merged_property_mapping(cls))
+    """The cached merged mapping itself when declared beyond the surface base, else None; no copy,
+    since internal callers only ever read it."""
+    merged = _merged_property_mapping(cls)
+    return merged if merged.declared_beyond_base else None
 
 
 def reject_merge_cache_assignment(cls: type) -> None:
-    """The merge cache is framework-written; a class body assigning it is a mistake."""
-    if CACHE_ATTR in cls.__dict__:
+    """The merge cache is framework-written; a class body assigning it is a mistake. A cache warmed
+    by a cooperative __init_subclass__ hook before calling super() is a _MergedMapping and is not
+    blamed: only a class body literally assigning the attribute produces something else."""
+    if CACHE_ATTR not in cls.__dict__:
+        return
+    if isinstance(cls.__dict__[CACHE_ATTR], _MergedMapping):
+        return
+    raise ValueError(
+        f"{cls.__name__} assigns {CACHE_ATTR} in its class body; the merge cache is "
+        f"framework-written and must never be declared."
+    )
+
+
+def reject_surface_marker_assignment(cls: type) -> None:
+    """The surface marker is framework-written; only FeatureGroup and BaseInputData set it."""
+    if SURFACE_ATTR in cls.__dict__:
         raise ValueError(
-            f"{cls.__name__} assigns {CACHE_ATTR} in its class body; the merge cache is "
-            f"framework-written and must never be declared."
+            f"{cls.__name__} assigns {SURFACE_ATTR} in its class body; the marker is set only by "
+            f"the framework's own base classes (FeatureGroup, BaseInputData)."
         )
+
+
+def _reject_conflicting_surface_bases(cls: type) -> None:
+    """Exactly one surface may govern cls; two distinct surface-marked classes in its MRO is an
+    author mistake, whether that is FeatureGroup and BaseInputData both, or a plain mixin carrying
+    the marker alongside either. Runs before any per-key validation, so a reader-only key merged
+    from the wrong surface never produces a misleading error first."""
+    bases = [klass for klass in cls.__mro__ if SURFACE_ATTR in klass.__dict__]
+    if len(bases) <= 1:
+        return
+    names = " and ".join(base.__name__ for base in bases)
+    raise ValueError(f"{cls.__name__} inherits both {names}; a class declares on one {SURFACE_ATTR} surface only.")
 
 
 def _reader_inert_checks(spec: PropertySpec) -> tuple[tuple[bool, str], ...]:
@@ -148,7 +189,12 @@ def validate_property_spec(
             f"Construct PropertySpec(...) or use the property_spec(...) helper.{suffix}"
         )
 
-    checks = _feature_group_checks(spec) if surface is DeclarationSurface.FEATURE_GROUP else _reader_inert_checks(spec)
+    if surface is DeclarationSurface.FEATURE_GROUP:
+        checks = _feature_group_checks(spec)
+    elif surface is DeclarationSurface.READER:
+        checks = _reader_inert_checks(spec)
+    else:
+        raise ValueError(f"Unknown DeclarationSurface {surface!r}.")
     for triggered, message in checks:
         if triggered:
             raise ValueError(f"{owner}.PROPERTY_MAPPING['{key}'] {message}{suffix}")
@@ -163,6 +209,7 @@ def validate_property_spec(
 
 def validate_property_mapping(cls: type) -> None:
     """Validate cls's own declaration, plus every plain mixin's, against the surface cls declares."""
+    _reject_conflicting_surface_bases(cls)
     base = surface_base(cls)
     if base is None:
         return
@@ -172,6 +219,8 @@ def validate_property_mapping(cls: type) -> None:
         validate_property_spec(cls.__name__, key, spec, surface)
 
     for klass in cls.__mro__[1:]:
+        # Real inheritance only: an ABC.register virtual subclass answers issubclass True without
+        # ever running __init_subclass__, so it never validated itself.
         if base in klass.__mro__:
             continue
         for key, spec in own_property_mapping(klass).items():

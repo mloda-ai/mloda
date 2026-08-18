@@ -9,6 +9,7 @@ from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.abstract_plugins.components.domain import Domain
 from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser import option_key_is_present
 from mloda.core.abstract_plugins.components.feature_chainer.property_spec import is_no_default
+from mloda.core.abstract_plugins.components.property_mapping import merged_property_mapping
 from mloda.core.abstract_plugins.components.utils import as_str, safe_field
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.components.options import Options, _isolate_forwarded_value
@@ -285,7 +286,7 @@ class GlobalFilter:
         """
         if feature_group is None:
             return None
-        spec = feature_group.declared_option_specs().get(key)
+        spec = merged_property_mapping(feature_group).get(key)
         if spec is None or is_no_default(spec.default) or spec.default is None:
             return None
         # Absence, not None-ness: an allow_explicit_none key is present, so its None survives.

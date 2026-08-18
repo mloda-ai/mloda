@@ -88,7 +88,7 @@ class PropertySpec:
     # outside match-time name capture (parsed from the name by the plugin, or supplied downstream).
     # It does NOT change config-path requiredness.
     deferred_binding: bool = False
-    # Marks a reader-surface key the framework writes rather than the user; rejected on the PROPERTY_MAPPING surface.
+    # Marks a reader-surface key the framework writes rather than the user; rejected on the FeatureGroup surface.
     framework_set: bool = False
     # Reader-only: rejects a list/tuple/set/frozenset value outright instead of unpacking it element-wise.
     scalar_only: bool = False

@@ -24,6 +24,7 @@ from mloda.core.abstract_plugins.components.property_mapping import (
     validate_property_mapping,
     validate_property_spec,
 )
+from mloda.core.abstract_plugins.feature_group import FeatureGroup
 
 
 def _pmsurf_match_guard(value: Any) -> bool:
@@ -544,3 +545,131 @@ class TestValidatePropertyMapping:
             }
 
         validate_property_mapping(PmsurfCleanReader)
+
+
+class TestSurfaceMarkerIsFrameworkOwned:
+    """PROPERTY_MAPPING_SURFACE is framework-written; a class body assigning it is rejected."""
+
+    def test_feature_group_subclass_assigning_surface_marker_raises(self) -> None:
+        with pytest.raises(ValueError) as exc_info:
+
+            class PmsurfFgAssignsSurface(FeatureGroup):
+                PROPERTY_MAPPING_SURFACE = DeclarationSurface.FEATURE_GROUP
+
+        message = str(exc_info.value)
+        del exc_info
+        assert "PmsurfFgAssignsSurface" in message
+        assert SURFACE_ATTR in message
+
+    def test_base_input_data_subclass_assigning_surface_marker_raises(self) -> None:
+        with pytest.raises(ValueError) as exc_info:
+
+            class PmsurfReaderAssignsSurface(BaseInputData):
+                PROPERTY_MAPPING_SURFACE = "not_a_real_surface"  # type: ignore[assignment]  # invalid shape is the point
+
+        message = str(exc_info.value)
+        del exc_info
+        assert "PmsurfReaderAssignsSurface" in message
+        assert SURFACE_ATTR in message
+
+    def test_mixin_carrying_surface_marker_mixed_into_feature_group_raises(self) -> None:
+        class PmsurfMixinAssignsSurface:
+            PROPERTY_MAPPING_SURFACE = DeclarationSurface.FEATURE_GROUP
+
+        with pytest.raises(ValueError) as exc_info:
+
+            class PmsurfMixinSurfaceMixed(PmsurfMixinAssignsSurface, FeatureGroup):
+                pass
+
+        message = str(exc_info.value)
+        del exc_info
+        assert "PmsurfMixinAssignsSurface" in message
+        assert SURFACE_ATTR in message
+
+
+class TestTwoSurfaceBasesInOneMroAreRejected:
+    """A class whose MRO carries two distinct surface bases (FeatureGroup and BaseInputData) is
+    an author mistake: exactly one surface may govern PROPERTY_MAPPING validation for a class."""
+
+    def test_feature_group_then_base_input_data_raises(self) -> None:
+        """Naming SURFACE_ATTR pins the dedicated two-surface-bases guard, not an unrelated,
+        incidental rejection (e.g. the reader's framework_set key looking FeatureGroup-invalid)."""
+        with pytest.raises(ValueError) as exc_info:
+
+            class PmsurfTwoBasesFgFirst(FeatureGroup, BaseInputData):
+                pass
+
+        message = str(exc_info.value)
+        del exc_info
+        assert "PmsurfTwoBasesFgFirst" in message
+        assert "FeatureGroup" in message
+        assert "BaseInputData" in message
+        assert SURFACE_ATTR in message
+
+    def test_base_input_data_then_feature_group_raises(self) -> None:
+        with pytest.raises(ValueError) as exc_info:
+
+            class PmsurfTwoBasesReaderFirst(BaseInputData, FeatureGroup):  # type: ignore[misc]  # wrong shape is the point
+                pass
+
+        message = str(exc_info.value)
+        del exc_info
+        assert "PmsurfTwoBasesReaderFirst" in message
+        assert "FeatureGroup" in message
+        assert "BaseInputData" in message
+        assert SURFACE_ATTR in message
+
+
+class TestCooperativeHookReadingBeforeSuperIsNotBlamed:
+    """A mixin's __init_subclass__ may read the merge before calling super(); that warm read must
+    not be mistaken for the class body itself assigning the merge cache."""
+
+    def test_feature_group_side_mixin_reading_before_super_defines_fine(self) -> None:
+        class PmsurfFgEarlyReadMixin:
+            def __init_subclass__(cls, **kwargs: Any) -> None:
+                cls.declared_option_keys()  # type: ignore[attr-defined]
+                super().__init_subclass__(**kwargs)
+
+        class PmsurfFgEarlyReadSub(PmsurfFgEarlyReadMixin, FeatureGroup):
+            PROPERTY_MAPPING: ClassVar[dict[str, PropertySpec]] = {
+                "pmsurf_early_fg_key": PropertySpec("x", default=None),
+            }
+
+        result = PmsurfFgEarlyReadSub.declared_option_keys()
+        del PmsurfFgEarlyReadSub
+        del PmsurfFgEarlyReadMixin
+
+        assert "pmsurf_early_fg_key" in result
+
+    def test_reader_side_mixin_reading_before_super_defines_fine(self) -> None:
+        class PmsurfReaderEarlyReadMixin:
+            def __init_subclass__(cls, **kwargs: Any) -> None:
+                cls.declared_reader_option_keys()  # type: ignore[attr-defined]
+                super().__init_subclass__(**kwargs)
+
+        class PmsurfReaderEarlyReadSub(PmsurfReaderEarlyReadMixin, BaseInputData):
+            PROPERTY_MAPPING: ClassVar[dict[str, PropertySpec]] = {
+                "pmsurf_early_reader_key": PropertySpec("x", default=None),
+            }
+
+        result = PmsurfReaderEarlyReadSub.declared_reader_option_keys()
+        del PmsurfReaderEarlyReadSub
+        del PmsurfReaderEarlyReadMixin
+
+        assert "pmsurf_early_reader_key" in result
+
+
+class TestConfigurationPropertyMappingHotPath:
+    """The hot path hands back the cached merged mapping directly (``is``), not a fresh copy."""
+
+    def test_repeated_calls_return_the_same_cached_object(self) -> None:
+        class PmsurfHotPathClass(FeatureGroup):
+            PROPERTY_MAPPING: ClassVar[dict[str, PropertySpec]] = {
+                "pmsurf_hot_key": PropertySpec("x", default=None),
+            }
+
+        first = configuration_property_mapping(PmsurfHotPathClass)
+        second = configuration_property_mapping(PmsurfHotPathClass)
+        del PmsurfHotPathClass
+
+        assert first is second

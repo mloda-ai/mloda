@@ -167,13 +167,17 @@ class TestNormalizeCollectionsStaysShallow:
         assert _normalize_collections([1, 2]) == (1, 2)
 
     def test_set_becomes_a_frozenset(self) -> None:
-        assert _normalize_collections({"b", "a"}) == frozenset({"a", "b"})
+        result = _normalize_collections({"b", "a"})
+        assert isinstance(result, frozenset)
+        assert result == frozenset({"a", "b"})
 
     def test_frozenset_stays_a_frozenset(self) -> None:
-        assert _normalize_collections(frozenset({"b", "a"})) == frozenset({"a", "b"})
+        result = _normalize_collections(frozenset({"b", "a"}))
+        assert isinstance(result, frozenset)
+        assert result == frozenset({"a", "b"})
 
     def test_cross_type_equal_set_elements_normalize_equal(self) -> None:
-        """1 == True: repr-based sorting used to leak the concrete type into the normalized order."""
+        """1 == True: repr-based sorting used to leak the concrete type into the normalized result."""
         assert _normalize_collections({1, 2}) == _normalize_collections({True, 2})
 
     def test_dict_is_left_unchanged_so_the_probe_can_reject_it(self) -> None:

@@ -65,11 +65,14 @@ class FilterParameterImpl:
 
     @property
     def values(self) -> Optional[list[Any]]:
-        # Stored as a tuple or frozenset for hashability; hand out the declared list type. Filter
-        # engines rely on this: PySpark's Column.isin only unwraps list/set, so either would silently
-        # break it if handed out raw.
+        # Stored as a tuple or frozenset for hashability; hand out the declared list type. A
+        # frozenset's own iteration order is hash-seed dependent, so a set/frozenset input is
+        # re-sorted here (matching the prior deterministic order) for SQL filter engines that build
+        # a params list from this, and because PySpark's Column.isin only unwraps list/set.
         stored = self._get("values")
-        if isinstance(stored, (tuple, frozenset)):
+        if isinstance(stored, frozenset):
+            return sorted(stored, key=repr)
+        if isinstance(stored, tuple):
             return list(stored)
         return cast(Optional[list[Any]], stored)
 

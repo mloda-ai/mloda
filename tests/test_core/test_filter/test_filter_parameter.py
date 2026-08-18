@@ -264,8 +264,9 @@ def test_parameter_sorting_is_consistent() -> None:
 
 # --- Collection value normalization tests (see issue #664) ---
 #
-# Contract: collection values are stored hashable (tuple) in `_raw`, but the public `values`
-# property returns a `list`, matching its declared type. Scalars must never be exploded.
+# Contract: collection values are stored hashable in `_raw` (list/tuple as tuple, set/frozenset as
+# frozenset), but the public `values` property returns a `list`, matching its declared type. Scalars
+# must never be exploded.
 
 
 def test_from_dict_with_list_values_normalizes_raw_to_tuple() -> None:
@@ -276,11 +277,11 @@ def test_from_dict_with_list_values_normalizes_raw_to_tuple() -> None:
     assert isinstance(hash(filter_param), int)
 
 
-def test_from_dict_with_set_values_is_hashable() -> None:
-    """Test a set value is accepted and does not break hashing."""
-    params: dict[str, Any] = {"values": {"EU", "NA"}}
-    filter_param = FilterParameterImpl.from_dict(params)
+def test_from_dict_with_set_values_normalizes_raw_to_frozenset() -> None:
+    """Test a set value is stored as a frozenset internally so the frozen dataclass stays hashable."""
+    filter_param = FilterParameterImpl.from_dict({"values": {"EU", "NA"}})
 
+    assert filter_param._raw == (("values", frozenset({"EU", "NA"})),)
     assert isinstance(hash(filter_param), int)
 
 
@@ -293,8 +294,20 @@ def test_values_property_returns_list_for_set_input() -> None:
     assert sorted(filter_param.values) == ["EU", "NA"]
 
 
+def test_values_property_is_deterministically_ordered_for_set_input() -> None:
+    """Test the public list order does not depend on the set's hash-seed iteration order.
+
+    A frozenset's own iteration order varies with PYTHONHASHSEED, so `values` must not hand it
+    out directly; it re-sorts by repr, matching the order the prior tuple-based storage produced.
+    """
+    params: dict[str, Any] = {"values": {5, 3, 40, 1, 22}}
+    filter_param = FilterParameterImpl.from_dict(params)
+
+    assert filter_param.values == sorted({5, 3, 40, 1, 22}, key=repr)
+
+
 def test_cross_type_equal_set_values_normalize_equal() -> None:
-    """Test set elements normalize by value equality, not repr, so 1 and True land in the same order."""
+    """Test set elements normalize by value equality, not repr, so 1 and True are interchangeable."""
     from_int = FilterParameterImpl.from_dict({"values": {1, 2}})
     from_bool = FilterParameterImpl.from_dict({"values": {True, 2}})
 

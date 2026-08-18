@@ -450,13 +450,21 @@ class FeatureChainParserMixin:
             unpacked = FeatureChainParser._unpack_property_value(inherited_value)
             if len(unpacked) == 1 and str(unpacked[0]) == name_value:
                 continue
+            if prop_key in options.inherited_group_keys:
+                remedy = (
+                    f"Carve the key out with forward_group_exclude={{'{prop_key}'}} on the child in the "
+                    f"consumer's input_features, or use an allowlist / forward_group=False."
+                )
+            else:
+                remedy = (
+                    f"Adjust inherit_context_keys on the child or propagate_context_keys on the consumer "
+                    f"so '{prop_key}' is no longer forwarded."
+                )
             message = (
                 f"Feature '{feature_name}': option '{prop_key}' was forwarded from a consumer with value "
                 f"'{inherited_value}', but the feature name parses to '{name_value}'. The name-parsed value "
-                f"takes precedence, so the forwarded value would be silently ignored. Carve the key out with "
-                f"forward_group_exclude={{'{prop_key}'}} on the child in the consumer's input_features, or use an "
-                f"allowlist / forward_group=False. Set MLODA_ALLOW_FORWARDED_NAME_MISMATCH=1 to downgrade this "
-                f"error to a warning."
+                f"takes precedence, so the forwarded value would be silently ignored. {remedy} Set "
+                f"MLODA_ALLOW_FORWARDED_NAME_MISMATCH=1 to downgrade this error to a warning."
             )
             if os.environ.get("MLODA_ALLOW_FORWARDED_NAME_MISMATCH", "").lower() in ("1", "true"):
                 logger.warning(message)

@@ -19,7 +19,10 @@ the options.
 Also covers the context-path counterpart: a value forwarded into
 ``options.inherited_context_keys`` via ``inherit_context_keys`` or the
 consumer's ``propagate_context_keys`` must be checked exactly like a
-group-forwarded value, not silently ignored.
+group-forwarded value, not silently ignored. Its remedy text must differ
+from the group path's: "forward_group_exclude" does not remove a
+context-forwarded value, so the message must omit it and instead name
+"inherit_context_keys" / "propagate_context_keys".
 
 All fixture names carry a "namemis579" (group path) or "ctxmis579" (context
 path) marker so they cannot collide with other tests in the global plugin
@@ -283,6 +286,11 @@ class TestForwardedContextNameMismatch:
         assert "sum" in message
         assert "max" in message
         assert "MLODA_ALLOW_FORWARDED_NAME_MISMATCH" in message
+        # A context-forwarded mismatch cannot be fixed with the group-only remedy; the message
+        # must instead name the context-forwarding controls that actually carried the value.
+        assert "forward_group_exclude" not in message
+        assert "inherit_context_keys" in message
+        assert "propagate_context_keys" in message
 
     def test_context_propagate_differing_value_raises(self) -> None:
         """A value pushed into the child's context via consumer.propagate_context_keys,
@@ -299,6 +307,10 @@ class TestForwardedContextNameMismatch:
         assert "sum" in message
         assert "max" in message
         assert "MLODA_ALLOW_FORWARDED_NAME_MISMATCH" in message
+        # Same context-only remedy requirement as the pull path above.
+        assert "forward_group_exclude" not in message
+        assert "inherit_context_keys" in message
+        assert "propagate_context_keys" in message
 
     def test_context_pull_equal_value_matches(self) -> None:
         """A pulled context value equal to the name-parsed value matches silently."""

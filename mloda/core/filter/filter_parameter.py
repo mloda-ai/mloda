@@ -25,10 +25,9 @@ class FilterParameter(Protocol):
 def _normalize_collections(value: Any) -> Any:
     """Normalize collection values so the frozen dataclass stays hashable.
 
-    Lists become tuples, order preserved. Sets/frozensets become frozensets: frozenset equality and
-    hashing are already order- and representation-independent, so cross-type-equal elements (1 and
-    True) normalize the same regardless of which concrete type built either side, unlike a repr-sorted
-    tuple. str/bytes stay scalar and are never exploded.
+    Sets/frozensets normalize to frozenset rather than a repr-sorted tuple: frozenset equality is
+    already order- and representation-independent, so cross-type-equal elements (1 and True)
+    normalize the same regardless of which concrete type built either side.
     """
     if isinstance(value, (str, bytes)):
         return value

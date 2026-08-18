@@ -1,4 +1,4 @@
-"""Pins the collapsed ``PROPERTY_MAPPING`` surface on ``BaseInputData`` (issue #949): one spec type,
+"""Pins the collapsed ``PROPERTY_MAPPING`` surface on ``BaseInputData``: one spec type,
 ``PropertySpec`` plus ``framework_set``, read via ``reader_option`` / ``reader_option_default``.
 Leak policy: the throwaway readers here leak deliberately; none is final, so selection never collects them.
 """
@@ -1305,8 +1305,7 @@ class TestDeclarationsDoNotAffectDiscovery:
 
 
 class TestReaderOptionsIsAHardBreak:
-    """``READER_OPTIONS`` is retired outright (renamed to ``PROPERTY_MAPPING``): a class body still
-    writing the old name is a loud break at class definition, never silent inheritance."""
+    """``READER_OPTIONS`` is retired outright (renamed to ``PROPERTY_MAPPING``); a class body still writing the old name is a loud break at class definition, never silent inheritance."""
 
     def test_a_subclass_declaring_reader_options_raises_naming_both_spellings(self) -> None:
         """The rename is a hard break: the retired attribute name is rejected where it is written."""

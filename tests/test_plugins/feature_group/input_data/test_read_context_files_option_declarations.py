@@ -125,7 +125,7 @@ def _source_tuple_values(instance: ConcatenatedFileContent, options: Options) ->
 
 def _make_no_spread_file_type_subclass() -> type[ConcatenatedFileContent]:
     """A throwaway subclass that declares ONLY its own key; the merge, not a manual spread, must
-    supply every other inherited key (issue #949 Phase 2)."""
+    supply every other inherited key."""
 
     class RcfdNoSpreadFileTypeProbeFeatureGroup(ConcatenatedFileContent):
         """Declares only file_type; the other four keys must come from the MRO merge, not a spread."""
@@ -172,7 +172,7 @@ class TestDeclarationInventory:
 
 
 class TestDeclarationMergeAcrossSubclassing:
-    """A subclass declaring only its own key still exposes every inherited key (#949 Phase 2)."""
+    """A subclass declaring only its own key still exposes every inherited key."""
 
     def test_declared_option_keys_includes_every_parent_key_without_a_manual_spread(
         self, no_feature_group_registry_pollution: None
@@ -193,7 +193,7 @@ class TestDeclarationMergeAcrossSubclassing:
         subclass = _make_no_spread_file_type_subclass()
         try:
             # hasattr, not a direct call: an AttributeError raised on the class itself would pin it via
-            # the exception's own `.obj` attribute, which outlives this test's gc.collect() (#845).
+            # the exception's own `.obj` attribute, which outlives this test's gc.collect().
             has_method = hasattr(subclass, "declared_option_specs")
             default = subclass.declared_option_specs()["file_type"].default if has_method else None
         finally:

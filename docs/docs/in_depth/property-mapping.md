@@ -149,14 +149,14 @@ consequences keep the shared type honest on this surface:
 - **The shared validator rejects, per surface, the fields that are inert there.** `match_guard`,
   `deferred_binding=True` and `context=False` describe name matching and value placement, which a
   reader does not have, so a reader declaration carrying them is rejected at class definition instead
-  of leaving them silently inert (#865). `framework_set=True` marks the one framework-written key, the
+  of leaving them silently inert. `framework_set=True` marks the one framework-written key, the
   reserved `"BaseInputData"` pair written by `add_base_input_data_to_options` and read by
   `init_reader`. Such keys are exempt from enforcement, so enforcement fields on them are rejected
   too, as is `allow_explicit_none`, which the admit path never reads on a framework-written key; on a
   feature group the field is rejected outright. The reserved key is checked as the MRO merge resolves
   it: its **winning** declaration must keep `framework_set=True`, so neither a subclass nor a plain
   mixin can turn the framework-written key into a user-enforced one.
-- **The reverse also holds: a reader-only field has no feature-group meaning.** `scalar_only` (#1154)
+- **The reverse also holds: a reader-only field has no feature-group meaning.** `scalar_only`
   rejects a collection value outright instead of unpacking it element-wise, so a feature group
   declaring it is rejected at class definition, the same way `match_guard`/`deferred_binding`/
   `context=False` are rejected on the reader surface.

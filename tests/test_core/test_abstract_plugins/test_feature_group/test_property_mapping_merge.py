@@ -1,16 +1,7 @@
-"""Pins Phase 2 of issue #949's follow-up: FeatureGroup.PROPERTY_MAPPING moves onto the shared
-declaration-surface module (``mloda/core/abstract_plugins/components/property_mapping.py``), so a
-subclass's declared options are the MRO-merged view, most-derived winning, not a plain-attribute
-replacement. Covers the FEATURE_GROUP surface identity, the merge accessors, materialization
-(``options_with_defaults`` / ``GlobalFilter._intake_fill``), config-path matching, guards reading
-the merged view, author-time rejections, and plain-mixin declarations.
-
-Today's bug (a child's own, incomplete PROPERTY_MAPPING masks its parent's) makes several of these
-children an accidental "universal matcher" (issue #771): they'd match any unrelated feature name
-resolved elsewhere in the same test session. Those helpers are therefore built fresh, function-local,
-by a factory (never module-level), and every using test drops its local reference before any
-assertion that may fail today, so a failing assertion's own traceback cannot keep the class registered
-for the rest of the run (#845). Once Green's merge lands, the same children stop being universal.
+"""Pins the FeatureGroup PROPERTY_MAPPING merge: a subclass's declared options are the MRO-merged
+view, most-derived winning, not a plain-attribute replacement. Some children below would be
+accidental universal matchers if declared at module level, so they are built fresh per test via
+function-local factories, with the local reference dropped before any assertion that may fail.
 """
 
 from __future__ import annotations
@@ -29,7 +20,7 @@ from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser
 from mloda.core.filter.global_filter import GlobalFilter
 from mloda.user import Options
 
-# --- Items 2-4: MRO merge, most-derived wins; materialization and config-path matching follow it. ---
+# --- MRO merge, most-derived wins; materialization and config-path matching follow it. ---
 
 PMFG_A_KEY = "pmfg_merge_a"
 PMFG_B_KEY = "pmfg_merge_b"
@@ -83,7 +74,7 @@ class PmfgUndeclared(FeatureChainParserMixin, FeatureGroup):
 
 
 class TestFeatureGroupDeclaresTheFeatureGroupSurface:
-    """Item 1: FeatureGroup carries the FEATURE_GROUP surface and an empty-dict, not None, default."""
+    """FeatureGroup carries the FEATURE_GROUP surface and an empty-dict, not None, default."""
 
     def test_feature_group_surface_is_feature_group(self) -> None:
         assert FeatureGroup.PROPERTY_MAPPING_SURFACE is DeclarationSurface.FEATURE_GROUP
@@ -94,7 +85,7 @@ class TestFeatureGroupDeclaresTheFeatureGroupSurface:
 
 
 class TestDeclaredOptionMerge:
-    """Item 2: MRO merge, most-derived winning; a child's declaration never leaks into its parent."""
+    """MRO merge, most-derived winning; a child's declaration never leaks into its parent."""
 
     def test_child_declared_option_keys_includes_every_inherited_key(self) -> None:
         child = _make_merge_child()
@@ -107,7 +98,7 @@ class TestDeclaredOptionMerge:
         child = _make_merge_child()
         try:
             # hasattr, not a direct call: an AttributeError on the class itself would pin it via the
-            # exception's own `.obj` attribute, which outlives this test's teardown gc.collect() (#845).
+            # exception's own `.obj` attribute, which outlives this test's teardown gc.collect().
             has_method = hasattr(child, "declared_option_specs")
             specs = child.declared_option_specs() if has_method else {}
         finally:
@@ -158,7 +149,7 @@ class TestDeclaredOptionMerge:
 
 
 class TestMaterializationFollowsTheMerge:
-    """Item 3: options_with_defaults and GlobalFilter._intake_fill read the merged view."""
+    """options_with_defaults and GlobalFilter._intake_fill read the merged view."""
 
     def test_options_with_defaults_fills_the_inherited_default(self) -> None:
         child = _make_merge_child()
@@ -176,7 +167,7 @@ class TestMaterializationFollowsTheMerge:
 
 
 class TestConfigPathFollowsTheMergeAndDeclaredBeyondBase:
-    """Item 4: config-path matching consults the merged view and the "declared beyond base" rule."""
+    """Config-path matching consults the merged view and the "declared beyond base" rule."""
 
     def test_undeclared_class_with_prefix_pattern_does_not_match_an_unrelated_config_path_name(self) -> None:
         """Unchanged from today: an undeclared class stays out of scope on the config path."""
@@ -200,7 +191,7 @@ class TestConfigPathFollowsTheMergeAndDeclaredBeyondBase:
         assert result is True
 
 
-# --- Item 5: guards read the merged view at call time. ---
+# --- Guards read the merged view at call time. ---
 
 PMFG_RW_TRIGGER_KEY = "pmfg_rw_trigger"
 PMFG_RW_TARGET_KEY = "pmfg_rw_target"
@@ -236,7 +227,7 @@ def _make_required_when_child() -> type[FeatureGroup]:
 
 
 class TestGuardsReadTheMergedViewAtCallTime:
-    """Item 5: the required_when guard, and the name-path presence guard, see inherited keys."""
+    """The required_when guard, and the name-path presence guard, see inherited keys."""
 
     def test_required_when_guard_non_match_when_the_conditionally_required_key_is_absent(self) -> None:
         child = _make_required_when_child()
@@ -272,11 +263,11 @@ class TestGuardsReadTheMergedViewAtCallTime:
         assert any(PMFG_B_KEY in message for message in messages)
 
 
-# --- Items 6-7: author-time rejections on the FeatureGroup surface. ---
+# --- Author-time rejections on the FeatureGroup surface. ---
 
 
 class TestExplicitNoneOrNonDictPropertyMappingRaisesAtClassDefinition:
-    """Item 6: PROPERTY_MAPPING = None or a non-dict raises ValueError at class-definition time."""
+    """PROPERTY_MAPPING = None or a non-dict raises ValueError at class-definition time."""
 
     def test_property_mapping_none_raises_naming_the_class_with_none_and_merge(self) -> None:
         with pytest.raises(ValueError) as exc_info:
@@ -306,7 +297,7 @@ class TestExplicitNoneOrNonDictPropertyMappingRaisesAtClassDefinition:
 
 
 class TestMergeCacheAssignmentRaises:
-    """Item 7: the merge cache is framework-written; declaring it in a class body is rejected."""
+    """The merge cache is framework-written; declaring it in a class body is rejected."""
 
     def test_property_mapping_cache_assignment_raises(self) -> None:
         with pytest.raises(ValueError):
@@ -315,7 +306,7 @@ class TestMergeCacheAssignmentRaises:
                 _property_mapping_cache: ClassVar[dict[str, Any]] = {}
 
 
-# --- Item 8: plain-mixin declarations. ---
+# --- Plain-mixin declarations. ---
 
 PMFG_MIX_KEY = "pmfg_mix_key"
 
@@ -337,7 +328,7 @@ class PmfgMixed(PmfgMix, FeatureGroup):
 
 
 class TestPlainMixinDeclarations:
-    """Item 8: a plain mixin's declaration merges in; a reader-only field on it still raises."""
+    """A plain mixin's declaration merges in; a reader-only field on it still raises."""
 
     def test_declared_option_keys_includes_a_plain_mixin_key(self) -> None:
         assert PMFG_MIX_KEY in PmfgMixed.declared_option_keys()
@@ -360,7 +351,7 @@ class TestPlainMixinDeclarations:
         assert "reached defining PmfgFrameworkSetMixed" in message
 
 
-# --- Item 9: mixin-only classes (no FeatureGroup base) keep working. ---
+# --- Mixin-only classes (no FeatureGroup base) keep working. ---
 
 PMFG_ONLY_MIXIN_KEY = "pmfg_only_mixin_key"
 
@@ -382,7 +373,7 @@ class PmfgNoDeclMixin(FeatureChainParserMixin):
 
 
 class TestMixinOnlyClassesKeepWorking:
-    """Item 9: a bare FeatureChainParserMixin subclass, with or without a declaration."""
+    """A bare FeatureChainParserMixin subclass, with or without a declaration."""
 
     def test_mixin_only_class_returns_its_own_mapping(self) -> None:
         mapping = PmfgOnlyMixin._get_property_mapping()

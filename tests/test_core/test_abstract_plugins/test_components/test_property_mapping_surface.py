@@ -1,7 +1,7 @@
-"""Pins the shared PROPERTY_MAPPING declaration-surface module (Phase 1 of issue #949 follow-up):
-the merge/validation machinery both ``BaseInputData`` (READER, this phase) and, later, ``FeatureGroup``
-(FEATURE_GROUP, phase 2) build on. Plain classes exercise the generic mechanics; ``BaseInputData``
-subclasses exercise the READER surface wiring.
+"""Pins the shared PROPERTY_MAPPING declaration-surface module: the merge/validation machinery
+both ``BaseInputData`` (READER surface) and ``FeatureGroup`` (FEATURE_GROUP surface) build on.
+Plain classes exercise the generic mechanics; ``BaseInputData`` subclasses exercise the READER
+surface wiring.
 """
 
 from __future__ import annotations

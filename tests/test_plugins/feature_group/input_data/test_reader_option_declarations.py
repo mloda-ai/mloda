@@ -1,4 +1,4 @@
-"""Pins the per-reader ``PROPERTY_MAPPING`` declarations (issue #949: ``PropertySpec`` values) and
+"""Pins the per-reader ``PROPERTY_MAPPING`` declarations (``PropertySpec`` values) and
 makes the declared ``document_suffixes`` default load-bearing in ReadFile/ReadDocument matching.
 Leak policy: the leaked readers here are never final; matching is called directly, never via mlodaAPI.
 """

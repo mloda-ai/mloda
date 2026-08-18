@@ -1,5 +1,5 @@
-"""Pins selection-time enforcement of ``PROPERTY_MAPPING`` specs (issue #949, cycle 2): per-candidate
-vetoes before the probe; absence vetoes record only on the feature-scope (ownership) path.
+"""Pins selection-time enforcement of ``PROPERTY_MAPPING`` specs: per-candidate vetoes before the
+probe; absence vetoes record only on the feature-scope (ownership) path.
 Leak policy: leaked final readers are foreign-inert (TestModuleLeakPolicy pins it); absence-firing ones are test-local.
 """
 

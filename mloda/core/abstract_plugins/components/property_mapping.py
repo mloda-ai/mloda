@@ -1,6 +1,6 @@
 """The PROPERTY_MAPPING declaration surface shared by FeatureGroup and BaseInputData: MRO merge,
-per-class cache, author-time rules. Two surfaces, one attribute name and one spec type
-(``PropertySpec``); the surface (``DeclarationSurface``) only changes which fields are inert.
+per-class cache, and author-time rules. One attribute, one spec type; DeclarationSurface only
+changes which fields are inert.
 """
 
 from __future__ import annotations

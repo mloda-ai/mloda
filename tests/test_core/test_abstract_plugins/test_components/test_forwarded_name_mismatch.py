@@ -100,7 +100,9 @@ class _ContextMismatchChainedGroup(FeatureChainParserMixin):
 def _context_pull_child_options(consumer_context: dict[str, Any]) -> Options:
     """Child-side pull: child.inherit_from(consumer, inherit_context_keys=...)."""
     child_options = Options()
-    child_options.inherit_from(Options(context=consumer_context), inherit_context_keys=frozenset(consumer_context.keys()))
+    child_options.inherit_from(
+        Options(context=consumer_context), inherit_context_keys=frozenset(consumer_context.keys())
+    )
     return child_options
 
 

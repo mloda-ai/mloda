@@ -9,9 +9,13 @@ will not find it. These tests verify the consumer has been updated.
 import inspect
 import os
 import tempfile
+from collections.abc import Iterator
 
 import pytest
 
+from mloda_plugins.feature_group.experimental.dynamic_feature_group_factory.dynamic_feature_group_factory import (
+    DynamicFeatureGroupCreator,
+)
 from mloda_plugins.feature_group.input_data.read_context_files import ConcatenatedFileContent
 from mloda_plugins.feature_group.input_data.read_document_feature import ReadDocumentFeature
 from mloda_plugins.feature_group.input_data.read_file_feature import ReadFileFeature
@@ -19,6 +23,12 @@ from mloda.user import FeatureName, Options
 from mloda.provider import DefaultOptionKeys
 from mloda_plugins.feature_group.input_data.read_files.text_file_reader import PyFileReader
 from mloda_plugins.feature_group.input_data.read_files.markdown_document_reader import MarkdownDocumentReader
+
+
+@pytest.fixture(autouse=True)
+def _cleanup_dynamic_feature_groups() -> Iterator[None]:
+    yield
+    DynamicFeatureGroupCreator._created_classes.pop(ConcatenatedFileContent.join_feature_name, None)
 
 
 class TestConcatenatedFileContentUsesReadDocumentFeature:

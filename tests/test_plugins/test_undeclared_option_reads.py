@@ -46,6 +46,9 @@ from mloda_plugins.feature_group.experimental.forecasting.base import Forecastin
 from mloda_plugins.feature_group.experimental.sklearn.encoding.base import EncodingFeatureGroup
 from mloda_plugins.feature_group.experimental.sklearn.pipeline.base import SklearnPipelineFeatureGroup
 from mloda_plugins.feature_group.experimental.sklearn.scaling.base import ScalingFeatureGroup
+from mloda_plugins.feature_group.experimental.dynamic_feature_group_factory.dynamic_feature_group_factory import (
+    DynamicFeatureGroupCreator,
+)
 from mloda_plugins.feature_group.experimental.time_window.base import TimeWindowFeatureGroup
 from mloda_plugins.feature_group.input_data.read_context_files import ConcatenatedFileContent
 from mloda_plugins.feature_group.input_data.read_document import ReadDocument
@@ -131,6 +134,16 @@ def _load_all_plugins() -> Iterator[None]:
     yield
     gc.collect()
     gc.collect()
+
+
+@pytest.fixture(autouse=True)
+def _cleanup_dynamic_feature_groups() -> Iterator[None]:
+    """This module only imports ``ConcatenatedFileContent``, but a sibling test file in the same xdist
+    worker can register its join class first; pop it here too so this module never carries the leak
+    forward regardless of run order.
+    """
+    yield
+    DynamicFeatureGroupCreator._created_classes.pop(ConcatenatedFileContent.join_feature_name, None)
 
 
 def _make_leaked_reader_probe() -> type[BaseInputData]:

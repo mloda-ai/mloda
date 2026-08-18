@@ -22,23 +22,35 @@ Filtering that removes EVERY named file is the sharp edge of the fix and is pinn
 empty result must be a loud error, not a join child whose ``in_features`` is an empty frozenset.
 
 Subclass-leak policy: this module defines no ``FeatureGroup`` or ``BaseInputData`` subclass at all,
-so it has nothing to leak; it drives the shipped ``ConcatenatedFileContent`` directly.
+so it has nothing to leak that way; ``_create_join_class`` still registers
+``ConcatenatedFileContent.join_feature_name`` in ``DynamicFeatureGroupCreator._created_classes``, a
+permanent strong reference no ``gc.collect()`` reclaims, so the autouse fixture below pops it back out.
 """
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
 
 from mloda.provider import DefaultOptionKeys
 from mloda.user import FeatureName, Options
+from mloda_plugins.feature_group.experimental.dynamic_feature_group_factory.dynamic_feature_group_factory import (
+    DynamicFeatureGroupCreator,
+)
 from mloda_plugins.feature_group.experimental.source_input_feature import SourceTuple
 from mloda_plugins.feature_group.input_data.read_context_files import ConcatenatedFileContent
 from mloda_plugins.feature_group.input_data.read_files.text_file_reader import PyFileReader
 
 
 PROBE_FEATURE = FeatureName("rcff_file_paths_probe")
+
+
+@pytest.fixture(autouse=True)
+def _cleanup_dynamic_feature_groups() -> Iterator[None]:
+    yield
+    DynamicFeatureGroupCreator._created_classes.pop(ConcatenatedFileContent.join_feature_name, None)
 
 
 def _source_tuples(instance: ConcatenatedFileContent, options: Options) -> set[SourceTuple]:

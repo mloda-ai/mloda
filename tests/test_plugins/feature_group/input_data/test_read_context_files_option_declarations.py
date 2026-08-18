@@ -50,6 +50,9 @@ from mloda.core.abstract_plugins.components.utils import get_all_subclasses
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.provider import DefaultOptionKeys, PropertySpec, is_no_default
 from mloda.user import FeatureName, Options
+from mloda_plugins.feature_group.experimental.dynamic_feature_group_factory.dynamic_feature_group_factory import (
+    DynamicFeatureGroupCreator,
+)
 from mloda_plugins.feature_group.input_data.read_context_files import ConcatenatedFileContent
 from mloda_plugins.feature_group.input_data.read_files.markdown_document_reader import MarkdownDocumentReader
 from mloda_plugins.feature_group.input_data.read_files.text_file_reader import PyFileReader
@@ -59,6 +62,12 @@ from mloda_plugins.feature_group.input_data.read_files.text_file_reader import P
 DECLARED_KEYS = frozenset({"disallowed_files", "file_paths", "target_folder", "file_type", "document_reader_class"})
 
 PROBE_FEATURE = FeatureName("rcfd_declaration_probe")
+
+
+@pytest.fixture(autouse=True)
+def _cleanup_dynamic_feature_groups() -> Iterator[None]:
+    yield
+    DynamicFeatureGroupCreator._created_classes.pop(ConcatenatedFileContent.join_feature_name, None)
 
 
 @pytest.fixture

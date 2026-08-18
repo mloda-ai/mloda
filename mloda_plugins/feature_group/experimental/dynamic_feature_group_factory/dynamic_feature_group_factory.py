@@ -165,6 +165,8 @@ class DynamicFeatureGroupCreator:
     - Properties use lambda functions or regular functions as method implementations
     - Method signatures must match the original FeatureGroup signatures
     - Unspecified methods fall back to parent class implementations
+    - A created class cannot be pickled back by module path, so a feature relying on it is rejected
+      up front under ParallelizationMode.MULTIPROCESSING instead of run
 
     ## Requirements
 

@@ -17,7 +17,7 @@ from mloda.core.prepare.resolution_failure_renderer import render_resolution_fai
 from mloda.core.prepare.resolution_types import EvaluationResult, RenderFacts
 from mloda.user import PluginLoader
 
-from tests.docs_corpus import REPO_ROOT, doc_files
+from tests.docs_corpus import PYTHON_BLOCK_PATTERN, REPO_ROOT, doc_files
 
 # The doc spellings that teach a framework name: quoted keyword, quoted dict key, and quoted list/set bodies.
 SINGULAR_NAME = re.compile(r"""compute_framework\s*=\s*(?P<quote>["'])(?P<name>[^"']+)(?P=quote)""")
@@ -28,9 +28,8 @@ PLURAL_LIST = re.compile(r"compute_frameworks\s*=\s*\[(?P<body>[^\]]*)\]", re.DO
 PLURAL_SET = re.compile(r"compute_frameworks\s*=\s*\{(?P<body>[^}]*)\}", re.DOTALL)
 QUOTED_NAME = re.compile(r"""(?P<quote>["'])(?P<name>[^"']+)(?P=quote)""")
 
-# These fence-block regexes rely on tests/test_docs_fences.py banning the fence spellings (tilde,
-# four-backtick, spaced, attributed) they would mishandle.
-PYTHON_BLOCK = re.compile(r"```(?:python|py)\n(.*?)```", re.DOTALL)
+# This fence-block regex relies on tests/test_docs_fences.py banning the fence spellings (tilde,
+# four-backtick, spaced, attributed) it would mishandle.
 # Any fenced block, whatever its info string: quoted error output teaches framework class names too.
 FENCED_BLOCK = re.compile(r"```[^\n]*\n(.*?)```", re.DOTALL)
 FRAMEWORK_LIKE_IDENTIFIER = re.compile(r"\b[A-Z]\w*(?:DataFrame|Table|Framework)\b")
@@ -73,7 +72,7 @@ def _framework_like_identifiers(text: str) -> list[tuple[int, str]]:
 
 def _get_domain_blocks(text: str) -> list[str]:
     """Return every python/py fenced block that defines get_domain."""
-    return [block for block in PYTHON_BLOCK.findall(text) if GET_DOMAIN_MARKER in block]
+    return [block for block in PYTHON_BLOCK_PATTERN.findall(text) if GET_DOMAIN_MARKER in block]
 
 
 def _get_domain_bodies(block: str) -> list[str]:

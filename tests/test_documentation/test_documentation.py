@@ -10,6 +10,7 @@ import pytest
 from typing import Any
 import time
 from mloda.steward import ExtenderHook, Extender
+from tests.docs_corpus import PYTHON_BLOCK_PATTERN, RUNNABLE_TAG
 import logging
 
 logger = logging.getLogger(__name__)
@@ -83,7 +84,7 @@ def run_md_files_isolated(fpaths: Sequence[Path]) -> None:
     the plugin-load cost once; docs sharing one interpreter matches the
     pre-isolation semantics. The last CHECKING line attributes a failure.
     """
-    kept_paths = [fpath for fpath in fpaths if "```python" in fpath.read_text(encoding="utf-8")]
+    kept_paths = [fpath for fpath in fpaths if f"```{RUNNABLE_TAG}" in fpath.read_text(encoding="utf-8")]
     if not kept_paths:
         return
     # Safe: fixed argv (sys.executable, constant driver, file paths), no shell, no user input.
@@ -109,7 +110,6 @@ def test_files_good() -> None:
     run_md_files_isolated(_markdown_files(DOCS_DIR))
 
 
-CODE_BLOCK_PATTERN = re.compile(r"```(?:python|py)\n(.*?)```", re.DOTALL)
 TEST_IMPORT_PATTERN = re.compile(r"^\s*from\s+tests\..*$", re.MULTILINE)
 
 
@@ -117,7 +117,7 @@ TEST_IMPORT_PATTERN = re.compile(r"^\s*from\s+tests\..*$", re.MULTILINE)
 def test_no_test_imports_in_docs(fpath: Path) -> None:
     text = fpath.read_text(encoding="utf-8")
     violations = []
-    for block in CODE_BLOCK_PATTERN.finditer(text):
+    for block in PYTHON_BLOCK_PATTERN.finditer(text):
         for match in TEST_IMPORT_PATTERN.finditer(block.group(1)):
             violations.append(match.group().strip())
     assert not violations, f"{fpath} imports from test modules (not available to users): {violations}"
@@ -130,11 +130,11 @@ def test_test_imports_in_illustrative_blocks_are_scanned() -> None:
     """A ```py block is read by users too, so its test imports must be caught."""
     found = [
         match.group().strip()
-        for block in CODE_BLOCK_PATTERN.finditer(ILLUSTRATIVE_BLOCK_WITH_TEST_IMPORT)
+        for block in PYTHON_BLOCK_PATTERN.finditer(ILLUSTRATIVE_BLOCK_WITH_TEST_IMPORT)
         for match in TEST_IMPORT_PATTERN.finditer(block.group(1))
     ]
     assert found == ["from tests.foo import bar"], (
-        f"CODE_BLOCK_PATTERN matches only ```python, so blocks retagged to ```py go unscanned, got {found}"
+        f"PYTHON_BLOCK_PATTERN matches only ```python, so blocks retagged to ```py go unscanned, got {found}"
     )
 
 

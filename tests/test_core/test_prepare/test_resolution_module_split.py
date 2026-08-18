@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import ast
 import importlib
-import re
 import subprocess  # nosec B404
 import sys
 import textwrap
@@ -20,6 +19,7 @@ from types import ModuleType
 import pytest
 
 from mloda.core.prepare import identify_feature_group
+from tests.docs_corpus import is_python_fence
 
 MATCHER_MODULE = "mloda.core.prepare.identify_feature_group"
 TYPES_MODULE = "mloda.core.prepare.resolution_types"
@@ -72,10 +72,6 @@ MATCHER_BASENAME = MATCHER_MODULE.rsplit(".", 1)[-1]
 
 # Package of the matcher as directory names, for the synthetic trees the sweep tests below build under tmp_path.
 MATCHER_PACKAGE_PARTS = tuple(MATCHER_MODULE.split(".")[:-1])
-
-# Opening fence of a markdown python block in every spelling mkdocs renders as python: a space after the
-# backticks, the py and python3 aliases, and any info string behind the language, such as title="x".
-_PYTHON_FENCE = re.compile(r"```\s*(python3?|py)(\s|$)")
 
 _SUBPROCESS_TIMEOUT = 8.0
 
@@ -154,7 +150,8 @@ def _python_blocks(source: str) -> list[tuple[int, str]]:
             continue
         backticks = len(stripped) - len(stripped.lstrip("`"))
         if opened is None:
-            opened, width, is_python = lineno, backticks, _PYTHON_FENCE.match(stripped) is not None
+            # mktestdocs only ever executes an exactly-3-backtick fence: a wider opener is never Python.
+            opened, width, is_python = lineno, backticks, backticks == 3 and is_python_fence(stripped[backticks:])
             continue
         if backticks < width:  # a shorter fence is content of the open block, as in a ``` shown inside a ````
             continue
@@ -358,6 +355,25 @@ def test_a_near_miss_language_fence_is_not_scanned(tmp_path: Path, language: str
     assert offenders == [], f"```{language} is not python, yet it was scanned: {offenders}"
 
 
+@pytest.mark.parametrize("language", ["pycon", "ipython", "python-repl"])
+def test_a_python_highlighting_alias_fence_is_scanned(tmp_path: Path, language: str) -> None:
+    """mkdocs highlights ```pycon, ```ipython and ```python-repl as Python; mktestdocs runs none of them."""
+    path = tmp_path / "docs" / "guide.md"
+    source = _markdown_with_block(language, f"from {MATCHER_MODULE} import render_resolution_failure")
+    offenders = _foreign_matcher_imports_in_markdown(path, source, tmp_path)
+    assert offenders == [f"{path}:4 -> render_resolution_failure"], f"```{language} went unscanned: {offenders}"
+
+
+def test_the_fence_classifier_is_the_shared_docs_corpus_helper() -> None:
+    """This module's is_python_fence must be the literal tests.docs_corpus.is_python_fence object, not a copy,
+    so the two fence-classification sweeps cannot drift apart."""
+    import tests.docs_corpus as docs_corpus
+
+    assert is_python_fence is docs_corpus.is_python_fence, (
+        f"{__name__}.is_python_fence must be the literal tests.docs_corpus.is_python_fence object"
+    )
+
+
 def test_an_indented_block_that_does_not_name_the_matcher_is_not_parsed(tmp_path: Path) -> None:
     """A fence indented into a numbered list is not parseable on its own, and it names no import of ours.
 
@@ -454,6 +470,23 @@ def test_prose_in_a_four_backtick_block_is_not_parsed_as_python(tmp_path: Path) 
         ]
     )
     assert _foreign_matcher_imports_in_markdown(path, source, tmp_path) == []
+
+
+def test_a_four_backtick_python_tagged_fence_is_not_scanned(tmp_path: Path) -> None:
+    """mktestdocs slices exactly three backticks, so a ````python fence is never executed either."""
+    path = tmp_path / "docs" / "guide.md"
+    source = "\n".join(
+        [
+            "# Guide",
+            "",
+            "````python",
+            f"from {MATCHER_MODULE} import render_resolution_failure",
+            "````",
+            "",
+        ]
+    )
+    offenders = _foreign_matcher_imports_in_markdown(path, source, tmp_path)
+    assert offenders == [], f"a four-backtick fence is never executed by mktestdocs, yet it was scanned: {offenders}"
 
 
 def test_an_unterminated_python_fence_at_end_of_file_is_scanned(tmp_path: Path) -> None:

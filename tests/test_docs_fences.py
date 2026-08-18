@@ -12,13 +12,7 @@ from typing import cast
 import pytest
 from mktestdocs import grab_code_blocks
 
-from tests.docs_corpus import REPO_ROOT, doc_files
-
-RUNNABLE_TAG = "python"
-ILLUSTRATIVE_TAG = "py"
-OUTPUT_TAG = "text"
-
-PYTHON_LOOKING = re.compile(r"i?py(thon)?[0-9]*(-repl)?|pycon", re.IGNORECASE)
+from tests.docs_corpus import ILLUSTRATIVE_TAG, OUTPUT_TAG, REPO_ROOT, RUNNABLE_TAG, doc_files, is_python_fence
 
 VOCABULARY_HINT = (
     f"Use ```{RUNNABLE_TAG} when the block runs, ```{ILLUSTRATIVE_TAG} when it is an "
@@ -129,7 +123,7 @@ def _violations_in_file(path: Path) -> list[str]:
     openings, unterminated = _scan_fences(path)
     for fence in openings:
         tag = fence.tag
-        python_looking = bool(PYTHON_LOOKING.fullmatch(tag))
+        python_looking = is_python_fence(fence.info)
         if fence.has_leading_space:
             unspaced = f"```{fence.info.strip()}"
             messages.append(f"{fence.location}: spaced fence {fence.text!r} -> write {unspaced!r}. {VOCABULARY_HINT}")

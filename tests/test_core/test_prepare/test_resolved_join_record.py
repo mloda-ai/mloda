@@ -207,6 +207,14 @@ class FrameworkCollision(NamedTuple):
     unrelated_uuid: UUID
 
 
+class FallbackBranchCollision(NamedTuple):
+    plan: ExecutionPlan
+    link: Link
+    left_uuid: UUID
+    far_right_uuid: UUID
+    unrelated_uuid: UUID
+
+
 class Chain(NamedTuple):
     plan: ExecutionPlan
     producer: Link
@@ -446,6 +454,34 @@ def _link_with_a_declared_left_split_across_frameworks_and_a_colliding_third_par
     }
     planned.plan.create_execution_plan(planned.queue, planned.graph, planned.link_trekker, declared_frameworks)
     return FrameworkCollision(planned.plan, link, left_pandas.uuid, left_pyarrow.uuid, right.uuid, unrelated.uuid)
+
+
+def _right_join_farther_right_parent_and_a_colliding_third_parent() -> FallbackBranchCollision:
+    """Lands run_link's final fallback branch; an unrelated third parent shares the source framework."""
+    planned = _planned()
+    link = _pair_link(Link.right)
+
+    left = feature("resolved_join_fallback_collision_left", PyArrowTable, link.left_index)
+    nearest_right = feature("resolved_join_fallback_collision_nearest_right", PythonDictFramework, link.right_index)
+    far_right = feature("resolved_join_fallback_collision_far_right", PandasDataFrame, link.right_index)
+    unrelated = feature("resolved_join_fallback_collision_unrelated", PyArrowTable)
+    child = feature("resolved_join_fallback_collision_child", PandasDataFrame)
+
+    planned.graph.add_node(left.uuid, NodeProperties(left, link.left_feature_group))
+    planned.graph.add_node(nearest_right.uuid, NodeProperties(nearest_right, ResolvedJoinPairRight))
+    planned.graph.add_node(far_right.uuid, NodeProperties(far_right, ResolvedJoinPairRightDescendant))
+    planned.graph.add_node(unrelated.uuid, NodeProperties(unrelated, ResolvedJoinUnlinked))
+    planned.queue.append((link.left_feature_group, {left}))
+    planned.queue.append((ResolvedJoinPairRight, {nearest_right}))
+    planned.queue.append((ResolvedJoinPairRightDescendant, {far_right}))
+    planned.queue.append((ResolvedJoinUnlinked, {unrelated}))
+    planned.queue.append((link, PyArrowTable, PandasDataFrame))
+    _add_child(planned, child, left, nearest_right, far_right, unrelated)
+    # The trekker key matches the queued key directly, so run_link never flips here.
+    trek(planned.link_trekker, link, (PyArrowTable, PandasDataFrame), child.uuid)
+
+    planned.plan.create_execution_plan(planned.queue, planned.graph, planned.link_trekker)
+    return FallbackBranchCollision(planned.plan, link, left.uuid, far_right.uuid, unrelated.uuid)
 
 
 def _ordered_chain() -> Chain:
@@ -945,8 +981,7 @@ def test_a_parent_the_link_never_mentions_stays_out_of_the_declared_sides() -> N
     assert record.destination_side is JoinSide.RIGHT
     assert record.left.uuids == {unlinked.left_uuid}
     assert record.right.uuids == {unlinked.right_uuid}
-    # The join writes into a parent that belongs to neither declared side, which a validation step should reject.
-    assert record.destination_uuids == {unlinked.right_uuid, unlinked.unlinked_uuid}
+    assert record.destination_uuids == {unlinked.right_uuid}
     assert record.source_uuids == {unlinked.left_uuid}
 
 
@@ -960,27 +995,26 @@ def test_a_declared_side_keeps_only_the_frameworks_its_own_parents_declared() ->
     assert PythonDictFramework not in record.left.declared_frameworks | record.right.declared_frameworks
 
 
-def test_a_third_parent_sharing_the_destination_framework_must_not_leak_into_declared_left() -> None:
-    """Issue #1137 finding #1: the declared left split across two frameworks defeats the full (both-sides)
-    containment check, and the fallback must not hand an unrelated, same-framework parent to record.left,
-    nor the declared-left parent that belongs to the other framework's joinstep."""
-    built = _link_with_a_declared_left_split_across_frameworks_and_a_colliding_third_parent()
+def test_a_third_parent_sharing_the_destination_framework_now_raises_a_missing_links_error() -> None:
+    with pytest.raises(ValueError) as exc_info:
+        _link_with_a_declared_left_split_across_frameworks_and_a_colliding_third_parent()
 
-    record = _one_record(built.plan, built.link)
-
-    assert built.unrelated_uuid not in record.left.uuids
-    assert built.left_pyarrow_uuid not in record.left.uuids
-    assert record.left.uuids == {built.left_pandas_uuid}
-    assert record.right.uuids == {built.right_uuid}
+    error_message = str(exc_info.value)
+    assert "Link" in error_message, "Error should mention Links as the missing piece of guidance"
+    # Either declared side can be the one a merged join-served group reports first, so accept either name.
+    assert "ResolvedJoinPairLeft" in error_message or "ResolvedJoinPairRight" in error_message
+    assert "ResolvedJoinUnlinked" in error_message
 
 
-def test_a_third_parent_sharing_the_destination_framework_must_not_leak_its_frameworks_into_declared_left() -> None:
-    built = _link_with_a_declared_left_split_across_frameworks_and_a_colliding_third_parent()
+def test_a_third_parent_colliding_in_run_links_final_fallback_also_raises() -> None:
+    """Same leak as above, in run_link's other (final fallback) branch."""
+    with pytest.raises(ValueError) as exc_info:
+        _right_join_farther_right_parent_and_a_colliding_third_parent()
 
-    record = _one_record(built.plan, built.link)
-
-    assert PandasDataFrame in record.left.declared_frameworks
-    assert PythonDictFramework not in record.left.declared_frameworks
+    error_message = str(exc_info.value)
+    assert "Link" in error_message, "Error should mention Links as the missing piece of guidance"
+    assert "ResolvedJoinPairRight" in error_message
+    assert "ResolvedJoinUnlinked" in error_message
 
 
 def test_a_self_join_gives_each_declared_side_only_its_own_parent() -> None:
@@ -1087,7 +1121,6 @@ def test_a_decline_reached_through_the_inversion_branch_records_the_orientation_
         _case_override_disagrees_with_the_nearest_split,
         _right_join_farther_right_parent_holds_destination_framework,
         _right_join_both_sides_claim_destination_framework,
-        _link_with_a_declared_left_split_across_frameworks_and_a_colliding_third_parent,
         _right_join_both_declared_sides_share_one_framework_child_on_a_third,
         _right_join_declared_left_spans_frameworks_declared_right_is_pyarrow_only,
     ],
@@ -1106,7 +1139,6 @@ def test_a_decline_reached_through_the_inversion_branch_records_the_orientation_
         "case_override_disagrees_with_nearest_split",
         "right_join_farther_right_parent_holds_destination_framework",
         "right_join_both_sides_claim_destination_framework",
-        "declared_left_framework_collision_with_unrelated_third_parent",
         "right_join_both_declared_sides_share_one_framework",
         "right_join_declared_right_is_pyarrow_exclusive",
     ],

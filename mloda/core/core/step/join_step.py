@@ -97,7 +97,7 @@ class JoinStep(Step):
         If matched, return the uuid of the join step.
         """
 
-        if uuid not in self.required_uuids:
+        if uuid not in self.destination_framework_uuids and uuid not in self.source_framework_uuids:
             return None
 
         if other_framework == self.destination_framework:

@@ -198,6 +198,15 @@ class Unlinked(NamedTuple):
     unlinked_uuid: UUID
 
 
+class FrameworkCollision(NamedTuple):
+    plan: ExecutionPlan
+    link: Link
+    left_pandas_uuid: UUID
+    left_pyarrow_uuid: UUID
+    right_uuid: UUID
+    unrelated_uuid: UUID
+
+
 class Chain(NamedTuple):
     plan: ExecutionPlan
     producer: Link
@@ -405,6 +414,40 @@ def _link_with_an_unlinked_third_parent() -> Unlinked:
     return Unlinked(planned.plan, link, left.uuid, right.uuid, unlinked.uuid)
 
 
+def _link_with_a_declared_left_split_across_frameworks_and_a_colliding_third_parent() -> FrameworkCollision:
+    """The declared left side has two nearest parents on different frameworks, so the full containment
+    check (both sides at once) fails; an unrelated third parent shares the destination framework with one
+    of them, so the unfiltered per-framework fallback hands it to record.left along with that parent."""
+    planned = _planned()
+    link = _pair_link()
+
+    left_pandas = feature("resolved_join_fw_collision_left_pandas", PandasDataFrame, link.left_index)
+    left_pyarrow = feature("resolved_join_fw_collision_left_pyarrow", PyArrowTable, link.left_index)
+    right = feature("resolved_join_fw_collision_right", PyArrowTable, link.right_index)
+    unrelated = feature("resolved_join_fw_collision_unrelated", PandasDataFrame)
+    child = feature("resolved_join_fw_collision_child", PyArrowTable)
+
+    planned.graph.add_node(left_pandas.uuid, NodeProperties(left_pandas, link.left_feature_group))
+    planned.graph.add_node(left_pyarrow.uuid, NodeProperties(left_pyarrow, link.left_feature_group))
+    planned.graph.add_node(right.uuid, NodeProperties(right, link.right_feature_group))
+    planned.graph.add_node(unrelated.uuid, NodeProperties(unrelated, ResolvedJoinUnlinked))
+    planned.queue.append((link.left_feature_group, {left_pandas, left_pyarrow}))
+    planned.queue.append((link.right_feature_group, {right}))
+    planned.queue.append((ResolvedJoinUnlinked, {unrelated}))
+    planned.queue.append((link, PandasDataFrame, PyArrowTable))
+    _add_child(planned, child, left_pandas, left_pyarrow, right, unrelated)
+    trek(planned.link_trekker, link, (PandasDataFrame, PyArrowTable), child.uuid)
+
+    declared_frameworks: DeclaredFrameworks = {
+        left_pandas.uuid: frozenset({PandasDataFrame}),
+        left_pyarrow.uuid: frozenset({PyArrowTable}),
+        right.uuid: frozenset({PyArrowTable}),
+        unrelated.uuid: frozenset({PandasDataFrame, PythonDictFramework}),
+    }
+    planned.plan.create_execution_plan(planned.queue, planned.graph, planned.link_trekker, declared_frameworks)
+    return FrameworkCollision(planned.plan, link, left_pandas.uuid, left_pyarrow.uuid, right.uuid, unrelated.uuid)
+
+
 def _ordered_chain() -> Chain:
     planned = _planned()
     producer = _pair_link()
@@ -542,6 +585,45 @@ def _right_join_both_sides_claim_destination_framework() -> Built:
     # far_left (PyArrowTable) is the sole source-side uuid; nearest_left also sits on the
     # destination framework, so it lands on the destination side alongside right.uuid.
     return _finish(planned, link, Sides(far_left.uuid, right.uuid, child.uuid, nearest_left.uuid))
+
+
+def _right_join_both_declared_sides_share_one_framework_child_on_a_third() -> Built:
+    """Regression shape for issue #1137 finding #2: both declared sides sit on the same framework, and only
+    the consumer names a third, unrelated framework, so no case-override branch can intervene."""
+    planned = _planned()
+    link = _pair_link(Link.right)
+    sides = _branch(
+        planned,
+        link,
+        "resolved_join_shared_fw_third_child",
+        left_cfw=PandasDataFrame,
+        right_cfw=PandasDataFrame,
+        child_cfw=PyArrowTable,
+    )
+    return _finish(planned, link, sides)
+
+
+def _right_join_declared_left_spans_frameworks_declared_right_is_pyarrow_only() -> Built:
+    """Regression shape for issue #1137 finding #2 ('hop names PairRight -> PairLeft'): declared left has
+    nearest parents on two frameworks, declared right is PyArrow-only, and the consumer is PyArrow too."""
+    planned = _planned()
+    link = _pair_link(Link.right)
+
+    left_pandas = feature("resolved_join_right_only_pyarrow_left_pandas", PandasDataFrame, link.left_index)
+    left_pyarrow = feature("resolved_join_right_only_pyarrow_left_pyarrow", PyArrowTable, link.left_index)
+    right = feature("resolved_join_right_only_pyarrow_right", PyArrowTable, link.right_index)
+    child = feature("resolved_join_right_only_pyarrow_child", PyArrowTable)
+
+    planned.graph.add_node(left_pandas.uuid, NodeProperties(left_pandas, link.left_feature_group))
+    planned.graph.add_node(left_pyarrow.uuid, NodeProperties(left_pyarrow, link.left_feature_group))
+    planned.graph.add_node(right.uuid, NodeProperties(right, link.right_feature_group))
+    planned.queue.append((link.left_feature_group, {left_pandas, left_pyarrow}))
+    planned.queue.append((link.right_feature_group, {right}))
+    planned.queue.append((link, PyArrowTable, PyArrowTable))
+    _add_child(planned, child, left_pandas, left_pyarrow, right)
+    trek(planned.link_trekker, link, (PyArrowTable, PyArrowTable), child.uuid)
+
+    return _finish(planned, link, Sides(left_pyarrow.uuid, right.uuid, child.uuid))
 
 
 def _join_steps(plan: ExecutionPlan) -> list[JoinStep]:
@@ -694,6 +776,33 @@ def test_a_right_joins_destination_stays_right_when_both_declared_sides_claim_th
     assert join_steps[0].swap_merge_sides is True
 
 
+def test_a_right_joins_destination_stays_right_when_both_declared_sides_share_one_framework() -> None:
+    """Regression pin for issue #1137 finding #2: a same-framework declared pair with the consumer on a
+    third framework must not knock a RIGHT join's destination onto LEFT."""
+    built = _right_join_both_declared_sides_share_one_framework_child_on_a_third()
+
+    record = _one_record(built.plan, built.link)
+
+    assert record.jointype is JoinType.RIGHT
+    assert record.destination_side is JoinSide.RIGHT
+
+
+@pytest.mark.skip(
+    reason="Pre-existing, out-of-scope bug: case_link_fw_is_equal_to_children_fw raises 'Right joins are not "
+    "supported for equal or polymorphic feature groups' unconditionally for JoinType.RIGHT, even though this "
+    "link's feature groups are neither equal nor polymorphic here. Tracked separately from issue #1137."
+)
+def test_a_right_joins_destination_stays_right_when_declared_right_is_the_only_pyarrow_exclusive_side() -> None:
+    """Regression pin for issue #1137 finding #2 ('hop names PairRight -> PairLeft'): declared right can
+    only ever be PyArrow, so the destination must land there even though declared left also offers PyArrow."""
+    built = _right_join_declared_left_spans_frameworks_declared_right_is_pyarrow_only()
+
+    record = _one_record(built.plan, built.link)
+
+    assert record.jointype is JoinType.RIGHT
+    assert record.destination_side is JoinSide.RIGHT
+
+
 def test_a_parent_the_link_never_mentions_stays_out_of_the_declared_sides() -> None:
     unlinked = _link_with_an_unlinked_third_parent()
 
@@ -715,6 +824,29 @@ def test_a_declared_side_keeps_only_the_frameworks_its_own_parents_declared() ->
     assert record.left.declared_frameworks == {PyArrowTable}
     assert record.right.declared_frameworks == {PandasDataFrame}
     assert PythonDictFramework not in record.left.declared_frameworks | record.right.declared_frameworks
+
+
+def test_a_third_parent_sharing_the_destination_framework_must_not_leak_into_declared_left() -> None:
+    """Issue #1137 finding #1: the declared left split across two frameworks defeats the full (both-sides)
+    containment check, and the fallback must not hand an unrelated, same-framework parent to record.left,
+    nor the declared-left parent that belongs to the other framework's joinstep."""
+    built = _link_with_a_declared_left_split_across_frameworks_and_a_colliding_third_parent()
+
+    record = _one_record(built.plan, built.link)
+
+    assert built.unrelated_uuid not in record.left.uuids
+    assert built.left_pyarrow_uuid not in record.left.uuids
+    assert record.left.uuids == {built.left_pandas_uuid}
+    assert record.right.uuids == {built.right_uuid}
+
+
+def test_a_third_parent_sharing_the_destination_framework_must_not_leak_its_frameworks_into_declared_left() -> None:
+    built = _link_with_a_declared_left_split_across_frameworks_and_a_colliding_third_parent()
+
+    record = _one_record(built.plan, built.link)
+
+    assert PandasDataFrame in record.left.declared_frameworks
+    assert PythonDictFramework not in record.left.declared_frameworks
 
 
 def test_a_self_join_gives_each_declared_side_only_its_own_parent() -> None:
@@ -821,6 +953,16 @@ def test_a_decline_reached_through_the_inversion_branch_records_the_orientation_
         _case_override_disagrees_with_the_nearest_split,
         _right_join_farther_right_parent_holds_destination_framework,
         _right_join_both_sides_claim_destination_framework,
+        _link_with_a_declared_left_split_across_frameworks_and_a_colliding_third_parent,
+        _right_join_both_declared_sides_share_one_framework_child_on_a_third,
+        pytest.param(
+            _right_join_declared_left_spans_frameworks_declared_right_is_pyarrow_only,
+            marks=pytest.mark.skip(
+                reason="Pre-existing, out-of-scope bug: case_link_fw_is_equal_to_children_fw raises 'Right joins "
+                "are not supported for equal or polymorphic feature groups' unconditionally for JoinType.RIGHT. "
+                "Tracked separately from issue #1137."
+            ),
+        ),
     ],
     ids=[
         "inner",
@@ -837,6 +979,9 @@ def test_a_decline_reached_through_the_inversion_branch_records_the_orientation_
         "case_override_disagrees_with_nearest_split",
         "right_join_farther_right_parent_holds_destination_framework",
         "right_join_both_sides_claim_destination_framework",
+        "declared_left_framework_collision_with_unrelated_third_parent",
+        "right_join_both_declared_sides_share_one_framework",
+        "right_join_declared_right_is_pyarrow_exclusive",
     ],
 )
 def test_the_records_sign_the_joins_the_join_steps_sign(build: Callable[[], Any]) -> None:

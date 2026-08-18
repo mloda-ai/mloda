@@ -109,7 +109,7 @@ class ReadDocument(BaseInputData):
                 elif handle_kind == "file" and not cls._document_file_matches(
                     data_access.files[hint], document_suffixes
                 ):
-                    hint = None
+                    return None
             file_match = data_access.resolve(
                 "file",
                 predicate=lambda p: cls._document_file_matches(p, document_suffixes),

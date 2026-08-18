@@ -105,7 +105,7 @@ class ReadFile(BaseInputData):
                 elif handle_kind == "file" and not cls._file_matches(
                     data_access.files[hint], feature_names, document_suffixes
                 ):
-                    hint = None
+                    return None
             file_match = data_access.resolve(
                 "file",
                 predicate=lambda p: cls._file_matches(p, feature_names, document_suffixes),

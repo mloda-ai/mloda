@@ -143,7 +143,7 @@ def _(data_dict, pd):
     # In mloda, we have the concept of feature groups.
     # A feature group is an abstraction between a data framework and processes of a data transformation.
     # In this example, the data framework is clearly pandas.
-    # The processes are typically meta information like names, but lifecyle definition, or dependencies or relations to other data.
+    # The processes are typically meta information like names, but lifecycle definition, or dependencies or relations to other data.
     class SklearnDataCreator(FeatureGroup):
         # On the basis on the given data_dict earlier defined and its names, we use a DataCreator to inject the data_dict into the feature group abstraction.
         # Very simply spoken: we load the data.

@@ -199,7 +199,7 @@ def _(mo):
      - Testing migrations: Feature(A, Polars), Feature(B, Pandas)
      - Sliding time windows: Feature(A, 10 days), Feature(B, 20 days)
 
-    This means inbetween Data to Feature, we have another abstraction, the FeatureSet.
+    This means in between Data to Feature, we have another abstraction, the FeatureSet.
     """)
     return
 
@@ -219,7 +219,7 @@ def _(mo):
         ...
     ```
 
-    In that sense, the FeatureSet has informations of
+    In that sense, the FeatureSet has information of
 
     - the Features itself
     - filters

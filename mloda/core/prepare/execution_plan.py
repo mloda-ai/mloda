@@ -509,8 +509,8 @@ Available join types:
                 # Explicit hops and join-served parents (delivered pre-merged by a JoinStep, no hop built)
                 # both compete for this step's one binding, so both get grouped by the same linkage test
                 # below. Order-independent: collected here, grouped once after the loop.
-                bound_entries: list[tuple[TransformFrameworkStep | _JoinServedParent, UUID, list[JoinStep]]] = []
-                join_served_entries: list[tuple[type[FeatureGroup], UUID, list[JoinStep]]] = []
+                bound_entries: list[tuple[TransformFrameworkStep | _JoinServedParent, UUID]] = []
+                join_served_entries: list[tuple[type[FeatureGroup], UUID]] = []
                 seen_hop_uuids: set[UUID] = set()
 
                 for parent in parents:
@@ -521,11 +521,8 @@ Available join types:
                         if js.matched(ep.compute_framework, parent_node_property.feature.uuid)
                     ]
                     if matching_join_steps:
-                        # Served by a join, no explicit hop needed; keep every matching join, not just
-                        # the first, so the later linkage check doesn't depend on set iteration order.
-                        join_served_entries.append(
-                            (parent_node_property.feature_group_class, parent, matching_join_steps)
-                        )
+                        # Served by a join, no explicit hop needed.
+                        join_served_entries.append((parent_node_property.feature_group_class, parent))
                         continue
 
                     if ep.compute_framework != parent_node_property.feature.get_compute_framework():
@@ -545,7 +542,7 @@ Available join types:
 
                         if canonical_tfs.uuid not in seen_hop_uuids:
                             seen_hop_uuids.add(canonical_tfs.uuid)
-                            bound_entries.append((canonical_tfs, parent, []))
+                            bound_entries.append((canonical_tfs, parent))
 
                         # Records every parent the hop covers; they all share one owning step, so
                         # this doesn't change the scheduling gate.
@@ -557,35 +554,28 @@ Available join types:
 
                         need_to_upload_collector.add(parent)
 
-                # Group entries by transitive linkage: same feature-group class, declared-side sharing via
-                # either entry's matching JoinSteps (catches a case-override hop whose parent lost the
-                # JoinStep's own uuid to a same-role sibling, see `_case_override_beats_nearer_wrong_framework_left`),
-                # or `_parents_linked_by_join`.
+                # Group entries by transitive linkage: same feature-group class, one entry's own class a
+                # subclass (or superclass) of the other's (catches a case-override hop whose parent lost the
+                # JoinStep's own uuid to a same-role sibling, see `_case_override_beats_nearer_wrong_framework_left`,
+                # without also bridging two entries that merely share an unrelated common ancestor via some
+                # third join's declared side), or `_parents_linked_by_join`.
                 def _entries_linked(
-                    entry_a: tuple[TransformFrameworkStep | _JoinServedParent, UUID, list[JoinStep]],
-                    entry_b: tuple[TransformFrameworkStep | _JoinServedParent, UUID, list[JoinStep]],
+                    entry_a: tuple[TransformFrameworkStep | _JoinServedParent, UUID],
+                    entry_b: tuple[TransformFrameworkStep | _JoinServedParent, UUID],
                 ) -> bool:
-                    hop_a, parent_a, matching_a = entry_a
-                    hop_b, parent_b, matching_b = entry_b
+                    hop_a, parent_a = entry_a
+                    hop_b, parent_b = entry_b
                     if hop_a.from_feature_group is hop_b.from_feature_group:
                         return True
-                    if any(
-                        issubclass(hop_b.from_feature_group, declared_side)
-                        for js in matching_a
-                        for declared_side in (js.link.left_feature_group, js.link.right_feature_group)
-                    ):
-                        return True
-                    if any(
-                        issubclass(hop_a.from_feature_group, declared_side)
-                        for js in matching_b
-                        for declared_side in (js.link.left_feature_group, js.link.right_feature_group)
+                    if issubclass(hop_a.from_feature_group, hop_b.from_feature_group) or issubclass(
+                        hop_b.from_feature_group, hop_a.from_feature_group
                     ):
                         return True
                     return self._parents_linked_by_join(parent_a, parent_b, left_join_frameworks)
 
                 def _add_to_groups(
-                    groups: list[list[tuple[TransformFrameworkStep | _JoinServedParent, UUID, list[JoinStep]]]],
-                    entry: tuple[TransformFrameworkStep | _JoinServedParent, UUID, list[JoinStep]],
+                    groups: list[list[tuple[TransformFrameworkStep | _JoinServedParent, UUID]]],
+                    entry: tuple[TransformFrameworkStep | _JoinServedParent, UUID],
                 ) -> None:
                     linked_groups = [
                         group for group in groups if any(_entries_linked(entry, member) for member in group)
@@ -599,20 +589,13 @@ Available join types:
                     else:
                         groups.append([entry])
 
-                hop_groups: list[list[tuple[TransformFrameworkStep | _JoinServedParent, UUID, list[JoinStep]]]] = []
+                hop_groups: list[list[tuple[TransformFrameworkStep | _JoinServedParent, UUID]]] = []
                 for entry in bound_entries:
                     _add_to_groups(hop_groups, entry)
 
-                if len(hop_groups) > 1:
-                    raise ValueError(
-                        self._conflicting_transform_hops_error(ep, hop_groups[0][0][0], hop_groups[1][0][0])
-                    )
-
                 # Join-served parents compete for the same binding, so merge them into the same groups too.
-                for served_feature_group, served_parent, matching_join_steps in join_served_entries:
-                    _add_to_groups(
-                        hop_groups, (_JoinServedParent(served_feature_group), served_parent, matching_join_steps)
-                    )
+                for served_feature_group, served_parent in join_served_entries:
+                    _add_to_groups(hop_groups, (_JoinServedParent(served_feature_group), served_parent))
 
                 if len(hop_groups) > 1:
                     raise ValueError(

@@ -17,12 +17,17 @@ PYTHON_LOOKING = re.compile(r"i?py(thon)?[0-9]*(-repl)?|pycon", re.IGNORECASE)
 PYTHON_BLOCK_PATTERN = re.compile(rf"```(?:{RUNNABLE_TAG}|{ILLUSTRATIVE_TAG})\n(.*?)```", re.DOTALL)
 
 
-def doc_files() -> list[Path]:
-    """Every markdown file under DOCS_ROOT; never an empty list, so a bad path fails loudly at import time."""
-    files = sorted(DOCS_ROOT.rglob("*.md"))
+def doc_files(root: Path = DOCS_ROOT) -> list[Path]:
+    """Every markdown file under root; never an empty list, so a bad path fails loudly at import time."""
+    files = sorted(root.rglob("*.md"))
     if not files:
-        raise RuntimeError(f"no markdown files found under {DOCS_ROOT}, doc guard tests would check nothing")
+        raise RuntimeError(f"no markdown files found under {root}, doc guard tests would check nothing")
     return files
+
+
+def doc_id(fpath: Path) -> str:
+    """Repo-relative posix path used as a pytest parametrize id."""
+    return fpath.relative_to(REPO_ROOT).as_posix()
 
 
 def is_python_fence(info: str) -> bool:

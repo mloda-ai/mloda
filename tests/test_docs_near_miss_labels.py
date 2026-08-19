@@ -24,7 +24,7 @@ from mloda.core.filter.global_filter import GlobalFilter
 from mloda.core.prepare.resolution_failure_renderer import _STAGE_LABELS, render_resolution_failure
 from mloda.core.prepare.resolution_types import Elimination, EliminationStage, EvaluationResult
 
-from tests.docs_corpus import DOCS_ROOT, REPO_ROOT, doc_files
+from tests.docs_corpus import DOCS_ROOT, REPO_ROOT, doc_files, doc_id
 
 FENCE_PATTERN = re.compile(r"^\s*```")
 
@@ -61,7 +61,7 @@ def _near_miss_bullets(text: str) -> Iterator[tuple[int, re.Match[str]]]:
             yield number, match
 
 
-@pytest.mark.parametrize("fpath", doc_files(), ids=lambda p: p.relative_to(REPO_ROOT).as_posix())
+@pytest.mark.parametrize("fpath", doc_files(), ids=doc_id)
 def test_rendered_near_miss_bullets_carry_a_current_stage_label(fpath: Path) -> None:
     """Every label a page reproduces in a near-miss bullet is still a value of ``_STAGE_LABELS``."""
     stale = [
@@ -159,7 +159,7 @@ def _unmatched_filter_warnings(text: str) -> Iterator[tuple[int, re.Match[str]]]
             yield number, match
 
 
-@pytest.mark.parametrize("fpath", doc_files(), ids=lambda p: p.relative_to(REPO_ROOT).as_posix())
+@pytest.mark.parametrize("fpath", doc_files(), ids=doc_id)
 def test_rendered_unmatched_filter_warnings_carry_a_current_stage_label(fpath: Path) -> None:
     """Every label a page reproduces in an unmatched-filter warning is still a value of ``_STAGE_LABELS``."""
     stale = [

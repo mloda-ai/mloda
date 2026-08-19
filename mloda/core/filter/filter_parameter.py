@@ -56,12 +56,6 @@ class FilterParameterImpl:
                     f"Filter parameter '{key}' holds an unhashable {culprit}; "
                     "filter values must be hashable: scalars, or lists, sets or tuples of hashables."
                 )
-        # "values" is the categorical_inclusion membership set (filter engines build `isin(values)`
-        # from it), so its container type and order carry no meaning: fold the now-hashable tuple in
-        # too, so list/tuple/set/frozenset inputs with the same elements are one filter. Other keys
-        # (e.g. a tuple under "value" used as a composite scalar) keep their given shape.
-        if isinstance(normalized.get("values"), tuple):
-            normalized["values"] = frozenset(normalized["values"])
         return cls(_raw=tuple(sorted(normalized.items())))
 
     @property
@@ -70,11 +64,13 @@ class FilterParameterImpl:
 
     @property
     def values(self) -> Optional[list[Any]]:
-        # Collection input always normalizes to a frozenset; hand out the declared list type. A
+        # Stored as a tuple or frozenset for hashability; hand out the declared list type. A
         # frozenset iterates in hash-seed order, so it's re-sorted here to stay deterministic.
         stored = self._get("values")
         if isinstance(stored, frozenset):
             return sorted(stored, key=repr)
+        if isinstance(stored, tuple):
+            return list(stored)
         return cast(Optional[list[Any]], stored)
 
     @property

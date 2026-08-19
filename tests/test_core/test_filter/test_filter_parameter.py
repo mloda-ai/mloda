@@ -39,14 +39,13 @@ def test_from_dict_with_range_params() -> None:
 def test_from_dict_with_categorical_values() -> None:
     """Test creating FilterParameterImpl with multiple values.
 
-    Internal storage normalizes the list to a frozenset so the frozen dataclass stays hashable and
-    order/container-independent (categorical_inclusion filters build `isin(values)` from it).
+    Internal storage normalizes the list to a tuple so the frozen dataclass stays hashable.
     """
     params = {"values": ["A", "B", "C"]}
     filter_param = FilterParameterImpl.from_dict(params)
 
     assert isinstance(filter_param, FilterParameterImpl)
-    assert filter_param._raw == (("values", frozenset({"A", "B", "C"})),)
+    assert filter_param._raw == (("values", ("A", "B", "C")),)
 
 
 def test_from_dict_with_max_exclusive() -> None:
@@ -265,17 +264,15 @@ def test_parameter_sorting_is_consistent() -> None:
 
 # --- Collection value normalization tests (see issue #664) ---
 #
-# Contract: "values" collection input is stored hashable in `_raw` as a frozenset regardless of
-# whether it arrived as a list, tuple, set or frozenset, since categorical_inclusion filters build
-# an order- and container-independent `isin(values)` from it. The public `values` property returns
-# a `list`, matching its declared type. Scalars must never be exploded.
+# Contract: collection values are stored hashable in `_raw` (tuple or frozenset), but the public
+# `values` property returns a `list`, matching its declared type. Scalars must never be exploded.
 
 
-def test_from_dict_with_list_values_normalizes_raw_to_frozenset() -> None:
-    """Test a list value is stored as a frozenset internally so the frozen dataclass stays hashable."""
+def test_from_dict_with_list_values_normalizes_raw_to_tuple() -> None:
+    """Test a list value is stored as a tuple internally so the frozen dataclass stays hashable."""
     filter_param = FilterParameterImpl.from_dict({"values": ["EU", "NA"]})
 
-    assert filter_param._raw == (("values", frozenset({"EU", "NA"})),)
+    assert filter_param._raw == (("values", ("EU", "NA")),)
     assert isinstance(hash(filter_param), int)
 
 
@@ -332,22 +329,12 @@ def test_homogeneous_set_values_still_deduplicate_regardless_of_insertion_order(
     assert len({first, second}) == 1
 
 
-def test_set_and_list_values_alias() -> None:
-    """Set and list inputs with the same elements both normalize to a frozenset: same filter."""
+def test_set_and_list_values_no_longer_alias() -> None:
+    """Set stores as frozenset, list as tuple: same elements, no longer equal (was repr-sort luck)."""
     from_set = FilterParameterImpl.from_dict({"values": {"EU", "NA"}})
     from_list = FilterParameterImpl.from_dict({"values": ["EU", "NA"]})
 
-    assert from_set == from_list
-    assert hash(from_set) == hash(from_list)
-
-
-def test_differently_ordered_list_values_alias() -> None:
-    """Test list input order carries no meaning either: it's folded into the same frozenset."""
-    first = FilterParameterImpl.from_dict({"values": ["EU", "NA"]})
-    second = FilterParameterImpl.from_dict({"values": ["NA", "EU"]})
-
-    assert first == second
-    assert hash(first) == hash(second)
+    assert from_set != from_list
 
 
 def test_values_property_returns_list_for_tuple_input() -> None:

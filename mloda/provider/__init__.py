@@ -79,7 +79,9 @@ from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser
     declared_columnwise_hooks,
 )
 from mloda.core.abstract_plugins.components.feature_chainer.parsed_feature_name import ParsedFeatureName
-from mloda.core.abstract_plugins.components.feature_chainer.property_spec import (
+
+# Property specs
+from mloda.core.abstract_plugins.components.property_spec import (
     NO_DEFAULT,
     PropertySpec,
     is_no_default,
@@ -169,6 +171,7 @@ __all__ = [
     "missing_columnwise_hooks",
     "declared_columnwise_hooks",
     "ParsedFeatureName",
+    # Property specs
     "PropertySpec",
     "is_no_default",
     "is_positive_int",

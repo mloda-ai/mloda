@@ -14,7 +14,7 @@ from mloda.core.abstract_plugins.components.match_rejection import record_match_
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.components.default_options_key import DefaultOptionKeys
 from mloda.core.abstract_plugins.components.feature_chainer.parsed_feature_name import ParsedFeatureName
-from mloda.core.abstract_plugins.components.feature_chainer.property_spec import PropertySpec, is_no_default
+from mloda.core.abstract_plugins.components.property_spec import PropertySpec, is_no_default
 from mloda.core.abstract_plugins.components.declaration_surface import DeclarationSurface, validate_property_spec
 from mloda.core.abstract_plugins.components.utils import (
     contained_raise_log_level,

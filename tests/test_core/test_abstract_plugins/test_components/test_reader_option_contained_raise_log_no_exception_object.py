@@ -11,7 +11,7 @@ from typing import Any
 
 import pytest
 
-from mloda.core.abstract_plugins.components.feature_chainer.property_spec import PropertySpec
+from mloda.core.abstract_plugins.components.property_spec import PropertySpec
 from mloda.core.abstract_plugins.components.input_data.base_input_data import BaseInputData
 from mloda.user import Options
 

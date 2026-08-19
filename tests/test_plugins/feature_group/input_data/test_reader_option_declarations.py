@@ -11,7 +11,7 @@ from typing import Any, ClassVar
 
 import pytest
 
-from mloda.core.abstract_plugins.components.feature_chainer.property_spec import PropertySpec
+from mloda.core.abstract_plugins.components.property_spec import PropertySpec
 from mloda.user import DataAccessCollection, Options
 from mloda_plugins.feature_group.input_data.read_db import ReadDB
 from mloda_plugins.feature_group.input_data.read_dbs.sqlite import SQLITEReader

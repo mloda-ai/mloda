@@ -11,7 +11,7 @@ from typing import Any, ClassVar
 
 import pytest
 
-from mloda.core.abstract_plugins.components.feature_chainer.property_spec import PropertySpec, is_no_default
+from mloda.core.abstract_plugins.components.property_spec import PropertySpec, is_no_default
 from mloda.core.abstract_plugins.components.match_data.match_data import MatchData
 from mloda.core.abstract_plugins.components.match_rejection import (
     MATCH_REJECTION_REASONS,

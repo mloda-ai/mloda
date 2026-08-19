@@ -59,7 +59,7 @@ MATCH_PATH_MODULES: dict[str, str] = {
     "mloda/core/abstract_plugins/components/feature_chainer/feature_chain_parser_mixin.py": "the chain-parser matcher",
     "mloda/core/abstract_plugins/components/feature_chainer/feature_chain_parser.py": "the parsing that matcher runs",
     "mloda/core/abstract_plugins/components/feature_chainer/feature_chain_author_guards.py": "the required_when guard",
-    "mloda/core/abstract_plugins/components/feature_chainer/property_spec.py": "the matcher reads the spec sentinel",
+    "mloda/core/abstract_plugins/components/property_spec.py": "the matcher reads the spec sentinel",
     "mloda/core/abstract_plugins/components/input_data/base_input_data.py": "reader matching and file pinning",
     "mloda/core/abstract_plugins/components/input_data/api/api_input_data.py": "the api reader's match hook",
     "mloda/core/abstract_plugins/components/input_data/creator/data_creator.py": "the data-creator match hook",

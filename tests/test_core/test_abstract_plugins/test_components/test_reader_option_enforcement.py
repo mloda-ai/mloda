@@ -11,7 +11,7 @@ from typing import Any, ClassVar
 
 import pytest
 
-from mloda.core.abstract_plugins.components.feature_chainer.property_spec import (
+from mloda.core.abstract_plugins.components.property_spec import (
     PropertySpec,
     is_no_default,
     is_positive_int,

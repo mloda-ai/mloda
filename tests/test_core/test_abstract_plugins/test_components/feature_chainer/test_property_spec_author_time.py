@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import pytest
 
-from mloda.core.abstract_plugins.components.feature_chainer.property_spec import PropertySpec, property_spec
+from mloda.core.abstract_plugins.components.property_spec import PropertySpec, property_spec
 
 
 class TestAuthorTimeTypeErrors:

@@ -11,7 +11,7 @@ import copy
 import pytest
 
 import mloda.provider as provider
-from mloda.core.abstract_plugins.components.feature_chainer.property_spec import _NoDefault
+from mloda.core.abstract_plugins.components.property_spec import _NoDefault
 from mloda.provider import NO_DEFAULT, PropertySpec, is_no_default, property_spec
 
 

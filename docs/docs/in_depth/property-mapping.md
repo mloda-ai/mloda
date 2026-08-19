@@ -128,6 +128,9 @@ differently because they consume values at different moments.
 | `PROPERTY_MAPPING` | a `FeatureGroup` | Enforces it and applies it: value validation (`allowed_values`, `element_validator`), presence and `required_when`, and materialization of declared defaults into `Options`. |
 | `READER_OPTIONS` | a `BaseInputData` reader | Enforces it at reader selection: presence, `required_when` and strict values are checked before a candidate probes, and a failure vetoes that reader, recording per the ownership rule above. Defaults are never materialized; only the reader's own code applies them. |
 
+Both surfaces run the same per-key validator, and the reader's MRO merge goes through the shared
+helper module (`mloda/core/abstract_plugins/components/declaration_surface.py`).
+
 A reader consumes its option keys during reader **selection** (`match_subclass_data_access`, reached
 through `BaseInputData.matches` from the matcher), before the framework materializes anything. Two
 consequences keep the shared type honest on this surface:
@@ -638,6 +641,7 @@ if it really is a whole-value check.
 | Declared defaults materialized at the compute boundary | `tests/test_core/test_abstract_plugins/test_materialize_defaults_boundary.py` |
 | Declared defaults materialized at intake, canonicalizing default-equivalent twins | `tests/test_core/test_abstract_plugins/test_intake_default_canonicalization.py` |
 | Filter criteria matching observes effective options | `tests/test_core/test_filter/test_filter_criteria_effective_options.py` |
+| The shared declaration mechanics: the per-key validator on both surfaces, the reader merge and its per-class cache, the plain-mixin walk | `tests/.../test_components/test_declaration_surface.py` |
 | The reader surface: the single spec type and its surface guards, the reserved framework key, the MRO merge, the loud undeclared key, the presence rule of `reader_option()` | `tests/.../test_components/test_reader_option_declarations.py` |
 | Reader selection enforcement: strict values, requiredness, the `framework_set` exemption, the attributable `input_data` rejection | `tests/.../test_components/test_reader_option_enforcement.py` |
 | Per-reader declarations, the declared `default` that is load-bearing at selection, and the bare-path branch it does not reach | `tests/.../input_data/test_reader_option_declarations.py` |

@@ -15,6 +15,7 @@ from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.components.default_options_key import DefaultOptionKeys
 from mloda.core.abstract_plugins.components.feature_chainer.parsed_feature_name import ParsedFeatureName
 from mloda.core.abstract_plugins.components.feature_chainer.property_spec import PropertySpec, is_no_default
+from mloda.core.abstract_plugins.components.declaration_surface import DeclarationSurface, validate_property_spec
 from mloda.core.abstract_plugins.components.utils import (
     contained_raise_log_level,
     contained_raise_reason,
@@ -257,30 +258,9 @@ class FeatureChainParser:
 
     @classmethod
     def _require_spec(cls, owner_name: str, key: str, spec: Any) -> PropertySpec:
-        """Reject anything that is not a reader-free ``PropertySpec``; the parser entry point is
-        public and takes caller mappings, so neither rule can live at class-definition time alone."""
-        if not isinstance(spec, PropertySpec):
-            # Contained: a raw dict spec is that candidate's own defect, so the seam reads it as a non-match.
-            raise ValueError(
-                f"{owner_name}.PROPERTY_MAPPING['{key}'] is a {type(spec).__name__}, not a PropertySpec. "
-                f"Raw dict specs are no longer accepted; construct PropertySpec(...) or use the "
-                f"property_spec(...) helper."
-            )
-        if spec.framework_set:
-            # Contained: a framework_set spec is that candidate's own defect, so the seam reads it as a non-match.
-            raise ValueError(
-                f"{owner_name}.PROPERTY_MAPPING['{key}'] declares framework_set=True, which marks a "
-                f"reader-surface (READER_OPTIONS) key written by the framework; PROPERTY_MAPPING keys "
-                f"are user-set."
-            )
-        if spec.scalar_only:
-            # Contained: a scalar_only spec is that candidate's own defect, so the seam reads it as a non-match.
-            raise ValueError(
-                f"{owner_name}.PROPERTY_MAPPING['{key}'] declares scalar_only=True, which marks a "
-                f"reader-surface (READER_OPTIONS) key rejected outright as a collection; PROPERTY_MAPPING "
-                f"keys always unpack element-wise."
-            )
-        return spec
+        """Thin seam onto the shared FEATURE_GROUP surface rules; the parser entry point is public
+        and takes caller mappings."""
+        return validate_property_spec(owner_name, key, spec, DeclarationSurface.FEATURE_GROUP)
 
     @classmethod
     def validate_property_mapping_defaults(cls, owner_name: str, property_mapping: dict[str, Any] | None) -> None:

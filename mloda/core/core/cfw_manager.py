@@ -3,6 +3,7 @@ from typing import Any, Optional
 from uuid import UUID
 
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
+from mloda.core.abstract_plugins.components.error_utils import internal_invariant_error
 from mloda.core.abstract_plugins.function_extender import Extender
 from mloda.core.abstract_plugins.components.parallelization_modes import ParallelizationMode
 
@@ -98,6 +99,25 @@ class CfwManager:
             if cf_class_name == cls_name and feature_uuid in children_if_root:
                 cfw_uuid = self.find_leftmost(cfw_uuid, cls_name)
                 return cfw_uuid
+        return None
+
+    def get_unique_cfw_uuid(self, cf_class_name: str, tfs_ids: set[UUID]) -> Optional[UUID]:
+        """
+        Resolves a set of tfs_ids to at most one distinct Compute Framework UUID.
+
+        Raises if the tfs_ids resolve to more than one distinct cfw (ambiguous).
+        Returns None if none of the tfs_ids resolve.
+        """
+        resolved_uuids = {resolved for tfs_id in tfs_ids if (resolved := self.get_cfw_uuid(cf_class_name, tfs_id))}
+        if len(resolved_uuids) > 1:
+            raise ValueError(
+                internal_invariant_error(
+                    "step.tfs_ids resolved to more than one distinct compute framework: ambiguous.",
+                    f"cf_class_name={cf_class_name}, resolved cfw_uuids={resolved_uuids}, tfs_ids={tfs_ids}",
+                )
+            )
+        if len(resolved_uuids) == 1:
+            return next(iter(resolved_uuids))
         return None
 
     def add_to_merge_relation(self, left_uuid: UUID, right_uuid: UUID, cls_name: str) -> None:

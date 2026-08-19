@@ -480,10 +480,9 @@ class ExecutionOrchestrator:
 
         class_name = step.compute_framework.get_class_name()
 
-        for tfs_id in step.tfs_ids:
-            cfw_uuid = self.cfw_register.get_cfw_uuid(class_name, tfs_id)
-            if cfw_uuid:
-                return cfw_uuid
+        resolved_uuid = self.cfw_register.get_unique_cfw_uuid(class_name, step.tfs_ids)
+        if resolved_uuid is not None:
+            return resolved_uuid
 
         if step.features.any_uuid is None:
             return None

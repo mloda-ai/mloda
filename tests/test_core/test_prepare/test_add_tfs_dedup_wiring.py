@@ -306,7 +306,10 @@ class MatchedJsConsumerFG(DedupBaseFG):
 def _hub_matches_two_joins_scenario(
     hub_link_token: UUID, other_link_token: UUID
 ) -> tuple[list[JoinStep | FeatureGroupStep], Graph]:
-    """Hub parent P genuinely matches both JoinSteps; only the token order differs between calls."""
+    """Hub parent P genuinely matches both JoinSteps; only the token order differs between calls. Q is the
+    genuine source-side member of ``hub_join_step`` (what ``run_link`` actually produces: source uuids
+    narrowed to genuine declared-side members), so P and Q are linked via real uuid adjacency, not merely
+    by sharing a declared-side class."""
     graph = Graph()
 
     p = _feature("matched_js_hub_p", PandasDataFrame)
@@ -325,7 +328,7 @@ def _hub_matches_two_joins_scenario(
         source_framework=PyArrowTable,
         required_uuids=set(),
         destination_framework_uuids={p.uuid},
-        source_framework_uuids={uuid4()},
+        source_framework_uuids={q.uuid},
         token=hub_link_token,
     )
     other_join_step = JoinStep(
@@ -358,3 +361,193 @@ def test_parent_matching_two_join_steps_does_not_raise_regardless_of_token_order
     execution_plan, graph = _hub_matches_two_joins_scenario(hub_link_token, other_link_token)
 
     ExecutionPlan().add_tfs(execution_plan, graph)
+
+
+# ---------------------------------------------------------------------------
+# A join-served parent bridging two otherwise-unlinked explicit hops
+# ---------------------------------------------------------------------------
+
+
+class BridgeXFG(DedupBaseFG):
+    pass
+
+
+class BridgeYFG(DedupBaseFG):
+    pass
+
+
+class BridgeUnrelatedFG(DedupBaseFG):
+    pass
+
+
+class BridgeConsumerFG(DedupBaseFG):
+    pass
+
+
+class BridgeScenario(NamedTuple):
+    producer_x: FeatureGroupStep
+    producer_y: FeatureGroupStep
+    join_step: JoinStep
+    dest_step: FeatureGroupStep
+    graph: Graph
+
+
+def _bridge_scenario(bridged: bool) -> BridgeScenario:
+    """Two genuinely unlinked explicit hops (producer_x, class BridgeXFG on PandasDataFrame;
+    producer_y, class BridgeYFG on PyArrowTable) feed one consumer on PythonDictFramework, plus
+    join-served parents whose class is an exact match for a hop's own class, on PythonDictFramework
+    (what ``run_link`` actually produces: destination/source uuids are narrowed to genuine
+    declared-side members). ``bridged=True`` gives BOTH hops a join-served counterpart, and the two
+    counterparts sit on opposite sides of the same JoinStep, so they are themselves genuinely
+    linked; this ties both explicit hops into one group. ``bridged=False`` gives only the left hop
+    a counterpart, and the link's right side names an unrelated class, so the right hop stays
+    genuinely unlinked."""
+    graph = Graph()
+
+    parent_x = _feature("bridge_parent_x", PandasDataFrame)
+    parent_y = _feature("bridge_parent_y", PyArrowTable)
+    bridge_left = _feature("bridge_left_served", PythonDictFramework)
+    _root_node(graph, parent_x, BridgeXFG)
+    _root_node(graph, parent_y, BridgeYFG)
+    _root_node(graph, bridge_left, BridgeXFG)
+
+    producer_x = _producer_step(BridgeXFG, parent_x, PandasDataFrame)
+    producer_y = _producer_step(BridgeYFG, parent_y, PyArrowTable)
+
+    right_side = BridgeYFG if bridged else BridgeUnrelatedFG
+    link = Link.inner(JoinSpec(BridgeXFG, "id"), JoinSpec(right_side, "id"))
+
+    destination_framework_uuids = {bridge_left.uuid}
+    source_framework_uuids: set[UUID] = set()
+    dest_parents = {parent_x.uuid, parent_y.uuid, bridge_left.uuid}
+
+    if bridged:
+        bridge_right = _feature("bridge_right_served", PythonDictFramework)
+        _root_node(graph, bridge_right, BridgeYFG)
+        source_framework_uuids = {bridge_right.uuid}
+        dest_parents.add(bridge_right.uuid)
+
+    join_step = JoinStep(
+        link=link,
+        destination_framework=PythonDictFramework,
+        source_framework=PythonDictFramework,
+        required_uuids=set(),
+        destination_framework_uuids=destination_framework_uuids,
+        source_framework_uuids=source_framework_uuids,
+    )
+
+    dest_feature = _feature("bridge_dest", PythonDictFramework)
+    feature_set = FeatureSet()
+    feature_set.add(dest_feature)
+    graph.parent_to_children_mapping[dest_feature.uuid] = dest_parents
+    dest_step = FeatureGroupStep(BridgeConsumerFG, feature_set, set(), PythonDictFramework)
+
+    return BridgeScenario(producer_x, producer_y, join_step, dest_step, graph)
+
+
+def test_join_served_parent_genuinely_bridging_two_hops_does_not_raise() -> None:
+    """Two join-served parents, each an exact-class match for one explicit hop and genuinely
+    adjacent to each other on the same JoinStep, must merge both hops into one group instead of
+    tripping the missing-Links check on the bound-entries-only grouping pass."""
+    scenario = _bridge_scenario(bridged=True)
+
+    ExecutionPlan().add_tfs(
+        [scenario.producer_x, scenario.producer_y, scenario.join_step, scenario.dest_step], scenario.graph
+    )
+
+
+def test_join_served_parent_linked_to_only_one_hop_still_raises() -> None:
+    """Guard against an overly-broad fix: a join-served parent must genuinely bridge BOTH hops,
+    not merely be present, for the missing-Links check to stand down."""
+    scenario = _bridge_scenario(bridged=False)
+
+    with pytest.raises(ValueError, match="two different, unlinked source feature"):
+        ExecutionPlan().add_tfs(
+            [scenario.producer_x, scenario.producer_y, scenario.join_step, scenario.dest_step], scenario.graph
+        )
+
+
+# ---------------------------------------------------------------------------
+# A join-served parent must not bridge two hops that are merely siblings under a
+# shared declared-side ancestor, with no genuine join between them
+# ---------------------------------------------------------------------------
+
+
+class SiblingBroadFG(DedupBaseFG):
+    """The class a link declares on one side; two unrelated sibling subclasses share it."""
+
+
+class SiblingS1FG(SiblingBroadFG):
+    pass
+
+
+class SiblingS2FG(SiblingBroadFG):
+    pass
+
+
+class SiblingRightFG(DedupBaseFG):
+    pass
+
+
+class SiblingConsumerFG(DedupBaseFG):
+    pass
+
+
+class SiblingBridgeScenario(NamedTuple):
+    producer_s1: FeatureGroupStep
+    producer_s2: FeatureGroupStep
+    join_step: JoinStep
+    consumer_step: FeatureGroupStep
+    graph: Graph
+
+
+def _sibling_bridge_scenario() -> SiblingBridgeScenario:
+    """Consumer (PythonDict) pulls from S1 (Pandas) and S2 (PyArrow), two sibling subclasses of a
+    link's declared left side with no Link between them, plus a genuinely join-served third parent
+    whose class equals S1's exactly (a real declared-side member, as ``run_link`` narrows
+    destination/source uuids to declared-side members only). The join-served parent legitimately
+    binds to the S1 hop; it must not also bridge the unrelated S2 hop just because S2 happens to
+    descend from the same declared-side base class."""
+    graph = Graph()
+
+    p_s1 = _feature("sibling_s1_pandas", PandasDataFrame)
+    p_s2 = _feature("sibling_s2_pyarrow", PyArrowTable)
+    p_served = _feature("sibling_s1_dict_served", PythonDictFramework)
+    _root_node(graph, p_s1, SiblingS1FG)
+    _root_node(graph, p_s2, SiblingS2FG)
+    _root_node(graph, p_served, SiblingS1FG)
+
+    producer_s1 = _producer_step(SiblingS1FG, p_s1, PandasDataFrame)
+    producer_s2 = _producer_step(SiblingS2FG, p_s2, PyArrowTable)
+
+    link = Link.inner(JoinSpec(SiblingBroadFG, "id"), JoinSpec(SiblingRightFG, "id"))
+    right_parent = _feature("sibling_right_dict", PythonDictFramework)
+    _root_node(graph, right_parent, SiblingRightFG)
+    join_step = JoinStep(
+        link=link,
+        destination_framework=PythonDictFramework,
+        source_framework=PythonDictFramework,
+        required_uuids=set(),
+        destination_framework_uuids={p_served.uuid, right_parent.uuid},
+        source_framework_uuids={p_served.uuid, right_parent.uuid},
+    )
+
+    consumer = _feature("sibling_consumer", PythonDictFramework)
+    feature_set = FeatureSet()
+    feature_set.add(consumer)
+    graph.parent_to_children_mapping[consumer.uuid] = {p_s1.uuid, p_s2.uuid, p_served.uuid}
+    consumer_step = FeatureGroupStep(SiblingConsumerFG, feature_set, set(), PythonDictFramework)
+
+    return SiblingBridgeScenario(producer_s1, producer_s2, join_step, consumer_step, graph)
+
+
+def test_join_served_sibling_parent_does_not_bridge_two_unrelated_declared_side_subclasses() -> None:
+    """A join-served parent classed as one declared-side subclass must not silently merge an
+    unrelated sibling subclass's hop into its group; the two hops share no genuine Link."""
+    scenario = _sibling_bridge_scenario()
+
+    with pytest.raises(ValueError, match="two different, unlinked source feature"):
+        ExecutionPlan().add_tfs(
+            [scenario.producer_s1, scenario.producer_s2, scenario.join_step, scenario.consumer_step],
+            scenario.graph,
+        )

@@ -720,6 +720,23 @@ Available join types:
                 parent_parents.update(parent_parent)
         return parent_parents
 
+    @staticmethod
+    def _validate_join_step_uuids(
+        link: Link,
+        destination_framework_uuids: set[UUID],
+        source_framework_uuids: set[UUID],
+    ) -> None:
+        """Both JoinStep sides must name at least one parent; the runtime later reads
+        them with next(iter(...))."""
+        if not destination_framework_uuids or not source_framework_uuids:
+            raise ValueError(
+                internal_invariant_error(
+                    "run_link resolved an empty destination_framework_uuids or source_framework_uuids.",
+                    f"link={link}, destination_framework_uuids={destination_framework_uuids}, "
+                    f"source_framework_uuids={source_framework_uuids}",
+                )
+            )
+
     def run_link(
         self,
         link_fw: LinkFrameworkTrekker,
@@ -897,6 +914,7 @@ Available join types:
         destination_uuids, source_uuids = (
             (join_uuids_right, join_uuids_left) if side is JoinSide.RIGHT else (join_uuids_left, join_uuids_right)
         )
+        self._validate_join_step_uuids(link, set(destination_uuids), set(source_uuids))
 
         record = ResolvedJoin(
             link_uuid=link.uuid,

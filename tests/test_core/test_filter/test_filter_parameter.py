@@ -264,9 +264,8 @@ def test_parameter_sorting_is_consistent() -> None:
 
 # --- Collection value normalization tests (see issue #664) ---
 #
-# Contract: collection values are stored hashable in `_raw` (list/tuple as tuple, set/frozenset as
-# frozenset), but the public `values` property returns a `list`, matching its declared type. Scalars
-# must never be exploded.
+# Contract: collection values are stored hashable in `_raw` (tuple or frozenset), but the public
+# `values` property returns a `list`, matching its declared type. Scalars must never be exploded.
 
 
 def test_from_dict_with_list_values_normalizes_raw_to_tuple() -> None:
@@ -295,11 +294,7 @@ def test_values_property_returns_list_for_set_input() -> None:
 
 
 def test_values_property_is_deterministically_ordered_for_set_input() -> None:
-    """Test the public list order does not depend on the set's hash-seed iteration order.
-
-    A frozenset's own iteration order varies with PYTHONHASHSEED, so `values` must not hand it
-    out directly; it re-sorts by repr, matching the order the prior tuple-based storage produced.
-    """
+    """Test the public list order does not depend on the set's hash-seed iteration order."""
     params: dict[str, Any] = {"values": {5, 3, 40, 1, 22}}
     filter_param = FilterParameterImpl.from_dict(params)
 
@@ -332,6 +327,14 @@ def test_homogeneous_set_values_still_deduplicate_regardless_of_insertion_order(
     assert first == second
     assert hash(first) == hash(second)
     assert len({first, second}) == 1
+
+
+def test_set_and_list_values_no_longer_alias() -> None:
+    """Set stores as frozenset, list as tuple: same elements, no longer equal (was repr-sort luck)."""
+    from_set = FilterParameterImpl.from_dict({"values": {"EU", "NA"}})
+    from_list = FilterParameterImpl.from_dict({"values": ["EU", "NA"]})
+
+    assert from_set != from_list
 
 
 def test_values_property_returns_list_for_tuple_input() -> None:

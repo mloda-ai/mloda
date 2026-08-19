@@ -364,7 +364,7 @@ class TestPrepareExecuteStep:
         step.compute_framework.get_class_name.return_value = "TestCFW"
 
         existing_uuid = uuid4()
-        cfw_register.get_cfw_uuid.return_value = existing_uuid
+        cfw_register.get_unique_cfw_uuid.return_value = existing_uuid
 
         result = executor.prepare_execute_step(step, ParallelizationMode.SYNC)
 
@@ -378,6 +378,7 @@ class TestPrepareExecuteStep:
 
         step = Mock(spec=FeatureGroupStep)
         step.tfs_ids = [uuid4()]
+        cfw_register.get_unique_cfw_uuid.return_value = None
         cfw_register.get_cfw_uuid.return_value = None
 
         feature_uuid = uuid4()
@@ -409,6 +410,8 @@ class TestPrepareExecuteStep:
         step.tfs_ids = []
         step.features = Mock()
         step.features.any_uuid = None
+        step.compute_framework = Mock()
+        cfw_register.get_unique_cfw_uuid.return_value = None
 
         with pytest.raises(ValueError, match="from_feature_uuid should not be none"):
             executor.prepare_execute_step(step, ParallelizationMode.SYNC)
@@ -673,6 +676,7 @@ class TestSyncExecuteStep:
         step.compute_framework.get_class_name.return_value = "TestCFW"
 
         cfw_uuid = uuid4()
+        cfw_register.get_unique_cfw_uuid.return_value = None
         cfw_register.get_cfw_uuid.return_value = cfw_uuid
 
         mock_cfw = Mock(spec=ComputeFramework)
@@ -699,6 +703,7 @@ class TestSyncExecuteStep:
         step.step_is_done = False
 
         cfw_uuid = uuid4()
+        cfw_register.get_unique_cfw_uuid.return_value = None
         cfw_register.get_cfw_uuid.return_value = cfw_uuid
 
         mock_cfw = Mock(spec=ComputeFramework)
@@ -723,6 +728,7 @@ class TestSyncExecuteStep:
         step.compute_framework.get_class_name.return_value = "TestCFW"
 
         cfw_uuid = uuid4()
+        cfw_register.get_unique_cfw_uuid.return_value = None
         cfw_register.get_cfw_uuid.return_value = cfw_uuid
 
         mock_cfw = Mock(spec=ComputeFramework)
@@ -757,6 +763,7 @@ class TestThreadExecuteStep:
         step.compute_framework.get_class_name.return_value = "TestCFW"
 
         cfw_uuid = uuid4()
+        cfw_register.get_unique_cfw_uuid.return_value = None
         cfw_register.get_cfw_uuid.return_value = cfw_uuid
 
         mock_cfw = Mock(spec=ComputeFramework)
@@ -785,6 +792,7 @@ class TestThreadExecuteStep:
         step.compute_framework.get_class_name.return_value = "TestCFW"
 
         cfw_uuid = uuid4()
+        cfw_register.get_unique_cfw_uuid.return_value = None
         cfw_register.get_cfw_uuid.return_value = cfw_uuid
 
         mock_cfw = Mock(spec=ComputeFramework)
@@ -814,6 +822,7 @@ class TestThreadExecuteStep:
         step.compute_framework.get_class_name.return_value = "TestCFW"
 
         cfw_uuid = uuid4()
+        cfw_register.get_unique_cfw_uuid.return_value = None
         cfw_register.get_cfw_uuid.return_value = cfw_uuid
 
         mock_cfw = Mock(spec=ComputeFramework)
@@ -848,6 +857,7 @@ class TestMultiExecuteStep:
         step.get_uuids.return_value = {uuid4()}
 
         cfw_uuid = uuid4()
+        cfw_register.get_unique_cfw_uuid.return_value = None
         cfw_register.get_cfw_uuid.return_value = cfw_uuid
 
         mock_cfw = Mock(spec=ComputeFramework)
@@ -879,6 +889,7 @@ class TestMultiExecuteStep:
         step.get_uuids.return_value = {uuid4()}
 
         cfw_uuid = uuid4()
+        cfw_register.get_unique_cfw_uuid.return_value = None
         cfw_register.get_cfw_uuid.return_value = cfw_uuid
 
         mock_cfw = Mock(spec=ComputeFramework)
@@ -946,6 +957,7 @@ class TestMultiExecuteStep:
         step.get_uuids.return_value = {uuid4()}
 
         cfw_uuid = uuid4()
+        cfw_register.get_unique_cfw_uuid.return_value = None
         cfw_register.get_cfw_uuid.return_value = cfw_uuid
 
         mock_cfw = Mock(spec=ComputeFramework)

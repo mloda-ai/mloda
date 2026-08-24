@@ -1,6 +1,7 @@
 import os
 from typing import Any
 import logging
+from fnmatch import fnmatch
 
 from mloda.provider import FeatureGroup
 from mloda.provider import FeatureSet
@@ -103,10 +104,11 @@ class ListDirectoryFeatureGroup(FeatureGroup):
         """Checks if a file/directory should be ignored based on .gitignore patterns."""
         for pattern in ignore_patterns:
             if pattern.endswith("/"):  # Directory exclusion
-                if file_path.startswith(pattern.rstrip("/")):
+                dir_pattern = pattern.rstrip("/")
+                if file_path == dir_pattern or file_path.startswith(dir_pattern + "/"):
                     return True
-            elif "*" in pattern:  # Basic wildcard support (e.g., *.log)
-                if file_path.endswith(pattern.lstrip("*")):
+            elif "*" in pattern:  # Wildcard support (e.g., *.log, temp*, logs/*)
+                if fnmatch(file_path, pattern):
                     return True
             elif file_path == pattern:  # Exact file/directory match
                 return True

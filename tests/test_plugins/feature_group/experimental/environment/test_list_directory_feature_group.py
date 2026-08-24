@@ -33,3 +33,21 @@ def test_list_directory_feature_group_mlodaAPI() -> None:
         assert "__init__.py" not in res[ListDirectoryFeatureGroup.get_class_name()].values[0]
     assert len(result) == 1
     assert ListDirectoryFeatureGroup.get_class_name() in result[0]
+
+
+def test_is_ignored_directory_pattern_respects_segment_boundary() -> None:
+    # A directory pattern must match the directory itself and its contents,
+    # but not unrelated paths that merely share a prefix.
+    assert ListDirectoryFeatureGroup._is_ignored("build_tools/x.py", {"build/"}) is False
+    assert ListDirectoryFeatureGroup._is_ignored("build", {"build/"}) is True
+    assert ListDirectoryFeatureGroup._is_ignored("build/out.txt", {"build/"}) is True
+    assert ListDirectoryFeatureGroup._is_ignored("build/sub/out.txt", {"build/"}) is True
+
+
+def test_is_ignored_wildcard_patterns() -> None:
+    assert ListDirectoryFeatureGroup._is_ignored("debug.log", {"*.log"}) is True
+    assert ListDirectoryFeatureGroup._is_ignored("debug.txt", {"*.log"}) is False
+    assert ListDirectoryFeatureGroup._is_ignored("temp.txt", {"temp*"}) is True
+    assert ListDirectoryFeatureGroup._is_ignored("keep.txt", {"temp*"}) is False
+    assert ListDirectoryFeatureGroup._is_ignored("logs/app.log", {"logs/*"}) is True
+    assert ListDirectoryFeatureGroup._is_ignored("other/app.log", {"logs/*"}) is False

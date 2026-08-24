@@ -1,3 +1,6 @@
+import subprocess  # nosec
+
+import pytest
 from mloda.user import Feature
 from mloda.provider import FeatureSet
 from mloda_plugins.feature_group.experimental.environment.installed_packages_feature_group import (
@@ -19,3 +22,17 @@ def test_installed_packages_feature_group_mlodaAPI() -> None:
     result = mloda.run_all(features, compute_frameworks={PandasDataFrame})
     assert len(result) == 1
     assert InstalledPackagesFeatureGroup.get_class_name() in result[0]
+
+
+def test_installed_packages_feature_group_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    def raise_called_process_error(*args: object, **kwargs: object) -> object:
+        raise subprocess.CalledProcessError(1, "pip freeze")
+
+    monkeypatch.setattr(subprocess, "run", raise_called_process_error)
+    feature_set = FeatureSet()
+    result = InstalledPackagesFeatureGroup.calculate_feature(None, feature_set)
+    assert result == {
+        InstalledPackagesFeatureGroup.get_class_name(): [
+            "Command 'pip freeze' failed with return code 1. Error output: None"
+        ]
+    }

@@ -108,7 +108,7 @@ class InstalledPackagesFeatureGroup(FeatureGroup):
             return {cls.get_class_name(): [packages]}
         except subprocess.CalledProcessError as e:
             error_message = f"Command '{e.cmd}' failed with return code {e.returncode}. Error output: {e.stderr}"
-            return {"error": error_message}
+            return {cls.get_class_name(): [error_message]}
 
     @classmethod
     def compute_framework_rule(cls) -> set[type[ComputeFramework]]:

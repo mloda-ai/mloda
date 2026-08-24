@@ -1,3 +1,4 @@
+import fnmatch
 import os
 from typing import Any
 import logging
@@ -103,10 +104,11 @@ class ListDirectoryFeatureGroup(FeatureGroup):
         """Checks if a file/directory should be ignored based on .gitignore patterns."""
         for pattern in ignore_patterns:
             if pattern.endswith("/"):  # Directory exclusion
-                if file_path.startswith(pattern.rstrip("/")):
+                base = pattern.rstrip("/")
+                if file_path == base or file_path.startswith(base + "/"):
                     return True
-            elif "*" in pattern:  # Basic wildcard support (e.g., *.log)
-                if file_path.endswith(pattern.lstrip("*")):
+            elif "*" in pattern:  # Wildcard support (e.g., *.log, temp*, logs/*)
+                if fnmatch.fnmatch(file_path, pattern):
                     return True
             elif file_path == pattern:  # Exact file/directory match
                 return True

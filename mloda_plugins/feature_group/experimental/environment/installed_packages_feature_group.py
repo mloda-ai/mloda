@@ -91,7 +91,8 @@ class InstalledPackagesFeatureGroup(FeatureGroup):
     - Uses `subprocess.run()` to execute `pip freeze`
     - Captures stdout as text
     - Returns packages as a single string in a list (DataFrame-compatible)
-    - On error, returns error message dictionary
+    - On error, returns the error message in that same column, so the output shape
+      does not change between the success and failure paths
 
     ## Security Considerations
 
@@ -108,7 +109,7 @@ class InstalledPackagesFeatureGroup(FeatureGroup):
             return {cls.get_class_name(): [packages]}
         except subprocess.CalledProcessError as e:
             error_message = f"Command '{e.cmd}' failed with return code {e.returncode}. Error output: {e.stderr}"
-            return {"error": error_message}
+            return {cls.get_class_name(): [error_message]}
 
     @classmethod
     def compute_framework_rule(cls) -> set[type[ComputeFramework]]:

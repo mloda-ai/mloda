@@ -69,6 +69,8 @@ def feature_set_multiple() -> FeatureSet:
     feature_set.add(Feature("price__avg_aggr"))
     feature_set.add(Feature("discount__min_aggr"))
     feature_set.add(Feature("customer_rating__max_aggr"))
+    feature_set.add(Feature("quantity__count_aggr"))
+    feature_set.add(Feature("discount__median_aggr"))
     return feature_set
 
 
@@ -81,6 +83,8 @@ class TestAggregatedFeatureGroup:
         assert AggregatedFeatureGroup.get_aggregation_type("quantity__min_aggr") == "min"
         assert AggregatedFeatureGroup.get_aggregation_type("price__max_aggr") == "max"
         assert AggregatedFeatureGroup.get_aggregation_type("discount__avg_aggr") == "avg"
+        assert AggregatedFeatureGroup.get_aggregation_type("quantity__count_aggr") == "count"
+        assert AggregatedFeatureGroup.get_aggregation_type("discount__median_aggr") == "median"
 
         # Test with invalid feature names
         with pytest.raises(ValueError):
@@ -117,6 +121,10 @@ class TestAggregatedFeatureGroup:
         assert AggregatedFeatureGroup.match_feature_group_criteria("quantity__min_aggr", options)
         assert AggregatedFeatureGroup.match_feature_group_criteria("price__max_aggr", options)
         assert AggregatedFeatureGroup.match_feature_group_criteria("discount__avg_aggr", options)
+        assert AggregatedFeatureGroup.match_feature_group_criteria("quantity__count_aggr", options)
+        assert AggregatedFeatureGroup.match_feature_group_criteria("discount__median_aggr", options)
+        assert AggregatedFeatureGroup.match_feature_group_criteria("sales__std_aggr", options)
+        assert AggregatedFeatureGroup.match_feature_group_criteria("sales__var_aggr", options)
 
         # Test with FeatureName objects
         assert AggregatedFeatureGroup.match_feature_group_criteria(FeatureName("sales__sum_aggr"), options)
@@ -143,6 +151,12 @@ class TestAggregatedFeatureGroup:
         assert input_features == {Feature("price")}
 
         input_features = feature_group.input_features(options, FeatureName("discount__avg_aggr"))
+        assert input_features == {Feature("discount")}
+
+        input_features = feature_group.input_features(options, FeatureName("quantity__count_aggr"))
+        assert input_features == {Feature("quantity")}
+
+        input_features = feature_group.input_features(options, FeatureName("discount__median_aggr"))
         assert input_features == {Feature("discount")}
 
 
@@ -235,6 +249,12 @@ class TestPandasAggregatedFeatureGroup:
         assert "customer_rating__max_aggr" in result.columns
         assert result["customer_rating__max_aggr"].iloc[0] == 5  # Max of [4, 5, 3, 4, 5]
 
+        assert "quantity__count_aggr" in result.columns
+        assert result["quantity__count_aggr"].iloc[0] == 5  # Count of [10, 20, 30, 40, 50]
+
+        assert "discount__median_aggr" in result.columns
+        assert result["discount__median_aggr"].iloc[0] == 0.15  # Median of [0.1, 0.2, 0.15, 0.25, 0.1]
+
         # Check that the original data is preserved
         assert "sales" in result.columns
         assert "quantity" in result.columns
@@ -286,6 +306,10 @@ class TestAggPandasIntegration:
                 "price__avg_aggr",
                 "discount__min_aggr",
                 "customer_rating__max_aggr",
+                "quantity__count_aggr",
+                "discount__median_aggr",
+                # "sales__std_aggr",
+                # "sales__var_aggr",
             ],
             compute_frameworks={PandasDataFrame},
             plugin_collector=plugin_collector,

@@ -196,6 +196,16 @@ class TestFeatureOptionsHelper:
         assert Extender.feature_options(({"col": [1]}, empty_feature_set)) is None
 
 
+class TestHookContextExport:
+    """HookContext (issue #572 delivery seam) must be re-exported from mloda.steward."""
+
+    def test_hook_context_is_exported_and_same_object(self) -> None:
+        from mloda.steward import HookContext
+        import mloda.core.abstract_plugins.hook_context as hook_context_module
+
+        assert HookContext is hook_context_module.HookContext
+
+
 class TestCompositeExtenderNamePropagation:
     """Regression: every extender in a composite chain must see the real feature group name.
 

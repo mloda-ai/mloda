@@ -21,6 +21,7 @@ from mloda.core.abstract_plugins.function_extender import (
     Extender,
     ExtenderHook,
 )
+from mloda.core.abstract_plugins.hook_context import HookContext
 
 # Plugin registry administration
 from mloda.core.abstract_plugins.plugin_registry.plugin_registry import PluginRegistry
@@ -60,6 +61,7 @@ __all__ = [
     # Function extenders
     "Extender",
     "ExtenderHook",
+    "HookContext",
     # Plugin registry administration
     "PluginRegistry",
     # Plugin governance

@@ -84,6 +84,25 @@ class MetricsExtender(Extender):
 
 Only the extender's own failure is caught: an exception raised by the wrapped function (or by a downstream breaking extender) always propagates, and the wrapped function is never run twice. Concrete extenders can also expose the flag as a constructor argument (for example `OtelExtender(raise_on_error=True)`) to let callers opt back into breaking behavior.
 
-#### 5. Discovering Extenders
+#### 6. Reading call facts via HookContext
+
+`HookContext.current()` returns the `HookContext` active for the hook currently being dispatched (available on `FEATURE_GROUP_CALCULATE_FEATURE`, `VALIDATE_INPUT_FEATURE`, `VALIDATE_OUTPUT_FEATURE`), or `None` outside a hook call. It replaces re-deriving facts from `func`/`args`/`kwargs`: which hook fired, the feature group's `module.qualname` and `version()`, the owning plugin's installed distribution version, the requested feature names, best-effort declared input feature names, the compute framework's class name, and rows in (via `__len__`, `None` for a lazy/streaming framework that doesn't materialize a length). Read it *after* calling `func(*args, **kwargs)` inside your own `__call__` to also see `rows_out`, `duration_seconds`, and `status` (`"success"`/`"error"`), which are only known once the wrapped call has returned. `run_id`, `data_access_identity`, `tenant_id`, and `principal` exist on the object but are always `None` today; they populate once the corresponding core seams land.
+
+```python
+from mloda.steward import Extender, ExtenderHook, HookContext
+
+class FactsExtender(Extender):
+    def wraps(self) -> Set[ExtenderHook]:
+        return {ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE}
+
+    def __call__(self, func: Any, *args: Any, **kwargs: Any) -> Any:
+        result = func(*args, **kwargs)
+        context = HookContext.current()
+        if context is not None:
+            logger.info(f"{context.feature_group_class}: {context.duration_seconds}s, {context.rows_out} rows out")
+        return result
+```
+
+#### 7. Discovering Extenders
 
 To list all available extenders and their documentation, use the `get_extender_docs()` function from `mloda.steward`.

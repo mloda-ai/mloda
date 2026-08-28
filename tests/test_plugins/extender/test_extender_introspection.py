@@ -197,7 +197,7 @@ class TestFeatureOptionsHelper:
 
 
 class TestHookContextExport:
-    """HookContext (issue #572 delivery seam) must be re-exported from mloda.steward."""
+    """HookContext must be re-exported from mloda.steward."""
 
     def test_hook_context_is_exported_and_same_object(self) -> None:
         from mloda.steward import HookContext

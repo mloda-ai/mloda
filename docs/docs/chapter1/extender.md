@@ -86,7 +86,9 @@ Only the extender's own failure is caught: an exception raised by the wrapped fu
 
 #### 6. Reading call facts via HookContext
 
-`HookContext.current()` returns the `HookContext` active for the hook currently being dispatched (available on `FEATURE_GROUP_CALCULATE_FEATURE`, `VALIDATE_INPUT_FEATURE`, `VALIDATE_OUTPUT_FEATURE`), or `None` outside a hook call. It replaces re-deriving facts from `func`/`args`/`kwargs`: which hook fired, the feature group's `module.qualname` and `version()`, the owning plugin's installed distribution version, the requested feature names, best-effort declared input feature names, the compute framework's class name, and rows in (via `__len__`, `None` for a lazy/streaming framework that doesn't materialize a length). Read it *after* calling `func(*args, **kwargs)` inside your own `__call__` to also see `rows_out`, `duration_seconds`, and `status` (`"success"`/`"error"`), which are only known once the wrapped call has returned. `run_id`, `data_access_identity`, `tenant_id`, and `principal` exist on the object but are always `None` today; they populate once the corresponding core seams land.
+`HookContext.current()` returns the `HookContext` active for the hook currently being dispatched (`FEATURE_GROUP_CALCULATE_FEATURE`, `VALIDATE_INPUT_FEATURE`, `VALIDATE_OUTPUT_FEATURE`), or `None` outside a hook call. It carries which hook fired, the feature group's `module.qualname` and `version()`, the owning plugin's installed distribution version, the requested feature names, best-effort declared input feature names, the compute framework's class name, and `rows_in` (`None` if the data has no `__len__`).
+
+Read it *after* calling `func(*args, **kwargs)` inside your own `__call__` to also see `rows_out`, `duration_seconds`, and `status` (`"success"`/`"error"`). `run_id`, `data_access_identity`, `tenant_id`, and `principal` are reserved for future use and always `None` today.
 
 ```python
 from mloda.steward import Extender, ExtenderHook, HookContext

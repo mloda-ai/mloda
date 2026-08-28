@@ -1,9 +1,7 @@
 """Tests wiring HookContext through ComputeFramework's three Extender hook call sites.
 
-Exercises the real public API (run_calculate_feature, run_validate_input_features,
-run_validate_output_features) on a concrete PythonDictFramework instance, pinning
-that context-capturing extenders see real per-call facts and that unmodified
-old-style extenders keep working unchanged.
+Exercises run_calculate_feature, run_validate_input_features, and
+run_validate_output_features on a concrete PythonDictFramework instance.
 """
 
 from typing import Any

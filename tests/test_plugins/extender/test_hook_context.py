@@ -1,8 +1,7 @@
 """Tests for HookContext, the delivery seam handed to Extender implementations.
 
 Pins construction, the ambient current()/activate() scope (including nested
-restore), row_count's lazy-safe __len__ gating, and instrument's timing/status
-bookkeeping around a wrapped call.
+restore), row_count's __len__ gating, and instrument's timing/status bookkeeping.
 """
 
 from typing import Any

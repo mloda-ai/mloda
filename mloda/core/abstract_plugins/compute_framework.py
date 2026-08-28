@@ -16,6 +16,8 @@ from mloda.core.abstract_plugins.function_extender import (
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.components.input_data.input_data_descriptor import InputDataDescriptor
 from mloda.core.abstract_plugins.components.parallelization_modes import ParallelizationMode
+from mloda.core.abstract_plugins.hook_context import HookContext, instrument
+from mloda.core.abstract_plugins.plugin_version import resolve_plugin_version
 from mloda.core.filter.filter_engine import BaseFilterEngine
 from mloda.core.abstract_plugins.components.mask.base_mask_engine import BaseMaskEngine
 from mloda.core.optional_dependency import loaded, require
@@ -561,8 +563,11 @@ class ComputeFramework(ABC):
         extender = self.get_function_extender(ExtenderHook.VALIDATE_INPUT_FEATURE)
         if extender is None:
             feature_group.validate_input_features(self.data, features)
-        else:
-            extender(feature_group.validate_input_features, self.data, features)
+            return
+
+        context = self._build_hook_context(ExtenderHook.VALIDATE_INPUT_FEATURE, feature_group, features)
+        with context.activate():
+            extender(instrument(context, feature_group.validate_input_features), self.data, features)
 
     @final
     def run_validate_output_features(self, feature_group: Any, features: Any) -> None:
@@ -589,8 +594,11 @@ class ComputeFramework(ABC):
         extender = self.get_function_extender(ExtenderHook.VALIDATE_OUTPUT_FEATURE)
         if extender is None:
             feature_group.validate_output_features(self.data, features)
-        else:
-            extender(feature_group.validate_output_features, self.data, features)
+            return
+
+        context = self._build_hook_context(ExtenderHook.VALIDATE_OUTPUT_FEATURE, feature_group, features)
+        with context.activate():
+            extender(instrument(context, feature_group.validate_output_features), self.data, features)
 
     @final
     def get_column_names(self) -> set[str]:
@@ -681,6 +689,52 @@ class ComputeFramework(ABC):
         return _CompositeExtender(sorted_extenders, wrapper_function_enum)
 
     @final
+    def _build_hook_context(self, hook: ExtenderHook, feature_group: Any, features: Any) -> HookContext:
+        from mloda.core.abstract_plugins.components.feature_set import FeatureSet
+        from mloda.core.abstract_plugins.components.utils import safe_field
+
+        # feature_group is a class on the real production path; normalize here so a
+        # duck-typed instance (as used by some test doubles) does not blow up below.
+        feature_group_cls: Any = feature_group if isinstance(feature_group, type) else type(feature_group)
+
+        feature_names: tuple[str, ...] = ()
+        input_features: frozenset[str] | None = None
+        if isinstance(features, FeatureSet):
+            feature_names = features.get_all_names()
+            input_features = self._declared_input_feature_names(feature_group_cls, features)
+
+        return HookContext(
+            hook=hook,
+            feature_group_class=f"{feature_group_cls.__module__}.{feature_group_cls.__qualname__}",
+            feature_group_version=safe_field(
+                lambda: feature_group_cls.version(), "unavailable", field="feature_group_version"
+            ),
+            plugin_version=resolve_plugin_version(feature_group_cls.__module__),
+            feature_names=feature_names,
+            input_features=input_features,
+            compute_framework_name=self.get_class_name(),
+            rows_in=HookContext.row_count(self.data),
+        )
+
+    @staticmethod
+    def _declared_input_feature_names(feature_group: Any, features: Any) -> "frozenset[str] | None":
+        from mloda.core.abstract_plugins.components.utils import safe_field
+
+        if features.options is None or features.name_of_one_feature is None:
+            return None
+        instance = feature_group()
+        if instance.is_root(features.options, features.name_of_one_feature):
+            return None
+        declared = safe_field(
+            lambda: instance.input_features(features.options, features.name_of_one_feature),
+            None,
+            field="input_features",
+        )
+        if not declared:
+            return None
+        return frozenset(str(f.name) for f in declared)
+
+    @final
     def run_calculate_feature(self, feature_group: Any, features: Any) -> Any:
         # Local import: feature_set -> feature -> compute_framework would cycle at module level.
         from mloda.core.abstract_plugins.components.feature_set import FeatureSet
@@ -693,7 +747,11 @@ class ComputeFramework(ABC):
         try:
             if extender is None:
                 return feature_group.calculate_feature(self.data, features)
-            return _invoke_extender(extender, feature_group.calculate_feature, self.data, features)
+            context = self._build_hook_context(ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE, feature_group, features)
+            with context.activate():
+                return _invoke_extender(
+                    extender, instrument(context, feature_group.calculate_feature), self.data, features
+                )
         except KeyError as e:
             # Provide helpful error message for missing columns
             self._raise_helpful_missing_column_error(feature_group, e)

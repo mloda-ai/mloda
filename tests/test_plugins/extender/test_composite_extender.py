@@ -574,6 +574,8 @@ class TestSingleExtenderPathHonorsRaiseOnError:
         cf.get_function_extender = ComputeFramework.get_function_extender.__get__(cf)
         cf.run_calculate_feature = ComputeFramework.run_calculate_feature.__get__(cf)
         cf._raise_helpful_missing_column_error = ComputeFramework._raise_helpful_missing_column_error.__get__(cf)
+        cf._build_hook_context = ComputeFramework._build_hook_context.__get__(cf)
+        cf._run_hook = ComputeFramework._run_hook.__get__(cf)
         return cf
 
     def test_single_default_extender_failure_propagates(self) -> None:

@@ -78,6 +78,12 @@ class SqliteFramework(ComputeFramework):
     def _extract_column_names(self, data: Any) -> set[str]:
         return set(data.columns)
 
+    def _row_count(self, data: Any) -> int | None:
+        """A SqliteRelation's __len__ runs a SELECT COUNT(*), a real query; never call it for observability."""
+        if isinstance(data, SqliteRelation):
+            return None
+        return super()._row_count(data)
+
     def _extract_column_dtype(self, data: Any, column_name: str) -> str | None:
         if not hasattr(data, "columns") or column_name not in data.columns:
             return None

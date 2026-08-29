@@ -84,6 +84,27 @@ class MetricsExtender(Extender):
 
 Only the extender's own failure is caught: an exception raised by the wrapped function (or by a downstream breaking extender) always propagates, and the wrapped function is never run twice. Concrete extenders can also expose the flag as a constructor argument (for example `OtelExtender(raise_on_error=True)`) to let callers opt back into breaking behavior.
 
-#### 5. Discovering Extenders
+#### 5. Reading call facts via HookContext
+
+`HookContext.current()` returns the `HookContext` for the hook being dispatched (`FEATURE_GROUP_CALCULATE_FEATURE`, `VALIDATE_INPUT_FEATURE`, `VALIDATE_OUTPUT_FEATURE`), or `None` outside a hook call. It is set only on the thread dispatching the hook: capture it before handing work to another thread, or run that work under `contextvars.copy_context().run`. It carries which hook fired, the feature group's `module.qualname` and `version()`, the owning plugin's installed distribution version, the requested feature names, best-effort declared input feature names, the compute framework's class name, and `rows_in` (`None` when the framework can't report a count without materializing, e.g. a lazy or SQL-backed frame). `rows_in` is the framework's current data, so on `VALIDATE_OUTPUT_FEATURE` it is the freshly calculated output, not the pre-calculation input.
+
+Read it *after* calling `func(*args, **kwargs)` in your own `__call__` to also see `rows_out`, `duration_seconds`, and `status`. `status` reflects only the wrapped call: `"success"` once it returns, `"error"` if it raised; a warning-only extender's own failure does not change it. On `VALIDATE_INPUT_FEATURE`/`VALIDATE_OUTPUT_FEATURE`, `rows_out` stays `None`, since those hooks return no data. `func` is always an instrumentation wrapper around the feature group's method, not the bound classmethod: use `Extender.feature_group_name(func)` or `inspect.unwrap(func)` to reach the original. `run_id`, `data_access_identity`, `tenant_id`, and `principal` are reserved for future use and always `None`.
+
+```python
+from mloda.steward import Extender, ExtenderHook, HookContext
+
+class FactsExtender(Extender):
+    def wraps(self) -> Set[ExtenderHook]:
+        return {ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE}
+
+    def __call__(self, func: Any, *args: Any, **kwargs: Any) -> Any:
+        result = func(*args, **kwargs)
+        context = HookContext.current()
+        if context is not None:
+            logger.info(f"{context.feature_group_class}: {context.duration_seconds}s, {context.rows_out} rows out")
+        return result
+```
+
+#### 6. Discovering Extenders
 
 To list all available extenders and their documentation, use the `get_extender_docs()` function from `mloda.steward`.

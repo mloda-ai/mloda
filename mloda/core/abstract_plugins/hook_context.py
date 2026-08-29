@@ -18,7 +18,7 @@ from mloda.core.abstract_plugins.function_extender import ExtenderHook
 _current_hook_context: ContextVar["HookContext | None"] = ContextVar("_current_hook_context", default=None)
 
 
-@dataclass
+@dataclass(kw_only=True)
 class HookContext:
     """Ambient, per-call context describing an Extender hook invocation."""
 

@@ -36,7 +36,7 @@
 | matplotlib-inline                      | 0.2.2           | BSD-3-Clause                                       |
 | mdurl                                  | 0.1.2           | MIT License                                        |
 | mktestdocs                             | 0.2.5           | MIT                                                |
-| mloda                                  | 0.11.1          | Apache-2.0                                         |
+| mloda                                  | 0.11.2          | Apache-2.0                                         |
 | mmh3                                   | 5.2.1           | MIT License                                        |
 | mypy                                   | 2.1.0           | MIT                                                |
 | mypy_extensions                        | 1.1.0           | MIT                                                |

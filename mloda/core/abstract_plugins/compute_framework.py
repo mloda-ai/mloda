@@ -520,6 +520,12 @@ class ComputeFramework(ABC):
         """
         return None
 
+    def _row_count(self, data: Any) -> int | None:
+        """Best-effort row count for observability. Override when the native type either
+        has no meaningful row-count via __len__, or where __len__ would materialize/query.
+        """
+        return HookContext.row_count(data)
+
     @final
     def set_filter_engine(self, features: Any) -> Any:
         """We set the filter engine of the feature set here.
@@ -567,7 +573,11 @@ class ComputeFramework(ABC):
 
         context = self._build_hook_context(ExtenderHook.VALIDATE_INPUT_FEATURE, feature_group, features)
         with context.activate():
-            extender(instrument(context, feature_group.validate_input_features), self.data, features)
+            extender(
+                instrument(context, feature_group.validate_input_features, row_count=self._row_count),
+                self.data,
+                features,
+            )
 
     @final
     def run_validate_output_features(self, feature_group: Any, features: Any) -> None:
@@ -598,7 +608,11 @@ class ComputeFramework(ABC):
 
         context = self._build_hook_context(ExtenderHook.VALIDATE_OUTPUT_FEATURE, feature_group, features)
         with context.activate():
-            extender(instrument(context, feature_group.validate_output_features), self.data, features)
+            extender(
+                instrument(context, feature_group.validate_output_features, row_count=self._row_count),
+                self.data,
+                features,
+            )
 
     @final
     def get_column_names(self) -> set[str]:
@@ -691,7 +705,7 @@ class ComputeFramework(ABC):
     @final
     def _build_hook_context(self, hook: ExtenderHook, feature_group: Any, features: Any) -> HookContext:
         from mloda.core.abstract_plugins.components.feature_set import FeatureSet
-        from mloda.core.abstract_plugins.components.utils import safe_field
+        from mloda.core.abstract_plugins.components.utils import as_str, safe_field
 
         # feature_group is a class on the real production path; normalize here so a
         # duck-typed instance (as used by some test doubles) does not blow up below.
@@ -701,35 +715,37 @@ class ComputeFramework(ABC):
         input_features: frozenset[str] | None = None
         if isinstance(features, FeatureSet):
             feature_names = features.get_all_names()
-            input_features = self._declared_input_feature_names(feature_group_cls, features)
+            input_features = safe_field(
+                lambda: self._declared_input_feature_names(feature_group_cls, features),
+                None,
+                field="input_features",
+            )
 
         return HookContext(
             hook=hook,
             feature_group_class=f"{feature_group_cls.__module__}.{feature_group_cls.__qualname__}",
             feature_group_version=safe_field(
-                lambda: feature_group_cls.version(), "unavailable", field="feature_group_version"
+                lambda: as_str(feature_group_cls.version()), "unavailable", field="feature_group_version"
             ),
             plugin_version=resolve_plugin_version(feature_group_cls.__module__),
             feature_names=feature_names,
             input_features=input_features,
             compute_framework_name=self.get_class_name(),
-            rows_in=HookContext.row_count(self.data),
+            rows_in=safe_field(lambda: self._row_count(self.data), None, field="rows_in"),
         )
 
     @staticmethod
-    def _declared_input_feature_names(feature_group: Any, features: Any) -> "frozenset[str] | None":
-        from mloda.core.abstract_plugins.components.utils import safe_field
+    @final
+    def _declared_input_feature_names(feature_group: Any, features: Any) -> frozenset[str] | None:
+        """Feature names an instance declares as input, or None for a root feature/unreadable options.
 
+        Callers must guard this with safe_field: a raising constructor or input_features()
+        (e.g. NotImplementedError for a root feature) is not caught here.
+        """
         if features.options is None or features.name_of_one_feature is None:
             return None
         instance = feature_group()
-        if instance.is_root(features.options, features.name_of_one_feature):
-            return None
-        declared = safe_field(
-            lambda: instance.input_features(features.options, features.name_of_one_feature),
-            None,
-            field="input_features",
-        )
+        declared = instance.input_features(features.options, features.name_of_one_feature)
         if not declared:
             return None
         return frozenset(str(f.name) for f in declared)
@@ -750,7 +766,10 @@ class ComputeFramework(ABC):
             context = self._build_hook_context(ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE, feature_group, features)
             with context.activate():
                 return _invoke_extender(
-                    extender, instrument(context, feature_group.calculate_feature), self.data, features
+                    extender,
+                    instrument(context, feature_group.calculate_feature, row_count=self._row_count),
+                    self.data,
+                    features,
                 )
         except KeyError as e:
             # Provide helpful error message for missing columns

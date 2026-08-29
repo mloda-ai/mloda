@@ -9,6 +9,7 @@ from mloda_plugins.compute_framework.base_implementations.python_dict.python_dic
 )
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
+from mloda.core.abstract_plugins.hook_context import HookContext
 from mloda.core.filter.filter_engine import BaseFilterEngine
 from mloda.core.abstract_plugins.components.mask.base_mask_engine import BaseMaskEngine
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_filter_engine import (
@@ -87,6 +88,16 @@ class PythonDictFramework(ComputeFramework):
         column-bearing frame such as ``{"a": []}`` carries a schema and is NOT schema-less.
         """
         return isinstance(data, dict) and not data
+
+    def _row_count(self, data: Any) -> int | None:
+        """Count ROWS (the shared value-list length), not COLUMNS (dict keys). ``{}`` has no
+        columns at all, so it counts as 0 rows, matching every column list's shared length.
+        """
+        if isinstance(data, dict):
+            if not data:
+                return 0
+            return len(next(iter(data.values())))
+        return HookContext.row_count(data)
 
     @staticmethod
     def _column_values(data: Any, column_name: str) -> list[Any]:

@@ -123,6 +123,10 @@ class DuckDBFramework(ComputeFramework):
     def _extract_column_names(self, data: Any) -> set[str]:
         return set(data.columns)
 
+    def _row_count(self, data: Any) -> int | None:
+        """A DuckdbRelation's __len__ runs count_star(), a real query; never call it for observability."""
+        return None
+
     def _extract_column_dtype(self, data: Any, column_name: str) -> str | None:
         if column_name in data.columns:
             dtypes = data.types

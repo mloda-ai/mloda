@@ -4,6 +4,8 @@ Exercises run_calculate_feature, run_validate_input_features, and
 run_validate_output_features on a concrete PythonDictFramework instance.
 """
 
+import functools
+import gc
 from typing import Any
 
 from mloda.core.abstract_plugins.components.feature_set import FeatureSet
@@ -186,3 +188,196 @@ class TestDeclaredInputFeaturesBestEffort:
 
         assert extender.captured is not None
         assert extender.captured.input_features is None
+
+
+class TestObservabilityFailureDoesNotBreakCalculation:
+    """An observability read failing must never fail run_calculate_feature itself (Bug 2)."""
+
+    def test_ctor_requiring_arg_degrades_input_features_to_none(self) -> None:
+        class _CtorRequiresArgFeatureGroup(FeatureGroup):
+            """FeatureGroup whose __init__ requires a positional argument, so zero-arg feature_group() raises."""
+
+            def __init__(self, required: int) -> None:
+                self.required = required
+
+            @classmethod
+            def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+                return [{"value": i} for i in range(3)]
+
+        try:
+            feature_set = _build_feature_set()
+            extender = _ContextCapturingExtender(ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE)
+            cfw = _build_framework({extender})
+
+            result = cfw.run_calculate_feature(_CtorRequiresArgFeatureGroup, feature_set)
+
+            assert result == [{"value": i} for i in range(3)]
+            assert extender.captured is not None
+            assert extender.captured.input_features is None
+        finally:
+            del _CtorRequiresArgFeatureGroup
+            gc.collect()
+
+    def test_version_raising_degrades_to_unavailable_fallback(self) -> None:
+        class _VersionRaisesFeatureGroup(FeatureGroup):
+            """FeatureGroup whose version() classmethod raises."""
+
+            @classmethod
+            def version(cls) -> str:
+                raise RuntimeError("boom")
+
+            @classmethod
+            def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+                return [{"value": i} for i in range(3)]
+
+        try:
+            feature_set = _build_feature_set()
+            extender = _ContextCapturingExtender(ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE)
+            cfw = _build_framework({extender})
+
+            result = cfw.run_calculate_feature(_VersionRaisesFeatureGroup, feature_set)
+
+            assert result == [{"value": i} for i in range(3)]
+            assert extender.captured is not None
+            assert extender.captured.feature_group_version == "unavailable"
+        finally:
+            del _VersionRaisesFeatureGroup
+            gc.collect()
+
+    def test_version_returning_non_str_normalizes_to_unavailable_fallback(self) -> None:
+        class _VersionReturnsIntFeatureGroup(FeatureGroup):
+            """FeatureGroup whose version() classmethod returns a non-str value."""
+
+            @classmethod
+            def version(cls) -> str:
+                return 123  # type: ignore[return-value]
+
+            @classmethod
+            def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+                return [{"value": i} for i in range(3)]
+
+        try:
+            feature_set = _build_feature_set()
+            extender = _ContextCapturingExtender(ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE)
+            cfw = _build_framework({extender})
+
+            result = cfw.run_calculate_feature(_VersionReturnsIntFeatureGroup, feature_set)
+
+            assert result == [{"value": i} for i in range(3)]
+            assert extender.captured is not None
+            assert extender.captured.feature_group_version == "unavailable"
+            assert isinstance(extender.captured.feature_group_version, str)
+        finally:
+            del _VersionReturnsIntFeatureGroup
+            gc.collect()
+
+    def test_rows_in_len_raising_degrades_to_none(self) -> None:
+        class _LenRaisesDouble:
+            """Stand-in whose __len__ raises, simulating an observability row-count read gone wrong."""
+
+            def __len__(self) -> int:
+                raise RuntimeError("len boom")
+
+        try:
+            feature_set = _build_feature_set()
+            extender = _ContextCapturingExtender(ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE)
+            cfw = _build_framework({extender})
+            cfw.data = _LenRaisesDouble()
+
+            result = cfw.run_calculate_feature(_CalcFeatureGroup, feature_set)
+
+            assert result == [{"value": i} for i in range(3)]
+            assert extender.captured is not None
+            assert extender.captured.rows_in is None
+        finally:
+            del _LenRaisesDouble
+            gc.collect()
+
+    def test_rows_out_len_raising_degrades_to_none(self) -> None:
+        class _LenRaisesDouble:
+            """Stand-in whose __len__ raises, simulating an observability row-count read gone wrong."""
+
+            def __len__(self) -> int:
+                raise RuntimeError("len boom")
+
+        class _ReturnsLenRaisesFeatureGroup(FeatureGroup):
+            """Returns a _LenRaisesDouble: the rows_out read must not break a successful calculation."""
+
+            double_factory = _LenRaisesDouble
+
+            @classmethod
+            def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+                return cls.double_factory()
+
+        try:
+            feature_set = _build_feature_set()
+            extender = _ContextCapturingExtender(ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE)
+            cfw = _build_framework({extender})
+
+            result = cfw.run_calculate_feature(_ReturnsLenRaisesFeatureGroup, feature_set)
+
+            assert isinstance(result, _LenRaisesDouble)
+            assert extender.captured is not None
+            assert extender.captured.rows_out is None
+        finally:
+            del _ReturnsLenRaisesFeatureGroup
+            del _LenRaisesDouble
+            gc.collect()
+
+
+class _FeatureGroupNameCapturingExtender(Extender):
+    """Calls Extender.feature_group_name(func) on the func it's handed and records the result."""
+
+    def __init__(self, priority: int = 100) -> None:
+        self.priority = priority
+        self.seen_name: str | None = None
+
+    def wraps(self) -> set[ExtenderHook]:
+        return {ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE}
+
+    def __call__(self, func: Any, *args: Any, **kwargs: Any) -> Any:
+        self.seen_name = Extender.feature_group_name(func)
+        return func(*args, **kwargs)
+
+
+class TestInstrumentPreservesSelfForNameResolution:
+    """instrument's wrapper must carry __self__ so feature_group_name resolves correctly (Bug 4)."""
+
+    def test_feature_group_name_resolves_through_extra_decorator(self) -> None:
+        def _plain_function_no_self(*args: Any, **kwargs: Any) -> Any:
+            """Function with no __self__: the wraps() target of _extra_decorator below."""
+            return None
+
+        def _extra_decorator(func: Any, _target: Any = _plain_function_no_self) -> Any:
+            """Simulates a plugin author's own decorator stacked on top of @classmethod: uses
+            functools.wraps pointing at a plain function with no __self__, so an unwrap chain
+            starting from this wrapper walks past the real bound classmethod to a __self__-less target."""
+
+            @functools.wraps(_target)
+            def wrapper(*args: Any, **kwargs: Any) -> Any:
+                return func(*args, **kwargs)
+
+            return wrapper
+
+        class _DoublyDecoratedFeatureGroup(FeatureGroup):
+            """calculate_feature is @classmethod-wrapped in an extra decorator whose own __wrapped__
+            chain leads elsewhere."""
+
+            @classmethod
+            @_extra_decorator
+            def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+                return [{"value": i} for i in range(3)]
+
+        try:
+            feature_set = _build_feature_set()
+            extender = _FeatureGroupNameCapturingExtender()
+            cfw = _build_framework({extender})
+
+            cfw.run_calculate_feature(_DoublyDecoratedFeatureGroup, feature_set)
+
+            assert extender.seen_name == "_DoublyDecoratedFeatureGroup"
+        finally:
+            del _DoublyDecoratedFeatureGroup
+            del _extra_decorator
+            del _plain_function_no_self
+            gc.collect()

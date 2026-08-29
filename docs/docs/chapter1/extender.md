@@ -84,11 +84,11 @@ class MetricsExtender(Extender):
 
 Only the extender's own failure is caught: an exception raised by the wrapped function (or by a downstream breaking extender) always propagates, and the wrapped function is never run twice. Concrete extenders can also expose the flag as a constructor argument (for example `OtelExtender(raise_on_error=True)`) to let callers opt back into breaking behavior.
 
-#### 6. Reading call facts via HookContext
+#### 5. Reading call facts via HookContext
 
-`HookContext.current()` returns the `HookContext` active for the hook currently being dispatched (`FEATURE_GROUP_CALCULATE_FEATURE`, `VALIDATE_INPUT_FEATURE`, `VALIDATE_OUTPUT_FEATURE`), or `None` outside a hook call. It carries which hook fired, the feature group's `module.qualname` and `version()`, the owning plugin's installed distribution version, the requested feature names, best-effort declared input feature names, the compute framework's class name, and `rows_in` (`None` if the data has no `__len__`).
+`HookContext.current()` returns the `HookContext` active for the hook currently being dispatched (`FEATURE_GROUP_CALCULATE_FEATURE`, `VALIDATE_INPUT_FEATURE`, `VALIDATE_OUTPUT_FEATURE`), or `None` outside a hook call. It carries which hook fired, the feature group's `module.qualname` and `version()`, the owning plugin's installed distribution version, the requested feature names, best-effort declared input feature names, the compute framework's class name, and `rows_in` (`None` when the framework can't report a count without materializing, e.g. a lazy or SQL-backed frame).
 
-Read it *after* calling `func(*args, **kwargs)` inside your own `__call__` to also see `rows_out`, `duration_seconds`, and `status` (`"success"`/`"error"`). `run_id`, `data_access_identity`, `tenant_id`, and `principal` are reserved for future use and always `None` today.
+Read it *after* calling `func(*args, **kwargs)` inside your own `__call__` to also see `rows_out`, `duration_seconds`, and `status`. `status` is `"success"` once the wrapped call returns, `"error"` if it raised (including when a warning-only extender fell back to the wrapped result: the wrapped call itself still succeeded, but the extender's own attempt did not). On `VALIDATE_INPUT_FEATURE`/`VALIDATE_OUTPUT_FEATURE`, `rows_out` stays `None` since those hooks don't return data. `run_id`, `data_access_identity`, `tenant_id`, and `principal` are reserved for future use and always `None` today.
 
 ```python
 from mloda.steward import Extender, ExtenderHook, HookContext
@@ -105,6 +105,6 @@ class FactsExtender(Extender):
         return result
 ```
 
-#### 7. Discovering Extenders
+#### 6. Discovering Extenders
 
 To list all available extenders and their documentation, use the `get_extender_docs()` function from `mloda.steward`.

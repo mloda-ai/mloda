@@ -208,3 +208,34 @@ class TestInstrument:
             wrapped()
 
         assert call_count["n"] == 1
+
+
+class _SelfCarryingFeatureGroup:
+    """FeatureGroup-like class exposing calculate_feature as a bound classmethod."""
+
+    @classmethod
+    def calculate_feature(cls, data: Any) -> Any:
+        return data
+
+
+class TestInstrumentPreservesSelf:
+    """instrument's wrapper must copy __self__ from the wrapped callable when present."""
+
+    def test_wrapper_carries_self_from_bound_classmethod(self) -> None:
+        context = _make_context()
+        bound = _SelfCarryingFeatureGroup.calculate_feature
+
+        wrapped = instrument(context, bound)
+
+        assert hasattr(wrapped, "__self__")
+        assert wrapped.__self__ is bound.__self__  # type: ignore[attr-defined]
+
+    def test_wrapper_has_no_self_for_plain_function_without_one(self) -> None:
+        context = _make_context()
+
+        def plain(x: int) -> int:
+            return x
+
+        wrapped = instrument(context, plain)
+
+        assert not hasattr(wrapped, "__self__")

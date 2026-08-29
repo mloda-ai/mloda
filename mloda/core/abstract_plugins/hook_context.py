@@ -12,6 +12,7 @@ from contextvars import ContextVar
 from dataclasses import dataclass
 from typing import Any
 
+from mloda.core.abstract_plugins.components.utils import safe_field
 from mloda.core.abstract_plugins.function_extender import ExtenderHook
 
 _current_hook_context: ContextVar["HookContext | None"] = ContextVar("_current_hook_context", default=None)
@@ -59,7 +60,11 @@ class HookContext:
             _current_hook_context.reset(token)
 
 
-def instrument(context: HookContext, func: Callable[..., Any]) -> Callable[..., Any]:
+def instrument(
+    context: HookContext,
+    func: Callable[..., Any],
+    row_count: Callable[[Any], int | None] = HookContext.row_count,
+) -> Callable[..., Any]:
     """Wrap func, updating context.status/duration_seconds/rows_out around the call."""
 
     @functools.wraps(func)
@@ -71,7 +76,12 @@ def instrument(context: HookContext, func: Callable[..., Any]) -> Callable[..., 
         finally:
             context.duration_seconds = time.perf_counter() - start
         context.status = "success"
-        context.rows_out = HookContext.row_count(result)
+        context.rows_out = safe_field(lambda: row_count(result), None, field="rows_out")
         return result
+
+    # A plugin author's own decorator stacked on the wrapped classmethod (functools.wraps chain) may
+    # not carry __self__; only copy it when the wrapped callable actually has one (Bug 4).
+    if hasattr(func, "__self__"):
+        wrapper.__self__ = func.__self__  # type: ignore[attr-defined]
 
     return wrapper

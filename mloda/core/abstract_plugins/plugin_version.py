@@ -6,42 +6,47 @@ from collections.abc import Mapping
 
 from mloda.core.abstract_plugins.components.utils import safe_field
 
-_packages_distributions_cache: Mapping[str, list[str]] | None = None
 
-
+@functools.cache
 def _read_distribution(dist_name: str) -> importlib.metadata.Distribution | None:
     return safe_field(lambda: importlib.metadata.distribution(dist_name), None, field="plugin_version")
 
 
-def _distribution_owning(module_name: str, distributions: list[str]) -> str:
-    """Pick the distribution whose file manifest lists module_name; a shared namespace
-    (e.g. "mloda") can map to several distributions, so the first candidate alone is
-    not reliable ownership. Falls back to the first candidate when nothing matches.
-    """
+def _owns_module(entry: str, module_path: str) -> bool:
+    if entry == f"{module_path}/__init__.py":
+        return True
+    prefix = f"{module_path}."
+    return entry.startswith(prefix) and "/" not in entry.removeprefix(prefix)
+
+
+def _distribution_owning(module_name: str, distributions: list[str]) -> str | None:
+    """First distribution whose file manifest lists module_name, else None."""
     module_path = module_name.replace(".", "/")
     for dist_name in distributions:
         dist = _read_distribution(dist_name)
-        files = () if dist is None or dist.files is None else dist.files
-        if any(str(f).removesuffix(".py") == module_path for f in files):
+        files = None if dist is None else safe_field(lambda: dist.files, None)
+        if files is None:
+            continue
+        if any(_owns_module(str(f), module_path) for f in files):
             return dist_name
-    return distributions[0]
+    return None
 
 
+@functools.cache
 def _read_packages_distributions() -> Mapping[str, list[str]]:
     empty: Mapping[str, list[str]] = {}
     return safe_field(lambda: importlib.metadata.packages_distributions(), empty, field="plugin_version")
 
 
-@functools.lru_cache(maxsize=None)
+@functools.cache
 def resolve_plugin_version(module_name: str) -> str | None:
     """Distribution version of the package owning `module_name`, else None."""
-    global _packages_distributions_cache
-    if _packages_distributions_cache is None:
-        _packages_distributions_cache = _read_packages_distributions()
-
-    distributions = _packages_distributions_cache.get(module_name.split(".")[0])
+    distributions = _read_packages_distributions().get(module_name.split(".")[0])
     if not distributions:
         return None
 
-    dist_name = _distribution_owning(module_name, distributions)
+    dist_name = distributions[0] if len(set(distributions)) == 1 else _distribution_owning(module_name, distributions)
+    if dist_name is None:
+        return None
+
     return safe_field(lambda: importlib.metadata.version(dist_name), None, field="plugin_version")

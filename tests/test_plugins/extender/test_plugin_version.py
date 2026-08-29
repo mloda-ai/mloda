@@ -3,12 +3,25 @@ populate HookContext.plugin_version.
 """
 
 import importlib.metadata
+from collections.abc import Iterator
 from typing import Any
 
 import pytest
 
 import mloda.core.abstract_plugins.plugin_version as plugin_version_module
 from mloda.core.abstract_plugins.plugin_version import resolve_plugin_version
+
+
+@pytest.fixture(autouse=True)
+def _clear_plugin_version_caches() -> Iterator[None]:
+    """Reset all module-level caches before and after every test so fakes never leak between tests."""
+    resolve_plugin_version.cache_clear()
+    plugin_version_module._read_packages_distributions.cache_clear()
+    plugin_version_module._read_distribution.cache_clear()
+    yield
+    resolve_plugin_version.cache_clear()
+    plugin_version_module._read_packages_distributions.cache_clear()
+    plugin_version_module._read_distribution.cache_clear()
 
 
 class TestResolvePluginVersion:
@@ -41,11 +54,18 @@ class _FakeDistribution:
         self.files = files
 
 
+class _RaisingFilesDistribution:
+    """Distribution stand-in whose `files` property raises, mimicking a broken metadata read."""
+
+    @property
+    def files(self) -> list[Any] | None:
+        raise TypeError("boom")
+
+
 class TestResolvePluginVersionCaching:
     """resolve_plugin_version must memoize the per-module importlib.metadata read (Bug 3)."""
 
     def test_repeated_calls_for_same_module_read_metadata_once(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        resolve_plugin_version.cache_clear()
         call_count = {"n": 0}
         real_version = importlib.metadata.version
 
@@ -66,7 +86,6 @@ class TestResolvePluginVersionOwnershipResolution:
 
     @staticmethod
     def _install_fake_multi_distribution_namespace(monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setattr(plugin_version_module, "_packages_distributions_cache", None)
         monkeypatch.setattr(
             importlib.metadata,
             "packages_distributions",
@@ -99,12 +118,9 @@ class TestResolvePluginVersionOwnershipResolution:
             "candidate blindly reports the wrong distribution's version."
         )
 
-    def test_falls_back_to_first_candidate_after_attempting_to_match_files(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        """When no distribution's files match (or files is None), fall back to the first
-        candidate's version -- but only after actually attempting the file-based match."""
-        monkeypatch.setattr(plugin_version_module, "_packages_distributions_cache", None)
+    def test_returns_none_when_no_candidate_owns_the_module(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """When no distribution's files match (or files is None), resolve_plugin_version returns None,
+        but only after actually attempting the file-based match against every candidate."""
         monkeypatch.setattr(
             importlib.metadata,
             "packages_distributions",
@@ -130,8 +146,117 @@ class TestResolvePluginVersionOwnershipResolution:
 
         result = resolve_plugin_version("othertop.module_z")
 
-        assert result == "9.0.0-x", "No file matched; must fall back to the first candidate's version, not raise/None."
-        assert distribution_calls, (
-            "resolve_plugin_version must attempt to inspect each candidate's files before "
-            "falling back, not skip straight to distributions[0] as today's uncached code does."
+        assert result is None
+        assert distribution_calls == ["dist-x", "dist-y"], (
+            "resolve_plugin_version must attempt to inspect every candidate's files before "
+            "giving up, not skip straight to a fallback."
         )
+
+
+class TestDistributionOwningManifestMatching:
+    """_distribution_owning recognizes package, plain-module, and extension-module manifest entries."""
+
+    @pytest.mark.parametrize(
+        ("file_entry", "module_name", "expected"),
+        [
+            ("faketop/sub/__init__.py", "faketop.sub", "dist-a"),
+            ("faketop/ext.py", "faketop.ext", "dist-a"),
+            ("faketop/ext.cpython-312-x86_64-linux-gnu.so", "faketop.ext", "dist-a"),
+            ("faketop/ext/__init__.py", "faketop.ext", "dist-a"),
+            ("faketop/ext/other.py", "faketop.ext", None),
+        ],
+    )
+    def test_manifest_entry_ownership(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        file_entry: str,
+        module_name: str,
+        expected: str | None,
+    ) -> None:
+        monkeypatch.setattr(
+            importlib.metadata,
+            "distribution",
+            lambda name: _FakeDistribution([importlib.metadata.PackagePath(file_entry)]),
+        )
+
+        result = plugin_version_module._distribution_owning(module_name, ["dist-a"])
+
+        assert result == expected
+
+
+class TestResolvePluginVersionSingleCandidateSkipsFileManifest:
+    def test_single_candidate_does_not_read_file_manifest(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(
+            importlib.metadata,
+            "packages_distributions",
+            lambda: {"faketop": ["dist-only"]},
+        )
+
+        def must_not_be_called(name: str) -> importlib.metadata.Distribution:
+            raise AssertionError("must not be called")
+
+        monkeypatch.setattr(importlib.metadata, "distribution", must_not_be_called)
+        monkeypatch.setattr(importlib.metadata, "version", lambda name: "3.3.3")
+
+        result = resolve_plugin_version("faketop.whatever")
+
+        assert result == "3.3.3"
+
+
+class TestResolvePluginVersionToleratesBrokenFilesProperty:
+    def test_candidate_with_raising_files_property_is_skipped(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(
+            importlib.metadata,
+            "packages_distributions",
+            lambda: {"faketop": ["dist-bad", "dist-good"]},
+        )
+
+        def fake_distribution(name: str) -> Any:
+            if name == "dist-bad":
+                return _RaisingFilesDistribution()
+            return _FakeDistribution([importlib.metadata.PackagePath("faketop/module_g.py")])
+
+        monkeypatch.setattr(importlib.metadata, "distribution", fake_distribution)
+        monkeypatch.setattr(
+            importlib.metadata,
+            "version",
+            lambda name: {"dist-bad": "0.0.0-bad", "dist-good": "5.0.0-good"}[name],
+        )
+
+        result = resolve_plugin_version("faketop.module_g")
+
+        assert result == "5.0.0-good"
+
+
+class TestReadDistributionCaching:
+    """_read_distribution is cached, so a distribution is read from importlib.metadata at most once."""
+
+    def test_distribution_lookup_cached_across_modules_in_same_namespace(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(
+            importlib.metadata,
+            "packages_distributions",
+            lambda: {"faketop": ["dist-a", "dist-b"]},
+        )
+
+        distribution_calls: list[str] = []
+
+        def fake_distribution(name: str) -> _FakeDistribution:
+            distribution_calls.append(name)
+            files_by_dist = {
+                "dist-a": [importlib.metadata.PackagePath("faketop/module_a.py")],
+                "dist-b": [importlib.metadata.PackagePath("faketop/module_b.py")],
+            }
+            return _FakeDistribution(files_by_dist[name])
+
+        monkeypatch.setattr(importlib.metadata, "distribution", fake_distribution)
+        monkeypatch.setattr(
+            importlib.metadata,
+            "version",
+            lambda name: {"dist-a": "1.0.0-a", "dist-b": "2.0.0-b"}[name],
+        )
+
+        resolve_plugin_version("faketop.module_a")
+        resolve_plugin_version("faketop.module_b")
+
+        assert distribution_calls.count("dist-a") <= 1
+        assert distribution_calls.count("dist-b") <= 1

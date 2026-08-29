@@ -1,5 +1,5 @@
 from abc import ABC
-from collections.abc import Iterable, Sequence
+from collections.abc import Callable, Iterable, Sequence
 from typing import Any, Optional, final
 from uuid import UUID, uuid4
 from mloda.core.abstract_plugins.components.data_types import DataType
@@ -7,6 +7,7 @@ from mloda.core.abstract_plugins.components.framework_transformer.cfw_transforme
     ComputeFrameworkTransformer,
 )
 from mloda.core.abstract_plugins.components.merge.base_merge_engine import BaseMergeEngine
+from mloda.core.abstract_plugins.components.utils import as_str, safe_field
 from mloda.core.abstract_plugins.function_extender import (
     Extender,
     ExtenderHook,
@@ -562,22 +563,26 @@ class ComputeFramework(ABC):
         return features
 
     @final
+    def _run_hook(self, hook: ExtenderHook, feature_group: Any, method: Callable[..., Any], features: Any) -> Any:
+        """Dispatch method through hook's extender (if any), instrumenting the call with a HookContext."""
+        extender = self.get_function_extender(hook)
+        if extender is None:
+            return method(self.data, features)
+
+        context = self._build_hook_context(hook, feature_group, features)
+        with context.activate():
+            return _invoke_extender(
+                extender, instrument(context, method, row_count=self._row_count), self.data, features
+            )
+
+    @final
     def run_validate_input_features(self, feature_group: Any, features: Any) -> None:
         if self.data is None:
             return
 
-        extender = self.get_function_extender(ExtenderHook.VALIDATE_INPUT_FEATURE)
-        if extender is None:
-            feature_group.validate_input_features(self.data, features)
-            return
-
-        context = self._build_hook_context(ExtenderHook.VALIDATE_INPUT_FEATURE, feature_group, features)
-        with context.activate():
-            extender(
-                instrument(context, feature_group.validate_input_features, row_count=self._row_count),
-                self.data,
-                features,
-            )
+        self._run_hook(
+            ExtenderHook.VALIDATE_INPUT_FEATURE, feature_group, feature_group.validate_input_features, features
+        )
 
     @final
     def run_validate_output_features(self, feature_group: Any, features: Any) -> None:
@@ -601,18 +606,9 @@ class ComputeFramework(ABC):
             lambda col_name: self._extract_column_data_type(self.data, col_name),
         )
 
-        extender = self.get_function_extender(ExtenderHook.VALIDATE_OUTPUT_FEATURE)
-        if extender is None:
-            feature_group.validate_output_features(self.data, features)
-            return
-
-        context = self._build_hook_context(ExtenderHook.VALIDATE_OUTPUT_FEATURE, feature_group, features)
-        with context.activate():
-            extender(
-                instrument(context, feature_group.validate_output_features, row_count=self._row_count),
-                self.data,
-                features,
-            )
+        self._run_hook(
+            ExtenderHook.VALIDATE_OUTPUT_FEATURE, feature_group, feature_group.validate_output_features, features
+        )
 
     @final
     def get_column_names(self) -> set[str]:
@@ -705,7 +701,6 @@ class ComputeFramework(ABC):
     @final
     def _build_hook_context(self, hook: ExtenderHook, feature_group: Any, features: Any) -> HookContext:
         from mloda.core.abstract_plugins.components.feature_set import FeatureSet
-        from mloda.core.abstract_plugins.components.utils import as_str, safe_field
 
         # feature_group is a class on the real production path; normalize here so a
         # duck-typed instance (as used by some test doubles) does not blow up below.
@@ -715,18 +710,12 @@ class ComputeFramework(ABC):
         input_features: frozenset[str] | None = None
         if isinstance(features, FeatureSet):
             feature_names = features.get_all_names()
-            input_features = safe_field(
-                lambda: self._declared_input_feature_names(feature_group_cls, features),
-                None,
-                field="input_features",
-            )
+            input_features = self._declared_input_feature_names(feature_group_cls, features)
 
         return HookContext(
             hook=hook,
             feature_group_class=f"{feature_group_cls.__module__}.{feature_group_cls.__qualname__}",
-            feature_group_version=safe_field(
-                lambda: as_str(feature_group_cls.version()), "unavailable", field="feature_group_version"
-            ),
+            feature_group_version=safe_field(lambda: as_str(feature_group_cls.version()), "unavailable"),
             plugin_version=resolve_plugin_version(feature_group_cls.__module__),
             feature_names=feature_names,
             input_features=input_features,
@@ -737,18 +726,35 @@ class ComputeFramework(ABC):
     @staticmethod
     @final
     def _declared_input_feature_names(feature_group: Any, features: Any) -> frozenset[str] | None:
-        """Feature names an instance declares as input, or None for a root feature/unreadable options.
+        """Feature names feature_group declares as input for this step's FeatureSet, resolved once.
 
-        Callers must guard this with safe_field: a raising constructor or input_features()
-        (e.g. NotImplementedError for a root feature) is not caught here.
+        Memoized on the FeatureSet: a root feature group (input_features raising
+        NotImplementedError) or an unreadable options/instance degrades silently to None.
         """
-        if features.options is None or features.name_of_one_feature is None:
-            return None
-        instance = feature_group()
-        declared = instance.input_features(features.options, features.name_of_one_feature)
-        if not declared:
-            return None
-        return frozenset(str(f.name) for f in declared)
+        if features.declared_input_features_resolved:
+            return features.declared_input_feature_names  # type: ignore[no-any-return]
+
+        result: frozenset[str] | None = None
+        if features.options is not None:
+            instance = safe_field(lambda: feature_group(), None)
+            if instance is not None:
+                names: set[str] = set()
+                for feature in features.features:
+
+                    def _read(feature: Any = feature) -> Any:
+                        return instance.input_features(
+                            feature.options if feature.options is not None else features.options, feature.name
+                        )
+
+                    declared = safe_field(_read, None)
+                    if declared:
+                        for entry in declared:
+                            names.add(entry if isinstance(entry, str) else str(entry.name))
+                result = frozenset(names) or None
+
+        features.declared_input_feature_names = result
+        features.declared_input_features_resolved = True
+        return result
 
     @final
     def run_calculate_feature(self, feature_group: Any, features: Any) -> Any:
@@ -758,19 +764,11 @@ class ComputeFramework(ABC):
         # Tests pass non-FeatureSet stand-ins for features; only a real FeatureSet is materialized (#796).
         if isinstance(features, FeatureSet):
             features.materialize_option_defaults(feature_group)
-        extender = self.get_function_extender(ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE)
 
         try:
-            if extender is None:
-                return feature_group.calculate_feature(self.data, features)
-            context = self._build_hook_context(ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE, feature_group, features)
-            with context.activate():
-                return _invoke_extender(
-                    extender,
-                    instrument(context, feature_group.calculate_feature, row_count=self._row_count),
-                    self.data,
-                    features,
-                )
+            return self._run_hook(
+                ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE, feature_group, feature_group.calculate_feature, features
+            )
         except KeyError as e:
             # Provide helpful error message for missing columns
             self._raise_helpful_missing_column_error(feature_group, e)

@@ -80,7 +80,9 @@ class SqliteFramework(ComputeFramework):
 
     def _row_count(self, data: Any) -> int | None:
         """A SqliteRelation's __len__ runs a SELECT COUNT(*), a real query; never call it for observability."""
-        return None
+        if isinstance(data, SqliteRelation):
+            return None
+        return super()._row_count(data)
 
     def _extract_column_dtype(self, data: Any, column_name: str) -> str | None:
         if not hasattr(data, "columns") or column_name not in data.columns:

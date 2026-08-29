@@ -27,6 +27,8 @@ class FeatureSet:
         self.save_artifact: Optional[Any] = None
         self.filter_engine: type[BaseFilterEngine] = BaseFilterEngine
         self.mask_engine: type[BaseMaskEngine] | None = None
+        self.declared_input_feature_names: frozenset[str] | None = None
+        self.declared_input_features_resolved: bool = False
 
         if features is not None:
             for feature in features:

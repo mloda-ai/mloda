@@ -40,14 +40,20 @@ class HookContext:
 
     @staticmethod
     def row_count(data: Any) -> int | None:
-        """Return len(data) when data supports __len__, else None. Never calls len() otherwise."""
-        if hasattr(data, "__len__"):
+        """Return len(data) when the TYPE declares __len__; a dict counts its first column's rows."""
+        if isinstance(data, dict):
+            return 0 if not data else HookContext.row_count(next(iter(data.values())))
+        if callable(getattr(type(data), "__len__", None)):
             return len(data)
         return None
 
     @classmethod
     def current(cls) -> "HookContext | None":
-        """Return the HookContext active in the current activate() scope, else None."""
+        """Return the HookContext active in the current activate() scope, else None.
+
+        Scoped to the thread dispatching the hook: it is a contextvars variable, so it is not
+        visible from another thread unless that thread runs under the same copied context.
+        """
         return _current_hook_context.get()
 
     @contextlib.contextmanager
@@ -70,6 +76,7 @@ def instrument(
     @functools.wraps(func)
     def wrapper(*args: Any, **kwargs: Any) -> Any:
         context.status = "error"
+        context.rows_out = None
         start = time.perf_counter()
         try:
             result = func(*args, **kwargs)

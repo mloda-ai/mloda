@@ -145,3 +145,64 @@ class TestDefaultRowCountDelegatesUnchanged:
 
         assert cf._row_count([1, 2, 3]) == 3
         assert cf._row_count(object()) is None
+
+
+class TestBaseRowCountColumnarDict:
+    """Base ComputeFramework._row_count counts ROWS of a bare columnar dict, not its column count."""
+
+    def test_counts_rows_of_columnar_dict(self) -> None:
+        cf = ComputeFramework()
+
+        assert cf._row_count({"a": [1, 2, 3, 4, 5], "b": [6, 7, 8, 9, 10]}) == 5
+        assert cf._row_count({"a": []}) == 0
+        assert cf._row_count({}) == 0
+        assert cf._row_count([1, 2, 3]) == 3
+        assert cf._row_count(object()) is None
+
+
+class _BaseFrameworkRowCountFeatureGroup(FeatureGroup):
+    """Root feature group returning a 2-column, 5-row dict, run on the base ComputeFramework."""
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return {"a": [1, 2, 3, 4, 5], "b": [6, 7, 8, 9, 10]}
+
+
+class TestBaseComputeFrameworkRowsOutEndToEnd:
+    """Regression: rows_out on the base (unoverridden) ComputeFramework must count rows, not columns."""
+
+    def test_rows_out_counts_rows_not_columns(self) -> None:
+        feature_set = _build_feature_set()
+        extender = _ContextCapturingExtender()
+        cfw = ComputeFramework(
+            mode=ParallelizationMode.SYNC, children_if_root=frozenset(), function_extender={extender}
+        )
+
+        cfw.run_calculate_feature(_BaseFrameworkRowCountFeatureGroup, feature_set)
+
+        captured = extender.captured
+        assert captured is not None
+        assert captured.rows_out == 5
+
+
+@pytest.mark.skipif(duckdb is None, reason="DuckDB is not installed.")
+class TestDuckDBRowCountCountsNonRelationInputs:
+    """DuckDBFramework._row_count must count rows for non-relation inputs, not unconditionally return None."""
+
+    def test_counts_rows_for_pyarrow_table(self) -> None:
+        table = pa.table({"a": [1, 2, 3]})
+        assert DuckDBFramework()._row_count(table) == 3
+
+    def test_counts_rows_for_columnar_dict(self) -> None:
+        assert DuckDBFramework()._row_count({"a": [1, 2, 3]}) == 3
+
+
+class TestSqliteRowCountCountsNonRelationInputs:
+    """SqliteFramework._row_count must count rows for non-relation inputs, not unconditionally return None."""
+
+    def test_counts_rows_for_pyarrow_table(self) -> None:
+        table = pa.table({"a": [1, 2, 3]})
+        assert SqliteFramework()._row_count(table) == 3
+
+    def test_counts_rows_for_columnar_dict(self) -> None:
+        assert SqliteFramework()._row_count({"a": [1, 2, 3]}) == 3

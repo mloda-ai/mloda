@@ -1,9 +1,8 @@
 """Tests for ComputeFramework._row_count, the per-framework row-counting hook used by
 HookContext's rows_in/rows_out.
 
-Pins that PythonDictFramework counts ROWS (not columns), that DuckDB/SQLite relations
-never trigger their expensive __len__ query, and that the default _row_count still
-delegates to HookContext.row_count unchanged.
+Pins that PythonDictFramework counts rows (not columns), DuckDB/SQLite relations never
+trigger __len__, and the default _row_count delegates to HookContext.row_count unchanged.
 """
 
 from typing import Any
@@ -46,7 +45,7 @@ class TestPythonDictRowCount:
         assert fw._row_count({"a": []}) == 0
 
     def test_schemaless_empty_dict(self) -> None:
-        """``{}`` (zero columns, PythonDictFramework's schema-less value) has no data at all: 0 rows."""
+        """``{}`` is PythonDictFramework's schema-less value: 0 rows."""
         fw = PythonDictFramework()
         assert fw._row_count({}) == 0
 
@@ -138,7 +137,7 @@ class TestSqliteRowCountStaysLazy:
 
 
 class TestDefaultRowCountDelegatesUnchanged:
-    """The base (unoverridden) ComputeFramework._row_count behaves like today's HookContext.row_count."""
+    """The base (unoverridden) ComputeFramework._row_count delegates to HookContext.row_count."""
 
     def test_default_row_count_on_sized_and_unsized_objects(self) -> None:
         cf = ComputeFramework()

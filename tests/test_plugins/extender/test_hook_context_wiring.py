@@ -110,9 +110,8 @@ class TestValidateOutputFeatureHookContext:
         feature_set = _build_feature_set()
         extender = _ContextCapturingExtender(ExtenderHook.VALIDATE_OUTPUT_FEATURE)
         cfw = _build_framework({extender})
-        # Preconditions read from the real source: data must not be None, and either no
-        # feature is initial_requested_data (skips the empty-schema guard, as here) or
-        # column_names is populated; features carry no data_type so DataTypeValidator no-ops.
+        # Preconditions: data isn't None; either no feature is initial_requested_data (as here)
+        # or column_names is populated; features carry no data_type so DataTypeValidator no-ops.
         cfw.data = {"col": [1, 2, 3]}
         cfw.set_column_names()
 
@@ -191,7 +190,7 @@ class TestDeclaredInputFeaturesBestEffort:
 
 
 class TestObservabilityFailureDoesNotBreakCalculation:
-    """An observability read failing must never fail run_calculate_feature itself (Bug 2)."""
+    """An observability read failing must never fail run_calculate_feature itself."""
 
     def test_ctor_requiring_arg_degrades_input_features_to_none(self) -> None:
         class _CtorRequiresArgFeatureGroup(FeatureGroup):
@@ -341,7 +340,7 @@ class _FeatureGroupNameCapturingExtender(Extender):
 
 
 class TestInstrumentPreservesSelfForNameResolution:
-    """instrument's wrapper must carry __self__ so feature_group_name resolves correctly (Bug 4)."""
+    """instrument's wrapper must carry __self__ so feature_group_name resolves correctly."""
 
     def test_feature_group_name_resolves_through_extra_decorator(self) -> None:
         def _plain_function_no_self(*args: Any, **kwargs: Any) -> Any:
@@ -349,9 +348,8 @@ class TestInstrumentPreservesSelfForNameResolution:
             return None
 
         def _extra_decorator(func: Any, _target: Any = _plain_function_no_self) -> Any:
-            """Simulates a plugin author's own decorator stacked on top of @classmethod: uses
-            functools.wraps pointing at a plain function with no __self__, so an unwrap chain
-            starting from this wrapper walks past the real bound classmethod to a __self__-less target."""
+            """Simulates a plugin's own decorator stacked on @classmethod, using functools.wraps on a
+            __self__-less function so unwrap walks past the real bound classmethod."""
 
             @functools.wraps(_target)
             def wrapper(*args: Any, **kwargs: Any) -> Any:
@@ -360,8 +358,7 @@ class TestInstrumentPreservesSelfForNameResolution:
             return wrapper
 
         class _DoublyDecoratedFeatureGroup(FeatureGroup):
-            """calculate_feature is @classmethod-wrapped in an extra decorator whose own __wrapped__
-            chain leads elsewhere."""
+            """calculate_feature is wrapped in an extra decorator whose own __wrapped__ chain leads elsewhere."""
 
             @classmethod
             @_extra_decorator

@@ -212,10 +212,7 @@ class TestDeclaredInputsResolvedOncePerStep:
 
 
 class _ValidateInputTrackingFeatureGroup(FeatureGroup):
-    """Module-level (not per-test) so an uncaught exception's traceback never pins it as a registry leak.
-
-    Tracks whether validate_input_features actually executed.
-    """
+    """Module-level to avoid registry-leak tracebacks; tracks whether validate_input_features ran."""
 
     executed = False
 
@@ -229,10 +226,7 @@ class _ValidateInputTrackingFeatureGroup(FeatureGroup):
 
 
 class _ValidateOutputTrackingFeatureGroup(FeatureGroup):
-    """Module-level (not per-test) so an uncaught exception's traceback never pins it as a registry leak.
-
-    Tracks whether validate_output_features actually executed.
-    """
+    """Module-level to avoid registry-leak tracebacks; tracks whether validate_output_features ran."""
 
     executed = False
 

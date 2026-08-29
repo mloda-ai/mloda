@@ -63,7 +63,7 @@ class _RaisingFilesDistribution:
 
 
 class TestResolvePluginVersionCaching:
-    """resolve_plugin_version must memoize the per-module importlib.metadata read (Bug 3)."""
+    """resolve_plugin_version must memoize the per-module importlib.metadata read."""
 
     def test_repeated_calls_for_same_module_read_metadata_once(self, monkeypatch: pytest.MonkeyPatch) -> None:
         call_count = {"n": 0}
@@ -82,7 +82,7 @@ class TestResolvePluginVersionCaching:
 
 
 class TestResolvePluginVersionOwnershipResolution:
-    """A shared namespace owned by multiple distributions must resolve each module correctly (Bug 3)."""
+    """A shared namespace owned by multiple distributions must resolve each module correctly."""
 
     @staticmethod
     def _install_fake_multi_distribution_namespace(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -120,7 +120,7 @@ class TestResolvePluginVersionOwnershipResolution:
 
     def test_returns_none_when_no_candidate_owns_the_module(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """When no distribution's files match (or files is None), resolve_plugin_version returns None,
-        but only after actually attempting the file-based match against every candidate."""
+        but only after attempting the file-based match against every candidate."""
         monkeypatch.setattr(
             importlib.metadata,
             "packages_distributions",

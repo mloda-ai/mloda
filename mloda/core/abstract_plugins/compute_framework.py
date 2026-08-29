@@ -522,9 +522,8 @@ class ComputeFramework(ABC):
         return None
 
     def _row_count(self, data: Any) -> int | None:
-        """Best-effort row count for observability. Override when the native type either
-        has no meaningful row-count via __len__, or where __len__ would materialize/query.
-        """
+        """Best-effort row count for observability; override when __len__ is missing, wrong,
+        or would materialize/query."""
         return HookContext.row_count(data)
 
     @final
@@ -702,8 +701,7 @@ class ComputeFramework(ABC):
     def _build_hook_context(self, hook: ExtenderHook, feature_group: Any, features: Any) -> HookContext:
         from mloda.core.abstract_plugins.components.feature_set import FeatureSet
 
-        # feature_group is a class on the real production path; normalize here so a
-        # duck-typed instance (as used by some test doubles) does not blow up below.
+        # feature_group is a class in production; normalize since test doubles may pass an instance.
         feature_group_cls: Any = feature_group if isinstance(feature_group, type) else type(feature_group)
 
         feature_names: tuple[str, ...] = ()
@@ -726,10 +724,9 @@ class ComputeFramework(ABC):
     @staticmethod
     @final
     def _declared_input_feature_names(feature_group: Any, features: Any) -> frozenset[str] | None:
-        """Feature names feature_group declares as input for this step's FeatureSet, resolved once.
+        """Feature names feature_group declares as input, memoized on the FeatureSet.
 
-        Memoized on the FeatureSet: a root feature group (input_features raising
-        NotImplementedError) or an unreadable options/instance degrades silently to None.
+        A root feature group or an unreadable options/instance degrades silently to None.
         """
         if features.declared_input_features_resolved:
             return features.declared_input_feature_names  # type: ignore[no-any-return]

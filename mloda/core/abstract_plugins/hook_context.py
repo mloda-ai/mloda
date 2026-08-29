@@ -51,8 +51,7 @@ class HookContext:
     def current(cls) -> "HookContext | None":
         """Return the HookContext active in the current activate() scope, else None.
 
-        Scoped to the thread dispatching the hook: it is a contextvars variable, so it is not
-        visible from another thread unless that thread runs under the same copied context.
+        Thread-scoped: a contextvars variable, invisible to another thread unless it shares the copied context.
         """
         return _current_hook_context.get()
 

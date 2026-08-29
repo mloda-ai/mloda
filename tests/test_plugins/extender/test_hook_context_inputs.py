@@ -14,7 +14,7 @@ import pytest
 from mloda.core.abstract_plugins.components.feature_set import FeatureSet
 from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook
 from mloda.core.abstract_plugins.hook_context import HookContext, instrument
-from mloda.provider import FeatureGroup
+from mloda.provider import FeatureGroup, PropertySpec
 from mloda.user import Feature, FeatureName, Options, ParallelizationMode
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
 
@@ -57,6 +57,24 @@ class _AllHooksContextCapturingExtender(Extender):
         context = HookContext.current()
         assert context is not None
         self.captured.append(context)
+        return result
+
+
+class _TwoHookContextCapturingExtender(Extender):
+    """Wraps VALIDATE_INPUT_FEATURE and FEATURE_GROUP_CALCULATE_FEATURE, keyed by hook."""
+
+    def __init__(self, priority: int = 100) -> None:
+        self.priority = priority
+        self.captured_by_hook: dict[ExtenderHook, HookContext] = {}
+
+    def wraps(self) -> set[ExtenderHook]:
+        return {ExtenderHook.VALIDATE_INPUT_FEATURE, ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE}
+
+    def __call__(self, func: Any, *args: Any, **kwargs: Any) -> Any:
+        result = func(*args, **kwargs)
+        context = HookContext.current()
+        assert context is not None
+        self.captured_by_hook[context.hook] = context
         return result
 
 
@@ -169,8 +187,75 @@ class TestBatchedFeatureSetDeclaredInputsUnion:
             gc.collect()
 
 
+class TestDeclaredInputsReresolvedAfterOptionDefaultsMaterialize:
+    """Declared inputs read from options must reflect materialized option defaults, not the pre-materialize memo."""
+
+    def test_input_features_sees_the_materialized_default(self) -> None:
+        class _DeclaredInputRematerializesFeatureGroup(FeatureGroup):
+            """PROPERTY_MAPPING declares a concrete default; input_features requires it materialized."""
+
+            PROPERTY_MAPPING = {"source": PropertySpec("Source column.", context=True, default="default_source")}
+
+            def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Any]]:
+                value = options.get("source")
+                if value is None:
+                    raise ValueError("unmaterialized")
+                return {value}
+
+            @classmethod
+            def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+                return {"col": [1, 2, 3]}
+
+        try:
+            feature_set = FeatureSet([Feature("my_feature")])
+            extender = _TwoHookContextCapturingExtender()
+            cfw = _build_framework({extender})
+            cfw.data = {"col": [1, 2, 3]}
+
+            cfw.run_validate_input_features(_DeclaredInputRematerializesFeatureGroup, feature_set)
+            cfw.run_calculate_feature(_DeclaredInputRematerializesFeatureGroup, feature_set)
+
+            captured = extender.captured_by_hook[ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE]
+            assert captured.input_features == frozenset({"default_source"})
+        finally:
+            del _DeclaredInputRematerializesFeatureGroup
+            gc.collect()
+
+
+class TestFeatureNamesAndInputFeaturesArePlainStr:
+    """feature_names and input_features must hold plain str, never FeatureName subclass instances."""
+
+    def test_feature_names_and_input_features_hold_plain_str(self) -> None:
+        class _StrTypedFeatureNamesFeatureGroup(FeatureGroup):
+            """input_features declares a Feature object, not a plain str."""
+
+            def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Any]]:
+                return {Feature("src")}
+
+            @classmethod
+            def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+                return {"col": [1, 2, 3]}
+
+        try:
+            feature_set = FeatureSet([Feature("a"), Feature("b")])
+            extender = _ContextCapturingExtender(ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE)
+            cfw = _build_framework({extender})
+
+            cfw.run_calculate_feature(_StrTypedFeatureNamesFeatureGroup, feature_set)
+
+            assert extender.captured is not None
+            assert extender.captured.feature_names == ("a", "b")
+            assert all(type(n) is str for n in extender.captured.feature_names)
+            assert extender.captured.input_features is not None
+            assert all(type(n) is str for n in extender.captured.input_features)
+        finally:
+            del _StrTypedFeatureNamesFeatureGroup
+            gc.collect()
+
+
 class TestDeclaredInputsResolvedOncePerStep:
-    """input_features and __init__ resolve exactly once per step, not once per hook site."""
+    """input_features and __init__ resolve at most twice per step: once per hook site, refreshed once after
+    option defaults materialize."""
 
     def test_input_features_and_init_called_once_across_the_step(self) -> None:
         class _CountingFeatureGroup(FeatureGroup):
@@ -201,7 +286,7 @@ class TestDeclaredInputsResolvedOncePerStep:
             cfw.run_calculate_feature(_CountingFeatureGroup, feature_set)
             cfw.run_validate_output_features(_CountingFeatureGroup, feature_set)
 
-            assert _CountingFeatureGroup.input_features_calls == 1
+            assert _CountingFeatureGroup.input_features_calls <= 2
             assert _CountingFeatureGroup.init_calls == 1
             assert len(extender.captured) == 3
             for context in extender.captured:
@@ -266,6 +351,45 @@ class TestWarningOnlyExtenderOnValidateHooksDoesNotBreakRun:
         assert _ValidateOutputTrackingFeatureGroup.executed is True
 
 
+class TestValidateHooksRowsOutStaysNone:
+    """rows_out must stay None on the validate hooks, even when the validator returns a sized value."""
+
+    def test_rows_out_none_for_sized_validate_return_values(self) -> None:
+        class _SizedValidateReturnFeatureGroup(FeatureGroup):
+            """validate_input_features/validate_output_features return sized lists."""
+
+            @classmethod
+            def validate_input_features(cls, data: Any, features: FeatureSet) -> Any:
+                return ["e1", "e2", "e3"]
+
+            @classmethod
+            def validate_output_features(cls, data: Any, features: FeatureSet) -> Any:
+                return ["e1", "e2", "e3"]
+
+            @classmethod
+            def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+                return {"col": [1, 2, 3]}
+
+        try:
+            feature_set = _build_feature_set()
+            input_extender = _ContextCapturingExtender(ExtenderHook.VALIDATE_INPUT_FEATURE)
+            output_extender = _ContextCapturingExtender(ExtenderHook.VALIDATE_OUTPUT_FEATURE)
+            cfw = _build_framework({input_extender, output_extender})
+            cfw.data = {"col": [1, 2, 3]}
+            cfw.set_column_names()
+
+            cfw.run_validate_input_features(_SizedValidateReturnFeatureGroup, feature_set)
+            cfw.run_validate_output_features(_SizedValidateReturnFeatureGroup, feature_set)
+
+            assert input_extender.captured is not None
+            assert input_extender.captured.rows_out is None
+            assert output_extender.captured is not None
+            assert output_extender.captured.rows_out is None
+        finally:
+            del _SizedValidateReturnFeatureGroup
+            gc.collect()
+
+
 class _NoLenGetattrRecordingDouble:
     """No __len__; a custom __getattr__ that records every name it's asked for and always raises."""
 
@@ -301,6 +425,42 @@ class TestRowCountNeverTriggersInstanceGetattr:
         result = HookContext.row_count(double)
 
         assert result is None
+
+
+class _LenRaisesRuntimeError:
+    """Sized-looking double whose __len__ always raises, to probe silent row-count degradation."""
+
+    def __len__(self) -> int:
+        raise RuntimeError("row count unavailable")
+
+
+class TestRowsInOutDegradeSilentlyOnLenRaising:
+    """rows_in/rows_out must degrade to None without a WARNING when __len__ raises."""
+
+    def test_len_raising_degrades_without_warning(self, caplog: pytest.LogCaptureFixture) -> None:
+        class _RootReturnsLenRaisingFeatureGroup(FeatureGroup):
+            """Root feature group; calculate_feature returns a __len__-raising double."""
+
+            @classmethod
+            def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+                return _LenRaisesRuntimeError()
+
+        try:
+            feature_set = _build_feature_set()
+            extender = _ContextCapturingExtender(ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE)
+            cfw = _build_framework({extender})
+            cfw.data = _LenRaisesRuntimeError()
+
+            with caplog.at_level(logging.WARNING, logger=_UTILS_LOGGER):
+                cfw.run_calculate_feature(_RootReturnsLenRaisingFeatureGroup, feature_set)
+
+            assert extender.captured is not None
+            assert not any("Degraded field" in record.message for record in caplog.records)
+            assert extender.captured.rows_in is None
+            assert extender.captured.rows_out is None
+        finally:
+            del _RootReturnsLenRaisingFeatureGroup
+            gc.collect()
 
 
 def _make_context(**overrides: Any) -> HookContext:
@@ -364,4 +524,37 @@ class TestFeatureGroupVersionDegradesSilently:
             assert not any("Degraded field 'feature_group_version'" in record.message for record in caplog.records)
         finally:
             del _VersionRaisesFeatureGroup
+            gc.collect()
+
+
+class TestDeclaredInputMemoAttributesGuarded:
+    """run_calculate_feature must not raise AttributeError when the FeatureSet lacks the declared-input memo attrs."""
+
+    def test_missing_memo_attributes_does_not_raise(self) -> None:
+        class _MemolessInputFeatureGroup(FeatureGroup):
+            """input_features declares a plain str name."""
+
+            def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Any]]:
+                return {"x"}
+
+            @classmethod
+            def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+                return {"col": [1, 2, 3]}
+
+        try:
+            feature_set = _build_feature_set()
+            del feature_set.declared_input_features_resolved
+            del feature_set.declared_input_feature_names
+
+            extender = _ContextCapturingExtender(ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE)
+            cfw = _build_framework({extender})
+            cfw.data = {"col": [1, 2, 3]}
+
+            result = cfw.run_calculate_feature(_MemolessInputFeatureGroup, feature_set)
+
+            assert result == {"col": [1, 2, 3]}
+            assert extender.captured is not None
+            assert extender.captured.input_features == frozenset({"x"})
+        finally:
+            del _MemolessInputFeatureGroup
             gc.collect()

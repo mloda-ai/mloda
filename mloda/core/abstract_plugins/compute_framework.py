@@ -27,6 +27,11 @@ from mloda.core.runtime.flight.flight_server import FlightServer
 _PYARROW_REASON = "this operation"
 
 
+def _no_rows(data: Any) -> int | None:
+    """row_count stand-in for hooks whose return value carries no row semantics."""
+    return None
+
+
 class EmptyResultError(ValueError):
     """Raised when a final requested feature's result carries no schema (zero columns);
     zero rows with a schema is valid."""
@@ -569,10 +574,10 @@ class ComputeFramework(ABC):
             return method(self.data, features)
 
         context = self._build_hook_context(hook, feature_group, features)
+        # The validate hooks' return value carries no row count; only the calculate hook's does.
+        counter = self._row_count if hook is ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE else _no_rows
         with context.activate():
-            return _invoke_extender(
-                extender, instrument(context, method, row_count=self._row_count), self.data, features
-            )
+            return _invoke_extender(extender, instrument(context, method, row_count=counter), self.data, features)
 
     @final
     def run_validate_input_features(self, feature_group: Any, features: Any) -> None:
@@ -707,7 +712,7 @@ class ComputeFramework(ABC):
         feature_names: tuple[str, ...] = ()
         input_features: frozenset[str] | None = None
         if isinstance(features, FeatureSet):
-            feature_names = features.get_all_names()
+            feature_names = tuple(str(name) for name in features.get_all_names())
             input_features = self._declared_input_feature_names(feature_group_cls, features)
 
         return HookContext(
@@ -718,7 +723,7 @@ class ComputeFramework(ABC):
             feature_names=feature_names,
             input_features=input_features,
             compute_framework_name=self.get_class_name(),
-            rows_in=safe_field(lambda: self._row_count(self.data), None, field="rows_in"),
+            rows_in=safe_field(lambda: self._row_count(self.data), None),
         )
 
     @staticmethod
@@ -728,8 +733,10 @@ class ComputeFramework(ABC):
 
         A root feature group or an unreadable options/instance degrades silently to None.
         """
-        if features.declared_input_features_resolved:
-            return features.declared_input_feature_names  # type: ignore[no-any-return]
+        resolved: bool = getattr(features, "declared_input_features_resolved", False)
+        memoized: frozenset[str] | None = getattr(features, "declared_input_feature_names", None)
+        if resolved:
+            return memoized
 
         result: frozenset[str] | None = None
         if features.options is not None:
@@ -746,7 +753,7 @@ class ComputeFramework(ABC):
                     declared = safe_field(_read, None)
                     if declared:
                         for entry in declared:
-                            names.add(entry if isinstance(entry, str) else str(entry.name))
+                            names.add(str(entry) if isinstance(entry, str) else str(entry.name))
                 result = frozenset(names) or None
 
         features.declared_input_feature_names = result

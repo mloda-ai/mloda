@@ -40,9 +40,16 @@ class HookContext:
 
     @staticmethod
     def row_count(data: Any) -> int | None:
-        """Return len(data) when the TYPE declares __len__; a dict counts its first column's rows."""
+        """Return len(data) when the TYPE declares __len__; a dict counts its first column's rows
+        (a scalar str/bytes or a nested dict first value is not a column).
+        """
         if isinstance(data, dict):
-            return 0 if not data else HookContext.row_count(next(iter(data.values())))
+            if not data:
+                return 0
+            first = next(iter(data.values()))
+            if isinstance(first, (str, bytes, dict)):
+                return None
+            return HookContext.row_count(first)
         if callable(getattr(type(data), "__len__", None)):
             return len(data)
         return None
@@ -74,15 +81,16 @@ def instrument(
 
     @functools.wraps(func)
     def wrapper(*args: Any, **kwargs: Any) -> Any:
-        context.status = "error"
         context.rows_out = None
+        succeeded = False
         start = time.perf_counter()
         try:
             result = func(*args, **kwargs)
+            succeeded = True
         finally:
             context.duration_seconds = time.perf_counter() - start
-        context.status = "success"
-        context.rows_out = safe_field(lambda: row_count(result), None, field="rows_out")
+            context.status = "success" if succeeded else "error"
+        context.rows_out = safe_field(lambda: row_count(result), None)
         return result
 
     if hasattr(func, "__self__"):

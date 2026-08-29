@@ -164,6 +164,10 @@ class TestDistributionOwningManifestMatching:
             ("faketop/ext.cpython-312-x86_64-linux-gnu.so", "faketop.ext", "dist-a"),
             ("faketop/ext/__init__.py", "faketop.ext", "dist-a"),
             ("faketop/ext/other.py", "faketop.ext", None),
+            ("faketop/mod.pyi", "faketop.mod", None),
+            ("faketop/mod.py", "faketop.mod", "dist-a"),
+            ("faketop/mod.cpython-312-x86_64-linux-gnu.so", "faketop.mod", "dist-a"),
+            ("faketop/mod.pyd", "faketop.mod", "dist-a"),
         ],
     )
     def test_manifest_entry_ownership(
@@ -182,6 +186,35 @@ class TestDistributionOwningManifestMatching:
         result = plugin_version_module._distribution_owning(module_name, ["dist-a"])
 
         assert result == expected
+
+
+class TestOwnsModuleIgnoresPyiStubs:
+    """A .pyi stub-only distribution must not be reported as a module's owning distribution."""
+
+    def test_stub_distribution_is_skipped_in_favor_of_the_real_module(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(
+            importlib.metadata,
+            "packages_distributions",
+            lambda: {"faketop": ["stubs-dist", "real-dist"]},
+        )
+
+        def fake_distribution(name: str) -> _FakeDistribution:
+            files_by_dist = {
+                "stubs-dist": [importlib.metadata.PackagePath("faketop/mod.pyi")],
+                "real-dist": [importlib.metadata.PackagePath("faketop/mod.py")],
+            }
+            return _FakeDistribution(files_by_dist[name])
+
+        monkeypatch.setattr(importlib.metadata, "distribution", fake_distribution)
+        monkeypatch.setattr(
+            importlib.metadata,
+            "version",
+            lambda name: {"stubs-dist": "1.0.0-stub", "real-dist": "2.0.0-real"}[name],
+        )
+
+        result = resolve_plugin_version("faketop.mod")
+
+        assert result == "2.0.0-real"
 
 
 class TestResolvePluginVersionSingleCandidateSkipsFileManifest:

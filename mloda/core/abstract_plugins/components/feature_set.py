@@ -108,12 +108,18 @@ class FeatureSet:
                     f"Deduplicate the request or set the key explicitly on all twins. Affected: {names}"
                 )
             self.features = rebuilt
+        options_before = self.options
         if self.options is not None:
             entry_for_options = memo.get(id(self.options))
             if entry_for_options is not None:
                 self.options = entry_for_options[1]
             else:
                 self.options = feature_group.options_with_defaults(self.options)
+
+        # Materialized options can change what input_features declares, so drop the memo when anything changed.
+        if rebound or self.options is not options_before:
+            self.declared_input_features_resolved = False
+            self.declared_input_feature_names = None
 
     def get_all_feature_ids(self) -> set[UUID]:
         return {feature.uuid for feature in self.features}

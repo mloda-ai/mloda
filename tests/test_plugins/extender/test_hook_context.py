@@ -105,6 +105,28 @@ class TestHookContextRowCount:
         assert HookContext.row_count(lazy_frame_double) is None
 
 
+class TestHookContextRowCountNonColumnarDicts:
+    """A dict's first column must be row-shaped (list/tuple-like); scalar, nested-dict, or bytes values return None."""
+
+    def test_scalar_string_first_value_returns_none(self) -> None:
+        assert HookContext.row_count({"name": "hello"}) is None
+
+    def test_nested_dict_first_value_returns_none(self) -> None:
+        assert HookContext.row_count({"a": {"x": [1, 2, 3]}}) is None
+
+    def test_bytes_first_value_returns_none(self) -> None:
+        assert HookContext.row_count({"a": b"bytes"}) is None
+
+    def test_list_first_value_still_counts(self) -> None:
+        assert HookContext.row_count({"a": [1, 2, 3]}) == 3
+
+    def test_tuple_first_value_still_counts(self) -> None:
+        assert HookContext.row_count({"a": (1, 2)}) == 2
+
+    def test_empty_dict_returns_zero(self) -> None:
+        assert HookContext.row_count({}) == 0
+
+
 class TestInstrument:
     """instrument wraps a callable, updating context.status/duration_seconds/rows_out."""
 
@@ -208,6 +230,37 @@ class TestInstrument:
             wrapped()
 
         assert call_count["n"] == 1
+
+
+class TestInstrumentStatusStaysNoneUntilCallFinishes:
+    """instrument must not pre-set status to 'error'; status stays None while func is running."""
+
+    def test_status_is_none_during_the_call_then_success_after(self) -> None:
+        context = _make_context()
+        recorded: dict[str, Any] = {}
+
+        def raw() -> list[int]:
+            recorded["status_during_call"] = context.status
+            return [1]
+
+        wrapped = instrument(context, raw)
+        wrapped()
+
+        assert recorded["status_during_call"] is None
+        assert context.status == "success"
+
+    def test_status_is_error_after_the_call_raises(self) -> None:
+        context = _make_context()
+
+        def raw() -> None:
+            raise ValueError("boom")
+
+        wrapped = instrument(context, raw)
+
+        with pytest.raises(ValueError, match="boom"):
+            wrapped()
+
+        assert context.status == "error"
 
 
 class _SelfCarryingFeatureGroup:

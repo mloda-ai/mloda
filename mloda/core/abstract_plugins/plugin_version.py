@@ -16,7 +16,11 @@ def _owns_module(entry: str, module_path: str) -> bool:
     if entry == f"{module_path}/__init__.py":
         return True
     prefix = f"{module_path}."
-    return entry.startswith(prefix) and "/" not in entry.removeprefix(prefix)
+    if not entry.startswith(prefix):
+        return False
+    # Keep the leading "." so a compiled extension's tag is matched by suffix; ".pyi" stubs never own a module.
+    remainder = entry[len(module_path) :]
+    return "/" not in remainder and remainder.endswith((".py", ".so", ".pyd"))
 
 
 def _distribution_owning(module_name: str, distributions: list[str]) -> str | None:

@@ -20,6 +20,7 @@ MISSING_VALUE_FEATURES: list[Feature | str] = [
     "category__mode_imputed",  # Mode imputation
     "category__constant_imputed",  # Constant imputation
     "temperature__ffill_imputed",  # Forward fill imputation
+    "temperature__bfill_imputed",  # Backward fill imputation
 ]
 
 
@@ -72,8 +73,11 @@ def validate_missing_value_features(result: list[pd.DataFrame]) -> None:
     assert imputed_df["category__constant_imputed"].iloc[1] == "Unknown"
     assert imputed_df["category__constant_imputed"].iloc[4] == "Unknown"
 
-    assert not pd.isna(imputed_df["temperature__ffill_imputed"].iloc[2])
-    assert not pd.isna(imputed_df["temperature__ffill_imputed"].iloc[3])
+    assert imputed_df["temperature__ffill_imputed"].iloc[2] == 68.3
+    assert imputed_df["temperature__ffill_imputed"].iloc[3] == 68.3
+
+    assert imputed_df["temperature__bfill_imputed"].iloc[2] == 70.1
+    assert imputed_df["temperature__bfill_imputed"].iloc[3] == 70.1
 
     assert "income__mean_imputed" in imputed_df.columns
     assert abs(imputed_df["income__mean_imputed"].iloc[1] - 61666.67) < 1.0  # Increased tolerance for PyArrow

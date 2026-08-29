@@ -364,6 +364,7 @@ class TestMissingValuePythonDictIntegration:
             "category__mode_imputed",  # Mode imputation
             "category__constant_imputed",  # Constant imputation
             "temperature__ffill_imputed",  # Forward fill imputation
+            "temperature__bfill_imputed",  # Backward fill imputation
         ]
 
         feature_list = [Feature(name=feature, options=options) for feature in feature_str]

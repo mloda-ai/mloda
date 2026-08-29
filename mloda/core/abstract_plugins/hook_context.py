@@ -79,8 +79,6 @@ def instrument(
         context.rows_out = safe_field(lambda: row_count(result), None, field="rows_out")
         return result
 
-    # A plugin author's own decorator stacked on the wrapped classmethod (functools.wraps chain) may
-    # not carry __self__; only copy it when the wrapped callable actually has one (Bug 4).
     if hasattr(func, "__self__"):
         wrapper.__self__ = func.__self__  # type: ignore[attr-defined]
 

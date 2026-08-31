@@ -1,7 +1,7 @@
-"""Pin the shared FeatureGroup registry-isolation mechanism (#845, part 1).
+"""Pin the shared registry-isolation mechanism (#845, part 1) for both roots, FeatureGroup and BaseTransformer.
 
-The mitigation must stay ONE mechanism: ``tests.registry_isolation.reclaim_leaked_feature_groups`` plus
-one autouse fixture in ``tests/conftest.py``, so every test module is isolated and no module carries a copy.
+The mitigation must stay ONE mechanism: ``reclaim_leaked_feature_groups`` and ``reclaim_leaked_transformers`` (thin
+wrappers over one root-agnostic core in ``tests.registry_isolation``) plus one autouse ``tests/conftest.py`` fixture.
 """
 
 from __future__ import annotations
@@ -16,11 +16,12 @@ from pathlib import Path
 
 import pytest
 
+from mloda.core.abstract_plugins.components.framework_transformer.base_transformer import BaseTransformer
 from mloda.core.abstract_plugins.components.utils import get_all_subclasses
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 
 from tests import registry_isolation_probe
-from tests.registry_isolation import reclaim_leaked_feature_groups
+from tests.registry_isolation import reclaim_leaked_feature_groups, reclaim_leaked_transformers
 
 
 TESTS_ROOT = Path(__file__).resolve().parent
@@ -62,6 +63,29 @@ def _define_leaked_subclass() -> type[FeatureGroup]:
         pass
 
     return LeakedRegistryProbe845FeatureGroup
+
+
+def _registered_transformer_names() -> set[str]:
+    """Names (never class objects, which would pin them) of this module's registered BaseTransformer subclasses."""
+    return {c.__name__ for c in get_all_subclasses(BaseTransformer) if c.__module__ == __name__}
+
+
+def _define_throwaway_transformer() -> str:
+    """Define a BaseTransformer subclass and return only its name; returning the class would pin it."""
+
+    class ThrowawayRegistryProbeTransformer(BaseTransformer):
+        pass
+
+    return ThrowawayRegistryProbeTransformer.__name__
+
+
+def _define_leaked_transformer() -> type[BaseTransformer]:
+    """Define a BaseTransformer subclass and return it, so the caller holds a strong reference: a genuine leak."""
+
+    class LeakedRegistryProbeTransformer(BaseTransformer):
+        pass
+
+    return LeakedRegistryProbeTransformer
 
 
 class TestReclaimLeakedFeatureGroups:
@@ -111,6 +135,32 @@ class TestReclaimLeakedFeatureGroups:
         """The cheap path: nothing appeared since the snapshot, so nothing is reported and no collection is needed."""
         before = get_all_subclasses(FeatureGroup)
         assert reclaim_leaked_feature_groups(before, __name__) == []
+
+
+class TestReclaimLeakedTransformers:
+    """reclaim_leaked_transformers(before, module_name) is the same mechanism over the BaseTransformer root."""
+
+    def test_reclaims_a_throwaway_transformer_subclass(self) -> None:
+        """A transient subclass is registered, then reclaimed. One test, not two: xdist could split a pair."""
+        before = get_all_subclasses(BaseTransformer)
+        name = _define_throwaway_transformer()
+        assert name in _registered_transformer_names(), (
+            "the probe never registered; the reclaim assertion would prove nothing"
+        )
+        assert reclaim_leaked_transformers(before, __name__) == []
+        assert name not in _registered_transformer_names(), f"{name} survived the reclaim"
+
+    def test_reports_a_genuine_transformer_leak(self) -> None:
+        """A strongly referenced subclass is reported, so the conftest fixture fails loudly instead of hiding it."""
+        before = get_all_subclasses(BaseTransformer)
+        leaked_cls = _define_leaked_transformer()
+        reported = [c.__name__ for c in reclaim_leaked_transformers(before, __name__)]
+        expected = leaked_cls.__name__
+        del leaked_cls  # drop the strong reference before asserting, so a failure leaves nothing behind
+        gc.collect()
+        gc.collect()
+        assert reported == [expected], f"a strongly referenced subclass must be reported, got {reported}"
+        assert expected not in _registered_transformer_names(), "the deliberate leak must not outlive this test"
 
 
 @contextmanager

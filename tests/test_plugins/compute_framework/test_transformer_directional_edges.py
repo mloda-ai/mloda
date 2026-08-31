@@ -22,9 +22,12 @@ Contract:
 Isolation note (mirrors ``test_one_way_transformer_edges.py``): every synthetic
 transformer and its framework types are built fresh inside a factory per test, and each
 registry under test has its map reset to ``{}`` so only the test's own ``add()`` calls are
-reflected. Fresh framework types are unreachable from any real framework; the colliding
-pair in B1 lives entirely on function-local types that are dropped once the test returns,
-so it can never poison another test's global transformer discovery.
+reflected. A function-local BaseTransformer subclass is only weakly held by
+``BaseTransformer.__subclasses__()`` once the test returns, but it dies only in a cyclic GC
+pass; until then another test's ``ComputeFrameworkTransformer()`` discovery on the same xdist
+worker registers it, and a ComputeFramework carrying that registry cannot be pickled for
+multiprocessing because its framework types are bound to no module. The autouse fixture in
+``tests/conftest.py`` reclaims such classes at teardown.
 """
 
 from __future__ import annotations

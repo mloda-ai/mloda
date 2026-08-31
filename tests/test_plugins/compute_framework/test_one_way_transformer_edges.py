@@ -22,10 +22,13 @@ unused hook, even a bare ``raise NotImplementedError``, registers the edge, so t
 through it and ``apply_chain`` crashes mid-chain instead of returning ``None``. Omit the hook.
 
 Isolation note: the synthetic frameworks and transformers are built fresh inside factory
-functions per test. Their import hooks succeed (``add()`` must accept them), so a lingering
-function-local class can be picked up by another test's ``ComputeFrameworkTransformer()``
-discovery; that is harmless because each call creates FRESH framework types that are
-unreachable from any real framework and can never collide on a pair.
+functions per test. Their import hooks succeed (``add()`` must accept them), so discovery
+would register them: a function-local BaseTransformer subclass is only weakly held by
+``BaseTransformer.__subclasses__()`` once the test returns, but it dies only in a cyclic GC
+pass; until then another test's ``ComputeFrameworkTransformer()`` discovery on the same xdist
+worker registers it, and a ComputeFramework carrying that registry cannot be pickled for
+multiprocessing because its framework types are bound to no module. The autouse fixture in
+``tests/conftest.py`` reclaims such classes at teardown.
 """
 
 from __future__ import annotations

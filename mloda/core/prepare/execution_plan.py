@@ -1452,11 +1452,25 @@ Available join types:
                         children_if_root.update(root_parent_children_mapping[feature.uuid])
 
                 feature_set = FeatureSet()
+                declared_input_feature_names: set[str] = set()
+                all_members_resolved = True
                 for feature in sub_features:
                     feature_set.add(feature)
                     feature.name
+                    if feature.declared_input_feature_names:
+                        declared_input_feature_names.update(feature.declared_input_feature_names)
+                    if not feature.declared_input_feature_names_resolved:
+                        all_members_resolved = False
 
                 self.feature_set_collections.append(feature_set.get_all_feature_ids())
+
+                if all_members_resolved:
+                    # Carry the engine's planning-time input_features() resolution onto the FeatureSet so
+                    # ComputeFramework._declared_input_feature_names does not recompute it at runtime. An
+                    # injected feature (filter/index, added outside Engine._process_feature) never gets
+                    # resolved, so its presence here correctly leaves the runtime fallback in place.
+                    feature_set.declared_input_feature_names = frozenset(declared_input_feature_names) or None
+                    feature_set.declared_input_features_resolved = True
 
                 self.add_artifact_to_feature_set(feature_group, feature_set)
                 self.add_single_filters_to_feature_set(feature_group, feature_set)

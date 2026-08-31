@@ -178,9 +178,10 @@ class Engine:
 
         if added:
             parent_domain = feature.domain.name if feature.domain else None
-            self._handle_input_features_recursion(
+            feature.declared_input_feature_names = self._handle_input_features_recursion(
                 feature_group_class, feature.uuid, declared_options, feature.name, parent_domain=parent_domain
             )
+            feature.declared_input_feature_names_resolved = True
 
         if self.global_filter:
             self._add_filter_feature(feature_group_class, feature_group, feature, features)
@@ -446,7 +447,7 @@ class Engine:
         options: Options,
         feature_name: FeatureName,
         parent_domain: Optional[str] = None,
-    ) -> None:
+    ) -> frozenset[str] | None:
         """Handles recursion for input features of a feature group."""
         feature_group = feature_group_class()
 
@@ -457,19 +458,20 @@ class Engine:
         except NotImplementedError:  # This means, it is a root feature.
             input_features = None
 
-        if input_features:
-            features = Features(
-                list(input_features), child_options=options, child_uuid=uuid, parent_domain=parent_domain
-            )
-            consumer_name = feature_group_class.get_class_name()
-            consumer_property_keys = self._property_mapping_keys(feature_group_class)
-            for input_feature in features.collection:
-                forwarded_declared_keys = input_feature.forwarded_group_keys & consumer_property_keys
-                input_feature.add_consumer_attribution(consumer_name, forwarded_declared_keys)
-            if features.child_uuid is None:
-                raise ValueError(f"Features {features} has no parent uuid although it should have one.")
-            self.feature_link_parents[features.child_uuid] = features.parent_uuids
-            self.setup_features_recursion(features, requested=False)
+        if not input_features:
+            return None
+
+        features = Features(list(input_features), child_options=options, child_uuid=uuid, parent_domain=parent_domain)
+        consumer_name = feature_group_class.get_class_name()
+        consumer_property_keys = self._property_mapping_keys(feature_group_class)
+        for input_feature in features.collection:
+            forwarded_declared_keys = input_feature.forwarded_group_keys & consumer_property_keys
+            input_feature.add_consumer_attribution(consumer_name, forwarded_declared_keys)
+        if features.child_uuid is None:
+            raise ValueError(f"Features {features} has no parent uuid although it should have one.")
+        self.feature_link_parents[features.child_uuid] = features.parent_uuids
+        self.setup_features_recursion(features, requested=False)
+        return frozenset(str(f.name) for f in features.collection)
 
     def set_compute_framework(self, feature: Feature, compute_frameworks: set[type[ComputeFramework]]) -> Feature:
         """

@@ -165,6 +165,17 @@ class Feature:
         # from equality and hash like link/index.
         self.forwarded_group_keys: frozenset[str] = frozenset()
 
+        # Names Engine._handle_input_features_recursion resolved from this feature's own
+        # input_features() call at planning time (None for a root feature); excluded from
+        # equality and hash like link/index.
+        self.declared_input_feature_names: frozenset[str] | None = None
+
+        # True once Engine._process_feature has run this feature through input_features() resolution
+        # (regardless of the result), so ExecutionPlan.run_feature_group can tell a genuinely-resolved
+        # feature (even one with no declared inputs) apart from one that was never processed (e.g. an
+        # injected filter/index feature).
+        self.declared_input_feature_names_resolved: bool = False
+
         # forward_group, forward_group_exclude and inherit_context_keys are merge directives
         # for input features with forward-by-default semantics (None/True inherit all consumer
         # group options, False isolates, an allowlist restricts, exclude subtracts),

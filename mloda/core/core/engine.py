@@ -82,6 +82,8 @@ class Engine:
         self._intake_options_memo: dict[tuple[type[FeatureGroup], int], tuple[Options, Options]] = {}
         # Declared (pre-default) options per surviving feature uuid, for default-equivalent merge warnings.
         self._declared_options_by_uuid: dict[UUID, Options] = {}
+        # Per feature uuid, _handle_input_features_recursion's result (None: root; injected filter/index: no entry).
+        self.resolved_input_feature_names: dict[UUID, frozenset[str] | None] = {}
         self.resolution_records: list[ResolutionRecord] = []
         self.execution_planner = self.create_setup_execution_plan(features)
         self.tfs_connection_map = self._resolve_tfs_connection_map()
@@ -147,7 +149,9 @@ class Engine:
             # Setup still shifts a stored hash: a copied option Feature reaches the host's Feature via child_options.
             self.global_filter.rehash_stored_filters()
 
-        execution_planner = ExecutionPlan(self.global_filter, self.api_input_data_collection)
+        execution_planner = ExecutionPlan(
+            self.global_filter, self.api_input_data_collection, self.resolved_input_feature_names
+        )
         execution_planner.create_execution_plan(
             planned_queue,
             graph,
@@ -178,10 +182,9 @@ class Engine:
 
         if added:
             parent_domain = feature.domain.name if feature.domain else None
-            feature.declared_input_feature_names = self._handle_input_features_recursion(
+            self.resolved_input_feature_names[feature.uuid] = self._handle_input_features_recursion(
                 feature_group_class, feature.uuid, declared_options, feature.name, parent_domain=parent_domain
             )
-            feature.declared_input_feature_names_resolved = True
 
         if self.global_filter:
             self._add_filter_feature(feature_group_class, feature_group, feature, features)

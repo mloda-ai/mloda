@@ -95,12 +95,14 @@ class ExecutionPlan:
         self,
         global_filter: Optional[GlobalFilter] = None,
         api_input_data_collection: Optional[ApiInputDataCollection] = None,
+        resolved_input_feature_names: dict[UUID, frozenset[str] | None] | None = None,
     ) -> None:
         # Maps a step to itself so a dedup hit can recover the already-inserted canonical member.
         self.tfs_collection: dict[TransformFrameworkStep, TransformFrameworkStep] = {}
         self.joinstep_collection = JoinStepCollection()
         self.global_filter = global_filter
         self.api_input_data_collection = api_input_data_collection
+        self.resolved_input_feature_names = resolved_input_feature_names
 
         # Helper variable
         self.feature_set_collections: list[set[UUID]] = []
@@ -154,8 +156,10 @@ class ExecutionPlan:
 
         # Only read during add_joinstep above; ExecutionPlan gets deepcopy'd on every Engine.compute()
         # call, so this (potentially O(#features), UUID-keyed) dict and its live reference into
-        # ResolveComputeFrameworks's own dict must not linger past the plan build that needs it.
+        # ResolveComputeFrameworks's own dict must not linger past the plan build that needs it, and
+        # neither must the engine's resolved_input_feature_names map that run_feature_group read.
         self.declared_frameworks = {}
+        self.resolved_input_feature_names = None
 
     def add_feature_group_step(
         self,
@@ -1452,24 +1456,19 @@ Available join types:
                         children_if_root.update(root_parent_children_mapping[feature.uuid])
 
                 feature_set = FeatureSet()
-                declared_input_feature_names: set[str] = set()
-                all_members_resolved = True
                 for feature in sub_features:
                     feature_set.add(feature)
                     feature.name
-                    if feature.declared_input_feature_names:
-                        declared_input_feature_names.update(feature.declared_input_feature_names)
-                    if not feature.declared_input_feature_names_resolved:
-                        all_members_resolved = False
 
                 self.feature_set_collections.append(feature_set.get_all_feature_ids())
 
-                if all_members_resolved:
-                    # Carry the engine's planning-time input_features() resolution onto the FeatureSet so
-                    # ComputeFramework._declared_input_feature_names does not recompute it at runtime. An
-                    # injected feature (filter/index, added outside Engine._process_feature) never gets
-                    # resolved, so its presence here correctly leaves the runtime fallback in place.
-                    feature_set.declared_input_feature_names = frozenset(declared_input_feature_names) or None
+                if self.resolved_input_feature_names is not None:
+                    # An injected filter or index feature is batched with its host and takes the host's
+                    # inputs, so the union over the resolved members is what the engine wired for the step.
+                    union: set[str] = set()
+                    for feature in sub_features:
+                        union.update(self.resolved_input_feature_names.get(feature.uuid) or frozenset())
+                    feature_set.declared_input_feature_names = frozenset(union) or None
                     feature_set.declared_input_features_resolved = True
 
                 self.add_artifact_to_feature_set(feature_group, feature_set)

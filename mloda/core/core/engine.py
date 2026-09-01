@@ -1,7 +1,7 @@
 from collections import defaultdict
 from copy import deepcopy
 import logging
-from typing import Any, Optional
+from typing import Any, Optional, cast
 from uuid import UUID
 import uuid
 
@@ -17,6 +17,13 @@ from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.abstract_plugins.components.data_types import DataType
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
+from mloda.core.abstract_plugins.function_extender import (
+    Extender,
+    ExtenderHook,
+    _invoke_extender,
+    get_function_extender,
+)
+from mloda.core.abstract_plugins.hook_context import HookContext, instrument
 from mloda.core.prepare.execution_plan import ExecutionPlan
 from mloda.core.prepare.graph.build_graph import BuildGraph
 from mloda.core.prepare.resolve_graph import ResolveGraph
@@ -39,6 +46,11 @@ from mloda.core.abstract_plugins.components.validators.link_validator import Lin
 logger = logging.getLogger(__name__)
 
 
+def _no_match_rows(result: Any) -> int | None:
+    """row_count stand-in for FEATURE_GROUP_MATCHED: its return value carries no row semantics."""
+    return None
+
+
 class Engine:
     def __init__(
         self,
@@ -50,8 +62,12 @@ class Engine:
         api_input_data_collection: Optional[ApiInputDataCollection] = None,
         plugin_collector: Optional[PluginCollector] = None,
         column_ordering: Optional[str] = None,
+        function_extender: Optional[set[Extender]] = None,
+        run_id: str | None = None,
     ) -> None:
         # setup variables which track the primary sources and the compute platforms
+        self.function_extender = function_extender if function_extender is not None else set()
+        self.run_id = run_id
         # Holds the Feature objects ResolveComputeFrameworks.links rewrites: hash-stale after planning, so only read it before planning (as today).
         self.feature_group_collection: dict[type[FeatureGroup], set[Feature]] = defaultdict(set)
 
@@ -107,6 +123,10 @@ class Engine:
                 connection_map[cfw_class] = conn
         return connection_map
 
+    def get_function_extender(self, hook: ExtenderHook) -> Optional[Extender]:
+        """Select the extender(s) registered for hook, delegating to the shared free function."""
+        return get_function_extender(self.function_extender, hook)
+
     def compute(self, flight_server: Optional[ParallelRunnerFlightServer] = None) -> ExecutionOrchestrator:
         execution_plan_copy = deepcopy(self.execution_planner)
         orchestrator = ExecutionOrchestrator(
@@ -160,14 +180,14 @@ class Engine:
         )
         return execution_planner
 
-    def setup_features_recursion(self, features: Features, requested: bool = True) -> None:
+    def setup_features_recursion(self, features: Features, requested: bool = True, depth: int = 0) -> None:
         for feature in features:
-            self._process_feature(feature, features, requested)
+            self._process_feature(feature, features, requested, depth)
 
-    def _process_feature(self, feature: Feature, features: Features, requested: bool) -> None:
+    def _process_feature(self, feature: Feature, features: Features, requested: bool, depth: int = 0) -> None:
         """Processes a single feature by delegating tasks to helper methods."""
 
-        feature_group_class, compute_frameworks, result = self._identify_feature_group_and_frameworks(feature)
+        feature_group_class, compute_frameworks, result = self._identify_feature_group_and_frameworks(feature, depth)
         self.resolution_records.append(ResolutionRecord(str(feature.name), requested, result))
         self._warn_on_dual_option_consumption(feature, feature_group_class)
         feature_group = feature_group_class()
@@ -183,7 +203,12 @@ class Engine:
         if added:
             parent_domain = feature.domain.name if feature.domain else None
             self.resolved_input_feature_names[feature.uuid] = self._handle_input_features_recursion(
-                feature_group_class, feature.uuid, declared_options, feature.name, parent_domain=parent_domain
+                feature_group_class,
+                feature.uuid,
+                declared_options,
+                feature.name,
+                parent_domain=parent_domain,
+                depth=depth,
             )
 
         if self.global_filter:
@@ -241,18 +266,65 @@ class Engine:
             )
 
     def _identify_feature_group_and_frameworks(
-        self, feature: Feature
+        self, feature: Feature, depth: int = 0
     ) -> tuple[type[FeatureGroup], set[type[ComputeFramework]], EvaluationResult]:
         """Identify the winning feature group via the shared helper; on failure it raises the enriched error."""
-        result = resolve_or_raise(
-            feature,
-            self.accessible_plugins,
-            self.links,
-            self.data_access_collection,
-            partial_records=self.resolution_records,
-        )
+        extender = self.get_function_extender(ExtenderHook.FEATURE_GROUP_MATCHED)
+        if extender is None:
+            result = resolve_or_raise(
+                feature,
+                self.accessible_plugins,
+                self.links,
+                self.data_access_collection,
+                partial_records=self.resolution_records,
+            )
+        else:
+            result = self._resolve_with_match_hook(extender, feature, depth)
         feature_group_class, compute_frameworks = next(iter(result.identified.items()))
         return feature_group_class, compute_frameworks, result
+
+    def _resolve_with_match_hook(self, extender: Extender, feature: Feature, depth: int) -> EvaluationResult:
+        """Dispatch resolve_or_raise through extender, instrumenting the call with a HookContext.
+
+        The resolved feature_group_class is only known once resolve_or_raise returns, so the
+        context starts with a placeholder and is written post-hoc, mirroring how instrument()
+        fills rows_out after the wrapped call.
+        """
+        context = HookContext(
+            hook=ExtenderHook.FEATURE_GROUP_MATCHED,
+            feature_group_class="",
+            feature_group_version="",
+            plugin_version=None,
+            feature_names=(str(feature.name),),
+            input_features=None,
+            compute_framework_name="",
+            run_id=self.run_id,
+            carrier=None,
+            worker_index=None,
+            plan_feature_count=len(self.resolution_records) + 1,
+            plan_node_count=len(self.feature_group_collection),
+            plan_depth=depth,
+        )
+
+        def _resolve(*args: Any, **kwargs: Any) -> EvaluationResult:
+            result = resolve_or_raise(*args, **kwargs)
+            winner = next(iter(result.identified.items()))[0]
+            context.feature_group_class = f"{winner.__module__}.{winner.__qualname__}"
+            return result
+
+        with context.activate():
+            return cast(
+                EvaluationResult,
+                _invoke_extender(
+                    extender,
+                    instrument(context, _resolve, row_count=_no_match_rows),
+                    feature,
+                    self.accessible_plugins,
+                    self.links,
+                    self.data_access_collection,
+                    partial_records=self.resolution_records,
+                ),
+            )
 
     def _add_index_feature(
         self,
@@ -450,6 +522,7 @@ class Engine:
         options: Options,
         feature_name: FeatureName,
         parent_domain: Optional[str] = None,
+        depth: int = 0,
     ) -> frozenset[str] | None:
         """Handles recursion for input features of a feature group."""
         feature_group = feature_group_class()
@@ -473,7 +546,7 @@ class Engine:
         if features.child_uuid is None:
             raise ValueError(f"Features {features} has no parent uuid although it should have one.")
         self.feature_link_parents[features.child_uuid] = features.parent_uuids
-        self.setup_features_recursion(features, requested=False)
+        self.setup_features_recursion(features, requested=False, depth=depth + 1)
         return frozenset(str(f.name) for f in features.collection)
 
     def set_compute_framework(self, feature: Feature, compute_frameworks: set[type[ComputeFramework]]) -> Feature:

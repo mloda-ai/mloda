@@ -33,7 +33,7 @@ class TestGetFunctionExtenderLookup:
         assert result is None
 
     def test_no_match_among_non_matching_extenders_returns_none(self) -> None:
-        extenders = {_DummyExtender(ExtenderHook.INPUT_DATA_LOAD)}
+        extenders: set[Extender] = {_DummyExtender(ExtenderHook.INPUT_DATA_LOAD)}
 
         result = get_function_extender(extenders, ExtenderHook.JOIN)
 

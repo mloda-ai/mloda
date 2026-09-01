@@ -66,6 +66,7 @@ class mlodaAPI:
         strict_type_enforcement: bool = False,
         column_ordering: Optional[str] = None,
         parallelization_modes: Optional[set[ParallelizationMode]] = None,
+        function_extender: Optional[set[Extender]] = None,
     ) -> None:
         # Setup boundary: any invalid request argument surfaces as the typed error before planning.
         try:
@@ -96,6 +97,7 @@ class mlodaAPI:
             self.api_input_data_collection = api_input_data_collection
             self.api_data = api_data
             self.plugin_collector = plugin_collector
+            self.function_extender = function_extender
         except SetupConfigurationError:
             raise
         except ValueError as error:
@@ -194,6 +196,7 @@ class mlodaAPI:
             strict_type_enforcement=strict_type_enforcement,
             column_ordering=column_ordering,
             parallelization_modes=parallelization_modes,
+            function_extender=function_extender,
         )
         results = session.run(
             api_data=api_data,
@@ -274,6 +277,7 @@ class mlodaAPI:
         strict_type_enforcement: bool = False,
         column_ordering: Optional[str] = None,
         parallelization_modes: Optional[set[ParallelizationMode]] = None,
+        function_extender: Optional[set[Extender]] = None,
     ) -> "mlodaAPI":
         """Build an execution plan without running it.
 
@@ -292,6 +296,7 @@ class mlodaAPI:
             strict_type_enforcement=strict_type_enforcement,
             column_ordering=column_ordering,
             parallelization_modes=parallelization_modes,
+            function_extender=function_extender,
         )
 
     @classmethod
@@ -309,6 +314,7 @@ class mlodaAPI:
         strict_type_enforcement: bool = False,
         column_ordering: Optional[str] = None,
         parallelization_modes: Optional[set[ParallelizationMode]] = None,
+        function_extender: Optional[set[Extender]] = None,
     ) -> list[PlanStep]:
         """Resolve the execution plan without executing it.
 
@@ -333,6 +339,7 @@ class mlodaAPI:
             strict_type_enforcement=strict_type_enforcement,
             column_ordering=column_ordering,
             parallelization_modes=parallelization_modes,
+            function_extender=function_extender,
         )
         return session.resolved_plan()
 
@@ -351,6 +358,7 @@ class mlodaAPI:
         strict_type_enforcement: bool = False,
         column_ordering: Optional[str] = None,
         parallelization_modes: Optional[set[ParallelizationMode]] = None,
+        function_extender: Optional[set[Extender]] = None,
     ) -> ResolutionDiagnosis:
         """Non-raising whole-request resolution preflight.
 
@@ -377,6 +385,7 @@ class mlodaAPI:
                 strict_type_enforcement=strict_type_enforcement,
                 column_ordering=column_ordering,
                 parallelization_modes=parallelization_modes,
+                function_extender=function_extender,
             )
         except FeatureResolutionError as error:
             return ResolutionDiagnosis(
@@ -555,6 +564,7 @@ class mlodaAPI:
         runner.__exit__(None, None, None)
 
     def _create_engine(self) -> Engine:
+        function_extender = filter_extenders_by_strict_mode(self.function_extender, self.plugin_collector)
         engine = Engine(
             self.features,
             self.compute_framework,
@@ -564,6 +574,8 @@ class mlodaAPI:
             self.api_input_data_collection,
             self.plugin_collector,
             column_ordering=self.column_ordering,
+            function_extender=function_extender,
+            run_id=self.run_id,
         )
         if not isinstance(engine, Engine):
             raise ValueError("Engine initialization failed.")

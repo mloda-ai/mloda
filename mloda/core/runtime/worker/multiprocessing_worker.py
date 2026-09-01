@@ -132,9 +132,7 @@ def worker(
                 try:
                     cfw_register.set_error(msg, exc_info, exception=e)
                 except Exception:
-                    # The exception object is not picklable across the manager
-                    # proxy; degrade to the string-only path (surfaces as MlodaRunError)
-                    # rather than let this raise and skip the STOP below (which would hang the run).
+                    # exception not picklable across the manager proxy; degrade to string-only
                     cfw_register.set_error(msg, exc_info)
 
             _handle_stop_command(command_queue)

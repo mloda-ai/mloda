@@ -61,13 +61,7 @@ class TestInitComputeFramework:
     """Tests for init_compute_framework method."""
 
     def test_creates_new_compute_framework_instance(self) -> None:
-        """Should create a new CFW instance with provided parameters.
-
-        run_id/carrier must NOT be passed as constructor kwargs (a third-party ComputeFramework
-        subclass with a fixed __init__ signature that doesn't forward **kwargs would break
-        otherwise). Instead they must be set post-construction on the instance, mirroring how
-        worker_index is set post-construction by the spawn worker.
-        """
+        """run_id/carrier must be set post-construction, not passed as constructor kwargs."""
         cfw_register = Mock(spec=CfwManager)
         worker_manager = Mock(spec=WorkerManager)
         executor = ComputeFrameworkExecutor(cfw_register, worker_manager)
@@ -93,12 +87,9 @@ class TestInitComputeFramework:
 
         cfw_uuid = executor.init_compute_framework(mock_cfw_class, mode, children, test_uuid)
 
-        # Verify CFW was created WITHOUT run_id/carrier kwargs, matching the pre-this-feature
-        # call shape (only function_extender=).
         mock_cfw_class.assert_called_once_with(
             mode, frozenset(children), test_uuid, function_extender=function_extender
         )
-        # run_id/carrier are set post-construction on the instance instead.
         assert mock_cfw_instance.run_id == run_id
         assert mock_cfw_instance.carrier == carrier
         assert cfw_uuid == test_uuid
@@ -996,15 +987,7 @@ class TestMultiExecuteStep:
         worker_manager.send_command.assert_called_once_with(cfw_uuid, step)
 
     def test_records_assignment_with_the_steps_own_result_uuid_not_get_uuids(self) -> None:
-        """record_assignment must use the identity the worker actually reports back.
-
-        _handle_command_result reports a finished step via result_queue.put(str(command.uuid)),
-        i.e. step.uuid (== step.get_result_uuid()). For a FeatureGroupStep, get_uuids() returns
-        the *feature* uuids instead, a different namespace used to track plan-graph completion.
-        Recording get_uuids() here made find_orphaned_steps see every clean worker exit as still
-        owing a result, since the recorded uuid could never match what result_uuids_collection
-        ever contains.
-        """
+        """record_assignment must use step.get_result_uuid(), not the feature uuids from get_uuids()."""
         cfw_register = Mock(spec=CfwManager)
         worker_manager = Mock(spec=WorkerManager)
         executor = ComputeFrameworkExecutor(cfw_register, worker_manager)

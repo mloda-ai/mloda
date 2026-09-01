@@ -164,11 +164,9 @@ class mlodaAPI:
             plugin_collector: Plugin collector.
             copy_features: Whether to deep copy features (default True).
             strict_type_enforcement: If True, enforce strict type matching for typed features.
-            carrier: Opaque W3C trace-context carrier dict, forwarded unchanged to
-                every ``HookContext`` produced by this run.
-            child_bootstrap: Optional picklable, no-argument callable invoked once inside
-                a spawned MULTIPROCESSING worker process, before that worker processes its
-                first command.
+            carrier: Opaque W3C trace-context carrier dict, forwarded to every ``HookContext``.
+            child_bootstrap: Picklable, no-argument callable run once in a spawned
+                MULTIPROCESSING worker before it processes its first command.
 
         Returns:
             ``RunResult``, a list of computed results, one per feature group in
@@ -231,13 +229,7 @@ class mlodaAPI:
         Like ``run_all`` but yields each feature group's result as it completes.
         ``list(stream_all(...))`` equals ``run_all(...)``. Planning happens eagerly
         at the call; the returned ``ResultStream`` exposes ``plan`` before iteration.
-
-        Args:
-            carrier: Opaque W3C trace-context carrier dict, forwarded unchanged to
-                every ``HookContext`` produced by this run.
-            child_bootstrap: Optional picklable, no-argument callable invoked once inside
-                a spawned MULTIPROCESSING worker process, before that worker processes its
-                first command.
+        ``carrier``/``child_bootstrap`` behave as in ``run_all``.
 
         Returns:
             ``ResultStream`` yielding one complete result per feature group.
@@ -444,12 +436,8 @@ class mlodaAPI:
                 When provided, feature groups with matching artifact names
                 switch to load mode for this run, enabling train-then-predict
                 workflows without re-preparing.
-            carrier: Opaque W3C trace-context carrier dict, forwarded unchanged to
-                every ``HookContext`` produced by this run (unlike ``run_id``, which is
-                minted once per session and stays fixed across repeated ``run()`` calls).
-            child_bootstrap: Optional picklable, no-argument callable invoked once inside
-                a spawned MULTIPROCESSING worker process, before that worker processes its
-                first command.
+            carrier/child_bootstrap: See ``run_all``. Unlike ``run_id`` (minted once per
+                session), ``carrier`` may differ on each ``run()`` call.
         """
         runner = self._batch_run(
             parallelization_modes,

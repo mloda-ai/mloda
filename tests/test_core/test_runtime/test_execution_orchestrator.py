@@ -348,11 +348,7 @@ class TestSyncModeSkipsMyManager:
 
 
 class TestEnterAcceptsChildBootstrap:
-    """__enter__ should accept a new trailing child_bootstrap parameter, appended after the
-    existing run_id/carrier kwargs so positional callers keep working."""
-
     def test_enter_accepts_child_bootstrap_parameter(self) -> None:
-        """__enter__ should accept a child_bootstrap parameter."""
         import inspect
 
         mock_planner = Mock(spec=ExecutionPlan)
@@ -362,7 +358,6 @@ class TestEnterAcceptsChildBootstrap:
         assert "child_bootstrap" in sig.parameters
 
     def test_child_bootstrap_parameter_defaults_to_none(self) -> None:
-        """child_bootstrap should default to None, like run_id and carrier before it."""
         import inspect
 
         mock_planner = Mock(spec=ExecutionPlan)
@@ -372,9 +367,7 @@ class TestEnterAcceptsChildBootstrap:
         assert sig.parameters["child_bootstrap"].default is None
 
     def test_child_bootstrap_parameter_is_last(self) -> None:
-        """child_bootstrap must be appended AFTER run_id/carrier so positional callers of
-        __enter__ that pass parallelization_modes/function_extender/api_data/artifacts
-        positionally are unaffected."""
+        """Must come after run_id/carrier so existing positional callers are unaffected."""
         import inspect
 
         mock_planner = Mock(spec=ExecutionPlan)
@@ -386,9 +379,6 @@ class TestEnterAcceptsChildBootstrap:
 
 
 class TestEnterSetsChildBootstrapOnCfwRegister:
-    """__enter__ must call self.cfw_register.set_child_bootstrap(child_bootstrap), the same
-    way it already calls set_run_context, so a SYNC-mode cfw_register round-trips it."""
-
     def test_sync_mode_cfw_register_round_trips_child_bootstrap(self) -> None:
         def _bootstrap() -> None:
             pass
@@ -396,9 +386,8 @@ class TestEnterSetsChildBootstrapOnCfwRegister:
         mock_planner = Mock(spec=ExecutionPlan)
         orchestrator = ExecutionOrchestrator(mock_planner)
 
-        # mypy's pos_only_special_methods option treats __enter__ as implicitly positional-only
-        # regardless of how its parameters are declared, so this keyword argument always trips a
-        # false-positive call-arg error, independent of __enter__'s own signature.
+        # mypy treats __enter__ as positional-only regardless of signature, so this kwarg
+        # always trips a false-positive call-arg error.
         orchestrator.__enter__({ParallelizationMode.SYNC}, child_bootstrap=_bootstrap)  # type: ignore[call-arg]
 
         assert orchestrator.cfw_register.get_child_bootstrap() is _bootstrap

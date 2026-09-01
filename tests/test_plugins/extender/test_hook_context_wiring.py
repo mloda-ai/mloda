@@ -1,10 +1,8 @@
 """Tests wiring HookContext through ComputeFramework's three Extender hook call sites.
 
 Exercises run_calculate_feature, run_validate_input_features, and
-run_validate_output_features on a concrete PythonDictFramework instance. Also covers run_id and
-carrier surfacing on the captured HookContext when set post-construction as plain attributes
-(mirroring worker_index), and that ComputeFramework.__init__ no longer accepts them as
-constructor kwargs.
+run_validate_output_features on a concrete PythonDictFramework instance. Also covers
+run_id/carrier/worker_index surfacing on the captured HookContext.
 """
 
 import functools
@@ -386,11 +384,8 @@ class TestInstrumentPreservesSelfForNameResolution:
 
 
 class TestRunIdAndCarrierWiring:
-    """ComputeFramework exposes run_id/carrier attributes, set post-construction rather than
-    passed as constructor kwargs (mirroring worker_index immediately below: neither is known at
-    construction time by every caller, and a third-party ComputeFramework subclass with a fixed
-    __init__ signature that doesn't forward **kwargs must keep working), and they surface
-    unchanged on the captured HookContext."""
+    """run_id/carrier are set post-construction (not constructor kwargs) and surface unchanged
+    on the captured HookContext."""
 
     def test_run_id_and_carrier_surface_on_captured_hook_context(self) -> None:
         feature_set = _build_feature_set()
@@ -421,15 +416,9 @@ class TestRunIdAndCarrierWiring:
 
 
 class TestComputeFrameworkConstructorRejectsRunIdAndCarrierKwargs:
-    """ComputeFramework.__init__ must NOT accept run_id/carrier as constructor kwargs any more:
-    this proves the constructor-kwarg removal actually happened, not just that the
-    attribute-based path above also happens to work."""
-
     def test_run_id_kwarg_raises_type_error(self) -> None:
         with pytest.raises(TypeError, match="run_id"):
-            # Intentionally invalid: proving run_id is rejected at runtime, so mypy's matching
-            # static call-arg error here is a true positive, not a false one (contrast Fix 5's
-            # __enter__ false-positive ignore).
+            # ignore below is a true positive: proving run_id really is rejected at runtime.
             PythonDictFramework(  # type: ignore[call-arg]
                 mode=ParallelizationMode.SYNC,
                 children_if_root=frozenset(),
@@ -438,8 +427,6 @@ class TestComputeFrameworkConstructorRejectsRunIdAndCarrierKwargs:
 
     def test_carrier_kwarg_raises_type_error(self) -> None:
         with pytest.raises(TypeError, match="carrier"):
-            # Intentionally invalid: proving carrier is rejected at runtime, so mypy's matching
-            # static call-arg error here is a true positive, not a false one.
             PythonDictFramework(  # type: ignore[call-arg]
                 mode=ParallelizationMode.SYNC,
                 children_if_root=frozenset(),
@@ -448,10 +435,6 @@ class TestComputeFrameworkConstructorRejectsRunIdAndCarrierKwargs:
 
 
 class TestWorkerIndexWiring:
-    """ComputeFramework exposes a worker_index attribute, set post-construction by the spawn
-    worker rather than passed as a constructor kwarg (it is not known until a worker process
-    is actually created), and it surfaces unchanged on the captured HookContext."""
-
     def test_worker_index_set_on_instance_surfaces_on_captured_hook_context(self) -> None:
         feature_set = _build_feature_set()
         extender = _ContextCapturingExtender(ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE)

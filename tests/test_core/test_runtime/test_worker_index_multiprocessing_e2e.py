@@ -1,21 +1,9 @@
-"""End-to-end test: worker_index, run_id, and carrier reach HookContext inside a real spawned
-MULTIPROCESSING worker process.
+"""E2E: worker_index, run_id, and carrier reach HookContext inside a real spawned
+MULTIPROCESSING worker process, for two independent root FeatureGroups (two workers).
 
-Two independent root FeatureGroups each get their own ComputeFramework instance and, under
-ParallelizationMode.MULTIPROCESSING, their own spawned worker process. WorkerManager assigns
-each worker a zero-based index in creation order (see test_worker_manager_worker_index.py),
-multiprocessing_worker.worker() lands that index on the ComputeFramework instance running
-inside the child process (see test_multiprocessing_worker.py), and ComputeFramework surfaces it,
-together with run_id/carrier, on the HookContext an Extender observes (see
-test_hook_context_wiring.py). run_id/carrier are only proven to survive the real pickle boundary
-here; test_hook_context_run_id_carrier_e2e.py only covers the already-tested SYNC path.
-
-An Extender's own instance state does not propagate back from a spawned MULTIPROCESSING child
-via the manager proxy (each child gets its own pickled copy), so the recording extender here
-writes the captured worker_index/run_id/carrier to a file instead, for the parent test process to
-read back after the run completes. Two recording extenders share the same function_extender set
-(every ComputeFramework instance in a run is constructed with the same set), so each filters by
-the feature_group_class on the HookContext it observes to avoid cross-writing the other's file.
+An Extender's own instance state does not propagate back from a spawned child via the manager
+proxy, so the recording extender here writes captured values to a file instead, read back by
+the parent process after the run.
 """
 
 from __future__ import annotations
@@ -36,8 +24,6 @@ _CARRIER = {"traceparent": "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7
 
 
 class _WorkerIndexFeatureGroupOne(FeatureGroup):
-    """Root PythonDict FeatureGroup, computed alongside _WorkerIndexFeatureGroupTwo."""
-
     @classmethod
     def input_data(cls) -> Optional[BaseInputData]:
         return DataCreator({"worker_index_e2e_col_one"})
@@ -52,8 +38,6 @@ class _WorkerIndexFeatureGroupOne(FeatureGroup):
 
 
 class _WorkerIndexFeatureGroupTwo(FeatureGroup):
-    """Second, independent root PythonDict FeatureGroup, computed alongside the first."""
-
     @classmethod
     def input_data(cls) -> Optional[BaseInputData]:
         return DataCreator({"worker_index_e2e_col_two"})
@@ -71,8 +55,7 @@ _ENABLED = PluginCollector.enabled_feature_groups({_WorkerIndexFeatureGroupOne, 
 
 
 class _WorkerIndexRecordingExtender(Extender):
-    """Writes HookContext.current().worker_index/run_id/carrier to output_path as JSON, for
-    calculate_feature calls whose feature_group_class matches target_feature_group only."""
+    """Writes worker_index/run_id/carrier to output_path as JSON, filtered to target_feature_group."""
 
     def __init__(self, output_path: Path, target_feature_group: type[FeatureGroup], priority: int = 100) -> None:
         self.priority = priority

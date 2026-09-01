@@ -19,9 +19,7 @@ _RAND_B_MASK = (1 << _RAND_B_BITS) - 1
 def generate_run_id() -> str:
     """Mint a UUIDv7 run id (RFC 9562).
 
-    Vendored because ``uuid.uuid7()`` is only available on Python 3.14+, while this repo
-    supports >=3.10. Layout: 48-bit unix_ts_ms | 4-bit version (0b0111) | 12-bit rand_a |
-    2-bit variant (0b10) | 62-bit rand_b, built from ``time.time_ns()`` and ``os.urandom``.
+    Vendored because ``uuid.uuid7()`` needs Python 3.14+, and this repo supports >=3.10.
     """
     unix_ts_ms = (time.time_ns() // 1_000_000) & _UNIX_TS_MS_MASK
 

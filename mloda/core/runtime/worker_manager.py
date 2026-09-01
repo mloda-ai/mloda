@@ -38,8 +38,7 @@ class WorkerManager:
     ) -> tuple[Any, Any, Any]:
         """Create worker process with command and result queues.
 
-        Appends a zero-based worker_index, len(self.process_register) at call time, as a
-        trailing positional arg to the spawned process's target.
+        Appends a zero-based worker_index as a trailing positional arg to the target.
         """
         ctx = mp_spawn_context()
         command_queue: multiprocessing.Queue[Any] = ctx.Queue()

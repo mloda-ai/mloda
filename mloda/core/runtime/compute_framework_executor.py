@@ -309,13 +309,7 @@ class ComputeFrameworkExecutor:
             process, command_queue, result_queue = existing
 
         self.worker_manager.send_command(cfw_uuid, step)
-        # Record the assignment so a worker that exits still owing these results is
-        # detectable, including the clean exit the data-drop path produces. This must be
-        # step.get_result_uuid() (== step.uuid), the identity the worker actually reports back
-        # via result_queue.put(str(command.uuid)) in _handle_command_result. get_uuids() is a
-        # different namespace: for a FeatureGroupStep it is the *feature* uuids used to track
-        # plan-graph completion (to_finish_ids/finished_ids), which never equal step.uuid, so
-        # using it here made find_orphaned_steps report every completed FeatureGroupStep worker
-        # as still owing a result the instant its process exited, whether or not the result had
-        # actually arrived.
+        # Track by step.get_result_uuid() (== step.uuid), the id a worker reports back via
+        # result_queue. get_uuids() returns feature uuids instead, a different namespace that
+        # made find_orphaned_steps flag every finished worker as still owing a result.
         self.worker_manager.record_assignment(cfw_uuid, {step.get_result_uuid()})

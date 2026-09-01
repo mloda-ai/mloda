@@ -75,9 +75,7 @@ class ComputeFramework(ABC):
         self.already_calculated_children_tracker: set[UUID] = set()
         self.column_names: set[str] = set()
         self.function_extender = function_extender if function_extender is not None else set()
-        # Not constructor kwargs: run_id/carrier are not known by every caller of a
-        # ComputeFramework subclass's fixed __init__ signature, and worker_index isn't known
-        # until a worker process is actually spawned, so all three are set post-construction.
+        # Set post-construction so a subclass's fixed __init__ signature isn't broken.
         self.run_id: str | None = None
         self.carrier: Optional[dict[str, str]] = None
         self.worker_index: int | None = None

@@ -1,16 +1,5 @@
-"""End-to-end tests for run_id/carrier plumbing through the real mlodaAPI single-process
-execution path: mlodaAPI mints a run_id and threads it, together with an opaque carrier dict,
-down to HookContext.
-
-Covers:
-- carrier is accepted (without error) by run_all, stream_all, session.run, and
-  session.stream_run: the same call path function_extender already takes.
-- run_all's minted session.run_id and the exact carrier dict passed in both reach the
-  HookContext an Extender observes.
-- Two feature groups computed within the same run_all()/run() call share the same run_id.
-
-Core does not interpret the carrier's contents; it is only ever compared for exact equality.
-"""
+"""E2E tests for run_id/carrier plumbing through the real mlodaAPI SYNC execution path,
+down to HookContext."""
 
 from typing import Any, Optional
 
@@ -25,8 +14,6 @@ _CARRIER = {"traceparent": "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7
 
 
 class _RunIdCarrierFeatureGroupOne(FeatureGroup):
-    """Root PythonDict FeatureGroup, used standalone or alongside _RunIdCarrierFeatureGroupTwo."""
-
     @classmethod
     def input_data(cls) -> Optional[BaseInputData]:
         return DataCreator({"run_id_carrier_e2e_col_one"})
@@ -41,8 +28,6 @@ class _RunIdCarrierFeatureGroupOne(FeatureGroup):
 
 
 class _RunIdCarrierFeatureGroupTwo(FeatureGroup):
-    """Second, independent root PythonDict FeatureGroup, computed alongside the first."""
-
     @classmethod
     def input_data(cls) -> Optional[BaseInputData]:
         return DataCreator({"run_id_carrier_e2e_col_two"})
@@ -60,9 +45,7 @@ _ENABLED = PluginCollector.enabled_feature_groups({_RunIdCarrierFeatureGroupOne,
 
 
 def _noop_child_bootstrap() -> None:
-    """Picklable no-argument callable, used only to prove the child_bootstrap kwarg threads
-    through run_all/stream_all/session.run/session.stream_run without a TypeError. SYNC mode
-    never spawns a worker process, so this is never actually invoked here."""
+    """Proves child_bootstrap threads through without error; SYNC mode never invokes it."""
 
 
 class _ContextCapturingExtender(Extender):
@@ -230,9 +213,7 @@ class TestRunIdAndCarrierSurfaceOnHookContext:
 
 
 class TestCarrierIsCopiedOnIngestNotAliased:
-    """The carrier dict reaching HookContext must be a copy of the caller-passed dict, not the
-    same object: a hook mutating context.carrier must not leak into the caller's own dict, and
-    must not leak across ComputeFramework instances that were handed the same caller dict."""
+    """HookContext.carrier must be a copy, so a hook mutating it can't leak into the caller's dict."""
 
     def test_captured_carrier_is_not_the_same_object_as_the_dict_passed_in(self) -> None:
         extender = _ContextCapturingExtender()

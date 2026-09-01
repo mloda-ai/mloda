@@ -241,9 +241,8 @@ class ExecutionOrchestrator:
                 if isinstance(original, BaseException):
                     raise original
                 raise MlodaRunError(self.cfw_register.get_error_msg())
-            # Drain any result already sitting in a queue before judging exit/orphan status below:
-            # a fast worker can fully exit (exitcode set) before _run_planner_pass has polled its
-            # queue even once, which would otherwise make find_orphaned_steps see a false positive.
+            # Drain queues first: a fast worker can exit before its queue is ever polled,
+            # which would otherwise false-positive as orphaned below.
             self.worker_manager.poll_result_queues()
             dead = self.worker_manager.find_dead_workers()
             if dead:

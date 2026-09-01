@@ -284,7 +284,7 @@ class CfwManager:
         return api_data
 
     def set_run_context(self, run_id: Optional[str], carrier: Optional[dict[str, str]]) -> None:
-        """Sets the run id and the opaque W3C trace-context carrier for this run."""
+        """Sets the run id and trace-context carrier for this run."""
         self.run_id = run_id
         self.carrier = carrier
 
@@ -293,13 +293,13 @@ class CfwManager:
         return self.run_id
 
     def get_carrier(self) -> Optional[dict[str, str]]:
-        """Retrieves the opaque W3C trace-context carrier."""
+        """Retrieves the trace-context carrier."""
         return self.carrier
 
     def set_child_bootstrap(self, bootstrap: Optional[Callable[[], None]]) -> None:
-        """Sets the picklable, no-argument callable a spawned worker invokes once before its first command."""
+        """Sets the callable a spawned worker invokes once before its first command."""
         self.child_bootstrap = bootstrap
 
     def get_child_bootstrap(self) -> Optional[Callable[[], None]]:
-        """Retrieves the child-process bootstrap callable, or None if unset."""
+        """Retrieves the child-process bootstrap callable."""
         return self.child_bootstrap

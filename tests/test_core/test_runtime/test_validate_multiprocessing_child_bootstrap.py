@@ -1,7 +1,4 @@
-"""Unit tests for raise_on_unpicklable_child_bootstrap. A lambda, or a closure over an
-unpicklable object, is genuinely unpicklable (pickle cannot resolve it back by module/qualname),
-which is what a child_bootstrap callable queued to a multiprocessing worker would otherwise fail
-deep inside pickle for."""
+"""Unit tests for raise_on_unpicklable_child_bootstrap."""
 
 from __future__ import annotations
 
@@ -14,8 +11,7 @@ from mloda.core.runtime.validate_multiprocessing_link import raise_on_unpicklabl
 
 
 class _Unpicklable:
-    """An object pickle cannot resolve: captured by a closure below, so the closure itself
-    becomes unpicklable too (threading.Lock is never picklable)."""
+    """threading.Lock is never picklable, so a closure over this is unpicklable too."""
 
     def __init__(self) -> None:
         self.lock = threading.Lock()

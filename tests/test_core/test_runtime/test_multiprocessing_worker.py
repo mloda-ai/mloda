@@ -1,23 +1,5 @@
-"""Tests for multiprocessing_worker.worker().
-
-Covers three responsibilities of worker(), all handled before it enters its main while-True
-command loop:
-
-- Accepting a trailing worker_index parameter and setting cfw.worker_index = worker_index.
-  This is the only place the spawned worker process learns which index it is among the
-  workers spawned so far in this run: create_worker_process (see
-  test_worker_manager_worker_index.py) computes the index and passes it as an extra trailing
-  argument; worker() is the callable started as that process's target and is responsible for
-  landing it on the ComputeFramework instance running inside it.
-- Reading cfw_register.get_child_bootstrap() and, if not None, calling it exactly once before
-  any command (feature group run) is processed. This is the child-process bootstrap seam: a
-  caller may register a plain, picklable, no-argument callable that mloda invokes once inside
-  a spawned worker process before that worker does anything else.
-- If that bootstrap callable raises, worker() must report the exception through the SAME error
-  channel every other worker failure uses (cfw_register.set_error(...) followed by
-  _handle_stop_command(command_queue)), and must not let the exception propagate out of
-  worker() itself. Every other failure path in this module (_execute_command's except block,
-  error_out) already follows this pattern; the bootstrap call sits outside any try/except today.
+"""Tests for multiprocessing_worker.worker(): worker_index assignment and the child_bootstrap
+seam (invoked once before the command loop, exceptions reported via the standard error channel).
 """
 
 import multiprocessing
@@ -33,8 +15,6 @@ from mloda_plugins.compute_framework.base_implementations.python_dict.python_dic
 
 
 class TestWorkerSetsWorkerIndexBeforeTheCommandLoop:
-    """worker() must set cfw.worker_index from its new worker_index parameter."""
-
     def test_worker_index_is_set_on_the_cfw_instance(self) -> None:
         ctx = mp_spawn_context()
         command_queue: multiprocessing.Queue[Any] = ctx.Queue()
@@ -51,9 +31,6 @@ class TestWorkerSetsWorkerIndexBeforeTheCommandLoop:
 
 
 class TestWorkerRunsChildBootstrapBeforeTheCommandLoop:
-    """worker() must invoke cfw_register.get_child_bootstrap(), if not None, exactly once
-    before entering its while-True command loop, i.e. before any command is processed."""
-
     def test_bootstrap_callable_is_invoked_exactly_once(self) -> None:
         ctx = mp_spawn_context()
         command_queue: multiprocessing.Queue[Any] = ctx.Queue()
@@ -83,10 +60,6 @@ class TestWorkerRunsChildBootstrapBeforeTheCommandLoop:
 
 
 class TestWorkerReportsChildBootstrapExceptionThroughTheErrorChannel:
-    """If the child_bootstrap callable raises, worker() must report it via
-    cfw_register.set_error(...) + _handle_stop_command(command_queue), exactly like every other
-    failure path in this module, instead of letting the exception propagate out of worker()."""
-
     def test_bootstrap_exception_is_reported_via_set_error_and_stop_without_propagating(self) -> None:
         ctx = mp_spawn_context()
         command_queue: multiprocessing.Queue[Any] = ctx.Queue()

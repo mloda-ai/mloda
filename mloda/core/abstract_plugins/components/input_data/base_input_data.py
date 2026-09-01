@@ -5,6 +5,8 @@ from typing import Any, ClassVar, Optional
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.abstract_plugins.components.property_spec import PropertySpec, is_no_default
 from mloda.core.abstract_plugins.components.feature_set import FeatureSet
+from mloda.core.abstract_plugins.function_extender import ExtenderHook, _invoke_extender
+from mloda.core.abstract_plugins.hook_context import HookContext, instrument
 from mloda.core.abstract_plugins.components.match_rejection import (
     INPUT_DATA_OWNED_STAGE,
     INPUT_DATA_STAGE,
@@ -31,6 +33,22 @@ from mloda.core.abstract_plugins.components.utils import (
 logger = logging.getLogger(__name__)
 
 RESERVED_READER_OPTION_KEY = "BaseInputData"
+
+
+def _data_access_identity(data_access: Any) -> str:
+    """Build a data_access_identity string that never leaks credential values.
+
+    A dict (e.g. DB credentials) is identified by its sorted key names only. A URI-shaped
+    string with a user[:pass]@ userinfo segment has that segment stripped before the host.
+    """
+    if isinstance(data_access, dict):
+        return "{" + ", ".join(sorted(str(key) for key in data_access)) + "}"
+    if isinstance(data_access, str) and "://" in data_access:
+        scheme, _, rest = data_access.partition("://")
+        if "@" in rest:
+            host_and_path = rest.rpartition("@")[2]
+            return f"{scheme}://{host_and_path}"
+    return str(data_access)
 
 
 class BaseInputData(ABC):
@@ -415,12 +433,50 @@ class BaseInputData(ABC):
             _options = feature.options
 
         reader, data_access = self.init_reader(_options)
-        data = reader.load_data(data_access, features)
+        data = self._load_data_via_hook(reader, data_access, features)
 
         if data is None:
             raise ValueError(f"Loading data failed for feature {features.get_name_of_one_feature()}.")
 
         return data
+
+    @staticmethod
+    def _load_data_via_hook(reader: "BaseInputData", data_access: Any, features: FeatureSet) -> Any:
+        """Dispatch reader.load_data through the INPUT_DATA_LOAD extender when one is registered,
+        instrumenting the call with a HookContext that inherits identity fields from the active calculate-phase HookContext."""
+        from mloda.core.abstract_plugins.compute_framework import ComputeFramework
+
+        cfw = ComputeFramework.current()
+        if cfw is None:
+            return reader.load_data(data_access, features)
+
+        extender = cfw.get_function_extender(ExtenderHook.INPUT_DATA_LOAD)
+        if extender is None:
+            return reader.load_data(data_access, features)
+
+        calc_context = HookContext.current()
+        if calc_context is None:
+            return reader.load_data(data_access, features)
+
+        context = HookContext(
+            hook=ExtenderHook.INPUT_DATA_LOAD,
+            feature_group_class=calc_context.feature_group_class,
+            feature_group_version=calc_context.feature_group_version,
+            plugin_version=calc_context.plugin_version,
+            feature_names=calc_context.feature_names,
+            input_features=calc_context.input_features,
+            compute_framework_name=cfw.get_class_name(),
+            run_id=cfw.run_id,
+            carrier=cfw.carrier,
+            worker_index=cfw.worker_index,
+            data_access_identity=_data_access_identity(data_access),
+            data_access_format=reader.data_access_name(),
+            data_access_dataset_version=None,
+        )
+        with context.activate():
+            return _invoke_extender(
+                extender, instrument(context, reader.load_data, row_count=cfw._row_count), data_access, features
+            )
 
     @classmethod
     def load_data(cls, data_access: Any, features: FeatureSet) -> Any:

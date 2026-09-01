@@ -19,6 +19,9 @@ class ExtenderHook(Enum):
     FEATURE_GROUP_CALCULATE_FEATURE = "feature_group_calculate_feature"
     VALIDATE_INPUT_FEATURE = "validate_input_feature"
     VALIDATE_OUTPUT_FEATURE = "validate_output_feature"
+    FEATURE_GROUP_MATCHED = "feature_group_matched"
+    INPUT_DATA_LOAD = "input_data_load"
+    JOIN = "join"
 
 
 class Extender(ABC):
@@ -119,6 +122,17 @@ class Extender(ABC):
         if feature_set is None:
             return None
         return feature_set.options
+
+
+def get_function_extender(function_extender: set[Extender], hook: ExtenderHook) -> Optional[Extender]:
+    """Select the Extender(s) wrapping hook: None, the sole match, or a priority-sorted _CompositeExtender."""
+    matching_extenders = [ext for ext in function_extender if hook in ext.wraps()]
+    if len(matching_extenders) == 0:
+        return None
+    if len(matching_extenders) == 1:
+        return matching_extenders[0]
+    sorted_extenders = sorted(matching_extenders, key=lambda e: e.priority)
+    return _CompositeExtender(sorted_extenders, hook)
 
 
 class _CompositeExtender(Extender):

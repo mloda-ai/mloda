@@ -8,10 +8,12 @@ These tests define the contract for a two-phase execution model:
 
 from typing import Any, Optional
 
+from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook
 from mloda.user import mloda, mlodaAPI, Feature, PluginCollector
-from mloda.provider import FeatureGroup, FeatureSet, ApiInputDataFeature
+from mloda.provider import BaseInputData, ComputeFramework, DataCreator, FeatureGroup, FeatureSet, ApiInputDataFeature
 from mloda.user import Options, FeatureName, Index
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
+from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
 
 
 class PrepareRunApiFeature(FeatureGroup):
@@ -218,3 +220,92 @@ class TestStepStateDoesNotLeakBetweenRuns:
         assert df_first["PrepareRunApiFeature"].tolist() == ["5_p", "6_q"]
         assert df_second["PrepareRunApiFeature"].tolist() == ["5_p", "6_q"]
         assert df_first["PrepareRunApiFeature"].tolist() == df_second["PrepareRunApiFeature"].tolist()
+
+
+_PFEXT_MARKER = "prepfallback051"
+
+
+class _PrepareRunExtenderFeatureGroup(FeatureGroup):
+    """Simple root feature group for pinning function_extender fallback between prepare() and run()."""
+
+    @classmethod
+    def input_data(cls) -> Optional[BaseInputData]:
+        return DataCreator({f"{_PFEXT_MARKER}_col"})
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PythonDictFramework}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return {f"{_PFEXT_MARKER}_col": [1, 2, 3]}
+
+
+class _CalculateHookRecordingExtender(Extender):
+    """Counts FEATURE_GROUP_CALCULATE_FEATURE invocations it wraps."""
+
+    def __init__(self, priority: int = 100) -> None:
+        self.priority = priority
+        self.call_count = 0
+
+    def wraps(self) -> set[ExtenderHook]:
+        return {ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE}
+
+    def __call__(self, func: Any, *args: Any, **kwargs: Any) -> Any:
+        self.call_count += 1
+        return func(*args, **kwargs)
+
+
+_pfext_enabled = PluginCollector.enabled_feature_groups({_PrepareRunExtenderFeatureGroup})
+
+
+class TestRunFallsBackToPrepareTimeFunctionExtender:
+    """Fix: run() with no function_extender of its own must still fire the extender passed to prepare()."""
+
+    def test_run_without_its_own_function_extender_uses_the_one_from_prepare(self) -> None:
+        recorder = _CalculateHookRecordingExtender()
+
+        session = mloda.prepare(
+            [Feature(f"{_PFEXT_MARKER}_col")],
+            compute_frameworks=["PythonDictFramework"],
+            plugin_collector=_pfext_enabled,
+            function_extender={recorder},
+        )
+        session.run()
+
+        assert recorder.call_count == 1
+
+
+class TestRunOwnFunctionExtenderOverridesPrepareTimeOne:
+    """An explicit run()-time function_extender replaces (does not merge with) prepare()'s."""
+
+    def test_explicit_run_function_extender_replaces_prepare_time_one(self) -> None:
+        recorder_a = _CalculateHookRecordingExtender()
+        recorder_b = _CalculateHookRecordingExtender()
+
+        session = mloda.prepare(
+            [Feature(f"{_PFEXT_MARKER}_col")],
+            compute_frameworks=["PythonDictFramework"],
+            plugin_collector=_pfext_enabled,
+            function_extender={recorder_a},
+        )
+        session.run(function_extender={recorder_b})
+
+        assert recorder_b.call_count == 1
+        assert recorder_a.call_count == 0
+
+
+class TestRunWithNoPrepareTimeExtenderRegressionGuard:
+    """Baseline guard: run()'s own function_extender still fires when prepare() had none."""
+
+    def test_run_function_extender_fires_when_prepare_had_none(self) -> None:
+        recorder = _CalculateHookRecordingExtender()
+
+        session = mloda.prepare(
+            [Feature(f"{_PFEXT_MARKER}_col")],
+            compute_frameworks=["PythonDictFramework"],
+            plugin_collector=_pfext_enabled,
+        )
+        session.run(function_extender={recorder})
+
+        assert recorder.call_count == 1

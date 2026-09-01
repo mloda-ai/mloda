@@ -1,5 +1,7 @@
+import contextlib
 from abc import ABC
-from collections.abc import Callable, Iterable, Sequence
+from collections.abc import Callable, Generator, Iterable, Sequence
+from contextvars import ContextVar
 from typing import Any, Optional, final
 from uuid import UUID, uuid4
 from mloda.core.abstract_plugins.components.data_types import DataType
@@ -25,6 +27,10 @@ from mloda.core.optional_dependency import loaded, require
 from mloda.core.runtime.flight.flight_server import FlightServer
 
 _PYARROW_REASON = "this operation"
+
+_current_compute_framework: ContextVar["ComputeFramework | None"] = ContextVar(
+    "_current_compute_framework", default=None
+)
 
 
 def _no_rows(data: Any) -> int | None:
@@ -570,18 +576,43 @@ class ComputeFramework(ABC):
             features.mask_engine = engine
         return features
 
+    @classmethod
+    def current(cls) -> "ComputeFramework | None":
+        """Return the ComputeFramework active in the current activate() scope, else None."""
+        return _current_compute_framework.get()
+
+    @contextlib.contextmanager
+    def activate(self) -> Generator["ComputeFramework", None, None]:
+        """Make this instance the current() compute framework for the scope, restoring the previous one on exit."""
+        token = _current_compute_framework.set(self)
+        try:
+            yield self
+        finally:
+            _current_compute_framework.reset(token)
+
     @final
     def _run_hook(self, hook: ExtenderHook, feature_group: Any, method: Callable[..., Any], features: Any) -> Any:
-        """Dispatch method through hook's extender (if any), instrumenting the call with a HookContext."""
+        """Dispatch method through hook's extender (if any), instrumenting the call with a HookContext.
+        For FEATURE_GROUP_CALCULATE_FEATURE, also activates self so a nested reader.load_data() call can find it via ComputeFramework.current()."""
         extender = self.get_function_extender(hook)
-        if extender is None:
+        if hook is not ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE:
+            if extender is None:
+                return method(self.data, features)
+            context = self._build_hook_context(hook, feature_group, features)
+            with context.activate():
+                return _invoke_extender(extender, instrument(context, method, row_count=_no_rows), self.data, features)
+
+        fetch_extender = self.get_function_extender(ExtenderHook.INPUT_DATA_LOAD)
+        if extender is None and fetch_extender is None:
             return method(self.data, features)
 
         context = self._build_hook_context(hook, feature_group, features)
-        # The validate hooks' return value carries no row count; only the calculate hook's does.
-        counter = self._row_count if hook is ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE else _no_rows
-        with context.activate():
-            return _invoke_extender(extender, instrument(context, method, row_count=counter), self.data, features)
+        with self.activate(), context.activate():
+            if extender is None:
+                return method(self.data, features)
+            return _invoke_extender(
+                extender, instrument(context, method, row_count=self._row_count), self.data, features
+            )
 
     @final
     def run_validate_input_features(self, feature_group: Any, features: Any) -> None:

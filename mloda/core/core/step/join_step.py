@@ -2,10 +2,12 @@ from typing import Optional, Any
 from uuid import UUID, uuid4
 from mloda.core.abstract_plugins.components.framework_transformer.cfw_transformer import ComputeFrameworkTransformer
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
+from mloda.core.abstract_plugins.function_extender import ExtenderHook, _invoke_extender
+from mloda.core.abstract_plugins.hook_context import HookContext, instrument
 from mloda.core.core.cfw_manager import CfwManager
 
 from mloda.core.core.step.abstract_step import Step
-from mloda.core.abstract_plugins.components.link import Link
+from mloda.core.abstract_plugins.components.link import JoinType, Link
 from mloda.core.runtime.flight.flight_server import FlightServer
 
 
@@ -37,6 +39,35 @@ class JoinStep(Step):
 
     def _merge_data(self, cfw: ComputeFramework, from_cfw_data: Any) -> None:
         """Merges data from another ComputeFramework into the current one."""
+        extender = cfw.get_function_extender(ExtenderHook.JOIN)
+        if extender is None:
+            self._do_merge_data(cfw, from_cfw_data)
+            return
+
+        context = HookContext(
+            hook=ExtenderHook.JOIN,
+            feature_group_class="",
+            feature_group_version="",
+            plugin_version=None,
+            feature_names=(),
+            input_features=None,
+            compute_framework_name=cfw.get_class_name(),
+            join_type=self.link.jointype.value,
+            join_keys=self._join_keys(),
+            run_id=cfw.run_id,
+            carrier=cfw.carrier,
+            worker_index=cfw.worker_index,
+        )
+        with context.activate():
+            _invoke_extender(extender, instrument(context, self._do_merge_data), cfw, from_cfw_data)
+
+    def _join_keys(self) -> Optional[tuple[str, ...]]:
+        """Pairs each left column with its corresponding right column; None for APPEND/UNION, which merge without keys."""
+        if self.link.jointype in (JoinType.APPEND, JoinType.UNION):
+            return None
+        return tuple(f"{left}={right}" for left, right in zip(self.link.left_index.index, self.link.right_index.index))
+
+    def _do_merge_data(self, cfw: ComputeFramework, from_cfw_data: Any) -> None:
         merge_engine_class = cfw.merge_engine()
         framework_connection = cfw.get_framework_connection_object()
         merge_engine_instance = merge_engine_class(framework_connection)

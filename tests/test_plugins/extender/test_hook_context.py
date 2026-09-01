@@ -88,7 +88,7 @@ class TestHookContextWorkerIndexField:
 
 
 class TestHookContextDataAccessAndJoinAndPlanFields:
-    """New optional fields for the FEATURE_GROUP_MATCHED/INPUT_DATA_LOAD/JOIN hooks (Phase 1)."""
+    """Optional fields for the FEATURE_GROUP_MATCHED/INPUT_DATA_LOAD/JOIN hooks."""
 
     def test_new_fields_default_to_none(self) -> None:
         context = _make_context()

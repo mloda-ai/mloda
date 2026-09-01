@@ -427,8 +427,7 @@ class BaseInputData(ABC):
     @staticmethod
     def _load_data_via_hook(reader: "BaseInputData", data_access: Any, features: FeatureSet) -> Any:
         """Dispatch reader.load_data through the INPUT_DATA_LOAD extender when one is registered,
-        instrumenting the call with a HookContext that inherits identity fields from the active
-        calculate-phase HookContext (always populated whenever a ComputeFramework is active)."""
+        instrumenting the call with a HookContext that inherits identity fields from the active calculate-phase HookContext."""
         from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 
         cfw = ComputeFramework.current()

@@ -285,11 +285,7 @@ class Engine:
 
     def _resolve_with_match_hook(self, extender: Extender, feature: Feature, depth: int) -> EvaluationResult:
         """Dispatch resolve_or_raise through extender, instrumenting the call with a HookContext.
-
-        The resolved feature_group_class is only known once resolve_or_raise returns, so the
-        context starts with a placeholder and is written post-hoc, mirroring how instrument()
-        fills rows_out after the wrapped call.
-        """
+        feature_group_class is only known once resolve_or_raise returns, so the context starts with a placeholder and is written post-hoc."""
         context = HookContext(
             hook=ExtenderHook.FEATURE_GROUP_MATCHED,
             feature_group_class="",

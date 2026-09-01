@@ -1,13 +1,7 @@
-"""Failing tests for int-051 Phase 3: wiring ExtenderHook.JOIN into JoinStep._merge_data.
-
-Covers HookContext population (hook/join_type/join_keys/run_id/carrier/worker_index/
-compute_framework_name), the no-extender baseline, and deny-before-merge / deny-with-fallback,
-mirroring Phase 2's FEATURE_GROUP_MATCHED tests (test_feature_group_matched_hook.py).
-
-join_keys is chosen as ``self.link.left_index.index + self.link.right_index.index``: a flat
-tuple of column-name strings, left side first then right side, in the order Index stores them
-(``Index.index`` is a plain ``tuple[str, ...]``). This is independent of ``swap_merge_sides``
-since it reads off the immutable ``Link``, not off which cfw happens to be "self" at merge time.
+"""Tests wiring ExtenderHook.JOIN into JoinStep._merge_data: HookContext population, the
+no-extender baseline, and deny-before-merge / deny-with-fallback. join_keys is
+``left_index.index + right_index.index`` (left columns then right); this is independent of
+``swap_merge_sides`` since it reads off the immutable ``Link``, not whichever cfw is "self" at merge time.
 """
 
 import logging
@@ -146,10 +140,7 @@ class TestJoinHookFiresWithCorrectContext:
 
 
 class TestNoJoinExtenderRegisteredBaselineRegressionGuard:
-    """BASELINE (already passes today): a join with no JOIN extender registered is unaffected.
-
-    Guards the "activate only when needed" short-circuit once JOIN is wired in.
-    """
+    """Baseline guard: a join with no JOIN extender registered is unaffected."""
 
     def test_inner_join_completes_and_produces_expected_merged_values(self, flight_server: Any) -> None:
         result = mloda.run_all(
@@ -167,8 +158,7 @@ class TestNoJoinExtenderRegisteredBaselineRegressionGuard:
 
 
 class TestDenyBeforeMerge:
-    """A raise_on_error=True (default) JOIN extender that raises instead of delegating
-    prevents the run from completing, mirroring the FEATURE_GROUP_MATCHED veto contract."""
+    """A raise_on_error=True (default) JOIN extender that raises instead of delegating prevents the run from completing."""
 
     def test_veto_raises_and_propagates(self, flight_server: Any) -> None:
         extender = _JoinVetoExtender()
@@ -186,8 +176,7 @@ class TestDenyBeforeMerge:
 
 
 class TestDenyWithFallback:
-    """A raise_on_error=False JOIN extender that raises still lets the join complete
-    (falls back, logs a warning), mirroring _invoke_extender's warning-only semantics."""
+    """A raise_on_error=False JOIN extender that raises still lets the join complete, with a warning logged."""
 
     def test_warning_only_veto_logs_and_falls_back(self, flight_server: Any, caplog: pytest.LogCaptureFixture) -> None:
         extender = _JoinVetoExtender(raise_on_error=False)

@@ -1,10 +1,8 @@
-"""Failing tests for int-051 Phase 4: wiring ExtenderHook.INPUT_DATA_LOAD into BaseInputData.load().
+"""Tests wiring ExtenderHook.INPUT_DATA_LOAD into BaseInputData.load().
 
-Covers ComputeFramework.current() (new contextvar, activated only when a calculate or fetch
-extender is registered), HookContext population (data_access_identity/format/dataset_version,
-run_id/carrier/worker_index/compute_framework_name/feature_group_class inherited from the active
-calculate-phase context), the no-extender baseline, deny-before-load / deny-with-fallback, and a
-short-circuit guard mirroring Phase 2/3's "activate only when needed" tests.
+Covers ComputeFramework.current(), HookContext population (inherited identity fields plus
+data_access_identity/format/dataset_version), the no-extender baseline, deny-before-load /
+deny-with-fallback, and the "activate only when needed" short-circuit.
 """
 
 import logging
@@ -124,8 +122,7 @@ class TestInputDataLoadHookFiresAlongsideCalculateExtender:
 
 
 class TestInputDataLoadHookFiresWithOnlyFetchExtenderRegistered:
-    """No calculate extender at all: the calculate-phase HookContext must still be built and
-    activated (because a fetch extender exists), so INPUT_DATA_LOAD can read from it."""
+    """No calculate extender: the calculate-phase HookContext is still built and activated so INPUT_DATA_LOAD can read from it."""
 
     def test_fetch_context_still_carries_calculate_phase_identity_fields(self, tmp_path: Path) -> None:
         column = f"{_MARKER}_col_b"
@@ -154,10 +151,7 @@ class TestInputDataLoadHookFiresWithOnlyFetchExtenderRegistered:
 
 
 class TestNoExtenderRegisteredBaselineRegressionGuard:
-    """BASELINE (already passes today): a CSV load with no extenders registered is unaffected.
-
-    Guards the "activate only when needed" short-circuit once INPUT_DATA_LOAD is wired in.
-    """
+    """Baseline guard: a CSV load with no extenders registered is unaffected."""
 
     def test_run_all_reads_expected_values(self, tmp_path: Path) -> None:
         column = f"{_MARKER}_col_c"
@@ -174,8 +168,7 @@ class TestNoExtenderRegisteredBaselineRegressionGuard:
 
 
 class TestDenyBeforeLoad:
-    """A raise_on_error=True (default) INPUT_DATA_LOAD extender that raises instead of delegating
-    prevents the load, propagating the error through run_all."""
+    """A raise_on_error=True (default) INPUT_DATA_LOAD extender that raises instead of delegating prevents the load."""
 
     def test_veto_raises_and_propagates(self, tmp_path: Path) -> None:
         column = f"{_MARKER}_col_d"
@@ -193,8 +186,7 @@ class TestDenyBeforeLoad:
 
 
 class TestDenyWithFallback:
-    """A raise_on_error=False INPUT_DATA_LOAD extender that raises still lets the load succeed
-    (falls back), with a warning logged, mirroring _invoke_extender's warning-only semantics."""
+    """A raise_on_error=False INPUT_DATA_LOAD extender that raises still lets the load succeed, with a warning logged."""
 
     def test_warning_only_veto_logs_and_falls_back(self, tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
         column = f"{_MARKER}_col_e"
@@ -218,8 +210,7 @@ class TestDenyWithFallback:
 
 
 class TestComputeFrameworkCurrentShortCircuit:
-    """ComputeFramework.current() must stay None unless a calculate or fetch extender is registered:
-    an unrelated hook's extender (VALIDATE_INPUT_FEATURE here) must not activate it."""
+    """ComputeFramework.current() stays None unless a calculate or fetch extender is registered."""
 
     def test_current_is_none_when_only_an_unrelated_hook_extender_is_registered(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch

@@ -1,4 +1,4 @@
-"""Failing tests for int-051 Phase 2: wiring FEATURE_GROUP_MATCHED into Engine's matching path.
+"""Tests wiring FEATURE_GROUP_MATCHED into Engine's matching path.
 
 Covers mlodaAPI.prepare/run_all threading function_extender into Engine, Engine.get_function_extender,
 HookContext population (run_id/carrier/worker_index/plan_*), and deny-before-match / deny-with-fallback.
@@ -254,11 +254,7 @@ class TestCarrierAndWorkerIndexNoneDuringMatch:
 
 
 class TestNoExtenderRegisteredBaselineRegressionGuard:
-    """BASELINE (already passes today): matching with no function_extender registered is unaffected.
-
-    Not a new-behavior assertion; guards the "activate only when needed" short-circuit once
-    FEATURE_GROUP_MATCHED is wired in, so a future refactor can't silently break it.
-    """
+    """Baseline guard: matching with no function_extender registered stays unaffected."""
 
     def test_prepare_without_function_extender_resolves_successfully(self) -> None:
         session = mloda.prepare(
@@ -272,8 +268,7 @@ class TestNoExtenderRegisteredBaselineRegressionGuard:
 
 
 class TestDenyBeforeMatch:
-    """A raise_on_error=True (default) extender that raises inside __call__ instead of delegating
-    prevents the match/resolution from completing for the targeted feature only."""
+    """A raise_on_error=True (default) extender that raises instead of delegating denies the match for the targeted feature only."""
 
     def test_veto_raises_and_propagates_for_the_targeted_feature(self) -> None:
         veto_name = f"{_MARKER}_veto_col_a"
@@ -307,8 +302,7 @@ class TestDenyBeforeMatch:
 
 
 class TestDenyWithFallback:
-    """A raise_on_error=False extender that raises inside __call__ still lets resolution succeed
-    (falls back to the wrapped resolution, per _invoke_extender's warning-only semantics)."""
+    """A raise_on_error=False extender that raises still lets resolution succeed by falling back to the wrapped resolution."""
 
     def test_warning_only_veto_logs_and_falls_back(self, caplog: pytest.LogCaptureFixture) -> None:
         veto_name = f"{_MARKER}_veto_col_a"
@@ -364,8 +358,7 @@ class TestPlanCountsAndDepthOnMatchContext:
 
 
 class TestEngineFunctionExtenderAndRunIdConstruction:
-    """Engine accepts function_extender/run_id kwargs and get_function_extender delegates to
-    the Phase-1 free function (mloda.core.abstract_plugins.function_extender.get_function_extender)."""
+    """Engine accepts function_extender/run_id kwargs and get_function_extender delegates to the module-level free function."""
 
     def test_engine_accepts_kwargs_and_get_function_extender_delegates(self) -> None:
         with (

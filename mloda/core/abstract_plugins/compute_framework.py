@@ -593,11 +593,7 @@ class ComputeFramework(ABC):
     @final
     def _run_hook(self, hook: ExtenderHook, feature_group: Any, method: Callable[..., Any], features: Any) -> Any:
         """Dispatch method through hook's extender (if any), instrumenting the call with a HookContext.
-
-        For FEATURE_GROUP_CALCULATE_FEATURE, both this ComputeFramework and its HookContext are also
-        activated when an INPUT_DATA_LOAD extender exists (even without a calculate extender), so a
-        nested reader.load_data() call can find them via ComputeFramework.current()/HookContext.current().
-        """
+        For FEATURE_GROUP_CALCULATE_FEATURE, also activates self so a nested reader.load_data() call can find it via ComputeFramework.current()."""
         extender = self.get_function_extender(hook)
         if hook is not ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE:
             if extender is None:

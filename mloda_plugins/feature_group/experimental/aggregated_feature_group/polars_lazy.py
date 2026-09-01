@@ -68,6 +68,17 @@ class PolarsLazyAggregatedFeatureGroup(AggregatedFeatureGroup):
         return data.with_columns(result.alias(feature_name))
 
     @classmethod
+    def _row_wise_variance(cls, columns: list[Any]) -> Any:
+        """Row-wise sample variance (ddof=1) across columns, skipping nulls per row.
+
+        Returns null for rows with fewer than 2 valid values, matching pandas' .var(axis=1, skipna=True).
+        """
+        valid_count = pl.sum_horizontal(*[col.is_not_null().cast(pl.Int64) for col in columns])
+        mean_val = pl.mean_horizontal(*columns)
+        sq_dev_sum = pl.sum_horizontal(*[(col - mean_val).pow(2) for col in columns])
+        return pl.when(valid_count > 1).then(sq_dev_sum / (valid_count - 1)).otherwise(None)
+
+    @classmethod
     def _perform_aggregation(cls, data: Any, aggregation_type: str, in_features: list[str]) -> Any:
         """
         Perform the aggregation using Polars lazy expressions.
@@ -104,14 +115,11 @@ class PolarsLazyAggregatedFeatureGroup(AggregatedFeatureGroup):
                 # Count non-null values across columns
                 return pl.sum_horizontal(*[col.is_not_null().cast(pl.Int64) for col in columns])
             elif aggregation_type == "std":
-                # Polars doesn't have horizontal std, compute manually
-                mean_val = pl.mean_horizontal(*columns)
-                variance = pl.mean_horizontal(*[(col - mean_val).pow(2) for col in columns])
-                return variance.sqrt()
+                # Polars doesn't have horizontal std, compute manually (ddof=1, null-skipping)
+                return cls._row_wise_variance(columns).sqrt()
             elif aggregation_type == "var":
-                # Polars doesn't have horizontal var, compute manually
-                mean_val = pl.mean_horizontal(*columns)
-                return pl.mean_horizontal(*[(col - mean_val).pow(2) for col in columns])
+                # Polars doesn't have horizontal var, compute manually (ddof=1, null-skipping)
+                return cls._row_wise_variance(columns)
             elif aggregation_type == "median":
                 # Polars doesn't have horizontal median, use concat and median
                 raise ValueError("Median aggregation across multiple columns is not supported in Polars")

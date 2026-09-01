@@ -56,6 +56,20 @@ def sample_lazy_dataframe() -> Any:
 
 
 @pytest.fixture
+def multi_source_lazy_dataframe_with_null() -> Any:
+    """Three source columns (metrics~0..2), row index 2 has a null in metrics~1."""
+    if not POLARS_AVAILABLE:
+        pytest.skip("Polars not available")
+
+    data = {
+        "metrics~0": [1.0, 4.0, 100.0, 8.0],
+        "metrics~1": [2.0, 10.0, None, 8.0],
+        "metrics~2": [3.0, 7.0, 25.0, 9.0],
+    }
+    return pl.LazyFrame(data)
+
+
+@pytest.fixture
 def feature_set_sum() -> FeatureSet:
     """Create a feature set with a sum aggregation feature."""
     feature_set = FeatureSet()
@@ -230,6 +244,49 @@ class TestPolarsLazyAggregatedFeatureGroup:
         finally:
             # Restore the original AGGREGATION_TYPES
             AggregatedFeatureGroup.AGGREGATION_TYPES = original_types
+
+
+@pytest.mark.skipif(pl is None, reason="Polars not available")
+class TestPolarsLazyAggregatedFeatureGroupMultiColumnDdofAndNullSkip:
+    """Pins down ddof=1 (sample statistics) with null-skip semantics for row-wise std/var.
+
+    Ground truth is computed inline from pandas' .std(axis=1, skipna=True)/.var(axis=1, skipna=True),
+    which already implement ddof=1 with a valid-value-count denominator that skips nulls.
+    """
+
+    def test_perform_aggregation_std_multi_column_matches_pandas_skipna_ddof1(
+        self, multi_source_lazy_dataframe_with_null: Any
+    ) -> None:
+        result_expr = PolarsLazyAggregatedFeatureGroup._perform_aggregation(
+            multi_source_lazy_dataframe_with_null, "std", ["metrics~0", "metrics~1", "metrics~2"]
+        )
+        result_df = multi_source_lazy_dataframe_with_null.with_columns(result_expr.alias("test_std")).collect()
+        result = result_df["test_std"].to_list()
+
+        source = multi_source_lazy_dataframe_with_null.collect().to_pandas()
+        expected = source[["metrics~0", "metrics~1", "metrics~2"]].std(axis=1, skipna=True)  # ddof=1 by default
+
+        for row_index in range(len(expected)):
+            assert abs(result[row_index] - expected[row_index]) < 1e-6, (
+                f"row {row_index}: expected {expected[row_index]} (pandas ddof=1, skipna), got {result[row_index]}"
+            )
+
+    def test_perform_aggregation_var_multi_column_matches_pandas_skipna_ddof1(
+        self, multi_source_lazy_dataframe_with_null: Any
+    ) -> None:
+        result_expr = PolarsLazyAggregatedFeatureGroup._perform_aggregation(
+            multi_source_lazy_dataframe_with_null, "var", ["metrics~0", "metrics~1", "metrics~2"]
+        )
+        result_df = multi_source_lazy_dataframe_with_null.with_columns(result_expr.alias("test_var")).collect()
+        result = result_df["test_var"].to_list()
+
+        source = multi_source_lazy_dataframe_with_null.collect().to_pandas()
+        expected = source[["metrics~0", "metrics~1", "metrics~2"]].var(axis=1, skipna=True)  # ddof=1 by default
+
+        for row_index in range(len(expected)):
+            assert abs(result[row_index] - expected[row_index]) < 1e-6, (
+                f"row {row_index}: expected {expected[row_index]} (pandas ddof=1, skipna), got {result[row_index]}"
+            )
 
 
 @pytest.mark.skipif(pl is None, reason="Polars not available")

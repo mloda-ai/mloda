@@ -4,6 +4,7 @@ PyArrow implementation for aggregated feature groups.
 
 from __future__ import annotations
 
+import warnings
 from typing import Any
 
 import numpy as np
@@ -91,27 +92,34 @@ class PyArrowAggregatedFeatureGroup(AggregatedFeatureGroup):
             # PyArrow doesn't have direct horizontal operations, need to implement manually
             columns = [data.column(name) for name in in_features]
 
-            arrays = [col.to_numpy() for col in columns]
+            # Cast to float64 first so integer-with-nulls columns promote to float-with-NaN
+            # instead of becoming an unusable object dtype in to_numpy().
+            arrays = [pc.cast(col, pa.float64()).to_numpy() for col in columns]
             stacked = np.column_stack(arrays)
 
-            if aggregation_type == "sum":
-                result = np.sum(stacked, axis=1)
-            elif aggregation_type == "min":
-                result = np.min(stacked, axis=1)
-            elif aggregation_type == "max":
-                result = np.max(stacked, axis=1)
-            elif aggregation_type in ["avg", "mean"]:
-                result = np.mean(stacked, axis=1)
-            elif aggregation_type == "count":
-                result = np.sum(~np.isnan(stacked), axis=1)
-            elif aggregation_type == "std":
-                result = np.std(stacked, axis=1)
-            elif aggregation_type == "var":
-                result = np.var(stacked, axis=1)
-            elif aggregation_type == "median":
-                result = np.median(stacked, axis=1)
-            else:
-                raise ValueError(f"Unsupported aggregation type: {aggregation_type}")
+            with warnings.catch_warnings():
+                # An all-NaN row triggers a RuntimeWarning (e.g. "Mean of empty slice"); the
+                # resulting NaN is the intended output, matching pandas' skipna behavior.
+                warnings.simplefilter("ignore", category=RuntimeWarning)
+
+                if aggregation_type == "sum":
+                    result = np.nansum(stacked, axis=1)
+                elif aggregation_type == "min":
+                    result = np.nanmin(stacked, axis=1)
+                elif aggregation_type == "max":
+                    result = np.nanmax(stacked, axis=1)
+                elif aggregation_type in ["avg", "mean"]:
+                    result = np.nanmean(stacked, axis=1)
+                elif aggregation_type == "count":
+                    result = np.sum(~np.isnan(stacked), axis=1)
+                elif aggregation_type == "std":
+                    result = np.nanstd(stacked, axis=1, ddof=1)
+                elif aggregation_type == "var":
+                    result = np.nanvar(stacked, axis=1, ddof=1)
+                elif aggregation_type == "median":
+                    result = np.nanmedian(stacked, axis=1)
+                else:
+                    raise ValueError(f"Unsupported aggregation type: {aggregation_type}")
 
             # Convert back to PyArrow array (will be added as column)
             return result
@@ -130,9 +138,9 @@ class PyArrowAggregatedFeatureGroup(AggregatedFeatureGroup):
             elif aggregation_type == "count":
                 return pc.count(column).as_py()
             elif aggregation_type == "std":
-                return pc.stddev(column).as_py()
+                return pc.stddev(column, ddof=1).as_py()
             elif aggregation_type == "var":
-                return pc.variance(column).as_py()
+                return pc.variance(column, ddof=1).as_py()
             elif aggregation_type == "median":
                 # PyArrow doesn't have a direct median function
                 # We can approximate it using quantile with q=0.5

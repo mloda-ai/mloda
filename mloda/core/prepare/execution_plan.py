@@ -743,10 +743,7 @@ Available join types:
         children_uuids: set[UUID] = set()
         attempted_key = link_fw
 
-        for stored_links, uuids in link_trekker.data.items():
-            if link_fw == stored_links:
-                children_uuids.update(uuids)
-            # this part is not working!
+        children_uuids.update(link_trekker.data.get(link_fw, set()))
 
         swap_merge_sides = False
 
@@ -758,9 +755,7 @@ Available join types:
             swap_merge_sides = True
             attempted_key = (link, destination_framework, source_framework)
 
-            for stored_links, uuids in link_trekker.data.items():
-                if (link, destination_framework, source_framework) == stored_links:
-                    children_uuids.update(uuids)
+            children_uuids.update(link_trekker.data.get(attempted_key, set()))
 
             if len(children_uuids) == 0:
                 raise ValueError(f"Link {link} has no matching uuids.")

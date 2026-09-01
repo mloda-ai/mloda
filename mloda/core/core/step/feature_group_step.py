@@ -35,7 +35,6 @@ class FeatureGroupStep(Step):
 
         self.need_to_upload = False
 
-        # Currently, also used for joinsteps without tfs. This might be a bug.
         self.tfs_ids: set[UUID] = set()
 
     def get_uuids(self) -> set[UUID]:

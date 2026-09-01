@@ -32,6 +32,18 @@ def sample_table_with_missing() -> pa.Table:
 
 
 @pytest.fixture
+def sample_table_with_missing_offset_group() -> pa.Table:
+    """Table where group "B" starts at global row 5 (not row 0), exposing group-local vs
+    global row-index bugs in ffill/bfill grouped imputation."""
+    return pa.Table.from_pydict(
+        {
+            "value": [10, 20, 30, 40, 50, 100, None, None, 400, 500],
+            "group": ["A", "A", "A", "A", "A", "B", "B", "B", "B", "B"],
+        }
+    )
+
+
+@pytest.fixture
 def feature_set_mean() -> FeatureSet:
     """Create a feature set with a mean imputation feature."""
     feature_set = FeatureSet()
@@ -173,6 +185,46 @@ class TestPyArrowMissingValueFeatureGroup:
         # Check that missing values are imputed
         assert not pc.is_null(result[1]).as_py()  # Should be imputed
         assert not pc.is_null(result[3]).as_py()  # Should be imputed
+
+    def test_perform_grouped_imputation_ffill_group_not_starting_at_zero(
+        self, sample_table_with_missing_offset_group: pa.Table
+    ) -> None:
+        """Grouped ffill must resolve each group's last-valid-before-row using the row's position
+        within the group, not its global row index, when the group does not start at row 0."""
+        result = PyArrowMissingValueFeatureGroup._perform_grouped_imputation(
+            sample_table_with_missing_offset_group, "ffill", "value", None, ["group"]
+        )
+
+        df = sample_table_with_missing_offset_group.to_pandas()
+        expected = df.groupby("group")["value"].ffill()
+
+        # Group "B" is [100, None, None, 400, 500] at global rows 5-9.
+        # Both nulls should be filled from the preceding in-group value (100), not the group's last value (500).
+        assert result[6].as_py() == expected[6]
+        assert result[7].as_py() == expected[7]
+        assert result[6].as_py() == 100
+        assert result[7].as_py() == 100
+
+    def test_perform_grouped_imputation_bfill_group_not_starting_at_zero(
+        self, sample_table_with_missing_offset_group: pa.Table
+    ) -> None:
+        """Grouped bfill must resolve each group's first-valid-after-row using the row's position
+        within the group, not its global row index, when the group does not start at row 0."""
+        result = PyArrowMissingValueFeatureGroup._perform_grouped_imputation(
+            sample_table_with_missing_offset_group, "bfill", "value", None, ["group"]
+        )
+
+        df = sample_table_with_missing_offset_group.to_pandas()
+        expected = df.groupby("group")["value"].bfill()
+
+        # Group "B" is [100, None, None, 400, 500] at global rows 5-9.
+        # Both nulls should be filled from the following in-group value (400), not left unfilled.
+        assert not pc.is_null(result[6]).as_py()
+        assert not pc.is_null(result[7]).as_py()
+        assert result[6].as_py() == expected[6]
+        assert result[7].as_py() == expected[7]
+        assert result[6].as_py() == 400
+        assert result[7].as_py() == 400
 
     def test_calculate_feature_single(self, sample_table_with_missing: pa.Table, feature_set_mean: FeatureSet) -> None:
         """Test calculate_feature method with a single imputation."""

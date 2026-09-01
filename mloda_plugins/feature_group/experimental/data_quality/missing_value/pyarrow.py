@@ -110,9 +110,9 @@ class PyArrowMissingValueFeatureGroup(MissingValueFeatureGroup):
 
                     # Find all indices where count equals max_count
                     max_indices = []
-                    for i in range(len(counts)):
-                        if counts[i].as_py() == max_count:
-                            max_indices.append(i)
+                    for count_idx in range(len(counts)):
+                        if counts[count_idx].as_py() == max_count:
+                            max_indices.append(count_idx)
 
                     # Use the first index with maximum count
                     if max_indices:
@@ -206,9 +206,9 @@ class PyArrowMissingValueFeatureGroup(MissingValueFeatureGroup):
 
                 # Find all indices where count equals max_count
                 max_indices = []
-                for i in range(len(counts)):
-                    if counts[i].as_py() == max_count:
-                        max_indices.append(i)
+                for count_idx in range(len(counts)):
+                    if counts[count_idx].as_py() == max_count:
+                        max_indices.append(count_idx)
 
                 # Use the first index with maximum count
                 if max_indices:
@@ -258,28 +258,34 @@ class PyArrowMissingValueFeatureGroup(MissingValueFeatureGroup):
 
                     # Find all indices where count equals max_count
                     max_indices = []
-                    for i in range(len(counts)):
-                        if counts[i].as_py() == max_count:
-                            max_indices.append(i)
+                    for count_idx in range(len(counts)):
+                        if counts[count_idx].as_py() == max_count:
+                            max_indices.append(count_idx)
 
                     # Use the first index with maximum count
                     if max_indices:
                         group_value = value_counts.field("values")[max_indices[0]].as_py()
             elif imputation_method == "ffill":
-                # For ffill, we need to find the last non-null value before this row in the group
+                # For ffill, we need to find the last non-null value before this row in the group.
+                # `i` is the global row index, so translate it to the row's position within the group.
+                group_row_indices = pc.indices_nonzero(group_mask).to_pylist()
+                local_idx = group_row_indices.index(i)
                 valid_indices = pc.indices_nonzero(pc.is_valid(group_data))
                 if len(valid_indices) > 0:
-                    # Find the largest valid index that is less than the current index
-                    valid_indices_before = [idx for idx in valid_indices.to_pylist() if idx < i]
+                    # Find the largest valid index that is less than the current group-local index
+                    valid_indices_before = [idx for idx in valid_indices.to_pylist() if idx < local_idx]
                     if valid_indices_before:
                         last_valid_idx = max(valid_indices_before)
                         group_value = group_data[last_valid_idx].as_py()
             elif imputation_method == "bfill":
-                # For bfill, we need to find the first non-null value after this row in the group
+                # For bfill, we need to find the first non-null value after this row in the group.
+                # `i` is the global row index, so translate it to the row's position within the group.
+                group_row_indices = pc.indices_nonzero(group_mask).to_pylist()
+                local_idx = group_row_indices.index(i)
                 valid_indices = pc.indices_nonzero(pc.is_valid(group_data))
                 if len(valid_indices) > 0:
-                    # Find the smallest valid index that is greater than the current index
-                    valid_indices_after = [idx for idx in valid_indices.to_pylist() if idx > i]
+                    # Find the smallest valid index that is greater than the current group-local index
+                    valid_indices_after = [idx for idx in valid_indices.to_pylist() if idx > local_idx]
                     if valid_indices_after:
                         next_valid_idx = min(valid_indices_after)
                         group_value = group_data[next_valid_idx].as_py()

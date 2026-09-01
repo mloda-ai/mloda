@@ -107,7 +107,12 @@ class PolarsMergeEngine(BaseMergeEngine):
         return column_name in result.columns
 
     def handle_empty_data(
-        self, left_data: Any, right_data: Any, left_idx: str | list[str], right_idx: str | list[str]
+        self,
+        left_data: Any,
+        right_data: Any,
+        left_idx: str | list[str],
+        right_idx: str | list[str],
+        join_type: str = "inner",
     ) -> Any:
         """Handle empty data cases. Override in subclasses for different data types."""
         if self.is_empty_data(left_data) or self.is_empty_data(right_data):
@@ -121,6 +126,10 @@ class PolarsMergeEngine(BaseMergeEngine):
                     if col not in combined_schema:
                         combined_schema[col] = right_data[col].dtype
                 return pl.DataFrame(schema=combined_schema)
+            elif join_type != "inner":
+                # For left/right/outer joins, only one side is empty: the native join preserves
+                # the non-empty side's rows and nulls the other side's columns.
+                return None
             elif self.is_empty_data(left_data):
                 # Left empty - ensure left has compatible schema with right join column
                 left_schema = dict(left_data.schema)
@@ -143,6 +152,24 @@ class PolarsMergeEngine(BaseMergeEngine):
                 return pl.DataFrame(schema=right_schema)
         return None
 
+    def _align_empty_side_join_key_dtypes(
+        self, left_data: Any, right_data: Any, left_idx: str | list[str], right_idx: str | list[str]
+    ) -> tuple[Any, Any]:
+        """Cast an empty side's join key column(s) to the non-empty side's dtype, no-op otherwise."""
+        left_cols = [left_idx] if isinstance(left_idx, str) else left_idx
+        right_cols = [right_idx] if isinstance(right_idx, str) else right_idx
+        left_empty = self.is_empty_data(left_data)
+        right_empty = self.is_empty_data(right_data)
+        if left_empty and not right_empty:
+            for l_col, r_col in zip(left_cols, right_cols):
+                if l_col in self.get_column_names(left_data) and r_col in self.get_column_names(right_data):
+                    left_data = left_data.with_columns(pl.col(l_col).cast(right_data[r_col].dtype))
+        elif right_empty and not left_empty:
+            for l_col, r_col in zip(left_cols, right_cols):
+                if l_col in self.get_column_names(left_data) and r_col in self.get_column_names(right_data):
+                    right_data = right_data.with_columns(pl.col(r_col).cast(left_data[l_col].dtype))
+        return left_data, right_data
+
     def join_logic(
         self, join_type: str, left_data: Any, right_data: Any, left_index: Index, right_index: Index, jointype: JoinType
     ) -> Any:
@@ -156,9 +183,14 @@ class PolarsMergeEngine(BaseMergeEngine):
             right_idx = right_index.index[0]
 
         # Handle empty data cases
-        empty_result = self.handle_empty_data(left_data, right_data, left_idx, right_idx)
+        empty_result = self.handle_empty_data(left_data, right_data, left_idx, right_idx, join_type)
         if empty_result is not None:
             return empty_result
+
+        # One side is empty and falls through to a native join (left/right/outer): an empty
+        # side built without explicit dtypes infers Null join-key columns, which polars' join
+        # rejects against the non-empty side's typed columns. Align the dtype so the join can run.
+        left_data, right_data = self._align_empty_side_join_key_dtypes(left_data, right_data, left_idx, right_idx)
 
         # For differing single-key names, keep both keys via coalesce=False (correct null semantics).
         # Only pass coalesce when the installed polars supports it; older versions degrade to legacy behavior.

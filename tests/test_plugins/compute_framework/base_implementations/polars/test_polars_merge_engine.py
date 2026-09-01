@@ -238,6 +238,75 @@ class TestPolarsMergeEngine:
         result = engine.merge_inner(empty_df, empty_df, index_obj, index_obj)
         assert len(result) == 0
 
+    def test_merge_left_with_empty_right(self, index_obj: Any) -> None:
+        """Left join against an empty right side must keep all left rows, right cols null."""
+        left_data = pl.DataFrame({"idx": [1, 2, 3], "col1": ["a", "b", "c"]})
+        right_data = pl.DataFrame({"idx": [], "col2": []})
+
+        engine = PolarsMergeEngine()
+        result = engine.merge_left(left_data, right_data, index_obj, index_obj)
+
+        assert len(result) == 3
+        result_sorted = result.sort("idx")
+        assert result_sorted["idx"].to_list() == [1, 2, 3]
+        assert result_sorted["col1"].to_list() == ["a", "b", "c"]
+        assert result_sorted["col2"].to_list() == [None, None, None]
+
+    def test_merge_right_with_empty_left(self, index_obj: Any) -> None:
+        """Right join against an empty left side must keep all right rows, left cols null."""
+        left_data = pl.DataFrame({"idx": [], "col1": []})
+        right_data = pl.DataFrame({"idx": [1, 2, 3], "col2": ["x", "y", "z"]})
+
+        engine = PolarsMergeEngine()
+        result = engine.merge_right(left_data, right_data, index_obj, index_obj)
+
+        assert len(result) == 3
+        result_sorted = result.sort("idx")
+        assert result_sorted["idx"].to_list() == [1, 2, 3]
+        assert result_sorted["col2"].to_list() == ["x", "y", "z"]
+        assert result_sorted["col1"].to_list() == [None, None, None]
+
+    def test_merge_full_outer_with_empty_right(self, index_obj: Any) -> None:
+        """Full outer join with an empty right side must keep all left rows, right cols null."""
+        left_data = pl.DataFrame({"idx": [1, 2, 3], "col1": ["a", "b", "c"]})
+        right_data = pl.DataFrame({"idx": [], "col2": []})
+
+        engine = PolarsMergeEngine()
+        result = engine.merge_full_outer(left_data, right_data, index_obj, index_obj)
+
+        assert len(result) == 3
+        result_sorted = result.sort("idx")
+        assert result_sorted["idx"].to_list() == [1, 2, 3]
+        assert result_sorted["col1"].to_list() == ["a", "b", "c"]
+        assert result_sorted["col2"].to_list() == [None, None, None]
+
+    def test_merge_full_outer_with_empty_left(self, index_obj: Any) -> None:
+        """Full outer join with an empty left side must keep all right rows, left cols null."""
+        left_data = pl.DataFrame({"idx": [], "col1": []})
+        right_data = pl.DataFrame({"idx": [1, 2, 3], "col2": ["x", "y", "z"]})
+
+        engine = PolarsMergeEngine()
+        result = engine.merge_full_outer(left_data, right_data, index_obj, index_obj)
+
+        assert len(result) == 3
+        result_sorted = result.sort("idx")
+        assert result_sorted["idx"].to_list() == [1, 2, 3]
+        assert result_sorted["col2"].to_list() == ["x", "y", "z"]
+        assert result_sorted["col1"].to_list() == [None, None, None]
+
+    def test_merge_inner_with_empty_side_still_zero_rows(self, index_obj: Any) -> None:
+        """Inner join with either side empty is correctly 0 rows (guard, not the bug)."""
+        left_data = pl.DataFrame({"idx": [1, 2, 3], "col1": ["a", "b", "c"]})
+        right_data = pl.DataFrame({"idx": [], "col2": []})
+
+        engine = PolarsMergeEngine()
+
+        result = engine.merge_inner(left_data, right_data, index_obj, index_obj)
+        assert len(result) == 0
+
+        result = engine.merge_inner(right_data, left_data, index_obj, index_obj)
+        assert len(result) == 0
+
     def test_merge_with_complex_data(self) -> None:
         """Test merge with more complex data structures."""
         left_data = pl.DataFrame({"id": [1, 2, 3], "name": ["Alice", "Bob", "Charlie"], "age": [25, 30, 35]})

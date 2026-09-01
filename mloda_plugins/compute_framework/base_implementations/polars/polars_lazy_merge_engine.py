@@ -30,7 +30,12 @@ class PolarsLazyMergeEngine(PolarsMergeEngine):
         return column_name in result.collect_schema().names()
 
     def handle_empty_data(
-        self, left_data: Any, right_data: Any, left_idx: str | list[str], right_idx: str | list[str]
+        self,
+        left_data: Any,
+        right_data: Any,
+        left_idx: str | list[str],
+        right_idx: str | list[str],
+        join_type: str = "inner",
     ) -> Any:
         """For LazyFrames, skip empty data handling and let Polars handle it efficiently."""
         return None

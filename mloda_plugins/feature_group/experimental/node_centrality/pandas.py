@@ -146,7 +146,7 @@ class PandasNodeCentralityFeatureGroup(NodeCentralityFeatureGroup):
         if centrality_type == "degree":
             centrality_scores = cls._calculate_degree_centrality(adj_matrix, nodes, graph_type)
         elif centrality_type == "betweenness":
-            centrality_scores = cls._calculate_betweenness_centrality(adj_matrix, nodes)
+            centrality_scores = cls._calculate_betweenness_centrality(adj_matrix, nodes, graph_type)
         elif centrality_type == "closeness":
             centrality_scores = cls._calculate_closeness_centrality(adj_matrix, nodes)
         elif centrality_type == "eigenvector":
@@ -295,13 +295,16 @@ class PandasNodeCentralityFeatureGroup(NodeCentralityFeatureGroup):
         return closeness
 
     @classmethod
-    def _calculate_betweenness_centrality(cls, adj_matrix: pd.DataFrame, nodes: np.ndarray[Any, Any]) -> pd.Series:
+    def _calculate_betweenness_centrality(
+        cls, adj_matrix: pd.DataFrame, nodes: np.ndarray[Any, Any], graph_type: str = "undirected"
+    ) -> pd.Series:
         """
         Calculate betweenness centrality for each node.
 
         Args:
             adj_matrix: Adjacency matrix
             nodes: Array of unique node identifiers
+            graph_type: Type of graph (directed or undirected)
 
         Returns:
             A pandas Series with betweenness centrality scores
@@ -352,9 +355,12 @@ class PandasNodeCentralityFeatureGroup(NodeCentralityFeatureGroup):
                     # Add the fraction to the betweenness centrality
                     betweenness.iloc[v] += num_paths_through_v / num_paths
 
-        # Normalize by the maximum possible betweenness
+        # Normalize by the maximum possible betweenness. The ordered-pair loop above
+        # sums sigma_st(v)/sigma_st over every (s, t): for undirected graphs each unordered
+        # pair is visited twice with an identical value, for directed graphs each ordered
+        # pair contributes independently, so (n-1)(n-2) is the correct divisor either way.
         if n > 2:
-            betweenness = betweenness / ((n - 1) * (n - 2) / 2)
+            betweenness = betweenness / ((n - 1) * (n - 2))
 
         return betweenness
 

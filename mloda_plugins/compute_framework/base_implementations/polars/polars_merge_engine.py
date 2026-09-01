@@ -127,8 +127,7 @@ class PolarsMergeEngine(BaseMergeEngine):
                         combined_schema[col] = right_data[col].dtype
                 return pl.DataFrame(schema=combined_schema)
             elif join_type != "inner":
-                # For left/right/outer joins, only one side is empty: the native join preserves
-                # the non-empty side's rows and nulls the other side's columns.
+                # Left/right/outer with one side empty: let the native join run, it handles this correctly.
                 return None
             elif self.is_empty_data(left_data):
                 # Left empty - ensure left has compatible schema with right join column
@@ -187,9 +186,7 @@ class PolarsMergeEngine(BaseMergeEngine):
         if empty_result is not None:
             return empty_result
 
-        # One side is empty and falls through to a native join (left/right/outer): an empty
-        # side built without explicit dtypes infers Null join-key columns, which polars' join
-        # rejects against the non-empty side's typed columns. Align the dtype so the join can run.
+        # An empty side's join key infers Null dtype, which polars' join rejects against the typed side.
         left_data, right_data = self._align_empty_side_join_key_dtypes(left_data, right_data, left_idx, right_idx)
 
         # For differing single-key names, keep both keys via coalesce=False (correct null semantics).

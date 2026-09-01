@@ -266,8 +266,7 @@ class PyArrowMissingValueFeatureGroup(MissingValueFeatureGroup):
                     if max_indices:
                         group_value = value_counts.field("values")[max_indices[0]].as_py()
             elif imputation_method == "ffill":
-                # For ffill, we need to find the last non-null value before this row in the group.
-                # `i` is the global row index, so translate it to the row's position within the group.
+                # `i` is the global row index; translate it to the row's position within the group.
                 group_row_indices = pc.indices_nonzero(group_mask).to_pylist()
                 local_idx = group_row_indices.index(i)
                 valid_indices = pc.indices_nonzero(pc.is_valid(group_data))
@@ -278,8 +277,7 @@ class PyArrowMissingValueFeatureGroup(MissingValueFeatureGroup):
                         last_valid_idx = max(valid_indices_before)
                         group_value = group_data[last_valid_idx].as_py()
             elif imputation_method == "bfill":
-                # For bfill, we need to find the first non-null value after this row in the group.
-                # `i` is the global row index, so translate it to the row's position within the group.
+                # `i` is the global row index; translate it to the row's position within the group.
                 group_row_indices = pc.indices_nonzero(group_mask).to_pylist()
                 local_idx = group_row_indices.index(i)
                 valid_indices = pc.indices_nonzero(pc.is_valid(group_data))

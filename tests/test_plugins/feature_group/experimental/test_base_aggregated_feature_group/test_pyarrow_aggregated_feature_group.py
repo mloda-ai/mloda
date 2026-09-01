@@ -254,12 +254,7 @@ class TestPyArrowAggregatedFeatureGroupMultiColumn:
 
 
 class TestPyArrowAggregatedFeatureGroupDdofAndNullSkip:
-    """Pins down ddof=1 (sample statistics) and null-skip semantics for std/var/sum/count.
-
-    Ground truth for every assertion is computed from pandas inline (never hardcoded),
-    since pandas' single-column .std()/.var() and multi-column .sum(axis=1, skipna=True)/
-    .std(axis=1, skipna=True) already implement the target semantics.
-    """
+    """Pins ddof=1 and null-skip semantics for std/var/sum/count against pandas ground truth computed inline."""
 
     def test_perform_aggregation_std_single_column_matches_pandas_ddof1(self, sample_table: pa.Table) -> None:
         """PyArrow single-column std must use ddof=1 (sample), not ddof=0 (population)."""

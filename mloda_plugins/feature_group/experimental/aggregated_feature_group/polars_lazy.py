@@ -69,10 +69,7 @@ class PolarsLazyAggregatedFeatureGroup(AggregatedFeatureGroup):
 
     @classmethod
     def _row_wise_variance(cls, columns: list[Any]) -> Any:
-        """Row-wise sample variance (ddof=1) across columns, skipping nulls per row.
-
-        Returns null for rows with fewer than 2 valid values, matching pandas' .var(axis=1, skipna=True).
-        """
+        """Row-wise sample variance (ddof=1), skipping nulls; null when a row has fewer than 2 valid values."""
         valid_count = pl.sum_horizontal(*[col.is_not_null().cast(pl.Int64) for col in columns])
         mean_val = pl.mean_horizontal(*columns)
         sq_dev_sum = pl.sum_horizontal(*[(col - mean_val).pow(2) for col in columns])

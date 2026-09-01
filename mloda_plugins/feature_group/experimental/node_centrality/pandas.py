@@ -355,10 +355,8 @@ class PandasNodeCentralityFeatureGroup(NodeCentralityFeatureGroup):
                     # Add the fraction to the betweenness centrality
                     betweenness.iloc[v] += num_paths_through_v / num_paths
 
-        # Normalize by the maximum possible betweenness. The ordered-pair loop above
-        # sums sigma_st(v)/sigma_st over every (s, t): for undirected graphs each unordered
-        # pair is visited twice with an identical value, for directed graphs each ordered
-        # pair contributes independently, so (n-1)(n-2) is the correct divisor either way.
+        # The ordered-pair loop double-counts each unordered pair for undirected graphs and
+        # covers each direction separately for directed graphs, so (n-1)(n-2) is correct either way.
         if n > 2:
             betweenness = betweenness / ((n - 1) * (n - 2))
 

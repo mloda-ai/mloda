@@ -92,14 +92,12 @@ class PyArrowAggregatedFeatureGroup(AggregatedFeatureGroup):
             # PyArrow doesn't have direct horizontal operations, need to implement manually
             columns = [data.column(name) for name in in_features]
 
-            # Cast to float64 first so integer-with-nulls columns promote to float-with-NaN
-            # instead of becoming an unusable object dtype in to_numpy().
+            # Cast to float64 first so integer-with-nulls columns promote to NaN instead of numpy object dtype.
             arrays = [pc.cast(col, pa.float64()).to_numpy() for col in columns]
             stacked = np.column_stack(arrays)
 
             with warnings.catch_warnings():
-                # An all-NaN row triggers a RuntimeWarning (e.g. "Mean of empty slice"); the
-                # resulting NaN is the intended output, matching pandas' skipna behavior.
+                # An all-NaN row triggers a RuntimeWarning; the resulting NaN is intended (matches pandas skipna).
                 warnings.simplefilter("ignore", category=RuntimeWarning)
 
                 if aggregation_type == "sum":

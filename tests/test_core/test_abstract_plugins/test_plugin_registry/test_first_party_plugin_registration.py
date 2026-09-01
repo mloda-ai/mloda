@@ -292,9 +292,8 @@ class TestEveryWheelOwnedPluginIsRegistered:
         assert PythonDictFramework in _wheel_owned_plugin_classes(ComputeFramework), (
             "the sweep must reach dependency-free ComputeFrameworks under mloda_plugins"
         )
-        # OtelExtender, the only concrete public bundled Extender, needs the otel extra, so the public Extender
-        # set is legitimately empty in minimal envs (tox -e core). _CompositeExtender is dependency-free and
-        # proves the Extender walk reaches classes at all.
+        # No concrete public bundled Extender exists in core anymore; _CompositeExtender is the only
+        # wheel-owned candidate and it's waived, so this guard's Extender arm is currently vacuous.
         assert _CompositeExtender in _wheel_owned_plugin_classes(Extender), (
             "the sweep must reach Extenders; an empty Extender candidate set would make the guard vacuous"
         )

@@ -82,7 +82,7 @@ class MetricsExtender(Extender):
         return result
 ```
 
-Only the extender's own failure is caught: an exception raised by the wrapped function (or by a downstream breaking extender) always propagates, and the wrapped function is never run twice. Concrete extenders can also expose the flag as a constructor argument (for example `OtelExtender(raise_on_error=True)`) to let callers opt back into breaking behavior.
+Only the extender's own failure is caught: an exception raised by the wrapped function (or by a downstream breaking extender) always propagates, and the wrapped function is never run twice. Concrete extenders can also expose the flag as a constructor argument (for example `MetricsExtender(raise_on_error=True)`) to let callers opt back into breaking behavior.
 
 #### 5. Reading call facts via HookContext
 

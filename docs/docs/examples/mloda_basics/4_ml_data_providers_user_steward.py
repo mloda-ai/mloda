@@ -378,19 +378,13 @@ def _(mo):
     #### Using organization wide logging
 
     ```python
-    class OtelExtender(Extender):
-        def __init__(self) -> None:
-            if trace is None:
-                return
-
-            # Function to be wrapped by the Extender
-            self.wrapped = {ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE}
-
+    class OrgLoggingExtender(Extender):
         def wraps(self) -> Set[ExtenderHook]:
-            return self.wrapped
+            # Function to be wrapped by the Extender
+            return {ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE}
 
         def __call__(self, func: Any, *args: Any, **kwargs: Any) -> Any:
-            logger.warning("OtelExtender")
+            logger.warning("OrgLoggingExtender")
             result = func(*args, **kwargs)
             return result
     ```

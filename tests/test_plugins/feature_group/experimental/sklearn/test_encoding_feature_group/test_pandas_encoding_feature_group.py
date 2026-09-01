@@ -57,9 +57,9 @@ class TestPandasEncodingFeatureGroup:
 
         training_data = PandasEncodingFeatureGroup._extract_training_data(data, "category")
 
-        # Should drop NaN values during training
-        assert training_data.shape == (4,)
-        assert list(training_data) == ["A", "B", "A", "B"]
+        # Should fill NaN with "unknown" during training, matching the transform-time policy
+        assert training_data.shape == (5,)
+        assert list(training_data) == ["A", "B", "unknown", "A", "B"]
 
     @patch(
         "mloda_plugins.feature_group.experimental.sklearn.encoding.pandas.PandasEncodingFeatureGroup._import_sklearn_components"
@@ -262,6 +262,40 @@ class TestPandasEncodingFeatureGroup:
         # LabelEncoder should assign 0, 1, 2 to A, B, C respectively
         expected_values = [0, 1, 2, 0, 1]  # A=0, B=1, C=2
         assert list(result_data["category__label_encoded"]) == expected_values
+
+    @patch(
+        "mloda_plugins.feature_group.experimental.sklearn.encoding.pandas.PandasEncodingFeatureGroup._import_sklearn_components"
+    )
+    def test_end_to_end_label_encoding_with_nan_does_not_crash(self, mock_import: Any) -> None:
+        """Fit fills NaN with 'unknown' (same as transform), so LabelEncoder.transform never sees an unseen label."""
+        try:
+            from sklearn.preprocessing import LabelEncoder
+        except ImportError:
+            return  # Skip test if sklearn not available
+
+        mock_import.return_value = {"LabelEncoder": LabelEncoder}
+
+        # Category column contains a NaN. Fit must fill it with "unknown" (the same
+        # sentinel used at transform time) so the encoder learns that label too.
+        data = pd.DataFrame({"category": ["a", "b", None, "a", "b"]})
+
+        features = FeatureSet()
+        features.add(Feature("category__label_encoded"))
+
+        result_data = PandasEncodingFeatureGroup.calculate_feature(data, features)
+
+        assert "category__label_encoded" in result_data.columns
+
+        # Ground truth: fit/transform a fresh LabelEncoder on the same fillna'd data.
+        filled = data["category"].fillna("unknown")
+        expected = LabelEncoder().fit(filled).transform(filled)
+
+        assert list(result_data["category__label_encoded"]) == list(expected)
+
+        # The row that had None must have a defined, non-null integer code.
+        nan_row_code = result_data["category__label_encoded"].iloc[2]
+        assert pd.notna(nan_row_code)
+        assert 0 <= nan_row_code < len(set(filled))
 
     @patch(
         "mloda_plugins.feature_group.experimental.sklearn.encoding.pandas.PandasEncodingFeatureGroup._import_sklearn_components"

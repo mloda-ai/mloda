@@ -90,9 +90,9 @@ class PandasEncodingFeatureGroup(EncodingFeatureGroup):
         # Extract the specified column
         feature_data = data[source_feature]
 
-        # Handle missing values by dropping rows with NaN
-        # This is a simple strategy - more sophisticated handling could be added
-        feature_data = feature_data.dropna()
+        # Handle missing values the same way as _apply_encoder does at transform time,
+        # so the encoder learns "unknown" as a category and never sees an unseen label.
+        feature_data = feature_data.fillna("unknown")
 
         # For categorical encoders, we need to handle the data format properly
         # LabelEncoder expects 1D array, OneHotEncoder and OrdinalEncoder expect 2D array

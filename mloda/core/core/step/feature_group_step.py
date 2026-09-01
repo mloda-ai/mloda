@@ -35,7 +35,8 @@ class FeatureGroupStep(Step):
 
         self.need_to_upload = False
 
-        # Currently, also used for joinsteps without tfs. This might be a bug.
+        # A uuid already registered on the target compute framework, not necessarily a TransformFrameworkStep's
+        # own uuid: ExecutionPlan.add_tfs's same-framework join path also stores a plain feature uuid here.
         self.tfs_ids: set[UUID] = set()
 
     def get_uuids(self) -> set[UUID]:

@@ -743,13 +743,11 @@ Available join types:
         children_uuids: set[UUID] = set()
         attempted_key = link_fw
 
-        for stored_links, uuids in link_trekker.data.items():
-            if link_fw == stored_links:
-                children_uuids.update(uuids)
-            # this part is not working!
+        children_uuids.update(link_trekker.data.get(link_fw, set()))
 
         swap_merge_sides = False
 
+        # link_fw is sourced from link_trekker.data, so this branch is defensive, not expected to trigger.
         if len(children_uuids) == 0:
             # No child needs the declared orientation, so destination and source are the other way around.
             destination_framework = link_fw[2]

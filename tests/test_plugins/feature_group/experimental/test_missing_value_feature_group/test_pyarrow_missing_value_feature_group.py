@@ -44,6 +44,19 @@ def sample_table_with_missing_offset_group() -> pa.Table:
 
 
 @pytest.fixture
+def sample_table_with_null_group_key() -> pa.Table:
+    """Table where one row's group-by-feature value is itself null (None group key),
+    and the value column also has a null at that same row, so grouped ffill/bfill
+    must resolve that row's own group without crashing."""
+    return pa.Table.from_pydict(
+        {
+            "value": [10, None, 30],
+            "group": ["A", None, "A"],
+        }
+    )
+
+
+@pytest.fixture
 def feature_set_mean() -> FeatureSet:
     """Create a feature set with a mean imputation feature."""
     feature_set = FeatureSet()
@@ -225,6 +238,28 @@ class TestPyArrowMissingValueFeatureGroup:
         assert result[7].as_py() == expected[7]
         assert result[6].as_py() == 400
         assert result[7].as_py() == 400
+
+    def test_perform_grouped_imputation_ffill_null_group_key(
+        self, sample_table_with_null_group_key: pa.Table
+    ) -> None:
+        """Grouped ffill must not crash when a row needing imputation has a null group-by key:
+        Arrow's 3-valued equality makes pc.equal(col, null) all-null, so the null-key group mask
+        is all-null and the row's own index is missing from indices_nonzero(group_mask)."""
+        result = PyArrowMissingValueFeatureGroup._perform_grouped_imputation(
+            sample_table_with_null_group_key, "ffill", "value", None, ["group"]
+        )
+        assert isinstance(result, pa.Array)
+        assert len(result) == sample_table_with_null_group_key.num_rows
+
+    def test_perform_grouped_imputation_bfill_null_group_key(
+        self, sample_table_with_null_group_key: pa.Table
+    ) -> None:
+        """Grouped bfill must not crash when a row needing imputation has a null group-by key."""
+        result = PyArrowMissingValueFeatureGroup._perform_grouped_imputation(
+            sample_table_with_null_group_key, "bfill", "value", None, ["group"]
+        )
+        assert isinstance(result, pa.Array)
+        assert len(result) == sample_table_with_null_group_key.num_rows
 
     def test_calculate_feature_single(self, sample_table_with_missing: pa.Table, feature_set_mean: FeatureSet) -> None:
         """Test calculate_feature method with a single imputation."""

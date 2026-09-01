@@ -142,6 +142,11 @@ class IcebergFilterEngine(BaseFilterEngine):
             elif len(expressions) == 2 and And is not None:
                 return And(expressions[0], expressions[1])
 
+            return None
+
+        else:
+            raise NotImplementedError(f"Unsupported Iceberg filter type: {filter_type!r}")
+
         return None
 
     @classmethod

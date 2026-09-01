@@ -117,14 +117,24 @@ class TestIcebergFilterEngine:
         assert expression is not None
 
     def test_build_iceberg_expression_unsupported(self) -> None:
-        """Test building expression for unsupported filter type."""
+        """Test that an unsupported filter type raises NotImplementedError."""
         feature = Feature("name")
         filter_type = FilterType.REGEX
         parameter = {"value": "^A"}
         single_filter = SingleFilter(feature, filter_type, parameter)
 
-        expression = IcebergFilterEngine._build_iceberg_expression(single_filter)
-        assert expression is None
+        with pytest.raises(NotImplementedError):
+            IcebergFilterEngine._build_iceberg_expression(single_filter)
+
+    def test_build_iceberg_expression_categorical_inclusion_raises(self) -> None:
+        """Unknown filter types must raise NotImplementedError, not silently fall through to None."""
+        feature = Feature("category")
+        filter_type = FilterType.CATEGORICAL_INCLUSION
+        parameter = {"values": ["A", "B"]}
+        single_filter = SingleFilter(feature, filter_type, parameter)
+
+        with pytest.raises(NotImplementedError):
+            IcebergFilterEngine._build_iceberg_expression(single_filter)
 
     def test_extract_parameter_value(self) -> None:
         """Test extracting parameter values."""
@@ -225,6 +235,17 @@ class TestIcebergFilterEngine:
 
         # Should only apply the age filter (unknown_column is not in get_all_names)
         mock_iceberg_table.scan.assert_called_once()
+
+    def test_apply_filters_categorical_inclusion_raises(self, mock_iceberg_table: Mock, mock_feature_set: Mock) -> None:
+        """apply_filters must not silently drop an unsupported filter and return the unfiltered table."""
+        category_filter = SingleFilter(Feature("category"), FilterType.CATEGORICAL_INCLUSION, {"values": ["A", "B"]})
+        mock_feature_set.filters = [category_filter]
+
+        with pytest.raises(NotImplementedError):
+            IcebergFilterEngine.apply_filters(mock_iceberg_table, mock_feature_set)
+
+        # An unfiltered scan would indicate the filter was silently dropped instead of raising.
+        mock_iceberg_table.scan.assert_not_called()
 
     def test_standard_filter_methods_not_implemented(self) -> None:
         """Test that standard filter methods raise NotImplementedError."""

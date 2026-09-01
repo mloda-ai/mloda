@@ -23,6 +23,8 @@ class WorkerManager:
         self.process_register: dict[UUID, tuple[Any, Any, Any]] = {}
         self.result_queues_collection: set[Any] = set()
         self.result_uuids_collection: set[UUID] = set()
+        # cfw_uuid of DROP_COMPLETE tuples drained by poll_result_queues before wait_for_drop_completion read them.
+        self.completed_drops: set[UUID] = set()
         # cfw_uuid -> step uuids dispatched to that worker. Needed because a worker that
         # exits cleanly is invisible to find_dead_workers, so the only way to notice the
         # loss is that steps were assigned to it and no result ever arrived.
@@ -67,11 +69,8 @@ class WorkerManager:
         command_queue.put(command)
 
     def poll_result_queues(self) -> None:
-        """Non-blocking poll all result queues, collect step-UUID strings.
-
-        The result queue also carries ("DROP_COMPLETE", cfw_uuid) control tuples;
-        skip non-str messages rather than pass them to UUID().
-        """
+        """Non-blocking poll of all result queues; collects step-UUID strings and drains DROP_COMPLETE tuples into
+        completed_drops."""
         for r_queue in self.result_queues_collection:
             try:
                 msg = r_queue.get(block=False)
@@ -79,6 +78,8 @@ class WorkerManager:
                 continue
             if isinstance(msg, str):
                 self.result_uuids_collection.add(UUID(msg))
+            elif isinstance(msg, tuple) and len(msg) == 2 and msg[0] == "DROP_COMPLETE":
+                self.completed_drops.add(msg[1])
 
     def record_assignment(self, cfw_uuid: UUID, step_uuids: set[UUID]) -> None:
         """Remember that these steps were dispatched to this worker."""
@@ -121,14 +122,18 @@ class WorkerManager:
         return step_uuid in self.result_uuids_collection
 
     def wait_for_drop_completion(self, result_queue: Any, cfw_uuid: UUID, timeout: float = 5.0) -> None:
-        """Poll queue until ("DROP_COMPLETE", cfw_uuid) received or timeout."""
+        """Poll queue until ("DROP_COMPLETE", cfw_uuid) is received or timeout, checking completed_drops first."""
         start_time = time.time()
         while time.time() - start_time < timeout:
+            if cfw_uuid in self.completed_drops:
+                self.completed_drops.discard(cfw_uuid)
+                return
             try:
                 msg = result_queue.get(block=False)
                 if isinstance(msg, tuple) and len(msg) == 2 and msg[0] == "DROP_COMPLETE" and msg[1] == cfw_uuid:
                     return
                 result_queue.put(msg, block=False)
+                time.sleep(0.001)
             except queue.Empty:
                 time.sleep(0.001)
         logger.warning(f"Drop operation for CFW {cfw_uuid} timed out after {timeout}s")

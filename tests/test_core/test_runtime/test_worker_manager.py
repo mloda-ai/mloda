@@ -5,6 +5,7 @@ import queue
 import sys
 import threading
 import time
+from collections.abc import Iterator
 from typing import Any
 from unittest.mock import MagicMock, Mock, patch
 from uuid import UUID, uuid4
@@ -338,6 +339,29 @@ class TestWorkerManagerResultPolling:
         assert UUID(valid_uuid) in manager.result_uuids_collection
         assert other_uuid not in manager.result_uuids_collection
 
+    def test_poll_result_queues_draining_drop_complete_leaves_waiter_stuck(self) -> None:
+        """A DROP_COMPLETE tuple drained by poll_result_queues must still reach wait_for_drop_completion, not vanish."""
+        manager = WorkerManager()
+        cfw_uuid = uuid4()
+
+        def get_side_effect() -> Iterator[Any]:
+            yield ("DROP_COMPLETE", cfw_uuid)
+            while True:
+                yield queue.Empty()
+
+        mock_queue = MagicMock()
+        mock_queue.get.side_effect = get_side_effect()
+        manager.result_queues_collection.add(mock_queue)
+
+        # Simulate the race: the main loop's poll wins and drains the tuple first.
+        manager.poll_result_queues()
+
+        start_time = time.time()
+        manager.wait_for_drop_completion(mock_queue, cfw_uuid, timeout=1.0)
+        elapsed = time.time() - start_time
+
+        assert elapsed < 0.5
+
 
 class TestWorkerManagerStepCompletion:
     """Test checking if steps are completed."""
@@ -568,6 +592,24 @@ class TestWorkerManagerDropCompletion:
         manager.wait_for_drop_completion(mock_queue, cfw_uuid, timeout=1.0)
 
         mock_queue.get.assert_called_with(block=False)
+
+    def test_wait_for_drop_completion_sleeps_after_putting_back_other_message(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The put-back path must sleep too, not only the queue.Empty() branch, or it busy-spins the CPU."""
+        manager = WorkerManager()
+        cfw_uuid = uuid4()
+        other_message = str(uuid4())
+
+        mock_queue = MagicMock()
+        mock_queue.get.side_effect = [other_message, ("DROP_COMPLETE", cfw_uuid)]
+
+        sleep_calls: list[float] = []
+        monkeypatch.setattr("mloda.core.runtime.worker_manager.time.sleep", lambda seconds: sleep_calls.append(seconds))
+
+        manager.wait_for_drop_completion(mock_queue, cfw_uuid, timeout=1.0)
+
+        assert sleep_calls, "time.sleep should be called between putting back a non-matching message and the next get"
 
 
 class TestWorkerManagerJoinAll:

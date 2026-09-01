@@ -92,8 +92,13 @@ class PyArrowAggregatedFeatureGroup(AggregatedFeatureGroup):
             # PyArrow doesn't have direct horizontal operations, need to implement manually
             columns = [data.column(name) for name in in_features]
 
-            # Cast to float64 first so integer-with-nulls columns promote to NaN instead of numpy object dtype.
-            arrays = [pc.cast(col, pa.float64()).to_numpy() for col in columns]
+            # Cast to float64 only when a null is present, so it can be represented as NaN for the
+            # np.nan* reducers to skip. Casting unconditionally would both force every result to
+            # float64 and silently lose precision for int64 values beyond +/-2**53.
+            if any(col.null_count > 0 for col in columns):
+                arrays = [pc.cast(col, pa.float64()).to_numpy() for col in columns]
+            else:
+                arrays = [col.to_numpy() for col in columns]
             stacked = np.column_stack(arrays)
 
             with warnings.catch_warnings():

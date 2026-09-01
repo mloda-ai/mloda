@@ -341,6 +341,46 @@ class TestPyArrowAggregatedFeatureGroupDdofAndNullSkip:
             assert abs(result[row_index] - expected[row_index]) < 1e-6
 
 
+class TestPyArrowAggregatedFeatureGroupMultiColumnIntegerHandling:
+    """Pins int64 handling for multi-column aggregation: no unconditional float64 cast."""
+
+    @pytest.fixture
+    def large_int64_table(self) -> pa.Table:
+        """Two int64 source columns; metrics~0 holds values beyond 2**53 (float64 precision limit)."""
+        return pa.table(
+            {
+                "metrics~0": pa.array([2**60, 2**60 + 1], type=pa.int64()),
+                "metrics~1": pa.array([0, 0], type=pa.int64()),
+            }
+        )
+
+    def test_perform_aggregation_max_multi_column_large_int64_does_not_raise_and_is_precise(
+        self, large_int64_table: pa.Table
+    ) -> None:
+        """An unconditional cast to float64 raises ArrowInvalid for int64 values beyond +/-2**53."""
+        result = PyArrowAggregatedFeatureGroup._perform_aggregation(
+            large_int64_table, "max", ["metrics~0", "metrics~1"]
+        )
+
+        assert int(result[0]) == 2**60
+        assert int(result[1]) == 2**60 + 1
+
+    def test_perform_aggregation_sum_multi_column_no_nulls_preserves_integer_dtype(
+        self, multi_source_table: pa.Table
+    ) -> None:
+        """With no nulls anywhere, the result dtype must stay integer, matching pandas/polars behavior."""
+        result = PyArrowAggregatedFeatureGroup._perform_aggregation(
+            multi_source_table, "sum", ["metrics~0", "metrics~1"]
+        )
+
+        updated = PyArrowAggregatedFeatureGroup._add_result_to_data(multi_source_table, "metrics__sum_aggr", result)
+
+        result_col = updated.column("metrics__sum_aggr")
+        assert pa.types.is_integer(result_col.type), (
+            f"expected integer dtype preserved when no nulls present, got {result_col.type}"
+        )
+
+
 class TestAggPyArrowIntegration:
     """Integration tests for the aggregated feature group using DataCreator."""
 

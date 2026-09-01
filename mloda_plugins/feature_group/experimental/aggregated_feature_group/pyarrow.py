@@ -6,6 +6,7 @@ from __future__ import annotations
 
 from typing import Any
 
+import numpy as np
 import pyarrow as pa
 import pyarrow.compute as pc
 
@@ -54,12 +55,19 @@ class PyArrowAggregatedFeatureGroup(AggregatedFeatureGroup):
     @classmethod
     def _add_result_to_data(cls, data: pa.Table, feature_name: str, result: Any) -> pa.Table:
         """Add the result to the Table."""
-        # Create an array with the aggregated result repeated for each row
-        repeat_count = data.num_rows
-        repeated_result = pa.array([result] * repeat_count)
+        if isinstance(result, np.ndarray):
+            # Multi-column (row-wise) aggregation: one value per row already.
+            result_array = pa.array(result)
+        else:
+            # Single-column (vertical) aggregation: a scalar broadcast to every row.
+            result_array = pa.array([result] * data.num_rows)
 
-        # Add the new column to the table
-        return data.append_column(feature_name, repeated_result)
+        if feature_name in data.schema.names:
+            column_index = data.schema.names.index(feature_name)
+            data = data.remove_column(column_index)
+            return data.append_column(feature_name, result_array)
+        else:
+            return data.append_column(feature_name, result_array)
 
     @classmethod
     def _perform_aggregation(cls, data: pa.Table, aggregation_type: str, in_features: list[str]) -> Any:
@@ -82,9 +90,6 @@ class PyArrowAggregatedFeatureGroup(AggregatedFeatureGroup):
             # Multi-column: aggregate across columns row-wise
             # PyArrow doesn't have direct horizontal operations, need to implement manually
             columns = [data.column(name) for name in in_features]
-
-            # Convert columns to numpy for easier row-wise operations
-            import numpy as np
 
             arrays = [col.to_numpy() for col in columns]
             stacked = np.column_stack(arrays)

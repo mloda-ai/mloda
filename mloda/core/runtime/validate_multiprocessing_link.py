@@ -6,8 +6,8 @@ inside a freshly spawned worker (e.g. one under `if __name__ == "__main__":`) ca
 """
 
 import pickle  # nosec
-from collections.abc import Iterable
-from typing import Any
+from collections.abc import Callable, Iterable
+from typing import Any, Optional
 
 from mloda.core.abstract_plugins.components.parallelization_modes import ParallelizationMode
 from mloda.core.core.step.feature_group_step import FeatureGroupStep
@@ -112,3 +112,24 @@ def raise_on_unpicklable_step_feature_group(steps: Iterable[Any]) -> None:
                 raise ValueError(_unpicklable_step_feature_group_error(feature_group, step))
 
         raise ValueError(_unpicklable_step_generic_error(step))
+
+
+def _unpicklable_child_bootstrap_error(child_bootstrap: Callable[[], None]) -> str:
+    return (
+        f"child_bootstrap ({child_bootstrap!r}) cannot be pickled for multiprocessing, so mloda cannot send it to "
+        "a spawned worker process. This happens when the callable is a lambda, a closure over a local variable or "
+        "an unpicklable object, or an instance of a class defined inside a function instead of at module level.\n"
+        "Resolution: use a plain, picklable, no-argument callable defined at module level, or run without "
+        "ParallelizationMode.MULTIPROCESSING."
+    )
+
+
+def raise_on_unpicklable_child_bootstrap(child_bootstrap: Optional[Callable[[], None]]) -> None:
+    """Raise ValueError if child_bootstrap is not None and multiprocessing cannot pickle it."""
+    if child_bootstrap is None:
+        return
+
+    if _is_picklable(child_bootstrap):
+        return
+
+    raise ValueError(_unpicklable_child_bootstrap_error(child_bootstrap))

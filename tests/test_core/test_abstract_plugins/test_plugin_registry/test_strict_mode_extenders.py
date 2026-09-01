@@ -22,7 +22,7 @@ parallel-safety.
 """
 
 import logging
-from typing import Any, Optional, cast
+from typing import Any, Callable, Optional, cast
 
 import pytest
 
@@ -175,6 +175,9 @@ class _RecordingRunner:
         function_extender: Optional[set[Extender]] = None,
         api_data: Optional[dict[str, Any]] = None,
         artifacts: Optional[dict[str, Any]] = None,
+        run_id: Optional[str] = None,
+        carrier: Optional[dict[str, str]] = None,
+        child_bootstrap: Optional[Callable[[], None]] = None,
     ) -> None:
         self.received_extenders = function_extender
 
@@ -190,6 +193,7 @@ class TestRequestWiring:
 
         api = mlodaAPI.__new__(mlodaAPI)
         api.plugin_collector = PluginCollector().set_strict_mode("strict")
+        api.run_id = "test-run-id"
 
         recorder = _RecordingRunner()
         api._enter_runner_context(

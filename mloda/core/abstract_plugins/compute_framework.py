@@ -65,7 +65,7 @@ class ComputeFramework(ABC):
         self,
         mode: ParallelizationMode = ParallelizationMode.SYNC,
         children_if_root: frozenset[UUID] = frozenset(),
-        uuid: UUID | None = None,
+        uuid: Optional[UUID] = None,
         function_extender: Optional[set[Extender]] = None,
     ) -> None:
         """This class is initialized for step execution."""
@@ -75,6 +75,10 @@ class ComputeFramework(ABC):
         self.already_calculated_children_tracker: set[UUID] = set()
         self.column_names: set[str] = set()
         self.function_extender = function_extender if function_extender is not None else set()
+        # Set post-construction so a subclass's fixed __init__ signature isn't broken.
+        self.run_id: str | None = None
+        self.carrier: Optional[dict[str, str]] = None
+        self.worker_index: int | None = None
 
         self.uuid = uuid or uuid4()
 
@@ -724,6 +728,9 @@ class ComputeFramework(ABC):
             input_features=input_features,
             compute_framework_name=self.get_class_name(),
             rows_in=safe_field(lambda: self._row_count(self.data), None),
+            run_id=self.run_id,
+            carrier=self.carrier,
+            worker_index=self.worker_index,
         )
 
     @staticmethod

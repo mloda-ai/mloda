@@ -66,6 +66,8 @@ class ComputeFrameworkExecutor:
         """
         # get function_extender
         function_extender = self.cfw_register.get_function_extender()
+        run_id = self.cfw_register.get_run_id()
+        carrier = self.cfw_register.get_carrier()
 
         # init framework
         new_cfw = cf_class(
@@ -74,6 +76,8 @@ class ComputeFrameworkExecutor:
             uuid or uuid4(),
             function_extender=function_extender,
         )
+        new_cfw.run_id = run_id
+        new_cfw.carrier = dict(carrier) if carrier is not None else None
 
         # add to register
         self.cfw_register.add_cfw_to_compute_frameworks(new_cfw.get_uuid(), cf_class.get_class_name(), children_if_root)
@@ -305,6 +309,7 @@ class ComputeFrameworkExecutor:
             process, command_queue, result_queue = existing
 
         self.worker_manager.send_command(cfw_uuid, step)
-        # Record the assignment so a worker that exits still owing these results is
-        # detectable, including the clean exit the data-drop path produces.
-        self.worker_manager.record_assignment(cfw_uuid, set(step.get_uuids()))
+        # Track by step.get_result_uuid() (== step.uuid), the id a worker reports back via
+        # result_queue. get_uuids() returns feature uuids instead, a different namespace that
+        # made find_orphaned_steps flag every finished worker as still owing a result.
+        self.worker_manager.record_assignment(cfw_uuid, {step.get_result_uuid()})

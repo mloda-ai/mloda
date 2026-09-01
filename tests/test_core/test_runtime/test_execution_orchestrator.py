@@ -347,6 +347,64 @@ class TestSyncModeSkipsMyManager:
         orchestrator.__exit__(None, None, None)
 
 
+class TestEnterAcceptsChildBootstrap:
+    def test_enter_accepts_child_bootstrap_parameter(self) -> None:
+        import inspect
+
+        mock_planner = Mock(spec=ExecutionPlan)
+        orchestrator = ExecutionOrchestrator(mock_planner)
+
+        sig = inspect.signature(orchestrator.__enter__)
+        assert "child_bootstrap" in sig.parameters
+
+    def test_child_bootstrap_parameter_defaults_to_none(self) -> None:
+        import inspect
+
+        mock_planner = Mock(spec=ExecutionPlan)
+        orchestrator = ExecutionOrchestrator(mock_planner)
+
+        sig = inspect.signature(orchestrator.__enter__)
+        assert sig.parameters["child_bootstrap"].default is None
+
+    def test_child_bootstrap_parameter_is_last(self) -> None:
+        """Must come after run_id/carrier so existing positional callers are unaffected."""
+        import inspect
+
+        mock_planner = Mock(spec=ExecutionPlan)
+        orchestrator = ExecutionOrchestrator(mock_planner)
+
+        sig = inspect.signature(orchestrator.__enter__)
+        param_names = list(sig.parameters.keys())
+        assert param_names.index("child_bootstrap") > param_names.index("carrier")
+
+
+class TestEnterSetsChildBootstrapOnCfwRegister:
+    def test_sync_mode_cfw_register_round_trips_child_bootstrap(self) -> None:
+        def _bootstrap() -> None:
+            pass
+
+        mock_planner = Mock(spec=ExecutionPlan)
+        orchestrator = ExecutionOrchestrator(mock_planner)
+
+        # mypy treats __enter__ as positional-only regardless of signature, so this kwarg
+        # always trips a false-positive call-arg error.
+        orchestrator.__enter__({ParallelizationMode.SYNC}, child_bootstrap=_bootstrap)  # type: ignore[call-arg]
+
+        assert orchestrator.cfw_register.get_child_bootstrap() is _bootstrap
+
+        orchestrator.__exit__(None, None, None)
+
+    def test_sync_mode_cfw_register_child_bootstrap_defaults_to_none(self) -> None:
+        mock_planner = Mock(spec=ExecutionPlan)
+        orchestrator = ExecutionOrchestrator(mock_planner)
+
+        orchestrator.__enter__({ParallelizationMode.SYNC})
+
+        assert orchestrator.cfw_register.get_child_bootstrap() is None
+
+        orchestrator.__exit__(None, None, None)
+
+
 class TestExecutionOrchestratorStepLock:
     def test_has_step_lock_attribute_after_construction(self) -> None:
         """ExecutionOrchestrator should have a _step_lock attribute after __init__."""

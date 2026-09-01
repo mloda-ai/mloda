@@ -36,12 +36,16 @@ class WorkerManager:
     def create_worker_process(
         self, cfw_uuid: UUID, target: Callable[..., None], args: tuple[Any, ...]
     ) -> tuple[Any, Any, Any]:
-        """Create worker process with command and result queues."""
+        """Create worker process with command and result queues.
+
+        Appends a zero-based worker_index as a trailing positional arg to the target.
+        """
         ctx = mp_spawn_context()
         command_queue: multiprocessing.Queue[Any] = ctx.Queue()
         result_queue: multiprocessing.Queue[Any] = ctx.Queue()
 
-        process = ctx.Process(target=target, args=(command_queue, result_queue, *args))
+        worker_index = len(self.process_register)
+        process = ctx.Process(target=target, args=(command_queue, result_queue, *args, worker_index))
 
         self.process_register[cfw_uuid] = (process, command_queue, result_queue)
         self.result_queues_collection.add(result_queue)

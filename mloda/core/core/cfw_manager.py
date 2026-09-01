@@ -128,6 +128,9 @@ class CfwManager:
         """
         Adds a merge relation between two Compute Framework UUIDs.
 
+        Calling this a second time for a pair already merged, with either uuid on either
+        side, can create a cycle in cfw_merge_relation, which find_leftmost will detect and raise on.
+
         Args:
             left_uuid: The UUID of the left Compute Framework.
             right_uuid: The UUID of the right Compute Framework.
@@ -148,14 +151,28 @@ class CfwManager:
 
         Returns:
             The leftmost UUID in the chain.
+
+        Raises:
+            ValueError: If cfw_merge_relation contains a cycle.
         """
         if uuid not in self.cfw_merge_relation:
             return uuid
 
+        start_uuid = uuid
         leftmost_uuid = uuid
+        visited = {uuid}
 
         while self.cfw_merge_relation[uuid][0] != uuid:
             uuid = self.cfw_merge_relation[uuid][0]
+
+            if uuid in visited:
+                raise ValueError(
+                    internal_invariant_error(
+                        "cfw_merge_relation contains a cycle while resolving leftmost uuid.",
+                        f"start_uuid={start_uuid}, cls_name={cls_name}, visited={visited}",
+                    )
+                )
+            visited.add(uuid)
 
             if self.cfw_merge_relation[uuid][1] == cls_name:
                 leftmost_uuid = uuid

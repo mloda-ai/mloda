@@ -28,6 +28,7 @@ Every `BaseMaskEngine` subclass implements these abstract classmethods:
 
 | Method | Returns mask where... |
 |--------|----------------------|
+| `supported_data_type()` | (not a mask) the data container type this engine handles, e.g. `pd.DataFrame` |
 | `equal(data, column, value)` | `data[column] == value` |
 | `greater_equal(data, column, value)` | `data[column] >= value` |
 | `greater_than(data, column, value)` | `data[column] > value` |

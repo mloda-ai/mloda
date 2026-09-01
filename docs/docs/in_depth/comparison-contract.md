@@ -12,8 +12,9 @@ clear error instead of a cryptic backend failure or a quietly incorrect result.
   `SemanticDimension` values (`ORDERED`, `TEMPORAL`, `NUMERIC`), an optional `unit`, and a
   `tz_policy`.
 - `ColumnSemantics` is the framework-neutral view of one column: `is_ordered`, `is_temporal`,
-  `is_numeric`, `unit`, `is_tz_aware`. Each compute framework derives it from its own native
-  schema (`column_semantics(...)`).
+  `is_numeric`, `unit`, `is_tz_aware`. Each merge and filter engine (`BaseMergeEngine` /
+  `BaseFilterEngine` subclass) derives it from its framework's native schema via the
+  `_column_semantics(data, column)` hook.
 - `ComparisonContract.validate(semantics, column)` checks a single column against the required
   dimensions. `require_compatible(left, right, ...)` checks two columns are comparable, using a
   **strict timezone model**: mixing timezone-aware and timezone-naive temporal columns is an error,

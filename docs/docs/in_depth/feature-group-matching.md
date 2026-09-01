@@ -89,11 +89,13 @@ options = Options(context={"in_features": "custom_feature"})  # Any value OK
 For complex validation beyond simple value lists:
 
 ```python
+from mloda.provider import is_positive_int
+
 PROPERTY_MAPPING = {
     "window_size": PropertySpec(
         "Size of the time window",
         strict_validation=True,
-        element_validator=lambda x: isinstance(x, int) and x > 0,
+        element_validator=is_positive_int,
     ),
 }
 ```

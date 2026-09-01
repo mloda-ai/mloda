@@ -19,6 +19,8 @@ class Graph:
         # track parent children relations easier
         self.parents_by_direct_: dict[UUID, set[UUID]] = defaultdict(set)
 
+        # Despite the name, this maps child -> set of its ancestors;
+        # ExecutionPlan.get_parent_children_mapping inverts it into parent -> children.
         self.parent_to_children_mapping: dict[UUID, set[UUID]] = defaultdict(set)
         self.child_with_root: dict[UUID, set[UUID]] = defaultdict(set)
 

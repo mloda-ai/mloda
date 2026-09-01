@@ -236,6 +236,8 @@ fgs = get_feature_group_docs(compute_framework="PandasDataFrame")
 - **search** (`str`, optional): Search in description (case-insensitive partial match).
 - **compute_framework** (`str | Type[ComputeFramework]`, optional): Filter by compute framework.
 - **version_contains** (`str`, optional): Filter by version substring.
+- **plugin_collector** (`PluginCollector`, optional): Filter using the plugin collector's applicability check.
+- **registered_only** (`bool`, default `False`): If `True`, only document classes in the collector's injected registry, else the default registry.
 
 **Returns:** `List[FeatureGroupInfo]` sorted by name.
 
@@ -258,6 +260,7 @@ available_frameworks = get_compute_framework_docs(available_only=True)
 - **name** (`str`, optional): Filter by name (case-insensitive partial match).
 - **search** (`str`, optional): Search in description (case-insensitive partial match).
 - **available_only** (`bool`, default `False`): By default all frameworks are listed (with `is_available` as the flag); set `available_only=True` to filter to available frameworks only.
+- **registered_only** (`bool`, default `False`): If `True`, only document classes in the default registry.
 
 **Returns:** `List[ComputeFrameworkInfo]` sorted by name.
 
@@ -280,6 +283,7 @@ extenders = get_extender_docs(wraps="formula")
 - **name** (`str`, optional): Filter by name (case-insensitive partial match).
 - **search** (`str`, optional): Search in description (case-insensitive partial match).
 - **wraps** (`str`, optional): Filter by wrapped function type (case-insensitive exact match).
+- **registered_only** (`bool`, default `False`): If `True`, only document classes in the default registry.
 
 **Returns:** `List[ExtenderInfo]` sorted by name.
 

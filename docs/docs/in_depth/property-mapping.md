@@ -46,7 +46,8 @@ same fields, its keyword is `strict=` (which sets `strict_validation`), and it k
 declaration readable. `PropertySpec` is the lower-level form: it is the type the builder
 returns and the type the schema is validated against, so reach for it directly when you need
 the class itself (subclassing, `isinstance` checks, or constructing a spec programmatically).
-Both are exported from `mloda.provider`.
+The builder does not accept `framework_set` or `scalar_only`; a spec needing those must be
+constructed as `PropertySpec(...)` directly. Both are exported from `mloda.provider`.
 
 ```python
 from mloda.provider import property_spec
@@ -71,7 +72,7 @@ does not understand can be absorbed silently.
 | Moment | Mechanism | Checks | Receives | On failure |
 | --- | --- | --- | --- | --- |
 | Author time | `mypy --strict` | The field exists and its declared type fits: `strict_validaton=True` (typo), `strict_validation=1`, `allowed_values=5` | The constructor call | mypy error at the spec literal. Without mypy: an unknown field is a `TypeError`; a wrong type falls through to the row below |
-| Construction (`PropertySpec(...)`) | `__post_init__` | `allowed_values` is not a str/bytes and is a Mapping or an iterable; `strict_validation` is a real bool; the validators are callable; `element_validator` implies strict; strict has a non-empty value space or an `element_validator`; a strict, non-`None` `default` is accepted by the key's own rules | The spec being built | `ValueError` at import, prefixed `PropertySpec('<explanation>')` |
+| Construction (`PropertySpec(...)`) | `__post_init__` | `allowed_values` is not a str/bytes and is a Mapping or an iterable; `strict_validation`, `framework_set` and `scalar_only` are real bools; the validators are callable; `element_validator` and `scalar_only` each imply strict; strict has a non-empty value space or an `element_validator`; a strict, non-`None` `default` is accepted by the key's own rules | The spec being built | `ValueError` at import, prefixed `PropertySpec('<explanation>')` |
 | Class definition (`FeatureGroup.__init_subclass__`) | Spec type | Every spec IS a `PropertySpec` | Every value in the mapping | `ValueError` naming the class and the key |
 | Match time (parser) | `allowed_values` membership | Each element of a **present** option is in the accepted set | One element | `ValueError`, surfaced to the end user |
 | Match time (parser) | `element_validator` | Each element of a **present** option satisfies a predicate | One element | `ValueError`, surfaced to the end user |

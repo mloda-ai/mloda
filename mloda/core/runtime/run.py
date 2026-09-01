@@ -360,6 +360,7 @@ class ExecutionOrchestrator:
             if isinstance(data_to_drop, frozenset):
                 self.data_lifecycle_manager.track_data_to_drop[cfw.uuid] = set(data_to_drop)
         else:
+            self.worker_manager.clear_completed_drop(cfw.uuid)
             command_queue.put(feature_uuids_to_possible_drop)
 
             flyway_datasets = self.cfw_register.get_uuid_flyway_datasets(cfw.uuid)

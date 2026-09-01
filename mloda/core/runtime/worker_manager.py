@@ -121,6 +121,11 @@ class WorkerManager:
         """Return step_uuid in result_uuids_collection."""
         return step_uuid in self.result_uuids_collection
 
+    def clear_completed_drop(self, cfw_uuid: UUID) -> None:
+        """Discard a stale drop flag; a cfw goes through multiple drop cycles, and a late completion
+        drained for an earlier cycle must not be mistaken for a later one."""
+        self.completed_drops.discard(cfw_uuid)
+
     def wait_for_drop_completion(self, result_queue: Any, cfw_uuid: UUID, timeout: float = 5.0) -> None:
         """Poll queue until ("DROP_COMPLETE", cfw_uuid) is received or timeout, checking completed_drops first."""
         start_time = time.time()

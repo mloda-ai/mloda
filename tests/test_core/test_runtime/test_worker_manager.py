@@ -611,6 +611,45 @@ class TestWorkerManagerDropCompletion:
 
         assert sleep_calls, "time.sleep should be called between putting back a non-matching message and the next get"
 
+    def test_clear_completed_drop_prevents_stale_flag_from_short_circuiting_next_wait(self) -> None:
+        """A worker is reused across a chain of steps, so the same cfw_uuid can be dropped twice.
+
+        If drop #1's DROP_COMPLETE reply arrives late and is drained by an ordinary
+        poll_result_queues() call, completed_drops[cfw_uuid] is set. Before arming the wait
+        for drop #2 (same cfw_uuid, a later drop cycle), the caller must call
+        clear_completed_drop(cfw_uuid) to purge that stale flag, or wait_for_drop_completion
+        would return immediately, wrongly claiming drop #2 done before the worker even
+        started processing it.
+        """
+        manager = WorkerManager()
+        cfw_uuid = uuid4()
+
+        # Drop #1's late DROP_COMPLETE gets drained by an ordinary poll.
+        stale_queue = MagicMock()
+        stale_queue.get.side_effect = [("DROP_COMPLETE", cfw_uuid), queue.Empty()]
+        manager.result_queues_collection.add(stale_queue)
+        manager.poll_result_queues()
+
+        assert cfw_uuid in manager.completed_drops
+
+        # Caller must purge the stale flag before arming drop #2's wait.
+        manager.clear_completed_drop(cfw_uuid)
+
+        assert cfw_uuid not in manager.completed_drops
+
+        # Drop #2's queue: no matching DROP_COMPLETE has arrived yet.
+        fresh_queue = MagicMock()
+        fresh_queue.get.side_effect = queue.Empty()
+
+        start_time = time.time()
+        manager.wait_for_drop_completion(fresh_queue, cfw_uuid, timeout=0.2)
+        elapsed = time.time() - start_time
+
+        # Proves the wait actually polled the fresh queue instead of short-circuiting
+        # via the (now-cleared) completed_drops flag.
+        fresh_queue.get.assert_called()
+        assert elapsed > 0.19
+
 
 class TestWorkerManagerJoinAll:
     """Test joining and terminating all tasks."""

@@ -118,7 +118,7 @@ def worker(
 
     while True:
         try:
-            command = command_queue.get(block=False)  # Non-blocking poll; sleeps briefly on Empty and retries
+            command = command_queue.get(block=False)
         except Empty:
             time.sleep(0.01)
             continue

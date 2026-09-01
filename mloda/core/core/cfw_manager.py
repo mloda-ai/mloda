@@ -153,9 +153,15 @@ class CfwManager:
             return uuid
 
         leftmost_uuid = uuid
+        visited = {uuid}
 
         while self.cfw_merge_relation[uuid][0] != uuid:
             uuid = self.cfw_merge_relation[uuid][0]
+
+            # A revisited uuid means cfw_merge_relation contains a cycle instead of a chain to a root.
+            if uuid in visited:
+                raise ValueError(f"Cycle detected in cfw_merge_relation while resolving leftmost uuid: {uuid}")
+            visited.add(uuid)
 
             if self.cfw_merge_relation[uuid][1] == cls_name:
                 leftmost_uuid = uuid

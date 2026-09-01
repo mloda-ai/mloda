@@ -4,7 +4,7 @@ import multiprocessing
 import threading
 import time
 from collections.abc import Sequence
-from typing import Any, Generator, Optional
+from typing import Any, Callable, Generator, Optional
 from uuid import UUID
 import logging
 
@@ -26,6 +26,7 @@ from mloda.core.abstract_plugins.components.feature_set import FeatureSet
 from mloda.core.abstract_plugins.components.error_utils import MlodaRunError, internal_invariant_error
 from mloda.core.abstract_plugins.feature_group import format_feature_group_class
 from mloda.core.runtime.validate_multiprocessing_link import (
+    raise_on_unpicklable_child_bootstrap,
     raise_on_unpicklable_join_link,
     raise_on_unpicklable_step_feature_group,
 )
@@ -417,6 +418,9 @@ class ExecutionOrchestrator:
         function_extender: Optional[set[Extender]] = None,
         api_data: Optional[dict[str, Any]] = None,
         artifacts: Optional[dict[str, Any]] = None,
+        run_id: Optional[str] = None,
+        carrier: Optional[dict[str, str]] = None,
+        child_bootstrap: Optional[Callable[[], None]] = None,
     ) -> None:
         """
         Enters the context of the ExecutionOrchestrator.
@@ -427,10 +431,14 @@ class ExecutionOrchestrator:
         else:
             raise_on_unpicklable_join_link(self.execution_planner)
             raise_on_unpicklable_step_feature_group(self.execution_planner)
+            raise_on_unpicklable_child_bootstrap(child_bootstrap)
 
             MyManager.register("CfwManager", CfwManager)
             self.manager = MyManager(ctx=mp_spawn_context()).__enter__()
             self.cfw_register = self.manager.CfwManager(parallelization_modes, function_extender)
+
+        self.cfw_register.set_run_context(run_id, carrier)
+        self.cfw_register.set_child_bootstrap(child_bootstrap)
 
         if self.flight_server:
             if self.flight_server.flight_server_process is None:

@@ -37,6 +37,8 @@ class HookContext:
     data_access_identity: str | None = None
     tenant_id: str | None = None
     principal: str | None = None
+    carrier: dict[str, str] | None = None
+    worker_index: int | None = None
 
     @staticmethod
     def row_count(data: Any) -> int | None:

@@ -57,6 +57,36 @@ class TestHookContextConstruction:
         assert context.principal is None
 
 
+class TestHookContextCarrierField:
+    """HookContext carries an opaque W3C trace-context carrier dict end to end."""
+
+    def test_carrier_defaults_to_none(self) -> None:
+        context = _make_context()
+
+        assert context.carrier is None
+
+    def test_carrier_can_be_set_via_constructor(self) -> None:
+        carrier = {"traceparent": "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"}
+
+        context = _make_context(carrier=carrier)
+
+        assert context.carrier == carrier
+
+
+class TestHookContextWorkerIndexField:
+    """HookContext carries the worker index of the multiprocessing worker it ran in."""
+
+    def test_worker_index_defaults_to_none(self) -> None:
+        context = _make_context()
+
+        assert context.worker_index is None
+
+    def test_worker_index_can_be_set_via_constructor(self) -> None:
+        context = _make_context(worker_index=3)
+
+        assert context.worker_index == 3
+
+
 class TestHookContextCurrentScope:
     """HookContext.current() reflects the active activate() scope, with proper nested restore."""
 

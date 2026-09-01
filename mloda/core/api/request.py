@@ -1,5 +1,5 @@
 from copy import deepcopy
-from typing import Any, Generator, Optional
+from typing import Any, Callable, Generator, Optional
 
 from mloda.core.abstract_plugins.components.input_data.api.api_input_data_collection import (
     ApiInputDataCollection,
@@ -35,6 +35,7 @@ from mloda.core.abstract_plugins.components.feature_collection import Features
 from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.link import Link
 from mloda.core.abstract_plugins.components.default_options_key import DefaultOptionKeys
+from mloda.core.runtime.run_id import generate_run_id
 
 
 class SetupConfigurationError(ValueError):
@@ -102,6 +103,7 @@ class mlodaAPI:
 
         self.runner: None | ExecutionOrchestrator = None
         self.engine: None | Engine = None
+        self.run_id = generate_run_id()
 
         self.engine = self._create_engine()
 
@@ -138,6 +140,8 @@ class mlodaAPI:
         copy_features: bool = True,
         strict_type_enforcement: bool = False,
         column_ordering: Optional[str] = None,
+        carrier: Optional[dict[str, str]] = None,
+        child_bootstrap: Optional[Callable[[], None]] = None,
     ) -> RunResult:
         """
         Run feature computation in one step.
@@ -160,6 +164,11 @@ class mlodaAPI:
             plugin_collector: Plugin collector.
             copy_features: Whether to deep copy features (default True).
             strict_type_enforcement: If True, enforce strict type matching for typed features.
+            carrier: Opaque W3C trace-context carrier dict, forwarded unchanged to
+                every ``HookContext`` produced by this run.
+            child_bootstrap: Optional picklable, no-argument callable invoked once inside
+                a spawned MULTIPROCESSING worker process, before that worker processes its
+                first command.
 
         Returns:
             ``RunResult``, a list of computed results, one per feature group in
@@ -193,6 +202,8 @@ class mlodaAPI:
             parallelization_modes=parallelization_modes,
             flight_server=flight_server,
             function_extender=function_extender,
+            carrier=carrier,
+            child_bootstrap=child_bootstrap,
         )
         return RunResult(results, session.resolved_plan())
 
@@ -212,12 +223,21 @@ class mlodaAPI:
         copy_features: bool = True,
         strict_type_enforcement: bool = False,
         column_ordering: Optional[str] = None,
+        carrier: Optional[dict[str, str]] = None,
+        child_bootstrap: Optional[Callable[[], None]] = None,
     ) -> ResultStream:
         """Stream results at feature-group granularity.
 
         Like ``run_all`` but yields each feature group's result as it completes.
         ``list(stream_all(...))`` equals ``run_all(...)``. Planning happens eagerly
         at the call; the returned ``ResultStream`` exposes ``plan`` before iteration.
+
+        Args:
+            carrier: Opaque W3C trace-context carrier dict, forwarded unchanged to
+                every ``HookContext`` produced by this run.
+            child_bootstrap: Optional picklable, no-argument callable invoked once inside
+                a spawned MULTIPROCESSING worker process, before that worker processes its
+                first command.
 
         Returns:
             ``ResultStream`` yielding one complete result per feature group.
@@ -242,6 +262,8 @@ class mlodaAPI:
                 parallelization_modes=parallelization_modes,
                 flight_server=flight_server,
                 function_extender=function_extender,
+                carrier=carrier,
+                child_bootstrap=child_bootstrap,
             ),
             session.resolved_plan(),
         )
@@ -408,6 +430,8 @@ class mlodaAPI:
         flight_server: Optional[Any] = None,
         function_extender: Optional[set[Extender]] = None,
         artifacts: Optional[dict[str, Any]] = None,
+        carrier: Optional[dict[str, str]] = None,
+        child_bootstrap: Optional[Callable[[], None]] = None,
     ) -> list[Any]:
         """Execute the prepared session and return results.
 
@@ -420,9 +444,21 @@ class mlodaAPI:
                 When provided, feature groups with matching artifact names
                 switch to load mode for this run, enabling train-then-predict
                 workflows without re-preparing.
+            carrier: Opaque W3C trace-context carrier dict, forwarded unchanged to
+                every ``HookContext`` produced by this run (unlike ``run_id``, which is
+                minted once per session and stays fixed across repeated ``run()`` calls).
+            child_bootstrap: Optional picklable, no-argument callable invoked once inside
+                a spawned MULTIPROCESSING worker process, before that worker processes its
+                first command.
         """
         runner = self._batch_run(
-            parallelization_modes, flight_server, function_extender, api_data=api_data, artifacts=artifacts
+            parallelization_modes,
+            flight_server,
+            function_extender,
+            api_data=api_data,
+            artifacts=artifacts,
+            carrier=carrier,
+            child_bootstrap=child_bootstrap,
         )
         self.runner = runner
         return self.get_result()
@@ -434,12 +470,22 @@ class mlodaAPI:
         flight_server: Optional[Any] = None,
         function_extender: Optional[set[Extender]] = None,
         artifacts: Optional[dict[str, Any]] = None,
+        carrier: Optional[dict[str, str]] = None,
+        child_bootstrap: Optional[Callable[[], None]] = None,
     ) -> Generator[Any, None, None]:
         """Execute the prepared session and yield each feature group's result as it completes."""
         _api_data = api_data if api_data is not None else self.api_data
         runner = self._setup_engine_runner(parallelization_modes, flight_server)
         try:
-            self._enter_runner_context(runner, parallelization_modes, function_extender, _api_data, artifacts=artifacts)
+            self._enter_runner_context(
+                runner,
+                parallelization_modes,
+                function_extender,
+                _api_data,
+                artifacts=artifacts,
+                carrier=carrier,
+                child_bootstrap=child_bootstrap,
+            )
             for _step_uuid, result in runner.compute_stream():
                 yield result
         finally:
@@ -453,12 +499,22 @@ class mlodaAPI:
         function_extender: Optional[set[Extender]] = None,
         api_data: Optional[dict[str, Any]] = None,
         artifacts: Optional[dict[str, Any]] = None,
+        carrier: Optional[dict[str, str]] = None,
+        child_bootstrap: Optional[Callable[[], None]] = None,
     ) -> ExecutionOrchestrator:
         """Sets up the engine runner and runs the engine computation."""
         # Use stored api_data if not explicitly provided
         _api_data = api_data if api_data is not None else self.api_data
         runner = self._setup_engine_runner(parallelization_modes, flight_server)
-        self._run_engine_computation(runner, parallelization_modes, function_extender, _api_data, artifacts=artifacts)
+        self._run_engine_computation(
+            runner,
+            parallelization_modes,
+            function_extender,
+            _api_data,
+            artifacts=artifacts,
+            carrier=carrier,
+            child_bootstrap=child_bootstrap,
+        )
         self.runner = runner
         return runner
 
@@ -469,13 +525,23 @@ class mlodaAPI:
         function_extender: Optional[set[Extender]] = None,
         api_data: Optional[dict[str, Any]] = None,
         artifacts: Optional[dict[str, Any]] = None,
+        carrier: Optional[dict[str, str]] = None,
+        child_bootstrap: Optional[Callable[[], None]] = None,
     ) -> None:
         """Runs the engine computation within a context manager."""
         if not isinstance(runner, ExecutionOrchestrator):
             raise ValueError("Internal error: execution orchestrator not initialized. This is likely a bug in mloda.")
 
         try:
-            self._enter_runner_context(runner, parallelization_modes, function_extender, api_data, artifacts=artifacts)
+            self._enter_runner_context(
+                runner,
+                parallelization_modes,
+                function_extender,
+                api_data,
+                artifacts=artifacts,
+                carrier=carrier,
+                child_bootstrap=child_bootstrap,
+            )
             runner.compute()
         finally:
             self._exit_runner_context(runner)
@@ -487,10 +553,14 @@ class mlodaAPI:
         function_extender: Optional[set[Extender]],
         api_data: Optional[dict[str, Any]],
         artifacts: Optional[dict[str, Any]] = None,
+        carrier: Optional[dict[str, str]] = None,
+        child_bootstrap: Optional[Callable[[], None]] = None,
     ) -> None:
         """Enters the runner context with strict-mode-filtered extenders."""
         function_extender = filter_extenders_by_strict_mode(function_extender, self.plugin_collector)
-        runner.__enter__(parallelization_modes, function_extender, api_data, artifacts)
+        runner.__enter__(
+            parallelization_modes, function_extender, api_data, artifacts, self.run_id, carrier, child_bootstrap
+        )
 
     def _exit_runner_context(self, runner: ExecutionOrchestrator) -> None:
         """Exits the runner context."""

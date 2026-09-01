@@ -1,5 +1,5 @@
 from multiprocessing.managers import BaseManager
-from typing import Any, Optional
+from typing import Any, Callable, Optional
 from uuid import UUID
 
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
@@ -60,6 +60,10 @@ class CfwManager:
         self.runtime_artifacts: Optional[dict[str, Any]] = None
 
         self.api_data: Optional[dict[str, Any]] = None
+
+        self.run_id: Optional[str] = None
+        self.carrier: Optional[dict[str, str]] = None
+        self.child_bootstrap: Optional[Callable[[], None]] = None
 
     def add_uuid_flyway_datasets(self, cf_uuid: UUID, object_ids: set[UUID]) -> None:
         """Associates a set of Flyway dataset UUIDs with a Compute Framework UUID."""
@@ -278,3 +282,24 @@ class CfwManager:
             raise ValueError(f"Api data with key {key} not found.")
 
         return api_data
+
+    def set_run_context(self, run_id: Optional[str], carrier: Optional[dict[str, str]]) -> None:
+        """Sets the run id and the opaque W3C trace-context carrier for this run."""
+        self.run_id = run_id
+        self.carrier = carrier
+
+    def get_run_id(self) -> Optional[str]:
+        """Retrieves the run id."""
+        return self.run_id
+
+    def get_carrier(self) -> Optional[dict[str, str]]:
+        """Retrieves the opaque W3C trace-context carrier."""
+        return self.carrier
+
+    def set_child_bootstrap(self, bootstrap: Optional[Callable[[], None]]) -> None:
+        """Sets the picklable, no-argument callable a spawned worker invokes once before its first command."""
+        self.child_bootstrap = bootstrap
+
+    def get_child_bootstrap(self) -> Optional[Callable[[], None]]:
+        """Retrieves the child-process bootstrap callable, or None if unset."""
+        return self.child_bootstrap

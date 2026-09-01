@@ -347,6 +347,75 @@ class TestSyncModeSkipsMyManager:
         orchestrator.__exit__(None, None, None)
 
 
+class TestEnterAcceptsChildBootstrap:
+    """__enter__ should accept a new trailing child_bootstrap parameter, appended after the
+    existing run_id/carrier kwargs so positional callers keep working."""
+
+    def test_enter_accepts_child_bootstrap_parameter(self) -> None:
+        """__enter__ should accept a child_bootstrap parameter."""
+        import inspect
+
+        mock_planner = Mock(spec=ExecutionPlan)
+        orchestrator = ExecutionOrchestrator(mock_planner)
+
+        sig = inspect.signature(orchestrator.__enter__)
+        assert "child_bootstrap" in sig.parameters
+
+    def test_child_bootstrap_parameter_defaults_to_none(self) -> None:
+        """child_bootstrap should default to None, like run_id and carrier before it."""
+        import inspect
+
+        mock_planner = Mock(spec=ExecutionPlan)
+        orchestrator = ExecutionOrchestrator(mock_planner)
+
+        sig = inspect.signature(orchestrator.__enter__)
+        assert sig.parameters["child_bootstrap"].default is None
+
+    def test_child_bootstrap_parameter_is_last(self) -> None:
+        """child_bootstrap must be appended AFTER run_id/carrier so positional callers of
+        __enter__ that pass parallelization_modes/function_extender/api_data/artifacts
+        positionally are unaffected."""
+        import inspect
+
+        mock_planner = Mock(spec=ExecutionPlan)
+        orchestrator = ExecutionOrchestrator(mock_planner)
+
+        sig = inspect.signature(orchestrator.__enter__)
+        param_names = list(sig.parameters.keys())
+        assert param_names.index("child_bootstrap") > param_names.index("carrier")
+
+
+class TestEnterSetsChildBootstrapOnCfwRegister:
+    """__enter__ must call self.cfw_register.set_child_bootstrap(child_bootstrap), the same
+    way it already calls set_run_context, so a SYNC-mode cfw_register round-trips it."""
+
+    def test_sync_mode_cfw_register_round_trips_child_bootstrap(self) -> None:
+        def _bootstrap() -> None:
+            pass
+
+        mock_planner = Mock(spec=ExecutionPlan)
+        orchestrator = ExecutionOrchestrator(mock_planner)
+
+        # mypy's pos_only_special_methods option treats __enter__ as implicitly positional-only
+        # regardless of how its parameters are declared, so this keyword argument always trips a
+        # false-positive call-arg error, independent of __enter__'s own signature.
+        orchestrator.__enter__({ParallelizationMode.SYNC}, child_bootstrap=_bootstrap)  # type: ignore[call-arg]
+
+        assert orchestrator.cfw_register.get_child_bootstrap() is _bootstrap
+
+        orchestrator.__exit__(None, None, None)
+
+    def test_sync_mode_cfw_register_child_bootstrap_defaults_to_none(self) -> None:
+        mock_planner = Mock(spec=ExecutionPlan)
+        orchestrator = ExecutionOrchestrator(mock_planner)
+
+        orchestrator.__enter__({ParallelizationMode.SYNC})
+
+        assert orchestrator.cfw_register.get_child_bootstrap() is None
+
+        orchestrator.__exit__(None, None, None)
+
+
 class TestExecutionOrchestratorStepLock:
     def test_has_step_lock_attribute_after_construction(self) -> None:
         """ExecutionOrchestrator should have a _step_lock attribute after __init__."""

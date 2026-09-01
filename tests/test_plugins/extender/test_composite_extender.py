@@ -571,6 +571,9 @@ class TestSingleExtenderPathHonorsRaiseOnError:
         cf = Mock(spec=ComputeFramework)
         cf.data = "DATA"
         cf.function_extender = extenders
+        cf.run_id = None
+        cf.carrier = None
+        cf.worker_index = None
         cf.get_function_extender = ComputeFramework.get_function_extender.__get__(cf)
         cf.run_calculate_feature = ComputeFramework.run_calculate_feature.__get__(cf)
         cf._raise_helpful_missing_column_error = ComputeFramework._raise_helpful_missing_column_error.__get__(cf)

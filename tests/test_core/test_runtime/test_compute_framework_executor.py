@@ -61,7 +61,13 @@ class TestInitComputeFramework:
     """Tests for init_compute_framework method."""
 
     def test_creates_new_compute_framework_instance(self) -> None:
-        """Should create a new CFW instance with provided parameters."""
+        """Should create a new CFW instance with provided parameters.
+
+        run_id/carrier must NOT be passed as constructor kwargs (a third-party ComputeFramework
+        subclass with a fixed __init__ signature that doesn't forward **kwargs would break
+        otherwise). Instead they must be set post-construction on the instance, mirroring how
+        worker_index is set post-construction by the spawn worker.
+        """
         cfw_register = Mock(spec=CfwManager)
         worker_manager = Mock(spec=WorkerManager)
         executor = ComputeFrameworkExecutor(cfw_register, worker_manager)
@@ -77,16 +83,24 @@ class TestInitComputeFramework:
 
         function_extender = Mock()
         cfw_register.get_function_extender.return_value = function_extender
+        run_id = "01909a3b-1234-7abc-8def-0123456789ab"
+        carrier = {"traceparent": "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"}
+        cfw_register.get_run_id.return_value = run_id
+        cfw_register.get_carrier.return_value = carrier
 
         children = {uuid4(), uuid4()}
         mode = ParallelizationMode.SYNC
 
         cfw_uuid = executor.init_compute_framework(mock_cfw_class, mode, children, test_uuid)
 
-        # Verify CFW was created with correct parameters
+        # Verify CFW was created WITHOUT run_id/carrier kwargs, matching the pre-this-feature
+        # call shape (only function_extender=).
         mock_cfw_class.assert_called_once_with(
             mode, frozenset(children), test_uuid, function_extender=function_extender
         )
+        # run_id/carrier are set post-construction on the instance instead.
+        assert mock_cfw_instance.run_id == run_id
+        assert mock_cfw_instance.carrier == carrier
         assert cfw_uuid == test_uuid
 
     def test_generates_uuid_when_not_provided(self) -> None:
@@ -103,6 +117,8 @@ class TestInitComputeFramework:
         mock_cfw_instance.get_uuid.return_value = generated_uuid
 
         cfw_register.get_function_extender.return_value = None
+        cfw_register.get_run_id.return_value = None
+        cfw_register.get_carrier.return_value = None
 
         cfw_uuid = executor.init_compute_framework(mock_cfw_class, ParallelizationMode.SYNC, set())
 
@@ -124,6 +140,8 @@ class TestInitComputeFramework:
         mock_cfw_instance.get_uuid.return_value = test_uuid
 
         cfw_register.get_function_extender.return_value = None
+        cfw_register.get_run_id.return_value = None
+        cfw_register.get_carrier.return_value = None
 
         children = {uuid4()}
         executor.init_compute_framework(mock_cfw_class, ParallelizationMode.SYNC, children, test_uuid)
@@ -144,6 +162,8 @@ class TestInitComputeFramework:
         mock_cfw_instance.get_uuid.return_value = test_uuid
 
         cfw_register.get_function_extender.return_value = None
+        cfw_register.get_run_id.return_value = None
+        cfw_register.get_carrier.return_value = None
 
         executor.init_compute_framework(mock_cfw_class, ParallelizationMode.SYNC, set(), test_uuid)
 
@@ -217,6 +237,8 @@ class TestAddComputeFramework:
         new_uuid = uuid4()
         mock_cfw_instance.get_uuid.return_value = new_uuid
         cfw_register.get_function_extender.return_value = None
+        cfw_register.get_run_id.return_value = None
+        cfw_register.get_carrier.return_value = None
 
         feature_uuid = uuid4()
         children = {uuid4()}
@@ -395,6 +417,8 @@ class TestPrepareExecuteStep:
         new_uuid = uuid4()
         mock_cfw_instance.get_uuid.return_value = new_uuid
         cfw_register.get_function_extender.return_value = None
+        cfw_register.get_run_id.return_value = None
+        cfw_register.get_carrier.return_value = None
 
         result = executor.prepare_execute_step(step, ParallelizationMode.SYNC)
 
@@ -449,6 +473,8 @@ class TestPrepareExecuteStep:
         new_uuid = uuid4()
         mock_to_cfw_instance.get_uuid.return_value = new_uuid
         cfw_register.get_function_extender.return_value = None
+        cfw_register.get_run_id.return_value = None
+        cfw_register.get_carrier.return_value = None
 
         with patch("mloda.core.runtime.compute_framework_executor.multiprocessing.Lock"):
             result = executor.prepare_execute_step(step, ParallelizationMode.THREADING)
@@ -1002,6 +1028,8 @@ class TestMultiExecuteStep:
         new_uuid = uuid4()
         mock_to_cfw_instance.get_uuid.return_value = new_uuid
         cfw_register.get_function_extender.return_value = None
+        cfw_register.get_run_id.return_value = None
+        cfw_register.get_carrier.return_value = None
 
         worker_manager.get_process_queues.return_value = (Mock(), Mock(), Mock())
 

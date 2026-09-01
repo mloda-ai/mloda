@@ -66,6 +66,8 @@ class ComputeFrameworkExecutor:
         """
         # get function_extender
         function_extender = self.cfw_register.get_function_extender()
+        run_id = self.cfw_register.get_run_id()
+        carrier = self.cfw_register.get_carrier()
 
         # init framework
         new_cfw = cf_class(
@@ -74,6 +76,8 @@ class ComputeFrameworkExecutor:
             uuid or uuid4(),
             function_extender=function_extender,
         )
+        new_cfw.run_id = run_id
+        new_cfw.carrier = dict(carrier) if carrier is not None else None
 
         # add to register
         self.cfw_register.add_cfw_to_compute_frameworks(new_cfw.get_uuid(), cf_class.get_class_name(), children_if_root)

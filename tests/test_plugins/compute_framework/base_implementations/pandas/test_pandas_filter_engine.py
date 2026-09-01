@@ -59,19 +59,11 @@ class TestPandasFilterEngine(FilterEngineTestMixin, TimeRangeFilterEngineTestMix
         return list(result["id"].tolist())
 
     def test_do_regex_filter_excludes_null_rows(self) -> None:
-        """A regex matching the literal string "nan" must not match null cells.
+        """A regex matching "a" must not match null cells that stringify to "nan" via astype(str).
 
-        ``.astype(str)`` on a null "name" cell (``np.nan``) can produce the literal
-        string "nan", so the pattern "a" (a substring of "nan") wrongly matches that
-        null row too. Only the genuinely matching "cat" row should survive; "dog" (no
-        "a") and the null row must both be excluded.
-
-        pandas >= 3.0 defaults ``future.infer_string`` to True, under which
-        ``.astype(str)`` happens to preserve missing values instead of stringifying
-        them, masking this bug. This project's tox matrix also runs pandas 2.3.3
-        (Python 3.10), whose default is False, so the option is pinned explicitly here
-        to exercise the code path the bug report describes on every supported pandas
-        version, including the one installed in this environment.
+        pandas >= 3.0 defaults ``future.infer_string`` to True, under which ``.astype(str)``
+        preserves missing values instead of stringifying them, masking this bug. Pin the option
+        explicitly so the test exercises the buggy code path regardless of installed pandas version.
         """
         with pd.option_context("future.infer_string", False):
             data = pd.DataFrame(

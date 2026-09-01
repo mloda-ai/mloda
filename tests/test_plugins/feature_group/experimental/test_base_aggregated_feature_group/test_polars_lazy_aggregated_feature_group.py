@@ -248,11 +248,7 @@ class TestPolarsLazyAggregatedFeatureGroup:
 
 @pytest.mark.skipif(pl is None, reason="Polars not available")
 class TestPolarsLazyAggregatedFeatureGroupMultiColumnDdofAndNullSkip:
-    """Pins down ddof=1 (sample statistics) with null-skip semantics for row-wise std/var.
-
-    Ground truth is computed inline from pandas' .std(axis=1, skipna=True)/.var(axis=1, skipna=True),
-    which already implement ddof=1 with a valid-value-count denominator that skips nulls.
-    """
+    """Pins ddof=1 with null-skip semantics for row-wise std/var against pandas .std/.var(axis=1, skipna=True)."""
 
     def test_perform_aggregation_std_multi_column_matches_pandas_skipna_ddof1(
         self, multi_source_lazy_dataframe_with_null: Any

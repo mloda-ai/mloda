@@ -90,8 +90,7 @@ class PandasEncodingFeatureGroup(EncodingFeatureGroup):
         # Extract the specified column
         feature_data = data[source_feature]
 
-        # Handle missing values the same way as _apply_encoder does at transform time,
-        # so the encoder learns "unknown" as a category and never sees an unseen label.
+        # Match _apply_encoder's transform-time policy so the encoder never sees an unseen label.
         feature_data = feature_data.fillna("unknown")
 
         # For categorical encoders, we need to handle the data format properly

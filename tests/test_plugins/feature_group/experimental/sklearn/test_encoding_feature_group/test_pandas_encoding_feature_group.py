@@ -275,8 +275,6 @@ class TestPandasEncodingFeatureGroup:
 
         mock_import.return_value = {"LabelEncoder": LabelEncoder}
 
-        # Category column contains a NaN. Fit must fill it with "unknown" (the same
-        # sentinel used at transform time) so the encoder learns that label too.
         data = pd.DataFrame({"category": ["a", "b", None, "a", "b"]})
 
         features = FeatureSet()

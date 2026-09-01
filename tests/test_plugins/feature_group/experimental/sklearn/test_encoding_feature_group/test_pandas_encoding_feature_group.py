@@ -298,6 +298,27 @@ class TestPandasEncodingFeatureGroup:
     @patch(
         "mloda_plugins.feature_group.experimental.sklearn.encoding.pandas.PandasEncodingFeatureGroup._import_sklearn_components"
     )
+    def test_end_to_end_label_encoding_with_numeric_nan_does_not_crash(self, mock_import: Any) -> None:
+        """FIT's fillna("unknown") on a numeric column mixes floats and a string, crashing LabelEncoder.fit."""
+        try:
+            from sklearn.preprocessing import LabelEncoder
+        except ImportError:
+            return  # Skip test if sklearn not available
+
+        mock_import.return_value = {"LabelEncoder": LabelEncoder}
+
+        data = pd.DataFrame({"category": [1.0, 2.0, None, 1.0]})
+
+        features = FeatureSet()
+        features.add(Feature("category__label_encoded"))
+
+        result_data = PandasEncodingFeatureGroup.calculate_feature(data, features)
+
+        assert "category__label_encoded" in result_data.columns
+
+    @patch(
+        "mloda_plugins.feature_group.experimental.sklearn.encoding.pandas.PandasEncodingFeatureGroup._import_sklearn_components"
+    )
     def test_end_to_end_onehot_encoding(self, mock_import: Any) -> None:
         """Test end-to-end one-hot encoding workflow."""
         # Skip test if sklearn not available

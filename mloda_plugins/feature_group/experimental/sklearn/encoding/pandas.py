@@ -91,7 +91,9 @@ class PandasEncodingFeatureGroup(EncodingFeatureGroup):
         feature_data = data[source_feature]
 
         # Match _apply_encoder's transform-time policy so the encoder never sees an unseen label.
-        feature_data = feature_data.fillna("unknown")
+        # Normalize the whole column to a uniform string dtype so a numeric column with NaN
+        # does not mix floats and "unknown" strings, which sklearn's fit validation rejects.
+        feature_data = feature_data.where(feature_data.notna(), "unknown").astype(str)
 
         # For categorical encoders, we need to handle the data format properly
         # LabelEncoder expects 1D array, OneHotEncoder and OrdinalEncoder expect 2D array
@@ -117,8 +119,9 @@ class PandasEncodingFeatureGroup(EncodingFeatureGroup):
         feature_data = data[source_feature]
 
         # Handle missing values - for prediction, we need to handle them differently
-        # than during training. For categorical data, we'll use the string "unknown"
-        feature_data = feature_data.fillna("unknown")
+        # than during training. For categorical data, we'll use the string "unknown".
+        # Must stay policy-identical with _extract_training_data.
+        feature_data = feature_data.where(feature_data.notna(), "unknown").astype(str)
 
         # Convert to appropriate format for sklearn
         feature_values = feature_data.to_numpy()

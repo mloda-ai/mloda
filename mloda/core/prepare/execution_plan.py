@@ -496,6 +496,8 @@ Available join types:
                                         inner_ep, store_val
                                     )
                                 else:
+                                    # Same value as any_uuid below: redundant with it, not load-bearing, but
+                                    # lets get_unique_cfw_uuid short-circuit before add_compute_framework's locked path.
                                     inner_ep.tfs_ids = {store_val}
                                     inner_ep.features.any_uuid = (
                                         store_val  # Resets the any_uuid to one of the left side
@@ -747,7 +749,9 @@ Available join types:
 
         swap_merge_sides = False
 
-        # link_fw is sourced from link_trekker.data, so this branch is defensive, not expected to trigger.
+        # The queue snapshots trekker keys before ResolveComputeFrameworks.links runs; LinkTrekker.invert_link
+        # can later re-key an inverted link, so link_fw may already be stale here. This branch re-resolves
+        # the link under its flipped key, the normal path for an inverted-orientation join.
         if len(children_uuids) == 0:
             # No child needs the declared orientation, so destination and source are the other way around.
             destination_framework = link_fw[2]
@@ -756,9 +760,7 @@ Available join types:
             swap_merge_sides = True
             attempted_key = (link, destination_framework, source_framework)
 
-            for stored_links, uuids in link_trekker.data.items():
-                if (link, destination_framework, source_framework) == stored_links:
-                    children_uuids.update(uuids)
+            children_uuids.update(link_trekker.data.get(attempted_key, set()))
 
             if len(children_uuids) == 0:
                 raise ValueError(f"Link {link} has no matching uuids.")

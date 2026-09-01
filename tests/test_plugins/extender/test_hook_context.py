@@ -87,6 +87,40 @@ class TestHookContextWorkerIndexField:
         assert context.worker_index == 3
 
 
+class TestHookContextDataAccessAndJoinAndPlanFields:
+    """New optional fields for the FEATURE_GROUP_MATCHED/INPUT_DATA_LOAD/JOIN hooks (Phase 1)."""
+
+    def test_new_fields_default_to_none(self) -> None:
+        context = _make_context()
+
+        assert context.data_access_format is None
+        assert context.data_access_dataset_version is None
+        assert context.join_type is None
+        assert context.join_keys is None
+        assert context.plan_feature_count is None
+        assert context.plan_node_count is None
+        assert context.plan_depth is None
+
+    def test_new_fields_can_be_set_via_constructor(self) -> None:
+        context = _make_context(
+            data_access_format="parquet",
+            data_access_dataset_version="2024-01-01",
+            join_type="inner",
+            join_keys=("id", "date"),
+            plan_feature_count=5,
+            plan_node_count=12,
+            plan_depth=3,
+        )
+
+        assert context.data_access_format == "parquet"
+        assert context.data_access_dataset_version == "2024-01-01"
+        assert context.join_type == "inner"
+        assert context.join_keys == ("id", "date")
+        assert context.plan_feature_count == 5
+        assert context.plan_node_count == 12
+        assert context.plan_depth == 3
+
+
 class TestHookContextCurrentScope:
     """HookContext.current() reflects the active activate() scope, with proper nested restore."""
 

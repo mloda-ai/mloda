@@ -39,6 +39,13 @@ class HookContext:
     principal: str | None = None
     carrier: dict[str, str] | None = None
     worker_index: int | None = None
+    data_access_format: str | None = None
+    data_access_dataset_version: str | None = None
+    join_type: str | None = None
+    join_keys: tuple[str, ...] | None = None
+    plan_feature_count: int | None = None
+    plan_node_count: int | None = None
+    plan_depth: int | None = None
 
     @staticmethod
     def row_count(data: Any) -> int | None:

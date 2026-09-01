@@ -995,6 +995,45 @@ class TestMultiExecuteStep:
 
         worker_manager.send_command.assert_called_once_with(cfw_uuid, step)
 
+    def test_records_assignment_with_the_steps_own_result_uuid_not_get_uuids(self) -> None:
+        """record_assignment must use the identity the worker actually reports back.
+
+        _handle_command_result reports a finished step via result_queue.put(str(command.uuid)),
+        i.e. step.uuid (== step.get_result_uuid()). For a FeatureGroupStep, get_uuids() returns
+        the *feature* uuids instead, a different namespace used to track plan-graph completion.
+        Recording get_uuids() here made find_orphaned_steps see every clean worker exit as still
+        owing a result, since the recorded uuid could never match what result_uuids_collection
+        ever contains.
+        """
+        cfw_register = Mock(spec=CfwManager)
+        worker_manager = Mock(spec=WorkerManager)
+        executor = ComputeFrameworkExecutor(cfw_register, worker_manager)
+
+        step = Mock(spec=FeatureGroupStep)
+        step.tfs_ids = []
+        step.features = Mock()
+        step.features.any_uuid = uuid4()
+        step.children_if_root = []
+        step.compute_framework = Mock()
+        step.compute_framework.get_class_name.return_value = "TestCFW"
+        step.uuid = uuid4()
+        step.get_result_uuid.return_value = step.uuid
+        # Deliberately disjoint from step.uuid, like the real feature uuids on a FeatureGroupStep.
+        step.get_uuids.return_value = {uuid4(), uuid4()}
+
+        cfw_uuid = uuid4()
+        cfw_register.get_unique_cfw_uuid.return_value = None
+        cfw_register.get_cfw_uuid.return_value = cfw_uuid
+
+        mock_cfw = Mock(spec=ComputeFramework)
+        executor.cfw_collection[cfw_uuid] = mock_cfw
+
+        worker_manager.get_process_queues.return_value = (Mock(), Mock(), Mock())
+
+        executor.multi_execute_step(step)
+
+        worker_manager.record_assignment.assert_called_once_with(cfw_uuid, {step.uuid})
+
     def test_prepares_from_cfw_for_transform_framework_step(self) -> None:
         """Should prepare from_cfw for TransformFrameworkStep."""
         cfw_register = Mock(spec=CfwManager)

@@ -56,7 +56,9 @@ class PandasFilterEngine(BaseFilterEngine):
         value = filter_feature.parameter.value
         if value is None:
             raise ValueError(f"Filter parameter 'value' not found in {filter_feature.parameter}")
-        return data[data[filter_feature.name].astype(str).str.contains(value, regex=True)]
+        column = data[filter_feature.name]
+        mask = column.notna() & column.astype(str).str.contains(value, regex=True, na=False)
+        return data[mask]
 
     @classmethod
     def do_categorical_inclusion_filter(cls, data: Any, filter_feature: SingleFilter) -> Any:

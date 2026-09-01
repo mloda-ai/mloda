@@ -267,26 +267,32 @@ class PyArrowMissingValueFeatureGroup(MissingValueFeatureGroup):
                         group_value = value_counts.field("values")[max_indices[0]].as_py()
             elif imputation_method == "ffill":
                 # `i` is the global row index; translate it to the row's position within the group.
+                # A null group key yields an all-null group_mask, so `i` won't be found; there is
+                # no identifiable group to ffill from, so fall back to the overall value.
                 group_row_indices = pc.indices_nonzero(group_mask).to_pylist()
-                local_idx = group_row_indices.index(i)
-                valid_indices = pc.indices_nonzero(pc.is_valid(group_data))
-                if len(valid_indices) > 0:
-                    # Find the largest valid index that is less than the current group-local index
-                    valid_indices_before = [idx for idx in valid_indices.to_pylist() if idx < local_idx]
-                    if valid_indices_before:
-                        last_valid_idx = max(valid_indices_before)
-                        group_value = group_data[last_valid_idx].as_py()
+                if i in group_row_indices:
+                    local_idx = group_row_indices.index(i)
+                    valid_indices = pc.indices_nonzero(pc.is_valid(group_data))
+                    if len(valid_indices) > 0:
+                        # Find the largest valid index that is less than the current group-local index
+                        valid_indices_before = [idx for idx in valid_indices.to_pylist() if idx < local_idx]
+                        if valid_indices_before:
+                            last_valid_idx = max(valid_indices_before)
+                            group_value = group_data[last_valid_idx].as_py()
             elif imputation_method == "bfill":
                 # `i` is the global row index; translate it to the row's position within the group.
+                # A null group key yields an all-null group_mask, so `i` won't be found; there is
+                # no identifiable group to bfill from, so fall back to the overall value.
                 group_row_indices = pc.indices_nonzero(group_mask).to_pylist()
-                local_idx = group_row_indices.index(i)
-                valid_indices = pc.indices_nonzero(pc.is_valid(group_data))
-                if len(valid_indices) > 0:
-                    # Find the smallest valid index that is greater than the current group-local index
-                    valid_indices_after = [idx for idx in valid_indices.to_pylist() if idx > local_idx]
-                    if valid_indices_after:
-                        next_valid_idx = min(valid_indices_after)
-                        group_value = group_data[next_valid_idx].as_py()
+                if i in group_row_indices:
+                    local_idx = group_row_indices.index(i)
+                    valid_indices = pc.indices_nonzero(pc.is_valid(group_data))
+                    if len(valid_indices) > 0:
+                        # Find the smallest valid index that is greater than the current group-local index
+                        valid_indices_after = [idx for idx in valid_indices.to_pylist() if idx > local_idx]
+                        if valid_indices_after:
+                            next_valid_idx = min(valid_indices_after)
+                            group_value = group_data[next_valid_idx].as_py()
 
             # If the group imputation value is None, fall back to the overall value
             if group_value is None:

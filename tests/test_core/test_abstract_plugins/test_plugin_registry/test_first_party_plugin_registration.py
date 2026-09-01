@@ -285,6 +285,8 @@ class TestEveryWheelOwnedPluginIsRegistered:
 
     def test_the_sweep_finds_the_known_wheel_owned_plugins(self) -> None:
         """Positive control: `unregistered == []` is vacuously true on an empty candidate set."""
+        from mloda_plugins.function_extender.base_implementations.timing.timing_extender import TimingExtender
+
         assert ApiInputDataFeature in _wheel_owned_plugin_classes(FeatureGroup), (
             "the sweep must reach FeatureGroups defined under mloda.core; it found "
             f"{len(_wheel_owned_plugin_classes(FeatureGroup))} FeatureGroups"
@@ -292,10 +294,9 @@ class TestEveryWheelOwnedPluginIsRegistered:
         assert PythonDictFramework in _wheel_owned_plugin_classes(ComputeFramework), (
             "the sweep must reach dependency-free ComputeFrameworks under mloda_plugins"
         )
-        # No concrete public bundled Extender exists in core anymore; _CompositeExtender is the only
-        # wheel-owned candidate and it's waived, so this guard's Extender arm is currently vacuous.
-        assert _CompositeExtender in _wheel_owned_plugin_classes(Extender), (
-            "the sweep must reach Extenders; an empty Extender candidate set would make the guard vacuous"
+        assert TimingExtender in _wheel_owned_plugin_classes(Extender), (
+            "the sweep must reach a concrete bundled Extender; an empty non-waived Extender candidate set "
+            "would make the guard vacuous"
         )
 
     def test_every_wheel_owned_feature_group_is_registered(self) -> None:

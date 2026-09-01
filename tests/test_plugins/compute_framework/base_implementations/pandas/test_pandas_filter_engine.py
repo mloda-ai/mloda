@@ -3,7 +3,12 @@
 from typing import Any
 
 import pytest
+import numpy as np
 import pandas as pd
+
+from mloda.user import Feature
+from mloda.user import SingleFilter
+from mloda.user import FilterType
 
 from mloda_plugins.compute_framework.base_implementations.pandas.pandas_filter_engine import PandasFilterEngine
 
@@ -52,3 +57,35 @@ class TestPandasFilterEngine(FilterEngineTestMixin, TimeRangeFilterEngineTestMix
 
     def get_id_column_values(self, result: Any) -> list[int]:
         return list(result["id"].tolist())
+
+    def test_do_regex_filter_excludes_null_rows(self) -> None:
+        """A regex matching the literal string "nan" must not match null cells.
+
+        ``.astype(str)`` on a null "name" cell (``np.nan``) can produce the literal
+        string "nan", so the pattern "a" (a substring of "nan") wrongly matches that
+        null row too. Only the genuinely matching "cat" row should survive; "dog" (no
+        "a") and the null row must both be excluded.
+
+        pandas >= 3.0 defaults ``future.infer_string`` to True, under which
+        ``.astype(str)`` happens to preserve missing values instead of stringifying
+        them, masking this bug. This project's tox matrix also runs pandas 2.3.3
+        (Python 3.10), whose default is False, so the option is pinned explicitly here
+        to exercise the code path the bug report describes on every supported pandas
+        version, including the one installed in this environment.
+        """
+        with pd.option_context("future.infer_string", False):
+            data = pd.DataFrame(
+                {
+                    "id": [1, 2, 3],
+                    "name": ["cat", "dog", np.nan],
+                }
+            )
+            feature = Feature("name")
+            filter_type = FilterType.REGEX
+            parameter = {"value": "a"}
+            single_filter = SingleFilter(feature, filter_type, parameter)
+
+            result = PandasFilterEngine.do_regex_filter(data, single_filter)
+
+        assert result["id"].tolist() == [1]
+        assert result["name"].tolist() == ["cat"]

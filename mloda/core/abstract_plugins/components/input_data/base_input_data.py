@@ -35,6 +35,22 @@ logger = logging.getLogger(__name__)
 RESERVED_READER_OPTION_KEY = "BaseInputData"
 
 
+def _data_access_identity(data_access: Any) -> str:
+    """Build a data_access_identity string that never leaks credential values.
+
+    A dict (e.g. DB credentials) is identified by its sorted key names only. A URI-shaped
+    string with a user[:pass]@ userinfo segment has that segment stripped before the host.
+    """
+    if isinstance(data_access, dict):
+        return "{" + ", ".join(sorted(str(key) for key in data_access)) + "}"
+    if isinstance(data_access, str) and "://" in data_access:
+        scheme, _, rest = data_access.partition("://")
+        if "@" in rest:
+            host_and_path = rest.rpartition("@")[2]
+            return f"{scheme}://{host_and_path}"
+    return str(data_access)
+
+
 class BaseInputData(ABC):
     READER_OPTIONS: ClassVar[dict[str, PropertySpec]] = {
         RESERVED_READER_OPTION_KEY: PropertySpec(
@@ -453,12 +469,14 @@ class BaseInputData(ABC):
             run_id=cfw.run_id,
             carrier=cfw.carrier,
             worker_index=cfw.worker_index,
-            data_access_identity=str(data_access),
+            data_access_identity=_data_access_identity(data_access),
             data_access_format=reader.data_access_name(),
             data_access_dataset_version=None,
         )
         with context.activate():
-            return _invoke_extender(extender, instrument(context, reader.load_data), data_access, features)
+            return _invoke_extender(
+                extender, instrument(context, reader.load_data, row_count=cfw._row_count), data_access, features
+            )
 
     @classmethod
     def load_data(cls, data_access: Any, features: FeatureSet) -> Any:

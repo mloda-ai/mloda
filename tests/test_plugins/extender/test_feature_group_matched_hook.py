@@ -253,6 +253,25 @@ class TestCarrierAndWorkerIndexNoneDuringMatch:
         assert all(context.worker_index is None for context in extender.captured)
 
 
+class TestStreamAllForwardsFunctionExtenderIntoMatchTimeHooks:
+    """Fix: stream_all's own function_extender must reach FEATURE_GROUP_MATCHED the same way run_all's does."""
+
+    def test_match_hook_fires_during_stream_all_when_function_extender_is_passed(self) -> None:
+        extender = _MatchContextCapturingExtender()
+
+        result_stream = mloda.stream_all(
+            [Feature(f"{_MARKER}_root_col")],
+            compute_frameworks=["PythonDictFramework"],
+            plugin_collector=PluginCollector.enabled_feature_groups({_MatchHookRootFeatureGroup}),
+            parallelization_modes={ParallelizationMode.SYNC},
+            function_extender={extender},
+        )
+        list(result_stream)
+
+        assert extender.captured is not None
+        assert extender.captured.hook == ExtenderHook.FEATURE_GROUP_MATCHED
+
+
 class TestNoExtenderRegisteredBaselineRegressionGuard:
     """Baseline guard: matching with no function_extender registered stays unaffected."""
 

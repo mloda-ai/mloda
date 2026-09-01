@@ -1,7 +1,9 @@
 """Tests wiring ExtenderHook.JOIN into JoinStep._merge_data: HookContext population, the
-no-extender baseline, and deny-before-merge / deny-with-fallback. join_keys is
-``left_index.index + right_index.index`` (left columns then right); this is independent of
-``swap_merge_sides`` since it reads off the immutable ``Link``, not whichever cfw is "self" at merge time.
+no-extender baseline, and deny-before-merge / deny-with-fallback. For a keyed join type,
+join_keys pairs each left column with its corresponding right column as ``"left=right"``
+strings; this is independent of ``swap_merge_sides`` since it reads off the immutable
+``Link``, not whichever cfw is "self" at merge time. APPEND/UNION links merge without using
+keys, so their join_keys is None.
 """
 
 import logging
@@ -132,7 +134,7 @@ class TestJoinHookFiresWithCorrectContext:
         context = extender.captured[0]
         assert context.hook == ExtenderHook.JOIN
         assert context.join_type == "inner"
-        assert context.join_keys == (f"{_MARKER}_left_id", f"{_MARKER}_right_id")
+        assert context.join_keys == (f"{_MARKER}_left_id={_MARKER}_right_id",)
         assert context.compute_framework_name == "PythonDictFramework"
         assert context.run_id == session.run_id
         assert context.carrier == carrier
@@ -291,3 +293,79 @@ class TestJoinHookFiresOncePerMergeInStarTopology:
         assert len(result) == 1
         assert len(extender.captured) == 2
         assert all(context.hook == ExtenderHook.JOIN for context in extender.captured)
+
+
+# === APPEND join type: join_keys is None, since APPEND does not use keys to merge ===
+
+
+class _JoinHookAppendLeftFeatureGroup(FeatureGroup):
+    @classmethod
+    def input_data(cls) -> Optional[BaseInputData]:
+        return DataCreator({f"{_MARKER}_append_left_id", f"{_MARKER}_append_left_value"})
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PythonDictFramework}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return {f"{_MARKER}_append_left_id": [1, 2], f"{_MARKER}_append_left_value": ["a", "b"]}
+
+
+class _JoinHookAppendRightFeatureGroup(FeatureGroup):
+    @classmethod
+    def input_data(cls) -> Optional[BaseInputData]:
+        return DataCreator({f"{_MARKER}_append_right_id", f"{_MARKER}_append_right_value"})
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PythonDictFramework}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return {f"{_MARKER}_append_right_id": [3, 4], f"{_MARKER}_append_right_value": ["c", "d"]}
+
+
+class _JoinHookAppendConsumerFeatureGroup(FeatureGroup):
+    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+        link = Link.append(
+            JoinSpec(_JoinHookAppendLeftFeatureGroup, Index((f"{_MARKER}_append_left_id",))),
+            JoinSpec(_JoinHookAppendRightFeatureGroup, Index((f"{_MARKER}_append_right_id",))),
+        )
+        return {
+            Feature(name=f"{_MARKER}_append_left_value", link=link, index=Index((f"{_MARKER}_append_left_id",))),
+            Feature(name=f"{_MARKER}_append_right_value", index=Index((f"{_MARKER}_append_right_id",))),
+        }
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PythonDictFramework}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return {cls.get_class_name(): data[f"{_MARKER}_append_left_value"]}
+
+
+class TestJoinKeysIsNoneForAppendJoinType:
+    """Fix: APPEND/UNION links don't use join keys to merge, so join_keys must be None,
+    not a misleading key tuple."""
+
+    def test_append_link_reports_join_keys_as_none(self, flight_server: Any) -> None:
+        extender = _JoinListCapturingExtender()
+        enabled = PluginCollector.enabled_feature_groups(
+            {_JoinHookAppendLeftFeatureGroup, _JoinHookAppendRightFeatureGroup, _JoinHookAppendConsumerFeatureGroup}
+        )
+
+        result = mloda.run_all(
+            [Feature(name=_JoinHookAppendConsumerFeatureGroup.get_class_name())],
+            compute_frameworks=["PythonDictFramework"],
+            plugin_collector=enabled,
+            flight_server=flight_server,
+            parallelization_modes={ParallelizationMode.SYNC},
+            function_extender={extender},
+        )
+
+        assert len(result) == 1
+        assert len(extender.captured) == 1
+        assert extender.captured[0].join_type == "append"
+        assert extender.captured[0].join_keys is None

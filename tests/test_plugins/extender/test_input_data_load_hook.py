@@ -6,18 +6,24 @@ deny-with-fallback, and the "activate only when needed" short-circuit.
 """
 
 import logging
+import sqlite3
 from pathlib import Path
 from typing import Any
 
 import pytest
 
+from mloda.core.abstract_plugins.components.feature_set import FeatureSet
+from mloda.core.abstract_plugins.components.input_data.base_input_data import BaseInputData
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook
 from mloda.core.abstract_plugins.hook_context import HookContext
-from mloda.user import DataAccessCollection, mloda
+from mloda.user import DataAccessCollection, PluginCollector, mloda
+from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
+from mloda_plugins.feature_group.input_data.read_dbs.sqlite import SQLITEReader
 from mloda_plugins.feature_group.input_data.read_file_feature import ReadFileFeature
 from mloda_plugins.feature_group.input_data.read_files.csv import CsvReader
+from tests.test_plugins.feature_group.input_data.test_classes.test_input_classes import DBInputDataTestFeatureGroup
 
 _MARKER = "inputload051"
 _EXPECTED_FEATURE_GROUP_CLASS = f"{ReadFileFeature.__module__}.{ReadFileFeature.__qualname__}"
@@ -237,3 +243,136 @@ class TestComputeFrameworkCurrentShortCircuit:
 
         assert observed
         assert observed[0] is None
+
+
+def _build_calc_context(compute_framework_name: str = "stub") -> HookContext:
+    """A minimal calculate-phase HookContext to activate() around a direct _load_data_via_hook call."""
+    return HookContext(
+        hook=ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE,
+        feature_group_class="test.Fake",
+        feature_group_version="1",
+        plugin_version=None,
+        feature_names=("x",),
+        input_features=None,
+        compute_framework_name=compute_framework_name,
+    )
+
+
+class _DirectLoadReader(BaseInputData):
+    """Minimal reader whose load_data returns a fixed 3-element list, for direct
+    _load_data_via_hook calls that bypass matching/init_reader entirely."""
+
+    @classmethod
+    def load_data(cls, data_access: Any, features: FeatureSet) -> Any:
+        return [1, 2, 3]
+
+
+class TestDataAccessIdentityHidesDictCredentialValues:
+    """Fix: a dict-shaped data_access (real ReadDB credentials) must expose only key
+    names in data_access_identity, never values, since DB credentials pass through
+    this exact dict at this exact point (mloda_plugins/feature_group/input_data/read_db.py)."""
+
+    def test_dict_credential_values_are_not_leaked_into_identity(self, tmp_path: Path) -> None:
+        db_path = tmp_path / "creds.db"
+        conn = sqlite3.connect(db_path)
+        conn.execute("CREATE TABLE creds_table (id INTEGER PRIMARY KEY, name TEXT)")
+        conn.execute('INSERT INTO creds_table (name) VALUES ("Alice")')
+        conn.commit()
+        conn.close()
+
+        fetch_extender = _InputDataLoadCapturingExtender()
+
+        mloda.run_all(
+            ["name"],
+            compute_frameworks={PyArrowTable},
+            data_access_collection=DataAccessCollection(
+                credentials=[{SQLITEReader.db_path(): str(db_path), "user": "alice", "password": "hunter2"}]  # nosec B105
+            ),
+            plugin_collector=PluginCollector.enabled_feature_groups({DBInputDataTestFeatureGroup}),
+            function_extender={fetch_extender},
+        )
+
+        fetch_context = fetch_extender.captured
+        assert fetch_context is not None
+        identity = fetch_context.data_access_identity
+        assert identity is not None
+        assert "hunter2" not in identity
+        assert "alice" not in identity
+        assert "user" in identity
+        assert "password" in identity
+
+
+class TestDataAccessIdentityHidesUriEmbeddedPassword:
+    """A postgresql://user:pass@host/db-style data_access string must not leak its password
+    segment. No built-in reader accepts a raw credentialed URI as data_access, so this pins
+    the contract directly against BaseInputData._load_data_via_hook."""
+
+    def test_uri_password_segment_is_not_in_identity(self) -> None:
+        extender = _InputDataLoadCapturingExtender()
+        cfw = ComputeFramework(function_extender={extender})
+        reader = _DirectLoadReader()
+        features = FeatureSet()
+        data_access = "postgresql://admin:s3cr3t@host:5432/db"
+
+        with cfw.activate(), _build_calc_context().activate():
+            BaseInputData._load_data_via_hook(reader, data_access, features)
+
+        assert extender.captured is not None
+        identity = extender.captured.data_access_identity
+        assert identity is not None
+        assert "s3cr3t" not in identity
+
+
+class TestDataAccessIdentityBaselineForNonCredentialShapedValues:
+    """Regression guard: an ordinary (non-credential-shaped) data_access, like a CSV file path,
+    must still produce a non-empty, useful identity string."""
+
+    def test_csv_file_path_identity_is_non_empty_and_useful(self, tmp_path: Path) -> None:
+        column = f"{_MARKER}_col_g"
+        path = tmp_path / "data.csv"
+        _write_csv(path, column, [1, 2])
+
+        fetch_extender = _InputDataLoadCapturingExtender()
+
+        mloda.run_all(
+            [column],
+            compute_frameworks={PythonDictFramework},
+            data_access_collection=DataAccessCollection(files={str(path)}),
+            function_extender={fetch_extender},
+        )
+
+        fetch_context = fetch_extender.captured
+        assert fetch_context is not None
+        identity = fetch_context.data_access_identity
+        assert identity
+        assert str(path) in identity
+
+
+_ROW_COUNT_SENTINEL = 424242
+
+
+class _SentinelRowCountComputeFramework(ComputeFramework):
+    """_row_count returns a fixed sentinel, unrelated to len() of any real result; stands in
+    for a lazy/SQL-backed framework's deliberately non-materializing row counter."""
+
+    def _row_count(self, data: Any) -> int | None:
+        return _ROW_COUNT_SENTINEL
+
+
+class TestInputDataLoadHookUsesFrameworkRowCountNotDefaultLen:
+    """Fix: rows_out on the INPUT_DATA_LOAD hook must reuse cfw._row_count, the same
+    framework-aware counter the calculate hook uses, not the generic len()-based default."""
+
+    def test_rows_out_reflects_cfw_row_count_not_len(self) -> None:
+        extender = _InputDataLoadCapturingExtender()
+        cfw = _SentinelRowCountComputeFramework(function_extender={extender})
+        reader = _DirectLoadReader()
+        features = FeatureSet()
+
+        with cfw.activate(), _build_calc_context().activate():
+            result = BaseInputData._load_data_via_hook(reader, {"any": "value"}, features)
+
+        assert result == [1, 2, 3]
+        assert extender.captured is not None
+        assert extender.captured.rows_out == _ROW_COUNT_SENTINEL
+        assert extender.captured.rows_out != len(result)

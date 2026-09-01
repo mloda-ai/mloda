@@ -249,6 +249,7 @@ class mlodaAPI:
             strict_type_enforcement=strict_type_enforcement,
             column_ordering=column_ordering,
             parallelization_modes=parallelization_modes,
+            function_extender=function_extender,
         )
         # Planning is eager in prepare, so the plan snapshot is available before iteration.
         return ResultStream(
@@ -554,6 +555,7 @@ class mlodaAPI:
         child_bootstrap: Optional[Callable[[], None]] = None,
     ) -> None:
         """Enters the runner context with strict-mode-filtered extenders."""
+        function_extender = function_extender if function_extender is not None else self.function_extender
         function_extender = filter_extenders_by_strict_mode(function_extender, self.plugin_collector)
         runner.__enter__(
             parallelization_modes, function_extender, api_data, artifacts, self.run_id, carrier, child_bootstrap

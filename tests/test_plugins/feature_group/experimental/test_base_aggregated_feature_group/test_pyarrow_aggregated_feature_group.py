@@ -60,6 +60,29 @@ def multi_source_table() -> pa.Table:
     )
 
 
+@pytest.fixture
+def multi_source_table_with_null() -> pa.Table:
+    """Two source columns, row index 2 has a null in metrics~0 only."""
+    return pa.table(
+        {
+            "metrics~0": pa.array([1.0, 2.0, None, 4.0], type=pa.float64()),
+            "metrics~1": pa.array([10.0, 20.0, 30.0, 40.0], type=pa.float64()),
+        }
+    )
+
+
+@pytest.fixture
+def multi_source_table_three_columns() -> pa.Table:
+    """Three source columns, no nulls, distinct values so std/var is meaningful."""
+    return pa.table(
+        {
+            "metrics~0": [1.0, 4.0, 100.0, 8.0],
+            "metrics~1": [2.0, 10.0, 50.0, 8.0],
+            "metrics~2": [3.0, 7.0, 25.0, 9.0],
+        }
+    )
+
+
 class TestPyArrowAggregatedFeatureGroup:
     """Tests for the PyArrowAggregatedFeatureGroup class."""
 
@@ -100,16 +123,14 @@ class TestPyArrowAggregatedFeatureGroup:
     def test_perform_aggregation_std(self, sample_table: pa.Table) -> None:
         """Test _perform_aggregation method with std aggregation."""
         result = PyArrowAggregatedFeatureGroup._perform_aggregation(sample_table, "std", ["sales"])
-        # PyArrow uses a different formula for standard deviation than Pandas
-        # PyArrow uses the population standard deviation (n), while Pandas uses the sample standard deviation (n-1)
-        assert abs(result - 141.42) < 0.1  # Std of [100, 200, 300, 400, 500] with population formula
+        # ddof=1 sample standard deviation, matching pandas' default.
+        assert abs(result - 158.11) < 0.1  # Std of [100, 200, 300, 400, 500] with sample formula
 
     def test_perform_aggregation_var(self, sample_table: pa.Table) -> None:
         """Test _perform_aggregation method with var aggregation."""
         result = PyArrowAggregatedFeatureGroup._perform_aggregation(sample_table, "var", ["sales"])
-        # PyArrow uses a different formula for variance than Pandas
-        # PyArrow uses the population variance (n), while Pandas uses the sample variance (n-1)
-        assert abs(result - 20000) < 0.1  # Var of [100, 200, 300, 400, 500] with population formula
+        # ddof=1 sample variance, matching pandas' default.
+        assert abs(result - 25000) < 0.1  # Var of [100, 200, 300, 400, 500] with sample formula
 
     def test_perform_aggregation_median(self, sample_table: pa.Table) -> None:
         """Test _perform_aggregation method with median aggregation."""
@@ -230,6 +251,99 @@ class TestPyArrowAggregatedFeatureGroupMultiColumn:
 
         recomputed = PyArrowAggregatedFeatureGroup.calculate_feature(result, feature_set)
         assert recomputed.schema.names.count("metrics__sum_aggr") == 1
+
+
+class TestPyArrowAggregatedFeatureGroupDdofAndNullSkip:
+    """Pins down ddof=1 (sample statistics) and null-skip semantics for std/var/sum/count.
+
+    Ground truth for every assertion is computed from pandas inline (never hardcoded),
+    since pandas' single-column .std()/.var() and multi-column .sum(axis=1, skipna=True)/
+    .std(axis=1, skipna=True) already implement the target semantics.
+    """
+
+    def test_perform_aggregation_std_single_column_matches_pandas_ddof1(self, sample_table: pa.Table) -> None:
+        """PyArrow single-column std must use ddof=1 (sample), not ddof=0 (population)."""
+        result = PyArrowAggregatedFeatureGroup._perform_aggregation(sample_table, "std", ["sales"])
+
+        expected = pd.Series(sample_table.column("sales").to_pylist()).std()  # ddof=1 by default
+
+        assert abs(result - expected) < 1e-6
+
+    def test_perform_aggregation_var_single_column_matches_pandas_ddof1(self, sample_table: pa.Table) -> None:
+        """PyArrow single-column var must use ddof=1 (sample), not ddof=0 (population)."""
+        result = PyArrowAggregatedFeatureGroup._perform_aggregation(sample_table, "var", ["sales"])
+
+        expected = pd.Series(sample_table.column("sales").to_pylist()).var()  # ddof=1 by default
+
+        assert abs(result - expected) < 1e-6
+
+    def test_perform_aggregation_sum_multi_column_skips_null(self, multi_source_table_with_null: pa.Table) -> None:
+        """A null in one source column must be skipped, not propagated as NaN, for the row's sum."""
+        result = PyArrowAggregatedFeatureGroup._perform_aggregation(
+            multi_source_table_with_null, "sum", ["metrics~0", "metrics~1"]
+        )
+
+        expected = pd.DataFrame(
+            {
+                "metrics~0": multi_source_table_with_null.column("metrics~0").to_pylist(),
+                "metrics~1": multi_source_table_with_null.column("metrics~1").to_pylist(),
+            }
+        ).sum(axis=1, skipna=True)
+
+        for row_index in range(len(expected)):
+            assert not pd.isna(result[row_index]), (
+                f"row {row_index}: expected a skip-null sum, got NaN (null propagated instead of skipped)"
+            )
+            assert abs(result[row_index] - expected[row_index]) < 1e-9
+
+    def test_perform_aggregation_count_multi_column_excludes_null_without_crashing(
+        self, multi_source_table_with_null: pa.Table
+    ) -> None:
+        """Count across columns must not crash and must exclude the null value for the affected row."""
+        result = PyArrowAggregatedFeatureGroup._perform_aggregation(
+            multi_source_table_with_null, "count", ["metrics~0", "metrics~1"]
+        )
+
+        # Row index 2 has a null in metrics~0, so only metrics~1 counts.
+        assert result[2] == 1
+
+    def test_perform_aggregation_std_multi_column_matches_pandas_ddof1(
+        self, multi_source_table_three_columns: pa.Table
+    ) -> None:
+        """PyArrow row-wise std across columns must use ddof=1 (sample), not ddof=0."""
+        result = PyArrowAggregatedFeatureGroup._perform_aggregation(
+            multi_source_table_three_columns, "std", ["metrics~0", "metrics~1", "metrics~2"]
+        )
+
+        expected = pd.DataFrame(
+            {
+                "metrics~0": multi_source_table_three_columns.column("metrics~0").to_pylist(),
+                "metrics~1": multi_source_table_three_columns.column("metrics~1").to_pylist(),
+                "metrics~2": multi_source_table_three_columns.column("metrics~2").to_pylist(),
+            }
+        ).std(axis=1)  # ddof=1 by default
+
+        for row_index in range(len(expected)):
+            assert abs(result[row_index] - expected[row_index]) < 1e-6
+
+    def test_perform_aggregation_var_multi_column_matches_pandas_ddof1(
+        self, multi_source_table_three_columns: pa.Table
+    ) -> None:
+        """PyArrow row-wise var across columns must use ddof=1 (sample), not ddof=0."""
+        result = PyArrowAggregatedFeatureGroup._perform_aggregation(
+            multi_source_table_three_columns, "var", ["metrics~0", "metrics~1", "metrics~2"]
+        )
+
+        expected = pd.DataFrame(
+            {
+                "metrics~0": multi_source_table_three_columns.column("metrics~0").to_pylist(),
+                "metrics~1": multi_source_table_three_columns.column("metrics~1").to_pylist(),
+                "metrics~2": multi_source_table_three_columns.column("metrics~2").to_pylist(),
+            }
+        ).var(axis=1)  # ddof=1 by default
+
+        for row_index in range(len(expected)):
+            assert abs(result[row_index] - expected[row_index]) < 1e-6
 
 
 class TestAggPyArrowIntegration:

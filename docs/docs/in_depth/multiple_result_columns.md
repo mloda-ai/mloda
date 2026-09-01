@@ -143,26 +143,16 @@ The mloda framework automatically handles the selection of columns that follow t
 2. This is implemented in the `identify_naming_convention` method in the `ComputeFramework` class:
 
 ```py
-def identify_naming_convention(self, selected_feature_names: Set[FeatureName], column_names: Set[str]) -> Set[str]:
-    feature_name_strings = {f.name for f in selected_feature_names}
-    _selected_feature_names: Set[str] = set()
-
-    for col in column_names:
-        for feature_name in feature_name_strings:
-            if col == feature_name:
-                _selected_feature_names.add(col)
-                continue
-
-            if col.startswith(f"{feature_name}~"):
-                _selected_feature_names.add(col)
-
-    if not _selected_feature_names:
-        raise ValueError(
-            f"No columns found that match feature names {feature_name_strings} or follow the naming convention 'feature_name~column_name'"
-        )
-
-    return _selected_feature_names
+def identify_naming_convention(
+    self,
+    selected_feature_names: Sequence[FeatureName],
+    column_names: set[str],
+    ordering: Optional[str] = None,
+    request_feature_order: Optional[list[str]] = None,
+) -> set[str] | list[str]: ...
 ```
+
+It collects every column that equals a requested feature name or starts with `feature_name~`, and raises a `ValueError` if no column matches. By default it returns a set; with `ordering="alphabetical"` it returns a sorted list, and with `ordering="request_order"` it returns a list ordered by `request_feature_order` (falling back to `selected_feature_names`). Any other `ordering` value raises a `ValueError`.
 
 ## Best Practices
 

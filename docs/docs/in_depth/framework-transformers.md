@@ -215,12 +215,24 @@ The `ComputeFramework` class uses the transformer system to convert data between
 The transformation is handled automatically by the `apply_compute_framework_transformer` method:
 
 ```py
+@final
 def apply_compute_framework_transformer(self, data: Any) -> Any:
     _from_fw = type(data)
     _to_fw = self.expected_data_framework()
-    transformer_cls = self.transformer.transformer_map.get((_from_fw, _to_fw), None)
-    if transformer_cls is not None:
-        return transformer_cls.transform(_from_fw, _to_fw, data)
+
+    # Same native type: nothing to transform.
+    if _from_fw == _to_fw:
+        return None
+
+    # A direct transformer always applies.
+    direct = self.transformer.transformer_map.get((_from_fw, _to_fw))
+    if direct is not None:
+        return direct.transform(_from_fw, _to_fw, data, self.framework_connection_object)
+
+    # A multi-hop chain (through pa.Table) is only valid for a descriptor input.
+    if isinstance(data, InputDataDescriptor):
+        return self._materialize_descriptor(data, _from_fw, _to_fw)
+
     return None
 ```
 

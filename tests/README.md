@@ -17,6 +17,7 @@ tests/
 ├── test_agent_docs_sync.py         # Agent-facing docs stay in sync with the code
 ├── test_attributions.py            # Third-party attributions are complete
 ├── test_ci_paths_ignore.py         # CI path filters do not skip real changes
+├── test_docs_corpus.py             # Fence-tag vocabulary and classifier of docs_corpus.py stay pinned
 ├── test_docs_fences.py             # Fenced code blocks in docs are well-formed
 ├── test_docs_near_miss_labels.py   # Rendered near-miss labels in docs match the code
 ├── test_docs_taught_values.py      # Values taught in docs match the code

@@ -128,20 +128,22 @@ result = mloda.run_all(
 
 ### DuckDB Transformer Example
 
-The `DuckDBPyarrowTransformer` requires a connection object for PyArrow → DuckDB transformations:
+The `DuckDBPyArrowTransformer` requires a connection object for PyArrow → DuckDB transformations. The shared `transform_other_fw_to_fw` lives in its base class `SqlBasePyArrowTransformer`, which validates the connection and delegates to the framework-specific hooks:
 
 ```py
-class DuckDBPyarrowTransformer(BaseTransformer):
+class DuckDBPyArrowTransformer(SqlBasePyArrowTransformer):
     @classmethod
-    def transform_other_fw_to_fw(cls, data: Any, framework_connection_object: Optional[Any] = None) -> Any:
-        """Transform a PyArrow Table to a DuckDB relation."""
-        if framework_connection_object is None:
-            raise ValueError("A DuckDB connection object is required for this transformation.")
-        
-        if not isinstance(framework_connection_object, duckdb.DuckDBPyConnection):
-            raise ValueError(f"Expected a DuckDB connection object, got {type(framework_connection_object)}")
-        
-        return framework_connection_object.from_arrow(data)
+    def _convert_to_arrow(cls, data: Any) -> Any:
+        return data.to_arrow_table()
+
+    @classmethod
+    def _convert_to_native(cls, data: Any, connection: Any) -> Any:
+        return DuckdbRelation.from_arrow(connection, data)
+
+    @classmethod
+    def _validate_connection(cls, connection: Any) -> None:
+        if not isinstance(connection, duckdb.DuckDBPyConnection):
+            raise ValueError(f"Expected a DuckDB connection object, got {type(connection)}")
 ```
 
 ## Implementation Guidelines
@@ -188,7 +190,7 @@ return framework_connection_object.from_other_format(data)
 
 1. **Missing Connection Object**:
    ```
-   ValueError: A DuckDB connection object is required for this transformation.
+   ValueError: A connection object is required for this transformation.
    ```
    **Solution**: Ensure you're providing a connection object when using stateful frameworks. Currently, parent features are not receiving the connection details automatically. Thus, you might need to give them a second time to root features!
 

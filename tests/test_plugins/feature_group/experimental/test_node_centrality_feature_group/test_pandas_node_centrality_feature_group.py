@@ -124,6 +124,28 @@ class TestPandasNodeCentralityFeatureGroup:
         assert (centrality >= 0).all()
         assert (centrality <= 1).all()
 
+    def test_calculate_betweenness_centrality_path_graph_undirected(self) -> None:
+        """Undirected path a-b-c: only unordered pair (a,c) runs through b, so C_B(b) must be 1.0, not 2.0."""
+        edges = pd.DataFrame(
+            [
+                {"source": "a", "target": "b"},
+                {"source": "b", "target": "c"},
+            ]
+        )
+        nodes = pd.concat([edges["source"], edges["target"]]).unique()
+
+        adj_matrix = PandasNodeCentralityFeatureGroup._create_adjacency_matrix(
+            edges, nodes, "source", "target", None, "undirected"
+        )
+
+        centrality = PandasNodeCentralityFeatureGroup._calculate_betweenness_centrality(adj_matrix, nodes)
+
+        # b sits on the only shortest path between a and c: hand-computed C_B(b) == 1.0
+        assert centrality["b"] == 1.0
+        # a and c are endpoints, on no shortest path between any other pair: C_B == 0.0
+        assert centrality["a"] == 0.0
+        assert centrality["c"] == 0.0
+
     def test_calculate_centrality(self, sample_data: pd.DataFrame) -> None:
         """Test the _calculate_centrality method."""
         # Test degree centrality

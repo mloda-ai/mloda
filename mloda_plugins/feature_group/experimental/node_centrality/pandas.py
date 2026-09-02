@@ -146,7 +146,7 @@ class PandasNodeCentralityFeatureGroup(NodeCentralityFeatureGroup):
         if centrality_type == "degree":
             centrality_scores = cls._calculate_degree_centrality(adj_matrix, nodes, graph_type)
         elif centrality_type == "betweenness":
-            centrality_scores = cls._calculate_betweenness_centrality(adj_matrix, nodes, graph_type)
+            centrality_scores = cls._calculate_betweenness_centrality(adj_matrix, nodes)
         elif centrality_type == "closeness":
             centrality_scores = cls._calculate_closeness_centrality(adj_matrix, nodes)
         elif centrality_type == "eigenvector":
@@ -295,16 +295,13 @@ class PandasNodeCentralityFeatureGroup(NodeCentralityFeatureGroup):
         return closeness
 
     @classmethod
-    def _calculate_betweenness_centrality(
-        cls, adj_matrix: pd.DataFrame, nodes: np.ndarray[Any, Any], graph_type: str = "undirected"
-    ) -> pd.Series:
+    def _calculate_betweenness_centrality(cls, adj_matrix: pd.DataFrame, nodes: np.ndarray[Any, Any]) -> pd.Series:
         """
         Calculate betweenness centrality for each node.
 
         Args:
             adj_matrix: Adjacency matrix
             nodes: Array of unique node identifiers
-            graph_type: Type of graph (directed or undirected)
 
         Returns:
             A pandas Series with betweenness centrality scores

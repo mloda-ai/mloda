@@ -239,9 +239,7 @@ class TestPyArrowMissingValueFeatureGroup:
         assert result[6].as_py() == 400
         assert result[7].as_py() == 400
 
-    def test_perform_grouped_imputation_ffill_null_group_key(
-        self, sample_table_with_null_group_key: pa.Table
-    ) -> None:
+    def test_perform_grouped_imputation_ffill_null_group_key(self, sample_table_with_null_group_key: pa.Table) -> None:
         """Grouped ffill must not crash when a row needing imputation has a null group-by key:
         Arrow's 3-valued equality makes pc.equal(col, null) all-null, so the null-key group mask
         is all-null and the row's own index is missing from indices_nonzero(group_mask)."""
@@ -251,9 +249,7 @@ class TestPyArrowMissingValueFeatureGroup:
         assert isinstance(result, pa.Array)
         assert len(result) == sample_table_with_null_group_key.num_rows
 
-    def test_perform_grouped_imputation_bfill_null_group_key(
-        self, sample_table_with_null_group_key: pa.Table
-    ) -> None:
+    def test_perform_grouped_imputation_bfill_null_group_key(self, sample_table_with_null_group_key: pa.Table) -> None:
         """Grouped bfill must not crash when a row needing imputation has a null group-by key."""
         result = PyArrowMissingValueFeatureGroup._perform_grouped_imputation(
             sample_table_with_null_group_key, "bfill", "value", None, ["group"]

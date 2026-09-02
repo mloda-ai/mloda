@@ -22,7 +22,4 @@ def test_order_ordered_ids_by_relation_keeps_both_ids_that_collide_on_one_positi
 
     trekker.order_ordered_ids_by_relation()
 
-    assert uuid_a in trekker.order, f"uuid_a was overwritten by the colliding position bug; got: {trekker.order}"
-    assert uuid_b in trekker.order
-    assert uuid_c in trekker.order
-    assert len(trekker.order) == 3
+    assert list(trekker.order.keys()) == [uuid_c, uuid_a, uuid_b]

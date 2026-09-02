@@ -4,8 +4,7 @@ PyArrow implementation for aggregated feature groups.
 
 from __future__ import annotations
 
-import warnings
-from typing import Any
+from typing import Any, Callable
 
 import numpy as np
 import pyarrow as pa
@@ -15,6 +14,26 @@ from mloda.provider import ComputeFramework
 
 from mloda.user.pyarrow import PyArrowTable
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.base import AggregatedFeatureGroup
+
+
+def _reduce_without_nan_warning(
+    stacked: np.ndarray[Any, Any],
+    degenerate_rows: np.ndarray[Any, Any],
+    reducer: Callable[[np.ndarray[Any, Any]], np.ndarray[Any, Any]],
+) -> np.ndarray[Any, Any]:
+    """Run a np.nan* row-wise reducer without ever triggering its RuntimeWarning.
+
+    Rows flagged as degenerate (e.g. all-NaN, or too few valid values for ddof=1) have their
+    NaN cells temporarily patched with 0.0 in a copy so the reducer never sees a degenerate
+    row; those rows' results are then overwritten back to NaN, matching the unpatched result.
+    """
+    if not degenerate_rows.any():
+        return reducer(stacked)
+    patched = stacked.copy()
+    nan_mask = np.isnan(patched)
+    patched[degenerate_rows[:, np.newaxis] & nan_mask] = 0.0
+    result = reducer(patched)
+    return np.where(degenerate_rows, np.nan, result)
 
 
 class PyArrowAggregatedFeatureGroup(AggregatedFeatureGroup):
@@ -101,28 +120,38 @@ class PyArrowAggregatedFeatureGroup(AggregatedFeatureGroup):
                 arrays = [col.to_numpy() for col in columns]
             stacked = np.column_stack(arrays)
 
-            with warnings.catch_warnings():
-                # An all-NaN row triggers a RuntimeWarning; the resulting NaN is intended (matches pandas skipna).
-                warnings.simplefilter("ignore", category=RuntimeWarning)
-
-                if aggregation_type == "sum":
-                    result = np.nansum(stacked, axis=1)
-                elif aggregation_type == "min":
-                    result = np.nanmin(stacked, axis=1)
+            # np.nansum and the count below never warn on an all-NaN row (nansum returns 0,
+            # count is not nan-aware). The other reducers warn on rows they can't skipna
+            # over: an all-NaN row for min/max/mean/median, or a row with fewer than 2 valid
+            # values for std/var (ddof=1 needs >=2). Route those through the helper, which
+            # patches just the degenerate rows so the warning never fires, instead of
+            # suppressing it process-wide via warnings.catch_warnings().
+            if aggregation_type == "sum":
+                result = np.nansum(stacked, axis=1)
+            elif aggregation_type == "count":
+                result = np.sum(~np.isnan(stacked), axis=1)
+            elif aggregation_type in ["min", "max", "avg", "mean", "median"]:
+                all_nan_rows = np.sum(~np.isnan(stacked), axis=1) == 0
+                if aggregation_type == "min":
+                    result = _reduce_without_nan_warning(stacked, all_nan_rows, lambda a: np.nanmin(a, axis=1))
                 elif aggregation_type == "max":
-                    result = np.nanmax(stacked, axis=1)
+                    result = _reduce_without_nan_warning(stacked, all_nan_rows, lambda a: np.nanmax(a, axis=1))
                 elif aggregation_type in ["avg", "mean"]:
-                    result = np.nanmean(stacked, axis=1)
-                elif aggregation_type == "count":
-                    result = np.sum(~np.isnan(stacked), axis=1)
-                elif aggregation_type == "std":
-                    result = np.nanstd(stacked, axis=1, ddof=1)
-                elif aggregation_type == "var":
-                    result = np.nanvar(stacked, axis=1, ddof=1)
-                elif aggregation_type == "median":
-                    result = np.nanmedian(stacked, axis=1)
+                    result = _reduce_without_nan_warning(stacked, all_nan_rows, lambda a: np.nanmean(a, axis=1))
                 else:
-                    raise ValueError(f"Unsupported aggregation type: {aggregation_type}")
+                    result = _reduce_without_nan_warning(stacked, all_nan_rows, lambda a: np.nanmedian(a, axis=1))
+            elif aggregation_type in ["std", "var"]:
+                under_two_valid_rows = np.sum(~np.isnan(stacked), axis=1) < 2
+                if aggregation_type == "std":
+                    result = _reduce_without_nan_warning(
+                        stacked, under_two_valid_rows, lambda a: np.nanstd(a, axis=1, ddof=1)
+                    )
+                else:
+                    result = _reduce_without_nan_warning(
+                        stacked, under_two_valid_rows, lambda a: np.nanvar(a, axis=1, ddof=1)
+                    )
+            else:
+                raise ValueError(f"Unsupported aggregation type: {aggregation_type}")
 
             # Convert back to PyArrow array (will be added as column)
             return result

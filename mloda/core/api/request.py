@@ -513,6 +513,12 @@ class mlodaAPI:
         run_context: RunContext,
     ) -> Generator[Any, None, None]:
         """Deferred half of ``stream_run``: iterating this is what actually drives computation."""
+        # Assign self.runner before the yield loop so that get_result()/get_artifacts()
+        # remain accessible even when the consumer exits early (break / next()).
+        # Previously this line lived after the loop, which meant an early exit left
+        # self.runner unset and both methods raised "You need to run any run function
+        # beforehand." despite teardown having completed successfully in `finally`.
+        self.runner = runner
         try:
             self._enter_runner_context(
                 runner,
@@ -526,7 +532,6 @@ class mlodaAPI:
                 yield result
         finally:
             self._exit_runner_context(runner)
-        self.runner = runner
 
     def _batch_run(
         self,

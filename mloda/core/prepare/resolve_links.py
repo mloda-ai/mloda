@@ -152,11 +152,8 @@ class LinkTrekker:
                 new_order[o_uuid] = o_set
             else:
                 # remembering latest position
-                if latest_position in pos_marker:
-                    for i in range(latest_position, len(pos_marker)):
-                        if i not in pos_marker:
-                            latest_position = i + latest_position
-                            break
+                while latest_position in pos_marker:
+                    latest_position += 1
                 pos_marker[latest_position] = (o_uuid, o_set)
 
         if len(pos_marker.keys()):

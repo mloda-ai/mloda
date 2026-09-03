@@ -24,7 +24,7 @@ decorator = "2099-01-01T00:00:00Z"
 [manifest]
 constraints = [
     { name = "idna", specifier = ">=3.15" },
-    { name = "mistune", specifier = ">=3.3.0" },
+    { name = "mistune", specifier = ">=3.3.3" },
     { name = "nbconvert", specifier = ">=7.17.1" },
     { name = "soupsieve", specifier = ">=2.8.4" },
     { name = "urllib3", specifier = ">=2.7.0" },

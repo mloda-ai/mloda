@@ -1086,7 +1086,7 @@ Available join types:
 
             for c_o_c in child_of_child:
                 if c_o_c in children_uuids:
-                    new_children_uuids.remove(c_o_c)
+                    new_children_uuids.discard(c_o_c)
 
         return new_children_uuids
 

@@ -56,5 +56,5 @@ To create effective and maintainable plugins:
 mloda_plugins/
 ├── compute_framework/   # Compute framework implementations
 ├── feature_group/       # Feature group implementations
-└── function_extender/   # Function extender implementations
+└── function_extender/   # Extension point for custom Extenders (no bundled implementations)
 ```

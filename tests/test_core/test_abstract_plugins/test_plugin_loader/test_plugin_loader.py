@@ -6,6 +6,7 @@ from mloda.core.abstract_plugins.components.input_data.base_input_data import (
     _collect_filtered_subclasses,  # noqa: F401
     get_all_filtered_subclasses,
 )
+from mloda.core.abstract_plugins.plugin_loader.plugin_loader import OPTIONAL_PLUGIN_DEPENDENCIES
 from mloda.core.abstract_plugins.plugin_registry.plugin_registry import PluginRegistry
 from mloda.user import PluginLoader
 
@@ -218,3 +219,7 @@ class TestPluginLoader:
             with patch.object(PluginLoader, "load_entry_points", MagicMock()):
                 with pytest.raises(RuntimeError):
                     PluginLoader.all()
+
+    def test_optional_plugin_dependencies_has_no_orphaned_opentelemetry_entry(self) -> None:
+        """opentelemetry was only imported by OtelExtender, deleted on this branch; nothing imports it now."""
+        assert "opentelemetry" not in OPTIONAL_PLUGIN_DEPENDENCIES

@@ -46,13 +46,6 @@ duckdb = ["duckdb", "pyarrow"]
 sqlite = ["pyarrow"]
 iceberg = ["pyiceberg", "pyarrow"]
 spark = ["pyspark", "pyarrow"]
-otel = [
-    "opentelemetry-api",
-    "opentelemetry-sdk",
-    "opentelemetry-instrumentation",
-    "opentelemetry-instrumentation-logging",
-    "opentelemetry-instrumentation-requests",
-]
 sklearn = [
     "scikit-learn>=1.0.0",
     "joblib>=1.0.0",
@@ -85,7 +78,6 @@ all = [
     "mloda[duckdb]",
     "mloda[sqlite]",
     "mloda[iceberg]",
-    "mloda[otel]",
     "mloda[sklearn]",
     "mloda[text_cleaning]",
     "mloda[docs]",

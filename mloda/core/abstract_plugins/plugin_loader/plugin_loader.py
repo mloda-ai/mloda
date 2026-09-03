@@ -36,7 +36,6 @@ OPTIONAL_PLUGIN_DEPENDENCIES: frozenset[str] = frozenset(
         "duckdb",
         "pyiceberg",
         "pyspark",
-        "opentelemetry",
         "sklearn",
         "joblib",
         "nltk",

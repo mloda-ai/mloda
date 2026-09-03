@@ -13,9 +13,18 @@ from mloda.core.abstract_plugins.function_extender import (
     ExtenderHook,
     Extender,
 )
-from mloda_plugins.function_extender.base_implementations.otel.otel_extender import OtelExtender
 from mloda.core.abstract_plugins.function_extender import _CompositeExtender
 from mloda.provider import ComputeFramework
+
+
+class DummyExtender(Extender):
+    """Minimal concrete Extender used to exercise the base class's priority property."""
+
+    def wraps(self) -> set[ExtenderHook]:
+        return {ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE}
+
+    def __call__(self, func: Any, *args: Any, **kwargs: Any) -> Any:
+        return func(*args, **kwargs)
 
 
 class MockExtender(Extender):
@@ -78,16 +87,15 @@ class TestExtenderPriority:
 
     def test_priority_property_exists_on_base_class(self) -> None:
         """Test that Extender base class defines priority."""
-        # Check if priority is defined at the class level or in __init__
-        # OtelExtender (a real implementation) should have priority after implementation
+        # A concrete Extender implementation should have priority via the base class
 
-        otel = OtelExtender()
-        assert hasattr(otel, "priority"), "Extender implementations must have a priority property"
+        dummy = DummyExtender()
+        assert hasattr(dummy, "priority"), "Extender implementations must have a priority property"
 
     def test_priority_default_value(self) -> None:
         """Test that priority defaults to 100 when not specified."""
-        otel = OtelExtender()
-        assert otel.priority == 100, "Default priority should be 100"
+        dummy = DummyExtender()
+        assert dummy.priority == 100, "Default priority should be 100"
 
     def test_priority_custom_value(self) -> None:
         """Test that priority can be set to a custom value."""

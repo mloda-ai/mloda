@@ -19,6 +19,7 @@ from mloda.core.api.plugin_docs import (
 )
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
+from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook
 from mloda.user import PluginLoader
 from tests.helpers.plugin_stubs import make_raising_fg
 
@@ -26,6 +27,16 @@ from tests.helpers.plugin_stubs import make_raising_fg
 pytestmark = pytest.mark.timeout(30)
 
 SAFE_FIELD_LOGGER = "mloda.core.abstract_plugins.components.utils"
+
+
+class _DocsCatalogExtender(Extender):
+    """Module-level Extender double so get_extender_docs() has a subclass to find in isolation."""
+
+    def wraps(self) -> set[ExtenderHook]:
+        return {ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE}
+
+    def __call__(self, func: Any, *args: Any, **kwargs: Any) -> Any:
+        return func(*args, **kwargs)
 
 
 @pytest.fixture(scope="module", autouse=True)

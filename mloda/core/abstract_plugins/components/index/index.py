@@ -17,7 +17,7 @@ class Index:
 
     def __eq__(self, other: Any) -> bool:
         if not isinstance(other, Index):
-            raise Exception(f"Cannot compare Index with {type(other)}.")
+            return NotImplemented
         return self.index == other.index
 
     def __hash__(self) -> int:

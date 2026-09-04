@@ -83,6 +83,7 @@ class ComputeFramework(ABC):
         self.column_names: set[str] = set()
         self.function_extender = function_extender if function_extender is not None else set()
         # Set post-construction so a subclass's fixed __init__ signature isn't broken.
+        # RunContext is internal; hook authors should read run_id/carrier off HookContext instead.
         self.run_context: RunContext = RunContext()
         self.worker_index: int | None = None
 

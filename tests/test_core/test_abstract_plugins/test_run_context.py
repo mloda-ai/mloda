@@ -5,6 +5,9 @@ import pickle  # nosec B403
 
 import pytest
 
+import mloda.provider as provider
+import mloda.steward as steward
+import mloda.user as user
 from mloda.core.abstract_plugins.run_context import RunContext
 
 
@@ -110,8 +113,12 @@ class TestRunContextIsInternal:
         assert "internal" in RunContext.__doc__.lower()
         assert "not part of the public api" in RunContext.__doc__.lower()
 
-    def test_not_exported_from_the_provider_facade(self) -> None:
-        import mloda.provider as provider
-
+    def test_not_exported_from_any_facade(self) -> None:
         assert "RunContext" not in provider.__all__
         assert not hasattr(provider, "RunContext")
+
+        assert "RunContext" not in steward.__all__
+        assert not hasattr(steward, "RunContext")
+
+        assert "RunContext" not in user.__all__
+        assert not hasattr(user, "RunContext")

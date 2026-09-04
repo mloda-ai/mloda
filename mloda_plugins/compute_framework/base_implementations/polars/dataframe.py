@@ -1,5 +1,5 @@
 from collections.abc import Sequence
-from typing import Any, Optional
+from typing import Any
 from mloda.core.abstract_plugins.components.data_types import DataType
 from mloda.provider import BaseMergeEngine
 from mloda_plugins.compute_framework.base_implementations.polars.polars_merge_engine import PolarsMergeEngine
@@ -38,8 +38,8 @@ class PolarsDataFrame(ComputeFramework):
         self,
         data: Any,
         selected_feature_names: Sequence[FeatureName],
-        column_ordering: Optional[str] = None,
-        request_feature_order: Optional[list[str]] = None,
+        column_ordering: str | None = None,
+        request_feature_order: list[str] | None = None,
     ) -> Any:
         column_names = set(data.columns)
         _selected_feature_names = self.identify_naming_convention(
@@ -55,13 +55,13 @@ class PolarsDataFrame(ComputeFramework):
             return str(data[column_name].dtype)
         return None
 
-    def _extract_column_data_type(self, data: Any, column_name: str) -> Optional[DataType]:
+    def _extract_column_data_type(self, data: Any, column_name: str) -> DataType | None:
         if column_name not in data.columns:
             return None
         return self._polars_type_to_data_type(data[column_name].dtype)
 
     @staticmethod
-    def _polars_type_to_data_type(dtype: Any) -> Optional[DataType]:
+    def _polars_type_to_data_type(dtype: Any) -> DataType | None:
         if pl is None:
             return None
         if dtype == pl.Int32:

@@ -1,7 +1,7 @@
 import csv
 import os
 import tempfile
-from typing import Any, Optional
+from typing import Any
 
 import pytest
 
@@ -34,7 +34,7 @@ class OverwrittenReadCsvInputDataTestFeatureGroup(ReadFileFeature):
         cls,
         feature_name: FeatureName | str,
         options: Options,
-        data_access_collection: Optional[DataAccessCollection] = None,
+        data_access_collection: DataAccessCollection | None = None,
     ) -> bool:
         if isinstance(feature_name, FeatureName):
             feature_name = str(feature_name)
@@ -75,7 +75,7 @@ class TestInputData:
 
     @classmethod
     def get_features(
-        cls, features: list[str], path: Optional[str] = None, additional_options: dict[str, Any] = {}
+        cls, features: list[str], path: str | None = None, additional_options: dict[str, Any] = {}
     ) -> list[str | Feature]:
         _feature_list: list[str | Feature] = []
         for feature in features:
@@ -361,7 +361,7 @@ class TestSameClassFGLinkWithDifferentDataSources:
 
             class ReadFileWithIndex(ReadFileFeature):
                 @classmethod
-                def index_columns(cls) -> Optional[list[Index]]:
+                def index_columns(cls) -> list[Index] | None:
                     return [Index(("id",))]
 
                 @classmethod
@@ -369,7 +369,7 @@ class TestSameClassFGLinkWithDifferentDataSources:
                     cls,
                     feature_name: FeatureName | str,
                     options: Options,
-                    data_access_collection: Optional[DataAccessCollection] = None,
+                    data_access_collection: DataAccessCollection | None = None,
                 ) -> bool:
                     if options.get("discriminator_test") is None:
                         return False
@@ -384,7 +384,7 @@ class TestSameClassFGLinkWithDifferentDataSources:
                 _path_a: str = path_a
                 _path_b: str = path_b
 
-                def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+                def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
                     _path_a = options.get("left_csv_path")
                     _path_b = options.get("right_csv_path")
                     link = Link.inner(
@@ -451,7 +451,7 @@ class TestSameClassFGLinkWithDifferentDataSources:
 
             class ReadFileWithIndexNoDisc(ReadFileFeature):
                 @classmethod
-                def index_columns(cls) -> Optional[list[Index]]:
+                def index_columns(cls) -> list[Index] | None:
                     return [Index(("id",))]
 
                 @classmethod
@@ -459,7 +459,7 @@ class TestSameClassFGLinkWithDifferentDataSources:
                     cls,
                     feature_name: FeatureName | str,
                     options: Options,
-                    data_access_collection: Optional[DataAccessCollection] = None,
+                    data_access_collection: DataAccessCollection | None = None,
                 ) -> bool:
                     if options.get("no_disc_test") is None:
                         return False
@@ -474,7 +474,7 @@ class TestSameClassFGLinkWithDifferentDataSources:
                 _path_a: str = path_a
                 _path_b: str = path_b
 
-                def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+                def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
                     _path_a = options.get("left_csv_path")
                     _path_b = options.get("right_csv_path")
                     link = Link.inner(

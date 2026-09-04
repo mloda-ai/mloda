@@ -4,7 +4,7 @@ import multiprocessing
 import threading
 import time
 from collections.abc import Sequence
-from typing import Any, Generator, Optional
+from typing import Any, Generator
 from uuid import UUID
 import logging
 
@@ -86,10 +86,10 @@ class ExecutionOrchestrator:
     def __init__(
         self,
         execution_planner: ExecutionPlan,
-        flight_server: Optional[ParallelRunnerFlightServer] = None,
-        column_ordering: Optional[str] = None,
-        request_feature_order: Optional[list[str]] = None,
-        tfs_connection_map: Optional[dict[type[ComputeFramework], Any]] = None,
+        flight_server: ParallelRunnerFlightServer | None = None,
+        column_ordering: str | None = None,
+        request_feature_order: list[str] | None = None,
+        tfs_connection_map: dict[type[ComputeFramework], Any] | None = None,
     ) -> None:
         """
         Initializes the ExecutionOrchestrator with an execution plan and optional flight server.
@@ -104,7 +104,7 @@ class ExecutionOrchestrator:
         self.manager: Any = None
 
         # multiprocessing - delegate to WorkerManager
-        self.location: Optional[str] = None
+        self.location: str | None = None
         self.worker_manager = WorkerManager()
 
         # Data lifecycle - delegate to DataLifecycleManager
@@ -406,7 +406,7 @@ class ExecutionOrchestrator:
         self.data_lifecycle_manager.add_to_result_data_collection(cfw, features, step_uuid, self.location)
 
     def get_result_data(
-        self, cfw: ComputeFramework, selected_feature_names: Sequence[FeatureName], location: Optional[str] = None
+        self, cfw: ComputeFramework, selected_feature_names: Sequence[FeatureName], location: str | None = None
     ) -> Any:
         """
         Gets result data from the compute framework.
@@ -420,9 +420,9 @@ class ExecutionOrchestrator:
     def __enter__(
         self,
         parallelization_modes: set[ParallelizationMode] = {ParallelizationMode.SYNC},
-        function_extender: Optional[set[Extender]] = None,
-        api_data: Optional[dict[str, Any]] = None,
-        artifacts: Optional[dict[str, Any]] = None,
+        function_extender: set[Extender] | None = None,
+        api_data: dict[str, Any] | None = None,
+        artifacts: dict[str, Any] | None = None,
         run_context: RunContext | None = None,
     ) -> None:
         """

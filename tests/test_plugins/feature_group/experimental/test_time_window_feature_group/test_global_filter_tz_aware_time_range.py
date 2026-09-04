@@ -20,7 +20,7 @@ omitted as redundant.
 """
 
 from datetime import datetime, timezone
-from typing import Any, Optional
+from typing import Any
 
 import pyarrow as pa
 import pytest
@@ -63,7 +63,7 @@ def test_pyarrow_tz_aware_time_range_filter() -> None:
 
     class PyArrowTzAwareSource(FeatureGroup):
         @classmethod
-        def input_data(cls) -> Optional[BaseInputData]:
+        def input_data(cls) -> BaseInputData | None:
             return DataCreator({"temperature", DefaultOptionKeys.reference_time})
 
         @classmethod
@@ -120,7 +120,7 @@ def test_pyarrow_tz_aware_time_range_filter_with_validity_window() -> None:
 
     class PyArrowTzAwareValiditySource(FeatureGroup):
         @classmethod
-        def input_data(cls) -> Optional[BaseInputData]:
+        def input_data(cls) -> BaseInputData | None:
             return DataCreator({"temperature", DefaultOptionKeys.reference_time, "valid_time"})
 
         @classmethod
@@ -175,7 +175,7 @@ def test_python_dict_tz_aware_time_range_filter() -> None:
 
     class PythonDictTzAwareSource(FeatureGroup):
         @classmethod
-        def input_data(cls) -> Optional[BaseInputData]:
+        def input_data(cls) -> BaseInputData | None:
             return DataCreator({"temperature", DefaultOptionKeys.reference_time})
 
         @classmethod
@@ -220,7 +220,7 @@ def test_polars_tz_aware_time_range_filter() -> None:
 
     class PolarsTzAwareSource(FeatureGroup):
         @classmethod
-        def input_data(cls) -> Optional[BaseInputData]:
+        def input_data(cls) -> BaseInputData | None:
             return DataCreator({"temperature", DefaultOptionKeys.reference_time})
 
         @classmethod

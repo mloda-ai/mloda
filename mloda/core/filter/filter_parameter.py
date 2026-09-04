@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Any, Optional, Protocol, cast, runtime_checkable
+from typing import Any, Protocol, cast, runtime_checkable
 
 from mloda.core.abstract_plugins.components.utils import unhashable_part
 
@@ -7,16 +7,16 @@ from mloda.core.abstract_plugins.components.utils import unhashable_part
 @runtime_checkable
 class FilterParameter(Protocol):
     @property
-    def value(self) -> Optional[Any]: ...
+    def value(self) -> Any | None: ...
 
     @property
-    def values(self) -> Optional[list[Any]]: ...
+    def values(self) -> list[Any] | None: ...
 
     @property
-    def min_value(self) -> Optional[Any]: ...
+    def min_value(self) -> Any | None: ...
 
     @property
-    def max_value(self) -> Optional[Any]: ...
+    def max_value(self) -> Any | None: ...
 
     @property
     def max_exclusive(self) -> bool: ...
@@ -59,11 +59,11 @@ class FilterParameterImpl:
         return cls(_raw=tuple(sorted(normalized.items())))
 
     @property
-    def value(self) -> Optional[Any]:
+    def value(self) -> Any | None:
         return self._get("value")
 
     @property
-    def values(self) -> Optional[list[Any]]:
+    def values(self) -> list[Any] | None:
         # Stored as a tuple or frozenset for hashability; hand out the declared list type. A
         # frozenset iterates in hash-seed order, so it's re-sorted here to stay deterministic.
         stored = self._get("values")
@@ -71,14 +71,14 @@ class FilterParameterImpl:
             return sorted(stored, key=repr)
         if isinstance(stored, tuple):
             return list(stored)
-        return cast(Optional[list[Any]], stored)
+        return cast(list[Any] | None, stored)
 
     @property
-    def min_value(self) -> Optional[Any]:
+    def min_value(self) -> Any | None:
         return self._get("min")
 
     @property
-    def max_value(self) -> Optional[Any]:
+    def max_value(self) -> Any | None:
         return self._get("max")
 
     @property

@@ -5,7 +5,7 @@ Base implementation for clustering feature groups.
 from __future__ import annotations
 
 from abc import abstractmethod
-from typing import Any, Optional
+from typing import Any
 
 from mloda.provider import FeatureGroup
 from mloda.user import Feature
@@ -228,7 +228,7 @@ class ClusteringFeatureGroup(FeatureChainParserMixin, FeatureGroup):
     # Custom validation done via _validate_string_match() hook
 
     @classmethod
-    def _extract_clustering_params(cls, feature: Feature) -> tuple[Optional[str], Optional[int | str]]:
+    def _extract_clustering_params(cls, feature: Feature) -> tuple[str | None, int | str | None]:
         """
         Extract algorithm and k_value from a feature.
 

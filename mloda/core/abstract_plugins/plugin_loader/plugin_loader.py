@@ -8,7 +8,7 @@ from pathlib import Path
 
 import logging
 from types import ModuleType
-from typing import Any, ClassVar, Optional
+from typing import Any, ClassVar
 
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
@@ -59,7 +59,7 @@ CORE_PLUGIN_MODULES: tuple[str, ...] = ("mloda.core.abstract_plugins.components.
 
 class PluginLoader:
     _disabled_groups: ClassVar[set[str]] = set()
-    _cached_loader: ClassVar[Optional["PluginLoader"]] = None
+    _cached_loader: ClassVar["PluginLoader | None"] = None
     _cached_generation: ClassVar[int | None] = None
     _building_thread_id: ClassVar[int | None] = None
     _cache_lock: ClassVar[threading.Lock] = threading.Lock()
@@ -308,7 +308,7 @@ class PluginLoader:
         package_path = Path(base_package).parent
         return package_path / group_name
 
-    def display_plugin_graph(self, plugin_category: Optional[str] = None) -> list[str]:
+    def display_plugin_graph(self, plugin_category: str | None = None) -> list[str]:
         """Display the plugin graph."""
 
         _list_plugins_dependencies: list[str] = []
@@ -324,7 +324,7 @@ class PluginLoader:
             raise ValueError(f"No plugins found for category {plugin_category}")
         return _list_plugins_dependencies
 
-    def list_loaded_modules(self, plugin_category: Optional[str] = None) -> list[str]:
+    def list_loaded_modules(self, plugin_category: str | None = None) -> list[str]:
         """List all loaded modules (plugins)."""
 
         _list_plugins_dependencies: list[str] = []

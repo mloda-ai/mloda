@@ -1,5 +1,4 @@
 from collections import defaultdict
-from typing import Optional
 from uuid import UUID
 from mloda.core.prepare.graph.graph import Graph
 from mloda.core.prepare.resolve_compute_frameworks import ResolveComputeFrameworks
@@ -15,7 +14,7 @@ PlannedQueue = list[LinkFrameworkTrekker | tuple[type[FeatureGroup], set[Feature
 
 
 class ResolveGraph:
-    def __init__(self, graph: Graph, links: Optional[set[Link]] = None):
+    def __init__(self, graph: Graph, links: set[Link] | None = None):
         self.graph = graph
         self.nodes_per_feature_group: dict[type[FeatureGroup], set[Feature]] = {}
         self.resolver_compute_framework = ResolveComputeFrameworks(self.graph)

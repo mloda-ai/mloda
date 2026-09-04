@@ -8,7 +8,7 @@ Each keeps only its own recording and rollback now, driven by the outcome this h
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Any
 
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser import PropertyValueRejection
@@ -31,14 +31,14 @@ class MatchHookOutcome:
 
     matched: bool
     returned: Any
-    error: Optional[Exception]
+    error: Exception | None
 
 
 def call_match_hook(
     feature_group: type[FeatureGroup],
     feature_name: FeatureName | str,
     options: Options,
-    data_access_collection: Optional[DataAccessCollection] = None,
+    data_access_collection: DataAccessCollection | None = None,
 ) -> MatchHookOutcome:
     """Ask one candidate's match hook: a raise out of it is a non-match for that candidate only (#845).
 
@@ -70,16 +70,16 @@ class CriteriaProbeOutcome:
     matched: bool
     returned: Any
     # Disjoint: the one contained raise is a typed decline (value_rejection) or the candidate's own defect.
-    matcher_error: Optional[Exception]
-    value_rejection: Optional[PropertyValueRejection]
-    rejection: Optional[MatchRejection]
+    matcher_error: Exception | None
+    value_rejection: PropertyValueRejection | None
+    rejection: MatchRejection | None
 
 
 def probe_match_criteria(
     feature_group: type[FeatureGroup],
     feature_name: FeatureName | str,
     options: Options,
-    data_access_collection: Optional[DataAccessCollection] = None,
+    data_access_collection: DataAccessCollection | None = None,
 ) -> CriteriaProbeOutcome:
     """Ask one candidate under its own rejection window; a marked abort propagates, the finally only resets."""
     token = MATCH_REJECTION_REASONS.set({})

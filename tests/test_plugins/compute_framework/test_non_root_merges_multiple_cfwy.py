@@ -1,4 +1,4 @@
-from typing import Any, Optional
+from typing import Any
 
 from mloda.provider import ComputeFramework
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
@@ -22,7 +22,7 @@ from mloda.user import mloda
 
 class NonCfwRootJoinTestFeature(FeatureGroup):
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator(supports_features={cls.get_class_name()})
 
     @classmethod
@@ -36,7 +36,7 @@ class NonCfwRootJoinTestFeature(FeatureGroup):
 
 class NonCfwRootJoinTestFeatureB(NonCfwRootJoinTestFeature):
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator(supports_features={cls.get_class_name()})
 
     @classmethod
@@ -55,7 +55,7 @@ class SecondNonCfwRootJoinTestFeature(NonCfwRootJoinTestFeature):
 
 
 class GroupedNonCfwRootJoinTestFeature(FeatureGroup):
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         if options.get("test_non_root_merge_multiple_join"):
             return {Feature(name="NonCfwRootJoinTestFeature"), Feature(name="NonCfwRootJoinTestFeatureB")}
 
@@ -76,7 +76,7 @@ class GroupedNonCfwRootJoinTestFeature(FeatureGroup):
 
 
 class GroupedSecondNonCfwRootJoinTestFeature(GroupedNonCfwRootJoinTestFeature):
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return {Feature(name="SecondNonCfwRootJoinTestFeature")}
 
     @classmethod
@@ -90,7 +90,7 @@ class GroupedSecondNonCfwRootJoinTestFeature(GroupedNonCfwRootJoinTestFeature):
 
 
 class Call2GroupedNonCfwRootJoinTestFeature(FeatureGroup):
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return {
             Feature(name=GroupedNonCfwRootJoinTestFeature.get_class_name()),
             Feature(name=GroupedSecondNonCfwRootJoinTestFeature.get_class_name()),

@@ -1,4 +1,4 @@
-from typing import Any, Optional
+from typing import Any
 import pytest
 import pyarrow as pa
 
@@ -83,7 +83,7 @@ class TestPyArrowTableMerge(DataFrameTestBase):
         """Create a pyarrow Table from a dictionary."""
         return pa.table(data)
 
-    def get_connection(self) -> Optional[Any]:
+    def get_connection(self) -> Any | None:
         """Return connection object (None for pyarrow)."""
         return None
 

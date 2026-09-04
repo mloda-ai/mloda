@@ -1,6 +1,6 @@
 import os
 from datetime import datetime, timezone
-from typing import Any, Optional
+from typing import Any
 import pytest
 from mloda_plugins.compute_framework.base_implementations.duckdb.duckdb_framework import DuckDBFramework
 from mloda_plugins.compute_framework.base_implementations.duckdb.duckdb_relation import DuckdbRelation
@@ -251,7 +251,7 @@ class TestDuckDBFrameworkMerge(DataFrameTestBase):
         arrow_table = pa.Table.from_pydict(data)
         return DuckdbRelation.from_arrow(self.conn, arrow_table)
 
-    def get_connection(self) -> Optional[Any]:
+    def get_connection(self) -> Any | None:
         """Return DuckDB connection object."""
         return self.conn
 

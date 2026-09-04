@@ -9,7 +9,7 @@ import gc
 from collections.abc import Callable
 from dataclasses import dataclass
 from functools import partial
-from typing import Optional, TypeVar
+from typing import TypeVar
 
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.abstract_plugins.components.feature import Feature
@@ -38,7 +38,7 @@ class OptionIsolationFw845r(ComputeFramework):
     """Dummy compute framework for the option-isolation tests."""
 
 
-def _capture(call: Callable[[], T]) -> tuple[Optional[T], Optional[str]]:
+def _capture(call: Callable[[], T]) -> tuple[T | None, str | None]:
     """Run call, returning (value, None) or (None, 'Type: message'). No traceback is retained."""
     try:
         return call(), None
@@ -67,14 +67,14 @@ def _make_mutating_raise_fg() -> type[FeatureGroup]:
             cls,
             feature_name: FeatureName | str,
             options: Options,
-            data_access_collection: Optional[DataAccessCollection] = None,
+            data_access_collection: DataAccessCollection | None = None,
         ) -> bool:
             if str(feature_name) != SHARED_FEATURE:
                 return False
             options.add_to_group(SIDE_EFFECT_KEY, SIDE_EFFECT_VALUE)
             raise RuntimeError(RAISE_MESSAGE)
 
-        def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+        def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
             return None
 
     return MutatingRaiseFG845r
@@ -95,7 +95,7 @@ def _make_clean_owner_fg() -> type[FeatureGroup]:
         def compute_framework_rule(cls) -> set[type[ComputeFramework]] | None:
             return {OptionIsolationFw845r}
 
-        def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+        def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
             return None
 
     return CleanNameOwnerFG845r
@@ -121,7 +121,7 @@ def _make_mutating_match_fg() -> type[FeatureGroup]:
             cls,
             feature_name: FeatureName | str,
             options: Options,
-            data_access_collection: Optional[DataAccessCollection] = None,
+            data_access_collection: DataAccessCollection | None = None,
         ) -> bool:
             if str(feature_name) != SHARED_FEATURE:
                 return False
@@ -129,7 +129,7 @@ def _make_mutating_match_fg() -> type[FeatureGroup]:
                 options.add_to_group(LINKED_KEY, LINKED_VALUE)
             return True
 
-        def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+        def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
             return None
 
     return MutatingMatchFG845r
@@ -139,11 +139,11 @@ def _make_mutating_match_fg() -> type[FeatureGroup]:
 class _OptionsSnapshot:
     """Plain-data readout of one evaluation. Holds no class and no exception object."""
 
-    escaped: Optional[str]
+    escaped: str | None
     identified_names: tuple[str, ...]
     option_keys: tuple[str, ...]
-    side_effect_value: Optional[str]
-    linked_value: Optional[str]
+    side_effect_value: str | None
+    linked_value: str | None
 
 
 def _evaluate(builders: tuple[Callable[[], type[FeatureGroup]], ...]) -> _OptionsSnapshot:

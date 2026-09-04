@@ -5,7 +5,7 @@ Consumes the shared AsofMergeEngineTestBase.
 """
 
 from datetime import timedelta
-from typing import Any, Optional
+from typing import Any
 
 import pytest
 
@@ -32,11 +32,11 @@ except ImportError:
 class _TimedeltaAsofFG(FeatureGroup):
     """Mock feature group with a single by-key index column 'k' for asof factory tests."""
 
-    def input_features(self, _options: Options, _feature_name: FeatureName) -> Optional[set[Any]]:
+    def input_features(self, _options: Options, _feature_name: FeatureName) -> set[Any] | None:
         return None
 
     @classmethod
-    def index_columns(cls) -> Optional[list[Index]]:
+    def index_columns(cls) -> list[Index] | None:
         return [Index(("k",))]
 
 
@@ -56,7 +56,7 @@ class TestPandasAsofMergeEngine(AsofMergeEngineTestBase):
         dataframe_type: type[Any] = pd.DataFrame
         return dataframe_type
 
-    def get_connection(self) -> Optional[Any]:
+    def get_connection(self) -> Any | None:
         return None
 
     def test_timedelta_tolerance_filters_far_match_on_datetime_column(self) -> None:

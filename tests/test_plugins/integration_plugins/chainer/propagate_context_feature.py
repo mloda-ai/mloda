@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Optional
+from typing import Any
 
 from mloda.provider import FeatureGroup
 from mloda.user import Feature
@@ -41,7 +41,7 @@ class PropagateContextFeatureGroupTest(FeatureGroup):
         cls,
         feature_name: FeatureName | str,
         options: Options,
-        data_access_collection: Optional[Any] = None,
+        data_access_collection: Any | None = None,
     ) -> bool:
         if not FeatureChainParser.match_configuration_feature_chain_parser(
             feature_name=feature_name,
@@ -53,7 +53,7 @@ class PropagateContextFeatureGroupTest(FeatureGroup):
 
         return True
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         features = set()
 
         # Children inherit consumer group options by default; CONTEXT stays local and flows

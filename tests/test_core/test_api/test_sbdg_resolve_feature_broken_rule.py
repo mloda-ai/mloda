@@ -14,7 +14,6 @@ test_plugin_docs.py) so it does not leak into the session-wide subclass registry
 """
 
 import gc
-from typing import Optional
 
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.abstract_plugins.components.feature import Feature
@@ -45,11 +44,11 @@ def _make_broken_rule_fg() -> type[FeatureGroup]:
             cls,
             feature_name: FeatureName | str,
             options: Options,
-            data_access_collection: Optional[DataAccessCollection] = None,
+            data_access_collection: DataAccessCollection | None = None,
         ) -> bool:
             return str(feature_name) == SBDG_BROKEN_RULE_FEATURE
 
-        def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+        def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
             return None
 
     return SbdgBrokenRuleFG

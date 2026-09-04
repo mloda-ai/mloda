@@ -6,7 +6,7 @@ combined with a final/global filter works.
 engine and ``_validate_filter_columns`` always see a columnar ``dict[str, list[Any]]``.
 """
 
-from typing import Any, Optional
+from typing import Any
 
 from mloda.provider import ComputeFramework, DataCreator, FeatureGroup, FeatureSet
 from mloda.provider import BaseInputData
@@ -25,7 +25,7 @@ class ListDictRootFeatureGroup(FeatureGroup):
     """
 
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator({"x", "y"})
 
     @classmethod

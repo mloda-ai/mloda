@@ -9,7 +9,7 @@ Both tests are expected to PASS against the already-merged capability behaviour;
 they lock the current end-to-end contract in place.
 """
 
-from typing import Any, Optional
+from typing import Any
 
 import pandas as pd
 
@@ -33,7 +33,7 @@ class E2ECapRunAllFeatureGroup(FeatureGroup):
     """
 
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator({FEAT})
 
     @classmethod

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import os
-from typing import Any, Optional
+from typing import Any
 
 from mloda.provider import FeatureGroup, FeatureSet
 from mloda.user import (
@@ -36,7 +36,7 @@ class TestJoinSpecWithoutIndexColumns:
                 cls,
                 feature_name: FeatureName | str,
                 options: Options,
-                data_access_collection: Optional[DataAccessCollection] = None,
+                data_access_collection: DataAccessCollection | None = None,
             ) -> bool:
                 if options.get("test_joinspec_no_index") is None:
                     return False
@@ -56,7 +56,7 @@ class TestJoinSpecWithoutIndexColumns:
             """Reads 'Class' from CSV. Defines index_columns() returning [Index(('id',))]."""
 
             @classmethod
-            def index_columns(cls) -> Optional[list[Index]]:
+            def index_columns(cls) -> list[Index] | None:
                 return [Index(("id",))]
 
             @classmethod
@@ -64,7 +64,7 @@ class TestJoinSpecWithoutIndexColumns:
                 cls,
                 feature_name: FeatureName | str,
                 options: Options,
-                data_access_collection: Optional[DataAccessCollection] = None,
+                data_access_collection: DataAccessCollection | None = None,
             ) -> bool:
                 if options.get("test_joinspec_no_index") is None:
                     return False
@@ -88,13 +88,13 @@ class TestJoinSpecWithoutIndexColumns:
                 cls,
                 feature_name: FeatureName | str,
                 options: Options,
-                data_access_collection: Optional[DataAccessCollection] = None,
+                data_access_collection: DataAccessCollection | None = None,
             ) -> bool:
                 if isinstance(feature_name, FeatureName):
                     feature_name = str(feature_name)
                 return feature_name == "JoinSpecNoIndexResult"
 
-            def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+            def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
                 return {Feature("Amount"), Feature("Class")}
 
             @classmethod

@@ -1,4 +1,4 @@
-from typing import Any, Callable, Optional
+from typing import Any, Callable
 import pyarrow as pa
 import pytest
 from mloda.provider import BaseInputData
@@ -20,8 +20,8 @@ from mloda.provider import DefaultOptionKeys
 from tests.test_core.test_tooling import MlodaTestRunner, PARALLELIZATION_MODES_SYNC_THREADING
 
 
-def _arrow_resolver(table: pa.Table) -> Callable[[str], Optional[DataType]]:
-    def resolve(col: str) -> Optional[DataType]:
+def _arrow_resolver(table: pa.Table) -> Callable[[str], DataType | None]:
+    def resolve(col: str) -> DataType | None:
         if col not in table.schema.names:
             return None
         return DataType.from_arrow_type_safe(table.schema.field(col).type)
@@ -39,7 +39,7 @@ class TypedFeatureSource(FeatureGroup):
         return table
 
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator({cls.get_class_name()})
 
 
@@ -52,7 +52,7 @@ class StringDataSource(FeatureGroup):
         return {cls.get_class_name(): ["a", "b", "c"]}
 
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator({cls.get_class_name()})
 
 
@@ -66,7 +66,7 @@ class Int64DataSource(FeatureGroup):
         return table
 
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator({"Int64DataSource"})
 
 
@@ -468,7 +468,7 @@ class TestStrictTypeEnforcementPropagation:
         # FeatureGroup that returns INT64 regardless of declared type
         class ReturnsInt64(FeatureGroup):
             @classmethod
-            def input_data(cls) -> Optional[BaseInputData]:
+            def input_data(cls) -> BaseInputData | None:
                 return DataCreator(supports_features={"ReturnsInt64"})
 
             @classmethod
@@ -515,7 +515,7 @@ class TestStrictTypeEnforcementPropagation:
         # Dependency: returns INT64 regardless of declared type
         class BaseFG(FeatureGroup):
             @classmethod
-            def input_data(cls) -> Optional[BaseInputData]:
+            def input_data(cls) -> BaseInputData | None:
                 return DataCreator(supports_features={"BaseFG"})
 
             @classmethod
@@ -525,10 +525,10 @@ class TestStrictTypeEnforcementPropagation:
         # Parent: depends on BaseFG with INT32 type
         class DerivedFG(FeatureGroup):
             @classmethod
-            def input_data(cls) -> Optional[BaseInputData]:
+            def input_data(cls) -> BaseInputData | None:
                 return DataCreator(supports_features={"DerivedFG"})
 
-            def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+            def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
                 return {Feature.int32_of("BaseFG")}
 
             @classmethod

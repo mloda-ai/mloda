@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Mapping
-from typing import Any, Optional
+from typing import Any
 
 import pytest
 
@@ -65,7 +65,7 @@ class RejectingValueFGCrlog(FeatureGroup):
         cls,
         feature_name: FeatureName | str,
         options: Options,
-        data_access_collection: Optional[DataAccessCollection] = None,
+        data_access_collection: DataAccessCollection | None = None,
     ) -> bool:
         if str(feature_name) != CRLOG_FEATURE:
             return False
@@ -76,7 +76,7 @@ class RejectingValueFGCrlog(FeatureGroup):
             prefix_patterns=[CRLOG_PATTERN],
         )
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return None
 
 

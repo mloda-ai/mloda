@@ -1,5 +1,5 @@
 from collections.abc import Sequence
-from typing import Any, Optional
+from typing import Any
 from mloda.core.abstract_plugins.components.data_types import DataType
 from mloda.provider import BaseMergeEngine
 from mloda.user import FeatureName
@@ -53,7 +53,7 @@ class IcebergFramework(ComputeFramework):
     provided via set_framework_connection_object() before use.
     """
 
-    def set_framework_connection_object(self, framework_connection_object: Optional[Any] = None) -> None:
+    def set_framework_connection_object(self, framework_connection_object: Any | None = None) -> None:
         """
         Set the Iceberg catalog for table operations.
 
@@ -112,8 +112,8 @@ class IcebergFramework(ComputeFramework):
         self,
         data: Any,
         selected_feature_names: Sequence[FeatureName],
-        column_ordering: Optional[str] = None,
-        request_feature_order: Optional[list[str]] = None,
+        column_ordering: str | None = None,
+        request_feature_order: list[str] | None = None,
     ) -> Any:
         """
         Select specific columns from Iceberg table.
@@ -154,7 +154,7 @@ class IcebergFramework(ComputeFramework):
             return None
         return str(field.field_type)
 
-    def _extract_column_data_type(self, data: Any, column_name: str) -> Optional[DataType]:
+    def _extract_column_data_type(self, data: Any, column_name: str) -> DataType | None:
         if IcebergTable is None or not isinstance(data, IcebergTable):
             return None
         schema = data.schema()
@@ -223,7 +223,7 @@ class IcebergFramework(ComputeFramework):
 
         raise ValueError(f"Data type {type(data)} is not supported by {self.__class__.__name__}")
 
-    def validate_expected_framework(self, location: Optional[str] = None) -> None:
+    def validate_expected_framework(self, location: str | None = None) -> None:
         """
         Override to accept both Iceberg tables and PyArrow tables.
 

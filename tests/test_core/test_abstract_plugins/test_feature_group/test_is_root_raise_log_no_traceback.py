@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Mapping
-from typing import Optional
 
 import pytest
 
@@ -35,7 +34,7 @@ class IsRootLogProbeFG(FeatureGroup):
     test pins it, so the registry-pollution guard would fire on the leak instead of the log contract.
     """
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         raise IsRootProbeExploded(ISROOT_MESSAGE)
 
 

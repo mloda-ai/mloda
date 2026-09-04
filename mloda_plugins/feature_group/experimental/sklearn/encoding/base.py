@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import datetime
 from abc import abstractmethod
-from typing import Any, Optional
+from typing import Any
 
 from mloda.provider import FeatureGroup
 from mloda.user import Feature
@@ -202,7 +202,7 @@ class EncodingFeatureGroup(FeatureChainParserMixin, FeatureGroup):
         """Return the artifact class for sklearn encoder persistence."""
         return SklearnArtifact
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         """Extract source feature from either configuration-based options or string parsing."""
 
         # Try string-based parsing first
@@ -307,7 +307,7 @@ class EncodingFeatureGroup(FeatureChainParserMixin, FeatureGroup):
         return cls._extract_operation_and_source_feature(feature, cls._extract_encoder_type, "encoder type")
 
     @classmethod
-    def _extract_encoder_type(cls, feature: Feature) -> Optional[str]:
+    def _extract_encoder_type(cls, feature: Feature) -> str | None:
         """
         Extract encoder type from a feature.
 

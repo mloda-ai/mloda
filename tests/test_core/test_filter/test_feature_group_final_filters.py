@@ -21,7 +21,7 @@ Validation (filter column must be present when row elimination applies):
 """
 
 from dataclasses import dataclass
-from typing import Any, Optional, cast
+from typing import Any, cast
 
 import pytest
 import pyarrow as pa
@@ -59,7 +59,7 @@ class InlineMaskViaFeatureGroup(FeatureGroup):
     """
 
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator({cls.get_class_name(), "status"})
 
     @classmethod
@@ -106,7 +106,7 @@ class RegularFeatureGroupForFilterTest(FeatureGroup):
     """
 
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator({cls.get_class_name(), "status"})
 
     @classmethod
@@ -148,7 +148,7 @@ class ForceFinalOnInlineEngine(FeatureGroup):
     """
 
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator({cls.get_class_name(), "status"})
 
     @classmethod
@@ -177,7 +177,7 @@ class ForceFinalOnFinalEngine(FeatureGroup):
     """
 
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator({cls.get_class_name(), "status"})
 
     @classmethod
@@ -225,7 +225,7 @@ class InlineMaskWithFinalElimination(FeatureGroup):
     """
 
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator({cls.get_class_name(), "status"})
 
     @classmethod
@@ -272,7 +272,7 @@ class DropsFilterColumnFeatureGroup(FeatureGroup):
     """
 
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator({cls.get_class_name(), "status"})
 
     @classmethod
@@ -301,7 +301,7 @@ class DefaultFGDropsFilterColumn(FeatureGroup):
     """
 
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator({cls.get_class_name(), "status"})
 
     @classmethod
@@ -326,7 +326,7 @@ class MutatesFilterColumnToInt(FeatureGroup):
     """
 
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator({cls.get_class_name(), "status"})
 
     @classmethod
@@ -355,7 +355,7 @@ class MutatesFilterColumnToString(FeatureGroup):
     """
 
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator({cls.get_class_name(), "price"})
 
     @classmethod
@@ -384,7 +384,7 @@ class DefaultFGMutatesFilterColumnToInt(FeatureGroup):
     """
 
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator({cls.get_class_name(), "status"})
 
     @classmethod
@@ -415,7 +415,7 @@ class CompatibleDtypeFeatureGroup(FeatureGroup):
     """
 
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator({cls.get_class_name(), "status"})
 
     @classmethod

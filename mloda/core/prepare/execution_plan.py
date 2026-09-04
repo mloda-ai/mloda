@@ -1,6 +1,6 @@
 from collections.abc import Sequence
 from copy import copy, deepcopy
-from typing import Any, Generator, NamedTuple, Optional
+from typing import Any, Generator, NamedTuple
 from uuid import UUID, uuid4
 
 from mloda.core.abstract_plugins.components.error_utils import REPORT_URL, internal_invariant_error
@@ -93,8 +93,8 @@ class _JoinServedParent(NamedTuple):
 class ExecutionPlan:
     def __init__(
         self,
-        global_filter: Optional[GlobalFilter] = None,
-        api_input_data_collection: Optional[ApiInputDataCollection] = None,
+        global_filter: GlobalFilter | None = None,
+        api_input_data_collection: ApiInputDataCollection | None = None,
         resolved_input_feature_names: dict[UUID, frozenset[str] | None] | None = None,
     ) -> None:
         # Maps a step to itself so a dedup hit can recover the already-inserted canonical member.

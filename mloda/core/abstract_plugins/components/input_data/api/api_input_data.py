@@ -1,4 +1,3 @@
-from typing import Optional
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.abstract_plugins.components.input_data.base_input_data import BaseInputData
 from mloda.core.abstract_plugins.components.options import Options
@@ -13,7 +12,7 @@ class ApiInputData(BaseInputData):
     """
 
     def matches(
-        self, feature_name: str, options: Options, data_access_collection: Optional[DataAccessCollection] = None
+        self, feature_name: str, options: Options, data_access_collection: DataAccessCollection | None = None
     ) -> bool:
         """
         We match the feature name with the column names given in ApiInputData.

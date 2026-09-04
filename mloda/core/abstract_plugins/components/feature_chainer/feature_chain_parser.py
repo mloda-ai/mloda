@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import logging
 import re
-from typing import Any, Optional
+from typing import Any
 
 from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
@@ -445,8 +445,8 @@ class FeatureChainParser:
         cls,
         feature_name: str | FeatureName,
         options: Options,
-        property_mapping: Optional[dict[str, PropertySpec]] = None,
-        prefix_patterns: Optional[list[Any]] = None,
+        property_mapping: dict[str, PropertySpec] | None = None,
+        prefix_patterns: list[Any] | None = None,
         pattern: str = CHAIN_SEPARATOR,
         owner_name: str | None = None,
     ) -> bool:

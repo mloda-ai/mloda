@@ -5,7 +5,7 @@ import threading
 import traceback
 import logging
 from dataclasses import replace
-from typing import Any, Callable, Optional
+from typing import Any, Callable
 from uuid import UUID, uuid4
 
 from mloda.core.abstract_plugins.components.error_utils import internal_invariant_error
@@ -33,7 +33,7 @@ class ComputeFrameworkExecutor:
         self,
         cfw_register: CfwManager,
         worker_manager: WorkerManager,
-        tfs_connection_map: Optional[dict[type[ComputeFramework], Any]] = None,
+        tfs_connection_map: dict[type[ComputeFramework], Any] | None = None,
     ) -> None:
         """
         Initialize the executor with dependencies.
@@ -57,7 +57,7 @@ class ComputeFrameworkExecutor:
         cf_class: type[ComputeFramework],
         parallelization_mode: ParallelizationMode,
         children_if_root: set[UUID],
-        uuid: Optional[UUID] = None,
+        uuid: UUID | None = None,
     ) -> UUID:
         """
         Initializes a compute framework.
@@ -143,7 +143,7 @@ class ComputeFrameworkExecutor:
         """
         Prepares a step for execution by initializing or retrieving the associated CFW.
         """
-        cfw_uuid: Optional[UUID] = None
+        cfw_uuid: UUID | None = None
 
         if isinstance(step, FeatureGroupStep):
             resolved_uuid = self.cfw_register.get_unique_cfw_uuid(step.compute_framework.get_class_name(), step.tfs_ids)
@@ -215,7 +215,7 @@ class ComputeFrameworkExecutor:
         """
         Prepares CFWs required for TransformFrameworkStep or JoinStep.
         """
-        from_cfw: Optional[Any] = None
+        from_cfw: Any | None = None
         if isinstance(step, TransformFrameworkStep):
             from_cfw = self.prepare_tfs_right_cfw(step)
             from_cfw = self.cfw_collection[from_cfw]

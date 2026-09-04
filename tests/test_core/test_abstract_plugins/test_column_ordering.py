@@ -1,6 +1,6 @@
 """Tests for column ordering in identify_naming_convention() and mlodaAPI."""
 
-from typing import Any, Optional
+from typing import Any
 from unittest.mock import Mock
 from uuid import uuid4
 
@@ -74,7 +74,7 @@ class SimpleTestFeature(FeatureGroup):
     """Simple test feature for API tests."""
 
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator({"SimpleTestFeature"})
 
     @classmethod
@@ -341,7 +341,7 @@ class MultiFeatureGroup(FeatureGroup):
     """Test feature group that supports 5 features (FeatureA through FeatureE)."""
 
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator({"FeatureA", "FeatureB", "FeatureC", "FeatureD", "FeatureE"})
 
     @classmethod

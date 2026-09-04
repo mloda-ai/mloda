@@ -57,7 +57,7 @@ import inspect
 import logging
 import os
 from collections.abc import Callable
-from typing import Any, Optional, cast
+from typing import Any, cast
 
 from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
@@ -139,7 +139,7 @@ class FeatureChainParserMixin:
 
     IN_FEATURE_SEPARATOR: str = INPUT_SEPARATOR
     MIN_IN_FEATURES: int = 1
-    MAX_IN_FEATURES: Optional[int] = None
+    MAX_IN_FEATURES: int | None = None
     # A recognition-only pattern binds no key from the name; all values come from options (#772).
     RECOGNITION_ONLY_PATTERN: bool = False
     # An all-optional PROPERTY_MAPPING that inherits the config matcher matches any feature name with
@@ -174,7 +174,7 @@ class FeatureChainParserMixin:
         """
         return True
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         """
         Parse input features from feature name or options.
 
@@ -587,10 +587,10 @@ class FeatureChainParserMixin:
         return FeatureChainParser.prefix_patterns_of(cls)
 
     @classmethod
-    def _get_property_mapping(cls) -> Optional[dict[str, PropertySpec]]:
+    def _get_property_mapping(cls) -> dict[str, PropertySpec] | None:
         """Get property mapping from class attribute."""
         if hasattr(cls, "PROPERTY_MAPPING"):
-            return cast(Optional[dict[str, PropertySpec]], cls.PROPERTY_MAPPING)
+            return cast(dict[str, PropertySpec] | None, cls.PROPERTY_MAPPING)
         return None
 
     @classmethod
@@ -650,8 +650,8 @@ class FeatureChainParserMixin:
         cls,
         feature_or_name: Any,
         options_or_key: Any,
-        config_key: Optional[str] = None,
-    ) -> Optional[str]:
+        config_key: str | None = None,
+    ) -> str | None:
         """Resolve the operation type from either a chained feature name or options.
 
         Many feature groups need to extract an operation type (e.g. aggregation type,

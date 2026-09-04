@@ -4,7 +4,7 @@ from dataclasses import FrozenInstanceError, dataclass
 from datetime import timedelta
 from enum import Enum
 from uuid import uuid4
-from typing import Any, ClassVar, Literal, Optional
+from typing import Any, ClassVar, Literal
 
 
 from mloda.core.abstract_plugins.components.index.index import Index
@@ -247,9 +247,9 @@ class Link:
         jointype: JoinType | str,
         left: JoinSpec,
         right: JoinSpec,
-        left_discriminator: Optional[dict[str, Any]] = None,
-        right_discriminator: Optional[dict[str, Any]] = None,
-        asof_config: Optional[AsOfJoinConfig] = None,
+        left_discriminator: dict[str, Any] | None = None,
+        right_discriminator: dict[str, Any] | None = None,
+        asof_config: AsOfJoinConfig | None = None,
     ) -> None:
         self.jointype = JoinType(jointype) if isinstance(jointype, str) else jointype
         self.left_feature_group = left.feature_group
@@ -271,8 +271,8 @@ class Link:
         jointype: JoinType,
         left: JoinSpec,
         right: JoinSpec,
-        left_discriminator: Optional[dict[str, Any]],
-        right_discriminator: Optional[dict[str, Any]],
+        left_discriminator: dict[str, Any] | None,
+        right_discriminator: dict[str, Any] | None,
     ) -> "Link":
         return cls(
             jointype, left, right, left_discriminator=left_discriminator, right_discriminator=right_discriminator
@@ -286,8 +286,8 @@ class Link:
         right: type[Any],
         left_index: int,
         right_index: int,
-        left_discriminator: Optional[dict[str, Any]],
-        right_discriminator: Optional[dict[str, Any]],
+        left_discriminator: dict[str, Any] | None,
+        right_discriminator: dict[str, Any] | None,
     ) -> "Link":
         left_idx = _get_index_from_feature_group(left, left_index, "left")
         right_idx = _get_index_from_feature_group(right, right_index, "right")
@@ -304,8 +304,8 @@ class Link:
         cls,
         left: JoinSpec,
         right: JoinSpec,
-        left_discriminator: Optional[dict[str, Any]] = None,
-        right_discriminator: Optional[dict[str, Any]] = None,
+        left_discriminator: dict[str, Any] | None = None,
+        right_discriminator: dict[str, Any] | None = None,
     ) -> "Link":
         return cls._from_specs(JoinType.INNER, left, right, left_discriminator, right_discriminator)
 
@@ -314,8 +314,8 @@ class Link:
         cls,
         left: JoinSpec,
         right: JoinSpec,
-        left_discriminator: Optional[dict[str, Any]] = None,
-        right_discriminator: Optional[dict[str, Any]] = None,
+        left_discriminator: dict[str, Any] | None = None,
+        right_discriminator: dict[str, Any] | None = None,
     ) -> "Link":
         return cls._from_specs(JoinType.LEFT, left, right, left_discriminator, right_discriminator)
 
@@ -324,8 +324,8 @@ class Link:
         cls,
         left: JoinSpec,
         right: JoinSpec,
-        left_discriminator: Optional[dict[str, Any]] = None,
-        right_discriminator: Optional[dict[str, Any]] = None,
+        left_discriminator: dict[str, Any] | None = None,
+        right_discriminator: dict[str, Any] | None = None,
     ) -> "Link":
         return cls._from_specs(JoinType.RIGHT, left, right, left_discriminator, right_discriminator)
 
@@ -334,8 +334,8 @@ class Link:
         cls,
         left: JoinSpec,
         right: JoinSpec,
-        left_discriminator: Optional[dict[str, Any]] = None,
-        right_discriminator: Optional[dict[str, Any]] = None,
+        left_discriminator: dict[str, Any] | None = None,
+        right_discriminator: dict[str, Any] | None = None,
     ) -> "Link":
         return cls._from_specs(JoinType.OUTER, left, right, left_discriminator, right_discriminator)
 
@@ -344,8 +344,8 @@ class Link:
         cls,
         left: JoinSpec,
         right: JoinSpec,
-        left_discriminator: Optional[dict[str, Any]] = None,
-        right_discriminator: Optional[dict[str, Any]] = None,
+        left_discriminator: dict[str, Any] | None = None,
+        right_discriminator: dict[str, Any] | None = None,
     ) -> "Link":
         return cls._from_specs(JoinType.APPEND, left, right, left_discriminator, right_discriminator)
 
@@ -354,8 +354,8 @@ class Link:
         cls,
         left: JoinSpec,
         right: JoinSpec,
-        left_discriminator: Optional[dict[str, Any]] = None,
-        right_discriminator: Optional[dict[str, Any]] = None,
+        left_discriminator: dict[str, Any] | None = None,
+        right_discriminator: dict[str, Any] | None = None,
     ) -> "Link":
         return cls._from_specs(JoinType.UNION, left, right, left_discriminator, right_discriminator)
 
@@ -366,8 +366,8 @@ class Link:
         right: type[Any],
         left_index: int = 0,
         right_index: int = 0,
-        left_discriminator: Optional[dict[str, Any]] = None,
-        right_discriminator: Optional[dict[str, Any]] = None,
+        left_discriminator: dict[str, Any] | None = None,
+        right_discriminator: dict[str, Any] | None = None,
     ) -> "Link":
         """Create INNER join using feature groups' index_columns()."""
         return cls._from_feature_groups(
@@ -421,8 +421,8 @@ class Link:
         right: type[Any],
         left_index: int = 0,
         right_index: int = 0,
-        left_discriminator: Optional[dict[str, Any]] = None,
-        right_discriminator: Optional[dict[str, Any]] = None,
+        left_discriminator: dict[str, Any] | None = None,
+        right_discriminator: dict[str, Any] | None = None,
     ) -> "Link":
         """Create LEFT join using feature groups' index_columns()."""
         return cls._from_feature_groups(
@@ -436,8 +436,8 @@ class Link:
         right: type[Any],
         left_index: int = 0,
         right_index: int = 0,
-        left_discriminator: Optional[dict[str, Any]] = None,
-        right_discriminator: Optional[dict[str, Any]] = None,
+        left_discriminator: dict[str, Any] | None = None,
+        right_discriminator: dict[str, Any] | None = None,
     ) -> "Link":
         """Create RIGHT join using feature groups' index_columns()."""
         return cls._from_feature_groups(
@@ -451,8 +451,8 @@ class Link:
         right: type[Any],
         left_index: int = 0,
         right_index: int = 0,
-        left_discriminator: Optional[dict[str, Any]] = None,
-        right_discriminator: Optional[dict[str, Any]] = None,
+        left_discriminator: dict[str, Any] | None = None,
+        right_discriminator: dict[str, Any] | None = None,
     ) -> "Link":
         """Create OUTER join using feature groups' index_columns()."""
         return cls._from_feature_groups(
@@ -466,8 +466,8 @@ class Link:
         right: type[Any],
         left_index: int = 0,
         right_index: int = 0,
-        left_discriminator: Optional[dict[str, Any]] = None,
-        right_discriminator: Optional[dict[str, Any]] = None,
+        left_discriminator: dict[str, Any] | None = None,
+        right_discriminator: dict[str, Any] | None = None,
     ) -> "Link":
         """Create APPEND join using feature groups' index_columns()."""
         return cls._from_feature_groups(
@@ -481,8 +481,8 @@ class Link:
         right: type[Any],
         left_index: int = 0,
         right_index: int = 0,
-        left_discriminator: Optional[dict[str, Any]] = None,
-        right_discriminator: Optional[dict[str, Any]] = None,
+        left_discriminator: dict[str, Any] | None = None,
+        right_discriminator: dict[str, Any] | None = None,
     ) -> "Link":
         """Create UNION join using feature groups' index_columns()."""
         return cls._from_feature_groups(
@@ -501,8 +501,8 @@ class Link:
         tolerance: float | int | timedelta | None = None,
         allow_exact_matches: bool = True,
         coerce_time_columns: bool = False,
-        left_discriminator: Optional[dict[str, Any]] = None,
-        right_discriminator: Optional[dict[str, Any]] = None,
+        left_discriminator: dict[str, Any] | None = None,
+        right_discriminator: dict[str, Any] | None = None,
     ) -> "Link":
         """Create an ASOF (point-in-time) join from explicit JoinSpecs."""
         config = AsOfJoinConfig(
@@ -536,8 +536,8 @@ class Link:
         coerce_time_columns: bool = False,
         left_index: int = 0,
         right_index: int = 0,
-        left_discriminator: Optional[dict[str, Any]] = None,
-        right_discriminator: Optional[dict[str, Any]] = None,
+        left_discriminator: dict[str, Any] | None = None,
+        right_discriminator: dict[str, Any] | None = None,
     ) -> "Link":
         """Create an ASOF join, deriving the by-key Index from index_columns()."""
         left_idx = _get_index_from_feature_group(left, left_index, "left")

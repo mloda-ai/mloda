@@ -1,5 +1,5 @@
 from collections import OrderedDict, defaultdict
-from typing import Any, Optional
+from typing import Any
 from uuid import UUID
 
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
@@ -209,7 +209,7 @@ class LinkTrekker:
 
 
 class ResolveLinks:
-    def __init__(self, graph: Graph, links: Optional[set[Link]] = None) -> None:
+    def __init__(self, graph: Graph, links: set[Link] | None = None) -> None:
         self.graph = graph
         self.links = links
         self.link_trekker = LinkTrekker()
@@ -292,7 +292,7 @@ class ResolveLinks:
         right_fg: type,
         right_feature: Any = None,
         left_feature: Any = None,
-        pinned_links: Optional[list[Link]] = None,
+        pinned_links: list[Link] | None = None,
     ) -> list[Link]:
         """Find all matching links using two-pass matching: exact first, then polymorphic.
 
@@ -408,8 +408,8 @@ class ResolveLinks:
     def create_link_trekker_key(
         self,
         link: Link,
-        left_frameworks: Optional[set[type[ComputeFramework]]] = None,
-        right_frameworks: Optional[set[type[ComputeFramework]]] = None,
+        left_frameworks: set[type[ComputeFramework]] | None = None,
+        right_frameworks: set[type[ComputeFramework]] | None = None,
     ) -> LinkFrameworkTrekker:
         """Both sides reduce exactly like Feature.get_compute_framework; the join lookup compares the two."""
         if left_frameworks is None or right_frameworks is None:

@@ -2,8 +2,6 @@
 production (engine.py, execution_plan.py, feature_group_step.py) after the plural
 format_feature_group_classes was removed."""
 
-from typing import Optional
-
 from mloda.core.abstract_plugins.components.domain import Domain
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.feature_group import FeatureGroup, format_feature_group_class
@@ -13,7 +11,7 @@ from mloda.user import Feature, Options
 class SampleFeatureGroupAlpha(FeatureGroup):
     """A test feature group for formatting tests."""
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return None
 
 
@@ -24,7 +22,7 @@ class SampleFeatureGroupWithDomain(FeatureGroup):
     def get_domain(cls) -> Domain:
         return Domain("sales")
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return None
 
 

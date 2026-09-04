@@ -13,7 +13,7 @@ Expected Behavior:
 - Feature("base~0") returns ONLY base~0 column (new capability)
 """
 
-from typing import Any, Optional
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -37,7 +37,7 @@ class SubColumnTestDataCreator(FeatureGroup):
     """Test data creator providing source data for sub-column tests."""
 
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator({"source_data"})
 
     @classmethod
@@ -67,7 +67,7 @@ class MultiColumnProducerForSubColumnTest(FeatureGroup):
     def feature_names_supported(cls) -> set[str]:
         return {"base_feature"}
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return {Feature("source_data")}
 
     @classmethod
@@ -97,7 +97,7 @@ class SubColumnConsumer(FeatureGroup):
     def feature_names_supported(cls) -> set[str]:
         return {"sub_column_consumer_output"}
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return {Feature("base_feature~1")}
 
     @classmethod
@@ -386,7 +386,7 @@ class TestSubColumnIntegration:
             def feature_names_supported(cls) -> set[str]:
                 return {"validating_consumer_output"}
 
-            def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+            def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
                 return {Feature("base_feature~1")}
 
             @classmethod
@@ -450,7 +450,7 @@ class TestSubColumnIntegration:
             def feature_names_supported(cls) -> set[str]:
                 return {"multi_sub_column_consumer_output"}
 
-            def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+            def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
                 return {Feature("base_feature~0"), Feature("base_feature~2")}
 
             @classmethod
@@ -639,7 +639,7 @@ class TestSubColumnIntegration:
             def feature_names_supported(cls) -> set[str]:
                 return {"first_consumer_output"}
 
-            def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+            def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
                 return {Feature("base_feature~1")}
 
             @classmethod
@@ -659,7 +659,7 @@ class TestSubColumnIntegration:
             def feature_names_supported(cls) -> set[str]:
                 return {"second_consumer_output"}
 
-            def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+            def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
                 return {Feature("first_consumer_output")}
 
             @classmethod

@@ -6,7 +6,7 @@ import re
 import sqlite3
 import uuid
 from collections.abc import Sequence
-from typing import Any, Optional
+from typing import Any
 
 from mloda_plugins.compute_framework.base_implementations.sql.sql_base_relation import SqlBaseRelation
 from mloda_plugins.compute_framework.base_implementations.sql.sql_utils import quote_ident
@@ -170,14 +170,14 @@ class SqliteRelation(SqlBaseRelation):
         connection: sqlite3.Connection,
         table_name: str,
         _is_view: bool = False,
-        _types: Optional[Sequence[pa.DataType | None]] = None,
+        _types: Sequence[pa.DataType | None] | None = None,
     ) -> None:
         self._connection = connection
         self._table_name = table_name
-        self._alias: Optional[str] = None
+        self._alias: str | None = None
         self._is_view = _is_view
-        self._cached_columns: Optional[list[str]] = None
-        self._cached_types: Optional[list[pa.DataType | None]] = list(_types) if _types is not None else None
+        self._cached_columns: list[str] | None = None
+        self._cached_types: list[pa.DataType | None] | None = list(_types) if _types is not None else None
 
     @property
     def connection(self) -> sqlite3.Connection:
@@ -212,12 +212,12 @@ class SqliteRelation(SqlBaseRelation):
         cursor = self._connection.execute(f"PRAGMA table_info({quote_ident(self._table_name)})")
         return {row[1]: _sqlite_affinity_to_arrow_type(str(row[2])) for row in cursor.fetchall()}
 
-    def _type_hints_for_current_columns(self) -> Optional[list[pa.DataType | None]]:
+    def _type_hints_for_current_columns(self) -> list[pa.DataType | None] | None:
         if self._cached_types is None or len(self._cached_types) != len(self.columns):
             return None
         return list(self._cached_types)
 
-    def _types_for_current_columns(self) -> Optional[list[pa.DataType]]:
+    def _types_for_current_columns(self) -> list[pa.DataType] | None:
         type_hints = self._type_hints_for_current_columns()
         if type_hints is None:
             return None
@@ -239,7 +239,7 @@ class SqliteRelation(SqlBaseRelation):
         self._cached_types = resolved_hints
         return [arrow_type for arrow_type in resolved_hints if arrow_type is not None]
 
-    def _types_for_projection(self, columns: list[str]) -> Optional[list[pa.DataType | None]]:
+    def _types_for_projection(self, columns: list[str]) -> list[pa.DataType | None] | None:
         current_type_hints = self._types_for_current_columns()
         if current_type_hints is None:
             return None
@@ -250,7 +250,7 @@ class SqliteRelation(SqlBaseRelation):
 
     def _types_for_raw_sql_projection(
         self, projection: str, output_columns: list[str]
-    ) -> Optional[list[pa.DataType | None]]:
+    ) -> list[pa.DataType | None] | None:
         if not _raw_sql_projection_starts_with_star(projection):
             return None
         source_columns = self.columns
@@ -264,12 +264,12 @@ class SqliteRelation(SqlBaseRelation):
     @staticmethod
     def _types_for_join_projection(
         left_cols: list[str],
-        left_types: Optional[Sequence[pa.DataType | None]],
+        left_types: Sequence[pa.DataType | None] | None,
         right_cols: list[str],
-        right_types: Optional[Sequence[pa.DataType | None]],
+        right_types: Sequence[pa.DataType | None] | None,
         shared: set[str],
         coalesce_shared: bool = False,
-    ) -> Optional[list[pa.DataType | None]]:
+    ) -> list[pa.DataType | None] | None:
         if left_types is None or right_types is None:
             return None
         left_type_map = dict(zip(left_cols, left_types, strict=True))
@@ -299,12 +299,12 @@ class SqliteRelation(SqlBaseRelation):
             _types=types,
         )
 
-    def select(self, *columns: str, _raw_sql: Optional[str] = None) -> "SqliteRelation":
+    def select(self, *columns: str, _raw_sql: str | None = None) -> "SqliteRelation":
         """Project columns. _raw_sql bypasses quoting: never pass user-controlled input."""
         new_name = _next_table_name()
         if _raw_sql is not None:
             projection = _raw_sql
-            types: Optional[list[pa.DataType | None]] = None
+            types: list[pa.DataType | None] | None = None
         else:
             projection = ", ".join(quote_ident(c) for c in columns)
             types = self._types_for_projection(list(columns))
@@ -321,7 +321,7 @@ class SqliteRelation(SqlBaseRelation):
         rel._alias = alias
         return rel
 
-    def get_alias(self) -> Optional[str]:
+    def get_alias(self) -> str | None:
         return self._alias
 
     def limit(self, n: int) -> "SqliteRelation":

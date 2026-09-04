@@ -4,7 +4,7 @@ Pandas implementation for forecasting feature groups.
 
 from __future__ import annotations
 
-from typing import Any, Optional, cast
+from typing import Any, cast
 
 from datetime import datetime, timedelta
 
@@ -118,7 +118,7 @@ class PandasForecastingFeatureGroup(ForecastingFeatureGroup):
         time_unit: str,
         in_features: list[str],
         time_filter_feature: str,
-        model_artifact: Optional[Any] = None,
+        model_artifact: Any | None = None,
     ) -> tuple[pd.Series, dict[str, Any]]:
         """
         Perform forecasting using scikit-learn models.
@@ -459,7 +459,7 @@ class PandasForecastingFeatureGroup(ForecastingFeatureGroup):
         return future_df
 
     @classmethod
-    def _train_model(cls, X: pd.DataFrame, y: pd.Series, algorithm: str) -> tuple[Any, Optional[StandardScaler]]:
+    def _train_model(cls, X: pd.DataFrame, y: pd.Series, algorithm: str) -> tuple[Any, StandardScaler | None]:
         """
         Train a forecasting model using the specified algorithm.
 
@@ -507,7 +507,7 @@ class PandasForecastingFeatureGroup(ForecastingFeatureGroup):
         time_unit: str,
         in_features: list[str],
         time_filter_feature: str,
-        model_artifact: Optional[Any] = None,
+        model_artifact: Any | None = None,
     ) -> tuple[pd.Series, pd.Series, pd.Series, dict[str, Any]]:
         """
         Perform forecasting with confidence intervals.

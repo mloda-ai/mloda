@@ -1,5 +1,5 @@
 import pytest
-from typing import Any, Optional
+from typing import Any
 
 from mloda.user import Feature
 from mloda.user import FeatureName
@@ -30,8 +30,8 @@ class ConcreteMissingValueFeatureGroup(MissingValueFeatureGroup):
         data: Any,
         imputation_method: str,
         in_features: list[str],
-        constant_value: Optional[Any] = None,
-        group_by_features: Optional[list[str]] = None,
+        constant_value: Any | None = None,
+        group_by_features: list[str] | None = None,
     ) -> Any:
         return data
 

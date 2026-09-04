@@ -1,4 +1,4 @@
-from typing import Any, Optional
+from typing import Any
 import pytest
 
 from mloda.provider import BaseMergeEngine
@@ -82,7 +82,7 @@ class TestPyArrowMergeEngineMultiIndex(MultiIndexMergeEngineTestBase):
         table_type: type[Any] = pa.Table
         return table_type
 
-    def get_connection(self) -> Optional[Any]:
+    def get_connection(self) -> Any | None:
         """PyArrow does not require a connection object."""
         return None
 

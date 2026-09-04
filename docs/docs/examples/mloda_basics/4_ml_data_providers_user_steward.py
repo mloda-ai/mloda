@@ -209,7 +209,7 @@ def _():
 
     class ReadFileFeature2(ReadFileFeature):
         @classmethod
-        def input_data(cls) -> Optional[BaseInputData]:
+        def input_data(cls) -> BaseInputData | None:
             return CsvReader2()
 
         @classmethod

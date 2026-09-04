@@ -1,6 +1,6 @@
 import logging
 from abc import ABC
-from typing import Any, ClassVar, Optional
+from typing import Any, ClassVar
 
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.abstract_plugins.components.property_spec import PropertySpec, is_no_default
@@ -123,7 +123,7 @@ class BaseInputData(ABC):
         return spec.default
 
     @classmethod
-    def reader_option(cls, key: str, options: Optional[Options]) -> Any:
+    def reader_option(cls, key: str, options: Options | None) -> Any:
         """The supplied value of key when present, else the declared default; NO_DEFAULT raises.
         allow_explicit_none=True reads presence as ``key in options``; options=None reads all-absent."""
         spec = cls._declared_reader_option_spec(key)
@@ -137,7 +137,7 @@ class BaseInputData(ABC):
         return spec.default
 
     @classmethod
-    def _reader_options_admit(cls, options: Optional[Options], record_absence: bool) -> bool:
+    def _reader_options_admit(cls, options: Options | None, record_absence: bool) -> bool:
         """Check this candidate's merged declarations BEFORE its probe runs; a veto is its own non-match.
         record_absence doubles as the ownership signal: it gates absence recordings and stages present-value ones."""
         for key, spec in merged_declaration(cls, DeclarationSurface.READER).items():
@@ -159,7 +159,7 @@ class BaseInputData(ABC):
 
     @classmethod
     def _absent_reader_option_admits(
-        cls, key: str, spec: PropertySpec, options: Optional[Options], record_absence: bool
+        cls, key: str, spec: PropertySpec, options: Options | None, record_absence: bool
     ) -> bool:
         """Requiredness of an ABSENT key: required_when decides when declared, else NO_DEFAULT rejects.
         record_absence says whether the veto is recorded."""
@@ -268,7 +268,7 @@ class BaseInputData(ABC):
         self,
         feature_name: str,
         options: Options,
-        data_access_collection: Optional[DataAccessCollection] = None,
+        data_access_collection: DataAccessCollection | None = None,
     ) -> bool:
         """
         We look if feature scope data access or global scope access is set.
@@ -326,7 +326,7 @@ class BaseInputData(ABC):
         cls,
         feature_name: str,
         options: Options,
-        data_access_collection: Optional[DataAccessCollection],
+        data_access_collection: DataAccessCollection | None,
     ) -> bool:
         if data_access_collection is None:
             return False
@@ -348,7 +348,7 @@ class BaseInputData(ABC):
         cls,
         feature_names: list[str],
         data_access_collection: DataAccessCollection,
-        options: Optional[Options] = None,
+        options: Options | None = None,
     ) -> tuple[Any, Any]:
         """
         We check for data access collection if any child classes match the data access.
@@ -396,7 +396,7 @@ class BaseInputData(ABC):
             )
         options.add_to_group(RESERVED_READER_OPTION_KEY, (cls_to_be_added, matched_data_access))
 
-    def init_reader(self, options: Optional[Options]) -> tuple["BaseInputData", Any]:
+    def init_reader(self, options: Options | None) -> tuple["BaseInputData", Any]:
         if options is None:
             raise ValueError(
                 f"Options were not set for {self.__class__.__name__}.init_reader().\n"
@@ -551,7 +551,7 @@ class BaseInputData(ABC):
         return path.endswith(cls.suffix())  # type: ignore[attr-defined]
 
     @classmethod
-    def _resolve_pinned_file(cls, data_access: Any, feature_names: list[str]) -> Optional[str]:
+    def _resolve_pinned_file(cls, data_access: Any, feature_names: list[str]) -> str | None:
         column_map: dict[str, str] = data_access.column_to_file
         files_registry: dict[str, str] = data_access.files
         pinned_handles: set[str] = {column_map[name] for name in feature_names if name in column_map}

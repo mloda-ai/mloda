@@ -11,7 +11,7 @@ import gc
 from collections.abc import Callable
 from dataclasses import dataclass
 from functools import partial
-from typing import Any, Optional, TypeVar
+from typing import Any, TypeVar
 
 import pytest
 
@@ -109,7 +109,7 @@ def _raise(exc: BaseException) -> Any:
     raise exc
 
 
-def _capture(call: Callable[[], T]) -> tuple[Optional[T], Optional[str]]:
+def _capture(call: Callable[[], T]) -> tuple[T | None, str | None]:
     """Run call, returning (value, None) or (None, 'Type: message'). No traceback is retained."""
     try:
         return call(), None
@@ -128,7 +128,7 @@ def _make_probe_fg(answer: Callable[[], Any]) -> type[FeatureGroup]:
             cls,
             feature_name: FeatureName | str,
             options: Options,
-            data_access_collection: Optional[DataAccessCollection] = None,
+            data_access_collection: DataAccessCollection | None = None,
         ) -> Any:  # Any, not bool: a non-bool out of a `-> bool` hook is exactly what the helper coerces.
             return answer()
 
@@ -139,7 +139,7 @@ def _make_probe_fg(answer: Callable[[], Any]) -> type[FeatureGroup]:
 class _OutcomeSnapshot:
     """Plain-data readout of one call_match_hook call. Holds no class and no exception object."""
 
-    escaped: Optional[str]
+    escaped: str | None
     escaped_is_the_raised_object: bool
     is_the_result_type: bool
     matched_is_true: bool
@@ -149,14 +149,14 @@ class _OutcomeSnapshot:
     returned_shown: str
     error_is_none: bool
     error_is_the_raised_object: bool
-    error_type: Optional[str]
-    error_message: Optional[str]
+    error_type: str | None
+    error_message: str | None
 
 
 def _drive(
     answer: Callable[[], Any],
     returned: Any = _NOTHING,
-    raised: Optional[BaseException] = None,
+    raised: BaseException | None = None,
 ) -> _OutcomeSnapshot:
     """Call the helper against one throwaway group and read the outcome out as plain data.
 
@@ -165,8 +165,8 @@ def _drive(
     """
     fg = _make_probe_fg(answer)
     outcome: Any = None
-    escaped: Optional[BaseException] = None
-    error: Optional[BaseException] = None
+    escaped: BaseException | None = None
+    error: BaseException | None = None
     matched: Any = None
     raw: Any = None
     try:
@@ -296,19 +296,19 @@ class TestTheHelperContainsARaise:
 class _ContainedErrorSnapshot:
     """Plain-data readout of the exception one contained raise hands back. Holds no exception object."""
 
-    escaped: Optional[str]
+    escaped: str | None
     is_the_raised_object: bool
     has_traceback: bool
-    type_name: Optional[str]
-    message: Optional[str]
+    type_name: str | None
+    message: str | None
     is_a_property_value_rejection: bool
 
 
 def _drive_contained_error(marker: Exception) -> _ContainedErrorSnapshot:
     """Contain one raise and read the exception the outcome carries, traceback included, out as plain data."""
     fg = _make_probe_fg(partial(_raise, marker))
-    outcome: Optional[MatchHookOutcome] = None
-    error: Optional[Exception] = None
+    outcome: MatchHookOutcome | None = None
+    error: Exception | None = None
     try:
         outcome, escaped = _capture(partial(call_match_hook, fg, PROBE_FEATURE, Options(), None))
         error = None if outcome is None else outcome.error
@@ -391,7 +391,7 @@ def test_the_filter_seam_calls_the_helper_once_per_filter(monkeypatch: pytest.Mo
     global_filter.add_filter(FILTER_FEATURE_A, FilterType.EQUAL, {"value": 1})
     global_filter.add_filter(FILTER_FEATURE_B, FilterType.EQUAL, {"value": 2})
     matched: Any = None
-    escaped: Optional[str] = None
+    escaped: str | None = None
     names: tuple[str, ...] = ()
     try:
         matched, escaped = _capture(partial(global_filter.identify_matched_filters, fg, Feature(HOST_FEATURE), None))
@@ -419,7 +419,7 @@ def test_the_resolution_seam_calls_the_helper_once_per_candidate(monkeypatch: py
     fg = _make_probe_fg(lambda: True)
     identifier = IdentifyFeatureGroupClass()
     verdict: Any = None
-    escaped: Optional[str] = None
+    escaped: str | None = None
     try:
         verdict, escaped = _capture(
             partial(identifier._filter_feature_group_by_criteria, fg, Feature(PROBE_FEATURE), None)

@@ -13,7 +13,7 @@ This prevents confusing KeyError messages at runtime and educates users about
 the requirement for explicit Links when merging multiple dependencies.
 """
 
-from typing import Any, Optional
+from typing import Any
 
 import pyarrow.compute as pc
 import pytest
@@ -36,7 +36,7 @@ class RootFeatureA(FeatureGroup):
     """First root feature for testing"""
 
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator(supports_features={cls.get_class_name()})
 
     @classmethod
@@ -52,7 +52,7 @@ class RootFeatureB(FeatureGroup):
     """Second root feature for testing"""
 
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator(supports_features={cls.get_class_name()})
 
     @classmethod
@@ -70,7 +70,7 @@ class MultiDependencyFeature(FeatureGroup):
     This will trigger the validation error when Links are not provided.
     """
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return {
             Feature.int32_of("RootFeatureA"),
             Feature.int32_of("RootFeatureB"),

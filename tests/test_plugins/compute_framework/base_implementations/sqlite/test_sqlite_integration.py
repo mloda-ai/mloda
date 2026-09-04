@@ -1,5 +1,5 @@
 import sqlite3
-from typing import Any, Optional
+from typing import Any
 
 import pytest
 
@@ -54,8 +54,8 @@ class ATestSqliteFeatureGroup(FeatureGroup, MatchData):
         cls,
         feature_name: str,
         options: Options,
-        data_access_collection: Optional[DataAccessCollection] = None,
-        framework_connection_object: Optional[Any] = None,
+        data_access_collection: DataAccessCollection | None = None,
+        framework_connection_object: Any | None = None,
     ) -> Any:
         if not SqliteFramework.is_available():
             return None
@@ -81,7 +81,7 @@ class ATestSqliteFeatureGroup(FeatureGroup, MatchData):
 
 
 class SqliteSimpleTransformFeatureGroup(ATestSqliteFeatureGroup):
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         feature_name_str = str(feature_name) if isinstance(feature_name, FeatureName) else str(feature_name)
 
         if feature_name_str == "doubled_value":
@@ -111,7 +111,7 @@ class SqliteSimpleTransformFeatureGroup(ATestSqliteFeatureGroup):
 
 
 class SqliteSecondTransformFeatureGroup(ATestSqliteFeatureGroup):
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return {Feature("doubled_value")}
 
     @classmethod
@@ -132,7 +132,7 @@ class SqliteSecondTransformFeatureGroup(ATestSqliteFeatureGroup):
 
 
 class SqliteAggregationFeatureGroup(ATestSqliteFeatureGroup):
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         feature_name_str = str(feature_name) if isinstance(feature_name, FeatureName) else str(feature_name)
 
         if feature_name_str in ["avg_value_by_category", "count_by_category"]:
@@ -164,7 +164,7 @@ class SqliteAggregationFeatureGroup(ATestSqliteFeatureGroup):
 
 
 class SqliteCheckData(FeatureGroup):
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         feature_name_str = str(feature_name) if isinstance(feature_name, FeatureName) else str(feature_name)
 
         if feature_name_str in ["pyarrow_avg_value_by_category_sqlite"]:

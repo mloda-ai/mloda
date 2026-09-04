@@ -1,5 +1,4 @@
 from collections import defaultdict
-from typing import Optional
 from uuid import UUID
 import uuid
 
@@ -20,7 +19,7 @@ class BaseTestGraphFeatureGroup3(BaseTestFeatureGroup1):
         cls,
         feature_name: FeatureName | str,
         options: Options,
-        data_access_collection: Optional[DataAccessCollection] = None,
+        data_access_collection: DataAccessCollection | None = None,
     ) -> bool:
         if "GraphFeature" in str(feature_name):
             return True
@@ -37,14 +36,14 @@ class BaseTestGraphFeatureGroup4(BaseTestGraphFeatureGroup3):
         cls,
         feature_name: FeatureName | str,
         options: Options,
-        data_access_collection: Optional[DataAccessCollection] = None,
+        data_access_collection: DataAccessCollection | None = None,
     ) -> bool:
         if "GraphFeatureIndex" in str(feature_name):
             return True
         return False
 
     @classmethod
-    def index_columns(cls) -> Optional[list[Index]]:
+    def index_columns(cls) -> list[Index] | None:
         index_1 = Index(tuple(["Index1"]))
         return [index_1]
 

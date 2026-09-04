@@ -4,7 +4,7 @@ Per-framework mask engine tests live in the framework-specific test directories 
 use the shared MaskEngineTestMixin (see mask_engine_test_mixin.py).
 """
 
-from typing import Any, Optional
+from typing import Any
 
 import pyarrow as pa
 import pyarrow.compute as pc
@@ -110,7 +110,7 @@ class MaskEngineFeatureGroup(FeatureGroup):
     """FeatureGroup that uses the mask engine to apply inline masking."""
 
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator({cls.get_class_name(), "status"})
 
     @classmethod
@@ -152,7 +152,7 @@ class MaskEngineNoMaskFeatureGroup(FeatureGroup):
     """
 
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator({cls.get_class_name(), "status"})
 
     @classmethod
@@ -195,7 +195,7 @@ class MaskEngineRangeFeatureGroup(FeatureGroup):
     """
 
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator({cls.get_class_name(), "value"})
 
     @classmethod
@@ -243,7 +243,7 @@ class MaskEngineCategoricalFeatureGroup(FeatureGroup):
     """
 
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator({cls.get_class_name(), "status"})
 
     @classmethod
@@ -287,7 +287,7 @@ class MaskEngineMultiMaskFeatureGroup(FeatureGroup):
     """
 
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator({cls.get_class_name(), "value"})
 
     @classmethod
@@ -333,7 +333,7 @@ class MaskEngineBetweenFeatureGroup(FeatureGroup):
     """
 
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator({cls.get_class_name(), "value"})
 
     @classmethod
@@ -377,7 +377,7 @@ class MaskEngineAllOfFeatureGroup(FeatureGroup):
     """
 
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator({cls.get_class_name(), "value"})
 
     @classmethod

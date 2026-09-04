@@ -6,7 +6,7 @@ thread it through ``Feature.options`` + a ``DataAccessCollection``, mirroring ho
 integration tests pass the SparkSession to ``run_all``.
 """
 
-from typing import Any, Optional
+from typing import Any
 
 import pytest
 
@@ -31,6 +31,6 @@ class TestSparkAllowEmptyResultRunAll(EmptyResultRunAllTestBase):
     def compute_framework_name(cls) -> str:
         return "SparkFramework"
 
-    def get_connection(self) -> Optional[Any]:
+    def get_connection(self) -> Any | None:
         """Spark requires the shared SparkSession as its connection object."""
         return self._spark_session

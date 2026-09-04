@@ -22,7 +22,7 @@ with other tests in the global plugin registry.
 from __future__ import annotations
 
 import logging
-from typing import Any, ClassVar, Optional
+from typing import Any, ClassVar
 
 import pandas as pd
 import pytest
@@ -62,7 +62,7 @@ class DualWarn579SourceGroup(FeatureGroup):
         cls.seen_options = []
 
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator({SOURCE_NAME})
 
     @classmethod
@@ -85,7 +85,7 @@ class DualWarn579CleanSourceGroup(FeatureGroup):
     """Upstream root group WITHOUT the mode key in its PROPERTY_MAPPING."""
 
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator({CLEAN_SOURCE_NAME})
 
     @classmethod
@@ -108,7 +108,7 @@ class _DualWarn579ConsumerBase(FeatureGroup):
         cls,
         feature_name: FeatureName | str,
         options: Options,
-        data_access_collection: Optional[DataAccessCollection] = None,
+        data_access_collection: DataAccessCollection | None = None,
     ) -> bool:
         return str(feature_name) == cls.FEATURE_NAME
 
@@ -132,7 +132,7 @@ class DualWarn579ConsumerGroup(_DualWarn579ConsumerBase):
         MODE_KEY: PropertySpec("Execution mode consumed by the dualwarn579 consumer group", context=False),
     }
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return {Feature(SOURCE_NAME)}
 
 
@@ -149,7 +149,7 @@ class DualWarn579StringConsumerGroup(_DualWarn579ConsumerBase):
         MODE_KEY: PropertySpec("Execution mode consumed by the dualwarn579 string consumer group", context=False),
     }
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Any]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Any] | None:
         return {SOURCE_NAME}
 
 
@@ -167,11 +167,11 @@ class DualWarn579RepeatConsumerGroup(_DualWarn579ConsumerBase):
         cls,
         feature_name: FeatureName | str,
         options: Options,
-        data_access_collection: Optional[DataAccessCollection] = None,
+        data_access_collection: DataAccessCollection | None = None,
     ) -> bool:
         return str(feature_name) in {cls.FEATURE_NAME, cls.SECOND_FEATURE_NAME}
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return {Feature(SOURCE_NAME)}
 
 
@@ -184,7 +184,7 @@ class DualWarn579CleanConsumerGroup(_DualWarn579ConsumerBase):
         MODE_KEY: PropertySpec("Execution mode consumed by the dualwarn579 clean consumer group", context=False),
     }
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return {Feature(CLEAN_SOURCE_NAME)}
 
 
@@ -196,7 +196,7 @@ class DualWarn579ExcludeConsumerGroup(_DualWarn579ConsumerBase):
         MODE_KEY: PropertySpec("Execution mode consumed by the dualwarn579 exclude consumer group", context=False),
     }
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return {Feature(SOURCE_NAME, forward_group_exclude={MODE_KEY})}
 
 
@@ -214,7 +214,7 @@ class DualWarn579SharedConsumerAGroup(_DualWarn579ConsumerBase):
         MODE_KEY: PropertySpec("Execution mode consumed by the dualwarn579 shared consumer A group", context=False),
     }
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return {_dualwarn579_shared_child["child"]}
 
 
@@ -226,7 +226,7 @@ class DualWarn579SharedConsumerBGroup(_DualWarn579ConsumerBase):
         MODE_KEY: PropertySpec("Execution mode consumed by the dualwarn579 shared consumer B group", context=False),
     }
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return {_dualwarn579_shared_child["child"]}
 
 
@@ -235,7 +235,7 @@ class DualWarn579UndeclaredConsumerGroup(_DualWarn579ConsumerBase):
 
     FEATURE_NAME = "dualwarn579_undeclared_consumer"
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return {Feature(SOURCE_NAME)}
 
 

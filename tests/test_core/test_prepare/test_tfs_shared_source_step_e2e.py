@@ -6,7 +6,7 @@ though both physically live on the same source compute framework instance, leaki
 destination compute framework and, under multiprocessing, downloading the same table twice.
 """
 
-from typing import Any, Optional
+from typing import Any
 
 import pandas as pd
 import pyarrow.compute as pc
@@ -27,7 +27,7 @@ class SharedSourceRootFG(FeatureGroup):
     """Pandas root exposing two columns that are always computed TOGETHER by one step."""
 
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator({"twocol_a", "twocol_b"})
 
     @classmethod
@@ -44,7 +44,7 @@ class SharedSourceConsumerFG(FeatureGroup):
     """PyArrow consumer pulling BOTH root columns in a single request, forcing one
     FeatureGroupStep on the root that produces both columns together."""
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return {Feature("twocol_a"), Feature("twocol_b")}
 
     @classmethod

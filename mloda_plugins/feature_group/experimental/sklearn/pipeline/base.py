@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import datetime
 from abc import abstractmethod
-from typing import Any, Optional
+from typing import Any
 
 from mloda.provider import FeatureGroup
 from mloda.user import Feature
@@ -129,7 +129,7 @@ class SklearnPipelineFeatureGroup(FeatureChainParserMixin, FeatureGroup):
     # Pipelines support variable number of in_features
     IN_FEATURE_SEPARATOR = ","  # Use comma for multiple source features
     MIN_IN_FEATURES = 1
-    MAX_IN_FEATURES: Optional[int] = None  # Unlimited
+    MAX_IN_FEATURES: int | None = None  # Unlimited
 
     # Hooks calculate_feature calls: _check_source_features_exist, _add_result_to_data.
     REQUIRED_COLUMNWISE_HOOKS = COLUMNWISE_HOOKS
@@ -139,7 +139,7 @@ class SklearnPipelineFeatureGroup(FeatureChainParserMixin, FeatureGroup):
         """Return the artifact class for sklearn pipeline persistence."""
         return SklearnArtifact
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         """Extract source features from either configuration-based options or string parsing."""
 
         # Try string-based parsing first
@@ -171,7 +171,7 @@ class SklearnPipelineFeatureGroup(FeatureChainParserMixin, FeatureGroup):
         cls,
         feature_name: FeatureName | str,
         options: Options,
-        data_access_collection: Optional[Any] = None,
+        data_access_collection: Any | None = None,
     ) -> bool:
         """Reject the one rule a spec cannot express: PIPELINE_NAME and PIPELINE_STEPS are mutually exclusive.
 
@@ -260,7 +260,7 @@ class SklearnPipelineFeatureGroup(FeatureChainParserMixin, FeatureGroup):
         return pipeline_name, source_features
 
     @classmethod
-    def _extract_pipeline_name(cls, feature: Feature) -> Optional[str]:
+    def _extract_pipeline_name(cls, feature: Feature) -> str | None:
         """
         Extract pipeline name from a feature.
 

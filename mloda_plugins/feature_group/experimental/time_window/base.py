@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import datetime
 from abc import abstractmethod
-from typing import Any, Optional
+from typing import Any
 
 from mloda.provider import FeatureGroup
 from mloda.user import Feature
@@ -133,7 +133,7 @@ class TimeWindowFeatureGroup(TimeReferenceMixin, FeatureChainParserMixin, Featur
     REQUIRED_COLUMNWISE_HOOKS = COLUMN_DISCOVERY_HOOKS
 
     # Custom input_features needed to add time_filter_feature
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         """Extract source feature from either configuration-based options or string parsing."""
 
         source_feature: str | None = None
@@ -173,7 +173,7 @@ class TimeWindowFeatureGroup(TimeReferenceMixin, FeatureChainParserMixin, Featur
         return True
 
     @classmethod
-    def _extract_time_window_params(cls, feature: Feature) -> tuple[Optional[str], Optional[int], Optional[str]]:
+    def _extract_time_window_params(cls, feature: Feature) -> tuple[str | None, int | None, str | None]:
         """
         Extract time window parameters (window_function, window_size, time_unit) from a feature.
 
@@ -418,7 +418,7 @@ class TimeWindowFeatureGroup(TimeReferenceMixin, FeatureChainParserMixin, Featur
         window_size: int,
         time_unit: str,
         in_features: list[str],
-        time_filter_feature: Optional[str] = None,
+        time_filter_feature: str | None = None,
     ) -> Any:
         """
         Method to perform the time window operation. Should be implemented by subclasses.

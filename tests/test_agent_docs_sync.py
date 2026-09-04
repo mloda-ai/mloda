@@ -37,3 +37,10 @@ def test_claude_md_and_agents_md_are_identical() -> None:
         f"CLAUDE.md and AGENTS.md have drifted:\n{_diff(claude, agents)}\n\n"
         "Neither file carries content of its own: whatever belongs in one belongs in the other, verbatim."
     )
+
+
+def test_agent_docs_name_modern_typing_rules() -> None:
+    content = CLAUDE_MD.read_text(encoding="utf-8")
+    assert "`UP006`, `UP007`, and `UP045`" in content, (
+        "The type-hint guidance must name UP006, UP007, and UP045 as the rules enforcing modern syntax."
+    )

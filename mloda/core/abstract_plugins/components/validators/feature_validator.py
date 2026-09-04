@@ -1,4 +1,3 @@
-from typing import Optional
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 
 
@@ -14,7 +13,7 @@ class FeatureValidator:
 
     @staticmethod
     def validate_compute_frameworks_resolved(
-        compute_frameworks: Optional[set[type[ComputeFramework]]], feature_name: str
+        compute_frameworks: set[type[ComputeFramework]] | None, feature_name: str
     ) -> None:
         if not compute_frameworks:
             raise ValueError(

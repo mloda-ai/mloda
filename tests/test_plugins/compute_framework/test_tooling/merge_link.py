@@ -1,5 +1,3 @@
-from typing import Optional
-
 from mloda.core.abstract_plugins.components.index.index import Index
 from mloda.core.abstract_plugins.components.link import AsOfJoinConfig, JoinSpec, JoinType, Link
 from mloda.provider import FeatureGroup
@@ -17,7 +15,7 @@ def make_merge_link(
     jointype: JoinType,
     left_index: Index,
     right_index: Index,
-    asof_config: Optional[AsOfJoinConfig] = None,
+    asof_config: AsOfJoinConfig | None = None,
 ) -> Link:
     """Build a minimal Link carrying jointype + indexes (+ optional asof_config) for unit tests."""
     return Link(

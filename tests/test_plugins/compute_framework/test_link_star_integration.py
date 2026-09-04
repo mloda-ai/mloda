@@ -8,7 +8,7 @@ exercise the joins the engine actually performs and assert on concrete joined
 cell values.
 """
 
-from typing import Any, Optional
+from typing import Any
 
 from mloda.provider import FeatureGroup, FeatureSet, BaseInputData, DataCreator
 from mloda.user import Feature, FeatureName, Index, Link, JoinSpec, JoinType, Options, PluginCollector, mloda
@@ -21,11 +21,11 @@ from mloda_plugins.compute_framework.base_implementations.pandas.dataframe impor
 
 class StarHubFG(FeatureGroup):
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator(supports_features={"row_id", "hub_value"})
 
     @classmethod
-    def index_columns(cls) -> Optional[list[Index]]:
+    def index_columns(cls) -> list[Index] | None:
         return [Index(("row_id",))]
 
     @classmethod
@@ -35,11 +35,11 @@ class StarHubFG(FeatureGroup):
 
 class StarSpokeAFG(FeatureGroup):
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator(supports_features={"row_id", "spoke_a_value"})
 
     @classmethod
-    def index_columns(cls) -> Optional[list[Index]]:
+    def index_columns(cls) -> list[Index] | None:
         return [Index(("row_id",))]
 
     @classmethod
@@ -49,11 +49,11 @@ class StarSpokeAFG(FeatureGroup):
 
 class StarSpokeBFG(FeatureGroup):
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator(supports_features={"row_id", "spoke_b_value"})
 
     @classmethod
-    def index_columns(cls) -> Optional[list[Index]]:
+    def index_columns(cls) -> list[Index] | None:
         return [Index(("row_id",))]
 
     @classmethod
@@ -68,7 +68,7 @@ class StarConsumerFG(FeatureGroup):
     before this group runs, so the merged frame is what ``calculate_feature`` sees.
     """
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return {
             Feature(name="hub_value"),
             Feature(name="spoke_a_value"),
@@ -88,11 +88,11 @@ class StarConsumerFG(FeatureGroup):
 
 class StarLeftHubFG(FeatureGroup):
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator(supports_features={"row_id", "left_hub_value"})
 
     @classmethod
-    def index_columns(cls) -> Optional[list[Index]]:
+    def index_columns(cls) -> list[Index] | None:
         return [Index(("row_id",))]
 
     @classmethod
@@ -102,11 +102,11 @@ class StarLeftHubFG(FeatureGroup):
 
 class StarLeftSpokeAFG(FeatureGroup):
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator(supports_features={"row_id", "left_spoke_a_value"})
 
     @classmethod
-    def index_columns(cls) -> Optional[list[Index]]:
+    def index_columns(cls) -> list[Index] | None:
         return [Index(("row_id",))]
 
     @classmethod
@@ -118,11 +118,11 @@ class StarLeftSpokeBFG(FeatureGroup):
     """Spoke B is intentionally missing row_id 3 so INNER drops it and LEFT keeps it."""
 
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator(supports_features={"row_id", "left_spoke_b_value"})
 
     @classmethod
-    def index_columns(cls) -> Optional[list[Index]]:
+    def index_columns(cls) -> list[Index] | None:
         return [Index(("row_id",))]
 
     @classmethod
@@ -138,7 +138,7 @@ class StarLeftConsumerFG(FeatureGroup):
     that spoke B does not supply.
     """
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return {
             Feature(name="left_hub_value"),
             Feature(name="left_spoke_a_value"),
@@ -156,11 +156,11 @@ class StarLeftConsumerFG(FeatureGroup):
 
 class StarOuterHubFG(FeatureGroup):
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator(supports_features={"row_id", "outer_hub_value"})
 
     @classmethod
-    def index_columns(cls) -> Optional[list[Index]]:
+    def index_columns(cls) -> list[Index] | None:
         return [Index(("row_id",))]
 
     @classmethod
@@ -172,11 +172,11 @@ class StarOuterSpokeAFG(FeatureGroup):
     """Spoke carries row_id 4 (which the hub lacks) and lacks row_id 1 (which the hub has)."""
 
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator(supports_features={"row_id", "outer_spoke_a_value"})
 
     @classmethod
-    def index_columns(cls) -> Optional[list[Index]]:
+    def index_columns(cls) -> list[Index] | None:
         return [Index(("row_id",))]
 
     @classmethod
@@ -191,7 +191,7 @@ class StarOuterConsumerFG(FeatureGroup):
     ``row_id`` through, so no possibly-null column is string-concatenated.
     """
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return {
             Feature(name="outer_hub_value"),
             Feature(name="outer_spoke_a_value"),

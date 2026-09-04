@@ -1,4 +1,4 @@
-from typing import Any, Optional
+from typing import Any
 
 from mloda.provider import BaseTransformer
 
@@ -52,7 +52,7 @@ class PolarsPyArrowTransformer(BaseTransformer):
         return data.to_arrow()
 
     @classmethod
-    def transform_other_fw_to_fw(cls, data: Any, framework_connection_object: Optional[Any] = None) -> Any:
+    def transform_other_fw_to_fw(cls, data: Any, framework_connection_object: Any | None = None) -> Any:
         """
         Transform a PyArrow Table to a Polars DataFrame.
 

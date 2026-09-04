@@ -43,7 +43,7 @@ import ast
 import dataclasses
 from collections import Counter
 from pathlib import Path
-from typing import Any, Literal, Optional, get_args, get_origin
+from typing import Any, Literal, get_args, get_origin
 from uuid import UUID
 
 import pandas as pd
@@ -84,7 +84,7 @@ class PlanInfoPandasSource(FeatureGroup):
     """Pandas root source feeding the chained aggregation request."""
 
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator({"plan_info_sales", "plan_info_price"})
 
     @classmethod
@@ -100,7 +100,7 @@ class PlanInfoArrowSource(FeatureGroup):
     """PyArrow root source: forces a transform step into the pandas aggregation group."""
 
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator({"plan_info_arrow_sales"})
 
     @classmethod
@@ -120,7 +120,7 @@ class PlanInfoNeverExecutes(FeatureGroup):
     """
 
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator({"plan_info_never_executed"})
 
     @classmethod
@@ -136,7 +136,7 @@ class PlanInfoLeftSource(FeatureGroup):
     """Left side of the single-framework join scenario."""
 
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator({"plan_info_jid", "plan_info_left_val"})
 
     @classmethod
@@ -148,7 +148,7 @@ class PlanInfoLeftSource(FeatureGroup):
         return {PandasDataFrame}
 
     @classmethod
-    def index_columns(cls) -> Optional[list[Index]]:
+    def index_columns(cls) -> list[Index] | None:
         return [Index(("plan_info_jid",))]
 
 
@@ -156,7 +156,7 @@ class PlanInfoRightSource(FeatureGroup):
     """Right side of the single-framework join scenario."""
 
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator({"plan_info_jid", "plan_info_right_val"})
 
     @classmethod
@@ -168,14 +168,14 @@ class PlanInfoRightSource(FeatureGroup):
         return {PandasDataFrame}
 
     @classmethod
-    def index_columns(cls) -> Optional[list[Index]]:
+    def index_columns(cls) -> list[Index] | None:
         return [Index(("plan_info_jid",))]
 
 
 class PlanInfoJoinConsumer(FeatureGroup):
     """Consumes features from both join sides, which forces a join step into the plan."""
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return {Feature("plan_info_left_val"), Feature("plan_info_right_val")}
 
     @classmethod
@@ -196,7 +196,7 @@ class PlanInfoCrossLeftPandas(FeatureGroup):
     """Left side of the cross-framework join scenario: pandas."""
 
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator({"plan_info_xjid", "plan_info_xleft_val"})
 
     @classmethod
@@ -208,7 +208,7 @@ class PlanInfoCrossLeftPandas(FeatureGroup):
         return {PandasDataFrame}
 
     @classmethod
-    def index_columns(cls) -> Optional[list[Index]]:
+    def index_columns(cls) -> list[Index] | None:
         return [Index(("plan_info_xjid",))]
 
 
@@ -220,7 +220,7 @@ class PlanInfoCrossRightArrow(FeatureGroup):
     """
 
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator({"plan_info_xjid", "plan_info_xright_val"})
 
     @classmethod
@@ -232,14 +232,14 @@ class PlanInfoCrossRightArrow(FeatureGroup):
         return {PyArrowTable}
 
     @classmethod
-    def index_columns(cls) -> Optional[list[Index]]:
+    def index_columns(cls) -> list[Index] | None:
         return [Index(("plan_info_xjid",))]
 
 
 class PlanInfoCrossConsumer(FeatureGroup):
     """Consumes one feature per side of the cross-framework join."""
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return {Feature("plan_info_xleft_val"), Feature("plan_info_xright_val")}
 
     @classmethod
@@ -259,7 +259,7 @@ class PlanInfoCrossConsumer(FeatureGroup):
 class PlanInfoInvertedConsumer(FeatureGroup):
     """Consumes the same two join sides on PyArrow, which puts the merge destination on the declared right side."""
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return {Feature("plan_info_xleft_val"), Feature("plan_info_xright_val")}
 
     @classmethod

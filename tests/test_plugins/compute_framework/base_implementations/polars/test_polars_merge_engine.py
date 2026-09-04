@@ -1,4 +1,4 @@
-from typing import Any, Optional
+from typing import Any
 import pytest
 
 from mloda.user import JoinType
@@ -392,5 +392,5 @@ class TestPolarsMergeEngineMultiIndex(MultiIndexMergeEngineTestBase):
         dataframe_type: type[Any] = pl.DataFrame
         return dataframe_type
 
-    def get_connection(self) -> Optional[Any]:
+    def get_connection(self) -> Any | None:
         return None

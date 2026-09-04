@@ -21,7 +21,7 @@ and because ``MlodaRunError`` does not yet exist.
 from __future__ import annotations
 
 import threading
-from typing import Any, Optional
+from typing import Any
 
 import pytest
 
@@ -50,7 +50,7 @@ class ImportErrorFeatureGroup(FeatureGroup):
     """Root FG whose ``calculate_feature`` raises a stdlib ``ImportError``."""
 
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator(supports_features={"exc_import_error_col"})
 
     @classmethod
@@ -70,7 +70,7 @@ class DomainErrorFeatureGroup(FeatureGroup):
     """Root FG whose ``calculate_feature`` raises a ``ValueError`` subclass."""
 
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator(supports_features={"exc_domain_error_col"})
 
     @classmethod
@@ -86,7 +86,7 @@ class CauseChainFeatureGroup(FeatureGroup):
     """Root FG that raises ``ValueError`` from a ``KeyError`` (``__cause__`` chain)."""
 
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator(supports_features={"exc_cause_chain_col"})
 
     @classmethod
@@ -260,7 +260,7 @@ class UnpicklableErrorFeatureGroup(FeatureGroup):
     """Root FG whose ``calculate_feature`` raises a non-picklable exception."""
 
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator(supports_features={"exc_unpicklable_col"})
 
     @classmethod

@@ -1,6 +1,6 @@
 import pandas as pd
 from datetime import datetime, timezone
-from typing import Any, Optional
+from typing import Any
 
 from mloda.user import mloda
 from mloda.provider import FeatureGroup
@@ -32,7 +32,7 @@ class TestTimeWindowWithGlobalFilter:
         # with a wider date range than we'll filter to
         class TestTimeDataCreator(FeatureGroup):
             @classmethod
-            def input_data(cls) -> Optional[BaseInputData]:
+            def input_data(cls) -> BaseInputData | None:
                 return DataCreator(
                     {
                         "temperature",
@@ -197,7 +197,7 @@ class TestTimeWindowWithGlobalFilter:
         # with the custom time filter feature name
         class TestCustomTimeDataCreator(FeatureGroup):
             @classmethod
-            def input_data(cls) -> Optional[BaseInputData]:
+            def input_data(cls) -> BaseInputData | None:
                 return DataCreator({"temperature", "humidity", custom_time_filter})
 
             @classmethod

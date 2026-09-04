@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Any, Optional, final
+from typing import Any, final
 from uuid import UUID, uuid4
 
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
@@ -18,9 +18,9 @@ class Step(ABC):
         self,
         cfw_register: CfwManager,
         cfw: ComputeFramework,
-        from_cfw: Optional[ComputeFramework | UUID] = None,
-        data: Optional[Any] = None,
-    ) -> Optional[Any]:
+        from_cfw: ComputeFramework | UUID | None = None,
+        data: Any | None = None,
+    ) -> Any | None:
         """Define what executing this step involves."""
         pass
 

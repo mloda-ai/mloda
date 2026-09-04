@@ -6,7 +6,7 @@ The cycle guard runs over the finished plan, so it sees join steps and feature g
 from __future__ import annotations
 
 from collections.abc import Sequence
-from typing import Any, NamedTuple, Optional
+from typing import Any, NamedTuple
 from uuid import UUID, uuid4
 
 import pytest
@@ -79,7 +79,7 @@ class TokenSelfSource(FeatureGroup):
     """Serves both sides of the self join; the requested feature name picks the side."""
 
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator(supports_features={SELF_LEFT_PAYLOAD, SELF_RIGHT_PAYLOAD})
 
     @classmethod
@@ -96,7 +96,7 @@ class TokenSelfSource(FeatureGroup):
 class TokenSelfConsumer(FeatureGroup):
     """Consumes both sides of the self join; the options are what the discriminators match on."""
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return {
             Feature(name=SELF_LEFT_PAYLOAD, options={SELF_SIDE: "left"}),
             Feature(name=SELF_RIGHT_PAYLOAD, options={SELF_SIDE: "right"}),

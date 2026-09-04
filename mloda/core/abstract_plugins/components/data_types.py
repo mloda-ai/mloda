@@ -3,7 +3,7 @@ from __future__ import annotations
 import datetime
 import decimal
 from enum import Enum
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Any
 
 from mloda.core.optional_dependency import loaded, require
 
@@ -116,7 +116,7 @@ class DataType(Enum):
             raise ValueError(f"Unsupported DataType: {data_type}")
 
     @classmethod
-    def _arrow_type_to_dtype_or_none(cls, arrow_type: pa.DataType) -> Optional["DataType"]:
+    def _arrow_type_to_dtype_or_none(cls, arrow_type: pa.DataType) -> "DataType" | None:
         pa = require("pyarrow", _PYARROW_REASON)
         if pa.types.is_int32(arrow_type):
             return cls.INT32
@@ -163,7 +163,7 @@ class DataType(Enum):
         return result
 
     @classmethod
-    def from_arrow_type_safe(cls, arrow_type: pa.DataType) -> Optional["DataType"]:
+    def from_arrow_type_safe(cls, arrow_type: pa.DataType) -> "DataType" | None:
         """Non-raising counterpart of from_arrow_type: returns None for unsupported types."""
         return cls._arrow_type_to_dtype_or_none(arrow_type)
 

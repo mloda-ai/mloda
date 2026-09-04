@@ -1,7 +1,7 @@
 """Pinning tests for match-time enforcement of SubtypeDeclaration (issue #639)."""
 
 import re
-from typing import ClassVar, Optional
+from typing import ClassVar
 
 import pytest
 
@@ -137,7 +137,7 @@ class SubDeclMatchRankLikeFG(FeatureChainParserMixin, FeatureGroup):
         return {SubDeclMatchFwAlpha, SubDeclMatchFwBeta}
 
 
-def _subdeclm_frame_resolver(feature_name: str, options: Options) -> Optional[str]:
+def _subdeclm_frame_resolver(feature_name: str, options: Options) -> str | None:
     match = re.match(r".*__(rows_\d+)_frame$", feature_name)
     if match is None:
         return None
@@ -160,7 +160,7 @@ class SubDeclMatchFrameSpecFG(StubFeatureGroup):
         cls,
         feature_name: FeatureName | str,
         options: Options,
-        data_access_collection: Optional[DataAccessCollection] = None,
+        data_access_collection: DataAccessCollection | None = None,
     ) -> bool:
         return str(feature_name).startswith("subdeclm_") and str(feature_name).endswith("_frame")
 
@@ -318,7 +318,7 @@ class TestFrameSpecLikeFamily:
         assert compute_frameworks == {SubDeclMatchFwAlpha, SubDeclMatchFwBeta}
 
 
-def _subdeclm_raising_resolver(feature_name: str, options: Options) -> Optional[str]:
+def _subdeclm_raising_resolver(feature_name: str, options: Options) -> str | None:
     raise RuntimeError("subdeclm resolver boom")
 
 
@@ -335,7 +335,7 @@ class SubDeclMatchRaisingResolverFG(FeatureGroup):
     def compute_framework_rule(cls) -> set[type[ComputeFramework]] | None:
         return {SubDeclMatchFwAlpha, SubDeclMatchFwBeta}
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return None
 
 

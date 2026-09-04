@@ -1,4 +1,4 @@
-from typing import Any, Optional
+from typing import Any
 
 import pyarrow as pa
 
@@ -19,7 +19,7 @@ from tests.test_core.test_tooling import MlodaTestRunner, PARALLELIZATION_MODES_
 
 class GlobalFilterBasicTest(FeatureGroup):
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator({cls.get_class_name()})
 
     @classmethod
@@ -39,7 +39,7 @@ class GlobalFilterBasicTest(FeatureGroup):
 
 class GlobalFilterFromDifferentColumnTest(GlobalFilterBasicTest):
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator({"GlobalFilterFromDifferentColumn1", "GlobalFilterFromDifferentColumn2"})
 
     @classmethod
@@ -60,7 +60,7 @@ class GlobalFilterFromDifferentColumnTest(GlobalFilterBasicTest):
 
 class GlobalFilterHasDifferentNameTest(GlobalFilterBasicTest):
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator({"GlobalFilterHasDifferentName1", "GlobalFilterHasDifferentName2"})
 
     @classmethod

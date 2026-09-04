@@ -7,7 +7,7 @@ type-only __len__ gate, instrument's rows_out reset, and feature_group_version.
 
 import gc
 import logging
-from typing import Any, Optional
+from typing import Any
 
 import pytest
 
@@ -136,7 +136,7 @@ class TestPlainStringDeclaredInputs:
         class _PlainStrInputsFeatureGroup(FeatureGroup):
             """input_features declares plain str names, not Feature objects."""
 
-            def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Any]]:
+            def input_features(self, options: Options, feature_name: FeatureName) -> set[Any] | None:
                 return {"base_amount", "currency"}
 
             @classmethod
@@ -166,7 +166,7 @@ class TestBatchedFeatureSetDeclaredInputsUnion:
         class _BatchedInputFeatureGroup(FeatureGroup):
             """input_features returns one Feature per requested feature_name."""
 
-            def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+            def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
                 return {Feature(f"src_{str(feature_name)}")}
 
             @classmethod
@@ -196,7 +196,7 @@ class TestDeclaredInputsReresolvedAfterOptionDefaultsMaterialize:
 
             PROPERTY_MAPPING = {"source": PropertySpec("Source column.", context=True, default="default_source")}
 
-            def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Any]]:
+            def input_features(self, options: Options, feature_name: FeatureName) -> set[Any] | None:
                 value = options.get("source")
                 if value is None:
                     raise ValueError("unmaterialized")
@@ -229,7 +229,7 @@ class TestFeatureNamesAndInputFeaturesArePlainStr:
         class _StrTypedFeatureNamesFeatureGroup(FeatureGroup):
             """input_features declares a Feature object, not a plain str."""
 
-            def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Any]]:
+            def input_features(self, options: Options, feature_name: FeatureName) -> set[Any] | None:
                 return {Feature("src")}
 
             @classmethod
@@ -267,7 +267,7 @@ class TestDeclaredInputsResolvedOncePerStep:
             def __init__(self) -> None:
                 type(self).init_calls += 1
 
-            def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Any]]:
+            def input_features(self, options: Options, feature_name: FeatureName) -> set[Any] | None:
                 type(self).input_features_calls += 1
                 return {"x"}
 
@@ -534,7 +534,7 @@ class TestDeclaredInputMemoAttributesGuarded:
         class _MemolessInputFeatureGroup(FeatureGroup):
             """input_features declares a plain str name."""
 
-            def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Any]]:
+            def input_features(self, options: Options, feature_name: FeatureName) -> set[Any] | None:
                 return {"x"}
 
             @classmethod

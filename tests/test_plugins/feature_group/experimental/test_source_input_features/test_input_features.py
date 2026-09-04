@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 import pandas as pd
 
@@ -51,7 +51,7 @@ class InputFeatureMergeTest(SourceInputFeature):
 class TestInputFeatures:
     class FeatureInputCreatorTest(FeatureGroup):
         @classmethod
-        def input_data(cls) -> Optional[BaseInputData]:
+        def input_data(cls) -> BaseInputData | None:
             return DataCreator({cls.get_class_name()})
 
         @classmethod

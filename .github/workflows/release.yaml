@@ -65,7 +65,7 @@ jobs:
             @semantic-release/git \
             @semantic-release/github
 
-      - name: Semantic Release Dry Run
+      - name: Semantic Release Run
         id: semantic
         run: |
           dry_run_output=$(semantic-release --dry-run 2>&1 || true)

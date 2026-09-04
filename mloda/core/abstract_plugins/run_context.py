@@ -4,7 +4,10 @@ from dataclasses import dataclass, field
 
 @dataclass(frozen=True)
 class RunContext:
-    """Per-run values every ComputeFramework carries into hooks and spawn workers; keep it picklable."""
+    """Internal, not part of the public API.
+
+    Per-run values every ComputeFramework carries into hooks and spawn workers; keep it picklable.
+    """
 
     run_id: str | None = None
     carrier: dict[str, str] | None = field(default=None, hash=False)  # a dict cannot hash; equality still compares it

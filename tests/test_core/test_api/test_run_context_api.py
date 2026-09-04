@@ -3,7 +3,7 @@
 from typing import Any, Optional
 
 from mloda.core.abstract_plugins.run_context import RunContext
-from mloda.core.abstract_plugins.verified_context import set_verified_context
+from mloda.core.abstract_plugins.verified_context import verified_context
 from mloda.core.api.request import mlodaAPI
 from mloda.provider import BaseInputData, ComputeFramework, DataCreator, FeatureGroup, FeatureSet
 from mloda.user import Feature, ParallelizationMode, PluginCollector, mloda
@@ -69,7 +69,7 @@ class TestBuildRunContextPicksUpActiveVerifiedContext:
     def test_build_run_context_carries_tenant_project_principal_from_active_scope(self) -> None:
         session = _prepare_session()
 
-        with set_verified_context(tenant_id="acme", project_id="proj1", principal="hash123"):
+        with verified_context(tenant_id="acme", project_id="proj1", principal="hash123"):
             built = session._build_run_context(None, None)
 
         assert built == RunContext(run_id=session.run_id, tenant_id="acme", project_id="proj1", principal="hash123")

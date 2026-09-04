@@ -13,7 +13,7 @@ import pytest
 from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook
 from mloda.core.abstract_plugins.hook_context import HookContext
 from mloda.core.abstract_plugins.run_context import RunContext
-from mloda.core.abstract_plugins.verified_context import set_verified_context
+from mloda.core.abstract_plugins.verified_context import verified_context
 from mloda.core.core.engine import Engine
 from mloda.provider import BaseInputData, ComputeFramework, DataCreator, FeatureGroup, FeatureSet
 from mloda.user import Feature, FeatureName, Features, Options, ParallelizationMode, PluginCollector, mloda
@@ -264,7 +264,7 @@ class TestTenantProjectPrincipalSurfaceDuringMatchWhenScopeIsActive:
     def test_tenant_project_principal_are_populated_on_every_match_context(self) -> None:
         extender = _MatchListCapturingExtender()
 
-        with set_verified_context(tenant_id="acme", project_id="proj1", principal="hash123"):
+        with verified_context(tenant_id="acme", project_id="proj1", principal="hash123"):
             mloda.prepare(
                 [Feature(f"{_MARKER}_col_one"), Feature(f"{_MARKER}_col_two")],
                 compute_frameworks=["PythonDictFramework"],

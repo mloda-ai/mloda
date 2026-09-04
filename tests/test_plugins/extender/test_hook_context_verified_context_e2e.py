@@ -1,4 +1,4 @@
-"""E2E tests for set_verified_context()/tenant_id/project_id/principal plumbing through the
+"""E2E tests for verified_context()/tenant_id/project_id/principal plumbing through the
 real mlodaAPI SYNC execution path, down to HookContext. Also proves Options can never override
 the seam's values."""
 
@@ -6,7 +6,7 @@ from typing import Any, Optional
 
 from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook
 from mloda.core.abstract_plugins.hook_context import HookContext
-from mloda.core.abstract_plugins.verified_context import set_verified_context
+from mloda.core.abstract_plugins.verified_context import verified_context
 from mloda.core.api.request import mlodaAPI
 from mloda.provider import BaseInputData, ComputeFramework, DataCreator, FeatureGroup, FeatureSet
 from mloda.user import Feature, ParallelizationMode, PluginCollector, mloda
@@ -62,7 +62,7 @@ class TestVerifiedContextSurfacesOnHookContext:
         extender = _ContextCapturingExtender()
         session = _prepare_session()
 
-        with set_verified_context(tenant_id="acme", project_id="proj1", principal="hash123"):
+        with verified_context(tenant_id="acme", project_id="proj1", principal="hash123"):
             session.run(parallelization_modes={ParallelizationMode.SYNC}, function_extender={extender})
 
         assert extender.captured is not None
@@ -85,16 +85,17 @@ class TestVerifiedContextAbsentWithoutScope:
 
 
 class TestStreamRunReadsVerifiedContextAtCreationNotAtIteration:
-    """Bug: stream_run/stream_all are generator functions, so their whole body (including the
-    current_verified_context() read) only executes at first iteration, not at the stream_run()/
-    stream_all() call. The captured tenant must reflect the scope active when the stream was
-    CREATED, not whatever scope (or lack of one) is active when it is later consumed."""
+    """Bug: stream_run was a generator function, so its whole body (including the
+    current_verified_context() read) only executed at first iteration, not at the stream_run()
+    call. stream_all is not a generator function and inherits the fix by calling stream_run
+    eagerly. The captured tenant must reflect the scope active when the stream was CREATED, not
+    whatever scope (or lack of one) is active when it is later consumed."""
 
     def test_tenant_reflects_the_scope_active_at_creation_not_at_later_consumption(self) -> None:
         extender = _ContextCapturingExtender()
         session = _prepare_session()
 
-        with set_verified_context(tenant_id="acme", project_id="proj-a", principal="hash-a"):
+        with verified_context(tenant_id="acme", project_id="proj-a", principal="hash-a"):
             stream = session.stream_run(parallelization_modes={ParallelizationMode.SYNC}, function_extender={extender})
 
         list(stream)
@@ -111,10 +112,10 @@ class TestStreamRunReadsVerifiedContextAtCreationNotAtIteration:
         extender = _ContextCapturingExtender()
         session = _prepare_session()
 
-        with set_verified_context(tenant_id="acme", project_id="proj-a", principal="hash-a"):
+        with verified_context(tenant_id="acme", project_id="proj-a", principal="hash-a"):
             stream = session.stream_run(parallelization_modes={ParallelizationMode.SYNC}, function_extender={extender})
 
-        with set_verified_context(tenant_id="tenant-b", project_id="proj-b", principal="hash-b"):
+        with verified_context(tenant_id="tenant-b", project_id="proj-b", principal="hash-b"):
             list(stream)
 
         assert extender.captured is not None
@@ -147,7 +148,7 @@ class TestOptionsCannotOverrideVerifiedContext:
         extender = _ContextCapturingExtender()
         session = _prepare_session(self._SPOOFED_OPTIONS)
 
-        with set_verified_context(tenant_id="acme", project_id="proj1", principal="hash123"):
+        with verified_context(tenant_id="acme", project_id="proj1", principal="hash123"):
             session.run(parallelization_modes={ParallelizationMode.SYNC}, function_extender={extender})
 
         assert extender.captured is not None

@@ -1,4 +1,4 @@
-"""E2E: tenant_id/project_id/principal set via set_verified_context() reach HookContext inside a
+"""E2E: tenant_id/project_id/principal set via verified_context() reach HookContext inside a
 real spawned MULTIPROCESSING worker process.
 
 An Extender's own instance state does not propagate back from a spawned child via the manager
@@ -19,7 +19,7 @@ import pytest
 
 from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook
 from mloda.core.abstract_plugins.hook_context import HookContext
-from mloda.core.abstract_plugins.verified_context import set_verified_context
+from mloda.core.abstract_plugins.verified_context import verified_context
 from mloda.provider import BaseInputData, ComputeFramework, DataCreator, FeatureGroup, FeatureSet
 from mloda.user import Feature, ParallelizationMode, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
@@ -86,7 +86,7 @@ class TestVerifiedContextReachesHookContextUnderMultiprocessing:
             parallelization_modes={ParallelizationMode.MULTIPROCESSING},
         )
 
-        with set_verified_context(tenant_id="acme", project_id="proj1", principal="hash123"):
+        with verified_context(tenant_id="acme", project_id="proj1", principal="hash123"):
             session.run(
                 parallelization_modes={ParallelizationMode.MULTIPROCESSING},
                 function_extender={extender},

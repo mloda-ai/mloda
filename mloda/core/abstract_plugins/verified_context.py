@@ -23,12 +23,12 @@ _current_verified_context: ContextVar[VerifiedContext | None] = ContextVar("_cur
 
 
 def current_verified_context() -> VerifiedContext | None:
-    """Return the VerifiedContext active in the current set_verified_context() scope, else None."""
+    """Return the VerifiedContext active in the current verified_context() scope, else None."""
     return _current_verified_context.get()
 
 
 @contextlib.contextmanager
-def set_verified_context(
+def verified_context(
     *,
     tenant_id: str | None = None,
     project_id: str | None = None,

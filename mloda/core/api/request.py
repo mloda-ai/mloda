@@ -492,7 +492,7 @@ class mlodaAPI:
     ) -> Generator[Any, None, None]:
         """Execute the prepared session and yield each feature group's result as it completes.
 
-        carrier/child_bootstrap and the active set_verified_context() scope are read here, at call
+        carrier/child_bootstrap and the active verified_context() scope are read here, at call
         time, not at first iteration: a function whose body itself contains ``yield`` only starts
         executing on first iteration, which would defer that read past the caller's intended scope.
         """

@@ -1,4 +1,4 @@
-"""Tests for VerifiedContext/set_verified_context/current_verified_context in isolation."""
+"""Tests for VerifiedContext/verified_context/current_verified_context in isolation."""
 
 import dataclasses
 
@@ -7,7 +7,7 @@ import pytest
 from mloda.core.abstract_plugins.verified_context import (
     VerifiedContext,
     current_verified_context,
-    set_verified_context,
+    verified_context,
 )
 
 
@@ -35,26 +35,26 @@ class TestCurrentVerifiedContextOutsideAnyScope:
 
 class TestSetVerifiedContextScope:
     def test_sets_values_for_the_scope_of_the_with_block(self) -> None:
-        with set_verified_context(tenant_id="acme", project_id="proj1", principal="hash123"):
+        with verified_context(tenant_id="acme", project_id="proj1", principal="hash123"):
             ctx = current_verified_context()
             assert ctx == VerifiedContext(tenant_id="acme", project_id="proj1", principal="hash123")
 
     def test_restores_previous_value_after_the_with_block_exits(self) -> None:
-        with set_verified_context(tenant_id="acme"):
+        with verified_context(tenant_id="acme"):
             pass
 
         assert current_verified_context() is None
 
     def test_all_kwargs_optional_and_default_to_none(self) -> None:
-        with set_verified_context():
+        with verified_context():
             assert current_verified_context() == VerifiedContext()
 
 
 class TestSetVerifiedContextNesting:
     def test_nested_scope_restores_outer_value_not_none(self) -> None:
-        with set_verified_context(tenant_id="outer-tenant", project_id="outer-proj", principal="outer-hash"):
+        with verified_context(tenant_id="outer-tenant", project_id="outer-proj", principal="outer-hash"):
             outer = current_verified_context()
-            with set_verified_context(tenant_id="inner-tenant", project_id="inner-proj", principal="inner-hash"):
+            with verified_context(tenant_id="inner-tenant", project_id="inner-proj", principal="inner-hash"):
                 inner = current_verified_context()
                 assert inner == VerifiedContext(
                     tenant_id="inner-tenant", project_id="inner-proj", principal="inner-hash"
@@ -70,9 +70,9 @@ class TestSetVerifiedContextNesting:
 
 class TestSetVerifiedContextRestoresOnException:
     def test_restores_previous_value_even_if_the_with_block_raises(self) -> None:
-        with set_verified_context(tenant_id="outer-tenant"):
+        with verified_context(tenant_id="outer-tenant"):
             with pytest.raises(ValueError, match="boom"):
-                with set_verified_context(tenant_id="inner-tenant"):
+                with verified_context(tenant_id="inner-tenant"):
                     raise ValueError("boom")
 
             assert current_verified_context() == VerifiedContext(tenant_id="outer-tenant")

@@ -56,7 +56,7 @@ EXPORT_MATRIX: list[tuple[str, str, str]] = [
     ("user", "PlanStep", "plan_info"),
     ("steward", "PlanStep", "plan_info"),
     # Verified context seam: steward-only, platform-integrator surface.
-    ("steward", "set_verified_context", "verified_context"),
+    ("steward", "verified_context", "verified_context"),
 ]
 
 _MATRIX_IDS = [f"{namespace}-{symbol}" for namespace, symbol, _source in EXPORT_MATRIX]
@@ -107,12 +107,12 @@ class TestCurrentVerifiedContextStaysInternal:
 
 
 class TestVerifiedContextStaysInternal:
-    """VerifiedContext itself is not needed by any public API consumer: only set_verified_context's
+    """VerifiedContext itself is not needed by any public API consumer: only verified_context's
     kwargs are. It stays defined in verified_context.py but is not re-exported from mloda.steward."""
 
     def test_verified_context_absent_from_steward_all(self) -> None:
         assert "VerifiedContext" not in mloda.steward.__all__, (
-            "mloda.steward must not list 'VerifiedContext' in __all__; only set_verified_context is exported"
+            "mloda.steward must not list 'VerifiedContext' in __all__; only verified_context is exported"
         )
 
     def test_verified_context_not_a_steward_attribute(self) -> None:

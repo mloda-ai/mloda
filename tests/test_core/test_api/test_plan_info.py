@@ -14,6 +14,10 @@ Contract under test:
     defaulting to ``()``. On compute steps they partition ``feature_names`` into the names the user
     asked for (``initial_requested_data`` is True) and the names the engine injected (chained
     sources, link index features). Join and transform steps keep both empty.
+  * ``PlanStep.input_feature_names`` is the prepare-time twin of ``HookContext.input_features``: on a
+    compute step the sorted, deduplicated names its feature group declares as input, read from the
+    step's ``FeatureSet.declared_input_feature_names``. A root group (no declared inputs) and every
+    join and transform step report ``()``. The step's own feature names are not subtracted.
   * Join steps also expose the resolved orientation: ``join_destination_side`` ("left"/"right") and
     ``join_token`` are dataclass fields; ``join_inverted`` is a derived read-only property
     (``join_destination_side == "right"``, or None without a side). Both default to None on
@@ -58,6 +62,7 @@ import mloda.user as mloda_user
 from mloda.core.api.plan_info import build_plan_steps
 from mloda.core.prepare.resolved_join import ResolvedJoinPlan
 from mloda.provider import BaseInputData, ComputeFramework, DataCreator, FeatureGroup, FeatureSet
+from mloda.steward import Extender, ExtenderHook, HookContext
 from mloda.user import (
     Feature,
     FeatureName,
@@ -280,6 +285,29 @@ class PlanInfoUnknownStep:
     """Not a FeatureGroupStep/TransformFrameworkStep/JoinStep: build_plan_steps must reject it."""
 
 
+class PlanInfoCalculateHookRecorder(Extender):
+    """Records the HookContext of every calculate hook, keyed by feature group class and feature names."""
+
+    def __init__(self) -> None:
+        self.captured: list[HookContext] = []
+
+    def wraps(self) -> set[ExtenderHook]:
+        return {ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE}
+
+    def __call__(self, func: Any, *args: Any, **kwargs: Any) -> Any:
+        result = func(*args, **kwargs)
+        context = HookContext.current()
+        assert context is not None
+        self.captured.append(context)
+        return result
+
+    def input_features_by_step(self) -> dict[tuple[str, tuple[str, ...]], frozenset[str]]:
+        return {
+            (context.feature_group_class, context.feature_names): context.input_features or frozenset()
+            for context in self.captured
+        }
+
+
 _AGGREGATION_PLUGINS = PluginCollector.enabled_feature_groups({PlanInfoPandasSource, PandasAggregatedFeatureGroup})
 _TRANSFORM_PLUGINS = PluginCollector.enabled_feature_groups({PlanInfoArrowSource, PandasAggregatedFeatureGroup})
 _NEVER_EXECUTES_PLUGINS = PluginCollector.enabled_feature_groups({PlanInfoNeverExecutes})
@@ -300,6 +328,15 @@ def _prepare_chained_session() -> mlodaAPI:
         _CHAINED_FEATURES,
         compute_frameworks={PandasDataFrame},
         plugin_collector=_AGGREGATION_PLUGINS,
+    )
+
+
+def _prepare_chained_session_with(recorder: PlanInfoCalculateHookRecorder) -> mlodaAPI:
+    return mloda.prepare(
+        _CHAINED_FEATURES,
+        compute_frameworks={PandasDataFrame},
+        plugin_collector=_AGGREGATION_PLUGINS,
+        function_extender={recorder},
     )
 
 
@@ -337,6 +374,20 @@ def _prepare_cross_framework_join_session() -> mlodaAPI:
 def _prepare_inverted_cross_framework_join_session() -> mlodaAPI:
     """Same link, PyArrow consumer: the join runs in the declared right side's framework."""
     return _prepare_cross_join("PlanInfoInvertedConsumer", _INVERTED_JOIN_PLUGINS)
+
+
+def _raw_steps_by_kind(session: mlodaAPI) -> dict[str, list[Any]]:
+    """Group a prepared session's raw execution-plan steps by the kind build_plan_steps gives them.
+
+    Keeps this module free of internal execution-step imports while still reaching the raw steps.
+    """
+    assert session.engine is not None
+    raw_steps: list[Any] = list(session.engine.execution_planner)
+
+    grouped: dict[str, list[Any]] = {"compute": [], "join": [], "transform": []}
+    for raw_step, record in zip(raw_steps, build_plan_steps(raw_steps)):
+        grouped[record.step_kind].append(raw_step)
+    return grouped
 
 
 # ---------------------------------------------------------------------------
@@ -378,6 +429,7 @@ class TestPlanStepDataclass:
             "join_type",
             "requested_feature_names",
             "injected_feature_names",
+            "input_feature_names",
             "join_destination_side",
             "join_token",
             "declared_left_frameworks",
@@ -513,6 +565,51 @@ class TestPlanStepRequestedAndInjectedFields:
         assert with_requested != with_injected
 
 
+class TestPlanStepInputFeatureNamesField:
+    """input_feature_names is an optional tuple[str, ...] field sitting next to the other name tuples."""
+
+    @staticmethod
+    def _compute_step() -> PlanStep:
+        return PlanStep(
+            step_kind="compute",
+            feature_names=("plan_info_sales__mean_aggr",),
+            feature_group=PandasAggregatedFeatureGroup,
+            compute_framework=PandasDataFrame,
+            source_feature_group=None,
+            source_compute_framework=None,
+        )
+
+    def test_input_feature_names_defaults_to_an_empty_tuple(self) -> None:
+        step = self._compute_step()
+
+        assert step.input_feature_names == ()
+
+        fields_by_name = {field.name: field for field in dataclasses.fields(PlanStep)}
+        assert fields_by_name["input_feature_names"].default == ()
+
+    def test_input_feature_names_is_annotated_as_a_tuple_of_strings(self) -> None:
+        annotation = PlanStep.__annotations__["input_feature_names"]
+
+        # Annotated as Any for the same reason as step_kind's Literal check above: typeshed's
+        # get_origin overloads make a precisely typed operand trip mypy's strict_equality check.
+        origin: Any = get_origin(annotation)
+        assert origin is tuple, f"input_feature_names must be a tuple type, got {annotation!r}"
+        assert get_args(annotation) == (str, Ellipsis)
+
+    def test_input_feature_names_follows_injected_feature_names(self) -> None:
+        """Positional construction order: the third name tuple sits directly behind the other two."""
+        field_names = [field.name for field in dataclasses.fields(PlanStep)]
+
+        assert field_names.index("input_feature_names") == field_names.index("injected_feature_names") + 1
+
+    def test_input_feature_names_participates_in_equality(self) -> None:
+        base = self._compute_step()
+        with_inputs = dataclasses.replace(base, input_feature_names=("plan_info_sales",))
+
+        assert base != with_inputs
+        assert with_inputs == dataclasses.replace(base, input_feature_names=("plan_info_sales",))
+
+
 class TestJoinOrientationFieldsOnTheDataclass:
     """join_destination_side, join_token, declared_left_frameworks and declared_right_frameworks are
     optional, typed dataclass fields; join_inverted is a derived read-only property, not a field."""
@@ -584,6 +681,7 @@ class TestJoinOrientationFieldsOnTheDataclass:
     def test_a_plan_step_round_trips_positionally(self) -> None:
         step = dataclasses.replace(
             self._join_step(),
+            input_feature_names=("plan_info_left_val",),
             join_destination_side="left",
             join_token=UUID("00000000-0000-4000-8000-000000000001"),
             declared_left_frameworks=(PandasDataFrame,),
@@ -1205,6 +1303,108 @@ class TestRequestedAndInjectedForJoinPlans:
         consumer_step = next(step for step in plan if step.feature_group is PlanInfoCrossConsumer)
         assert consumer_step.requested_feature_names == ("PlanInfoCrossConsumer",)
         assert consumer_step.injected_feature_names == ()
+
+
+# ---------------------------------------------------------------------------
+# declared input feature names
+# ---------------------------------------------------------------------------
+
+
+class TestBuildPlanStepsInputFeatureNames:
+    """build_plan_steps reads a compute step's FeatureSet.declared_input_feature_names, sorted."""
+
+    @staticmethod
+    def _source_compute_step() -> Any:
+        """The root source's raw FeatureGroupStep, from a session nobody else shares."""
+        compute_steps = _raw_steps_by_kind(_prepare_chained_session())["compute"]
+        return next(step for step in compute_steps if step.feature_group is PlanInfoPandasSource)
+
+    def test_declared_input_names_are_reported_sorted(self) -> None:
+        step = self._source_compute_step()
+        step.features.declared_input_feature_names = frozenset({"b", "a"})
+
+        assert build_plan_steps([step])[0].input_feature_names == ("a", "b")
+
+    def test_undeclared_input_names_yield_an_empty_tuple(self) -> None:
+        step = self._source_compute_step()
+        step.features.declared_input_feature_names = None
+
+        assert build_plan_steps([step])[0].input_feature_names == ()
+
+    def test_a_root_feature_group_step_is_planned_without_declared_inputs(self) -> None:
+        """PlanInfoPandasSource is a root group, so the planner leaves its declared inputs at None."""
+        step = self._source_compute_step()
+
+        assert step.features.declared_input_feature_names is None
+        assert build_plan_steps([step])[0].input_feature_names == ()
+
+    def test_the_steps_own_feature_names_are_not_subtracted(self) -> None:
+        step = self._source_compute_step()
+        step.features.declared_input_feature_names = frozenset({"plan_info_sales", "plan_info_price"})
+
+        record = build_plan_steps([step])[0]
+
+        assert record.feature_names == ("plan_info_sales",)
+        assert record.input_feature_names == ("plan_info_price", "plan_info_sales")
+
+    def test_join_and_transform_steps_report_no_input_features(self) -> None:
+        raw_steps = _raw_steps_by_kind(_prepare_cross_framework_join_session())
+        assert raw_steps["join"], "the fixture must plan a join"
+        assert raw_steps["transform"], "the fixture must plan a transform"
+
+        for step in raw_steps["join"] + raw_steps["transform"]:
+            assert build_plan_steps([step])[0].input_feature_names == ()
+
+
+class TestInputFeatureNamesForChainedFeature:
+    """The aggregation step names the source it chains off; the root source names nothing."""
+
+    def test_derived_step_reports_the_source_feature_it_declares(self) -> None:
+        plan = _prepare_chained_session().resolved_plan()
+
+        aggregation_step = next(step for step in plan if step.feature_group is PandasAggregatedFeatureGroup)
+
+        assert aggregation_step.input_feature_names == ("plan_info_sales",)
+
+    def test_root_step_reports_no_input_features(self) -> None:
+        plan = _prepare_chained_session().resolved_plan()
+
+        source_step = next(step for step in plan if step.feature_group is PlanInfoPandasSource)
+
+        assert source_step.input_feature_names == ()
+
+    def test_input_feature_names_are_unchanged_by_run(self) -> None:
+        session = _prepare_chained_session()
+
+        before_run = [step.input_feature_names for step in session.resolved_plan()]
+        session.run()
+        after_run = [step.input_feature_names for step in session.resolved_plan()]
+
+        assert after_run == before_run
+        assert ("plan_info_sales",) in after_run
+
+
+class TestInputFeatureNamesMatchTheRuntimeHookContext:
+    """input_feature_names is the prepare-time twin of the run-time HookContext.input_features."""
+
+    def test_every_compute_step_matches_its_calculate_hook_context(self) -> None:
+        recorder = PlanInfoCalculateHookRecorder()
+        session = _prepare_chained_session_with(recorder)
+
+        session.run()
+
+        compute_steps = [step for step in session.resolved_plan() if step.step_kind == "compute"]
+        assert len(compute_steps) == 2
+        assert any(step.input_feature_names for step in compute_steps), "an all-empty comparison proves nothing"
+
+        hook_inputs = recorder.input_features_by_step()
+        assert len(hook_inputs) == len(compute_steps), "every compute step must be hooked exactly once"
+
+        for step in compute_steps:
+            assert step.feature_group is not None
+            key = (f"{step.feature_group.__module__}.{step.feature_group.__qualname__}", step.feature_names)
+            assert key in hook_inputs, f"no calculate hook captured for {key}"
+            assert frozenset(step.input_feature_names) == hook_inputs[key]
 
 
 # ---------------------------------------------------------------------------

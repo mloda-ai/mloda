@@ -62,7 +62,7 @@ class TestInitComputeFramework:
     """Tests for init_compute_framework method."""
 
     def test_creates_new_compute_framework_instance(self) -> None:
-        """run_id/carrier must be set post-construction, not passed as constructor kwargs."""
+        """run_context must be assigned post-construction, not passed as a constructor kwarg."""
         cfw_register = Mock(spec=CfwManager)
         worker_manager = Mock(spec=WorkerManager)
         executor = ComputeFrameworkExecutor(cfw_register, worker_manager)
@@ -158,7 +158,6 @@ class TestInitComputeFramework:
         assert executor.cfw_collection[test_uuid] is mock_cfw_instance
 
     def test_each_initialized_framework_gets_its_own_carrier_copy(self) -> None:
-        """Two frameworks initialized from the same register share an equal run_context but not the carrier object."""
         cfw_register = Mock(spec=CfwManager)
         worker_manager = Mock(spec=WorkerManager)
         executor = ComputeFrameworkExecutor(cfw_register, worker_manager)

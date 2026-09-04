@@ -94,3 +94,11 @@ class TestRunContextReplace:
         assert replaced.run_id == "some-run-id"
         assert replaced.child_bootstrap is _module_level_bootstrap
         assert replaced.carrier == {"other": "carrier"}
+
+    def test_replace_without_changes_copies_the_carrier(self) -> None:
+        ctx = RunContext(carrier={"k": "v"})
+
+        replaced = dataclasses.replace(ctx)
+
+        assert replaced.carrier == ctx.carrier
+        assert replaced.carrier is not ctx.carrier

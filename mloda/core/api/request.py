@@ -428,13 +428,12 @@ class mlodaAPI:
         return deepcopy(self.engine.resolution_records)
 
     def _build_run_context(
-        self, carrier: Optional[dict[str, str]], child_bootstrap: Optional[Callable[[], None]]
+        self, carrier: dict[str, str] | None, child_bootstrap: Callable[[], None] | None
     ) -> RunContext:
         """Derive this run's context from the engine's plan-time base."""
         if self.engine is None:
             raise ValueError("Internal error: engine not initialized. This is likely a bug in mloda.")
-        # The engine's base carries plan-time fields; run() adds the per-run ones.
-        return replace(self.engine.run_context, carrier=carrier, child_bootstrap=child_bootstrap)
+        return replace(self.engine.run_context, run_id=self.run_id, carrier=carrier, child_bootstrap=child_bootstrap)
 
     def run(
         self,

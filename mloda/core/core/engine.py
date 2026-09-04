@@ -296,6 +296,8 @@ class Engine:
             input_features=None,
             compute_framework_name="",
             run_id=self.run_context.run_id,
+            carrier=None,
+            worker_index=None,
             plan_feature_count=len(self.resolution_records) + 1,
             plan_node_count=len(self.feature_group_collection),
             plan_depth=depth,

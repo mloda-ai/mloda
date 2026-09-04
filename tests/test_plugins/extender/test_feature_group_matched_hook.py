@@ -378,7 +378,7 @@ class TestPlanCountsAndDepthOnMatchContext:
 
 
 class TestEngineFunctionExtenderAndRunIdConstruction:
-    """Engine stores function_extender and run_id (on a RunContext); get_function_extender delegates to the free function."""
+    """Engine stores function_extender/run_id on a RunContext; get_function_extender delegates to the free function."""
 
     def test_engine_accepts_kwargs_and_get_function_extender_delegates(self) -> None:
         with (

@@ -385,7 +385,7 @@ class TestInstrumentPreservesSelfForNameResolution:
 
 
 class TestRunIdAndCarrierWiring:
-    """run_context is set post-construction (not a constructor kwarg); its run_id/carrier surface unchanged on HookContext."""
+    """run_context is set post-construction, not a constructor kwarg; run_id/carrier surface unchanged."""
 
     def test_run_id_and_carrier_surface_on_captured_hook_context(self) -> None:
         feature_set = _build_feature_set()

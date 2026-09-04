@@ -176,7 +176,7 @@ class _RecordingRunner:
         function_extender: Optional[set[Extender]] = None,
         api_data: Optional[dict[str, Any]] = None,
         artifacts: Optional[dict[str, Any]] = None,
-        run_context: Optional[Any] = None,
+        run_context: RunContext | None = None,
     ) -> None:
         self.received_extenders = function_extender
 

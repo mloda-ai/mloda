@@ -1,5 +1,3 @@
-"""RunContext: the per-run bundle a ComputeFramework carries into hooks and spawn workers."""
-
 from collections.abc import Callable
 from dataclasses import dataclass, field
 

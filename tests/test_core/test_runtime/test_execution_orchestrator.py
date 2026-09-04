@@ -6,6 +6,8 @@ This test file defines the requirements for the ExecutionOrchestrator class.
 
 from __future__ import annotations
 
+import inspect
+import threading
 import uuid as uuid_mod
 from collections.abc import Callable
 from unittest.mock import Mock, patch, MagicMock
@@ -91,8 +93,6 @@ class TestExecutionOrchestratorContextManager:
 
     def test_enter_accepts_parallelization_modes(self) -> None:
         """__enter__ should accept parallelization_modes parameter."""
-        import inspect
-
         mock_planner = Mock(spec=ExecutionPlan)
         orchestrator = ExecutionOrchestrator(mock_planner)
 
@@ -102,8 +102,6 @@ class TestExecutionOrchestratorContextManager:
 
     def test_enter_accepts_function_extender(self) -> None:
         """__enter__ should accept function_extender parameter."""
-        import inspect
-
         mock_planner = Mock(spec=ExecutionPlan)
         orchestrator = ExecutionOrchestrator(mock_planner)
 
@@ -112,8 +110,6 @@ class TestExecutionOrchestratorContextManager:
 
     def test_enter_accepts_api_data(self) -> None:
         """__enter__ should accept api_data parameter."""
-        import inspect
-
         mock_planner = Mock(spec=ExecutionPlan)
         orchestrator = ExecutionOrchestrator(mock_planner)
 
@@ -122,8 +118,6 @@ class TestExecutionOrchestratorContextManager:
 
     def test_exit_accepts_exception_info(self) -> None:
         """__exit__ should accept exc_type, exc_val, exc_tb parameters."""
-        import inspect
-
         mock_planner = Mock(spec=ExecutionPlan)
         orchestrator = ExecutionOrchestrator(mock_planner)
 
@@ -223,8 +217,6 @@ class TestExecutionOrchestratorMethodSignatures:
 
     def test_is_step_done_accepts_step_uuids_and_finished_ids(self) -> None:
         """_is_step_done should accept step_uuids and finished_ids parameters."""
-        import inspect
-
         mock_planner = Mock(spec=ExecutionPlan)
         orchestrator = ExecutionOrchestrator(mock_planner)
 
@@ -235,8 +227,6 @@ class TestExecutionOrchestratorMethodSignatures:
 
     def test_can_run_step_signature(self) -> None:
         """_can_run_step should have correct parameters."""
-        import inspect
-
         mock_planner = Mock(spec=ExecutionPlan)
         orchestrator = ExecutionOrchestrator(mock_planner)
 
@@ -249,8 +239,6 @@ class TestExecutionOrchestratorMethodSignatures:
 
     def test_mark_step_as_finished_signature(self) -> None:
         """_mark_step_as_finished should have correct parameters."""
-        import inspect
-
         mock_planner = Mock(spec=ExecutionPlan)
         orchestrator = ExecutionOrchestrator(mock_planner)
 
@@ -262,8 +250,6 @@ class TestExecutionOrchestratorMethodSignatures:
 
     def test_currently_running_step_signature(self) -> None:
         """currently_running_step should have correct parameters."""
-        import inspect
-
         mock_planner = Mock(spec=ExecutionPlan)
         orchestrator = ExecutionOrchestrator(mock_planner)
 
@@ -274,8 +260,6 @@ class TestExecutionOrchestratorMethodSignatures:
 
     def test_execute_step_accepts_step_parameter(self) -> None:
         """_execute_step should accept a step parameter."""
-        import inspect
-
         mock_planner = Mock(spec=ExecutionPlan)
         orchestrator = ExecutionOrchestrator(mock_planner)
 
@@ -285,8 +269,6 @@ class TestExecutionOrchestratorMethodSignatures:
 
     def test_process_step_result_accepts_step_parameter(self) -> None:
         """_process_step_result should accept a step parameter."""
-        import inspect
-
         mock_planner = Mock(spec=ExecutionPlan)
         orchestrator = ExecutionOrchestrator(mock_planner)
 
@@ -352,8 +334,6 @@ class TestSyncModeSkipsMyManager:
 
 class TestEnterAcceptsRunContext:
     def test_enter_accepts_run_context_parameter(self) -> None:
-        import inspect
-
         mock_planner = Mock(spec=ExecutionPlan)
         orchestrator = ExecutionOrchestrator(mock_planner)
 
@@ -361,8 +341,6 @@ class TestEnterAcceptsRunContext:
         assert "run_context" in sig.parameters
 
     def test_run_context_parameter_defaults_to_none(self) -> None:
-        import inspect
-
         mock_planner = Mock(spec=ExecutionPlan)
         orchestrator = ExecutionOrchestrator(mock_planner)
 
@@ -371,8 +349,6 @@ class TestEnterAcceptsRunContext:
 
     def test_enter_signature_has_exactly_five_parameters_in_order(self) -> None:
         """No run_id/carrier/child_bootstrap parameters remain."""
-        import inspect
-
         mock_planner = Mock(spec=ExecutionPlan)
         orchestrator = ExecutionOrchestrator(mock_planner)
 
@@ -408,8 +384,6 @@ class TestEnterSetsRunContextOnCfwRegister:
 
 class TestEnterRejectsUnpicklableChildBootstrapBeforeSpawningAManager:
     def test_multiprocessing_mode_with_unpicklable_bootstrap_raises_before_any_manager_starts(self) -> None:
-        import threading
-
         class _Unpicklable:
             """threading.Lock is never picklable, so a closure over this is unpicklable too."""
 
@@ -453,8 +427,6 @@ class TestExecutionOrchestratorStepLock:
 
     def test_step_lock_is_threading_lock_instance(self) -> None:
         """_step_lock should be an instance of threading.Lock."""
-        import threading
-
         mock_planner = Mock(spec=ExecutionPlan)
 
         orchestrator = ExecutionOrchestrator(mock_planner)

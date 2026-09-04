@@ -3,6 +3,10 @@ name: Release
 on:
   workflow_dispatch:
 
+concurrency:
+  group: release
+  cancel-in-progress: false
+
 jobs:
   github_release:
     name: GitHub Release
@@ -103,11 +107,18 @@ jobs:
 
       - name: Capture released commit SHA
         id: release_sha
-        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+        if: steps.semantic.outputs.new_release_published == 'true'
+        env:
+          VERSION: ${{ steps.semantic.outputs.new_release_version }}
+        run: |
+          sha=$(git rev-parse --verify "refs/tags/$VERSION^{commit}")
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
 
   publish:
     needs: github_release
-    if: needs.github_release.outputs.new_release_published == 'true'
+    if: >-
+      needs.github_release.outputs.new_release_published == 'true' &&
+      needs.github_release.outputs.new_release_sha != ''
     runs-on: ubuntu-24.04
     steps:
       - name: Check out the released commit

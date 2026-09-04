@@ -1,4 +1,4 @@
-from typing import Any, Optional
+from typing import Any
 
 import pytest
 
@@ -23,7 +23,7 @@ from mloda_plugins.compute_framework.base_implementations.pandas.dataframe impor
 
 class ReadFGS1(FeatureGroup):
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator(supports_features={cls.get_class_name()})
 
     @classmethod
@@ -33,7 +33,7 @@ class ReadFGS1(FeatureGroup):
 
 class AggFGS1(FeatureGroup):
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator(supports_features={"agg_sum_s1", "agg_count_s1", "agg_avg_s1"})
 
     @classmethod
@@ -43,7 +43,7 @@ class AggFGS1(FeatureGroup):
 
 
 class ConsumerFGS1(FeatureGroup):
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return {
             Feature(name=ReadFGS1.get_class_name()),
             Feature(name="agg_sum_s1", options={"agg_type": "sum"}),
@@ -61,7 +61,7 @@ class ConsumerFGS1(FeatureGroup):
 
 class BaseAggS2(FeatureGroup):
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator(supports_features={cls.get_class_name()})
 
     @classmethod
@@ -83,7 +83,7 @@ class AvgAggS2(BaseAggS2):
 
 class ReadFGS2(FeatureGroup):
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator(supports_features={cls.get_class_name()})
 
     @classmethod
@@ -92,7 +92,7 @@ class ReadFGS2(FeatureGroup):
 
 
 class ConsumerFGS2(FeatureGroup):
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return {
             Feature(name=ReadFGS2.get_class_name()),
             Feature(name=SumAggS2.get_class_name()),
@@ -110,7 +110,7 @@ class ConsumerFGS2(FeatureGroup):
 
 class ReadFGS3(FeatureGroup):
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator(supports_features={cls.get_class_name()})
 
     @classmethod
@@ -120,7 +120,7 @@ class ReadFGS3(FeatureGroup):
 
 class SumFGS3(FeatureGroup):
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator(supports_features={cls.get_class_name()})
 
     @classmethod
@@ -130,7 +130,7 @@ class SumFGS3(FeatureGroup):
 
 class CountFGS3(FeatureGroup):
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator(supports_features={cls.get_class_name()})
 
     @classmethod
@@ -140,7 +140,7 @@ class CountFGS3(FeatureGroup):
 
 class AvgFGS3(FeatureGroup):
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator(supports_features={cls.get_class_name()})
 
     @classmethod
@@ -149,7 +149,7 @@ class AvgFGS3(FeatureGroup):
 
 
 class ConsumerFGS3(FeatureGroup):
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return {
             Feature(name=ReadFGS3.get_class_name()),
             Feature(name=SumFGS3.get_class_name()),

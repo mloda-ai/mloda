@@ -3,7 +3,7 @@
 A second consumer sharing the same link does not change that outcome.
 """
 
-from typing import Any, Optional
+from typing import Any
 
 import pytest
 
@@ -46,7 +46,7 @@ class SharedAppendSource(FeatureGroup):
     """Serves both sides of the append; each side is pinned to a different framework."""
 
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator(
             supports_features={"stack_left_key", "stack_left_payload", "stack_right_key", "stack_right_payload"}
         )
@@ -73,7 +73,7 @@ def _append_sides() -> set[Feature]:
 class SharedAppendPandasConsumer(FeatureGroup):
     """Resolves to the right framework only, so it differs from the left index feature."""
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return _append_sides()
 
     @classmethod
@@ -89,7 +89,7 @@ class SharedAppendPandasConsumer(FeatureGroup):
 class SharedAppendFlexibleConsumer(FeatureGroup):
     """Second consumer of the same link, kept unpinned so only the link is shared."""
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return _append_sides()
 
     @classmethod

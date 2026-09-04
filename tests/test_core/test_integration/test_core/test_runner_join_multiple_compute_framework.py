@@ -1,4 +1,4 @@
-from typing import Any, Optional
+from typing import Any
 import pytest
 from mloda.provider import BaseInputData
 from mloda.provider import DataCreator
@@ -44,7 +44,7 @@ COMPUTE_FRAMEWORKS: set[type[ComputeFramework]] = {
 
 class JoinCfwTest1(FeatureGroup):
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator({cls.get_class_name()})
 
     @classmethod
@@ -58,7 +58,7 @@ class JoinCfwTest1(FeatureGroup):
 
 class JoinCfwTest2(FeatureGroup):
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator({cls.get_class_name()})
 
     @classmethod
@@ -72,7 +72,7 @@ class JoinCfwTest2(FeatureGroup):
 
 class JoinCfwTest3(FeatureGroup):
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator({cls.get_class_name()})
 
     @classmethod
@@ -86,7 +86,7 @@ class JoinCfwTest3(FeatureGroup):
 
 class JoinCfwTest4(FeatureGroup):
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator({cls.get_class_name()})
 
     @classmethod
@@ -102,7 +102,7 @@ class JoinCfwTest4(FeatureGroup):
 
 
 class Join2CfwTest(FeatureGroup):
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return {Feature.int32_of("JoinCfwTest1"), Feature.int32_of("JoinCfwTest2")}
 
     @classmethod
@@ -113,7 +113,7 @@ class Join2CfwTest(FeatureGroup):
 
 
 class Join3CfwTest(FeatureGroup):
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return {Feature.int32_of("JoinCfwTest1"), Feature.int32_of("JoinCfwTest2"), Feature.int32_of("JoinCfwTest3")}
 
     @classmethod
@@ -129,7 +129,7 @@ class Join3CfwTest(FeatureGroup):
 
 
 class Join4CfwTest(Join3CfwTest):
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return {
             Feature.int32_of("JoinCfwTest1"),
             Feature.int32_of("JoinCfwTest2"),
@@ -154,7 +154,7 @@ class MultiIndexJoinTest1(FeatureGroup):
     """Feature group using Pandas framework with 2-column multi-index."""
 
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator({cls.get_class_name()})
 
     @classmethod
@@ -174,7 +174,7 @@ class MultiIndexJoinTest2(FeatureGroup):
     """Feature group using PolarsLazy framework with 2-column multi-index."""
 
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator({cls.get_class_name()})
 
     @classmethod
@@ -194,7 +194,7 @@ class MultiIndexJoinTest3(FeatureGroup):
     """Feature group using PyArrow framework with 2-column multi-index."""
 
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator({cls.get_class_name()})
 
     @classmethod
@@ -214,7 +214,7 @@ class MultiIndexJoinTest4(FeatureGroup):
     """Feature group using PythonDict framework with 2-column multi-index."""
 
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator({cls.get_class_name()})
 
     @classmethod
@@ -233,7 +233,7 @@ class MultiIndexJoinTest4(FeatureGroup):
 class JoinMultiIndexTest(FeatureGroup):
     """Consumer feature group that uses all 4 multi-index feature groups."""
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return {
             Feature.int32_of("MultiIndexJoinTest1"),
             Feature.int32_of("MultiIndexJoinTest2"),

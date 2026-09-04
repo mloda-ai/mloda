@@ -18,7 +18,7 @@ from collections.abc import Callable
 from copy import deepcopy
 from dataclasses import dataclass
 from functools import partial
-from typing import Any, Optional, TypeVar
+from typing import Any, TypeVar
 
 import pytest
 
@@ -102,7 +102,7 @@ FALSY_RETURNS: dict[str, Any] = {**FALSY_NON_BOOL_RETURNS, "literal_false": Fals
 TRUTHY_RETURNS: dict[str, Any] = {**TRUTHY_NON_BOOL_RETURNS, "literal_true": True}
 
 
-def _capture(call: Callable[[], T]) -> tuple[Optional[T], Optional[str]]:
+def _capture(call: Callable[[], T]) -> tuple[T | None, str | None]:
     """Run call, returning (value, None) or (None, 'Type: message'). No traceback is retained."""
     try:
         return call(), None
@@ -152,7 +152,7 @@ def _make_non_bool_matcher_fg(returned: Any) -> type[FeatureGroup]:
             cls,
             feature_name: FeatureName | str,
             options: Options,
-            data_access_collection: Optional[DataAccessCollection] = None,
+            data_access_collection: DataAccessCollection | None = None,
         ) -> Any:  # Any, not bool: returning a non-bool out of a `-> bool` hook is the case under test.
             if str(feature_name) == FILTER_FEATURE:
                 return returned
@@ -175,7 +175,7 @@ def _make_mutating_exploding_bool_fg() -> type[FeatureGroup]:
             cls,
             feature_name: FeatureName | str,
             options: Options,
-            data_access_collection: Optional[DataAccessCollection] = None,
+            data_access_collection: DataAccessCollection | None = None,
         ) -> Any:  # Any, not bool: the write lands, then reading the return value is what raises.
             options.add_to_group(OPTION_KEY_927, OPTION_VALUE_927)
             return ExplodingBool927()
@@ -190,7 +190,7 @@ class _CriteriaSnapshot:
     is_false: bool
     is_true: bool
     shown: str
-    escaped: Optional[str]
+    escaped: str | None
     entries: tuple[tuple[str, str], ...]
     reasons: tuple[str, ...]
     warnings: tuple[str, ...]
@@ -206,7 +206,7 @@ def _drive_criteria(returned: Any, caplog: pytest.LogCaptureFixture, calls: int 
     declared = _single(FILTER_FEATURE)
     try:
         value: Any = None
-        escaped: Optional[str] = None
+        escaped: str | None = None
         with caplog.at_level(logging.DEBUG, logger=GF_LOGGER_NAME):
             for _ in range(calls):
                 value, escaped = _capture(partial(global_filter.criteria, fg, deepcopy(declared), None))
@@ -230,7 +230,7 @@ class _MatchedFilterSnapshot:
     """Plain-data readout of one identify_matched_filters call. Holds no class and no filter object."""
 
     names: tuple[str, ...]
-    escaped: Optional[str]
+    escaped: str | None
     entries: tuple[tuple[str, str], ...]
 
 
@@ -261,7 +261,7 @@ class _RawCriteriaGlobalFilter927(GlobalFilter):
         self,
         feature_group: type[FeatureGroup],
         filter: SingleFilter,
-        data_access_collection: Optional[DataAccessCollection] = None,
+        data_access_collection: DataAccessCollection | None = None,
     ) -> Any:  # Any, not bool: bypassing the coercion inside criteria is the point of this double.
         return self.raw
 
@@ -293,7 +293,7 @@ class _ResolutionSnapshot:
     is_false: bool
     is_true: bool
     shown: str
-    escaped: Optional[str]
+    escaped: str | None
     warnings: tuple[str, ...]
     matcher_errors: tuple[tuple[str, str], ...]
     option_keys: tuple[str, ...]
@@ -328,7 +328,7 @@ def _drive_resolution(build: Callable[[], type[FeatureGroup]], caplog: pytest.Lo
 class _EliminationSnapshot:
     """Plain-data readout of one evaluate() pass. Holds no class and no Elimination object."""
 
-    escaped: Optional[str]
+    escaped: str | None
     identified: tuple[str, ...]
     eliminations: tuple[tuple[str, str, str], ...]
 
@@ -586,7 +586,7 @@ def _make_e2e_probe_fg() -> type[FeatureGroup]:
             cls,
             feature_name: FeatureName | str,
             options: Options,
-            data_access_collection: Optional[DataAccessCollection] = None,
+            data_access_collection: DataAccessCollection | None = None,
         ) -> Any:  # Any, not bool: returning None out of a `-> bool` hook is the case under test.
             if str(feature_name) == E2E_TARGET:
                 return None
@@ -618,7 +618,7 @@ def _single_row(frame: Any, column: str) -> Any:
     return values[0]
 
 
-def _run() -> tuple[Optional[dict[str, Any]], Optional[str]]:
+def _run() -> tuple[dict[str, Any] | None, str | None]:
     """Run E2E_MAIN under a filter whose hook answers None; the escape is text, never an exception object."""
     fg = _make_e2e_probe_fg()
     collector = PluginCollector.enabled_feature_groups({fg})
@@ -698,7 +698,7 @@ def _make_unnameable_group_fg() -> type[FeatureGroup]:
             cls,
             feature_name: FeatureName | str,
             options: Options,
-            data_access_collection: Optional[DataAccessCollection] = None,
+            data_access_collection: DataAccessCollection | None = None,
         ) -> Any:  # Any, not bool: the None below is the falsy non-bool whose report then names the group.
             if str(feature_name) == FILTER_FEATURE:
                 return None
@@ -713,7 +713,7 @@ class _DegradedReportSnapshot:
 
     is_false: bool
     shown: str
-    escaped: Optional[str]
+    escaped: str | None
     drops: int
     warnings: tuple[str, ...]
 
@@ -745,7 +745,7 @@ def _drive_criteria_of(
 class _MatchingPassSnapshot:
     """Plain-data readout of one identify_matched_filters call. Holds no class and no filter object."""
 
-    escaped: Optional[str]
+    escaped: str | None
     names: tuple[str, ...]
     drops: int
 
@@ -830,7 +830,7 @@ def _make_unreadable_report_e2e_fg() -> type[FeatureGroup]:
             cls,
             feature_name: FeatureName | str,
             options: Options,
-            data_access_collection: Optional[DataAccessCollection] = None,
+            data_access_collection: DataAccessCollection | None = None,
         ) -> Any:  # Any, not bool: the falsy non-bool below is what the filter seam then tries to report.
             if str(feature_name) == E2E_TARGET:
                 return UnnameableFalsy991()
@@ -852,7 +852,7 @@ def _make_unreadable_report_e2e_fg() -> type[FeatureGroup]:
     return UnreadableReportE2EFG991
 
 
-def _run_built(build: Callable[[], type[FeatureGroup]]) -> tuple[Optional[dict[str, Any]], Optional[str]]:
+def _run_built(build: Callable[[], type[FeatureGroup]]) -> tuple[dict[str, Any] | None, str | None]:
     """Run E2E_MAIN under a filter matched by a group `build` makes; the escape is text, never an exception."""
     fg = build()
     collector = PluginCollector.enabled_feature_groups({fg})

@@ -20,7 +20,7 @@ plugin registry.
 
 from __future__ import annotations
 
-from typing import Any, ClassVar, Optional
+from typing import Any, ClassVar
 
 import pandas as pd
 
@@ -60,7 +60,7 @@ class ForwardingE2ESourceGroup(FeatureGroup):
         cls.invocation_count = 0
 
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator({SOURCE_NAME})
 
     @classmethod
@@ -93,7 +93,7 @@ class _ForwardingE2EConsumerBase(FeatureGroup):
         cls,
         feature_name: FeatureName | str,
         options: Options,
-        data_access_collection: Optional[DataAccessCollection] = None,
+        data_access_collection: DataAccessCollection | None = None,
     ) -> bool:
         return str(feature_name) == cls.FEATURE_NAME
 
@@ -116,7 +116,7 @@ class ForwardingE2EDefaultConsumer(_ForwardingE2EConsumerBase):
 
     FEATURE_NAME = "forwarding_e2e_579_default_consumer"
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return {Feature(SOURCE_NAME)}
 
 
@@ -125,7 +125,7 @@ class ForwardingE2EAllowlistConsumer(_ForwardingE2EConsumerBase):
 
     FEATURE_NAME = "forwarding_e2e_579_allowlist_consumer"
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return {Feature(SOURCE_NAME, forward_group={"backend"})}
 
 
@@ -134,7 +134,7 @@ class ForwardingE2EIsolatedConsumer(_ForwardingE2EConsumerBase):
 
     FEATURE_NAME = "forwarding_e2e_579_isolated_consumer"
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return {Feature(SOURCE_NAME, forward_group=False)}
 
 
@@ -143,7 +143,7 @@ class ForwardingE2EExcludeConsumer(_ForwardingE2EConsumerBase):
 
     FEATURE_NAME = "forwarding_e2e_579_exclude_consumer"
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return {Feature(SOURCE_NAME, forward_group_exclude={"top_k"})}
 
 
@@ -152,7 +152,7 @@ class ForwardingE2EContextConsumer(_ForwardingE2EConsumerBase):
 
     FEATURE_NAME = "forwarding_e2e_579_context_consumer"
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return {Feature(SOURCE_NAME, inherit_context_keys={"tenant"})}
 
 
@@ -167,7 +167,7 @@ class ForwardingE2EDedupConsumer(_ForwardingE2EConsumerBase):
 
     FEATURE_NAME = "forwarding_e2e_579_dedup_consumer"
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return {Feature(SOURCE_NAME, forward_group_exclude={"top_k"})}
 
     def set_feature_name(self, config: Options, feature_name: FeatureName) -> FeatureName:

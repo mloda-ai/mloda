@@ -1,5 +1,5 @@
 from abc import ABC
-from typing import Any, Optional, final
+from typing import Any, final
 
 from mloda.core.abstract_plugins.components.feature_set import FeatureSet
 from mloda.core.abstract_plugins.components.options import Options
@@ -48,7 +48,7 @@ class BaseArtifact(ABC):
 
     @final
     @classmethod
-    def load(cls, features: FeatureSet) -> Optional[Any]:
+    def load(cls, features: FeatureSet) -> Any | None:
         """
         Loads an artifact from the given config of the feature set, when the custom_loader is not overwritten.
         If the custom_loader is overwritten, this method will call the custom_loader and return the result.
@@ -71,7 +71,7 @@ class BaseArtifact(ABC):
         return loaded_artifact
 
     @classmethod
-    def custom_loader(cls, features: FeatureSet) -> Optional[Any]:
+    def custom_loader(cls, features: FeatureSet) -> Any | None:
         """
         In the default case, it loads an artifact from the given config of the features.
 
@@ -113,7 +113,7 @@ class BaseArtifact(ABC):
 
     @final
     @classmethod
-    def save(cls, features: FeatureSet, artifact: Any) -> Optional[Any]:
+    def save(cls, features: FeatureSet, artifact: Any) -> Any | None:
         """
         The default implementation is to return the artifact, as then the framework will handle it.
 
@@ -138,7 +138,7 @@ class BaseArtifact(ABC):
         return artifact
 
     @classmethod
-    def custom_saver(cls, features: FeatureSet, artifact: Any) -> Optional[Any]:
+    def custom_saver(cls, features: FeatureSet, artifact: Any) -> Any | None:
         """
         Subclasses can override this method to implement custom saving logic.
 

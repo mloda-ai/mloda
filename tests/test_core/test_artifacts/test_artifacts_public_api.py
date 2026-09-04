@@ -5,7 +5,7 @@ Validates the patterns documented in docs/docs/in_depth/artifacts.md:
   2. run_all() for loading artifacts via options
 """
 
-from typing import Any, Optional
+from typing import Any
 
 from mloda.provider import BaseArtifact, BaseInputData, DataCreator, FeatureGroup, FeatureSet
 from mloda.user import Feature, mloda
@@ -16,7 +16,7 @@ class PublicApiArtifactFeature(FeatureGroup):
     """Artifact feature group mirroring the documentation example."""
 
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator({cls.get_class_name()})
 
     @staticmethod

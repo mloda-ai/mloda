@@ -1,5 +1,5 @@
 from multiprocessing.managers import BaseManager
-from typing import Any, Optional
+from typing import Any
 from uuid import UUID
 
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
@@ -30,7 +30,7 @@ class CfwManager:
     def __init__(
         self,
         parallelization_modes: set[ParallelizationMode],
-        function_extender: Optional[set[Extender]] = None,
+        function_extender: set[Extender] | None = None,
     ) -> None:
         """
         Initializes the CfwManager.
@@ -47,7 +47,7 @@ class CfwManager:
         ] = {}  # cfw uuid -> (cfw class name, children_if_root)
         self.cfw_merge_relation: dict[UUID, tuple[UUID, str]] = {}  # merge relation
 
-        self.location: Optional[str] = None  # multiprocessing location
+        self.location: str | None = None  # multiprocessing location
         self.error = False  # multiprocessing error flag
         self.msg: Any = None
         self.exc_info: Any = None
@@ -58,9 +58,9 @@ class CfwManager:
 
         self.artifact_to_save: dict[str, Any] = {}
 
-        self.runtime_artifacts: Optional[dict[str, Any]] = None
+        self.runtime_artifacts: dict[str, Any] | None = None
 
-        self.api_data: Optional[dict[str, Any]] = None
+        self.api_data: dict[str, Any] | None = None
 
         self.run_context: RunContext = RunContext()
 
@@ -68,7 +68,7 @@ class CfwManager:
         """Associates a set of Flyway dataset UUIDs with a Compute Framework UUID."""
         self.uuid_flyway_datasets[cf_uuid] = object_ids
 
-    def get_uuid_flyway_datasets(self, cf_uuid: UUID) -> Optional[set[UUID]]:
+    def get_uuid_flyway_datasets(self, cf_uuid: UUID) -> set[UUID] | None:
         """Retrieves the set of Flyway dataset UUIDs associated with a Compute Framework UUID."""
         return self.uuid_flyway_datasets.get(cf_uuid, None)
 
@@ -84,7 +84,7 @@ class CfwManager:
         self,
         cf_class_name: str,
         feature_uuid: UUID,
-    ) -> Optional[UUID]:
+    ) -> UUID | None:
         """
         Retrieves the UUID of a Compute Framework based on its class name and a feature UUID.
 
@@ -104,7 +104,7 @@ class CfwManager:
                 return cfw_uuid
         return None
 
-    def get_unique_cfw_uuid(self, cf_class_name: str, tfs_ids: set[UUID]) -> Optional[UUID]:
+    def get_unique_cfw_uuid(self, cf_class_name: str, tfs_ids: set[UUID]) -> UUID | None:
         """
         Resolves a set of tfs_ids to at most one distinct Compute Framework UUID.
 
@@ -212,7 +212,7 @@ class CfwManager:
         if not self.location:
             self.location = location
 
-    def get_location(self) -> Optional[str]:
+    def get_location(self) -> str | None:
         """Retrieves the location for multiprocessing."""
         return self.location
 
@@ -246,7 +246,7 @@ class CfwManager:
         """Retrieves the exception information."""
         return self.exc_info
 
-    def get_function_extender(self) -> Optional[set[Extender]]:
+    def get_function_extender(self) -> set[Extender] | None:
         """Retrieves the optional set of function extenders."""
         return self.function_extender
 
@@ -271,7 +271,7 @@ class CfwManager:
         """Sets runtime artifacts passed to run() for load-mode resolution."""
         self.runtime_artifacts = artifacts
 
-    def get_runtime_artifacts(self) -> Optional[dict[str, Any]]:
+    def get_runtime_artifacts(self) -> dict[str, Any] | None:
         """Retrieves runtime artifacts, or None if not provided."""
         return self.runtime_artifacts
 
@@ -279,7 +279,7 @@ class CfwManager:
         """Sets the API data."""
         self.api_data = api_data
 
-    def get_api_data_by_name(self, key: str) -> Optional[Any]:
+    def get_api_data_by_name(self, key: str) -> Any | None:
         """
         Retrieves API data by name.
 

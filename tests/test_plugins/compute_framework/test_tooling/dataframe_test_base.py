@@ -6,7 +6,7 @@ for merge operations across all compute frameworks.
 """
 
 from abc import ABC, abstractmethod
-from typing import Any, Optional
+from typing import Any
 
 from mloda.user import Index
 from mloda.user import JoinType
@@ -45,7 +45,7 @@ class DataFrameTestBase(ABC):
         pass
 
     @abstractmethod
-    def get_connection(self) -> Optional[Any]:
+    def get_connection(self) -> Any | None:
         """Return framework connection object, or None if not needed."""
         pass
 
@@ -68,7 +68,7 @@ class DataFrameTestBase(ABC):
         actual = len(result)
         assert actual == expected, f"Expected {expected} rows, got {actual}"
 
-    def _assert_result_equals(self, result: Any, expected: Any, sort_columns: Optional[list[str]] = None) -> None:
+    def _assert_result_equals(self, result: Any, expected: Any, sort_columns: list[str] | None = None) -> None:
         """Perform framework-aware equality check."""
         if sort_columns is not None:
             result = result.sort(sort_columns)

@@ -5,7 +5,7 @@ when compared to incompatible types. Per Python data model conventions, __eq__
 should return NotImplemented (which Python translates to False) rather than raising.
 """
 
-from typing import Any, Optional
+from typing import Any
 
 import pytest
 
@@ -25,7 +25,7 @@ class _EqTestFeatureGroup(FeatureGroup):
     discovers it via FeatureGroup.__subclasses__().
     """
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Any]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Any] | None:
         return None
 
 

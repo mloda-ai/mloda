@@ -18,8 +18,6 @@ Contract under test (to be implemented by the Green agent):
 All tests are written to FAIL until the feature exists.
 """
 
-from typing import Optional
-
 import pytest
 
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
@@ -58,13 +56,13 @@ class PlainCapabilityFeatureGroup(FeatureGroup):
         cls,
         feature_name: FeatureName | str,
         options: Options,
-        data_access_collection: Optional[DataAccessCollection] = None,
+        data_access_collection: DataAccessCollection | None = None,
     ) -> bool:
         if isinstance(feature_name, FeatureName):
             feature_name = str(feature_name)
         return feature_name == CAPABILITY_FEATURE
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return None
 
 
@@ -79,7 +77,7 @@ class RejectBCapabilityFeatureGroup(FeatureGroup):
         cls,
         feature_name: FeatureName | str,
         options: Options,
-        data_access_collection: Optional[DataAccessCollection] = None,
+        data_access_collection: DataAccessCollection | None = None,
     ) -> bool:
         if isinstance(feature_name, FeatureName):
             feature_name = str(feature_name)
@@ -94,7 +92,7 @@ class RejectBCapabilityFeatureGroup(FeatureGroup):
     ) -> bool:
         return compute_framework is not CapabilityFwB
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return None
 
 
@@ -106,7 +104,7 @@ class RejectAllCapabilityFeatureGroup(FeatureGroup):
         cls,
         feature_name: FeatureName | str,
         options: Options,
-        data_access_collection: Optional[DataAccessCollection] = None,
+        data_access_collection: DataAccessCollection | None = None,
     ) -> bool:
         if isinstance(feature_name, FeatureName):
             feature_name = str(feature_name)
@@ -121,7 +119,7 @@ class RejectAllCapabilityFeatureGroup(FeatureGroup):
     ) -> bool:
         return False
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return None
 
 
@@ -143,7 +141,7 @@ class DualDeclaringFG_782(FeatureGroup):
         cls,
         feature_name: FeatureName | str,
         options: Options,
-        data_access_collection: Optional[DataAccessCollection] = None,
+        data_access_collection: DataAccessCollection | None = None,
     ) -> bool:
         if isinstance(feature_name, FeatureName):
             feature_name = str(feature_name)
@@ -158,7 +156,7 @@ class DualDeclaringFG_782(FeatureGroup):
     ) -> bool:
         return compute_framework is not CapabilityFwB
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return None
 
 

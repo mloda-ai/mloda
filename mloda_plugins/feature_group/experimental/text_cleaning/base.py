@@ -5,7 +5,7 @@ Base implementation for text cleaning feature groups.
 from __future__ import annotations
 
 from abc import abstractmethod
-from typing import Any, Optional
+from typing import Any
 
 from mloda.provider import FeatureGroup
 from mloda.user import Feature
@@ -134,7 +134,7 @@ class TextCleaningFeatureGroup(FeatureChainParserMixin, FeatureGroup):
         return cls._extract_operation_and_source_feature(feature, cls._extract_cleaning_operations, "operations")
 
     @classmethod
-    def _extract_cleaning_operations(cls, feature: Feature) -> Optional[tuple[Any, Any]]:
+    def _extract_cleaning_operations(cls, feature: Feature) -> tuple[Any, Any] | None:
         """Cleaning operations from feature options (both paths), or None when absent."""
         operations = feature.options.get(cls.CLEANING_OPERATIONS)
         return operations if operations is not None else None

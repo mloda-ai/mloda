@@ -12,7 +12,7 @@ Not to be confused with the legacy ``test_python_dict_framework.py`` which still
 row-wise contract; that module is superseded by this one under the columnar model.
 """
 
-from typing import Any, Optional
+from typing import Any
 
 import pytest
 
@@ -216,7 +216,7 @@ class _ColumnarZeroRowFeatureGroup(FeatureGroup, _EmptyResultMatchData):
     """Root FG returning a schema-bearing zero-row columnar dict, with NO opt-in flag."""
 
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator(supports_features={"columnar_zero_row_col"})
 
     @classmethod
@@ -232,7 +232,7 @@ class _ColumnarZeroColumnFeatureGroup(FeatureGroup, _EmptyResultMatchData):
     """Root FG returning a schema-less ``{}`` (zero columns), with NO opt-in flag."""
 
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator(supports_features={"columnar_zero_column_col"})
 
     @classmethod

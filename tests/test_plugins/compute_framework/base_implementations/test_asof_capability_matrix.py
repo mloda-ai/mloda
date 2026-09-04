@@ -6,7 +6,7 @@ Keep ``ASOF_CAPABILITY_MATRIX`` in sync with docs/docs/in_depth/join_data.md.
 
 import sqlite3
 from datetime import datetime, timedelta
-from typing import Any, Callable, Optional
+from typing import Any, Callable
 
 import pytest
 
@@ -82,7 +82,7 @@ class BackendSpec:
         name: str,
         engine_class: type[BaseMergeEngine] | None,
         framework_type: type[Any] | None,
-        connection_factory: Callable[[], Optional[Any]],
+        connection_factory: Callable[[], Any | None],
         missing: bool,
     ) -> None:
         self.name = name

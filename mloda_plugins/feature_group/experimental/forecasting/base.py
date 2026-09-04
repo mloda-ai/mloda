@@ -5,7 +5,7 @@ Base implementation for forecasting feature groups.
 from __future__ import annotations
 
 from abc import abstractmethod
-from typing import Any, Optional
+from typing import Any
 
 from mloda.provider import FeatureGroup
 from mloda.provider import BaseArtifact
@@ -184,7 +184,7 @@ class ForecastingFeatureGroup(TimeReferenceMixin, FeatureChainParserMixin, Featu
         """
         return ForecastingArtifact
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         """Extract source feature and time filter feature from either configuration-based options or string parsing."""
 
         source_feature: str | None = None
@@ -444,7 +444,7 @@ class ForecastingFeatureGroup(TimeReferenceMixin, FeatureChainParserMixin, Featu
         return True
 
     @classmethod
-    def _extract_forecast_params(cls, feature: Feature) -> tuple[Optional[str], Optional[int], Optional[str]]:
+    def _extract_forecast_params(cls, feature: Feature) -> tuple[str | None, int | None, str | None]:
         """
         Extract forecast-specific parameters (algorithm, horizon, time_unit) from a feature.
 
@@ -509,8 +509,8 @@ class ForecastingFeatureGroup(TimeReferenceMixin, FeatureChainParserMixin, Featu
         time_unit: str,
         in_features: list[str],
         time_filter_feature: str,
-        model_artifact: Optional[Any] = None,
-    ) -> tuple[Any, Optional[Any]]:
+        model_artifact: Any | None = None,
+    ) -> tuple[Any, Any | None]:
         """
         Method to perform the forecasting. Should be implemented by subclasses.
 
@@ -542,8 +542,8 @@ class ForecastingFeatureGroup(TimeReferenceMixin, FeatureChainParserMixin, Featu
         time_unit: str,
         in_features: list[str],
         time_filter_feature: str,
-        model_artifact: Optional[Any] = None,
-    ) -> tuple[Any, Any, Any, Optional[Any]]:
+        model_artifact: Any | None = None,
+    ) -> tuple[Any, Any, Any, Any | None]:
         """
         Method to perform forecasting and return point forecast plus confidence intervals.
 

@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from enum import Enum
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Any
 import functools
 import inspect
 import logging
@@ -124,7 +124,7 @@ class Extender(ABC):
         return feature_set.options
 
 
-def get_function_extender(function_extender: set[Extender], hook: ExtenderHook) -> Optional[Extender]:
+def get_function_extender(function_extender: set[Extender], hook: ExtenderHook) -> Extender | None:
     """Select the Extender(s) wrapping hook: None, the sole match, or a priority-sorted _CompositeExtender."""
     matching_extenders = [ext for ext in function_extender if hook in ext.wraps()]
     if len(matching_extenders) == 0:
@@ -138,7 +138,7 @@ def get_function_extender(function_extender: set[Extender], hook: ExtenderHook) 
 class _CompositeExtender(Extender):
     """Internal class that chains multiple Extenders in priority order."""
 
-    def __init__(self, extenders: list[Extender], function_type: Optional[ExtenderHook] = None):
+    def __init__(self, extenders: list[Extender], function_type: ExtenderHook | None = None):
         self.extenders = sorted(extenders, key=lambda e: e.priority)
         self.function_type = function_type
 

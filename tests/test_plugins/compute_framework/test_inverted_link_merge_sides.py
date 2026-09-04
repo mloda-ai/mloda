@@ -3,7 +3,7 @@
 Asymmetric key sets and differing index column names make a swapped merge observable.
 """
 
-from typing import Any, Optional
+from typing import Any
 
 import pytest
 
@@ -26,7 +26,7 @@ from mloda_plugins.compute_framework.base_implementations.pyarrow.table import P
 
 class AsymLeftSource(FeatureGroup):
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator(supports_features={"asym_left_key", "asym_left_payload"})
 
     @classmethod
@@ -40,7 +40,7 @@ class AsymLeftSource(FeatureGroup):
 
 class AsymRightSource(FeatureGroup):
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator(supports_features={"asym_right_key", "asym_right_payload"})
 
     @classmethod
@@ -55,7 +55,7 @@ class AsymRightSource(FeatureGroup):
 class AsymJoinChild(FeatureGroup):
     """Only the right framework is supported, which inverts the declared link orientation."""
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return {
             Feature(name="asym_left_key"),
             Feature(name="asym_left_payload"),

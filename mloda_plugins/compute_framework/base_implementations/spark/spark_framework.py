@@ -1,6 +1,6 @@
 import logging
 from collections.abc import Sequence
-from typing import Any, Optional
+from typing import Any
 from mloda.core.abstract_plugins.components.data_types import DataType
 from mloda.provider import BaseMergeEngine
 from mloda_plugins.compute_framework.base_implementations.spark.spark_merge_engine import SparkMergeEngine
@@ -36,7 +36,7 @@ class SparkFramework(ComputeFramework):
     It requires a SparkSession to be provided through the framework connection object.
     """
 
-    def set_framework_connection_object(self, framework_connection_object: Optional[Any] = None) -> None:
+    def set_framework_connection_object(self, framework_connection_object: Any | None = None) -> None:
         """Use given SparkSession connection."""
         if SparkSession is None:
             raise ImportError("PySpark is not installed. To be able to use this framework, please install pyspark.")
@@ -82,8 +82,8 @@ class SparkFramework(ComputeFramework):
         self,
         data: Any,
         selected_feature_names: Sequence[FeatureName],
-        column_ordering: Optional[str] = None,
-        request_feature_order: Optional[list[str]] = None,
+        column_ordering: str | None = None,
+        request_feature_order: list[str] | None = None,
     ) -> Any:
         column_names = set(data.columns)
         _selected_feature_names = self.identify_naming_convention(
@@ -99,7 +99,7 @@ class SparkFramework(ComputeFramework):
             return str(data.schema[column_name].dataType)
         return None
 
-    def _extract_column_data_type(self, data: Any, column_name: str) -> Optional[DataType]:
+    def _extract_column_data_type(self, data: Any, column_name: str) -> DataType | None:
         if column_name not in data.columns:
             return None
         spark_type = data.schema[column_name].dataType

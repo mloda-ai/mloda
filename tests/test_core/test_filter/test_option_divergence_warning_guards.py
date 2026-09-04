@@ -7,7 +7,7 @@ call the seam directly: every guard below decides nothing but whether one log li
 from __future__ import annotations
 
 import logging
-from typing import Any, Optional
+from typing import Any
 
 import pytest
 
@@ -46,12 +46,12 @@ class _ArrayLikeDefault:
         return "<array-like default>"
 
 
-def _emit(mapping: Optional[dict[str, PropertySpec]], feat_options: Options, filter_options: Options) -> None:
+def _emit(mapping: dict[str, PropertySpec] | None, feat_options: Options, filter_options: Options) -> None:
     """Run the seam once against a throwaway group; ``mapping`` None means no resolving group.
 
     The probe class stays local to this frame, so it cannot leak into the registry.
     """
-    feature_group: Optional[type[FeatureGroup]] = None
+    feature_group: type[FeatureGroup] | None = None
     if mapping is not None:
 
         class DwgProbeFeatureGroup(FeatureGroup):

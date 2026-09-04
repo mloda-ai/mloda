@@ -6,10 +6,10 @@ feature configuration files.
 """
 
 from dataclasses import dataclass, field, fields
-from typing import Any, Optional
+from typing import Any
 
 
-def validate_feature_group_scope(value: Any) -> Optional[str]:
+def validate_feature_group_scope(value: Any) -> str | None:
     """Config scope is a non-empty class-name string; the class-object form is Python-only."""
     # Local import: feature_group pulls in the plugin machinery, which this data-model module stays free of.
     from mloda.core.abstract_plugins.components.feature import normalize_feature_group_scope
@@ -34,7 +34,7 @@ def validate_feature_group_scope(value: Any) -> Optional[str]:
     return value
 
 
-def validate_feature_group_not_in_options(options: Optional[dict[str, Any]], container_name: str) -> None:
+def validate_feature_group_not_in_options(options: dict[str, Any] | None, container_name: str) -> None:
     """Scope is a config field, not an option: a top-level 'feature_group' key in a container is a misplacement."""
     if options and "feature_group" in options:
         raise ValueError(
@@ -51,12 +51,12 @@ class FeatureConfig:
     name: str = field(metadata={"nested": True})
     options: dict[str, Any] = field(default_factory=dict, metadata={"nested": True})
     # A nested in_features dict reuses this field for a single source name or a further nested feature dict.
-    in_features: Optional[list[str] | dict[str, Any] | str] = field(default=None, metadata={"nested": True})
-    group_options: Optional[dict[str, Any]] = None
-    context_options: Optional[dict[str, Any]] = None
-    propagate_context_keys: Optional[list[str]] = None
-    column_index: Optional[int] = None
-    feature_group: Optional[str] = field(default=None, metadata={"nested": True})
+    in_features: list[str] | dict[str, Any] | str | None = field(default=None, metadata={"nested": True})
+    group_options: dict[str, Any] | None = None
+    context_options: dict[str, Any] | None = None
+    propagate_context_keys: list[str] | None = None
+    column_index: int | None = None
+    feature_group: str | None = field(default=None, metadata={"nested": True})
 
     def __post_init__(self) -> None:
         """Validate the invariants shared by the top-level and the nested feature dict."""

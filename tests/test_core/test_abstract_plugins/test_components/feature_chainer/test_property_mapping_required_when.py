@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Optional
+from typing import Any
 
 import pandas as pd
 import pytest
@@ -265,10 +265,10 @@ class ConditionalRequiredFeatureGroup(FeatureChainParserMixin, FeatureGroup):
     }
 
     @classmethod
-    def input_data(cls) -> Optional[DataCreator]:
+    def input_data(cls) -> DataCreator | None:
         return DataCreator({"result_feature"})
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Any]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Any] | None:
         return None
 
     @classmethod

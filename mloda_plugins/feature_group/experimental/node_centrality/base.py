@@ -5,7 +5,7 @@ Base implementation for node centrality feature groups.
 from __future__ import annotations
 
 from abc import abstractmethod
-from typing import Any, Optional
+from typing import Any
 
 from mloda.provider import FeatureGroup
 from mloda.user import Feature
@@ -272,7 +272,7 @@ class NodeCentralityFeatureGroup(FeatureChainParserMixin, FeatureGroup):
         return cls._extract_operation_and_source_feature(feature, cls._extract_centrality_type, "centrality type")
 
     @classmethod
-    def _extract_centrality_type(cls, feature: Feature) -> Optional[str]:
+    def _extract_centrality_type(cls, feature: Feature) -> str | None:
         """
         Extract centrality type from a feature.
 
@@ -306,7 +306,7 @@ class NodeCentralityFeatureGroup(FeatureChainParserMixin, FeatureGroup):
         centrality_type: str,
         node_feature: str,
         graph_type: str = "undirected",
-        weight_column: Optional[str] = None,
+        weight_column: str | None = None,
     ) -> Any:
         """
         Method to calculate the centrality. Should be implemented by subclasses.

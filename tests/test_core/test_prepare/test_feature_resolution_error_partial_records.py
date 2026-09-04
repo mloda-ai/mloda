@@ -16,7 +16,7 @@ leak into another module's candidate universe in the parallel suite.
 
 import inspect
 import pickle  # nosec B403
-from typing import Any, Optional
+from typing import Any
 
 import pandas as pd
 import pytest
@@ -46,7 +46,7 @@ class PartialRecordsSource_836pr(FeatureGroup):
     """Pandas root source providing the feature the consumer chains off."""
 
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator({SOURCE_FEATURE_836PR})
 
     @classmethod
@@ -61,7 +61,7 @@ class PartialRecordsSource_836pr(FeatureGroup):
 class PartialRecordsConsumer_836pr(FeatureGroup):
     """Consumes the source feature, so the source resolves as a derived input before the failing request."""
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return {Feature(SOURCE_FEATURE_836PR)}
 
     @classmethod

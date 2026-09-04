@@ -7,7 +7,7 @@ inside a freshly spawned worker (e.g. one under `if __name__ == "__main__":`) ca
 
 import pickle  # nosec
 from collections.abc import Callable, Iterable
-from typing import Any, Optional
+from typing import Any
 
 from mloda.core.abstract_plugins.components.parallelization_modes import ParallelizationMode
 from mloda.core.core.step.feature_group_step import FeatureGroupStep
@@ -124,7 +124,7 @@ def _unpicklable_child_bootstrap_error(child_bootstrap: Callable[[], None]) -> s
     )
 
 
-def raise_on_unpicklable_child_bootstrap(child_bootstrap: Optional[Callable[[], None]]) -> None:
+def raise_on_unpicklable_child_bootstrap(child_bootstrap: Callable[[], None] | None) -> None:
     """Raise ValueError if child_bootstrap is not None and multiprocessing cannot pickle it."""
     if child_bootstrap is None:
         return

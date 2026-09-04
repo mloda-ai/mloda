@@ -12,7 +12,7 @@ from mloda.user import DataAccessCollection, Domain, Feature, Options
 
 class MlLifeCycleDataCreator(DataCreator):
     def matches(
-        self, feature_name: str, options: Options, data_access_collection: Optional[DataAccessCollection] = None
+        self, feature_name: str, options: Options, data_access_collection: DataAccessCollection | None = None
     ) -> bool:
         # This match function is only adjusted as it is part of a larger project. Else this DataCreator might be found by other
         # functionalities as well, e.g. in the testing framework. This should not be the case in a normal project.
@@ -25,7 +25,7 @@ class MlLifeCycleDataCreator(DataCreator):
 
 class OrderSyntheticDataSet(FeatureGroup):
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return MlLifeCycleDataCreator({"order_id", "product_id", "quantity", "item_price", "created_at"})
 
     @classmethod
@@ -48,7 +48,7 @@ class OrderSyntheticDataSet(FeatureGroup):
 
 class PaymentSyntheticDataSet(OrderSyntheticDataSet):
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return MlLifeCycleDataCreator({"payment_id", "payment_type", "payment_status", "created_at", "valid_datetime"})
 
     @classmethod
@@ -73,7 +73,7 @@ class PaymentSyntheticDataSet(OrderSyntheticDataSet):
 
 class LocationSyntheticDataSet(FeatureGroup):
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return MlLifeCycleDataCreator({"transaction_id", "user_location", "merchant_location", "update_date"})
 
     @classmethod
@@ -96,7 +96,7 @@ class LocationSyntheticDataSet(FeatureGroup):
 
 class CategoricalSyntheticDataSet(FeatureGroup):
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return MlLifeCycleDataCreator({"transaction_id", "user_age_group", "product_category", "transaction_type"})
 
     @classmethod

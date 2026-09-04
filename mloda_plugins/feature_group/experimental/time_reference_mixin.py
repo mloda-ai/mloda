@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from typing import Optional
 
 from mloda.core.abstract_plugins.components.contract.comparison_contract import (
     ColumnSemantics,
@@ -32,7 +31,7 @@ class TimeReferenceMixin:
     )
 
     @classmethod
-    def get_reference_time_column(cls, options: Optional[Options] = None) -> str:
+    def get_reference_time_column(cls, options: Options | None = None) -> str:
         """
         Get the reference time column name from options or use the default.
 

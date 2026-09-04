@@ -1,7 +1,7 @@
 """E2E tests for run_id/carrier plumbing through the real mlodaAPI SYNC execution path,
 down to HookContext."""
 
-from typing import Any, Optional
+from typing import Any
 
 from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook
 from mloda.core.abstract_plugins.hook_context import HookContext
@@ -15,7 +15,7 @@ _CARRIER = {"traceparent": "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7
 
 class _RunIdCarrierFeatureGroupOne(FeatureGroup):
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator({"run_id_carrier_e2e_col_one"})
 
     @classmethod
@@ -29,7 +29,7 @@ class _RunIdCarrierFeatureGroupOne(FeatureGroup):
 
 class _RunIdCarrierFeatureGroupTwo(FeatureGroup):
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator({"run_id_carrier_e2e_col_two"})
 
     @classmethod

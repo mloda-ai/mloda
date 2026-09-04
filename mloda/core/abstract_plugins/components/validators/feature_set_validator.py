@@ -1,4 +1,4 @@
-from typing import Any, Optional, TYPE_CHECKING
+from typing import Any, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from mloda.core.abstract_plugins.components.feature import Feature
@@ -23,7 +23,7 @@ class FeatureSetValidator:
                 raise ValueError("Features have different options")
 
     @staticmethod
-    def validate_feature_added(feature_name: Optional[str], context: str = "feature") -> None:
+    def validate_feature_added(feature_name: str | None, context: str = "feature") -> None:
         if feature_name is None:
             raise ValueError(f"Feature name is None in {context}")
 

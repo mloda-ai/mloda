@@ -11,8 +11,6 @@ Defect 2: resolve_subtype promises "never raises", but a malformed
 PREFIX_PATTERN regex propagates re.error out of parse_feature_name.
 """
 
-from typing import Optional
-
 from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser import FeatureChainParser
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
@@ -54,7 +52,7 @@ class SbparWindowFG(FeatureGroup):
     def compute_framework_rule(cls) -> set[type[ComputeFramework]] | None:
         return {SbparFwAlpha, SbparFwBeta}
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return None
 
 
@@ -78,7 +76,7 @@ class SbparDefaultedFG(FeatureGroup):
     def compute_framework_rule(cls) -> set[type[ComputeFramework]] | None:
         return {SbparFwAlpha, SbparFwBeta}
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return None
 
 
@@ -102,7 +100,7 @@ class SbparBadPrefixFG(FeatureGroup):
     def compute_framework_rule(cls) -> set[type[ComputeFramework]] | None:
         return {SbparFwAlpha, SbparFwBeta}
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return None
 
 

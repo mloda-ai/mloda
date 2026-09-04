@@ -1,6 +1,6 @@
 import pytest
 import pyarrow as pa
-from typing import Any, Optional
+from typing import Any
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda.user import FeatureName
 from mloda.user import ParallelizationMode
@@ -125,7 +125,7 @@ class TestPandasDataFrameMerge(DataFrameTestBase):
         """Create a pandas DataFrame from a dictionary."""
         return pd.DataFrame.from_dict(data)
 
-    def get_connection(self) -> Optional[Any]:
+    def get_connection(self) -> Any | None:
         """Return connection object (None for pandas)."""
         return None
 

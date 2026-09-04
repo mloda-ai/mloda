@@ -7,7 +7,7 @@ keys, so their join_keys is None.
 """
 
 import logging
-from typing import Any, Optional
+from typing import Any
 
 import pytest
 
@@ -22,7 +22,7 @@ _MARKER = "joinhook051"
 
 class _JoinHookLeftFeatureGroup(FeatureGroup):
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator({f"{_MARKER}_left_id", f"{_MARKER}_left_value"})
 
     @classmethod
@@ -36,7 +36,7 @@ class _JoinHookLeftFeatureGroup(FeatureGroup):
 
 class _JoinHookRightFeatureGroup(FeatureGroup):
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator({f"{_MARKER}_right_id", f"{_MARKER}_right_value"})
 
     @classmethod
@@ -49,7 +49,7 @@ class _JoinHookRightFeatureGroup(FeatureGroup):
 
 
 class _JoinHookConsumerFeatureGroup(FeatureGroup):
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return {
             Feature(name=f"{_MARKER}_left_value"),
             Feature(name=f"{_MARKER}_right_value"),
@@ -205,7 +205,7 @@ class TestDenyWithFallback:
 
 class _JoinHookStarHubFeatureGroup(FeatureGroup):
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator({f"{_MARKER}_star_row_id", f"{_MARKER}_star_hub_value"})
 
     @classmethod
@@ -219,7 +219,7 @@ class _JoinHookStarHubFeatureGroup(FeatureGroup):
 
 class _JoinHookStarSpokeAFeatureGroup(FeatureGroup):
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator({f"{_MARKER}_star_row_id", f"{_MARKER}_star_spoke_a_value"})
 
     @classmethod
@@ -233,7 +233,7 @@ class _JoinHookStarSpokeAFeatureGroup(FeatureGroup):
 
 class _JoinHookStarSpokeBFeatureGroup(FeatureGroup):
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator({f"{_MARKER}_star_row_id", f"{_MARKER}_star_spoke_b_value"})
 
     @classmethod
@@ -246,7 +246,7 @@ class _JoinHookStarSpokeBFeatureGroup(FeatureGroup):
 
 
 class _JoinHookStarConsumerFeatureGroup(FeatureGroup):
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return {
             Feature(name=f"{_MARKER}_star_hub_value"),
             Feature(name=f"{_MARKER}_star_spoke_a_value"),
@@ -300,7 +300,7 @@ class TestJoinHookFiresOncePerMergeInStarTopology:
 
 class _JoinHookAppendLeftFeatureGroup(FeatureGroup):
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator({f"{_MARKER}_append_left_id", f"{_MARKER}_append_left_value"})
 
     @classmethod
@@ -314,7 +314,7 @@ class _JoinHookAppendLeftFeatureGroup(FeatureGroup):
 
 class _JoinHookAppendRightFeatureGroup(FeatureGroup):
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator({f"{_MARKER}_append_right_id", f"{_MARKER}_append_right_value"})
 
     @classmethod
@@ -327,7 +327,7 @@ class _JoinHookAppendRightFeatureGroup(FeatureGroup):
 
 
 class _JoinHookAppendConsumerFeatureGroup(FeatureGroup):
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         link = Link.append(
             JoinSpec(_JoinHookAppendLeftFeatureGroup, Index((f"{_MARKER}_append_left_id",))),
             JoinSpec(_JoinHookAppendRightFeatureGroup, Index((f"{_MARKER}_append_right_id",))),

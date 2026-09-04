@@ -27,7 +27,6 @@ is merely filtered, so plain pytest.raises is safe for it.
 
 import gc
 import sys
-from typing import Optional
 
 import pytest
 
@@ -80,11 +79,11 @@ def _make_broken_rule_fg() -> type[FeatureGroup]:
             cls,
             feature_name: FeatureName | str,
             options: Options,
-            data_access_collection: Optional[DataAccessCollection] = None,
+            data_access_collection: DataAccessCollection | None = None,
         ) -> bool:
             return str(feature_name) == ENV_BUILD_FAILURE_FEATURE
 
-        def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+        def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
             return None
 
     return EnvBuildFailureProbe790
@@ -112,11 +111,11 @@ def _make_value_error_rule_fg() -> type[FeatureGroup]:
             cls,
             feature_name: FeatureName | str,
             options: Options,
-            data_access_collection: Optional[DataAccessCollection] = None,
+            data_access_collection: DataAccessCollection | None = None,
         ) -> bool:
             return str(feature_name) == ENV_BUILD_VALUE_ERROR_FEATURE
 
-        def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+        def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
             return None
 
     return EnvBuildValueErrorProbe790
@@ -147,17 +146,17 @@ def _make_mloda_typed_error_rule_fg(
             cls,
             feature_name: FeatureName | str,
             options: Options,
-            data_access_collection: Optional[DataAccessCollection] = None,
+            data_access_collection: DataAccessCollection | None = None,
         ) -> bool:
             return str(feature_name) == expected_feature_name
 
-        def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+        def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
             return None
 
     return EnvBuildMlodaTypedErrorProbe790
 
 
-def _capture_engine_build_failure() -> Optional[str]:
+def _capture_engine_build_failure() -> str | None:
     """Drive a real Engine and return the message its environment build raised, or None if it did not raise.
 
     The Engine itself is under test here, not a stand-in: asserting in prose that PreFilterPlugins is what
@@ -277,7 +276,7 @@ def test_diagnose_projects_the_environment_build_failure() -> None:
         feature_name = diagnosis.feature_name
         failed_result = diagnosis.failed_result
         del diagnosis
-        prepare_error: Optional[str] = None
+        prepare_error: str | None = None
         try:
             mlodaAPI.prepare([ENV_BUILD_FAILURE_FEATURE], compute_frameworks={PandasDataFrame})
         except FrameworkDeclarationError:
@@ -425,11 +424,11 @@ class CollectorFilteredProbe850(FeatureGroup):
         cls,
         feature_name: FeatureName | str,
         options: Options,
-        data_access_collection: Optional[DataAccessCollection] = None,
+        data_access_collection: DataAccessCollection | None = None,
     ) -> bool:
         return False
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return None
 
 

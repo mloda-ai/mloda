@@ -189,13 +189,13 @@ def _(Feature, data_access_collection, mloda):
 
     class ReadFileFeatureJoin(ReadFileFeature):
         @classmethod
-        def index_columns(cls) -> Optional[list[Index]]:
+        def index_columns(cls) -> list[Index] | None:
             return [index]
 
     link = Link.inner(JoinSpec(ReadFileFeatureJoin, index), JoinSpec(ReadFileFeatureJoin, index))
 
     class ExampleMlLifeCycleJoin(FeatureGroup):
-        def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+        def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
             quantity = Feature(name="quantity", compute_framework="PandasDataFrame")
             product_id = Feature(name="product_id", compute_framework="PyArrowTable")
             return {product_id, quantity}

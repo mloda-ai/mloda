@@ -1,7 +1,7 @@
 from collections import defaultdict
 from copy import deepcopy
 import logging
-from typing import Any, Optional, cast
+from typing import Any, cast
 from uuid import UUID
 import uuid
 
@@ -57,13 +57,13 @@ class Engine:
         self,
         features: Features,
         compute_frameworks: set[type[ComputeFramework]],
-        links: Optional[set[Link]],
-        data_access_collection: Optional[DataAccessCollection] = None,
-        global_filter: Optional[GlobalFilter] = None,
-        api_input_data_collection: Optional[ApiInputDataCollection] = None,
-        plugin_collector: Optional[PluginCollector] = None,
-        column_ordering: Optional[str] = None,
-        function_extender: Optional[set[Extender]] = None,
+        links: set[Link] | None,
+        data_access_collection: DataAccessCollection | None = None,
+        global_filter: GlobalFilter | None = None,
+        api_input_data_collection: ApiInputDataCollection | None = None,
+        plugin_collector: PluginCollector | None = None,
+        column_ordering: str | None = None,
+        function_extender: set[Extender] | None = None,
         run_id: str | None = None,
     ) -> None:
         # setup variables which track the primary sources and the compute platforms
@@ -124,11 +124,11 @@ class Engine:
                 connection_map[cfw_class] = conn
         return connection_map
 
-    def get_function_extender(self, hook: ExtenderHook) -> Optional[Extender]:
+    def get_function_extender(self, hook: ExtenderHook) -> Extender | None:
         """Select the extender(s) registered for hook, delegating to the shared free function."""
         return get_function_extender(self.function_extender, hook)
 
-    def compute(self, flight_server: Optional[ParallelRunnerFlightServer] = None) -> ExecutionOrchestrator:
+    def compute(self, flight_server: ParallelRunnerFlightServer | None = None) -> ExecutionOrchestrator:
         execution_plan_copy = deepcopy(self.execution_planner)
         orchestrator = ExecutionOrchestrator(
             execution_plan_copy,
@@ -450,7 +450,7 @@ class Engine:
         self,
         feature_group_class: type[FeatureGroup],
         feature: Feature,
-        child_uuid: Optional[UUID],
+        child_uuid: UUID | None,
         if_index_feature: bool = False,
     ) -> bool:
         # Materialize declared defaults at intake: default-equivalent twins become equal and merge
@@ -518,7 +518,7 @@ class Engine:
         uuid: UUID,
         options: Options,
         feature_name: FeatureName,
-        parent_domain: Optional[str] = None,
+        parent_domain: str | None = None,
         depth: int = 0,
     ) -> frozenset[str] | None:
         """Handles recursion for input features of a feature group."""
@@ -560,7 +560,7 @@ class Engine:
             feature.compute_frameworks = compute_frameworks
         return feature
 
-    def set_data_type(self, feature: Feature, feature_group_class: type[FeatureGroup]) -> Optional[DataType]:
+    def set_data_type(self, feature: Feature, feature_group_class: type[FeatureGroup]) -> DataType | None:
         fg_data_type = feature_group_class.return_data_type_rule(feature)
         if feature.data_type and fg_data_type:
             if feature.data_type != fg_data_type:

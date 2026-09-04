@@ -30,7 +30,7 @@ feature_group)`` every test here FAILS for the right reason: the str-only first 
 accept a ``Feature``, and ``links`` / ``data_access_collection`` are not parameters at all.
 """
 
-from typing import Any, Optional
+from typing import Any
 
 import pytest
 
@@ -86,11 +86,11 @@ class PlainResolve756FeatureGroup(FeatureGroup):
         cls,
         feature_name: FeatureName | str,
         options: Options,
-        data_access_collection: Optional[DataAccessCollection] = None,
+        data_access_collection: DataAccessCollection | None = None,
     ) -> bool:
         return str(feature_name) == PLAIN_FEATURE
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return None
 
 
@@ -110,11 +110,11 @@ class DomainAResolve756FeatureGroup(FeatureGroup):
         cls,
         feature_name: FeatureName | str,
         options: Options,
-        data_access_collection: Optional[DataAccessCollection] = None,
+        data_access_collection: DataAccessCollection | None = None,
     ) -> bool:
         return str(feature_name) == DOMAIN_FEATURE
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return None
 
 
@@ -134,11 +134,11 @@ class DomainBResolve756FeatureGroup(FeatureGroup):
         cls,
         feature_name: FeatureName | str,
         options: Options,
-        data_access_collection: Optional[DataAccessCollection] = None,
+        data_access_collection: DataAccessCollection | None = None,
     ) -> bool:
         return str(feature_name) == DOMAIN_FEATURE
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return None
 
 
@@ -154,11 +154,11 @@ class FrameworkPinResolve756FeatureGroup(FeatureGroup):
         cls,
         feature_name: FeatureName | str,
         options: Options,
-        data_access_collection: Optional[DataAccessCollection] = None,
+        data_access_collection: DataAccessCollection | None = None,
     ) -> bool:
         return str(feature_name) == FRAMEWORK_FEATURE
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return None
 
 
@@ -170,7 +170,7 @@ class LinkResolve756FeatureGroup(FeatureGroup):
         return {PandasDataFrame, PythonDictFramework}
 
     @classmethod
-    def index_columns(cls) -> Optional[list[Index]]:
+    def index_columns(cls) -> list[Index] | None:
         return [Index((LINK_INDEX_COLUMN,))]
 
     @classmethod
@@ -178,11 +178,11 @@ class LinkResolve756FeatureGroup(FeatureGroup):
         cls,
         feature_name: FeatureName | str,
         options: Options,
-        data_access_collection: Optional[DataAccessCollection] = None,
+        data_access_collection: DataAccessCollection | None = None,
     ) -> bool:
         return str(feature_name) == LINK_FEATURE
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return None
 
 
@@ -198,7 +198,7 @@ class DataAccessResolve756FeatureGroup(FeatureGroup):
         cls,
         feature_name: FeatureName | str,
         options: Options,
-        data_access_collection: Optional[DataAccessCollection] = None,
+        data_access_collection: DataAccessCollection | None = None,
     ) -> bool:
         if str(feature_name) != DATA_ACCESS_FEATURE:
             return False
@@ -206,7 +206,7 @@ class DataAccessResolve756FeatureGroup(FeatureGroup):
             return False
         return EXPECTED_FILE_HANDLE in set(data_access_collection.files.values())
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return None
 
 
@@ -222,7 +222,7 @@ class RaisingDacResolve756FeatureGroup(FeatureGroup):
         cls,
         feature_name: FeatureName | str,
         options: Options,
-        data_access_collection: Optional[DataAccessCollection] = None,
+        data_access_collection: DataAccessCollection | None = None,
     ) -> bool:
         if str(feature_name) != RAISING_DAC_FEATURE:
             return False
@@ -230,7 +230,7 @@ class RaisingDacResolve756FeatureGroup(FeatureGroup):
             raise RuntimeError("resolve756 reader-style match hook blew up on a data access collection")
         return False
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return None
 
 

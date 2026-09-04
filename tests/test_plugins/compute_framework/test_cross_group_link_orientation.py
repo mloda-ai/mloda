@@ -3,7 +3,7 @@
 Both must end up on a single orientation and see the joined columns.
 """
 
-from typing import Any, Optional
+from typing import Any
 
 import pyarrow as pa
 import pytest
@@ -27,7 +27,7 @@ from mloda_plugins.compute_framework.base_implementations.pyarrow.table import P
 
 class OrientParentLeft(FeatureGroup):
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator(supports_features={cls.get_class_name()})
 
     @classmethod
@@ -41,7 +41,7 @@ class OrientParentLeft(FeatureGroup):
 
 class OrientParentRight(FeatureGroup):
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator(supports_features={cls.get_class_name()})
 
     @classmethod
@@ -62,7 +62,7 @@ def _column_names(data: Any) -> list[str]:
 class OrientChildFlexible(FeatureGroup):
     """Supports both frameworks, so on its own it would keep the left orientation."""
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return {Feature(name=OrientParentLeft.get_class_name()), Feature(name=OrientParentRight.get_class_name())}
 
     @classmethod
@@ -86,7 +86,7 @@ class OrientChildFlexible(FeatureGroup):
 class OrientChildPandasOnly(FeatureGroup):
     """Supports only the right framework, so on its own it would invert the link."""
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return {Feature(name=OrientParentLeft.get_class_name()), Feature(name=OrientParentRight.get_class_name())}
 
     @classmethod

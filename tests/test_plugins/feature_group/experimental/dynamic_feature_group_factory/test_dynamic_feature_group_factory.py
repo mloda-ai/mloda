@@ -1,4 +1,4 @@
-from typing import Any, Optional
+from typing import Any
 from mloda.provider import FeatureGroup
 from mloda.user import Feature
 from mloda.user import Options
@@ -112,22 +112,22 @@ class TestDynamicFeatureGroupFactory:
             cls: type[FeatureGroup],
             feature_name: FeatureName | str,
             options: Options,
-            data_access_collection: Optional[DataAccessCollection] = None,
+            data_access_collection: DataAccessCollection | None = None,
         ) -> bool:
             if isinstance(feature_name, FeatureName):
                 feature_name = str(feature_name)
             return "custom" in feature_name
 
-        def custom_input_features(self: Any, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+        def custom_input_features(self: Any, options: Options, feature_name: FeatureName) -> set[Feature] | None:
             return {Feature(name="custom_input_feature")}
 
         def custom_compute_framework_rule() -> set[type[ComputeFramework]]:
             return {PandasDataFrame}
 
-        def custom_index_columns() -> Optional[list[Index]]:
+        def custom_index_columns() -> list[Index] | None:
             return [Index(("a",)), Index(("b", "c"))]
 
-        def custom_supports_index(cls, index: Index) -> Optional[bool]:  # type: ignore
+        def custom_supports_index(cls, index: Index) -> bool | None:  # type: ignore
             return index.is_multi_index() is False
 
         properties: dict[str, Any] = {
@@ -178,7 +178,7 @@ class TestDynamicFeatureGroupFactory:
         Test case for creating a dynamic feature group using SourceInputFeatureComposite with a simple string.
         """
 
-        def custom_input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:  # type: ignore
+        def custom_input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:  # type: ignore
             return SourceInputFeatureComposite.input_features(options, feature_name)
 
         properties: dict[str, Any] = {
@@ -214,7 +214,7 @@ class TestDynamicFeatureGroupFactory:
         Test case for creating a dynamic feature group using SourceInputFeatureComposite inheriting from SourceInputFeature.
         """
 
-        def custom_input_features(self: Any, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+        def custom_input_features(self: Any, options: Options, feature_name: FeatureName) -> set[Feature] | None:
             return SourceInputFeatureComposite.input_features(options, feature_name)
 
         properties: dict[str, Any] = {

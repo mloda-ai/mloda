@@ -6,7 +6,7 @@ import threading
 import time
 import logging
 from multiprocessing.process import BaseProcess
-from typing import Any, Callable, Optional
+from typing import Any, Callable
 from uuid import UUID
 
 from mloda.core.runtime.mp_context import mp_spawn_context
@@ -56,7 +56,7 @@ class WorkerManager:
 
         return process, command_queue, result_queue
 
-    def get_process_queues(self, cfw_uuid: UUID) -> Optional[tuple[Any, Any, Any]]:
+    def get_process_queues(self, cfw_uuid: UUID) -> tuple[Any, Any, Any] | None:
         """Return registered tuple or None."""
         return self.process_register.get(cfw_uuid)
 

@@ -18,7 +18,6 @@ guard turns the match into a non-match unless its own unique option keys are pre
 from __future__ import annotations
 
 from collections.abc import Iterator
-from typing import Optional
 
 import pytest
 
@@ -56,7 +55,7 @@ class RwrecRequiredWhenFG(FeatureGroup):
         RWREC_COMPANION_KEY: PropertySpec("The alternative to the required key.", context=False, default=None),
     }
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return None
 
 

@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import Generator, Optional
+from typing import Generator
 from uuid import UUID
 from mloda.core.abstract_plugins.components.domain import Domain
 from mloda.core.abstract_plugins.components.feature import Feature
@@ -20,13 +20,13 @@ class Features:
     def __init__(
         self,
         features: list[Feature | str],
-        child_options: Optional[Options] = None,
-        child_uuid: Optional[UUID] = None,
-        parent_domain: Optional[str] = None,
+        child_options: Options | None = None,
+        child_uuid: UUID | None = None,
+        parent_domain: str | None = None,
     ) -> None:
         self.collection: list[Feature] = []
-        self.child_uuid: Optional[UUID] = child_uuid
-        self.parent_domain: Optional[str] = parent_domain
+        self.child_uuid: UUID | None = child_uuid
+        self.parent_domain: str | None = parent_domain
 
         self.parent_uuids: set[UUID] = set()
 
@@ -37,7 +37,7 @@ class Features:
         self.build_feature_collection(features, child_options, child_uuid)
 
     def build_feature_collection(
-        self, features: list[Feature | str], child_options: Options, child_uuid: Optional[UUID] = None
+        self, features: list[Feature | str], child_options: Options, child_uuid: UUID | None = None
     ) -> None:
         for feature in features:
             if child_options.group == {} and child_options.context == {}:

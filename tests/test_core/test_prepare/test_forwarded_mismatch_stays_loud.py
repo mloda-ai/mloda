@@ -9,7 +9,7 @@ import gc
 from collections.abc import Callable
 from dataclasses import dataclass
 from functools import partial
-from typing import Optional, TypeVar
+from typing import TypeVar
 
 from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser_mixin import FeatureChainParserMixin
@@ -37,7 +37,7 @@ class LoudProbeFw845r(ComputeFramework):
     """Dummy compute framework for the forwarded-mismatch seam tests."""
 
 
-def _capture(call: Callable[[], T]) -> tuple[Optional[T], Optional[str]]:
+def _capture(call: Callable[[], T]) -> tuple[T | None, str | None]:
     """Run call, returning (value, None) or (None, 'Type: message'). No traceback is retained."""
     try:
         return call(), None
@@ -94,11 +94,11 @@ def _make_rival_fg() -> type[FeatureGroup]:
             cls,
             feature_name: FeatureName | str,
             options: Options,
-            data_access_collection: Optional[DataAccessCollection] = None,
+            data_access_collection: DataAccessCollection | None = None,
         ) -> bool:
             return str(feature_name) == LOUD_FEATURE
 
-        def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+        def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
             return None
 
     return RivalNameOwnerFG845r
@@ -108,7 +108,7 @@ def _make_rival_fg() -> type[FeatureGroup]:
 class _SeamSnapshot:
     """Plain-data readout of one seam evaluation. Holds no class and no exception object."""
 
-    escaped: Optional[str]
+    escaped: str | None
     identified_names: tuple[str, ...]
 
 

@@ -156,7 +156,7 @@ def _(data_dict, pd):
             return data  # With this, we have access to the before and after state of a feature.
 
         @classmethod
-        def input_data(cls) -> Optional[BaseInputData]:
+        def input_data(cls) -> BaseInputData | None:
             return DataCreator(
                 {"age", "weight", "state", "gender"}
             )  # If this feature would not load data, we would use the data given from the parameter "data".

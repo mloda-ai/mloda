@@ -7,7 +7,7 @@ The matrix-voiding check (subtype_support_matrix raising for a hand-written
 supports_compute_framework override) stays.
 """
 
-from typing import Any, Optional
+from typing import Any
 
 import pytest
 
@@ -57,7 +57,7 @@ class TestSbrmDerivedAccessorOverrideAllowed:
         assert overriding.canonical_subtype("median") == "sbrm_canon_median"
 
     def test_sbrm_resolve_subtype_override_on_declared_family_takes_effect(self) -> None:
-        def sbrm_resolve(cls: type[FeatureGroup], feature_name: FeatureName | str, options: Options) -> Optional[str]:
+        def sbrm_resolve(cls: type[FeatureGroup], feature_name: FeatureName | str, options: Options) -> str | None:
             return "sbrm_resolved"
 
         overriding = type(

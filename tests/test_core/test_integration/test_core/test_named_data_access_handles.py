@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import sqlite3
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 import pytest
 
@@ -94,8 +94,8 @@ class _DoubledValueFG(FeatureGroup, MatchData):
         cls,
         feature_name: str,
         options: Options,
-        data_access_collection: Optional[DataAccessCollection] = None,
-        framework_connection_object: Optional[Any] = None,
+        data_access_collection: DataAccessCollection | None = None,
+        framework_connection_object: Any | None = None,
     ) -> Any:
         if feature_name not in cls.feature_names_supported():
             return None
@@ -116,7 +116,7 @@ class _DoubledValueFG(FeatureGroup, MatchData):
     def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
         return {SqliteFramework}
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return {Feature("value")}
 
     @classmethod

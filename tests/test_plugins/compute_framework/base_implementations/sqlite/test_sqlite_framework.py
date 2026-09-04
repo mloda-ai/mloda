@@ -1,5 +1,5 @@
 import sqlite3
-from typing import Any, Optional
+from typing import Any
 
 import pyarrow as pa
 import pytest
@@ -183,7 +183,7 @@ class TestSqliteFrameworkMerge(DataFrameTestBase):
         arrow_table = pa.Table.from_pydict(data)
         return SqliteRelation.from_arrow(self.conn, arrow_table)
 
-    def get_connection(self) -> Optional[Any]:
+    def get_connection(self) -> Any | None:
         return self.conn
 
     def _create_test_framework(self) -> Any:

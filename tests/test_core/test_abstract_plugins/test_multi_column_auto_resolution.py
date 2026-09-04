@@ -7,7 +7,7 @@ This test shows the complete flow of:
 3. Chained processor works with consumer's single-column output
 """
 
-from typing import Any, Optional
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -30,7 +30,7 @@ class MultiColumnTestDataCreator(FeatureGroup):
     """Test data creator providing source data for multi-column tests."""
 
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         """Return a DataCreator with the supported feature names."""
         return DataCreator({"source_data"})
 
@@ -65,7 +65,7 @@ class MultiColumnProducer(FeatureGroup):
         """Explicitly support base_feature."""
         return {"base_feature"}
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         """Requires source_data as input."""
         return {Feature("source_data")}
 
@@ -118,7 +118,7 @@ class MultiColumnConsumer(FeatureGroup):
         """Explicitly support consumed_feature."""
         return {"consumed_feature"}
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         """
         Requires base_feature as input (without ~N suffix).
 
@@ -187,7 +187,7 @@ class ChainedProcessor(FeatureGroup):
         """Explicitly support chained_feature."""
         return {"chained_feature"}
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         """Requires consumed_feature as input."""
         return {Feature("consumed_feature")}
 

@@ -8,7 +8,7 @@ backend. A zero-column ``{}`` result raises ``EmptyResultError`` (the ``allow_em
 opt-in is retired).
 """
 
-from typing import Any, Optional
+from typing import Any
 
 import pytest
 
@@ -85,7 +85,7 @@ class EmptyResultNoneAllowedFeatureGroup(FeatureGroup, _EmptyResultMatchData):
     """
 
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator(supports_features={"empty_result_none_allowed_col"})
 
     @classmethod

@@ -4,7 +4,7 @@ Base implementation for aggregated feature groups.
 
 from __future__ import annotations
 
-from typing import Any, Optional
+from typing import Any
 
 from mloda.provider import FeatureGroup
 from mloda.user import Feature
@@ -58,7 +58,7 @@ class ChainedContextFeatureGroupTest(FeatureGroup):
         cls,
         feature_name: FeatureName | str,
         options: Options,
-        data_access_collection: Optional[Any] = None,
+        data_access_collection: Any | None = None,
     ) -> bool:
         """Check if feature name matches the expected pattern and aggregation type."""
 
@@ -72,7 +72,7 @@ class ChainedContextFeatureGroupTest(FeatureGroup):
 
         return True
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         features = set()
 
         # String-based feature extraction

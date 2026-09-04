@@ -5,7 +5,7 @@ HookContext population (run_id/carrier/worker_index/plan_*), and deny-before-mat
 """
 
 import logging
-from typing import Any, Optional
+from typing import Any
 from unittest.mock import patch
 
 import pytest
@@ -28,7 +28,7 @@ class _MatchHookRootFeatureGroup(FeatureGroup):
     """Root feature group: single resolved feature for the basic FEATURE_GROUP_MATCHED assertions."""
 
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator({f"{_MARKER}_root_col"})
 
     @classmethod
@@ -42,7 +42,7 @@ class _MatchHookRootFeatureGroup(FeatureGroup):
 
 class _MatchHookColOneFeatureGroup(FeatureGroup):
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator({f"{_MARKER}_col_one"})
 
     @classmethod
@@ -56,7 +56,7 @@ class _MatchHookColOneFeatureGroup(FeatureGroup):
 
 class _MatchHookColTwoFeatureGroup(FeatureGroup):
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator({f"{_MARKER}_col_two"})
 
     @classmethod
@@ -70,7 +70,7 @@ class _MatchHookColTwoFeatureGroup(FeatureGroup):
 
 class _MatchVetoFeatureGroupA(FeatureGroup):
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator({f"{_MARKER}_veto_col_a"})
 
     @classmethod
@@ -84,7 +84,7 @@ class _MatchVetoFeatureGroupA(FeatureGroup):
 
 class _MatchVetoFeatureGroupB(FeatureGroup):
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator({f"{_MARKER}_veto_col_b"})
 
     @classmethod
@@ -100,7 +100,7 @@ class _MatchDepthRootFeatureGroup(FeatureGroup):
     """Root of a two-level input_features() chain, for the plan_depth assertions."""
 
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator({f"{_MARKER}_depth_root_col"})
 
     @classmethod
@@ -115,7 +115,7 @@ class _MatchDepthRootFeatureGroup(FeatureGroup):
 class _MatchDepthDerivedFeatureGroup(FeatureGroup):
     """Requested top-level; declares the root feature group's column as its one input feature."""
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return {Feature(f"{_MARKER}_depth_root_col")}
 
     @classmethod
@@ -162,12 +162,12 @@ class _MatchListCapturingExtender(Extender):
         return result
 
 
-def _require_int(value: Optional[int]) -> int:
+def _require_int(value: int | None) -> int:
     assert value is not None
     return value
 
 
-def _feature_name_from_args(args: tuple[Any, ...], kwargs: dict[str, Any]) -> Optional[str]:
+def _feature_name_from_args(args: tuple[Any, ...], kwargs: dict[str, Any]) -> str | None:
     """Best-effort: find the Feature being resolved among the wrapped resolution's arguments."""
     for value in (*args, *kwargs.values()):
         name = getattr(value, "name", None)

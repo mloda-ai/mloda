@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import re
-from typing import Any, Literal, Optional, cast
+from typing import Any, Literal, cast
 
 try:
     import duckdb
@@ -54,7 +54,7 @@ class DuckdbRelation(SqlBaseRelation):
     def __init__(self, connection: duckdb.DuckDBPyConnection, relation: duckdb.DuckDBPyRelation) -> None:
         self._connection = connection
         self._relation = relation
-        self._alias: Optional[str] = None
+        self._alias: str | None = None
 
     @property
     def connection(self) -> duckdb.DuckDBPyConnection:
@@ -117,7 +117,7 @@ class DuckdbRelation(SqlBaseRelation):
         new_rel._alias = alias
         return new_rel
 
-    def get_alias(self) -> Optional[str]:
+    def get_alias(self) -> str | None:
         return self._alias
 
     _VALID_JOIN_TYPES = {"inner", "left", "right", "outer"}

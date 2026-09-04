@@ -4,7 +4,7 @@ PyArrow implementation for missing value imputation feature groups.
 
 from __future__ import annotations
 
-from typing import Any, Optional
+from typing import Any
 
 import pyarrow as pa
 import pyarrow.compute as pc
@@ -53,8 +53,8 @@ class PyArrowMissingValueFeatureGroup(MissingValueFeatureGroup):
         data: pa.Table,
         imputation_method: str,
         in_features: list[str],
-        constant_value: Optional[Any] = None,
-        group_by_features: Optional[list[str]] = None,
+        constant_value: Any | None = None,
+        group_by_features: list[str] | None = None,
     ) -> pa.Array:
         """
         Perform the imputation using PyArrow compute functions.
@@ -167,7 +167,7 @@ class PyArrowMissingValueFeatureGroup(MissingValueFeatureGroup):
         data: pa.Table,
         imputation_method: str,
         in_features: str,  # Note: grouped imputation only supports single column
-        constant_value: Optional[Any],
+        constant_value: Any | None,
         group_by_features: list[str],
     ) -> pa.Array:
         """

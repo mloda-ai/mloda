@@ -6,7 +6,7 @@ test that 'nearest' direction raises ValueError.
 """
 
 from datetime import timedelta
-from typing import Any, Optional
+from typing import Any
 
 import pytest
 
@@ -44,7 +44,7 @@ class TestDuckDBAsofMergeEngine(AsofMergeEngineTestBase):
             raise ImportError("DuckDB is not installed")
         return DuckdbRelation
 
-    def get_connection(self) -> Optional[Any]:
+    def get_connection(self) -> Any | None:
         """DuckDB requires a connection object."""
         if not hasattr(self, "_connection"):
             self._connection = duckdb.connect()

@@ -13,8 +13,6 @@ Exact failure-message wording is out of scope: it is inherently wording-coupled,
 structured facts and reserve exact-string checks for tests whose contract is the wording itself.
 """
 
-from typing import Optional
-
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.link import Link
@@ -28,8 +26,8 @@ from mloda.core.prepare.resolution_types import EvaluationResult
 def evaluate_or_raise(
     feature: Feature,
     accessible_plugins: FeatureGroupEnvironmentMapping,
-    links: Optional[set[Link]] = None,
-    data_access_collection: Optional[DataAccessCollection] = None,
+    links: set[Link] | None = None,
+    data_access_collection: DataAccessCollection | None = None,
 ) -> EvaluationResult:
     """Evaluate one feature and raise the typed error on failure, exactly as the engine seam does."""
     return resolve_or_raise(feature, accessible_plugins, links, data_access_collection)
@@ -38,8 +36,8 @@ def evaluate_or_raise(
 def identify_winner(
     feature: Feature,
     accessible_plugins: FeatureGroupEnvironmentMapping,
-    links: Optional[set[Link]] = None,
-    data_access_collection: Optional[DataAccessCollection] = None,
+    links: set[Link] | None = None,
+    data_access_collection: DataAccessCollection | None = None,
 ) -> tuple[type[FeatureGroup], set[type[ComputeFramework]]]:
     """The winning (feature_group, frameworks) pair, mirroring the removed IdentifyFeatureGroupClass.get()."""
     result = evaluate_or_raise(feature, accessible_plugins, links, data_access_collection)

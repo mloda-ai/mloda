@@ -8,7 +8,7 @@ during the data joining phase. Covers:
 - Asymmetric polymorphic matching (base + external concrete)
 """
 
-from typing import Any, Optional
+from typing import Any
 
 from mloda.provider import FeatureGroup
 from mloda.user import Feature
@@ -57,7 +57,7 @@ class ConcreteFeatureGroupA(BaseFeatureGroupA):
     """Concrete implementation of A."""
 
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator({cls.FEATURE_NAME})
 
     @classmethod
@@ -69,7 +69,7 @@ class ConcreteFeatureGroupB(BaseFeatureGroupB):
     """Concrete implementation of B."""
 
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator({cls.FEATURE_NAME})
 
     @classmethod
@@ -92,7 +92,7 @@ class AssemblerWithConcreteLinks(FeatureGroup):
         name = str(feature_name) if isinstance(feature_name, FeatureName) else feature_name
         return name == cls.FEATURE_NAME
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         idx = Index((BaseFeatureGroupA.ROW_INDEX,))
 
         # CONCRETE classes in link
@@ -123,7 +123,7 @@ class AssemblerWithPolymorphicLinks(FeatureGroup):
         name = str(feature_name) if isinstance(feature_name, FeatureName) else feature_name
         return name == cls.FEATURE_NAME
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         idx = Index((BaseFeatureGroupA.ROW_INDEX,))
 
         # BASE classes in link - polymorphic matching should resolve to concrete
@@ -204,7 +204,7 @@ class AssemblerWithMixedLink(FeatureGroup):
         name = str(feature_name) if isinstance(feature_name, FeatureName) else feature_name
         return name == cls.FEATURE_NAME
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         idx = Index((BaseFeatureGroupA.ROW_INDEX,))
 
         # Base class + External concrete class (ApiInputDataFeature has no subclass)

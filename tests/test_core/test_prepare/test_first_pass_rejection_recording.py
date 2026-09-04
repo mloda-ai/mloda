@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import contextvars
 from collections.abc import Iterator
-from typing import Any, Optional, cast
+from typing import Any, cast
 
 import pytest
 
@@ -88,7 +88,7 @@ class StrictRecordingFGOs005r(FeatureChainParserMixin, FeatureGroup):
         DefaultOptionKeys.in_features: property_spec("source", context=True),
     }
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return None
 
 
@@ -102,7 +102,7 @@ class MissingOptionRecordingFGOs005r(FeatureChainParserMixin, FeatureGroup):
         DefaultOptionKeys.in_features: property_spec("source", context=True),
     }
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return None
 
 
@@ -118,7 +118,7 @@ class GuardRecordingFGOs005r(FeatureChainParserMixin, FeatureGroup):
         ),
     }
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return None
 
 
@@ -134,7 +134,7 @@ class FacadeProbeFGOs005r(FeatureGroup):
         cls,
         feature_name: FeatureName | str,
         options: Options,
-        data_access_collection: Optional[DataAccessCollection] = None,
+        data_access_collection: DataAccessCollection | None = None,
     ) -> bool:
         return False
 
@@ -145,7 +145,7 @@ class FacadeProbeFGOs005r(FeatureGroup):
             return FACADE_SENTINEL_REASON_OS005R
         return None
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return None
 
 
@@ -159,7 +159,7 @@ def _build_colliding_rejection_groups_os005c() -> tuple[type[FeatureGroup], type
     """
 
     def make(module: str, key: str) -> type[FeatureGroup]:
-        def input_features(self: Any, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+        def input_features(self: Any, options: Options, feature_name: FeatureName) -> set[Feature] | None:
             return None
 
         namespace: dict[str, Any] = {

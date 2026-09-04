@@ -20,7 +20,7 @@ This module is intentionally NOT collected as tests (no ``Test`` prefix).
 
 import sqlite3
 from abc import ABC, abstractmethod
-from typing import Any, Optional
+from typing import Any
 
 import pytest
 
@@ -137,8 +137,8 @@ class _AsofMatchData(MatchData):
         cls,
         feature_name: str,
         options: Options,
-        data_access_collection: Optional[DataAccessCollection] = None,
-        framework_connection_object: Optional[Any] = None,
+        data_access_collection: DataAccessCollection | None = None,
+        framework_connection_object: Any | None = None,
     ) -> Any:
         if feature_name not in cls.feature_names_supported():
             return None
@@ -159,7 +159,7 @@ class AsofLeftFeature(FeatureGroup, _AsofMatchData):
     """Left side of the ASOF join: emits by-key ``k``, time ``t`` and value ``lv``."""
 
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator(supports_features={"k", "t", "lv"})
 
     @classmethod
@@ -175,7 +175,7 @@ class AsofRightFeature(FeatureGroup, _AsofMatchData):
     """Right side of the ASOF join: emits by-key ``k``, time ``t`` and value ``rv``."""
 
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator(supports_features={"k", "t", "rv"})
 
     @classmethod
@@ -190,7 +190,7 @@ class AsofRightFeature(FeatureGroup, _AsofMatchData):
 class AsofJoinedFeature(FeatureGroup, _AsofMatchData):
     """Parent feature group that requires the ASOF merge of the two leaf groups."""
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         link = _asof_link()
         return {
             Feature(name="lv", link=link, index=Index(("k",))),
@@ -223,7 +223,7 @@ class AsofRunAllTestBase(ABC):
         """Return the compute framework name string for ``compute_frameworks=[...]``."""
         pass
 
-    def get_connection(self) -> Optional[Any]:
+    def get_connection(self) -> Any | None:
         """Return a framework connection object, or None when none is needed."""
         return None
 

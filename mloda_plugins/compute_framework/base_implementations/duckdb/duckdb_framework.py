@@ -1,6 +1,6 @@
 import logging
 from collections.abc import Sequence
-from typing import Any, Optional
+from typing import Any
 from mloda.core.abstract_plugins.components.data_types import DataType
 from mloda.provider import BaseMergeEngine
 from mloda_plugins.compute_framework.base_implementations.duckdb.duckdb_merge_engine import DuckDBMergeEngine
@@ -52,7 +52,7 @@ class DuckDBFramework(ComputeFramework):
     This framework does not support multiprocessing, so it should not be used with multiprocessing.
     """
 
-    def set_framework_connection_object(self, framework_connection_object: Optional[Any] = None) -> None:
+    def set_framework_connection_object(self, framework_connection_object: Any | None = None) -> None:
         """Use given DuckDB connection.
 
         Pins the DuckDB session timezone to UTC on first assignment so that timestamp
@@ -104,8 +104,8 @@ class DuckDBFramework(ComputeFramework):
         self,
         data: Any,
         selected_feature_names: Sequence[FeatureName],
-        column_ordering: Optional[str] = None,
-        request_feature_order: Optional[list[str]] = None,
+        column_ordering: str | None = None,
+        request_feature_order: list[str] | None = None,
     ) -> Any:
         """Materialize the final result as a PyArrow Table.
 
@@ -136,7 +136,7 @@ class DuckDBFramework(ComputeFramework):
             return str(dtypes[idx])
         return None
 
-    def _extract_column_data_type(self, data: Any, column_name: str) -> Optional[DataType]:
+    def _extract_column_data_type(self, data: Any, column_name: str) -> DataType | None:
         if column_name not in data.columns:
             return None
         idx = data.columns.index(column_name)

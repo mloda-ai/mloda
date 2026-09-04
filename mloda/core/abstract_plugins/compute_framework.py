@@ -2,7 +2,7 @@ import contextlib
 from abc import ABC
 from collections.abc import Callable, Generator, Iterable, Sequence
 from contextvars import ContextVar
-from typing import Any, Optional, final
+from typing import Any, final
 from uuid import UUID, uuid4
 from mloda.core.abstract_plugins.components.data_types import DataType
 from mloda.core.abstract_plugins.components.framework_transformer.cfw_transformer import (
@@ -72,8 +72,8 @@ class ComputeFramework(ABC):
         self,
         mode: ParallelizationMode = ParallelizationMode.SYNC,
         children_if_root: frozenset[UUID] = frozenset(),
-        uuid: Optional[UUID] = None,
-        function_extender: Optional[set[Extender]] = None,
+        uuid: UUID | None = None,
+        function_extender: set[Extender] | None = None,
     ) -> None:
         """This class is initialized for step execution."""
         self.mode = mode
@@ -95,7 +95,7 @@ class ComputeFramework(ABC):
         self.object_ids: list[str] = []
 
         # connection object for frameworks that need persistent connections (e.g., DuckDB, Spark)
-        self.framework_connection_object: Optional[Any] = None
+        self.framework_connection_object: Any | None = None
 
     @classmethod
     def expected_data_framework(cls) -> Any:
@@ -193,8 +193,8 @@ class ComputeFramework(ABC):
         self,
         data: Any,
         selected_feature_names: Sequence[FeatureName],
-        column_ordering: Optional[str] = None,
-        request_feature_order: Optional[list[str]] = None,
+        column_ordering: str | None = None,
+        request_feature_order: list[str] | None = None,
     ) -> Any:
         """
         If you only want to store the requested features, implement this functionality depending on your framework.
@@ -216,7 +216,7 @@ class ComputeFramework(ABC):
         """
         raise NotImplementedError(f"Merge functionality is for this compute framework not implemented {cls.__name__}.")
 
-    def set_framework_connection_object(self, framework_connection_object: Optional[Any] = None) -> None:
+    def set_framework_connection_object(self, framework_connection_object: Any | None = None) -> None:
         """
         Some compute frameworks (e.g., DuckDB, Spark) require sharing their connection
         with merge engines to ensure data consistency. Override this method in
@@ -234,7 +234,7 @@ class ComputeFramework(ABC):
         return False
 
     @classmethod
-    def pick_connection_from_dac(cls, data_access_collection: Any, options: Optional[Any] = None) -> Optional[Any]:
+    def pick_connection_from_dac(cls, data_access_collection: Any, options: Any | None = None) -> Any | None:
         """Pick the matching connection for this framework from the DataAccessCollection.
 
         Called at Engine setup (once per session), not on the per-request run path.
@@ -279,8 +279,8 @@ class ComputeFramework(ABC):
 
     @final
     def run_calculation(
-        self, feature_group: Any, features: Any, location: str | None, data: Optional[Any] = None
-    ) -> Optional[Any]:
+        self, feature_group: Any, features: Any, location: str | None, data: Any | None = None
+    ) -> Any | None:
         # case multiprocessing or case base api input feature
         if data is not None:
             self.data = data
@@ -519,7 +519,7 @@ class ComputeFramework(ABC):
         """
         return False
 
-    def _extract_column_dtype(self, data: Any, column_name: str) -> Optional[str]:
+    def _extract_column_dtype(self, data: Any, column_name: str) -> str | None:
         """Extract the dtype of a specific column as a human-readable string.
 
         Returns None when the framework does not support dtype extraction.
@@ -527,7 +527,7 @@ class ComputeFramework(ABC):
         """
         return None
 
-    def _extract_column_data_type(self, data: Any, column_name: str) -> Optional[DataType]:
+    def _extract_column_data_type(self, data: Any, column_name: str) -> DataType | None:
         """Resolve a column's native dtype to the unified DataType enum.
 
         Default: return None. Frameworks must override to convert their native
@@ -683,7 +683,7 @@ class ComputeFramework(ABC):
     def __hash__(self) -> int:
         return hash((id(type(self)), self.children_if_root))
 
-    def validate_expected_framework(self, location: Optional[str] = None) -> None:
+    def validate_expected_framework(self, location: str | None = None) -> None:
         """
         Validates that the data is in the expected framework.
         Only touch this if your framework supports multiple data frameworks.
@@ -710,7 +710,7 @@ class ComputeFramework(ABC):
 
     @final
     def add_already_calculated_children_and_drop_if_possible(
-        self, children: set[UUID], location: Optional[str] = None
+        self, children: set[UUID], location: str | None = None
     ) -> bool | frozenset[UUID]:
         self.already_calculated_children_tracker.update(children)
 
@@ -724,7 +724,7 @@ class ComputeFramework(ABC):
         return False
 
     @final
-    def get_function_extender(self, wrapper_function_enum: ExtenderHook) -> Optional[Extender]:
+    def get_function_extender(self, wrapper_function_enum: ExtenderHook) -> Extender | None:
         matching_extenders = []
         for extender in self.function_extender:
             if wrapper_function_enum in extender.wraps():
@@ -881,7 +881,7 @@ Available join types:
         return self.upload_table(location, self.uuid)
 
     @final
-    def upload_table(self, location: str, object_id: Optional[UUID] = None) -> str:
+    def upload_table(self, location: str, object_id: UUID | None = None) -> str:
         pa = require("pyarrow", _PYARROW_REASON)
         if object_id is None:
             object_id = uuid4()
@@ -929,7 +929,7 @@ Available join types:
         FlightServer.drop_tables(location, table_keys)
 
     @final
-    def drop_last_data(self, location: Optional[str] = None) -> None:
+    def drop_last_data(self, location: str | None = None) -> None:
         if isinstance(self.data, str) and location:
             self.drop_data({self.data}, location)
 
@@ -946,8 +946,8 @@ Available join types:
         self,
         selected_feature_names: Sequence[FeatureName],
         column_names: set[str],
-        ordering: Optional[str] = None,
-        request_feature_order: Optional[list[str]] = None,
+        ordering: str | None = None,
+        request_feature_order: list[str] | None = None,
     ) -> set[str] | list[str]:
         """
         Identifies columns that match feature names or follow the naming convention pattern.

@@ -6,7 +6,7 @@ through `mloda.run_all` so each SQL framework gets the same coverage as the
 original DuckDB reproducer."""
 
 from abc import abstractmethod
-from typing import Any, Optional
+from typing import Any
 
 import pytest
 
@@ -22,7 +22,7 @@ class TfsRawValPyArrowSource(FeatureGroup):
     test exercises the same PyArrow -> <SQL framework> TFS edge."""
 
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator({"raw_val"})
 
     @classmethod

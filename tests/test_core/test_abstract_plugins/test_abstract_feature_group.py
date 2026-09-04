@@ -1,4 +1,3 @@
-from typing import Optional
 import numpy as np
 import pytest
 from mloda.user import DataAccessCollection
@@ -15,7 +14,7 @@ class BaseTestFeatureGroup1(FeatureGroup):
         cls,
         feature_name: FeatureName | str,
         options: Options,
-        data_access_collection: Optional[DataAccessCollection] = None,
+        data_access_collection: DataAccessCollection | None = None,
     ) -> bool:
         if "BaseTestFeature" in str(feature_name) and "1" in str(feature_name):
             return True
@@ -28,20 +27,20 @@ class BaseTestFeatureGroup2(FeatureGroup):
         cls,
         feature_name: FeatureName | str,
         options: Options,
-        data_access_collection: Optional[DataAccessCollection] = None,
+        data_access_collection: DataAccessCollection | None = None,
     ) -> bool:
         if "BaseTestFeature" in str(feature_name) and "2" in str(feature_name):
             return True
         return False
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         """This function should return the input features for the feature group
         if this feature is dependent on other features.
         Else, return None"""
         return {Feature.str_of("BaseTestFeature1"), Feature.int32_of("BaseTestFeature1")}
 
     @classmethod
-    def return_data_type_rule(cls, feature: Feature) -> Optional[DataType]:
+    def return_data_type_rule(cls, feature: Feature) -> DataType | None:
         if "BaseTestFeature" in feature.name and "2" in feature.name:
             return DataType.STRING
         return None

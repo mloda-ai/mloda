@@ -9,7 +9,7 @@ import math
 import warnings
 from abc import ABC, abstractmethod
 from collections import Counter
-from typing import Any, Optional
+from typing import Any
 
 import pytest
 
@@ -56,7 +56,7 @@ class AsofMergeEngineTestBase(ABC):
         pass
 
     @abstractmethod
-    def get_connection(self) -> Optional[Any]:
+    def get_connection(self) -> Any | None:
         """Return framework connection object, or None if not needed."""
         pass
 

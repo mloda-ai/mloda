@@ -11,7 +11,7 @@ validation moments for free:
    the element_validator, at the call site (class-definition time).
 """
 
-from typing import Any, Optional
+from typing import Any
 
 import pandas as pd
 import pytest
@@ -43,7 +43,7 @@ class PropertySpecE2EDataCreator(FeatureGroup):
     """Root data provider supplying a numeric base column."""
 
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator({"property_spec_e2e_base"})
 
     @classmethod

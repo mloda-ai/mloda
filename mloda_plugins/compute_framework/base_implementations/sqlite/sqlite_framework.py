@@ -2,7 +2,7 @@ import logging
 import re
 import sqlite3
 from collections.abc import Sequence
-from typing import Any, Optional
+from typing import Any
 
 from mloda.core.abstract_plugins.components.data_types import DataType
 from mloda.provider import BaseMergeEngine
@@ -17,7 +17,7 @@ from mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_relation
 logger = logging.getLogger(__name__)
 
 
-def _regexp(pattern: str, string: Optional[str]) -> bool:
+def _regexp(pattern: str, string: str | None) -> bool:
     """SQLite REGEXP implementation. Warning: pattern comes from filter values; malicious
     patterns (e.g. '(a+)+$') can cause exponential backtracking on crafted input."""
     if string is None:
@@ -26,7 +26,7 @@ def _regexp(pattern: str, string: Optional[str]) -> bool:
 
 
 class SqliteFramework(ComputeFramework):
-    def set_framework_connection_object(self, framework_connection_object: Optional[Any] = None) -> None:
+    def set_framework_connection_object(self, framework_connection_object: Any | None = None) -> None:
         if framework_connection_object is None:
             raise ValueError("A sqlite3.Connection object is required.")
         if not isinstance(framework_connection_object, sqlite3.Connection):
@@ -64,8 +64,8 @@ class SqliteFramework(ComputeFramework):
         self,
         data: Any,
         selected_feature_names: Sequence[FeatureName],
-        column_ordering: Optional[str] = None,
-        request_feature_order: Optional[list[str]] = None,
+        column_ordering: str | None = None,
+        request_feature_order: list[str] | None = None,
     ) -> Any:
         column_names = set(data.columns)
         _selected_feature_names = self.identify_naming_convention(
@@ -90,7 +90,7 @@ class SqliteFramework(ComputeFramework):
         idx = data.columns.index(column_name)
         return str(data.types[idx])
 
-    def _extract_column_data_type(self, data: Any, column_name: str) -> Optional[DataType]:
+    def _extract_column_data_type(self, data: Any, column_name: str) -> DataType | None:
         if not hasattr(data, "columns") or column_name not in data.columns:
             return None
         idx = data.columns.index(column_name)

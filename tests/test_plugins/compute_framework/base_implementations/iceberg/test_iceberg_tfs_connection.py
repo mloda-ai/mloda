@@ -6,7 +6,7 @@ the destination FG operates on a pa.Table and verifies that the catalog from
 the DataAccessCollection has been bound on the IcebergFramework instance by
 asserting it from inside calculate_feature via a per-test sentinel."""
 
-from typing import Any, Optional
+from typing import Any
 from unittest.mock import Mock
 
 import pytest
@@ -38,12 +38,12 @@ class ConnectionRecordingIcebergFramework(IcebergFramework):
     """Test-only subclass that records the bound catalog so the e2e test can
     assert the setup-time precompute reached this CFW instance."""
 
-    def set_framework_connection_object(self, framework_connection_object: Optional[Any] = None) -> None:
+    def set_framework_connection_object(self, framework_connection_object: Any | None = None) -> None:
         super().set_framework_connection_object(framework_connection_object)
         _observed_catalogs.append(self.framework_connection_object)
 
     @classmethod
-    def pick_connection_from_dac(cls, data_access_collection: Any, options: Optional[Any] = None) -> Optional[Any]:
+    def pick_connection_from_dac(cls, data_access_collection: Any, options: Any | None = None) -> Any | None:
         return IcebergFramework.pick_connection_from_dac(data_access_collection, options)
 
 
@@ -55,8 +55,8 @@ class TfsDoubledIcebergFG(FeatureGroup, MatchData):
         cls,
         feature_name: str,
         options: Options,
-        data_access_collection: Optional[DataAccessCollection] = None,
-        framework_connection_object: Optional[Any] = None,
+        data_access_collection: DataAccessCollection | None = None,
+        framework_connection_object: Any | None = None,
     ) -> Any:
         if pyiceberg is None:
             return None
@@ -73,7 +73,7 @@ class TfsDoubledIcebergFG(FeatureGroup, MatchData):
                 return conn
         return None
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return {Feature("raw_val")}
 
     @classmethod

@@ -23,7 +23,7 @@ parallel, so a shared name would leak into another module's candidate universe.
 from abc import abstractmethod
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass, field
-from typing import Any, ClassVar, Optional, cast
+from typing import Any, ClassVar, cast
 
 import pytest
 
@@ -163,9 +163,9 @@ class CountingSinglePassFG_782(FeatureGroup):
     """Feature group base counting every provider-overridable hook one resolution attempt may reach."""
 
     MATCHES: frozenset[str] = frozenset()
-    DOMAIN_NAME: Optional[str] = None
-    FRAMEWORK_RULE: Optional[set[type[ComputeFramework]]] = None
-    SUPPORTED_FRAMEWORKS: Optional[frozenset[str]] = None
+    DOMAIN_NAME: str | None = None
+    FRAMEWORK_RULE: set[type[ComputeFramework]] | None = None
+    SUPPORTED_FRAMEWORKS: frozenset[str] | None = None
     SUPPORTED_NAMES: frozenset[str] = frozenset()
 
     @classmethod
@@ -173,7 +173,7 @@ class CountingSinglePassFG_782(FeatureGroup):
         cls,
         feature_name: FeatureName | str,
         options: Options,
-        data_access_collection: Optional[DataAccessCollection] = None,
+        data_access_collection: DataAccessCollection | None = None,
     ) -> bool:
         _record(cls.get_class_name(), "match_feature_group_criteria")
         return str(feature_name) in cls.MATCHES
@@ -204,12 +204,12 @@ class CountingSinglePassFG_782(FeatureGroup):
         return compute_framework.get_class_name() in cls.SUPPORTED_FRAMEWORKS
 
     @classmethod
-    def index_columns(cls) -> Optional[list[Index]]:
+    def index_columns(cls) -> list[Index] | None:
         _record(cls.get_class_name(), "index_columns")
         return None
 
     @classmethod
-    def supports_index(cls, index: Index) -> Optional[bool]:
+    def supports_index(cls, index: Index) -> bool | None:
         _record(cls.get_class_name(), "supports_index")
         _record_index(cls.get_class_name(), index)
         return None
@@ -224,7 +224,7 @@ class CountingSinglePassFG_782(FeatureGroup):
         _record(cls.get_class_name(), "prefix")
         return f"{cls.get_class_name()}_"
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return None
 
 
@@ -290,7 +290,7 @@ class SinglePassBareOnlyFG_782(CountingSinglePassFG_782):
         cls,
         feature_name: FeatureName | str,
         options: Options,
-        data_access_collection: Optional[DataAccessCollection] = None,
+        data_access_collection: DataAccessCollection | None = None,
     ) -> bool:
         matched = super().match_feature_group_criteria(feature_name, options, data_access_collection)
         return matched and not options.group
@@ -311,7 +311,7 @@ class SinglePassReaderFG_782(CountingSinglePassFG_782):
         cls,
         feature_name: FeatureName | str,
         options: Options,
-        data_access_collection: Optional[DataAccessCollection] = None,
+        data_access_collection: DataAccessCollection | None = None,
     ) -> bool:
         _record(cls.get_class_name(), "match_feature_group_criteria")
         options.add_to_context(f"{OPTION_PROBE_PREFIX_782}{len(_probe_keys(options))}", "seen")
@@ -327,12 +327,12 @@ class SinglePassLinkFG_782(CountingSinglePassFG_782):
     FRAMEWORK_RULE = {SinglePassFwOne_782}
 
     @classmethod
-    def index_columns(cls) -> Optional[list[Index]]:
+    def index_columns(cls) -> list[Index] | None:
         _record(cls.get_class_name(), "index_columns")
         return [LEFT_INDEX_782]
 
     @classmethod
-    def supports_index(cls, index: Index) -> Optional[bool]:
+    def supports_index(cls, index: Index) -> bool | None:
         _record(cls.get_class_name(), "supports_index")
         _record_index(cls.get_class_name(), index)
         return False
@@ -350,7 +350,7 @@ class SinglePassStatefulMatchFG_782(CountingSinglePassFG_782):
         cls,
         feature_name: FeatureName | str,
         options: Options,
-        data_access_collection: Optional[DataAccessCollection] = None,
+        data_access_collection: DataAccessCollection | None = None,
     ) -> bool:
         _record(cls.get_class_name(), "match_feature_group_criteria")
         if _next_stateful_answer(cls.get_class_name()) > 0:
@@ -565,7 +565,7 @@ class SinglePassStrictFG_782(FeatureChainParserMixin, FeatureGroup):
         cls,
         feature_name: str | FeatureName,
         options: Options,
-        data_access_collection: Optional[DataAccessCollection] = None,
+        data_access_collection: DataAccessCollection | None = None,
     ) -> bool:
         _record(cls.get_class_name(), "match_feature_group_criteria")
         return super().match_feature_group_criteria(feature_name, options, data_access_collection)
@@ -592,7 +592,7 @@ class SinglePassStrictFG_782(FeatureChainParserMixin, FeatureGroup):
         return super().supports_compute_framework(feature_name, options, compute_framework)
 
     @classmethod
-    def index_columns(cls) -> Optional[list[Index]]:
+    def index_columns(cls) -> list[Index] | None:
         _record(cls.get_class_name(), "index_columns")
         return None
 
@@ -611,7 +611,7 @@ class SinglePassStrictFG_782(FeatureChainParserMixin, FeatureGroup):
         _record(cls.get_class_name(), "_strict_validation_rejection_reason")
         return super()._strict_validation_rejection_reason(feature_name, options)
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return None
 
 
@@ -627,8 +627,8 @@ class Scenario782:
     feature: Feature
     feature_groups: frozenset[type[FeatureGroup]]
     frameworks: frozenset[type[ComputeFramework]] = frozenset({SinglePassFwOne_782})
-    links: Optional[set[Link]] = None
-    data_access_collection: Optional[DataAccessCollection] = None
+    links: set[Link] | None = None
+    data_access_collection: DataAccessCollection | None = None
     # Every accessible candidate the matcher must be asked about, exactly once. Drives the EXACT counter
     # expectation, so a hook that stops being called at all fails just as loudly as one called twice.
     candidates: frozenset[str] = field(default_factory=frozenset)
@@ -687,7 +687,7 @@ def _resolve_error(scenario: Scenario782) -> str:
     return resolved.error
 
 
-def multiple_scenario(scope: Optional[str] = None) -> Scenario782:
+def multiple_scenario(scope: str | None = None) -> Scenario782:
     """Two identified candidates."""
     return Scenario782(
         feature=Feature(MULTIPLE_FEATURE_782, feature_group=scope),
@@ -696,7 +696,7 @@ def multiple_scenario(scope: Optional[str] = None) -> Scenario782:
     )
 
 
-def domain_multiple_scenario(scope: Optional[str] = None) -> Scenario782:
+def domain_multiple_scenario(scope: str | None = None) -> Scenario782:
     """Two identified candidates for a request that CARRIES a domain, so the filter loop asks get_domain."""
     return Scenario782(
         feature=Feature(DOMAIN_MULTIPLE_FEATURE_782, domain=PROBE_DOMAIN_782, feature_group=scope),
@@ -705,7 +705,7 @@ def domain_multiple_scenario(scope: Optional[str] = None) -> Scenario782:
     )
 
 
-def abstract_only_scenario(scope: Optional[str] = None) -> Scenario782:
+def abstract_only_scenario(scope: str | None = None) -> Scenario782:
     """Abstract base matched; its criteria-matched concrete subclass declares no enabled framework."""
     return Scenario782(
         feature=Feature(ABSTRACT_FEATURE_782, feature_group=scope),
@@ -715,7 +715,7 @@ def abstract_only_scenario(scope: Optional[str] = None) -> Scenario782:
     )
 
 
-def capability_scenario(scope: Optional[str] = None) -> Scenario782:
+def capability_scenario(scope: str | None = None) -> Scenario782:
     """The one enabled framework is the one the candidate rejects."""
     return Scenario782(
         feature=Feature(CAPABILITY_FEATURE_782, feature_group=scope),
@@ -724,7 +724,7 @@ def capability_scenario(scope: Optional[str] = None) -> Scenario782:
     )
 
 
-def ordinary_none_scenario(scope: Optional[str] = None) -> Scenario782:
+def ordinary_none_scenario(scope: str | None = None) -> Scenario782:
     """No match: the candidate matches the bare name but rejects the feature's group options."""
     return Scenario782(
         feature=Feature(BARE_ONLY_FEATURE_782, Options(group={"top_k_782": 5}), feature_group=scope),

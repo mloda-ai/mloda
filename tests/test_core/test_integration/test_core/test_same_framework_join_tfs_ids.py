@@ -2,7 +2,7 @@
 resolves through ExecutionPlan.add_tfs's inner_ep.tfs_ids branch and produces correct joined data.
 """
 
-from typing import Any, Optional
+from typing import Any
 
 from mloda.provider import BaseInputData
 from mloda.provider import ComputeFramework
@@ -28,7 +28,7 @@ SUMMED_VALUES = [110, 220, 330]
 
 class SftfsLeft(FeatureGroup):
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator(supports_features={"sftfs_left_key", "sftfs_left_value"})
 
     @classmethod
@@ -36,7 +36,7 @@ class SftfsLeft(FeatureGroup):
         return {"sftfs_left_key": LEFT_KEYS, "sftfs_left_value": LEFT_VALUES}
 
     @classmethod
-    def index_columns(cls) -> Optional[list[Index]]:
+    def index_columns(cls) -> list[Index] | None:
         return [Index(("sftfs_left_key",))]
 
     @classmethod
@@ -46,7 +46,7 @@ class SftfsLeft(FeatureGroup):
 
 class SftfsRight(FeatureGroup):
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator(supports_features={"sftfs_right_key", "sftfs_right_value"})
 
     @classmethod
@@ -54,7 +54,7 @@ class SftfsRight(FeatureGroup):
         return {"sftfs_right_key": RIGHT_KEYS, "sftfs_right_value": RIGHT_VALUES}
 
     @classmethod
-    def index_columns(cls) -> Optional[list[Index]]:
+    def index_columns(cls) -> list[Index] | None:
         return [Index(("sftfs_right_key",))]
 
     @classmethod
@@ -63,7 +63,7 @@ class SftfsRight(FeatureGroup):
 
 
 class SftfsChild(FeatureGroup):
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return {
             Feature(name="sftfs_left_key"),
             Feature(name="sftfs_left_value"),

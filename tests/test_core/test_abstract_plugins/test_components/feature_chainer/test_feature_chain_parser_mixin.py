@@ -1,7 +1,7 @@
 """Tests for FeatureChainParserMixin."""
 
 import logging
-from typing import Any, Optional
+from typing import Any
 
 import pytest
 
@@ -87,7 +87,7 @@ class _HiddenAttribute:
     def __set_name__(self, owner: type, name: str) -> None:
         self.name = name
 
-    def __get__(self, obj: object, objtype: Optional[type] = None) -> None:
+    def __get__(self, obj: object, objtype: type | None = None) -> None:
         raise AttributeError(self.name)
 
 

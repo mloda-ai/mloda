@@ -1,6 +1,6 @@
 import os
 from pathlib import Path
-from typing import Any, ClassVar, Optional
+from typing import Any, ClassVar
 
 from mloda.provider import BaseInputData, FeatureSet, PropertySpec
 from mloda.user import DataAccessCollection, Options
@@ -132,7 +132,7 @@ class ReadDocument(BaseInputData):
         cls,
         data_accesses: list[str],
         feature_names: list[str],
-        document_suffixes: Optional["frozenset[str]"] = None,
+        document_suffixes: "frozenset[str] | None" = None,
     ) -> Any:
         try:
             suffix = cls.suffix()

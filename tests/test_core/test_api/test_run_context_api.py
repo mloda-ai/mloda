@@ -1,6 +1,6 @@
 """E2E tests for RunContext plumbing through mlodaAPI, CfwManager, and _build_run_context()."""
 
-from typing import Any, Optional
+from typing import Any
 
 from mloda.core.abstract_plugins.run_context import RunContext
 from mloda.core.api.request import mlodaAPI
@@ -17,7 +17,7 @@ def _run_context_api_bootstrap() -> None:
 
 class _RunContextApiFeatureGroup(FeatureGroup):
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator({"run_context_api_col"})
 
     @classmethod

@@ -1,6 +1,6 @@
 from collections.abc import Iterable
 from dataclasses import dataclass, field
-from typing import Literal, Optional, TYPE_CHECKING
+from typing import Literal, TYPE_CHECKING
 from uuid import UUID
 
 from mloda.core.abstract_plugins.components.error_utils import internal_invariant_error
@@ -50,36 +50,36 @@ class PlanStep:
 
     step_kind: Literal["compute", "join", "transform"]
     feature_names: tuple[str, ...]
-    feature_group: Optional[type["FeatureGroup"]]
-    compute_framework: Optional[type["ComputeFramework"]]
-    source_feature_group: Optional[type["FeatureGroup"]]
-    source_compute_framework: Optional[type["ComputeFramework"]]
-    join_type: Optional[str] = None
+    feature_group: type["FeatureGroup"] | None
+    compute_framework: type["ComputeFramework"] | None
+    source_feature_group: type["FeatureGroup"] | None
+    source_compute_framework: type["ComputeFramework"] | None
+    join_type: str | None = None
     requested_feature_names: tuple[str, ...] = ()
     injected_feature_names: tuple[str, ...] = ()
-    join_destination_side: Optional[Literal["left", "right"]] = None
-    join_token: Optional[UUID] = field(default=None, compare=False)
+    join_destination_side: Literal["left", "right"] | None = None
+    join_token: UUID | None = field(default=None, compare=False)
     declared_left_frameworks: tuple[type["ComputeFramework"], ...] = ()
     declared_right_frameworks: tuple[type["ComputeFramework"], ...] = ()
 
     @property
-    def feature_group_name(self) -> Optional[str]:
+    def feature_group_name(self) -> str | None:
         return None if self.feature_group is None else self.feature_group.get_class_name()
 
     @property
-    def compute_framework_name(self) -> Optional[str]:
+    def compute_framework_name(self) -> str | None:
         return None if self.compute_framework is None else self.compute_framework.get_class_name()
 
     @property
-    def source_feature_group_name(self) -> Optional[str]:
+    def source_feature_group_name(self) -> str | None:
         return None if self.source_feature_group is None else self.source_feature_group.get_class_name()
 
     @property
-    def source_compute_framework_name(self) -> Optional[str]:
+    def source_compute_framework_name(self) -> str | None:
         return None if self.source_compute_framework is None else self.source_compute_framework.get_class_name()
 
     @property
-    def join_inverted(self) -> Optional[bool]:
+    def join_inverted(self) -> bool | None:
         return None if self.join_destination_side is None else self.join_destination_side == "right"
 
     @property
@@ -93,7 +93,7 @@ class PlanStep:
 
 def build_plan_steps(
     execution_plan: Iterable[TransformFrameworkStep | JoinStep | FeatureGroupStep],
-    resolved_join_plan: Optional["ResolvedJoinPlan"] = None,
+    resolved_join_plan: "ResolvedJoinPlan | None" = None,
 ) -> list[PlanStep]:
     """Map the steps of an ExecutionPlan onto PlanStep records, in execution-plan order.
 

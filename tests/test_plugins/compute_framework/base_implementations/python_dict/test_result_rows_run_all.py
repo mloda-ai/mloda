@@ -1,6 +1,6 @@
 """End-to-end test: ``result_rows`` unwraps a PythonDict ``mloda.run_all`` result (issue 717)."""
 
-from typing import Any, Optional
+from typing import Any
 
 from mloda.provider import BaseInputData
 from mloda.provider import ComputeFramework
@@ -19,7 +19,7 @@ class ResultRowsRootFeatureGroup(FeatureGroup):
     """Root PythonDict FeatureGroup emitting a two-row columnar dict for ``result_rows``."""
 
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator({"result_rows_e2e_col"})
 
     @classmethod

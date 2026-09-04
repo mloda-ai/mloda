@@ -1,4 +1,4 @@
-from typing import Optional, Any
+from typing import Any
 from uuid import UUID, uuid4
 from mloda.core.abstract_plugins.components.framework_transformer.cfw_transformer import ComputeFrameworkTransformer
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
@@ -21,7 +21,7 @@ class JoinStep(Step):
         destination_framework_uuids: set[UUID],
         source_framework_uuids: set[UUID],
         swap_merge_sides: bool = False,
-        token: Optional[UUID] = None,
+        token: UUID | None = None,
     ) -> None:
         self.link = link
         self.swap_merge_sides = swap_merge_sides
@@ -61,7 +61,7 @@ class JoinStep(Step):
         with context.activate():
             _invoke_extender(extender, instrument(context, self._do_merge_data), cfw, from_cfw_data)
 
-    def _join_keys(self) -> Optional[tuple[str, ...]]:
+    def _join_keys(self) -> tuple[str, ...] | None:
         """Pairs each left column with its corresponding right column; None for APPEND/UNION, which merge without keys."""
         if self.link.jointype in (JoinType.APPEND, JoinType.UNION):
             return None
@@ -89,9 +89,9 @@ class JoinStep(Step):
         self,
         cfw_register: CfwManager,
         cfw: ComputeFramework,
-        from_cfw: Optional[ComputeFramework | UUID] = None,
-        data: Optional[Any] = None,
-    ) -> Optional[Any]:
+        from_cfw: ComputeFramework | UUID | None = None,
+        data: Any | None = None,
+    ) -> Any | None:
         self.location = cfw_register.get_location()
 
         if from_cfw is None:
@@ -123,7 +123,7 @@ class JoinStep(Step):
             raise ValueError("From_cfw is a UUID, but we are not using flightserver.")
         return from_cfw.get_data(), from_cfw.uuid
 
-    def matched(self, other_framework: type[ComputeFramework], uuid: UUID) -> Optional[UUID]:
+    def matched(self, other_framework: type[ComputeFramework], uuid: UUID) -> UUID | None:
         """
         If matched, return the uuid of the join step.
         """

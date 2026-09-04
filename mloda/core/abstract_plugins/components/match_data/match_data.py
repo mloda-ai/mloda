@@ -1,4 +1,4 @@
-from typing import Any, Optional
+from typing import Any
 
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.abstract_plugins.components.options import Options
@@ -16,7 +16,7 @@ class MatchData:
         cls,
         feature_name: str,
         options: Options,
-        data_access_collection: Optional[DataAccessCollection] = None,
+        data_access_collection: DataAccessCollection | None = None,
     ) -> bool:
         """
         We look if feature scope data access or global scope access is set.
@@ -54,7 +54,7 @@ class MatchData:
         cls,
         feature_name: str,
         options: Options,
-        data_access_collection: Optional[DataAccessCollection],
+        data_access_collection: DataAccessCollection | None,
     ) -> bool:
         """
         We check for global scope data access if any data access collection matches the framework connection and matching logic."""
@@ -75,8 +75,8 @@ class MatchData:
         cls,
         feature_name: str,
         options: Options,
-        data_access_collection: Optional[DataAccessCollection] = None,
-        framework_connection_object: Optional[Any] = None,
+        data_access_collection: DataAccessCollection | None = None,
+        framework_connection_object: Any | None = None,
     ) -> Any:
         """
         We check for data access collection if any child classes match the data access.

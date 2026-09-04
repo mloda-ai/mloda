@@ -5,7 +5,7 @@ TypeError and that element order is preserved via tuple conversion.
 """
 
 import ast
-from typing import Any, Optional
+from typing import Any
 
 from mloda.provider import ComputeFramework
 from mloda.provider import FeatureGroup
@@ -29,7 +29,7 @@ class ListValuedTestDataCreator(FeatureGroup):
     """Creates test data with three columns."""
 
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator({"col_a", "col_b", "col_c"})
 
     @classmethod
@@ -68,7 +68,7 @@ class ListValuedFeatureGroup(FeatureGroup):
         cls,
         feature_name: FeatureName | str,
         options: Options,
-        data_access_collection: Optional[Any] = None,
+        data_access_collection: Any | None = None,
     ) -> bool:
         _name = str(feature_name) if isinstance(feature_name, FeatureName) else feature_name
         return FeatureChainParser.match_configuration_feature_chain_parser(
@@ -77,7 +77,7 @@ class ListValuedFeatureGroup(FeatureGroup):
             property_mapping=cls.PROPERTY_MAPPING,
         )
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         source_features = options.get_in_features()
         return set(source_features)
 

@@ -8,7 +8,7 @@ into a SqliteRelation routes through PyArrow, so PyArrow must be available.
 
 import sqlite3
 from datetime import timedelta
-from typing import Any, Optional
+from typing import Any
 
 import pytest
 
@@ -43,7 +43,7 @@ class TestSqliteAsofMergeEngine(AsofMergeEngineTestBase):
     def framework_type(cls) -> type[Any]:
         return SqliteRelation
 
-    def get_connection(self) -> Optional[Any]:
+    def get_connection(self) -> Any | None:
         if not hasattr(self, "_connection"):
             self._connection = sqlite3.connect(":memory:")
             self._connection.create_function("REGEXP", 2, _regexp)

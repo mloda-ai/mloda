@@ -1,5 +1,5 @@
 import os
-from typing import Any, Optional
+from typing import Any
 
 from mloda.provider import FeatureGroup
 from mloda.user import Feature
@@ -14,7 +14,7 @@ from tests.test_core.test_integration.test_core.test_runner_one_compute_framewor
 
 class InputDataTestFeatureGroup(FeatureGroup):
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator(
             supports_features={
                 "InputDataTestFeatureGroup_id",

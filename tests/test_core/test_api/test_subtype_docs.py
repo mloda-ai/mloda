@@ -2,7 +2,6 @@
 
 import gc
 from abc import abstractmethod
-from typing import Optional
 
 import pytest
 
@@ -47,7 +46,7 @@ R4_KEY = "sbddr4_kind"
 R5_FEATURE = "sbdd_resolver_feature"
 
 
-def _sbdd_raising_resolver(feature_name: str, options: Options) -> Optional[str]:
+def _sbdd_raising_resolver(feature_name: str, options: Options) -> str | None:
     raise RuntimeError("sbdd resolver exploded")
 
 
@@ -164,11 +163,11 @@ class SubDeclDocOptionFG(FeatureGroup):
         cls,
         feature_name: FeatureName | str,
         options: Options,
-        data_access_collection: Optional[DataAccessCollection] = None,
+        data_access_collection: DataAccessCollection | None = None,
     ) -> bool:
         return str(feature_name) == OPTION_FEATURE
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return None
 
 
@@ -184,11 +183,11 @@ class SubDeclDocPlainFG(FeatureGroup):
         cls,
         feature_name: FeatureName | str,
         options: Options,
-        data_access_collection: Optional[DataAccessCollection] = None,
+        data_access_collection: DataAccessCollection | None = None,
     ) -> bool:
         return str(feature_name) == PLAIN_FEATURE
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return None
 
 
@@ -229,11 +228,11 @@ class SubDeclDocRaisingResolverFG(FeatureGroup):
         cls,
         feature_name: FeatureName | str,
         options: Options,
-        data_access_collection: Optional[DataAccessCollection] = None,
+        data_access_collection: DataAccessCollection | None = None,
     ) -> bool:
         return str(feature_name) == R5_FEATURE
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return None
 
 

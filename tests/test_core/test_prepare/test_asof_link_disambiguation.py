@@ -18,7 +18,7 @@ PART B drives the real path through ``mloda.run_all`` with the link pinned on
 the LEFT feature, as in production.
 """
 
-from typing import Any, Optional
+from typing import Any
 
 import pytest
 
@@ -52,22 +52,22 @@ from mloda_plugins.compute_framework.base_implementations.pandas.dataframe impor
 class AsofFGa(FeatureGroup):
     """Mock left feature group with a single by-key index column 'k'."""
 
-    def input_features(self, _options: Options, _feature_name: FeatureName) -> Optional[set[Any]]:
+    def input_features(self, _options: Options, _feature_name: FeatureName) -> set[Any] | None:
         return None
 
     @classmethod
-    def index_columns(cls) -> Optional[list[Index]]:
+    def index_columns(cls) -> list[Index] | None:
         return [Index(("k",))]
 
 
 class AsofFGb(FeatureGroup):
     """Mock right feature group with a single by-key index column 'k'."""
 
-    def input_features(self, _options: Options, _feature_name: FeatureName) -> Optional[set[Any]]:
+    def input_features(self, _options: Options, _feature_name: FeatureName) -> set[Any] | None:
         return None
 
     @classmethod
-    def index_columns(cls) -> Optional[list[Index]]:
+    def index_columns(cls) -> list[Index] | None:
         return [Index(("k",))]
 
 
@@ -237,7 +237,7 @@ class DisambigLeftFeature(FeatureGroup):
     """Left side: emits by-key ``k``, time ``t`` and value ``lv``."""
 
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator(supports_features={"k", "t", "lv"})
 
     @classmethod
@@ -249,7 +249,7 @@ class DisambigRightFeature(FeatureGroup):
     """Right side: emits by-key ``k``, time ``t`` and value ``rv``."""
 
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator(supports_features={"k", "t", "rv"})
 
     @classmethod
@@ -260,7 +260,7 @@ class DisambigRightFeature(FeatureGroup):
 class DisambigBackwardJoinedFeature(FeatureGroup):
     """Parent FG pinning the BACKWARD link on the joining ``lv`` feature."""
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return {
             Feature(name="lv", link=_disambig_link_backward(), index=Index(("k",))),
             Feature(name="rv", index=Index(("k",))),
@@ -279,7 +279,7 @@ class DisambigBackwardJoinedFeature(FeatureGroup):
 class DisambigForwardJoinedFeature(FeatureGroup):
     """Parent FG pinning the FORWARD link on the joining ``lv`` feature."""
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return {
             Feature(name="lv", link=_disambig_link_forward(), index=Index(("k",))),
             Feature(name="rv", index=Index(("k",))),

@@ -1,4 +1,4 @@
-from typing import Any, Optional
+from typing import Any
 from mloda.core.abstract_plugins.components.contract.comparison_contract import ColumnSemantics
 from mloda.provider import BaseFilterEngine
 from mloda.user import SingleFilter
@@ -16,14 +16,14 @@ try:
         Reference,
     )
 except ImportError:
-    IcebergTable: Optional[type[Any]] = None  # type: ignore[no-redef]
-    GreaterThan: Optional[type[Any]] = None  # type: ignore[no-redef]
-    LessThan: Optional[type[Any]] = None  # type: ignore[no-redef]
-    GreaterThanOrEqual: Optional[type[Any]] = None  # type: ignore[no-redef]
-    LessThanOrEqual: Optional[type[Any]] = None  # type: ignore[no-redef]
-    EqualTo: Optional[type[Any]] = None  # type: ignore[no-redef]
-    And: Optional[type[Any]] = None  # type: ignore[no-redef]
-    Reference: Optional[type[Any]] = None  # type: ignore[no-redef]
+    IcebergTable: type[Any] | None = None  # type: ignore[no-redef]
+    GreaterThan: type[Any] | None = None  # type: ignore[no-redef]
+    LessThan: type[Any] | None = None  # type: ignore[no-redef]
+    GreaterThanOrEqual: type[Any] | None = None  # type: ignore[no-redef]
+    LessThanOrEqual: type[Any] | None = None  # type: ignore[no-redef]
+    EqualTo: type[Any] | None = None  # type: ignore[no-redef]
+    And: type[Any] | None = None  # type: ignore[no-redef]
+    Reference: type[Any] | None = None  # type: ignore[no-redef]
 
 
 class IcebergFilterEngine(BaseFilterEngine):

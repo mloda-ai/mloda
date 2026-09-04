@@ -1,7 +1,7 @@
 """Characterizes what the link planner plans, and what it declines to plan."""
 
 from pathlib import Path
-from typing import Any, Callable, NamedTuple, Optional
+from typing import Any, Callable, NamedTuple
 from uuid import UUID
 
 import pyarrow as pa
@@ -101,7 +101,7 @@ class LinkPlanSharedLeft(FeatureGroup):
     """Pinned to the framework the link declares as its left side, with descending keys as an order oracle."""
 
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator(supports_features={SHARED_LEFT_PAYLOAD})
 
     @classmethod
@@ -117,7 +117,7 @@ class LinkPlanSharedRight(FeatureGroup):
     """Pinned to the right framework, with keys that only partly overlap the left side."""
 
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator(supports_features={SHARED_RIGHT_PAYLOAD})
 
     @classmethod
@@ -136,7 +136,7 @@ def _shared_parents() -> set[Feature]:
 class LinkPlanSharedFlexibleChild(FeatureGroup):
     """Takes either framework, so on its own it would keep the declared orientation."""
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return _shared_parents()
 
     @classmethod
@@ -151,7 +151,7 @@ class LinkPlanSharedFlexibleChild(FeatureGroup):
 class LinkPlanSharedPinnedChild(FeatureGroup):
     """Takes the right framework only, so it forces the shared link into its inverted orientation."""
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return _shared_parents()
 
     @classmethod
@@ -167,7 +167,7 @@ class LinkPlanSelfSource(FeatureGroup):
     """Serves both sides of the self join; the requested feature name picks the side."""
 
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator(supports_features={SELF_LEFT_PAYLOAD, SELF_RIGHT_PAYLOAD})
 
     @classmethod
@@ -184,7 +184,7 @@ class LinkPlanSelfSource(FeatureGroup):
 class LinkPlanSelfConsumer(FeatureGroup):
     """Consumes both sides; the options are what the discriminators match on."""
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return {
             Feature(name=SELF_LEFT_PAYLOAD, options={SELF_SIDE: "left"}),
             Feature(name=SELF_RIGHT_PAYLOAD, options={SELF_SIDE: "right"}),
@@ -286,7 +286,7 @@ def _trek(planned: Planned, left_cfw: type[ComputeFramework], right_cfw: type[Co
     planned.link_trekker.data_ordered[(planned.link, left_cfw, right_cfw)] = trekked
 
 
-def _run(planned: Planned, left_cfw: type[ComputeFramework], right_cfw: type[ComputeFramework]) -> Optional[JoinStep]:
+def _run(planned: Planned, left_cfw: type[ComputeFramework], right_cfw: type[ComputeFramework]) -> JoinStep | None:
     link_fw: LinkFrameworkTrekker = (planned.link, left_cfw, right_cfw)
     return planned.plan.run_link(link_fw, planned.link_trekker, planned.graph, planned.pre_execution_plan)
 

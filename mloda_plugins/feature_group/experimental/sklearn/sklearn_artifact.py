@@ -7,7 +7,7 @@ import base64
 import logging
 import tempfile
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 from mloda.core.abstract_plugins.components.utils import contained_raise_reason
 from mloda.provider import BaseArtifact
@@ -123,7 +123,7 @@ class SklearnArtifact(BaseArtifact):
         return artifact
 
     @classmethod
-    def custom_saver(cls, features: FeatureSet, artifact: Any) -> Optional[Any]:
+    def custom_saver(cls, features: FeatureSet, artifact: Any) -> Any | None:
         """
         Save sklearn artifacts to file(s).
 
@@ -187,7 +187,7 @@ class SklearnArtifact(BaseArtifact):
         return storage_dir / filename
 
     @classmethod
-    def custom_loader(cls, features: FeatureSet) -> Optional[Any]:
+    def custom_loader(cls, features: FeatureSet) -> Any | None:
         """
         Load sklearn artifacts from file(s).
 
@@ -243,7 +243,7 @@ class SklearnArtifact(BaseArtifact):
             return None
 
     @classmethod
-    def load_sklearn_artifact(cls, features: FeatureSet, artifact_key: str) -> Optional[dict[str, Any]]:
+    def load_sklearn_artifact(cls, features: FeatureSet, artifact_key: str) -> dict[str, Any] | None:
         """
         Helper method to load a specific sklearn artifact by key.
 

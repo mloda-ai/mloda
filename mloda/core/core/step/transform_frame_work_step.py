@@ -1,4 +1,4 @@
-from typing import Any, Optional
+from typing import Any
 from uuid import UUID, uuid4
 
 from mloda.core.abstract_plugins.components.error_utils import internal_invariant_error
@@ -21,9 +21,9 @@ class TransformFrameworkStep(Step):
         required_uuids: set[UUID],
         from_feature_group: type[FeatureGroup],
         to_feature_group: type[FeatureGroup],
-        link_id: Optional[UUID] = None,
-        source_framework_uuids: Optional[set[UUID]] = None,
-        source_step_uuid: Optional[UUID] = None,
+        link_id: UUID | None = None,
+        source_framework_uuids: set[UUID] | None = None,
+        source_step_uuid: UUID | None = None,
     ) -> None:
         if source_framework_uuids is None:
             source_framework_uuids = set()
@@ -40,7 +40,7 @@ class TransformFrameworkStep(Step):
         self.transformer = ComputeFrameworkTransformer()
 
         # This variable is only set, if the TFS was requested by a joinstep.
-        self.source_framework_uuid: Optional[UUID] = None
+        self.source_framework_uuid: UUID | None = None
         if len(source_framework_uuids) > 0:
             self.source_framework_uuid = next(iter(source_framework_uuids))
 
@@ -80,9 +80,9 @@ class TransformFrameworkStep(Step):
         self,
         cfw_register: CfwManager,
         cfw: ComputeFramework,
-        from_cfw: Optional[ComputeFramework | UUID] = None,
-        data: Optional[Any] = None,
-    ) -> Optional[Any]:
+        from_cfw: ComputeFramework | UUID | None = None,
+        data: Any | None = None,
+    ) -> Any | None:
         self.location = cfw_register.get_location()
 
         if from_cfw is None:

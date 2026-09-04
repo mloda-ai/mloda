@@ -7,7 +7,7 @@ Three features:
 3. JoinedFeature (custom) - depends on both with a join
 """
 
-from typing import Any, Optional
+from typing import Any
 from mloda.provider import FeatureGroup
 from mloda.user import Feature
 from mloda.user import FeatureName
@@ -30,7 +30,7 @@ class CreatorDataFeature(FeatureGroup):
     """Creates its own data via DataCreator."""
 
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator({"creator_id", "creator_value"})
 
     @classmethod
@@ -48,7 +48,7 @@ class CreatorDataFeature(FeatureGroup):
 class LeftJoinedFeature(FeatureGroup):
     """Joins mloda data with Creator data using LEFT join."""
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         """Define input features with a LEFT join link."""
 
         # Create the link: LEFT join on api_id = creator_id
@@ -76,7 +76,7 @@ class LeftJoinedFeature(FeatureGroup):
 class AppendedFeature(FeatureGroup):
     """Appends mloda data with Creator data (stacks vertically)."""
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         """Define input features with an APPEND link."""
 
         # Create the link: APPEND stacks data vertically

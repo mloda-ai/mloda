@@ -11,7 +11,7 @@ in_features path, which bypasses FeatureConfig validation), invalid values are
 rejected with ValueError, and the schema advertises it.
 """
 
-from typing import Any, Optional
+from typing import Any
 
 import pytest
 
@@ -579,7 +579,7 @@ class ConfigScopeSourceA(FeatureGroup):
     """Source A: provides the shared "config_shared_token" plus "config_value_a"."""
 
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator(supports_features={"config_shared_token", "config_value_a"})
 
     @classmethod
@@ -594,7 +594,7 @@ class ConfigScopeSourceB(FeatureGroup):
     """Source B: also provides the shared "config_shared_token" plus "config_value_b"."""
 
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator(supports_features={"config_shared_token", "config_value_b"})
 
     @classmethod
@@ -663,7 +663,7 @@ class ConfigScopeAggregationSource(FeatureGroup):
     """Source data for the aggregated-family scope test."""
 
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator(supports_features={"config_scope_sales"})
 
     @classmethod

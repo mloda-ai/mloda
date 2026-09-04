@@ -7,7 +7,7 @@ duplicated merge tests across all framework test files (Pandas, Polars, PyArrow,
 
 import pytest
 from abc import ABC
-from typing import Any, Optional
+from typing import Any
 from unittest.mock import Mock, MagicMock
 
 from mloda.user import Index
@@ -25,7 +25,7 @@ class ConcreteTestClass(DataFrameTestBase):
     def create_dataframe(self, data: dict[str, Any]) -> Any:
         return {"mocked_df": data}
 
-    def get_connection(self) -> Optional[Any]:
+    def get_connection(self) -> Any | None:
         return None
 
 
@@ -100,7 +100,7 @@ class TestDataFrameTestBaseHelpers:
             def create_dataframe(self, data: dict[str, Any]) -> Any:
                 return data
 
-            def get_connection(self) -> Optional[Any]:
+            def get_connection(self) -> Any | None:
                 return None
 
         concrete = MockFrameworkTestClass()

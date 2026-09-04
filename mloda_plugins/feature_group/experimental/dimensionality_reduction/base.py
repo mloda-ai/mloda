@@ -5,7 +5,7 @@ Base implementation for dimensionality reduction feature groups.
 from __future__ import annotations
 
 from abc import abstractmethod
-from typing import Any, Optional
+from typing import Any
 
 from mloda.provider import FeatureGroup
 from mloda.user import Feature
@@ -303,7 +303,7 @@ class DimensionalityReductionFeatureGroup(FeatureChainParserMixin, FeatureGroup)
         return algorithm, dimension, source_features, algo_options
 
     @classmethod
-    def _extract_dim_reduction_params(cls, feature: Feature) -> tuple[Optional[str], Optional[int], Options]:
+    def _extract_dim_reduction_params(cls, feature: Feature) -> tuple[str | None, int | None, Options]:
         """
         Extract dimensionality reduction algorithm, dimension, and options from a feature.
 

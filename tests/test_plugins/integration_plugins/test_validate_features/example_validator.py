@@ -1,4 +1,4 @@
-from typing import Any, Optional
+from typing import Any
 
 from pandera import Column, Check
 
@@ -33,7 +33,7 @@ class ExamplePanderaValidator(BaseValidator):
 
 class BaseValidateOutputFeaturesBase(FeatureGroup):
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator({cls.get_class_name()})
 
     @classmethod

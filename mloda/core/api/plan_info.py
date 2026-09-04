@@ -26,6 +26,10 @@ class PlanStep:
     engine-injected/dependency remainder; both are empty for join and transform steps.
     The split is name-based, so a name that is both user-requested and engine-injected within
     one step counts as requested only.
+    ``input_feature_names`` holds the sorted, deduplicated names the feature group declares as
+    input; it is empty for a root step and for join and transform steps. It is the prepare-time twin
+    of the run-time ``HookContext.input_features``, which ``ComputeFramework._build_hook_context``
+    fills from the same FeatureSet attribute.
     ``source_*`` and ``join_type`` are None.
 
     transform: ``feature_group``/``compute_framework`` are the destination, ``source_*`` the origin.
@@ -57,6 +61,7 @@ class PlanStep:
     join_type: Optional[str] = None
     requested_feature_names: tuple[str, ...] = ()
     injected_feature_names: tuple[str, ...] = ()
+    input_feature_names: tuple[str, ...] = ()
     join_destination_side: Optional[Literal["left", "right"]] = None
     join_token: Optional[UUID] = field(default=None, compare=False)
     declared_left_frameworks: tuple[type["ComputeFramework"], ...] = ()
@@ -112,6 +117,8 @@ def build_plan_steps(
             feature_names = tuple(str(name) for name in step.features.get_all_names())
             requested = tuple(sorted(str(name) for name in step.features.get_initial_requested_features()))
             injected = tuple(sorted(set(feature_names) - set(requested)))
+            declared = step.features.declared_input_feature_names
+            input_feature_names = tuple(sorted(declared)) if declared else ()
             plan.append(
                 PlanStep(
                     step_kind="compute",
@@ -122,6 +129,7 @@ def build_plan_steps(
                     source_compute_framework=None,
                     requested_feature_names=requested,
                     injected_feature_names=injected,
+                    input_feature_names=input_feature_names,
                 )
             )
         elif isinstance(step, TransformFrameworkStep):

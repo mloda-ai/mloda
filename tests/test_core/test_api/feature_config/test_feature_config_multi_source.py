@@ -100,8 +100,7 @@ def test_load_multiple_sources_as_frozenset() -> None:
     # in_features should be converted to frozenset and stored in context
     # Note: Using DefaultOptionKeys.in_features (singular)
     in_features = result[0].options.context.get(DefaultOptionKeys.in_features)
-    assert isinstance(in_features, frozenset)
-    assert in_features == frozenset({"latitude", "longitude"})
+    assert in_features == ("latitude", "longitude")
 
     # Regular options should be in group
     assert result[0].options.group.get("method") == "haversine"
@@ -112,8 +111,7 @@ def test_load_multiple_sources_as_frozenset() -> None:
 
     # in_features should be converted to frozenset and stored in context
     in_features_2 = result[1].options.context.get(DefaultOptionKeys.in_features)
-    assert isinstance(in_features_2, frozenset)
-    assert in_features_2 == frozenset({"width", "height"})
+    assert in_features_2 == ("width", "height")
 
     # Group options should be in group
     assert result[1].options.group.get("unit") == "square_meters"

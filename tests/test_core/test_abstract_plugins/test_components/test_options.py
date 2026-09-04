@@ -506,3 +506,34 @@ class TestOptionsGetInFeaturesUnresolvableTruthyValue:
         """The unsupported-type message keeps naming the type alongside the value."""
         message = self._message(value)
         assert type(value).__name__ in message, message
+
+
+class TestOptionsGetInFeaturesOrdering:
+    """get_in_features preserves ordered declarations and stabilizes unordered inputs."""
+
+    @pytest.mark.parametrize(
+        "ordered_input",
+        [
+            pytest.param(["z_source", "a_source", "z_source"], id="list"),
+            pytest.param(("z_source", "a_source", "z_source"), id="tuple"),
+            pytest.param("z_source, a_source, z_source", id="comma_separated_string"),
+        ],
+    )
+    def test_ordered_input_preserves_order_and_first_occurrence(self, ordered_input: object) -> None:
+        result = Options(context={IN_FEATURES: ordered_input}).get_in_features()
+
+        assert isinstance(result, tuple)
+        assert [feature.name for feature in result] == ["z_source", "a_source"]
+
+    @pytest.mark.parametrize(
+        "unordered_input",
+        [
+            pytest.param({"z_source", "a_source"}, id="set"),
+            pytest.param(frozenset({"z_source", "a_source"}), id="frozenset"),
+        ],
+    )
+    def test_legacy_unordered_input_uses_stable_name_order(self, unordered_input: object) -> None:
+        result = Options(context={IN_FEATURES: unordered_input}).get_in_features()
+
+        assert isinstance(result, tuple)
+        assert [feature.name for feature in result] == ["a_source", "z_source"]

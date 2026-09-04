@@ -432,7 +432,7 @@ def test_loader_does_not_write_in_features_into_parsed_context_options(monkeypat
     }
     outer = _single_feature(config)
 
-    assert outer.options.context.get(DefaultOptionKeys.in_features) == frozenset({"age"})
+    assert outer.options.context.get(DefaultOptionKeys.in_features) == ("age",)
 
     parsed = captured[0]
     assert isinstance(parsed, FeatureConfig)
@@ -523,7 +523,7 @@ def test_top_level_in_features_with_group_options_still_lands_in_context() -> No
 
     assert outer.options.group == {"threshold": 0.5}
     assert outer.options.context.get("metadata") == "test"
-    assert outer.options.context.get(DefaultOptionKeys.in_features) == frozenset({"age"})
+    assert outer.options.context.get(DefaultOptionKeys.in_features) == ("age",)
 
 
 def test_column_index_suffix_still_applied_with_group_options() -> None:
@@ -567,7 +567,7 @@ def test_in_features_branch_with_options_still_loads() -> None:
     outer = _single_feature(config)
 
     assert outer.options.group == {"method": "standard"}
-    assert outer.options.context.get(DefaultOptionKeys.in_features) == frozenset({"age"})
+    assert outer.options.context.get(DefaultOptionKeys.in_features) == ("age",)
 
 
 def test_options_branch_collision_with_top_level_in_features_still_raises() -> None:

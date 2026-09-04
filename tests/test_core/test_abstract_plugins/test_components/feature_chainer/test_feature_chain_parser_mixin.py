@@ -403,7 +403,7 @@ class _MarkedAbortOptions(Options):
 
     marker: BaseException
 
-    def get_in_features(self) -> "frozenset[Feature]":
+    def get_in_features(self) -> "tuple[Feature, ...]":
         raise self.marker
 
 
@@ -677,9 +677,7 @@ class TestFeatureChainParserMixinExtractSourceFeatures:
         result = MockFeatureGroup._extract_source_features(feature)
 
         # Should return list of feature names from get_in_features()
-        assert len(result) == 2
-        assert "feature_a" in result
-        assert "feature_b" in result
+        assert result == ["feature_a", "feature_b"]
 
     def test_extract_source_features_custom_separator(self) -> None:
         """Test extraction with custom separator (comma instead of ampersand)."""

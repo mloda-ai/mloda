@@ -116,8 +116,7 @@ def test_load_features_with_mloda_source() -> None:
 
     # in_features should be in options.context as a frozenset
     in_features_value = result[0].options.context.get(DefaultOptionKeys.in_features)
-    assert isinstance(in_features_value, frozenset)
-    assert in_features_value == frozenset({"age"})
+    assert in_features_value == ("age",)
 
     # Regular options should be in options.group
     assert result[0].options.group.get("method") == "standard"
@@ -168,8 +167,7 @@ def test_load_features_mixed_chained_and_simple() -> None:
     assert isinstance(result[2], Feature)
     assert result[2].name == "standard_scaled__mean_imputed__age"
     in_features_value = result[2].options.context.get(DefaultOptionKeys.in_features)
-    assert isinstance(in_features_value, frozenset)
-    assert in_features_value == frozenset({"age"})
+    assert in_features_value == ("age",)
     assert result[2].options.group.get("method") == "robust"
 
     # Fourth feature: simple string
@@ -389,8 +387,7 @@ def test_load_appends_tilde_syntax_to_name() -> None:
     assert isinstance(result[1], Feature)
     assert result[1].name == "scale__mean_imputed__age~1"
     in_features_value = result[1].options.context.get(DefaultOptionKeys.in_features)
-    assert isinstance(in_features_value, frozenset)
-    assert in_features_value == frozenset({"age"})
+    assert in_features_value == ("age",)
     assert result[1].options.group.get("scaler") == "robust"
 
     # Third: with group_options and context_options
@@ -494,7 +491,7 @@ def test_load_features_accepts_in_features_array_of_names() -> None:
 
     assert len(result) == 1
     assert isinstance(result[0], Feature)
-    assert result[0].options.context.get(DefaultOptionKeys.in_features) == frozenset({"age", "weight"})
+    assert result[0].options.context.get(DefaultOptionKeys.in_features) == ("age", "weight")
 
 
 def test_load_features_with_multiple_in_features() -> None:
@@ -533,8 +530,7 @@ def test_load_features_with_multiple_in_features() -> None:
 
     # in_features should be converted to frozenset in options.context with singular key name
     in_features_value = result[0].options.context.get(DefaultOptionKeys.in_features)
-    assert isinstance(in_features_value, frozenset), "in_features should be converted to frozenset"
-    assert in_features_value == frozenset({"latitude", "longitude"})
+    assert in_features_value == ("latitude", "longitude")
 
     # Regular options should still be in options.group
     assert result[0].options.group.get("distance_type") == "euclidean"
@@ -575,17 +571,15 @@ def test_load_creates_frozenset_for_in_features() -> None:
     assert isinstance(result[0], Feature)
     assert result[0].name == "multi_source_aggregation"
     in_features_1 = result[0].options.context.get(DefaultOptionKeys.in_features)
-    assert isinstance(in_features_1, frozenset), "Should be frozenset"
-    assert in_features_1 == frozenset({"sales", "revenue", "profit"})
+    assert in_features_1 == ("sales", "revenue", "profit")
     assert result[0].options.group.get("aggregation") == "sum"
 
     # Second feature: duplicates should be deduplicated by frozenset
     assert isinstance(result[1], Feature)
     assert result[1].name == "duplicate_sources"
     in_features_2 = result[1].options.context.get(DefaultOptionKeys.in_features)
-    assert isinstance(in_features_2, frozenset), "Should be frozenset"
     # frozenset automatically handles duplicates - should contain 2 items, not 3
-    assert in_features_2 == frozenset({"feature1", "feature2"})
+    assert in_features_2 == ("feature1", "feature2")
     assert len(in_features_2) == 2
     assert result[1].options.group.get("method") == "combine"
 
@@ -623,8 +617,7 @@ def test_load_adds_in_features_to_in_features_option() -> None:
     # Should have in_features (singular) in context
     assert DefaultOptionKeys.in_features in result[0].options.context
     in_features_value_0 = result[0].options.context.get(DefaultOptionKeys.in_features)
-    assert isinstance(in_features_value_0, frozenset)
-    assert in_features_value_0 == frozenset({"age"})
+    assert in_features_value_0 == ("age",)
 
     # Second feature: multiple sources - stored as frozenset in in_features
     assert isinstance(result[1], Feature)
@@ -632,8 +625,7 @@ def test_load_adds_in_features_to_in_features_option() -> None:
     # Should have in_features (singular) in context (unified key for both single and multiple)
     assert DefaultOptionKeys.in_features in result[1].options.context
     in_features_value = result[1].options.context.get(DefaultOptionKeys.in_features)
-    assert isinstance(in_features_value, frozenset)
-    assert in_features_value == frozenset({"latitude", "longitude"})
+    assert in_features_value == ("latitude", "longitude")
 
 
 def test_nested_feature_branch_follows_the_enum_value(monkeypatch: pytest.MonkeyPatch) -> None:

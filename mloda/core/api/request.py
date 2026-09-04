@@ -483,6 +483,12 @@ class mlodaAPI:
         """Execute the prepared session and yield each feature group's result as it completes."""
         _api_data = api_data if api_data is not None else self.api_data
         runner = self._setup_engine_runner(parallelization_modes, flight_server)
+        # Assign self.runner before the yield loop so that get_result()/get_artifacts()
+        # remain accessible even when the consumer exits early (break / next()).
+        # Previously this line lived after the loop, which meant an early exit left
+        # self.runner unset and both methods raised "You need to run any run function
+        # beforehand." despite teardown having completed successfully in `finally`.
+        self.runner = runner
         try:
             self._enter_runner_context(
                 runner,
@@ -496,7 +502,6 @@ class mlodaAPI:
                 yield result
         finally:
             self._exit_runner_context(runner)
-        self.runner = runner
 
     def _batch_run(
         self,

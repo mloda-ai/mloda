@@ -119,7 +119,7 @@ def worker(
 
     cfw.worker_index = worker_index
 
-    bootstrap = cfw_register.get_child_bootstrap()
+    bootstrap = cfw_register.get_run_context().child_bootstrap
     if bootstrap is not None:
         try:
             bootstrap()

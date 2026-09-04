@@ -8,6 +8,7 @@ from unittest.mock import Mock
 from uuid import uuid4
 
 from mloda.core.abstract_plugins.components.parallelization_modes import ParallelizationMode
+from mloda.core.abstract_plugins.run_context import RunContext
 from mloda.core.core.cfw_manager import CfwManager
 from mloda.core.runtime.mp_context import mp_spawn_context
 from mloda.core.runtime.worker.multiprocessing_worker import worker
@@ -21,7 +22,7 @@ class TestWorkerSetsWorkerIndexBeforeTheCommandLoop:
         result_queue: multiprocessing.Queue[Any] = ctx.Queue()
         cfw_register = Mock(spec=CfwManager)
         cfw_register.get_location.return_value = "grpc://localhost:9999"
-        cfw_register.get_child_bootstrap.return_value = None
+        cfw_register.get_run_context.return_value = RunContext()
         cfw = PythonDictFramework(mode=ParallelizationMode.MULTIPROCESSING, children_if_root=frozenset())
         command_queue.put("STOP")
 
@@ -38,7 +39,7 @@ class TestWorkerRunsChildBootstrapBeforeTheCommandLoop:
         cfw_register = Mock(spec=CfwManager)
         cfw_register.get_location.return_value = "grpc://localhost:9999"
         bootstrap = Mock()
-        cfw_register.get_child_bootstrap.return_value = bootstrap
+        cfw_register.get_run_context.return_value = RunContext(child_bootstrap=bootstrap)
         cfw = PythonDictFramework(mode=ParallelizationMode.MULTIPROCESSING, children_if_root=frozenset())
         command_queue.put("STOP")
 
@@ -52,7 +53,7 @@ class TestWorkerRunsChildBootstrapBeforeTheCommandLoop:
         result_queue: multiprocessing.Queue[Any] = ctx.Queue()
         cfw_register = Mock(spec=CfwManager)
         cfw_register.get_location.return_value = "grpc://localhost:9999"
-        cfw_register.get_child_bootstrap.return_value = None
+        cfw_register.get_run_context.return_value = RunContext()
         cfw = PythonDictFramework(mode=ParallelizationMode.MULTIPROCESSING, children_if_root=frozenset())
         command_queue.put("STOP")
 
@@ -68,7 +69,7 @@ class TestWorkerReportsChildBootstrapExceptionThroughTheErrorChannel:
         cfw_register.get_location.return_value = "grpc://localhost:9999"
         boom = RuntimeError("boom")
         bootstrap = Mock(side_effect=boom)
-        cfw_register.get_child_bootstrap.return_value = bootstrap
+        cfw_register.get_run_context.return_value = RunContext(child_bootstrap=bootstrap)
         cfw = PythonDictFramework(mode=ParallelizationMode.MULTIPROCESSING, children_if_root=frozenset())
 
         # The call itself must not raise, even though bootstrap() does.

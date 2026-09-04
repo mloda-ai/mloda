@@ -1,10 +1,11 @@
-"""Tests for CfwManager child_bootstrap get/set round-trip and merge-relation cycles."""
+"""Tests for CfwManager RunContext get/set round-trip and merge-relation cycles."""
 
 from uuid import uuid4
 
 import pytest
 
 from mloda.core.abstract_plugins.components.parallelization_modes import ParallelizationMode
+from mloda.core.abstract_plugins.run_context import RunContext
 from mloda.core.core.cfw_manager import CfwManager
 
 
@@ -12,28 +13,28 @@ def _module_level_bootstrap() -> None:
     pass
 
 
-class TestCfwManagerChildBootstrapDefault:
-    def test_default_child_bootstrap_is_none(self) -> None:
+class TestCfwManagerRunContextDefault:
+    def test_default_run_context_is_an_empty_run_context(self) -> None:
         cfw_register = CfwManager({ParallelizationMode.SYNC})
 
-        assert cfw_register.get_child_bootstrap() is None
+        assert cfw_register.get_run_context() == RunContext()
 
 
-class TestCfwManagerChildBootstrapRoundTrip:
-    def test_set_then_get_round_trips_a_module_level_picklable_callable(self) -> None:
+class TestCfwManagerRunContextRoundTrip:
+    def test_set_then_get_round_trips_a_run_context_with_a_module_level_picklable_bootstrap(self) -> None:
         cfw_register = CfwManager({ParallelizationMode.SYNC})
 
-        cfw_register.set_child_bootstrap(_module_level_bootstrap)
+        cfw_register.set_run_context(RunContext(child_bootstrap=_module_level_bootstrap))
 
-        assert cfw_register.get_child_bootstrap() is _module_level_bootstrap
+        assert cfw_register.get_run_context().child_bootstrap is _module_level_bootstrap
 
-    def test_set_none_after_a_previous_set_clears_it_back_to_none(self) -> None:
+    def test_set_empty_run_context_after_a_previous_set_clears_it_back_to_default(self) -> None:
         cfw_register = CfwManager({ParallelizationMode.SYNC})
-        cfw_register.set_child_bootstrap(_module_level_bootstrap)
+        cfw_register.set_run_context(RunContext(child_bootstrap=_module_level_bootstrap))
 
-        cfw_register.set_child_bootstrap(None)
+        cfw_register.set_run_context(RunContext())
 
-        assert cfw_register.get_child_bootstrap() is None
+        assert cfw_register.get_run_context() == RunContext()
 
 
 class TestCfwManagerFindLeftmostCycleDetection:

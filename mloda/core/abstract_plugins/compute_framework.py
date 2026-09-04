@@ -21,6 +21,7 @@ from mloda.core.abstract_plugins.components.input_data.input_data_descriptor imp
 from mloda.core.abstract_plugins.components.parallelization_modes import ParallelizationMode
 from mloda.core.abstract_plugins.hook_context import HookContext, instrument
 from mloda.core.abstract_plugins.plugin_version import resolve_plugin_version
+from mloda.core.abstract_plugins.run_context import RunContext
 from mloda.core.filter.filter_engine import BaseFilterEngine
 from mloda.core.abstract_plugins.components.mask.base_mask_engine import BaseMaskEngine
 from mloda.core.optional_dependency import loaded, require
@@ -82,8 +83,7 @@ class ComputeFramework(ABC):
         self.column_names: set[str] = set()
         self.function_extender = function_extender if function_extender is not None else set()
         # Set post-construction so a subclass's fixed __init__ signature isn't broken.
-        self.run_id: str | None = None
-        self.carrier: Optional[dict[str, str]] = None
+        self.run_context: RunContext = RunContext()
         self.worker_index: int | None = None
 
         self.uuid = uuid or uuid4()
@@ -759,8 +759,8 @@ class ComputeFramework(ABC):
             input_features=input_features,
             compute_framework_name=self.get_class_name(),
             rows_in=safe_field(lambda: self._row_count(self.data), None),
-            run_id=self.run_id,
-            carrier=self.carrier,
+            run_id=self.run_context.run_id,
+            carrier=self.run_context.carrier,
             worker_index=self.worker_index,
         )
 

@@ -54,8 +54,8 @@ class JoinStep(Step):
             compute_framework_name=cfw.get_class_name(),
             join_type=self.link.jointype.value,
             join_keys=self._join_keys(),
-            run_id=cfw.run_id,
-            carrier=cfw.carrier,
+            run_id=cfw.run_context.run_id,
+            carrier=cfw.run_context.carrier,
             worker_index=cfw.worker_index,
         )
         with context.activate():

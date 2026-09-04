@@ -4,6 +4,7 @@ import multiprocessing  # noqa: F401
 import threading
 import traceback
 import logging
+from dataclasses import replace
 from typing import Any, Callable, Optional
 from uuid import UUID, uuid4
 
@@ -66,8 +67,6 @@ class ComputeFrameworkExecutor:
         """
         # get function_extender
         function_extender = self.cfw_register.get_function_extender()
-        run_id = self.cfw_register.get_run_id()
-        carrier = self.cfw_register.get_carrier()
 
         # init framework
         new_cfw = cf_class(
@@ -76,8 +75,8 @@ class ComputeFrameworkExecutor:
             uuid or uuid4(),
             function_extender=function_extender,
         )
-        new_cfw.run_id = run_id
-        new_cfw.carrier = dict(carrier) if carrier is not None else None
+        # replace() re-runs __post_init__, so each framework owns its carrier copy.
+        new_cfw.run_context = replace(self.cfw_register.get_run_context())
 
         # add to register
         self.cfw_register.add_cfw_to_compute_frameworks(new_cfw.get_uuid(), cf_class.get_class_name(), children_if_root)

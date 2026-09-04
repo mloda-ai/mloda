@@ -12,6 +12,7 @@ import pytest
 
 from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook
 from mloda.core.abstract_plugins.hook_context import HookContext
+from mloda.core.abstract_plugins.run_context import RunContext
 from mloda.core.core.engine import Engine
 from mloda.provider import BaseInputData, ComputeFramework, DataCreator, FeatureGroup, FeatureSet
 from mloda.user import Feature, FeatureName, Features, Options, ParallelizationMode, PluginCollector, mloda
@@ -377,7 +378,7 @@ class TestPlanCountsAndDepthOnMatchContext:
 
 
 class TestEngineFunctionExtenderAndRunIdConstruction:
-    """Engine accepts function_extender/run_id kwargs and get_function_extender delegates to the module-level free function."""
+    """Engine stores function_extender and run_id (on a RunContext); get_function_extender delegates to the free function."""
 
     def test_engine_accepts_kwargs_and_get_function_extender_delegates(self) -> None:
         with (
@@ -403,3 +404,4 @@ class TestEngineFunctionExtenderAndRunIdConstruction:
 
             assert engine.get_function_extender(ExtenderHook.FEATURE_GROUP_MATCHED) is extender
             assert engine.get_function_extender(ExtenderHook.JOIN) is None
+            assert engine.run_context == RunContext(run_id="fgmatch051-direct-run-id")

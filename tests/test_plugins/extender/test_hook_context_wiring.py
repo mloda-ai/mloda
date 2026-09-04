@@ -2,7 +2,7 @@
 
 Exercises run_calculate_feature, run_validate_input_features, and
 run_validate_output_features on a concrete PythonDictFramework instance. Also covers
-run_id/carrier/worker_index surfacing on the captured HookContext.
+run_context/worker_index surfacing on the captured HookContext.
 """
 
 import functools
@@ -14,6 +14,7 @@ import pytest
 from mloda.core.abstract_plugins.components.feature_set import FeatureSet
 from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook
 from mloda.core.abstract_plugins.hook_context import HookContext
+from mloda.core.abstract_plugins.run_context import RunContext
 from mloda.provider import FeatureGroup
 from mloda.user import Feature, ParallelizationMode
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
@@ -384,16 +385,14 @@ class TestInstrumentPreservesSelfForNameResolution:
 
 
 class TestRunIdAndCarrierWiring:
-    """run_id/carrier are set post-construction (not constructor kwargs) and surface unchanged
-    on the captured HookContext."""
+    """run_context is set post-construction (not a constructor kwarg); its run_id/carrier surface unchanged on HookContext."""
 
     def test_run_id_and_carrier_surface_on_captured_hook_context(self) -> None:
         feature_set = _build_feature_set()
         extender = _ContextCapturingExtender(ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE)
         carrier = {"traceparent": "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"}
         cfw = _build_framework({extender})
-        cfw.run_id = "01909a3b-1234-7abc-8def-0123456789ab"
-        cfw.carrier = carrier
+        cfw.run_context = RunContext(run_id="01909a3b-1234-7abc-8def-0123456789ab", carrier=carrier)
 
         cfw.run_calculate_feature(_CalcFeatureGroup, feature_set)
 

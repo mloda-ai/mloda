@@ -762,6 +762,9 @@ class ComputeFramework(ABC):
             rows_in=safe_field(lambda: self._row_count(self.data), None),
             run_id=self.run_context.run_id,
             carrier=self.run_context.carrier,
+            tenant_id=self.run_context.tenant_id,
+            project_id=self.run_context.project_id,
+            principal=self.run_context.principal,
             worker_index=self.worker_index,
         )
 

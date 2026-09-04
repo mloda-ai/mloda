@@ -32,6 +32,7 @@ _SOURCE_MODULES: dict[str, str] = {
     "plugin_docs": "mloda.core.api.plugin_docs",
     "core_policy": "mloda.core.abstract_plugins.plugin_registry.plugin_policy",
     "plan_info": "mloda.core.api.plan_info",
+    "verified_context": "mloda.core.abstract_plugins.verified_context",
 }
 
 
@@ -54,6 +55,8 @@ EXPORT_MATRIX: list[tuple[str, str, str]] = [
     # Resolved execution plan (issue #647): the same PlanStep record for users and stewards.
     ("user", "PlanStep", "plan_info"),
     ("steward", "PlanStep", "plan_info"),
+    # Verified context seam: steward-only, platform-integrator surface.
+    ("steward", "verified_context", "verified_context"),
 ]
 
 _MATRIX_IDS = [f"{namespace}-{symbol}" for namespace, symbol, _source in EXPORT_MATRIX]
@@ -88,6 +91,32 @@ class TestUserDoesNotExportPluginRegistry:
         assert not hasattr(mloda.user, "PluginRegistry"), (
             "mloda.user must not expose a PluginRegistry attribute; stewards use mloda.steward.PluginRegistry"
         )
+
+
+class TestCurrentVerifiedContextStaysInternal:
+    def test_current_verified_context_absent_from_steward_all(self) -> None:
+        assert "current_verified_context" not in mloda.steward.__all__, (
+            "mloda.steward must not list 'current_verified_context' in __all__; it is internal, "
+            "used only by mlodaAPI._build_run_context"
+        )
+
+    def test_current_verified_context_not_a_steward_attribute(self) -> None:
+        assert not hasattr(mloda.steward, "current_verified_context"), (
+            "mloda.steward must not expose 'current_verified_context'"
+        )
+
+
+class TestVerifiedContextStaysInternal:
+    """VerifiedContext itself is not needed by any public API consumer: only verified_context's
+    kwargs are. It stays defined in verified_context.py but is not re-exported from mloda.steward."""
+
+    def test_verified_context_absent_from_steward_all(self) -> None:
+        assert "VerifiedContext" not in mloda.steward.__all__, (
+            "mloda.steward must not list 'VerifiedContext' in __all__; only verified_context is exported"
+        )
+
+    def test_verified_context_not_a_steward_attribute(self) -> None:
+        assert not hasattr(mloda.steward, "VerifiedContext"), "mloda.steward must not expose 'VerifiedContext'"
 
 
 class TestGovernanceExportsAreStewardOnly:

@@ -56,6 +56,9 @@ class JoinStep(Step):
             join_keys=self._join_keys(),
             run_id=cfw.run_context.run_id,
             carrier=cfw.run_context.carrier,
+            tenant_id=cfw.run_context.tenant_id,
+            project_id=cfw.run_context.project_id,
+            principal=cfw.run_context.principal,
             worker_index=cfw.worker_index,
         )
         with context.activate():

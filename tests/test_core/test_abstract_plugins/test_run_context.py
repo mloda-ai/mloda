@@ -23,6 +23,20 @@ class TestRunContextDefaults:
         assert ctx.carrier is None
         assert ctx.child_bootstrap is None
 
+    def test_tenant_id_project_id_principal_default_to_none(self) -> None:
+        ctx = RunContext()
+
+        assert ctx.tenant_id is None
+        assert ctx.project_id is None
+        assert ctx.principal is None
+
+    def test_tenant_id_project_id_principal_can_be_set_via_constructor(self) -> None:
+        ctx = RunContext(tenant_id="acme", project_id="proj1", principal="hash123")
+
+        assert ctx.tenant_id == "acme"
+        assert ctx.project_id == "proj1"
+        assert ctx.principal == "hash123"
+
 
 class TestRunContextFrozen:
     def test_assigning_a_field_raises_frozen_instance_error(self) -> None:
@@ -70,6 +84,15 @@ class TestRunContextPickleRoundTrip:
         assert restored.carrier == ctx.carrier
         assert restored.child_bootstrap is _module_level_bootstrap
 
+    def test_pickle_round_trip_preserves_tenant_id_project_id_and_principal(self) -> None:
+        ctx = RunContext(tenant_id="acme", project_id="proj1", principal="hash123")
+
+        restored = pickle.loads(pickle.dumps(ctx))  # nosec B301
+
+        assert restored.tenant_id == ctx.tenant_id
+        assert restored.project_id == ctx.project_id
+        assert restored.principal == ctx.principal
+
 
 class TestRunContextHash:
     def test_hash_of_context_with_a_carrier_returns_an_int(self) -> None:
@@ -86,6 +109,18 @@ class TestRunContextHash:
 
     def test_equality_still_compares_the_carrier(self) -> None:
         assert RunContext(carrier={"a": "1"}) != RunContext(carrier={"a": "2"})
+
+    def test_two_equal_contexts_with_tenant_project_principal_hash_equal(self) -> None:
+        ctx_a = RunContext(tenant_id="acme", project_id="proj1", principal="hash123")
+        ctx_b = RunContext(tenant_id="acme", project_id="proj1", principal="hash123")
+
+        assert ctx_a == ctx_b
+        assert hash(ctx_a) == hash(ctx_b)
+
+    def test_equality_compares_tenant_id_project_id_and_principal(self) -> None:
+        assert RunContext(tenant_id="acme") != RunContext(tenant_id="other")
+        assert RunContext(project_id="proj1") != RunContext(project_id="proj2")
+        assert RunContext(principal="hash1") != RunContext(principal="hash2")
 
 
 class TestRunContextReplace:
@@ -105,6 +140,18 @@ class TestRunContextReplace:
 
         assert replaced.carrier == ctx.carrier
         assert replaced.carrier is not ctx.carrier
+
+    def test_replace_tenant_id_project_id_principal_keeps_other_fields(self) -> None:
+        ctx = RunContext(run_id="some-run-id", carrier={"k": "v"}, child_bootstrap=_module_level_bootstrap)
+
+        replaced = dataclasses.replace(ctx, tenant_id="acme", project_id="proj1", principal="hash123")
+
+        assert replaced.run_id == "some-run-id"
+        assert replaced.carrier == {"k": "v"}
+        assert replaced.child_bootstrap is _module_level_bootstrap
+        assert replaced.tenant_id == "acme"
+        assert replaced.project_id == "proj1"
+        assert replaced.principal == "hash123"
 
 
 class TestRunContextIsInternal:

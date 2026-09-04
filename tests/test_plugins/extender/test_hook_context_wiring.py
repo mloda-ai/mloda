@@ -433,6 +433,37 @@ class TestComputeFrameworkConstructorRejectsRunIdAndCarrierKwargs:
             )
 
 
+class TestTenantProjectPrincipalWiring:
+    """run_context is set post-construction; tenant_id/project_id/principal surface unchanged."""
+
+    def test_tenant_project_principal_surface_on_captured_hook_context(self) -> None:
+        feature_set = _build_feature_set()
+        extender = _ContextCapturingExtender(ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE)
+        cfw = _build_framework({extender})
+        cfw.run_context = RunContext(tenant_id="acme", project_id="proj1", principal="hash123")
+
+        cfw.run_calculate_feature(_CalcFeatureGroup, feature_set)
+
+        captured = extender.captured
+        assert captured is not None
+        assert captured.tenant_id == "acme"
+        assert captured.project_id == "proj1"
+        assert captured.principal == "hash123"
+
+    def test_tenant_project_principal_default_to_none(self) -> None:
+        feature_set = _build_feature_set()
+        extender = _ContextCapturingExtender(ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE)
+        cfw = _build_framework({extender})
+
+        cfw.run_calculate_feature(_CalcFeatureGroup, feature_set)
+
+        captured = extender.captured
+        assert captured is not None
+        assert captured.tenant_id is None
+        assert captured.project_id is None
+        assert captured.principal is None
+
+
 class TestWorkerIndexWiring:
     def test_worker_index_set_on_instance_surfaces_on_captured_hook_context(self) -> None:
         feature_set = _build_feature_set()

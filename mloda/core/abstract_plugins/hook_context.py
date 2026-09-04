@@ -36,6 +36,7 @@ class HookContext:
     run_id: str | None = None
     data_access_identity: str | None = None
     tenant_id: str | None = None
+    project_id: str | None = None
     principal: str | None = None
     carrier: dict[str, str] | None = None
     worker_index: int | None = None

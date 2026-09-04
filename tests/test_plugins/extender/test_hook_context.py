@@ -54,6 +54,7 @@ class TestHookContextConstruction:
         assert context.run_id is None
         assert context.data_access_identity is None
         assert context.tenant_id is None
+        assert context.project_id is None
         assert context.principal is None
 
 

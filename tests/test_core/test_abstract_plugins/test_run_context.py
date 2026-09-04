@@ -102,3 +102,16 @@ class TestRunContextReplace:
 
         assert replaced.carrier == ctx.carrier
         assert replaced.carrier is not ctx.carrier
+
+
+class TestRunContextIsInternal:
+    def test_docstring_states_the_class_is_internal_and_not_public_api(self) -> None:
+        assert RunContext.__doc__ is not None
+        assert "internal" in RunContext.__doc__.lower()
+        assert "not part of the public api" in RunContext.__doc__.lower()
+
+    def test_not_exported_from_the_provider_facade(self) -> None:
+        import mloda.provider as provider
+
+        assert "RunContext" not in provider.__all__
+        assert not hasattr(provider, "RunContext")

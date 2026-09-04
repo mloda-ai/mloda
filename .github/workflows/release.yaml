@@ -12,6 +12,7 @@ jobs:
     outputs:
       new_release_version: ${{ steps.semantic.outputs.new_release_version }}
       new_release_published: ${{ steps.semantic.outputs.new_release_published }}
+      new_release_sha: ${{ steps.release_sha.outputs.sha }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -100,19 +101,20 @@ jobs:
           CI: true
           GITHUB_TOKEN: ${{ secrets.SEMANTIC_RELEASE_TOKEN }}
 
+      - name: Capture released commit SHA
+        id: release_sha
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
   publish:
     needs: github_release
     if: needs.github_release.outputs.new_release_published == 'true'
     runs-on: ubuntu-24.04
     steps:
-      - name: Check out the code
+      - name: Check out the released commit
         uses: actions/checkout@v4
         with:
           persist-credentials: false
-          ref: main
-
-      - name: Fetch changes on main
-        run: git pull origin main
+          ref: ${{ needs.github_release.outputs.new_release_sha }}
 
       - name: Set up Python
         uses: actions/setup-python@v5

@@ -24,6 +24,7 @@ from mloda.core.abstract_plugins.function_extender import (
     get_function_extender,
 )
 from mloda.core.abstract_plugins.hook_context import HookContext, instrument
+from mloda.core.abstract_plugins.run_context import RunContext
 from mloda.core.prepare.execution_plan import ExecutionPlan
 from mloda.core.prepare.graph.build_graph import BuildGraph
 from mloda.core.prepare.resolve_graph import ResolveGraph
@@ -67,7 +68,7 @@ class Engine:
     ) -> None:
         # setup variables which track the primary sources and the compute platforms
         self.function_extender = function_extender if function_extender is not None else set()
-        self.run_id = run_id
+        self.run_context = RunContext(run_id=run_id)
         # Holds the Feature objects ResolveComputeFrameworks.links rewrites: hash-stale after planning, so only read it before planning (as today).
         self.feature_group_collection: dict[type[FeatureGroup], set[Feature]] = defaultdict(set)
 
@@ -294,7 +295,7 @@ class Engine:
             feature_names=(str(feature.name),),
             input_features=None,
             compute_framework_name="",
-            run_id=self.run_id,
+            run_id=self.run_context.run_id,
             carrier=None,
             worker_index=None,
             plan_feature_count=len(self.resolution_records) + 1,

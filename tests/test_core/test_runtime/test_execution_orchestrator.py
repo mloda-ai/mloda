@@ -6,9 +6,13 @@ This test file defines the requirements for the ExecutionOrchestrator class.
 
 from __future__ import annotations
 
+import inspect
+import threading
 import uuid as uuid_mod
+from collections.abc import Callable
 from unittest.mock import Mock, patch, MagicMock
 
+import pytest
 
 from mloda.provider import ComputeFramework  # noqa: F401
 from mloda.core.prepare.execution_plan import ExecutionPlan
@@ -16,6 +20,7 @@ from mloda.core.prepare.execution_plan import ExecutionPlan
 from mloda.core.runtime.run import ExecutionOrchestrator
 from mloda.core.core.cfw_manager import CfwManager
 from mloda.core.abstract_plugins.components.parallelization_modes import ParallelizationMode
+from mloda.core.abstract_plugins.run_context import RunContext
 
 
 class TestExecutionOrchestratorImport:
@@ -88,8 +93,6 @@ class TestExecutionOrchestratorContextManager:
 
     def test_enter_accepts_parallelization_modes(self) -> None:
         """__enter__ should accept parallelization_modes parameter."""
-        import inspect
-
         mock_planner = Mock(spec=ExecutionPlan)
         orchestrator = ExecutionOrchestrator(mock_planner)
 
@@ -99,8 +102,6 @@ class TestExecutionOrchestratorContextManager:
 
     def test_enter_accepts_function_extender(self) -> None:
         """__enter__ should accept function_extender parameter."""
-        import inspect
-
         mock_planner = Mock(spec=ExecutionPlan)
         orchestrator = ExecutionOrchestrator(mock_planner)
 
@@ -109,8 +110,6 @@ class TestExecutionOrchestratorContextManager:
 
     def test_enter_accepts_api_data(self) -> None:
         """__enter__ should accept api_data parameter."""
-        import inspect
-
         mock_planner = Mock(spec=ExecutionPlan)
         orchestrator = ExecutionOrchestrator(mock_planner)
 
@@ -119,8 +118,6 @@ class TestExecutionOrchestratorContextManager:
 
     def test_exit_accepts_exception_info(self) -> None:
         """__exit__ should accept exc_type, exc_val, exc_tb parameters."""
-        import inspect
-
         mock_planner = Mock(spec=ExecutionPlan)
         orchestrator = ExecutionOrchestrator(mock_planner)
 
@@ -220,8 +217,6 @@ class TestExecutionOrchestratorMethodSignatures:
 
     def test_is_step_done_accepts_step_uuids_and_finished_ids(self) -> None:
         """_is_step_done should accept step_uuids and finished_ids parameters."""
-        import inspect
-
         mock_planner = Mock(spec=ExecutionPlan)
         orchestrator = ExecutionOrchestrator(mock_planner)
 
@@ -232,8 +227,6 @@ class TestExecutionOrchestratorMethodSignatures:
 
     def test_can_run_step_signature(self) -> None:
         """_can_run_step should have correct parameters."""
-        import inspect
-
         mock_planner = Mock(spec=ExecutionPlan)
         orchestrator = ExecutionOrchestrator(mock_planner)
 
@@ -246,8 +239,6 @@ class TestExecutionOrchestratorMethodSignatures:
 
     def test_mark_step_as_finished_signature(self) -> None:
         """_mark_step_as_finished should have correct parameters."""
-        import inspect
-
         mock_planner = Mock(spec=ExecutionPlan)
         orchestrator = ExecutionOrchestrator(mock_planner)
 
@@ -259,8 +250,6 @@ class TestExecutionOrchestratorMethodSignatures:
 
     def test_currently_running_step_signature(self) -> None:
         """currently_running_step should have correct parameters."""
-        import inspect
-
         mock_planner = Mock(spec=ExecutionPlan)
         orchestrator = ExecutionOrchestrator(mock_planner)
 
@@ -271,8 +260,6 @@ class TestExecutionOrchestratorMethodSignatures:
 
     def test_execute_step_accepts_step_parameter(self) -> None:
         """_execute_step should accept a step parameter."""
-        import inspect
-
         mock_planner = Mock(spec=ExecutionPlan)
         orchestrator = ExecutionOrchestrator(mock_planner)
 
@@ -282,8 +269,6 @@ class TestExecutionOrchestratorMethodSignatures:
 
     def test_process_step_result_accepts_step_parameter(self) -> None:
         """_process_step_result should accept a step parameter."""
-        import inspect
-
         mock_planner = Mock(spec=ExecutionPlan)
         orchestrator = ExecutionOrchestrator(mock_planner)
 
@@ -347,62 +332,86 @@ class TestSyncModeSkipsMyManager:
         orchestrator.__exit__(None, None, None)
 
 
-class TestEnterAcceptsChildBootstrap:
-    def test_enter_accepts_child_bootstrap_parameter(self) -> None:
-        import inspect
-
+class TestEnterAcceptsRunContext:
+    def test_enter_accepts_run_context_parameter(self) -> None:
         mock_planner = Mock(spec=ExecutionPlan)
         orchestrator = ExecutionOrchestrator(mock_planner)
 
         sig = inspect.signature(orchestrator.__enter__)
-        assert "child_bootstrap" in sig.parameters
+        assert "run_context" in sig.parameters
 
-    def test_child_bootstrap_parameter_defaults_to_none(self) -> None:
-        import inspect
-
+    def test_run_context_parameter_defaults_to_none(self) -> None:
         mock_planner = Mock(spec=ExecutionPlan)
         orchestrator = ExecutionOrchestrator(mock_planner)
 
         sig = inspect.signature(orchestrator.__enter__)
-        assert sig.parameters["child_bootstrap"].default is None
+        assert sig.parameters["run_context"].default is None
 
-    def test_child_bootstrap_parameter_is_last(self) -> None:
-        """Must come after run_id/carrier so existing positional callers are unaffected."""
-        import inspect
-
+    def test_enter_signature_has_exactly_five_parameters_in_order(self) -> None:
+        """No run_id/carrier/child_bootstrap parameters remain."""
         mock_planner = Mock(spec=ExecutionPlan)
         orchestrator = ExecutionOrchestrator(mock_planner)
 
         sig = inspect.signature(orchestrator.__enter__)
         param_names = list(sig.parameters.keys())
-        assert param_names.index("child_bootstrap") > param_names.index("carrier")
+        assert param_names == ["parallelization_modes", "function_extender", "api_data", "artifacts", "run_context"]
 
 
-class TestEnterSetsChildBootstrapOnCfwRegister:
-    def test_sync_mode_cfw_register_round_trips_child_bootstrap(self) -> None:
+class TestEnterSetsRunContextOnCfwRegister:
+    def test_sync_mode_cfw_register_round_trips_run_context(self) -> None:
         def _bootstrap() -> None:
             pass
 
         mock_planner = Mock(spec=ExecutionPlan)
         orchestrator = ExecutionOrchestrator(mock_planner)
 
-        # mypy treats __enter__ as positional-only regardless of signature, so this kwarg
-        # always trips a false-positive call-arg error.
-        orchestrator.__enter__({ParallelizationMode.SYNC}, child_bootstrap=_bootstrap)  # type: ignore[call-arg]
+        orchestrator.__enter__({ParallelizationMode.SYNC}, None, None, None, RunContext(child_bootstrap=_bootstrap))
 
-        assert orchestrator.cfw_register.get_child_bootstrap() is _bootstrap
+        assert orchestrator.cfw_register.get_run_context().child_bootstrap is _bootstrap
 
         orchestrator.__exit__(None, None, None)
 
-    def test_sync_mode_cfw_register_child_bootstrap_defaults_to_none(self) -> None:
+    def test_sync_mode_cfw_register_run_context_defaults_to_empty_run_context(self) -> None:
         mock_planner = Mock(spec=ExecutionPlan)
         orchestrator = ExecutionOrchestrator(mock_planner)
 
         orchestrator.__enter__({ParallelizationMode.SYNC})
 
-        assert orchestrator.cfw_register.get_child_bootstrap() is None
+        assert orchestrator.cfw_register.get_run_context() == RunContext()
 
         orchestrator.__exit__(None, None, None)
+
+
+class TestEnterRejectsUnpicklableChildBootstrapBeforeSpawningAManager:
+    def test_multiprocessing_mode_with_unpicklable_bootstrap_raises_before_any_manager_starts(self) -> None:
+        class _Unpicklable:
+            """threading.Lock is never picklable, so a closure over this is unpicklable too."""
+
+            def __init__(self) -> None:
+                self.lock = threading.Lock()
+
+        def _make_closure_over_unpicklable() -> Callable[[], None]:
+            unpicklable = _Unpicklable()
+
+            def _bootstrap() -> None:
+                unpicklable.lock.acquire()
+
+            return _bootstrap
+
+        empty_planner = ExecutionPlan()
+        empty_planner.execution_plan = []
+        orchestrator = ExecutionOrchestrator(empty_planner)
+
+        with pytest.raises(ValueError, match="child_bootstrap"):
+            orchestrator.__enter__(
+                {ParallelizationMode.MULTIPROCESSING},
+                None,
+                None,
+                None,
+                RunContext(child_bootstrap=_make_closure_over_unpicklable()),
+            )
+
+        assert orchestrator.manager is None, "no MyManager/worker process may be created on the rejection path"
 
 
 class TestExecutionOrchestratorStepLock:
@@ -418,8 +427,6 @@ class TestExecutionOrchestratorStepLock:
 
     def test_step_lock_is_threading_lock_instance(self) -> None:
         """_step_lock should be an instance of threading.Lock."""
-        import threading
-
         mock_planner = Mock(spec=ExecutionPlan)
 
         orchestrator = ExecutionOrchestrator(mock_planner)

@@ -1,4 +1,5 @@
 from copy import deepcopy
+from dataclasses import replace
 from typing import Any, Callable, Generator, Optional
 
 from mloda.core.abstract_plugins.components.input_data.api.api_input_data_collection import (
@@ -29,6 +30,7 @@ from mloda.core.filter.global_filter import GlobalFilter
 from mloda.core.runtime.run import ExecutionOrchestrator
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.function_extender import Extender
+from mloda.core.abstract_plugins.run_context import RunContext
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.abstract_plugins.components.parallelization_modes import ParallelizationMode
 from mloda.core.abstract_plugins.components.feature_collection import Features
@@ -425,6 +427,14 @@ class mlodaAPI:
             raise ValueError("Internal error: engine not initialized. This is likely a bug in mloda.")
         return deepcopy(self.engine.resolution_records)
 
+    def _build_run_context(
+        self, carrier: dict[str, str] | None, child_bootstrap: Callable[[], None] | None
+    ) -> RunContext:
+        """Derive this run's context from the engine's plan-time base."""
+        if self.engine is None:
+            raise ValueError("Internal error: engine not initialized. This is likely a bug in mloda.")
+        return replace(self.engine.run_context, run_id=self.run_id, carrier=carrier, child_bootstrap=child_bootstrap)
+
     def run(
         self,
         api_data: Optional[dict[str, dict[str, Any]]] = None,
@@ -455,8 +465,7 @@ class mlodaAPI:
             function_extender,
             api_data=api_data,
             artifacts=artifacts,
-            carrier=carrier,
-            child_bootstrap=child_bootstrap,
+            run_context=self._build_run_context(carrier, child_bootstrap),
         )
         self.runner = runner
         return self.get_result()
@@ -481,8 +490,7 @@ class mlodaAPI:
                 function_extender,
                 _api_data,
                 artifacts=artifacts,
-                carrier=carrier,
-                child_bootstrap=child_bootstrap,
+                run_context=self._build_run_context(carrier, child_bootstrap),
             )
             for _step_uuid, result in runner.compute_stream():
                 yield result
@@ -497,8 +505,7 @@ class mlodaAPI:
         function_extender: Optional[set[Extender]] = None,
         api_data: Optional[dict[str, Any]] = None,
         artifacts: Optional[dict[str, Any]] = None,
-        carrier: Optional[dict[str, str]] = None,
-        child_bootstrap: Optional[Callable[[], None]] = None,
+        run_context: RunContext | None = None,
     ) -> ExecutionOrchestrator:
         """Sets up the engine runner and runs the engine computation."""
         # Use stored api_data if not explicitly provided
@@ -510,8 +517,7 @@ class mlodaAPI:
             function_extender,
             _api_data,
             artifacts=artifacts,
-            carrier=carrier,
-            child_bootstrap=child_bootstrap,
+            run_context=run_context,
         )
         self.runner = runner
         return runner
@@ -523,8 +529,7 @@ class mlodaAPI:
         function_extender: Optional[set[Extender]] = None,
         api_data: Optional[dict[str, Any]] = None,
         artifacts: Optional[dict[str, Any]] = None,
-        carrier: Optional[dict[str, str]] = None,
-        child_bootstrap: Optional[Callable[[], None]] = None,
+        run_context: RunContext | None = None,
     ) -> None:
         """Runs the engine computation within a context manager."""
         if not isinstance(runner, ExecutionOrchestrator):
@@ -537,8 +542,7 @@ class mlodaAPI:
                 function_extender,
                 api_data,
                 artifacts=artifacts,
-                carrier=carrier,
-                child_bootstrap=child_bootstrap,
+                run_context=run_context,
             )
             runner.compute()
         finally:
@@ -551,15 +555,14 @@ class mlodaAPI:
         function_extender: Optional[set[Extender]],
         api_data: Optional[dict[str, Any]],
         artifacts: Optional[dict[str, Any]] = None,
-        carrier: Optional[dict[str, str]] = None,
-        child_bootstrap: Optional[Callable[[], None]] = None,
+        run_context: RunContext | None = None,
     ) -> None:
         """Enters the runner context with strict-mode-filtered extenders."""
         function_extender = function_extender if function_extender is not None else self.function_extender
         function_extender = filter_extenders_by_strict_mode(function_extender, self.plugin_collector)
-        runner.__enter__(
-            parallelization_modes, function_extender, api_data, artifacts, self.run_id, carrier, child_bootstrap
-        )
+        if run_context is None:
+            run_context = self._build_run_context(None, None)
+        runner.__enter__(parallelization_modes, function_extender, api_data, artifacts, run_context)
 
     def _exit_runner_context(self, runner: ExecutionOrchestrator) -> None:
         """Exits the runner context."""

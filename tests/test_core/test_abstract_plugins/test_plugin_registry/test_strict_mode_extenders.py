@@ -22,7 +22,7 @@ parallel-safety.
 """
 
 import logging
-from typing import Any, Callable, Optional, cast
+from typing import Any, Optional, cast
 
 import pytest
 
@@ -30,6 +30,7 @@ from mloda.core.abstract_plugins.components.parallelization_modes import Paralle
 from mloda.core.abstract_plugins.components.plugin_option.plugin_collector import PluginCollector
 from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook
 from mloda.core.abstract_plugins.plugin_registry.plugin_registry import PluginRegistry, register_plugin
+from mloda.core.abstract_plugins.run_context import RunContext
 from mloda.core.api.request import mlodaAPI
 from mloda.core.runtime.run import ExecutionOrchestrator
 
@@ -175,9 +176,7 @@ class _RecordingRunner:
         function_extender: Optional[set[Extender]] = None,
         api_data: Optional[dict[str, Any]] = None,
         artifacts: Optional[dict[str, Any]] = None,
-        run_id: Optional[str] = None,
-        carrier: Optional[dict[str, str]] = None,
-        child_bootstrap: Optional[Callable[[], None]] = None,
+        run_context: RunContext | None = None,
     ) -> None:
         self.received_extenders = function_extender
 
@@ -193,7 +192,6 @@ class TestRequestWiring:
 
         api = mlodaAPI.__new__(mlodaAPI)
         api.plugin_collector = PluginCollector().set_strict_mode("strict")
-        api.run_id = "test-run-id"
 
         recorder = _RecordingRunner()
         api._enter_runner_context(
@@ -201,6 +199,7 @@ class TestRequestWiring:
             {ParallelizationMode.SYNC},
             {registered, unregistered},
             None,
+            run_context=RunContext(),
         )
 
         assert recorder.received_extenders == {registered}, (

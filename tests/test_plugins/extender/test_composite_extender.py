@@ -14,6 +14,7 @@ from mloda.core.abstract_plugins.function_extender import (
     Extender,
 )
 from mloda.core.abstract_plugins.function_extender import _CompositeExtender
+from mloda.core.abstract_plugins.run_context import RunContext
 from mloda.provider import ComputeFramework
 
 
@@ -579,8 +580,7 @@ class TestSingleExtenderPathHonorsRaiseOnError:
         cf = Mock(spec=ComputeFramework)
         cf.data = "DATA"
         cf.function_extender = extenders
-        cf.run_id = None
-        cf.carrier = None
+        cf.run_context = RunContext()
         cf.worker_index = None
         cf.get_function_extender = ComputeFramework.get_function_extender.__get__(cf)
         cf.run_calculate_feature = ComputeFramework.run_calculate_feature.__get__(cf)

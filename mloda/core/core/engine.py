@@ -25,6 +25,7 @@ from mloda.core.abstract_plugins.function_extender import (
 )
 from mloda.core.abstract_plugins.hook_context import HookContext, instrument
 from mloda.core.abstract_plugins.run_context import RunContext
+from mloda.core.abstract_plugins.verified_context import current_verified_context
 from mloda.core.prepare.execution_plan import ExecutionPlan
 from mloda.core.prepare.graph.build_graph import BuildGraph
 from mloda.core.prepare.resolve_graph import ResolveGraph
@@ -287,6 +288,7 @@ class Engine:
     def _resolve_with_match_hook(self, extender: Extender, feature: Feature, depth: int) -> EvaluationResult:
         """Dispatch resolve_or_raise through extender, instrumenting the call with a HookContext.
         feature_group_class is only known once resolve_or_raise returns, so the context starts with a placeholder and is written post-hoc."""
+        verified = current_verified_context()
         context = HookContext(
             hook=ExtenderHook.FEATURE_GROUP_MATCHED,
             feature_group_class="",
@@ -297,6 +299,9 @@ class Engine:
             compute_framework_name="",
             run_id=self.run_context.run_id,
             carrier=None,
+            tenant_id=verified.tenant_id if verified else None,
+            project_id=verified.project_id if verified else None,
+            principal=verified.principal if verified else None,
             worker_index=None,
             plan_feature_count=len(self.resolution_records) + 1,
             plan_node_count=len(self.feature_group_collection),

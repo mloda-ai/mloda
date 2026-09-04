@@ -31,6 +31,7 @@ from mloda.core.runtime.run import ExecutionOrchestrator
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.function_extender import Extender
 from mloda.core.abstract_plugins.run_context import RunContext
+from mloda.core.abstract_plugins.verified_context import current_verified_context
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.abstract_plugins.components.parallelization_modes import ParallelizationMode
 from mloda.core.abstract_plugins.components.feature_collection import Features
@@ -433,7 +434,16 @@ class mlodaAPI:
         """Derive this run's context from the engine's plan-time base."""
         if self.engine is None:
             raise ValueError("Internal error: engine not initialized. This is likely a bug in mloda.")
-        return replace(self.engine.run_context, run_id=self.run_id, carrier=carrier, child_bootstrap=child_bootstrap)
+        verified = current_verified_context()
+        return replace(
+            self.engine.run_context,
+            run_id=self.run_id,
+            carrier=carrier,
+            child_bootstrap=child_bootstrap,
+            tenant_id=verified.tenant_id if verified else None,
+            project_id=verified.project_id if verified else None,
+            principal=verified.principal if verified else None,
+        )
 
     def run(
         self,
@@ -480,17 +490,37 @@ class mlodaAPI:
         carrier: Optional[dict[str, str]] = None,
         child_bootstrap: Optional[Callable[[], None]] = None,
     ) -> Generator[Any, None, None]:
-        """Execute the prepared session and yield each feature group's result as it completes."""
+        """Execute the prepared session and yield each feature group's result as it completes.
+
+        carrier/child_bootstrap and the active set_verified_context() scope are read here, at call
+        time, not at first iteration: a function whose body itself contains ``yield`` only starts
+        executing on first iteration, which would defer that read past the caller's intended scope.
+        """
         _api_data = api_data if api_data is not None else self.api_data
         runner = self._setup_engine_runner(parallelization_modes, flight_server)
+        run_context = self._build_run_context(carrier, child_bootstrap)
+        return self._stream_run_results(
+            runner, parallelization_modes, function_extender, _api_data, artifacts, run_context
+        )
+
+    def _stream_run_results(
+        self,
+        runner: ExecutionOrchestrator,
+        parallelization_modes: set[ParallelizationMode],
+        function_extender: Optional[set[Extender]],
+        api_data: Optional[dict[str, dict[str, Any]]],
+        artifacts: Optional[dict[str, Any]],
+        run_context: RunContext,
+    ) -> Generator[Any, None, None]:
+        """Deferred half of ``stream_run``: iterating this is what actually drives computation."""
         try:
             self._enter_runner_context(
                 runner,
                 parallelization_modes,
                 function_extender,
-                _api_data,
+                api_data,
                 artifacts=artifacts,
-                run_context=self._build_run_context(carrier, child_bootstrap),
+                run_context=run_context,
             )
             for _step_uuid, result in runner.compute_stream():
                 yield result

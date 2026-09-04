@@ -13,6 +13,7 @@ import pytest
 
 from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook
 from mloda.core.abstract_plugins.hook_context import HookContext
+from mloda.core.abstract_plugins.verified_context import set_verified_context
 from mloda.provider import BaseInputData, ComputeFramework, DataCreator, FeatureGroup, FeatureSet
 from mloda.user import Feature, FeatureName, Index, JoinSpec, Link, Options, ParallelizationMode, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
@@ -122,12 +123,13 @@ class TestJoinHookFiresWithCorrectContext:
             parallelization_modes={ParallelizationMode.SYNC},
         )
 
-        result = session.run(
-            parallelization_modes={ParallelizationMode.SYNC},
-            flight_server=flight_server,
-            function_extender={extender},
-            carrier=carrier,
-        )
+        with set_verified_context(tenant_id="acme", project_id="proj1", principal="hash123"):
+            result = session.run(
+                parallelization_modes={ParallelizationMode.SYNC},
+                flight_server=flight_server,
+                function_extender={extender},
+                carrier=carrier,
+            )
 
         assert len(result) == 1
         assert len(extender.captured) == 1
@@ -139,6 +141,9 @@ class TestJoinHookFiresWithCorrectContext:
         assert context.run_id == session.run_id
         assert context.carrier == carrier
         assert context.worker_index is None
+        assert context.tenant_id == "acme"
+        assert context.project_id == "proj1"
+        assert context.principal == "hash123"
 
 
 class TestNoJoinExtenderRegisteredBaselineRegressionGuard:

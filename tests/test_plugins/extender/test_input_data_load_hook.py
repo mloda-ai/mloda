@@ -123,6 +123,9 @@ class TestInputDataLoadHookFiresAlongsideCalculateExtender:
         assert fetch_context.run_id == calc_context.run_id
         assert fetch_context.carrier == calc_context.carrier
         assert fetch_context.worker_index == calc_context.worker_index
+        assert fetch_context.tenant_id == calc_context.tenant_id
+        assert fetch_context.project_id == calc_context.project_id
+        assert fetch_context.principal == calc_context.principal
         assert fetch_context.compute_framework_name == calc_context.compute_framework_name
         assert fetch_context.feature_group_class == calc_context.feature_group_class
 

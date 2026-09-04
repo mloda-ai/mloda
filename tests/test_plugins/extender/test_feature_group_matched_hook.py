@@ -13,6 +13,7 @@ import pytest
 from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook
 from mloda.core.abstract_plugins.hook_context import HookContext
 from mloda.core.abstract_plugins.run_context import RunContext
+from mloda.core.abstract_plugins.verified_context import set_verified_context
 from mloda.core.core.engine import Engine
 from mloda.provider import BaseInputData, ComputeFramework, DataCreator, FeatureGroup, FeatureSet
 from mloda.user import Feature, FeatureName, Features, Options, ParallelizationMode, PluginCollector, mloda
@@ -252,6 +253,32 @@ class TestCarrierAndWorkerIndexNoneDuringMatch:
         assert len(extender.captured) == 2
         assert all(context.carrier is None for context in extender.captured)
         assert all(context.worker_index is None for context in extender.captured)
+
+
+class TestTenantProjectPrincipalSurfaceDuringMatchWhenScopeIsActive:
+    """Bug: _resolve_with_match_hook hardcodes tenant_id/project_id/principal to None, modeled
+    after carrier=None. That reasoning does not hold here: Engine.__init__ (which triggers match
+    hook resolution) runs synchronously inside mlodaAPI.__init__, which prepare()/run_all() call
+    directly, so a verified-context scope wrapping prepare() genuinely IS active at match time."""
+
+    def test_tenant_project_principal_are_populated_on_every_match_context(self) -> None:
+        extender = _MatchListCapturingExtender()
+
+        with set_verified_context(tenant_id="acme", project_id="proj1", principal="hash123"):
+            mloda.prepare(
+                [Feature(f"{_MARKER}_col_one"), Feature(f"{_MARKER}_col_two")],
+                compute_frameworks=["PythonDictFramework"],
+                plugin_collector=PluginCollector.enabled_feature_groups(
+                    {_MatchHookColOneFeatureGroup, _MatchHookColTwoFeatureGroup}
+                ),
+                parallelization_modes={ParallelizationMode.SYNC},
+                function_extender={extender},
+            )
+
+        assert len(extender.captured) == 2
+        assert all(context.tenant_id == "acme" for context in extender.captured)
+        assert all(context.project_id == "proj1" for context in extender.captured)
+        assert all(context.principal == "hash123" for context in extender.captured)
 
 
 class TestStreamAllForwardsFunctionExtenderIntoMatchTimeHooks:

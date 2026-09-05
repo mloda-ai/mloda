@@ -4,6 +4,7 @@ Pins construction, the ambient current()/activate() scope (including nested
 restore), row_count's __len__ gating, and instrument's timing/status bookkeeping.
 """
 
+import dataclasses
 from typing import Any
 
 import pytest
@@ -17,7 +18,7 @@ class _NoLenDouble:
 
 
 def _make_context(**overrides: Any) -> HookContext:
-    required = {
+    required: dict[str, Any] = {
         "hook": ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE,
         "feature_group_class": "tests.something.FakeFeatureGroup",
         "feature_group_version": "v1",
@@ -27,13 +28,13 @@ def _make_context(**overrides: Any) -> HookContext:
         "compute_framework_name": "FakeFramework",
     }
     required.update(overrides)
-    return HookContext(**required)  # type: ignore[arg-type]
+    return HookContext(**required)
 
 
 class TestHookContextConstruction:
     """HookContext construction and defaults."""
 
-    def test_constructs_with_only_required_fields(self) -> None:
+    def test_constructs_with_explicit_fields(self) -> None:
         context = _make_context()
 
         assert context.hook == ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE
@@ -357,3 +358,60 @@ class TestInstrumentPreservesSelf:
         wrapped = instrument(context, plain)
 
         assert not hasattr(wrapped, "__self__")
+
+
+class TestHookContextKeywordDefaults:
+    """Only hook, feature_group_class, feature_group_version, compute_framework_name stay required."""
+
+    def test_short_form_constructs_with_identity_fields_only(self) -> None:
+        context = HookContext(
+            hook=ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE,
+            feature_group_class="tests.something.FakeFeatureGroup",
+            feature_group_version="v1",
+            compute_framework_name="FakeFramework",
+        )
+
+        assert context.plugin_version is None
+        assert context.feature_names == ()
+        assert context.input_features is None
+
+    @pytest.mark.parametrize(
+        "dropped_field",
+        ["hook", "feature_group_class", "feature_group_version", "compute_framework_name"],
+    )
+    def test_identity_field_stays_required(self, dropped_field: str) -> None:
+        kwargs: dict[str, Any] = {
+            "hook": ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE,
+            "feature_group_class": "tests.something.FakeFeatureGroup",
+            "feature_group_version": "v1",
+            "compute_framework_name": "FakeFramework",
+        }
+        del kwargs[dropped_field]
+
+        with pytest.raises(TypeError, match=dropped_field):
+            HookContext(**kwargs)
+
+    def test_exactly_four_fields_have_no_default(self) -> None:
+        required_field_names = {
+            field.name
+            for field in dataclasses.fields(HookContext)
+            if field.default is dataclasses.MISSING and field.default_factory is dataclasses.MISSING
+        }
+
+        assert required_field_names == {
+            "hook",
+            "feature_group_class",
+            "feature_group_version",
+            "compute_framework_name",
+        }
+
+    def test_every_other_field_defaults_to_none(self) -> None:
+        identity_fields = {"hook", "feature_group_class", "feature_group_version", "compute_framework_name"}
+
+        for field in dataclasses.fields(HookContext):
+            if field.name in identity_fields or field.name == "feature_names":
+                continue
+            assert field.default is None, f"{field.name} should default to None"
+
+        feature_names_field = next(field for field in dataclasses.fields(HookContext) if field.name == "feature_names")
+        assert feature_names_field.default == ()

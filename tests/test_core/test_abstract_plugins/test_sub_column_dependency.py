@@ -176,8 +176,7 @@ class TestSubColumnDependencyResolution:
             {PandasDataFrame},
             plugin_collector=plugin_collector,
         )
-        api._batch_run()
-        results = api.get_result()
+        results = api.run()
 
         assert len(results) > 0, "Should return at least one result DataFrame"
 

@@ -59,8 +59,7 @@ class TestScalingFeatureGroupIntegration:
             {PandasDataFrame},
             plugin_collector=plugin_collector,
         )
-        api1._batch_run()
-        results1 = api1.get_result()
+        results1 = api1.run()
         artifacts1 = api1.get_artifacts()
 
         # Verify scaling feature was created
@@ -90,8 +89,7 @@ class TestScalingFeatureGroupIntegration:
             {PandasDataFrame},
             plugin_collector=plugin_collector,
         )
-        api2._batch_run()
-        results2 = api2.get_result()
+        results2 = api2.run()
         artifacts2 = api2.get_artifacts()
 
         # Verify results are identical (indicating artifact reuse)

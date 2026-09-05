@@ -265,8 +265,7 @@ def test_multi_column_auto_resolution_with_chaining() -> None:
         {PandasDataFrame},
         plugin_collector=plugin_collector,
     )
-    api._batch_run()
-    results = api.get_result()
+    results = api.run()
 
     # Verify results
     # The mloda returns separate DataFrames per feature group

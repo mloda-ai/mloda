@@ -6,6 +6,7 @@ import dataclasses
 import inspect
 import logging
 import threading
+import types
 from dataclasses import dataclass
 from enum import Enum
 from types import ModuleType
@@ -78,9 +79,14 @@ class PluginRegistryEntry:
 PluginRegistrySnapshot = dict[str, PluginRegistryEntry]
 
 
+def _is_class(obj: object) -> bool:
+    """Python 3.10 reports a types.GenericAlias such as tuple[str, ...] as a type; issubclass then raises."""
+    return isinstance(obj, type) and not isinstance(obj, types.GenericAlias)
+
+
 def _resolve_plugin_type(cls: type[Any]) -> type[Any]:
     for base in _PLUGIN_BASE_TYPES:
-        if isinstance(cls, type) and issubclass(cls, base):
+        if _is_class(cls) and issubclass(cls, base):
             return base
     raise ValueError(f"{cls!r} is not a subclass of FeatureGroup, ComputeFramework, or Extender.")
 
@@ -263,7 +269,7 @@ def register_module_plugins(module: ModuleType, *, source: PluginSource | str = 
     registry = PluginRegistry.default()
     keys: list[str] = []
     for obj in vars(module).values():
-        if not isinstance(obj, type) or obj in _PLUGIN_BASE_TYPES:
+        if not _is_class(obj) or obj in _PLUGIN_BASE_TYPES:
             continue
         if not issubclass(obj, _PLUGIN_BASE_TYPES) or obj.__module__ != module.__name__:
             continue

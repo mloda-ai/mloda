@@ -203,7 +203,7 @@ Every failure a plugin can cause falls into one of three tiers:
   `available_only=True`, exactly as a genuinely unavailable one would be.
 - **Skip.** An entry that is not meant to be documented is dropped silently:
   classes defined in `__main__`, and the abstract bases (`get_extender_docs`
-  skips `Extender` and `_CompositeExtender` explicitly; the FeatureGroup and
+  skips `Extender` and `CompositeExtender` explicitly; the FeatureGroup and
   ComputeFramework roots never appear because `get_all_subclasses` omits them).
   Redefinition duplicates are collapsed rather than listed twice (see below).
 - **Propagate.** Errors that are not a single plugin's introspection fault are

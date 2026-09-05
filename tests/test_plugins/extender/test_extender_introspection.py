@@ -15,7 +15,7 @@ from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.function_extender import (
     Extender,
     ExtenderHook,
-    _CompositeExtender,
+    CompositeExtender,
 )
 
 
@@ -209,14 +209,14 @@ class TestHookContextExport:
 class TestCompositeExtenderNamePropagation:
     """Regression: every extender in a composite chain must see the real feature group name.
 
-    Today _CompositeExtender.make_wrapper hands all but the innermost extender an
+    Today CompositeExtender.make_wrapper hands all but the innermost extender an
     anonymous `wrapper` closure, so name introspection breaks for the outer ones.
     """
 
     def test_all_extenders_in_chain_resolve_real_class_name(self) -> None:
         ext_a = RecordingExtender(priority=10)
         ext_b = RecordingExtender(priority=20)
-        composite = _CompositeExtender([ext_a, ext_b])
+        composite = CompositeExtender([ext_a, ext_b])
 
         feature_set = build_feature_set()
         result = composite(SampleFeatureGroup.calculate_feature, {"x": [1]}, feature_set)

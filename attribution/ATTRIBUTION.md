@@ -84,7 +84,7 @@
 | strictyaml              | 1.7.3           | MIT License                                        |
 | tenacity                | 9.1.4           | Apache Software License                            |
 | threadpoolctl           | 3.6.0           | BSD License                                        |
-| tornado                 | 6.5.7           | Apache Software License                            |
+| tornado                 | 6.5.8           | Apache Software License                            |
 | tqdm                    | 4.67.3          | MPL-2.0 AND MIT                                    |
 | traitlets               | 5.15.0          | BSD License                                        |
 | typeguard               | 4.5.2           | MIT                                                |

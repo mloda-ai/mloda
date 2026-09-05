@@ -20,6 +20,7 @@ from mloda.core.api.plugin_docs import (
 from mloda.core.abstract_plugins.function_extender import (
     Extender,
     ExtenderHook,
+    CompositeExtender,
 )
 from mloda.core.abstract_plugins.hook_context import HookContext
 
@@ -65,6 +66,7 @@ __all__ = [
     "Extender",
     "ExtenderHook",
     "HookContext",
+    "CompositeExtender",
     # Server-verified tenant/project/principal context seam
     "verified_context",
     # Plugin registry administration

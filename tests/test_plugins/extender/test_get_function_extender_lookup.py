@@ -5,7 +5,7 @@ from typing import Any
 from mloda.core.abstract_plugins.function_extender import (
     Extender,
     ExtenderHook,
-    _CompositeExtender,
+    CompositeExtender,
     get_function_extender,
 )
 
@@ -53,5 +53,5 @@ class TestGetFunctionExtenderLookup:
 
         result = get_function_extender({high, low, mid}, ExtenderHook.JOIN)
 
-        assert isinstance(result, _CompositeExtender)
+        assert isinstance(result, CompositeExtender)
         assert result.extenders == [low, mid, high]

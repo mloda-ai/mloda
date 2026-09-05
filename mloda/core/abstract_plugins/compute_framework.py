@@ -19,7 +19,7 @@ from mloda.core.abstract_plugins.function_extender import (
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.components.input_data.input_data_descriptor import InputDataDescriptor
 from mloda.core.abstract_plugins.components.parallelization_modes import ParallelizationMode
-from mloda.core.abstract_plugins.hook_context import HookContext, instrument
+from mloda.core.abstract_plugins.hook_context import HookContext, OutputSchema, instrument
 from mloda.core.abstract_plugins.plugin_version import resolve_plugin_version
 from mloda.core.abstract_plugins.run_context import RunContext
 from mloda.core.filter.filter_engine import BaseFilterEngine
@@ -542,6 +542,13 @@ class ComputeFramework(ABC):
         or would materialize/query."""
         return HookContext.row_count(data)
 
+    def _output_schema(self, data: Any) -> OutputSchema | None:
+        """Best-effort (column, dtype) pairs sorted by name for observability; override when reading
+        names or dtypes would materialize or query."""
+        return tuple(
+            (name, self._extract_column_dtype(data, name)) for name in sorted(self._extract_column_names(data))
+        )
+
     @final
     def set_filter_engine(self, features: Any) -> Any:
         """We set the filter engine of the feature set here.
@@ -612,7 +619,10 @@ class ComputeFramework(ABC):
             if extender is None:
                 return method(self.data, features)
             return _invoke_extender(
-                extender, instrument(context, method, row_count=self._row_count), self.data, features
+                extender,
+                instrument(context, method, row_count=self._row_count, output_schema=self._output_schema),
+                self.data,
+                features,
             )
 
     @final

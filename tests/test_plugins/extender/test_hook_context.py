@@ -155,6 +155,20 @@ class TestHookContextCurrentScope:
         assert HookContext.current() is None
 
 
+class TestHookContextOutputSchemaField:
+    """HookContext carries a best-effort output schema: (column_name, dtype_or_none) pairs."""
+
+    def test_defaults_to_none(self) -> None:
+        context = _make_context()
+
+        assert context.output_schema is None
+
+    def test_settable_via_constructor(self) -> None:
+        context = _make_context(output_schema=(("a", "int64"), ("b", None)))
+
+        assert context.output_schema == (("a", "int64"), ("b", None))
+
+
 class TestHookContextRowCount:
     """HookContext.row_count is __len__-gated, never calls len() on unsized objects."""
 
@@ -295,6 +309,79 @@ class TestInstrument:
             wrapped()
 
         assert call_count["n"] == 1
+
+
+class TestInstrumentOutputSchema:
+    """instrument's optional output_schema kwarg mirrors rows_out's reset/degrade semantics."""
+
+    def test_default_leaves_output_schema_none_after_success(self) -> None:
+        context = _make_context()
+
+        def raw() -> list[int]:
+            return [1, 2, 3]
+
+        wrapped = instrument(context, raw)
+        wrapped()
+
+        assert context.output_schema is None
+
+    def test_callable_result_sets_output_schema(self) -> None:
+        context = _make_context()
+
+        def raw() -> list[int]:
+            return [1, 2, 3]
+
+        wrapped = instrument(context, raw, output_schema=lambda result: (("a", "int64"),))
+        wrapped()
+
+        assert context.output_schema == (("a", "int64"),)
+
+    def test_callable_receives_wrapped_function_return_value(self) -> None:
+        context = _make_context()
+        received: dict[str, Any] = {}
+
+        def raw() -> list[int]:
+            return [1, 2, 3]
+
+        def capture_schema(result: Any) -> Any:
+            received["result"] = result
+            return None
+
+        wrapped = instrument(context, raw, output_schema=capture_schema)
+        result = wrapped()
+
+        assert received["result"] is result
+
+    def test_raising_output_schema_callable_degrades_to_none_without_propagating(self) -> None:
+        context = _make_context()
+
+        def raw() -> list[int]:
+            return [1, 2, 3]
+
+        def raising_schema(result: Any) -> Any:
+            raise RuntimeError("boom")
+
+        wrapped = instrument(context, raw, output_schema=raising_schema)
+        result = wrapped()
+
+        assert result == [1, 2, 3]
+        assert context.output_schema is None
+
+    def test_reset_at_call_start_and_stays_none_after_raise(self) -> None:
+        context = _make_context(output_schema=(("stale", "int"),))
+        recorded: dict[str, Any] = {}
+
+        def raw() -> None:
+            recorded["output_schema_during_call"] = context.output_schema
+            raise ValueError("boom")
+
+        wrapped = instrument(context, raw, output_schema=lambda result: (("a", "int64"),))
+
+        with pytest.raises(ValueError, match="boom"):
+            wrapped()
+
+        assert recorded["output_schema_during_call"] is None
+        assert context.output_schema is None
 
 
 class TestInstrumentStatusStaysNoneUntilCallFinishes:

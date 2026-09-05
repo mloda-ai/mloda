@@ -2,6 +2,8 @@
 Tests for SklearnArtifact.
 """
 
+from pathlib import Path
+
 from mloda.user import Feature
 import pytest
 from unittest.mock import Mock, patch
@@ -68,19 +70,18 @@ class TestSklearnArtifact:
             with pytest.raises(ImportError, match="joblib is required"):
                 SklearnArtifact._deserialize_artifact('{"fitted_transformer": "dummy"}')
 
-    def test_custom_saver(self) -> None:
+    def test_custom_saver(self, tmp_path: Path) -> None:
         """Test custom_saver method."""
         # Skip test if sklearn/joblib not available
         try:
             import joblib  # noqa: F401
             from sklearn.preprocessing import StandardScaler
-            import tempfile  # noqa: F401
             import os
         except ImportError:
             pytest.skip("scikit-learn or joblib not available")
 
         features = FeatureSet()
-        features.add(Feature("test_custom_saver_feature", Options()))
+        features.add(Feature("test_custom_saver_feature", Options({"artifact_storage_path": str(tmp_path)})))
 
         # Use the new multiple artifact format
         artifact = {
@@ -90,22 +91,11 @@ class TestSklearnArtifact:
             }
         }
 
-        try:
-            result = SklearnArtifact.custom_saver(features, artifact)
-            assert isinstance(result, dict)
-            assert "test_artifact_key" in result
-            # Verify file was created
-            assert os.path.exists(result["test_artifact_key"])
-        finally:
-            # Clean up
-            try:
-                import glob
-
-                artifact_files = glob.glob("/tmp/sklearn_artifact_*.joblib")  # nosec
-                for file_path in artifact_files:
-                    os.remove(file_path)
-            except Exception:  # nosec
-                pass
+        result = SklearnArtifact.custom_saver(features, artifact)
+        assert isinstance(result, dict)
+        assert "test_artifact_key" in result
+        # Verify file was created
+        assert os.path.exists(result["test_artifact_key"])
 
     def test_custom_loader_no_options(self) -> None:
         """Test custom_loader when no options are available."""
@@ -131,14 +121,13 @@ class TestSklearnArtifact:
             result = SklearnArtifact.custom_loader(features)
             assert result is None
 
-    def test_custom_loader_with_artifact(self) -> None:
+    def test_custom_loader_with_artifact(self, tmp_path: Path) -> None:
         """Test custom_loader with stored artifact."""
         # Skip test if sklearn/joblib not available
         try:
             import joblib  # noqa: F401
             from sklearn.preprocessing import StandardScaler
             import os
-            import glob
         except ImportError:
             pytest.skip("scikit-learn or joblib not available")
 
@@ -154,30 +143,21 @@ class TestSklearnArtifact:
 
         # Mock features with unique name
         features = FeatureSet()
-        features.add(Feature("test_with_artifact_feature_unique", Options({})))
+        features.add(Feature("test_with_artifact_feature_unique", Options({"artifact_storage_path": str(tmp_path)})))
 
-        try:
-            # First save the artifact
-            saved_paths = SklearnArtifact.custom_saver(features, artifact)
-            assert isinstance(saved_paths, dict)
-            assert "test_with_artifact_key" in saved_paths
-            assert os.path.exists(saved_paths["test_with_artifact_key"])
+        # First save the artifact
+        saved_paths = SklearnArtifact.custom_saver(features, artifact)
+        assert isinstance(saved_paths, dict)
+        assert "test_with_artifact_key" in saved_paths
+        assert os.path.exists(saved_paths["test_with_artifact_key"])
 
-            # Then load it
-            result = SklearnArtifact.custom_loader(features)
+        # Then load it
+        result = SklearnArtifact.custom_loader(features)
 
-            assert result is not None
-            assert isinstance(result, dict)
-            assert "test_with_artifact_key" in result
-            loaded_artifact = result["test_with_artifact_key"]
-            assert "fitted_transformer" in loaded_artifact
-            assert "feature_names" in loaded_artifact
-            assert loaded_artifact["feature_names"] == ["feature1", "feature2"]
-        finally:
-            # Clean up
-            try:
-                artifact_files = glob.glob("/tmp/sklearn_artifact_*.joblib")  # nosec
-                for file_path in artifact_files:
-                    os.remove(file_path)
-            except Exception:  # nosec
-                pass
+        assert result is not None
+        assert isinstance(result, dict)
+        assert "test_with_artifact_key" in result
+        loaded_artifact = result["test_with_artifact_key"]
+        assert "fitted_transformer" in loaded_artifact
+        assert "feature_names" in loaded_artifact
+        assert loaded_artifact["feature_names"] == ["feature1", "feature2"]

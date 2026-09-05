@@ -67,7 +67,8 @@ class FeatureSet:
 
     def add(self, feature: Feature) -> None:
         self.features.add(feature)
-        self.name_of_one_feature = feature.name
+        if self.name_of_one_feature is None or feature.name < self.name_of_one_feature:
+            self.name_of_one_feature = feature.name
         if self.options is None:
             self.options = feature.options
         if self.any_uuid is None:
@@ -165,6 +166,7 @@ class FeatureSet:
         return tuple(sorted({feature.name for feature in self.features if feature.initial_requested_data}))
 
     def get_name_of_one_feature(self) -> FeatureName:
+        """Return the alphabetically smallest feature name added to the set (deterministic regardless of add() order)."""
         FeatureSetValidator.validate_feature_added(
             self.name_of_one_feature if self.name_of_one_feature else None, "get_name_of_one_feature"
         )

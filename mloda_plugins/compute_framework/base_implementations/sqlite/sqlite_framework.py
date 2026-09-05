@@ -5,6 +5,7 @@ from collections.abc import Sequence
 from typing import Any, Optional
 
 from mloda.core.abstract_plugins.components.data_types import DataType
+from mloda.core.abstract_plugins.hook_context import OutputSchema
 from mloda.provider import BaseMergeEngine
 from mloda.provider import ComputeFramework
 from mloda.provider import BaseFilterEngine, BaseMaskEngine
@@ -83,6 +84,19 @@ class SqliteFramework(ComputeFramework):
         if isinstance(data, SqliteRelation):
             return None
         return super()._row_count(data)
+
+    def _output_schema(self, data: Any) -> OutputSchema | None:
+        """A SqliteRelation infers unresolved types by scanning every row; report only propagated hints."""
+        if not isinstance(data, SqliteRelation):
+            return super()._output_schema(data)
+        columns = data.columns
+        if not columns:
+            return None
+        hints = data.type_hints or [None] * len(columns)
+        return tuple(
+            (name, None if hint is None else str(hint))
+            for name, hint in sorted(zip(columns, hints), key=lambda pair: pair[0])
+        )
 
     def _extract_column_dtype(self, data: Any, column_name: str) -> str | None:
         if not hasattr(data, "columns") or column_name not in data.columns:

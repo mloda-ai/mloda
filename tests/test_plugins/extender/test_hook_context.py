@@ -169,6 +169,21 @@ class TestHookContextOutputSchemaField:
         assert context.output_schema == (("a", "int64"), ("b", None))
 
 
+class TestOutputSchemaPublicExport:
+    """OutputSchema is re-exported as a public type alias from mloda.steward."""
+
+    def test_output_schema_is_the_same_object_as_the_core_alias(self) -> None:
+        from mloda.steward import OutputSchema
+        from mloda.core.abstract_plugins.hook_context import OutputSchema as CoreOutputSchema
+
+        assert OutputSchema is CoreOutputSchema
+
+    def test_output_schema_listed_in_steward_all(self) -> None:
+        import mloda.steward as steward
+
+        assert "OutputSchema" in steward.__all__
+
+
 class TestHookContextRowCount:
     """HookContext.row_count is __len__-gated, never calls len() on unsized objects."""
 

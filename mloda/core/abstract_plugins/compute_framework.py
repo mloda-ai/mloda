@@ -504,7 +504,8 @@ class ComputeFramework(ABC):
     def _extract_column_names(self, data: Any) -> set[str]:
         """Extract column names from the data.
 
-        Called only with the non-None output of calculate_feature.
+        Called with the framework's data after transform, and, through _output_schema,
+        with the raw calculate_feature result, which may be any shape.
         """
         raise NotImplementedError
 
@@ -543,10 +544,16 @@ class ComputeFramework(ABC):
         return HookContext.row_count(data)
 
     def _output_schema(self, data: Any) -> OutputSchema | None:
-        """Best-effort (column, dtype) pairs sorted by name for observability; override when reading
-        names or dtypes would materialize or query."""
+        """Best-effort (column, dtype) pairs sorted by name, None when no column names can be read.
+
+        A column whose dtype read fails keeps a None dtype; override when reading would materialize or query.
+        """
+        names = self._extract_column_names(data)
+        if not names:
+            return None
         return tuple(
-            (name, self._extract_column_dtype(data, name)) for name in sorted(self._extract_column_names(data))
+            (str(name), safe_field(lambda: self._extract_column_dtype(data, name), None))
+            for name in sorted(names, key=str)
         )
 
     @final

@@ -1,7 +1,8 @@
 """Tests for ComputeFramework._output_schema: sorted (column, dtype) pairs, degradation to None
-on failure, and that lazy frames (polars/duckdb) are never materialized to build the schema.
+on failure, and that lazy frames (polars/duckdb/sqlite) are never materialized to build the schema.
 """
 
+import sqlite3
 from typing import Any
 
 import pytest
@@ -29,10 +30,18 @@ try:
 except ImportError:
     pl = None  # type: ignore[assignment]
 
+try:
+    import pandas as pd
+except ImportError:
+    pd = None
+
 from mloda_plugins.compute_framework.base_implementations.duckdb.duckdb_framework import DuckDBFramework
 from mloda_plugins.compute_framework.base_implementations.duckdb.duckdb_relation import DuckdbRelation
+from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.compute_framework.base_implementations.polars.lazy_dataframe import PolarsLazyDataFrame
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
+from mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_framework import SqliteFramework
+from mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_relation import SqliteRelation
 
 
 class TestPythonDictOutputSchema:
@@ -46,9 +55,13 @@ class TestPythonDictOutputSchema:
         fw = PythonDictFramework()
         assert fw._output_schema({"a": [None, None]}) == (("a", None),)
 
-    def test_empty_dict_yields_empty_schema(self) -> None:
+    def test_no_columns_yields_none(self) -> None:
         fw = PythonDictFramework()
-        assert fw._output_schema({}) == ()
+        assert fw._output_schema({}) is None
+
+    def test_non_native_shape_yields_none(self) -> None:
+        fw = PythonDictFramework()
+        assert fw._output_schema([1, 2, 3]) is None
 
 
 @pytest.mark.skipif(pa is None, reason="PyArrow is not installed. Skipping this test.")
@@ -181,10 +194,10 @@ class _RaisingDtypeFramework(PythonDictFramework):
         raise RuntimeError("dtype boom")
 
 
-class TestDtypeFailureDegradesToNone:
-    """A dtype-extraction failure inside _output_schema must degrade output_schema to None, not break the call."""
+class TestDtypeFailureDegradesColumnToNone:
+    """A dtype-extraction failure degrades only that column's dtype to None; names and other columns survive."""
 
-    def test_dtype_raising_degrades_output_schema_to_none(self) -> None:
+    def test_dtype_raising_degrades_only_that_columns_dtype(self) -> None:
         feature_set = _build_feature_set()
         extender = _ContextCapturingExtender()
         cfw = _RaisingDtypeFramework(
@@ -196,7 +209,7 @@ class TestDtypeFailureDegradesToNone:
         assert result == {"b": ["x", "y"], "a": [1, 2]}
         captured = extender.captured
         assert captured is not None
-        assert captured.output_schema is None
+        assert captured.output_schema == (("a", None), ("b", None))
         assert captured.status == "success"
 
 
@@ -244,7 +257,7 @@ class TestPolarsLazyOutputSchemaStaysLazy:
         assert PolarsLazyDataFrame()._output_schema(lazy_frame) == (("a", "Int64"), ("b", "String"))
 
 
-@pytest.mark.skipif(duckdb is None, reason="DuckDB is not installed.")
+@pytest.mark.skipif(duckdb is None or pa is None, reason="DuckDB/PyArrow is not installed.")
 class TestDuckDBOutputSchemaStaysLazy:
     """DuckDBFramework._output_schema must never trigger the relation's expensive count_star() query."""
 
@@ -259,3 +272,84 @@ class TestDuckDBOutputSchemaStaysLazy:
         monkeypatch.setattr(DuckdbRelation, "__len__", _raise_if_called)
 
         assert DuckDBFramework()._output_schema(relation) == (("a", "BIGINT"), ("b", "VARCHAR"))
+
+
+class _PandasOutputSchemaFeatureGroup(FeatureGroup):
+    """Root feature group returning a plain dict, run on PandasDataFrame."""
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return {"a": [1]}
+
+
+@pytest.mark.skipif(pd is None, reason="Pandas is not installed. Skipping this test.")
+class TestPandasOutputSchema:
+    """PandasDataFrame._output_schema reads pandas dtypes; non-string column labels stringify and sort by string form."""
+
+    def test_sorted_columns_with_pandas_dtypes(self) -> None:
+        df = pd.DataFrame({"b": [1.5], "a": [1]})
+        assert PandasDataFrame()._output_schema(df) == (("a", "int64"), ("b", "float64"))
+
+    def test_non_string_labels_are_stringified_and_sorted_by_string_form(self) -> None:
+        df = pd.DataFrame({0: [1], "b": [1.5]})
+        assert PandasDataFrame()._output_schema(df) == (("0", "int64"), ("b", "float64"))
+
+    def test_dict_result_is_not_pandas_native_shape_and_yields_none(self) -> None:
+        feature_set = _build_feature_set()
+        extender = _ContextCapturingExtender()
+        cfw = PandasDataFrame(mode=ParallelizationMode.SYNC, children_if_root=frozenset(), function_extender={extender})
+
+        cfw.run_calculate_feature(_PandasOutputSchemaFeatureGroup, feature_set)
+
+        captured = extender.captured
+        assert captured is not None
+        assert captured.output_schema is None
+        assert captured.status == "success"
+
+
+@pytest.mark.skipif(pa is None, reason="PyArrow is not installed. Skipping this test.")
+class TestSqliteOutputSchemaStaysLazy:
+    """SqliteFramework._output_schema reads propagated type hints; it must never scan rows or count them."""
+
+    @staticmethod
+    def _forbid_row_scan(monkeypatch: pytest.MonkeyPatch) -> None:
+        def _raise_len(self: Any) -> int:
+            raise AssertionError("SqliteRelation.__len__ must not be called by _output_schema")
+
+        def _raise_infer(self: Any, type_hints: Any) -> Any:
+            raise AssertionError(
+                "SqliteRelation._types_with_inferred_unknown_hints must not be called by _output_schema"
+            )
+
+        monkeypatch.setattr(SqliteRelation, "__len__", _raise_len)
+        monkeypatch.setattr(SqliteRelation, "_types_with_inferred_unknown_hints", _raise_infer)
+
+    def test_fully_resolved_hints_report_every_dtype(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        conn = sqlite3.connect(":memory:")
+        relation = SqliteRelation.from_arrow(conn, pa.table({"b": ["x"], "a": [1]}))
+        self._forbid_row_scan(monkeypatch)
+        statements: list[str] = []
+        conn.set_trace_callback(statements.append)
+
+        assert SqliteFramework()._output_schema(relation) == (("a", "int64"), ("b", "string"))
+
+    def test_unresolved_hint_reports_none_without_scanning(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        conn = sqlite3.connect(":memory:")
+        relation = SqliteRelation.from_arrow(conn, pa.table({"b": ["x"], "a": [1]}))
+        derived = relation.select(_raw_sql="*, a * 2 AS c")
+        self._forbid_row_scan(monkeypatch)
+        statements: list[str] = []
+        conn.set_trace_callback(statements.append)
+
+        assert SqliteFramework()._output_schema(derived) == (("a", "int64"), ("b", "string"), ("c", None))
+        assert not [s for s in statements if s.startswith("SELECT *") and "LIMIT 0" not in s]
+
+    def test_relation_without_cached_hints_reports_none_dtypes(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        conn = sqlite3.connect(":memory:")
+        relation = SqliteRelation.from_arrow(conn, pa.table({"b": ["x"], "a": [1]}))
+        bare = SqliteRelation(conn, relation.table_name)
+        self._forbid_row_scan(monkeypatch)
+        statements: list[str] = []
+        conn.set_trace_callback(statements.append)
+
+        assert SqliteFramework()._output_schema(bare) == (("a", None), ("b", None))

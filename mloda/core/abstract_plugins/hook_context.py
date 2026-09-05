@@ -27,9 +27,9 @@ class HookContext:
     hook: ExtenderHook
     feature_group_class: str
     feature_group_version: str
-    plugin_version: str | None
-    feature_names: tuple[str, ...]
-    input_features: frozenset[str] | None
+    plugin_version: str | None = None
+    feature_names: tuple[str, ...] = ()
+    input_features: frozenset[str] | None = None
     compute_framework_name: str
     rows_in: int | None = None
     rows_out: int | None = None

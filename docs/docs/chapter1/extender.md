@@ -107,6 +107,22 @@ class FactsExtender(Extender):
         return result
 ```
 
+To unit-test an extender's `__call__` without running the engine, build a `HookContext` directly and `activate()` it. Only `hook`, `feature_group_class`, `feature_group_version` and `compute_framework_name` are required. `plugin_version` and `input_features` default to `None`, `feature_names` defaults to an empty tuple, and every other field defaults to `None`.
+
+```python
+from mloda.steward import ExtenderHook, HookContext
+
+context = HookContext(
+    hook=ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE,
+    feature_group_class="my_plugin.MyFeatureGroup",
+    feature_group_version="1",
+    compute_framework_name="PyArrowTable",
+)
+
+with context.activate():
+    FactsExtender()(lambda: "result")
+```
+
 #### 6. Discovering Extenders
 
 To list all available extenders and their documentation, use the `get_extender_docs()` function from `mloda.steward`.

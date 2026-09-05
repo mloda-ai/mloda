@@ -67,7 +67,8 @@ class FeatureSet:
 
     def add(self, feature: Feature) -> None:
         self.features.add(feature)
-        self.name_of_one_feature = feature.name
+        if self.name_of_one_feature is None or feature.name < self.name_of_one_feature:
+            self.name_of_one_feature = feature.name
         if self.options is None:
             self.options = feature.options
         if self.any_uuid is None:

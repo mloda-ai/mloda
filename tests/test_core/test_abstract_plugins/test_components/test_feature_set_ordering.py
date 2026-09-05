@@ -4,7 +4,10 @@ These pin the NEW API:
 - get_all_names() -> tuple[str, ...] sorted alphabetically
 - get_initial_requested_features() -> tuple[FeatureName, ...] sorted alphabetically
 - get_sorted_features() -> tuple[Feature, ...] sorted by feature.name
+- name_of_one_feature / get_name_of_one_feature() -> alphabetically smallest name, order-independent
 """
+
+import itertools
 
 from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
@@ -67,3 +70,55 @@ class TestGetSortedFeatures:
 
         assert isinstance(sorted_features, tuple)
         assert all(isinstance(feature, Feature) for feature in sorted_features)
+
+
+class TestNameOfOneFeatureDeterministic:
+    def test_out_of_order_add_picks_alphabetically_smallest_attribute(self) -> None:
+        features = FeatureSet()
+        features.add(Feature("c_col"))
+        features.add(Feature("a_col"))
+        features.add(Feature("b_col"))
+
+        assert features.name_of_one_feature == FeatureName("a_col")
+
+    def test_out_of_order_add_picks_alphabetically_smallest_via_getter(self) -> None:
+        features = FeatureSet()
+        features.add(Feature("c_col"))
+        features.add(Feature("a_col"))
+        features.add(Feature("b_col"))
+
+        assert features.get_name_of_one_feature() == FeatureName("a_col")
+
+    def test_last_added_feature_is_not_always_the_result(self) -> None:
+        # Guards against the old "last call wins" behavior: adding the alphabetically
+        # smallest name first must not make it lose to a later, larger name.
+        features = FeatureSet()
+        features.add(Feature("a_col"))
+        features.add(Feature("z_col"))
+
+        assert features.get_name_of_one_feature() == FeatureName("a_col")
+
+    def test_order_independent_across_explicit_orderings(self) -> None:
+        names = ["c_col", "a_col", "b_col"]
+        orderings = [names, list(reversed(names)), sorted(names), ["b_col", "c_col", "a_col"]]
+
+        results = set()
+        for ordering in orderings:
+            features = FeatureSet()
+            for name in ordering:
+                features.add(Feature(name))
+            results.add(features.get_name_of_one_feature())
+
+        assert results == {FeatureName("a_col")}
+
+    def test_order_independent_across_all_permutations(self) -> None:
+        names = ["delta", "alpha", "charlie", "bravo"]
+        expected = FeatureName(min(names))
+
+        for ordering in itertools.permutations(names):
+            features = FeatureSet()
+            for name in ordering:
+                features.add(Feature(name))
+
+            assert features.get_name_of_one_feature() == expected
+            assert features.name_of_one_feature == expected

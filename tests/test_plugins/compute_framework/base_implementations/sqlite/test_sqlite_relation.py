@@ -319,6 +319,29 @@ class TestSqliteRelationTableNameQuoting:
         assert result == [(1,)]
 
 
+class TestTypeHints:
+    """SqliteRelation.type_hints exposes propagated per-column type hints without scanning rows."""
+
+    def test_from_arrow_exposes_hints_aligned_with_columns(self, connection: sqlite3.Connection) -> None:
+        relation = SqliteRelation.from_arrow(connection, pa.table({"b": ["x"], "a": [1]}))
+        assert relation.type_hints == [pa.string(), pa.int64()]
+
+    def test_unresolved_raw_sql_column_reports_none_without_scanning(self, connection: sqlite3.Connection) -> None:
+        relation = SqliteRelation.from_arrow(connection, pa.table({"b": ["x"], "a": [1]}))
+        derived = relation.select(_raw_sql="*, a * 2 AS c")
+
+        statements: list[str] = []
+        connection.set_trace_callback(statements.append)
+
+        assert derived.type_hints == [pa.string(), pa.int64(), None]
+        assert not [s for s in statements if s.startswith("SELECT *") and "LIMIT 0" not in s]
+
+    def test_relation_without_cached_hints_returns_none(self, connection: sqlite3.Connection) -> None:
+        relation = SqliteRelation.from_arrow(connection, pa.table({"b": ["x"], "a": [1]}))
+        bare = SqliteRelation(connection, relation.table_name)
+        assert bare.type_hints is None
+
+
 class TestInferSqliteType:
     def test_int_before_float_returns_real(self) -> None:
         """When a float follows an int in the list, widest type (REAL) should win."""

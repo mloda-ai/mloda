@@ -11,6 +11,9 @@ from tests.test_plugins.compute_framework.test_tooling.availability_test_helper 
 from tests.test_plugins.compute_framework.base_implementations.datatype_validator_test_mixin import (
     DataTypeValidatorFrameworkTestMixin,
 )
+from tests.test_plugins.compute_framework.base_implementations.dict_interchange_output_schema_test_mixin import (
+    DictInterchangeOutputSchemaTestMixin,
+)
 from tests.test_plugins.compute_framework.base_implementations.dtype_extraction_test_mixin import (
     DtypeExtractionTestMixin,
 )
@@ -141,6 +144,15 @@ class TestPandasDtypeExtraction(DtypeExtractionTestMixin):
     @pytest.fixture
     def dtype_sample_data(self) -> Any:
         return pd.DataFrame({"int_col": [1, 2, 3], "str_col": ["a", "b", "c"], "float_col": [1.0, 2.0, 3.0]})
+
+
+@pytest.mark.skipif(pd is None, reason="Pandas is not installed. Skipping this test.")
+class TestPandasDictInterchangeOutputSchema(DictInterchangeOutputSchemaTestMixin):
+    """Test PandasDataFrame._output_schema on the dict interchange shape using shared mixin."""
+
+    @pytest.fixture
+    def framework_instance(self) -> Any:
+        return PandasDataFrame(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
 
 
 @pytest.mark.skipif(pd is None, reason="Pandas is not installed. Skipping this test.")

@@ -19,7 +19,7 @@ from mloda.core.abstract_plugins.function_extender import (
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.components.input_data.input_data_descriptor import InputDataDescriptor
 from mloda.core.abstract_plugins.components.parallelization_modes import ParallelizationMode
-from mloda.core.abstract_plugins.hook_context import HookContext, instrument
+from mloda.core.abstract_plugins.hook_context import HookContext, OutputSchema, instrument
 from mloda.core.abstract_plugins.plugin_version import resolve_plugin_version
 from mloda.core.abstract_plugins.run_context import RunContext
 from mloda.core.filter.filter_engine import BaseFilterEngine
@@ -37,6 +37,21 @@ _current_compute_framework: ContextVar["ComputeFramework | None"] = ContextVar(
 def _no_rows(data: Any) -> int | None:
     """row_count stand-in for hooks whose return value carries no row semantics."""
     return None
+
+
+def _python_dtype(values: Any) -> str | None:
+    """Type name of the first non-None value in a column; None when every value is None."""
+    for value in values:
+        if value is not None:
+            return type(value).__name__
+    return None
+
+
+def _dict_output_schema(data: dict[Any, Any]) -> OutputSchema | None:
+    """Schema of the dict interchange shape; a column whose values cannot be iterated keeps a None dtype."""
+    if not data:
+        return None
+    return tuple((str(key), safe_field(lambda: _python_dtype(data[key]), None)) for key in sorted(data, key=str))
 
 
 class EmptyResultError(ValueError):
@@ -502,9 +517,9 @@ class ComputeFramework(ABC):
         return any(dtype_str.startswith(p) for p in ComputeFramework._NUMERIC_PREFIXES)
 
     def _extract_column_names(self, data: Any) -> set[str]:
-        """Extract column names from the data.
+        """Extract column names from the framework's data after transform.
 
-        Called only with the non-None output of calculate_feature.
+        Also called via _output_schema with a non-dict raw calculate_feature result, where a raise degrades to None.
         """
         raise NotImplementedError
 
@@ -541,6 +556,21 @@ class ComputeFramework(ABC):
         """Best-effort row count for observability; override when __len__ is missing, wrong,
         or would materialize/query."""
         return HookContext.row_count(data)
+
+    def _output_schema(self, data: Any) -> OutputSchema | None:
+        """Best-effort (column, dtype) pairs sorted by name; the dict interchange shape is read directly.
+
+        None when no columns can be read; a failed dtype read keeps None; override if reading materializes or queries.
+        """
+        if isinstance(data, dict):
+            return _dict_output_schema(data)
+        names = self._extract_column_names(data)
+        if not names:
+            return None
+        return tuple(
+            (str(name), safe_field(lambda: self._extract_column_dtype(data, name), None))
+            for name in sorted(names, key=str)
+        )
 
     @final
     def set_filter_engine(self, features: Any) -> Any:
@@ -612,7 +642,10 @@ class ComputeFramework(ABC):
             if extender is None:
                 return method(self.data, features)
             return _invoke_extender(
-                extender, instrument(context, method, row_count=self._row_count), self.data, features
+                extender,
+                instrument(context, method, row_count=self._row_count, output_schema=self._output_schema),
+                self.data,
+                features,
             )
 
     @final

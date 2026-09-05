@@ -17,6 +17,7 @@ from mloda.core.abstract_plugins.plugin_registry.plugin_policy import PluginPoli
 from mloda.core.abstract_plugins.plugin_registry.plugin_registry import (
     PluginRegistry,
     PluginSource,
+    _is_class,
     register_module_plugins,
     warn_policy_denied,
 )
@@ -180,7 +181,7 @@ class PluginLoader:
         registry = PluginRegistry.default()
         keys: list[str] = []
         for cls in manifest:
-            if not isinstance(cls, type):
+            if not _is_class(cls):
                 raise TypeError(f"Entry point '{label}' manifest contains a non-class item: {cls!r}.")
             if not issubclass(cls, base_type):
                 raise TypeError(

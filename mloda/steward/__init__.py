@@ -22,7 +22,7 @@ from mloda.core.abstract_plugins.function_extender import (
     ExtenderHook,
     CompositeExtender,
 )
-from mloda.core.abstract_plugins.hook_context import HookContext
+from mloda.core.abstract_plugins.hook_context import HookContext, OutputSchema
 
 # Server-verified tenant/project/principal context seam
 from mloda.core.abstract_plugins.verified_context import verified_context
@@ -66,6 +66,7 @@ __all__ = [
     "Extender",
     "ExtenderHook",
     "HookContext",
+    "OutputSchema",
     "CompositeExtender",
     # Server-verified tenant/project/principal context seam
     "verified_context",

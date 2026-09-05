@@ -39,6 +39,21 @@ def _no_rows(data: Any) -> int | None:
     return None
 
 
+def _python_dtype(values: Any) -> str | None:
+    """Type name of the first non-None value in a column; None when every value is None."""
+    for value in values:
+        if value is not None:
+            return type(value).__name__
+    return None
+
+
+def _dict_output_schema(data: dict[Any, Any]) -> OutputSchema | None:
+    """Schema of the dict interchange shape; a column whose values cannot be iterated keeps a None dtype."""
+    if not data:
+        return None
+    return tuple((str(key), safe_field(lambda: _python_dtype(data[key]), None)) for key in sorted(data, key=str))
+
+
 class EmptyResultError(ValueError):
     """Raised when a final requested feature's result carries no schema (zero columns);
     zero rows with a schema is valid."""
@@ -502,10 +517,9 @@ class ComputeFramework(ABC):
         return any(dtype_str.startswith(p) for p in ComputeFramework._NUMERIC_PREFIXES)
 
     def _extract_column_names(self, data: Any) -> set[str]:
-        """Extract column names from the data.
+        """Extract column names from the framework's data after transform.
 
-        Called with the framework's data after transform, and, through _output_schema,
-        with the raw calculate_feature result, which may be any shape.
+        Also called via _output_schema with a non-dict raw calculate_feature result, where a raise degrades to None.
         """
         raise NotImplementedError
 
@@ -544,10 +558,12 @@ class ComputeFramework(ABC):
         return HookContext.row_count(data)
 
     def _output_schema(self, data: Any) -> OutputSchema | None:
-        """Best-effort (column, dtype) pairs sorted by name, None when no column names can be read.
+        """Best-effort (column, dtype) pairs sorted by name; the dict interchange shape is read directly.
 
-        A column whose dtype read fails keeps a None dtype; override when reading would materialize or query.
+        None when no columns can be read; a failed dtype read keeps None; override if reading materializes or queries.
         """
+        if isinstance(data, dict):
+            return _dict_output_schema(data)
         names = self._extract_column_names(data)
         if not names:
             return None

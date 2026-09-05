@@ -170,7 +170,7 @@ class TestHookContextOutputSchemaField:
 
 
 class TestOutputSchemaPublicExport:
-    """OutputSchema is re-exported as a public type alias from mloda.steward."""
+    """OutputSchema is re-exported as a public type alias from mloda.steward and mloda.provider."""
 
     def test_output_schema_is_the_same_object_as_the_core_alias(self) -> None:
         from mloda.steward import OutputSchema
@@ -182,6 +182,17 @@ class TestOutputSchemaPublicExport:
         import mloda.steward as steward
 
         assert "OutputSchema" in steward.__all__
+
+    def test_provider_output_schema_is_the_same_object_as_the_core_alias(self) -> None:
+        from mloda.provider import OutputSchema
+        from mloda.core.abstract_plugins.hook_context import OutputSchema as CoreOutputSchema
+
+        assert OutputSchema is CoreOutputSchema
+
+    def test_output_schema_listed_in_provider_all(self) -> None:
+        import mloda.provider as provider
+
+        assert "OutputSchema" in provider.__all__
 
 
 class TestHookContextRowCount:

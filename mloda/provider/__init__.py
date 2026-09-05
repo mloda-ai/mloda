@@ -25,6 +25,7 @@ from mloda.core.abstract_plugins.feature_group import FeatureGroup as FeatureGro
 from mloda.core.abstract_plugins.components.base_feature_group_version import BaseFeatureGroupVersion
 from mloda.core.version import get_mloda_version
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework as ComputeFramework
+from mloda.core.abstract_plugins.hook_context import OutputSchema as OutputSchema
 from mloda.core.abstract_plugins.compute_framework import EmptyResultError as EmptyResultError
 
 # Utilities
@@ -131,6 +132,7 @@ __all__ = [
     # Versioning
     "BaseFeatureGroupVersion",
     "ComputeFramework",
+    "OutputSchema",
     "EmptyResultError",
     # Utilities
     "HashableDict",

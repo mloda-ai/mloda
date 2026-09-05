@@ -5,9 +5,9 @@ from collections.abc import Sequence
 from typing import Any, Optional
 
 from mloda.core.abstract_plugins.components.data_types import DataType
-from mloda.core.abstract_plugins.hook_context import OutputSchema
 from mloda.provider import BaseMergeEngine
 from mloda.provider import ComputeFramework
+from mloda.provider import OutputSchema
 from mloda.provider import BaseFilterEngine, BaseMaskEngine
 from mloda.user import FeatureName, ParallelizationMode
 from mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_filter_engine import SqliteFilterEngine
@@ -86,13 +86,16 @@ class SqliteFramework(ComputeFramework):
         return super()._row_count(data)
 
     def _output_schema(self, data: Any) -> OutputSchema | None:
-        """A SqliteRelation infers unresolved types by scanning every row; report only propagated hints."""
+        """Report propagated hints (None per unresolved column) or, without any hints, PRAGMA affinity types.
+
+        Resolving an unresolved hint scans every row, so it is never done here.
+        """
         if not isinstance(data, SqliteRelation):
             return super()._output_schema(data)
         columns = data.columns
         if not columns:
             return None
-        hints = data.type_hints or [None] * len(columns)
+        hints = data.type_hints if data.type_hints is not None else data.types
         return tuple(
             (name, None if hint is None else str(hint))
             for name, hint in sorted(zip(columns, hints), key=lambda pair: pair[0])

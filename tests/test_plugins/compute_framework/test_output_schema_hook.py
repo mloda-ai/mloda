@@ -16,6 +16,9 @@ from mloda.core.abstract_plugins.hook_context import HookContext
 from mloda.provider import FeatureGroup
 from mloda.user import Feature, ParallelizationMode
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
+from tests.test_plugins.compute_framework.base_implementations.dict_interchange_output_schema_test_mixin import (
+    DictInterchangeOutputSchemaTestMixin,
+)
 
 try:
     import duckdb
@@ -71,45 +74,9 @@ class TestPyArrowOutputSchema:
         assert PyArrowTable()._output_schema(table) == (("a", "int64"), ("b", "string"))
 
 
-class DictInterchangeOutputSchemaMixin:
-    """Shared _output_schema tests for the dict interchange shape, identical on every framework since it
-    bypasses the framework's own extraction and goes straight through the module-level dict reader."""
-
-    @pytest.fixture
-    def framework_instance(self) -> Any:
-        raise NotImplementedError
-
-    def test_reads_dict_sorted_with_python_type_names(self, framework_instance: Any) -> None:
-        assert framework_instance._output_schema({"b": ["x"], "a": [1], "c": [1.5]}) == (
-            ("a", "int"),
-            ("b", "str"),
-            ("c", "float"),
-        )
-
-
-@pytest.mark.skipif(pd is None, reason="Pandas is not installed. Skipping this test.")
-class TestPandasDictInterchangeOutputSchema(DictInterchangeOutputSchemaMixin):
-    @pytest.fixture
-    def framework_instance(self) -> Any:
-        return PandasDataFrame()
-
-
-@pytest.mark.skipif(pa is None, reason="PyArrow is not installed. Skipping this test.")
-class TestPyArrowDictInterchangeOutputSchema(DictInterchangeOutputSchemaMixin):
-    @pytest.fixture
-    def framework_instance(self) -> Any:
-        return PyArrowTable()
-
-
-@pytest.mark.skipif(duckdb is None or pa is None, reason="DuckDB/PyArrow is not installed.")
-class TestDuckDBDictInterchangeOutputSchema(DictInterchangeOutputSchemaMixin):
-    @pytest.fixture
-    def framework_instance(self) -> Any:
-        return DuckDBFramework()
-
-
-class TestBareComputeFrameworkDictInterchangeOutputSchema(DictInterchangeOutputSchemaMixin):
-    """Also covers the dict-interchange edge cases once, since that path is framework-agnostic."""
+class TestBareComputeFrameworkDictInterchangeOutputSchema(DictInterchangeOutputSchemaTestMixin):
+    """Shared mixin plus the dict-interchange edge cases, covered once here since that path is
+    framework-agnostic (pandas/pyarrow/duckdb each cover the shared smoke test in their own file)."""
 
     @pytest.fixture
     def framework_instance(self) -> Any:

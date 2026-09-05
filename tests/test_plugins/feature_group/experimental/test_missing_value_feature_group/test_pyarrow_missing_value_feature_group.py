@@ -2,15 +2,10 @@ import pyarrow as pa
 import pyarrow.compute as pc
 import pytest
 
-from mloda.user import mloda
-from mloda.user import Feature
 from mloda.provider import FeatureSet
-from mloda.user import Options
-from mloda.user import PluginCollector
-
+from mloda.user import Feature, Options, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from mloda_plugins.feature_group.experimental.data_quality.missing_value.pyarrow import PyArrowMissingValueFeatureGroup
-
 from tests.test_plugins.feature_group.experimental.test_missing_value_feature_group.test_missing_value_utils import (
     PyArrowMissingValueTestDataCreator,
     validate_missing_value_features,
@@ -104,6 +99,30 @@ class TestPyArrowMissingValueFeatureGroup:
     def test_compute_framework_rule(self) -> None:
         """Test compute_framework_rule method."""
         assert PyArrowMissingValueFeatureGroup.compute_framework_rule() == {PyArrowTable}
+
+    def test_perform_imputation_no_missing_values_fast_path(self) -> None:
+        """Test that columns without missing values trigger the fast path and return the column unchanged."""
+        table = pa.Table.from_pydict({"values": [10, 20, 30, 40]})
+        col = table.column("values")
+        assert col.null_count == 0
+
+        # Fast path returns unchanged column without error even if method is otherwise unhandled
+        result = PyArrowMissingValueFeatureGroup._perform_imputation(
+            table, "invalid_method_skipped_by_fast_path", ["values"]
+        )
+        assert result.equals(col)
+        assert result.to_pylist() == [10, 20, 30, 40]
+
+    def test_perform_imputation_with_missing_values_takes_imputation_path(
+        self, sample_table_with_missing: pa.Table
+    ) -> None:
+        """Test that columns with missing values do not take the fast path and undergo imputation."""
+        orig_col = sample_table_with_missing.column("income")
+        assert orig_col.null_count > 0
+
+        result = PyArrowMissingValueFeatureGroup._perform_imputation(sample_table_with_missing, "mean", ["income"])
+        assert not result.equals(orig_col)
+        assert result.null_count == 0
 
     def test_perform_imputation_mean(self, sample_table_with_missing: pa.Table) -> None:
         """Test _perform_imputation method with mean imputation."""

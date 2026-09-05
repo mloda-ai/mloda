@@ -167,9 +167,7 @@ class FeatureSet:
 
     def get_name_of_one_feature(self) -> FeatureName:
         """Return the alphabetically smallest feature name added to the set (deterministic regardless of add() order)."""
-        FeatureSetValidator.validate_feature_added(
-            self.name_of_one_feature if self.name_of_one_feature else None, "get_name_of_one_feature"
-        )
+        FeatureSetValidator.validate_feature_added(self.name_of_one_feature, "get_name_of_one_feature")
         assert self.name_of_one_feature is not None  # Type narrowing for mypy
         return self.name_of_one_feature
 

@@ -79,9 +79,9 @@ class BaseArtifact(ABC):
         """
 
         options = cls.get_singular_option_from_options(features)
-        if options is None or features.name_of_one_feature is None:
+        if options is None or features.artifact_to_load is None:
             return None
-        return options[str(features.name_of_one_feature)]
+        return options[features.artifact_to_load]
 
     @classmethod
     def get_singular_option_from_options(cls, features: FeatureSet) -> Options | None:

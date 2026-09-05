@@ -189,3 +189,21 @@ class TestFeatureSetConstructorConvergesToAlphabeticallySmallest:
         features.add_artifact_name()
 
         assert features.artifact_to_save == "a_col"
+
+
+class TestGetNameOfOneFeatureEmptyNameNotTreatedAsUnset:
+    """An empty-string FeatureName is a genuinely set value, not the "unset" sentinel."""
+
+    def test_empty_name_does_not_raise(self) -> None:
+        features = FeatureSet()
+        features.add(Feature(""))
+
+        assert features.get_name_of_one_feature() == FeatureName("")
+
+    def test_empty_name_wins_as_alphabetically_smallest(self) -> None:
+        features = FeatureSet()
+        features.add(Feature("a_col"))
+        features.add(Feature(""))
+
+        assert features.name_of_one_feature == FeatureName("")
+        assert features.get_name_of_one_feature() == FeatureName("")

@@ -47,8 +47,6 @@ from mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_relation
 
 
 class TestPythonDictOutputSchema:
-    """PythonDictFramework._output_schema pairs sorted column names with a best-effort dtype."""
-
     def test_sorted_columns_with_dtypes(self) -> None:
         fw = PythonDictFramework()
         assert fw._output_schema({"b": ["x", "y"], "a": [1, 2]}) == (("a", "int"), ("b", "str"))
@@ -68,46 +66,66 @@ class TestPythonDictOutputSchema:
 
 @pytest.mark.skipif(pa is None, reason="PyArrow is not installed. Skipping this test.")
 class TestPyArrowOutputSchema:
-    """PyArrowTable._output_schema reads the arrow schema's native type names."""
-
     def test_sorted_columns_with_arrow_dtypes(self) -> None:
         table = pa.table({"b": ["x"], "a": [1]})
         assert PyArrowTable()._output_schema(table) == (("a", "int64"), ("b", "string"))
 
 
-class TestDictInterchangeOutputSchema:
-    """The base _output_schema reads the dict interchange shape on every framework, not only PythonDictFramework."""
+class DictInterchangeOutputSchemaMixin:
+    """Shared _output_schema tests for the dict interchange shape, identical on every framework since it
+    bypasses the framework's own extraction and goes straight through the module-level dict reader."""
 
-    @pytest.mark.skipif(pd is None, reason="Pandas is not installed. Skipping this test.")
-    def test_pandas_reads_dict_sorted_with_python_type_names(self) -> None:
-        assert PandasDataFrame()._output_schema({"b": ["x"], "a": [1]}) == (("a", "int"), ("b", "str"))
+    @pytest.fixture
+    def framework_instance(self) -> Any:
+        raise NotImplementedError
 
-    @pytest.mark.skipif(pa is None, reason="PyArrow is not installed. Skipping this test.")
-    def test_pyarrow_reads_dict(self) -> None:
-        assert PyArrowTable()._output_schema({"a": [1]}) == (("a", "int"),)
+    def test_reads_dict_sorted_with_python_type_names(self, framework_instance: Any) -> None:
+        assert framework_instance._output_schema({"b": ["x"], "a": [1], "c": [1.5]}) == (
+            ("a", "int"),
+            ("b", "str"),
+            ("c", "float"),
+        )
 
-    @pytest.mark.skipif(duckdb is None or pa is None, reason="DuckDB/PyArrow is not installed.")
-    def test_duckdb_reads_dict(self) -> None:
-        assert DuckDBFramework()._output_schema({"a": [1.5]}) == (("a", "float"),)
 
-    @pytest.mark.skipif(pd is None, reason="Pandas is not installed. Skipping this test.")
-    def test_empty_dict_yields_none(self) -> None:
-        assert PandasDataFrame()._output_schema({}) is None
+@pytest.mark.skipif(pd is None, reason="Pandas is not installed. Skipping this test.")
+class TestPandasDictInterchangeOutputSchema(DictInterchangeOutputSchemaMixin):
+    @pytest.fixture
+    def framework_instance(self) -> Any:
+        return PandasDataFrame()
 
-    @pytest.mark.skipif(pd is None, reason="Pandas is not installed. Skipping this test.")
-    def test_all_none_column_yields_none_dtype(self) -> None:
-        assert PandasDataFrame()._output_schema({"a": [None, None]}) == (("a", None),)
 
-    @pytest.mark.skipif(pd is None, reason="Pandas is not installed. Skipping this test.")
-    def test_scalar_column_value_yields_none_dtype(self) -> None:
-        assert PandasDataFrame()._output_schema({"a": 1}) == (("a", None),)
+@pytest.mark.skipif(pa is None, reason="PyArrow is not installed. Skipping this test.")
+class TestPyArrowDictInterchangeOutputSchema(DictInterchangeOutputSchemaMixin):
+    @pytest.fixture
+    def framework_instance(self) -> Any:
+        return PyArrowTable()
 
-    @pytest.mark.skipif(pd is None, reason="Pandas is not installed. Skipping this test.")
-    def test_non_string_keys_are_stringified_and_sorted_by_string_form(self) -> None:
-        assert PandasDataFrame()._output_schema({1: [1], "a": [2]}) == (("1", "int"), ("a", "int"))
 
-    def test_bare_base_class_reads_dict(self) -> None:
-        assert ComputeFramework()._output_schema({"a": [1]}) == (("a", "int"),)
+@pytest.mark.skipif(duckdb is None or pa is None, reason="DuckDB/PyArrow is not installed.")
+class TestDuckDBDictInterchangeOutputSchema(DictInterchangeOutputSchemaMixin):
+    @pytest.fixture
+    def framework_instance(self) -> Any:
+        return DuckDBFramework()
+
+
+class TestBareComputeFrameworkDictInterchangeOutputSchema(DictInterchangeOutputSchemaMixin):
+    """Also covers the dict-interchange edge cases once, since that path is framework-agnostic."""
+
+    @pytest.fixture
+    def framework_instance(self) -> Any:
+        return ComputeFramework()
+
+    def test_empty_dict_yields_none(self, framework_instance: Any) -> None:
+        assert framework_instance._output_schema({}) is None
+
+    def test_all_none_column_yields_none_dtype(self, framework_instance: Any) -> None:
+        assert framework_instance._output_schema({"a": [None, None]}) == (("a", None),)
+
+    def test_scalar_column_value_yields_none_dtype(self, framework_instance: Any) -> None:
+        assert framework_instance._output_schema({"a": 1}) == (("a", None),)
+
+    def test_non_string_keys_are_stringified_and_sorted_by_string_form(self, framework_instance: Any) -> None:
+        assert framework_instance._output_schema({1: [1], "a": [2]}) == (("1", "int"), ("a", "int"))
 
 
 class _NamesOnlyFramework(ComputeFramework):
@@ -118,8 +136,6 @@ class _NamesOnlyFramework(ComputeFramework):
 
 
 class TestDefaultDtypeFrameworkOutputSchema:
-    """A framework overriding only _extract_column_names gets None dtypes from the base class on non-dict data."""
-
     def test_dtype_defaults_to_none_when_unoverridden(self) -> None:
         fw = _NamesOnlyFramework()
         data = types.MappingProxyType({"b": [1], "a": [2]})
@@ -135,8 +151,6 @@ class TestBaseComputeFrameworkOutputSchemaRaises:
 
 
 class _ContextCapturingExtender(Extender):
-    """Calls func like a real extender, then reads HookContext.current() afterward."""
-
     def __init__(self, priority: int = 100) -> None:
         self.priority = priority
         self.captured: HookContext | None = None
@@ -151,8 +165,6 @@ class _ContextCapturingExtender(Extender):
 
 
 class _HookCapturingExtender(Extender):
-    """Calls func like a real extender for a caller-chosen hook, then reads HookContext.current()."""
-
     def __init__(self, hook: ExtenderHook, priority: int = 100) -> None:
         self._hook = hook
         self.priority = priority
@@ -176,8 +188,6 @@ def _build_framework(extenders: set[Extender]) -> PythonDictFramework:
 
 
 class _OutputSchemaFeatureGroup(FeatureGroup):
-    """Root feature group returning a dict with mixed dtypes."""
-
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
         return {"b": ["x", "y"], "a": [1, 2]}
@@ -200,8 +210,6 @@ class TestOutputSchemaEndToEnd:
 
 
 class _BaseFrameworkOutputSchemaFeatureGroup(FeatureGroup):
-    """Root feature group returning a non-dict list, run on the base (unoverridden) ComputeFramework."""
-
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
         return [1, 2]
@@ -241,8 +249,6 @@ class _RowWiseOutputSchemaFeatureGroup(FeatureGroup):
 
 
 class TestDtypeFailureDegradesColumnToNone:
-    """A dtype read failure on the framework path (non-dict result) degrades only that column's dtype to None."""
-
     def test_dtype_raising_degrades_only_that_columns_dtype(self) -> None:
         feature_set = _build_feature_set()
         extender = _ContextCapturingExtender()
@@ -260,8 +266,6 @@ class TestDtypeFailureDegradesColumnToNone:
 
 
 class TestValidateHooksLeaveOutputSchemaNone:
-    """VALIDATE_INPUT_FEATURE and VALIDATE_OUTPUT_FEATURE hooks never populate output_schema."""
-
     def test_validate_output_feature_leaves_output_schema_none(self) -> None:
         feature_set = _build_feature_set()
         extender = _HookCapturingExtender(ExtenderHook.VALIDATE_OUTPUT_FEATURE)
@@ -290,8 +294,6 @@ class TestValidateHooksLeaveOutputSchemaNone:
 
 @pytest.mark.skipif(pl is None, reason="Polars is not installed. Skipping this test.")
 class TestPolarsLazyOutputSchemaStaysLazy:
-    """PolarsLazyDataFrame._output_schema must never call LazyFrame.collect()."""
-
     def test_output_schema_does_not_collect(self, monkeypatch: pytest.MonkeyPatch) -> None:
         def _raise_if_called(self: Any, *args: Any, **kwargs: Any) -> Any:
             raise AssertionError("LazyFrame.collect must not be called by _output_schema")
@@ -321,8 +323,6 @@ class TestDuckDBOutputSchemaStaysLazy:
 
 
 class _PandasOutputSchemaFeatureGroup(FeatureGroup):
-    """Root feature group returning a plain dict, run on PandasDataFrame."""
-
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
         return {"a": [1]}
@@ -330,8 +330,6 @@ class _PandasOutputSchemaFeatureGroup(FeatureGroup):
 
 @pytest.mark.skipif(pd is None, reason="Pandas is not installed. Skipping this test.")
 class TestPandasOutputSchema:
-    """PandasDataFrame._output_schema reads pandas dtypes; non-string column labels stringify and sort by string form."""
-
     def test_sorted_columns_with_pandas_dtypes(self) -> None:
         df = pd.DataFrame({"b": [1.5], "a": [1]})
         assert PandasDataFrame()._output_schema(df) == (("a", "int64"), ("b", "float64"))

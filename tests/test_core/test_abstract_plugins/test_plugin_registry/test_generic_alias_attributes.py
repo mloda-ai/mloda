@@ -1,9 +1,5 @@
-"""Pins Python 3.10's GenericAlias isinstance(obj, type) quirk in the plugin registry.
-
-On Python 3.10 alone, isinstance(tuple[str, ...], type) is True for a types.GenericAlias, so a
-module-level type alias attribute passes the registry's isinstance(obj, type) filter and then
-issubclass() raises TypeError instead of being skipped as a non-class attribute.
-"""
+"""On Python 3.10 alone, isinstance(tuple[str, ...], type) is True for a types.GenericAlias, so the
+plugin registry must skip a module-level type alias attribute rather than call issubclass() on it."""
 
 import gc
 import sys

@@ -247,7 +247,7 @@ class Options:
     def __setitem__(self, key: str, value: Any) -> None:
         self.set(key, value)
 
-    def get_in_features(self) -> "frozenset[Feature]":
+    def get_in_features(self) -> "tuple[Feature, ...]":
         val = self.get(DefaultOptionKeys.in_features)
 
         if not val:
@@ -271,17 +271,20 @@ class Options:
             else:
                 raise TypeError(f"Cannot convert {type(item)} to Feature. Expected Feature object or str.")
 
-        if isinstance(val, (list, tuple, set, frozenset)):
-            return frozenset(_convert_to_feature(item) for item in val)
+        if isinstance(val, (set, frozenset)):
+            converted = sorted((_convert_to_feature(item) for item in val), key=lambda feature: str(feature.name))
+            return tuple(dict.fromkeys(converted))
+        elif isinstance(val, (list, tuple)):
+            return tuple(dict.fromkeys(_convert_to_feature(item) for item in val))
         elif isinstance(val, str):
             # Handle comma-separated strings
             if "," in val:
                 feature_names = [name.strip() for name in val.split(",")]
-                return frozenset(_convert_to_feature(name) for name in feature_names)
+                return tuple(dict.fromkeys(_convert_to_feature(name) for name in feature_names))
             else:
-                return frozenset([_convert_to_feature(val)])
+                return (_convert_to_feature(val),)
         elif hasattr(val, "options"):  # Handle Feature objects
-            return frozenset([_convert_to_feature(val)])
+            return (_convert_to_feature(val),)
         else:
             raise TypeError(
                 f"Unsupported source feature {val!r} of type {type(val).__name__}. "

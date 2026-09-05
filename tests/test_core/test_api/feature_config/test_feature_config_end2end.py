@@ -86,7 +86,7 @@ def test_integration_json_file() -> None:
     assert features[8].name == "age__max_aggr"
     # The in_features should be a frozenset referencing feature 7
     mloda_source_8 = features[8].options.context.get("in_features")
-    assert mloda_source_8 == frozenset({"minmaxscaledage"})
+    assert mloda_source_8 == ("minmaxscaledage",)
 
     # Tenth feature: min_max with in_features="age__max_aggr" in options
     assert isinstance(features[9], Feature)
@@ -105,8 +105,7 @@ def test_integration_json_file() -> None:
     assert features[11].name == "custom_geo_distance"
     # Verify in_features is converted to frozenset and stored correctly
     in_features_11 = features[11].options.context.get(DefaultOptionKeys.in_features)
-    assert isinstance(in_features_11, frozenset)
-    assert in_features_11 == frozenset(["customer_location", "store_location"])
+    assert in_features_11 == ("customer_location", "store_location")
     assert features[11].options.context.get("distance_type") == "euclidean"
 
 
@@ -361,8 +360,7 @@ def test_end2end_multiple_source_features() -> None:
     assert features[5].name == "distance_feature"
     # Verify in_features is converted to frozenset
     in_features_5 = features[5].options.context.get(DefaultOptionKeys.in_features)
-    assert isinstance(in_features_5, frozenset)
-    assert in_features_5 == frozenset(["latitude", "longitude"])
+    assert in_features_5 == ("latitude", "longitude")
     # Verify options are correctly set
     assert features[5].options.group.get("distance_type") == "euclidean"
 
@@ -371,8 +369,7 @@ def test_end2end_multiple_source_features() -> None:
     assert features[6].name == "multi_source_aggregation"
     # Verify in_features is converted to frozenset
     in_features_6 = features[6].options.context.get(DefaultOptionKeys.in_features)
-    assert isinstance(in_features_6, frozenset)
-    assert in_features_6 == frozenset(["sales", "revenue", "profit"])
+    assert in_features_6 == ("sales", "revenue", "profit")
     # Verify options are correctly set
     assert features[6].options.group.get("aggregation") == "sum"
 
@@ -381,8 +378,7 @@ def test_end2end_multiple_source_features() -> None:
     assert features[7].name == "feature_with_both"
     # Verify in_features is converted to frozenset
     in_features_7 = features[7].options.context.get(DefaultOptionKeys.in_features)
-    assert isinstance(in_features_7, frozenset)
-    assert in_features_7 == frozenset(["latitude", "longitude"])
+    assert in_features_7 == ("latitude", "longitude")
     # Verify group options are correctly set
     assert features[7].options.group.get("cache_enabled") is True
     # Verify context options are correctly set (in addition to in_features)
@@ -477,7 +473,7 @@ def test_complete_integration_json() -> None:
     assert isinstance(features[8], Feature), "Feature with aggregation should be a Feature object"
     assert features[8].name == "age__max_aggr", "Feature name should be 'age__max_aggr'"
     mloda_source_8 = features[8].options.context.get("in_features")
-    assert mloda_source_8 == frozenset({"minmaxscaledage"}), "in_features should be frozenset with 'minmaxscaledage'"
+    assert mloda_source_8 == ("minmaxscaledage",), "in_features should be frozenset with 'minmaxscaledage'"
     validated_patterns["feature_reference"] = True
 
     # Feature index 9: min_max with in_features="age__max_aggr" in options
@@ -501,8 +497,7 @@ def test_complete_integration_json() -> None:
     assert isinstance(features[11], Feature), "Second multi-source feature should be a Feature object"
     assert features[11].name == "custom_geo_distance", "Feature name should be 'custom_geo_distance'"
     in_features_11 = features[11].options.context.get(DefaultOptionKeys.in_features)
-    assert isinstance(in_features_11, frozenset), "in_features should be converted to frozenset"
-    assert in_features_11 == frozenset(["customer_location", "store_location"]), (
+    assert in_features_11 == ("customer_location", "store_location"), (
         "in_features should contain customer_location and store_location"
     )
     assert features[11].options.context.get("distance_type") == "euclidean", "distance_type should be 'euclidean'"

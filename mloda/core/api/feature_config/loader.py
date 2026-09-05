@@ -5,7 +5,7 @@ This module handles the conversion from validated configuration data
 to mloda Feature instances.
 """
 
-from typing import Any
+from typing import Any, cast
 
 # Import from the component modules, NOT the `mloda.user` facade: that facade
 # imports load_features_from_config from this module, so a facade import here
@@ -19,6 +19,10 @@ from mloda.core.api.feature_config.models import (
     validate_nested_in_features,
 )
 from mloda.core.abstract_plugins.components.default_options_key import DefaultOptionKeys
+
+
+def _ordered_unique_in_features(in_features: list[str]) -> tuple[str, ...]:
+    return tuple(dict.fromkeys(in_features))
 
 
 def build_nested_feature(value: dict[str, Any]) -> Feature:
@@ -141,8 +145,9 @@ def load_features_from_config(config_str: str, format: str = "json") -> list[Fea
                 group = process_nested_features(item.group_options or {})
                 context = process_nested_features(item.context_options or {})
                 if item.in_features:
-                    # Always convert to frozenset for consistency
-                    context[DefaultOptionKeys.in_features] = frozenset(item.in_features)
+                    context[DefaultOptionKeys.in_features] = _ordered_unique_in_features(
+                        cast(list[str], item.in_features)
+                    )
                 options = Options(
                     group=group,
                     context=context,
@@ -156,8 +161,7 @@ def load_features_from_config(config_str: str, format: str = "json") -> list[Fea
             elif item.in_features:
                 # Process nested features in options before creating Feature
                 processed_options = process_nested_features(item.options)
-                # Always convert to frozenset for consistency (even single items)
-                source_value = frozenset(item.in_features)
+                source_value = _ordered_unique_in_features(cast(list[str], item.in_features))
                 options = Options(group=processed_options, context={DefaultOptionKeys.in_features: source_value})
                 feature = Feature(name=feature_name, options=options, feature_group=item.feature_group)
                 features.append(feature)

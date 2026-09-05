@@ -2,6 +2,11 @@
 Tests for the GeoDistanceFeatureGroup.
 """
 
+import json
+import os
+import subprocess  # nosec B404
+import sys
+
 import pandas as pd
 import pytest
 
@@ -32,6 +37,35 @@ class TestGeoDistanceFeatureGroup:
 
         with pytest.raises(ValueError):
             GeoDistanceFeatureGroup.get_point_features("point1__haversine_distance")
+
+    def test_config_operand_order_is_stable_across_hash_seeds(self) -> None:
+        """Config declarations keep point1 and point2 stable in fresh interpreters."""
+        code = """
+import json
+
+from mloda.core.api.feature_config.loader import load_features_from_config
+from mloda_plugins.feature_group.experimental.geo_distance.base import GeoDistanceFeatureGroup
+
+feature = load_features_from_config(
+    '[{"name": "distance", "in_features": ["z_source", "a_source"], '
+    '"options": {"distance_type": "euclidean"}}]'
+)[0]
+_, point1, point2 = GeoDistanceFeatureGroup._extract_geo_distance_parameters(feature)
+print(json.dumps([str(point1), str(point2)]))
+"""
+
+        for seed in ("1", "2", "3", "17", "42"):
+            env = os.environ.copy()
+            env["PYTHONHASHSEED"] = seed
+            completed = subprocess.run(  # nosec B603
+                [sys.executable, "-c", code],
+                check=True,
+                capture_output=True,
+                text=True,
+                env=env,
+            )
+
+            assert json.loads(completed.stdout) == ["z_source", "a_source"], f"PYTHONHASHSEED={seed}"
 
     def test_match_feature_group_criteria(self) -> None:
         """Test matching of feature names to feature group criteria."""

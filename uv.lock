@@ -1413,7 +1413,7 @@ wheels = [
 
 [[package]]
 name = "mloda"
-version = "0.11.3"
+version = "0.12.0"
 source = { editable = "." }
 
 [package.optional-dependencies]

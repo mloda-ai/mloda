@@ -187,6 +187,17 @@ elimination has anything to do. Data on which the framework cannot see columns
 but that is not an empty result still fails the missing-filter-column check
 loudly.
 
+### Row count for observability
+
+`ComputeFramework._row_count(self, data) -> int | None` supplies the row counts extenders read
+off `HookContext` (`rows_in`/`rows_out`) on the `FEATURE_GROUP_CALCULATE_FEATURE` and
+`INPUT_DATA_LOAD` hooks (see [Extender](../chapter1/extender.md)). The default,
+`HookContext.row_count(data)`, is a best-effort `len(data)` that already counts a columnar
+`dict[str, list]` by its first column, so `PythonDictFramework` needs no override. Override
+`_row_count` only when the native type's `__len__` is missing, wrong, or would materialize or
+query the data: `DuckDBFramework` and `SqliteFramework` both return `None` for their relation
+objects, since `len()` on either runs a real `COUNT(*)` query rather than reading metadata.
+
 ### Timezone and unit validation (merge and filter engines)
 
 A custom compute framework's merge and filter engines can opt into the
@@ -275,122 +286,10 @@ When data needs to move between compute frameworks:
 
 For more details on how data transformation works between compute frameworks, see [Framework Transformers](framework-transformers.md).
 
-## Example
+## Framework Notes
 
-For a segmentation feature group:
-
-```py
-# Base class (framework-agnostic)
-class SegmentationFeatureGroup(FeatureGroup):
-    def input_features(self, options, feature_name):
-        # Extract source features from feature name
-        
-    @classmethod
-    def calculate_feature(cls, data, features):
-        # This will be overridden by framework-specific implementations
-
-# Pandas implementation
-class PandasSegmentationFeatureGroup(SegmentationFeatureGroup):
-    @classmethod
-    def compute_framework_rule(cls):
-        return {PandasDataFrame}
-    
-    @classmethod
-    def calculate_feature(cls, data, features):
-        # Pandas-specific segmentation implementation
-        
-# PyArrow implementation
-class PyArrowSegmentationFeatureGroup(SegmentationFeatureGroup):
-    @classmethod
-    def compute_framework_rule(cls):
-        return {PyArrowTable}
-    
-    @classmethod
-    def calculate_feature(cls, data, features):
-        # PyArrow-specific segmentation implementation
-```
-
-For a summary feature group with Polars support:
-
-```py
-# Base class (framework-agnostic)
-class SummaryFeatureGroup(FeatureGroup):
-    def input_features(self, options, feature_name):
-        # Extract source features from feature name
-        
-    @classmethod
-    def calculate_feature(cls, data, features):
-        # This will be overridden by framework-specific implementations
-
-# Polars Lazy implementation
-class PolarsLazySummaryFeatureGroup(SummaryFeatureGroup):
-    @classmethod
-    def compute_framework_rule(cls):
-        return {PolarsLazyDataFrame}
-    
-    @classmethod
-    def calculate_feature(cls, data, features):
-        # Polars lazy-specific summary implementation
-        # Uses lazy evaluation for query optimization
-```
-
-Note that Polars supports both eager (`PolarsDataFrame`) and lazy (`PolarsLazyDataFrame`) evaluation modes, allowing you to choose the appropriate strategy based on your performance requirements.
-
-For an analytical feature group with DuckDB support:
-
-```py
-# Base class (framework-agnostic)
-class AnalyticalFeatureGroup(FeatureGroup):
-    def input_features(self, options, feature_name):
-        # Extract source features from feature name
-        
-    @classmethod
-    def calculate_feature(cls, data, features):
-        # This will be overridden by framework-specific implementations
-
-# DuckDB implementation
-class DuckDBAnalyticalFeatureGroup(AnalyticalFeatureGroup):
-    @classmethod
-    def compute_framework_rule(cls):
-        return {DuckDBFramework}
-    
-    @classmethod
-    def calculate_feature(cls, data, features):
-        # DuckDB-specific analytical implementation
-        # Uses SQL-like operations for complex analytics
-        # Example: data.aggregate("column", "sum").df()
-        return data.aggregate("value_column", "sum")
-```
-
-**Important**: DuckDB feature groups require a connection object to be available. The framework will automatically handle connection management, but ensure your data access collection includes the necessary connection information.
-
-For a distributed processing feature group with Spark support:
-
-```py
-# Base class (framework-agnostic)
-class DistributedFeatureGroup(FeatureGroup):
-    def input_features(self, options, feature_name):
-        # Extract source features from feature name
-        
-    @classmethod
-    def calculate_feature(cls, data, features):
-        # This will be overridden by framework-specific implementations
-
-# Spark implementation
-class SparkDistributedFeatureGroup(DistributedFeatureGroup):
-    @classmethod
-    def compute_framework_rule(cls):
-        return {SparkFramework}
-    
-    @classmethod
-    def calculate_feature(cls, data, features):
-        # Spark-specific distributed processing implementation
-        # Uses Spark DataFrame operations for scalable processing
-        # Example: data.groupBy("category").agg({"value": "sum"})
-        return data.groupBy("category_column").agg({"value_column": "sum"})
-```
-
-**Important**: Spark feature groups require PySpark installation and Java 8+ environment with JAVA_HOME configured. The framework can auto-create a local SparkSession if none is provided, but for production use, you should provide a configured SparkSession through the data access collection. Spark uses its own distributed processing capabilities instead of mloda's framework inherent multiprocessing.
+- **DuckDB**: feature groups need a connection object supplied via the data access collection; mloda validates it and pins its session timezone to UTC but never opens or closes it.
+- **Spark**: requires PySpark and a Java 8+ runtime (`JAVA_HOME`). mloda can auto-create a local `SparkSession`; for production, supply a configured one through the data access collection. Spark's own distributed processing replaces mloda's built-in multiprocessing.
 
 ## SQL Relation Helpers (DuckDB / SQLite)
 

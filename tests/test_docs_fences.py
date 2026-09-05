@@ -25,7 +25,7 @@ ILLUSTRATIVE_BLOCK_ALLOWLIST: dict[str, int] = {
     "docs/docs/chapter1/compute-frameworks.md": 4,
     "docs/docs/in_depth/access-feature-data.md": 5,
     "docs/docs/in_depth/artifacts.md": 1,
-    "docs/docs/in_depth/compute-framework-integration.md": 12,
+    "docs/docs/in_depth/compute-framework-integration.md": 8,
     "docs/docs/in_depth/data-access-patterns.md": 7,
     "docs/docs/in_depth/discover-plugins.md": 1,
     "docs/docs/in_depth/feature-chain-parser.md": 16,

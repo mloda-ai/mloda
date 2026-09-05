@@ -359,8 +359,7 @@ class TestSklearnPipelineFeatureGroupIntegration:
         feature1 = Feature("income__sklearn_pipeline_scaling", Options(feature_options))
 
         api1 = mloda([feature1], {PandasDataFrame}, plugin_collector=plugin_collector)
-        api1._batch_run()
-        results1 = api1.get_result()
+        results1 = api1.run()
         artifacts1 = api1.get_artifacts()
 
         # Verify we got results and artifacts
@@ -392,8 +391,7 @@ class TestSklearnPipelineFeatureGroupIntegration:
         feature2 = Feature("income__sklearn_pipeline_scaling", Options(combined_options))
 
         api2 = mloda([feature2], {PandasDataFrame}, plugin_collector=plugin_collector)
-        api2._batch_run()
-        results2 = api2.get_result()
+        results2 = api2.run()
         artifacts2 = api2.get_artifacts()
 
         # Verify results are identical (indicating artifact reuse)

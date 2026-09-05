@@ -61,8 +61,7 @@ class TestForecastingArtifactIntegration:
         )
 
         # Run the mloda to generate forecasts and save the artifact
-        api._batch_run()
-        results1 = api.get_result()
+        results1 = api.run()
 
         # Get the saved artifacts
         artifacts = api.get_artifacts()
@@ -84,8 +83,7 @@ class TestForecastingArtifactIntegration:
         )
 
         # Run the mloda to generate forecasts using the loaded artifact
-        api2._batch_run()
-        results2 = api2.get_result()
+        results2 = api2.run()
 
         # Verify that both runs produced results with the same feature
         assert feature_name in results1[0].columns, f"{feature_name} not found in first run results"

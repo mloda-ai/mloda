@@ -65,8 +65,7 @@ class TestForecastingModernization:
             plugin_collector=plugin_collector,
         )
 
-        api._batch_run()
-        results = api.get_result()
+        results = api.run()
 
         # Verify that the feature was created successfully
         assert len(results) == 1
@@ -101,8 +100,7 @@ class TestForecastingModernization:
             plugin_collector=plugin_collector,
         )
 
-        api._batch_run()
-        results = api.get_result()
+        results = api.run()
 
         # Verify that the feature was created successfully
         assert len(results) == 1
@@ -137,12 +135,10 @@ class TestForecastingModernization:
 
         # Run both approaches
         api1 = mloda([string_feature], {PandasDataFrame}, plugin_collector=plugin_collector)
-        api1._batch_run()
-        results1 = api1.get_result()
+        results1 = api1.run()
 
         api2 = mloda([config_feature], {PandasDataFrame}, plugin_collector=plugin_collector)
-        api2._batch_run()
-        results2 = api2.get_result()
+        results2 = api2.run()
 
         # Both should produce results with their respective feature names
         assert "sales__linear_forecast_7day" in results1[0].columns
@@ -174,7 +170,7 @@ class TestForecastingModernization:
                 ),
             )
             api = mloda([feature], {PandasDataFrame}, plugin_collector=plugin_collector)
-            api._batch_run()
+            api.run()
 
         # Test invalid time unit
         with pytest.raises(Exception):  # Should fail during validation
@@ -190,7 +186,7 @@ class TestForecastingModernization:
                 ),
             )
             api = mloda([feature], {PandasDataFrame}, plugin_collector=plugin_collector)
-            api._batch_run()
+            api.run()
 
         # Test invalid horizon (negative)
         with pytest.raises(Exception):  # Should fail during validation
@@ -206,7 +202,7 @@ class TestForecastingModernization:
                 ),
             )
             api = mloda([feature], {PandasDataFrame}, plugin_collector=plugin_collector)
-            api._batch_run()
+            api.run()
 
     def test_multiple_algorithms_configuration_based(self) -> None:
         """Test multiple forecasting algorithms using configuration-based approach."""
@@ -235,8 +231,7 @@ class TestForecastingModernization:
 
         # Run the mloda with multiple features
         api = mloda(features, {PandasDataFrame}, plugin_collector=plugin_collector)
-        api._batch_run()
-        results = api.get_result()
+        results = api.run()
 
         # Verify all features were created
         assert len(results) == 1
@@ -280,8 +275,7 @@ class TestForecastingModernization:
 
         # Run the mloda with both features
         api = mloda([feature1, feature2], {PandasDataFrame}, plugin_collector=plugin_collector)
-        api._batch_run()
-        results = api.get_result()
+        results = api.run()
 
         # Both features should be processed together (same Feature Group resolution)
         assert len(results) == 1

@@ -80,7 +80,7 @@ class MlodaTestRunner:
         Run mloda with the given configuration.
 
         This is the recommended method for most integration tests.
-        Uses mloda instance + _batch_run() for full access to results and artifacts.
+        Uses mloda instance + run() for full access to results and artifacts.
 
         Args:
             features: The feature set to compute
@@ -112,9 +112,11 @@ class MlodaTestRunner:
             plugin_collector=plugin_collector,
             strict_type_enforcement=strict_type_enforcement,
         )
-        api._batch_run(parallelization_modes, flight_server, function_extender)
-
-        results = api.get_result()
+        results = api.run(
+            parallelization_modes=parallelization_modes,
+            flight_server=flight_server,
+            function_extender=function_extender,
+        )
         artifacts = api.get_artifacts()
 
         if cleanup_flight_server:

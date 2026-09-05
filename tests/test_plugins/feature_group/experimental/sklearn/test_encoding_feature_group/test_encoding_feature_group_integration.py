@@ -60,8 +60,7 @@ class TestEncodingFeatureGroupIntegration:
             {PandasDataFrame},
             plugin_collector=plugin_collector,
         )
-        api1._batch_run()
-        results1 = api1.get_result()
+        results1 = api1.run()
         artifacts1 = api1.get_artifacts()
 
         # Verify encoding feature was created
@@ -90,8 +89,7 @@ class TestEncodingFeatureGroupIntegration:
             {PandasDataFrame},
             plugin_collector=plugin_collector,
         )
-        api2._batch_run()
-        results2 = api2.get_result()
+        results2 = api2.run()
         artifacts2 = api2.get_artifacts()
 
         # Verify results are identical (indicating artifact reuse)
@@ -129,8 +127,7 @@ class TestEncodingFeatureGroupIntegration:
             {PandasDataFrame},
             plugin_collector=plugin_collector,
         )
-        api1._batch_run()
-        results1 = api1.get_result()
+        results1 = api1.run()
         artifacts1 = api1.get_artifacts()
 
         # Verify encoding feature was created
@@ -176,8 +173,7 @@ class TestEncodingFeatureGroupIntegration:
             {PandasDataFrame},
             plugin_collector=plugin_collector,
         )
-        api1._batch_run()
-        results1 = api1.get_result()
+        results1 = api1.run()
         artifacts1 = api1.get_artifacts()
 
         # Verify specific columns were created
@@ -211,8 +207,7 @@ class TestEncodingFeatureGroupIntegration:
             {PandasDataFrame},
             plugin_collector=plugin_collector,
         )
-        api2._batch_run()
-        results2 = api2.get_result()
+        results2 = api2.run()
 
         # Verify full encoding creates all columns
         assert len(results2) == 1
@@ -270,8 +265,7 @@ class TestEncodingFeatureGroupIntegration:
             {PandasDataFrame},
             plugin_collector=plugin_collector,
         )
-        api._batch_run()
-        results = api.get_result()
+        results = api.run()
         artifacts = api.get_artifacts()
 
         # Verify results
@@ -300,8 +294,7 @@ class TestEncodingFeatureGroupIntegration:
             {PandasDataFrame},
             plugin_collector=plugin_collector,
         )
-        api_string._batch_run()
-        results_string = api_string.get_result()
+        results_string = api_string.run()
 
         # Verify string-based results match configuration-based results
         assert len(results_string) == 1

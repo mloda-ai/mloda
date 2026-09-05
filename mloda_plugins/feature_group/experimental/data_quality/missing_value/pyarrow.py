@@ -80,7 +80,7 @@ class PyArrowMissingValueFeatureGroup(MissingValueFeatureGroup):
             source_column = data.column(source_feature)
 
             # If there are no missing values, return the original column
-            if pc.count(pc.is_null(source_column)).as_py() == 0:
+            if source_column.null_count == 0:
                 return source_column
 
             # If group_by_features is provided, perform grouped imputation

@@ -185,6 +185,35 @@ class TestPyArrowMissingValueFeatureGroup:
         with pytest.raises(ValueError):
             PyArrowMissingValueFeatureGroup._perform_imputation(sample_table_with_missing, "invalid", ["income"])
 
+    def test_perform_imputation_no_missing_values_returns_source_unchanged(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The fast path must fire when a non-empty column has no nulls: the column is returned
+        as-is and no imputation compute runs."""
+        table = pa.Table.from_pydict({"income": [50000, 75000, 60000]})
+
+        def _fail(*args: object, **kwargs: object) -> None:
+            raise AssertionError("imputation should be skipped when there are no missing values")
+
+        monkeypatch.setattr(pc, "fill_null", _fail)
+        monkeypatch.setattr(pc, "mean", _fail)
+
+        result = PyArrowMissingValueFeatureGroup._perform_imputation(table, "mean", ["income"])
+
+        assert result.equals(table.column("income"))
+        assert result.null_count == 0
+
+    def test_perform_imputation_with_missing_values_skips_fast_path(self, sample_table_with_missing: pa.Table) -> None:
+        """The fast path must not fire when the column has nulls; imputation still runs."""
+        source_column = sample_table_with_missing.column("income")
+
+        result = PyArrowMissingValueFeatureGroup._perform_imputation(sample_table_with_missing, "mean", ["income"])
+
+        assert result is not source_column
+        assert result.null_count == 0
+        assert not pc.is_null(result[1]).as_py()
+        assert not pc.is_null(result[3]).as_py()
+
     def test_perform_grouped_imputation_mean(self, sample_table_with_missing: pa.Table) -> None:
         """Test _perform_grouped_imputation method with mean imputation by group."""
         result = PyArrowMissingValueFeatureGroup._perform_grouped_imputation(

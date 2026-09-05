@@ -8,6 +8,9 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
+from packaging.requirements import Requirement
+from packaging.utils import canonicalize_name
+
 if sys.version_info >= (3, 11):
     import tomllib
 else:
@@ -38,6 +41,18 @@ def test_sqlite_extra_exists_and_contains_pyarrow() -> None:
     assert "sqlite" in optional, f"No sqlite extra found in pyproject.toml. Available extras: {list(optional.keys())}"
     sqlite_deps = optional["sqlite"]
     assert any("pyarrow" in dep for dep in sqlite_deps), f"Expected pyarrow in sqlite extra. Got: {sqlite_deps}"
+
+
+def test_otel_extra_exists_and_aliases_registry_package() -> None:
+    """An otel optional-dependency extra must exist and be a pure alias of mloda-community-otel."""
+    optional = _load_optional_deps()
+    assert "otel" in optional, f"No otel extra found in pyproject.toml. Available extras: {list(optional.keys())}"
+    otel_deps = optional["otel"]
+    assert len(otel_deps) == 1, f"Expected otel extra to be a single-package alias. Got: {otel_deps}"
+    canonical_names = {canonicalize_name(Requirement(dep).name) for dep in otel_deps}
+    assert canonicalize_name("mloda-community-otel") in canonical_names, (
+        f"Expected mloda-community-otel in otel extra. Got: {otel_deps}"
+    )
 
 
 def test_all_extra_references_sqlite() -> None:

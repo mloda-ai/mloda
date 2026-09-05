@@ -221,5 +221,5 @@ class TestPluginLoader:
                     PluginLoader.all()
 
     def test_optional_plugin_dependencies_has_no_orphaned_opentelemetry_entry(self) -> None:
-        """opentelemetry was only imported by OtelExtender, deleted on this branch; nothing imports it now."""
+        """mloda core has no first-party opentelemetry import; mloda-community-otel is an external package."""
         assert "opentelemetry" not in OPTIONAL_PLUGIN_DEPENDENCIES

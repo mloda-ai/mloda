@@ -121,7 +121,9 @@ def _normalize_extra_name(name: str) -> str:
 class TestExtrasConsistency:
     # nopyarrow_test is a test-only extra that must omit pyarrow (used by the
     # nopyarrow tox env); like spark, it is intentionally not part of [all].
-    INTENTIONALLY_EXCLUDED_FROM_ALL = {"all", "spark", "nopyarrow_test"}
+    # otel pins its own compatible mloda version range, so bundling it into [all]
+    # would couple mloda[all]'s installability to that external package's release cadence.
+    INTENTIONALLY_EXCLUDED_FROM_ALL = {"all", "spark", "nopyarrow_test", "otel"}
 
     def test_all_extras_uses_self_references(self) -> None:
         extras = _load_extras()
@@ -140,6 +142,17 @@ class TestExtrasConsistency:
 
         missing = expected_normalized - referenced_normalized
         assert not missing, f"[all] is missing references to extras groups: {missing}"
+
+    def test_excluded_groups_absent_from_all(self) -> None:
+        extras = _load_extras()
+        referenced = {entry.split("[")[1].rstrip("]") for entry in extras["all"]}
+        referenced_normalized = {_normalize_extra_name(r) for r in referenced}
+
+        excluded_groups = self.INTENTIONALLY_EXCLUDED_FROM_ALL - {"all"}
+        excluded_normalized = {_normalize_extra_name(g) for g in excluded_groups}
+
+        reintroduced = excluded_normalized & referenced_normalized
+        assert not reintroduced, f"[all] must not reference intentionally-excluded extras groups: {reintroduced}"
 
     def test_scikit_learn_version_consistent(self) -> None:
         extras = _load_extras()

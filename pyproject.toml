@@ -46,6 +46,9 @@ duckdb = ["duckdb", "pyarrow"]
 sqlite = ["pyarrow"]
 iceberg = ["pyiceberg", "pyarrow"]
 spark = ["pyspark", "pyarrow"]
+# mloda-community-otel pins mloda core to a version range; a version bump of mloda core past that
+# range makes uv lock fail with this extra enabled. Widen the pin in mloda-community-otel first.
+otel = ["mloda-community-otel>=0.4.6"]
 sklearn = [
     "scikit-learn>=1.0.0",
     "joblib>=1.0.0",
@@ -165,7 +168,9 @@ extend-select = ["UP006", "UP007"]
 exclude-newer = "7 days"
 # decorator 5.3.0 ships empty License metadata so pip-licenses can't classify it; 5.3.1 fixes this.
 # Opt decorator out of the rolling window so the latest published version is always accepted.
-exclude-newer-package = { decorator = "2099-01-01T00:00:00Z" }
+# mloda-community-otel is mloda's own registry package (same org/maintainer); the 7-day buffer
+# mainly guards against unvetted third-party releases, so opt it out like decorator.
+exclude-newer-package = { decorator = "2099-01-01T00:00:00Z", mloda-community-otel = "2099-01-01T00:00:00Z" }
 # Constraints applied only to transitive dependencies to remediate Dependabot security alerts.
 # - urllib3 >= 2.7.0: GHSA decompression-bomb bypass + sensitive headers across origins
 # - idna   >= 3.15:   idna.encode() bypass of CVE-2024-3651 fix

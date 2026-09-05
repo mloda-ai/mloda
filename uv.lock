@@ -20,6 +20,7 @@ exclude-newer-span = "P7D"
 
 [options.exclude-newer-package]
 decorator = "2099-01-01T00:00:00Z"
+mloda-community-otel = "2099-01-01T00:00:00Z"
 
 [manifest]
 constraints = [
@@ -1479,6 +1480,9 @@ nopyarrow-test = [
     { name = "pytest-xdist" },
     { name = "tomli", marker = "python_full_version < '3.11'" },
 ]
+otel = [
+    { name = "mloda-community-otel" },
+]
 pandas = [
     { name = "pandas", version = "2.3.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
     { name = "pandas", version = "3.0.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
@@ -1551,6 +1555,7 @@ requires-dist = [
     { name = "mloda", extras = ["sqlite"], marker = "extra == 'all'" },
     { name = "mloda", extras = ["test"], marker = "extra == 'all'" },
     { name = "mloda", extras = ["text-cleaning"], marker = "extra == 'all'" },
+    { name = "mloda-community-otel", marker = "extra == 'otel'", specifier = ">=0.4.6" },
     { name = "mypy", marker = "extra == 'test'" },
     { name = "nltk", marker = "extra == 'text-cleaning'", specifier = ">=3.8" },
     { name = "notebook", marker = "extra == 'docs'" },
@@ -1584,7 +1589,19 @@ requires-dist = [
     { name = "types-requests", marker = "extra == 'test'" },
     { name = "types-toml", marker = "extra == 'test'" },
 ]
-provides-extras = ["test", "pyarrow", "pandas", "polars", "duckdb", "sqlite", "iceberg", "spark", "sklearn", "text-cleaning", "nopyarrow-test", "docs", "all"]
+provides-extras = ["test", "pyarrow", "pandas", "polars", "duckdb", "sqlite", "iceberg", "spark", "otel", "sklearn", "text-cleaning", "nopyarrow-test", "docs", "all"]
+
+[[package]]
+name = "mloda-community-otel"
+version = "0.4.6"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "mloda" },
+    { name = "opentelemetry-api" },
+]
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/3d/d1/ccf96b74658350fa12c18914b8c12d34e9052c0cd16727dede8e60700955/mloda_community_otel-0.4.6-py3-none-any.whl", hash = "sha256:d0702c55bd794a59b64aac6e88041dab585cf497e9bf876f2faf2468b0500a53", size = 5798, upload-time = "2026-09-05T07:56:49.283Z" },
+]
 
 [[package]]
 name = "mmh3"
@@ -2092,6 +2109,18 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/d7/22/5f378a9d4633c98f28c4709d4144b1a4630c5c09e109d2e781e2d26c8fe1/numpy-2.4.5-pp311-pypy311_pp73-manylinux_2_27_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:0e63caf31a1df06338ae63d999f7a33a675ced62eea9c9b02db4b1c1f45cff38", size = 15798292, upload-time = "2026-05-15T20:25:10.689Z" },
     { url = "https://files.pythonhosted.org/packages/63/1c/cec582febef798c99888892d92dc1d28dfe29cb427c41f44d13d0dec208f/numpy-2.4.5-pp311-pypy311_pp73-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:d8fc52b85a7b45e474be53eddf08e006d22e381a4e41bcde8e4aa08da0e7d198", size = 16747406, upload-time = "2026-05-15T20:25:13.879Z" },
     { url = "https://files.pythonhosted.org/packages/b1/dc/d358a16a6fec86cf736b8fbe67386044b3fa2aded1a80cff90e836799301/numpy-2.4.5-pp311-pypy311_pp73-win_amd64.whl", hash = "sha256:40c71d50a4da1a7c317af419461052d3911a5770bfc5fd55baf52cc45e7a2c20", size = 12504085, upload-time = "2026-05-15T20:25:16.667Z" },
+]
+
+[[package]]
+name = "opentelemetry-api"
+version = "1.44.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "typing-extensions" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/ee/8b/aa9e2d8b8dfa7c946f7dec5d1f8f6ba8eca062f43509a06bdb5ce93d26c0/opentelemetry_api-1.44.0.tar.gz", hash = "sha256:67647e5e9566edcf421166fdf022b3537f818635daa852b289e34604dc6fb33a", size = 72406, upload-time = "2026-07-16T15:25:32.678Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/ca/6f/a04e900f465ff3221ccc395522503e2d10e79fa21f2723c8e177aae1e0d1/opentelemetry_api-1.44.0-py3-none-any.whl", hash = "sha256:94b98c893a91b88657eaac1e3ba89618cdb85be6918196705354f34728b2cdef", size = 60018, upload-time = "2026-07-16T15:25:11.657Z" },
 ]
 
 [[package]]

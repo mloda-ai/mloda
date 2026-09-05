@@ -125,18 +125,21 @@ class Extender(ABC):
 
 
 def get_function_extender(function_extender: set[Extender], hook: ExtenderHook) -> Optional[Extender]:
-    """Select the Extender(s) wrapping hook: None, the sole match, or a priority-sorted _CompositeExtender."""
+    """Select the Extender(s) wrapping hook: None, the sole match, or a priority-sorted CompositeExtender."""
     matching_extenders = [ext for ext in function_extender if hook in ext.wraps()]
     if len(matching_extenders) == 0:
         return None
     if len(matching_extenders) == 1:
         return matching_extenders[0]
     sorted_extenders = sorted(matching_extenders, key=lambda e: e.priority)
-    return _CompositeExtender(sorted_extenders, hook)
+    return CompositeExtender(sorted_extenders, hook)
 
 
-class _CompositeExtender(Extender):
-    """Internal class that chains multiple Extenders in priority order."""
+class CompositeExtender(Extender):
+    """Chains multiple Extenders together, running them in priority order.
+
+    Constructed internally by get_function_extender(); not meant to be subclassed or instantiated directly.
+    """
 
     def __init__(self, extenders: list[Extender], function_type: Optional[ExtenderHook] = None):
         self.extenders = sorted(extenders, key=lambda e: e.priority)

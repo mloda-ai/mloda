@@ -294,7 +294,7 @@ def get_extender_docs(
         description = (ext_class.__doc__ or "").strip() or ext_class.__name__
         module = ext_class.__module__
 
-        if ext_name in ("Extender", "_CompositeExtender"):
+        if ext_name in ("Extender", "CompositeExtender"):
             continue
 
         wraps_list: list[str] = safe_field(lambda: [w.value for w in ext_class().wraps()], [])

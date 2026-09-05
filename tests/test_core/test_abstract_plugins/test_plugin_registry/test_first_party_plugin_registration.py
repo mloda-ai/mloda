@@ -50,7 +50,7 @@ from mloda.core.abstract_plugins.components.plugin_option.plugin_collector impor
 from mloda.core.abstract_plugins.components.utils import get_all_subclasses
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
-from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook, _CompositeExtender
+from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook, CompositeExtender
 from mloda.core.abstract_plugins.plugin_loader.plugin_loader import (
     CORE_PLUGIN_MODULES,
     OPTIONAL_PLUGIN_DEPENDENCIES,
@@ -77,9 +77,9 @@ WHEEL_ROOTS: tuple[str, ...] = ("mloda", "mloda_plugins")
 # the pyproject wheel excludes by test_reserved_namespaces_stay_in_sync_with_pyproject below.
 RESERVED_NAMESPACES: tuple[str, ...] = ("mloda.community", "mloda.enterprise", "mloda.registry", "mloda.testing")
 
-# The one waiver: _CompositeExtender is composed inside ComputeFramework.get_function_extender from an
+# The one waiver: CompositeExtender is composed inside ComputeFramework.get_function_extender from an
 # already-filtered extender set, so it never passes through the strict-mode gate (pinned below).
-_NOT_REGISTRY_GATED: frozenset[type[Any]] = frozenset({_CompositeExtender})
+_NOT_REGISTRY_GATED: frozenset[type[Any]] = frozenset({CompositeExtender})
 
 CORE_DRIFT_MODULE = "mloda.core.first_party_guard_drift_probe"
 
@@ -89,7 +89,7 @@ class _GuardObserverFeatureGroup(FeatureGroup):
 
 
 class _ExtenderHostFramework(ComputeFramework):
-    """Host used to build a _CompositeExtender through the real get_function_extender path."""
+    """Host used to build a CompositeExtender through the real get_function_extender path."""
 
 
 class _GuardExtenderA(Extender):
@@ -341,20 +341,20 @@ class TestGuardDetectsCoreDrift:
 
 
 class TestCompositeExtenderExclusion:
-    """_CompositeExtender is waived by name in _NOT_REGISTRY_GATED, not by a private-name rule."""
+    """CompositeExtender is waived by name in _NOT_REGISTRY_GATED, not by a private-name rule."""
 
     @pytest.mark.timeout(30)
     def test_composite_extender_is_waived_and_would_otherwise_be_flagged(self) -> None:
-        assert _is_bundled_plugin(_CompositeExtender), "sanity: it ships in the wheel"
-        assert not inspect.isabstract(_CompositeExtender), "sanity: it is concrete"
-        assert _CompositeExtender in _NOT_REGISTRY_GATED, "the exclusion must be an explicit waiver"
+        assert _is_bundled_plugin(CompositeExtender), "sanity: it ships in the wheel"
+        assert not inspect.isabstract(CompositeExtender), "sanity: it is concrete"
+        assert CompositeExtender in _NOT_REGISTRY_GATED, "the exclusion must be an explicit waiver"
 
         registered = {_qualid(cls) for cls in _loaded_registry().registered_classes()}
-        assert _qualid(_CompositeExtender) not in registered, (
-            "sanity: no loader path registers _CompositeExtender, so only the waiver keeps it out of the guard"
+        assert _qualid(CompositeExtender) not in registered, (
+            "sanity: no loader path registers CompositeExtender, so only the waiver keeps it out of the guard"
         )
-        assert _qualid(_CompositeExtender) not in _unregistered_wheel_owned(Extender), (
-            "the waiver must keep _CompositeExtender out of the guard: it is internal machinery, never a "
+        assert _qualid(CompositeExtender) not in _unregistered_wheel_owned(Extender), (
+            "the waiver must keep CompositeExtender out of the guard: it is internal machinery, never a "
             "registry-gated plugin"
         )
 
@@ -370,10 +370,10 @@ class TestCompositeExtenderExclusion:
 
         framework = _ExtenderHostFramework(function_extender=surviving)
         composite = framework.get_function_extender(ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE)
-        assert isinstance(composite, _CompositeExtender), "sanity: two matching extenders compose"
+        assert isinstance(composite, CompositeExtender), "sanity: two matching extenders compose"
 
         assert filter_extenders_by_strict_mode({composite}, collector) == set(), (
-            "strict mode would drop a _CompositeExtender, since it is unregistered; it is safe only because "
+            "strict mode would drop a CompositeExtender, since it is unregistered; it is safe only because "
             "ComputeFramework.get_function_extender builds it downstream of the filter, which is why the "
             "registration guard waives it instead of demanding a registry entry for it"
         )

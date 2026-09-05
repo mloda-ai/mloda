@@ -13,7 +13,7 @@ from mloda.core.abstract_plugins.components.utils import as_str, safe_field
 from mloda.core.abstract_plugins.function_extender import (
     Extender,
     ExtenderHook,
-    _CompositeExtender,
+    CompositeExtender,
     _invoke_extender,
 )
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
@@ -736,7 +736,7 @@ class ComputeFramework(ABC):
             return matching_extenders[0]
 
         sorted_extenders = sorted(matching_extenders, key=lambda e: e.priority)
-        return _CompositeExtender(sorted_extenders, wrapper_function_enum)
+        return CompositeExtender(sorted_extenders, wrapper_function_enum)
 
     @final
     def _build_hook_context(self, hook: ExtenderHook, feature_group: Any, features: Any) -> HookContext:

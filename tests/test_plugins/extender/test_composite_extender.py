@@ -13,7 +13,7 @@ from mloda.core.abstract_plugins.function_extender import (
     ExtenderHook,
     Extender,
 )
-from mloda.core.abstract_plugins.function_extender import _CompositeExtender
+from mloda.core.abstract_plugins.function_extender import CompositeExtender
 from mloda.core.abstract_plugins.run_context import RunContext
 from mloda.provider import ComputeFramework
 
@@ -116,41 +116,41 @@ class TestExtenderPriority:
         assert extender.priority == 50, "Priority should be settable to custom value"
 
 
-class Test_CompositeExtender:
-    """Test _CompositeExtender class that chains multiple extenders."""
+class TestCompositeExtender:
+    """Test CompositeExtender class that chains multiple extenders."""
 
     def test_composite_extender_class_exists(self) -> None:
-        """Test that _CompositeExtender class is defined."""
-        # This will fail until _CompositeExtender is implemented
-        assert _CompositeExtender is not None, "_CompositeExtender class must exist"
+        """Test that CompositeExtender class is defined."""
+        # This will fail until CompositeExtender is implemented
+        assert CompositeExtender is not None, "CompositeExtender class must exist"
 
     def test_composite_extender_inherits_from_wrapper(self) -> None:
-        """Test that _CompositeExtender inherits from Extender."""
+        """Test that CompositeExtender inherits from Extender."""
 
-        # This will fail until _CompositeExtender inherits properly
-        assert issubclass(_CompositeExtender, Extender), "_CompositeExtender must inherit from Extender"
+        # This will fail until CompositeExtender inherits properly
+        assert issubclass(CompositeExtender, Extender), "CompositeExtender must inherit from Extender"
 
     def test_composite_extender_accepts_list_of_extenders(self) -> None:
-        """Test that _CompositeExtender can be initialized with a list of extenders."""
+        """Test that CompositeExtender can be initialized with a list of extenders."""
 
         extender1 = MockExtender("first", priority=10)
         extender2 = MockExtender("second", priority=20)
 
-        # This will fail until _CompositeExtender accepts extenders in __init__
-        composite = _CompositeExtender([extender1, extender2])
-        assert composite is not None, "_CompositeExtender should accept list of extenders"
+        # This will fail until CompositeExtender accepts extenders in __init__
+        composite = CompositeExtender([extender1, extender2])
+        assert composite is not None, "CompositeExtender should accept list of extenders"
 
     def test_composite_extender_chains_multiple_extenders(self) -> None:
-        """Test that _CompositeExtender calls all extenders in the chain."""
+        """Test that CompositeExtender calls all extenders in the chain."""
 
         extender1 = MockExtender("first", priority=10)
         extender2 = MockExtender("second", priority=20)
-        composite = _CompositeExtender([extender1, extender2])
+        composite = CompositeExtender([extender1, extender2])
 
         def test_func(x: int, y: int) -> int:
             return x + y
 
-        # This will fail until _CompositeExtender calls all extenders
+        # This will fail until CompositeExtender calls all extenders
         result = composite(test_func, 5, 3)
 
         assert result == 8, "Function should execute correctly"
@@ -158,16 +158,16 @@ class Test_CompositeExtender:
         assert extender2.call_count == 1, "Second extender should be called"
 
     def test_composite_extender_wraps_returns_union(self) -> None:
-        """Test that _CompositeExtender.wraps() returns union of all wrapped types."""
+        """Test that CompositeExtender.wraps() returns union of all wrapped types."""
 
         extender1 = MockExtender("first")
         extender2 = MockExtender("second")
-        composite = _CompositeExtender([extender1, extender2])
+        composite = CompositeExtender([extender1, extender2])
 
-        # This will fail until _CompositeExtender.wraps() returns proper union
+        # This will fail until CompositeExtender.wraps() returns proper union
         wrapped = composite.wraps()
         assert ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE in wrapped, (
-            "_CompositeExtender should wrap all function types from child extenders"
+            "CompositeExtender should wrap all function types from child extenders"
         )
 
 
@@ -195,8 +195,8 @@ class TestExtenderExecutionOrder:
         extender_low = OrderTrackingExtender("low_priority_10", priority=10)
         extender_mid = OrderTrackingExtender("mid_priority_30", priority=30)
 
-        # This will fail until _CompositeExtender sorts by priority
-        composite = _CompositeExtender([extender_high, extender_low, extender_mid])
+        # This will fail until CompositeExtender sorts by priority
+        composite = CompositeExtender([extender_high, extender_low, extender_mid])
 
         def test_func() -> str:
             return "done"
@@ -224,7 +224,7 @@ class TestExtenderErrorResilience:
         extender2 = MockExtender("failing", priority=20, should_fail=True, raise_on_error=False)
         extender3 = MockExtender("third", priority=30)
 
-        composite = _CompositeExtender([extender1, extender2, extender3])
+        composite = CompositeExtender([extender1, extender2, extender3])
 
         def test_func(x: int) -> int:
             return x * 2
@@ -242,7 +242,7 @@ class TestExtenderErrorResilience:
         extender1 = MockExtender("first", priority=10)
         extender2 = MockExtender("failing", priority=20, should_fail=True, raise_on_error=False)
 
-        composite = _CompositeExtender([extender1, extender2])
+        composite = CompositeExtender([extender1, extender2])
 
         def test_func(x: int) -> int:
             return x * 2
@@ -259,7 +259,7 @@ class TestExtenderErrorResilience:
         """Test that errors from the original function are not caught."""
 
         extender = MockExtender("test", priority=10)
-        composite = _CompositeExtender([extender])
+        composite = CompositeExtender([extender])
 
         def failing_func() -> None:
             raise RuntimeError("Original function error")
@@ -270,10 +270,10 @@ class TestExtenderErrorResilience:
 
 
 class TestGetFunctionExtenderWithComposite:
-    """Test that get_function_extender returns _CompositeExtender for multiple matches."""
+    """Test that get_function_extender returns CompositeExtender for multiple matches."""
 
     def test_get_function_extender_returns_composite_for_multiple_matches(self) -> None:
-        """Test that get_function_extender returns a _CompositeExtender when multiple extenders match."""
+        """Test that get_function_extender returns a CompositeExtender when multiple extenders match."""
 
         # Create a mock ComputeFramework with multiple extenders
         extender1 = MockExtender("first", priority=10)
@@ -287,13 +287,13 @@ class TestGetFunctionExtenderWithComposite:
 
         result = compute_fw.get_function_extender(ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE)
 
-        assert isinstance(result, _CompositeExtender), (
-            "get_function_extender should return _CompositeExtender for multiple matches"
+        assert isinstance(result, CompositeExtender), (
+            "get_function_extender should return CompositeExtender for multiple matches"
         )
-        assert isinstance(result, Extender), "_CompositeExtender should be a Extender"
+        assert isinstance(result, Extender), "CompositeExtender should be a Extender"
 
     def test_get_function_extender_preserves_priority_order(self) -> None:
-        """Test that get_function_extender creates _CompositeExtender with correct priority order."""
+        """Test that get_function_extender creates CompositeExtender with correct priority order."""
 
         # Create extenders in non-priority order
         extender_high = MockExtender("high", priority=50)
@@ -304,10 +304,10 @@ class TestGetFunctionExtenderWithComposite:
         compute_fw.function_extender = [extender_high, extender_low, extender_mid]
         compute_fw.get_function_extender = ComputeFramework.get_function_extender.__get__(compute_fw)
 
-        # This will fail until _CompositeExtender sorts extenders by priority
+        # This will fail until CompositeExtender sorts extenders by priority
         result = compute_fw.get_function_extender(ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE)
 
-        assert isinstance(result, _CompositeExtender), "Should return _CompositeExtender"
+        assert isinstance(result, CompositeExtender), "Should return CompositeExtender"
 
         # Execute and verify order
         execution_order = []
@@ -329,7 +329,7 @@ class TestGetFunctionExtenderWithComposite:
 
         result(test_func)
 
-        assert execution_order == ["low", "mid", "high"], "_CompositeExtender should maintain priority order"
+        assert execution_order == ["low", "mid", "high"], "CompositeExtender should maintain priority order"
 
     def test_get_function_extender_single_match_unchanged(self) -> None:
         """Test that get_function_extender returns single extender directly when only one matches."""
@@ -383,7 +383,7 @@ class TestExtenderRaiseOnErrorContractComposite:
         """A DEFAULT (raise_on_error=True) extender that fails must re-raise, not swallow/fall back."""
 
         failing = MockExtender("boom", priority=10, should_fail=True)  # raise_on_error defaults True
-        composite = _CompositeExtender([failing])
+        composite = CompositeExtender([failing])
 
         def test_func(x: int) -> int:
             return x * 2
@@ -397,7 +397,7 @@ class TestExtenderRaiseOnErrorContractComposite:
         call_marker = {"func_calls": 0}
 
         failing = MockExtender("boom", priority=10, should_fail=True)
-        composite = _CompositeExtender([failing])
+        composite = CompositeExtender([failing])
 
         def test_func(x: int) -> int:
             call_marker["func_calls"] += 1
@@ -415,12 +415,12 @@ class TestExtenderRaiseOnErrorContractComposite:
             return x * 2
 
         # Single breaking extender
-        single = _CompositeExtender([MockExtender("boom", priority=10, should_fail=True)])
+        single = CompositeExtender([MockExtender("boom", priority=10, should_fail=True)])
         with pytest.raises(ValueError, match="MockExtender boom intentionally failed"):
             single(test_func, 5)
 
         # Adding a second (non-failing) breaking extender must not change the semantics
-        composite = _CompositeExtender(
+        composite = CompositeExtender(
             [
                 MockExtender("boom", priority=10, should_fail=True),
                 MockExtender("ok", priority=20),
@@ -434,7 +434,7 @@ class TestExtenderRaiseOnErrorContractComposite:
 
         failing = MockExtender("soft", priority=10, should_fail=True, raise_on_error=False)
         other = MockExtender("ok", priority=20)
-        composite = _CompositeExtender([failing, other])
+        composite = CompositeExtender([failing, other])
 
         def test_func(x: int) -> int:
             return x * 2
@@ -515,7 +515,7 @@ class TestWarningOnlyDoesNotSwallowInnerErrors:
 
         warn = MockExtender("warn", priority=10, raise_on_error=False)
         breaking = MockExtender("boom", priority=20, should_fail=True, raise_on_error=True)
-        composite = _CompositeExtender([warn, breaking])
+        composite = CompositeExtender([warn, breaking])
 
         with caplog.at_level(logging.WARNING):
             with pytest.raises(ValueError, match="MockExtender boom intentionally failed"):
@@ -539,7 +539,7 @@ class TestWarningOnlyDoesNotSwallowInnerErrors:
             raise RuntimeError("inner boom")
 
         warn = MockExtender("warn", priority=10, raise_on_error=False)
-        composite = _CompositeExtender([warn])
+        composite = CompositeExtender([warn])
 
         with pytest.raises(RuntimeError, match="inner boom"):
             composite(base)
@@ -558,7 +558,7 @@ class TestWarningOnlyDoesNotSwallowInnerErrors:
             return x * 3
 
         post_fail = _PostFailExtender("posty", priority=10)
-        composite = _CompositeExtender([post_fail])
+        composite = CompositeExtender([post_fail])
 
         with caplog.at_level(logging.WARNING):
             result = composite(base, 7)

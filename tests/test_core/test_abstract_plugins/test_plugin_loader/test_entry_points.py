@@ -118,6 +118,22 @@ def _own_package_broken_manifest_source(pkg_name: str, class_name: str) -> str:
     """
 
 
+def _shared_root_manifest_source(class_name: str) -> str:
+    """A manifest importing a fixed shared root module name, so two distributions can fail on it independently."""
+    return f"""
+    import shared_missing_root
+
+    from mloda.core.abstract_plugins.feature_group import FeatureGroup
+
+
+    class {class_name}(FeatureGroup):
+        pass
+
+
+    FEATURE_GROUPS = [{class_name}]
+    """
+
+
 _FG_MANIFEST = """
     from mloda.core.abstract_plugins.feature_group import FeatureGroup
 
@@ -250,6 +266,22 @@ _DECLARED_OPTIONAL_EXTENDER_MANIFEST = """
 
 _DECLARED_OPTIONAL_DEPS_MODULE_SOURCE = """
     OPTIONAL_DEPENDENCIES = frozenset({"eptest_declopt_missing_root"})
+"""
+
+# Fails with ModuleNotFoundError on root "pandas" specifically (submodule genuinely does not exist,
+# regardless of whether the real pandas package is installed), a root already in the global
+# OPTIONAL_PLUGIN_DEPENDENCIES set.
+_PANDAS_SUBMODULE_MANIFEST = """
+    import pandas.eptest_nonexistent_submodule_zzz
+
+    from mloda.core.abstract_plugins.feature_group import FeatureGroup
+
+
+    class EpPandasSubmoduleFeatureGroup(FeatureGroup):
+        pass
+
+
+    FEATURE_GROUPS = [EpPandasSubmoduleFeatureGroup]
 """
 
 
@@ -695,6 +727,155 @@ class TestLoadEntryPointsOptionalDependenciesDeclaration:
         good_key = f"{good_pkg}.manifest:EpFeatureGroup"
         assert good_key in keys
         assert not any(key.startswith(f"{broken_pkg}.") for key in keys)
+
+
+class TestOptionalDependencyMarkerMalformedValues:
+    """A malformed `mloda.optional_dependencies` marker is skipped with a WARNING, never fatal."""
+
+    def test_marker_raising_attribute_error_is_ignored_not_fatal(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        marker_pkg = "eptest_malformed_attrerr_pkg"
+        other_pkg = "eptest_malformed_attrerr_other_pkg"
+        _build_distribution(
+            tmp_path,
+            marker_pkg,
+            _FG_MANIFEST,
+            f"""
+            [mloda.feature_groups]
+            demo = {marker_pkg}.manifest:FEATURE_GROUPS
+
+            [mloda.optional_dependencies]
+            demo = {marker_pkg}.optional_deps:OPTIONAL_DEPENDENCIES
+            """,
+        )
+        _write_module(tmp_path, marker_pkg, "optional_deps", "")  # importable module, missing the attribute
+        _build_distribution(
+            tmp_path,
+            other_pkg,
+            _FG_MANIFEST,
+            f"""
+            [mloda.feature_groups]
+            good = {other_pkg}.manifest:FEATURE_GROUPS
+            """,
+        )
+        monkeypatch.syspath_prepend(str(tmp_path))
+
+        with caplog.at_level(logging.WARNING, logger=plugin_loader_module.__name__):
+            keys = PluginLoader().load_entry_points()
+
+        assert f"{marker_pkg}.manifest:EpFeatureGroup" in keys
+        assert f"{other_pkg}.manifest:EpFeatureGroup" in keys
+        warning_messages = [record.getMessage() for record in caplog.records if record.levelno == logging.WARNING]
+        assert any("demo" in message for message in warning_messages), (
+            f"expected a WARNING naming the malformed marker's entry point, got: {warning_messages}"
+        )
+
+    def test_marker_declaring_non_iterable_value_is_ignored_not_fatal(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        marker_pkg = "eptest_malformed_typeerr_pkg"
+        other_pkg = "eptest_malformed_typeerr_other_pkg"
+        _build_distribution(
+            tmp_path,
+            marker_pkg,
+            _FG_MANIFEST,
+            f"""
+            [mloda.feature_groups]
+            demo = {marker_pkg}.manifest:FEATURE_GROUPS
+
+            [mloda.optional_dependencies]
+            demo = {marker_pkg}.optional_deps:OPTIONAL_DEPENDENCIES
+            """,
+        )
+        _write_module(tmp_path, marker_pkg, "optional_deps", "OPTIONAL_DEPENDENCIES = 42\n")
+        _build_distribution(
+            tmp_path,
+            other_pkg,
+            _FG_MANIFEST,
+            f"""
+            [mloda.feature_groups]
+            good = {other_pkg}.manifest:FEATURE_GROUPS
+            """,
+        )
+        monkeypatch.syspath_prepend(str(tmp_path))
+
+        with caplog.at_level(logging.WARNING, logger=plugin_loader_module.__name__):
+            keys = PluginLoader().load_entry_points()
+
+        assert f"{marker_pkg}.manifest:EpFeatureGroup" in keys
+        assert f"{other_pkg}.manifest:EpFeatureGroup" in keys
+        warning_messages = [record.getMessage() for record in caplog.records if record.levelno == logging.WARNING]
+        assert any("demo" in message for message in warning_messages), (
+            f"expected a WARNING naming the malformed marker's entry point, got: {warning_messages}"
+        )
+
+    def test_marker_declaring_a_bare_string_is_ignored_not_treated_as_char_set(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        pkg = "eptest_malformed_strmarker_pkg"
+        _build_distribution(
+            tmp_path,
+            pkg,
+            _PANDAS_SUBMODULE_MANIFEST,
+            f"""
+            [mloda.feature_groups]
+            demo = {pkg}.manifest:FEATURE_GROUPS
+
+            [mloda.optional_dependencies]
+            demo = {pkg}.optional_deps:OPTIONAL_DEPENDENCIES
+            """,
+        )
+        _write_module(tmp_path, pkg, "optional_deps", 'OPTIONAL_DEPENDENCIES = "pandas"\n')
+        monkeypatch.syspath_prepend(str(tmp_path))
+
+        with caplog.at_level(logging.WARNING, logger=plugin_loader_module.__name__):
+            keys = PluginLoader().load_entry_points()
+
+        assert not any(key.startswith(f"{pkg}.") for key in keys)
+        assert PluginRegistry.default().get(f"{pkg}.manifest:EpPandasSubmoduleFeatureGroup") is None
+        warning_messages = [record.getMessage() for record in caplog.records if record.levelno == logging.WARNING]
+        assert any("demo" in message for message in warning_messages), (
+            f"expected a WARNING about the malformed (bare-string) marker, got: {warning_messages}"
+        )
+
+
+class TestOptionalDependencyDeclarationScopedPerDistribution:
+    """A declaration must not leak across distributions that happen to share an entry-point label."""
+
+    def test_optional_dependency_declaration_does_not_leak_across_distributions_with_same_name(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        dist_a = "eptest_collide_distA"
+        dist_b = "eptest_collide_distB"
+        _build_distribution(
+            tmp_path,
+            dist_a,
+            _shared_root_manifest_source("EpCollideAFeatureGroup"),
+            f"""
+            [mloda.feature_groups]
+            demo = {dist_a}.manifest:FEATURE_GROUPS
+
+            [mloda.optional_dependencies]
+            demo = {dist_a}.optional_deps:OPTIONAL_DEPENDENCIES
+            """,
+        )
+        _write_module(tmp_path, dist_a, "optional_deps", 'OPTIONAL_DEPENDENCIES = frozenset({"shared_missing_root"})\n')
+        _build_distribution(
+            tmp_path,
+            dist_b,
+            _shared_root_manifest_source("EpCollideBFeatureGroup"),
+            f"""
+            [mloda.feature_groups]
+            demo = {dist_b}.manifest:FEATURE_GROUPS
+            """,
+        )
+        monkeypatch.syspath_prepend(str(tmp_path))
+
+        with pytest.raises(ModuleNotFoundError):
+            PluginLoader().load_entry_points()
+
+        assert PluginRegistry.default().get(f"{dist_a}.manifest:EpCollideAFeatureGroup") is None
 
 
 class TestLoadEntryPointsIdempotencyAndCollisions:

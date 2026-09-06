@@ -3,7 +3,7 @@ import importlib.metadata
 import inspect
 import sys
 import threading
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
 from pathlib import Path
 
 import logging
@@ -171,7 +171,8 @@ class PluginLoader:
                     own_root = entry_point.module.split(".")[0]
                     if root == own_root:
                         raise
-                    optional_roots = declared_optional.get(entry_point.name, OPTIONAL_PLUGIN_DEPENDENCIES)
+                    dist_name = entry_point.dist.name if entry_point.dist is not None else None
+                    optional_roots = declared_optional.get((dist_name, entry_point.name), OPTIONAL_PLUGIN_DEPENDENCIES)
                     if root in optional_roots:
                         logger.warning(
                             "Skipping entry point %s: missing optional dependency %s", entry_point.name, e.name
@@ -181,15 +182,26 @@ class PluginLoader:
                 keys.extend(self._register_manifest(entry_point.name, group_name, base_type, manifest))
         return sorted(set(keys))
 
-    def _load_declared_optional_dependencies(self) -> dict[str, frozenset[str]]:
-        """Load per-entry-point optional-root declarations; a marker that fails to import is skipped."""
-        declared: dict[str, frozenset[str]] = {}
+    def _load_declared_optional_dependencies(self) -> dict[tuple[str | None, str], frozenset[str]]:
+        """Load per-(distribution, entry-point) optional-root declarations; a marker that fails to
+        load, or isn't a non-string iterable of roots, is skipped with a WARNING.
+        """
+        declared: dict[tuple[str | None, str], frozenset[str]] = {}
         for entry_point in importlib.metadata.entry_points(group=OPTIONAL_DEPENDENCY_ENTRY_POINT_GROUP):
             try:
                 roots = entry_point.load()
-            except ImportError:
+            except (ImportError, AttributeError, TypeError) as e:
+                logger.warning("Ignoring optional-dependency marker %s: failed to load (%s)", entry_point.name, e)
                 continue
-            declared[entry_point.name] = frozenset(roots)
+            if isinstance(roots, (str, bytes)) or not isinstance(roots, Iterable):
+                logger.warning(
+                    "Ignoring optional-dependency marker %s: expected an iterable of module roots, got %r",
+                    entry_point.name,
+                    roots,
+                )
+                continue
+            dist_name = entry_point.dist.name if entry_point.dist is not None else None
+            declared[(dist_name, entry_point.name)] = frozenset(roots)
         return declared
 
     def _register_manifest(self, label: str, group_name: str, base_type: type[Any], manifest: Any) -> list[str]:

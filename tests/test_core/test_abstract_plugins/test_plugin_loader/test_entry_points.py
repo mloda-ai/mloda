@@ -15,9 +15,9 @@ Contract under test:
   PluginRegistryCollisionError, double loads are idempotent, and PluginLoader.all() folds
   entry points in after the mloda_plugins scan.
 - A companion `mloda.optional_dependencies` entry point (same name) declares per-entry-point
-  optional import roots; both ModuleNotFoundError and plain ImportError are caught against it
-  (falling back to the global OPTIONAL_PLUGIN_DEPENDENCIES set), logged at WARNING, except the
-  entry point's own package root, which always re-raises.
+  optional import roots; ImportError (including ModuleNotFoundError) is checked against it,
+  falling back to the global OPTIONAL_PLUGIN_DEPENDENCIES set, and logged at WARNING, except
+  for the entry point's own package root, which always re-raises.
 
 Each test builds real on-disk distributions (package + dist-info) in tmp_path with a unique
 package name, so importlib.metadata discovery is exercised for real and tests stay xdist-safe.
@@ -74,20 +74,19 @@ def _manifest_class(pkg_name: str, class_name: str) -> type:
 
 
 def _write_module(base_dir: Path, pkg_name: str, module_name: str, source: str) -> None:
-    """Write an extra module file into an already-built fake package directory (e.g. the
-    `mloda.optional_dependencies` companion module, alongside `manifest.py`)."""
+    """Add an extra module to an already-built fake package (e.g. the optional_dependencies companion)."""
     (base_dir / pkg_name / f"{module_name}.py").write_text(textwrap.dedent(source))
 
 
 def _write_root_module(base_dir: Path, module_name: str, source: str = "") -> None:
-    """Write a standalone top-level module file directly under base_dir (not inside a package),
-    so `from <module_name> import missing_name` raises plain ImportError, not ModuleNotFoundError."""
+    """Write a standalone top-level module (not inside a package), so importing a missing name
+    from it raises plain ImportError rather than ModuleNotFoundError."""
     (base_dir / f"{module_name}.py").write_text(textwrap.dedent(source))
 
 
 def _import_error_fg_manifest_source(root_module: str, class_name: str) -> str:
-    """A manifest whose top-level `from <root_module> import missing_name` raises ImportError
-    (not ModuleNotFoundError) because `root_module` exists but does not define `missing_name`."""
+    """A manifest raising ImportError, not ModuleNotFoundError, because `root_module` exists but
+    doesn't define the name it imports."""
     return f"""
     from {root_module} import missing_name
 
@@ -103,8 +102,8 @@ def _import_error_fg_manifest_source(root_module: str, class_name: str) -> str:
 
 
 def _own_package_broken_manifest_source(pkg_name: str, class_name: str) -> str:
-    """A manifest whose own package fails to import a missing submodule of itself, so the
-    failing import's root equals the entry point's own module root."""
+    """A manifest whose own package fails importing a submodule of itself, so the failing
+    import's root equals the entry point's own module root."""
     return f"""
     import {pkg_name}.missing_submodule
 

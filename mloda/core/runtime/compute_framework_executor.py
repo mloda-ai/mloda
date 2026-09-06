@@ -47,9 +47,8 @@ class ComputeFrameworkExecutor:
                 framework connection (e.g. duckdb.DuckDBPyConnection, sqlite3.Connection).
                 Engine builds this once from the DataAccessCollection at setup; the
                 executor only does a dict lookup per TFS step on the run path.
-            function_extender: When not None, used directly to build every ComputeFramework
-                instead of round-tripping through cfw_register.get_function_extender(), which
-                under MULTIPROCESSING returns a freshly-unpickled copy on every call.
+            function_extender: When set, used directly instead of cfw_register.get_function_extender(),
+                which under MULTIPROCESSING returns a freshly-unpickled copy on every call.
         """
         self.cfw_collection: dict[UUID, ComputeFramework] = {}
         self.cfw_register = cfw_register

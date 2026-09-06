@@ -232,8 +232,9 @@ class TestDtypeFailureDegradesColumnToNone:
         assert captured.status == "success"
 
 
-class TestValidateHooksLeaveOutputSchemaNone:
-    def test_validate_output_feature_leaves_output_schema_none(self) -> None:
+class TestValidateHooksOutputSchema:
+    def test_validate_output_feature_output_schema_reflects_native_data(self) -> None:
+        """VALIDATE_OUTPUT_FEATURE reads self.data (the finalized native shape) for output_schema, mirroring rows_in."""
         feature_set = _build_feature_set()
         extender = _HookCapturingExtender(ExtenderHook.VALIDATE_OUTPUT_FEATURE)
         cfw = _build_framework({extender})
@@ -244,7 +245,7 @@ class TestValidateHooksLeaveOutputSchemaNone:
 
         captured = extender.captured
         assert captured is not None
-        assert captured.output_schema is None
+        assert captured.output_schema == (("col", "int"),)
 
     def test_validate_input_feature_leaves_output_schema_none(self) -> None:
         feature_set = _build_feature_set()
@@ -288,6 +289,30 @@ class TestDuckDBOutputSchemaStaysLazy:
 
         assert DuckDBFramework()._output_schema(relation) == (("a", "BIGINT"), ("b", "VARCHAR"))
 
+    def test_validate_output_feature_hook_does_not_call_dunder_len(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Regression at the hook-dispatch level: VALIDATE_OUTPUT_FEATURE must read output_schema
+        without materializing the relation, not just when _output_schema is unit-tested directly."""
+        conn = duckdb.connect()
+        arrow_table = pa.Table.from_pydict({"b": ["x"], "a": [1]})
+        relation = DuckdbRelation.from_arrow(conn, arrow_table)
+
+        def _raise_if_called(self: Any) -> int:
+            raise AssertionError("DuckdbRelation.__len__ must not be called by _output_schema")
+
+        monkeypatch.setattr(DuckdbRelation, "__len__", _raise_if_called)
+
+        feature_set = _build_feature_set()
+        extender = _HookCapturingExtender(ExtenderHook.VALIDATE_OUTPUT_FEATURE)
+        cfw = DuckDBFramework(mode=ParallelizationMode.SYNC, children_if_root=frozenset(), function_extender={extender})
+        cfw.data = relation
+        cfw.set_column_names()
+
+        cfw.run_validate_output_features(_OutputSchemaFeatureGroup, feature_set)
+
+        captured = extender.captured
+        assert captured is not None
+        assert captured.output_schema == (("a", "BIGINT"), ("b", "VARCHAR"))
+
 
 class _PandasOutputSchemaFeatureGroup(FeatureGroup):
     @classmethod
@@ -316,6 +341,32 @@ class TestPandasOutputSchema:
         assert captured is not None
         assert captured.output_schema == (("a", "int"),)
         assert captured.status == "success"
+
+
+@pytest.mark.skipif(pd is None, reason="Pandas is not installed. Skipping this test.")
+class TestOutputSchemaCalculateVsValidateOutput:
+    """FEATURE_GROUP_CALCULATE_FEATURE sees the raw FG return value's schema,
+    VALIDATE_OUTPUT_FEATURE sees the finalized native-shape schema after transform."""
+
+    def test_calculate_and_validate_output_hooks_see_different_schemas(self) -> None:
+        feature_set = _build_feature_set()
+        calculate_extender = _HookCapturingExtender(ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE)
+        validate_output_extender = _HookCapturingExtender(ExtenderHook.VALIDATE_OUTPUT_FEATURE)
+        cfw = PandasDataFrame(
+            mode=ParallelizationMode.SYNC,
+            children_if_root=frozenset(),
+            function_extender={calculate_extender, validate_output_extender},
+        )
+
+        cfw.run_calculation(_PandasOutputSchemaFeatureGroup, feature_set, location=None)
+
+        calculate_captured = calculate_extender.captured
+        assert calculate_captured is not None
+        assert calculate_captured.output_schema == (("a", "int"),)
+
+        validate_output_captured = validate_output_extender.captured
+        assert validate_output_captured is not None
+        assert validate_output_captured.output_schema == (("a", "int64"),)
 
 
 @pytest.mark.skipif(pa is None, reason="PyArrow is not installed. Skipping this test.")

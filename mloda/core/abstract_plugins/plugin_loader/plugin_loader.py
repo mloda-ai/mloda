@@ -53,8 +53,8 @@ ENTRY_POINT_GROUPS: dict[str, type[Any]] = {
     "mloda.extenders": Extender,
 }
 
-# Companion group: an entry here, named after the entry point it protects, declares that
-# entry point's own optional import roots, overriding the OPTIONAL_PLUGIN_DEPENDENCIES fallback.
+# Companion group: an entry here, named after the entry point it protects, declares its own
+# optional import roots, overriding the OPTIONAL_PLUGIN_DEPENDENCIES fallback.
 OPTIONAL_DEPENDENCY_ENTRY_POINT_GROUP: str = "mloda.optional_dependencies"
 
 # Plugin classes defined in mloda.core, not under the scanned mloda_plugins package. The loader
@@ -182,10 +182,7 @@ class PluginLoader:
         return sorted(set(keys))
 
     def _load_declared_optional_dependencies(self) -> dict[str, frozenset[str]]:
-        """Load per-entry-point optional-root declarations from OPTIONAL_DEPENDENCY_ENTRY_POINT_GROUP.
-
-        A broken marker (fails to import) is skipped rather than propagated.
-        """
+        """Load per-entry-point optional-root declarations; a marker that fails to import is skipped."""
         declared: dict[str, frozenset[str]] = {}
         for entry_point in importlib.metadata.entry_points(group=OPTIONAL_DEPENDENCY_ENTRY_POINT_GROUP):
             try:

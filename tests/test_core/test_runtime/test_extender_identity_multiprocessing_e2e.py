@@ -1,16 +1,9 @@
 """Proves ExecutionOrchestrator keeps the caller's function_extender objects, not independent
-unpickled copies, when constructing multiple ComputeFrameworks in the parent process.
-
-Empirically checked first (see PR discussion): every ExtenderHook tied to computing a feature
-(FEATURE_GROUP_CALCULATE_FEATURE, JOIN) runs its __call__ inside a spawned MULTIPROCESSING worker,
-never in the parent, because a FeatureGroupStep/JoinStep is always dispatched via
-multi_execute_step once MULTIPROCESSING is a register mode; there is no hook whose __call__
-reliably fires in-parent for both THREADING and MULTIPROCESSING. So this test takes the
-integration-style fallback: it drives ExecutionOrchestrator.__enter__ and
-ComputeFrameworkExecutor.init_compute_framework directly (real machinery, no mocks) and inspects
-the constructed ComputeFramework.function_extender in the parent process right after construction,
-before anything would be shipped to a worker.
-"""
+unpickled copies, across ComputeFrameworks built in the parent process. Drives
+ExecutionOrchestrator.__enter__ and ComputeFrameworkExecutor.init_compute_framework directly
+(real machinery, no mocks), since no ExtenderHook's __call__ reliably fires in-parent under
+MULTIPROCESSING (a FeatureGroupStep/JoinStep is always dispatched to a worker once
+MULTIPROCESSING is a register mode)."""
 
 from __future__ import annotations
 

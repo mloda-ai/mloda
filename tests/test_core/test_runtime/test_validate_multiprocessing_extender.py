@@ -1,7 +1,7 @@
 """Unit tests for raise_on_unpicklable_extender. An Extender class is picklable at the class
-level, but an instance can still hold unpicklable state (e.g. a threading.Lock), which is what a
-function_extender set carrying it would otherwise fail deep inside pickle for when sent to the
-multiprocessing manager process."""
+level, but an instance can still hold unpicklable state (e.g. a threading.Lock), which would
+otherwise fail deep inside pickle when the extender is sent to the multiprocessing manager
+process."""
 
 from __future__ import annotations
 

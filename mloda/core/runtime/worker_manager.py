@@ -9,7 +9,7 @@ from multiprocessing.process import BaseProcess
 from typing import Any, Callable, Optional
 from uuid import UUID
 
-from mloda.core.runtime.mp_context import mp_spawn_context
+from mloda.core.runtime.mp_context import mp_spawn_context, spawn_daemon_process
 
 logger = logging.getLogger(__name__)
 
@@ -47,10 +47,9 @@ class WorkerManager:
         result_queue: multiprocessing.Queue[Any] = ctx.Queue()
 
         worker_index = len(self.process_register)
-        # daemon=True so this process is reaped automatically if the parent exits without
-        # calling join_all(); as a side effect, code running inside a worker cannot itself
+        # As a side effect of daemon=True, code running inside a worker cannot itself
         # spawn multiprocessing children (Python raises on that).
-        process = ctx.Process(target=target, args=(command_queue, result_queue, *args, worker_index), daemon=True)
+        process = spawn_daemon_process(ctx, target, (command_queue, result_queue, *args, worker_index))
 
         self.process_register[cfw_uuid] = (process, command_queue, result_queue)
         self.result_queues_collection.add(result_queue)

@@ -130,3 +130,26 @@ class TestLinkDiscriminatorEqHash:
         )
         assert link_with != link_without
         assert len({link_with, link_without}) == 2
+
+    def test_list_valued_discriminator_is_hashable(self) -> None:
+        """A discriminator holding a list value (a valid Options value, e.g. file_paths) must not
+        raise on hash(); Link.__hash__ has to normalize it instead of hashing it directly."""
+        link_1 = Link.inner(
+            JoinSpec(DiscriminatorFG, "id"),
+            JoinSpec(DiscriminatorFG, "id"),
+            left_discriminator={"file_paths": ["a.csv", "b.csv"]},
+        )
+        link_2 = Link.inner(
+            JoinSpec(DiscriminatorFG, "id"),
+            JoinSpec(DiscriminatorFG, "id"),
+            left_discriminator={"file_paths": ["a.csv", "b.csv"]},
+        )
+        link_3 = Link.inner(
+            JoinSpec(DiscriminatorFG, "id"),
+            JoinSpec(DiscriminatorFG, "id"),
+            left_discriminator={"file_paths": ["a.csv", "c.csv"]},
+        )
+        assert link_1 == link_2
+        assert hash(link_1) == hash(link_2)
+        assert link_1 != link_3
+        assert len({link_1, link_2, link_3}) == 2

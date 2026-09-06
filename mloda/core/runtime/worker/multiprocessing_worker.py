@@ -142,6 +142,12 @@ def worker(
         try:
             command = command_queue.get(block=False)
         except Empty:
+            # Lets an orphaned worker exit on its own if its parent dies (e.g. SIGKILL).
+            # Only checked here at poll time, so a command already in progress runs to
+            # completion before this loop is reached again (best-effort, not preemptive).
+            parent = multiprocessing.parent_process()
+            if parent is not None and not parent.is_alive():
+                break
             time.sleep(0.01)
             continue
 

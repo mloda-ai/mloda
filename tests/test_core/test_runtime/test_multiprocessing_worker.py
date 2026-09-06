@@ -7,6 +7,8 @@ from typing import Any
 from unittest.mock import Mock
 from uuid import uuid4
 
+import pytest
+
 from mloda.core.abstract_plugins.components.parallelization_modes import ParallelizationMode
 from mloda.core.abstract_plugins.run_context import RunContext
 from mloda.core.core.cfw_manager import CfwManager
@@ -85,3 +87,26 @@ class TestWorkerReportsChildBootstrapExceptionThroughTheErrorChannel:
         # exactly like the existing except block at the bottom of the while-True loop does.
         stopped_command = command_queue.get(timeout=2)
         assert stopped_command == "STOP"
+
+
+class TestWorkerExitsWhenTheParentProcessIsNoLongerAlive:
+    """worker() exits its command loop once parent_process() reports the parent as dead, even without a STOP."""
+
+    @pytest.mark.timeout(5)
+    def test_worker_returns_without_a_stop_command_when_parent_is_dead(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        class _FakeDeadParent:
+            def is_alive(self) -> bool:
+                return False
+
+        monkeypatch.setattr(multiprocessing, "parent_process", lambda: _FakeDeadParent())
+
+        ctx = mp_spawn_context()
+        command_queue: multiprocessing.Queue[Any] = ctx.Queue()
+        result_queue: multiprocessing.Queue[Any] = ctx.Queue()
+        cfw_register = Mock(spec=CfwManager)
+        cfw_register.get_location.return_value = "grpc://localhost:9999"
+        cfw_register.get_run_context.return_value = RunContext()
+        cfw = PythonDictFramework(mode=ParallelizationMode.MULTIPROCESSING, children_if_root=frozenset())
+
+        # No STOP is queued; the dead-parent check alone must end the loop.
+        worker(command_queue, result_queue, cfw_register, cfw, uuid4(), worker_index=0)

@@ -47,7 +47,10 @@ class WorkerManager:
         result_queue: multiprocessing.Queue[Any] = ctx.Queue()
 
         worker_index = len(self.process_register)
-        process = ctx.Process(target=target, args=(command_queue, result_queue, *args, worker_index))
+        # daemon=True so this process is reaped automatically if the parent exits without
+        # calling join_all(); as a side effect, code running inside a worker cannot itself
+        # spawn multiprocessing children (Python raises on that).
+        process = ctx.Process(target=target, args=(command_queue, result_queue, *args, worker_index), daemon=True)
 
         self.process_register[cfw_uuid] = (process, command_queue, result_queue)
         self.result_queues_collection.add(result_queue)

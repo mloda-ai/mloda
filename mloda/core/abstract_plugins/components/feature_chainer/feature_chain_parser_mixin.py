@@ -622,11 +622,28 @@ class FeatureChainParserMixin:
         return [f.name for f in in_features_set]
 
     @classmethod
+    def _extract_single_source_feature(cls, feature: Feature) -> str:
+        """Single-source counterpart to ``_extract_source_features``; always enforces exactly one result.
+
+        Raises:
+            ValueError: if the resolved source count is not exactly one
+        """
+        source_features = cls._extract_source_features(feature)
+        reason = cls._in_feature_count_reason(feature.name, len(source_features))
+        if reason is not None:
+            raise ValueError(reason)
+        if len(source_features) != 1:
+            raise ValueError(
+                f"Feature '{feature.name}' resolved {len(source_features)} source feature(s), expected exactly 1"
+            )
+        return source_features[0]
+
+    @classmethod
     def _extract_operation_and_source_feature(
         cls, feature: Feature, extract_fn: Callable[[Feature], Any], label: str
     ) -> tuple[Any, str]:
         """
-        Extract an operation parameter and the primary source feature name from a feature.
+        Extract the primary source feature name and an operation parameter from a feature.
 
         Args:
             feature: The feature to extract parameters from
@@ -637,13 +654,13 @@ class FeatureChainParserMixin:
             Tuple of (operation_value, source_feature_name)
 
         Raises:
-            ValueError: If the operation value cannot be extracted
+            ValueError: if the source count isn't exactly one, or the operation can't be extracted
         """
-        source_features = cls._extract_source_features(feature)
+        source_feature = cls._extract_single_source_feature(feature)
         operation = extract_fn(feature)
         if operation is None:
             raise ValueError(f"Could not extract {label} from: {feature.name}")
-        return operation, source_features[0]
+        return operation, source_feature
 
     @classmethod
     def _resolve_operation(

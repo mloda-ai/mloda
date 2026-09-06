@@ -232,7 +232,7 @@ class TestDtypeFailureDegradesColumnToNone:
         assert captured.status == "success"
 
 
-class TestValidateHooksLeaveOutputSchemaNone:
+class TestValidateHooksOutputSchema:
     def test_validate_output_feature_output_schema_reflects_native_data(self) -> None:
         """VALIDATE_OUTPUT_FEATURE reads self.data (the finalized native shape) for output_schema, mirroring rows_in."""
         feature_set = _build_feature_set()
@@ -289,6 +289,30 @@ class TestDuckDBOutputSchemaStaysLazy:
 
         assert DuckDBFramework()._output_schema(relation) == (("a", "BIGINT"), ("b", "VARCHAR"))
 
+    def test_validate_output_feature_hook_does_not_call_dunder_len(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Regression at the hook-dispatch level: VALIDATE_OUTPUT_FEATURE must read output_schema
+        without materializing the relation, not just when _output_schema is unit-tested directly."""
+        conn = duckdb.connect()
+        arrow_table = pa.Table.from_pydict({"b": ["x"], "a": [1]})
+        relation = DuckdbRelation.from_arrow(conn, arrow_table)
+
+        def _raise_if_called(self: Any) -> int:
+            raise AssertionError("DuckdbRelation.__len__ must not be called by _output_schema")
+
+        monkeypatch.setattr(DuckdbRelation, "__len__", _raise_if_called)
+
+        feature_set = _build_feature_set()
+        extender = _HookCapturingExtender(ExtenderHook.VALIDATE_OUTPUT_FEATURE)
+        cfw = DuckDBFramework(mode=ParallelizationMode.SYNC, children_if_root=frozenset(), function_extender={extender})
+        cfw.data = relation
+        cfw.set_column_names()
+
+        cfw.run_validate_output_features(_OutputSchemaFeatureGroup, feature_set)
+
+        captured = extender.captured
+        assert captured is not None
+        assert captured.output_schema == (("a", "BIGINT"), ("b", "VARCHAR"))
+
 
 class _PandasOutputSchemaFeatureGroup(FeatureGroup):
     @classmethod
@@ -322,7 +346,7 @@ class TestPandasOutputSchema:
 @pytest.mark.skipif(pd is None, reason="Pandas is not installed. Skipping this test.")
 class TestOutputSchemaCalculateVsValidateOutput:
     """FEATURE_GROUP_CALCULATE_FEATURE sees the raw FG return value's schema,
-    VALIDATE_OUTPUT_FEATURE sees the finalized native-shape schema after transform/filter."""
+    VALIDATE_OUTPUT_FEATURE sees the finalized native-shape schema after transform."""
 
     def test_calculate_and_validate_output_hooks_see_different_schemas(self) -> None:
         feature_set = _build_feature_set()

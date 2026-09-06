@@ -632,8 +632,9 @@ class ComputeFramework(ABC):
             context = self._build_hook_context(hook, feature_group, features)
 
             def _output_schema_reader(_: Any) -> OutputSchema | None:
-                # VALIDATE_OUTPUT_FEATURE's return value carries no schema; self.data is already
-                # the finalized, native shape by the time this hook fires (see _build_hook_context's rows_in).
+                # VALIDATE_OUTPUT_FEATURE's return value carries no schema, so this reads self.data
+                # the same way rows_in does, but only once the call returns without raising (rows_in
+                # is captured before the call, so it is also present when the call raises).
                 if hook is ExtenderHook.VALIDATE_OUTPUT_FEATURE:
                     return self._output_schema(self.data)
                 return None

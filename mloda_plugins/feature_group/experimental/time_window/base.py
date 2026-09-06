@@ -219,13 +219,12 @@ class TimeWindowFeatureGroup(TimeReferenceMixin, FeatureChainParserMixin, Featur
         Raises:
             ValueError: If parameters cannot be extracted
         """
-        source_features = cls._extract_source_features(feature)
         window_function, window_size, time_unit = cls._extract_time_window_params(feature)
 
         if window_function is None or window_size is None or time_unit is None:
             raise ValueError(f"Could not extract time window parameters from: {feature.name}")
 
-        return window_function, window_size, time_unit, source_features[0]
+        return window_function, window_size, time_unit, cls._extract_single_source_feature(feature)
 
     @classmethod
     def parse_time_window_prefix(cls, feature_name: str) -> tuple[str, int, str]:

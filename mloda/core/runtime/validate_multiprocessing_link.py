@@ -1,8 +1,7 @@
-"""Guards a JoinStep's Link, and a FeatureGroupStep's or TransformFrameworkStep's feature group
-classes, against a value pickle cannot round-trip, which otherwise fails deep inside a
-multiprocessing worker with an opaque PicklingError instead of being rejected clearly at plan
-time. This only proves resolvability in the current process: a class resolvable here but not
-inside a freshly spawned worker (e.g. one under `if __name__ == "__main__":`) can still fail there.
+"""Guards a Link, a feature group class, a child_bootstrap callable, or an extender against a value
+pickle cannot round-trip, which otherwise fails deep inside a multiprocessing worker with an opaque
+PicklingError instead of being rejected clearly at plan time. This only proves resolvability in the
+current process: a value resolvable here but not inside a freshly spawned worker can still fail there.
 """
 
 import pickle  # nosec

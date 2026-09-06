@@ -691,7 +691,7 @@ class TestLoadEntryPointsOptionalDependenciesDeclaration:
             PluginLoader().load_entry_points()
 
     def test_undeclared_root_in_global_set_still_falls_back_and_skips(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
     ) -> None:
         """Regression guard: with no companion `mloda.optional_dependencies` entry at all, a
         missing root that IS in the global OPTIONAL_PLUGIN_DEPENDENCIES set still skips."""
@@ -722,11 +722,17 @@ class TestLoadEntryPointsOptionalDependenciesDeclaration:
             plugin_loader_module.OPTIONAL_PLUGIN_DEPENDENCIES | frozenset({"eptest_fake_optional_dep"}),
         )
 
-        keys = PluginLoader().load_entry_points()
+        with caplog.at_level(logging.WARNING, logger=plugin_loader_module.__name__):
+            keys = PluginLoader().load_entry_points()
 
         good_key = f"{good_pkg}.manifest:EpFeatureGroup"
         assert good_key in keys
         assert not any(key.startswith(f"{broken_pkg}.") for key in keys)
+
+        warning_messages = [record.getMessage() for record in caplog.records if record.levelno == logging.WARNING]
+        assert any("broken" in message for message in warning_messages), (
+            f"expected the skip to be logged at WARNING naming the entry point, got: {warning_messages}"
+        )
 
 
 class TestOptionalDependencyMarkerMalformedValues:

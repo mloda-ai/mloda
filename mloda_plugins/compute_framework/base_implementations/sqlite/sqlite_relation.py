@@ -208,6 +208,11 @@ class SqliteRelation(SqlBaseRelation):
         type_map = self._sqlite_affinity_types_by_column()
         return [type_map.get(column, pa.string()) for column in columns]
 
+    @property
+    def type_hints(self) -> Optional[list[pa.DataType | None]]:
+        """Propagated per-column type hints aligned with columns, None per unresolved column; never scans rows."""
+        return self._type_hints_for_current_columns()
+
     def _sqlite_affinity_types_by_column(self) -> dict[str, pa.DataType]:
         cursor = self._connection.execute(f"PRAGMA table_info({quote_ident(self._table_name)})")
         return {row[1]: _sqlite_affinity_to_arrow_type(str(row[2])) for row in cursor.fetchall()}

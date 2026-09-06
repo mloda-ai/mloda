@@ -17,6 +17,8 @@ from mloda.core.abstract_plugins.function_extender import ExtenderHook
 
 _current_hook_context: ContextVar["HookContext | None"] = ContextVar("_current_hook_context", default=None)
 
+OutputSchema = tuple[tuple[str, str | None], ...]
+
 
 @dataclass(kw_only=True)
 class HookContext:
@@ -31,6 +33,7 @@ class HookContext:
     compute_framework_name: str
     rows_in: int | None = None
     rows_out: int | None = None
+    output_schema: OutputSchema | None = None
     duration_seconds: float | None = None
     status: str | None = None
     run_id: str | None = None
@@ -82,16 +85,23 @@ class HookContext:
             _current_hook_context.reset(token)
 
 
+def _no_schema(data: Any) -> OutputSchema | None:
+    """output_schema stand-in for hooks whose return value carries no schema semantics."""
+    return None
+
+
 def instrument(
     context: HookContext,
     func: Callable[..., Any],
     row_count: Callable[[Any], int | None] = HookContext.row_count,
+    output_schema: Callable[[Any], OutputSchema | None] = _no_schema,
 ) -> Callable[..., Any]:
-    """Wrap func, updating context.status/duration_seconds/rows_out around the call."""
+    """Wrap func, updating context.status/duration_seconds/rows_out/output_schema around the call."""
 
     @functools.wraps(func)
     def wrapper(*args: Any, **kwargs: Any) -> Any:
         context.rows_out = None
+        context.output_schema = None
         succeeded = False
         start = time.perf_counter()
         try:
@@ -101,6 +111,7 @@ def instrument(
             context.duration_seconds = time.perf_counter() - start
             context.status = "success" if succeeded else "error"
         context.rows_out = safe_field(lambda: row_count(result), None)
+        context.output_schema = safe_field(lambda: output_schema(result), None)
         return result
 
     if hasattr(func, "__self__"):

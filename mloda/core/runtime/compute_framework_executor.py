@@ -70,9 +70,15 @@ class ComputeFrameworkExecutor:
         Returns:
             The UUID of the compute framework.
         """
-        # Prefer the constructor-supplied extender; only round-trip through the register if none was given.
+        # Prefer the constructor-supplied extender only for a framework staying in this process.
+        # A MULTIPROCESSING-resolved framework is dispatched to a worker regardless, so it still
+        # needs its own isolated copy from the register, not an object shared with every other
+        # framework this process builds (an in-process mutation on the shared object could
+        # otherwise poison a later, unrelated worker dispatch with state pickle can't handle).
         function_extender = (
-            self.function_extender if self.function_extender is not None else self.cfw_register.get_function_extender()
+            self.function_extender
+            if self.function_extender is not None and parallelization_mode is not ParallelizationMode.MULTIPROCESSING
+            else self.cfw_register.get_function_extender()
         )
 
         # init framework

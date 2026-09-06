@@ -21,7 +21,7 @@ class TestFlightServerProcessLocation:
                 return None
 
         class InlineProcess:
-            def __init__(self, target: Any, args: tuple[Any, ...]) -> None:
+            def __init__(self, target: Any, args: tuple[Any, ...], **kwargs: Any) -> None:
                 self.target = target
                 self.args = args
                 self.started = False
@@ -53,7 +53,7 @@ class TestFlightServerProcessLocation:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         class DeadProcess:
-            def __init__(self, target: Any, args: tuple[Any, ...]) -> None:
+            def __init__(self, target: Any, args: tuple[Any, ...], **kwargs: Any) -> None:
                 self.target = target
                 self.args = args
                 self.exitcode: int | None = None
@@ -94,6 +94,52 @@ class TestFlightServerProcessLocation:
         assert "1" in str(exc_info.value)
         assert server.flight_server_process is None
         assert server.location is None
+
+
+class TestFlightServerProcessDaemon:
+    """The flight server child process must be daemon=True: a caller that never calls
+    end_flight_server_process() on the success path would otherwise hang at clean
+    interpreter exit, mirroring the sibling fix in WorkerManager.create_worker_process."""
+
+    def test_start_flight_server_process_creates_process_with_daemon_true(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        published_location = "grpc://127.0.0.1:39124"
+
+        class BoundFlightServer:
+            def __init__(self, location: str) -> None:
+                self.location = published_location
+
+            def serve(self) -> None:
+                return None
+
+        class RecordingProcess:
+            def __init__(self, target: Any, args: tuple[Any, ...], **kwargs: Any) -> None:
+                self.target = target
+                self.args = args
+                self.daemon = kwargs.get("daemon")
+
+            def start(self) -> None:
+                self.target(*self.args)
+
+        monkeypatch.setattr(
+            "mloda.core.runtime.flight.runner_flight_server.create_location", lambda: "grpc://127.0.0.1:0"
+        )
+        monkeypatch.setattr("mloda.core.runtime.flight.runner_flight_server.FlightServer", BoundFlightServer)
+
+        class FakeCtx:
+            Process = RecordingProcess
+            Queue: Any = staticmethod(multiprocessing.Queue)
+
+        monkeypatch.setattr(
+            "mloda.core.runtime.flight.runner_flight_server.mp_spawn_context",
+            lambda: FakeCtx(),
+        )
+
+        server = ParallelRunnerFlightServer()
+        server.start_flight_server_process()
+
+        assert server.flight_server_process.daemon is True
 
 
 class TestFlightServerLocationNoneError:

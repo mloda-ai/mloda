@@ -1,3 +1,5 @@
+import functools
+from collections.abc import Callable, Iterable
 from multiprocessing.managers import BaseManager
 from typing import Any, Optional
 from uuid import UUID
@@ -7,6 +9,7 @@ from mloda.core.abstract_plugins.components.error_utils import internal_invarian
 from mloda.core.abstract_plugins.function_extender import Extender
 from mloda.core.abstract_plugins.components.parallelization_modes import ParallelizationMode
 from mloda.core.abstract_plugins.run_context import RunContext
+from mloda.core.runtime.parent_death_watchdog import start_parent_death_watchdog
 
 import logging
 
@@ -14,8 +17,20 @@ import logging
 logger = logging.getLogger(__name__)
 
 
+def _watchdog_then_initializer(initializer: Callable[..., object] | None, initargs: Iterable[Any]) -> None:
+    start_parent_death_watchdog()
+    if initializer is not None:
+        initializer(*initargs)
+
+
 class MyManager(BaseManager):
-    pass
+    def start(self, initializer: Callable[..., object] | None = None, initargs: Iterable[Any] = ()) -> None:
+        # BaseManager._run_server() runs initializer inside the freshly spawned manager server
+        # process, so the watchdog must always run there; a caller-supplied initializer is
+        # chained after it rather than replaced. A module-level function plus functools.partial
+        # is used, not a closure, because BaseManager.start() pickles the initializer to send it
+        # to the spawned server process, and closures are not picklable.
+        super().start(functools.partial(_watchdog_then_initializer, initializer, initargs), ())
 
 
 class CfwManager:

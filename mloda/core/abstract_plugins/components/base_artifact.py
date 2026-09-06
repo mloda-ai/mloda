@@ -1,4 +1,5 @@
 from abc import ABC
+from copy import copy
 from typing import Any, Optional, final
 
 from mloda.core.abstract_plugins.components.feature_set import FeatureSet
@@ -92,6 +93,11 @@ class BaseArtifact(ABC):
         If features carry different Options (e.g. due to context-based
         partitioning), saving and loading a single artifact per feature set
         is ambiguous. Raises ValueError when Options differ across features.
+
+        A runtime artifact is exposed through a temporary Options copy so
+        existing custom loaders can read it by ``artifact_to_load`` without
+        adding execution state to the shared Options that determine Feature
+        equality and hashing.
         """
 
         _options = None
@@ -108,6 +114,13 @@ class BaseArtifact(ABC):
 
         if _options is None:
             return None
+
+        if features.artifact_to_load is not None and features.runtime_artifact_to_load is not None:
+            # Options.__copy__ gives the overlay its own group/context dictionaries while
+            # preserving opaque option values and provenance metadata by reference/value.
+            isolated_options = copy(_options)
+            isolated_options.set(features.artifact_to_load, features.runtime_artifact_to_load)
+            return isolated_options
 
         return _options
 

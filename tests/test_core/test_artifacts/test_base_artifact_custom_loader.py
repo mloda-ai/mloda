@@ -66,3 +66,22 @@ class TestFeatureSetResolveArtifactForRuntimeUsesArtifactToLoad:
         result = BaseArtifact.load(features)
 
         assert result == "runtime_value"
+
+    def test_runtime_artifact_does_not_change_feature_identity_or_group_options(self) -> None:
+        shared_options = Options(group={"model_version": "v1"}, context={"trace_id": "run-1"})
+        feature = Feature("artifact_feature", shared_options)
+        features = FeatureSet([feature])
+        feature_hash = hash(feature)
+        group_options = shared_options.group.copy()
+
+        features.resolve_artifact_for_runtime({"artifact_feature": "runtime_value"})
+
+        assert features.artifact_to_load == "artifact_feature"
+        assert features.artifact_to_save is None
+        assert feature in features.features
+        assert hash(feature) == feature_hash
+        assert shared_options.group == group_options
+        assert BaseArtifact.load(features) == "runtime_value"
+        assert feature in features.features
+        assert hash(feature) == feature_hash
+        assert shared_options.group == group_options

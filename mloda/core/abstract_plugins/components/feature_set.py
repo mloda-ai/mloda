@@ -24,6 +24,10 @@ class FeatureSet:
         self.name_of_one_feature: Optional[FeatureName] = None
         self.artifact_to_save: Optional[str] = None
         self.artifact_to_load: Optional[str] = None
+        # Runtime artifact payloads are execution state, not feature configuration. Keeping the
+        # value separate prevents an artifact from changing Options.group and invalidating the
+        # hashes of Feature objects already stored in ``features``.
+        self.runtime_artifact_to_load: Optional[Any] = None
         self.save_artifact: Optional[Any] = None
         self.filter_engine: type[BaseFilterEngine] = BaseFilterEngine
         self.mask_engine: type[BaseMaskEngine] | None = None
@@ -37,6 +41,7 @@ class FeatureSet:
     def add_artifact_name(self) -> None:
         FeatureSetValidator.validate_options_initialized(self.options, "add_artifact_name")
         assert self.options is not None  # Type narrowing for mypy
+        self.runtime_artifact_to_load = None
 
         for feature_name in self.get_all_names():
             if feature_name in self.options.keys():
@@ -50,7 +55,9 @@ class FeatureSet:
 
         Called at step execution time on the deep-copied FeatureSet when
         artifacts are passed to run(). This enables switching between save
-        and load modes across run() calls without re-preparing.
+        and load modes across run() calls without re-preparing. The selected
+        payload is kept as execution state instead of being written to shared
+        feature Options, whose group values define Feature identity.
         """
         FeatureSetValidator.validate_options_initialized(self.options, "resolve_artifact_for_runtime")
         assert self.options is not None
@@ -59,11 +66,12 @@ class FeatureSet:
             if feature_name in runtime_artifacts:
                 self.artifact_to_load = feature_name
                 self.artifact_to_save = None
-                self.options.set(feature_name, runtime_artifacts[feature_name])
+                self.runtime_artifact_to_load = runtime_artifacts[feature_name]
                 return
 
         self.artifact_to_load = None
         self.artifact_to_save = self.get_name_of_one_feature()
+        self.runtime_artifact_to_load = None
 
     def add(self, feature: Feature) -> None:
         self.features.add(feature)

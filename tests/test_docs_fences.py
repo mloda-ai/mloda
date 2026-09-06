@@ -36,7 +36,7 @@ ILLUSTRATIVE_BLOCK_ALLOWLIST: dict[str, int] = {
     "docs/docs/in_depth/join_data.md": 4,
     "docs/docs/in_depth/multiple_result_columns.md": 5,
     "docs/docs/in_depth/named-data-access-handles.md": 4,
-    "docs/docs/in_depth/plugin-loader.md": 1,
+    "docs/docs/in_depth/plugin-loader.md": 2,
     "docs/docs/in_depth/plugin_registry.md": 1,
     "docs/docs/in_depth/property-mapping.md": 4,
     "docs/docs/in_depth/troubleshooting/feature-group-resolution-errors.md": 3,

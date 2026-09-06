@@ -14,12 +14,17 @@ Contract under test:
   missing optional dependencies skip only the affected entry point, key conflicts raise
   PluginRegistryCollisionError, double loads are idempotent, and PluginLoader.all() folds
   entry points in after the mloda_plugins scan.
+- A companion `mloda.optional_dependencies` entry point (same name) declares per-entry-point
+  optional import roots; both ModuleNotFoundError and plain ImportError are caught against it
+  (falling back to the global OPTIONAL_PLUGIN_DEPENDENCIES set), logged at WARNING, except the
+  entry point's own package root, which always re-raises.
 
 Each test builds real on-disk distributions (package + dist-info) in tmp_path with a unique
 package name, so importlib.metadata discovery is exercised for real and tests stay xdist-safe.
 """
 
 import importlib
+import logging
 import textwrap
 from pathlib import Path
 
@@ -66,6 +71,52 @@ def _manifest_class(pkg_name: str, class_name: str) -> type:
     cls = getattr(module, class_name)
     assert isinstance(cls, type)
     return cls
+
+
+def _write_module(base_dir: Path, pkg_name: str, module_name: str, source: str) -> None:
+    """Write an extra module file into an already-built fake package directory (e.g. the
+    `mloda.optional_dependencies` companion module, alongside `manifest.py`)."""
+    (base_dir / pkg_name / f"{module_name}.py").write_text(textwrap.dedent(source))
+
+
+def _write_root_module(base_dir: Path, module_name: str, source: str = "") -> None:
+    """Write a standalone top-level module file directly under base_dir (not inside a package),
+    so `from <module_name> import missing_name` raises plain ImportError, not ModuleNotFoundError."""
+    (base_dir / f"{module_name}.py").write_text(textwrap.dedent(source))
+
+
+def _import_error_fg_manifest_source(root_module: str, class_name: str) -> str:
+    """A manifest whose top-level `from <root_module> import missing_name` raises ImportError
+    (not ModuleNotFoundError) because `root_module` exists but does not define `missing_name`."""
+    return f"""
+    from {root_module} import missing_name
+
+    from mloda.core.abstract_plugins.feature_group import FeatureGroup
+
+
+    class {class_name}(FeatureGroup):
+        pass
+
+
+    FEATURE_GROUPS = [{class_name}]
+    """
+
+
+def _own_package_broken_manifest_source(pkg_name: str, class_name: str) -> str:
+    """A manifest whose own package fails to import a missing submodule of itself, so the
+    failing import's root equals the entry point's own module root."""
+    return f"""
+    import {pkg_name}.missing_submodule
+
+    from mloda.core.abstract_plugins.feature_group import FeatureGroup
+
+
+    class {class_name}(FeatureGroup):
+        pass
+
+
+    FEATURE_GROUPS = [{class_name}]
+    """
 
 
 _FG_MANIFEST = """
@@ -175,6 +226,31 @@ _HARD_DEP_MANIFEST = """
 
 
     FEATURE_GROUPS = [EpHardDepFeatureGroup]
+"""
+
+# Fails with ModuleNotFoundError on a root NOT in the global OPTIONAL_PLUGIN_DEPENDENCIES set;
+# only tolerated when a companion `mloda.optional_dependencies` entry declares it optional.
+_DECLARED_OPTIONAL_EXTENDER_MANIFEST = """
+    from typing import Any
+
+    import eptest_declopt_missing_root
+
+    from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook
+
+
+    class EpDeclOptExtender(Extender):
+        def wraps(self) -> set[ExtenderHook]:
+            return set()
+
+        def __call__(self, func: Any, *args: Any, **kwargs: Any) -> Any:
+            return func
+
+
+    EXTENDERS = [EpDeclOptExtender]
+"""
+
+_DECLARED_OPTIONAL_DEPS_MODULE_SOURCE = """
+    OPTIONAL_DEPENDENCIES = frozenset({"eptest_declopt_missing_root"})
 """
 
 
@@ -456,6 +532,170 @@ class TestLoadEntryPointsMissingDependencies:
 
         with pytest.raises(ModuleNotFoundError):
             PluginLoader().load_entry_points()
+
+
+class TestLoadEntryPointsOptionalDependenciesDeclaration:
+    """The new `mloda.optional_dependencies` group: per-entry-point optional-root declarations,
+    plain ImportError handling, and the own-package re-raise guard."""
+
+    def test_declared_optional_root_skips_entry_point_and_logs_warning(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        broken_pkg = "eptest_declopt_broken_pkg"
+        good_pkg = "eptest_declopt_good_pkg"
+        _build_distribution(
+            tmp_path,
+            broken_pkg,
+            _DECLARED_OPTIONAL_EXTENDER_MANIFEST,
+            f"""
+            [mloda.extenders]
+            demo = {broken_pkg}.manifest:EXTENDERS
+
+            [mloda.optional_dependencies]
+            demo = {broken_pkg}.optional_deps:OPTIONAL_DEPENDENCIES
+            """,
+        )
+        _write_module(tmp_path, broken_pkg, "optional_deps", _DECLARED_OPTIONAL_DEPS_MODULE_SOURCE)
+        _build_distribution(
+            tmp_path,
+            good_pkg,
+            _FG_MANIFEST,
+            f"""
+            [mloda.feature_groups]
+            good = {good_pkg}.manifest:FEATURE_GROUPS
+            """,
+        )
+        monkeypatch.syspath_prepend(str(tmp_path))
+
+        with caplog.at_level(logging.WARNING, logger=plugin_loader_module.__name__):
+            keys = PluginLoader().load_entry_points()
+
+        registry = PluginRegistry.default()
+        good_key = f"{good_pkg}.manifest:EpFeatureGroup"
+        assert good_key in keys
+        assert not any(key.startswith(f"{broken_pkg}.") for key in keys)
+        assert registry.get(f"{broken_pkg}.manifest:EpDeclOptExtender") is None
+
+        warning_messages = [record.getMessage() for record in caplog.records if record.levelno == logging.WARNING]
+        assert any("demo" in message and "eptest_declopt_missing_root" in message for message in warning_messages), (
+            f"expected a WARNING naming the entry point and the missing module, got: {warning_messages}"
+        )
+
+    def test_declared_optional_root_catches_plain_import_error(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        pkg = "eptest_declopt_importerror_pkg"
+        root_module = "eptest_declopt_importerror_root"
+        _write_root_module(tmp_path, root_module)
+        _build_distribution(
+            tmp_path,
+            pkg,
+            _import_error_fg_manifest_source(root_module, "EpImportErrorFeatureGroup"),
+            f"""
+            [mloda.feature_groups]
+            demo = {pkg}.manifest:FEATURE_GROUPS
+
+            [mloda.optional_dependencies]
+            demo = {pkg}.optional_deps:OPTIONAL_DEPENDENCIES
+            """,
+        )
+        _write_module(tmp_path, pkg, "optional_deps", f'OPTIONAL_DEPENDENCIES = ("{root_module}",)\n')
+        monkeypatch.syspath_prepend(str(tmp_path))
+
+        with caplog.at_level(logging.WARNING, logger=plugin_loader_module.__name__):
+            keys = PluginLoader().load_entry_points()
+
+        assert not any(key.startswith(f"{pkg}.") for key in keys)
+        assert PluginRegistry.default().get(f"{pkg}.manifest:EpImportErrorFeatureGroup") is None
+        warning_messages = [record.getMessage() for record in caplog.records if record.levelno == logging.WARNING]
+        assert any("demo" in message and root_module in message for message in warning_messages), (
+            f"expected a WARNING naming the entry point and the missing module, got: {warning_messages}"
+        )
+
+    def test_undeclared_root_import_error_still_propagates(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Plain ImportError (already uncaught today) must still propagate once caught, when
+        its root is declared nowhere (neither per-entry-point nor in the global set)."""
+        pkg = "eptest_undeclared_importerror_pkg"
+        root_module = "eptest_undeclared_importerror_root"
+        _write_root_module(tmp_path, root_module)
+        _build_distribution(
+            tmp_path,
+            pkg,
+            _import_error_fg_manifest_source(root_module, "EpUndeclaredImportErrorFeatureGroup"),
+            f"""
+            [mloda.feature_groups]
+            demo = {pkg}.manifest:FEATURE_GROUPS
+            """,
+        )
+        monkeypatch.syspath_prepend(str(tmp_path))
+
+        with pytest.raises(ImportError) as exc_info:
+            PluginLoader().load_entry_points()
+        assert not isinstance(exc_info.value, ModuleNotFoundError)
+
+    def test_own_package_root_always_raises_even_if_declared_optional(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A (nonsensical) declaration that the entry point's own package root is optional must
+        not suppress the error: it means the plugin's own package is broken."""
+        pkg = "eptest_declopt_own_pkg"
+        _build_distribution(
+            tmp_path,
+            pkg,
+            _own_package_broken_manifest_source(pkg, "EpOwnPkgFeatureGroup"),
+            f"""
+            [mloda.feature_groups]
+            demo = {pkg}.manifest:FEATURE_GROUPS
+
+            [mloda.optional_dependencies]
+            demo = {pkg}.optional_deps:OPTIONAL_DEPENDENCIES
+            """,
+        )
+        _write_module(tmp_path, pkg, "optional_deps", f'OPTIONAL_DEPENDENCIES = frozenset({{"{pkg}"}})\n')
+        monkeypatch.syspath_prepend(str(tmp_path))
+
+        with pytest.raises(ModuleNotFoundError):
+            PluginLoader().load_entry_points()
+
+    def test_undeclared_root_in_global_set_still_falls_back_and_skips(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Regression guard: with no companion `mloda.optional_dependencies` entry at all, a
+        missing root that IS in the global OPTIONAL_PLUGIN_DEPENDENCIES set still skips."""
+        broken_pkg = "eptest_declopt_fallback_broken_pkg"
+        good_pkg = "eptest_declopt_fallback_good_pkg"
+        _build_distribution(
+            tmp_path,
+            broken_pkg,
+            _OPTIONAL_DEP_MANIFEST,
+            f"""
+            [mloda.feature_groups]
+            broken = {broken_pkg}.manifest:FEATURE_GROUPS
+            """,
+        )
+        _build_distribution(
+            tmp_path,
+            good_pkg,
+            _FG_MANIFEST,
+            f"""
+            [mloda.feature_groups]
+            good = {good_pkg}.manifest:FEATURE_GROUPS
+            """,
+        )
+        monkeypatch.syspath_prepend(str(tmp_path))
+        monkeypatch.setattr(
+            plugin_loader_module,
+            "OPTIONAL_PLUGIN_DEPENDENCIES",
+            plugin_loader_module.OPTIONAL_PLUGIN_DEPENDENCIES | frozenset({"eptest_fake_optional_dep"}),
+        )
+
+        keys = PluginLoader().load_entry_points()
+
+        good_key = f"{good_pkg}.manifest:EpFeatureGroup"
+        assert good_key in keys
+        assert not any(key.startswith(f"{broken_pkg}.") for key in keys)
 
 
 class TestLoadEntryPointsIdempotencyAndCollisions:

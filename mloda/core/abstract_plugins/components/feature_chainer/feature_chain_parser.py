@@ -134,8 +134,10 @@ class FeatureChainParser:
     ) -> tuple[str | None, str | None]:
         """Legacy adapter over ``parse_name``: returns ``(operation_config, source_feature)``.
 
-        Public API (mloda_plugins call sites and documented examples), so the tuple stays
-        byte-for-byte identical to today, including the captureless fabrication and the ValueError.
+        Public API, so the tuple stays byte-for-byte identical to today: ``(None, None)`` on no
+        match; otherwise ``source_feature`` is always populated, and ``operation_config`` is
+        ``None`` for a captureless or non-participating-capture pattern (a match with nothing
+        before the separator still raises, as before).
         """
         parsed = cls.parse_name(feature_name, prefix_patterns, pattern)
         if not parsed.matched:

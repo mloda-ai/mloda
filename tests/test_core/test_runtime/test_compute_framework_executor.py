@@ -16,6 +16,7 @@ import pytest
 
 from mloda.user import ParallelizationMode
 from mloda.provider import ComputeFramework
+from mloda.core.abstract_plugins.function_extender import Extender
 from mloda.core.abstract_plugins.run_context import RunContext
 from mloda.core.core.cfw_manager import CfwManager
 from mloda.core.core.step.feature_group_step import FeatureGroupStep
@@ -185,6 +186,68 @@ class TestInitComputeFramework:
         assert mock_cfw_instance_a.run_context.carrier is not mock_cfw_instance_b.run_context.carrier
         assert mock_cfw_instance_a.run_context.carrier is not register_run_context.carrier
         assert mock_cfw_instance_b.run_context.carrier is not register_run_context.carrier
+
+
+class TestInitComputeFrameworkWithDirectFunctionExtender:
+    """A constructor-supplied function_extender must be used directly, skipping the cfw_register
+    round trip that, under MULTIPROCESSING, would return a freshly-unpickled copy on every call."""
+
+    def test_constructor_accepts_function_extender_keyword_argument(self) -> None:
+        cfw_register = Mock(spec=CfwManager)
+        worker_manager = Mock(spec=WorkerManager)
+        extender = Mock(spec=Extender)
+
+        executor = ComputeFrameworkExecutor(cfw_register, worker_manager, function_extender={extender})
+
+        assert executor is not None
+
+    def test_init_compute_framework_uses_the_provided_function_extender_directly(self) -> None:
+        cfw_register = Mock(spec=CfwManager)
+        worker_manager = Mock(spec=WorkerManager)
+        extender = Mock(spec=Extender)
+        provided_function_extender: set[Extender] = {extender}
+        executor = ComputeFrameworkExecutor(cfw_register, worker_manager, function_extender=provided_function_extender)
+
+        mock_cfw_class = Mock()
+        mock_cfw_instance = Mock(spec=ComputeFramework)
+        mock_cfw_class.return_value = mock_cfw_instance
+        mock_cfw_class.get_class_name.return_value = "TestCFW"
+
+        test_uuid = uuid4()
+        mock_cfw_instance.get_uuid.return_value = test_uuid
+        cfw_register.get_run_context.return_value = RunContext()
+
+        cfw_uuid = executor.init_compute_framework(mock_cfw_class, ParallelizationMode.SYNC, set(), test_uuid)
+
+        mock_cfw_class.assert_called_once_with(
+            ParallelizationMode.SYNC, frozenset(), test_uuid, function_extender=provided_function_extender
+        )
+        cfw_register.get_function_extender.assert_not_called()
+        assert cfw_uuid == test_uuid
+
+    def test_init_compute_framework_falls_back_to_cfw_register_when_function_extender_omitted(self) -> None:
+        """Locks in the existing fallback contract: omitting the new kwarg changes nothing."""
+        cfw_register = Mock(spec=CfwManager)
+        worker_manager = Mock(spec=WorkerManager)
+        executor = ComputeFrameworkExecutor(cfw_register, worker_manager)
+
+        mock_cfw_class = Mock()
+        mock_cfw_instance = Mock(spec=ComputeFramework)
+        mock_cfw_class.return_value = mock_cfw_instance
+        mock_cfw_class.get_class_name.return_value = "TestCFW"
+
+        test_uuid = uuid4()
+        mock_cfw_instance.get_uuid.return_value = test_uuid
+        function_extender_from_register = Mock()
+        cfw_register.get_function_extender.return_value = function_extender_from_register
+        cfw_register.get_run_context.return_value = RunContext()
+
+        executor.init_compute_framework(mock_cfw_class, ParallelizationMode.SYNC, set(), test_uuid)
+
+        cfw_register.get_function_extender.assert_called_once()
+        mock_cfw_class.assert_called_once_with(
+            ParallelizationMode.SYNC, frozenset(), test_uuid, function_extender=function_extender_from_register
+        )
 
 
 class TestComputeFrameworkExecutorCfwLock:

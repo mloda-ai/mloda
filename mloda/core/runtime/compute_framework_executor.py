@@ -11,6 +11,7 @@ from uuid import UUID, uuid4
 from mloda.core.abstract_plugins.components.error_utils import internal_invariant_error
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.components.parallelization_modes import ParallelizationMode
+from mloda.core.abstract_plugins.function_extender import Extender
 from mloda.core.core.cfw_manager import CfwManager
 from mloda.core.core.step.feature_group_step import FeatureGroupStep
 from mloda.core.core.step.join_step import JoinStep
@@ -34,6 +35,7 @@ class ComputeFrameworkExecutor:
         cfw_register: CfwManager,
         worker_manager: WorkerManager,
         tfs_connection_map: Optional[dict[type[ComputeFramework], Any]] = None,
+        function_extender: Optional[set[Extender]] = None,
     ) -> None:
         """
         Initialize the executor with dependencies.
@@ -45,11 +47,15 @@ class ComputeFrameworkExecutor:
                 framework connection (e.g. duckdb.DuckDBPyConnection, sqlite3.Connection).
                 Engine builds this once from the DataAccessCollection at setup; the
                 executor only does a dict lookup per TFS step on the run path.
+            function_extender: When not None, used directly to build every ComputeFramework
+                instead of round-tripping through cfw_register.get_function_extender(), which
+                under MULTIPROCESSING returns a freshly-unpickled copy on every call.
         """
         self.cfw_collection: dict[UUID, ComputeFramework] = {}
         self.cfw_register = cfw_register
         self.worker_manager = worker_manager
         self.tfs_connection_map: dict[type[ComputeFramework], Any] = tfs_connection_map or {}
+        self.function_extender = function_extender
         self._cfw_lock = threading.Lock()
 
     def init_compute_framework(
@@ -65,8 +71,10 @@ class ComputeFrameworkExecutor:
         Returns:
             The UUID of the compute framework.
         """
-        # get function_extender
-        function_extender = self.cfw_register.get_function_extender()
+        # Prefer the constructor-supplied extender; only round-trip through the register if none was given.
+        function_extender = (
+            self.function_extender if self.function_extender is not None else self.cfw_register.get_function_extender()
+        )
 
         # init framework
         new_cfw = cf_class(

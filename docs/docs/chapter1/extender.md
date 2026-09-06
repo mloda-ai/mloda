@@ -129,6 +129,6 @@ To list all available extenders and their documentation, use the `get_extender_d
 
 #### 7. Extender identity under `ParallelizationMode.MULTIPROCESSING`
 
-Under `ParallelizationMode.MULTIPROCESSING`, every ComputeFramework the parent process constructs shares the caller's original `function_extender` objects, not copies: identity and mutable state on an extender are visible across every framework built in the parent. An extender is pickled into a copy only when the framework it belongs to is dispatched into a spawned worker process.
+Under `ParallelizationMode.MULTIPROCESSING`, every ComputeFramework the parent process constructs shares the caller's original `function_extender` objects, not copies: identity and mutable state on an extender are visible across every framework built in the parent. This applies to a framework whose own resolved `parallelization_mode` is not `MULTIPROCESSING`, i.e. one that stays resident in the parent process, which can happen even inside an overall MULTIPROCESSING-enabled run (e.g. a compute framework that only supports `SYNC`). A framework that itself resolves to `MULTIPROCESSING` always gets its own independent, isolated copy from the register, exactly as before this identity-sharing existed, since it is dispatched into a spawned worker regardless and never benefited from sharing identity in the first place.
 
 An extender holding a runtime handle pickle can't round-trip (a client, tracer, connection, lock) must rebuild it lazily, e.g. inside `__call__` or `__setstate__`, instead of setting it eagerly in `__init__`.

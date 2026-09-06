@@ -249,6 +249,37 @@ class TestInitComputeFrameworkWithDirectFunctionExtender:
             ParallelizationMode.SYNC, frozenset(), test_uuid, function_extender=function_extender_from_register
         )
 
+    def test_init_compute_framework_ignores_direct_extender_when_multiprocessing_resolved(self) -> None:
+        """A framework resolving to MULTIPROCESSING is dispatched to a spawned worker and must
+        get its own isolated extender copy from the register, not the caller's shared object,
+        so a later in-parent mutation of the shared object can never poison it for pickling."""
+        cfw_register = Mock(spec=CfwManager)
+        worker_manager = Mock(spec=WorkerManager)
+        extender = Mock(spec=Extender)
+        provided_function_extender: set[Extender] = {extender}
+        executor = ComputeFrameworkExecutor(cfw_register, worker_manager, function_extender=provided_function_extender)
+
+        mock_cfw_class = Mock()
+        mock_cfw_instance = Mock(spec=ComputeFramework)
+        mock_cfw_class.return_value = mock_cfw_instance
+        mock_cfw_class.get_class_name.return_value = "TestCFW"
+
+        test_uuid = uuid4()
+        mock_cfw_instance.get_uuid.return_value = test_uuid
+        function_extender_from_register = Mock()
+        cfw_register.get_function_extender.return_value = function_extender_from_register
+        cfw_register.get_run_context.return_value = RunContext()
+
+        executor.init_compute_framework(mock_cfw_class, ParallelizationMode.MULTIPROCESSING, set(), test_uuid)
+
+        cfw_register.get_function_extender.assert_called_once()
+        mock_cfw_class.assert_called_once_with(
+            ParallelizationMode.MULTIPROCESSING,
+            frozenset(),
+            test_uuid,
+            function_extender=function_extender_from_register,
+        )
+
 
 class TestComputeFrameworkExecutorCfwLock:
     def test_has_cfw_lock_attribute_after_construction(self) -> None:

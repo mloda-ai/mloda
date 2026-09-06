@@ -28,6 +28,7 @@ from mloda.core.abstract_plugins.components.error_utils import MlodaRunError, in
 from mloda.core.abstract_plugins.feature_group import format_feature_group_class
 from mloda.core.runtime.validate_multiprocessing_link import (
     raise_on_unpicklable_child_bootstrap,
+    raise_on_unpicklable_extender,
     raise_on_unpicklable_join_link,
     raise_on_unpicklable_step_feature_group,
 )
@@ -102,6 +103,7 @@ class ExecutionOrchestrator:
 
         self.cfw_register: CfwManager
         self.manager: Any = None
+        self.function_extender: Optional[set[Extender]] = None
 
         # multiprocessing - delegate to WorkerManager
         self.location: Optional[str] = None
@@ -144,7 +146,10 @@ class ExecutionOrchestrator:
             )
 
         self.executor = ComputeFrameworkExecutor(
-            self.cfw_register, self.worker_manager, tfs_connection_map=self.tfs_connection_map
+            self.cfw_register,
+            self.worker_manager,
+            tfs_connection_map=self.tfs_connection_map,
+            function_extender=self.function_extender,
         )
         self._register_modes = self.cfw_register.get_parallelization_modes()
 
@@ -429,6 +434,7 @@ class ExecutionOrchestrator:
         Enters the context of the ExecutionOrchestrator.
         """
         run_context = run_context if run_context is not None else RunContext()
+        self.function_extender = function_extender
 
         if ParallelizationMode.MULTIPROCESSING not in parallelization_modes:
             self.cfw_register = CfwManager(parallelization_modes, function_extender)
@@ -437,6 +443,7 @@ class ExecutionOrchestrator:
             raise_on_unpicklable_join_link(self.execution_planner)
             raise_on_unpicklable_step_feature_group(self.execution_planner)
             raise_on_unpicklable_child_bootstrap(run_context.child_bootstrap)
+            raise_on_unpicklable_extender(function_extender)
 
             MyManager.register("CfwManager", CfwManager)
             self.manager = MyManager(ctx=mp_spawn_context()).__enter__()

@@ -10,6 +10,7 @@ from collections.abc import Callable, Iterable
 from typing import Any, Optional
 
 from mloda.core.abstract_plugins.components.parallelization_modes import ParallelizationMode
+from mloda.core.abstract_plugins.function_extender import Extender
 from mloda.core.core.step.feature_group_step import FeatureGroupStep
 from mloda.core.core.step.join_step import JoinStep
 from mloda.core.core.step.transform_frame_work_step import TransformFrameworkStep
@@ -133,3 +134,23 @@ def raise_on_unpicklable_child_bootstrap(child_bootstrap: Optional[Callable[[], 
         return
 
     raise ValueError(_unpicklable_child_bootstrap_error(child_bootstrap))
+
+
+def _unpicklable_extender_error(extender: Extender) -> str:
+    return (
+        f"Extender {extender!r} cannot be pickled for multiprocessing, so mloda cannot send it to a spawned "
+        "worker process. This happens when an extender instance holds unpicklable state (e.g. a "
+        "threading.Lock, an open connection, or a client handle) set eagerly in __init__.\n"
+        "Resolution: rebuild such state lazily (e.g. inside __call__ or __setstate__) instead of storing it "
+        "eagerly in __init__, or run without ParallelizationMode.MULTIPROCESSING."
+    )
+
+
+def raise_on_unpicklable_extender(function_extender: Optional[set[Extender]]) -> None:
+    """Raise ValueError if function_extender is not None/empty and any extender in it cannot be pickled."""
+    if not function_extender:
+        return
+
+    for extender in function_extender:
+        if not _is_picklable(extender):
+            raise ValueError(_unpicklable_extender_error(extender))

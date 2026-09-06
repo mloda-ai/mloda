@@ -77,9 +77,12 @@ class TestStreamRunEarlyExitRunnerAssignment:
         assert isinstance(artifacts, dict)
 
     def test_get_artifacts_does_not_raise_after_break_from_stream_all(self) -> None:
-        """Breaking out of stream_all() must not prevent get_artifacts() from working.
+        """Breaking out of stream_all() must not raise when the stream is closed afterward.
 
-        stream_all() wraps stream_run() via ResultStream, so the fix applies here too.
+        ResultStream does not expose the underlying session, so get_artifacts() cannot be
+        reached through this API. This instead verifies the concrete guarantee stream_all
+        depends on: closing the stream after an early break must drive the generator's
+        ``finally`` teardown (``_exit_runner_context``) without raising.
         """
         stream = mlodaAPI.stream_all(
             Features(
@@ -95,10 +98,7 @@ class TestStreamRunEarlyExitRunnerAssignment:
         for _result in stream:
             break  # exit after one item
 
-        # The underlying session is not exposed by ResultStream, so we verify
-        # indirectly that the generator's finally block ran without error
-        # (i.e. no exception was raised by early exit teardown).
-        # The primary assertion is that breaking does NOT raise an unhandled exception.
+        stream.close()  # drives the generator's finally teardown; must not raise
 
     def test_runner_set_before_first_yield(self) -> None:
         """session.runner must be set even before the generator produces its first value.
@@ -112,7 +112,7 @@ class TestStreamRunEarlyExitRunnerAssignment:
         # After next() returns, self.runner must already be set.
         _first = next(gen)
 
-        # runner is set — we don't need to exhaust the generator
+        # runner is set (no need to exhaust the generator)
         assert session.runner is not None
 
         # Clean up the generator properly

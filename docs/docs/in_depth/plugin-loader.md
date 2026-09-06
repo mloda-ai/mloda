@@ -113,6 +113,8 @@ my-pkg = "my_pkg.optional_deps:OPTIONAL_DEPENDENCIES"
 OPTIONAL_DEPENDENCIES = ("some_optional_lib",)
 ```
 
+The declaration is scoped to the distribution that published it (matched by the installed package, not the entry-point name), so two unrelated packages reusing the same entry-point label never collide.
+
 ### Loading
 
 Discovery is lazy: installing a package does nothing by itself. Manifests are imported and registered only when `load_entry_points()` runs, either directly or as the final step of `PluginLoader.all()`. Discovered classes register into the default registry with provenance `source="entry_point"` (see [Plugin Registry](plugin_registry.md)).

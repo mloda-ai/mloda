@@ -199,7 +199,7 @@ class TestInitComputeFrameworkWithDirectFunctionExtender:
 
         executor = ComputeFrameworkExecutor(cfw_register, worker_manager, function_extender={extender})
 
-        assert executor is not None
+        assert executor.function_extender == {extender}
 
     def test_init_compute_framework_uses_the_provided_function_extender_directly(self) -> None:
         cfw_register = Mock(spec=CfwManager)

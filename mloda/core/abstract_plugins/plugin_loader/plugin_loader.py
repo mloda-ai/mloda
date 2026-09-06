@@ -175,7 +175,10 @@ class PluginLoader:
                     optional_roots = declared_optional.get((dist_name, entry_point.name), OPTIONAL_PLUGIN_DEPENDENCIES)
                     if root in optional_roots:
                         logger.warning(
-                            "Skipping entry point %s: missing optional dependency %s", entry_point.name, e.name
+                            "Skipping entry point %s (%s): missing optional dependency %s",
+                            entry_point.name,
+                            entry_point.value,
+                            e.name,
                         )
                         continue
                     raise

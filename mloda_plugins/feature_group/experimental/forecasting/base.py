@@ -406,11 +406,10 @@ class ForecastingFeatureGroup(TimeReferenceMixin, FeatureChainParserMixin, Featu
         Raises:
             ValueError: If parameters cannot be extracted
         """
-        source_features = cls._extract_source_features(feature)
         algorithm, horizon, time_unit = cls._extract_forecast_params(feature)
         if algorithm is None or horizon is None or time_unit is None:
             raise ValueError(f"Could not extract forecasting parameters from: {feature.name}")
-        return algorithm, horizon, time_unit, source_features[0]
+        return algorithm, horizon, time_unit, cls._extract_single_source_feature(feature)
 
     @classmethod
     def _has_valid_forecast_suffix(cls, feature_name: str) -> bool:

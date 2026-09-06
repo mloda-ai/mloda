@@ -95,6 +95,24 @@ class CustomerChurnFeatureGroup(FeatureGroup):
 FEATURE_GROUPS = [CustomerChurnFeatureGroup]
 ```
 
+### Declaring Optional Dependencies
+
+A package can name its own optional import roots per entry point via a companion `mloda.optional_dependencies` entry, whose name matches the entry it protects:
+
+```toml
+[project.entry-points."mloda.feature_groups"]
+my-pkg = "my_pkg.manifest:FEATURE_GROUPS"
+
+[project.entry-points."mloda.optional_dependencies"]
+my-pkg = "my_pkg.optional_deps:OPTIONAL_DEPENDENCIES"
+```
+
+```py
+# my_pkg/optional_deps.py
+# Must always be safely importable on its own.
+OPTIONAL_DEPENDENCIES = ("some_optional_lib",)
+```
+
 ### Loading
 
 Discovery is lazy: installing a package does nothing by itself. Manifests are imported and registered only when `load_entry_points()` runs, either directly or as the final step of `PluginLoader.all()`. Discovered classes register into the default registry with provenance `source="entry_point"` (see [Plugin Registry](plugin_registry.md)).
@@ -117,5 +135,6 @@ fg_keys = loader.load_entry_points(group="mloda.feature_groups")
 - **Validation is loud, by design.** A malformed entry point fails discovery with an error instead of being skipped: a manifest that is not a list or tuple of plugin classes, or that contains classes of the wrong base type for its group, raises `TypeError` naming the entry point.
 - **Abstract classes are skipped** silently; manifests may list a shared abstract base alongside its concrete subclasses.
 - **Collisions raise.** If a different class already holds a manifest class's `module:qualname` key, loading raises `PluginRegistryCollisionError`. Loading the same manifests twice is idempotent.
-- **Missing optional dependencies skip.** If importing a manifest fails on a module listed in `OPTIONAL_PLUGIN_DEPENDENCIES` (pandas, polars, duckdb, ...), only that entry point is skipped; any other `ModuleNotFoundError` is re-raised.
+- **Missing optional dependencies skip.** `ImportError` (which also covers `ModuleNotFoundError`) around an entry point's `.load()` is caught. Its root module is checked against that entry point's `mloda.optional_dependencies` declaration if one exists, else against the global `OPTIONAL_PLUGIN_DEPENDENCIES` (pandas, polars, duckdb, ...). A match skips only that entry point and logs at WARNING naming the entry point and the missing module; otherwise the error re-raises.
+- **Own-package failures always raise.** If the missing root equals the entry point's own module root, it re-raises regardless of any optional-dependency declaration: that means the plugin's own package is broken, not that a third-party dependency is absent.
 - **Policies apply, after import.** A registration denied by an installed [plugin policy](plugin_registry.md#governance) raises inside `register()`; the loader catches the denial, skips the class, leaves its key out of the returned list, and logs one warning per denied key per registry instance. The policy gates registration only, not import: the manifest module is imported before the policy applies, so installing a package implies trusting its import side effects.

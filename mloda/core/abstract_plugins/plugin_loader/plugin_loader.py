@@ -53,6 +53,10 @@ ENTRY_POINT_GROUPS: dict[str, type[Any]] = {
     "mloda.extenders": Extender,
 }
 
+# Companion group: an entry here, named after the entry point it protects, declares that
+# entry point's own optional import roots, overriding the OPTIONAL_PLUGIN_DEPENDENCIES fallback.
+OPTIONAL_DEPENDENCY_ENTRY_POINT_GROUP: str = "mloda.optional_dependencies"
+
 # Plugin classes defined in mloda.core, not under the scanned mloda_plugins package. The loader
 # registers them explicitly so they are first-class registry entries like every bundled plugin.
 CORE_PLUGIN_MODULES: tuple[str, ...] = ("mloda.core.abstract_plugins.components.input_data.api.api_input_data_feature",)
@@ -155,22 +159,41 @@ class PluginLoader:
             valid = ", ".join(ENTRY_POINT_GROUPS)
             raise ValueError(f"Unknown entry-point group '{group}'. Valid groups are: {valid}.")
         groups = [group] if group is not None else list(ENTRY_POINT_GROUPS)
+        declared_optional = self._load_declared_optional_dependencies()
         keys: list[str] = []
         for group_name in groups:
             base_type = ENTRY_POINT_GROUPS[group_name]
             for entry_point in importlib.metadata.entry_points(group=group_name):
                 try:
                     manifest = entry_point.load()
-                except ModuleNotFoundError as e:
+                except ImportError as e:
                     root = e.name.split(".")[0] if e.name else None
-                    if root in OPTIONAL_PLUGIN_DEPENDENCIES:
-                        logger.debug(
+                    own_root = entry_point.module.split(".")[0]
+                    if root == own_root:
+                        raise
+                    optional_roots = declared_optional.get(entry_point.name, OPTIONAL_PLUGIN_DEPENDENCIES)
+                    if root in optional_roots:
+                        logger.warning(
                             "Skipping entry point %s: missing optional dependency %s", entry_point.name, e.name
                         )
                         continue
                     raise
                 keys.extend(self._register_manifest(entry_point.name, group_name, base_type, manifest))
         return sorted(set(keys))
+
+    def _load_declared_optional_dependencies(self) -> dict[str, frozenset[str]]:
+        """Load per-entry-point optional-root declarations from OPTIONAL_DEPENDENCY_ENTRY_POINT_GROUP.
+
+        A broken marker (fails to import) is skipped rather than propagated.
+        """
+        declared: dict[str, frozenset[str]] = {}
+        for entry_point in importlib.metadata.entry_points(group=OPTIONAL_DEPENDENCY_ENTRY_POINT_GROUP):
+            try:
+                roots = entry_point.load()
+            except ImportError:
+                continue
+            declared[entry_point.name] = frozenset(roots)
+        return declared
 
     def _register_manifest(self, label: str, group_name: str, base_type: type[Any], manifest: Any) -> list[str]:
         """Validate a manifest sequence and register its concrete classes."""

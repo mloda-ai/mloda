@@ -153,6 +153,26 @@ class TestWorkerManagerProcessCreation:
 
         mock_process.start.assert_called_once()
 
+    def test_create_worker_process_passes_daemon_true(self) -> None:
+        """Worker processes must be daemonic so they are reaped if the parent interpreter exits."""
+        manager = WorkerManager()
+        cfw_uuid = uuid4()
+        target_func = Mock()
+        args = ("arg1", "arg2")
+
+        mock_process = Mock()
+        mock_ctx = Mock()
+        mock_ctx.Process.return_value = mock_process
+        mock_ctx.Queue.return_value = Mock()
+
+        with patch(
+            "mloda.core.runtime.worker_manager.mp_spawn_context",
+            return_value=mock_ctx,
+        ):
+            manager.create_worker_process(cfw_uuid, target_func, args)
+
+        assert mock_ctx.Process.call_args.kwargs.get("daemon") is True
+
 
 class TestWorkerManagerProcessRetrieval:
     """Test retrieving existing process information."""

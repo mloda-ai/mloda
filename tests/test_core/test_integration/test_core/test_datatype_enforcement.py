@@ -347,6 +347,7 @@ class TestEndToEndIntegration:
         run_result = MlodaTestRunner.run_api(features, parallelization_modes=modes, flight_server=flight_server)
 
         assert len(run_result.results) == 1
+        assert run_result.runner is not None
         result = run_result.results[0]
         assert "TypedFeatureSource" in result.column_names
         assert result.to_pydict()["TypedFeatureSource"] == [25, 30, 35]

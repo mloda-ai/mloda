@@ -122,7 +122,10 @@ class MlodaTestRunner:
         if cleanup_flight_server:
             MlodaTestRunner.assert_flight_server_clean(parallelization_modes, flight_server)
 
-        return RunResult(results=results, artifacts=artifacts)
+        return RunResult(results=results,
+                        artifacts=artifacts,
+                        runner=api.runner,
+                    )
 
     @staticmethod
     def run_api_simple(

@@ -97,6 +97,18 @@ class JoinSpec:
         return hash((self.feature_group, self.index))
 
 
+def _freeze_discriminator(discriminator: Optional[dict[str, Any]]) -> Optional[tuple[tuple[str, Any], ...]]:
+    """Return a hashable, order-independent representation of a discriminator dict.
+
+    Discriminators are optional ``{key: value}`` dicts; dicts are unhashable, so this
+    normalizes them (sorted by key) into a tuple that can participate in ``__hash__``
+    while comparing equal regardless of insertion order.
+    """
+    if discriminator is None:
+        return None
+    return tuple(sorted(discriminator.items()))
+
+
 def _get_index_from_feature_group(
     feature_group: type[Any],
     index_position: int,
@@ -599,6 +611,8 @@ class Link:
             and self.left_index == other.left_index
             and self.right_index == other.right_index
             and self.asof_config == other.asof_config
+            and self.left_discriminator == other.left_discriminator
+            and self.right_discriminator == other.right_discriminator
         )
 
     def __hash__(self) -> int:
@@ -610,5 +624,7 @@ class Link:
                 self.left_index,
                 self.right_index,
                 self.asof_config,
+                _freeze_discriminator(self.left_discriminator),
+                _freeze_discriminator(self.right_discriminator),
             )
         )

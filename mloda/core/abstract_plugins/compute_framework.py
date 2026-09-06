@@ -630,8 +630,21 @@ class ComputeFramework(ABC):
             if extender is None:
                 return method(self.data, features)
             context = self._build_hook_context(hook, feature_group, features)
+
+            def _output_schema_reader(_: Any) -> OutputSchema | None:
+                # VALIDATE_OUTPUT_FEATURE's return value carries no schema; self.data is already
+                # the finalized, native shape by the time this hook fires (see _build_hook_context's rows_in).
+                if hook is ExtenderHook.VALIDATE_OUTPUT_FEATURE:
+                    return self._output_schema(self.data)
+                return None
+
             with context.activate():
-                return _invoke_extender(extender, instrument(context, method, row_count=_no_rows), self.data, features)
+                return _invoke_extender(
+                    extender,
+                    instrument(context, method, row_count=_no_rows, output_schema=_output_schema_reader),
+                    self.data,
+                    features,
+                )
 
         fetch_extender = self.get_function_extender(ExtenderHook.INPUT_DATA_LOAD)
         if extender is None and fetch_extender is None:

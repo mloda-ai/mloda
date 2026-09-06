@@ -233,7 +233,8 @@ class TestDtypeFailureDegradesColumnToNone:
 
 
 class TestValidateHooksLeaveOutputSchemaNone:
-    def test_validate_output_feature_leaves_output_schema_none(self) -> None:
+    def test_validate_output_feature_output_schema_reflects_native_data(self) -> None:
+        """VALIDATE_OUTPUT_FEATURE reads self.data (the finalized native shape) for output_schema, mirroring rows_in."""
         feature_set = _build_feature_set()
         extender = _HookCapturingExtender(ExtenderHook.VALIDATE_OUTPUT_FEATURE)
         cfw = _build_framework({extender})
@@ -244,7 +245,7 @@ class TestValidateHooksLeaveOutputSchemaNone:
 
         captured = extender.captured
         assert captured is not None
-        assert captured.output_schema is None
+        assert captured.output_schema == (("col", "int"),)
 
     def test_validate_input_feature_leaves_output_schema_none(self) -> None:
         feature_set = _build_feature_set()
@@ -316,6 +317,32 @@ class TestPandasOutputSchema:
         assert captured is not None
         assert captured.output_schema == (("a", "int"),)
         assert captured.status == "success"
+
+
+@pytest.mark.skipif(pd is None, reason="Pandas is not installed. Skipping this test.")
+class TestOutputSchemaCalculateVsValidateOutput:
+    """FEATURE_GROUP_CALCULATE_FEATURE sees the raw FG return value's schema,
+    VALIDATE_OUTPUT_FEATURE sees the finalized native-shape schema after transform/filter."""
+
+    def test_calculate_and_validate_output_hooks_see_different_schemas(self) -> None:
+        feature_set = _build_feature_set()
+        calculate_extender = _HookCapturingExtender(ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE)
+        validate_output_extender = _HookCapturingExtender(ExtenderHook.VALIDATE_OUTPUT_FEATURE)
+        cfw = PandasDataFrame(
+            mode=ParallelizationMode.SYNC,
+            children_if_root=frozenset(),
+            function_extender={calculate_extender, validate_output_extender},
+        )
+
+        cfw.run_calculation(_PandasOutputSchemaFeatureGroup, feature_set, location=None)
+
+        calculate_captured = calculate_extender.captured
+        assert calculate_captured is not None
+        assert calculate_captured.output_schema == (("a", "int"),)
+
+        validate_output_captured = validate_output_extender.captured
+        assert validate_output_captured is not None
+        assert validate_output_captured.output_schema == (("a", "int64"),)
 
 
 @pytest.mark.skipif(pa is None, reason="PyArrow is not installed. Skipping this test.")

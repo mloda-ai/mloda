@@ -7,7 +7,6 @@ from mloda_plugins.compute_framework.base_implementations.sql.sql_type_semantics
 try:
     from pyiceberg.table import Table as IcebergTable
     from pyiceberg.expressions import (
-        GreaterThan,
         LessThan,
         GreaterThanOrEqual,
         LessThanOrEqual,
@@ -17,7 +16,6 @@ try:
     )
 except ImportError:
     IcebergTable: Optional[type[Any]] = None  # type: ignore[no-redef]
-    GreaterThan: Optional[type[Any]] = None  # type: ignore[no-redef]
     LessThan: Optional[type[Any]] = None  # type: ignore[no-redef]
     GreaterThanOrEqual: Optional[type[Any]] = None  # type: ignore[no-redef]
     LessThanOrEqual: Optional[type[Any]] = None  # type: ignore[no-redef]
@@ -96,9 +94,7 @@ class IcebergFilterEngine(BaseFilterEngine):
     @classmethod
     def _build_iceberg_expression(cls, filter_feature: SingleFilter) -> Any:
         """Build an Iceberg filter expression from a SingleFilter."""
-        if any(
-            expr is None for expr in [EqualTo, GreaterThan, LessThan, GreaterThanOrEqual, LessThanOrEqual, Reference]
-        ):
+        if any(expr is None for expr in [EqualTo, And, LessThan, GreaterThanOrEqual, LessThanOrEqual, Reference]):
             return None
 
         column_name = str(filter_feature.filter_feature.name)
@@ -106,48 +102,51 @@ class IcebergFilterEngine(BaseFilterEngine):
 
         if filter_type == "equal":
             value = cls._extract_parameter_value(filter_feature, "value")
-            return EqualTo(Reference(column_name), value) if value is not None else None
+            if value is None:
+                raise ValueError(f"Filter parameter 'value' not found in {filter_feature.parameter}")
+            return EqualTo(Reference(column_name), value)
 
         elif filter_type == "min":
             value = cls._extract_parameter_value(filter_feature, "value")
-            return GreaterThanOrEqual(Reference(column_name), value) if value is not None else None
+            if value is None:
+                raise ValueError(f"Filter parameter 'value' not found in {filter_feature.parameter}")
+            return GreaterThanOrEqual(Reference(column_name), value)
 
         elif filter_type == "max":
-            # Handle both simple and complex max parameters
-            if cls._has_parameter(filter_feature, "max"):
-                _, max_param, is_max_exclusive = cls.get_min_max_operator(filter_feature)
-                if max_param is not None:
-                    if is_max_exclusive:
-                        return LessThan(Reference(column_name), max_param)
-                    return LessThanOrEqual(Reference(column_name), max_param)
-            else:
+            has_max = cls._has_parameter(filter_feature, "max")
+            has_value = cls._extract_parameter_value(filter_feature, "value") is not None
+
+            if has_max:
+                min_param, max_param, is_max_exclusive = cls.get_min_max_operator(filter_feature)
+                if min_param is not None:
+                    raise ValueError(
+                        f"Filter parameter {filter_feature.parameter} not supported as max filter: "
+                        f"{filter_feature.name}"
+                    )
+                if is_max_exclusive is True:
+                    return LessThan(Reference(column_name), max_param)
+                return LessThanOrEqual(Reference(column_name), max_param)
+            elif has_value:
                 value = cls._extract_parameter_value(filter_feature, "value")
-                return LessThanOrEqual(Reference(column_name), value) if value is not None else None
+                return LessThanOrEqual(Reference(column_name), value)
+            else:
+                raise ValueError(f"No valid filter parameter found in {filter_feature.parameter}")
 
         elif filter_type == "range":
             min_param, max_param, is_max_exclusive = cls.get_min_max_operator(filter_feature)
-            expressions: list[Any] = []
+            if min_param is None or max_param is None:
+                raise ValueError(f"Filter parameter {filter_feature.parameter} not supported")
 
-            if min_param is not None:
-                expressions.append(GreaterThanOrEqual(Reference(column_name), min_param))
-
-            if max_param is not None:
-                if is_max_exclusive:
-                    expressions.append(LessThan(Reference(column_name), max_param))
-                else:
-                    expressions.append(LessThanOrEqual(Reference(column_name), max_param))
-
-            if len(expressions) == 1:
-                return expressions[0]
-            elif len(expressions) == 2 and And is not None:
-                return And(expressions[0], expressions[1])
-
-            return None
+            expr_min = GreaterThanOrEqual(Reference(column_name), min_param)
+            expr_max: Any
+            if is_max_exclusive is True:
+                expr_max = LessThan(Reference(column_name), max_param)
+            else:
+                expr_max = LessThanOrEqual(Reference(column_name), max_param)
+            return And(expr_min, expr_max)
 
         else:
             raise NotImplementedError(f"Unsupported Iceberg filter type: {filter_type!r}")
-
-        return None
 
     @classmethod
     def _extract_parameter_value(cls, filter_feature: SingleFilter, param_name: str) -> Any:

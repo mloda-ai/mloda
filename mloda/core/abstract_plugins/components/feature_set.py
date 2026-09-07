@@ -66,11 +66,14 @@ class FeatureSet:
                         raise ValueError(
                             f"Artifact '{feature_name}' is already stored in Options.group from a previous "
                             "save; supply it either via Options at prepare time or via run(artifacts=...), "
-                            "not both."
+                            f"not both (feature set anchored on '{self.get_name_of_one_feature()}')."
                         )
 
                 # Write to context (never group, to avoid mutating any Feature's hash) on every
                 # distinct Options instance, since get_singular_option_from_options may read any of them.
+                # A raw dict write, not add_to_context(): its value-equality check crashes on
+                # non-boolean-comparable artifacts (e.g. numpy arrays) and would block re-resolving
+                # a different artifact across repeated run() calls.
                 for options in distinct_options:
                     options.context[feature_name] = runtime_artifacts[feature_name]
 

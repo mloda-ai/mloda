@@ -44,7 +44,7 @@ class RunResult:
 
     results: list[Any] = field(default_factory=list)
     artifacts: dict[str, Any] = field(default_factory=dict)
-    runner: Optional[ExecutionOrchestrator] = None
+    runner: Optional[ExecutionOrchestrator] = None  # already torn down; only get_result()/get_artifacts() are safe
 
 
 class MlodaTestRunner:
@@ -96,7 +96,7 @@ class MlodaTestRunner:
             strict_type_enforcement: If True, enforce strict type matching for typed features
 
         Returns:
-            RunResult containing results, artifacts, and optionally the runner
+            RunResult containing results, artifacts, and the runner
         """
         if compute_frameworks is None:
             compute_frameworks = {PyArrowTable}

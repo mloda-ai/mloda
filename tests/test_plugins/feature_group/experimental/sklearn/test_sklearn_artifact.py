@@ -15,6 +15,35 @@ from mloda.user import Options
 class TestSklearnArtifact:
     """Test cases for SklearnArtifact."""
 
+    def test_empty_string_artifact_to_save_proceeds(self) -> None:
+        """artifact_to_save="" must not be silently treated as unset."""
+        features = FeatureSet()
+        features.artifact_to_save = ""
+        SklearnArtifact.save_sklearn_artifact(features, "my_key", {"data": 1})
+        assert features.save_artifact == {"my_key": {"data": 1}}
+
+    def test_none_artifact_to_save_skips(self) -> None:
+        """artifact_to_save=None still skips (no change in behaviour)."""
+        features = FeatureSet()
+        assert features.artifact_to_save is None
+        SklearnArtifact.save_sklearn_artifact(features, "my_key", {"data": 1})
+        assert features.save_artifact is None
+
+    def test_empty_string_artifact_to_load_attempts_load(self) -> None:
+        """artifact_to_load="" must enter the load branch, not silently return None."""
+        features = FeatureSet()
+        features.artifact_to_load = ""
+        with patch.object(SklearnArtifact, "custom_loader", return_value=None):
+            with pytest.raises(ValueError, match="Artifact not found"):
+                SklearnArtifact.load_sklearn_artifact(features, "my_key")
+
+    def test_none_artifact_to_load_returns_none(self) -> None:
+        """artifact_to_load=None still returns None (no change in behaviour)."""
+        features = FeatureSet()
+        assert features.artifact_to_load is None
+        result = SklearnArtifact.load_sklearn_artifact(features, "my_key")
+        assert result is None
+
     def test_serialize_deserialize_artifact(self) -> None:
         """Test serialization and deserialization of sklearn artifacts."""
         # Skip test if sklearn/joblib not available

@@ -336,7 +336,7 @@ class ForecastingFeatureGroup(TimeReferenceMixin, FeatureChainParserMixin, Featu
 
             # Check if we have a trained model in the artifact
             model_artifact = None
-            if features.artifact_to_load:
+            if features.artifact_to_load is not None:
                 model_artifact = cls.load_artifact(features)
                 if model_artifact is None:
                     raise ValueError("No artifact to load although it was requested.")
@@ -358,7 +358,7 @@ class ForecastingFeatureGroup(TimeReferenceMixin, FeatureChainParserMixin, Featu
                 )
 
                 # Save the updated artifact if needed
-                if features.artifact_to_save and updated_artifact and not features.artifact_to_load:
+                if features.artifact_to_save is not None and updated_artifact and features.artifact_to_load is None:
                     features.save_artifact = updated_artifact
 
                 # Store the results for later addition (main forecast + confidence bounds)
@@ -378,7 +378,7 @@ class ForecastingFeatureGroup(TimeReferenceMixin, FeatureChainParserMixin, Featu
                 )
 
                 # Save the updated artifact if needed
-                if features.artifact_to_save and updated_artifact and not features.artifact_to_load:
+                if features.artifact_to_save is not None and updated_artifact and features.artifact_to_load is None:
                     features.save_artifact = updated_artifact
 
                 # Store the result for later addition

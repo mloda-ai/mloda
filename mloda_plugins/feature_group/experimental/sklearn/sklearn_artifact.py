@@ -254,7 +254,7 @@ class SklearnArtifact(BaseArtifact):
         Returns:
             The artifact data if found, None otherwise
         """
-        if features.artifact_to_load:
+        if features.artifact_to_load is not None:
             artifacts = cls.custom_loader(features)
             if artifacts and artifact_key in artifacts:
                 return artifacts[artifact_key]  # type: ignore
@@ -273,7 +273,7 @@ class SklearnArtifact(BaseArtifact):
             artifact_key: The unique key for this artifact
             artifact_data: The artifact data to save
         """
-        if features.artifact_to_save:
+        if features.artifact_to_save is not None:
             # Support multiple artifacts by using a dictionary
             if not isinstance(features.save_artifact, dict):
                 features.save_artifact = {}

@@ -1,7 +1,9 @@
+from __future__ import annotations
+
 import datetime
 import decimal
 from collections.abc import Sequence
-from typing import Any, Optional
+from typing import TYPE_CHECKING, Any, Optional
 from mloda.core.abstract_plugins.components.data_types import DataType
 from mloda.core.abstract_plugins.components.merge.base_merge_engine import BaseMergeEngine
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_merge_engine import (
@@ -10,7 +12,6 @@ from mloda_plugins.compute_framework.base_implementations.python_dict.python_dic
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.components.utils import safe_field
-from mloda.core.abstract_plugins.hook_context import OutputSchema
 from mloda.core.filter.filter_engine import BaseFilterEngine
 from mloda.core.abstract_plugins.components.mask.base_mask_engine import BaseMaskEngine
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_filter_engine import (
@@ -23,6 +24,9 @@ from mloda_plugins.compute_framework.base_implementations.python_dict.python_dic
     rows_to_columnar,
     validate_columnar_dict,
 )
+
+if TYPE_CHECKING:
+    from mloda.core.abstract_plugins.hook_context import OutputSchema
 
 
 class PythonDictFramework(ComputeFramework):

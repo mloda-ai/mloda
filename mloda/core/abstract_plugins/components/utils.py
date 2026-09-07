@@ -51,30 +51,23 @@ def safe_exc_str(exc: BaseException) -> str:
         return type(exc).__name__
 
 
-# Keys already warned via warn_once_for. Weak-referenceable keys (the common case: a class) live in the
-# WeakSet, so a key is never pinned past its natural lifetime, consistent with
-# _class_source_hash_cache's rationale in base_feature_group_version.py; keys that cannot be weakly
-# referenced fall back to a plain set.
+# Weakly held so a warn_once_for key (typically a class) isn't pinned past its lifetime; non-weakly-referenceable
+# keys fall back to a plain set.
 _warn_once_for_weak: "weakref.WeakSet[Any]" = weakref.WeakSet()
 _warn_once_for_strong: set[object] = set()
 
 
 def _warn_once_for_seen(key: object) -> bool:
-    """True if `key` was already recorded by a prior warn_once_for call; otherwise records it and returns False.
-
-    Total: any failure probing or recording `key` (a plugin-owned __hash__/__eq__/weakref hook can raise)
-    degrades to "not seen", matching safe_exc_str/is_match_abort's never-break-the-safety-net idiom.
-    """
+    """True if `key` was already seen, else records it. Never raises: a bad hash/weakref hook degrades to False."""
     try:
-        # type(key).__weakrefoffset__, not hasattr(key, "__weakref__"): the latter resolves through key's
-        # MRO when key is a class, testing instances-of-key, not key itself.
+        # __weakrefoffset__, not hasattr(key, "__weakref__"): the latter tests instances-of-key, not key itself.
         registry: "weakref.WeakSet[Any] | set[object]" = (
             _warn_once_for_weak if getattr(type(key), "__weakrefoffset__", 0) else _warn_once_for_strong
         )
         if key in registry:
             return True
         registry.add(key)
-    except Exception:  # noqa: BLE001  (checking/recording the key is plugin-owned and must not escape)
+    except Exception:  # noqa: BLE001  (plugin-owned key, must not escape)
         return False
     return False
 

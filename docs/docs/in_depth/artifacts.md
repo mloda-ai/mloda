@@ -45,10 +45,10 @@ class BaseExampleArtifactFeature(FeatureGroup):
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
-        if features.artifact_to_save:
+        if features.artifact_to_save is not None:
             features.save_artifact = "BasicArtifact"
 
-        if features.artifact_to_load:
+        if features.artifact_to_load is not None:
             result = cls.load_artifact(features)
             print(f"{result} is the loaded artifact.")
 
@@ -154,7 +154,7 @@ class MySklearnFeatureGroup(FeatureGroup):
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
         # Save multiple artifacts with unique keys
-        if features.artifact_to_save:
+        if features.artifact_to_save is not None:
             SklearnArtifact.save_sklearn_artifact(
                 features, 
                 "my_transformer", 
@@ -162,7 +162,7 @@ class MySklearnFeatureGroup(FeatureGroup):
             )
         
         # Load specific artifact by key
-        if features.artifact_to_load:
+        if features.artifact_to_load is not None:
             artifact_data = SklearnArtifact.load_sklearn_artifact(features, "my_transformer")
             fitted_model = artifact_data["fitted_transformer"]
 ```

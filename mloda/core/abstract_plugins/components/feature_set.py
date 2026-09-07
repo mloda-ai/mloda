@@ -59,7 +59,19 @@ class FeatureSet:
             if feature_name in runtime_artifacts:
                 self.artifact_to_load = feature_name
                 self.artifact_to_save = None
-                self.options.set(feature_name, runtime_artifacts[feature_name])
+                # self.options is commonly the same object a member Feature's `.options`
+                # aliases (set by add() on first insert, or shared directly by the caller
+                # across multiple features). Options.set() defaults a brand-new key to
+                # `group`, but group is what Options.__hash__/__eq__ (and therefore
+                # Feature.__hash__) is based on -- writing the artifact there silently
+                # changes the hash of any Feature(s) still referencing this Options
+                # object, corrupting `self.features` set membership for any Feature
+                # already inserted (#1236). `context` is excluded from hashing and is
+                # still checked by Options.get()/__getitem__, so store it there instead;
+                # write directly (rather than via add_to_context(), which raises on a
+                # differing existing value) so re-resolving across repeated run() calls
+                # with a different artifact each time keeps working.
+                self.options.context[feature_name] = runtime_artifacts[feature_name]
                 return
 
         self.artifact_to_load = None

@@ -150,14 +150,21 @@ class DuckDBFramework(ComputeFramework):
         return None
 
     def _output_schema(self, data: Any) -> OutputSchema | None:
-        """Read columns/types once and zip them; never index into columns per name."""
+        """Read columns/types once and zip them; never index into columns per name.
+
+        Duplicate column names (e.g. an un-aliased join) collapse to one entry, first
+        occurrence wins.
+        """
         if isinstance(data, dict):
             return super()._output_schema(data)
         columns = data.columns
         if not columns:
             return None
         types = data.types
-        return tuple((name, str(dtype)) for name, dtype in sorted(zip(columns, types), key=lambda pair: pair[0]))
+        seen: dict[str, str] = {}
+        for name, dtype in zip(columns, types):
+            seen.setdefault(name, str(dtype))
+        return tuple((name, seen[name]) for name in sorted(seen, key=str))
 
     @classmethod
     def duckdb_relation(cls) -> Any:

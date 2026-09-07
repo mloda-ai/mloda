@@ -82,6 +82,11 @@ class TestPythonDictRowWiseOutputSchemaSinglePass:
         rows = [{"b": "x", "a": 1}, {"b": "y", "a": 2}]
         assert PythonDictFramework()._output_schema(rows) == (("a", "int"), ("b", "str"))
 
+    def test_non_string_keys_are_stringified(self) -> None:
+        """MINOR: the row-wise branch's final tuple emits (name, ...) instead of (str(name), ...),
+        so a non-str key (e.g. int 1) leaks through unstringified, unlike the base class."""
+        assert PythonDictFramework()._output_schema([{1: "x", "a": 2}]) == (("1", "str"), ("a", "int"))
+
 
 @pytest.mark.skipif(pa is None, reason="PyArrow is not installed. Skipping this test.")
 class TestPyArrowOutputSchema:
@@ -131,6 +136,29 @@ class TestBaseComputeFrameworkOutputSchemaRaises:
     def test_raises_not_implemented_error(self) -> None:
         with pytest.raises(NotImplementedError):
             ComputeFramework()._output_schema([1, 2])
+
+
+class _RaisingColumnADtypeFramework(ComputeFramework):
+    """Names come back fixed as {"a", "b"}; dtype extraction raises for "a" but works for "b"."""
+
+    def _extract_column_names(self, data: Any) -> set[str]:
+        return {"a", "b"}
+
+    def _extract_column_dtype(self, data: Any, column_name: str) -> str | None:
+        if column_name == "a":
+            raise RuntimeError("cannot read dtype for column 'a'")
+        return "int"
+
+
+class TestBaseComputeFrameworkGenericLoopDegradesColumnToNone:
+    """Coverage restoration: exercises ComputeFramework._output_schema's generic per-column
+    safe_field loop directly, independent of PythonDictFramework's own single-pass override.
+    This loop still runs for every framework that does not override _output_schema."""
+
+    def test_raising_extract_column_dtype_degrades_only_that_column(self) -> None:
+        fw = _RaisingColumnADtypeFramework()
+        # A non-dict-shaped sentinel so this hits the generic loop, not the dict shortcut.
+        assert fw._output_schema(object()) == (("a", None), ("b", "int"))
 
 
 class _ContextCapturingExtender(Extender):
@@ -245,12 +273,15 @@ class TestDtypeFailureDegradesColumnToNone:
         extender = _ContextCapturingExtender()
         cfw = _build_framework({extender})
 
-        cfw.run_calculate_feature(_RowWiseOutputSchemaFeatureGroup, feature_set)
+        result = cfw.run_calculate_feature(_RowWiseOutputSchemaFeatureGroup, feature_set)
 
         captured = extender.captured
         assert captured is not None
         assert captured.output_schema == (("a", None), ("b", "str"))
         assert captured.status == "success"
+        # dict.__eq__ does not invoke the overridden get/__getitem__, so this equality check is
+        # unaffected by the poisoned column and confirms the schema-read failure did not corrupt data.
+        assert result == [{"b": "x", "a": 1}, {"b": "y", "a": 2}]
 
 
 class TestValidateHooksOutputSchema:
@@ -311,6 +342,19 @@ class TestPolarsLazyOutputSchemaStaysLazy:
         assert call_count == 1
 
 
+@pytest.mark.skipif(pl is None, reason="Polars is not installed. Skipping this test.")
+class TestPolarsLazyDictInterchangeOutputSchema(DictInterchangeOutputSchemaTestMixin):
+    """Test PolarsLazyDataFrame._output_schema on the dict interchange shape using shared mixin.
+
+    BLOCKER: _output_schema calls data.collect_schema() unconditionally, with no isinstance(data, dict)
+    guard, but the dict interchange shape reaches this method before transform() normalizes it.
+    """
+
+    @pytest.fixture
+    def framework_instance(self) -> Any:
+        return PolarsLazyDataFrame()
+
+
 class _IndexForbiddenList(list[str]):
     """Stand-in for data.columns whose .index() raises, since the builtin list type itself
     cannot be monkeypatched."""
@@ -351,6 +395,38 @@ class TestDuckDBOutputSchemaStaysLazy:
 
         assert DuckDBFramework()._output_schema(relation) == (("a", "DOUBLE"), ("b", "BIGINT"), ("c", "VARCHAR"))
 
+    def test_output_schema_reads_columns_and_types_properties_once(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Stronger perf regression than test_output_schema_does_not_call_list_index: counts total
+        reads of columns/types instead of only forbidding .index(), catching any once-per-column read."""
+        conn = duckdb.connect()
+        arrow_table = pa.Table.from_pydict({"c": ["x"], "b": [1], "a": [1.5]})
+        relation = DuckdbRelation.from_arrow(conn, arrow_table)
+
+        original_get_columns = cast(property, DuckdbRelation.__dict__["columns"]).fget
+        original_get_types = cast(property, DuckdbRelation.__dict__["types"]).fget
+        assert original_get_columns is not None
+        assert original_get_types is not None
+
+        columns_read_count = 0
+        types_read_count = 0
+
+        def _counting_columns(self: Any) -> Any:
+            nonlocal columns_read_count
+            columns_read_count += 1
+            return original_get_columns(self)
+
+        def _counting_types(self: Any) -> Any:
+            nonlocal types_read_count
+            types_read_count += 1
+            return original_get_types(self)
+
+        monkeypatch.setattr(DuckdbRelation, "columns", property(_counting_columns))
+        monkeypatch.setattr(DuckdbRelation, "types", property(_counting_types))
+
+        assert DuckDBFramework()._output_schema(relation) == (("a", "DOUBLE"), ("b", "BIGINT"), ("c", "VARCHAR"))
+        assert columns_read_count == 1
+        assert types_read_count == 1
+
     def test_validate_output_feature_hook_does_not_call_dunder_len(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Regression at the hook-dispatch level: VALIDATE_OUTPUT_FEATURE must read output_schema
         without materializing the relation, not just when _output_schema is unit-tested directly."""
@@ -374,6 +450,22 @@ class TestDuckDBOutputSchemaStaysLazy:
         captured = extender.captured
         assert captured is not None
         assert captured.output_schema == (("a", "BIGINT"), ("b", "VARCHAR"))
+
+
+@pytest.mark.skipif(duckdb is None or pa is None, reason="DuckDB/PyArrow is not installed.")
+class TestDuckDBOutputSchemaDuplicateColumns:
+    """MAJOR: zip(data.columns, data.types) no longer dedupes duplicate column names the way the
+    old _extract_column_names = set(data.columns) path did; duplicates leak through as-is."""
+
+    def test_duplicate_column_names_collapse_to_one_entry(self) -> None:
+        conn = duckdb.connect()
+        relation = DuckdbRelation(conn, conn.sql("select 1 as a, 2 as b, 3 as a"))
+
+        result = DuckDBFramework()._output_schema(relation)
+
+        assert result is not None
+        a_entries = [pair for pair in result if pair[0] == "a"]
+        assert len(a_entries) == 1
 
 
 class _PandasOutputSchemaFeatureGroup(FeatureGroup):

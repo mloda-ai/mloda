@@ -126,6 +126,11 @@ class PythonDictFramework(ComputeFramework):
             return None
         return None
 
+    @staticmethod
+    def _row_dtypes(row: Any, names: tuple[str, ...]) -> dict[str, str]:
+        """Non-None dtypes for ``names`` read off a single row; a name absent from the result stays unresolved."""
+        return {name: type(value).__name__ for name in names if (value := row.get(name)) is not None}
+
     def _output_schema(self, data: Any) -> OutputSchema | None:
         """Row-wise list[dict] resolves every column's dtype in a single pass over rows;
         other shapes (columnar dict included) delegate to the base implementation."""
@@ -141,18 +146,31 @@ class PythonDictFramework(ComputeFramework):
         for row in data:
             if not unresolved:
                 break
-            for name in list(unresolved):
+            pending = tuple(unresolved)
 
-                def _read(row: Any = row, name: str = name) -> str | None:
-                    value = row.get(name)
-                    return None if value is None else type(value).__name__
+            def _read_row(row: Any = row, pending: tuple[str, ...] = pending) -> dict[str, str] | None:
+                return self._row_dtypes(row, pending)
 
-                dtype = safe_field(_read, None)
-                if dtype is not None:
-                    dtypes[name] = dtype
-                    unresolved.discard(name)
+            # One safe_field call per row (not per cell): a hostile column must not force a
+            # per-cell try/except for every column that would otherwise resolve cheaply.
+            resolved = safe_field(_read_row, None)
+            if resolved is None:
+                # The batch read raised; isolate the hostile column(s) so a single bad column
+                # does not also degrade this row's otherwise-readable columns.
+                resolved = {}
+                for name in pending:
 
-        return tuple((name, dtypes[name]) for name in sorted(names, key=str))
+                    def _read_cell(row: Any = row, name: str = name) -> dict[str, str] | None:
+                        return self._row_dtypes(row, (name,))
+
+                    cell_result = safe_field(_read_cell, None)
+                    if cell_result is not None:
+                        resolved.update(cell_result)
+            for name, dtype in resolved.items():
+                dtypes[name] = dtype
+                unresolved.discard(name)
+
+        return tuple((str(name), dtypes[name]) for name in sorted(names, key=str))
 
     @staticmethod
     def _validate_columnar_dict(data: dict[str, Any]) -> None:

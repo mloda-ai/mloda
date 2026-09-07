@@ -67,7 +67,13 @@ class PolarsLazyDataFrame(PolarsDataFrame):
         return PolarsDataFrame._polars_type_to_data_type(schema[column_name])
 
     def _output_schema(self, data: Any) -> OutputSchema | None:
-        """Read collect_schema() once and build the sorted (name, dtype) pairs from it directly."""
+        """Read collect_schema() once and build the sorted (name, dtype) pairs from it directly.
+
+        The dict interchange shape reaches this method before transform() normalizes it, so it
+        must be handled before collect_schema() is called.
+        """
+        if isinstance(data, dict):
+            return super()._output_schema(data)
         schema = data.collect_schema()
         if not schema:
             return None

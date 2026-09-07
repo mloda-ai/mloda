@@ -2,6 +2,7 @@ import logging
 from collections.abc import Sequence
 from typing import Any, Optional
 from mloda.core.abstract_plugins.components.data_types import DataType
+from mloda.core.abstract_plugins.hook_context import OutputSchema
 from mloda.provider import BaseMergeEngine
 from mloda_plugins.compute_framework.base_implementations.duckdb.duckdb_merge_engine import DuckDBMergeEngine
 from mloda.user import FeatureName, ParallelizationMode
@@ -147,6 +148,16 @@ class DuckDBFramework(ComputeFramework):
         if type_str.startswith("DECIMAL"):
             return DataType.DECIMAL
         return None
+
+    def _output_schema(self, data: Any) -> OutputSchema | None:
+        """Read columns/types once and zip them; never index into columns per name."""
+        if isinstance(data, dict):
+            return super()._output_schema(data)
+        columns = data.columns
+        if not columns:
+            return None
+        types = data.types
+        return tuple((name, str(dtype)) for name, dtype in sorted(zip(columns, types), key=lambda pair: pair[0]))
 
     @classmethod
     def duckdb_relation(cls) -> Any:

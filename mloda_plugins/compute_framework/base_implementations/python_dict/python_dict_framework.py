@@ -9,6 +9,8 @@ from mloda_plugins.compute_framework.base_implementations.python_dict.python_dic
 )
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
+from mloda.core.abstract_plugins.components.utils import safe_field
+from mloda.core.abstract_plugins.hook_context import OutputSchema
 from mloda.core.filter.filter_engine import BaseFilterEngine
 from mloda.core.abstract_plugins.components.mask.base_mask_engine import BaseMaskEngine
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_filter_engine import (
@@ -123,6 +125,34 @@ class PythonDictFramework(ComputeFramework):
                 return DataType.DECIMAL
             return None
         return None
+
+    def _output_schema(self, data: Any) -> OutputSchema | None:
+        """Row-wise list[dict] resolves every column's dtype in a single pass over rows;
+        other shapes (columnar dict included) delegate to the base implementation."""
+        if not (isinstance(data, list) and data and isinstance(data[0], dict)):
+            return super()._output_schema(data)
+
+        names = self._extract_column_names(data)
+        if not names:
+            return None
+
+        dtypes: dict[str, str | None] = dict.fromkeys(names)
+        unresolved = set(names)
+        for row in data:
+            if not unresolved:
+                break
+            for name in list(unresolved):
+
+                def _read(row: Any = row, name: str = name) -> str | None:
+                    value = row.get(name)
+                    return None if value is None else type(value).__name__
+
+                dtype = safe_field(_read, None)
+                if dtype is not None:
+                    dtypes[name] = dtype
+                    unresolved.discard(name)
+
+        return tuple((name, dtypes[name]) for name in sorted(names, key=str))
 
     @staticmethod
     def _validate_columnar_dict(data: dict[str, Any]) -> None:

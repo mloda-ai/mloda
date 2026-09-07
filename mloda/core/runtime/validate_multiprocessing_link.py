@@ -6,7 +6,7 @@ current process: a value resolvable here but not inside a freshly spawned worker
 
 import pickle  # nosec
 from collections.abc import Callable, Iterable
-from typing import Any, Optional
+from typing import Any
 
 from mloda.core.abstract_plugins.components.parallelization_modes import ParallelizationMode
 from mloda.core.abstract_plugins.function_extender import Extender
@@ -124,7 +124,7 @@ def _unpicklable_child_bootstrap_error(child_bootstrap: Callable[[], None]) -> s
     )
 
 
-def raise_on_unpicklable_child_bootstrap(child_bootstrap: Optional[Callable[[], None]]) -> None:
+def raise_on_unpicklable_child_bootstrap(child_bootstrap: Callable[[], None] | None) -> None:
     """Raise ValueError if child_bootstrap is not None and multiprocessing cannot pickle it."""
     if child_bootstrap is None:
         return
@@ -145,7 +145,7 @@ def _unpicklable_extender_error(extender: Extender) -> str:
     )
 
 
-def raise_on_unpicklable_extender(function_extender: Optional[set[Extender]]) -> None:
+def raise_on_unpicklable_extender(function_extender: set[Extender] | None) -> None:
     """Raise ValueError if function_extender is not None/empty and any extender in it cannot be pickled."""
     if not function_extender:
         return

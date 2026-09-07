@@ -4,7 +4,7 @@ runtime re-call. The dependent feature group's input_features() must run exactly
 mloda.run_all(...) call, not once during planning and again at runtime to populate HookContext.
 """
 
-from typing import Any, Optional
+from typing import Any
 
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook
@@ -39,14 +39,14 @@ class _CifDependentFeatureGroup(FeatureGroup):
         cls,
         feature_name: FeatureName | str,
         options: Options,
-        data_access_collection: Optional[DataAccessCollection] = None,
+        data_access_collection: DataAccessCollection | None = None,
     ) -> bool:
         # A name-only match, bypassing the default is_root()/input_features() matching probe:
         # this test counts input_features() calls, so resolution itself must not call it too.
         name = str(feature_name) if isinstance(feature_name, FeatureName) else feature_name
         return name == CIF_DEPENDENT_FEATURE
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Any]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Any] | None:
         type(self).input_features_calls += 1
         return {CIF_ROOT_FEATURE}
 

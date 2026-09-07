@@ -10,7 +10,7 @@ import gc
 from collections.abc import Callable
 from dataclasses import dataclass
 from functools import partial
-from typing import Any, Optional, TypeVar
+from typing import Any, TypeVar
 
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.abstract_plugins.components.feature import Feature
@@ -68,7 +68,7 @@ class SlottedFrameworkError845r(Exception):
     __slots__ = ()
 
 
-def _capture(call: Callable[[], T]) -> tuple[Optional[T], Optional[str]]:
+def _capture(call: Callable[[], T]) -> tuple[T | None, str | None]:
     """Run call, returning (value, None) or (None, 'Type: message'). No traceback is retained."""
     try:
         return call(), None
@@ -97,13 +97,13 @@ def _make_raising_fg(class_name: str, feature_name: str, exc_factory: Callable[[
             cls,
             name: FeatureName | str,
             options: Options,
-            data_access_collection: Optional[DataAccessCollection] = None,
+            data_access_collection: DataAccessCollection | None = None,
         ) -> bool:
             if str(name) != feature_name:
                 return False
             raise exc_factory()
 
-        def input_features(self, options: Options, feature_name_arg: FeatureName) -> Optional[set[Feature]]:
+        def input_features(self, options: Options, feature_name_arg: FeatureName) -> set[Feature] | None:
             return None
 
     MarkerProbeFG845r.__name__ = class_name
@@ -115,11 +115,11 @@ def _make_raising_fg(class_name: str, feature_name: str, exc_factory: Callable[[
 class _ContainmentSnapshot:
     """Plain-data readout of one seam evaluation. Holds no class and no exception object."""
 
-    escaped: Optional[str]
-    failure_kind: Optional[str]
+    escaped: str | None
+    failure_kind: str | None
     eliminated_names: tuple[str, ...]
-    stage: Optional[str]
-    reason: Optional[str]
+    stage: str | None
+    reason: str | None
 
 
 def _evaluate_raising_matcher(

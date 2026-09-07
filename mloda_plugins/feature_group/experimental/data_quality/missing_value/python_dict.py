@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import statistics
 from collections import Counter
-from typing import Any, Optional
+from typing import Any
 
 from mloda.provider import ComputeFramework
 
@@ -65,8 +65,8 @@ class PythonDictMissingValueFeatureGroup(MissingValueFeatureGroup):
         data: dict[str, list[Any]],
         imputation_method: str,
         in_features: list[str],
-        constant_value: Optional[Any] = None,
-        group_by_features: Optional[list[str]] = None,
+        constant_value: Any | None = None,
+        group_by_features: list[str] | None = None,
     ) -> list[Any]:
         """
         Perform the imputation using pure Python operations.
@@ -158,7 +158,7 @@ class PythonDictMissingValueFeatureGroup(MissingValueFeatureGroup):
         data: dict[str, list[Any]],
         imputation_method: str,
         in_features: str,  # Note: grouped imputation only supports single column
-        constant_value: Optional[Any],
+        constant_value: Any | None,
         group_by_features: list[str],
     ) -> list[Any]:
         """

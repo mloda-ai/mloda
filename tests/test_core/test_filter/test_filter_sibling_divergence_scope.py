@@ -8,7 +8,7 @@ import gc
 import logging
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, Optional
+from typing import Any
 
 import pytest
 
@@ -70,7 +70,7 @@ def _make_fg(capture: list[tuple[Feature, ...]], notes: list[tuple[str, ...]]) -
             cls,
             feature_name: FeatureName | str,
             options: Options,
-            data_access_collection: Optional[DataAccessCollection] = None,
+            data_access_collection: DataAccessCollection | None = None,
         ) -> bool:
             name = str(feature_name)
             if name == FSD_SHARED_FILTER:
@@ -109,7 +109,7 @@ def _make_rename_fg(capture: list[tuple[Feature, ...]], notes: list[tuple[str, .
             cls,
             feature_name: FeatureName | str,
             options: Options,
-            data_access_collection: Optional[DataAccessCollection] = None,
+            data_access_collection: DataAccessCollection | None = None,
         ) -> bool:
             return str(feature_name) in {FSD_RN_A, FSD_RN_B, FSD_RN_FILTER}
 
@@ -145,7 +145,7 @@ def _make_freshness_fg(modes: list[tuple[str, ...]]) -> type[FeatureGroup]:
             cls,
             feature_name: FeatureName | str,
             options: Options,
-            data_access_collection: Optional[DataAccessCollection] = None,
+            data_access_collection: DataAccessCollection | None = None,
         ) -> bool:
             return str(feature_name) in {FSD_FRESH_HOST, FSD_FRESH_FILTER}
 

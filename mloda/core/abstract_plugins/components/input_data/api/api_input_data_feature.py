@@ -1,4 +1,4 @@
-from typing import Any, Optional
+from typing import Any
 
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.abstract_plugins.components.feature_set import FeatureSet
@@ -128,7 +128,7 @@ class ApiInputDataFeature(FeatureGroup):
     """
 
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return ApiInputData()
 
     @classmethod

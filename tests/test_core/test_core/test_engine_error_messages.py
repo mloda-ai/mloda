@@ -4,7 +4,7 @@ These tests verify that error messages use human-readable formatting
 with class names and module paths instead of raw class representations.
 """
 
-from typing import Optional, cast
+from typing import cast
 from unittest.mock import patch
 
 import pytest
@@ -30,18 +30,18 @@ class NoIndexFeatureGroup(FeatureGroup):
         cls,
         feature_name: FeatureName | str,
         options: Options,
-        data_access_collection: Optional[DataAccessCollection] = None,
+        data_access_collection: DataAccessCollection | None = None,
     ) -> bool:
         if isinstance(feature_name, FeatureName):
             return "NoIndexTestFeature" in str(feature_name)
         return "NoIndexTestFeature" in feature_name
 
     @classmethod
-    def index_columns(cls) -> Optional[list[Index]]:
+    def index_columns(cls) -> list[Index] | None:
         """Returns None to simulate the 'no indexes defined' error condition."""
         return None
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return None
 
 

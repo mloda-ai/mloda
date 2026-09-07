@@ -2,7 +2,7 @@
 TestDataCreator classes for creating test data in different compute frameworks.
 """
 
-from typing import Any, Optional
+from typing import Any
 import pandas as pd
 
 from mloda.provider import FeatureGroup
@@ -34,7 +34,7 @@ class ATestDataCreator(FeatureGroup):
     }
 
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         """Return a DataCreator with the supported feature names."""
         return DataCreator(set(cls.get_raw_data().keys()))
 

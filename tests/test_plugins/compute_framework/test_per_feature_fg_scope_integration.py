@@ -6,7 +6,7 @@ the request to one source (Feature("subject_token", feature_group=SourceA))
 resolves it uniquely, so the derived feature group can compute its result.
 """
 
-from typing import Any, Optional
+from typing import Any
 
 import pytest
 
@@ -28,7 +28,7 @@ class Source508A(FeatureGroup):
     """Source A: provides the shared "subject_token" plus "scoping_value_a"."""
 
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator(supports_features={"subject_token", "scoping_value_a"})
 
     @classmethod
@@ -43,7 +43,7 @@ class Source508B(FeatureGroup):
     """Source B: also provides the shared "subject_token" plus "scoping_value_b"."""
 
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator(supports_features={"subject_token", "scoping_value_b"})
 
     @classmethod
@@ -57,7 +57,7 @@ class Source508B(FeatureGroup):
 class Derived508Scoped(FeatureGroup):
     """Derived FG: reads scoping_value_a and subject_token scoped to Source A."""
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return {
             Feature("scoping_value_a"),
             Feature("subject_token", feature_group=Source508A),
@@ -73,7 +73,7 @@ class Derived508Scoped(FeatureGroup):
 class Derived508Unscoped(FeatureGroup):
     """Derived FG requesting subject_token WITHOUT scope (ambiguous by design)."""
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return {
             Feature("scoping_value_a"),
             Feature("subject_token"),
@@ -131,7 +131,7 @@ class Source508CounterA(FeatureGroup):
     calls = 0
 
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator(supports_features={"subject_token", "counter_value_a"})
 
     @classmethod
@@ -147,7 +147,7 @@ class Source508CounterB(FeatureGroup):
     """Source B, providing the shared subject_token plus counter_value_b (creates ambiguity)."""
 
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator(supports_features={"subject_token", "counter_value_b"})
 
     @classmethod
@@ -161,7 +161,7 @@ class Source508CounterB(FeatureGroup):
 class Derived508CounterScoped(FeatureGroup):
     """Derived FG: reads counter_value_a and subject_token scoped to Source A."""
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return {
             Feature("counter_value_a"),
             Feature("subject_token", feature_group=Source508CounterA),
@@ -213,7 +213,7 @@ class Source508IndepA(FeatureGroup):
     """Source A: provides subject_token plus value_a."""
 
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator(supports_features={"subject_token", "value_a"})
 
     @classmethod
@@ -228,7 +228,7 @@ class Source508IndepB(FeatureGroup):
     """Source B: provides subject_token plus value_b."""
 
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator(supports_features={"subject_token", "value_b"})
 
     @classmethod
@@ -242,7 +242,7 @@ class Source508IndepB(FeatureGroup):
 class Derived508IndepA(FeatureGroup):
     """Derived FG A: reads value_a and subject_token scoped to Source A."""
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return {
             Feature("value_a"),
             Feature("subject_token", feature_group=Source508IndepA),
@@ -258,7 +258,7 @@ class Derived508IndepA(FeatureGroup):
 class Derived508IndepB(FeatureGroup):
     """Derived FG B: reads value_b and subject_token scoped to Source B."""
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return {
             Feature("value_b"),
             Feature("subject_token", feature_group=Source508IndepB),

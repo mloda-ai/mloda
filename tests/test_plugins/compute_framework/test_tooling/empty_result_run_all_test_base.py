@@ -34,7 +34,7 @@ remains as an override point but is False for every built-in framework.
 This module is intentionally NOT collected as tests (no ``Test`` prefix).
 """
 
-from typing import Any, Optional
+from typing import Any
 
 import pytest
 
@@ -75,8 +75,8 @@ class _EmptyResultMatchData(MatchData):
         cls,
         feature_name: str,
         options: Options,
-        data_access_collection: Optional[DataAccessCollection] = None,
-        framework_connection_object: Optional[Any] = None,
+        data_access_collection: DataAccessCollection | None = None,
+        framework_connection_object: Any | None = None,
     ) -> Any:
         if feature_name not in cls.feature_names_supported():
             return None
@@ -92,7 +92,7 @@ class EmptyResultDefaultFeatureGroup(FeatureGroup, _EmptyResultMatchData):
     """Root FeatureGroup that yields a schema-bearing zero-row result under default behavior."""
 
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator(supports_features={"empty_result_default_col"})
 
     @classmethod
@@ -110,7 +110,7 @@ class EmptyResultAllowedFeatureGroup(FeatureGroup, _EmptyResultMatchData):
     """Root FeatureGroup that yields a schema-bearing zero-row result (one empty column)."""
 
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator(supports_features={"empty_result_allowed_col"})
 
     @classmethod
@@ -132,7 +132,7 @@ class EmptyResultSchemalessAllowedFeatureGroup(FeatureGroup, _EmptyResultMatchDa
     """
 
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator(supports_features={"empty_result_schemaless_col"})
 
     @classmethod
@@ -149,7 +149,7 @@ class EmptyResultNoneFeatureGroup(FeatureGroup, _EmptyResultMatchData):
     """Root FeatureGroup whose ``calculate_feature`` returns ``None`` (state A)."""
 
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator(supports_features={"empty_result_none_col"})
 
     @classmethod

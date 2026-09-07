@@ -36,7 +36,7 @@ from mloda.provider import FeatureGroup, FeatureSet, BaseArtifact, DataCreator, 
 
 class BaseExampleArtifactFeature(FeatureGroup):
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator({cls.get_class_name()})
 
     @staticmethod

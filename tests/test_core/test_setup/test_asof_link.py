@@ -11,7 +11,7 @@ The implementation does not exist yet, so these tests are expected to FAIL
 (at import / attribute level or assertion level).
 """
 
-from typing import Any, Optional
+from typing import Any
 
 import pytest
 
@@ -28,22 +28,22 @@ from mloda.user import Options
 class AsofFGa(FeatureGroup):
     """Mock left feature group with a single by-key index column 'k'."""
 
-    def input_features(self, _options: Options, _feature_name: FeatureName) -> Optional[set[Any]]:
+    def input_features(self, _options: Options, _feature_name: FeatureName) -> set[Any] | None:
         return None
 
     @classmethod
-    def index_columns(cls) -> Optional[list[Index]]:
+    def index_columns(cls) -> list[Index] | None:
         return [Index(("k",))]
 
 
 class AsofFGb(FeatureGroup):
     """Mock right feature group with a single by-key index column 'k'."""
 
-    def input_features(self, _options: Options, _feature_name: FeatureName) -> Optional[set[Any]]:
+    def input_features(self, _options: Options, _feature_name: FeatureName) -> set[Any] | None:
         return None
 
     @classmethod
-    def index_columns(cls) -> Optional[list[Index]]:
+    def index_columns(cls) -> list[Index] | None:
         return [Index(("k",))]
 
 

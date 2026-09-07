@@ -4,7 +4,7 @@ features. Before the fix this either crashes at runtime or silently serves one r
 other's data.
 """
 
-from typing import Any, Optional
+from typing import Any
 
 import pandas as pd
 
@@ -25,7 +25,7 @@ class DedupParentsRootFG(FeatureGroup):
     """Pandas root exposing two distinct columns."""
 
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator({"dedup_col_x", "dedup_col_y"})
 
     @classmethod
@@ -44,7 +44,7 @@ class DedupParentsConsumerFG(FeatureGroup):
     """PyArrow consumer with two Options-gated requests, each pulling a DIFFERENT Pandas column
     as its own single parent, forcing two same-shaped Pandas->PyArrow transform hops."""
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         variant = options.get("dedup_variant")
         if variant == "x":
             return {Feature("dedup_col_x")}

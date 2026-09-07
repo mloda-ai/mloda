@@ -1,5 +1,5 @@
 from abc import ABC
-from typing import Any, Optional, final
+from typing import Any, final
 
 from mloda.core.abstract_plugins.components.contract.comparison_contract import ColumnSemantics, ComparisonContract
 from mloda.core.abstract_plugins.components.index.index import Index
@@ -17,7 +17,7 @@ class BaseMergeEngine(ABC):
 
     provides_column_semantics: bool = False
 
-    def __init__(self, framework_connection: Optional[Any] = None) -> None:
+    def __init__(self, framework_connection: Any | None = None) -> None:
         """
         Initialize the merge engine.
 

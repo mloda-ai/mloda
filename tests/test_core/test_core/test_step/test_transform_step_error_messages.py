@@ -1,6 +1,5 @@
 """Tests for improved error messages in TransformFrameworkStep."""
 
-from typing import Optional
 from unittest.mock import MagicMock
 from uuid import uuid4
 
@@ -29,11 +28,11 @@ class MockFeatureGroup(FeatureGroup):
         cls,
         feature_name: FeatureName | str,
         options: Options,
-        data_access_collection: Optional[DataAccessCollection] = None,
+        data_access_collection: DataAccessCollection | None = None,
     ) -> bool:
         return False
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return None
 
 

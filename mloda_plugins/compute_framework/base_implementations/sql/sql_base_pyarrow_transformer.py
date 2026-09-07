@@ -1,4 +1,4 @@
-from typing import Any, Optional
+from typing import Any
 
 from mloda.provider import BaseTransformer
 
@@ -46,7 +46,7 @@ class SqlBasePyArrowTransformer(BaseTransformer):
         return cls._convert_to_arrow(data)
 
     @classmethod
-    def transform_other_fw_to_fw(cls, data: Any, framework_connection_object: Optional[Any] = None) -> Any:
+    def transform_other_fw_to_fw(cls, data: Any, framework_connection_object: Any | None = None) -> Any:
         if framework_connection_object is None:
             raise ValueError("A connection object is required for this transformation.")
 

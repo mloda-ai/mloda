@@ -1,5 +1,5 @@
 from datetime import datetime, timedelta, timezone
-from typing import Any, Optional
+from typing import Any
 
 import pyarrow as pa
 
@@ -20,7 +20,7 @@ from tests.test_core.test_tooling import MlodaTestRunner, PARALLELIZATION_MODES_
 
 class TimeTravelNegativeFilterTest(FeatureGroup):
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator({cls.get_class_name()})
 
     @classmethod

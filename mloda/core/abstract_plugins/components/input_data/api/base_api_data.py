@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Any, Optional, final
+from typing import Any, final
 from mloda.core.abstract_plugins.components.options import Options
 
 
@@ -18,11 +18,11 @@ class BaseApiData(ABC):
 
     Attributes:
         api_input_name (str): The name identifier for the API input.
-        feature_name (Optional[str]): The name of the feature associated with the API input.
-        options (Optional[Options]): Additional options or configurations for the API input data.
+        feature_name (str | None): The name of the feature associated with the API input.
+        options (Options | None): Additional options or configurations for the API input data.
     """
 
-    def __init__(self, api_input_name: str, feature_name: Optional[str], options: Optional[Options]) -> None:
+    def __init__(self, api_input_name: str, feature_name: str | None, options: Options | None) -> None:
         self.api_input_name = api_input_name
 
     def get_data_by_using_api_data(self, api_data: Any) -> Any:

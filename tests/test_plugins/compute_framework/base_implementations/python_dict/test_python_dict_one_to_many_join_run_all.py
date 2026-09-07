@@ -5,7 +5,7 @@ preserves one-to-many fan-out: a unique-key left joined to a duplicate-key right
 must yield one row per matching right row, not collapse to the last one.
 """
 
-from typing import Any, Optional
+from typing import Any
 
 import pytest
 
@@ -40,7 +40,7 @@ class OneToManyLeftFeature(FeatureGroup):
     """Left side: one row per user (unique join keys)."""
 
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator(supports_features={"user_id", "uname"})
 
     @classmethod
@@ -56,7 +56,7 @@ class OneToManyRightFeature(FeatureGroup):
     """Right side: many rows per user (duplicate join keys)."""
 
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator(supports_features={"user_id", "amount"})
 
     @classmethod
@@ -71,7 +71,7 @@ class OneToManyRightFeature(FeatureGroup):
 class OneToManyJoinedFeature(FeatureGroup):
     """Parent consuming the one-to-many join; encodes each joined row as 'uname|amount'."""
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         link = _one_to_many_link()
         return {
             Feature(name="uname", link=link, index=Index(("user_id",))),

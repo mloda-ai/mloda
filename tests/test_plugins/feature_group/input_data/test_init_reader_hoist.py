@@ -2,7 +2,7 @@
 
 Contract:
 
-    BaseInputData.init_reader(self, options: Optional[Options]) -> tuple[BaseInputData, Any]
+    BaseInputData.init_reader(self, options: Options | None) -> tuple[BaseInputData, Any]
     is concrete; ReadDB, ReadFile, and ReadDocument have no overrides.
 
     Semantics of the hoisted implementation:

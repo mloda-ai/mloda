@@ -27,7 +27,7 @@ into a computed dependency.
 """
 
 import json
-from typing import Any, Optional
+from typing import Any
 
 import pytest
 
@@ -631,7 +631,7 @@ class NestedConfigEngineSource(FeatureGroup):
     """Root source: creates the raw column the innermost nested feature reads."""
 
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator(supports_features={"cfg_nested_base"})
 
     @classmethod
@@ -646,7 +646,7 @@ class NestedConfigEngineDoubler(FeatureGroup):
     def feature_names_supported(cls) -> set[str]:
         return {"cfg_nested_doubled", "cfg_nested_outer"}
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return set(options.get_in_features())
 
     @classmethod

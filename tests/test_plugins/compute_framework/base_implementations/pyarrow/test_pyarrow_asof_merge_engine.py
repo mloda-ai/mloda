@@ -6,7 +6,7 @@ under test and the interchange format used by the DataConverter.
 """
 
 from datetime import datetime, timedelta, timezone
-from typing import Any, Optional
+from typing import Any
 
 import pytest
 
@@ -42,7 +42,7 @@ class TestPyArrowAsofMergeEngine(AsofMergeEngineTestBase):
         table_type: type[Any] = pa.Table
         return table_type
 
-    def get_connection(self) -> Optional[Any]:
+    def get_connection(self) -> Any | None:
         return None
 
     def test_nearest_direction(self) -> None:

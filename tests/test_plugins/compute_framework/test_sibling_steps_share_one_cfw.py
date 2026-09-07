@@ -3,7 +3,7 @@ Both outputs must survive when the two steps overlap in time.
 """
 
 import threading
-from typing import Any, Optional
+from typing import Any
 
 import pytest
 
@@ -29,7 +29,7 @@ late_writer_stored_data = threading.Event()
 
 class SharedSiblingParent(FeatureGroup):
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator(supports_features={cls.get_class_name()})
 
     @classmethod
@@ -44,7 +44,7 @@ class SharedSiblingParent(FeatureGroup):
 class SiblingEarlyWriter(FeatureGroup):
     """Stores its frame first, then holds its step open until the sibling has stored too."""
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return {Feature(name=SharedSiblingParent.get_class_name())}
 
     @classmethod
@@ -65,7 +65,7 @@ class SiblingEarlyWriter(FeatureGroup):
 class SiblingLateWriter(FeatureGroup):
     """Takes its input before the sibling writes, then stores its own frame last."""
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return {Feature(name=SharedSiblingParent.get_class_name())}
 
     @classmethod

@@ -19,7 +19,7 @@ This test is expected to FAIL against the current implementation because ``{"fea
 accepted and returned instead of raising.
 """
 
-from typing import Any, Optional
+from typing import Any
 
 import pytest
 
@@ -44,7 +44,7 @@ class _ScalarValuedResultFeatureGroup(FeatureGroup, _EmptyResultMatchData):
     """
 
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator(supports_features={"scalar_result_col"})
 
     @classmethod
@@ -61,7 +61,7 @@ class _MultiScalarValuedResultFeatureGroup(FeatureGroup, _EmptyResultMatchData):
     """Root FeatureGroup returning a multi-column scalar-valued dict ``{"a": 1, "b": 2}``."""
 
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator(supports_features={"multi_scalar_result_col"})
 
     @classmethod

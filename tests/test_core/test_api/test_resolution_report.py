@@ -20,7 +20,7 @@ would leak into another module's candidate universe in the parallel suite.
 """
 
 import dataclasses
-from typing import Any, Optional
+from typing import Any
 from unittest.mock import patch
 
 import pandas as pd
@@ -60,7 +60,7 @@ class ResReportSource_811(FeatureGroup):
     """Pandas root source providing the feature the consumer chains off."""
 
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator({"res_report_sales"})
 
     @classmethod
@@ -75,7 +75,7 @@ class ResReportSource_811(FeatureGroup):
 class ResReportConsumer_811(FeatureGroup):
     """Consumes the source feature, so the source becomes a derived input during recursion."""
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return {Feature("res_report_sales")}
 
     @classmethod
@@ -100,7 +100,7 @@ class ResReportCountingSource_811(FeatureGroup):
     """Root source whose match hook counts calls, proving resolution_report() does not re-match."""
 
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator({"res_report_counted_811"})
 
     @classmethod
@@ -108,7 +108,7 @@ class ResReportCountingSource_811(FeatureGroup):
         cls,
         feature_name: FeatureName | str,
         options: Options,
-        data_access_collection: Optional[DataAccessCollection] = None,
+        data_access_collection: DataAccessCollection | None = None,
     ) -> bool:
         RES_REPORT_MATCH_CALLS_811[cls.get_class_name()] = RES_REPORT_MATCH_CALLS_811.get(cls.get_class_name(), 0) + 1
         return super().match_feature_group_criteria(feature_name, options, data_access_collection)
@@ -139,11 +139,11 @@ class ResReportGoodFG_811(FeatureGroup):
         cls,
         feature_name: FeatureName | str,
         options: Options,
-        data_access_collection: Optional[DataAccessCollection] = None,
+        data_access_collection: DataAccessCollection | None = None,
     ) -> bool:
         return str(feature_name) == GOOD_FEATURE_811
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return None
 
 

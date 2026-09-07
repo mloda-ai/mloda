@@ -4,7 +4,7 @@ The formatting lives in mloda/core/prepare/resolution_failure_renderer.py: _rend
 candidate as "ClassName (module.path)" instead of a raw dict/class representation.
 """
 
-from typing import ClassVar, Optional
+from typing import ClassVar
 
 import pytest
 
@@ -271,7 +271,7 @@ class StrictWindowFeatureGroup(FeatureChainParserMixin, FeatureGroup):
         DefaultOptionKeys.in_features: property_spec("source", context=True),
     }
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return None
 
 
@@ -291,7 +291,7 @@ class StrictMaxWindowFeatureGroup(FeatureChainParserMixin, FeatureGroup):
         DefaultOptionKeys.in_features: property_spec("source", context=True),
     }
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return None
 
 

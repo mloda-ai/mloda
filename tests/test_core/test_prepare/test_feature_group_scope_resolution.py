@@ -15,7 +15,7 @@ Follows the construction conventions in test_identify_feature_group_error_messag
 
 import inspect
 from abc import abstractmethod
-from typing import Any, ClassVar, Optional
+from typing import Any, ClassVar
 
 import pytest
 
@@ -698,7 +698,7 @@ class ScopePythonAggregationSource(FeatureGroup):
     """Source data for the Python-surface aggregated-family scope test."""
 
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator(supports_features={"scope_python_sales"})
 
     @classmethod

@@ -1,5 +1,5 @@
 from collections import Counter
-from typing import TYPE_CHECKING, Any, Iterable, Optional
+from typing import TYPE_CHECKING, Any, Iterable
 from uuid import UUID
 
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
@@ -15,16 +15,16 @@ if TYPE_CHECKING:
 
 
 class FeatureSet:
-    def __init__(self, features: Optional[Iterable[Feature]] = None) -> None:
+    def __init__(self, features: Iterable[Feature] | None = None) -> None:
         self.features: set[Feature] = set()
-        self.options: Optional[Options] = None
+        self.options: Options | None = None
         # This is just one uuid for easier access
-        self.any_uuid: Optional[UUID] = None
-        self.filters: Optional[set[SingleFilter]] = None
-        self.name_of_one_feature: Optional[FeatureName] = None
-        self.artifact_to_save: Optional[str] = None
-        self.artifact_to_load: Optional[str] = None
-        self.save_artifact: Optional[Any] = None
+        self.any_uuid: UUID | None = None
+        self.filters: set[SingleFilter] | None = None
+        self.name_of_one_feature: FeatureName | None = None
+        self.artifact_to_save: str | None = None
+        self.artifact_to_load: str | None = None
+        self.save_artifact: Any | None = None
         self.filter_engine: type[BaseFilterEngine] = BaseFilterEngine
         self.mask_engine: type[BaseMaskEngine] | None = None
         self.declared_input_feature_names: frozenset[str] | None = None

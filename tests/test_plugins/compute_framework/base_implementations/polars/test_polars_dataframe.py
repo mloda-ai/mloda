@@ -1,5 +1,5 @@
 import os
-from typing import Any, Optional
+from typing import Any
 import pytest
 import pyarrow as pa
 from mloda_plugins.compute_framework.base_implementations.polars.dataframe import PolarsDataFrame
@@ -111,7 +111,7 @@ class TestPolarsDataFrameMerge(DataFrameTestBase):
         """Create a polars DataFrame from a dictionary."""
         return pl.DataFrame(data)
 
-    def get_connection(self) -> Optional[Any]:
+    def get_connection(self) -> Any | None:
         """Return connection object (None for polars)."""
         return None
 

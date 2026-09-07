@@ -7,7 +7,7 @@ import gc
 from collections.abc import Callable
 from dataclasses import dataclass
 from functools import partial
-from typing import Any, Optional, TypeVar
+from typing import Any, TypeVar
 
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.abstract_plugins.components.feature import Feature
@@ -43,7 +43,7 @@ class OptionWriteFw932(ComputeFramework):
     pass
 
 
-def _capture(call: Callable[[], T]) -> tuple[Optional[T], Optional[str]]:
+def _capture(call: Callable[[], T]) -> tuple[T | None, str | None]:
     """Returns (value, None) or (None, 'Type: message'); no traceback is retained."""
     try:
         return call(), None
@@ -55,7 +55,7 @@ def _capture(call: Callable[[], T]) -> tuple[Optional[T], Optional[str]]:
 class _ConflictSnapshot:
     """Readout of one evaluation, holding no class and no exception object."""
 
-    escaped: Optional[str]
+    escaped: str | None
     identified_names: tuple[str, ...]
 
 
@@ -78,8 +78,8 @@ def _make_match_data_fg() -> type[FeatureGroup]:
             cls,
             feature_name: str,
             options: Options,
-            data_access_collection: Optional[DataAccessCollection] = None,
-            framework_connection_object: Optional[Any] = None,
+            data_access_collection: DataAccessCollection | None = None,
+            framework_connection_object: Any | None = None,
         ) -> Any:
             if str(feature_name) != MATCH_DATA_FEATURE:
                 return None
@@ -87,7 +87,7 @@ def _make_match_data_fg() -> type[FeatureGroup]:
                 return None
             return GLOBAL_ACCESS
 
-        def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+        def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
             return None
 
     return OptionWriteMatchDataFG932
@@ -106,7 +106,7 @@ def _make_match_data_rival_fg() -> type[FeatureGroup]:
         def compute_framework_rule(cls) -> set[type[ComputeFramework]] | None:
             return {OptionWriteFw932}
 
-        def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+        def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
             return None
 
     return OptionWriteMatchDataRivalFG932
@@ -121,7 +121,7 @@ class OptionWriteReader932(OptionWriteReaderFamily932):
 
     @classmethod
     def match_subclass_data_access(
-        cls, data_access: Any, feature_names: list[str], options: Optional[Options] = None
+        cls, data_access: Any, feature_names: list[str], options: Options | None = None
     ) -> Any:
         if isinstance(data_access, DataAccessCollection):
             if GLOBAL_ACCESS in data_access.connections.values():
@@ -142,7 +142,7 @@ def _make_reader_fg() -> type[FeatureGroup]:
 
     class OptionWriteReaderFG932(FeatureGroup):
         @classmethod
-        def input_data(cls) -> Optional[BaseInputData]:
+        def input_data(cls) -> BaseInputData | None:
             return OptionWriteReaderFamily932()
 
         @classmethod
@@ -153,7 +153,7 @@ def _make_reader_fg() -> type[FeatureGroup]:
         def compute_framework_rule(cls) -> set[type[ComputeFramework]] | None:
             return {OptionWriteFw932}
 
-        def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+        def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
             return None
 
     return OptionWriteReaderFG932
@@ -172,7 +172,7 @@ def _make_reader_rival_fg() -> type[FeatureGroup]:
         def compute_framework_rule(cls) -> set[type[ComputeFramework]] | None:
             return {OptionWriteFw932}
 
-        def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+        def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
             return None
 
     return OptionWriteReaderRivalFG932
@@ -182,8 +182,8 @@ def _evaluate(
     feature_name: str,
     options: Options,
     conflict_fg: type[FeatureGroup],
-    rival_fg: Optional[type[FeatureGroup]],
-    data_access: Optional[DataAccessCollection],
+    rival_fg: type[FeatureGroup] | None,
+    data_access: DataAccessCollection | None,
 ) -> _ConflictSnapshot:
     """Evaluates one feature at the match seam and reads the outcome out as plain data."""
     feature = Feature(feature_name, options=options)
@@ -219,7 +219,7 @@ def _evaluate_reader_conflict(with_rival: bool, global_scope: bool, reserved_val
     rival_fg = _make_reader_rival_fg() if with_rival else None
     try:
         group: dict[str, Any] = {RESERVED_KEY: reserved_value}
-        data_access: Optional[DataAccessCollection] = None
+        data_access: DataAccessCollection | None = None
         if global_scope:
             data_access = DataAccessCollection(connections={"option_write_handle_932": GLOBAL_ACCESS})
         else:

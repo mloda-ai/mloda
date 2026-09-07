@@ -10,7 +10,7 @@ They will pass once JoinSpec is implemented as a frozen dataclass.
 
 from collections.abc import Callable
 from dataclasses import FrozenInstanceError
-from typing import Any, Optional
+from typing import Any
 
 import pytest
 
@@ -28,14 +28,14 @@ from mloda.user import Options
 class MockFeatureGroup(FeatureGroup):
     """Minimal feature group for testing JoinSpec."""
 
-    def input_features(self, _options: Options, _feature_name: FeatureName) -> Optional[set[Any]]:
+    def input_features(self, _options: Options, _feature_name: FeatureName) -> set[Any] | None:
         return None
 
 
 class AnotherMockFeatureGroup(FeatureGroup):
     """Another feature group for testing equality and hashing."""
 
-    def input_features(self, _options: Options, _feature_name: FeatureName) -> Optional[set[Any]]:
+    def input_features(self, _options: Options, _feature_name: FeatureName) -> set[Any] | None:
         return None
 
 

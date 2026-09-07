@@ -1,4 +1,4 @@
-from typing import Any, Optional
+from typing import Any
 
 from mloda.provider import FeatureGroup
 from mloda.provider import FeatureSet
@@ -14,7 +14,7 @@ class ReadDocumentFeature(FeatureGroup):
     """
 
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return ReadDocument()
 
     @classmethod

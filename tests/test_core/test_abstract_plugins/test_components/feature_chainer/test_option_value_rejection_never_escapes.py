@@ -9,7 +9,7 @@ All fixture names carry an "esc732" marker so they cannot collide with other tes
 from __future__ import annotations
 
 import logging
-from typing import Any, Optional
+from typing import Any
 
 import pytest
 
@@ -148,7 +148,7 @@ class DirectParserOverrideFeatureGroup(FeatureChainParserMixin, FeatureGroup):
         cls,
         feature_name: FeatureName | str,
         options: Options,
-        data_access_collection: Optional[DataAccessCollection] = None,
+        data_access_collection: DataAccessCollection | None = None,
     ) -> bool:
         name = str(feature_name)
         if options.get(PIPELINE_KEY) is None and "esc732_pipeline_" not in name:
@@ -160,7 +160,7 @@ class DirectParserOverrideFeatureGroup(FeatureChainParserMixin, FeatureGroup):
             prefix_patterns=[cls.PREFIX_PATTERN],
         )
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return None
 
 
@@ -172,11 +172,11 @@ class NeighborFeatureGroup(FeatureGroup):
         cls,
         feature_name: FeatureName | str,
         options: Options,
-        data_access_collection: Optional[DataAccessCollection] = None,
+        data_access_collection: DataAccessCollection | None = None,
     ) -> bool:
         return str(feature_name) == PIPELINE_FEATURE
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return None
 
 
@@ -203,7 +203,7 @@ class RaisingTypeErrorValidatorFeatureGroup(FeatureChainParserMixin, FeatureGrou
         ),
     }
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return None
 
 
@@ -221,7 +221,7 @@ class RaisingAttributeErrorValidatorFeatureGroup(FeatureChainParserMixin, Featur
         )
     }
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return None
 
 
@@ -239,7 +239,7 @@ class RaisingKeyErrorValidatorFeatureGroupEsc763(FeatureChainParserMixin, Featur
         )
     }
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return None
 
 
@@ -256,7 +256,7 @@ class RaisingKeyErrorGuardFeatureGroupEsc763(FeatureChainParserMixin, FeatureGro
         )
     }
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return None
 
 
@@ -283,7 +283,7 @@ class RaisingKeyErrorRequiredWhenFeatureGroupEsc763(FeatureChainParserMixin, Fea
         cls,
         feature_name: FeatureName | str,
         options: Options,
-        data_access_collection: Optional[DataAccessCollection] = None,
+        data_access_collection: DataAccessCollection | None = None,
     ) -> bool:
         name = str(feature_name)
         # Classmethod is mandatory: required_when forbids a staticmethod matcher. Claim only this
@@ -297,7 +297,7 @@ class RaisingKeyErrorRequiredWhenFeatureGroupEsc763(FeatureChainParserMixin, Fea
             prefix_patterns=[cls.PREFIX_PATTERN],
         )
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return None
 
 
@@ -309,11 +309,11 @@ class RequiredWhenNeighborFeatureGroupEsc763(FeatureGroup):
         cls,
         feature_name: FeatureName | str,
         options: Options,
-        data_access_collection: Optional[DataAccessCollection] = None,
+        data_access_collection: DataAccessCollection | None = None,
     ) -> bool:
         return str(feature_name) == REQUIRED_WHEN_FEATURE_ESC763
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return None
 
 

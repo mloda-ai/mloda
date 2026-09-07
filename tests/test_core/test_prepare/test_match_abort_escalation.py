@@ -13,7 +13,7 @@ import gc
 from collections.abc import Callable
 from dataclasses import dataclass
 from functools import partial
-from typing import ClassVar, Optional, TypeVar
+from typing import ClassVar, TypeVar
 
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.abstract_plugins.components.feature import Feature
@@ -64,7 +64,7 @@ class _RaiseReadout:
     message: str
 
 
-def _outcome(call: Callable[[], T]) -> tuple[Optional[T], Optional[_RaiseReadout]]:
+def _outcome(call: Callable[[], T]) -> tuple[T | None, _RaiseReadout | None]:
     """Run call, returning (value, None) or (None, readout of the escaping raise)."""
     try:
         return call(), None
@@ -72,7 +72,7 @@ def _outcome(call: Callable[[], T]) -> tuple[Optional[T], Optional[_RaiseReadout
         return None, _RaiseReadout(is_match_abort(exc), type(exc).__name__, str(exc))
 
 
-def _capture(call: Callable[[], T]) -> tuple[Optional[T], Optional[str]]:
+def _capture(call: Callable[[], T]) -> tuple[T | None, str | None]:
     """Run call, returning (value, None) or (None, 'Type: message'). No traceback is retained."""
     value, readout = _outcome(call)
     return value, None if readout is None else f"{readout.type_name}: {readout.message}"
@@ -99,13 +99,13 @@ def _make_marked_raise_fg() -> type[FeatureGroup]:
             cls,
             feature_name: FeatureName | str,
             options: Options,
-            data_access_collection: Optional[DataAccessCollection] = None,
+            data_access_collection: DataAccessCollection | None = None,
         ) -> bool:
             if str(feature_name) != MARKED_FEATURE:
                 return False
             raise escalate_match_abort(ValueError(MARKED_MESSAGE))
 
-        def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+        def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
             return None
 
     return MarkedRaiseFG845e
@@ -131,13 +131,13 @@ def _make_unmarked_raise_fg() -> type[FeatureGroup]:
             cls,
             feature_name: FeatureName | str,
             options: Options,
-            data_access_collection: Optional[DataAccessCollection] = None,
+            data_access_collection: DataAccessCollection | None = None,
         ) -> bool:
             if str(feature_name) != UNMARKED_FEATURE:
                 return False
             raise ValueError(UNMARKED_MESSAGE)
 
-        def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+        def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
             return None
 
     return UnmarkedRaiseFG845e
@@ -147,14 +147,14 @@ def _make_unmarked_raise_fg() -> type[FeatureGroup]:
 class _ContainedSnapshot:
     """Plain-data readout of one contained evaluation. Holds no class and no exception object."""
 
-    escaped: Optional[str]
-    failure_kind: Optional[str]
+    escaped: str | None
+    failure_kind: str | None
     eliminated_names: tuple[str, ...]
-    stage: Optional[str]
-    reason: Optional[str]
+    stage: str | None
+    reason: str | None
 
 
-def _evaluate_marked_raise() -> Optional[str]:
+def _evaluate_marked_raise() -> str | None:
     """Evaluate the marked double's own feature; return the escaping raise as 'Type: message', else None."""
     broken_fg = _make_marked_raise_fg()
     try:
@@ -257,7 +257,7 @@ class BothCategoriesMixin845f(FeatureChainParserMixin):
 
     PREFIX_PATTERN = BINDING_PATTERN
     # Annotated exactly as FeatureGroup declares it, so the FeatureGroup subclass below stays consistent.
-    PROPERTY_MAPPING: ClassVar[Optional[dict[str, PropertySpec]]] = {
+    PROPERTY_MAPPING: ClassVar[dict[str, PropertySpec] | None] = {
         BINDING_KEY: property_spec("the key the feature name carries")
     }
 
@@ -282,13 +282,13 @@ def _make_both_categories_fg() -> type[FeatureGroup]:
         def compute_framework_rule(cls) -> set[type[ComputeFramework]] | None:
             return {MatchAbortFw845e}
 
-        def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+        def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
             return None
 
     return BothCategoriesFG845f
 
 
-def _evaluate_both_categories() -> Optional[_RaiseReadout]:
+def _evaluate_both_categories() -> _RaiseReadout | None:
     """Evaluate the both-categories candidate through the seam; read any escaping raise out as plain data."""
     probe_fg = _make_both_categories_fg()
     try:
@@ -310,14 +310,14 @@ def _make_is_root_fg(raiser: Callable[[], None]) -> type[FeatureGroup]:
     class IsRootProbeFG845f(FeatureGroup):
         """Stands in for a group whose input_features cannot answer for this feature name."""
 
-        def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+        def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
             raiser()
             return None
 
     return IsRootProbeFG845f
 
 
-def _is_root_outcome(raiser: Callable[[], None]) -> tuple[Optional[bool], Optional[_RaiseReadout]]:
+def _is_root_outcome(raiser: Callable[[], None]) -> tuple[bool | None, _RaiseReadout | None]:
     """(verdict, None) when is_root answers, (None, readout) when the raise escapes it."""
     probe_fg = _make_is_root_fg(raiser)
     try:

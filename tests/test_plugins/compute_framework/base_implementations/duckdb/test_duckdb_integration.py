@@ -3,7 +3,7 @@ from mloda.provider import ComputeFramework
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 import pytest
 
-from typing import Any, Optional
+from typing import Any
 
 from mloda.provider import FeatureGroup
 from mloda.user import Feature
@@ -73,8 +73,8 @@ class ATestDuckDBFeatureGroup(FeatureGroup, MatchData):
         cls,
         feature_name: str,
         options: Options,
-        data_access_collection: Optional[DataAccessCollection] = None,
-        framework_connection_object: Optional[Any] = None,
+        data_access_collection: DataAccessCollection | None = None,
+        framework_connection_object: Any | None = None,
     ) -> Any:
         """We check for data access collection if any child classes match the data access."""
 
@@ -104,7 +104,7 @@ class ATestDuckDBFeatureGroup(FeatureGroup, MatchData):
 class DuckDBSimpleTransformFeatureGroup(ATestDuckDBFeatureGroup):
     """Simple feature group for testing DuckDB transformations."""
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         """Require base features for transformation."""
         feature_name_str = str(feature_name) if isinstance(feature_name, FeatureName) else str(feature_name)
 
@@ -142,7 +142,7 @@ class DuckDBSimpleTransformFeatureGroup(ATestDuckDBFeatureGroup):
 class DuckDBSecondTransformFeatureGroup(ATestDuckDBFeatureGroup):
     """Second transformation that depends on the first."""
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return {Feature("doubled_value")}
 
     @classmethod
@@ -166,7 +166,7 @@ class DuckDBSecondTransformFeatureGroup(ATestDuckDBFeatureGroup):
 class DuckDBAggregationFeatureGroup(ATestDuckDBFeatureGroup):
     """Feature group for testing DuckDB aggregation capabilities."""
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         feature_name_str = str(feature_name) if isinstance(feature_name, FeatureName) else str(feature_name)
 
         if feature_name_str in ["avg_value_by_category", "count_by_category"]:
@@ -200,7 +200,7 @@ class DuckDBAggregationFeatureGroup(ATestDuckDBFeatureGroup):
 class CheckData(FeatureGroup):
     """Feature group for testing DuckDB aggregation capabilities."""
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         feature_name_str = str(feature_name) if isinstance(feature_name, FeatureName) else str(feature_name)
 
         if feature_name_str in ["pyarrow_avg_value_by_category"]:

@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 import pytest
 
@@ -25,7 +25,7 @@ _CARRIER = {"traceparent": "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7
 
 class _WorkerIndexFeatureGroupOne(FeatureGroup):
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator({"worker_index_e2e_col_one"})
 
     @classmethod
@@ -39,7 +39,7 @@ class _WorkerIndexFeatureGroupOne(FeatureGroup):
 
 class _WorkerIndexFeatureGroupTwo(FeatureGroup):
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator({"worker_index_e2e_col_two"})
 
     @classmethod

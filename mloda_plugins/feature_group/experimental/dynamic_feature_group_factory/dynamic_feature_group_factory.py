@@ -1,4 +1,4 @@
-from typing import Any, Optional
+from typing import Any
 from mloda.provider import FeatureGroup
 from mloda.user import Options
 from mloda.user import FeatureName
@@ -213,13 +213,13 @@ class DynamicFeatureGroupCreator:
             cls,
             feature_name: FeatureName | str,
             options: Options,
-            data_access_collection: Optional[DataAccessCollection] = None,
+            data_access_collection: DataAccessCollection | None = None,
         ) -> bool:
             if "match_feature_group_criteria" in properties:
                 return properties["match_feature_group_criteria"](cls, feature_name, options, data_access_collection)  # type: ignore[no-any-return]
             return super(new_class, cls).match_feature_group_criteria(feature_name, options, data_access_collection)  # type: ignore[misc, arg-type, no-any-return]
 
-        def input_data(cls) -> Optional[BaseInputData]:  # type: ignore[no-untyped-def]
+        def input_data(cls) -> BaseInputData | None:  # type: ignore[no-untyped-def]
             if "input_data" in properties:
                 return properties["input_data"]()  # type: ignore[no-any-return]
             return super(new_class, cls).input_data()  # type: ignore[misc, arg-type, no-any-return]
@@ -241,7 +241,7 @@ class DynamicFeatureGroupCreator:
                 return
             super(new_class, cls).validate_output_features(data, features)  # type: ignore[misc, arg-type]
 
-        def artifact(cls) -> Optional[type[Any]]:  # type: ignore[no-untyped-def]
+        def artifact(cls) -> type[Any] | None:  # type: ignore[no-untyped-def]
             if "artifact" in properties:
                 return properties["artifact"]()  # type: ignore[no-any-return]
             return super(new_class, cls).artifact()  # type: ignore[misc, arg-type, no-any-return]
@@ -251,22 +251,22 @@ class DynamicFeatureGroupCreator:
                 return properties["compute_framework_rule"]()  # type: ignore[no-any-return]
             return super(new_class, cls).compute_framework_rule()  # type: ignore[misc, arg-type, no-any-return]
 
-        def return_data_type_rule(cls, feature: Any) -> Optional[DataType]:  # type: ignore[no-untyped-def]
+        def return_data_type_rule(cls, feature: Any) -> DataType | None:  # type: ignore[no-untyped-def]
             if "return_data_type_rule" in properties:
                 return properties["return_data_type_rule"](cls, feature)  # type: ignore[no-any-return]
             return super(new_class, cls).return_data_type_rule(feature)  # type: ignore[misc, arg-type, no-any-return]
 
-        def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Any]]:  # type: ignore[no-untyped-def]
+        def input_features(self, options: Options, feature_name: FeatureName) -> set[Any] | None:  # type: ignore[no-untyped-def]
             if "input_features" in properties:
                 return properties["input_features"](self, options, feature_name)  # type: ignore[no-any-return]
             return super(new_class, self).input_features(options, feature_name)  # type: ignore[misc, arg-type, no-any-return]
 
-        def index_columns(cls) -> Optional[list[Index]]:  # type: ignore[no-untyped-def]
+        def index_columns(cls) -> list[Index] | None:  # type: ignore[no-untyped-def]
             if "index_columns" in properties:
                 return properties["index_columns"]()  # type: ignore[no-any-return]
             return super(new_class, cls).index_columns()  # type: ignore[misc, arg-type, no-any-return]
 
-        def supports_index(cls, index: Index) -> Optional[bool]:  # type: ignore[no-untyped-def]
+        def supports_index(cls, index: Index) -> bool | None:  # type: ignore[no-untyped-def]
             if "supports_index" in properties:
                 return properties["supports_index"](cls, index)  # type: ignore[no-any-return]
             return super(new_class, cls).supports_index(index)  # type: ignore[misc, arg-type, no-any-return]

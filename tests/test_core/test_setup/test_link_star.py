@@ -21,7 +21,7 @@ See Also:
     - GitHub Issue #571: Star-join builder Link.star
 """
 
-from typing import Any, Optional
+from typing import Any
 
 import pytest
 
@@ -38,21 +38,21 @@ from mloda.user import Options
 class HubFG(FeatureGroup):
     """Hub feature group for star-join testing."""
 
-    def input_features(self, _options: Options, _feature_name: FeatureName) -> Optional[set[Any]]:
+    def input_features(self, _options: Options, _feature_name: FeatureName) -> set[Any] | None:
         return None
 
 
 class SpokeAFG(FeatureGroup):
     """First spoke feature group for star-join testing."""
 
-    def input_features(self, _options: Options, _feature_name: FeatureName) -> Optional[set[Any]]:
+    def input_features(self, _options: Options, _feature_name: FeatureName) -> set[Any] | None:
         return None
 
 
 class SpokeBFG(FeatureGroup):
     """Second spoke feature group for star-join testing."""
 
-    def input_features(self, _options: Options, _feature_name: FeatureName) -> Optional[set[Any]]:
+    def input_features(self, _options: Options, _feature_name: FeatureName) -> set[Any] | None:
         return None
 
 

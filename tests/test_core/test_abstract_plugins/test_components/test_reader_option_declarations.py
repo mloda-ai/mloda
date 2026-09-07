@@ -517,7 +517,7 @@ class TestReaderOptionToleratesNoneOptions:
     def test_none_options_return_the_declared_default(self) -> None:
         """With no Options at all, the declared fallback applies exactly as for an absent key."""
         parent, _, _ = _decl_family()
-        none_options: Any = None  # the accessor's contract widens to Optional[Options]
+        none_options: Any = None  # the accessor's contract widens to Options | None
 
         assert parent.reader_option("rod_key_a", none_options) == "parent_a"
 

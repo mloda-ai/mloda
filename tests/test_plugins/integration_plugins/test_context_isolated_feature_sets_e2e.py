@@ -19,7 +19,7 @@ plugin registry.
 
 from __future__ import annotations
 
-from typing import Any, ClassVar, Optional
+from typing import Any, ClassVar
 
 import pandas as pd
 
@@ -61,7 +61,7 @@ class ContextIsoSourceGroup(FeatureGroup):
         cls.invocation_count = 0
 
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator({SOURCE_NAME})
 
     @classmethod
@@ -93,7 +93,7 @@ class _ContextIsoConsumerBase(FeatureGroup):
         cls,
         feature_name: FeatureName | str,
         options: Options,
-        data_access_collection: Optional[DataAccessCollection] = None,
+        data_access_collection: DataAccessCollection | None = None,
     ) -> bool:
         return str(feature_name) == cls.FEATURE_NAME
 
@@ -101,7 +101,7 @@ class _ContextIsoConsumerBase(FeatureGroup):
     def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
         return {PandasDataFrame}
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return {Feature(SOURCE_NAME, inherit_context_keys={"tenant"})}
 
     @classmethod

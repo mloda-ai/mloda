@@ -1,4 +1,4 @@
-from typing import Any, Optional
+from typing import Any
 import pytest
 
 from mloda.user import JoinType
@@ -444,7 +444,7 @@ class TestDuckDBMergeEngineMultiIndex(MultiIndexMergeEngineTestBase):
             raise ImportError("DuckDB is not installed")
         return DuckdbRelation
 
-    def get_connection(self) -> Optional[Any]:
+    def get_connection(self) -> Any | None:
         """DuckDB requires a connection object."""
         if not hasattr(self, "_connection"):
             self._connection = duckdb.connect()

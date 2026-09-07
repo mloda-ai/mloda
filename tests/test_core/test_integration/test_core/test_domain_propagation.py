@@ -7,7 +7,7 @@ dependency chain.
 Uses pytest.mark.parametrize for matrix testing of various scenarios.
 """
 
-from typing import Any, Optional
+from typing import Any
 
 import pytest
 
@@ -32,7 +32,7 @@ class DomainTestDataCreator(FeatureGroup):
         return TEST_DOMAIN
 
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator({"base_value"})
 
     @classmethod
@@ -64,7 +64,7 @@ class ChildFeatureGroup(FeatureGroup):
             feature_name = str(feature_name)
         return feature_name == "child_feature"
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return {"base_value"}  # type: ignore[arg-type]
 
     @classmethod
@@ -95,7 +95,7 @@ class ParentFeatureGroup(FeatureGroup):
             feature_name = str(feature_name)
         return feature_name == "parent_feature"
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return {"child_feature"}  # type: ignore[arg-type]
 
     @classmethod
@@ -126,7 +126,7 @@ class GrandchildFeatureGroup(FeatureGroup):
             feature_name = str(feature_name)
         return feature_name == "grandchild_feature"
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return {"base_value"}  # type: ignore[arg-type]
 
     @classmethod
@@ -157,7 +157,7 @@ class IntermediateFeatureGroup(FeatureGroup):
             feature_name = str(feature_name)
         return feature_name == "intermediate_feature"
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return {"grandchild_feature"}  # type: ignore[arg-type]
 
     @classmethod
@@ -188,7 +188,7 @@ class GrandparentFeatureGroup(FeatureGroup):
             feature_name = str(feature_name)
         return feature_name == "grandparent_feature"
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return {"intermediate_feature"}  # type: ignore[arg-type]
 
     @classmethod
@@ -312,8 +312,8 @@ class TestDomainPropagationMatrix:
     def test_features_class_domain_propagation(
         self,
         child_input: str | Feature,
-        parent_domain: Optional[str],
-        expected_child_domain: Optional[str],
+        parent_domain: str | None,
+        expected_child_domain: str | None,
     ) -> None:
         """Test Features class handles domain propagation correctly."""
         features = Features([child_input], parent_domain=parent_domain)

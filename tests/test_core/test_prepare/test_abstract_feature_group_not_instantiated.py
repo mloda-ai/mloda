@@ -10,7 +10,7 @@ These tests are written to FAIL until the abstract-base guard exists.
 """
 
 from abc import abstractmethod
-from typing import Any, Optional
+from typing import Any
 
 import pytest
 
@@ -54,7 +54,7 @@ class AbstractWinnerFeatureGroup(FeatureGroup):
         cls,
         feature_name: FeatureName | str,
         options: Options,
-        data_access_collection: Optional[DataAccessCollection] = None,
+        data_access_collection: DataAccessCollection | None = None,
     ) -> bool:
         name = str(feature_name) if isinstance(feature_name, FeatureName) else feature_name
         return name == ABSTRACT_WINNER_FEATURE
@@ -65,7 +65,7 @@ class AbstractWinnerFeatureGroup(FeatureGroup):
         """Abstract hook that makes this class uninstantiable."""
         ...
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return None
 
 
@@ -83,7 +83,7 @@ class IsolatedAbstractAggBase(FeatureGroup):
         cls,
         feature_name: FeatureName | str,
         options: Options,
-        data_access_collection: Optional[DataAccessCollection] = None,
+        data_access_collection: DataAccessCollection | None = None,
     ) -> bool:
         name = str(feature_name) if isinstance(feature_name, FeatureName) else feature_name
         return name == ISOLATED_ABSTRACT_AGG_FEATURE
@@ -94,7 +94,7 @@ class IsolatedAbstractAggBase(FeatureGroup):
         """Abstract hook that makes this base uninstantiable."""
         ...
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return None
 
 
@@ -131,11 +131,11 @@ class ScopeMismatchUnrelatedFG(FeatureGroup):
         cls,
         feature_name: FeatureName | str,
         options: Options,
-        data_access_collection: Optional[DataAccessCollection] = None,
+        data_access_collection: DataAccessCollection | None = None,
     ) -> bool:
         return False
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return None
 
 
@@ -147,7 +147,7 @@ class ScopeMismatchAbstractBase(FeatureGroup):
         cls,
         feature_name: FeatureName | str,
         options: Options,
-        data_access_collection: Optional[DataAccessCollection] = None,
+        data_access_collection: DataAccessCollection | None = None,
     ) -> bool:
         name = str(feature_name) if isinstance(feature_name, FeatureName) else feature_name
         return name == SCOPE_MISMATCH_FEATURE
@@ -158,7 +158,7 @@ class ScopeMismatchAbstractBase(FeatureGroup):
         """Abstract hook that makes this base uninstantiable."""
         ...
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return None
 
 
@@ -186,7 +186,7 @@ class CapabilityShadowAbstractBase(FeatureGroup):
         cls,
         feature_name: FeatureName | str,
         options: Options,
-        data_access_collection: Optional[DataAccessCollection] = None,
+        data_access_collection: DataAccessCollection | None = None,
     ) -> bool:
         name = str(feature_name) if isinstance(feature_name, FeatureName) else feature_name
         return name == CAPABILITY_SHADOW_FEATURE
@@ -197,7 +197,7 @@ class CapabilityShadowAbstractBase(FeatureGroup):
         """Abstract hook that makes this base uninstantiable."""
         ...
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return None
 
 

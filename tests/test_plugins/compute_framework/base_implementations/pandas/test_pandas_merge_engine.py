@@ -1,5 +1,5 @@
 import pytest
-from typing import Any, Optional
+from typing import Any
 
 from mloda.provider import BaseMergeEngine
 from mloda_plugins.compute_framework.base_implementations.pandas.pandas_merge_engine import PandasMergeEngine
@@ -36,6 +36,6 @@ class TestPandasMergeEngine(MultiIndexMergeEngineTestBase):
         dataframe_type: type[Any] = pd.DataFrame
         return dataframe_type
 
-    def get_connection(self) -> Optional[Any]:
+    def get_connection(self) -> Any | None:
         """Pandas does not require a connection object."""
         return None

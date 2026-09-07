@@ -17,7 +17,7 @@ from abc import abstractmethod
 from ast import literal_eval
 from collections.abc import Callable, Iterable, Iterator
 from difflib import get_close_matches
-from typing import Any, ClassVar, Optional, cast, get_args
+from typing import Any, ClassVar, cast, get_args
 
 import pytest
 
@@ -384,7 +384,7 @@ class RendererBareOnlyFG791(CountingFeatureGroup791):
         cls,
         feature_name: FeatureName | str,
         options: Options,
-        data_access_collection: Optional[DataAccessCollection] = None,
+        data_access_collection: DataAccessCollection | None = None,
     ) -> bool:
         matched = super().match_feature_group_criteria(feature_name, options, data_access_collection)
         return matched and not options.group
@@ -408,7 +408,7 @@ class RendererStrictFG791(FeatureChainParserMixin, FeatureGroup):
         cls,
         feature_name: str | FeatureName,
         options: Options,
-        data_access_collection: Optional[DataAccessCollection] = None,
+        data_access_collection: DataAccessCollection | None = None,
     ) -> bool:
         HOOK_COUNTER_791.record(cls.get_class_name(), "match_feature_group_criteria")
         return super().match_feature_group_criteria(feature_name, options, data_access_collection)
@@ -434,12 +434,12 @@ class RendererStrictFG791(FeatureChainParserMixin, FeatureGroup):
         return super().supports_compute_framework(feature_name, options, compute_framework)
 
     @classmethod
-    def index_columns(cls) -> Optional[list[Index]]:
+    def index_columns(cls) -> list[Index] | None:
         HOOK_COUNTER_791.record(cls.get_class_name(), "index_columns")
         return None
 
     @classmethod
-    def supports_index(cls, index: Index) -> Optional[bool]:
+    def supports_index(cls, index: Index) -> bool | None:
         HOOK_COUNTER_791.record(cls.get_class_name(), "supports_index")
         return None
 
@@ -458,7 +458,7 @@ class RendererStrictFG791(FeatureChainParserMixin, FeatureGroup):
         HOOK_COUNTER_791.record(cls.get_class_name(), "_strict_validation_rejection_reason")
         return super()._strict_validation_rejection_reason(feature_name, options)
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return None
 
 
@@ -475,7 +475,7 @@ class RendererMissingOptionFG791(FeatureChainParserMixin, FeatureGroup):
         DefaultOptionKeys.in_features: property_spec("source", context=True),
     }
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return None
 
 
@@ -585,7 +585,7 @@ class RendererValueStageFG791(CountingFeatureGroup791):
         cls,
         feature_name: FeatureName | str,
         options: Options,
-        data_access_collection: Optional[DataAccessCollection] = None,
+        data_access_collection: DataAccessCollection | None = None,
     ) -> bool:
         # Name-guarded, so this globally visible class stays inert for every other name it is asked about.
         if not super().match_feature_group_criteria(feature_name, options, data_access_collection):
@@ -627,7 +627,7 @@ class RendererLivePrefixFG791(CountingFeatureGroup791):
         cls,
         feature_name: FeatureName | str,
         options: Options,
-        data_access_collection: Optional[DataAccessCollection] = None,
+        data_access_collection: DataAccessCollection | None = None,
     ) -> bool:
         cls._enter_hook("match_feature_group_criteria")
         return cls.feature_name_contains_class_name_as_prefix(str(feature_name))
@@ -665,7 +665,7 @@ class RendererCrossDomainNameFG791(CountingFeatureGroup791):
         cls,
         feature_name: FeatureName | str,
         options: Options,
-        data_access_collection: Optional[DataAccessCollection] = None,
+        data_access_collection: DataAccessCollection | None = None,
     ) -> bool:
         cls._enter_hook("match_feature_group_criteria")
         # The two class-identity rules of the default matcher, and the two names the catalog captures for it.
@@ -743,7 +743,7 @@ class ValueRejectingCrossDomainFG791(CountingFeatureGroup791):
         cls,
         feature_name: FeatureName | str,
         options: Options,
-        data_access_collection: Optional[DataAccessCollection] = None,
+        data_access_collection: DataAccessCollection | None = None,
     ) -> bool:
         # Name-guarded, so this globally visible class stays inert for every other name it is asked about.
         if not super().match_feature_group_criteria(feature_name, options, data_access_collection):
@@ -765,7 +765,7 @@ class ValueRejectingUnlinkedFG791(CountingFeatureGroup791):
         cls,
         feature_name: FeatureName | str,
         options: Options,
-        data_access_collection: Optional[DataAccessCollection] = None,
+        data_access_collection: DataAccessCollection | None = None,
     ) -> bool:
         # Name-guarded, so this globally visible class stays inert for every other name it is asked about.
         if not super().match_feature_group_criteria(feature_name, options, data_access_collection):
@@ -1057,7 +1057,7 @@ def _build_renamed_group() -> type[CountingFeatureGroup791]:
             cls,
             feature_name: FeatureName | str,
             options: Options,
-            data_access_collection: Optional[DataAccessCollection] = None,
+            data_access_collection: DataAccessCollection | None = None,
         ) -> bool:
             cls._enter_hook("match_feature_group_criteria")
             # The two class-identity rules of the default matcher, both of which read get_class_name().

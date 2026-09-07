@@ -9,7 +9,7 @@ See Also:
     - GitHub Issue #1235: Link equality/hash ignore discriminators
 """
 
-from typing import Any, Optional
+from typing import Any
 
 from mloda.provider import FeatureGroup
 from mloda.user import FeatureName
@@ -24,11 +24,11 @@ from mloda.user import Options
 class DiscriminatorFG(FeatureGroup):
     """Mock feature group with a single index column 'id'."""
 
-    def input_features(self, _options: Options, _feature_name: FeatureName) -> Optional[set[Any]]:
+    def input_features(self, _options: Options, _feature_name: FeatureName) -> set[Any] | None:
         return None
 
     @classmethod
-    def index_columns(cls) -> Optional[list[Index]]:
+    def index_columns(cls) -> list[Index] | None:
         return [Index(("id",))]
 
 

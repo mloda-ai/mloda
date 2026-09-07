@@ -2,7 +2,6 @@ import inspect
 from collections.abc import Sequence
 from copy import deepcopy
 from dataclasses import replace
-from typing import Optional
 
 from mloda.core.prepare.accessible_plugins import FeatureGroupEnvironmentMapping
 
@@ -110,16 +109,16 @@ class IdentifyFeatureGroupClass:
     _match_rejections: dict[type[FeatureGroup], MatchRejection]
     _matcher_errors: dict[type[FeatureGroup], str]
     _eliminations: dict[type[FeatureGroup], Elimination]
-    _data_access_collection: Optional[DataAccessCollection]
+    _data_access_collection: DataAccessCollection | None
     # Per-evaluation memos of the hooks more than one reader wants. evaluate() builds a fresh instance, so
     # they are scoped to one resolution attempt and never cache across runs.
-    _domain_outcomes: dict[type[FeatureGroup], tuple[Optional[Domain], Optional[Exception]]]
-    _links_outcomes: dict[type[FeatureGroup], tuple[Optional[bool], Optional[Exception]]]
+    _domain_outcomes: dict[type[FeatureGroup], tuple[Domain | None, Exception | None]]
+    _links_outcomes: dict[type[FeatureGroup], tuple[bool | None, Exception | None]]
     _declared_frameworks: dict[type[FeatureGroup], frozenset[type[ComputeFramework]]]
     _supported_names: dict[type[FeatureGroup], frozenset[str]]
     _prefixes: dict[type[FeatureGroup], str]
 
-    def __init__(self, data_access_collection: Optional[DataAccessCollection] = None) -> None:
+    def __init__(self, data_access_collection: DataAccessCollection | None = None) -> None:
         self._criteria_matched_feature_groups = set()
         self._abstract_matched_feature_groups = set()
         self._candidate_frameworks = {}
@@ -140,8 +139,8 @@ class IdentifyFeatureGroupClass:
         cls,
         feature: Feature,
         accessible_plugins: FeatureGroupEnvironmentMapping,
-        links: Optional[set[Link]],
-        data_access_collection: Optional[DataAccessCollection] = None,
+        links: set[Link] | None,
+        data_access_collection: DataAccessCollection | None = None,
     ) -> EvaluationResult:
         """Run the matching/filter logic without raising, returning a structured result."""
         # Pre-matching guard: a >1 pin fires regardless of whether any candidate matches (the old check
@@ -174,7 +173,7 @@ class IdentifyFeatureGroupClass:
         result: EvaluationResult,
         accessible_plugins: FeatureGroupEnvironmentMapping,
         feature: Feature,
-        links: Optional[set[Link]],
+        links: set[Link] | None,
     ) -> RenderFacts:
         """Capture the non-elimination facts the messages still need. Only reached when the pass has no winner.
 
@@ -210,7 +209,7 @@ class IdentifyFeatureGroupClass:
                 hints.add(prefix)
         return frozenset(hints)
 
-    def _domain_outcome(self, feature_group: type[FeatureGroup]) -> tuple[Optional[Domain], Optional[Exception]]:
+    def _domain_outcome(self, feature_group: type[FeatureGroup]) -> tuple[Domain | None, Exception | None]:
         """Memoized get_domain() OUTCOME, value or raise, so one candidate's hook runs once per evaluation.
 
         The outcome rather than the value, because the two readers disagree on error semantics: the decision
@@ -331,7 +330,7 @@ class IdentifyFeatureGroupClass:
         return tuple(known_names)
 
     def _fails_name_blind_gate(
-        self, feature_group: type[FeatureGroup], feature: Feature, links: Optional[set[Link]]
+        self, feature_group: type[FeatureGroup], feature: Feature, links: set[Link] | None
     ) -> bool:
         """Capture-side retest of the three name-blind gates, scope then domain then links, that never raises.
 
@@ -377,7 +376,7 @@ class IdentifyFeatureGroupClass:
         feature_group: type[FeatureGroup],
         compute_frameworks: set[type[ComputeFramework]],
         feature: Feature,
-        links: Optional[set[Link]],
+        links: set[Link] | None,
     ) -> bool:
         """No name at all can resolve to this candidate: it has no framework left, or it lost at a name-blind gate.
 
@@ -403,7 +402,7 @@ class IdentifyFeatureGroupClass:
         result: EvaluationResult,
         accessible_plugins: FeatureGroupEnvironmentMapping,
         feature: Feature,
-        links: Optional[set[Link]],
+        links: set[Link] | None,
     ) -> frozenset[str]:
         """Catalog names of dead candidates that no live candidate owns and no live candidate's prefix covers.
 
@@ -432,8 +431,8 @@ class IdentifyFeatureGroupClass:
         self,
         feature: Feature,
         accessible_plugins: FeatureGroupEnvironmentMapping,
-        links: Optional[set[Link]],
-        data_access_collection: Optional[DataAccessCollection] = None,
+        links: set[Link] | None,
+        data_access_collection: DataAccessCollection | None = None,
     ) -> FeatureGroupEnvironmentMapping:
         _identified_feature_groups: FeatureGroupEnvironmentMapping = {}
 
@@ -527,7 +526,7 @@ class IdentifyFeatureGroupClass:
         """Record the first gate a non-winning name-matching candidate failed; one entry per candidate."""
         self._eliminations.setdefault(feature_group, Elimination(stage=stage, reason=reason))
 
-    def _value_rejection(self, feature_group: type[FeatureGroup]) -> Optional[MatchRejection]:
+    def _value_rejection(self, feature_group: type[FeatureGroup]) -> MatchRejection | None:
         """The MatchRejection the first match pass recorded for this candidate class, if any.
 
         The candidate's criteria match records its own rejection under a per-candidate window; this
@@ -544,7 +543,7 @@ class IdentifyFeatureGroupClass:
             return f"does not declare the requested domain '{requested}'"
         return f"declares domain '{candidate_domain}', but the run requested '{requested}'"
 
-    def _filter_feature_group_by_links(self, feature_group: type[FeatureGroup], links: Optional[set[Link]]) -> bool:
+    def _filter_feature_group_by_links(self, feature_group: type[FeatureGroup], links: set[Link] | None) -> bool:
         """Decision-side links gate: unguarded, so a raising index hook still fails the engine loudly."""
         supported, error = self._links_outcome(feature_group, links)
         if error is not None:
@@ -554,8 +553,8 @@ class IdentifyFeatureGroupClass:
         return supported
 
     def _links_outcome(
-        self, feature_group: type[FeatureGroup], links: Optional[set[Link]]
-    ) -> tuple[Optional[bool], Optional[Exception]]:
+        self, feature_group: type[FeatureGroup], links: set[Link] | None
+    ) -> tuple[bool | None, Exception | None]:
         """Memoized links-gate OUTCOME, verdict or raise, so one candidate's index hooks run once per evaluation.
 
         The outcome rather than the verdict, for the reason _domain_outcome caches one: the decision filter
@@ -573,7 +572,7 @@ class IdentifyFeatureGroupClass:
         return self._links_outcomes[feature_group]
 
     @staticmethod
-    def _links_gate(feature_group: type[FeatureGroup], links: Optional[set[Link]]) -> bool:
+    def _links_gate(feature_group: type[FeatureGroup], links: set[Link] | None) -> bool:
         # Case index columns not given, so no validation possible
         if feature_group.index_columns() is None:
             return True
@@ -596,7 +595,7 @@ class IdentifyFeatureGroupClass:
         self,
         feature_group: type[FeatureGroup],
         feature: Feature,
-        data_access_collection: Optional[DataAccessCollection],
+        data_access_collection: DataAccessCollection | None,
     ) -> bool:
         """A raise out of the match hook is a non-match for that candidate only, not a run-wide abort (#845).
 
@@ -695,8 +694,8 @@ class IdentifyFeatureGroupClass:
 def evaluate_and_render(
     feature: Feature,
     accessible_plugins: FeatureGroupEnvironmentMapping,
-    links: Optional[set[Link]] = None,
-    data_access_collection: Optional[DataAccessCollection] = None,
+    links: set[Link] | None = None,
+    data_access_collection: DataAccessCollection | None = None,
 ) -> tuple[EvaluationResult, str | None]:
     """One resolution pass plus its failure message; the message is None iff the feature resolved."""
     # Unguarded: ComputeFrameworkPinError is a misuse validated before matching, so it escapes unconverted.
@@ -707,8 +706,8 @@ def evaluate_and_render(
 def resolve_or_raise(
     feature: Feature,
     accessible_plugins: FeatureGroupEnvironmentMapping,
-    links: Optional[set[Link]] = None,
-    data_access_collection: Optional[DataAccessCollection] = None,
+    links: set[Link] | None = None,
+    data_access_collection: DataAccessCollection | None = None,
     partial_records: Sequence[ResolutionRecord] = (),
 ) -> EvaluationResult:
     """Evaluate one feature and raise the typed FeatureResolutionError on failure."""

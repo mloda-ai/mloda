@@ -5,7 +5,7 @@ Consumes the shared AsofMergeEngineTestBase. PythonDict's native format is a
 columnar dict; the DataConverter routes through PyArrow, so PyArrow must be available.
 """
 
-from typing import Any, Optional
+from typing import Any
 
 import pytest
 
@@ -40,7 +40,7 @@ class TestPythonDictAsofMergeEngine(AsofMergeEngineTestBase):
     def framework_type(cls) -> type[Any]:
         return dict
 
-    def get_connection(self) -> Optional[Any]:
+    def get_connection(self) -> Any | None:
         return None
 
     def test_nearest_direction(self) -> None:

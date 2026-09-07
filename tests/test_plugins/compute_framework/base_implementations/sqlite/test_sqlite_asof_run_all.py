@@ -8,7 +8,7 @@ guarded with a skipif on ``pa``.
 """
 
 import sqlite3
-from typing import Any, Optional
+from typing import Any
 
 import pytest
 
@@ -38,7 +38,7 @@ class TestSqliteAsofRunAll(AsofRunAllTestBase):
     def compute_framework_name(cls) -> str:
         return "SqliteFramework"
 
-    def get_connection(self) -> Optional[Any]:
+    def get_connection(self) -> Any | None:
         """SQLite requires a connection object."""
         if not hasattr(self, "_connection"):
             self._connection = sqlite3.connect(":memory:")

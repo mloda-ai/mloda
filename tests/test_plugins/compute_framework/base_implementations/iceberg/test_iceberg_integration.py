@@ -1,6 +1,6 @@
 from mloda.user import Features
 import pytest
-from typing import Any, Optional
+from typing import Any
 from unittest.mock import Mock
 
 from mloda.provider import FeatureGroup
@@ -82,7 +82,7 @@ class IcebergTestDataCreator(FeatureGroup):
     """Test data creator for Iceberg integration tests."""
 
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         """Return a DataCreator with the supported feature names."""
         return DataCreator(set(iceberg_test_dict.keys()))
 
@@ -118,8 +118,8 @@ class ATestIcebergFeatureGroup(FeatureGroup, MatchData):
         cls,
         feature_name: str,
         options: Options,
-        data_access_collection: Optional[DataAccessCollection] = None,
-        framework_connection_object: Optional[Any] = None,
+        data_access_collection: DataAccessCollection | None = None,
+        framework_connection_object: Any | None = None,
     ) -> Any:
         """Check for data access collection if any child classes match the data access."""
 
@@ -150,7 +150,7 @@ class ATestIcebergFeatureGroup(FeatureGroup, MatchData):
 class IcebergSimpleTransformFeatureGroup(FeatureGroup):
     """Simple feature group for testing Iceberg transformations."""
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         """Require base features for transformation."""
         feature_name_str = str(feature_name) if isinstance(feature_name, FeatureName) else str(feature_name)
 
@@ -203,7 +203,7 @@ class IcebergSimpleTransformFeatureGroup(FeatureGroup):
 class IcebergToArrowFeatureGroup(FeatureGroup):
     """Feature group that converts Iceberg data to PyArrow format."""
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return {Feature("doubled_value")}
 
     @classmethod

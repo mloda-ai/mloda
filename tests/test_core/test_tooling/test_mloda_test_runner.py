@@ -1,6 +1,6 @@
 """MlodaTestRunner.run_api must populate RunResult.runner with the ExecutionOrchestrator."""
 
-from typing import Any, Optional
+from typing import Any
 
 from mloda.provider import BaseInputData
 from mloda.provider import DataCreator
@@ -15,7 +15,7 @@ from tests.test_core.test_tooling import MlodaTestRunner
 
 class RunnerFieldRootFeature(FeatureGroup):
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator({cls.get_class_name()})
 
     @classmethod

@@ -67,14 +67,14 @@ assert _pyarrow_module.PyArrowTable.is_available() is False, (
 
 from mloda.provider import FeatureGroup, FeatureSet, DataCreator, BaseInputData
 
-from typing import Any, Optional
+from typing import Any
 
 
 class InlinePythonDictCreator(FeatureGroup):
     """Self-contained primary-source FeatureGroup producing PythonDict data."""
 
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator({"inline_value"})
 
     @classmethod

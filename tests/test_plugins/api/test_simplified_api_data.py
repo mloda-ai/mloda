@@ -11,7 +11,7 @@ Simplified mloda:
     )
 """
 
-from typing import Any, Optional
+from typing import Any
 
 from mloda.user import mloda
 from mloda.provider import FeatureGroup
@@ -34,7 +34,7 @@ from mloda.provider import ApiInputDataFeature
 class SimpleApiFeature(FeatureGroup):
     """A simple feature that consumes mloda data."""
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         """Define input features from mloda data."""
         return {
             Feature(name="api_id", index=Index(("api_id",))),
@@ -58,7 +58,7 @@ class SimpleApiFeature(FeatureGroup):
 class MultiKeyApiFeature(FeatureGroup):
     """A feature that consumes data from multiple mloda keys."""
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         """Define input features from multiple mloda data sources."""
         # This will require data from both FirstKey and SecondKey
         return {
@@ -84,7 +84,7 @@ class CreatorDataFeature(FeatureGroup):
     """Creates its own data via DataCreator."""
 
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator({"creator_id", "creator_value"})
 
     @classmethod
@@ -99,7 +99,7 @@ class CreatorDataFeature(FeatureGroup):
 class SimplifiedApiJoinFeature(FeatureGroup):
     """Joins simplified mloda data with Creator data using LEFT join."""
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         """Define input features with a LEFT join link."""
         # Create the link: LEFT join on api_id = creator_id
         link = Link.left(

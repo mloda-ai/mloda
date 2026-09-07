@@ -1,5 +1,5 @@
 import os
-from typing import Any, Optional
+from typing import Any
 
 import tempfile
 import sqlite3
@@ -108,7 +108,7 @@ class TestTwoReader:
 
         class ReadFileFeatureWithIndex(ReadFileFeature):
             @classmethod
-            def index_columns(cls) -> Optional[list[Index]]:
+            def index_columns(cls) -> list[Index] | None:
                 return [Index(("id",))]
 
             @classmethod
@@ -116,7 +116,7 @@ class TestTwoReader:
                 cls,
                 feature_name: FeatureName | str,
                 options: Options,
-                data_access_collection: Optional[DataAccessCollection] = None,
+                data_access_collection: DataAccessCollection | None = None,
             ) -> bool:
                 # Feature is only valid for this test
                 if options.get("test_agg_feature") is None:
@@ -132,7 +132,7 @@ class TestTwoReader:
 
         class DBInputDataTestFeatureGroupWithIndex(DBInputDataTestFeatureGroup):
             @classmethod
-            def index_columns(cls) -> Optional[list[Index]]:
+            def index_columns(cls) -> list[Index] | None:
                 return [Index(("id",))]
 
             @classmethod

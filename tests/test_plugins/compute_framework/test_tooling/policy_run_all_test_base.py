@@ -12,7 +12,7 @@ base that concrete per-framework conformance suites build on.
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Any, Callable, Optional
+from typing import Any, Callable
 
 import pytest
 
@@ -100,7 +100,7 @@ class PolicyRunAllTestBase(ABC):
         """Return the compute framework name string for ``compute_frameworks=[...]``."""
         pass
 
-    def get_connection(self) -> Optional[Any]:
+    def get_connection(self) -> Any | None:
         """Return a framework connection object, or None when none is needed."""
         return None
 
@@ -109,7 +109,7 @@ class PolicyRunAllTestBase(ABC):
         """FeatureGroup classes whose ``get_class_name()`` keys the connection in options."""
         return set()
 
-    def _feature_and_dac(self, feature_name: str) -> tuple[Feature, Optional[DataAccessCollection]]:
+    def _feature_and_dac(self, feature_name: str) -> tuple[Feature, DataAccessCollection | None]:
         conn = self.get_connection()
         if conn is not None:
             feature = Feature(
@@ -127,7 +127,7 @@ class PolicyRunAllTestBase(ABC):
         expectation: PolicyExpectation,
         mode: ParallelizationMode,
         flight_server: Any,
-    ) -> Optional[list[Any]]:
+    ) -> list[Any] | None:
         feature, dac = self._feature_and_dac(feature_name)
 
         if isinstance(expectation, PolicyRaises):

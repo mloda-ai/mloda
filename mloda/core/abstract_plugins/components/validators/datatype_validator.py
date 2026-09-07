@@ -1,4 +1,4 @@
-from typing import Any, Callable, Optional
+from typing import Any, Callable
 
 
 from mloda.core.abstract_plugins.components.data_types import DataType
@@ -60,7 +60,7 @@ class DataTypeValidator:
     def validate(
         cls,
         features: Any,
-        get_column_data_type: Callable[[str], Optional[DataType]],
+        get_column_data_type: Callable[[str], DataType | None],
     ) -> None:
         """Validate that data columns match declared feature types.
 

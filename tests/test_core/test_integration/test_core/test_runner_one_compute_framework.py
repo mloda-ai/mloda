@@ -1,4 +1,4 @@
-from typing import Any, Optional
+from typing import Any
 import pyarrow as pa
 import pyarrow.compute as pc
 from mloda.provider import BaseInputData
@@ -24,7 +24,7 @@ class EngineRunnerTest(FeatureGroup):
         return {cls.f_name: [1, 2, 3]}
 
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator({cls.f_name})
 
 
@@ -37,13 +37,13 @@ class EngineRunnerTest2(FeatureGroup):
         cls,
         feature_name: FeatureName | str,
         options: Options,
-        data_access_collection: Optional[DataAccessCollection] = None,
+        data_access_collection: DataAccessCollection | None = None,
     ) -> bool:
         if cls.f_name in str(feature_name):
             return True
         return False
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return {Feature.int32_of(self.f_name2)}
 
     @classmethod
@@ -59,7 +59,7 @@ class EngineRunnerTest2(FeatureGroup):
 class EngineRunnerTest3(FeatureGroup):
     feature_2 = Feature.int32_of("EngineRunnerTest2")
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return {self.feature_2}
 
     @classmethod
@@ -82,7 +82,7 @@ class EngineRunnerTest4(FeatureGroup):
         return pa.Table.from_arrays(arrays, schema=schema)
 
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator({f"{cls.get_class_name()}_{cnt}" for cnt in range(4)})
 
 
@@ -92,13 +92,13 @@ class SumFeature(FeatureGroup):
         cls,
         feature_name: FeatureName | str,
         options: Options,
-        data_access_collection: Optional[DataAccessCollection] = None,
+        data_access_collection: DataAccessCollection | None = None,
     ) -> bool:
         if "sum_of_" in str(feature_name):
             return True
         return False
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         feature_names = options.get("sum")
         return {Feature.int32_of(value) for value in set(feature_names)}
 

@@ -4,7 +4,7 @@ import inspect
 import logging
 import sys
 from copy import deepcopy
-from typing import Any, Optional, cast
+from typing import Any, cast
 
 from mloda.core.abstract_plugins.components.base_feature_group_version import (
     SOURCE_INTROSPECTION_ERRORS,
@@ -147,7 +147,7 @@ def _running_in_zmq_shell() -> bool:
     return bool(ipython_instance.__class__.__name__ == "ZMQInteractiveShell")
 
 
-def _safe_class_source_hash(cls: type[FeatureGroup]) -> Optional[str]:
+def _safe_class_source_hash(cls: type[FeatureGroup]) -> str | None:
     """Return source hash for a FeatureGroup subclass or None if unavailable.
 
     ``inspect.getsource`` raises ``OSError`` (no source backing) or ``TypeError``
@@ -272,7 +272,7 @@ def _any_live_in_module(members: list[type[FeatureGroup]]) -> bool:
     return any(_is_live_in_module(cls) for cls in members)
 
 
-def _cell_label(cls: type[FeatureGroup]) -> Optional[str]:
+def _cell_label(cls: type[FeatureGroup]) -> str | None:
     """Return the first synthetic ``<...>`` filename a class's methods live in.
 
     Returns ``None`` for classes whose methods all live in real source files.
@@ -313,7 +313,7 @@ class PreFilterPlugins:
     def __init__(
         self,
         compute_frameworks: set[type[ComputeFramework]],
-        plugin_collector: Optional[PluginCollector] = None,
+        plugin_collector: PluginCollector | None = None,
     ) -> None:
         feature_groups = self._set_feature_groups(plugin_collector)
         compute_frameworks = self._set_compute_frameworks(compute_frameworks, plugin_collector)
@@ -325,7 +325,7 @@ class PreFilterPlugins:
     def get_accessible_plugins(self) -> FeatureGroupEnvironmentMapping:
         return self.accessible_plugins
 
-    def _set_feature_groups(self, plugin_collector: Optional[PluginCollector] = None) -> set[type[FeatureGroup]]:
+    def _set_feature_groups(self, plugin_collector: PluginCollector | None = None) -> set[type[FeatureGroup]]:
         accessible_feature_groups = self.get_featuregroup_subclasses()
 
         loaded_universe_was_non_empty = bool(accessible_feature_groups)
@@ -395,7 +395,7 @@ class PreFilterPlugins:
     def _set_compute_frameworks(
         self,
         compute_frameworks: set[type[ComputeFramework]],
-        plugin_collector: Optional[PluginCollector] = None,
+        plugin_collector: PluginCollector | None = None,
     ) -> set[type[ComputeFramework]]:
         compute_frameworks = compute_frameworks.intersection(self.get_cfw_subclasses())
 

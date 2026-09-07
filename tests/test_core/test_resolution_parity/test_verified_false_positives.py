@@ -13,7 +13,6 @@ divergences are erased wholesale when resolve_feature delegates, so they need no
 
 import inspect
 from abc import abstractmethod
-from typing import Optional
 
 import pytest
 
@@ -66,7 +65,7 @@ class AbstractOnlyProbe753(FeatureGroup):
         cls,
         feature_name: FeatureName | str,
         options: Options,
-        data_access_collection: Optional[DataAccessCollection] = None,
+        data_access_collection: DataAccessCollection | None = None,
     ) -> bool:
         return str(feature_name) == ABSTRACT_ONLY_FEATURE
 
@@ -75,7 +74,7 @@ class AbstractOnlyProbe753(FeatureGroup):
     def _probe_hook_753(cls) -> str:
         """Abstract hook that keeps this probe abstract."""
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return None
 
 
@@ -91,11 +90,11 @@ class ParentProbe753(FeatureGroup):
         cls,
         feature_name: FeatureName | str,
         options: Options,
-        data_access_collection: Optional[DataAccessCollection] = None,
+        data_access_collection: DataAccessCollection | None = None,
     ) -> bool:
         return str(feature_name) == PARENT_CHILD_FEATURE
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return None
 
 
@@ -119,11 +118,11 @@ class UnavailableOnlyProbe753(FeatureGroup):
         cls,
         feature_name: FeatureName | str,
         options: Options,
-        data_access_collection: Optional[DataAccessCollection] = None,
+        data_access_collection: DataAccessCollection | None = None,
     ) -> bool:
         return str(feature_name) == UNAVAILABLE_FEATURE
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return None
 
 

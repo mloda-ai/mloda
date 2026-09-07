@@ -10,7 +10,6 @@ Target errors:
 3. Line 874: "Feature group {feature_group} has no matching api data class for feature."
 """
 
-from typing import Optional
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -39,7 +38,7 @@ class ApiInputDataFeatureGroupFixture(FeatureGroup):
     """A feature group fixture that uses ApiInputData for testing error messages."""
 
     @classmethod
-    def input_data(cls) -> Optional[ApiInputData]:
+    def input_data(cls) -> ApiInputData | None:
         return ApiInputData()
 
     @classmethod
@@ -47,13 +46,13 @@ class ApiInputDataFeatureGroupFixture(FeatureGroup):
         cls,
         feature_name: FeatureName | str,
         options: Options,
-        data_access_collection: Optional[DataAccessCollection] = None,
+        data_access_collection: DataAccessCollection | None = None,
     ) -> bool:
         if isinstance(feature_name, FeatureName):
             feature_name = str(feature_name)
         return feature_name == "test_api_feature"
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return None
 
 
@@ -65,13 +64,13 @@ class NoUuidFeatureGroup(FeatureGroup):
         cls,
         feature_name: FeatureName | str,
         options: Options,
-        data_access_collection: Optional[DataAccessCollection] = None,
+        data_access_collection: DataAccessCollection | None = None,
     ) -> bool:
         if isinstance(feature_name, FeatureName):
             feature_name = str(feature_name)
         return feature_name == "no_uuid_test_feature"
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return None
 
 

@@ -3,7 +3,7 @@ from __future__ import annotations
 import datetime
 import decimal
 from collections.abc import Sequence
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Any
 from mloda.core.abstract_plugins.components.data_types import DataType
 from mloda.core.abstract_plugins.components.merge.base_merge_engine import BaseMergeEngine
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_merge_engine import (
@@ -64,8 +64,8 @@ class PythonDictFramework(ComputeFramework):
         self,
         data: dict[str, list[Any]],
         selected_feature_names: Sequence[FeatureName],
-        column_ordering: Optional[str] = None,
-        request_feature_order: Optional[list[str]] = None,
+        column_ordering: str | None = None,
+        request_feature_order: list[str] | None = None,
     ) -> dict[str, list[Any]]:
         if not data:
             return {}
@@ -107,7 +107,7 @@ class PythonDictFramework(ComputeFramework):
                 return type(value).__name__
         return None
 
-    def _extract_column_data_type(self, data: Any, column_name: str) -> Optional[DataType]:
+    def _extract_column_data_type(self, data: Any, column_name: str) -> DataType | None:
         for val in self._column_values(data, column_name):
             if val is None:
                 continue

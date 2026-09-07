@@ -161,13 +161,14 @@ class TestExtrasConsistency:
 class TestRuffConfig:
     """Validate that ruff lint rules enforce modern Python typing conventions."""
 
-    def test_up006_and_up007_rules_configured(self) -> None:
-        """UP006 (PEP 585 builtins) and UP007 (PEP 604 unions) must be enforced."""
+    def test_modern_typing_rules_configured(self) -> None:
+        """UP006 (PEP 585 builtins), UP007 (PEP 604 unions), and UP045 (PEP 604 Optional rewrite) must be enforced."""
         with open(PROJECT_ROOT / "pyproject.toml", "rb") as f:
             data: dict[str, Any] = tomllib.load(f)
         extend_select = data.get("tool", {}).get("ruff", {}).get("lint", {}).get("extend-select", [])
         assert "UP006" in extend_select, "ruff must enforce UP006 (use builtin generics instead of typing generics)"
-        assert "UP007" in extend_select, "ruff must enforce UP007 (use X | Y instead of Union/Optional)"
+        assert "UP007" in extend_select, "ruff must enforce UP007 (use X | Y instead of Union)"
+        assert "UP045" in extend_select, "ruff must enforce UP045 (use X | None instead of Optional)"
 
     def test_no_redundant_typing_generics_in_source(self) -> None:
         """Source files must not import redundant typing generics that UP006/UP007 replace."""
@@ -184,6 +185,20 @@ class TestRuffConfig:
                     if found:
                         violations.append(f"{py_file.relative_to(PROJECT_ROOT)}:{i} imports {found}")
         assert not violations, "Redundant typing imports found:\n" + "\n".join(violations)
+
+    def test_no_optional_typing_usage_in_source(self) -> None:
+        """Source and test files must not use Optional-style annotations that UP045 replaces."""
+        needle = "Optional" + "["
+        source_dirs = [PROJECT_ROOT / "mloda", PROJECT_ROOT / "mloda_plugins", PROJECT_ROOT / "tests"]
+        violations: list[str] = []
+        for source_dir in source_dirs:
+            for py_file in source_dir.rglob("*.py"):
+                for i, line in enumerate(_read_text(py_file).splitlines(), start=1):
+                    if needle in line:
+                        violations.append(f"{py_file.relative_to(PROJECT_ROOT)}:{i}")
+        assert not violations, f"Found {len(violations)} {needle}...] usages (showing up to 20):\n" + "\n".join(
+            violations[:20]
+        )
 
 
 class TestPackagingConfig:

@@ -4,7 +4,7 @@ that, the dedup dropped one of the two hops, the JoinStep lost its transform-ste
 ``run()`` failed to find its source data.
 """
 
-from typing import Any, Optional
+from typing import Any
 from uuid import UUID, uuid4
 
 import pandas as pd
@@ -29,7 +29,7 @@ class HopIdA(FeatureGroup):
     """Pandas root: the join's declared left side."""
 
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator({"hop_id_jid", "hop_id_a_val", "hop_id_a_helper"})
 
     @classmethod
@@ -41,7 +41,7 @@ class HopIdA(FeatureGroup):
         return {PandasDataFrame}
 
     @classmethod
-    def index_columns(cls) -> Optional[list[Index]]:
+    def index_columns(cls) -> list[Index] | None:
         return [Index(("hop_id_jid",))]
 
 
@@ -49,10 +49,10 @@ class HopIdB(FeatureGroup):
     """PyArrow root (join's declared right side); its own index feature doubles as an option-gated derived one."""
 
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator({"hop_id_bjid", "hop_id_b_val"})
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         if options.get("hop_id_variant") == "other":
             return {Feature("hop_id_a_helper", options=Options({"hop_id_variant": "other"}))}
         return None
@@ -69,7 +69,7 @@ class HopIdB(FeatureGroup):
         return {PyArrowTable}
 
     @classmethod
-    def index_columns(cls) -> Optional[list[Index]]:
+    def index_columns(cls) -> list[Index] | None:
         return [Index(("hop_id_bjid",))]
 
     @classmethod
@@ -82,7 +82,7 @@ class HopIdB(FeatureGroup):
 class HopIdC(FeatureGroup):
     """PyArrow consumer of both join sides: forces the join's own transform hop into the plan."""
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return {Feature("hop_id_a_val"), Feature("hop_id_b_val")}
 
     @classmethod
@@ -138,7 +138,7 @@ def _optioned_hop_id_bjid_step(session: mlodaAPI) -> FeatureGroupStep:
     )
 
 
-def _describe(step: TransformFrameworkStep) -> tuple[str, str, str, str, Optional[UUID]]:
+def _describe(step: TransformFrameworkStep) -> tuple[str, str, str, str, UUID | None]:
     return (
         step.from_framework.get_class_name(),
         step.to_framework.get_class_name(),
@@ -223,7 +223,7 @@ class TestTransformFrameworkStepIdentityIncludesLinkId:
     """A join's transform hop and a plain feature-group hop of the same shape must not collide."""
 
     @staticmethod
-    def _step(link_id: Optional[UUID]) -> TransformFrameworkStep:
+    def _step(link_id: UUID | None) -> TransformFrameworkStep:
         return TransformFrameworkStep(
             from_framework=PandasDataFrame,
             to_framework=PyArrowTable,
@@ -253,7 +253,7 @@ class TestTransformFrameworkStepIdentityIncludesSourceStepUuid:
     """Hops of the same shape must key on source_step_uuid: different owning steps, or a join hop, must not collide."""
 
     @staticmethod
-    def _step(source_step_uuid: Optional[UUID]) -> TransformFrameworkStep:
+    def _step(source_step_uuid: UUID | None) -> TransformFrameworkStep:
         return TransformFrameworkStep(
             from_framework=PandasDataFrame,
             to_framework=PyArrowTable,

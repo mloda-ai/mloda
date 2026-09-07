@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 import sqlite3
 import tempfile
-from typing import Any, Optional
+from typing import Any
 
 from mloda.user import PluginCollector
 from mloda_plugins.feature_group.input_data.read_db_feature import ReadDBFeature
@@ -55,7 +55,7 @@ class TestAddIndex:
     ) -> None:
         class ReadFileFeatureWithIndex(ReadFileFeature):
             @classmethod
-            def index_columns(cls) -> Optional[list[Index]]:
+            def index_columns(cls) -> list[Index] | None:
                 return [Index(("id",))]
 
             @classmethod
@@ -63,7 +63,7 @@ class TestAddIndex:
                 cls,
                 feature_name: FeatureName | str,
                 options: Options,
-                data_access_collection: Optional[DataAccessCollection] = None,
+                data_access_collection: DataAccessCollection | None = None,
             ) -> bool:
                 # Feature is only valid for this test
                 if options.get("test_add_index_simple") is None:
@@ -79,7 +79,7 @@ class TestAddIndex:
 
         class DBInputDataTestFeatureGroupWithIndex(DBInputDataTestFeatureGroup):
             @classmethod
-            def index_columns(cls) -> Optional[list[Index]]:
+            def index_columns(cls) -> list[Index] | None:
                 return [Index(("id",))]
 
             @classmethod
@@ -105,13 +105,13 @@ class TestAddIndex:
                 cls,
                 feature_name: FeatureName | str,
                 options: Options,
-                data_access_collection: Optional[DataAccessCollection] = None,
+                data_access_collection: DataAccessCollection | None = None,
             ) -> bool:
                 if "TestAddIndexFeature" in str(feature_name):
                     return True
                 return False
 
-            def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+            def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
                 return {Feature.int32_of("Amount"), Feature.int32_of("any_num")}
 
             @classmethod

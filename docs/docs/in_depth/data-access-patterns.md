@@ -33,7 +33,7 @@ from mloda.provider import BaseInputData, FeatureGroup, FeatureSet
 
 class ReadFileFeature(FeatureGroup):
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return ReadFile()  # BaseInputData implementation
     
     @classmethod
@@ -228,7 +228,7 @@ BaseInputData and MatchData serve **different purposes** and are used in **diffe
 ```py
 class DuckDBAnalyticsFeature(FeatureGroup, MatchData):
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         # BaseInputData for general data loading
         return ReadFile()
 
@@ -252,7 +252,7 @@ class DuckDBAnalyticsFeature(FeatureGroup, MatchData):
 ```py
 class CsvProcessingFeature(FeatureGroup):
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return ReadFile()  # BaseInputData handles file reading
 ```
 
@@ -264,7 +264,7 @@ class CsvProcessingFeature(FeatureGroup):
 ```py
 class DuckDBAnalyticsFeature(FeatureGroup, MatchData):
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return ReadFile()  # BaseInputData for data loading
 
     @classmethod
@@ -283,7 +283,7 @@ For database connection patterns, see [Framework Connection Object](framework-co
 ```py
 class SyntheticDataFeature(FeatureGroup):
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator({"synthetic_data"})  # BaseInputData for data creation
 ```
 

@@ -113,6 +113,10 @@ RAISING_HELPERS_OUTSIDE_THE_PATH: dict[tuple[str, str], str] = {
     ("mloda/core/abstract_plugins/components/utils.py", "get_all_subclasses"): (
         "real edge, collided verdict: it raises nothing itself; the set.add / set.update names do"
     ),
+    ("mloda/core/abstract_plugins/components/utils.py", "safe_field"): (
+        "real edge, collided verdict: it raises nothing itself; warn_once_for's own try/except degrades any "
+        "failure to 'not seen', and the WeakSet/set add() name collides with an unrelated raising add() elsewhere"
+    ),
     ("mloda/core/prepare/resolve_links.py", "update"): _UPDATE_COLLISION,
     ("mloda/core/runtime/run.py", "join"): _JOIN_COLLISION,
     ("mloda/core/abstract_plugins/components/declaration_surface.py", "merged_declaration"): (

@@ -285,7 +285,9 @@ class TestObservabilityFailureDoesNotBreakCalculation:
             warnings = [
                 record.getMessage()
                 for record in caplog.records
-                if record.levelno == logging.WARNING and record.name == SAFE_FIELD_LOGGER
+                if record.levelno == logging.WARNING
+                and record.name == SAFE_FIELD_LOGGER
+                and ".version" in record.getMessage()
             ]
             assert len(warnings) == 1, f"Expected exactly one WARNING across both calls, got {warnings}"
             assert "_RepeatedVersionRaisesFeatureGroup" in warnings[0]

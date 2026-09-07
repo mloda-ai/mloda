@@ -4,6 +4,7 @@ from typing import Any
 import pytest
 
 from mloda.core.abstract_plugins.components.framework_transformer.base_transformer import BaseTransformer
+from mloda.core.abstract_plugins.components import utils
 from mloda.core.abstract_plugins.components.utils import get_all_subclasses
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.abstract_plugins.plugin_registry.plugin_registry import PluginRegistry
@@ -37,18 +38,31 @@ def _clear_warned_unregistered() -> None:
         warned.clear()
 
 
+def _clear_warn_once_for_registries() -> None:
+    """Clear safe_field's warn_once_for dedup registries if the implementation provides them."""
+    weak_registry = getattr(utils, "_warn_once_for_weak", None)
+    if weak_registry is not None:
+        weak_registry.clear()
+    strong_registry = getattr(utils, "_warn_once_for_strong", None)
+    if strong_registry is not None:
+        strong_registry.clear()
+
+
 @pytest.fixture(autouse=True)
 def restore_default_plugin_registry() -> Any:
     """Snapshot and restore the default plugin registry around every test.
 
-    Also clears the warn-mode dedup set so warn-mode tests stay independent.
+    Also clears the warn-mode dedup set and safe_field's warn_once_for registries so
+    warn-mode tests and once-per-process WARNING dedup tests stay independent.
     """
     registry = PluginRegistry.default()
     snapshot = registry.snapshot()
     _clear_warned_unregistered()
+    _clear_warn_once_for_registries()
     yield
     registry.restore(snapshot)
     _clear_warned_unregistered()
+    _clear_warn_once_for_registries()
 
 
 @pytest.fixture(autouse=True)

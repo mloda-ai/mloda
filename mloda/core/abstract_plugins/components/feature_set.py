@@ -57,21 +57,25 @@ class FeatureSet:
 
         for feature_name in self.get_all_names():
             if feature_name in runtime_artifacts:
+                # Dedupe by identity, not equality: Options.__eq__/__hash__ is group-content-based,
+                # so distinct instances with equal groups must not collapse into one.
+                distinct_options = {id(feature.options): feature.options for feature in self.features}.values()
+
+                for options in distinct_options:
+                    if feature_name in options.group:
+                        raise ValueError(
+                            f"Artifact '{feature_name}' is already stored in Options.group from a previous "
+                            "save; supply it either via Options at prepare time or via run(artifacts=...), "
+                            "not both."
+                        )
+
+                # Write to context (never group, to avoid mutating any Feature's hash) on every
+                # distinct Options instance, since get_singular_option_from_options may read any of them.
+                for options in distinct_options:
+                    options.context[feature_name] = runtime_artifacts[feature_name]
+
                 self.artifact_to_load = feature_name
                 self.artifact_to_save = None
-                # self.options is commonly the same object a member Feature's `.options`
-                # aliases (set by add() on first insert, or shared directly by the caller
-                # across multiple features). Options.set() defaults a brand-new key to
-                # `group`, but group is what Options.__hash__/__eq__ (and therefore
-                # Feature.__hash__) is based on -- writing the artifact there silently
-                # changes the hash of any Feature(s) still referencing this Options
-                # object, corrupting `self.features` set membership for any Feature
-                # already inserted (#1236). `context` is excluded from hashing and is
-                # still checked by Options.get()/__getitem__, so store it there instead;
-                # write directly (rather than via add_to_context(), which raises on a
-                # differing existing value) so re-resolving across repeated run() calls
-                # with a different artifact each time keeps working.
-                self.options.context[feature_name] = runtime_artifacts[feature_name]
                 return
 
         self.artifact_to_load = None

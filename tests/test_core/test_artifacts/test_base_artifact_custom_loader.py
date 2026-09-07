@@ -1,6 +1,8 @@
 """Pin BaseArtifact.custom_loader to key off artifact_to_load, not name_of_one_feature (always the
 alphabetically smallest feature name, independent of which feature the artifact is stored under)."""
 
+import pytest
+
 from mloda.provider import BaseArtifact, FeatureSet
 from mloda.user import Feature, Options
 
@@ -118,3 +120,39 @@ class TestFeatureSetResolveArtifactForRuntimeDoesNotMutateFeatureHash:
         features.resolve_artifact_for_runtime({"z_col": "runtime_value"})
 
         assert shared_options["z_col"] == "runtime_value"
+
+
+class TestFeatureSetResolveArtifactForRuntimeRejectsGroupCollision:
+    """A stored artifact key baked into Options.group (the documented "load via Options" pattern)
+    must not silently coexist with a runtime override written into context: Options.get() checks
+    group before context, so the stale group value would shadow the fresh runtime value forever."""
+
+    def test_raises_when_runtime_override_collides_with_group_baked_artifact(self) -> None:
+        options = Options({"z_col": "stored_value"})
+        feature = Feature("z_col", options)
+        features = FeatureSet()
+        features.add(feature)
+
+        with pytest.raises(ValueError, match="(?i)artifact"):
+            features.resolve_artifact_for_runtime({"z_col": "new_runtime_value"})
+
+
+class TestFeatureSetResolveArtifactForRuntimeVisibleAcrossDistinctOptionsInstances:
+    """resolve_artifact_for_runtime() writes only onto self.options (aliased to whichever Feature
+    was added first). When a FeatureSet holds two value-equal but distinct Options instances, the
+    runtime value must land on both, since get_singular_option_from_options reads an arbitrary
+    feature from a set."""
+
+    def test_runtime_value_lands_on_both_distinct_options_instances(self) -> None:
+        options_a = Options({})
+        options_z = Options({})
+        a_col = Feature("a_col", options_a)
+        z_col = Feature("z_col", options_z)
+        fs = FeatureSet()
+        fs.add(a_col)
+        fs.add(z_col)
+
+        fs.resolve_artifact_for_runtime({"z_col": "runtime_value"})
+
+        assert options_a.context.get("z_col") == "runtime_value"
+        assert options_z.context.get("z_col") == "runtime_value"

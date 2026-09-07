@@ -1,6 +1,7 @@
 from collections.abc import Sequence
 from typing import Any, Optional
 from mloda.core.abstract_plugins.components.data_types import DataType
+from mloda.core.abstract_plugins.hook_context import OutputSchema
 from mloda.provider import BaseMergeEngine
 from mloda_plugins.compute_framework.base_implementations.polars.polars_merge_engine import PolarsMergeEngine
 from mloda.user import FeatureName
@@ -85,6 +86,18 @@ class PolarsDataFrame(ComputeFramework):
         if isinstance(dtype, pl.Decimal):
             return DataType.DECIMAL
         return None
+
+    def _output_schema(self, data: Any) -> OutputSchema | None:
+        """Read `.schema` once and build the sorted (name, dtype) pairs from it directly. The dict
+        interchange shape must be handled first, since it reaches this method before transform()
+        normalizes it.
+        """
+        if isinstance(data, dict):
+            return super()._output_schema(data)
+        schema = data.schema
+        if not schema:
+            return None
+        return tuple((name, str(dtype)) for name, dtype in sorted(schema.items(), key=lambda pair: pair[0]))
 
     @classmethod
     def pl_dataframe(cls) -> Any:

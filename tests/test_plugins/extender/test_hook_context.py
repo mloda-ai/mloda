@@ -74,6 +74,19 @@ class TestHookContextCarrierField:
 
         assert context.carrier == carrier
 
+    def test_carrier_is_copied_not_aliased_and_mutation_does_not_leak_into_original(self) -> None:
+        carrier = {"traceparent": "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"}
+
+        context = _make_context(carrier=carrier)
+
+        assert context.carrier == carrier
+        assert context.carrier is not carrier
+
+        assert context.carrier is not None
+        context.carrier["mutated"] = "yes"
+
+        assert "mutated" not in carrier
+
 
 class TestHookContextWorkerIndexField:
     """HookContext carries the worker index of the multiprocessing worker it ran in."""

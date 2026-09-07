@@ -17,6 +17,7 @@ from mloda.core.abstract_plugins.components.input_data.base_input_data import Ba
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook
 from mloda.core.abstract_plugins.hook_context import HookContext
+from mloda.core.abstract_plugins.run_context import RunContext
 from mloda.user import DataAccessCollection, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
@@ -349,6 +350,58 @@ class TestDataAccessIdentityBaselineForNonCredentialShapedValues:
         identity = fetch_context.data_access_identity
         assert identity
         assert str(path) in identity
+
+
+class TestCarrierIsNotAliasedAcrossTwoInputDataLoadHookContexts:
+    """Two INPUT_DATA_LOAD HookContexts built off the SAME ComputeFramework instance's
+    run_context.carrier must not share the dict object."""
+
+    def test_two_direct_load_calls_get_distinct_carrier_objects(self) -> None:
+        extender = _InputDataLoadCapturingExtender()
+        carrier = {"traceparent": "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"}
+        cfw = ComputeFramework(function_extender={extender})
+        cfw.run_context = RunContext(carrier=carrier)
+        reader = _DirectLoadReader()
+        features = FeatureSet()
+
+        with cfw.activate(), _build_calc_context().activate():
+            BaseInputData._load_data_via_hook(reader, "access-one", features)
+        first_context = extender.captured
+
+        with cfw.activate(), _build_calc_context().activate():
+            BaseInputData._load_data_via_hook(reader, "access-two", features)
+        second_context = extender.captured
+
+        assert first_context is not None
+        assert second_context is not None
+        assert first_context.carrier == second_context.carrier == carrier
+        assert first_context.carrier is not second_context.carrier
+
+    def test_mutating_one_carrier_does_not_leak_into_the_other_or_run_context(self) -> None:
+        extender = _InputDataLoadCapturingExtender()
+        carrier = {"traceparent": "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"}
+        cfw = ComputeFramework(function_extender={extender})
+        cfw.run_context = RunContext(carrier=carrier)
+        reader = _DirectLoadReader()
+        features = FeatureSet()
+
+        with cfw.activate(), _build_calc_context().activate():
+            BaseInputData._load_data_via_hook(reader, "access-one", features)
+        first_context = extender.captured
+
+        with cfw.activate(), _build_calc_context().activate():
+            BaseInputData._load_data_via_hook(reader, "access-two", features)
+        second_context = extender.captured
+
+        assert first_context is not None
+        assert first_context.carrier is not None
+        first_context.carrier["mutated"] = "yes"
+
+        assert second_context is not None
+        assert second_context.carrier is not None
+        assert "mutated" not in second_context.carrier
+        assert cfw.run_context.carrier is not None
+        assert "mutated" not in cfw.run_context.carrier
 
 
 _ROW_COUNT_SENTINEL = 424242

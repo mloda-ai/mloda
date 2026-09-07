@@ -51,6 +51,11 @@ class HookContext:
     plan_node_count: int | None = None
     plan_depth: int | None = None
 
+    def __post_init__(self) -> None:
+        # Copy on ingest so a hook mutating the carrier never reaches the caller's dict.
+        if self.carrier is not None:
+            self.carrier = dict(self.carrier)
+
     @staticmethod
     def row_count(data: Any) -> int | None:
         """Return len(data) when the TYPE declares __len__; a dict counts its first column's rows

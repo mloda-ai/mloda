@@ -618,28 +618,6 @@ class TestGetFeatureGroupDocsContractViolations:
             del _DocsVersionNonStrUnfilteredFG
             gc.collect()
 
-    def test_version_degradation_stays_silent(self, caplog: pytest.LogCaptureFixture) -> None:
-        """_safe_version is unlabelled by design, so a degraded version read logs nothing."""
-
-        class _DocsVersionSilentFG(FeatureGroup):
-            """Test double whose version() returns an int."""
-
-            @classmethod
-            def version(cls) -> Any:
-                return 42
-
-        try:
-            with caplog.at_level(logging.DEBUG, logger=SAFE_FIELD_LOGGER):
-                by_name = {fg.name: fg for fg in get_feature_group_docs()}
-
-            assert by_name["_DocsVersionSilentFG"].version == "unavailable"
-
-            messages = [record.getMessage() for record in caplog.records if record.name == SAFE_FIELD_LOGGER]
-            assert messages == [], f"An unlabelled version degradation must be silent, got {messages}"
-        finally:
-            del _DocsVersionSilentFG
-            gc.collect()
-
 
 class TestDegradedReadLogging:
     """Feature-group reads are labelled, so they warn. Compute-framework reads are not, so they stay silent.
@@ -675,6 +653,70 @@ class TestDegradedReadLogging:
             assert "boom" in matching[0], "Warning must carry the swallowed exception message"
         finally:
             del _DocsWarnBoomFG
+            gc.collect()
+
+    def test_version_raising_logs_exactly_one_warning_across_repeated_calls(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """A version() that raises degrades once; warn_once_for dedups the WARNING across repeated doc calls."""
+
+        class _DocsVersionRaisesFG(FeatureGroup):
+            """Test double whose version() classmethod raises OSError."""
+
+            @classmethod
+            def version(cls) -> str:
+                raise OSError("boom")
+
+        try:
+            with caplog.at_level(logging.WARNING, logger=SAFE_FIELD_LOGGER):
+                first = {fg.name: fg for fg in get_feature_group_docs()}
+                second = {fg.name: fg for fg in get_feature_group_docs()}
+
+            assert "_DocsVersionRaisesFG" in first, "A raising version() must not drop the class from the catalog"
+            assert first["_DocsVersionRaisesFG"].version == "unavailable"
+            assert "_DocsVersionRaisesFG" in second, "The class must stay in the catalog on the second call too"
+            assert second["_DocsVersionRaisesFG"].version == "unavailable"
+
+            warnings = [
+                record.getMessage()
+                for record in caplog.records
+                if record.levelno == logging.WARNING
+                and record.name == SAFE_FIELD_LOGGER
+                and "_DocsVersionRaisesFG.version" in record.getMessage()
+            ]
+            assert len(warnings) == 1, f"Expected exactly one WARNING across both calls, got {warnings}"
+            assert "boom" in warnings[0], "Warning must carry the swallowed exception message"
+        finally:
+            del _DocsVersionRaisesFG
+            gc.collect()
+
+    def test_version_degradation_logs_warning_naming_class_and_field(self, caplog: pytest.LogCaptureFixture) -> None:
+        """_safe_version is labelled, so a degraded version read (non-str return) logs a WARNING."""
+
+        class _DocsVersionWarnFG(FeatureGroup):
+            """Test double whose version() returns an int."""
+
+            @classmethod
+            def version(cls) -> Any:
+                return 42
+
+        try:
+            with caplog.at_level(logging.WARNING, logger=SAFE_FIELD_LOGGER):
+                by_name = {fg.name: fg for fg in get_feature_group_docs()}
+
+            assert by_name["_DocsVersionWarnFG"].version == "unavailable"
+
+            messages = [
+                record.getMessage()
+                for record in caplog.records
+                if record.levelno == logging.WARNING and record.name == SAFE_FIELD_LOGGER
+            ]
+            matching = [msg for msg in messages if "_DocsVersionWarnFG.version" in msg]
+            assert len(matching) == 1, (
+                f"Expected exactly one WARNING naming '_DocsVersionWarnFG.version', got {messages}"
+            )
+        finally:
+            del _DocsVersionWarnFG
             gc.collect()
 
     def test_degraded_compute_framework_read_logs_nothing(self, caplog: pytest.LogCaptureFixture) -> None:

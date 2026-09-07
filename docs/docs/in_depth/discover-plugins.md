@@ -277,12 +277,13 @@ also reject a non-str return, so a wrong type degrades too instead of sinking th
 call at the filter.
 
 Logging is opt-in via `field`: the labelled `get_feature_group_docs` reads warn on
-swallow, where a raise does mean a broken plugin. The unlabelled guards stay silent
-because degrading there is by design (source introspection of `type()`-built
-classes, an availability probe without its optional backend, Iceberg's deliberate
-`NotImplementedError` from `merge_engine()`). A hot call site can also pass
-`warn_once_for` (a key, typically the plugin class) to dedup that WARNING to once
-per key instead of once per call.
+swallow, where a raise does mean a broken plugin (`_safe_version` included, via
+`warn_once_for` so a broken class warns once, not once per catalog walk). The
+unlabelled guards stay silent because degrading there is by design (the source-hash
+read in `accessible_plugins.py`, an availability probe without its optional backend,
+Iceberg's deliberate `NotImplementedError` from `merge_engine()`). A hot call site
+can also pass `warn_once_for` (a key, typically the plugin class) to dedup that
+WARNING to once per key instead of once per call.
 
 `get_compute_framework_docs` uses the default broad `catching` (any failure
 degrades the field), while the narrower named guards `_safe_version` (in

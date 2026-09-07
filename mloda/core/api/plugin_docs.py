@@ -51,8 +51,20 @@ def list_registered(plugin_type: type[Any]) -> list[type[Any]]:
 
 
 def _safe_version(fg_class: type[FeatureGroup]) -> str:
-    """Return the feature group version or "unavailable" if source introspection fails or version() is not a str."""
-    return safe_field(lambda: as_str(fg_class.version()), "unavailable", catching=SOURCE_INTROSPECTION_ERRORS)
+    """Return the feature group version or "unavailable" if source introspection fails or version() is not a str.
+
+    Warns once per class (via warn_once_for) when it degrades.
+    """
+    cls_name = fg_class.__name__
+    return safe_field(
+        lambda: as_str(fg_class.version()),
+        "unavailable",
+        catching=SOURCE_INTROSPECTION_ERRORS,
+        field=f"{cls_name}.version",
+        # Shares this dedup key with compute_framework.py's _build_hook_context version read;
+        # only whichever call site hits first per class actually warns for it in a process.
+        warn_once_for=fg_class,
+    )
 
 
 def _subtype_support_or_error(fg_class: type[FeatureGroup]) -> tuple[dict[str, list[str]], Optional[str]]:

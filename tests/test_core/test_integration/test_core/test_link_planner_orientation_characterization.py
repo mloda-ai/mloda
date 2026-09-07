@@ -1,6 +1,6 @@
 """Characterizes which feature group's data ends up as the left merge argument of a link."""
 
-from typing import Any, Optional
+from typing import Any
 
 import pytest
 
@@ -97,7 +97,7 @@ class OrientCharLeftInPandas(FeatureGroup):
     """Declared left side of pair A, so a Pandas child joins in the declared orientation."""
 
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator(supports_features={"oc_a_left_key", "oc_a_left_payload"})
 
     @classmethod
@@ -111,7 +111,7 @@ class OrientCharLeftInPandas(FeatureGroup):
 
 class OrientCharRightInArrow(FeatureGroup):
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator(supports_features={"oc_a_right_key", "oc_a_right_payload"})
 
     @classmethod
@@ -127,7 +127,7 @@ class OrientCharLeftInArrow(FeatureGroup):
     """Declared left side of pair B, so a Pandas child inverts the declared orientation."""
 
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator(supports_features={"oc_b_left_key", "oc_b_left_payload"})
 
     @classmethod
@@ -141,7 +141,7 @@ class OrientCharLeftInArrow(FeatureGroup):
 
 class OrientCharRightInPandas(FeatureGroup):
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator(supports_features={"oc_b_right_key", "oc_b_right_payload"})
 
     @classmethod
@@ -155,7 +155,7 @@ class OrientCharRightInPandas(FeatureGroup):
 
 class OrientCharThirdInDict(FeatureGroup):
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator(supports_features={"oc_c_key", "oc_c_payload"})
 
     @classmethod
@@ -170,7 +170,7 @@ class OrientCharThirdInDict(FeatureGroup):
 class OrientCharDeclaredChild(FeatureGroup):
     """Runs in the framework of pair A's declared left parent."""
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return _pair_features("oc_a")
 
     @classmethod
@@ -185,7 +185,7 @@ class OrientCharDeclaredChild(FeatureGroup):
 class OrientCharInvertedChild(FeatureGroup):
     """Runs in the framework of pair B's declared right parent."""
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return _pair_features("oc_b")
 
     @classmethod
@@ -200,7 +200,7 @@ class OrientCharInvertedChild(FeatureGroup):
 class OrientCharArrowChild(FeatureGroup):
     """Declares the framework of pair B's declared left parent."""
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return _pair_features("oc_b")
 
     @classmethod
@@ -213,7 +213,7 @@ class OrientCharArrowChild(FeatureGroup):
 
 
 class OrientCharChainChild(FeatureGroup):
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return {
             Feature(name="oc_a_left_key"),
             Feature(name="oc_a_left_payload"),

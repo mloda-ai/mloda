@@ -14,7 +14,7 @@ import sys
 import textwrap
 
 import pytest
-from typing import Any, Optional
+from typing import Any
 
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.abstract_plugins.components.domain import Domain
@@ -69,7 +69,7 @@ class SplitCapResolveFeatureGroup(FeatureGroup):
         cls,
         feature_name: FeatureName | str,
         options: Options,
-        data_access_collection: Optional[DataAccessCollection] = None,
+        data_access_collection: DataAccessCollection | None = None,
     ) -> bool:
         if isinstance(feature_name, FeatureName):
             feature_name = str(feature_name)
@@ -84,7 +84,7 @@ class SplitCapResolveFeatureGroup(FeatureGroup):
     ) -> bool:
         return compute_framework is not PythonDictFramework
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return None
 
 
@@ -100,7 +100,7 @@ class AllRejectedCapResolveFeatureGroup(FeatureGroup):
         cls,
         feature_name: FeatureName | str,
         options: Options,
-        data_access_collection: Optional[DataAccessCollection] = None,
+        data_access_collection: DataAccessCollection | None = None,
     ) -> bool:
         if isinstance(feature_name, FeatureName):
             feature_name = str(feature_name)
@@ -115,7 +115,7 @@ class AllRejectedCapResolveFeatureGroup(FeatureGroup):
     ) -> bool:
         return False
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return None
 
 
@@ -131,7 +131,7 @@ class OptionGatedResolveFeatureGroup(FeatureGroup):
         cls,
         feature_name: FeatureName | str,
         options: Options,
-        data_access_collection: Optional[DataAccessCollection] = None,
+        data_access_collection: DataAccessCollection | None = None,
     ) -> bool:
         if isinstance(feature_name, FeatureName):
             feature_name = str(feature_name)
@@ -139,7 +139,7 @@ class OptionGatedResolveFeatureGroup(FeatureGroup):
             return False
         return bool(options.get(PARTITION_BY_KEY))
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return None
 
 
@@ -155,7 +155,7 @@ class OptionCapResolveFeatureGroup(FeatureGroup):
         cls,
         feature_name: FeatureName | str,
         options: Options,
-        data_access_collection: Optional[DataAccessCollection] = None,
+        data_access_collection: DataAccessCollection | None = None,
     ) -> bool:
         if isinstance(feature_name, FeatureName):
             feature_name = str(feature_name)
@@ -172,7 +172,7 @@ class OptionCapResolveFeatureGroup(FeatureGroup):
             return bool(options.get(ALLOW_PYTHON_DICT_KEY))
         return True
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return None
 
 
@@ -207,11 +207,11 @@ class ScopedResolveFamilyBase693(FeatureGroup):
         cls,
         feature_name: FeatureName | str,
         options: Options,
-        data_access_collection: Optional[DataAccessCollection] = None,
+        data_access_collection: DataAccessCollection | None = None,
     ) -> bool:
         return False
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return None
 
 
@@ -223,7 +223,7 @@ class ScopedResolveSiblingOne693(ScopedResolveFamilyBase693):
         cls,
         feature_name: FeatureName | str,
         options: Options,
-        data_access_collection: Optional[DataAccessCollection] = None,
+        data_access_collection: DataAccessCollection | None = None,
     ) -> bool:
         if isinstance(feature_name, FeatureName):
             feature_name = str(feature_name)
@@ -238,7 +238,7 @@ class ScopedResolveSiblingTwo693(ScopedResolveFamilyBase693):
         cls,
         feature_name: FeatureName | str,
         options: Options,
-        data_access_collection: Optional[DataAccessCollection] = None,
+        data_access_collection: DataAccessCollection | None = None,
     ) -> bool:
         if isinstance(feature_name, FeatureName):
             feature_name = str(feature_name)
@@ -253,7 +253,7 @@ class ScopedResolveLoneChild693(ScopedResolveFamilyBase693):
         cls,
         feature_name: FeatureName | str,
         options: Options,
-        data_access_collection: Optional[DataAccessCollection] = None,
+        data_access_collection: DataAccessCollection | None = None,
     ) -> bool:
         if isinstance(feature_name, FeatureName):
             feature_name = str(feature_name)
@@ -272,13 +272,13 @@ class UnrelatedScopedResolve693FeatureGroup(FeatureGroup):
         cls,
         feature_name: FeatureName | str,
         options: Options,
-        data_access_collection: Optional[DataAccessCollection] = None,
+        data_access_collection: DataAccessCollection | None = None,
     ) -> bool:
         if isinstance(feature_name, FeatureName):
             feature_name = str(feature_name)
         return feature_name == UNRELATED_SCOPED_FEATURE
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return None
 
 
@@ -490,7 +490,7 @@ class TestResolveFeatureSubclassFiltering:
                 cls,
                 feature_name: FeatureName | str,
                 options: Options,
-                data_access_collection: Optional[DataAccessCollection] = None,
+                data_access_collection: DataAccessCollection | None = None,
             ) -> bool:
                 return feature_name == "SubclassFilterTestFeature"
 
@@ -524,7 +524,7 @@ class TestResolveFeatureSubclassFiltering:
                 cls,
                 feature_name: FeatureName | str,
                 options: Options,
-                data_access_collection: Optional[DataAccessCollection] = None,
+                data_access_collection: DataAccessCollection | None = None,
             ) -> bool:
                 return feature_name == "CandidatesTestFeature"
 

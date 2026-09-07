@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Callable
-from typing import Any, Optional, TYPE_CHECKING, cast
+from typing import Any, TYPE_CHECKING, cast
 from copy import deepcopy
 
 from mloda.core.abstract_plugins.components.hashable_dict import _deep_equal, _deep_hashable, register_deep_node
@@ -149,8 +149,8 @@ class Options:
 
     def __init__(
         self,
-        group: Optional[dict[str, Any]] = None,
-        context: Optional[dict[str, Any]] = None,
+        group: dict[str, Any] | None = None,
+        context: dict[str, Any] | None = None,
         propagate_context_keys: frozenset[str] | None = None,
     ) -> None:
         self.group = _normalize_reader_class_keys(group) if group else {}

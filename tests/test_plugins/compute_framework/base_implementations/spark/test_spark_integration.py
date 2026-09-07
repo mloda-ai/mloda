@@ -21,7 +21,7 @@ The tests use a shared SparkSession fixture to avoid Java gateway conflicts and
 ensure proper resource management across all test methods.
 """
 
-from typing import Any, Optional
+from typing import Any
 import pytest
 
 from mloda.provider import MatchData
@@ -99,8 +99,8 @@ class ATestSparkFeatureGroup(FeatureGroup, MatchData):
         cls,
         feature_name: str,
         options: Options,
-        data_access_collection: Optional[DataAccessCollection] = None,
-        framework_connection_object: Optional[Any] = None,
+        data_access_collection: DataAccessCollection | None = None,
+        framework_connection_object: Any | None = None,
     ) -> Any:
         """Check for data access collection if any child classes match the data access."""
 
@@ -130,7 +130,7 @@ class ATestSparkFeatureGroup(FeatureGroup, MatchData):
 class SparkSimpleTransformFeatureGroup(ATestSparkFeatureGroup):
     """Simple feature group for testing Spark transformations."""
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         """Require base features for transformation."""
         feature_name_str = str(feature_name) if isinstance(feature_name, FeatureName) else str(feature_name)
 
@@ -168,7 +168,7 @@ class SparkSimpleTransformFeatureGroup(ATestSparkFeatureGroup):
 class SparkSecondTransformFeatureGroup(ATestSparkFeatureGroup):
     """Second transformation that depends on the first."""
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return {Feature("doubled_value")}
 
     @classmethod
@@ -192,7 +192,7 @@ class SparkSecondTransformFeatureGroup(ATestSparkFeatureGroup):
 class SparkAggregationFeatureGroup(ATestSparkFeatureGroup):
     """Feature group for testing Spark aggregation capabilities."""
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         feature_name_str = str(feature_name) if isinstance(feature_name, FeatureName) else str(feature_name)
 
         if feature_name_str in ["avg_value_by_category", "count_by_category"]:
@@ -230,7 +230,7 @@ class SparkAggregationFeatureGroup(ATestSparkFeatureGroup):
 class CheckData(FeatureGroup):
     """Feature group for testing cross-framework transformation (Spark to PyArrow)."""
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         feature_name_str = str(feature_name) if isinstance(feature_name, FeatureName) else str(feature_name)
 
         if feature_name_str in ["pyarrow_avg_value_by_category"]:
@@ -467,7 +467,7 @@ class TestSparkIntegrationWithMlodaAPI:
         class SparkErrorFeatureGroup(ATestSparkFeatureGroup):
             """Feature group that intentionally causes an error."""
 
-            def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+            def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
                 return {Feature("value")}
 
             @classmethod

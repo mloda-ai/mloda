@@ -7,7 +7,7 @@ from __future__ import annotations
 import gc
 import logging
 from dataclasses import dataclass
-from typing import Any, Optional
+from typing import Any
 
 import pytest
 
@@ -55,7 +55,7 @@ def _make_fg(capture: list[tuple[Feature, ...]] | None = None) -> type[FeatureGr
             cls,
             feature_name: FeatureName | str,
             options: Options,
-            data_access_collection: Optional[DataAccessCollection] = None,
+            data_access_collection: DataAccessCollection | None = None,
         ) -> bool:
             if str(feature_name) == FSP_FILTER:
                 # identify_matched_filters enriched the filter feature with the probing feature's options.

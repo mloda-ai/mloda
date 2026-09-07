@@ -1,6 +1,6 @@
 """End-to-end TFS connection-propagation test for Spark."""
 
-from typing import Any, Optional
+from typing import Any
 
 import pytest
 
@@ -35,8 +35,8 @@ class TfsDoubledSparkFG(FeatureGroup, MatchData):
         cls,
         feature_name: str,
         options: Options,
-        data_access_collection: Optional[DataAccessCollection] = None,
-        framework_connection_object: Optional[Any] = None,
+        data_access_collection: DataAccessCollection | None = None,
+        framework_connection_object: Any | None = None,
     ) -> Any:
         if not PYSPARK_AVAILABLE:
             return None
@@ -51,7 +51,7 @@ class TfsDoubledSparkFG(FeatureGroup, MatchData):
                 return conn
         return None
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return {Feature("raw_val")}
 
     @classmethod

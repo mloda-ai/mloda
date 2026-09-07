@@ -8,7 +8,7 @@ for multi-index merge operations across all compute frameworks.
 import collections
 import math
 from abc import ABC, abstractmethod
-from typing import Any, Callable, Optional
+from typing import Any, Callable
 import logging
 
 import pytest
@@ -80,7 +80,7 @@ class MultiIndexMergeEngineTestBase(ABC):
         pass
 
     @abstractmethod
-    def get_connection(self) -> Optional[Any]:
+    def get_connection(self) -> Any | None:
         """Return framework connection object, or None if not needed."""
         pass
 
@@ -98,7 +98,7 @@ class MultiIndexMergeEngineTestBase(ABC):
         self,
         scenario_key: str,
         merge_method: str,
-        additional_assertions: Optional[Callable[[list[dict[str, Any]], MergeScenario], None]] = None,
+        additional_assertions: Callable[[list[dict[str, Any]], MergeScenario], None] | None = None,
     ) -> None:
         """
         Run a merge test using a predefined scenario.

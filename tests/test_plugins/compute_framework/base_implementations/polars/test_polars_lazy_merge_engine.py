@@ -1,4 +1,4 @@
-from typing import Any, Optional
+from typing import Any
 import pytest
 
 from mloda.provider import BaseMergeEngine
@@ -34,6 +34,6 @@ class TestPolarsLazyMergeEngine(MultiIndexMergeEngineTestBase):
             raise ImportError("Polars is not installed")
         return pl.LazyFrame
 
-    def get_connection(self) -> Optional[Any]:
+    def get_connection(self) -> Any | None:
         """Polars does not require a connection object."""
         return None

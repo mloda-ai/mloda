@@ -2,7 +2,7 @@
 must raise a "missing Links" ValueError at plan-build time, not silently bind only one hop's data.
 """
 
-from typing import Any, Optional
+from typing import Any
 
 import pytest
 
@@ -14,7 +14,7 @@ from mloda_plugins.compute_framework.base_implementations.pyarrow.table import P
 
 class UnlinkedRootA(FeatureGroup):
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator({"unlinked_root_a"})
 
     @classmethod
@@ -30,7 +30,7 @@ class UnlinkedRootA(FeatureGroup):
 
 class UnlinkedRootB(FeatureGroup):
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator({"unlinked_root_b"})
 
     @classmethod
@@ -45,7 +45,7 @@ class UnlinkedRootB(FeatureGroup):
 
 
 class UnlinkedConsumer(FeatureGroup):
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return {Feature("unlinked_root_a"), Feature("unlinked_root_b")}
 
     @classmethod

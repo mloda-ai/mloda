@@ -1,5 +1,5 @@
 from abc import abstractmethod
-from typing import Any, Optional, final
+from typing import Any, final
 
 
 class BaseTransformer:
@@ -85,7 +85,7 @@ class BaseTransformer:
     @final
     @classmethod
     def transform(
-        cls, framework: type[Any], other_framework: type[Any], data: Any, framework_connection_object: Optional[Any]
+        cls, framework: type[Any], other_framework: type[Any], data: Any, framework_connection_object: Any | None
     ) -> Any:
         """Transform data from one framework to another."""
 
@@ -168,7 +168,7 @@ class BaseTransformer:
         raise NotImplementedError
 
     @classmethod
-    def transform_other_fw_to_fw(cls, data: Any, framework_connection_object: Optional[Any] = None) -> Any:
+    def transform_other_fw_to_fw(cls, data: Any, framework_connection_object: Any | None = None) -> Any:
         """
         Transform data from the secondary framework to the primary framework.
 

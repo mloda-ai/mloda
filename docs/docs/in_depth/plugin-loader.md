@@ -40,10 +40,10 @@ PluginLoader.disable_auto_load("feature_group/input_data/read_files")
 PluginLoader.disable_auto_load("compute_framework")
 ```
 
-### `list_loaded_modules(plugin_category: Optional[str])`
+### `list_loaded_modules(plugin_category: str | None)`
 Lists loaded plugin modules, optionally filtered by category.
 
-### `display_plugin_graph(plugin_category: Optional[str])`
+### `display_plugin_graph(plugin_category: str | None)`
 Shows plugin dependencies as a graph.
 
 ## Example

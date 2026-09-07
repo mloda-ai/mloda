@@ -3,7 +3,7 @@ from __future__ import annotations
 import inspect
 import logging
 from collections.abc import Collection, Mapping
-from typing import Any, ClassVar, Callable, Optional, final
+from typing import Any, ClassVar, Callable, final
 from abc import ABC
 
 from mloda.core.abstract_plugins.components.base_artifact import BaseArtifact
@@ -88,7 +88,7 @@ class FeatureGroup(ABC):
     for the full PROPERTY_MAPPING reference.
     """
 
-    PROPERTY_MAPPING: ClassVar[Optional[dict[str, PropertySpec]]] = None
+    PROPERTY_MAPPING: ClassVar[dict[str, PropertySpec] | None] = None
     """Override in subclasses to declare configurable parameters.
 
     Each key is a parameter name. Each value is a ``PropertySpec`` carrying the
@@ -97,7 +97,7 @@ class FeatureGroup(ABC):
     ``docs/in_depth/property-mapping.md`` for the full specification.
     """
 
-    SUBTYPES: ClassVar[Optional[SubtypeDeclaration]] = None
+    SUBTYPES: ClassVar[SubtypeDeclaration | None] = None
     """Declarative subtype dimension of the family; ``None`` means no subtype dimension.
     The derived accessors below are ``@final`` (type-checker enforced) and derived from SUBTYPES."""
 
@@ -206,7 +206,7 @@ class FeatureGroup(ABC):
 
     @final
     @classmethod
-    def resolve_subtype(cls, feature_name: FeatureName | str, options: Options) -> Optional[str]:
+    def resolve_subtype(cls, feature_name: FeatureName | str, options: Options) -> str | None:
         """Resolve the raw subtype of a concrete feature: name parsing first, then options; never raises."""
         declaration = cls.SUBTYPES
         if declaration is None:
@@ -373,7 +373,7 @@ class FeatureGroup(ABC):
         return BaseFeatureGroupVersion.version(cls)
 
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         """
         This function should return the input data class used for this feature group.
         """
@@ -458,7 +458,7 @@ class FeatureGroup(ABC):
 
     @staticmethod
     def apply_naming_convention(
-        result: Any, feature_name: str, suffix_generator: Optional[Callable[[int], str]] = None
+        result: Any, feature_name: str, suffix_generator: Callable[[int], str] | None = None
     ) -> dict[str, Any]:
         """
         Applies naming convention to multi-column results.
@@ -513,7 +513,7 @@ class FeatureGroup(ABC):
         return [feature_name]
 
     @classmethod
-    def return_data_type_rule(cls, feature: Feature) -> Optional[DataType]:
+    def return_data_type_rule(cls, feature: Feature) -> DataType | None:
         """
         Specifies a fixed return data type for this feature group, if applicable.
 
@@ -523,7 +523,7 @@ class FeatureGroup(ABC):
         """
         return None
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         """
         Defines the input features required by this feature group.
 
@@ -537,7 +537,7 @@ class FeatureGroup(ABC):
         raise NotImplementedError
 
     @classmethod
-    def index_columns(cls) -> Optional[list[Index]]:
+    def index_columns(cls) -> list[Index] | None:
         """
         Specifies the index columns used for merging or joining data.
 
@@ -551,7 +551,7 @@ class FeatureGroup(ABC):
         return None
 
     @classmethod
-    def supports_index(cls, index: Index) -> Optional[bool]:
+    def supports_index(cls, index: Index) -> bool | None:
         """
         Check if this feature group supports the given index.
 
@@ -579,7 +579,7 @@ class FeatureGroup(ABC):
 
     @classmethod
     def _matches_input_data(
-        cls, feature_name: str, options: Options, data_access_collection: Optional[DataAccessCollection]
+        cls, feature_name: str, options: Options, data_access_collection: DataAccessCollection | None
     ) -> bool:
         """
         Helper function to check if the input data matches.
@@ -602,7 +602,7 @@ class FeatureGroup(ABC):
         cls,
         feature_name: FeatureName | str,
         options: Options,
-        data_access_collection: Optional[DataAccessCollection] = None,
+        data_access_collection: DataAccessCollection | None = None,
     ) -> bool:
         """
         Determines whether this feature group matches the given criteria.
@@ -841,7 +841,7 @@ class FeatureGroup(ABC):
 
     @classmethod
     def _is_root_and_matches_input_data(
-        cls, feature_name: str, options: Options, data_access_collection: Optional[DataAccessCollection]
+        cls, feature_name: str, options: Options, data_access_collection: DataAccessCollection | None
     ) -> bool:
         """
         Checks if the feature group is a root and matches input data.
@@ -857,7 +857,7 @@ class FeatureGroup(ABC):
     @final
     @classmethod
     def _matches_data(
-        cls, feature_name: str, options: Options, data_access_collection: Optional[DataAccessCollection]
+        cls, feature_name: str, options: Options, data_access_collection: DataAccessCollection | None
     ) -> bool:
         """
         This functionality is for matching data, when a data access is necessary.

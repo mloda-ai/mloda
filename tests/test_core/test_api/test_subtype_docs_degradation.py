@@ -8,7 +8,6 @@ surfaces as subtype_error in the docs.
 """
 
 import logging
-from typing import Optional
 
 import pytest
 
@@ -46,7 +45,7 @@ class SbfixRaisingHookFG(FeatureGroup):
         cls,
         feature_name: FeatureName | str,
         options: Options,
-        data_access_collection: Optional[DataAccessCollection] = None,
+        data_access_collection: DataAccessCollection | None = None,
     ) -> bool:
         return str(feature_name) == SBFIX_HOOK_FEATURE
 
@@ -59,7 +58,7 @@ class SbfixRaisingHookFG(FeatureGroup):
     ) -> bool:
         raise RuntimeError("sbfix hook exploded")
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return None
 
 
@@ -75,7 +74,7 @@ class Sbfix852EmptyHookFG(FeatureGroup):
         cls,
         feature_name: FeatureName | str,
         options: Options,
-        data_access_collection: Optional[DataAccessCollection] = None,
+        data_access_collection: DataAccessCollection | None = None,
     ) -> bool:
         return str(feature_name) == SBFIX852_EMPTY_HOOK_FEATURE
 
@@ -88,7 +87,7 @@ class Sbfix852EmptyHookFG(FeatureGroup):
     ) -> bool:
         raise RuntimeError()
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return None
 
 
@@ -111,7 +110,7 @@ class SbfixDocBogusSupportedFG(FeatureGroup):
     def compute_framework_rule(cls) -> set[type[ComputeFramework]] | None:
         return {PythonDictFramework}
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return None
 
 

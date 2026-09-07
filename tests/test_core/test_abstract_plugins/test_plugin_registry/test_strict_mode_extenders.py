@@ -22,7 +22,7 @@ parallel-safety.
 """
 
 import logging
-from typing import Any, Optional, cast
+from typing import Any, cast
 
 import pytest
 
@@ -168,14 +168,14 @@ class _RecordingRunner:
     """Stand-in for ExecutionOrchestrator that records what __enter__ receives."""
 
     def __init__(self) -> None:
-        self.received_extenders: Optional[set[Extender]] = None
+        self.received_extenders: set[Extender] | None = None
 
     def __enter__(
         self,
-        parallelization_modes: Optional[set[ParallelizationMode]] = None,
-        function_extender: Optional[set[Extender]] = None,
-        api_data: Optional[dict[str, Any]] = None,
-        artifacts: Optional[dict[str, Any]] = None,
+        parallelization_modes: set[ParallelizationMode] | None = None,
+        function_extender: set[Extender] | None = None,
+        api_data: dict[str, Any] | None = None,
+        artifacts: dict[str, Any] | None = None,
         run_context: RunContext | None = None,
     ) -> None:
         self.received_extenders = function_extender

@@ -1,4 +1,4 @@
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from mloda.core.abstract_plugins.components.link import Link
@@ -67,7 +67,7 @@ class LinkValidator:
                         )
 
     @classmethod
-    def validate_links(cls, links: Optional[set["Link"]]) -> None:
+    def validate_links(cls, links: set["Link"] | None) -> None:
         if links is None:
             return
 

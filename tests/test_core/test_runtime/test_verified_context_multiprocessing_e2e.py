@@ -13,7 +13,7 @@ from __future__ import annotations
 import json
 import os
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 import pytest
 
@@ -27,7 +27,7 @@ from mloda_plugins.compute_framework.base_implementations.python_dict.python_dic
 
 class _VerifiedContextMultiprocessingFeatureGroup(FeatureGroup):
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator({"verified_context_mp_e2e_col"})
 
     @classmethod

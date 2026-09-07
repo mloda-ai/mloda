@@ -1,4 +1,4 @@
-from typing import Any, Optional
+from typing import Any
 from mloda.provider import FeatureGroup
 from mloda.user import Feature
 from mloda.user import FeatureName
@@ -17,7 +17,7 @@ class NFeatureNameBase(FeatureGroup):
 
 
 class NFeatureConsumer(FeatureGroup):
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return {Feature.not_typed("NFeatureNameBase")}
 
     @classmethod

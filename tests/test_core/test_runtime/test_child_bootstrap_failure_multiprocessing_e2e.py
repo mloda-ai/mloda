@@ -3,7 +3,7 @@ not just kill the worker process silently."""
 
 from __future__ import annotations
 
-from typing import Any, Optional
+from typing import Any
 
 import pytest
 
@@ -14,7 +14,7 @@ from mloda_plugins.compute_framework.base_implementations.python_dict.python_dic
 
 class _ChildBootstrapFailureFeatureGroup(FeatureGroup):
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator(supports_features={"child_bootstrap_failure_col"})
 
     @classmethod

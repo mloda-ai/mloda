@@ -5,7 +5,7 @@ through run_link's subset branch and produce an empty destination/source uuid se
 unguarded, that empty set later raises an unguarded StopIteration in compute_framework_executor.
 """
 
-from typing import Any, Optional
+from typing import Any
 from unittest.mock import patch
 from uuid import UUID, uuid4
 
@@ -91,7 +91,7 @@ def test_validate_join_step_uuids_accepts_two_genuine_non_empty_sides() -> None:
 
 class WiringJoinLeftFG(FeatureGroup):
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator({"wiring_join_left"})
 
     @classmethod
@@ -105,13 +105,13 @@ class WiringJoinLeftFG(FeatureGroup):
         return {PandasDataFrame}
 
     @classmethod
-    def index_columns(cls) -> Optional[list[Index]]:
+    def index_columns(cls) -> list[Index] | None:
         return [Index(("id",))]
 
 
 class WiringJoinRightFG(FeatureGroup):
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator({"wiring_join_right"})
 
     @classmethod
@@ -125,12 +125,12 @@ class WiringJoinRightFG(FeatureGroup):
         return {PyArrowTable}
 
     @classmethod
-    def index_columns(cls) -> Optional[list[Index]]:
+    def index_columns(cls) -> list[Index] | None:
         return [Index(("id",))]
 
 
 class WiringJoinChild(FeatureGroup):
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return {Feature("wiring_join_left"), Feature("wiring_join_right")}
 
     @classmethod

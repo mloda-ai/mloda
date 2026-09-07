@@ -1,6 +1,6 @@
 import logging
 import time
-from typing import Any, Optional
+from typing import Any
 
 import pytest
 from pandera import Check, Column
@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 
 class BaseValidateInputFeaturesBase(FeatureGroup):
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator({cls.get_class_name()})
 
     @classmethod
@@ -36,7 +36,7 @@ class SimpleValidateInputFeatures(FeatureGroup):
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
         return {cls.get_class_name(): [1, 2, 3]}
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return {Feature(name="BaseValidateInputFeaturesBase", options=options)}
 
     @classmethod
@@ -52,7 +52,7 @@ class CustomValidateInputFeatures(FeatureGroup):
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
         return {cls.get_class_name(): [1, 2, 3]}  # dummy return
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return {Feature(name="BaseValidateInputFeaturesBase", options=options)}
 
     @classmethod

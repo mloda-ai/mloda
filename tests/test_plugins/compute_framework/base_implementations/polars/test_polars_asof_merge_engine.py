@@ -6,7 +6,7 @@ lazy PolarsLazyMergeEngine (pl.LazyFrame).
 """
 
 from datetime import datetime, timezone
-from typing import Any, Optional
+from typing import Any
 
 import pytest
 
@@ -107,7 +107,7 @@ class TestPolarsAsofMergeEngine(_PolarsAsofTzChecks):
             raise ImportError("Polars is not installed")
         return pl.DataFrame
 
-    def get_connection(self) -> Optional[Any]:
+    def get_connection(self) -> Any | None:
         return None
 
     @classmethod
@@ -130,7 +130,7 @@ class TestPolarsLazyAsofMergeEngine(_PolarsAsofTzChecks):
             raise ImportError("Polars is not installed")
         return pl.LazyFrame
 
-    def get_connection(self) -> Optional[Any]:
+    def get_connection(self) -> Any | None:
         return None
 
     @classmethod

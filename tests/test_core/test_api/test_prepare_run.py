@@ -6,7 +6,7 @@ These tests define the contract for a two-phase execution model:
   2. run() - instance method that executes with fresh api_data, reusing the cached plan
 """
 
-from typing import Any, Optional
+from typing import Any
 
 from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook
 from mloda.user import mloda, mlodaAPI, Feature, PluginCollector
@@ -19,7 +19,7 @@ from mloda_plugins.compute_framework.base_implementations.python_dict.python_dic
 class PrepareRunApiFeature(FeatureGroup):
     """A simple feature that consumes api data for prepare/run tests."""
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return {
             Feature(name="api_id", index=Index(("api_id",))),
             Feature(name="api_value", index=Index(("api_id",))),
@@ -229,7 +229,7 @@ class _PrepareRunExtenderFeatureGroup(FeatureGroup):
     """Simple root feature group for pinning function_extender fallback between prepare() and run()."""
 
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator({f"{_PFEXT_MARKER}_col"})
 
     @classmethod

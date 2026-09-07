@@ -1,5 +1,5 @@
 from collections.abc import Sequence
-from typing import Any, Optional
+from typing import Any
 from mloda.core.abstract_plugins.components.data_types import DataType
 from mloda.core.abstract_plugins.hook_context import OutputSchema
 from mloda.user import FeatureName
@@ -40,8 +40,8 @@ class PolarsLazyDataFrame(PolarsDataFrame):
         self,
         data: Any,
         selected_feature_names: Sequence[FeatureName],
-        column_ordering: Optional[str] = None,
-        request_feature_order: Optional[list[str]] = None,
+        column_ordering: str | None = None,
+        request_feature_order: list[str] | None = None,
     ) -> Any:
         column_names = set(data.collect_schema().names())
         _selected_feature_names = self.identify_naming_convention(
@@ -60,7 +60,7 @@ class PolarsLazyDataFrame(PolarsDataFrame):
             return str(schema[column_name])
         return None
 
-    def _extract_column_data_type(self, data: Any, column_name: str) -> Optional[DataType]:
+    def _extract_column_data_type(self, data: Any, column_name: str) -> DataType | None:
         schema = data.collect_schema()
         if column_name not in schema.names():
             return None

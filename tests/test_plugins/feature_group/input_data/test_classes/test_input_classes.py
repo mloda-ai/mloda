@@ -1,4 +1,4 @@
-from typing import Any, Optional
+from typing import Any
 from mloda.provider import FeatureGroup
 from mloda.provider import FeatureSet
 from mloda.provider import BaseInputData
@@ -7,7 +7,7 @@ from mloda_plugins.feature_group.input_data.read_db import ReadDB
 
 class DBInputDataTestFeatureGroup(FeatureGroup):
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return ReadDB()
 
     @classmethod

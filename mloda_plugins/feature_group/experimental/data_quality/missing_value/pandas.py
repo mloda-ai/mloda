@@ -4,7 +4,7 @@ Pandas implementation for missing value imputation feature groups.
 
 from __future__ import annotations
 
-from typing import Any, Optional
+from typing import Any
 
 
 from mloda.provider import ComputeFramework
@@ -49,8 +49,8 @@ class PandasMissingValueFeatureGroup(MissingValueFeatureGroup):
         data: pd.DataFrame,
         imputation_method: str,
         in_features: list[str],
-        constant_value: Optional[Any] = None,
-        group_by_features: Optional[list[str]] = None,
+        constant_value: Any | None = None,
+        group_by_features: list[str] | None = None,
     ) -> pd.Series:
         """
         Perform the imputation using Pandas.
@@ -137,7 +137,7 @@ class PandasMissingValueFeatureGroup(MissingValueFeatureGroup):
         data: pd.DataFrame,
         imputation_method: str,
         in_features: str,
-        constant_value: Optional[Any],
+        constant_value: Any | None,
         group_by_features: list[str],
     ) -> pd.Series:
         """

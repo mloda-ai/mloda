@@ -6,7 +6,7 @@ single prepare() session.
 """
 
 import hashlib
-from typing import Any, Optional
+from typing import Any
 
 from mloda.provider import BaseArtifact, BaseInputData, DataCreator, FeatureGroup, FeatureSet
 from mloda.user import Feature, mloda, PluginCollector
@@ -17,7 +17,7 @@ class PrepareRunArtifactFeature(FeatureGroup):
     """Artifact-capable feature group for prepare/run tests."""
 
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator({cls.get_class_name()})
 
     @staticmethod
@@ -52,7 +52,7 @@ class VerifiableArtifactFeature(FeatureGroup):
     ARTIFACT_VALUE = "model|v1-alpha|weights=0.1,0.2,0.3"
 
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator({cls.get_class_name()})
 
     @staticmethod

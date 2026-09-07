@@ -93,7 +93,7 @@ def test_value_property_with_string_value() -> None:
 def test_values_property_returns_list_for_categorical() -> None:
     """Test values property returns list for categorical_inclusion filter.
 
-    The public accessor must honour its declared `Optional[list[Any]]` type even though the
+    The public accessor must honour its declared `list[Any] | None` type even though the
     internal storage keeps a tuple. Filter engines rely on this: PySpark's `Column.isin` only
     unwraps list/set arguments, so leaking a tuple silently breaks the Spark categorical filter.
     """

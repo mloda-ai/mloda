@@ -14,7 +14,7 @@ other tests in the global plugin registry.
 
 from __future__ import annotations
 
-from typing import Any, Optional
+from typing import Any
 
 import pandas as pd
 import pytest
@@ -47,7 +47,7 @@ class NameMis579SourceGroup(FeatureGroup):
     """Root group providing the source column via DataCreator."""
 
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator({SOURCE_NAME})
 
     @classmethod
@@ -122,7 +122,7 @@ class NameMis579ConsumerGroup(FeatureGroup):
     def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
         return {PandasDataFrame}
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return {Feature(CHAINED_CHILD_NAME)}
 
     @classmethod
@@ -153,7 +153,7 @@ class NameMis579StringConsumerGroup(FeatureGroup):
     def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
         return {PandasDataFrame}
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Any]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Any] | None:
         return {CHAINED_CHILD_NAME}
 
     @classmethod

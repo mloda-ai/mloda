@@ -5,7 +5,7 @@ These tests ensure that methods accessing module-level imports are implemented a
 """
 
 import inspect
-from typing import Any, Optional
+from typing import Any
 
 import pytest
 
@@ -15,8 +15,8 @@ from mloda_plugins.compute_framework.base_implementations.pandas.pandas_merge_en
 
 # Optional imports for polars
 _pl: Any = None
-_PolarsDataFrame: Optional[type[Any]] = None
-_PolarsLazyDataFrame: Optional[type[Any]] = None
+_PolarsDataFrame: type[Any] | None = None
+_PolarsLazyDataFrame: type[Any] | None = None
 try:
     import polars as _pl
     from mloda_plugins.compute_framework.base_implementations.polars.dataframe import (
@@ -30,7 +30,7 @@ except ImportError:
 
 # Optional imports for duckdb
 _duckdb: Any = None
-_DuckDBFramework: Optional[type[Any]] = None
+_DuckDBFramework: type[Any] | None = None
 try:
     import duckdb as _duckdb
     from mloda_plugins.compute_framework.base_implementations.duckdb.duckdb_framework import (
@@ -41,7 +41,7 @@ except ImportError:
 
 # Optional imports for spark
 _SparkSession: Any = None
-_SparkFramework: Optional[type[Any]] = None
+_SparkFramework: type[Any] | None = None
 try:
     from pyspark.sql import SparkSession as _SparkSessionImport
     from mloda_plugins.compute_framework.base_implementations.spark.spark_framework import (

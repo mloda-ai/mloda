@@ -3,7 +3,7 @@
 Resolution reconciles the two orientations at once, so both children see the joined columns.
 """
 
-from typing import Any, Optional
+from typing import Any
 
 import pyarrow as pa
 import pytest
@@ -52,7 +52,7 @@ def _add_joined_column(data: Any, name: str) -> Any:
 
 class SwappedParentLeft(FeatureGroup):
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator(supports_features={cls.get_class_name()})
 
     @classmethod
@@ -66,7 +66,7 @@ class SwappedParentLeft(FeatureGroup):
 
 class SwappedParentRight(FeatureGroup):
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator(supports_features={cls.get_class_name()})
 
     @classmethod
@@ -81,7 +81,7 @@ class SwappedParentRight(FeatureGroup):
 class SwappedChildPandasLeft(FeatureGroup):
     """Pins the left parent to pandas and the right parent to pyarrow."""
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return {
             Feature(name=SwappedParentLeft.get_class_name(), compute_framework="PandasDataFrame"),
             Feature(name=SwappedParentRight.get_class_name(), compute_framework="PyArrowTable"),
@@ -99,7 +99,7 @@ class SwappedChildPandasLeft(FeatureGroup):
 class SwappedChildPyArrowLeft(FeatureGroup):
     """Pins the same two parents the other way round, so the link is recorded in both orientations."""
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return {
             Feature(name=SwappedParentLeft.get_class_name(), compute_framework="PyArrowTable"),
             Feature(name=SwappedParentRight.get_class_name(), compute_framework="PandasDataFrame"),

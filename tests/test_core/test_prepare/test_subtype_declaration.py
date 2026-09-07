@@ -2,7 +2,7 @@
 
 import dataclasses
 from abc import abstractmethod
-from typing import Any, Optional
+from typing import Any
 
 import pytest
 
@@ -28,11 +28,11 @@ def _subdecl_is_positive_int(value: object) -> bool:
     return isinstance(value, int) and value > 0
 
 
-def _subdecl_noop_resolver(feature_name: str, options: Options) -> Optional[str]:
+def _subdecl_noop_resolver(feature_name: str, options: Options) -> str | None:
     return None
 
 
-def _subdecl_frame_resolver(feature_name: str, options: Options) -> Optional[str]:
+def _subdecl_frame_resolver(feature_name: str, options: Options) -> str | None:
     frame_type = options.get("subdecl_frame_type")
     frame_unit = options.get("subdecl_frame_unit")
     if frame_type is None or frame_unit is None:
@@ -40,11 +40,11 @@ def _subdecl_frame_resolver(feature_name: str, options: Options) -> Optional[str
     return f"{frame_type}_{frame_unit}"
 
 
-def _subdecl_echo_resolver(feature_name: str, options: Options) -> Optional[str]:
+def _subdecl_echo_resolver(feature_name: str, options: Options) -> str | None:
     return feature_name
 
 
-def _subdecl_pred_resolver(feature_name: str, options: Options) -> Optional[str]:
+def _subdecl_pred_resolver(feature_name: str, options: Options) -> str | None:
     value = options.get("subdecl_pred_key")
     if value is None:
         return None
@@ -117,7 +117,7 @@ class SubDeclPlainFG(FeatureGroup):
     def compute_framework_rule(cls) -> set[type[ComputeFramework]] | None:
         return {SubDeclFwAlpha, SubDeclFwBeta}
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return None
 
 
@@ -134,7 +134,7 @@ class SubDeclFlattenedFG(FeatureGroup):
     def compute_framework_rule(cls) -> set[type[ComputeFramework]] | None:
         return {SubDeclFwAlpha, SubDeclFwBeta}
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return None
 
 
@@ -143,7 +143,7 @@ class SubDeclEchoFG(FeatureGroup):
 
     SUBTYPES = SubtypeDeclaration(universe={"echo"}, resolver=_subdecl_echo_resolver)
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return None
 
 
@@ -163,7 +163,7 @@ class SubDeclPredicateUniverseFG(FeatureGroup):
     def compute_framework_rule(cls) -> set[type[ComputeFramework]] | None:
         return {SubDeclFwAlpha, SubDeclFwBeta}
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return None
 
 
@@ -183,7 +183,7 @@ class SubDeclValueSpaceFG(FeatureGroup):
         "subdecl_n": property_spec("Predicate-only key.", strict=True, element_validator=_subdecl_is_positive_int),
     }
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return None
 
 
@@ -238,7 +238,7 @@ class SubDeclHookMatrixPlainFG(FeatureGroup):
     ) -> bool:
         return True
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return None
 
 
@@ -678,7 +678,7 @@ def _subdecl_setitem(mapping: Any, key: str, value: Any) -> None:
     mapping[key] = value
 
 
-def _subdecl_raising_resolver(feature_name: str, options: Options) -> Optional[str]:
+def _subdecl_raising_resolver(feature_name: str, options: Options) -> str | None:
     raise RuntimeError("subdecl resolver boom")
 
 
@@ -695,7 +695,7 @@ class SubDeclRaisingResolverFG(FeatureGroup):
         supported={SubDeclFwBeta.get_class_name(): frozenset()},
     )
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return None
 
 
@@ -708,7 +708,7 @@ class SubDeclIntResolverFG(FeatureGroup):
         supported={SubDeclFwBeta.get_class_name(): frozenset()},
     )
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return None
 
 
@@ -783,7 +783,7 @@ class TestSubDeclKeyedNumericValueSpace:
             def compute_framework_rule(cls) -> set[type[ComputeFramework]] | None:
                 return {SubDeclFwAlpha, SubDeclFwBeta}
 
-            def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+            def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
                 return None
 
         options = Options(group={"subdecl_num_bucket": 2})

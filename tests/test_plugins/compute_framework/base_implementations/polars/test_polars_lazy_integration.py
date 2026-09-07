@@ -1,5 +1,5 @@
 import pytest
-from typing import Any, Optional
+from typing import Any
 
 from mloda.provider import ComputeFramework
 from mloda.provider import FeatureGroup
@@ -75,7 +75,7 @@ class PolarsLazySimpleTransformFeatureGroup(FeatureGroup):
         """Support both lazy and eager Polars frameworks."""
         return {PolarsDataFrame, PolarsLazyDataFrame}
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         """Require base features for transformation."""
         feature_name_str = str(feature_name) if isinstance(feature_name, FeatureName) else str(feature_name)
 
@@ -116,7 +116,7 @@ class SecondTransformFeatureGroup(FeatureGroup):
     def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
         return {PolarsLazyDataFrame}
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return {Feature("doubled_value")}
 
     @classmethod

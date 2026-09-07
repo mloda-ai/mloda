@@ -5,7 +5,7 @@ Base implementation for geo distance feature groups.
 from __future__ import annotations
 
 from abc import abstractmethod
-from typing import Any, Optional
+from typing import Any
 
 from mloda.provider import FeatureGroup
 from mloda.user import Feature
@@ -124,7 +124,7 @@ class GeoDistanceFeatureGroup(FeatureChainParserMixin, FeatureGroup):
         ),
     }
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         """Extract point features from either configuration-based options or string parsing."""
 
         # Try string-based parsing first
@@ -235,7 +235,7 @@ class GeoDistanceFeatureGroup(FeatureChainParserMixin, FeatureGroup):
         return distance_type, source_features[0], source_features[1]
 
     @classmethod
-    def _extract_distance_unit(cls, feature: Feature) -> Optional[str]:
+    def _extract_distance_unit(cls, feature: Feature) -> str | None:
         """
         Extract distance unit (distance type) from a feature.
 

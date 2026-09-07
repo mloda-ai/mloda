@@ -3,7 +3,7 @@ import uuid
 import pytest
 import pandas as pd
 import pandas.testing as pdt
-from typing import Any, Optional
+from typing import Any
 from mloda.core.abstract_plugins.components.contract.comparison_contract import ColumnSemantics
 from mloda.provider import FeatureGroup
 from mloda.user import Feature
@@ -23,7 +23,7 @@ from tests.test_plugins.compute_framework.test_tooling.merge_link import make_me
 
 class AppendMergeTestFeature(FeatureGroup):
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator(supports_features={f"{cls.get_class_name()}{i}" for i in range(0, 99)})
 
     @classmethod
@@ -43,7 +43,7 @@ class SecondAppendMergeTestFeature(AppendMergeTestFeature):
 
 
 class GroupedAppendMergeTestFeature(FeatureGroup):
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         def add_run_id(some_uuid: UUID, right: int = 0) -> tuple[str]:
             return (f"{some_uuid}{str(cnt + right)}",)
 
@@ -80,7 +80,7 @@ class GroupedAppendMergeTestFeature(FeatureGroup):
 
 
 class Call2GroupedAppendMergeTestFeature(FeatureGroup):
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         iteration = options.get("iteration")
 
         features = frozenset({f"AppendMergeTestFeature{i}" for i in range(iteration)})

@@ -8,7 +8,6 @@ assert, so no failing assert pins it (tests/conftest.py).
 from __future__ import annotations
 
 import gc
-from typing import Optional
 
 from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser_mixin import FeatureChainParserMixin
@@ -48,19 +47,19 @@ def _make_min_count_mixin_fg() -> type[FeatureGroup]:
         def compute_framework_rule(cls) -> set[type[ComputeFramework]] | None:
             return {MinCountFw944}
 
-        def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+        def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
             return None
 
     return MinInFeaturesMixinFG944
 
 
-def _resolve(feature_name: str) -> tuple[Optional[str], tuple[str, ...], tuple[tuple[str, str, str], ...]]:
+def _resolve(feature_name: str) -> tuple[str | None, tuple[str, ...], tuple[tuple[str, str, str], ...]]:
     """Evaluate that name: (error type, winner names, (class, stage, reason) per elimination)."""
     feature_group = _make_min_count_mixin_fg()
     feature = Feature(feature_name, Options())
     plugins: FeatureGroupEnvironmentMapping = {feature_group: {MinCountFw944}}
-    error_type: Optional[str] = None
-    result: Optional[EvaluationResult] = None
+    error_type: str | None = None
+    result: EvaluationResult | None = None
     try:
         result = evaluate_or_raise(feature, plugins, None)
     except FeatureResolutionError as exc:

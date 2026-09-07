@@ -1,4 +1,4 @@
-from typing import Callable, Optional
+from typing import Callable
 
 import pytest
 import pyarrow as pa
@@ -12,8 +12,8 @@ from mloda.user import Feature
 from mloda.provider import FeatureSet
 
 
-def _arrow_resolver(table: pa.Table) -> Callable[[str], Optional[DataType]]:
-    def resolve(col: str) -> Optional[DataType]:
+def _arrow_resolver(table: pa.Table) -> Callable[[str], DataType | None]:
+    def resolve(col: str) -> DataType | None:
         if col not in table.schema.names:
             return None
         return DataType.from_arrow_type_safe(table.schema.field(col).type)
@@ -192,7 +192,7 @@ class TestValidateEnforcesOnPandas:
             DataTypeValidator.validate(feature_set, lambda col: fw._extract_column_data_type(df, col))
 
     def test_typed_feature_group_runs_through_run_all_on_pandas_matching_passes(self) -> None:
-        from typing import Any, Optional
+        from typing import Any
 
         import pandas as pd
 
@@ -205,7 +205,7 @@ class TestValidateEnforcesOnPandas:
 
         class _Src(FeatureGroup):
             @classmethod
-            def input_data(cls) -> Optional[Any]:
+            def input_data(cls) -> Any | None:
                 return DataCreator({"price"})
 
             @classmethod
@@ -248,7 +248,7 @@ class TestValidateEnforcesOnPandas:
         assert df["price_typed_match"].tolist() == [2.0, 4.0, 6.0]
 
     def test_typed_feature_group_runs_through_run_all_on_pandas_mismatch_raises(self) -> None:
-        from typing import Any, Optional
+        from typing import Any
 
         import pandas as pd
         import pytest as _pytest
@@ -262,7 +262,7 @@ class TestValidateEnforcesOnPandas:
 
         class _Src(FeatureGroup):
             @classmethod
-            def input_data(cls) -> Optional[Any]:
+            def input_data(cls) -> Any | None:
                 return DataCreator({"price"})
 
             @classmethod

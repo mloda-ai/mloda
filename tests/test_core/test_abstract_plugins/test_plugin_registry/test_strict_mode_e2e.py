@@ -10,7 +10,7 @@ Parallel-safety: assertions are membership-based and the feature name is unique
 to this module; the autouse conftest fixture restores the default registry.
 """
 
-from typing import Any, Optional
+from typing import Any
 
 from mloda.provider import BaseInputData, DataCreator, FeatureGroup, FeatureSet
 from mloda.user import Feature, PluginCollector, PluginLoader, mloda, register_plugin
@@ -22,7 +22,7 @@ class StrictE2ERunAllFeatureGroup(FeatureGroup):
     """Root feature group producing one columnar feature for the strict e2e run."""
 
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator({FEAT})
 
     @classmethod

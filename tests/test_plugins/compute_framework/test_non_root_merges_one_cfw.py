@@ -1,4 +1,4 @@
-from typing import Any, Optional
+from typing import Any
 
 import pytest
 
@@ -20,7 +20,7 @@ from mloda_plugins.compute_framework.base_implementations.pandas.dataframe impor
 
 class NonRootJoinTestFeature(FeatureGroup):
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator(supports_features={cls.get_class_name()})
 
     @classmethod
@@ -30,7 +30,7 @@ class NonRootJoinTestFeature(FeatureGroup):
 
 class NonRootJoinTestFeatureB(NonRootJoinTestFeature):
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator(supports_features={cls.get_class_name()})
 
     @classmethod
@@ -43,7 +43,7 @@ class SecondNonRootJoinTestFeature(NonRootJoinTestFeature):
 
 
 class GroupedNonRootJoinTestFeature(FeatureGroup):
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         if options.get("test_non_root_merge_multiple_join"):
             return {Feature(name="NonRootJoinTestFeature"), Feature(name="NonRootJoinTestFeatureB")}
 
@@ -59,7 +59,7 @@ class GroupedNonRootJoinTestFeature(FeatureGroup):
 
 
 class GroupedSecondNonRootJoinTestFeature(GroupedNonRootJoinTestFeature):
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return {Feature(name="SecondNonRootJoinTestFeature")}
 
     @classmethod
@@ -72,7 +72,7 @@ class GroupedSecondNonRootJoinTestFeature(GroupedNonRootJoinTestFeature):
 
 
 class Call2GroupedNonRootJoinTestFeature(FeatureGroup):
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return {
             Feature(name=GroupedNonRootJoinTestFeature.get_class_name()),
             Feature(name=GroupedSecondNonRootJoinTestFeature.get_class_name()),

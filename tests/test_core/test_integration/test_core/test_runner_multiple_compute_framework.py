@@ -1,4 +1,4 @@
-from typing import Any, Optional
+from typing import Any
 import pyarrow as pa
 import pyarrow.compute as pc
 from mloda.provider import BaseInputData
@@ -23,7 +23,7 @@ from tests.test_core.test_tooling import MlodaTestRunner, PARALLELIZATION_MODES_
 
 class MultipleCfwTest1(FeatureGroup):
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator({cls.get_class_name()})
 
     @classmethod
@@ -37,7 +37,7 @@ class MultipleCfwTest1(FeatureGroup):
 
 class MultipleCfwTest2(FeatureGroup):
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator({cls.get_class_name()})
 
     @classmethod
@@ -50,7 +50,7 @@ class MultipleCfwTest2(FeatureGroup):
 
 
 class ChangeCfw(FeatureGroup):
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return {Feature.int32_of("MultipleCfwTest1")}
 
     @classmethod
@@ -63,7 +63,7 @@ class ChangeCfw(FeatureGroup):
 
 
 class ChangeCfwThird(FeatureGroup):
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         # return {Feature.int32_of("ChangeCfw"), Feature.int32_of("MultipleCfwTest1")}
         return {Feature.int32_of("ChangeCfw")}
 

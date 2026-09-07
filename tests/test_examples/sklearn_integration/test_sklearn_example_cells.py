@@ -6,7 +6,7 @@ Functions return data/results that can be used in subsequent cells.
 """
 
 from copy import copy
-from typing import Any, Optional
+from typing import Any
 from mloda.provider import FeatureGroup
 from mloda.provider import FeatureSet
 from mloda.provider import BaseInputData
@@ -25,7 +25,7 @@ import pandas as pd
 # Create a DataCreator feature group for our sample data
 class SklearnDataCreator(FeatureGroup):
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator({"age", "weight", "state", "gender"})
 
     @classmethod
@@ -210,7 +210,7 @@ def cell6_reusability_demo() -> None:
 
     class SecondSklearnDataCreator(FeatureGroup):
         @classmethod
-        def input_data(cls) -> Optional[BaseInputData]:
+        def input_data(cls) -> BaseInputData | None:
             return DataCreator({"age", "weight", "state", "gender"})
 
         @classmethod

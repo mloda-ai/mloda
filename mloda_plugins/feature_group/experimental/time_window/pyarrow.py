@@ -4,7 +4,7 @@ PyArrow implementation for time window feature groups.
 
 from __future__ import annotations
 
-from typing import Any, Optional
+from typing import Any
 import bisect
 
 import pyarrow as pa
@@ -84,7 +84,7 @@ class PyArrowTimeWindowFeatureGroup(TimeWindowFeatureGroup):
         window_size: int,
         time_unit: str,
         in_features: list[str],
-        time_filter_feature: Optional[str] = None,
+        time_filter_feature: str | None = None,
     ) -> pa.Array:
         """
         Perform the time window operation using PyArrow compute functions.

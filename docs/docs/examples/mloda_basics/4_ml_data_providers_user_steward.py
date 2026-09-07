@@ -185,7 +185,7 @@ def _():
     # In the following, we will just adjust a bit the CsvReader to handle a different delimiter.
     # CsvReader2 overrides load_data wholesale, returning a concrete table instead of a FileSource.
 
-    from typing import Any, Optional
+    from typing import Any
 
     from pyarrow import csv as pyarrow_csv
 
@@ -209,7 +209,7 @@ def _():
 
     class ReadFileFeature2(ReadFileFeature):
         @classmethod
-        def input_data(cls) -> Optional[BaseInputData]:
+        def input_data(cls) -> BaseInputData | None:
             return CsvReader2()
 
         @classmethod

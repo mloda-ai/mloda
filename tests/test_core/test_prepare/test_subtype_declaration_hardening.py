@@ -5,7 +5,7 @@ subtype_support_matrix(); supported keys are stringified on ingest; and the
 declaration is hashable even with mappings set.
 """
 
-from typing import Any, Optional
+from typing import Any
 
 import pytest
 
@@ -21,7 +21,7 @@ SBFIX_UNIVERSE = frozenset({"sum", "median"})
 SBFIX_BOGUS_FRAMEWORK = "SbfixNoSuchFramework"
 
 
-def _sbfix_noop_resolver(feature_name: str, options: Options) -> Optional[str]:
+def _sbfix_noop_resolver(feature_name: str, options: Options) -> str | None:
     return None
 
 
@@ -48,7 +48,7 @@ class SbfixBogusSupportedFG(FeatureGroup):
     def compute_framework_rule(cls) -> set[type[ComputeFramework]] | None:
         return {SbfixFwAlpha}
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return None
 
 
@@ -71,7 +71,7 @@ class SbfixHealthySupportedFG(FeatureGroup):
     def compute_framework_rule(cls) -> set[type[ComputeFramework]] | None:
         return {SbfixFwAlpha}
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return None
 
 

@@ -1,4 +1,4 @@
-from typing import Any, Optional
+from typing import Any
 
 from mloda.provider import BaseArtifact
 from mloda.provider import BaseInputData
@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 
 class BaseTestArtifactFeature(FeatureGroup):
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator({cls.get_class_name()})
 
     @staticmethod

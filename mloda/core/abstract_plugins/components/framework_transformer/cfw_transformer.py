@@ -1,7 +1,7 @@
 import logging
 import weakref
 from collections import deque
-from typing import Any, ClassVar, Optional
+from typing import Any, ClassVar
 
 from mloda.core.abstract_plugins.components.framework_transformer.base_transformer import BaseTransformer
 from mloda.core.abstract_plugins.components.utils import get_all_subclasses
@@ -128,7 +128,7 @@ class ComputeFrameworkTransformer:
 
     def get_transformation_chain(
         self, from_framework: type[Any], to_framework: type[Any]
-    ) -> Optional[list[type[BaseTransformer]]]:
+    ) -> list[type[BaseTransformer]] | None:
         """
         Find a transformation chain between two frameworks.
 

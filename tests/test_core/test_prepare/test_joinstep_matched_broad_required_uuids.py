@@ -1,7 +1,7 @@
 """An unrelated, unlinked parent must not skip the missing-Link conflict check by being wrongly
 treated as "served by" a join it isn't genuinely a side of."""
 
-from typing import Any, Optional
+from typing import Any
 
 import pytest
 
@@ -16,7 +16,7 @@ from mloda_plugins.compute_framework.base_implementations.python_dict.python_dic
 
 class LinkedRootA(FeatureGroup):
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator({"linked_root_a"})
 
     @classmethod
@@ -30,13 +30,13 @@ class LinkedRootA(FeatureGroup):
         return {PandasDataFrame}
 
     @classmethod
-    def index_columns(cls) -> Optional[list[Index]]:
+    def index_columns(cls) -> list[Index] | None:
         return [Index(("id",))]
 
 
 class LinkedRootB(FeatureGroup):
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator({"linked_root_b"})
 
     @classmethod
@@ -50,13 +50,13 @@ class LinkedRootB(FeatureGroup):
         return {PyArrowTable}
 
     @classmethod
-    def index_columns(cls) -> Optional[list[Index]]:
+    def index_columns(cls) -> list[Index] | None:
         return [Index(("id",))]
 
 
 class OrphanRootC(FeatureGroup):
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator({"orphan_root_c"})
 
     @classmethod
@@ -70,7 +70,7 @@ class OrphanRootC(FeatureGroup):
 
 class OrphanRootD(FeatureGroup):
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator({"orphan_root_d"})
 
     @classmethod
@@ -83,7 +83,7 @@ class OrphanRootD(FeatureGroup):
 
 
 class FourParentConsumer(FeatureGroup):
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return {
             Feature("linked_root_a"),
             Feature("linked_root_b"),
@@ -107,7 +107,7 @@ class FourParentConsumer(FeatureGroup):
 class ThreeParentConsumer(FeatureGroup):
     """A join-served linked pair (zero explicit hops) plus an orphan (one explicit hop)."""
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return {
             Feature("linked_root_a"),
             Feature("linked_root_b"),
@@ -167,7 +167,7 @@ def test_joinstep_matched_raises_for_literal_three_parent_scenario() -> None:
 
 class IndependentJoinPairOneLeft(FeatureGroup):
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator({"independent_join_pair_one_left"})
 
     @classmethod
@@ -181,13 +181,13 @@ class IndependentJoinPairOneLeft(FeatureGroup):
         return {PandasDataFrame}
 
     @classmethod
-    def index_columns(cls) -> Optional[list[Index]]:
+    def index_columns(cls) -> list[Index] | None:
         return [Index(("pair_one_id",))]
 
 
 class IndependentJoinPairOneRight(FeatureGroup):
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator({"independent_join_pair_one_right"})
 
     @classmethod
@@ -199,13 +199,13 @@ class IndependentJoinPairOneRight(FeatureGroup):
         return {PythonDictFramework}
 
     @classmethod
-    def index_columns(cls) -> Optional[list[Index]]:
+    def index_columns(cls) -> list[Index] | None:
         return [Index(("pair_one_id",))]
 
 
 class IndependentJoinPairTwoLeft(FeatureGroup):
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator({"independent_join_pair_two_left"})
 
     @classmethod
@@ -219,13 +219,13 @@ class IndependentJoinPairTwoLeft(FeatureGroup):
         return {PandasDataFrame}
 
     @classmethod
-    def index_columns(cls) -> Optional[list[Index]]:
+    def index_columns(cls) -> list[Index] | None:
         return [Index(("pair_two_id",))]
 
 
 class IndependentJoinPairTwoRight(FeatureGroup):
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator({"independent_join_pair_two_right"})
 
     @classmethod
@@ -237,14 +237,14 @@ class IndependentJoinPairTwoRight(FeatureGroup):
         return {PythonDictFramework}
 
     @classmethod
-    def index_columns(cls) -> Optional[list[Index]]:
+    def index_columns(cls) -> list[Index] | None:
         return [Index(("pair_two_id",))]
 
 
 class TwoIndependentJoinsConsumer(FeatureGroup):
     """Both parents are join-served by two separate, unlinked JoinSteps: zero explicit hops at all."""
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return {
             Feature("independent_join_pair_one_left"),
             Feature("independent_join_pair_one_right"),

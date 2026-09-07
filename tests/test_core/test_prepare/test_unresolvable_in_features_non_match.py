@@ -8,7 +8,7 @@ so no failing assert pins it (tests/conftest.py).
 from __future__ import annotations
 
 import gc
-from typing import Any, Optional
+from typing import Any
 
 from mloda.core.abstract_plugins.components.default_options_key import DefaultOptionKeys
 from mloda.core.abstract_plugins.components.feature import Feature
@@ -46,21 +46,21 @@ def _make_in_features_mixin_fg() -> type[FeatureGroup]:
         def compute_framework_rule(cls) -> set[type[ComputeFramework]] | None:
             return {InFeaturesFw884}
 
-        def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+        def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
             return None
 
     return InFeaturesMixinFG884
 
 
-def _resolve(in_features: Any) -> tuple[Optional[str], tuple[str, ...], tuple[tuple[str, str, str], ...]]:
+def _resolve(in_features: Any) -> tuple[str | None, tuple[str, ...], tuple[tuple[str, str, str], ...]]:
     """Evaluate one feature carrying that value: (error type, winner names, (class, stage, reason) per elimination)."""
     feature_group = _make_in_features_mixin_fg()
     options = Options(context={"operation": "op1", DefaultOptionKeys.in_features: in_features})
     feature = Feature(IN_FEATURES_FEATURE_884, options)
     plugins: FeatureGroupEnvironmentMapping = {feature_group: {InFeaturesFw884}}
     try:
-        error_type: Optional[str] = None
-        result: Optional[EvaluationResult] = evaluate_or_raise(feature, plugins, None)
+        error_type: str | None = None
+        result: EvaluationResult | None = evaluate_or_raise(feature, plugins, None)
     except FeatureResolutionError as exc:
         error_type, result = type(exc).__name__, exc.result
     except Exception as exc:  # noqa: BLE001  (an untyped escape is a fact this test wants to report)

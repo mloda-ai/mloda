@@ -13,7 +13,7 @@ way the set loses its own member and a value-equal ``add_filter`` stops deduplic
 
 from __future__ import annotations
 
-from typing import Any, Optional
+from typing import Any
 
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
@@ -212,7 +212,7 @@ def _make_cached_input_chain() -> tuple[Feature, type[FeatureGroup], type[Featur
             cls,
             feature_name: FeatureName | str,
             options: Options,
-            data_access_collection: Optional[DataAccessCollection] = None,
+            data_access_collection: DataAccessCollection | None = None,
         ) -> bool:
             return str(feature_name) == SFO_CONSUMER_FEATURE
 

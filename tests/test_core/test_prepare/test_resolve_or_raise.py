@@ -21,8 +21,6 @@ All fixture names carry an ``016`` suffix: test feature groups become global sub
 parallel, so a shared name would leak into another module's candidate universe.
 """
 
-from typing import Optional
-
 import pytest
 
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
@@ -128,7 +126,7 @@ def _built_plugins_for(feature_name: str) -> FeatureGroupEnvironmentMapping:
     return PreFilterPlugins(_frameworks_016(), _collector_for(feature_name)).get_accessible_plugins()
 
 
-def _resolve_feature_016(feature_name: str, scope: Optional[type[FeatureGroup]] = None) -> ResolvedFeature:
+def _resolve_feature_016(feature_name: str, scope: type[FeatureGroup] | None = None) -> ResolvedFeature:
     """Run resolve_feature over the fixture universe of one failure kind."""
     return resolve_feature(
         feature_name,
@@ -181,8 +179,8 @@ RENDER_EXPLOSION_016 = "resolve_or_raise_016 render step exploded"
 def _exploding_evaluate_and_render(
     feature: Feature,
     accessible_plugins: FeatureGroupEnvironmentMapping,
-    links: Optional[set[Link]] = None,
-    data_access_collection: Optional[DataAccessCollection] = None,
+    links: set[Link] | None = None,
+    data_access_collection: DataAccessCollection | None = None,
 ) -> tuple[EvaluationResult, str | None]:
     """Stand-in for the helper pair that always raises, standing for a renderer that blows up."""
     raise RuntimeError(RENDER_EXPLOSION_016)

@@ -1,5 +1,5 @@
 from datetime import datetime, timezone
-from typing import Any, Optional
+from typing import Any
 import pytest
 
 from mloda.user import JoinType
@@ -319,6 +319,6 @@ class TestPythonDictMergeEngineMultiIndex(MultiIndexMergeEngineTestBase):
         """Return dict type (PythonDict uses a columnar dict)."""
         return dict
 
-    def get_connection(self) -> Optional[Any]:
+    def get_connection(self) -> Any | None:
         """PythonDict does not require a connection object."""
         return None

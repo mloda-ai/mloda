@@ -2,7 +2,7 @@
 real mlodaAPI SYNC execution path, down to HookContext. Also proves Options can never override
 the seam's values."""
 
-from typing import Any, Optional
+from typing import Any
 
 from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook
 from mloda.core.abstract_plugins.hook_context import HookContext
@@ -15,7 +15,7 @@ from mloda_plugins.compute_framework.base_implementations.python_dict.python_dic
 
 class _VerifiedContextFeatureGroup(FeatureGroup):
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator({"verified_context_e2e_col"})
 
     @classmethod
@@ -48,7 +48,7 @@ class _ContextCapturingExtender(Extender):
         return result
 
 
-def _prepare_session(options: Optional[dict[str, Any]] = None) -> mlodaAPI:
+def _prepare_session(options: dict[str, Any] | None = None) -> mlodaAPI:
     return mloda.prepare(
         [Feature(name="verified_context_e2e_col", options=options)],
         compute_frameworks=["PythonDictFramework"],

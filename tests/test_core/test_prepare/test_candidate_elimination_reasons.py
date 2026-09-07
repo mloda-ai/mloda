@@ -15,7 +15,7 @@ groups become global ``FeatureGroup`` subclasses and must not collide with other
 """
 
 from abc import abstractmethod
-from typing import ClassVar, Optional
+from typing import ClassVar
 
 import pytest
 
@@ -100,18 +100,18 @@ class _ElimBaseFG(FeatureGroup):
     """
 
     MATCHES: ClassVar[frozenset[str]] = frozenset()
-    DOMAIN_NAME: ClassVar[Optional[str]] = None
-    FRAMEWORK_RULE: ClassVar[Optional[set[type[ComputeFramework]]]] = None
-    SUPPORTED_FRAMEWORKS: ClassVar[Optional[frozenset[str]]] = None
-    INDEX_COLUMNS: ClassVar[Optional[list[Index]]] = None
-    SUPPORTS_INDEX_RESULT: ClassVar[Optional[bool]] = None
+    DOMAIN_NAME: ClassVar[str | None] = None
+    FRAMEWORK_RULE: ClassVar[set[type[ComputeFramework]] | None] = None
+    SUPPORTED_FRAMEWORKS: ClassVar[frozenset[str] | None] = None
+    INDEX_COLUMNS: ClassVar[list[Index] | None] = None
+    SUPPORTS_INDEX_RESULT: ClassVar[bool | None] = None
 
     @classmethod
     def match_feature_group_criteria(
         cls,
         feature_name: FeatureName | str,
         options: Options,
-        data_access_collection: Optional[DataAccessCollection] = None,
+        data_access_collection: DataAccessCollection | None = None,
     ) -> bool:
         return str(feature_name) in cls.MATCHES
 
@@ -137,14 +137,14 @@ class _ElimBaseFG(FeatureGroup):
         return compute_framework.get_class_name() in cls.SUPPORTED_FRAMEWORKS
 
     @classmethod
-    def index_columns(cls) -> Optional[list[Index]]:
+    def index_columns(cls) -> list[Index] | None:
         return cls.INDEX_COLUMNS
 
     @classmethod
-    def supports_index(cls, index: Index) -> Optional[bool]:
+    def supports_index(cls, index: Index) -> bool | None:
         return cls.SUPPORTS_INDEX_RESULT
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return None
 
 
@@ -163,7 +163,7 @@ class ElimValueRejectFG011(_ElimBaseFG):
         cls,
         feature_name: FeatureName | str,
         options: Options,
-        data_access_collection: Optional[DataAccessCollection] = None,
+        data_access_collection: DataAccessCollection | None = None,
     ) -> bool:
         if str(feature_name) in cls.MATCHES:
             raise PropertyValueRejection(VALUE_REJECT_REASON)
@@ -301,7 +301,7 @@ class ElimLosingRejectorFG011(_ElimBaseFG):
         cls,
         feature_name: FeatureName | str,
         options: Options,
-        data_access_collection: Optional[DataAccessCollection] = None,
+        data_access_collection: DataAccessCollection | None = None,
     ) -> bool:
         # Name matches, but the value is rejected: the first pass records the reason as the match fails.
         if str(feature_name) == WIN_WITH_REJECTOR_FEATURE:
@@ -324,7 +324,7 @@ class ElimDomainAndValueRejectFG011(_ElimBaseFG):
         cls,
         feature_name: FeatureName | str,
         options: Options,
-        data_access_collection: Optional[DataAccessCollection] = None,
+        data_access_collection: DataAccessCollection | None = None,
     ) -> bool:
         # The value is rejected at the criteria gate, recording the reason before the domain gate is reached.
         if str(feature_name) == DOMAIN_AND_VALUE_REJECT_FEATURE:
@@ -347,7 +347,7 @@ class _ElimReprobeFG011(_ElimBaseFG):
         cls,
         feature_name: FeatureName | str,
         options: Options,
-        data_access_collection: Optional[DataAccessCollection] = None,
+        data_access_collection: DataAccessCollection | None = None,
     ) -> bool:
         matched = str(feature_name) in cls.MATCHES
         if matched:
@@ -387,7 +387,7 @@ ELIM_LINK = Link.inner(
 def _fail(
     feature: Feature,
     accessible_plugins: FeatureGroupEnvironmentMapping,
-    links: Optional[set[Link]] = None,
+    links: set[Link] | None = None,
 ) -> FeatureResolutionError:
     """Drive the engine seam and return the raised typed error (carrying ``.result`` and message)."""
     with pytest.raises(FeatureResolutionError) as excinfo:

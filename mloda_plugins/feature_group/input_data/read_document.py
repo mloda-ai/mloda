@@ -1,6 +1,6 @@
 import os
 from pathlib import Path
-from typing import Any, ClassVar, Optional
+from typing import Any, ClassVar
 
 from mloda.provider import BaseInputData, FeatureSet, PropertySpec
 from mloda.user import DataAccessCollection, Options
@@ -132,7 +132,7 @@ class ReadDocument(BaseInputData):
         cls,
         data_accesses: list[str],
         feature_names: list[str],
-        document_suffixes: Optional["frozenset[str]"] = None,
+        document_suffixes: frozenset[str] | None = None,
     ) -> Any:
         try:
             suffix = cls.suffix()
@@ -152,7 +152,7 @@ class ReadDocument(BaseInputData):
         return None
 
     @classmethod
-    def _document_file_matches(cls, path: str, document_suffixes: "frozenset[str]") -> bool:
+    def _document_file_matches(cls, path: str, document_suffixes: frozenset[str]) -> bool:
         if not cls._has_suffix():
             return False
         if not path.endswith(cls.suffix()):
@@ -162,7 +162,7 @@ class ReadDocument(BaseInputData):
         return True
 
     @classmethod
-    def _is_structured_suffix(cls, filename: str, document_suffixes: "frozenset[str]") -> bool:
+    def _is_structured_suffix(cls, filename: str, document_suffixes: frozenset[str]) -> bool:
         """Return True if filename has a structured suffix not overridden by document_suffixes."""
         for s in ReadFile._structured_suffixes:
             if filename.endswith(s) and s not in document_suffixes:

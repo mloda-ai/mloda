@@ -8,7 +8,7 @@ and aborts resolution for the whole run. Such a base must simply not match.
 
 import inspect
 from abc import abstractmethod
-from typing import Any, Optional
+from typing import Any
 
 import pandas as pd
 
@@ -39,7 +39,7 @@ class ConcreteRootFeatureGroup(FeatureGroup):
     """Concrete root feature group: no input features, creates its own data."""
 
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator({"issue692_root_feature"})
 
     @classmethod
@@ -59,7 +59,7 @@ class ConcreteSubclassOfAbstractBase(AbstractBaseWithAbstractMethod):
         return data
 
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator({"issue692_subclass_root_feature"})
 
     @classmethod

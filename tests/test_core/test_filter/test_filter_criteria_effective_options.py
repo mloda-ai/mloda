@@ -8,7 +8,7 @@ called to match a filter feature, even though the very same classmethod observes
 
 from __future__ import annotations
 
-from typing import Any, Optional
+from typing import Any
 
 
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
@@ -49,7 +49,7 @@ def _make_probe_fg() -> type[FeatureGroup]:
             cls,
             feature_name: FeatureName | str,
             options: Options,
-            data_access_collection: Optional[DataAccessCollection] = None,
+            data_access_collection: DataAccessCollection | None = None,
         ) -> bool:
             # PFC_MAIN must always resolve: feature resolution itself observes declared (pre-default)
             # options, so gating the root request on PFC_KEY would break it whenever the key is absent.

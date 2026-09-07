@@ -6,7 +6,7 @@ any compute framework format by leveraging the existing transformer infrastructu
 All conversions go through PyArrow as an intermediate format.
 """
 
-from typing import Any, Optional
+from typing import Any
 
 from mloda.provider import ComputeFrameworkTransformer
 from mloda.user import PluginLoader
@@ -43,7 +43,7 @@ class DataConverter:
         self,
         data: list[dict[str, Any]],
         target_framework_type: type[Any],
-        connection: Optional[Any] = None,
+        connection: Any | None = None,
     ) -> Any:
         """
         Convert test data (List[Dict]) to target framework format.

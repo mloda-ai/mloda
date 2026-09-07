@@ -1,4 +1,4 @@
-from typing import Any, Optional
+from typing import Any
 from mloda.core.abstract_plugins.components.hashable_dict import HashableDict
 from mloda.core.abstract_plugins.components.input_data.api.base_api_data import BaseApiData
 
@@ -11,7 +11,7 @@ class ApiInputDataCollection:
     and retrieval of API input data classes based on their names and associated column names.
     """
 
-    def __init__(self, registry: Optional[dict[str, type[BaseApiData]]] = None) -> None:
+    def __init__(self, registry: dict[str, type[BaseApiData]] | None = None) -> None:
         self._registry: dict[str, type[BaseApiData]] = registry if registry is not None else {}
 
         # Keep track of used key names to avoid misalignment

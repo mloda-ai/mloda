@@ -1,6 +1,6 @@
 """A RIGHT join binds the declared left group as the left merge argument; surplus left keys expose a swap."""
 
-from typing import Any, Optional
+from typing import Any
 
 import pytest
 
@@ -84,7 +84,7 @@ def _packed_rows(results: Any, column: str) -> list[str]:
 
 class RightBindLeftInArrow(FeatureGroup):
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator(supports_features={"rjsb_left_key", "rjsb_left_payload"})
 
     @classmethod
@@ -98,7 +98,7 @@ class RightBindLeftInArrow(FeatureGroup):
 
 class RightBindRightInPandas(FeatureGroup):
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator(supports_features={"rjsb_right_key", "rjsb_right_payload"})
 
     @classmethod
@@ -113,7 +113,7 @@ class RightBindRightInPandas(FeatureGroup):
 class RightBindChild(FeatureGroup):
     """Runs in the declared right group's framework, which is where the RIGHT join executes."""
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return _pair_features("rjsb")
 
     @classmethod
@@ -129,7 +129,7 @@ class RightBindPolyBase(FeatureGroup):
     """Declared left side of a link whose declared right side derives from it."""
 
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator(supports_features={"rjsbp_left_key", "rjsbp_left_payload"})
 
     @classmethod
@@ -145,7 +145,7 @@ class RightBindPolyDerived(RightBindPolyBase):
     """Declared right side, and a subclass of the declared left side, so it answers to both sides."""
 
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator(supports_features={"rjsbp_right_key", "rjsbp_right_payload"})
 
     @classmethod
@@ -158,7 +158,7 @@ class RightBindPolyDerived(RightBindPolyBase):
 
 
 class RightBindPolyChild(FeatureGroup):
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return _pair_features("rjsbp")
 
     @classmethod
@@ -174,7 +174,7 @@ class RightBindAncestorBase(FeatureGroup):
     """Declared left side of the RIGHT join, and the base class of an unrelated ancestor of the same child."""
 
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator(supports_features={"rjsba_left_key", "rjsba_left_payload"})
 
     @classmethod
@@ -188,7 +188,7 @@ class RightBindAncestorBase(FeatureGroup):
 
 class RightBindAncestorRight(FeatureGroup):
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator(supports_features={"rjsba_right_key", "rjsba_right_payload"})
 
     @classmethod
@@ -204,7 +204,7 @@ class RightBindAncestorSibling(RightBindAncestorBase):
     """Subclasses the declared left side but runs in the destination framework and joins on its own link."""
 
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator(supports_features={"rjsba_sibling_key", "rjsba_sibling_payload"})
 
     @classmethod
@@ -217,7 +217,7 @@ class RightBindAncestorSibling(RightBindAncestorBase):
 
 
 class RightBindAncestorChild(FeatureGroup):
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return _pair_features("rjsba") | {Feature(name="rjsba_sibling_payload")}
 
     @classmethod

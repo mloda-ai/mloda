@@ -2,7 +2,7 @@
 
 import collections.abc
 import inspect
-from typing import Any, Optional
+from typing import Any
 from unittest.mock import patch
 
 from mloda.core.api.request import mlodaAPI
@@ -15,7 +15,7 @@ from mloda_plugins.compute_framework.base_implementations.pandas.dataframe impor
 class ClassMethodFeature(FeatureGroup):
     """A simple feature for classmethod dispatch tests."""
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return {
             Feature(name="cm_id", index=Index(("cm_id",))),
             Feature(name="cm_value", index=Index(("cm_id",))),

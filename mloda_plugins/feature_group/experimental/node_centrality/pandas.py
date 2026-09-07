@@ -4,7 +4,7 @@ Pandas implementation for node centrality feature groups.
 
 from __future__ import annotations
 
-from typing import Any, Optional, cast
+from typing import Any, cast
 
 
 try:
@@ -103,7 +103,7 @@ class PandasNodeCentralityFeatureGroup(NodeCentralityFeatureGroup):
         centrality_type: str,
         node_feature: str,
         graph_type: str = "undirected",
-        weight_column: Optional[str] = None,
+        weight_column: str | None = None,
     ) -> pd.Series:
         """
         Calculate centrality metrics for nodes in a graph.
@@ -165,7 +165,7 @@ class PandasNodeCentralityFeatureGroup(NodeCentralityFeatureGroup):
         nodes: np.ndarray[Any, Any],
         source_col: str,
         target_col: str,
-        weight_column: Optional[str] = None,
+        weight_column: str | None = None,
         graph_type: str = "undirected",
     ) -> pd.DataFrame:
         """

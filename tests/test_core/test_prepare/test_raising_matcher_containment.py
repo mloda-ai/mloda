@@ -10,7 +10,7 @@ import gc
 from collections.abc import Callable
 from dataclasses import dataclass
 from functools import partial
-from typing import Optional, TypeVar
+from typing import TypeVar
 
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.abstract_plugins.components.feature import Feature
@@ -54,11 +54,11 @@ class ContainedNeighborFG845(FeatureGroup):
     def compute_framework_rule(cls) -> set[type[ComputeFramework]] | None:
         return {ContainedFw845}
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return None
 
 
-def _capture(call: Callable[[], T]) -> tuple[Optional[T], Optional[str]]:
+def _capture(call: Callable[[], T]) -> tuple[T | None, str | None]:
     """Run call, returning (value, None) or (None, 'Type: message'). No traceback is retained."""
     try:
         return call(), None
@@ -87,11 +87,11 @@ def _make_raising_matcher_fg() -> type[FeatureGroup]:
             cls,
             feature_name: FeatureName | str,
             options: Options,
-            data_access_collection: Optional[DataAccessCollection] = None,
+            data_access_collection: DataAccessCollection | None = None,
         ) -> bool:
             raise RuntimeError(RAISE_MESSAGE)
 
-        def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+        def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
             return None
 
     return RaisingMatcherFG845
@@ -101,13 +101,13 @@ def _make_raising_matcher_fg() -> type[FeatureGroup]:
 class _OwnFeatureSnapshot:
     """Plain-data readout of one own-feature evaluation. Holds no class and no exception object."""
 
-    escaped: Optional[str]
-    failure_kind: Optional[str]
+    escaped: str | None
+    failure_kind: str | None
     eliminated_names: tuple[str, ...]
-    stage: Optional[str]
-    reason: Optional[str]
-    reason_type: Optional[str]
-    message: Optional[str]
+    stage: str | None
+    reason: str | None
+    reason_type: str | None
+    message: str | None
 
 
 def _evaluate_own_feature() -> _OwnFeatureSnapshot:

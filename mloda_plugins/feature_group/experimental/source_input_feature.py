@@ -38,7 +38,7 @@ Further, it allows defining:
         ```
 """
 
-from typing import Any, NamedTuple, Optional
+from typing import Any, NamedTuple
 from mloda.provider import FeatureGroup
 from mloda.user import Feature
 from mloda.user import FeatureName
@@ -88,7 +88,7 @@ class SourceInputFeature(FeatureGroup):
         - merges:  Specifies merge operations between features.
     """
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return SourceInputFeatureComposite.input_features(options, feature_name)
 
 
@@ -109,12 +109,12 @@ class SourceTuple(NamedTuple):
     """
 
     feature_name: str
-    source_class: Optional[type[FeatureGroup | str]] = None
-    source_value: Optional[str] = None
-    left_link: Optional[tuple[type[FeatureGroup], str | Index]] = None
-    right_link: Optional[tuple[type[FeatureGroup], str | Index]] = None
-    join_type: Optional[JoinType] = None
-    merge_index: Optional[str | Index] = None
+    source_class: type[FeatureGroup | str] | None = None
+    source_value: str | None = None
+    left_link: tuple[type[FeatureGroup], str | Index] | None = None
+    right_link: tuple[type[FeatureGroup], str | Index] | None = None
+    join_type: JoinType | None = None
+    merge_index: str | Index | None = None
 
 
 class SourceInputFeatureComposite:
@@ -123,7 +123,7 @@ class SourceInputFeatureComposite:
     """
 
     @classmethod
-    def input_features(cls, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(cls, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         """
         Retrieves the set of input features based on the provided options.
 

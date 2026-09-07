@@ -5,7 +5,7 @@ Base implementation for missing value imputation feature groups.
 from __future__ import annotations
 
 from abc import abstractmethod
-from typing import Any, Optional
+from typing import Any
 
 from mloda.provider import FeatureGroup
 from mloda.user import Feature
@@ -218,7 +218,7 @@ class MissingValueFeatureGroup(FeatureChainParserMixin, FeatureGroup):
         return imputation_method
 
     @classmethod
-    def _extract_imputation_method(cls, feature: Feature) -> Optional[str]:
+    def _extract_imputation_method(cls, feature: Feature) -> str | None:
         """
         Extract imputation method from a feature.
 
@@ -318,8 +318,8 @@ class MissingValueFeatureGroup(FeatureChainParserMixin, FeatureGroup):
         data: Any,
         imputation_method: str,
         in_features: list[str],
-        constant_value: Optional[Any] = None,
-        group_by_features: Optional[list[str]] = None,
+        constant_value: Any | None = None,
+        group_by_features: list[str] | None = None,
     ) -> Any:
         """
         Method to perform the imputation. Should be implemented by subclasses.

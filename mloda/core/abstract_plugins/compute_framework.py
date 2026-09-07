@@ -792,6 +792,8 @@ class ComputeFramework(ABC):
         # feature_group is a class in production; normalize since test doubles may pass an instance.
         feature_group_cls: Any = feature_group if isinstance(feature_group, type) else type(feature_group)
 
+        feature_group_class = f"{feature_group_cls.__module__}.{feature_group_cls.__qualname__}"
+
         feature_names: tuple[str, ...] = ()
         input_features: frozenset[str] | None = None
         if isinstance(features, FeatureSet):
@@ -800,8 +802,13 @@ class ComputeFramework(ABC):
 
         return HookContext(
             hook=hook,
-            feature_group_class=f"{feature_group_cls.__module__}.{feature_group_cls.__qualname__}",
-            feature_group_version=safe_field(lambda: as_str(feature_group_cls.version()), "unavailable"),
+            feature_group_class=feature_group_class,
+            feature_group_version=safe_field(
+                lambda: as_str(feature_group_cls.version()),
+                "unavailable",
+                field=f"{feature_group_class}.version",
+                warn_once_for=feature_group_cls,
+            ),
             plugin_version=resolve_plugin_version(feature_group_cls.__module__),
             feature_names=feature_names,
             input_features=input_features,

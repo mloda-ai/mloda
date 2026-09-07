@@ -240,3 +240,72 @@ class TestSafeFieldFieldLabelKeepsExistingBehavior:
                 safe_field(raises, "fallback", catching=(OSError, TypeError), field="version")
 
         assert _warning_messages(caplog) == [], "A propagated exception is not a swallowed read, so it must not warn"
+
+
+class TestSafeFieldWarnOnceFor:
+    """warn_once_for dedups the WARNING per key, so a hot call site warns only on the key's first swallow."""
+
+    def test_first_call_with_warn_once_for_warns_once(self, caplog: pytest.LogCaptureFixture) -> None:
+        key = object()
+
+        def raises() -> str:
+            raise RuntimeError("boom")
+
+        with caplog.at_level(logging.WARNING, logger=SAFE_FIELD_LOGGER):
+            result = safe_field(raises, "unavailable", field="description", warn_once_for=key)
+
+        assert result == "unavailable"
+        messages = _warning_messages(caplog)
+        assert len(messages) == 1, f"Expected exactly one WARNING, got {messages}"
+
+    def test_second_call_with_same_warn_once_for_does_not_warn_again(self, caplog: pytest.LogCaptureFixture) -> None:
+        key = object()
+
+        def raises_first() -> str:
+            raise RuntimeError("boom")
+
+        def raises_second() -> str:
+            raise KeyError("missing")
+
+        with caplog.at_level(logging.WARNING, logger=SAFE_FIELD_LOGGER):
+            safe_field(raises_first, "unavailable", field="description", warn_once_for=key)
+            # Different field label and different exception type: still the same warn_once_for key.
+            safe_field(raises_second, "unavailable", field="other_field", warn_once_for=key)
+
+        messages = _warning_messages(caplog)
+        assert len(messages) == 1, (
+            f"A second swallow with the same warn_once_for key must not warn again, got {messages}"
+        )
+
+    def test_different_warn_once_for_still_warns_on_its_own_first_occurrence(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        key_a = object()
+        key_b = object()
+
+        def raises() -> str:
+            raise RuntimeError("boom")
+
+        with caplog.at_level(logging.WARNING, logger=SAFE_FIELD_LOGGER):
+            safe_field(raises, "unavailable", field="description", warn_once_for=key_a)
+            safe_field(raises, "unavailable", field="description", warn_once_for=key_b)
+
+        messages = _warning_messages(caplog)
+        assert len(messages) == 2, (
+            f"A different warn_once_for key must still warn on its own first occurrence, got {messages}"
+        )
+
+    def test_without_warn_once_for_repeated_swallows_still_warn_every_time(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """No regression: omitting warn_once_for keeps today's every-call-warns behavior."""
+
+        def raises() -> str:
+            raise RuntimeError("boom")
+
+        with caplog.at_level(logging.WARNING, logger=SAFE_FIELD_LOGGER):
+            safe_field(raises, "unavailable", field="description")
+            safe_field(raises, "unavailable", field="description")
+
+        messages = _warning_messages(caplog)
+        assert len(messages) == 2, f"Expected two WARNINGs (no dedup without warn_once_for), got {messages}"

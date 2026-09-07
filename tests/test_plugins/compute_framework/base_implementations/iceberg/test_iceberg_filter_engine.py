@@ -136,6 +136,76 @@ class TestIcebergFilterEngine:
         with pytest.raises(NotImplementedError):
             IcebergFilterEngine._build_iceberg_expression(single_filter)
 
+    def test_build_iceberg_expression_equal_missing_value_raises(self) -> None:
+        """EQUAL with no value must raise ValueError, not silently return None."""
+        feature = Feature("age")
+        filter_type = FilterType.EQUAL
+        parameter = {"invalid": 30}
+        single_filter = SingleFilter(feature, filter_type, parameter)
+
+        with pytest.raises(ValueError, match="Filter parameter 'value' not found"):
+            IcebergFilterEngine._build_iceberg_expression(single_filter)
+
+    def test_build_iceberg_expression_min_missing_value_raises(self) -> None:
+        """MIN with no value must raise ValueError, not silently return None."""
+        feature = Feature("age")
+        filter_type = FilterType.MIN
+        parameter = {"invalid": 30}
+        single_filter = SingleFilter(feature, filter_type, parameter)
+
+        with pytest.raises(ValueError, match="Filter parameter 'value' not found"):
+            IcebergFilterEngine._build_iceberg_expression(single_filter)
+
+    def test_build_iceberg_expression_max_missing_value_raises(self) -> None:
+        """MAX with neither value nor max must raise ValueError, matching the base engine's message."""
+        feature = Feature("age")
+        filter_type = FilterType.MAX
+        parameter = {"invalid": 30}
+        single_filter = SingleFilter(feature, filter_type, parameter)
+
+        with pytest.raises(ValueError, match="No valid filter parameter found"):
+            IcebergFilterEngine._build_iceberg_expression(single_filter)
+
+    def test_build_iceberg_expression_max_with_min_raises(self) -> None:
+        """MAX with both min and max present must raise ValueError instead of silently dropping min."""
+        feature = Feature("age")
+        filter_type = FilterType.MAX
+        parameter = {"min": 25, "max": 50}
+        single_filter = SingleFilter(feature, filter_type, parameter)
+
+        with pytest.raises(ValueError, match="not supported as max filter"):
+            IcebergFilterEngine._build_iceberg_expression(single_filter)
+
+    def test_build_iceberg_expression_range_missing_both_raises(self) -> None:
+        """RANGE with neither min nor max must raise ValueError, not silently return None."""
+        feature = Feature("age")
+        filter_type = FilterType.RANGE
+        parameter = {"invalid": 30}
+        single_filter = SingleFilter(feature, filter_type, parameter)
+
+        with pytest.raises(ValueError, match="not supported"):
+            IcebergFilterEngine._build_iceberg_expression(single_filter)
+
+    def test_build_iceberg_expression_range_missing_max_raises(self) -> None:
+        """RANGE requires both bounds; a min-only range must raise ValueError."""
+        feature = Feature("age")
+        filter_type = FilterType.RANGE
+        parameter = {"min": 25}
+        single_filter = SingleFilter(feature, filter_type, parameter)
+
+        with pytest.raises(ValueError, match="not supported"):
+            IcebergFilterEngine._build_iceberg_expression(single_filter)
+
+    def test_build_iceberg_expression_range_missing_min_raises(self) -> None:
+        """RANGE requires both bounds; a max-only range must raise ValueError."""
+        feature = Feature("age")
+        filter_type = FilterType.RANGE
+        parameter = {"max": 50}
+        single_filter = SingleFilter(feature, filter_type, parameter)
+
+        with pytest.raises(ValueError, match="not supported"):
+            IcebergFilterEngine._build_iceberg_expression(single_filter)
+
     def test_extract_parameter_value(self) -> None:
         """Test extracting parameter values."""
         feature = Feature("age")
@@ -242,6 +312,17 @@ class TestIcebergFilterEngine:
         mock_feature_set.filters = [category_filter]
 
         with pytest.raises(NotImplementedError):
+            IcebergFilterEngine.apply_filters(mock_iceberg_table, mock_feature_set)
+
+        # An unfiltered scan would indicate the filter was silently dropped instead of raising.
+        mock_iceberg_table.scan.assert_not_called()
+
+    def test_apply_filters_equal_missing_value_raises(self, mock_iceberg_table: Mock, mock_feature_set: Mock) -> None:
+        """apply_filters must not silently drop a missing-value filter and return the unfiltered table."""
+        age_filter = SingleFilter(Feature("age"), FilterType.EQUAL, {"invalid": 30})
+        mock_feature_set.filters = [age_filter]
+
+        with pytest.raises(ValueError, match="Filter parameter 'value' not found"):
             IcebergFilterEngine.apply_filters(mock_iceberg_table, mock_feature_set)
 
         # An unfiltered scan would indicate the filter was silently dropped instead of raising.

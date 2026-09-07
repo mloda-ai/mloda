@@ -146,46 +146,54 @@ class IcebergFramework(ComputeFramework):
         return set(data.schema.names)
 
     def _extract_column_dtype(self, data: Any, column_name: str) -> str | None:
-        if IcebergTable is None or not isinstance(data, IcebergTable):
+        if IcebergTable is not None and isinstance(data, IcebergTable):
+            schema = data.schema()
+            if column_name not in set(schema.column_names):
+                return None
+            field = schema.find_field(column_name)
+            if field is None:
+                return None
+            return str(field.field_type)
+        if pa is not None and isinstance(data, pa.Table):
+            if column_name in data.schema.names:
+                return str(data.schema.field(column_name).type)
             return None
-        schema = data.schema()
-        if column_name not in set(schema.column_names):
-            return None
-        field = schema.find_field(column_name)
-        if field is None:
-            return None
-        return str(field.field_type)
+        return None
 
     def _extract_column_data_type(self, data: Any, column_name: str) -> Optional[DataType]:
-        if IcebergTable is None or not isinstance(data, IcebergTable):
+        if IcebergTable is not None and isinstance(data, IcebergTable):
+            schema = data.schema()
+            if column_name not in set(schema.column_names):
+                return None
+            field = schema.find_field(column_name)
+            if field is None:
+                return None
+            field_type = field.field_type
+            if isinstance(field_type, IntegerType):
+                return DataType.INT32
+            if isinstance(field_type, LongType):
+                return DataType.INT64
+            if isinstance(field_type, FloatType):
+                return DataType.FLOAT
+            if isinstance(field_type, DoubleType):
+                return DataType.DOUBLE
+            if isinstance(field_type, BooleanType):
+                return DataType.BOOLEAN
+            if isinstance(field_type, StringType):
+                return DataType.STRING
+            if isinstance(field_type, BinaryType):
+                return DataType.BINARY
+            if isinstance(field_type, DateType):
+                return DataType.DATE
+            if isinstance(field_type, (TimestampType, TimestamptzType)):
+                return DataType.TIMESTAMP_MICROS
+            if isinstance(field_type, DecimalType):
+                return DataType.DECIMAL
             return None
-        schema = data.schema()
-        if column_name not in set(schema.column_names):
-            return None
-        field = schema.find_field(column_name)
-        if field is None:
-            return None
-        field_type = field.field_type
-        if isinstance(field_type, IntegerType):
-            return DataType.INT32
-        if isinstance(field_type, LongType):
-            return DataType.INT64
-        if isinstance(field_type, FloatType):
-            return DataType.FLOAT
-        if isinstance(field_type, DoubleType):
-            return DataType.DOUBLE
-        if isinstance(field_type, BooleanType):
-            return DataType.BOOLEAN
-        if isinstance(field_type, StringType):
-            return DataType.STRING
-        if isinstance(field_type, BinaryType):
-            return DataType.BINARY
-        if isinstance(field_type, DateType):
-            return DataType.DATE
-        if isinstance(field_type, (TimestampType, TimestamptzType)):
-            return DataType.TIMESTAMP_MICROS
-        if isinstance(field_type, DecimalType):
-            return DataType.DECIMAL
+        if pa is not None and isinstance(data, pa.Table):
+            if column_name not in data.schema.names:
+                return None
+            return DataType.from_arrow_type_safe(data.schema.field(column_name).type)
         return None
 
     def _output_schema(self, data: Any) -> OutputSchema | None:

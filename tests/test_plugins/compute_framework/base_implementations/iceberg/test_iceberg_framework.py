@@ -291,6 +291,59 @@ class TestIcebergDtypeExtraction(DtypeExtractionTestMixin):
 @pytest.mark.skipif(
     pyiceberg is None or pa is None, reason="PyIceberg or PyArrow is not installed. Skipping this test."
 )
+class TestIcebergDtypeExtractionPyArrow(DtypeExtractionTestMixin):
+    """Pin _extract_column_dtype for the post-transform PyArrow shape, not just a native IcebergTable."""
+
+    @pytest.fixture
+    def framework_instance(self) -> Any:
+        return IcebergFramework(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
+
+    @pytest.fixture
+    def dtype_sample_data(self) -> Any:
+        return pa.table({"int_col": [1, 2, 3], "str_col": ["a", "b", "c"], "float_col": [1.0, 2.0, 3.0]})
+
+
+@pytest.mark.skipif(
+    pyiceberg is None or pa is None, reason="PyIceberg or PyArrow is not installed. Skipping this test."
+)
+class TestIcebergDataTypeValidatorPyArrow(DataTypeValidatorFrameworkTestMixin):
+    """Pin DataTypeValidator enforcement for the post-transform PyArrow shape, where from_arrow is the identity."""
+
+    @pytest.fixture
+    def framework_instance(self) -> Any:
+        return IcebergFramework(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
+
+    def from_arrow(self, table: Any) -> Any:
+        return table
+
+
+@pytest.mark.skipif(
+    pyiceberg is None or pa is None, reason="PyIceberg or PyArrow is not installed. Skipping this test."
+)
+def test_extract_column_dtype_pyarrow_table_returns_arrow_type_string() -> None:
+    framework = IcebergFramework()
+    assert framework._extract_column_dtype(pa.table({"a": [1]}), "a") == "int64"
+
+
+@pytest.mark.skipif(
+    pyiceberg is None or pa is None, reason="PyIceberg or PyArrow is not installed. Skipping this test."
+)
+def test_extract_column_dtype_pyarrow_table_missing_column_returns_none() -> None:
+    framework = IcebergFramework()
+    assert framework._extract_column_dtype(pa.table({"a": [1]}), "unknown") is None
+
+
+@pytest.mark.skipif(
+    pyiceberg is None or pa is None, reason="PyIceberg or PyArrow is not installed. Skipping this test."
+)
+def test_extract_column_data_type_pyarrow_table_returns_int64() -> None:
+    framework = IcebergFramework()
+    assert framework._extract_column_data_type(pa.table({"a": [1]}), "a") is DataType.INT64
+
+
+@pytest.mark.skipif(
+    pyiceberg is None or pa is None, reason="PyIceberg or PyArrow is not installed. Skipping this test."
+)
 class TestIcebergEmptyResult(EmptyResultFrameworkTestMixin):
     """Test IcebergFramework schema detection via shared mixin, covering both branches.
 

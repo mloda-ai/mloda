@@ -66,3 +66,55 @@ class TestFeatureSetResolveArtifactForRuntimeUsesArtifactToLoad:
         result = BaseArtifact.load(features)
 
         assert result == "runtime_value"
+
+
+class TestFeatureSetResolveArtifactForRuntimeDoesNotMutateFeatureHash:
+    """resolve_artifact_for_runtime() must not change the group options (and therefore the
+    hash) of any Feature whose `.options` aliases the FeatureSet's shared Options object --
+    doing so silently corrupts `self.features` set membership (#1236)."""
+
+    def test_feature_remains_a_member_after_resolving_runtime_artifact(self) -> None:
+        feature = Feature("abc")
+        features = FeatureSet()
+        features.add(feature)
+
+        assert feature in features.features
+
+        features.resolve_artifact_for_runtime({"abc": "ART"})
+
+        assert feature in features.features
+
+    def test_feature_group_options_are_unchanged_after_resolving_runtime_artifact(self) -> None:
+        feature = Feature("abc")
+        features = FeatureSet()
+        features.add(feature)
+        hash_before = hash(feature)
+
+        features.resolve_artifact_for_runtime({"abc": "ART"})
+
+        assert "abc" not in feature.options.group
+        assert hash(feature) == hash_before
+
+    def test_shared_options_group_is_unchanged_across_features(self) -> None:
+        shared_options = Options({})
+        features = FeatureSet()
+        a_feature = Feature("a_col", shared_options)
+        z_feature = Feature("z_col", shared_options)
+        features.add(a_feature)
+        features.add(z_feature)
+
+        features.resolve_artifact_for_runtime({"z_col": "runtime_value"})
+
+        assert "z_col" not in shared_options.group
+        assert a_feature in features.features
+        assert z_feature in features.features
+
+    def test_artifact_is_still_retrievable_via_feature_options_after_fix(self) -> None:
+        shared_options = Options({})
+        features = FeatureSet()
+        features.add(Feature("a_col", shared_options))
+        features.add(Feature("z_col", shared_options))
+
+        features.resolve_artifact_for_runtime({"z_col": "runtime_value"})
+
+        assert shared_options["z_col"] == "runtime_value"

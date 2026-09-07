@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any, Callable, TypeVar
 
 import logging
+import weakref
 
 logger = logging.getLogger(__name__)
 
@@ -50,21 +51,44 @@ def safe_exc_str(exc: BaseException) -> str:
         return type(exc).__name__
 
 
+# Weakly held so a warn_once_for key (typically a class) isn't pinned past its lifetime; non-weakly-referenceable
+# keys fall back to a plain set.
+_warn_once_for_weak: "weakref.WeakSet[Any]" = weakref.WeakSet()
+_warn_once_for_strong: set[object] = set()
+
+
+def _warn_once_for_seen(key: object) -> bool:
+    """True if `key` was already seen, else records it. Never raises: a bad hash/weakref hook degrades to False."""
+    try:
+        # __weakrefoffset__, not hasattr(key, "__weakref__"): the latter tests instances-of-key, not key itself.
+        registry: "weakref.WeakSet[Any] | set[object]" = (
+            _warn_once_for_weak if getattr(type(key), "__weakrefoffset__", 0) else _warn_once_for_strong
+        )
+        if key in registry:
+            return True
+        registry.add(key)
+    except Exception:  # noqa: BLE001  (plugin-owned key, must not escape)
+        return False
+    return False
+
+
 def safe_field(
     read: Callable[[], T],
     fallback: T,
     catching: tuple[type[Exception], ...] = (Exception,),
     field: str = "",
+    warn_once_for: object | None = None,
 ) -> T:
     """Annotate tier: degrade a single unreadable field to a fallback instead of failing the whole discovery call.
 
     A labelled read (non-empty `field`) warns on swallow; an unlabelled read degrades silently, because degrading
-    there is expected.
+    there is expected. `warn_once_for` dedups that WARNING per key, so a hot call site warns only on the key's
+    first swallow.
     """
     try:
         return read()
     except catching as exc:
-        if field:
+        if field and (warn_once_for is None or not _warn_once_for_seen(warn_once_for)):
             # str(exc), not exc: a retained log record must not pin the traceback, its frames and the plugin class.
             logger.warning("Degraded field '%s': %s: %s", field, type(exc).__name__, safe_exc_str(exc))
         return fallback

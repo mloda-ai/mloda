@@ -2,7 +2,8 @@
 
 Covers root-feature-group warnings, plain-str/batched input_features declarations,
 once-per-step resolution, warning-only extenders on validate hooks, row_count's
-type-only __len__ gate, instrument's rows_out reset, and feature_group_version.
+type-only __len__ gate, instrument's rows_out reset, and feature_group_version's
+degrade-and-log-once fallback.
 """
 
 import gc
@@ -496,10 +497,10 @@ class TestInstrumentResetsRowsOutOnEntry:
         assert context.status == "error"
 
 
-class TestFeatureGroupVersionDegradesSilently:
-    """A version() that raises must degrade to 'unavailable' without a WARNING log."""
+class TestFeatureGroupVersionDegradesAndLogs:
+    """A version() that raises must degrade to 'unavailable' and log exactly one WARNING."""
 
-    def test_version_raising_degrades_without_warning(self, caplog: pytest.LogCaptureFixture) -> None:
+    def test_version_raising_degrades_and_logs_exactly_one_warning(self, caplog: pytest.LogCaptureFixture) -> None:
         class _VersionRaisesFeatureGroup(FeatureGroup):
             """version() classmethod raises."""
 
@@ -521,7 +522,17 @@ class TestFeatureGroupVersionDegradesSilently:
 
             assert extender.captured is not None
             assert extender.captured.feature_group_version == "unavailable"
-            assert not any("Degraded field 'feature_group_version'" in record.message for record in caplog.records)
+
+            warnings = [
+                record.getMessage()
+                for record in caplog.records
+                if record.levelno == logging.WARNING
+                and record.name == _UTILS_LOGGER
+                and ".version" in record.getMessage()
+            ]
+            assert len(warnings) == 1, f"Expected exactly one WARNING, got {warnings}"
+            assert "_VersionRaisesFeatureGroup" in warnings[0]
+            assert "RuntimeError" in warnings[0]
         finally:
             del _VersionRaisesFeatureGroup
             gc.collect()

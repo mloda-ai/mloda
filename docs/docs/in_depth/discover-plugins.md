@@ -264,7 +264,7 @@ its declaration is read. Both apply identically to a run, so a scope that rescue
 ### Shared helper
 
 The annotate tier is a single shared helper,
-`safe_field(read, fallback, catching=(Exception,), field="")` in
+`safe_field(read, fallback, catching=(Exception,), field="", warn_once_for=None)` in
 `mloda.core.abstract_plugins.components.utils`: it calls the `read` thunk and
 returns `fallback` if the read raises one of `catching`, so a catalog function or
 info field reaches for one helper instead of re-deriving a `try/except`.
@@ -280,7 +280,9 @@ Logging is opt-in via `field`: the labelled `get_feature_group_docs` reads warn 
 swallow, where a raise does mean a broken plugin. The unlabelled guards stay silent
 because degrading there is by design (source introspection of `type()`-built
 classes, an availability probe without its optional backend, Iceberg's deliberate
-`NotImplementedError` from `merge_engine()`).
+`NotImplementedError` from `merge_engine()`). A hot call site can also pass
+`warn_once_for` (a key, typically the plugin class) to dedup that WARNING to once
+per key instead of once per call.
 
 `get_compute_framework_docs` uses the default broad `catching` (any failure
 degrades the field), while the narrower named guards `_safe_version` (in

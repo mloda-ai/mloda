@@ -7,6 +7,7 @@ run_context/worker_index surfacing on the captured HookContext.
 
 import functools
 import gc
+import logging
 from typing import Any
 
 import pytest
@@ -18,6 +19,8 @@ from mloda.core.abstract_plugins.run_context import RunContext
 from mloda.provider import FeatureGroup
 from mloda.user import Feature, ParallelizationMode
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
+
+SAFE_FIELD_LOGGER = "mloda.core.abstract_plugins.components.utils"
 
 
 class _CalcFeatureGroup(FeatureGroup):
@@ -245,6 +248,52 @@ class TestObservabilityFailureDoesNotBreakCalculation:
             assert extender.captured.feature_group_version == "unavailable"
         finally:
             del _VersionRaisesFeatureGroup
+            gc.collect()
+
+    def test_version_raising_logs_exactly_one_warning_across_repeated_calls(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """The fallback WARNING names the feature group and exception once, not on every hot-path hook call."""
+
+        class _RepeatedVersionRaisesFeatureGroup(FeatureGroup):
+            """FeatureGroup whose version() classmethod raises; invoked twice to probe dedup."""
+
+            @classmethod
+            def version(cls) -> str:
+                raise RuntimeError("boom")
+
+            @classmethod
+            def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+                return [{"value": i} for i in range(3)]
+
+        try:
+            feature_set = _build_feature_set()
+            extender = _ContextCapturingExtender(ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE)
+            cfw = _build_framework({extender})
+
+            with caplog.at_level(logging.WARNING, logger=SAFE_FIELD_LOGGER):
+                cfw.run_calculate_feature(_RepeatedVersionRaisesFeatureGroup, feature_set)
+                first_captured = extender.captured
+                cfw.run_calculate_feature(_RepeatedVersionRaisesFeatureGroup, feature_set)
+                second_captured = extender.captured
+
+            assert first_captured is not None
+            assert first_captured.feature_group_version == "unavailable"
+            assert second_captured is not None
+            assert second_captured.feature_group_version == "unavailable"
+
+            warnings = [
+                record.getMessage()
+                for record in caplog.records
+                if record.levelno == logging.WARNING
+                and record.name == SAFE_FIELD_LOGGER
+                and ".version" in record.getMessage()
+            ]
+            assert len(warnings) == 1, f"Expected exactly one WARNING across both calls, got {warnings}"
+            assert "_RepeatedVersionRaisesFeatureGroup" in warnings[0]
+            assert "RuntimeError" in warnings[0]
+        finally:
+            del _RepeatedVersionRaisesFeatureGroup
             gc.collect()
 
     def test_version_returning_non_str_normalizes_to_unavailable_fallback(self) -> None:

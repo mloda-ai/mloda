@@ -13,7 +13,9 @@ import pytest
 
 from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook
 from mloda.core.abstract_plugins.hook_context import HookContext
+from mloda.core.abstract_plugins.run_context import RunContext
 from mloda.core.abstract_plugins.verified_context import verified_context
+from mloda.core.core.step.join_step import JoinStep
 from mloda.provider import BaseInputData, ComputeFramework, DataCreator, FeatureGroup, FeatureSet
 from mloda.user import Feature, FeatureName, Index, JoinSpec, Link, Options, ParallelizationMode, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
@@ -144,6 +146,65 @@ class TestJoinHookFiresWithCorrectContext:
         assert context.tenant_id == "acme"
         assert context.project_id == "proj1"
         assert context.principal == "hash123"
+
+
+def _build_direct_join_step() -> JoinStep:
+    """A JoinStep usable for direct _merge_data calls, bypassing DAG execution entirely."""
+    return JoinStep(
+        link=_join_hook_link(),
+        destination_framework=PythonDictFramework,
+        source_framework=PythonDictFramework,
+        required_uuids=set(),
+        destination_framework_uuids=set(),
+        source_framework_uuids=set(),
+    )
+
+
+class TestJoinHookCarrierIsNotAliasedAcrossTwoMergesOnSameComputeFramework:
+    """Two JOIN HookContexts built from merges into the SAME destination ComputeFramework
+    instance (mirroring a star join's hub, which merges twice) must not share the carrier
+    dict object read off cfw.run_context.carrier."""
+
+    def test_two_direct_merge_calls_get_distinct_carrier_objects(self) -> None:
+        extender = _JoinListCapturingExtender()
+        carrier = {"traceparent": "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"}
+        step = _build_direct_join_step()
+        cfw = PythonDictFramework(function_extender={extender})
+        cfw.run_context = RunContext(carrier=carrier)
+        cfw.data = {f"{_MARKER}_left_id": [1, 2, 3], f"{_MARKER}_left_value": ["a", "b", "c"]}
+        from_cfw_data = {f"{_MARKER}_right_id": [1, 2, 3], f"{_MARKER}_right_value": [10, 20, 30]}
+        second_from_cfw_data = {f"{_MARKER}_right_id": [1, 2, 3], f"{_MARKER}_other_value": [7, 8, 9]}
+
+        step._merge_data(cfw, from_cfw_data)
+        step._merge_data(cfw, second_from_cfw_data)
+
+        assert len(extender.captured) == 2
+        first_context, second_context = extender.captured
+        assert first_context.carrier == second_context.carrier == carrier
+        assert first_context.carrier is not second_context.carrier
+
+    def test_mutating_one_carrier_does_not_leak_into_the_other_or_run_context(self) -> None:
+        extender = _JoinListCapturingExtender()
+        carrier = {"traceparent": "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"}
+        step = _build_direct_join_step()
+        cfw = PythonDictFramework(function_extender={extender})
+        cfw.run_context = RunContext(carrier=carrier)
+        cfw.data = {f"{_MARKER}_left_id": [1, 2, 3], f"{_MARKER}_left_value": ["a", "b", "c"]}
+        from_cfw_data = {f"{_MARKER}_right_id": [1, 2, 3], f"{_MARKER}_right_value": [10, 20, 30]}
+        second_from_cfw_data = {f"{_MARKER}_right_id": [1, 2, 3], f"{_MARKER}_other_value": [7, 8, 9]}
+
+        step._merge_data(cfw, from_cfw_data)
+        step._merge_data(cfw, second_from_cfw_data)
+
+        assert len(extender.captured) == 2
+        first_context, second_context = extender.captured
+        assert first_context.carrier is not None
+        first_context.carrier["mutated"] = "yes"
+
+        assert second_context.carrier is not None
+        assert "mutated" not in second_context.carrier
+        assert cfw.run_context.carrier is not None
+        assert "mutated" not in cfw.run_context.carrier
 
 
 class TestNoJoinExtenderRegisteredBaselineRegressionGuard:

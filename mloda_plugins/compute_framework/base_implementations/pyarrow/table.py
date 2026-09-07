@@ -3,6 +3,7 @@ from typing import Any, Optional
 from mloda.core.abstract_plugins.components.data_types import DataType
 from mloda.provider import BaseMergeEngine
 from mloda.provider import BaseFilterEngine, BaseMaskEngine
+from mloda.provider import OutputSchema
 from mloda_plugins.compute_framework.base_implementations.pyarrow.pyarrow_merge_engine import PyArrowMergeEngine
 from mloda_plugins.compute_framework.base_implementations.pyarrow.pyarrow_filter_engine import PyArrowFilterEngine
 from mloda_plugins.compute_framework.base_implementations.pyarrow.pyarrow_mask_engine import (
@@ -21,6 +22,21 @@ try:
     import pandas as pd
 except ImportError:
     pd = None
+
+
+def arrow_schema_output_schema(schema: Any) -> OutputSchema | None:
+    """Read a pyarrow Schema's names/types once and zip them, rather than calling schema.field()
+    per name. Duplicate column names (e.g. an un-aliased join) collapse to the first occurrence.
+
+    Shared with IcebergFramework, which reaches the same PyArrow interchange shape post-transform.
+    """
+    names = schema.names
+    if not names:
+        return None
+    seen: dict[str, str] = {}
+    for name, arrow_type in zip(names, schema.types):
+        seen.setdefault(name, str(arrow_type))
+    return tuple((name, seen[name]) for name in sorted(seen, key=str))
 
 
 class PyArrowTable(ComputeFramework):
@@ -75,6 +91,11 @@ class PyArrowTable(ComputeFramework):
         if column_name not in data.schema.names:
             return None
         return DataType.from_arrow_type_safe(data.schema.field(column_name).type)
+
+    def _output_schema(self, data: Any) -> OutputSchema | None:
+        if isinstance(data, dict):
+            return super()._output_schema(data)
+        return arrow_schema_output_schema(data.schema)
 
     def transform(
         self,

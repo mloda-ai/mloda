@@ -5,7 +5,9 @@ from mloda.provider import BaseMergeEngine
 from mloda.user import FeatureName
 from mloda.provider import ComputeFramework
 from mloda.provider import BaseFilterEngine
+from mloda.provider import OutputSchema
 from mloda_plugins.compute_framework.base_implementations.iceberg.iceberg_filter_engine import IcebergFilterEngine
+from mloda_plugins.compute_framework.base_implementations.pyarrow.table import arrow_schema_output_schema
 
 try:
     from pyiceberg.catalog import Catalog
@@ -185,6 +187,29 @@ class IcebergFramework(ComputeFramework):
         if isinstance(field_type, DecimalType):
             return DataType.DECIMAL
         return None
+
+    def _output_schema(self, data: Any) -> OutputSchema | None:
+        """Read the schema once and build the sorted (name, dtype) pairs directly: for a native
+        Iceberg table, schema.column_names (nested fields included, e.g. "b.c") read once, then
+        schema.find_field(name) per name, an O(1) cached lookup rather than the O(columns) rebuild
+        of set(schema.column_names) the old per-column path did. For the PyArrow interchange shape
+        reached post-transform, delegate to the same helper PyArrowTable uses.
+        """
+        if isinstance(data, dict):
+            return super()._output_schema(data)
+        if IcebergTable is not None and isinstance(data, IcebergTable):
+            schema = data.schema()
+            names = schema.column_names
+            if not names:
+                return None
+            seen: dict[str, str | None] = {}
+            for name in names:
+                field = schema.find_field(name)
+                seen.setdefault(name, None if field is None else str(field.field_type))
+            return tuple((name, seen[name]) for name in sorted(seen, key=str))
+        if pa is not None and isinstance(data, pa.Table):
+            return arrow_schema_output_schema(data.schema)
+        return super()._output_schema(data)
 
     def transform(self, data: Any, feature_names: Sequence[str]) -> Any:
         """

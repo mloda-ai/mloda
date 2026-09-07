@@ -7,6 +7,7 @@ from mloda_plugins.compute_framework.base_implementations.spark.spark_merge_engi
 from mloda.user import FeatureName
 from mloda.provider import ComputeFramework
 from mloda.provider import BaseFilterEngine, BaseMaskEngine
+from mloda.provider import OutputSchema
 from mloda_plugins.compute_framework.base_implementations.spark.spark_filter_engine import SparkFilterEngine
 from mloda_plugins.compute_framework.base_implementations.spark.spark_mask_engine import SparkMaskEngine
 from mloda_plugins.compute_framework.base_implementations.sql.sql_utils import pick_helper_column_name
@@ -139,6 +140,20 @@ class SparkFramework(ComputeFramework):
         if isinstance(spark_type, DecimalType):
             return DataType.DECIMAL
         return None
+
+    def _output_schema(self, data: Any) -> OutputSchema | None:
+        """Read schema.fields once, rather than indexing the schema by name per column. Duplicate
+        column names (e.g. an un-aliased join) collapse to the first occurrence.
+        """
+        if isinstance(data, dict):
+            return super()._output_schema(data)
+        fields = data.schema.fields
+        if not fields:
+            return None
+        seen: dict[str, str] = {}
+        for field in fields:
+            seen.setdefault(field.name, str(field.dataType))
+        return tuple((name, seen[name]) for name in sorted(seen, key=str))
 
     @classmethod
     def spark_dataframe(cls) -> Any:

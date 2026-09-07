@@ -1,7 +1,9 @@
+from __future__ import annotations
+
 import datetime
 import decimal
 from collections.abc import Sequence
-from typing import Any, Optional
+from typing import TYPE_CHECKING, Any, Optional
 from mloda.core.abstract_plugins.components.data_types import DataType
 from mloda.core.abstract_plugins.components.merge.base_merge_engine import BaseMergeEngine
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_merge_engine import (
@@ -9,6 +11,7 @@ from mloda_plugins.compute_framework.base_implementations.python_dict.python_dic
 )
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
+from mloda.core.abstract_plugins.components.utils import safe_field
 from mloda.core.filter.filter_engine import BaseFilterEngine
 from mloda.core.abstract_plugins.components.mask.base_mask_engine import BaseMaskEngine
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_filter_engine import (
@@ -21,6 +24,9 @@ from mloda_plugins.compute_framework.base_implementations.python_dict.python_dic
     rows_to_columnar,
     validate_columnar_dict,
 )
+
+if TYPE_CHECKING:
+    from mloda.core.abstract_plugins.hook_context import OutputSchema
 
 
 class PythonDictFramework(ComputeFramework):
@@ -123,6 +129,52 @@ class PythonDictFramework(ComputeFramework):
                 return DataType.DECIMAL
             return None
         return None
+
+    @staticmethod
+    def _row_dtypes(row: Any, names: tuple[str, ...]) -> dict[str, str]:
+        """Non-None dtypes for ``names`` read off a single row; a name absent from the result stays unresolved."""
+        return {name: type(value).__name__ for name in names if (value := row.get(name)) is not None}
+
+    def _output_schema(self, data: Any) -> OutputSchema | None:
+        """Row-wise list[dict] resolves every column's dtype in a single pass over rows;
+        other shapes (columnar dict included) delegate to the base implementation."""
+        if not (isinstance(data, list) and data and isinstance(data[0], dict)):
+            return super()._output_schema(data)
+
+        names = self._extract_column_names(data)
+        if not names:
+            return None
+
+        dtypes: dict[str, str | None] = dict.fromkeys(names)
+        unresolved = set(names)
+        for row in data:
+            if not unresolved:
+                break
+            pending = tuple(unresolved)
+
+            def _read_row(row: Any = row, pending: tuple[str, ...] = pending) -> dict[str, str] | None:
+                return self._row_dtypes(row, pending)
+
+            # One safe_field call per row (not per cell): a hostile column must not force a
+            # per-cell try/except for every column that would otherwise resolve cheaply.
+            resolved = safe_field(_read_row, None)
+            if resolved is None:
+                # The batch read raised; isolate the hostile column(s) so a single bad column
+                # does not also degrade this row's otherwise-readable columns.
+                resolved = {}
+                for name in pending:
+
+                    def _read_cell(row: Any = row, name: str = name) -> dict[str, str] | None:
+                        return self._row_dtypes(row, (name,))
+
+                    cell_result = safe_field(_read_cell, None)
+                    if cell_result is not None:
+                        resolved.update(cell_result)
+            for name, dtype in resolved.items():
+                dtypes[name] = dtype
+                unresolved.discard(name)
+
+        return tuple((str(name), dtypes[name]) for name in sorted(names, key=str))
 
     @staticmethod
     def _validate_columnar_dict(data: dict[str, Any]) -> None:

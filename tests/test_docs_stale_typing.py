@@ -1,8 +1,7 @@
-"""Stale old-style typing forms swept from docs/docs/in_depth pages and marimo example scripts.
+"""Old-style Union/Optional/Set/Type generics swept from docs/docs/in_depth and the marimo examples.
 
-The old-style Union, Optional, Set, and Type generics predate the PEP 604/585 syntax (X | Y, X | None,
-set[X], type[X]) and none of these words legitimately appear bracketed in this doc tree otherwise, so a raw
-text scan over the whole file (fenced code, prose, and inline code alike) is enough: no AST or fence parsing needed.
+None of these words legitimately appear bracketed elsewhere in this doc tree, so a raw text scan is
+enough to catch them, no fence parsing needed.
 """
 
 import re
@@ -27,7 +26,6 @@ TARGET_FILES = doc_files(DOCS_ROOT / "in_depth") + EXAMPLE_FILES
 
 
 def _stale_token_counts(path: Path) -> dict[str, int]:
-    """Count occurrences of each stale typing token in path's raw text, omitting zero counts."""
     text = path.read_text(encoding="utf-8")
     counts = {token: len(pattern.findall(text)) for token, pattern in TOKEN_PATTERNS.items()}
     return {token: count for token, count in counts.items() if count}

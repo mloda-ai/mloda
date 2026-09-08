@@ -6,6 +6,7 @@ name: Commit Lint
 on:
   pull_request:
     branches: [ "main" ]
+    types: [ opened, synchronize, reopened, edited ]
 
 permissions:
   contents: read
@@ -19,22 +20,32 @@ jobs:
           fetch-depth: 0
       - name: Validate commit messages follow Conventional Commits
         env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           set -u
-          # Types kept in sync with the commit-analyzer releaseRules in .releaserc.yaml.
-          pattern='^(minor|feat|impr|refactor|perf|fix|ci|docs|chore|style|test|build)(\([^)]+\))?!?: .+'
+          : "${BASE_SHA:?}" "${HEAD_SHA:?}"
+          # Types kept in sync with the commit-analyzer releaseRules in .releaserc.yaml
+          # (tests/test_commit_lint_types.py pins them), plus revert: not in .releaserc.yaml
+          # but still release-triggering via commit-analyzer's default rules.
+          pattern='^(Revert "|(minor|feat|impr|refactor|perf|fix|ci|docs|chore|style|test|build|revert)(\([^)]+\))?!?: ).+$'
+          failed=0
+          check() {
+            if ! [[ "$2" =~ $pattern ]]; then
+              echo "::error ::$1 does not follow Conventional Commits (see .releaserc.yaml): $2"
+              failed=1
+            fi
+          }
+          # This repo squash-merges multi-commit PRs, which lands the PR title, not the
+          # individual commits, as the subject semantic-release actually parses.
+          check "PR title" "$PR_TITLE"
           subjects=$(git log --no-merges --format=%s "$BASE_SHA..$HEAD_SHA") || {
             echo "::error ::git log failed for range $BASE_SHA..$HEAD_SHA"
             exit 1
           }
-          failed=0
           while IFS= read -r subject; do
             [ -z "$subject" ] && continue
-            if ! [[ "$subject" =~ $pattern ]]; then
-              echo "::error ::Commit message does not follow Conventional Commits (see .releaserc.yaml): $subject"
-              failed=1
-            fi
+            check "Commit message" "$subject"
           done <<< "$subjects"
           exit "$failed"

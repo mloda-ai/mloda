@@ -1,0 +1,40 @@
+name: Commit Lint
+
+# @semantic-release/commit-analyzer (.releaserc.yaml) silently ignores malformed commit messages
+# instead of erroring, so this catches them before merge. No paths-ignore: docs-only PRs still
+# need a conforming commit.
+on:
+  pull_request:
+    branches: [ "main" ]
+
+permissions:
+  contents: read
+
+jobs:
+  commit-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Validate commit messages follow Conventional Commits
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -u
+          # Types kept in sync with the commit-analyzer releaseRules in .releaserc.yaml.
+          pattern='^(minor|feat|impr|refactor|perf|fix|ci|docs|chore|style|test|build)(\([^)]+\))?!?: .+'
+          subjects=$(git log --no-merges --format=%s "$BASE_SHA..$HEAD_SHA") || {
+            echo "::error ::git log failed for range $BASE_SHA..$HEAD_SHA"
+            exit 1
+          }
+          failed=0
+          while IFS= read -r subject; do
+            [ -z "$subject" ] && continue
+            if ! [[ "$subject" =~ $pattern ]]; then
+              echo "::error ::Commit message does not follow Conventional Commits (see .releaserc.yaml): $subject"
+              failed=1
+            fi
+          done <<< "$subjects"
+          exit "$failed"

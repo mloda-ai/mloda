@@ -1,6 +1,9 @@
 """Pin BaseArtifact.custom_loader to key off artifact_to_load, not name_of_one_feature (always the
 alphabetically smallest feature name, independent of which feature the artifact is stored under)."""
 
+import numpy as np
+import pytest
+
 from mloda.provider import BaseArtifact, FeatureSet
 from mloda.user import Feature, Options
 
@@ -118,3 +121,74 @@ class TestFeatureSetResolveArtifactForRuntimeDoesNotMutateFeatureHash:
         features.resolve_artifact_for_runtime({"z_col": "runtime_value"})
 
         assert shared_options["z_col"] == "runtime_value"
+
+
+class TestFeatureSetResolveArtifactForRuntimeRejectsGroupCollision:
+    """A stored artifact key baked into Options.group (the documented "load via Options" pattern)
+    must not silently coexist with a runtime override written into context: Options.get() checks
+    group before context, so the stale group value would shadow the fresh runtime value forever."""
+
+    def test_raises_when_second_feature_has_group_baked_artifact(self) -> None:
+        """The colliding key belongs to the second-added feature's Options, a distinct object
+        from self.options (aliased to the first-added feature), proving the check covers every
+        distinct instance in the set rather than only self.options."""
+        clean_options = Options({})
+        colliding_options = Options({"z_col": "stored_value"})
+        a_col = Feature("a_col", clean_options)
+        z_col = Feature("z_col", colliding_options)
+        features = FeatureSet()
+        features.add(a_col)
+        features.add(z_col)
+
+        with pytest.raises(ValueError, match="already stored in Options.group"):
+            features.resolve_artifact_for_runtime({"z_col": "new_runtime_value"})
+
+        assert clean_options.context == {}
+        assert "z_col" not in colliding_options.context
+        assert features.artifact_to_load is None
+        assert features.artifact_to_save is None
+
+
+class TestFeatureSetResolveArtifactForRuntimeVisibleAcrossDistinctOptionsInstances:
+    """resolve_artifact_for_runtime() writes only onto self.options (aliased to whichever Feature
+    was added first). When a FeatureSet holds two value-equal but distinct Options instances, the
+    runtime value must land on both, since get_singular_option_from_options reads an arbitrary
+    feature from a set."""
+
+    def test_runtime_value_lands_on_both_distinct_options_instances(self) -> None:
+        options_a = Options({})
+        options_z = Options({})
+        a_col = Feature("a_col", options_a)
+        z_col = Feature("z_col", options_z)
+        fs = FeatureSet()
+        fs.add(a_col)
+        fs.add(z_col)
+
+        fs.resolve_artifact_for_runtime({"z_col": "runtime_value"})
+
+        assert options_a.context.get("z_col") == "runtime_value"
+        assert options_z.context.get("z_col") == "runtime_value"
+        assert BaseArtifact.load(fs) == "runtime_value"
+
+    def test_runtime_numpy_array_lands_on_both_instances_and_re_resolves(self) -> None:
+        """A raw dict write (not add_to_context()) is required because numpy arrays are not
+        boolean-comparable; this also confirms a second resolve with a different array succeeds."""
+        options_a = Options({})
+        options_z = Options({})
+        a_col = Feature("a_col", options_a)
+        z_col = Feature("z_col", options_z)
+        fs = FeatureSet()
+        fs.add(a_col)
+        fs.add(z_col)
+
+        first_array = np.array([1, 2, 3])
+        fs.resolve_artifact_for_runtime({"z_col": first_array})
+
+        assert np.array_equal(options_a.context["z_col"], first_array)
+        assert np.array_equal(options_z.context["z_col"], first_array)
+
+        second_array = np.array([4, 5, 6])
+        fs.resolve_artifact_for_runtime({"z_col": second_array})
+
+        assert np.array_equal(options_a.context["z_col"], second_array)
+        assert np.array_equal(options_z.context["z_col"], second_array)

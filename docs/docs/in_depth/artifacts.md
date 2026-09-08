@@ -131,7 +131,10 @@ for fold_data in folds:
 ```
 
 When `artifacts` is not provided (the default), the artifact mode from
-`prepare()` is used.
+`prepare()` is used. Baking an artifact into `Options` at prepare time and also
+supplying it via `run(artifacts=...)` for the same feature are mutually
+exclusive: resolving a runtime artifact when the key is already present in
+`Options.group` raises, rather than silently picking one over the other.
 
 #### Testing Artifacts
 

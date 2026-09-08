@@ -2,7 +2,7 @@
 
 These tests define requirements for:
 1. SqliteFramework.supported_parallelization_modes() returns {SYNC} only
-2. DuckDBFramework.supported_parallelization_modes() returns {SYNC, THREADING} only
+2. DuckDBFramework.supported_parallelization_modes() returns {SYNC} only
 3. ComputeFramework.supported_parallelization_modes() base class returns all three modes
 4. SetupComputeFramework filters out frameworks incompatible with requested parallelization_modes
 5. FeatureGroupStep.get_parallelization_mode() delegates to compute_framework.supported_parallelization_modes()
@@ -71,7 +71,7 @@ class TestSqliteFrameworkSupportedParallelizationModes:
 class TestDuckDBFrameworkSupportedParallelizationModes:
     """Tests for DuckDBFramework.supported_parallelization_modes()."""
 
-    def test_duckdb_returns_sync_and_threading(self) -> None:
+    def test_duckdb_returns_sync_only(self) -> None:
         """DuckDBFramework must support SYNC only (connections are not thread-safe)."""
         result = DuckDBFramework.supported_parallelization_modes()
         assert result == {ParallelizationMode.SYNC}
@@ -128,7 +128,7 @@ class TestSetupComputeFrameworkParallelizationModeFiltering:
 
     def test_multiprocessing_mode_excludes_duckdb_framework(self) -> None:
         """Passing parallelization_modes={MULTIPROCESSING} with user_compute_frameworks={DuckDBFramework}
-        must raise ValueError because DuckDBFramework only supports SYNC and THREADING.
+        must raise ValueError because DuckDBFramework only supports SYNC.
         """
         features = Features([Feature("test_feature")])
         with pytest.raises(ValueError):

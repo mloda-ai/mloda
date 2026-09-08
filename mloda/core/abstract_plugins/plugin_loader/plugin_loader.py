@@ -62,6 +62,18 @@ OPTIONAL_DEPENDENCY_ENTRY_POINT_GROUP: str = "mloda.optional_dependencies"
 CORE_PLUGIN_MODULES: tuple[str, ...] = ("mloda.core.abstract_plugins.components.input_data.api.api_input_data_feature",)
 
 
+def _traceback_blames_root(exc: ImportError, root: str) -> bool:
+    """Return True if any frame on exc's traceback belongs to root or one of its submodules,
+    catching a declared optional root whose own transitive import is what actually failed."""
+    tb = exc.__traceback__
+    while tb is not None:
+        module_name = tb.tb_frame.f_globals.get("__name__")
+        if isinstance(module_name, str) and (module_name == root or module_name.startswith(f"{root}.")):
+            return True
+        tb = tb.tb_next
+    return False
+
+
 class PluginLoader:
     _disabled_groups: ClassVar[set[str]] = set()
     _cached_loader: ClassVar["PluginLoader | None"] = None
@@ -173,7 +185,7 @@ class PluginLoader:
                         raise
                     dist_name = entry_point.dist.name if entry_point.dist is not None else None
                     optional_roots = declared_optional.get((dist_name, entry_point.name), OPTIONAL_PLUGIN_DEPENDENCIES)
-                    if root in optional_roots:
+                    if root in optional_roots or any(_traceback_blames_root(e, r) for r in optional_roots):
                         logger.warning(
                             "Skipping entry point %s (%s): missing optional dependency %s",
                             entry_point.name,

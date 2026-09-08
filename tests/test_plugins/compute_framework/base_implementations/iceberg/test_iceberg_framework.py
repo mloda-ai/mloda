@@ -12,6 +12,7 @@ from tests.test_plugins.compute_framework.base_implementations.datatype_validato
 )
 from tests.test_plugins.compute_framework.base_implementations.dtype_extraction_test_mixin import (
     DtypeExtractionTestMixin,
+    DuplicateColumnDtypeExtractionTestMixin,
 )
 from tests.test_plugins.compute_framework.base_implementations.empty_result_test_mixin import (
     EmptyResultFrameworkTestMixin,
@@ -291,7 +292,7 @@ class TestIcebergDtypeExtraction(DtypeExtractionTestMixin):
 @pytest.mark.skipif(
     pyiceberg is None or pa is None, reason="PyIceberg or PyArrow is not installed. Skipping this test."
 )
-class TestIcebergDtypeExtractionPyArrow(DtypeExtractionTestMixin):
+class TestIcebergDtypeExtractionPyArrow(DtypeExtractionTestMixin, DuplicateColumnDtypeExtractionTestMixin):
     """Pin _extract_column_dtype for the post-transform PyArrow shape, not just a native IcebergTable."""
 
     @pytest.fixture
@@ -301,6 +302,16 @@ class TestIcebergDtypeExtractionPyArrow(DtypeExtractionTestMixin):
     @pytest.fixture
     def dtype_sample_data(self) -> Any:
         return pa.table({"int_col": [1, 2, 3], "str_col": ["a", "b", "c"], "float_col": [1.0, 2.0, 3.0]})
+
+    @pytest.fixture
+    def dtype_duplicate_column_data(self) -> Any:
+        table = pa.table({"dup_col": [1, 2, 3]})
+        return table.append_column("dup_col", pa.array(["x", "y", "z"]))
+
+    @pytest.fixture
+    def dtype_duplicate_column_data_reversed(self) -> Any:
+        table = pa.table({"dup_col": ["x", "y", "z"]})
+        return table.append_column("dup_col", pa.array([1, 2, 3]))
 
 
 @pytest.mark.skipif(

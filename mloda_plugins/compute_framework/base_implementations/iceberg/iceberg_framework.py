@@ -7,7 +7,10 @@ from mloda.provider import ComputeFramework
 from mloda.provider import BaseFilterEngine
 from mloda.provider import OutputSchema
 from mloda_plugins.compute_framework.base_implementations.iceberg.iceberg_filter_engine import IcebergFilterEngine
-from mloda_plugins.compute_framework.base_implementations.pyarrow.table import arrow_schema_output_schema
+from mloda_plugins.compute_framework.base_implementations.pyarrow.table import (
+    arrow_schema_field_type,
+    arrow_schema_output_schema,
+)
 
 try:
     from pyiceberg.catalog import Catalog
@@ -155,9 +158,10 @@ class IcebergFramework(ComputeFramework):
                 return None
             return str(field.field_type)
         if pa is not None and isinstance(data, pa.Table):
-            if column_name in data.schema.names:
-                return str(data.schema.field(column_name).type)
-            return None
+            arrow_type = arrow_schema_field_type(data.schema, column_name)
+            if arrow_type is None:
+                return None
+            return str(arrow_type)
         return None
 
     def _extract_column_data_type(self, data: Any, column_name: str) -> DataType | None:
@@ -191,9 +195,10 @@ class IcebergFramework(ComputeFramework):
                 return DataType.DECIMAL
             return None
         if pa is not None and isinstance(data, pa.Table):
-            if column_name not in data.schema.names:
+            arrow_type = arrow_schema_field_type(data.schema, column_name)
+            if arrow_type is None:
                 return None
-            return DataType.from_arrow_type_safe(data.schema.field(column_name).type)
+            return DataType.from_arrow_type_safe(arrow_type)
         return None
 
     def _output_schema(self, data: Any) -> OutputSchema | None:

@@ -18,6 +18,7 @@ from tests.test_plugins.compute_framework.base_implementations.dict_interchange_
 )
 from tests.test_plugins.compute_framework.base_implementations.dtype_extraction_test_mixin import (
     DtypeExtractionTestMixin,
+    DuplicateColumnDtypeExtractionTestMixin,
 )
 from tests.test_plugins.compute_framework.base_implementations.empty_result_test_mixin import (
     EmptyResultFrameworkTestMixin,
@@ -101,8 +102,8 @@ class TestPyArrowTableMerge(DataFrameTestBase):
         pass
 
 
-class TestPyArrowDtypeExtraction(DtypeExtractionTestMixin):
-    """Test PyArrowTable._extract_column_dtype using shared mixin."""
+class TestPyArrowDtypeExtraction(DtypeExtractionTestMixin, DuplicateColumnDtypeExtractionTestMixin):
+    """Test PyArrowTable._extract_column_dtype using shared mixins."""
 
     @pytest.fixture
     def framework_instance(self) -> Any:
@@ -111,6 +112,16 @@ class TestPyArrowDtypeExtraction(DtypeExtractionTestMixin):
     @pytest.fixture
     def dtype_sample_data(self) -> Any:
         return pa.table({"int_col": [1, 2, 3], "str_col": ["a", "b", "c"], "float_col": [1.0, 2.0, 3.0]})
+
+    @pytest.fixture
+    def dtype_duplicate_column_data(self) -> Any:
+        table = pa.table({"dup_col": [1, 2, 3]})
+        return table.append_column("dup_col", pa.array(["x", "y", "z"]))
+
+    @pytest.fixture
+    def dtype_duplicate_column_data_reversed(self) -> Any:
+        table = pa.table({"dup_col": ["x", "y", "z"]})
+        return table.append_column("dup_col", pa.array([1, 2, 3]))
 
 
 class TestPyArrowDictInterchangeOutputSchema(DictInterchangeOutputSchemaTestMixin):

@@ -302,12 +302,20 @@ class PluginLoader:
 
         try:
             module = importlib.import_module(full_module_name)
-        except ModuleNotFoundError as e:
-            if e.name and (e.name == self.base_package or e.name.startswith(self.base_package + ".")):
-                raise
+        except ImportError as e:
             root = e.name.split(".")[0] if e.name else None
-            if root in OPTIONAL_PLUGIN_DEPENDENCIES:
-                logger.debug("Skipping plugin %s: missing optional dependency %s", full_module_name, e.name)
+            if root == self.base_package:
+                raise
+            tb_roots = [
+                r
+                for r in OPTIONAL_PLUGIN_DEPENDENCIES
+                if full_module_name != r and not full_module_name.startswith(f"{r}.")
+            ]
+            blamed_root = next((r for r in tb_roots if _traceback_blames_root(e, r)), None)
+            if root in OPTIONAL_PLUGIN_DEPENDENCIES or blamed_root is not None:
+                logger.debug(
+                    "Skipping plugin %s: missing optional dependency %s", full_module_name, e.name or blamed_root
+                )
                 return
             raise
 

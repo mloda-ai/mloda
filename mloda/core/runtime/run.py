@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import multiprocessing
+import pickle  # nosec B403
 import threading
 import time
 from collections.abc import Sequence
@@ -104,6 +105,7 @@ class ExecutionOrchestrator:
         self.cfw_register: CfwManager
         self.manager: Any = None
         self.function_extender: set[Extender] | None = None
+        self.worker_extender_payload: bytes | None = None
 
         # multiprocessing - delegate to WorkerManager
         self.location: str | None = None
@@ -150,6 +152,7 @@ class ExecutionOrchestrator:
             self.worker_manager,
             tfs_connection_map=self.tfs_connection_map,
             function_extender=self.function_extender,
+            worker_extender_payload=self.worker_extender_payload,
         )
         self._register_modes = self.cfw_register.get_parallelization_modes()
 
@@ -437,17 +440,21 @@ class ExecutionOrchestrator:
         self.function_extender = function_extender
 
         if ParallelizationMode.MULTIPROCESSING not in parallelization_modes:
-            self.cfw_register = CfwManager(parallelization_modes, function_extender)
+            self.cfw_register = CfwManager(parallelization_modes)
             self.manager = None
+            self.worker_extender_payload = None
         else:
             raise_on_unpicklable_join_link(self.execution_planner)
             raise_on_unpicklable_step_feature_group(self.execution_planner)
             raise_on_unpicklable_child_bootstrap(run_context.child_bootstrap)
             raise_on_unpicklable_extender(function_extender)
+            # Snapshot right after the preflight, once, in this process: workers get this exact
+            # bytes payload, never a fetch through the register/proxy.
+            self.worker_extender_payload = pickle.dumps(function_extender) if function_extender is not None else None
 
             MyManager.register("CfwManager", CfwManager)
             self.manager = MyManager(ctx=mp_spawn_context()).__enter__()
-            self.cfw_register = self.manager.CfwManager(parallelization_modes, function_extender)
+            self.cfw_register = self.manager.CfwManager(parallelization_modes)
 
         self.cfw_register.set_run_context(run_context)
 

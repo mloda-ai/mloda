@@ -6,7 +6,6 @@ from uuid import UUID
 
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.components.error_utils import internal_invariant_error
-from mloda.core.abstract_plugins.function_extender import Extender
 from mloda.core.abstract_plugins.components.parallelization_modes import ParallelizationMode
 from mloda.core.abstract_plugins.run_context import RunContext
 from mloda.core.runtime.parent_death_watchdog import start_parent_death_watchdog
@@ -40,22 +39,22 @@ class CfwManager:
     This class handles the registration, merging, and retrieval of Compute Frameworks,
     along with managing multiprocessing resources and error tracking.  It aims to
     centralize and simplify the management of CFWs within the mloda core.
+
+    Does not carry extenders: it is a cross-process object, and crossing that proxy strips
+    extender state; workers get extenders on the pickled ComputeFramework they own.
     """
 
     def __init__(
         self,
         parallelization_modes: set[ParallelizationMode],
-        function_extender: set[Extender] | None = None,
     ) -> None:
         """
         Initializes the CfwManager.
 
         Args:
             parallelization_modes: The set of parallelization modes to use.
-            function_extender: Optional set of function extenders.
         """
         self.parallelization_modes = parallelization_modes
-        self.function_extender = function_extender
 
         self.compute_frameworks: dict[
             UUID, tuple[str, set[UUID]]
@@ -260,10 +259,6 @@ class CfwManager:
     def get_error_exc_info(self) -> Any:
         """Retrieves the exception information."""
         return self.exc_info
-
-    def get_function_extender(self) -> set[Extender] | None:
-        """Retrieves the optional set of function extenders."""
-        return self.function_extender
 
     def set_artifact_to_save(self, artifact_name: str, artifact: Any) -> None:
         """

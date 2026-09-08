@@ -2,13 +2,15 @@
 unpickled copies, across ComputeFrameworks built in the parent process, but only for frameworks
 that themselves resolve to a non-MULTIPROCESSING mode. A framework resolved to MULTIPROCESSING is
 dispatched to a spawned worker via Process(args=(cfw_register, cfw, from_cfw)), which pickles it;
-it must keep getting an isolated, independently-fetched extender copy so an in-parent mutation of
-the shared object (e.g. an extender lazily building an unpicklable handle) can never poison it.
+it must keep getting an isolated copy unpickled locally from a snapshot taken once at run entry,
+so an in-parent mutation of the shared object (e.g. an extender lazily building an unpicklable
+handle) can never poison it.
 
 Drives ExecutionOrchestrator.__enter__ and ComputeFrameworkExecutor.init_compute_framework directly
-(real machinery, no mocks), since no ExtenderHook's __call__ reliably fires in-parent under
-MULTIPROCESSING (a FeatureGroupStep/JoinStep is always dispatched to a worker once
-MULTIPROCESSING is a register mode)."""
+(real machinery, no mocks), for precise control over which mode each individual framework resolves
+to. test_extender_handle_survives_multiprocessing_run_e2e.py covers the same guarantee through a
+real mlodaAPI run, where an ExtenderHook's __call__ does fire in-parent for a step whose compute
+framework resolves to a non-MULTIPROCESSING mode."""
 
 from __future__ import annotations
 
@@ -54,6 +56,25 @@ class _HandleHoldingExtender(Extender):
         return func(*args, **kwargs)
 
 
+class _HandleStrippingExtender(Extender):
+    """A live, unpicklable handle held from construction, stripped in __getstate__, so pickling
+    this instance always succeeds regardless of when it runs."""
+
+    def __init__(self) -> None:
+        self.handle: Any = threading.Lock()
+
+    def wraps(self) -> set[ExtenderHook]:
+        return {ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE}
+
+    def __call__(self, func: Any, *args: Any, **kwargs: Any) -> Any:
+        return func(*args, **kwargs)
+
+    def __getstate__(self) -> dict[str, Any]:
+        state = self.__dict__.copy()
+        state["handle"] = None
+        return state
+
+
 def _empty_plan() -> ExecutionPlan:
     plan = ExecutionPlan()
     plan.execution_plan = []
@@ -97,9 +118,9 @@ class TestExtenderIdentityAcrossFrameworksBuiltInTheParent:
 
 @pytest.mark.timeout(30)
 class TestExtenderIdentityNotSharedWithMultiprocessingResolvedFramework:
-    """MAJ-3 regression guard: a mixed run (overall MULTIPROCESSING-enabled, real proxy register)
-    must still give in-parent-resident frameworks the caller's shared extender, while a framework
-    resolved to MULTIPROCESSING (worker-bound) gets its own isolated copy through the real proxy,
+    """A mixed run (overall MULTIPROCESSING-enabled, real manager/register) must still give
+    in-parent-resident frameworks the caller's shared extender, while a framework resolved to
+    MULTIPROCESSING (worker-bound) gets its own isolated copy unpickled locally from a snapshot,
     so it cannot be poisoned by another framework's later in-parent mutation of the shared object."""
 
     def test_parent_resident_shares_identity_worker_bound_gets_isolated_copy(self) -> None:
@@ -130,8 +151,8 @@ class TestExtenderIdentityNotSharedWithMultiprocessingResolvedFramework:
                 "real extender object, even inside a MULTIPROCESSING-enabled run"
             )
             assert worker_bound_extender is not extender, (
-                "a framework resolved to MULTIPROCESSING must get its own independent copy from "
-                "the register's proxy, not the caller's shared object"
+                "a framework resolved to MULTIPROCESSING must get its own independent copy "
+                "unpickled locally from a snapshot, not the caller's shared object"
             )
 
             # Simulate a hook that lazily built an unpicklable handle on the shared object, mutating
@@ -141,6 +162,43 @@ class TestExtenderIdentityNotSharedWithMultiprocessingResolvedFramework:
             # This is what Process(args=...) would pickle to dispatch the worker-bound framework.
             # It must succeed: the worker-bound framework's own extender copy is untouched by the
             # later mutation of the caller's shared object.
-            pickle.dumps(worker_bound_cfw)  # nosec B301
+            pickle.dumps(worker_bound_cfw)
+        finally:
+            orchestrator.__exit__(None, None, None)
+
+
+@pytest.mark.timeout(30)
+class TestHandleStrippingExtenderNeverLosesStateToTheRegisterProxy:
+    """Parent-resident construction keeps the caller's own extender and its live handle;
+    MULTIPROCESSING-resolved construction gets an independent copy unpickled locally from a
+    snapshot, never a fetch through the register/proxy."""
+
+    def test_parent_resident_keeps_live_handle_and_multiprocessing_never_asks_the_register_proxy(self) -> None:
+        extender = _HandleStrippingExtender()
+        live_handle = extender.handle
+        caller_function_extender: set[Extender] = {extender}
+
+        orchestrator = ExecutionOrchestrator(_empty_plan())
+        orchestrator.__enter__({ParallelizationMode.MULTIPROCESSING}, caller_function_extender)
+        try:
+            orchestrator._init_run()
+
+            parent_resident_uuid = orchestrator.executor.init_compute_framework(
+                PythonDictFramework, ParallelizationMode.SYNC, set(), uuid4()
+            )
+            parent_resident_cfw = orchestrator.executor.cfw_collection[parent_resident_uuid]
+            parent_resident_extender = next(iter(parent_resident_cfw.function_extender))
+
+            assert parent_resident_extender is extender, "must be the caller's own extender object"
+            assert parent_resident_extender.handle is live_handle, (
+                "a parent-resident framework must never receive a proxy-fetched copy of the "
+                "caller's own extender: that round trip would silently strip the live handle"
+            )
+
+            # Builds successfully without reaching for cfw_register.get_function_extender(), a
+            # method the register no longer has: unpickling worker_extender_payload is the only path.
+            orchestrator.executor.init_compute_framework(
+                PythonDictFramework, ParallelizationMode.MULTIPROCESSING, set(), uuid4()
+            )
         finally:
             orchestrator.__exit__(None, None, None)

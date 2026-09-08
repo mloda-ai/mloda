@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 import multiprocessing  # noqa: F401
+import pickle  # nosec B403
 import threading
 import traceback
 import logging
 from dataclasses import replace
-from typing import Any, Callable
+from typing import Any, Callable, cast
 from uuid import UUID, uuid4
 
 from mloda.core.abstract_plugins.components.error_utils import internal_invariant_error
@@ -36,6 +37,7 @@ class ComputeFrameworkExecutor:
         worker_manager: WorkerManager,
         tfs_connection_map: dict[type[ComputeFramework], Any] | None = None,
         function_extender: set[Extender] | None = None,
+        worker_extender_payload: bytes | None = None,
     ) -> None:
         """
         Initialize the executor with dependencies.
@@ -47,14 +49,17 @@ class ComputeFrameworkExecutor:
                 framework connection (e.g. duckdb.DuckDBPyConnection, sqlite3.Connection).
                 Engine builds this once from the DataAccessCollection at setup; the
                 executor only does a dict lookup per TFS step on the run path.
-            function_extender: When set, used directly instead of cfw_register.get_function_extender(),
-                which under MULTIPROCESSING returns a freshly-unpickled copy on every call.
+            function_extender: The caller's own extenders, used for a framework staying resident
+                in this process.
+            worker_extender_payload: Pickled snapshot of the extenders, unpickled locally to build
+                an independent copy for a framework dispatched to a spawned worker.
         """
         self.cfw_collection: dict[UUID, ComputeFramework] = {}
         self.cfw_register = cfw_register
         self.worker_manager = worker_manager
         self.tfs_connection_map: dict[type[ComputeFramework], Any] = tfs_connection_map or {}
         self.function_extender = function_extender
+        self.worker_extender_payload = worker_extender_payload
         self._cfw_lock = threading.Lock()
 
     def init_compute_framework(
@@ -70,16 +75,22 @@ class ComputeFrameworkExecutor:
         Returns:
             The UUID of the compute framework.
         """
-        # Prefer the constructor-supplied extender only for a framework staying in this process.
-        # A MULTIPROCESSING-resolved framework is dispatched to a worker regardless, so it still
-        # needs its own isolated copy from the register, not an object shared with every other
-        # framework this process builds (an in-process mutation on the shared object could
-        # otherwise poison a later, unrelated worker dispatch with state pickle can't handle).
-        function_extender = (
-            self.function_extender
-            if self.function_extender is not None and parallelization_mode is not ParallelizationMode.MULTIPROCESSING
-            else self.cfw_register.get_function_extender()
+        # The parent-side copy exists to keep the worker's copy isolated from later in-process
+        # mutation of the caller's objects. Fetching it through the register proxy instead would
+        # run the round trip in this process and strip any state an extender drops in __getstate__.
+        # A framework is only actually dispatched to a spawned worker when its own class supports
+        # MULTIPROCESSING; TransformFrameworkStep never overrides Step.get_parallelization_mode(),
+        # so parallelization_mode alone cannot be trusted to mean "runs in a worker".
+        dispatched_to_worker = (
+            parallelization_mode is ParallelizationMode.MULTIPROCESSING
+            and ParallelizationMode.MULTIPROCESSING in cf_class.supported_parallelization_modes()
         )
+        if dispatched_to_worker and self.worker_extender_payload is not None:
+            function_extender = cast("set[Extender] | None", pickle.loads(self.worker_extender_payload))  # nosec B301
+        else:
+            # Reached when the framework stays resident in this process, or when it is
+            # worker-bound but the caller passed no extenders (so there is no payload).
+            function_extender = self.function_extender
 
         # init framework
         new_cfw = cf_class(

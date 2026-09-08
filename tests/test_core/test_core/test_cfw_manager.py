@@ -23,6 +23,15 @@ class TestCfwManagerRunContextDefault:
         assert cfw_register.get_run_context() == RunContext()
 
 
+class TestCfwManagerDoesNotCarryExtenders:
+    """The register is a cross-process coordination object; it must not carry extenders."""
+
+    def test_get_function_extender_method_does_not_exist(self) -> None:
+        cfw_register = CfwManager({ParallelizationMode.SYNC})
+
+        assert not hasattr(cfw_register, "get_function_extender")
+
+
 class TestCfwManagerRunContextRoundTrip:
     def test_set_then_get_round_trips_a_run_context_with_a_module_level_picklable_bootstrap(self) -> None:
         cfw_register = CfwManager({ParallelizationMode.SYNC})

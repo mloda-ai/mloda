@@ -545,6 +545,30 @@ class TestGetExecutionFunction:
 
         assert result == executor.sync_execute_step
 
+    def test_returns_sync_execute_step_for_sync_only_join_step_even_when_register_supports_multiprocessing(
+        self,
+    ) -> None:
+        """Should return sync_execute_step for a SYNC-only JoinStep even when multiprocessing is registered."""
+        cfw_register = Mock(spec=CfwManager)
+        worker_manager = Mock(spec=WorkerManager)
+        executor = ComputeFrameworkExecutor(cfw_register, worker_manager)
+
+        step = JoinStep(
+            link=MagicMock(),
+            destination_framework=DuckDBFramework,
+            source_framework=DuckDBFramework,
+            required_uuids=set(),
+            destination_framework_uuids=set(),
+            source_framework_uuids=set(),
+        )
+
+        mode_by_cfw = {ParallelizationMode.SYNC, ParallelizationMode.MULTIPROCESSING}
+        mode_by_step = step.get_parallelization_mode()
+
+        result = executor._get_execution_function(mode_by_cfw, mode_by_step)
+
+        assert result == executor.sync_execute_step
+
 
 class TestPrepareExecuteStep:
     """Tests for prepare_execute_step method."""

@@ -106,6 +106,41 @@ class TestEnsureConnectionWithSpecCandidate:
         assert _ConnRecordingFramework.open_connection_specs == [spec]
 
 
+class TestTwoInstancesSharingOneConnectionSourceBindTheSameObject:
+    def test_ensure_connection_with_no_candidate_binds_the_same_object(self) -> None:
+        _ConnRecordingFramework.open_connection_specs = []
+        spec = ConnectionSpec(_ConnRecordingFramework, database="shared")
+        source = ConnectionSource(spec=spec)
+
+        fw1 = _ConnRecordingFramework()
+        fw1.connection_source = source
+        fw2 = _ConnRecordingFramework()
+        fw2.connection_source = source
+
+        first = fw1.ensure_connection()
+        second = fw2.ensure_connection()
+
+        assert first is second
+
+
+class TestEnsureConnectionCandidateEqualToConnectionSourceSpec:
+    def test_binds_the_sources_memoized_object(self) -> None:
+        _ConnRecordingFramework.open_connection_specs = []
+        spec = ConnectionSpec(_ConnRecordingFramework, database="shared")
+        source = ConnectionSource(spec=spec)
+
+        fw1 = _ConnRecordingFramework()
+        fw1.connection_source = source
+        bound_via_source = fw1.ensure_connection()
+
+        fw2 = _ConnRecordingFramework()
+        fw2.connection_source = source
+        candidate = ConnectionSpec(_ConnRecordingFramework, database="shared")
+        bound_via_candidate = fw2.ensure_connection(candidate)
+
+        assert bound_via_candidate is bound_via_source
+
+
 class TestEnsureConnectionIgnoresLaterSpecOnceBound:
     def test_bound_framework_returns_bound_object_and_skips_open(self) -> None:
         _ConnRecordingFramework.open_connection_specs = []

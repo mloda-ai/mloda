@@ -156,7 +156,9 @@ def raise_on_unpicklable_extender(function_extender: set[Extender] | None) -> No
             raise ValueError(_unpicklable_extender_error(extender))
 
 
-def _step_connection_destination(step: Any) -> type[Any] | None:
+def step_connection_destination(step: Any) -> type[Any] | None:
+    """The destination ComputeFramework class a step's connection binds to, or None if the
+    step carries no destination framework (e.g. an unrecognized step type)."""
     if isinstance(step, FeatureGroupStep):
         return step.compute_framework
     if isinstance(step, TransformFrameworkStep):
@@ -176,19 +178,36 @@ def _live_connection_for_worker_error(cls: type[Any], step: Any, source: Connect
     )
 
 
+def _unpicklable_connection_spec_error(cls: type[Any], step: Any) -> str:
+    return (
+        f"{cls.__name__} resolved a ConnectionSpec from DataAccessCollection whose params pickle "
+        f"cannot resolve, but {type(step).__name__} (uuid={step.uuid}) can run in a spawned worker "
+        "process, and ConnectionSpec params must be picklable to cross that boundary.\n"
+        f"Resolution: use only picklable values in the ConnectionSpec({cls.__name__}, ...) params, or "
+        "run without ParallelizationMode.MULTIPROCESSING."
+    )
+
+
 def raise_on_live_connection_for_worker(
     steps: Iterable[Any], connection_sources: dict[type[Any], ConnectionSource]
 ) -> None:
     """Raise ValueError if a step that can run in a spawned MULTIPROCESSING worker has a
-    live-only ConnectionSource (no ConnectionSpec) resolved for its destination framework."""
+    live-only ConnectionSource (no ConnectionSpec), or an unpicklable ConnectionSpec, resolved
+    for its destination framework."""
     for step in steps:
         if ParallelizationMode.MULTIPROCESSING not in step.get_parallelization_mode():
             continue
 
-        cls = _step_connection_destination(step)
+        cls = step_connection_destination(step)
         if cls is None:
             continue
 
         source = connection_sources.get(cls)
-        if source is not None and source.live is not None and source.spec is None:
+        if source is None:
+            continue
+
+        if source.live is not None and source.spec is None:
             raise ValueError(_live_connection_for_worker_error(cls, step, source))
+
+        if source.spec is not None and not _is_picklable(source.spec):
+            raise ValueError(_unpicklable_connection_spec_error(cls, step))

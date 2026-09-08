@@ -31,6 +31,7 @@ from mloda.core.prepare.execution_plan import ExecutionPlan
 from mloda.core.prepare.graph.build_graph import BuildGraph
 from mloda.core.prepare.resolve_graph import ResolveGraph
 from mloda.core.runtime.run import ExecutionOrchestrator
+from mloda.core.runtime.validate_multiprocessing_link import step_connection_destination
 from mloda.core.prepare.identify_feature_group import resolve_or_raise
 from mloda.core.prepare.resolution_types import (
     EvaluationResult,
@@ -108,14 +109,15 @@ class Engine:
         self.connection_sources = self._resolve_connection_sources()
 
     def _resolve_connection_sources(self) -> dict[type[ComputeFramework], ConnectionSource]:
-        """Resolve a ConnectionSource per TFS destination framework at setup time, so
-        ComputeFrameworkExecutor can consume it on the run path without further DAC scanning."""
+        """Resolve a ConnectionSource per destination framework reached by any planned step
+        (FeatureGroupStep, TransformFrameworkStep, JoinStep), so ComputeFrameworkExecutor can
+        consume it on the run path without further DAC scanning."""
         connection_sources: dict[type[ComputeFramework], ConnectionSource] = {}
         if self.data_access_collection is None:
             return connection_sources
-        for tfs in self.execution_planner.tfs_collection.values():
-            cfw_class = tfs.to_framework
-            if cfw_class in connection_sources:
+        for step in self.execution_planner:
+            cfw_class = step_connection_destination(step)
+            if cfw_class is None or cfw_class in connection_sources:
                 continue
             conn = cfw_class.pick_connection_from_dac(self.data_access_collection)
             if conn is not None:

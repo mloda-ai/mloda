@@ -129,6 +129,7 @@ class SqliteFramework(ComputeFramework):
             return transformed_data
 
         if isinstance(data, dict):
+            self.ensure_connection()
             if self.framework_connection_object is None:
                 raise ValueError(
                     "SqliteFramework has no connection. Register a sqlite3 connection or a "

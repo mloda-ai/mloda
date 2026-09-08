@@ -7,6 +7,9 @@ accepting a ConnectionSpec as a connection entry. See the connection resolution 
 from __future__ import annotations
 
 import pickle  # nosec B403
+from typing import Any, ClassVar
+
+import pytest
 
 from mloda.core.abstract_plugins.components.connection_spec import ConnectionSource, ConnectionSpec
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
@@ -29,6 +32,17 @@ class _PicklableLive:
     """Picklable stand-in for a live connection handle."""
 
 
+class _OpenForFramework(ComputeFramework):
+    """Module-level framework whose open_connection returns a fresh object per call, recorded for assertions."""
+
+    open_calls: ClassVar[list[ConnectionSpec | None]] = []
+
+    @classmethod
+    def open_connection(cls, spec: ConnectionSpec | None) -> Any | None:
+        cls.open_calls.append(spec)
+        return object()
+
+
 class TestConnectionSpecConstruction:
     def test_stores_framework_and_params(self) -> None:
         spec = ConnectionSpec(_SpecFramework, database="x")
@@ -38,6 +52,16 @@ class TestConnectionSpecConstruction:
     def test_no_params_yields_empty_dict(self) -> None:
         spec = ConnectionSpec(_SpecFramework)
         assert spec.params == {}
+
+
+class TestConnectionSpecConstructionRejectsInvalidFramework:
+    def test_instance_argument_raises_type_error(self) -> None:
+        with pytest.raises(TypeError):
+            ConnectionSpec(_SpecFramework())  # type: ignore[arg-type]
+
+    def test_non_class_non_str_argument_raises_type_error(self) -> None:
+        with pytest.raises(TypeError):
+            ConnectionSpec(42)  # type: ignore[arg-type]
 
 
 class TestConnectionSpecMatchesWithClass:
@@ -91,12 +115,23 @@ class TestConnectionSpecPickle:
 
 
 class TestConnectionSpecRepr:
-    def test_repr_contains_framework_name_and_params(self) -> None:
+    def test_repr_contains_framework_name_and_param_keys(self) -> None:
         spec = ConnectionSpec(_SpecFramework, database="x")
         text = repr(spec)
         assert "_SpecFramework" in text
         assert "database" in text
-        assert "x" in text
+
+    def test_repr_redacts_param_values(self) -> None:
+        spec = ConnectionSpec(_SpecFramework, database="/x", password="hunter2")  # nosec B106
+        text = repr(spec)
+        assert "database='***'" in text
+        assert "password='***'" in text
+        assert "/x" not in text
+        assert "hunter2" not in text
+
+    def test_no_param_repr_is_unchanged(self) -> None:
+        spec = ConnectionSpec(_SpecFramework)
+        assert repr(spec) == "ConnectionSpec(_SpecFramework)"
 
 
 class TestConnectionSourceConstruction:
@@ -142,6 +177,40 @@ class TestConnectionSourcePickle:
         restored = pickle.loads(pickle.dumps(source))  # nosec B301
         assert restored.spec == spec
         assert restored.live_dropped is False
+
+
+class TestConnectionSourceOpenFor:
+    def test_spec_source_opens_once_and_memoizes(self) -> None:
+        _OpenForFramework.open_calls = []
+        spec = ConnectionSpec(_OpenForFramework, database="x")
+        source = ConnectionSource(spec=spec)
+
+        first = source.open_for(_OpenForFramework)
+        second = source.open_for(_OpenForFramework)
+
+        assert first is second
+        assert _OpenForFramework.open_calls == [spec]
+
+    def test_live_source_returns_the_live_object(self) -> None:
+        live = _PicklableLive()
+        source = ConnectionSource(live=live)
+        assert source.open_for(_OpenForFramework) is live
+
+    def test_no_spec_and_no_live_returns_none(self) -> None:
+        source = ConnectionSource()
+        assert source.open_for(_OpenForFramework) is None
+
+    def test_memo_is_dropped_after_pickle_round_trip(self) -> None:
+        _OpenForFramework.open_calls = []
+        spec = ConnectionSpec(_OpenForFramework, database="x")
+        source = ConnectionSource(spec=spec)
+        first = source.open_for(_OpenForFramework)
+
+        restored = pickle.loads(pickle.dumps(source))  # nosec B301
+        second = restored.open_for(_OpenForFramework)
+
+        assert second is not first
+        assert _OpenForFramework.open_calls == [spec, spec]
 
 
 class TestDataAccessCollectionAcceptsConnectionSpec:

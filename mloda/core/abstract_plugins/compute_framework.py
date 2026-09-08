@@ -273,12 +273,16 @@ class ComputeFramework(ABC):
 
     @final
     def ensure_connection(self, candidate: Any | None = None) -> Any | None:
-        """Resolve and bind this instance's connection, opening it lazily on first use. Priority:
-        `candidate` (spec, live object, or None), then an already-bound connection, then `connection_source`."""
+        """A live candidate is always handed to set_framework_connection_object; a spec
+        candidate yields to an already-bound handle."""
         if candidate is not None:
             if isinstance(candidate, ConnectionSpec):
                 if self.framework_connection_object is None:
-                    live = self.open_connection(candidate)
+                    source = self.connection_source
+                    if source is not None and candidate == source.spec:
+                        live = source.open_for(type(self))
+                    else:
+                        live = self.open_connection(candidate)
                     if live is not None:
                         self.set_framework_connection_object(live)
                 return self.framework_connection_object
@@ -291,16 +295,14 @@ class ComputeFramework(ABC):
         live = None
         if self.connection_source is not None:
             source = self.connection_source
-            live = source.live
-            if live is None:
-                if source.spec is None and source.live_dropped:
-                    raise ValueError(
-                        f"{type(self).__name__} was given a live connection that cannot cross into this "
-                        f"worker process. Register a ConnectionSpec({type(self).__name__}, ...) in "
-                        "DataAccessCollection so each process opens its own connection, or run without "
-                        "ParallelizationMode.MULTIPROCESSING."
-                    )
-                live = self.open_connection(source.spec)
+            if source.live is None and source.spec is None and source.live_dropped:
+                raise ValueError(
+                    f"{type(self).__name__} was given a live connection that cannot cross into this "
+                    f"worker process. Register a ConnectionSpec({type(self).__name__}, ...) in "
+                    "DataAccessCollection so each process opens its own connection, or run without "
+                    "ParallelizationMode.MULTIPROCESSING."
+                )
+            live = source.open_for(type(self))
         else:
             live = self.open_connection(None)
 

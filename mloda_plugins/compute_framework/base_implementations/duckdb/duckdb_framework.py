@@ -196,6 +196,7 @@ class DuckDBFramework(ComputeFramework):
                 )
             arrow_table = pa.Table.from_pydict(data)
 
+            self.ensure_connection()
             if self.framework_connection_object is None:
                 raise ValueError(
                     "DuckDBFramework has no connection. Register a duckdb connection or a "

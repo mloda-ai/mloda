@@ -97,6 +97,19 @@ def test_spec_backed_source_does_not_raise() -> None:
     raise_on_live_connection_for_worker([step], connection_sources)
 
 
+def test_spec_backed_source_with_unpicklable_params_raises() -> None:
+    step = _transform_step(_MpCapableFramework)
+    spec = ConnectionSpec(_MpCapableFramework, callback=lambda: None)
+    connection_sources = {_MpCapableFramework: ConnectionSource(spec=spec)}
+
+    with pytest.raises(ValueError) as excinfo:
+        raise_on_live_connection_for_worker([step], connection_sources)
+
+    message = str(excinfo.value)
+    assert "picklable" in message
+    assert "ConnectionSpec" in message
+
+
 def test_source_with_both_live_and_spec_present_does_not_raise() -> None:
     step = _transform_step(_MpCapableFramework)
     source = ConnectionSource(live=object(), spec=ConnectionSpec(_MpCapableFramework))

@@ -67,6 +67,7 @@ def test_open_connection_with_empty_spec_builds_default_session_via_builder() ->
 
 
 def test_open_connection_with_spec_uses_provided_values() -> None:
+    """config merges OVER the two adaptive defaults; it does not replace them."""
     builder = _mock_builder(Mock())
     spec = ConnectionSpec(SparkFramework, app_name="x", master="local[2]", config={"a": "b"})
     with patch.object(SparkSession, "builder", new=builder):
@@ -74,7 +75,22 @@ def test_open_connection_with_spec_uses_provided_values() -> None:
 
     builder.appName.assert_called_once_with("x")
     builder.master.assert_called_once_with("local[2]")
-    builder.config.assert_called_once_with("a", "b")
+    builder.config.assert_any_call("spark.sql.adaptive.enabled", "true")
+    builder.config.assert_any_call("spark.sql.adaptive.coalescePartitions.enabled", "true")
+    builder.config.assert_any_call("a", "b")
+
+
+def test_open_connection_with_unknown_keys_raises_value_error_naming_allowed_keys() -> None:
+    builder = _mock_builder(Mock())
+    spec = ConnectionSpec(SparkFramework, appName="x")
+    with patch.object(SparkSession, "builder", new=builder):
+        with pytest.raises(ValueError) as excinfo:
+            SparkFramework.open_connection(spec)
+
+    message = str(excinfo.value)
+    assert "app_name" in message
+    assert "master" in message
+    assert "config" in message
 
 
 def test_ensure_connection_binds_default_session_and_transform_reuses_it() -> None:

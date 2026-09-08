@@ -50,19 +50,27 @@ class SparkFramework(ComputeFramework):
                 raise ValueError(f"Expected a SparkSession object, got {type(framework_connection_object)}")
             self.framework_connection_object = framework_connection_object
 
+    _OPEN_CONNECTION_KEYS: frozenset[str] = frozenset({"app_name", "master", "config"})
+
     @classmethod
     def open_connection(cls, spec: ConnectionSpec | None) -> Any | None:
-        """Build a SparkSession via the builder chain, using spec.params to override defaults."""
+        """Build a SparkSession via the builder chain, using spec.params to override defaults.
+        `config` merges over (not replaces) the two adaptive defaults."""
         if SparkSession is None:
             raise ImportError("PySpark is not installed. To be able to use this framework, please install pyspark.")
 
         params = spec.params if spec is not None else {}
+        unknown = set(params) - cls._OPEN_CONNECTION_KEYS
+        if unknown:
+            raise ValueError(
+                f"ConnectionSpec(SparkFramework, ...) received unknown params {sorted(unknown)}. "
+                f"Allowed keys: {sorted(cls._OPEN_CONNECTION_KEYS)}."
+            )
+
         app_name = params.get("app_name", "MLoda-Spark-Framework")
         master = params.get("master", "local[*]")
-        config = params.get(
-            "config",
-            {"spark.sql.adaptive.enabled": "true", "spark.sql.adaptive.coalescePartitions.enabled": "true"},
-        )
+        default_config = {"spark.sql.adaptive.enabled": "true", "spark.sql.adaptive.coalescePartitions.enabled": "true"}
+        config = {**default_config, **params.get("config", {})}
 
         builder = SparkSession.builder.appName(app_name).master(master)
         for key, value in config.items():

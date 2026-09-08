@@ -62,6 +62,14 @@ def test_ensure_connection_from_spec_source_binds_the_mocked_catalog() -> None:
     assert fw.framework_connection_object is mock_catalog
 
 
+def test_open_connection_raises_import_error_when_load_catalog_missing() -> None:
+    spec = ConnectionSpec(IcebergFramework, name="lake", type="rest", uri="http://x")
+
+    with patch(_LOAD_CATALOG_TARGET, None):
+        with pytest.raises(ImportError):
+            IcebergFramework.open_connection(spec)
+
+
 def test_pick_connection_from_dac_returns_matching_spec() -> None:
     spec = ConnectionSpec(IcebergFramework, name="lake", type="rest", uri="http://x")
     dac = DataAccessCollection(connections={spec})

@@ -16,9 +16,6 @@ from mloda.core.core.step.join_step import JoinStep
 from mloda.core.core.step.transform_frame_work_step import TransformFrameworkStep
 
 
-logger = logging.getLogger(__name__)
-
-
 def _handle_stop_command(command_queue: multiprocessing.Queue[Any]) -> None:
     """Puts a 'STOP' command in the command queue."""
     if command_queue:

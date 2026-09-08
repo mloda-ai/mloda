@@ -48,7 +48,8 @@ except ImportError:
 
 
 class IcebergFramework(ComputeFramework):
-    """Read-only Apache Iceberg integration via PyArrow. Register a catalog via ConnectionSpec(IcebergFramework, ...) or a live catalog."""
+    """Read-only Apache Iceberg integration via PyArrow. Register a catalog via
+    ConnectionSpec(IcebergFramework, ...) or a live catalog."""
 
     def set_framework_connection_object(self, framework_connection_object: Any | None = None) -> None:
         """
@@ -75,6 +76,8 @@ class IcebergFramework(ComputeFramework):
     def open_connection(cls, spec: ConnectionSpec | None) -> Any | None:
         if spec is None:
             return None
+        if load_catalog is None:
+            raise ImportError("PyIceberg is not installed. To use this framework, please install pyiceberg.")
         return load_catalog(**spec.params)
 
     @classmethod

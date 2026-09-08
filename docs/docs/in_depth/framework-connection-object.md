@@ -6,6 +6,8 @@ DuckDB, SQLite, Spark, and Iceberg each need a persistent connection object to r
 
 Register on `DataAccessCollection` in one of two shapes. A live object works only in the process that registered it, for SYNC and THREADING runs. A `ConnectionSpec(Framework, **params)` recipe is picklable: every process, including each MULTIPROCESSING worker, opens its own from it.
 
+A MatchData feature group whose `match_data_access` checks connection entries with isinstance will not match a ConnectionSpec; it must accept both shapes.
+
 ```py
 import duckdb
 from mloda.user import DataAccessCollection
@@ -34,13 +36,17 @@ DataAccessCollection(connections={ConnectionSpec(IcebergFramework, name="lake", 
 
 Params pass straight through: to `duckdb.connect`, `sqlite3.connect`, the `SparkSession` builder (`app_name`, `master`, `config`), and pyiceberg's `load_catalog`.
 
+Spark's config merges over the framework's adaptive defaults, and an unknown Spark param key raises ValueError.
+
 ## Resolution rule
 
 The runtime resolves one connection entry per transform-destination framework at setup. A framework binds it lazily, calling `ensure_connection()` right before it needs the handle: during a transform, a join, or materializing flight-server results. `open_connection(spec)` is the only per-framework hook, a classmethod that opens a new handle from the spec.
 
 ## Multiprocessing
 
-A live connection never crosses a process boundary; it is dropped when a framework instance is pickled. A `ConnectionSpec` does cross: each worker, and the parent, opens its own connection from it. A MULTIPROCESSING-eligible step that resolved a live connection instead of a spec fails before any worker starts:
+A live connection never crosses a process boundary; it is dropped when a framework instance is pickled. A `ConnectionSpec` does cross: each worker, and the parent, opens its own connection from it. A handle opened from a spec is shared by every framework instance of that class in one process (worker or parent) until it exits. The caller keeps ownership of a live object it registered.
+
+A MULTIPROCESSING-eligible step that resolved a live connection instead of a spec fails before any worker starts:
 
 ```text
 DuckDBFramework resolved a live DuckDBPyConnection from DataAccessCollection, but
@@ -93,3 +99,11 @@ if framework_connection_object is None:
     raise ValueError("A connection object is required for this transformation.")
 return framework_connection_object.from_other_format(data)
 ```
+
+## Changed behaviour
+
+`SparkFramework.set_framework_connection_object(None)` now raises instead of building a local session. Register a `ConnectionSpec(SparkFramework)`, or rely on the default the framework opens when nothing is registered.
+
+`IcebergFramework.set_framework_connection_object(None)` now raises instead of silently doing nothing.
+
+`ComputeFramework.convert_flight_server_data_back` is an instance method. Call it on the framework instance, not the class.

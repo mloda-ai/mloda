@@ -32,6 +32,8 @@ from pathlib import Path
 
 import pytest
 
+from conftest import _write_broken_optional_root_package
+
 import mloda.core.abstract_plugins.plugin_loader.plugin_loader as plugin_loader_module
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
@@ -84,14 +86,6 @@ def _write_root_module(base_dir: Path, module_name: str, source: str = "") -> No
     """Write a standalone top-level module (not inside a package), so importing a missing name
     from it raises plain ImportError rather than ModuleNotFoundError."""
     (base_dir / f"{module_name}.py").write_text(textwrap.dedent(source))
-
-
-def _write_broken_optional_root_package(base_dir: Path, pkg_name: str, missing_subdep: str) -> None:
-    """Build an installed-but-incomplete package: its __init__.py imports a nonexistent module."""
-    pkg_dir = base_dir / pkg_name
-    pkg_dir.mkdir()
-    (pkg_dir / "__init__.py").write_text(f"import {missing_subdep}\n")
-    importlib.invalidate_caches()
 
 
 def _import_error_fg_manifest_source(root_module: str, class_name: str) -> str:

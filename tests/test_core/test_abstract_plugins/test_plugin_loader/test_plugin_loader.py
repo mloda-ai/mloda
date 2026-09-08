@@ -1,8 +1,11 @@
 import importlib
+import logging
 from pathlib import Path
 from unittest.mock import patch
 
 import pytest
+
+from conftest import _write_broken_optional_root_package
 
 import mloda.core.abstract_plugins.plugin_loader.plugin_loader as plugin_loader_module
 from mloda.core.abstract_plugins.components.input_data.base_input_data import (
@@ -14,20 +17,29 @@ from mloda.core.abstract_plugins.plugin_registry.plugin_registry import PluginRe
 from mloda.user import PluginLoader
 
 
-def _write_broken_optional_root_package(base_dir: Path, pkg_name: str, missing_subdep: str) -> None:
-    """An installed package whose own __init__.py import fails."""
-    pkg_dir = base_dir / pkg_name
-    pkg_dir.mkdir()
-    (pkg_dir / "__init__.py").write_text(f"import {missing_subdep}\n")
-    importlib.invalidate_caches()
-
-
 def _write_fake_base_package(base_dir: Path, base_pkg_name: str, submodule_name: str, imports: str) -> None:
     """A fake base package standing in for mloda_plugins."""
     pkg_dir = base_dir / base_pkg_name
     pkg_dir.mkdir()
     (pkg_dir / "__init__.py").write_text("")
     (pkg_dir / f"{submodule_name}.py").write_text(f"import {imports}\n")
+    importlib.invalidate_caches()
+
+
+def _write_root_module(base_dir: Path, module_name: str) -> None:
+    """A standalone top-level module (not a package), so importing a missing name from it raises
+    plain ImportError rather than ModuleNotFoundError."""
+    (base_dir / f"{module_name}.py").write_text("")
+
+
+def _write_fake_base_package_bad_from_import(
+    base_dir: Path, base_pkg_name: str, submodule_name: str, root_module: str
+) -> None:
+    """A fake base package submodule doing `from <root_module> import missing_name`."""
+    pkg_dir = base_dir / base_pkg_name
+    pkg_dir.mkdir()
+    (pkg_dir / "__init__.py").write_text("")
+    (pkg_dir / f"{submodule_name}.py").write_text(f"from {root_module} import missing_name\n")
     importlib.invalidate_caches()
 
 
@@ -272,3 +284,95 @@ class TestLoadPluginTransitiveOptionalDependency:
         loader._load_plugin(submodule)
 
         assert f"{base_pkg}.{submodule}" not in loader.plugins
+
+
+class TestLoadPluginPlainImportError:
+    def test_declared_optional_root_catches_plain_import_error(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """A plain ImportError (not ModuleNotFoundError) from an existing declared-optional root
+        must be skipped, proving the ImportError widening isn't limited to ModuleNotFoundError."""
+        root_module = "pltest_importerror_root"
+        _write_root_module(tmp_path, root_module)
+
+        base_pkg = "pltest_importerror_base_pkg"
+        submodule = "bad_from_import"
+        _write_fake_base_package_bad_from_import(tmp_path, base_pkg, submodule, root_module)
+
+        monkeypatch.syspath_prepend(str(tmp_path))
+        monkeypatch.setattr(
+            plugin_loader_module,
+            "OPTIONAL_PLUGIN_DEPENDENCIES",
+            plugin_loader_module.OPTIONAL_PLUGIN_DEPENDENCIES | frozenset({root_module}),
+        )
+
+        loader = PluginLoader()
+        loader.base_package = base_pkg
+
+        with caplog.at_level(logging.DEBUG, logger=plugin_loader_module.__name__):
+            loader._load_plugin(submodule)
+
+        assert f"{base_pkg}.{submodule}" not in loader.plugins
+        debug_messages = [record.getMessage() for record in caplog.records if record.levelno == logging.DEBUG]
+        assert any(root_module in message for message in debug_messages), (
+            f"expected a DEBUG message naming the missing root, got: {debug_messages}"
+        )
+
+    def test_undeclared_root_import_error_still_propagates(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Plain ImportError whose root is declared nowhere must still propagate, proving the
+        propagation path isn't narrower than ImportError."""
+        root_module = "pltest_undeclared_importerror_root"
+        _write_root_module(tmp_path, root_module)
+
+        base_pkg = "pltest_undeclared_importerror_base_pkg"
+        submodule = "bad_from_import"
+        _write_fake_base_package_bad_from_import(tmp_path, base_pkg, submodule, root_module)
+
+        monkeypatch.syspath_prepend(str(tmp_path))
+
+        loader = PluginLoader()
+        loader.base_package = base_pkg
+
+        with pytest.raises(ImportError) as exc_info:
+            loader._load_plugin(submodule)
+        assert not isinstance(exc_info.value, ModuleNotFoundError)
+
+
+class TestLoadGroupContinuesPastSkippedPlugin:
+    def test_broken_optional_dependency_plugin_does_not_abort_group_scan(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """One bundled plugin hitting a skippable optional-dependency failure must not abort the
+        rest of the group scan, proving load_all_plugins()'s DoD through the real load_group path."""
+        optional_root_pkg = "pltest_group_optional_dep"
+        missing_subdep = "pltest_group_missing_subdep"
+        _write_broken_optional_root_package(tmp_path, optional_root_pkg, missing_subdep)
+
+        base_pkg = "pltest_group_fake_base_pkg"
+        group_name = "mygroup"
+        base_dir = tmp_path / base_pkg
+        base_dir.mkdir()
+        (base_dir / "__init__.py").write_text("")
+        group_dir = base_dir / group_name
+        group_dir.mkdir()
+        (group_dir / "__init__.py").write_text("")
+        (group_dir / "broken.py").write_text(f"import {optional_root_pkg}\n")
+        (group_dir / "good.py").write_text("")
+        importlib.invalidate_caches()
+
+        monkeypatch.syspath_prepend(str(tmp_path))
+        monkeypatch.setattr(
+            plugin_loader_module,
+            "OPTIONAL_PLUGIN_DEPENDENCIES",
+            plugin_loader_module.OPTIONAL_PLUGIN_DEPENDENCIES | frozenset({optional_root_pkg}),
+        )
+
+        loader = PluginLoader()
+        loader.base_package = base_pkg
+
+        loader.load_group(group_name)
+
+        assert f"{base_pkg}.{group_name}.broken" not in loader.plugins
+        assert f"{base_pkg}.{group_name}.good" in loader.plugins

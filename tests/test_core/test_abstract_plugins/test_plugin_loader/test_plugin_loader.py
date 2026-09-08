@@ -15,7 +15,7 @@ from mloda.user import PluginLoader
 
 
 def _write_broken_optional_root_package(base_dir: Path, pkg_name: str, missing_subdep: str) -> None:
-    """Build an installed-but-incomplete package: its __init__.py imports a nonexistent module."""
+    """An installed package whose own __init__.py import fails."""
     pkg_dir = base_dir / pkg_name
     pkg_dir.mkdir()
     (pkg_dir / "__init__.py").write_text(f"import {missing_subdep}\n")
@@ -23,7 +23,7 @@ def _write_broken_optional_root_package(base_dir: Path, pkg_name: str, missing_s
 
 
 def _write_fake_base_package(base_dir: Path, base_pkg_name: str, submodule_name: str, imports: str) -> None:
-    """Build a fake base package (standing in for mloda_plugins) with one submodule importing `imports`."""
+    """A fake base package standing in for mloda_plugins."""
     pkg_dir = base_dir / base_pkg_name
     pkg_dir.mkdir()
     (pkg_dir / "__init__.py").write_text("")

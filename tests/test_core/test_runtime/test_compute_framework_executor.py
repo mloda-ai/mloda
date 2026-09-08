@@ -1245,8 +1245,8 @@ class TestMultiExecuteStep:
         # Verify from_cfw_uuid was prepared
         assert cfw_register.get_cfw_uuid.call_count >= 1
 
-    def test_binds_tfs_connection(self) -> None:
-        """multi_execute_step must call _bind_tfs_connection, like the other execute methods already do."""
+    def test_does_not_bind_tfs_connection(self) -> None:
+        """multi_execute_step must not call _bind_tfs_connection: the cfw is pickled to a spawned worker process."""
         cfw_register = Mock(spec=CfwManager)
         worker_manager = Mock(spec=WorkerManager)
         executor = ComputeFrameworkExecutor(cfw_register, worker_manager)
@@ -1273,4 +1273,4 @@ class TestMultiExecuteStep:
 
         executor.multi_execute_step(step)
 
-        executor._bind_tfs_connection.assert_called_once_with(step, cfw_uuid)
+        executor._bind_tfs_connection.assert_not_called()

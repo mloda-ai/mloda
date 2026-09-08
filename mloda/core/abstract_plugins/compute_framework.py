@@ -5,6 +5,7 @@ from collections.abc import Callable, Generator, Iterable, Sequence
 from contextvars import ContextVar
 from typing import Any, final
 from uuid import UUID, uuid4
+from mloda.core.abstract_plugins.components.connection_spec import ConnectionSource, ConnectionSpec
 from mloda.core.abstract_plugins.components.data_types import DataType
 from mloda.core.abstract_plugins.components.framework_transformer.cfw_transformer import (
     ComputeFrameworkTransformer,
@@ -119,6 +120,15 @@ class ComputeFramework(ABC):
 
         # connection object for frameworks that need persistent connections (e.g., DuckDB, Spark)
         self.framework_connection_object: Any | None = None
+        # Set post-construction by the executor, the same way run_context is.
+        self.connection_source: ConnectionSource | None = None
+
+    @final
+    def __getstate__(self) -> dict[str, Any]:
+        """Drop the live connection handle before pickling; ensure_connection re-opens it on the other side."""
+        state = dict(self.__dict__)
+        state["framework_connection_object"] = None
+        return state
 
     @final
     def __setstate__(self, state: dict[str, Any]) -> None:
@@ -257,6 +267,49 @@ class ComputeFramework(ABC):
         self.framework_connection_object = None
 
     @classmethod
+    def open_connection(cls, spec: ConnectionSpec | None) -> Any | None:
+        """Open a new live connection from `spec.params`. Override per framework."""
+        return None
+
+    @final
+    def ensure_connection(self, candidate: Any | None = None) -> Any | None:
+        """Resolve and bind this instance's connection, opening it lazily on first use. Priority:
+        `candidate` (spec, live object, or None), then an already-bound connection, then `connection_source`."""
+        if candidate is not None:
+            if isinstance(candidate, ConnectionSpec):
+                if self.framework_connection_object is None:
+                    live = self.open_connection(candidate)
+                    if live is not None:
+                        self.set_framework_connection_object(live)
+                return self.framework_connection_object
+            self.set_framework_connection_object(candidate)
+            return self.framework_connection_object
+
+        if self.framework_connection_object is not None:
+            return self.framework_connection_object
+
+        live = None
+        if self.connection_source is not None:
+            source = self.connection_source
+            live = source.live
+            if live is None:
+                if source.spec is None and source.live_dropped:
+                    raise ValueError(
+                        f"{type(self).__name__} was given a live connection that cannot cross into this "
+                        f"worker process. Register a ConnectionSpec({type(self).__name__}, ...) in "
+                        "DataAccessCollection so each process opens its own connection, or run without "
+                        "ParallelizationMode.MULTIPROCESSING."
+                    )
+                live = self.open_connection(source.spec)
+        else:
+            live = self.open_connection(None)
+
+        if live is not None:
+            self.set_framework_connection_object(live)
+
+        return self.framework_connection_object
+
+    @classmethod
     def _connection_matches(cls, conn: Any) -> bool:
         """Return True if `conn` is a connection this framework can adopt.
 
@@ -264,6 +317,13 @@ class ComputeFramework(ABC):
         the surrounding fail-fast policy lives in `pick_connection_from_dac`.
         """
         return False
+
+    @classmethod
+    def _accepts_dac_entry(cls, entry: Any) -> bool:
+        """A ConnectionSpec matching this class, or a live entry `_connection_matches` accepts."""
+        if isinstance(entry, ConnectionSpec):
+            return entry.matches(cls)
+        return cls._connection_matches(entry)
 
     @classmethod
     def pick_connection_from_dac(cls, data_access_collection: Any, options: Any | None = None) -> Any | None:
@@ -281,9 +341,9 @@ class ComputeFramework(ABC):
             handle_kind = data_access_collection.handles().get(hint)
             if handle_kind not in (None, "connection"):
                 hint = None
-            elif handle_kind == "connection" and not cls._connection_matches(data_access_collection.connections[hint]):
+            elif handle_kind == "connection" and not cls._accepts_dac_entry(data_access_collection.connections[hint]):
                 hint = None
-        return data_access_collection.resolve("connection", predicate=cls._connection_matches, hint=hint)
+        return data_access_collection.resolve("connection", predicate=cls._accepts_dac_entry, hint=hint)
 
     @final
     def get_framework_connection_object(self) -> Any:
@@ -328,7 +388,7 @@ class ComputeFramework(ABC):
 
         if not isinstance(data, self.expected_data_framework()):
             # if data is not in the expected data framework, we need to transform it and for this, we may need the framework connection object
-            self.set_framework_connection_object(features.get_options_key(feature_group.get_class_name()))
+            self.ensure_connection(features.get_options_key(feature_group.get_class_name()))
             data = self.transform(data, names)
         else:
             # already the native type: transform is skipped, so enforce the framework's
@@ -975,8 +1035,7 @@ Available join types:
         return _object_id
 
     @final
-    @classmethod
-    def convert_flight_server_data_back(cls, data: Any, transformer: ComputeFrameworkTransformer) -> Any:
+    def convert_flight_server_data_back(self, data: Any, transformer: ComputeFrameworkTransformer) -> Any:
         # Hot path: if pyarrow is not already loaded, data cannot be a pa.Table, so never import it.
         pa = loaded("pyarrow")
         if pa is None:
@@ -984,18 +1043,18 @@ Available join types:
 
         if not isinstance(data, pa.Table):
             return data
-        if isinstance(data, cls.expected_data_framework()):
+        if isinstance(data, self.expected_data_framework()):
             return data
 
         _from_fw = type(data)
-        _to_fw = cls.expected_data_framework()
+        _to_fw = self.expected_data_framework()
 
         transformer_cls = transformer.transformer_map.get((_from_fw, _to_fw), None)
         if transformer_cls is not None:
-            return transformer_cls.transform(_from_fw, _to_fw, data, None)
+            return transformer_cls.transform(_from_fw, _to_fw, data, self.ensure_connection())
 
         raise ValueError(
-            f"Conversion from {type(data)} to {cls.expected_data_framework()} is not supported. This can happen when a FlightServer was used."
+            f"Conversion from {type(data)} to {self.expected_data_framework()} is not supported. This can happen when a FlightServer was used."
         )
 
     @final

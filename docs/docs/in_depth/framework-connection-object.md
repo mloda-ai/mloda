@@ -1,206 +1,95 @@
 # Framework Connection Object
 
-## Overview
+DuckDB, SQLite, Spark, and Iceberg each need a persistent connection object to run. Pandas, PyArrow, and Polars are stateless and never need one.
 
-The Framework Connection Object is a key concept in mloda's compute framework system that enables stateful compute frameworks to maintain persistent connections and share resources across different operations. This is particularly important for frameworks like DuckDB, Spark, or database connections that require maintaining state between operations.
+## Registering a connection
 
-## What is a Framework Connection Object?
-
-A Framework Connection Object is an optional parameter that some compute frameworks use to:
-
-- **Maintain persistent connections** to databases or compute engines
-- **Share state** between different operations within the same compute session
-- **Ensure data consistency** across merge operations and transformations
-- **Optimize performance** by reusing connections and avoiding repeated setup costs
-
-## When is it Required?
-
-### Stateful Frameworks
-
-Some compute frameworks require a connection object to function properly:
-
-- **DuckDB**: Requires a `DuckDBPyConnection` to maintain database state
-- **Spark**: Requires a `SparkSession` to manage cluster resources and distributed computing
-- **Iceberg**: Requires a catalog connection for table operations
-- **Database frameworks**: Need database connections for query execution
-
-### Stateless Frameworks
-
-Other frameworks don't require connection objects:
-
-- **Pandas**: Operations are performed on in-memory DataFrames
-- **PyArrow**: Tables are self-contained data structures
-- **Polars**: DataFrames and LazyFrames are independent objects
-- **PythonDictFramework**: Simple Python data structures
-
-## How it Works
-
-### In ComputeFramework Base Class
-
-The base `ComputeFramework` class provides methods to manage connection objects:
+Register on `DataAccessCollection` in one of two shapes. A live object works only in the process that registered it, for SYNC and THREADING runs. A `ConnectionSpec(Framework, **params)` recipe is picklable: every process, including each MULTIPROCESSING worker, opens its own from it.
 
 ```py
-class ComputeFramework(ABC):
-    def __init__(self) -> None:
-        # Connection object for frameworks that need persistent connections
-        self.framework_connection_object: Any | None = None
-    
-    def set_framework_connection_object(self, framework_connection_object: Any | None = None) -> None:
-        """
-        Some compute frameworks (e.g., DuckDB, Spark) require sharing their connection
-        with merge engines to ensure data consistency. Override this method in
-        subclasses that need to provide a connection object.
-        """
-        self.framework_connection_object = None
-    
-    def get_framework_connection_object(self) -> Any:
-        """This method retrieves the connection object set by `set_framework_connection_object`."""
-        return self.framework_connection_object
-```
-
-### In Framework Transformers
-
-Framework transformers receive the connection object as a parameter:
-
-```py
-@classmethod
-def transform_other_fw_to_fw(cls, data: Any, framework_connection_object: Any | None = None) -> Any:
-    """
-    Transform data from the secondary framework to the primary framework.
-    
-    Args:
-        data: Data in the secondary framework format
-        framework_connection_object: Optional connection object for stateful frameworks
-    
-    Returns:
-        Any: Transformed data in the primary framework format
-    """
-```
-
-### Using DuckDB with mloda API
-
-The API examples below are sketches, not executed: `feature1` and `feature2` stand for columns your own
-tables or readers provide, so a connection alone does not make the request resolve.
-
-```py
-from mloda.user import mloda
-from mloda.user import DataAccessCollection
 import duckdb
-
-# Create DuckDB connection
-connection = duckdb.connect()
-
-# Set up data access
-data_access_collection = DataAccessCollection(connections={connection})
-
-# Run with DuckDB framework
-result = mloda.run_all(
-    ["feature1", "feature2"],
-    compute_frameworks=["DuckDBFramework"],
-    data_access_collection=data_access_collection
-)
-```
-
-### Using Spark with mloda API
-
-```py
-from mloda.user import mloda
 from mloda.user import DataAccessCollection
-from pyspark.sql import SparkSession
 
-# Create SparkSession
-spark = SparkSession.builder \
-    .appName("MLoda-Spark-Application") \
-    .master("local[*]") \
-    .config("spark.sql.adaptive.enabled", "true") \
-    .getOrCreate()
-
-# Set up data access
-data_access_collection = DataAccessCollection(connections={spark})
-
-# Run with Spark framework
-result = mloda.run_all(
-    ["feature1", "feature2"],
-    compute_frameworks=["SparkFramework"],
-    data_access_collection=data_access_collection
-)
+data_access_collection = DataAccessCollection(connections={duckdb.connect()})
 ```
-
-### DuckDB Transformer Example
-
-The `DuckDBPyArrowTransformer` requires a connection object for PyArrow → DuckDB transformations. The shared `transform_other_fw_to_fw` lives in its base class `SqlBasePyArrowTransformer`, which validates the connection and delegates to the framework-specific hooks:
 
 ```py
-class DuckDBPyArrowTransformer(SqlBasePyArrowTransformer):
-    @classmethod
-    def _convert_to_arrow(cls, data: Any) -> Any:
-        return data.to_arrow_table()
+from mloda.user import ConnectionSpec, DataAccessCollection
+from mloda_plugins.compute_framework.base_implementations.duckdb.duckdb_framework import DuckDBFramework
 
-    @classmethod
-    def _convert_to_native(cls, data: Any, connection: Any) -> Any:
-        return DuckdbRelation.from_arrow(connection, data)
-
-    @classmethod
-    def _validate_connection(cls, connection: Any) -> None:
-        if not isinstance(connection, duckdb.DuckDBPyConnection):
-            raise ValueError(f"Expected a DuckDB connection object, got {type(connection)}")
+DataAccessCollection(connections={ConnectionSpec(DuckDBFramework, database="/data/warehouse.duckdb")})
 ```
 
-## Implementation Guidelines
-
-### For Framework Developers
-
-When implementing a new compute framework that requires a connection object:
-
-1. **Override `set_framework_connection_object`**:
 ```py
-def set_framework_connection_object(self, framework_connection_object: Any | None = None) -> None:
-    if framework_connection_object is not None:
-        if not isinstance(framework_connection_object, ExpectedConnectionType):
-            raise ValueError(f"Expected connection type, got {type(framework_connection_object)}")
-        self.framework_connection_object = framework_connection_object
+from mloda_plugins.compute_framework.base_implementations.spark.spark_framework import SparkFramework
+
+DataAccessCollection(connections={ConnectionSpec(SparkFramework, app_name="demo", master="local[2]")})
 ```
 
-2. **Pass connection objects** to merge engines and other components that need them.
+```py
+from mloda_plugins.compute_framework.base_implementations.iceberg.iceberg_framework import IcebergFramework
 
-### For Transformer Developers
+DataAccessCollection(connections={ConnectionSpec(IcebergFramework, name="lake", type="rest", uri="https://...")})
+```
 
-When implementing transformers for stateful frameworks:
+Params pass straight through: to `duckdb.connect`, `sqlite3.connect`, the `SparkSession` builder (`app_name`, `master`, `config`), and pyiceberg's `load_catalog`.
 
-1. **Accept the connection object parameter**:
+## Resolution rule
+
+The runtime resolves one connection entry per transform-destination framework at setup. A framework binds it lazily, calling `ensure_connection()` right before it needs the handle: during a transform, a join, or materializing flight-server results. `open_connection(spec)` is the only per-framework hook, a classmethod that opens a new handle from the spec.
+
+## Multiprocessing
+
+A live connection never crosses a process boundary; it is dropped when a framework instance is pickled. A `ConnectionSpec` does cross: each worker, and the parent, opens its own connection from it. A MULTIPROCESSING-eligible step that resolved a live connection instead of a spec fails before any worker starts:
+
+```text
+DuckDBFramework resolved a live DuckDBPyConnection from DataAccessCollection, but
+TransformFrameworkStep (uuid=...) can run in a spawned worker process, and a live connection
+never crosses that boundary.
+Resolution: register a ConnectionSpec(DuckDBFramework, ...) so each process opens its own
+connection, or run without ParallelizationMode.MULTIPROCESSING.
+```
+
+DuckDB and SQLite declare themselves SYNC-only, so this never fires for them by default. Declare MULTIPROCESSING support on a subclass and pair it with a `ConnectionSpec` to run them in workers:
+
+```py
+from mloda.user import ParallelizationMode
+
+class WorkerDuckDBFramework(DuckDBFramework):
+    @classmethod
+    def supported_parallelization_modes(cls) -> set[ParallelizationMode]:
+        return {ParallelizationMode.SYNC, ParallelizationMode.THREADING, ParallelizationMode.MULTIPROCESSING}
+```
+
+## For framework authors
+
+Override `set_framework_connection_object` to validate and bind a live object; raise on `None`, never self-construct a connection there:
+
+```py
+def set_framework_connection_object(self, framework_connection_object=None) -> None:
+    if framework_connection_object is None:
+        raise ValueError("A DuckDB connection object is required.")
+    self.framework_connection_object = framework_connection_object
+```
+
+Override `open_connection(spec)` to build a new connection from `spec.params`:
+
+```py
+@classmethod
+def open_connection(cls, spec: ConnectionSpec | None) -> Any | None:
+    return None if spec is None else duckdb.connect(**spec.params)
+```
+
+Transformers still receive the resolved handle as `framework_connection_object`:
+
 ```py
 @classmethod
 def transform_other_fw_to_fw(cls, data: Any, framework_connection_object: Any | None = None) -> Any:
-    # Implementation here
+    """Transform data into this framework's native format, using the connection if needed."""
 ```
 
-2. **Validate the connection object** when required:
 ```py
 if framework_connection_object is None:
-    raise ValueError("Connection object is required for this transformation.")
-```
-
-3. **Use the connection object** for the transformation:
-```py
+    raise ValueError("A connection object is required for this transformation.")
 return framework_connection_object.from_other_format(data)
 ```
-## Troubleshooting
-
-### Common Issues
-
-1. **Missing Connection Object**:
-   ```
-   ValueError: A connection object is required for this transformation.
-   ```
-   **Solution**: Ensure you're providing a connection object when using stateful frameworks. Currently, parent features are not receiving the connection details automatically. Thus, you might need to give them a second time to root features!
-
-## Summary
-
-The Framework Connection Object is a powerful feature that enables mloda to work with stateful compute frameworks while maintaining the flexibility to work with stateless frameworks as well. By understanding when and how to use connection objects, you can:
-
-- **Integrate database-backed compute frameworks** like DuckDB
-- **Maintain state consistency** across operations
-- **Optimize performance** through connection reuse
-- **Build robust applications** with proper error handling
-
-This design allows mloda to support both simple, stateless frameworks (like Pandas) and complex, stateful frameworks (like DuckDB) within the same unified interface.

@@ -8,6 +8,7 @@ from dataclasses import replace
 from typing import Any, Callable
 from uuid import UUID, uuid4
 
+from mloda.core.abstract_plugins.components.connection_spec import ConnectionSource
 from mloda.core.abstract_plugins.components.error_utils import internal_invariant_error
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.components.parallelization_modes import ParallelizationMode
@@ -34,7 +35,7 @@ class ComputeFrameworkExecutor:
         self,
         cfw_register: CfwManager,
         worker_manager: WorkerManager,
-        tfs_connection_map: dict[type[ComputeFramework], Any] | None = None,
+        connection_sources: dict[type[ComputeFramework], ConnectionSource] | None = None,
         function_extender: set[Extender] | None = None,
         worker_extender_payload: bytes | None = None,
     ) -> None:
@@ -44,10 +45,8 @@ class ComputeFrameworkExecutor:
         Args:
             cfw_register: The CFW manager for registering compute frameworks.
             worker_manager: The worker manager for handling parallel execution.
-            tfs_connection_map: Setup-resolved map of destination CFW class to its
-                framework connection (e.g. duckdb.DuckDBPyConnection, sqlite3.Connection).
-                Engine builds this once from the DataAccessCollection at setup; the
-                executor only does a dict lookup per TFS step on the run path.
+            connection_sources: Setup-resolved ConnectionSource per framework class, attached to
+                each framework the executor creates; it opens its own connection lazily via ensure_connection().
             function_extender: The caller's own extenders, used for a framework staying resident
                 in this process.
             worker_extender_payload: Pickled snapshot of the extenders for a framework dispatched
@@ -58,7 +57,7 @@ class ComputeFrameworkExecutor:
         self.cfw_collection: dict[UUID, ComputeFramework] = {}
         self.cfw_register = cfw_register
         self.worker_manager = worker_manager
-        self.tfs_connection_map: dict[type[ComputeFramework], Any] = tfs_connection_map or {}
+        self.connection_sources: dict[type[ComputeFramework], ConnectionSource] = connection_sources or {}
         self.function_extender = function_extender
         self.worker_extender_payload = worker_extender_payload
         self._cfw_lock = threading.Lock()
@@ -106,6 +105,7 @@ class ComputeFrameworkExecutor:
             new_cfw._pending_extender_payload = self.worker_extender_payload
         # replace() re-runs __post_init__, so each framework owns its carrier copy.
         new_cfw.run_context = replace(self.cfw_register.get_run_context())
+        new_cfw.connection_source = self.connection_sources.get(cf_class)
 
         # add to register
         self.cfw_register.add_cfw_to_compute_frameworks(new_cfw.get_uuid(), cf_class.get_class_name(), children_if_root)
@@ -265,26 +265,11 @@ class ComputeFrameworkExecutor:
             from_cfw = self.cfw_collection[from_cfw_uuid]
         return from_cfw
 
-    def _bind_tfs_connection(self, step: Any, cfw_uuid: UUID) -> None:
-        """Bind the setup-resolved connection to a TFS destination CFW, if any.
-
-        No-op for non-TFS steps and for destinations whose framework has no entry
-        in `tfs_connection_map` (i.e. no connection was resolved at Engine setup).
-        """
-        if not isinstance(step, TransformFrameworkStep):
-            return
-        cfw = self.cfw_collection[cfw_uuid]
-        conn = self.tfs_connection_map.get(type(cfw))
-        if conn is not None and cfw.framework_connection_object is None:
-            cfw.set_framework_connection_object(conn)
-
     def sync_execute_step(self, step: Any) -> None:
         """
         Executes a step synchronously.
         """
         cfw_uuid = self.prepare_execute_step(step, ParallelizationMode.SYNC)
-
-        self._bind_tfs_connection(step, cfw_uuid)
 
         try:
             from_cfw = self.prepare_tfs_and_joinstep(step) or None
@@ -303,8 +288,6 @@ class ComputeFrameworkExecutor:
         Executes a step in a separate thread.
         """
         cfw_uuid = self.prepare_execute_step(step, ParallelizationMode.THREADING)
-
-        self._bind_tfs_connection(step, cfw_uuid)
 
         from_cfw = self.prepare_tfs_and_joinstep(step) or None
 
@@ -328,13 +311,10 @@ class ComputeFrameworkExecutor:
         existing = self.worker_manager.get_process_queues(cfw_uuid)
 
         if existing is None:
-            needs_tfs_connection = isinstance(step, TransformFrameworkStep) and (
-                self.tfs_connection_map.get(type(self.cfw_collection[cfw_uuid])) is not None
-            )
             process, command_queue, result_queue = self.worker_manager.create_worker_process(
                 cfw_uuid,
                 worker,
-                (self.cfw_register, self.cfw_collection[cfw_uuid], from_cfw, needs_tfs_connection),
+                (self.cfw_register, self.cfw_collection[cfw_uuid], from_cfw),
             )
         else:
             process, command_queue, result_queue = existing

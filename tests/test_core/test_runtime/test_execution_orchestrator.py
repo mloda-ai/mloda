@@ -19,6 +19,7 @@ from mloda.core.prepare.execution_plan import ExecutionPlan
 
 from mloda.core.runtime.run import ExecutionOrchestrator
 from mloda.core.core.cfw_manager import CfwManager
+from mloda.core.abstract_plugins.components.connection_spec import ConnectionSource
 from mloda.core.abstract_plugins.components.parallelization_modes import ParallelizationMode
 from mloda.core.abstract_plugins.run_context import RunContext
 
@@ -481,3 +482,40 @@ class TestSyncModeSkipsSleep:
         with patch("mloda.core.runtime.run.time.sleep") as mock_sleep:
             orchestrator.compute()
             mock_sleep.assert_not_called()
+
+
+class TestExecutionOrchestratorConnectionSources:
+    """connection_sources replaces tfs_connection_map: dict[type[ComputeFramework], ConnectionSource]."""
+
+    def test_constructor_accepts_connection_sources_and_stores_it(self) -> None:
+        mock_planner = Mock(spec=ExecutionPlan)
+        source = ConnectionSource(live=object())
+        connection_sources = {ComputeFramework: source}
+
+        orchestrator = ExecutionOrchestrator(mock_planner, connection_sources=connection_sources)
+
+        assert orchestrator.connection_sources is connection_sources
+
+    def test_constructor_defaults_connection_sources_to_empty_dict(self) -> None:
+        mock_planner = Mock(spec=ExecutionPlan)
+
+        orchestrator = ExecutionOrchestrator(mock_planner)
+
+        assert orchestrator.connection_sources == {}
+
+    def test_constructor_rejects_tfs_connection_map_keyword(self) -> None:
+        mock_planner = Mock(spec=ExecutionPlan)
+
+        with pytest.raises(TypeError):
+            ExecutionOrchestrator(mock_planner, tfs_connection_map={})  # type: ignore[call-arg]
+
+    def test_init_run_passes_connection_sources_through_to_the_executor(self) -> None:
+        mock_planner = Mock(spec=ExecutionPlan)
+        source = ConnectionSource(live=object())
+        connection_sources = {ComputeFramework: source}
+        orchestrator = ExecutionOrchestrator(mock_planner, connection_sources=connection_sources)
+        orchestrator.cfw_register = CfwManager({ParallelizationMode.SYNC})
+
+        orchestrator._init_run()
+
+        assert orchestrator.executor.connection_sources is connection_sources

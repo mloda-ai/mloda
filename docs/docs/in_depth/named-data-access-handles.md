@@ -17,6 +17,8 @@ DataAccessCollection(
 )
 ```
 
+A connection entry can also be a `ConnectionSpec`, the form to register when a run uses `ParallelizationMode.MULTIPROCESSING`; see [Framework Connection Object](framework-connection-object.md).
+
 Handle names are arbitrary strings you choose. They are globally unique across kinds: you cannot register a connection and a file under the same name. Registration raises `ValueError` on duplicates.
 
 Mutators mirror the keyed-dict shape:

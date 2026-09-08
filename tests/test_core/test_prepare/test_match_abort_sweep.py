@@ -87,6 +87,9 @@ _DECIDED_ABOVE_BY_READER_SELECTION = (
     "ever reaches an absent key"
 )
 _MATCHES_COLLISION = "name collision: the match path calls the input-data hooks named matches, not Link.matches"
+_CONNECTION_SPEC_MATCHES_COLLISION = (
+    "name collision: the match path calls the input-data hooks named matches, not ConnectionSpec.matches"
+)
 _UPDATE_COLLISION = "name collision: dict.update, not the link resolver's"
 _JOIN_COLLISION = "name collision: str.join, not the runner's join"
 _MERGED_DECLARATION_RAISES = (
@@ -110,6 +113,7 @@ RAISING_HELPERS_OUTSIDE_THE_PATH: dict[tuple[str, str], str] = {
     ("mloda/core/abstract_plugins/plugin_loader/plugin_loader.py", "load_group"): _READER_AUTO_LOAD,
     ("mloda/core/abstract_plugins/plugin_loader/plugin_loader.py", "all"): _READER_AUTO_LOAD,
     ("mloda/core/abstract_plugins/components/link.py", "matches"): _MATCHES_COLLISION,
+    ("mloda/core/abstract_plugins/components/connection_spec.py", "matches"): _CONNECTION_SPEC_MATCHES_COLLISION,
     ("mloda/core/abstract_plugins/components/utils.py", "get_all_subclasses"): (
         "real edge, collided verdict: it raises nothing itself; the set.add / set.update names do"
     ),
@@ -152,6 +156,7 @@ SWALLOWING_HELPERS_OUTSIDE_THE_PATH: dict[tuple[str, str], str] = {
     ("mloda/core/abstract_plugins/plugin_loader/plugin_loader.py", "load_group"): _READER_AUTO_LOAD,
     ("mloda/core/abstract_plugins/plugin_loader/plugin_loader.py", "all"): _READER_AUTO_LOAD,
     ("mloda/core/abstract_plugins/components/link.py", "matches"): _MATCHES_COLLISION,
+    ("mloda/core/abstract_plugins/components/connection_spec.py", "matches"): _CONNECTION_SPEC_MATCHES_COLLISION,
     ("mloda/core/prepare/resolve_links.py", "update"): _UPDATE_COLLISION,
     ("mloda/core/runtime/run.py", "join"): _JOIN_COLLISION,
     ("mloda/core/abstract_plugins/components/declaration_surface.py", "merged_declaration"): (

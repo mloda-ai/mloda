@@ -5,7 +5,7 @@ from mloda.core.abstract_plugins.components.data_types import DataType
 from mloda.provider import BaseMergeEngine
 from mloda_plugins.compute_framework.base_implementations.spark.spark_merge_engine import SparkMergeEngine
 from mloda.user import FeatureName
-from mloda.provider import ComputeFramework
+from mloda.provider import ComputeFramework, ConnectionSpec
 from mloda.provider import BaseFilterEngine, BaseMaskEngine
 from mloda.provider import OutputSchema
 from mloda_plugins.compute_framework.base_implementations.spark.spark_filter_engine import SparkFilterEngine
@@ -42,20 +42,32 @@ class SparkFramework(ComputeFramework):
         if SparkSession is None:
             raise ImportError("PySpark is not installed. To be able to use this framework, please install pyspark.")
 
+        if framework_connection_object is None:
+            raise ValueError("A SparkSession object is required.")
+
         if self.framework_connection_object is None:
-            if framework_connection_object is not None:
-                if not isinstance(framework_connection_object, SparkSession):
-                    raise ValueError(f"Expected a SparkSession object, got {type(framework_connection_object)}")
-                self.framework_connection_object = framework_connection_object
-            else:
-                # Create a default local SparkSession if none provided
-                self.framework_connection_object = (
-                    SparkSession.builder.appName("MLoda-Spark-Framework")
-                    .master("local[*]")
-                    .config("spark.sql.adaptive.enabled", "true")
-                    .config("spark.sql.adaptive.coalescePartitions.enabled", "true")
-                    .getOrCreate()
-                )
+            if not isinstance(framework_connection_object, SparkSession):
+                raise ValueError(f"Expected a SparkSession object, got {type(framework_connection_object)}")
+            self.framework_connection_object = framework_connection_object
+
+    @classmethod
+    def open_connection(cls, spec: ConnectionSpec | None) -> Any | None:
+        """Build a SparkSession via the builder chain, using spec.params to override defaults."""
+        if SparkSession is None:
+            raise ImportError("PySpark is not installed. To be able to use this framework, please install pyspark.")
+
+        params = spec.params if spec is not None else {}
+        app_name = params.get("app_name", "MLoda-Spark-Framework")
+        master = params.get("master", "local[*]")
+        config = params.get(
+            "config",
+            {"spark.sql.adaptive.enabled": "true", "spark.sql.adaptive.coalescePartitions.enabled": "true"},
+        )
+
+        builder = SparkSession.builder.appName(app_name).master(master)
+        for key, value in config.items():
+            builder = builder.config(key, value)
+        return builder.getOrCreate()
 
     @classmethod
     def _connection_matches(cls, conn: Any) -> bool:
@@ -189,8 +201,7 @@ class SparkFramework(ComputeFramework):
 
         if isinstance(data, dict):
             """Initial data: Transform dict to Spark DataFrame"""
-            if self.framework_connection_object is None:
-                self.set_framework_connection_object()
+            self.ensure_connection()
 
             spark = self.framework_connection_object
 
@@ -249,8 +260,7 @@ class SparkFramework(ComputeFramework):
                 existing_with_row_num = self.data.withColumn(rn, F.row_number().over(window_spec))
 
                 # Create new DataFrame with the new column
-                if self.framework_connection_object is None:
-                    self.set_framework_connection_object()
+                self.ensure_connection()
 
                 spark = self.framework_connection_object
                 if spark is None:

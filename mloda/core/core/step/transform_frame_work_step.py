@@ -165,6 +165,4 @@ class TransformFrameworkStep(Step):
                 f"Available transformers: {list(self.transformer.transformer_map.keys())}"
             )
 
-        return self.transformer.apply_chain(
-            _from_fw, _to_fw, transformation_chain, data, cfw.framework_connection_object
-        )
+        return self.transformer.apply_chain(_from_fw, _to_fw, transformation_chain, data, cfw.ensure_connection())

@@ -35,6 +35,7 @@ from mloda.core.filter.filter_type_enum import FilterType
 
 # Data access
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
+from mloda.core.abstract_plugins.components.connection_spec import ConnectionSpec
 from mloda.core.abstract_plugins.components.credential import Credential
 
 # Types
@@ -102,6 +103,7 @@ __all__ = [
     "FilterType",
     # Data access
     "DataAccessCollection",
+    "ConnectionSpec",
     "Credential",
     # Types
     "DataType",

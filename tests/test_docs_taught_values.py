@@ -36,7 +36,9 @@ FRAMEWORK_LIKE_IDENTIFIER = re.compile(r"\b[A-Z]\w*(?:DataFrame|Table|Framework)
 
 # Framework-like fenced identifiers that are legitimately not loaded classes: the abstract base plus the
 # placeholder classes of the transformer and type-enforcement examples.
-FRAMEWORK_IDENTIFIER_ALLOWLIST = frozenset({"ComputeFramework", "CustomFramework", "MyFramework", "OtherFramework"})
+FRAMEWORK_IDENTIFIER_ALLOWLIST = frozenset(
+    {"ComputeFramework", "CustomFramework", "MyFramework", "OtherFramework", "WorkerDuckDBFramework"}
+)
 
 GET_DOMAIN_MARKER = "def get_domain"
 DOMAIN_RETURN_MARKER = "return Domain("

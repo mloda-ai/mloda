@@ -3,7 +3,7 @@ from typing import Any
 
 import pytest
 
-from mloda.user import DataAccessCollection
+from mloda.user import ConnectionSpec, DataAccessCollection
 
 
 class TfsConnectionInitMixin:
@@ -81,3 +81,13 @@ class TfsConnectionInitMixin:
         options = Options(context={"data_access_handle": "secondary"})
         resolved = framework_class.pick_connection_from_dac(dac, options=options)
         assert resolved is second_valid_connection
+
+    def test_returns_matching_spec(self, framework_class: Any) -> None:
+        spec = ConnectionSpec(framework_class)
+        dac = DataAccessCollection(connections={spec})
+        assert framework_class.pick_connection_from_dac(dac) is spec
+
+    def test_spec_for_other_framework_is_ignored(self, framework_class: Any) -> None:
+        spec = ConnectionSpec("SomeOtherFramework")
+        dac = DataAccessCollection(connections={spec})
+        assert framework_class.pick_connection_from_dac(dac) is None

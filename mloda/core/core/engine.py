@@ -14,6 +14,7 @@ from mloda.core.abstract_plugins.components.plugin_option.plugin_collector impor
 from mloda.core.filter.global_filter import GlobalFilter
 from mloda.core.prepare.accessible_plugins import PreFilterPlugins
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
+from mloda.core.abstract_plugins.components.connection_spec import ConnectionSource
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.abstract_plugins.components.data_types import DataType
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
@@ -104,26 +105,22 @@ class Engine:
         self.resolved_input_feature_names: dict[UUID, frozenset[str] | None] = {}
         self.resolution_records: list[ResolutionRecord] = []
         self.execution_planner = self.create_setup_execution_plan(features)
-        self.tfs_connection_map = self._resolve_tfs_connection_map()
+        self.connection_sources = self._resolve_connection_sources()
 
-    def _resolve_tfs_connection_map(self) -> dict[type[ComputeFramework], Any]:
-        """Resolve a connection per TFS destination framework at setup time.
-
-        Walks the planned TFS steps once and asks each destination framework class to pick
-        a matching connection from the DataAccessCollection. The resulting dict is consumed
-        on the run path by ComputeFrameworkExecutor without any further DAC scanning.
-        """
-        connection_map: dict[type[ComputeFramework], Any] = {}
+    def _resolve_connection_sources(self) -> dict[type[ComputeFramework], ConnectionSource]:
+        """Resolve a ConnectionSource per TFS destination framework at setup time, so
+        ComputeFrameworkExecutor can consume it on the run path without further DAC scanning."""
+        connection_sources: dict[type[ComputeFramework], ConnectionSource] = {}
         if self.data_access_collection is None:
-            return connection_map
+            return connection_sources
         for tfs in self.execution_planner.tfs_collection.values():
             cfw_class = tfs.to_framework
-            if cfw_class in connection_map:
+            if cfw_class in connection_sources:
                 continue
             conn = cfw_class.pick_connection_from_dac(self.data_access_collection)
             if conn is not None:
-                connection_map[cfw_class] = conn
-        return connection_map
+                connection_sources[cfw_class] = ConnectionSource.from_entry(conn)
+        return connection_sources
 
     def get_function_extender(self, hook: ExtenderHook) -> Extender | None:
         """Select the extender(s) registered for hook, delegating to the shared free function."""
@@ -136,7 +133,7 @@ class Engine:
             flight_server,
             column_ordering=self.column_ordering,
             request_feature_order=self.request_feature_order,
-            tfs_connection_map=self.tfs_connection_map,
+            connection_sources=self.connection_sources,
         )
         if isinstance(orchestrator, ExecutionOrchestrator):
             return orchestrator

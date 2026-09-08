@@ -6,7 +6,7 @@ from typing import Any
 
 from mloda.core.abstract_plugins.components.data_types import DataType
 from mloda.provider import BaseMergeEngine
-from mloda.provider import ComputeFramework
+from mloda.provider import ComputeFramework, ConnectionSpec
 from mloda.provider import OutputSchema
 from mloda.provider import BaseFilterEngine, BaseMaskEngine
 from mloda.user import FeatureName, ParallelizationMode
@@ -38,6 +38,12 @@ class SqliteFramework(ComputeFramework):
             return  # same connection passed again — safe no-op
         framework_connection_object.create_function("REGEXP", 2, _regexp, deterministic=True)
         self.framework_connection_object = framework_connection_object
+
+    @classmethod
+    def open_connection(cls, spec: ConnectionSpec | None) -> Any | None:
+        if spec is None:
+            return None
+        return sqlite3.connect(**spec.params)
 
     @classmethod
     def _connection_matches(cls, conn: Any) -> bool:
@@ -125,7 +131,9 @@ class SqliteFramework(ComputeFramework):
         if isinstance(data, dict):
             if self.framework_connection_object is None:
                 raise ValueError(
-                    "Framework connection object is not set. Please call set_framework_connection_object() first."
+                    "SqliteFramework has no connection. Register a sqlite3 connection or a "
+                    "ConnectionSpec(SqliteFramework, ...) in DataAccessCollection, or call "
+                    "set_framework_connection_object()."
                 )
             return SqliteRelation.from_dict(self.framework_connection_object, data)
 

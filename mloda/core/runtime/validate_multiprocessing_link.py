@@ -1,13 +1,14 @@
-"""Guards a Link, a feature group class, a child_bootstrap callable, or an extender against a value
-pickle cannot round-trip, which otherwise fails deep inside a multiprocessing worker with an opaque
-PicklingError instead of being rejected clearly at plan time. This only proves resolvability in the
-current process: a value resolvable here but not inside a freshly spawned worker can still fail there.
+"""Guards a Link, a feature group class, a child_bootstrap callable, an extender, or a live
+connection against a value that cannot cross into a spawned multiprocessing worker, rejecting it
+clearly at plan time instead of an opaque worker-side failure. This only proves resolvability in
+the current process: a value resolvable here can still fail inside a freshly spawned worker.
 """
 
 import pickle  # nosec
 from collections.abc import Callable, Iterable
 from typing import Any
 
+from mloda.core.abstract_plugins.components.connection_spec import ConnectionSource
 from mloda.core.abstract_plugins.components.parallelization_modes import ParallelizationMode
 from mloda.core.abstract_plugins.function_extender import Extender
 from mloda.core.core.step.feature_group_step import FeatureGroupStep
@@ -153,3 +154,41 @@ def raise_on_unpicklable_extender(function_extender: set[Extender] | None) -> No
     for extender in function_extender:
         if not _is_picklable(extender):
             raise ValueError(_unpicklable_extender_error(extender))
+
+
+def _step_connection_destination(step: Any) -> type[Any] | None:
+    if isinstance(step, FeatureGroupStep):
+        return step.compute_framework
+    if isinstance(step, TransformFrameworkStep):
+        return step.to_framework
+    if isinstance(step, JoinStep):
+        return step.destination_framework
+    return None
+
+
+def _live_connection_for_worker_error(cls: type[Any], step: Any, source: ConnectionSource) -> str:
+    return (
+        f"{cls.__name__} resolved a live {type(source.live).__name__} from DataAccessCollection, but "
+        f"{type(step).__name__} (uuid={step.uuid}) can run in a spawned worker process, and a live connection "
+        "never crosses that boundary.\n"
+        f"Resolution: register a ConnectionSpec({cls.__name__}, ...) so each "
+        "process opens its own connection, or run without ParallelizationMode.MULTIPROCESSING."
+    )
+
+
+def raise_on_live_connection_for_worker(
+    steps: Iterable[Any], connection_sources: dict[type[Any], ConnectionSource]
+) -> None:
+    """Raise ValueError if a step that can run in a spawned MULTIPROCESSING worker has a
+    live-only ConnectionSource (no ConnectionSpec) resolved for its destination framework."""
+    for step in steps:
+        if ParallelizationMode.MULTIPROCESSING not in step.get_parallelization_mode():
+            continue
+
+        cls = _step_connection_destination(step)
+        if cls is None:
+            continue
+
+        source = connection_sources.get(cls)
+        if source is not None and source.live is not None and source.spec is None:
+            raise ValueError(_live_connection_for_worker_error(cls, step, source))

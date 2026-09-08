@@ -10,6 +10,7 @@ from uuid import UUID
 import logging
 
 from mloda.core.abstract_plugins.function_extender import Extender
+from mloda.core.abstract_plugins.components.connection_spec import ConnectionSource
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.run_context import RunContext
@@ -28,6 +29,7 @@ from mloda.core.abstract_plugins.components.feature_set import FeatureSet
 from mloda.core.abstract_plugins.components.error_utils import MlodaRunError, internal_invariant_error
 from mloda.core.abstract_plugins.feature_group import format_feature_group_class
 from mloda.core.runtime.validate_multiprocessing_link import (
+    raise_on_live_connection_for_worker,
     raise_on_unpicklable_child_bootstrap,
     raise_on_unpicklable_extender,
     raise_on_unpicklable_join_link,
@@ -91,7 +93,7 @@ class ExecutionOrchestrator:
         flight_server: ParallelRunnerFlightServer | None = None,
         column_ordering: str | None = None,
         request_feature_order: list[str] | None = None,
-        tfs_connection_map: dict[type[ComputeFramework], Any] | None = None,
+        connection_sources: dict[type[ComputeFramework], ConnectionSource] | None = None,
     ) -> None:
         """
         Initializes the ExecutionOrchestrator with an execution plan and optional flight server.
@@ -124,7 +126,7 @@ class ExecutionOrchestrator:
         if flight_server:
             self.flight_server = flight_server
 
-        self.tfs_connection_map: dict[type[ComputeFramework], Any] = tfs_connection_map or {}
+        self.connection_sources: dict[type[ComputeFramework], ConnectionSource] = connection_sources or {}
 
     def _is_step_done(self, step_uuids: set[UUID], finished_ids: set[UUID]) -> bool:
         """
@@ -150,7 +152,7 @@ class ExecutionOrchestrator:
         self.executor = ComputeFrameworkExecutor(
             self.cfw_register,
             self.worker_manager,
-            tfs_connection_map=self.tfs_connection_map,
+            connection_sources=self.connection_sources,
             function_extender=self.function_extender,
             worker_extender_payload=self.worker_extender_payload,
         )
@@ -448,6 +450,7 @@ class ExecutionOrchestrator:
             raise_on_unpicklable_step_feature_group(self.execution_planner)
             raise_on_unpicklable_child_bootstrap(run_context.child_bootstrap)
             raise_on_unpicklable_extender(function_extender)
+            raise_on_live_connection_for_worker(self.execution_planner, self.connection_sources)
             # Snapshot right after the preflight, once, in this process: workers get this exact
             # bytes payload, never a fetch through the register/proxy.
             self.worker_extender_payload = pickle.dumps(function_extender) if function_extender is not None else None

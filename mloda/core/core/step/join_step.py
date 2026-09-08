@@ -76,7 +76,7 @@ class JoinStep(Step):
 
     def _do_merge_data(self, cfw: ComputeFramework, from_cfw_data: Any) -> None:
         merge_engine_class = cfw.merge_engine()
-        framework_connection = cfw.get_framework_connection_object()
+        framework_connection = cfw.ensure_connection()
         merge_engine_instance = merge_engine_class(framework_connection)
 
         # Link indices are bound to the feature groups, so the left group's data must stay the left argument.

@@ -3,7 +3,7 @@ from typing import Any
 from mloda.core.abstract_plugins.components.data_types import DataType
 from mloda.provider import BaseMergeEngine
 from mloda.user import FeatureName
-from mloda.provider import ComputeFramework
+from mloda.provider import ComputeFramework, ConnectionSpec
 from mloda.provider import BaseFilterEngine
 from mloda.provider import OutputSchema
 from mloda_plugins.compute_framework.base_implementations.iceberg.iceberg_filter_engine import IcebergFilterEngine
@@ -13,7 +13,7 @@ from mloda_plugins.compute_framework.base_implementations.pyarrow.table import (
 )
 
 try:
-    from pyiceberg.catalog import Catalog
+    from pyiceberg.catalog import Catalog, load_catalog
     from pyiceberg.table import Table as IcebergTable
     from pyiceberg.types import (
         BinaryType,
@@ -31,6 +31,7 @@ try:
     import pyarrow as pa
 except ImportError:
     Catalog = None  # type: ignore[assignment,misc]
+    load_catalog = None  # type: ignore[assignment]
     IcebergTable = None  # type: ignore[assignment,misc]
     BinaryType = None  # type: ignore[assignment,misc]
     BooleanType = None  # type: ignore[assignment,misc]
@@ -47,16 +48,7 @@ except ImportError:
 
 
 class IcebergFramework(ComputeFramework):
-    """
-    Iceberg compute framework implementation.
-
-    This framework provides integration with Apache Iceberg tables, supporting
-    schema evolution, time travel, and efficient data management. It uses PyArrow
-    as the interchange format for compatibility with other mloda frameworks.
-
-    Note: This implementation focuses on read operations. The catalog must be
-    provided via set_framework_connection_object() before use.
-    """
+    """Read-only Apache Iceberg integration via PyArrow. Register a catalog via ConnectionSpec(IcebergFramework, ...) or a live catalog."""
 
     def set_framework_connection_object(self, framework_connection_object: Any | None = None) -> None:
         """
@@ -68,17 +60,22 @@ class IcebergFramework(ComputeFramework):
         if Catalog is None:
             raise ImportError("PyIceberg is not installed. To use this framework, please install pyiceberg.")
 
+        if framework_connection_object is None:
+            raise ValueError("An Iceberg catalog or table is required.")
+
         if self.framework_connection_object is None:
-            if framework_connection_object is not None:
-                # Accept either a catalog instance or a table instance
-                if hasattr(framework_connection_object, "load_table"):
-                    # It's a catalog
-                    self.framework_connection_object = framework_connection_object
-                elif isinstance(framework_connection_object, IcebergTable):
-                    # It's already a table - store it directly
-                    self.framework_connection_object = framework_connection_object
-                else:
-                    raise ValueError(f"Expected an Iceberg catalog or table, got {type(framework_connection_object)}")
+            if hasattr(framework_connection_object, "load_table"):
+                self.framework_connection_object = framework_connection_object
+            elif isinstance(framework_connection_object, IcebergTable):
+                self.framework_connection_object = framework_connection_object
+            else:
+                raise ValueError(f"Expected an Iceberg catalog or table, got {type(framework_connection_object)}")
+
+    @classmethod
+    def open_connection(cls, spec: ConnectionSpec | None) -> Any | None:
+        if spec is None:
+            return None
+        return load_catalog(**spec.params)
 
     @classmethod
     def _connection_matches(cls, conn: Any) -> bool:

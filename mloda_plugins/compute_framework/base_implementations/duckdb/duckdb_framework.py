@@ -6,7 +6,7 @@ from mloda.core.abstract_plugins.hook_context import OutputSchema
 from mloda.provider import BaseMergeEngine
 from mloda_plugins.compute_framework.base_implementations.duckdb.duckdb_merge_engine import DuckDBMergeEngine
 from mloda.user import FeatureName, ParallelizationMode
-from mloda.provider import ComputeFramework
+from mloda.provider import ComputeFramework, ConnectionSpec
 from mloda.provider import BaseFilterEngine, BaseMaskEngine
 from mloda_plugins.compute_framework.base_implementations.duckdb.duckdb_filter_engine import DuckDBFilterEngine
 from mloda_plugins.compute_framework.base_implementations.duckdb.duckdb_mask_engine import DuckDBMaskEngine
@@ -76,6 +76,12 @@ class DuckDBFramework(ComputeFramework):
             return
         framework_connection_object.execute("SET TimeZone='UTC'")
         self.framework_connection_object = framework_connection_object
+
+    @classmethod
+    def open_connection(cls, spec: ConnectionSpec | None) -> Any | None:
+        if spec is None:
+            return None
+        return duckdb.connect(**spec.params)
 
     @classmethod
     def _connection_matches(cls, conn: Any) -> bool:
@@ -192,7 +198,9 @@ class DuckDBFramework(ComputeFramework):
 
             if self.framework_connection_object is None:
                 raise ValueError(
-                    "Framework connection object is not set. Please call set_framework_connection_object() first."
+                    "DuckDBFramework has no connection. Register a duckdb connection or a "
+                    "ConnectionSpec(DuckDBFramework, ...) in DataAccessCollection, or call "
+                    "set_framework_connection_object()."
                 )
             return DuckdbRelation.from_arrow(self.framework_connection_object, arrow_table)
 

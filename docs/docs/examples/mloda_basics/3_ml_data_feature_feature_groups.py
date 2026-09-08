@@ -107,7 +107,7 @@ def _(mo):
 
     ```python
     # This could be:
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return {OrderAmount, Datetime, ID}
     ```
     """)
@@ -140,9 +140,9 @@ def _(mo):
     ```python
     @classmethod
     def match_feature_group_criteria(
-        feature_name: Union[FeatureName, str],
+        feature_name: FeatureName | str,
         options: Options,
-        data_access_collection: Optional[DataAccessCollection] = None
+        data_access_collection: DataAccessCollection | None = None
         )
         ...
     ```

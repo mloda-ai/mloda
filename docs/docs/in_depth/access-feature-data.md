@@ -147,7 +147,7 @@ In this case, we need to provide the specific reader class: CsvReader.
 # This feature is already implemented as plugin, so do not run it again. This will raise intentional errors.
 class ReadFileFeature(FeatureGroup):
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return ReadFile()
 
     @classmethod
@@ -164,7 +164,7 @@ As a side note, the ReadFileFeature was also used for the global scope automatis
 To use it, we can simply:
 
 ```python
-from typing import Optional, Any, List
+from typing import Any, List
 from pathlib import Path
 
 from mloda.user import mloda
@@ -263,7 +263,7 @@ class AFeatureInputCreator(FeatureGroup):
 
     # Define input_data with using DataCreator
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator({"AFeatureInputCreator"})
 
     # Define the data this feature creates
@@ -297,8 +297,6 @@ This is one of the key aspects in how we achieve to split data from processes.
 
 In the following example, we will use data from another feature.
 ```python
-from typing import Set
-
 from mloda.user import mloda
 from mloda.provider import FeatureGroup, FeatureSet
 from mloda.user import Options, FeatureName, Feature, PluginCollector
@@ -310,7 +308,7 @@ _in_features = "in_features"
 # First, we create a class, which uses input features from another class
 class AInputFeatureGroup(FeatureGroup):
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
 
         # We use the source to make this feature flexible.
         # One could give here different feature names via the configuration.
@@ -371,7 +369,7 @@ from mloda.provider import ApiInputDataFeature
 
 class JoinedFeature(FeatureGroup):
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         # Create a LEFT join between mloda data and Creator data
         link = Link.left(
             (ApiInputDataFeature, Index(("api_id",))),

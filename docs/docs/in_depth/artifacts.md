@@ -30,7 +30,7 @@ The following example demonstrates how to implement and test an artifact.
 Here, we create a `FeatureGroup` with a configured `BaseArtifact`.
 
 ```python
-from typing import Type, Any, Optional
+from typing import Any
 from mloda.provider import FeatureGroup, FeatureSet, BaseArtifact, DataCreator, BaseInputData
 
 
@@ -40,7 +40,7 @@ class BaseExampleArtifactFeature(FeatureGroup):
         return DataCreator({cls.get_class_name()})
 
     @staticmethod
-    def artifact() -> Type[BaseArtifact] | None:
+    def artifact() -> type[BaseArtifact] | None:
         return BaseArtifact
 
     @classmethod
@@ -151,7 +151,7 @@ from mloda_plugins.feature_group.experimental.sklearn.sklearn_artifact import Sk
 
 class MySklearnFeatureGroup(FeatureGroup):
     @staticmethod
-    def artifact() -> Type[BaseArtifact] | None:
+    def artifact() -> type[BaseArtifact] | None:
         return SklearnArtifact
 
     @classmethod

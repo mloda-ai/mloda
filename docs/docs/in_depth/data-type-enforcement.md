@@ -7,7 +7,7 @@ mloda supports optional data type declarations on Features, enabling runtime val
 Use typed constructors to declare the expected data type:
 
 ```python
-from typing import Any, Optional
+from typing import Any
 from mloda.user import Feature
 
 # Typed features: Will be validated at runtime
@@ -97,7 +97,7 @@ In strict mode, only exact type matches or standard widening conversions are all
 Enforcement is driven by a single override point on `ComputeFramework`:
 
 ```python
-def _extract_column_data_type(self, data: Any, column_name: str) -> Optional[DataType]:
+def _extract_column_data_type(self, data: Any, column_name: str) -> DataType | None:
     ...
 ```
 
@@ -126,7 +126,7 @@ from mloda.provider import ComputeFramework
 
 
 class MyFramework(ComputeFramework):
-    def _extract_column_data_type(self, data: Any, column_name: str) -> Optional[DataType]:
+    def _extract_column_data_type(self, data: Any, column_name: str) -> DataType | None:
         native = data.schema.field(column_name).type  # framework-specific access
         if native == ...:
             return DataType.INT64

@@ -235,7 +235,7 @@ fgs = get_feature_group_docs(compute_framework="PandasDataFrame")
 
 - **name** (`str`, optional): Filter by name (case-insensitive partial match).
 - **search** (`str`, optional): Search in description (case-insensitive partial match).
-- **compute_framework** (`str | Type[ComputeFramework]`, optional): Filter by compute framework.
+- **compute_framework** (`str | type[ComputeFramework]`, optional): Filter by compute framework.
 - **version_contains** (`str`, optional): Filter by version substring.
 - **plugin_collector** (`PluginCollector`, optional): Filter using the plugin collector's applicability check.
 - **registered_only** (`bool`, default `False`): If `True`, only document classes in the collector's injected registry, else the default registry.

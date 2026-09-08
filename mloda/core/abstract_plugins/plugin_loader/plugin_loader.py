@@ -306,12 +306,7 @@ class PluginLoader:
             root = e.name.split(".")[0] if e.name else None
             if root == self.base_package:
                 raise
-            tb_roots = [
-                r
-                for r in OPTIONAL_PLUGIN_DEPENDENCIES
-                if full_module_name != r and not full_module_name.startswith(f"{r}.")
-            ]
-            blamed_root = next((r for r in tb_roots if _traceback_blames_root(e, r)), None)
+            blamed_root = next((r for r in OPTIONAL_PLUGIN_DEPENDENCIES if _traceback_blames_root(e, r)), None)
             if root in OPTIONAL_PLUGIN_DEPENDENCIES or blamed_root is not None:
                 logger.debug(
                     "Skipping plugin %s: missing optional dependency %s", full_module_name, e.name or blamed_root

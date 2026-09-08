@@ -84,6 +84,16 @@ def _write_root_module(base_dir: Path, module_name: str, source: str = "") -> No
     (base_dir / f"{module_name}.py").write_text(textwrap.dedent(source))
 
 
+def _write_broken_optional_root_package(base_dir: Path, pkg_name: str, missing_subdep: str) -> None:
+    """Build a real importable package (no dist-info, not an entry-point provider itself) whose
+    own __init__.py imports a nonexistent module: an "installed but incomplete" dependency whose
+    own transitive import is missing."""
+    pkg_dir = base_dir / pkg_name
+    pkg_dir.mkdir()
+    (pkg_dir / "__init__.py").write_text(f"import {missing_subdep}\n")
+    importlib.invalidate_caches()
+
+
 def _import_error_fg_manifest_source(root_module: str, class_name: str) -> str:
     """A manifest raising ImportError, not ModuleNotFoundError, because `root_module` exists but
     doesn't define the name it imports."""
@@ -106,6 +116,23 @@ def _own_package_broken_manifest_source(pkg_name: str, class_name: str) -> str:
     import's root equals the entry point's own module root."""
     return f"""
     import {pkg_name}.missing_submodule
+
+    from mloda.core.abstract_plugins.feature_group import FeatureGroup
+
+
+    class {class_name}(FeatureGroup):
+        pass
+
+
+    FEATURE_GROUPS = [{class_name}]
+    """
+
+
+def _transitive_optional_dependency_manifest_source(optional_root_pkg: str, class_name: str) -> str:
+    """A manifest importing a declared optional root that is itself installed, but whose own
+    __init__.py fails on an unrelated missing transitive dependency of its own."""
+    return f"""
+    import {optional_root_pkg}
 
     from mloda.core.abstract_plugins.feature_group import FeatureGroup
 
@@ -1016,3 +1043,93 @@ class TestPluginLoaderAllLoadsEntryPoints:
         key = f"{pkg}.manifest:EpFeatureGroup"
         assert registry.is_registered(_manifest_class(pkg, "EpFeatureGroup"))
         assert registry.get_entry(key).source == PluginSource.ENTRY_POINT
+
+
+class TestLoadEntryPointsTransitiveOptionalDependency:
+    """A declared optional root that is itself installed, but whose own code fails on ITS OWN
+    missing transitive dependency, must still be treated as optional (issue #1353): the failing
+    ImportError's `e.name` names the transitive dependency, not the declared root, so matching
+    must also walk the traceback for a frame inside the declared root's own module."""
+
+    def test_transitive_missing_dependency_inside_declared_optional_root_is_skipped(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        optional_root_pkg = "eptest_transroot"
+        missing_subdep = "eptest_transroot_missing_subdep"
+        _write_broken_optional_root_package(tmp_path, optional_root_pkg, missing_subdep)
+
+        manifest_pkg = "eptest_transroot_manifest_pkg"
+        good_pkg = "eptest_transroot_good_pkg"
+        _build_distribution(
+            tmp_path,
+            manifest_pkg,
+            _transitive_optional_dependency_manifest_source(optional_root_pkg, "EpTransRootFeatureGroup"),
+            f"""
+            [mloda.feature_groups]
+            demo = {manifest_pkg}.manifest:FEATURE_GROUPS
+
+            [mloda.optional_dependencies]
+            demo = {manifest_pkg}.optional_deps:OPTIONAL_DEPENDENCIES
+            """,
+        )
+        _write_module(
+            tmp_path, manifest_pkg, "optional_deps", f'OPTIONAL_DEPENDENCIES = frozenset({{"{optional_root_pkg}"}})\n'
+        )
+        _build_distribution(
+            tmp_path,
+            good_pkg,
+            _FG_MANIFEST,
+            f"""
+            [mloda.feature_groups]
+            good = {good_pkg}.manifest:FEATURE_GROUPS
+            """,
+        )
+        monkeypatch.syspath_prepend(str(tmp_path))
+
+        with caplog.at_level(logging.WARNING, logger=plugin_loader_module.__name__):
+            keys = PluginLoader().load_entry_points()
+
+        registry = PluginRegistry.default()
+        good_key = f"{good_pkg}.manifest:EpFeatureGroup"
+        assert good_key in keys
+        assert not any(key.startswith(f"{manifest_pkg}.") for key in keys)
+        assert registry.get(f"{manifest_pkg}.manifest:EpTransRootFeatureGroup") is None
+
+        warning_messages = [record.getMessage() for record in caplog.records if record.levelno == logging.WARNING]
+        assert any("demo" in message and missing_subdep in message for message in warning_messages), (
+            f"expected a WARNING naming the entry point and the missing transitive module, got: {warning_messages}"
+        )
+
+    def test_prefix_without_dot_boundary_is_not_mistaken_for_declared_root(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """`eptest_siblingrootx` shares a name PREFIX with declared root `eptest_siblingroot` but
+        is not a submodule of it (no `.` boundary); the traceback fallback must not conflate the
+        two, so the failure must still propagate rather than being skipped as optional."""
+        declared_root = "eptest_siblingroot"
+        sibling_pkg = "eptest_siblingrootx"
+        missing_subdep = "eptest_siblingrootx_missing_subdep"
+        _write_broken_optional_root_package(tmp_path, sibling_pkg, missing_subdep)
+
+        manifest_pkg = "eptest_siblingroot_manifest_pkg"
+        _build_distribution(
+            tmp_path,
+            manifest_pkg,
+            _transitive_optional_dependency_manifest_source(sibling_pkg, "EpSiblingRootFeatureGroup"),
+            f"""
+            [mloda.feature_groups]
+            demo = {manifest_pkg}.manifest:FEATURE_GROUPS
+
+            [mloda.optional_dependencies]
+            demo = {manifest_pkg}.optional_deps:OPTIONAL_DEPENDENCIES
+            """,
+        )
+        _write_module(
+            tmp_path, manifest_pkg, "optional_deps", f'OPTIONAL_DEPENDENCIES = frozenset({{"{declared_root}"}})\n'
+        )
+        monkeypatch.syspath_prepend(str(tmp_path))
+
+        with pytest.raises(ModuleNotFoundError):
+            PluginLoader().load_entry_points()
+
+        assert PluginRegistry.default().get(f"{manifest_pkg}.manifest:EpSiblingRootFeatureGroup") is None

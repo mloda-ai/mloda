@@ -256,9 +256,9 @@ class TestInitComputeFrameworkWithDirectFunctionExtender:
 
         mock_cfw_class.assert_called_once_with(ParallelizationMode.SYNC, frozenset(), test_uuid, function_extender=None)
 
-    def test_multiprocessing_mode_builds_an_independent_copy_from_worker_extender_payload(self) -> None:
-        """A MULTIPROCESSING-resolved framework gets its own copy unpickled from worker_extender_payload,
-        never the caller's shared object or the register/proxy."""
+    def test_multiprocessing_mode_defers_worker_extender_payload_materialization_to_the_worker(self) -> None:
+        """Builds with function_extender=None and the raw payload attached as _pending_extender_payload;
+        unpickling is deferred to ComputeFramework.__setstate__ in the worker, never done here."""
         cfw_register = Mock(spec=CfwManager)
         worker_manager = Mock(spec=WorkerManager)
         caller_extender = _StateHoldingExtender("caller")
@@ -287,11 +287,8 @@ class TestInitComputeFrameworkWithDirectFunctionExtender:
 
         executor.init_compute_framework(mock_cfw_class, ParallelizationMode.MULTIPROCESSING, set(), test_uuid)
 
-        built_function_extender = mock_cfw_class.call_args.kwargs["function_extender"]
-        assert built_function_extender is not provided_function_extender
-        built_extender = next(iter(built_function_extender))
-        assert built_extender is not caller_extender
-        assert built_extender.marker == "payload"
+        assert mock_cfw_class.call_args.kwargs["function_extender"] is None
+        assert mock_cfw_instance._pending_extender_payload == payload
 
     def test_multiprocessing_call_on_a_sync_only_framework_keeps_the_callers_extender_identity(self) -> None:
         """A framework whose supported_parallelization_modes() excludes MULTIPROCESSING can never

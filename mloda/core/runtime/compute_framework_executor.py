@@ -1,12 +1,11 @@
 from __future__ import annotations
 
 import multiprocessing  # noqa: F401
-import pickle  # nosec B403
 import threading
 import traceback
 import logging
 from dataclasses import replace
-from typing import Any, Callable, cast
+from typing import Any, Callable
 from uuid import UUID, uuid4
 
 from mloda.core.abstract_plugins.components.error_utils import internal_invariant_error
@@ -51,8 +50,10 @@ class ComputeFrameworkExecutor:
                 executor only does a dict lookup per TFS step on the run path.
             function_extender: The caller's own extenders, used for a framework staying resident
                 in this process.
-            worker_extender_payload: Pickled snapshot of the extenders, unpickled locally to build
-                an independent copy for a framework dispatched to a spawned worker.
+            worker_extender_payload: Pickled snapshot of the extenders for a framework dispatched
+                to a spawned worker. Never unpickled here; attached to the new instance as
+                `_pending_extender_payload` and materialized by `ComputeFramework.__setstate__`
+                only once the instance is actually unpickled in the worker.
         """
         self.cfw_collection: dict[UUID, ComputeFramework] = {}
         self.cfw_register = cfw_register
@@ -75,20 +76,21 @@ class ComputeFrameworkExecutor:
         Returns:
             The UUID of the compute framework.
         """
-        # The parent-side copy exists to keep the worker's copy isolated from later in-process
-        # mutation of the caller's objects. Fetching it through the register proxy instead would
-        # run the round trip in this process and strip any state an extender drops in __getstate__.
         # Re-checking cf_class.supported_parallelization_modes() here is defensive: no current
         # call path can pass MULTIPROCESSING for a class that does not support it.
+        # The worker-bound payload is deferred, never unpickled here: materializing it in this
+        # (parent) process would run any extender's own __setstate__ (e.g. building a live handle)
+        # under the wrong pid, and a second unpickle in the worker would then silently skip it.
         dispatched_to_worker = (
             parallelization_mode is ParallelizationMode.MULTIPROCESSING
             and ParallelizationMode.MULTIPROCESSING in cf_class.supported_parallelization_modes()
         )
-        if dispatched_to_worker and self.worker_extender_payload is not None:
-            function_extender = cast("set[Extender] | None", pickle.loads(self.worker_extender_payload))  # nosec B301
+        if dispatched_to_worker:
+            # Never the caller's own extender objects here; a payload (if any) is attached
+            # below, after construction, as the still-pickled _pending_extender_payload.
+            function_extender = None
         else:
-            # Reached when the framework stays resident in this process, or when it is
-            # worker-bound but the caller passed no extenders (so there is no payload).
+            # Framework stays resident in this process: use the caller's own extenders directly.
             function_extender = self.function_extender
 
         # init framework
@@ -98,6 +100,10 @@ class ComputeFrameworkExecutor:
             uuid or uuid4(),
             function_extender=function_extender,
         )
+        if dispatched_to_worker and self.worker_extender_payload is not None:
+            # Materialization happens only in ComputeFramework.__setstate__, once this instance is
+            # actually unpickled in the worker; never here in the parent that dispatches it.
+            new_cfw._pending_extender_payload = self.worker_extender_payload
         # replace() re-runs __post_init__, so each framework owns its carrier copy.
         new_cfw.run_context = replace(self.cfw_register.get_run_context())
 

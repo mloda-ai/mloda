@@ -1,4 +1,5 @@
 import contextlib
+import pickle  # nosec B403
 from abc import ABC
 from collections.abc import Callable, Generator, Iterable, Sequence
 from contextvars import ContextVar
@@ -83,6 +84,10 @@ class ComputeFramework(ABC):
     This use case, however, is currently not supported, as one could just run the module twice and compare the result datasets for now.
     """
 
+    # Class-level default so the attribute exists even when a subclass's __getstate__
+    # returns a filtered dict that omits it (e.g. dropping unpicklable live state).
+    _pending_extender_payload: bytes | None = None
+
     def __init__(
         self,
         mode: ParallelizationMode = ParallelizationMode.SYNC,
@@ -97,6 +102,9 @@ class ComputeFramework(ABC):
         self.already_calculated_children_tracker: set[UUID] = set()
         self.column_names: set[str] = set()
         self.function_extender = function_extender if function_extender is not None else set()
+        # Raw pickled payload attached by the worker dispatch path; materialized into
+        # function_extender only by __setstate__, i.e. only on the actual unpickle in the worker.
+        self._pending_extender_payload: bytes | None = None
         # Set post-construction so a subclass's fixed __init__ signature isn't broken.
         # RunContext is internal; hook authors should read run_id/carrier off HookContext instead.
         self.run_context: RunContext = RunContext()
@@ -111,6 +119,15 @@ class ComputeFramework(ABC):
 
         # connection object for frameworks that need persistent connections (e.g., DuckDB, Spark)
         self.framework_connection_object: Any | None = None
+
+    @final
+    def __setstate__(self, state: dict[str, Any]) -> None:
+        """Materialize a deferred worker extender payload on the actual unpickle, so an
+        extender's own __setstate__ (e.g. building a live handle) fires in the worker's pid."""
+        self.__dict__.update(state)
+        if self._pending_extender_payload is not None:
+            self.function_extender = pickle.loads(self._pending_extender_payload)  # nosec B301
+            self._pending_extender_payload = None
 
     @classmethod
     def expected_data_framework(cls) -> Any:

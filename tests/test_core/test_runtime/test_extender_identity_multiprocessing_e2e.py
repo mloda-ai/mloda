@@ -2,9 +2,9 @@
 unpickled copies, across ComputeFrameworks built in the parent process, but only for frameworks
 that themselves resolve to a non-MULTIPROCESSING mode. A framework resolved to MULTIPROCESSING is
 dispatched to a spawned worker via Process(args=(cfw_register, cfw, from_cfw)), which pickles it;
-it must keep getting an isolated copy unpickled locally from a snapshot taken once at run entry,
-so an in-parent mutation of the shared object (e.g. an extender lazily building an unpicklable
-handle) can never poison it.
+it must keep a pending, still-pickled snapshot taken once at run entry, materialized only once the
+worker actually unpickles it (ComputeFramework.__setstate__), so an in-parent mutation of the
+shared object (e.g. an extender lazily building an unpicklable handle) can never poison it.
 
 Drives ExecutionOrchestrator.__enter__ and ComputeFrameworkExecutor.init_compute_framework directly
 (real machinery, no mocks), for precise control over which mode each individual framework resolves
@@ -120,10 +120,11 @@ class TestExtenderIdentityAcrossFrameworksBuiltInTheParent:
 class TestExtenderIdentityNotSharedWithMultiprocessingResolvedFramework:
     """A mixed run (overall MULTIPROCESSING-enabled, real manager/register) must still give
     in-parent-resident frameworks the caller's shared extender, while a framework resolved to
-    MULTIPROCESSING (worker-bound) gets its own isolated copy unpickled locally from a snapshot,
-    so it cannot be poisoned by another framework's later in-parent mutation of the shared object."""
+    MULTIPROCESSING (worker-bound) only carries a still-pickled snapshot (_pending_extender_payload),
+    never a copy already unpickled in the parent, so it cannot be poisoned by another framework's
+    later in-parent mutation of the shared object."""
 
-    def test_parent_resident_shares_identity_worker_bound_gets_isolated_copy(self) -> None:
+    def test_parent_resident_shares_identity_worker_bound_defers_the_pending_payload(self) -> None:
         extender = _HandleHoldingExtender()
         caller_function_extender: set[Extender] = {extender}
 
@@ -144,15 +145,18 @@ class TestExtenderIdentityNotSharedWithMultiprocessingResolvedFramework:
             worker_bound_cfw = orchestrator.executor.cfw_collection[worker_bound_uuid]
 
             parent_resident_extender = next(iter(parent_resident_cfw.function_extender))
-            worker_bound_extender = next(iter(worker_bound_cfw.function_extender))
 
             assert parent_resident_extender is extender, (
                 "a framework resolved to a non-MULTIPROCESSING mode must still share the caller's "
                 "real extender object, even inside a MULTIPROCESSING-enabled run"
             )
-            assert worker_bound_extender is not extender, (
-                "a framework resolved to MULTIPROCESSING must get its own independent copy "
-                "unpickled locally from a snapshot, not the caller's shared object"
+            assert worker_bound_cfw.function_extender == set(), (
+                "a framework resolved to MULTIPROCESSING must not have its extender materialized "
+                "in the parent; it must stay an empty set until the worker unpickles it"
+            )
+            assert worker_bound_cfw._pending_extender_payload is not None, (
+                "the worker-bound framework must carry the still-pickled snapshot, materialized "
+                "only by ComputeFramework.__setstate__ once the worker actually unpickles it"
             )
 
             # Simulate a hook that lazily built an unpicklable handle on the shared object, mutating
@@ -160,8 +164,8 @@ class TestExtenderIdentityNotSharedWithMultiprocessingResolvedFramework:
             extender.handle = threading.Lock()
 
             # This is what Process(args=...) would pickle to dispatch the worker-bound framework.
-            # It must succeed: the worker-bound framework's own extender copy is untouched by the
-            # later mutation of the caller's shared object.
+            # It must succeed: the pending payload was snapshotted before the later mutation of the
+            # caller's shared object, and is never touched here in the parent.
             pickle.dumps(worker_bound_cfw)
         finally:
             orchestrator.__exit__(None, None, None)
@@ -170,8 +174,8 @@ class TestExtenderIdentityNotSharedWithMultiprocessingResolvedFramework:
 @pytest.mark.timeout(30)
 class TestHandleStrippingExtenderNeverLosesStateToTheRegisterProxy:
     """Parent-resident construction keeps the caller's own extender and its live handle;
-    MULTIPROCESSING-resolved construction gets an independent copy unpickled locally from a
-    snapshot, never a fetch through the register/proxy."""
+    MULTIPROCESSING-resolved construction only attaches the still-pickled snapshot as
+    _pending_extender_payload, never a fetch through the register/proxy."""
 
     def test_parent_resident_keeps_live_handle_and_multiprocessing_never_asks_the_register_proxy(self) -> None:
         extender = _HandleStrippingExtender()
@@ -196,7 +200,8 @@ class TestHandleStrippingExtenderNeverLosesStateToTheRegisterProxy:
             )
 
             # Builds successfully without reaching for cfw_register.get_function_extender(), a
-            # method the register no longer has: unpickling worker_extender_payload is the only path.
+            # method the register no longer has: attaching worker_extender_payload as the pending
+            # payload is the only path, materialized later in the worker, never here.
             orchestrator.executor.init_compute_framework(
                 PythonDictFramework, ParallelizationMode.MULTIPROCESSING, set(), uuid4()
             )

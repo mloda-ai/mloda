@@ -2,9 +2,7 @@ from typing import Any
 import pytest
 import pyarrow as pa
 
-from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.provider import EmptyResultError
-from mloda.user import DataType
 from mloda.user import FeatureName
 from mloda.user import ParallelizationMode
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
@@ -20,6 +18,7 @@ from tests.test_plugins.compute_framework.base_implementations.dict_interchange_
 )
 from tests.test_plugins.compute_framework.base_implementations.dtype_extraction_test_mixin import (
     DtypeExtractionTestMixin,
+    DuplicateColumnDtypeExtractionTestMixin,
 )
 from tests.test_plugins.compute_framework.base_implementations.empty_result_test_mixin import (
     EmptyResultFrameworkTestMixin,
@@ -103,8 +102,8 @@ class TestPyArrowTableMerge(DataFrameTestBase):
         pass
 
 
-class TestPyArrowDtypeExtraction(DtypeExtractionTestMixin):
-    """Test PyArrowTable._extract_column_dtype using shared mixin."""
+class TestPyArrowDtypeExtraction(DtypeExtractionTestMixin, DuplicateColumnDtypeExtractionTestMixin):
+    """Test PyArrowTable._extract_column_dtype using shared mixins."""
 
     @pytest.fixture
     def framework_instance(self) -> Any:
@@ -119,25 +118,10 @@ class TestPyArrowDtypeExtraction(DtypeExtractionTestMixin):
         table = pa.table({"dup_col": [1, 2, 3]})
         return table.append_column("dup_col", pa.array(["x", "y", "z"]))
 
-    def test_extract_duplicate_column_dtype_returns_first_occurrence(
-        self, framework_instance: Any, dtype_duplicate_column_data: Any
-    ) -> None:
-        """A duplicate column name must not raise; the first occurrence's dtype wins."""
-        dtype = framework_instance._extract_column_dtype(dtype_duplicate_column_data, "dup_col")
-        assert dtype is not None, "_extract_column_dtype returned None for a duplicate column"
-        assert ComputeFramework._is_numeric_dtype(str(dtype).lower()), (
-            f"duplicate column dtype '{dtype}' should match the first (int) occurrence"
-        )
-
-    def test_extract_duplicate_column_data_type_returns_first_occurrence(
-        self, framework_instance: Any, dtype_duplicate_column_data: Any
-    ) -> None:
-        """A duplicate column name must not raise; _extract_column_data_type returns the first occurrence."""
-        data_type = framework_instance._extract_column_data_type(dtype_duplicate_column_data, "dup_col")
-        assert data_type is not None, "_extract_column_data_type returned None for a duplicate column"
-        assert data_type == DataType.INT64, (
-            f"duplicate column data type '{data_type}' should match the first (int) occurrence"
-        )
+    @pytest.fixture
+    def dtype_duplicate_column_data_reversed(self) -> Any:
+        table = pa.table({"dup_col": ["x", "y", "z"]})
+        return table.append_column("dup_col", pa.array([1, 2, 3]))
 
 
 class TestPyArrowDictInterchangeOutputSchema(DictInterchangeOutputSchemaTestMixin):

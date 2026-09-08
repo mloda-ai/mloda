@@ -1,7 +1,10 @@
+import importlib
+from pathlib import Path
 from unittest.mock import patch
 
 import pytest
 
+import mloda.core.abstract_plugins.plugin_loader.plugin_loader as plugin_loader_module
 from mloda.core.abstract_plugins.components.input_data.base_input_data import (
     _collect_filtered_subclasses,  # noqa: F401
     get_all_filtered_subclasses,
@@ -9,6 +12,23 @@ from mloda.core.abstract_plugins.components.input_data.base_input_data import (
 from mloda.core.abstract_plugins.plugin_loader.plugin_loader import OPTIONAL_PLUGIN_DEPENDENCIES
 from mloda.core.abstract_plugins.plugin_registry.plugin_registry import PluginRegistry
 from mloda.user import PluginLoader
+
+
+def _write_broken_optional_root_package(base_dir: Path, pkg_name: str, missing_subdep: str) -> None:
+    """Build an installed-but-incomplete package: its __init__.py imports a nonexistent module."""
+    pkg_dir = base_dir / pkg_name
+    pkg_dir.mkdir()
+    (pkg_dir / "__init__.py").write_text(f"import {missing_subdep}\n")
+    importlib.invalidate_caches()
+
+
+def _write_fake_base_package(base_dir: Path, base_pkg_name: str, submodule_name: str, imports: str) -> None:
+    """Build a fake base package (standing in for mloda_plugins) with one submodule importing `imports`."""
+    pkg_dir = base_dir / base_pkg_name
+    pkg_dir.mkdir()
+    (pkg_dir / "__init__.py").write_text("")
+    (pkg_dir / f"{submodule_name}.py").write_text(f"import {imports}\n")
+    importlib.invalidate_caches()
 
 
 class TestPluginLoader:
@@ -223,3 +243,32 @@ class TestPluginLoader:
     def test_optional_plugin_dependencies_has_no_orphaned_opentelemetry_entry(self) -> None:
         """opentelemetry was only imported by OtelExtender, deleted on this branch; nothing imports it now."""
         assert "opentelemetry" not in OPTIONAL_PLUGIN_DEPENDENCIES
+
+
+class TestLoadPluginTransitiveOptionalDependency:
+    def test_transitive_missing_dependency_inside_declared_optional_root_is_skipped(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A declared-optional root whose OWN import fails must be skipped by _load_plugin, mirroring
+        the already-fixed load_entry_points traceback fallback."""
+        optional_root_pkg = "pltest_transroot_optional_dep"
+        missing_subdep = "pltest_transroot_missing_subdep"
+        _write_broken_optional_root_package(tmp_path, optional_root_pkg, missing_subdep)
+
+        base_pkg = "pltest_fake_base_pkg"
+        submodule = "broken_consumer"
+        _write_fake_base_package(tmp_path, base_pkg, submodule, optional_root_pkg)
+
+        monkeypatch.syspath_prepend(str(tmp_path))
+        monkeypatch.setattr(
+            plugin_loader_module,
+            "OPTIONAL_PLUGIN_DEPENDENCIES",
+            plugin_loader_module.OPTIONAL_PLUGIN_DEPENDENCIES | frozenset({optional_root_pkg}),
+        )
+
+        loader = PluginLoader()
+        loader.base_package = base_pkg
+
+        loader._load_plugin(submodule)
+
+        assert f"{base_pkg}.{submodule}" not in loader.plugins

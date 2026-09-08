@@ -1,6 +1,7 @@
 from typing import Any
 from uuid import UUID, uuid4
 from mloda.core.abstract_plugins.components.framework_transformer.cfw_transformer import ComputeFrameworkTransformer
+from mloda.core.abstract_plugins.components.parallelization_modes import ParallelizationMode
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.function_extender import ExtenderHook, _invoke_extender
 from mloda.core.abstract_plugins.hook_context import HookContext, instrument
@@ -36,6 +37,9 @@ class JoinStep(Step):
     def get_uuids(self) -> set[UUID]:
         """Only this step's uuid is a completion token; the link uuid is shared by both orientations."""
         return {self.uuid}
+
+    def get_parallelization_mode(self) -> set[ParallelizationMode]:
+        return self.destination_framework.supported_parallelization_modes()
 
     def _merge_data(self, cfw: ComputeFramework, from_cfw_data: Any) -> None:
         """Merges data from another ComputeFramework into the current one."""

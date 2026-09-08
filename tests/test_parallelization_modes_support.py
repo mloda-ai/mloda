@@ -19,6 +19,7 @@ from mloda.core.abstract_plugins.components.parallelization_modes import Paralle
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.api.prepare.setup_compute_framework import SetupComputeFramework
 from mloda.core.core.step.feature_group_step import FeatureGroupStep
+from mloda.core.core.step.join_step import JoinStep
 from mloda.core.core.step.transform_frame_work_step import TransformFrameworkStep
 from mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_framework import SqliteFramework
 from mloda_plugins.compute_framework.base_implementations.duckdb.duckdb_framework import DuckDBFramework
@@ -201,6 +202,72 @@ class TestTransformFrameworkStepGetParallelizationMode:
             required_uuids=set(),
             from_feature_group=MagicMock(),
             to_feature_group=MagicMock(),
+        )
+
+        result = step.get_parallelization_mode()
+        assert result == {
+            ParallelizationMode.SYNC,
+            ParallelizationMode.THREADING,
+            ParallelizationMode.MULTIPROCESSING,
+        }
+
+
+class TestJoinStepGetParallelizationMode:
+    """Tests for JoinStep.get_parallelization_mode() delegation."""
+
+    def test_get_parallelization_mode_delegates_to_duckdb_framework(self) -> None:
+        """JoinStep.get_parallelization_mode() with destination_framework=DuckDBFramework must return {SYNC}."""
+        step = JoinStep(
+            link=MagicMock(),
+            destination_framework=DuckDBFramework,
+            source_framework=SqliteFramework,
+            required_uuids=set(),
+            destination_framework_uuids=set(),
+            source_framework_uuids=set(),
+        )
+
+        result = step.get_parallelization_mode()
+        assert result == {ParallelizationMode.SYNC}
+
+    def test_get_parallelization_mode_delegates_to_sqlite_framework(self) -> None:
+        """JoinStep.get_parallelization_mode() with destination_framework=SqliteFramework must return {SYNC}."""
+        step = JoinStep(
+            link=MagicMock(),
+            destination_framework=SqliteFramework,
+            source_framework=DuckDBFramework,
+            required_uuids=set(),
+            destination_framework_uuids=set(),
+            source_framework_uuids=set(),
+        )
+
+        result = step.get_parallelization_mode()
+        assert result == {ParallelizationMode.SYNC}
+
+    def test_get_parallelization_mode_ignores_source_framework_when_it_supports_more(self) -> None:
+        """destination_framework=DuckDBFramework (SYNC only) must win even though source_framework=PyArrowTable
+        supports all three modes; this pins delegation to destination_framework, not source_framework."""
+        step = JoinStep(
+            link=MagicMock(),
+            destination_framework=DuckDBFramework,
+            source_framework=PyArrowTable,
+            required_uuids=set(),
+            destination_framework_uuids=set(),
+            source_framework_uuids=set(),
+        )
+
+        result = step.get_parallelization_mode()
+        assert result == {ParallelizationMode.SYNC}
+
+    def test_get_parallelization_mode_ignores_source_framework_when_it_supports_less(self) -> None:
+        """destination_framework=PyArrowTable (all three modes) must win even though source_framework=DuckDBFramework
+        is SYNC only; rules out both a source_framework read and an intersection of the two."""
+        step = JoinStep(
+            link=MagicMock(),
+            destination_framework=PyArrowTable,
+            source_framework=DuckDBFramework,
+            required_uuids=set(),
+            destination_framework_uuids=set(),
+            source_framework_uuids=set(),
         )
 
         result = step.get_parallelization_mode()

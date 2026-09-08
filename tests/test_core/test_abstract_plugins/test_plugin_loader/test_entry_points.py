@@ -85,9 +85,7 @@ def _write_root_module(base_dir: Path, module_name: str, source: str = "") -> No
 
 
 def _write_broken_optional_root_package(base_dir: Path, pkg_name: str, missing_subdep: str) -> None:
-    """Build a real importable package (no dist-info, not an entry-point provider itself) whose
-    own __init__.py imports a nonexistent module: an "installed but incomplete" dependency whose
-    own transitive import is missing."""
+    """Build an installed-but-incomplete package: its __init__.py imports a nonexistent module."""
     pkg_dir = base_dir / pkg_name
     pkg_dir.mkdir()
     (pkg_dir / "__init__.py").write_text(f"import {missing_subdep}\n")
@@ -129,8 +127,8 @@ def _own_package_broken_manifest_source(pkg_name: str, class_name: str) -> str:
 
 
 def _transitive_optional_dependency_manifest_source(optional_root_pkg: str, class_name: str) -> str:
-    """A manifest importing a declared optional root that is itself installed, but whose own
-    __init__.py fails on an unrelated missing transitive dependency of its own."""
+    """A manifest importing an installed optional root whose own __init__.py fails on a missing
+    transitive dependency."""
     return f"""
     import {optional_root_pkg}
 
@@ -1046,10 +1044,9 @@ class TestPluginLoaderAllLoadsEntryPoints:
 
 
 class TestLoadEntryPointsTransitiveOptionalDependency:
-    """A declared optional root that is itself installed, but whose own code fails on ITS OWN
-    missing transitive dependency, must still be treated as optional (issue #1353): the failing
-    ImportError's `e.name` names the transitive dependency, not the declared root, so matching
-    must also walk the traceback for a frame inside the declared root's own module."""
+    """A declared optional root that imports fine itself but fails on its own missing transitive
+    dependency must still be treated as optional: the ImportError's `e.name` names the transitive
+    module, not the root, so matching must also walk the traceback for a frame inside the root."""
 
     def test_transitive_missing_dependency_inside_declared_optional_root_is_skipped(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
@@ -1103,9 +1100,9 @@ class TestLoadEntryPointsTransitiveOptionalDependency:
     def test_prefix_without_dot_boundary_is_not_mistaken_for_declared_root(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """`eptest_siblingrootx` shares a name PREFIX with declared root `eptest_siblingroot` but
-        is not a submodule of it (no `.` boundary); the traceback fallback must not conflate the
-        two, so the failure must still propagate rather than being skipped as optional."""
+        """`eptest_siblingrootx` shares a name prefix with declared root `eptest_siblingroot` but
+        is not one of its submodules (no `.` boundary), so the traceback fallback must not treat
+        the failure as optional."""
         declared_root = "eptest_siblingroot"
         sibling_pkg = "eptest_siblingrootx"
         missing_subdep = "eptest_siblingrootx_missing_subdep"

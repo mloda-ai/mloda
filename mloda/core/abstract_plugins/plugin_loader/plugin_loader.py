@@ -63,8 +63,8 @@ CORE_PLUGIN_MODULES: tuple[str, ...] = ("mloda.core.abstract_plugins.components.
 
 
 def _traceback_blames_root(exc: ImportError, root: str) -> bool:
-    """Return True if any frame on exc's traceback belongs to root or one of its submodules,
-    catching a declared optional root whose own transitive import is what actually failed."""
+    """True if a frame in exc's traceback belongs to root or a submodule of it, i.e. root
+    imported fine but one of its own imports failed."""
     tb = exc.__traceback__
     while tb is not None:
         module_name = tb.tb_frame.f_globals.get("__name__")

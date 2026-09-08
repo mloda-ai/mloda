@@ -159,6 +159,62 @@ def _shared_root_manifest_source(class_name: str) -> str:
     """
 
 
+def _write_callback_root_package(base_dir: Path, pkg_name: str) -> None:
+    """Build an installed root package whose only export is a decorator that calls back into
+    whatever class it wraps, mimicking a real plugin-registration hook."""
+    pkg_dir = base_dir / pkg_name
+    pkg_dir.mkdir()
+    (pkg_dir / "__init__.py").write_text(
+        textwrap.dedent(
+            """
+            def register(cls):
+                cls.on_register()
+                return cls
+            """
+        )
+    )
+    importlib.invalidate_caches()
+
+
+def _callback_into_own_broken_code_manifest_source(
+    callback_root_pkg: str, unrelated_missing_dep: str, class_name: str
+) -> str:
+    """A manifest whose class is decorated by a declared-optional root's callback; the callback
+    calls back into the manifest's OWN classmethod, which has an unrelated genuine bug."""
+    return f"""
+    import {callback_root_pkg}
+
+    from mloda.core.abstract_plugins.feature_group import FeatureGroup
+
+
+    @{callback_root_pkg}.register
+    class {class_name}(FeatureGroup):
+        @classmethod
+        def on_register(cls) -> None:
+            import {unrelated_missing_dep}
+
+
+    FEATURE_GROUPS = [{class_name}]
+    """
+
+
+def _own_namespace_missing_hard_dep_manifest_source(missing_dep: str, class_name: str) -> str:
+    """A manifest whose own top-level namespace happens to equal a declared optional root, but the
+    failing import is a genuine hard dependency of the manifest itself, unrelated to that root."""
+    return f"""
+    import {missing_dep}
+
+    from mloda.core.abstract_plugins.feature_group import FeatureGroup
+
+
+    class {class_name}(FeatureGroup):
+        pass
+
+
+    FEATURE_GROUPS = [{class_name}]
+    """
+
+
 _FG_MANIFEST = """
     from mloda.core.abstract_plugins.feature_group import FeatureGroup
 
@@ -1126,7 +1182,69 @@ class TestLoadEntryPointsTransitiveOptionalDependency:
         )
         monkeypatch.syspath_prepend(str(tmp_path))
 
-        with pytest.raises(ModuleNotFoundError):
+        with pytest.raises(ModuleNotFoundError) as exc_info:
             PluginLoader().load_entry_points()
+        assert exc_info.value.name == missing_subdep
 
         assert PluginRegistry.default().get(f"{manifest_pkg}.manifest:EpSiblingRootFeatureGroup") is None
+
+    def test_callback_into_own_broken_code_is_not_mistaken_for_optional_root(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A declared-optional root's decorator calling back into the plugin's OWN broken
+        classmethod must not attribute that failure to the root: only the deepest, actually
+        failing frame counts, and here it belongs to the manifest module, not the root."""
+        callback_root_pkg = "eptest_callbackroot"
+        _write_callback_root_package(tmp_path, callback_root_pkg)
+
+        manifest_pkg = "eptest_callbackroot_manifest_pkg"
+        unrelated_missing_dep = "eptest_callbackroot_unrelated_missing_dep"
+        _build_distribution(
+            tmp_path,
+            manifest_pkg,
+            _callback_into_own_broken_code_manifest_source(
+                callback_root_pkg, unrelated_missing_dep, "EpCallbackRootFeatureGroup"
+            ),
+            f"""
+            [mloda.feature_groups]
+            demo = {manifest_pkg}.manifest:FEATURE_GROUPS
+
+            [mloda.optional_dependencies]
+            demo = {manifest_pkg}.optional_deps:OPTIONAL_DEPENDENCIES
+            """,
+        )
+        _write_module(
+            tmp_path, manifest_pkg, "optional_deps", f'OPTIONAL_DEPENDENCIES = frozenset({{"{callback_root_pkg}"}})\n'
+        )
+        monkeypatch.syspath_prepend(str(tmp_path))
+
+        with pytest.raises(ModuleNotFoundError) as exc_info:
+            PluginLoader().load_entry_points()
+        assert exc_info.value.name == unrelated_missing_dep
+
+    def test_own_namespace_matching_declared_root_still_raises_for_own_bug(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A manifest whose own top-level namespace IS the declared optional root (e.g. a plugin
+        author declaring their own namespace optional because it coincides with an upstream
+        dependency name) must still propagate a genuine hard-dependency failure in its own code."""
+        pkg = "eptest_nsroot"
+        missing_dep = "eptest_nsroot_genuinely_missing_hard_dep"
+        _build_distribution(
+            tmp_path,
+            pkg,
+            _own_namespace_missing_hard_dep_manifest_source(missing_dep, "EpNsRootFeatureGroup"),
+            f"""
+            [mloda.feature_groups]
+            demo = {pkg}.manifest:FEATURE_GROUPS
+
+            [mloda.optional_dependencies]
+            demo = {pkg}.optional_deps:OPTIONAL_DEPENDENCIES
+            """,
+        )
+        _write_module(tmp_path, pkg, "optional_deps", f'OPTIONAL_DEPENDENCIES = frozenset({{"{pkg}"}})\n')
+        monkeypatch.syspath_prepend(str(tmp_path))
+
+        with pytest.raises(ModuleNotFoundError) as exc_info:
+            PluginLoader().load_entry_points()
+        assert exc_info.value.name == missing_dep

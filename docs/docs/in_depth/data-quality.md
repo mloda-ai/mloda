@@ -19,7 +19,7 @@ Example: Input Feature Validation Using Custom Validators
 ###### Simple validator
 
 ```python
-from typing import Any, Optional, Set
+from typing import Any
 from mloda.user import mloda
 from mloda.provider import BaseInputData, DataCreator, FeatureGroup, FeatureSet
 from mloda.user import Options, FeatureName, Feature
@@ -28,7 +28,7 @@ from mloda.user.pyarrow import PyArrowTable
 
 class DocBaseValidateInputFeaturesBase(FeatureGroup):
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator({cls.get_class_name()})
 
     @classmethod
@@ -42,7 +42,7 @@ class DocSimpleValidateInputFeatures(FeatureGroup):
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
         return {cls.get_class_name(): [1, 2, 3]}
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return {Feature(name="DocBaseValidateInputFeaturesBase", options=options)}
 
     @classmethod
@@ -146,7 +146,7 @@ import time
 
 
 class DokuValidateInputFeatureExtender(Extender):
-    def wraps(self) -> Set[ExtenderHook]:
+    def wraps(self) -> set[ExtenderHook]:
         return {ExtenderHook.VALIDATE_INPUT_FEATURE}
 
     def __call__(self, func: Any, *args: Any, **kwargs: Any) -> Any:
@@ -187,7 +187,7 @@ from mloda.user import Options
 
 class DocBaseValidateOutputFeaturesBase(FeatureGroup):
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator({cls.get_class_name()})
 
     @classmethod
@@ -242,7 +242,7 @@ We can of course also use an extender.
 
 ```python
 class ValidateOutputFeatureExtender(Extender):
-    def wraps(self) -> Set[ExtenderHook]:
+    def wraps(self) -> set[ExtenderHook]:
         return {ExtenderHook.VALIDATE_OUTPUT_FEATURE}
 
     def __call__(self, func: Any, *args: Any, **kwargs: Any) -> Any:

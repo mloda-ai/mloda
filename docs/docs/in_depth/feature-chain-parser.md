@@ -69,7 +69,6 @@ The new `Options` class separates parameters into two categories:
 
 ```python
 from mloda.user import Options
-from typing import Optional
 
 # New Options architecture
 options = Options(
@@ -265,7 +264,7 @@ Override when you need to add additional input features (e.g., time filter):
 
 ```py
 class TimeWindowFeatureGroup(TimeReferenceMixin, FeatureChainParserMixin, FeatureGroup):
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         # Try string-based parsing first
         _, in_feature = FeatureChainParser.parse_feature_name(str(feature_name), [self.PREFIX_PATTERN])
         if in_feature is not None:
@@ -387,7 +386,7 @@ def match_feature_group_criteria(cls, feature_name, options, data_access_collect
 Handle both string-based and configuration-based features:
 
 ```py
-def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
+def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
     """Extract source feature from either configuration-based options or string parsing."""
 
     # Try string-based parsing first
@@ -505,14 +504,12 @@ on a requested feature travels down self-resolving chains (for example
 `price__mean_imputed__sum_aggr`) to the end of the chain without any ceremony:
 
 ```python
-from typing import Optional
-
 from mloda.provider import FeatureGroup
 from mloda.user import Feature, FeatureName, Options
 
 
 class GraphAnswer(FeatureGroup):
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         # The child inherits ALL of the consumer's group options by default.
         return {Feature("knowledge_graph")}
 ```
@@ -633,7 +630,7 @@ Use `resolve_multi_column_feature()` to automatically discover columns:
 
 ```py
 class MultiColumnConsumer(FeatureGroup):
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         # Request base feature without ~N suffix
         return {Feature("category__onehot_encoded")}
 

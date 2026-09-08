@@ -184,8 +184,8 @@ class DuckDBFeatureGroup(FeatureGroup, MatchData):
         cls,
         feature_name: str,
         options: Options,
-        data_access_collection: Optional[DataAccessCollection] = None,
-        framework_connection_object: Optional[Any] = None,
+        data_access_collection: DataAccessCollection | None = None,
+        framework_connection_object: Any | None = None,
     ) -> Any:
         # Logic to determine if this matcher handles DuckDB connections
         if framework_connection_object and isinstance(framework_connection_object, duckdb.DuckDBPyConnection):
@@ -234,8 +234,8 @@ class DuckDBAnalyticsFeature(FeatureGroup, MatchData):
 
     @classmethod
     def match_data_access(cls, feature_name: str, options: Options,
-                         data_access_collection: Optional[DataAccessCollection] = None,
-                         framework_connection_object: Optional[Any] = None) -> Any:
+                         data_access_collection: DataAccessCollection | None = None,
+                         framework_connection_object: Any | None = None) -> Any:
         # MatchData for connection object matching
         if framework_connection_object and isinstance(framework_connection_object, duckdb.DuckDBPyConnection):
             return framework_connection_object

@@ -43,9 +43,9 @@ The base `ComputeFramework` class provides methods to manage connection objects:
 class ComputeFramework(ABC):
     def __init__(self) -> None:
         # Connection object for frameworks that need persistent connections
-        self.framework_connection_object: Optional[Any] = None
+        self.framework_connection_object: Any | None = None
     
-    def set_framework_connection_object(self, framework_connection_object: Optional[Any] = None) -> None:
+    def set_framework_connection_object(self, framework_connection_object: Any | None = None) -> None:
         """
         Some compute frameworks (e.g., DuckDB, Spark) require sharing their connection
         with merge engines to ensure data consistency. Override this method in
@@ -64,7 +64,7 @@ Framework transformers receive the connection object as a parameter:
 
 ```py
 @classmethod
-def transform_other_fw_to_fw(cls, data: Any, framework_connection_object: Optional[Any] = None) -> Any:
+def transform_other_fw_to_fw(cls, data: Any, framework_connection_object: Any | None = None) -> Any:
     """
     Transform data from the secondary framework to the primary framework.
     
@@ -154,7 +154,7 @@ When implementing a new compute framework that requires a connection object:
 
 1. **Override `set_framework_connection_object`**:
 ```py
-def set_framework_connection_object(self, framework_connection_object: Optional[Any] = None) -> None:
+def set_framework_connection_object(self, framework_connection_object: Any | None = None) -> None:
     if framework_connection_object is not None:
         if not isinstance(framework_connection_object, ExpectedConnectionType):
             raise ValueError(f"Expected connection type, got {type(framework_connection_object)}")
@@ -170,7 +170,7 @@ When implementing transformers for stateful frameworks:
 1. **Accept the connection object parameter**:
 ```py
 @classmethod
-def transform_other_fw_to_fw(cls, data: Any, framework_connection_object: Optional[Any] = None) -> Any:
+def transform_other_fw_to_fw(cls, data: Any, framework_connection_object: Any | None = None) -> Any:
     # Implementation here
 ```
 

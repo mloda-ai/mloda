@@ -56,7 +56,7 @@ Use the `resolve_multi_column_feature()` utility to automatically discover all c
 
 ```py
 class MultiColumnConsumer(FeatureGroup):
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return {Feature.not_typed("MultiColumnFeature")}
 
     @classmethod
@@ -86,7 +86,7 @@ For backwards compatibility, you can still access columns manually:
 
 ```py
 class MultiColumnConsumer(FeatureGroup):
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return {Feature.not_typed("MultiColumnFeature")}
 
     @classmethod
@@ -108,7 +108,7 @@ You can declare a dependency on a specific sub-column directly, without needing 
 
 ```py
 class SpecificSubColumnConsumer(FeatureGroup):
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         # Depend on ONLY base_feature~1, not all columns
         return {Feature("base_feature~1")}
 
@@ -147,8 +147,8 @@ def identify_naming_convention(
     self,
     selected_feature_names: Sequence[FeatureName],
     column_names: set[str],
-    ordering: Optional[str] = None,
-    request_feature_order: Optional[list[str]] = None,
+    ordering: str | None = None,
+    request_feature_order: list[str] | None = None,
 ) -> set[str] | list[str]: ...
 ```
 

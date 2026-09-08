@@ -9,7 +9,7 @@ In the following example, we will reuse the previous feature group example and d
 We will create a DokuExtender class to monitor and log the time taken for the calculate_feature function of the feature group to execute.
 #### 1. Define the Extender
 ```python
-from typing import Set, Any
+from typing import Any
 import time
 from mloda.steward import Extender, ExtenderHook
 import logging
@@ -21,7 +21,7 @@ A simple DokuExtender class:
 
 ```python
 class DokuExtender(Extender):
-    def wraps(self) -> Set[ExtenderHook]:
+    def wraps(self) -> set[ExtenderHook]:
         return {ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE}
     def __call__(self, func: Any, *args: Any, **kwargs: Any) -> Any:
         start = time.time()
@@ -73,7 +73,7 @@ class MetricsExtender(Extender):
     def __init__(self) -> None:
         self.raise_on_error = False  # failures log a warning instead of breaking
 
-    def wraps(self) -> Set[ExtenderHook]:
+    def wraps(self) -> set[ExtenderHook]:
         return {ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE}
 
     def __call__(self, func: Any, *args: Any, **kwargs: Any) -> Any:
@@ -96,7 +96,7 @@ Read it *after* calling `func(*args, **kwargs)` in your own `__call__` to also s
 from mloda.steward import Extender, ExtenderHook, HookContext
 
 class FactsExtender(Extender):
-    def wraps(self) -> Set[ExtenderHook]:
+    def wraps(self) -> set[ExtenderHook]:
         return {ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE}
 
     def __call__(self, func: Any, *args: Any, **kwargs: Any) -> Any:

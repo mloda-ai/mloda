@@ -174,7 +174,7 @@ To create a custom transformer for a new pair of frameworks:
 Example of a two-way transformer:
 
 ```python
-from typing import Any, Optional
+from typing import Any
 
 class CustomTransformer(BaseTransformer):
     @classmethod
@@ -199,7 +199,7 @@ class CustomTransformer(BaseTransformer):
         return other_framework.from_custom(data)
 
     @classmethod
-    def transform_other_fw_to_fw(cls, data: Any, framework_connection_object: Optional[Any] = None) -> Any:
+    def transform_other_fw_to_fw(cls, data: Any, framework_connection_object: Any | None = None) -> Any:
         # Convert from OtherFramework to CustomFramework
         return custom_framework.from_other(data)
 ```

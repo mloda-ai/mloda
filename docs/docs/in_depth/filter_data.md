@@ -51,8 +51,8 @@ Parameters:
 
 -   event_from (datetime): Start of the time range (with timezone).
 -   event_to (datetime): End of the time range (with timezone).
--   valid_from (Optional[datetime]): Start of the validity period (optional, with timezone).
--   valid_to (Optional[datetime]): End of the validity period (optional, with timezone).
+-   valid_from (datetime | None): Start of the validity period (optional, with timezone).
+-   valid_to (datetime | None): End of the validity period (optional, with timezone).
 -   max_exclusive (bool): If True, the upper bounds (event_to, valid_to) are treated as exclusive.
 -   event_time_column: The column name containing event timestamps. Default is "reference_time".
 -   validity_time_column: The column name containing validity timestamps. Default is "time_travel".
@@ -115,12 +115,12 @@ Further, the feature is a data creator, so we create the data here itself.
 ```python
 from mloda.user import mloda
 from mloda.provider import FeatureGroup, FeatureSet, ComputeFramework, BaseInputData, DataCreator
-from typing import Any, Union, Set, Type, Optional
+from typing import Any
 from mloda.user.pyarrow import PyArrowTable
 
 class ExampleOrderFilter(FeatureGroup):
     @classmethod
-    def input_data(cls) -> Optional[BaseInputData]:
+    def input_data(cls) -> BaseInputData | None:
         return DataCreator({cls.get_class_name(), "example_order_id"})
 
     @classmethod

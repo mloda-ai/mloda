@@ -140,7 +140,7 @@ def _(mo):
     ```python
     class ReadFileFeature(FeatureGroup):
         @classmethod
-        def input_data(cls) -> Optional[BaseInputData]:
+        def input_data(cls) -> BaseInputData | None:
             return ReadFile()
 
         @classmethod
@@ -324,13 +324,13 @@ def _(mo):
     class mlodaAPI:
         def __init__(
             self,
-            requested_features: Union[Features, list[Union[Feature, str]]],
-            compute_frameworks: Union[Set[Type[ComputeFramework]], Optional[list[str]]] = None,
-            links: Optional[Set[Link]] = None,
-            data_access_collection: Optional[DataAccessCollection] = None,
-            global_filter: Optional[GlobalFilter] = None,
-            api_input_data_collection: Optional[ApiInputDataCollection] = None,
-            plugin_collector: Optional[PluginCollector] = None,
+            requested_features: Features | list[Feature | str],
+            compute_frameworks: set[type[ComputeFramework]] | list[str] | None = None,
+            links: set[Link] | None = None,
+            data_access_collection: DataAccessCollection | None = None,
+            global_filter: GlobalFilter | None = None,
+            api_data: dict[str, dict[str, Any]] | None = None,
+            plugin_collector: PluginCollector | None = None,
         ) -> None:
 
     data = mlodamloda.run_all(requested_feature,...)
@@ -379,7 +379,7 @@ def _(mo):
 
     ```python
     class OrgLoggingExtender(Extender):
-        def wraps(self) -> Set[ExtenderHook]:
+        def wraps(self) -> set[ExtenderHook]:
             # Function to be wrapped by the Extender
             return {ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE}
 
@@ -394,7 +394,7 @@ def _(mo):
     ```python
     class LogSizeOfData(Extender):
 
-        def wraps(self) -> Set[ExtenderHook]:
+        def wraps(self) -> set[ExtenderHook]:
             # Function to be wrapped by the Extender
             return {ExtenderHook.VALIDATE_INPUT_FEATURE}
 

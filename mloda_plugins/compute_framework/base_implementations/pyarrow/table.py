@@ -39,6 +39,14 @@ def arrow_schema_output_schema(schema: Any) -> OutputSchema | None:
     return tuple((name, seen[name]) for name in sorted(seen, key=str))
 
 
+def arrow_schema_field_type(schema: Any, column_name: str) -> Any | None:
+    """Return column_name's arrow type from its first occurrence; unlike schema.field(), never raises on duplicates."""
+    for name, arrow_type in zip(schema.names, schema.types):
+        if name == column_name:
+            return arrow_type
+    return None
+
+
 class PyArrowTable(ComputeFramework):
     @staticmethod
     def is_available() -> bool:
@@ -83,14 +91,16 @@ class PyArrowTable(ComputeFramework):
         return set(data.schema.names)
 
     def _extract_column_dtype(self, data: Any, column_name: str) -> str | None:
-        if column_name in data.schema.names:
-            return str(data.schema.field(column_name).type)
-        return None
+        arrow_type = arrow_schema_field_type(data.schema, column_name)
+        if arrow_type is None:
+            return None
+        return str(arrow_type)
 
     def _extract_column_data_type(self, data: Any, column_name: str) -> DataType | None:
-        if column_name not in data.schema.names:
+        arrow_type = arrow_schema_field_type(data.schema, column_name)
+        if arrow_type is None:
             return None
-        return DataType.from_arrow_type_safe(data.schema.field(column_name).type)
+        return DataType.from_arrow_type_safe(arrow_type)
 
     def _output_schema(self, data: Any) -> OutputSchema | None:
         if isinstance(data, dict):

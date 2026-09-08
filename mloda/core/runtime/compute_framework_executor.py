@@ -78,9 +78,8 @@ class ComputeFrameworkExecutor:
         # The parent-side copy exists to keep the worker's copy isolated from later in-process
         # mutation of the caller's objects. Fetching it through the register proxy instead would
         # run the round trip in this process and strip any state an extender drops in __getstate__.
-        # A framework is only actually dispatched to a spawned worker when its own class supports
-        # MULTIPROCESSING; TransformFrameworkStep never overrides Step.get_parallelization_mode(),
-        # so parallelization_mode alone cannot be trusted to mean "runs in a worker".
+        # Re-checking cf_class.supported_parallelization_modes() here is defensive: no current
+        # call path can pass MULTIPROCESSING for a class that does not support it.
         dispatched_to_worker = (
             parallelization_mode is ParallelizationMode.MULTIPROCESSING
             and ParallelizationMode.MULTIPROCESSING in cf_class.supported_parallelization_modes()

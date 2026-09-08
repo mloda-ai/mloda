@@ -25,6 +25,7 @@ from mloda.core.core.step.join_step import JoinStep
 from mloda.core.core.step.transform_frame_work_step import TransformFrameworkStep
 from mloda.core.runtime.compute_framework_executor import ComputeFrameworkExecutor
 from mloda.core.runtime.worker_manager import WorkerManager
+from mloda_plugins.compute_framework.base_implementations.duckdb.duckdb_framework import DuckDBFramework
 
 
 class _StateHoldingExtender(Extender):
@@ -520,6 +521,29 @@ class TestGetExecutionFunction:
         result = executor._get_execution_function(mode_by_cfw, mode_by_step)
 
         assert result == executor.multi_execute_step
+
+    def test_returns_sync_execute_step_for_sync_only_tfs_step_even_when_register_supports_multiprocessing(
+        self,
+    ) -> None:
+        """Should return sync_execute_step for a SYNC-only TFS step even when multiprocessing is registered."""
+        cfw_register = Mock(spec=CfwManager)
+        worker_manager = Mock(spec=WorkerManager)
+        executor = ComputeFrameworkExecutor(cfw_register, worker_manager)
+
+        step = TransformFrameworkStep(
+            from_framework=DuckDBFramework,
+            to_framework=DuckDBFramework,
+            required_uuids=set(),
+            from_feature_group=MagicMock(),
+            to_feature_group=MagicMock(),
+        )
+
+        mode_by_cfw = {ParallelizationMode.SYNC, ParallelizationMode.MULTIPROCESSING}
+        mode_by_step = step.get_parallelization_mode()
+
+        result = executor._get_execution_function(mode_by_cfw, mode_by_step)
+
+        assert result == executor.sync_execute_step
 
 
 class TestPrepareExecuteStep:
@@ -1220,3 +1244,33 @@ class TestMultiExecuteStep:
 
         # Verify from_cfw_uuid was prepared
         assert cfw_register.get_cfw_uuid.call_count >= 1
+
+    def test_does_not_bind_tfs_connection(self) -> None:
+        """multi_execute_step must not call _bind_tfs_connection: the cfw is pickled to a spawned worker process."""
+        cfw_register = Mock(spec=CfwManager)
+        worker_manager = Mock(spec=WorkerManager)
+        executor = ComputeFrameworkExecutor(cfw_register, worker_manager)
+
+        step = Mock(spec=FeatureGroupStep)
+        step.tfs_ids = []
+        step.features = Mock()
+        step.features.any_uuid = uuid4()
+        step.children_if_root = []
+        step.compute_framework = Mock()
+        step.compute_framework.get_class_name.return_value = "TestCFW"
+        step.get_uuids.return_value = {uuid4()}
+
+        cfw_uuid = uuid4()
+        cfw_register.get_unique_cfw_uuid.return_value = None
+        cfw_register.get_cfw_uuid.return_value = cfw_uuid
+
+        mock_cfw = Mock(spec=ComputeFramework)
+        executor.cfw_collection[cfw_uuid] = mock_cfw
+
+        worker_manager.get_process_queues.return_value = (Mock(), Mock(), Mock())
+
+        executor._bind_tfs_connection = Mock()  # type: ignore[method-assign]
+
+        executor.multi_execute_step(step)
+
+        executor._bind_tfs_connection.assert_not_called()

@@ -5,6 +5,7 @@ from mloda.core.abstract_plugins.components.error_utils import internal_invarian
 from mloda.core.abstract_plugins.components.framework_transformer.cfw_transformer import (
     ComputeFrameworkTransformer,
 )
+from mloda.core.abstract_plugins.components.parallelization_modes import ParallelizationMode
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.core.cfw_manager import CfwManager
 from mloda.core.core.step.abstract_step import Step
@@ -75,6 +76,9 @@ class TransformFrameworkStep(Step):
 
     def get_uuids(self) -> set[UUID]:
         return {self.uuid}
+
+    def get_parallelization_mode(self) -> set[ParallelizationMode]:
+        return self.to_framework.supported_parallelization_modes()
 
     def execute(
         self,

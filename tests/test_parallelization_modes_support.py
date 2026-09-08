@@ -19,6 +19,7 @@ from mloda.core.abstract_plugins.components.parallelization_modes import Paralle
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.api.prepare.setup_compute_framework import SetupComputeFramework
 from mloda.core.core.step.feature_group_step import FeatureGroupStep
+from mloda.core.core.step.transform_frame_work_step import TransformFrameworkStep
 from mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_framework import SqliteFramework
 from mloda_plugins.compute_framework.base_implementations.duckdb.duckdb_framework import DuckDBFramework
 
@@ -145,6 +146,36 @@ class TestSetupComputeFrameworkParallelizationModeFiltering:
             features=features,
         )
         assert SqliteFramework in setup.compute_frameworks
+
+
+class TestTransformFrameworkStepGetParallelizationMode:
+    """Tests for TransformFrameworkStep.get_parallelization_mode() delegation."""
+
+    def test_get_parallelization_mode_delegates_to_duckdb_framework(self) -> None:
+        """TransformFrameworkStep.get_parallelization_mode() with to_framework=DuckDBFramework must return {SYNC}."""
+        step = TransformFrameworkStep(
+            from_framework=SqliteFramework,
+            to_framework=DuckDBFramework,
+            required_uuids=set(),
+            from_feature_group=MagicMock(),
+            to_feature_group=MagicMock(),
+        )
+
+        result = step.get_parallelization_mode()
+        assert result == {ParallelizationMode.SYNC}
+
+    def test_get_parallelization_mode_delegates_to_sqlite_framework(self) -> None:
+        """TransformFrameworkStep.get_parallelization_mode() with to_framework=SqliteFramework must return {SYNC}."""
+        step = TransformFrameworkStep(
+            from_framework=DuckDBFramework,
+            to_framework=SqliteFramework,
+            required_uuids=set(),
+            from_feature_group=MagicMock(),
+            to_feature_group=MagicMock(),
+        )
+
+        result = step.get_parallelization_mode()
+        assert result == {ParallelizationMode.SYNC}
 
 
 class TestFeatureGroupStepGetParallelizationMode:

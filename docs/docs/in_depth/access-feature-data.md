@@ -164,7 +164,7 @@ As a side note, the ReadFileFeature was also used for the global scope automatis
 To use it, we can simply:
 
 ```python
-from typing import Any, List
+from typing import Any
 from pathlib import Path
 
 from mloda.user import mloda
@@ -177,7 +177,7 @@ from mloda_plugins.feature_group.input_data.read_files.csv import CsvReader
 file_path = os.getcwd()
 file_path += "/docs/docs/in_depth"
 
-feature_list: List[Feature | str] = []
+feature_list: list[Feature | str] = []
 feature_list.append(
     Feature(
         name="AExample",
@@ -215,8 +215,6 @@ Use cases:
 The following example shows a simple ApiData setup.
 
 ```python
-from typing import List
-
 from mloda.user import mloda
 from mloda.user.pandas import PandasDataFrame
 

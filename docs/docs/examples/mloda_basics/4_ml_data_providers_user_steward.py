@@ -329,7 +329,7 @@ def _(mo):
             links: set[Link] | None = None,
             data_access_collection: DataAccessCollection | None = None,
             global_filter: GlobalFilter | None = None,
-            api_input_data_collection: ApiInputDataCollection | None = None,
+            api_data: dict[str, dict[str, Any]] | None = None,
             plugin_collector: PluginCollector | None = None,
         ) -> None:
 

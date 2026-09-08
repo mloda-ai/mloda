@@ -63,15 +63,15 @@ CORE_PLUGIN_MODULES: tuple[str, ...] = ("mloda.core.abstract_plugins.components.
 
 
 def _traceback_blames_root(exc: ImportError, root: str) -> bool:
-    """True if a frame in exc's traceback belongs to root or a submodule of it, i.e. root
-    imported fine but one of its own imports failed."""
+    """True if the innermost (deepest) frame of exc's traceback, i.e. where the failure actually
+    occurred, belongs to root or a submodule of it."""
     tb = exc.__traceback__
-    while tb is not None:
-        module_name = tb.tb_frame.f_globals.get("__name__")
-        if isinstance(module_name, str) and (module_name == root or module_name.startswith(f"{root}.")):
-            return True
+    if tb is None:
+        return False
+    while tb.tb_next is not None:
         tb = tb.tb_next
-    return False
+    module_name = tb.tb_frame.f_globals.get("__name__")
+    return isinstance(module_name, str) and (module_name == root or module_name.startswith(f"{root}."))
 
 
 class PluginLoader:
@@ -185,12 +185,17 @@ class PluginLoader:
                         raise
                     dist_name = entry_point.dist.name if entry_point.dist is not None else None
                     optional_roots = declared_optional.get((dist_name, entry_point.name), OPTIONAL_PLUGIN_DEPENDENCIES)
-                    if root in optional_roots or any(_traceback_blames_root(e, r) for r in optional_roots):
+                    # Exclude any root the entry point's own module is at or under, so a namespace
+                    # collision can't misattribute the plugin's own bug to that root's traceback frame.
+                    own_module = entry_point.module
+                    tb_roots = [r for r in optional_roots if own_module != r and not own_module.startswith(f"{r}.")]
+                    blamed_root = next((r for r in tb_roots if _traceback_blames_root(e, r)), None)
+                    if root in optional_roots or blamed_root is not None:
                         logger.warning(
                             "Skipping entry point %s (%s): missing optional dependency %s",
                             entry_point.name,
                             entry_point.value,
-                            e.name,
+                            e.name or blamed_root,
                         )
                         continue
                     raise

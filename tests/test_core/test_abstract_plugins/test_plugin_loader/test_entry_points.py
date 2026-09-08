@@ -17,7 +17,9 @@ Contract under test:
 - A companion `mloda.optional_dependencies` entry point (same name) declares per-entry-point
   optional import roots; ImportError (including ModuleNotFoundError) is checked against it,
   falling back to the global OPTIONAL_PLUGIN_DEPENDENCIES set, and logged at WARNING, except
-  for the entry point's own package root, which always re-raises.
+  for the entry point's own package root, which always re-raises. A root that only imports fine
+  because a transitive import of ITS own fails is matched via the innermost traceback frame, but
+  never when that frame (or the entry point's own namespace) is the entry point's own module.
 
 Each test builds real on-disk distributions (package + dist-info) in tmp_path with a unique
 package name, so importlib.metadata discovery is exercised for real and tests stay xdist-safe.

@@ -1103,7 +1103,7 @@ class TestMultiExecuteStep:
         executor.multi_execute_step(step)
 
         worker_manager.create_worker_process.assert_called_once_with(
-            cfw_uuid, mock_worker, (cfw_register, mock_cfw, None)
+            cfw_uuid, mock_worker, (cfw_register, mock_cfw, None, False)
         )
 
     def test_uses_existing_worker_process_if_exists(self) -> None:
@@ -1274,3 +1274,185 @@ class TestMultiExecuteStep:
         executor.multi_execute_step(step)
 
         executor._bind_tfs_connection.assert_not_called()
+
+    @patch("mloda.core.runtime.compute_framework_executor.worker")
+    def test_passes_needs_tfs_connection_false_for_non_tfs_step_even_when_destination_type_is_in_tfs_connection_map(
+        self, mock_worker: Any
+    ) -> None:
+        """tfs_connection_map is keyed by destination CFW class across the whole plan. A non-TFS
+        step (FeatureGroupStep/JoinStep) must never get needs_tfs_connection=True just because its
+        CFW class happens to match a tfs_connection_map entry populated by an unrelated TFS step
+        elsewhere in the plan; _bind_tfs_connection gates on isinstance(step, TransformFrameworkStep)
+        and multi_execute_step's needs_tfs_connection computation must mirror that gate."""
+        cfw_register = Mock(spec=CfwManager)
+        worker_manager = Mock(spec=WorkerManager)
+        executor = ComputeFrameworkExecutor(cfw_register, worker_manager)
+
+        step = Mock(spec=FeatureGroupStep)
+        step.tfs_ids = []
+        step.features = Mock()
+        step.features.any_uuid = uuid4()
+        step.children_if_root = []
+        step.compute_framework = Mock()
+        step.compute_framework.get_class_name.return_value = "TestCFW"
+        step.get_uuids.return_value = {uuid4()}
+
+        cfw_uuid = uuid4()
+        cfw_register.get_unique_cfw_uuid.return_value = None
+        cfw_register.get_cfw_uuid.return_value = cfw_uuid
+
+        mock_cfw = Mock(spec=ComputeFramework)
+        executor.cfw_collection[cfw_uuid] = mock_cfw
+        # Keying off type(mock_cfw) avoids needing a real ComputeFramework subclass instance.
+        executor.tfs_connection_map = {type(mock_cfw): Mock()}
+
+        worker_manager.get_process_queues.return_value = None
+
+        mock_process = Mock()
+        mock_cmd_queue = Mock()
+        mock_result_queue = Mock()
+        worker_manager.create_worker_process.return_value = (mock_process, mock_cmd_queue, mock_result_queue)
+
+        executor.multi_execute_step(step)
+
+        worker_manager.create_worker_process.assert_called_once_with(
+            cfw_uuid, mock_worker, (cfw_register, mock_cfw, None, False)
+        )
+
+    @patch("mloda.core.runtime.compute_framework_executor.worker")
+    def test_passes_needs_tfs_connection_true_for_a_real_tfs_step_whose_destination_type_is_in_tfs_connection_map(
+        self, mock_worker: Any
+    ) -> None:
+        """The genuine positive case: a real TransformFrameworkStep whose to_framework CFW class
+        is in tfs_connection_map must reach create_worker_process with needs_tfs_connection=True."""
+        cfw_register = Mock(spec=CfwManager)
+        worker_manager = Mock(spec=WorkerManager)
+        executor = ComputeFrameworkExecutor(cfw_register, worker_manager)
+
+        step = Mock(spec=TransformFrameworkStep)
+        step.source_framework_uuid = uuid4()
+        step.from_framework = Mock()
+        step.from_framework.get_class_name.return_value = "FromCFW"
+        step.required_uuids = [uuid4()]
+        # multi_execute_step records the dispatch, so the step must answer get_uuids()
+        # with real uuids like a TransformFrameworkStep does.
+        step.get_uuids.return_value = {uuid4()}
+
+        from_cfw_uuid = uuid4()
+        cfw_register.get_cfw_uuid.side_effect = [from_cfw_uuid, from_cfw_uuid]
+
+        from_cfw = Mock(spec=ComputeFramework)
+        from_cfw.children_if_root = set()
+        executor.cfw_collection[from_cfw_uuid] = from_cfw
+
+        step.link_id = None
+        step.uuid = uuid4()
+
+        mock_to_cfw_class = Mock()
+        mock_to_cfw_instance = Mock(spec=ComputeFramework)
+        mock_to_cfw_class.return_value = mock_to_cfw_instance
+        mock_to_cfw_class.supported_parallelization_modes.return_value = {
+            ParallelizationMode.SYNC,
+            ParallelizationMode.THREADING,
+            ParallelizationMode.MULTIPROCESSING,
+        }
+        step.to_framework = mock_to_cfw_class
+
+        new_uuid = uuid4()
+        mock_to_cfw_instance.get_uuid.return_value = new_uuid
+        cfw_register.get_run_context.return_value = RunContext()
+
+        # Keying off type(mock_to_cfw_instance) so the TFS destination's own CFW class is resolved.
+        executor.tfs_connection_map = {type(mock_to_cfw_instance): Mock()}
+
+        worker_manager.get_process_queues.return_value = None
+
+        mock_process = Mock()
+        mock_cmd_queue = Mock()
+        mock_result_queue = Mock()
+        worker_manager.create_worker_process.return_value = (mock_process, mock_cmd_queue, mock_result_queue)
+
+        with patch("mloda.core.runtime.compute_framework_executor.multiprocessing.Lock"):
+            executor.multi_execute_step(step)
+
+        worker_manager.create_worker_process.assert_called_once_with(
+            new_uuid, mock_worker, (cfw_register, mock_to_cfw_instance, from_cfw_uuid, True)
+        )
+
+    @patch("mloda.core.runtime.compute_framework_executor.worker")
+    def test_passes_needs_tfs_connection_false_when_tfs_connection_map_is_empty(self, mock_worker: Any) -> None:
+        cfw_register = Mock(spec=CfwManager)
+        worker_manager = Mock(spec=WorkerManager)
+        executor = ComputeFrameworkExecutor(cfw_register, worker_manager)
+
+        step = Mock(spec=FeatureGroupStep)
+        step.tfs_ids = []
+        step.features = Mock()
+        step.features.any_uuid = uuid4()
+        step.children_if_root = []
+        step.compute_framework = Mock()
+        step.compute_framework.get_class_name.return_value = "TestCFW"
+        step.get_uuids.return_value = {uuid4()}
+
+        cfw_uuid = uuid4()
+        cfw_register.get_unique_cfw_uuid.return_value = None
+        cfw_register.get_cfw_uuid.return_value = cfw_uuid
+
+        mock_cfw = Mock(spec=ComputeFramework)
+        executor.cfw_collection[cfw_uuid] = mock_cfw
+        assert executor.tfs_connection_map == {}
+
+        worker_manager.get_process_queues.return_value = None
+
+        mock_process = Mock()
+        mock_cmd_queue = Mock()
+        mock_result_queue = Mock()
+        worker_manager.create_worker_process.return_value = (mock_process, mock_cmd_queue, mock_result_queue)
+
+        executor.multi_execute_step(step)
+
+        worker_manager.create_worker_process.assert_called_once_with(
+            cfw_uuid, mock_worker, (cfw_register, mock_cfw, None, False)
+        )
+
+    @patch("mloda.core.runtime.compute_framework_executor.worker")
+    def test_passes_needs_tfs_connection_false_when_destination_type_is_not_in_tfs_connection_map(
+        self, mock_worker: Any
+    ) -> None:
+        cfw_register = Mock(spec=CfwManager)
+        worker_manager = Mock(spec=WorkerManager)
+        executor = ComputeFrameworkExecutor(cfw_register, worker_manager)
+
+        step = Mock(spec=FeatureGroupStep)
+        step.tfs_ids = []
+        step.features = Mock()
+        step.features.any_uuid = uuid4()
+        step.children_if_root = []
+        step.compute_framework = Mock()
+        step.compute_framework.get_class_name.return_value = "TestCFW"
+        step.get_uuids.return_value = {uuid4()}
+
+        cfw_uuid = uuid4()
+        cfw_register.get_unique_cfw_uuid.return_value = None
+        cfw_register.get_cfw_uuid.return_value = cfw_uuid
+
+        mock_cfw = Mock(spec=ComputeFramework)
+        executor.cfw_collection[cfw_uuid] = mock_cfw
+
+        class _UnrelatedCfwType(ComputeFramework):
+            pass
+
+        executor.tfs_connection_map = {_UnrelatedCfwType: Mock()}
+
+        worker_manager.get_process_queues.return_value = None
+
+        mock_process = Mock()
+        mock_cmd_queue = Mock()
+        mock_result_queue = Mock()
+        worker_manager.create_worker_process.return_value = (mock_process, mock_cmd_queue, mock_result_queue)
+
+        executor.multi_execute_step(step)
+
+        worker_manager.create_worker_process.assert_called_once_with(
+            cfw_uuid, mock_worker, (cfw_register, mock_cfw, None, False)
+        )

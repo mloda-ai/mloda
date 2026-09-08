@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import inspect
 import pickle  # nosec B403
+import sys
 from typing import Any, ClassVar
 from unittest.mock import Mock
 
@@ -246,7 +247,12 @@ class TestGetstateDropsFrameworkConnectionObject:
 
 class TestComputeFrameworkGetstateIsFinal:
     def test_getstate_is_marked_final(self) -> None:
-        assert getattr(ComputeFramework.__getstate__, "__final__", False) is True
+        # typing.final only sets the runtime __final__ marker from Python 3.11 on; object itself
+        # has no __getstate__ before 3.11 either, so the fallback comparison stays version-safe.
+        assert "__getstate__" in ComputeFramework.__dict__
+        assert ComputeFramework.__dict__["__getstate__"] is not getattr(object, "__getstate__", None)
+        if sys.version_info >= (3, 11):
+            assert getattr(ComputeFramework.__getstate__, "__final__", False) is True
 
 
 class TestConvertFlightServerDataBackIsAnInstanceMethod:

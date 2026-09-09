@@ -26,9 +26,9 @@ jobs:
         run: |
           set -u
           : "${BASE_SHA:?}" "${HEAD_SHA:?}"
-          # Types kept in sync with the commit-analyzer releaseRules in .releaserc.yaml
-          # (tests/test_commit_lint_types.py pins them), plus revert: not in .releaserc.yaml
-          # but still release-triggering via commit-analyzer's default rules.
+          # Types kept in sync with the commit-analyzer releaseRules in .releaserc.yaml, plus
+          # revert: not in .releaserc.yaml but still release-triggering via commit-analyzer's
+          # default rules.
           pattern='^(Revert "|(minor|feat|impr|refactor|perf|fix|ci|docs|chore|style|test|build|revert)(\([^)]+\))?!?: ).+$'
           failed=0
           check() {

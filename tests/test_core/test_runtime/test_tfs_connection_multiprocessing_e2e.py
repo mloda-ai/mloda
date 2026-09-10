@@ -127,3 +127,42 @@ def test_tfs_connection_reaches_multiprocessing_worker(flight_server: Any) -> No
     assert final.column("mp_tfs_final").to_pylist() == [2, 4, 6]
 
     setup_connection.close()
+
+
+@pytest.mark.timeout(30)
+@pytest.mark.skipif(duckdb is None or pa is None, reason="DuckDB or PyArrow not installed.")
+def test_tfs_direct_duckdb_materialization_needs_connection(flight_server: Any) -> None:
+    """Request mp_tfs_doubled directly from DuckDB TFS destination (not via PyArrow re-emission).
+    
+    This test captures the gap in #1375: requesting a connection-requiring TFS destination 
+    feature directly fails because ComputeFramework.convert_flight_server_data_back hard-codes 
+    None as the connection in the parent process.
+    
+    Expected behavior after the fix:
+    - Parent process binds a connection for this materialization step, OR
+    - Failure is clearly attributed instead of a generic ValueError
+    """
+    setup_connection = duckdb.connect()
+    plugin_collector = PluginCollector.enabled_feature_groups(
+        {_MpTfsRawValSource, _MpTfsDoubledDuckDBFG}
+    )
+    dac = DataAccessCollection(connections={setup_connection})
+
+    # Request mp_tfs_doubled directly — this is the gap described in #1375
+    result = mloda.run_all(
+        [Feature("mp_tfs_doubled")],  # Direct request, not through PyArrow re-emission
+        compute_frameworks={PythonDictFramework, _MultiprocessingConnectionDuckDBFramework},
+        plugin_collector=plugin_collector,
+        data_access_collection=dac,
+        parallelization_modes={ParallelizationMode.MULTIPROCESSING},
+        flight_server=flight_server,
+    )
+
+    assert result is not None
+    assert len(result) == 1
+    doubled = result[0]
+    assert isinstance(doubled, pa.Table)
+    assert "mp_tfs_doubled" in doubled.column_names
+    assert doubled.column("mp_tfs_doubled").to_pylist() == [2, 4, 6]
+
+    setup_connection.close()

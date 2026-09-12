@@ -108,7 +108,6 @@ def worker(
     cfw_register: CfwManager,
     cfw: ComputeFramework,
     from_cfw: UUID,
-    needs_tfs_connection: bool = False,
     worker_index: int = 0,
 ) -> None:
     data = None
@@ -138,31 +137,6 @@ def worker(
 
             _handle_stop_command(command_queue)
             return
-
-    if needs_tfs_connection and cfw.framework_connection_object is None:
-        try:
-            cfw.set_framework_connection_object(None)
-        except Exception as e:
-            error_message = f"An error occurred: {e}"
-            msg = f"{error_message}\nFull traceback:\n{traceback.format_exc()}"
-            logging.error(msg)
-            exc_info = traceback.format_exc()
-            if cfw_register:
-                try:
-                    cfw_register.set_error(msg, exc_info, exception=e)
-                except Exception:
-                    # exception not picklable across the manager proxy; degrade to string-only
-                    cfw_register.set_error(msg, exc_info)
-
-            _handle_stop_command(command_queue)
-            return
-        if cfw.framework_connection_object is None:
-            logger.warning(
-                "%s did not bind a connection in set_framework_connection_object(None); "
-                "override it to self-construct one for MULTIPROCESSING, or drop MULTIPROCESSING "
-                "from supported_parallelization_modes() so the step stays in the parent process.",
-                type(cfw).__name__,
-            )
 
     while True:
         try:

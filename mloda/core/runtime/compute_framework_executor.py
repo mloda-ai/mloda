@@ -334,13 +334,10 @@ class ComputeFrameworkExecutor:
         existing = self.worker_manager.get_process_queues(cfw_uuid)
 
         if existing is None:
-            needs_tfs_connection = isinstance(step, TransformFrameworkStep) and (
-                self.tfs_connection_map.get(type(self.cfw_collection[cfw_uuid])) is not None
-            )
             process, command_queue, result_queue = self.worker_manager.create_worker_process(
                 cfw_uuid,
                 worker,
-                (self.cfw_register, self.cfw_collection[cfw_uuid], from_cfw, needs_tfs_connection),
+                (self.cfw_register, self.cfw_collection[cfw_uuid], from_cfw),
             )
         else:
             process, command_queue, result_queue = existing

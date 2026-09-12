@@ -776,6 +776,7 @@ class TestPrepareTfsAndJoinStep:
         """Should return from_cfw instance for TransformFrameworkStep."""
         cfw_register = Mock(spec=CfwManager)
         worker_manager = Mock(spec=WorkerManager)
+        worker_manager.get_process_queues.return_value = None
         executor = ComputeFrameworkExecutor(cfw_register, worker_manager)
 
         step = Mock(spec=TransformFrameworkStep)
@@ -797,6 +798,7 @@ class TestPrepareTfsAndJoinStep:
         """Should return from_cfw for JoinStep using link UUID."""
         cfw_register = Mock(spec=CfwManager)
         worker_manager = Mock(spec=WorkerManager)
+        worker_manager.get_process_queues.return_value = None
         executor = ComputeFrameworkExecutor(cfw_register, worker_manager)
 
         step = Mock(spec=JoinStep)
@@ -823,6 +825,7 @@ class TestPrepareTfsAndJoinStep:
         """Should fallback to source_framework_uuids if link UUID not found."""
         cfw_register = Mock(spec=CfwManager)
         worker_manager = Mock(spec=WorkerManager)
+        worker_manager.get_process_queues.return_value = None
         executor = ComputeFrameworkExecutor(cfw_register, worker_manager)
 
         step = Mock(spec=JoinStep)

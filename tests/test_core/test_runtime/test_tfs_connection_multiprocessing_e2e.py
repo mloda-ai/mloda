@@ -1,6 +1,6 @@
-"""E2E: binds a working connection inside a spawned MULTIPROCESSING worker for a
-connection-requiring destination framework, mirroring Spark/Iceberg's worker-side
-self-construction pattern without the cost of a real JVM/catalog in the worker."""
+"""E2E: a connection-requiring destination framework opts into MULTIPROCESSING and
+self-constructs its connection worker-side, without needing a real JVM or catalog
+in the worker."""
 
 from typing import Any
 
@@ -27,8 +27,8 @@ from mloda_plugins.compute_framework.base_implementations.python_dict.python_dic
 
 
 class _MultiprocessingConnectionDuckDBFramework(DuckDBFramework):
-    """Stands in for Spark/Iceberg: self-constructs its connection worker-side instead of
-    receiving the parent process's live object."""
+    """Opts into MULTIPROCESSING and self-constructs its connection worker-side instead
+    of receiving the parent process's live object."""
 
     @classmethod
     def supported_parallelization_modes(cls) -> set[ParallelizationMode]:

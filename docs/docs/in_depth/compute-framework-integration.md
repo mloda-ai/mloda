@@ -290,6 +290,7 @@ For more details on how data transformation works between compute frameworks, se
 
 - **DuckDB**: feature groups need a connection object supplied via the data access collection; mloda validates it and pins its session timezone to UTC but never opens or closes it.
 - **Spark**: requires PySpark and a Java 8+ runtime (`JAVA_HOME`). mloda can auto-create a local `SparkSession`; for production, supply a configured one through the data access collection. Spark's own distributed processing replaces mloda's built-in multiprocessing.
+- **Iceberg**: needs a catalog supplied through the data access collection. The catalog stays in the parent process, so Iceberg steps run in SYNC or THREADING mode, never in a multiprocessing worker.
 
 ## SQL Relation Helpers (DuckDB / SQLite)
 

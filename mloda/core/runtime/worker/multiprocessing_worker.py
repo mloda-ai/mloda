@@ -159,7 +159,8 @@ def worker(
         if cfw.framework_connection_object is None:
             logger.warning(
                 "%s did not bind a connection in set_framework_connection_object(None); "
-                "override it to self-construct one for MULTIPROCESSING.",
+                "override it to self-construct one for MULTIPROCESSING, or drop MULTIPROCESSING "
+                "from supported_parallelization_modes() so the step stays in the parent process.",
                 type(cfw).__name__,
             )
 

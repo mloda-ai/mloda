@@ -123,7 +123,7 @@ class ParquetReader(ReadFile):
         if pyarrow_parquet is None:
             raise NotImplementedError
         parquet_file = pyarrow_parquet.ParquetFile(file_name)
-        return [column.name for column in parquet_file.schema]
+        return list(parquet_file.schema_arrow.names)
 
     @classmethod
     def describe_columns(cls, data_access: Any) -> dict[str, DataType | None]:

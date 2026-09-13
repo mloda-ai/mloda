@@ -72,7 +72,7 @@ Readers are classified structurally; no reader code is executed for classificati
 
 ### Column discovery
 
-`BaseInputData.describe_columns(data_access) -> dict[str, DataType | None]` maps column name to `DataType` (`None` where unknown), and raises `NotImplementedError` when a reader can't enumerate columns. `ReadFile` supplies a family default wrapping `get_column_names` with unknown types; `JsonReader`, `ParquetReader`, `FeatherReader`, `OrcReader`, and `SQLITEReader` override it to report real types from the format's own schema.
+`BaseInputData.describe_columns(data_access) -> dict[str, DataType | None]` maps column name to `DataType` (`None` where unknown), and raises `NotImplementedError` when a reader can't enumerate columns. `ReadFile` supplies a family default wrapping `get_column_names` with unknown types; `JsonReader`, `ParquetReader`, `FeatherReader`, and `OrcReader` override it to report real types from the format's own schema. `SQLITEReader` overrides it too, from SQLite's declared (unenforced) column types; it needs `data_access["table_name"]` already set, e.g. `{"sqlite": path, "table_name": "customers"}`.
 
 ### Selecting among sibling readers
 

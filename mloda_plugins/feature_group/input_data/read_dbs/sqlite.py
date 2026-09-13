@@ -292,6 +292,7 @@ class SQLITEReader(ReadDB):
             raise ValueError(
                 f"{cls.__name__}.describe_columns requires data_access to be a dict with a 'table_name' key."
             )
+        cls.is_valid_credentials(data_access)
         table_name = str(data_access["table_name"])
         result, _ = cls.read_db(data_access, query=f"PRAGMA table_info({quote_ident(table_name)});")
         if not result:
@@ -300,6 +301,8 @@ class SQLITEReader(ReadDB):
 
     @staticmethod
     def _affinity_to_datatype(declared_type: str) -> DataType | None:
+        # Independent of the compute framework's own _sqlite_affinity_to_arrow_type (sqlite_relation.py);
+        # the two may map BLOB to a different binary width, since neither seam is derived from the other.
         upper = declared_type.upper()
         if "INT" in upper:
             return DataType.INT64

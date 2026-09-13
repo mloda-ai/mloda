@@ -143,8 +143,8 @@ class JsonReader(ReadFile):
     def get_column_names(cls, file_name: str) -> Any:
         if pyarrow_json is None:
             raise NotImplementedError
-        # Read only the first batch of rows to infer the schema
-        read_options = pyarrow_json.ReadOptions(block_size=65536)  # Reads a small sample
+        # block_size is a chunking granularity, not a row-count sample; this parses the whole file.
+        read_options = pyarrow_json.ReadOptions(block_size=65536)
         table = pyarrow_json.read_json(file_name, read_options=read_options)
         return table.schema.names
 
@@ -152,6 +152,6 @@ class JsonReader(ReadFile):
     def describe_columns(cls, data_access: Any) -> dict[str, DataType | None]:
         if pyarrow_json is None:
             raise NotImplementedError
-        read_options = pyarrow_json.ReadOptions(block_size=65536)  # Reads a small sample
+        read_options = pyarrow_json.ReadOptions(block_size=65536)
         table = pyarrow_json.read_json(data_access, read_options=read_options)
         return {field.name: DataType.from_arrow_type_safe(field.type) for field in table.schema}

@@ -254,6 +254,25 @@ class TestSQLITEReader:
         assert result["amount"] is None
         assert result["precise"] is None
 
+    def test_describe_columns_nonexistent_db_does_not_create_file(self, tmp_path: Any) -> None:
+        """describe_columns must not create a db file as a side effect of a wrong path
+        (sqlite3.connect creates the file); it should fail fast via is_valid_credentials."""
+        nonexistent_path = tmp_path / "nonexistent.db"
+        assert not nonexistent_path.exists()
+
+        with pytest.raises(ValueError):
+            SQLITEReader.describe_columns({"sqlite": str(nonexistent_path), "table_name": "t"})
+
+        assert not nonexistent_path.exists()
+
+    def test_describe_columns_nonexistent_db_error_mentions_path(self, tmp_path: Any) -> None:
+        """The raised ValueError must name the missing db path, not just the table name,
+        so the error points at the real problem (wrong db path)."""
+        nonexistent_path = tmp_path / "nonexistent.db"
+
+        with pytest.raises(ValueError, match=re.escape(str(nonexistent_path))):
+            SQLITEReader.describe_columns({"sqlite": str(nonexistent_path), "table_name": "t"})
+
     def test_describe_columns_quotes_identifiers_blocks_injection(self, temp_sqlite_db: Any) -> None:
         """A crafted table_name must not break out of PRAGMA table_info(...)'s identifier position; quote_ident
         confines it to one identifier, so the injected DROP never runs and describe_columns raises ValueError."""

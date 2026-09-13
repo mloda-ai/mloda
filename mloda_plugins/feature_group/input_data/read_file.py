@@ -199,7 +199,28 @@ class ReadFile(BaseInputData):
         try:
             columns = cls.get_column_names(file_name)
         except NotImplementedError:
+            # An override that raises NotImplementedError (e.g. an optional dependency is absent) still cannot
+            # confirm a chain/column-separated name; a base class that never overrides get_column_names defers
+            # to _declines_unvalidated_separator_name upstream, and a pin exempts that guard entirely.
+            if cls._is_overridden(ReadFile, "get_column_names") and any(
+                CHAIN_SEPARATOR in feature or COLUMN_SEPARATOR in feature for feature in feature_names
+            ):
+                record_match_rejection(
+                    cls.get_class_name(),
+                    f"{cls.get_class_name()} matched the suffix of {file_name} but cannot confirm the "
+                    f"chain/column-separated name without column enumeration",
+                    stage=INPUT_DATA_STAGE,
+                )
+                return False
             return True
+        # Swallows: one unreadable file (corrupt, truncated, missing) must not abort matching for every sibling reader.
+        except Exception as exc:
+            record_match_rejection(
+                cls.get_class_name(),
+                f"{cls.get_class_name()} matched the suffix of {file_name} but could not read its columns: {exc}",
+                stage=INPUT_DATA_STAGE,
+            )
+            return False
 
         missing = [feature for feature in feature_names if feature not in columns]
         if missing:

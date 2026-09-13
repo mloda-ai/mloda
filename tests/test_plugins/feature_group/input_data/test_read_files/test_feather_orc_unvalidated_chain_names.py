@@ -134,3 +134,59 @@ class TestJsonParquetPyarrowAbsenceGuard:
             ParquetReader.get_column_names(missing_path)
         with pytest.raises(NotImplementedError):
             ParquetReader.describe_columns(missing_path)
+
+
+class TestFeatherOrcPyarrowAbsenceGuardDeclinesMatch:
+    """Bug A: without pyarrow, get_column_names is still structurally overridden, so
+    _declines_unvalidated_separator_name never fires; validate_columns must decline the match instead."""
+
+    def test_feather_reader_declines_chain_separated_name_without_pyarrow(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(feather_module, "pyarrow_ipc", None)
+
+        result = FeatherReader.match_read_file_data_access(["dummy.feather"], [f"a{CHAIN_SEPARATOR}b"])
+
+        assert result is None
+
+    def test_orc_reader_declines_chain_separated_name_without_pyarrow(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(orc_module, "pyarrow_orc", None)
+
+        result = OrcReader.match_read_file_data_access(["dummy.orc"], [f"a{CHAIN_SEPARATOR}b"])
+
+        assert result is None
+
+
+class TestFeatherOrcUnreadableFileDeclinesMatch:
+    """Bug B: a real file get_column_names cannot read (corrupt, truncated, or missing)
+    must decline the match instead of letting the exception propagate out of matching."""
+
+    def test_feather_reader_declines_corrupt_file(
+        self, tmp_path: Path, rejection_window: dict[str, MatchRejection]
+    ) -> None:
+        bad_path = tmp_path / "corrupt.feather"
+        bad_path.write_bytes(b"not a real feather file")
+
+        result = FeatherReader.match_read_file_data_access([str(bad_path)], ["a"])
+
+        assert result is None
+        stored = rejection_window[FeatherReader.get_class_name()]
+        assert "could not read" in stored.reason
+
+    def test_orc_reader_declines_corrupt_file(
+        self, tmp_path: Path, rejection_window: dict[str, MatchRejection]
+    ) -> None:
+        bad_path = tmp_path / "corrupt.orc"
+        bad_path.write_bytes(b"")
+
+        result = OrcReader.match_read_file_data_access([str(bad_path)], ["a"])
+
+        assert result is None
+        stored = rejection_window[OrcReader.get_class_name()]
+        assert "could not read" in stored.reason
+
+    def test_feather_reader_declines_nonexistent_path_plain_name(self) -> None:
+        assert FeatherReader.match_read_file_data_access(["dummy.feather"], ["a"]) is None
+
+    def test_orc_reader_declines_nonexistent_path_plain_name(self) -> None:
+        assert OrcReader.match_read_file_data_access(["dummy.orc"], ["a"]) is None

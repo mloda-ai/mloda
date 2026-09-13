@@ -169,3 +169,15 @@ class TestDeterministicColumnOrder:
         described = ParquetReader.describe_columns(file_path)
 
         assert described == {"a": DataType.INT64, "nested": None}
+
+    def test_parquet_get_column_names_returns_top_level_names_for_nested_column(self, tmp_path: Path) -> None:
+        """get_column_names must report top-level column names, not pyarrow's leaf-flattened
+        field names for a nested (list) column; it must agree with describe_columns."""
+        table = pa.Table.from_pydict({"a": [1, 2, 3], "nested": [[1, 2], [3], []]})
+        file_path = str(tmp_path / "nested_names.parquet")
+        pyarrow_parquet.write_table(table, file_path)
+
+        column_names = ParquetReader.get_column_names(file_path)
+
+        assert sorted(column_names) == ["a", "nested"]
+        assert set(column_names) == set(ParquetReader.describe_columns(file_path).keys())

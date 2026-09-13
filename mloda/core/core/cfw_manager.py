@@ -109,6 +109,15 @@ class CfwManager:
                 return cfw_uuid
         return None
 
+    def get_cfw_uuid_as_registered(self, cf_class_name: str, feature_uuid: UUID) -> UUID | None:
+        """Same lookup as `get_cfw_uuid`, but without canonicalizing through `find_leftmost`/
+        `cfw_merge_relation`, which a join already executed would re-point at a different cfw."""
+        for cfw_uuid, value in self.compute_frameworks.items():
+            cls_name, children_if_root = value
+            if cf_class_name == cls_name and feature_uuid in children_if_root:
+                return cfw_uuid
+        return None
+
     def get_unique_cfw_uuid(self, cf_class_name: str, tfs_ids: set[UUID]) -> UUID | None:
         """
         Resolves a set of tfs_ids to at most one distinct Compute Framework UUID.

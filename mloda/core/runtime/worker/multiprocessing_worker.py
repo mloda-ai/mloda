@@ -31,11 +31,13 @@ def _handle_data_dropping(
 ) -> bool:
     """Handles dropping already calculated data based on the provided command."""
     data_to_drop = cfw.add_already_calculated_children_and_drop_if_possible(command, location)
+    resolved = data_to_drop is True
 
-    # Signal completion back to main thread
-    result_queue.put(("DROP_COMPLETE", cfw.uuid), block=False)
+    # Signal completion back to main thread, including whether this cfw is now fully resolved
+    # (dropped and about to exit), so the caller knows not to wait on it any further.
+    result_queue.put(("DROP_COMPLETE", cfw.uuid, resolved), block=False)
 
-    if data_to_drop is True:
+    if resolved:
         _handle_stop_command(command_queue)
         return True
     return False

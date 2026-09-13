@@ -7,8 +7,10 @@ name carries a "chaindecline" marker to stay inert for other tests under pytest-
 from __future__ import annotations
 
 from collections.abc import Iterator
+from pathlib import Path
 from typing import Any
 
+import pyarrow as pa
 import pytest
 
 from mloda.core.abstract_plugins.components.match_rejection import MATCH_REJECTION_REASONS, MatchRejection
@@ -269,9 +271,18 @@ class TestPinnedNameExemptsSeparatorGuard:
     """An explicit column_to_file pin IS the confirmation the separator guard demands; it must not be declined."""
 
     def test_validate_columns_never_applies_the_separator_guard(
-        self, rejection_window: dict[str, MatchRejection]
+        self, tmp_path: Path, rejection_window: dict[str, MatchRejection]
     ) -> None:
-        result = FeatherReader.validate_columns("pinned.feather", ["price__scaled"])
+        """A literal column named "price__scaled" is an ordinary pyarrow column name. Now that
+        FeatherReader overrides get_column_names, validate_columns finds it for real, so True
+        reflects the column genuinely existing, not a NotImplementedError being swallowed."""
+        table = pa.Table.from_pydict({"price__scaled": [1, 2, 3]})
+        file_path = str(tmp_path / "pinned.feather")
+        with pa.OSFile(file_path, "wb") as sink:
+            with pa.ipc.new_file(sink, table.schema) as writer:
+                writer.write_table(table)
+
+        result = FeatherReader.validate_columns(file_path, ["price__scaled"])
 
         assert result is True
         assert rejection_window == {}

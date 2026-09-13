@@ -6,6 +6,7 @@ from unittest.mock import MagicMock, patch
 
 import pyarrow as pa
 
+from mloda.user import DataType
 from mloda.user import Feature
 from mloda.user import Options
 from mloda.provider import FeatureSet
@@ -55,6 +56,29 @@ class TestSQLITEReader:
         conn.commit()
         conn.close()
         return str(db_path)
+
+    @pytest.fixture(scope="class")
+    def affinity_test_table(self, temp_sqlite_db: Any) -> Any:
+        """A second table on the same db, covering describe_columns affinity-mapping edge cases:
+        REAL/FLOAT/DOUBLE, BLOB, VARCHAR(255)/CLOB, an undeclared type, and NUMERIC/DECIMAL."""
+        conn = sqlite3.connect(temp_sqlite_db)
+        cursor = conn.cursor()
+        cursor.execute("""
+            CREATE TABLE affinity_table (
+                price REAL,
+                weight FLOAT,
+                distance DOUBLE,
+                payload BLOB,
+                label VARCHAR(255),
+                notes CLOB,
+                untyped_col,
+                amount NUMERIC,
+                precise DECIMAL(10,5)
+            );
+        """)
+        conn.commit()
+        conn.close()
+        return "affinity_table"
 
     @pytest.fixture(scope="class")
     def valid_credentials(self, temp_sqlite_db: Any) -> Any:
@@ -198,3 +222,54 @@ class TestSQLITEReader:
         options = MockOptions(("BaseInputData", {}))
         with pytest.raises(KeyError, match="'table_name'"):
             SQLITEReader.get_table(options)  # type: ignore
+
+    def test_describe_columns_happy_path(self, temp_sqlite_db: Any) -> None:
+        result = SQLITEReader.describe_columns({"sqlite": temp_sqlite_db, "table_name": "test_table"})
+        assert result == {"id": DataType.INT64, "name": DataType.STRING, "age": DataType.INT64}
+
+    def test_describe_columns_missing_table_name(self, temp_sqlite_db: Any) -> None:
+        with pytest.raises(ValueError, match="table_name"):
+            SQLITEReader.describe_columns({"sqlite": temp_sqlite_db})
+
+    def test_describe_columns_unknown_table(self, temp_sqlite_db: Any) -> None:
+        with pytest.raises(ValueError, match="does_not_exist"):
+            SQLITEReader.describe_columns({"sqlite": temp_sqlite_db, "table_name": "does_not_exist"})
+
+    def test_describe_columns_affinity_edge_cases(self, temp_sqlite_db: Any, affinity_test_table: Any) -> None:
+        result = SQLITEReader.describe_columns({"sqlite": temp_sqlite_db, "table_name": affinity_test_table})
+
+        assert result["price"] == DataType.DOUBLE
+        assert result["weight"] == DataType.DOUBLE
+        assert result["distance"] == DataType.DOUBLE
+        assert result["payload"] == DataType.BINARY
+        # VARCHAR(255): substring match must still hit with a length modifier attached.
+        assert result["label"] == DataType.STRING
+        assert result["notes"] == DataType.STRING  # CLOB, not just plain TEXT
+        # SQLite allows a column with no declared type at all; PRAGMA table_info reports it
+        # as an empty string, which must map to None, not raise.
+        assert result["untyped_col"] is None
+        # Deliberate divergence from the compute framework's private
+        # _sqlite_affinity_to_arrow_type (sqlite_relation.py:74), which defaults an unmatched
+        # declared type to TEXT/pa.string(). NUMERIC/DECIMAL affinity isn't reliably text, so
+        # describe_columns returns None here instead of guessing STRING.
+        assert result["amount"] is None
+        assert result["precise"] is None
+
+    def test_describe_columns_quotes_identifiers_blocks_injection(self, temp_sqlite_db: Any) -> None:
+        """A crafted table_name must not break out of PRAGMA table_info(...)'s identifier position.
+
+        Mirrors test_build_query_quotes_identifiers_blocks_injection: an unquoted
+        f"PRAGMA table_info({table_name})" would let a name like
+        "test_table); DROP TABLE test_table; --" run as a second statement. With quote_ident
+        the whole string collapses into one double-quoted identifier, so the DROP never runs;
+        PRAGMA reports no such table and describe_columns raises ValueError instead of silently
+        returning {} or letting test_table be dropped.
+        """
+        malicious_table_name = "test_table); DROP TABLE test_table; --"
+
+        with pytest.raises(ValueError):
+            SQLITEReader.describe_columns({"sqlite": temp_sqlite_db, "table_name": malicious_table_name})
+
+        # test_table must still exist and be intact: the injected DROP never executed.
+        result = SQLITEReader.describe_columns({"sqlite": temp_sqlite_db, "table_name": "test_table"})
+        assert result == {"id": DataType.INT64, "name": DataType.STRING, "age": DataType.INT64}

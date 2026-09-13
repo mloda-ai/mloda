@@ -337,6 +337,27 @@ class TestReadFile:
         data = TestReadFile().load(features)
         assert data.column_names == ["id", "V1", "V2"]
 
+    def test_describe_columns_wraps_get_column_names(self) -> None:
+        class TestReadFile(ReadFile):
+            @classmethod
+            def get_column_names(cls, file_name: str) -> list[str]:
+                return ["id", "V1", "V2"]
+
+            @classmethod
+            def suffix(cls) -> tuple[str, ...]:
+                return (".csv",)
+
+        assert TestReadFile.describe_columns("dummy.csv") == {"id": None, "V1": None, "V2": None}
+
+    def test_describe_columns_not_implemented_by_default(self) -> None:
+        class TestReadFile(ReadFile):
+            @classmethod
+            def suffix(cls) -> tuple[str, ...]:
+                return (".csv",)
+
+        with pytest.raises(NotImplementedError):
+            TestReadFile.describe_columns("dummy.csv")
+
 
 class TestSameClassFGLinkWithDifferentDataSources:
     """Integration test: same FeatureGroup class linked with different data sources.

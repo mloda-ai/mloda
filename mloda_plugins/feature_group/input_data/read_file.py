@@ -11,6 +11,7 @@ from mloda.provider import (
     PropertySpec,
     record_match_rejection,
 )
+from mloda.user import DataType
 from mloda.user import Options
 
 
@@ -36,6 +37,7 @@ class ReadFile(BaseInputData):
     - load_data
     - suffix
     - get_column_names
+    - describe_columns (optional; the family default wraps get_column_names with unknown types)
 
     A ReadFile subclass classifies as a final reader by overriding ``load_data``
     wholesale. It may return its table directly, or a descriptor materialized by
@@ -99,6 +101,11 @@ class ReadFile(BaseInputData):
     @classmethod
     def get_column_names(cls, file_name: str) -> list[str]:
         raise NotImplementedError
+
+    @classmethod
+    def describe_columns(cls, data_access: Any) -> dict[str, DataType | None]:
+        """Family default: wraps get_column_names, mapping every column name to an unknown (None) type."""
+        return {name: None for name in cls.get_column_names(data_access)}
 
     @classmethod
     def match_subclass_data_access(cls, data_access: Any, feature_names: list[str], options: Options) -> Any:

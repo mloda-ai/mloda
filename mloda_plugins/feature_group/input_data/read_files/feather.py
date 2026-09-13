@@ -6,6 +6,7 @@ except ImportError:
     pyarrow_ipc = None
 
 from mloda.provider import FeatureSet
+from mloda.user import DataType
 from mloda_plugins.feature_group.input_data.read_file import ReadFile
 
 
@@ -118,3 +119,17 @@ class FeatherReader(ReadFile):
         # deprecated pyarrow.feather.read_table (removed warning as of pyarrow 24).
         with pyarrow_ipc.open_file(data_access) as reader:
             return reader.read_all().select(columns)
+
+    @classmethod
+    def get_column_names(cls, file_name: str) -> list[str]:
+        if pyarrow_ipc is None:
+            raise NotImplementedError
+        with pyarrow_ipc.open_file(file_name) as reader:
+            return list(reader.schema.names)
+
+    @classmethod
+    def describe_columns(cls, data_access: Any) -> dict[str, DataType | None]:
+        if pyarrow_ipc is None:
+            raise NotImplementedError
+        with pyarrow_ipc.open_file(data_access) as reader:
+            return {field.name: DataType.from_arrow_type_safe(field.type) for field in reader.schema}

@@ -3,6 +3,7 @@ from abc import ABC
 from typing import Any, ClassVar
 
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
+from mloda.core.abstract_plugins.components.data_types import DataType
 from mloda.core.abstract_plugins.components.property_spec import PropertySpec, is_no_default
 from mloda.core.abstract_plugins.components.feature_set import FeatureSet
 from mloda.core.abstract_plugins.function_extender import ExtenderHook, _invoke_extender
@@ -535,6 +536,13 @@ class BaseInputData(ABC):
     @classmethod
     def validate_columns(cls, file_name: str, feature_names: list[str]) -> bool:
         return True
+
+    @classmethod
+    def describe_columns(cls, data_access: Any) -> dict[str, DataType | None]:
+        """Maps column name to DataType, None where the type is unknown; NotImplementedError
+        when this reader cannot enumerate columns for data_access. A duplicate column name in
+        the underlying source collapses to one entry, inherited from get_column_names's list[str] shape."""
+        raise NotImplementedError
 
     @classmethod
     def _has_suffix(cls) -> bool:

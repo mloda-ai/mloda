@@ -70,6 +70,10 @@ Readers are classified structurally; no reader code is executed for classificati
 
 `_final_reader_requires` is underscore-named but is a stable, documented extension point for third-party reader families.
 
+### Column discovery
+
+`BaseInputData.describe_columns(data_access) -> dict[str, DataType | None]` maps column name to `DataType`, `None` where the type is unknown, and raises `NotImplementedError` when a reader cannot enumerate columns for `data_access` at all. `ReadFile` supplies a family default that wraps `get_column_names`, so any file reader overriding that hook (`CsvReader`, and every other `ReadFile` subclass) gets a working `describe_columns` for free, with unknown types. `JsonReader`, `ParquetReader`, `FeatherReader`, `OrcReader`, and `SQLITEReader` override it directly to report real types from the format's own schema (or, for `SQLITEReader`, from `PRAGMA table_info`'s declared-type affinity).
+
 ### Selecting among sibling readers
 
 A feature selects a specific reader with an Option whose key equals the reader's `BaseInputData.data_access_name()`, which defaults to `cls.__name__` (unique per class, so sibling readers cannot collide) and which a reader that overrides it keeps unique within its family itself:

@@ -6,6 +6,7 @@ except ImportError:
     pyarrow_parquet = None
 
 from mloda.provider import FeatureSet
+from mloda.user import DataType
 from mloda_plugins.feature_group.input_data.read_file import ReadFile
 
 
@@ -119,5 +120,14 @@ class ParquetReader(ReadFile):
 
     @classmethod
     def get_column_names(cls, file_name: str) -> Any:
+        if pyarrow_parquet is None:
+            raise NotImplementedError
         parquet_file = pyarrow_parquet.ParquetFile(file_name)
         return [column.name for column in parquet_file.schema]
+
+    @classmethod
+    def describe_columns(cls, data_access: Any) -> dict[str, DataType | None]:
+        if pyarrow_parquet is None:
+            raise NotImplementedError
+        parquet_file = pyarrow_parquet.ParquetFile(data_access)
+        return {field.name: DataType.from_arrow_type_safe(field.type) for field in parquet_file.schema_arrow}

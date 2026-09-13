@@ -283,3 +283,35 @@ class SQLITEReader(ReadDB):
         if options is None:
             raise ValueError("Options were not set.")
         return options.get("BaseInputData")[1]["table_name"]
+
+    @classmethod
+    def describe_columns(cls, data_access: Any) -> dict[str, DataType | None]:
+        """Maps column name to DataType via PRAGMA table_info's declared-type affinity.
+
+        Deliberately returns None (not this method's own guess of STRING) for a
+        NUMERIC/DECIMAL-affinity or undeclared column, unlike the compute framework's
+        private ``_sqlite_affinity_to_arrow_type`` (sqlite_relation.py), which defaults
+        to TEXT: that affinity isn't reliably text.
+        """
+        if not isinstance(data_access, dict) or not data_access.get("table_name"):
+            raise ValueError(
+                f"{cls.__name__}.describe_columns requires data_access to be a dict with a 'table_name' key."
+            )
+        table_name = str(data_access["table_name"])
+        result, _ = cls.read_db(data_access, query=f"PRAGMA table_info({quote_ident(table_name)});")
+        if not result:
+            raise ValueError(f"{cls.__name__}.describe_columns: no such table '{table_name}'.")
+        return {row[1]: cls._affinity_to_datatype(str(row[2])) for row in result}
+
+    @staticmethod
+    def _affinity_to_datatype(declared_type: str) -> DataType | None:
+        upper = declared_type.upper()
+        if "INT" in upper:
+            return DataType.INT64
+        if "REAL" in upper or "FLOA" in upper or "DOUB" in upper:
+            return DataType.DOUBLE
+        if "BLOB" in upper:
+            return DataType.BINARY
+        if "CHAR" in upper or "CLOB" in upper or "TEXT" in upper:
+            return DataType.STRING
+        return None

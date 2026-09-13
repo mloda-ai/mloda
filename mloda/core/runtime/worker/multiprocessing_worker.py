@@ -16,9 +16,6 @@ from mloda.core.core.step.join_step import JoinStep
 from mloda.core.core.step.transform_frame_work_step import TransformFrameworkStep
 
 
-logger = logging.getLogger(__name__)
-
-
 def _handle_stop_command(command_queue: multiprocessing.Queue[Any]) -> None:
     """Puts a 'STOP' command in the command queue."""
     if command_queue:
@@ -49,12 +46,12 @@ def _execute_command(
     cfw_register: CfwManager,
     cfw: ComputeFramework,
     data: Any,
-    from_cfw: UUID,
+    from_cfw: UUID | None,
 ) -> Any:
     """Executes a given command based on its type."""
     if isinstance(command, JoinStep):
         # Destination framework here, because it is already transformed beforehand
-        from_cfw = cfw_register.get_cfw_uuid(command.destination_framework.get_class_name(), command.link.uuid)  # type: ignore[assignment]
+        from_cfw = cfw_register.get_cfw_uuid(command.destination_framework.get_class_name(), command.link.uuid)
 
         if from_cfw is None:
             from_cfw = cfw_register.get_cfw_uuid(
@@ -67,6 +64,8 @@ def _execute_command(
     if isinstance(command, TransformFrameworkStep):
         # from cfw is not None, if the TFS is done due to a join
         if from_cfw is None:
+            if command.source_framework_uuid is None:
+                raise ValueError(f"source_framework_uuid should not be none: {command}")
             from_cfw = cfw_register.get_cfw_uuid(
                 command.from_framework.get_class_name(),
                 command.source_framework_uuid,
@@ -107,8 +106,7 @@ def worker(
     result_queue: multiprocessing.Queue[Any],
     cfw_register: CfwManager,
     cfw: ComputeFramework,
-    from_cfw: UUID,
-    needs_tfs_connection: bool = False,
+    from_cfw: UUID | None,
     worker_index: int = 0,
 ) -> None:
     data = None
@@ -138,30 +136,6 @@ def worker(
 
             _handle_stop_command(command_queue)
             return
-
-    if needs_tfs_connection and cfw.framework_connection_object is None:
-        try:
-            cfw.set_framework_connection_object(None)
-        except Exception as e:
-            error_message = f"An error occurred: {e}"
-            msg = f"{error_message}\nFull traceback:\n{traceback.format_exc()}"
-            logging.error(msg)
-            exc_info = traceback.format_exc()
-            if cfw_register:
-                try:
-                    cfw_register.set_error(msg, exc_info, exception=e)
-                except Exception:
-                    # exception not picklable across the manager proxy; degrade to string-only
-                    cfw_register.set_error(msg, exc_info)
-
-            _handle_stop_command(command_queue)
-            return
-        if cfw.framework_connection_object is None:
-            logger.warning(
-                "%s did not bind a connection in set_framework_connection_object(None); "
-                "override it to self-construct one for MULTIPROCESSING.",
-                type(cfw).__name__,
-            )
 
     while True:
         try:

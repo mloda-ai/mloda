@@ -2,7 +2,7 @@ from collections.abc import Sequence
 from typing import Any
 from mloda.core.abstract_plugins.components.data_types import DataType
 from mloda.provider import BaseMergeEngine
-from mloda.user import FeatureName
+from mloda.user import FeatureName, ParallelizationMode
 from mloda.provider import ComputeFramework
 from mloda.provider import BaseFilterEngine
 from mloda.provider import OutputSchema
@@ -96,6 +96,11 @@ class IcebergFramework(ComputeFramework):
             return True
         except ImportError:
             return False
+
+    @classmethod
+    def supported_parallelization_modes(cls) -> set[ParallelizationMode]:
+        """The live catalog handle cannot cross a process boundary."""
+        return {ParallelizationMode.SYNC, ParallelizationMode.THREADING}
 
     @classmethod
     def expected_data_framework(cls) -> Any:

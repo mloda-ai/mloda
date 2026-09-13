@@ -4,7 +4,7 @@ from typing import Any
 from mloda.core.abstract_plugins.components.data_types import DataType
 from mloda.provider import BaseMergeEngine
 from mloda_plugins.compute_framework.base_implementations.spark.spark_merge_engine import SparkMergeEngine
-from mloda.user import FeatureName
+from mloda.user import FeatureName, ParallelizationMode
 from mloda.provider import ComputeFramework
 from mloda.provider import BaseFilterEngine, BaseMaskEngine
 from mloda.provider import OutputSchema
@@ -70,6 +70,11 @@ class SparkFramework(ComputeFramework):
             return True
         except ImportError:
             return False
+
+    @classmethod
+    def supported_parallelization_modes(cls) -> set[ParallelizationMode]:
+        """The live SparkSession cannot cross a process boundary."""
+        return {ParallelizationMode.SYNC, ParallelizationMode.THREADING}
 
     @classmethod
     def expected_data_framework(cls) -> Any:

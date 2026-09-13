@@ -199,11 +199,12 @@ class ComputeFrameworkExecutor:
                 )
 
             from_cfw = self.cfw_collection[from_cfw_uuid]
-            childrens = set(from_cfw.children_if_root)
 
             if step.link_id:
                 from_feature_uuid = step.link_id
-                childrens.add(from_feature_uuid)
+                childrens = {from_feature_uuid}
+            else:
+                childrens = set(from_cfw.children_if_root)
 
             with self._cfw_lock:
                 cfw_uuid = self.init_compute_framework(step.to_framework, parallelization_mode, childrens, step.uuid)

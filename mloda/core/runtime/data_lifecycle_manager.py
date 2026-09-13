@@ -154,13 +154,17 @@ class DataLifecycleManager:
         Raises:
             ValueError: If no results have been collected.
         """
+        return [value for _, value in self.get_result_items()]
+
+    def get_result_items(self) -> list[tuple[UUID, Any]]:
+        """Like get_results(), but keeps each result's step uuid."""
         if not self.result_data_collection:
             raise ValueError(
                 f"No results found: {self.__class__.__name__} has an empty result collection, "
                 "so no step produced a result to return"
             )
 
-        return list(self.result_data_collection.values())
+        return list(self.result_data_collection.items())
 
     def pop_result_data_collection(self) -> Generator[tuple[UUID, Any], None, None]:
         """Drain completed results one at a time.

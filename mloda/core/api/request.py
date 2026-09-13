@@ -175,11 +175,12 @@ class mlodaAPI:
 
         Returns:
             ``RunResult``, a list of computed results, one per feature group in
-            execution plan order. Each element is a compute-framework object
+            completion order. Each element is a compute-framework object
             (e.g. ``pd.DataFrame``, ``pa.Table``) containing only the columns
             for the requested features resolved by that group. When all
             requested features resolve to a single group, the list has one
-            element. ``result.plan`` exposes the resolved plan of this run.
+            element. ``result.plan`` exposes the resolved plan of this run, and
+            ``result.frames()`` pairs each result with the ``PlanStep`` that produced it.
 
         Example:
             result = mloda.run_all(
@@ -209,7 +210,8 @@ class mlodaAPI:
             carrier=carrier,
             child_bootstrap=child_bootstrap,
         )
-        return RunResult(results, session.resolved_plan())
+        result_items = session.runner.get_result_items() if session.runner is not None else None
+        return RunResult(results, session.resolved_plan(), result_items)
 
     @classmethod
     def stream_all(

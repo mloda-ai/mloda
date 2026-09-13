@@ -42,13 +42,25 @@ from tests.test_plugins.compute_framework.base_implementations.tfs_connection_e2
 )
 
 
+def _flight_table_keys(location: str | None) -> set[str]:
+    """Location is None until the first test starts the shared session-scoped flight server process."""
+    if location is None:
+        return set()
+    raw = FlightServer.list_flight_infos(location)
+    return {key.decode("utf-8") if isinstance(key, bytes) else key for key in raw}
+
+
 @pytest.fixture(autouse=True)
 def _clean_flight_server(flight_server: Any) -> Any:
-    """Drops every table left on the shared session-scoped flight server after each test."""
+    """Fails a test that leaves a new table on the shared session-scoped flight server, then sweeps it."""
+    before = _flight_table_keys(flight_server.location)
     yield
-    leftover = FlightServer.list_flight_infos(flight_server.location)
-    table_keys = {key.decode("utf-8") if isinstance(key, bytes) else key for key in leftover}
-    FlightServer.drop_tables(flight_server.location, table_keys)
+    after = _flight_table_keys(flight_server.location)
+    try:
+        assert not after - before, f"test leaked flight-server table(s): {after - before}"
+    finally:
+        if after:
+            FlightServer.drop_tables(flight_server.location, after)
 
 
 class _MixedModeDoubledDuckDBFG(FeatureGroup):
@@ -130,14 +142,14 @@ def _find_root_and_doubled(results: list[Any]) -> tuple[Any, Any]:
 
 
 class _MixedModeDoubledThreadingPythonDictFG(FeatureGroup):
-    """Destination on a THREADING-only framework. Plain FeatureGroup on columnar dict data."""
+    """Destination candidate is THREADING-only or plain PythonDictFramework, whichever the run selects."""
 
     def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return {Feature("raw_val")}
 
     @classmethod
     def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
-        return {_ThreadingOnlyPythonDictFramework}
+        return {_ThreadingOnlyPythonDictFramework, PythonDictFramework}
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
@@ -254,17 +266,27 @@ class TestMixedModeParentDestinationE2E:
         assert len(result) == 1
         assert _extract_mixed_mode_doubled(result[0]) == [2, 4, 6]
 
-    def test_worker_source_feeds_parent_threading_only_destination(self, flight_server: Any) -> None:
-        """THREADING dispatch of the worker-owned-source handoff."""
+    @pytest.mark.parametrize(
+        "destination_framework,modes",
+        [
+            (_ThreadingOnlyPythonDictFramework, {ParallelizationMode.THREADING, ParallelizationMode.MULTIPROCESSING}),
+            (PythonDictFramework, {ParallelizationMode.MULTIPROCESSING}),
+        ],
+        ids=["threading_destination", "pure_multiprocessing"],
+    )
+    def test_worker_source_feeds_parent_threading_only_destination(
+        self, flight_server: Any, destination_framework: type[ComputeFramework], modes: set[ParallelizationMode]
+    ) -> None:
+        """THREADING and pure-MULTIPROCESSING dispatch of the worker-owned-source handoff."""
         plugin_collector = PluginCollector.enabled_feature_groups(
             {TfsRawValPyArrowSource, _MixedModeDoubledThreadingPythonDictFG}
         )
 
         result = mloda.run_all(
             [Feature("mixed_mode_doubled_threading")],
-            compute_frameworks={PyArrowTable, _ThreadingOnlyPythonDictFramework},
+            compute_frameworks={PyArrowTable, destination_framework},
             plugin_collector=plugin_collector,
-            parallelization_modes={ParallelizationMode.THREADING, ParallelizationMode.MULTIPROCESSING},
+            parallelization_modes=modes,
             flight_server=flight_server,
         )
 

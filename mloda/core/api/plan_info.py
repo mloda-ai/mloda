@@ -4,6 +4,7 @@ from typing import Literal, TYPE_CHECKING
 from uuid import UUID
 
 from mloda.core.abstract_plugins.components.error_utils import internal_invariant_error
+from mloda.core.abstract_plugins.components.options import Options, _safe_deepcopy
 from mloda.core.core.step.feature_group_step import FeatureGroupStep
 from mloda.core.core.step.join_step import JoinStep
 from mloda.core.core.step.transform_frame_work_step import TransformFrameworkStep
@@ -50,6 +51,10 @@ class PlanStep:
     ``declared_right_frameworks`` are the classes each declared side's parent features declared as
     candidates, sorted by class name; ``()`` when no resolved join plan is given, or when the plan
     recorded no candidates for that side. APPEND/UNION sides carry only the index-bearing parent.
+
+    ``feature_set_options`` is a compute step's group-only, deep-copied snapshot of ``FeatureSet.options``,
+    and ``step_uuid`` its ``FeatureGroupStep.uuid``, the key ``RunResult.frames()`` pairs frames by; both
+    are None for join/transform steps and, like ``join_token``, excluded from equality.
     """
 
     step_kind: Literal["compute", "join", "transform"]
@@ -66,6 +71,8 @@ class PlanStep:
     join_token: UUID | None = field(default=None, compare=False)
     declared_left_frameworks: tuple[type["ComputeFramework"], ...] = ()
     declared_right_frameworks: tuple[type["ComputeFramework"], ...] = ()
+    feature_set_options: Options | None = field(default=None, compare=False)
+    step_uuid: UUID | None = field(default=None, compare=False)
 
     @property
     def feature_group_name(self) -> str | None:
@@ -130,6 +137,14 @@ def build_plan_steps(
                     requested_feature_names=requested,
                     injected_feature_names=injected,
                     input_feature_names=input_feature_names,
+                    feature_set_options=(
+                        Options(
+                            group={key: _safe_deepcopy(value, {}) for key, value in step.features.options.group.items()}
+                        )
+                        if step.features.options is not None
+                        else None
+                    ),
+                    step_uuid=step.uuid,
                 )
             )
         elif isinstance(step, TransformFrameworkStep):

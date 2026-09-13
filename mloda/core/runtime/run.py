@@ -564,3 +564,9 @@ class ExecutionOrchestrator:
         Gets the results.
         """
         return self.data_lifecycle_manager.get_results()
+
+    def get_result_items(self) -> list[tuple[UUID, Any]]:
+        """
+        Gets the results with their step uuids.
+        """
+        return self.data_lifecycle_manager.get_result_items()

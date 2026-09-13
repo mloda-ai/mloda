@@ -29,6 +29,8 @@ Contract under test:
     tuples default to ``()`` without a resolved join plan. ``build_plan_steps`` takes an explicit
     ``resolved_join_plan`` argument; a bare ``ExecutionPlan`` or list carries none.
   * ``build_plan_steps`` raises ``ValueError`` on a step it does not know, instead of dropping it.
+  * Compute steps carry ``feature_set_options`` (a deep-copied, group-only snapshot of the step's
+    ``FeatureSet.options``) and ``step_uuid``; both stay out of equality.
   * ``mlodaAPI.resolved_plan()`` returns ``list[PlanStep]`` on a prepared session, both before
     and after ``run()``, in execution-plan order, and matches the plan that actually executed.
   * ``mlodaAPI.explain(features, ...)`` mirrors the ``prepare`` parameter shape with keyword-only
@@ -44,12 +46,14 @@ claim is registry-wide, so generic names like ``sales`` would leak into every ot
 """
 
 import ast
+import copy
 import dataclasses
 from collections import Counter
 from pathlib import Path
 from typing import Any, Literal, get_args, get_origin
 from uuid import UUID
 
+import numpy as np
 import pandas as pd
 import pyarrow as pa
 import pyarrow.compute as pc
@@ -281,6 +285,25 @@ class PlanInfoInvertedConsumer(FeatureGroup):
         return {cls.get_class_name()}
 
 
+class PlanInfoNestedOptionsSource(FeatureGroup):
+    """Root source whose values depend on a nested dict inside a group option."""
+
+    @classmethod
+    def input_data(cls) -> BaseInputData | None:
+        return DataCreator({"plan_info_nested_value"})
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        assert features.options is not None
+        nested = features.options.get("plan_info_nested")
+        values = {"A": [1, 2, 3], "mutated": [999, 999, 999]}
+        return pd.DataFrame({"plan_info_nested_value": values[nested["table"]]})
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PandasDataFrame}
+
+
 class PlanInfoUnknownStep:
     """Not a FeatureGroupStep/TransformFrameworkStep/JoinStep: build_plan_steps must reject it."""
 
@@ -318,6 +341,7 @@ _CROSS_JOIN_PLUGINS = PluginCollector.enabled_feature_groups(
 _INVERTED_JOIN_PLUGINS = PluginCollector.enabled_feature_groups(
     {PlanInfoCrossLeftPandas, PlanInfoCrossRightArrow, PlanInfoInvertedConsumer}
 )
+_NESTED_OPTIONS_PLUGINS = PluginCollector.enabled_feature_groups({PlanInfoNestedOptionsSource})
 
 # The chained request from the issue: an aggregated feature over a source feature.
 _CHAINED_FEATURES: list[Feature | str] = ["plan_info_sales__mean_aggr"]
@@ -374,6 +398,14 @@ def _prepare_cross_framework_join_session() -> mlodaAPI:
 def _prepare_inverted_cross_framework_join_session() -> mlodaAPI:
     """Same link, PyArrow consumer: the join runs in the declared right side's framework."""
     return _prepare_cross_join("PlanInfoInvertedConsumer", _INVERTED_JOIN_PLUGINS)
+
+
+def _prepare_nested_options_session() -> mlodaAPI:
+    return mloda.prepare(
+        [Feature("plan_info_nested_value", options={"plan_info_nested": {"table": "A"}})],
+        compute_frameworks={PandasDataFrame},
+        plugin_collector=_NESTED_OPTIONS_PLUGINS,
+    )
 
 
 def _raw_steps_by_kind(session: mlodaAPI) -> dict[str, list[Any]]:
@@ -434,6 +466,8 @@ class TestPlanStepDataclass:
             "join_token",
             "declared_left_frameworks",
             "declared_right_frameworks",
+            "feature_set_options",
+            "step_uuid",
         ]
 
     def test_join_type_defaults_to_none(self) -> None:
@@ -703,6 +737,42 @@ class TestJoinOrientationFieldsOnTheDataclass:
 
         assert step.declared_left_framework_names == ("PandasDataFrame",)
         assert step.declared_right_framework_names == ("PyArrowTable",)
+
+
+# ---------------------------------------------------------------------------
+# feature_set_options
+# ---------------------------------------------------------------------------
+
+
+class TestPlanStepFeatureSetOptions:
+    """feature_set_options is a decoupled snapshot that stays out of equality."""
+
+    def test_mutating_a_nested_group_value_does_not_change_what_a_subsequent_run_computes(self) -> None:
+        session = _prepare_nested_options_session()
+
+        step = next(s for s in session.resolved_plan() if s.feature_group is PlanInfoNestedOptionsSource)
+        assert step.feature_set_options is not None
+        step.feature_set_options.group["plan_info_nested"]["table"] = "mutated"
+
+        results = session.run()
+        assert results[0]["plan_info_nested_value"].tolist() == [1, 2, 3]
+
+    def test_feature_set_options_is_excluded_from_equality(self) -> None:
+        """Excluded like step_uuid, so a non-scalar group value cannot make plan comparison raise."""
+        step = PlanStep(
+            step_kind="compute",
+            feature_names=("plan_info_sales",),
+            feature_group=PlanInfoPandasSource,
+            compute_framework=PandasDataFrame,
+            source_feature_group=None,
+            source_compute_framework=None,
+            feature_set_options=Options(group={"weights": np.array([1.0, 2.0])}),
+        )
+        without_options = dataclasses.replace(step, feature_set_options=None)
+
+        assert step == copy.deepcopy(step)
+        assert step == without_options
+        assert hash(step) == hash(without_options)
 
 
 # ---------------------------------------------------------------------------

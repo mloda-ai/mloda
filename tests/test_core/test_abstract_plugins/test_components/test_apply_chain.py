@@ -202,7 +202,7 @@ class TestTransformFrameworkStepDelegatesToApplyChain:
         monkeypatch.setattr(ComputeFrameworkTransformer, "apply_chain", _spy)
 
         cfw = _CfwTo(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
-        result = step.transform(cfw, ["payload"], set())
+        result = step.transform(cfw, ["payload"])
 
         assert result == "CHAIN_APPLIED"
         assert recorded["args"] == (fw_a, fw_b, [trans_ab], ["payload"], cfw.framework_connection_object)

@@ -67,7 +67,6 @@ class CfwManager:
         self.exc_info: Any = None
         self.exception: Any = None
 
-        self.uuid_column_names: dict[UUID, set[str]] = {}  # We only set this in case of TransformFrameworkStep
         self.uuid_flyway_datasets: dict[UUID, set[UUID]] = {}
 
         self.artifact_to_save: dict[str, Any] = {}
@@ -85,14 +84,6 @@ class CfwManager:
     def get_uuid_flyway_datasets(self, cf_uuid: UUID) -> set[UUID] | None:
         """Retrieves the set of Flyway dataset UUIDs associated with a Compute Framework UUID."""
         return self.uuid_flyway_datasets.get(cf_uuid, None)
-
-    def add_column_names_to_cf_uuid(self, cf_uuid: UUID, column_names: set[str]) -> None:
-        """Associates a set of column names with a Compute Framework UUID."""
-        self.uuid_column_names[cf_uuid] = column_names
-
-    def get_column_names(self, cf_uuid: UUID) -> set[str]:
-        """Retrieves the set of column names associated with a Compute Framework UUID."""
-        return self.uuid_column_names[cf_uuid]
 
     def get_cfw_uuid(
         self,

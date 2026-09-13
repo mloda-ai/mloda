@@ -978,39 +978,6 @@ class TestSyncExecuteStep:
 
         assert step.step_is_done is True
 
-    def test_registers_column_names_before_marking_step_done(self) -> None:
-        """add_column_names_to_cf_uuid must run while step.step_is_done is still False."""
-        cfw_register = Mock(spec=CfwManager)
-        worker_manager = Mock(spec=WorkerManager)
-        executor = ComputeFrameworkExecutor(cfw_register, worker_manager)
-
-        step = Mock(spec=FeatureGroupStep)
-        step.tfs_ids = []
-        step.features = Mock()
-        step.features.any_uuid = uuid4()
-        step.children_if_root = []
-        step.compute_framework = Mock()
-        step.compute_framework.get_class_name.return_value = "TestCFW"
-        step.step_is_done = False
-
-        cfw_uuid = uuid4()
-        cfw_register.get_unique_cfw_uuid.return_value = None
-        cfw_register.get_cfw_uuid.return_value = cfw_uuid
-
-        mock_cfw = Mock(spec=ComputeFramework)
-        mock_cfw.get_column_names.return_value = {"a"}
-        executor.cfw_collection[cfw_uuid] = mock_cfw
-
-        def _assert_step_not_done_yet(*args: Any, **kwargs: Any) -> None:
-            assert step.step_is_done is False
-
-        cfw_register.add_column_names_to_cf_uuid.side_effect = _assert_step_not_done_yet
-
-        executor.sync_execute_step(step)
-
-        cfw_register.add_column_names_to_cf_uuid.assert_called_once_with(cfw_uuid, {"a"})
-        assert step.step_is_done is True
-
     def test_handles_exception_and_sets_error(self) -> None:
         """Should catch exceptions and set error in cfw_register."""
         cfw_register = Mock(spec=CfwManager)

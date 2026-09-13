@@ -99,9 +99,7 @@ class TransformFrameworkStep(Step):
             )
 
         data = self.get_data(from_cfw)
-        column_names = self.get_column_names(cfw_register, from_cfw)
-
-        data = self.transform(cfw, data, column_names)
+        data = self.transform(cfw, data)
 
         cfw.set_data(data)
         cfw.set_column_names()
@@ -113,15 +111,6 @@ class TransformFrameworkStep(Step):
             cfw.set_data(data)
             return data
         return None
-
-    def get_column_names(self, cfw_register: CfwManager, from_cfw: ComputeFramework | UUID) -> set[str]:
-        if self.location and isinstance(from_cfw, UUID):
-            return cfw_register.get_column_names(from_cfw)
-
-        if isinstance(from_cfw, UUID):
-            raise ValueError("From_cfw is a UUID, but we are not using flightserver.")
-
-        return from_cfw.get_column_names()
 
     def get_data(self, cfw: ComputeFramework | UUID) -> Any:
         """
@@ -142,7 +131,7 @@ class TransformFrameworkStep(Step):
     def set_data(self, cfw: ComputeFramework, data: Any) -> None:
         cfw.set_data(data)
 
-    def transform(self, cfw: ComputeFramework, data: Any, feature_names: set[str]) -> Any:
+    def transform(self, cfw: ComputeFramework, data: Any) -> Any:
         _from_fw = self.from_framework.expected_data_framework()
         _to_fw = self.to_framework.expected_data_framework()
 

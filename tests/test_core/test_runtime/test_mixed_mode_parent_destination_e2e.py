@@ -911,8 +911,7 @@ class TestTransformFrameworkStepSourceRootDropTiming:
     """Regression coverage for a TransformFrameworkStep's FROM-side (source) cfw: unlike a
     JoinStep, `ExecutionOrchestrator._process_step_result` never marks anything as arrived on the
     cfw a finished TransformFrameworkStep just consumed, so it survives until the run-finalize
-    sweep instead of being dropped incrementally once the hop that reads it has finished (#1409
-    follow-up)."""
+    sweep instead of being dropped incrementally once the hop that reads it has finished."""
 
     def test_plain_hop_source_root_dropped_mid_run_not_only_at_finalize(
         self, flight_server: Any, monkeypatch: pytest.MonkeyPatch

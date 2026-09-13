@@ -624,20 +624,17 @@ Available join types:
                 if not need_to_upload_collector.isdisjoint(_ep.get_uuids()):
                     _ep.need_to_upload = True
 
-        # A plain (non-join) hop's SOURCE-side cfw is never otherwise marked as consumed once the
-        # hop finishes; reusing its actual downstream consumer(s)' own children_if_root lets
-        # _drop_tfs_source_if_possible mark it incrementally instead of only at run finalize. A
-        # join-triggered hop's own source-root case is a separate, out-of-scope gap: its
-        # destination-side drop is already handled by _drop_join_source_if_possible, so it is left
-        # with empty owed_tokens (a safe no-op).
-        #
-        # A plain hop's own from_framework can also be a JoinStep's source or destination framework
-        # elsewhere in the same plan (a shared, canonicalized cfw instance, e.g. after a same-framework
-        # join re-points it): that join may still need to read from or merge into that exact cfw after
-        # this hop finishes, and children_if_root has no token representing that join's own outstanding
-        # read (only a same-framework join's already-executed side gets one, via
-        # add_value_to_children_if_root above). Crediting owed_tokens there would risk dropping the
-        # cfw before the join is done with it, so such a hop keeps the old, safe finalize-only timing.
+        # A plain (non-join) hop's SOURCE-side cfw is never otherwise marked as consumed once the hop
+        # finishes, so credit owed_tokens from each downstream consumer's own children_if_root, letting
+        # _drop_tfs_source_if_possible mark it incrementally instead of only at run finalize. Two cases
+        # are skipped and left with empty owed_tokens (a safe no-op): a join-triggered hop's own
+        # source-root, whose destination-side drop _drop_join_source_if_possible already handles; and a
+        # plain hop whose from_framework is also a JoinStep's source or destination elsewhere in the plan
+        # (a shared, canonicalized cfw, e.g. after a same-framework join re-points it) - that join may
+        # still need to read from or merge into that cfw after this hop finishes, and children_if_root
+        # carries no token for that outstanding read (only a same-framework join's already-executed side
+        # gets one, via add_value_to_children_if_root above), so crediting here would risk dropping the
+        # cfw before the join is done with it.
         join_frameworks: set[type[ComputeFramework]] = set()
         for _ep in new_execution_plan:
             if isinstance(_ep, JoinStep):

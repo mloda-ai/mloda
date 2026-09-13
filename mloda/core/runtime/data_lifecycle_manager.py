@@ -1,4 +1,4 @@
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from typing import Any, Generator
 from uuid import UUID
 
@@ -39,7 +39,11 @@ class DataLifecycleManager:
         self.request_feature_order = request_feature_order
 
     def drop_data_for_finished_cfws(
-        self, finished_ids: set[UUID], cfw_collection: dict[UUID, ComputeFramework], location: str | None = None
+        self,
+        finished_ids: set[UUID],
+        cfw_collection: dict[UUID, ComputeFramework],
+        location: str | None = None,
+        drop_action: Callable[[UUID, ComputeFramework], None] | None = None,
     ) -> None:
         """
         Drops data for CFWs when all their dependent steps are finished.
@@ -48,6 +52,9 @@ class DataLifecycleManager:
             finished_ids: Set of step UUIDs that have been completed.
             cfw_collection: Dictionary of CFWs keyed by UUID.
             location: Optional location string for remote data dropping.
+            drop_action: Optional override for how a single CFW's data is dropped, e.g. to route
+                the drop through a worker process that still owns the live instance. Defaults to
+                calling `cfw.drop_last_data()` directly on the `cfw_collection` entry.
         """
         if not finished_ids:
             return
@@ -55,14 +62,18 @@ class DataLifecycleManager:
         cfw_to_delete = set()
         for cfw_uuid, step_uuids in self.track_data_to_drop.items():
             if all(step_id in finished_ids for step_id in step_uuids):
-                self.drop_cfw_data(cfw_uuid, cfw_collection, location)
+                self.drop_cfw_data(cfw_uuid, cfw_collection, location, drop_action)
                 cfw_to_delete.add(cfw_uuid)
 
         for cfw_uuid in cfw_to_delete:
             del self.track_data_to_drop[cfw_uuid]
 
     def drop_cfw_data(
-        self, cfw_uuid: UUID, cfw_collection: dict[UUID, ComputeFramework], location: str | None = None
+        self,
+        cfw_uuid: UUID,
+        cfw_collection: dict[UUID, ComputeFramework],
+        location: str | None = None,
+        drop_action: Callable[[UUID, ComputeFramework], None] | None = None,
     ) -> None:
         """
         Drops data associated with a specific CFW.
@@ -71,12 +82,14 @@ class DataLifecycleManager:
             cfw_uuid: The UUID of the CFW to drop data for.
             cfw_collection: Dictionary of CFWs keyed by UUID.
             location: Optional location string for remote data dropping.
+            drop_action: Optional override for how the drop itself is performed (see
+                `drop_data_for_finished_cfws`).
         """
         cfw = cfw_collection[cfw_uuid]
-        if location:
-            cfw.drop_last_data(location)
-        else:
-            cfw.drop_last_data(None)
+        if drop_action is not None:
+            drop_action(cfw_uuid, cfw)
+            return
+        cfw.drop_last_data(location)
 
     def add_to_result_data_collection(
         self, cfw: ComputeFramework, features: FeatureSet, step_uuid: UUID, location: str | None = None

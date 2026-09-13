@@ -782,7 +782,11 @@ class ComputeFramework(ABC):
             return True
 
         if len(self.object_ids) > 0:
-            return self.children_if_root
+            # Only the members still outstanding: a caller tracking this externally (e.g. against
+            # a set of step uuids that will eventually all complete) must not be handed a member
+            # that already-arrived children can never re-supply, such as a link uuid that is not
+            # itself any step's own completion token.
+            return self.children_if_root - self.already_calculated_children_tracker
 
         return False
 
@@ -1003,9 +1007,12 @@ Available join types:
 
     @final
     def drop_last_data(self, location: str | None = None) -> None:
-        if isinstance(self.data, str) and location:
-            self.drop_data({self.data}, location)
+        """Drops every table this cfw ever uploaded, tracked in `object_ids`, not just a
+        string held in `self.data` (a restored-to-native cfw.data never is one)."""
+        if location and self.object_ids:
+            self.drop_data(set(self.object_ids), location)
 
+        self.object_ids = []
         self.data = None
 
     @final

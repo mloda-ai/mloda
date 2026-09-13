@@ -138,8 +138,24 @@ class ExecutionOrchestrator:
         Handles the dropping of intermediate data based on finished steps.
         """
         self.data_lifecycle_manager.drop_data_for_finished_cfws(
-            finished_ids, self.executor.cfw_collection, self.location
+            finished_ids, self.executor.cfw_collection, self.location, self._drop_cfw_data_routed
         )
+
+    def _drop_cfw_data_routed(self, cfw_uuid: UUID, cfw: ComputeFramework) -> None:
+        """Drop a cfw's uploaded data, routed through its worker if still alive: `cfw_collection`
+        here only ever holds the pre-dispatch snapshot, whose `object_ids` stays empty."""
+        process, command_queue, result_queue = self.worker_manager.process_register.get(cfw_uuid, (None, None, None))
+        if command_queue is None or process is None or not process.is_alive():
+            # No worker left to ask (never dispatched, or it already exited after resolving its
+            # own drop earlier): cfw_collection's entry is then either the live in-process instance
+            # or a pre-dispatch snapshot whose object_ids are empty, so this is a harmless no-op.
+            cfw.drop_last_data(self.location)
+            return
+
+        self.worker_manager.clear_completed_drop(cfw_uuid)
+        command_queue.put(set(cfw.children_if_root))
+        if result_queue is not None:
+            self._wait_for_drop_completion(result_queue, cfw_uuid)
 
     def _init_run(self) -> tuple[set[UUID], set[UUID], set[UUID]]:
         """Validate state, construct the executor, and return fresh id-tracking sets."""
@@ -309,6 +325,10 @@ class ExecutionOrchestrator:
                 if ParallelizationMode.MULTIPROCESSING in self.cfw_register.get_parallelization_modes():
                     time.sleep(0.01)
 
+            # A cfw's last dependent can finish in the same pass that visited its own
+            # drop-check with a stale finished_ids (see _run_planner_pass), so nothing
+            # guarantees another FeatureGroupStep is iterated afterwards to flush it.
+            self._drop_data_for_finished_cfws(finished_ids)
         finally:
             self._finalize()
 
@@ -337,6 +357,9 @@ class ExecutionOrchestrator:
 
                 time.sleep(0.01)
 
+            # See compute(): flush anything left in track_data_to_drop once finished_ids
+            # is fully up to date, since no further FeatureGroupStep iteration is guaranteed.
+            self._drop_data_for_finished_cfws(finished_ids)
         finally:
             self._finalize()
 
@@ -355,7 +378,11 @@ class ExecutionOrchestrator:
         if not step.step_is_done:
             return False
 
-        if isinstance(step, (TransformFrameworkStep, JoinStep)):
+        if isinstance(step, TransformFrameworkStep):
+            return True
+
+        if isinstance(step, JoinStep):
+            self._drop_join_source_if_possible(step)
             return True
 
         if isinstance(step, FeatureGroupStep):
@@ -375,30 +402,51 @@ class ExecutionOrchestrator:
         This method checks if data can be dropped based on the CFW's dependencies
         and either drops the data directly or sends a command to a worker process to do so.
         """
+        feature_uuids_to_possible_drop = {f.uuid for f in step.features.features}
+        self._mark_children_and_track(cfw, feature_uuids_to_possible_drop)
+
+    def _drop_join_source_if_possible(self, step: JoinStep) -> None:
+        """A same-framework join marks its source cfw's children_if_root with the link's own
+        uuid (execution_plan.add_tfs); only the join's own completion can supply it."""
+        if step.destination_framework != step.source_framework:
+            return
+
+        source_cfw_uuid = self.cfw_register.get_cfw_uuid_as_registered(
+            step.destination_framework.get_class_name(), step.link.uuid
+        )
+        if source_cfw_uuid is None:
+            return
+
+        source_cfw = self.executor.cfw_collection[source_cfw_uuid]
+        self._mark_children_and_track(source_cfw, {step.link.uuid})
+
+    def _mark_children_and_track(self, cfw: ComputeFramework, children: set[UUID]) -> None:
+        """
+        Records newly-finished children on a CFW and, if not yet fully satisfied, tracks the
+        remaining wait-condition so a later `_drop_data_for_finished_cfws` pass can flush it.
+        """
         process, command_queue, result_queue = self.worker_manager.process_register.get(cfw.uuid, (None, None, None))
 
-        feature_uuids_to_possible_drop = {f.uuid for f in step.features.features}
-
         if command_queue is None:
-            data_to_drop = cfw.add_already_calculated_children_and_drop_if_possible(
-                feature_uuids_to_possible_drop, self.location
-            )
+            data_to_drop = cfw.add_already_calculated_children_and_drop_if_possible(children, self.location)
             if isinstance(data_to_drop, frozenset):
                 self.data_lifecycle_manager.track_data_to_drop[cfw.uuid] = set(data_to_drop)
         else:
             self.worker_manager.clear_completed_drop(cfw.uuid)
-            command_queue.put(feature_uuids_to_possible_drop)
+            command_queue.put(children)
 
-            flyway_datasets = self.cfw_register.get_uuid_flyway_datasets(cfw.uuid)
+            resolved = self._wait_for_drop_completion(result_queue, cfw.uuid) if result_queue is not None else None
+            if resolved:
+                # The worker already dropped its own data and is exiting; nothing left to track.
+                return
+
+            flyway_datasets = self.cfw_register.get_uuid_flyway_datasets(cfw.uuid) or set(cfw.children_if_root)
             if flyway_datasets:
                 self.data_lifecycle_manager.track_data_to_drop[cfw.uuid] = flyway_datasets
 
-            if result_queue is not None:
-                self._wait_for_drop_completion(result_queue, cfw.uuid)
-
     def _wait_for_drop_completion(
         self, result_queue: multiprocessing.Queue[Any], cfw_uuid: UUID, timeout: float = 5.0
-    ) -> None:
+    ) -> bool | None:
         """
         Wait for drop operation to complete from worker process.
 
@@ -406,8 +454,12 @@ class ExecutionOrchestrator:
             result_queue: The queue to receive completion signals from the worker.
             cfw_uuid: The UUID of the compute framework being dropped.
             timeout: Maximum time to wait for completion in seconds.
+
+        Returns:
+            The worker's own resolved flag (True once its data is dropped and it is exiting),
+            or None if no acknowledgement arrived before the timeout.
         """
-        self.worker_manager.wait_for_drop_completion(result_queue, cfw_uuid, timeout)
+        return self.worker_manager.wait_for_drop_completion(result_queue, cfw_uuid, timeout)
 
     def _execute_step(self, step: Any) -> None:
         """

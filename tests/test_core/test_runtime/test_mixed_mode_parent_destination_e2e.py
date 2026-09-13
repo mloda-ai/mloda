@@ -408,6 +408,9 @@ class TestMixedModeParentDestinationE2E:
         assert doubled is not None
         assert doubled.column("mixed_mode_root_doubled").to_pylist() == [2, 4, 6]
 
+        leftover = FlightServer.list_flight_infos(flight_server.location)
+        assert leftover == set(), f"leaked flight tables: {leftover}"
+
     def test_parent_resident_root_feature_stays_native_when_it_also_feeds_a_worker_under_threading(
         self, flight_server: Any
     ) -> None:
@@ -437,7 +440,8 @@ class TestMixedModeParentDestinationE2E:
         assert doubled.column("mixed_mode_root_doubled").to_pylist() == [2, 4, 6]
 
     def test_parent_resident_join_child_receives_native_data_under_mixed_mode(self, flight_server: Any) -> None:
-        """A join result consumed by its own parent-resident child must stay native, not pa.Table."""
+        """A join result consumed by its own parent-resident child must stay native, not pa.Table,
+        and the join upload must not leak a flight table onto the server (#1395)."""
         plugin_collector = PluginCollector.enabled_feature_groups(
             {_JoinLeftRootFG, _JoinRightRootFG, _JoinChildFG, _JoinLeftValPyArrowFG}
         )
@@ -466,3 +470,65 @@ class TestMixedModeParentDestinationE2E:
         assert join_result["join_sum"] == [11, 22, 33]
 
         assert doubled_result.column("left_val_doubled").to_pylist() == [20, 40, 60]
+
+        leftover = FlightServer.list_flight_infos(flight_server.location)
+        assert leftover == set(), f"leaked flight tables: {leftover}"
+
+
+class _MpTransformSourceFG(FeatureGroup):
+    """Root source on PythonDictFramework, computed in a MULTIPROCESSING-only run."""
+
+    @classmethod
+    def input_data(cls) -> BaseInputData | None:
+        return DataCreator({"mp_transform_source_val"})
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PythonDictFramework}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return {"mp_transform_source_val": [1, 2, 3]}
+
+
+class _MpTransformDestFG(FeatureGroup):
+    """Final requested feature on PyArrowTable, reached only via a TransformFrameworkStep hop."""
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return {Feature("mp_transform_source_val")}
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PyArrowTable}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return data.append_column("mp_transform_doubled", pc.multiply(data["mp_transform_source_val"], 2))
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {"mp_transform_doubled"}
+
+
+@pytest.mark.timeout(30)
+@pytest.mark.skipif(pa is None, reason="PyArrow not installed.")
+class TestPureMultiprocessingTransformHopDoesNotLeakFlightTable:
+    def test_pure_multiprocessing_transform_hop_does_not_leak_flight_table(self, flight_server: Any) -> None:
+        """A source cfw whose last consumer is a TransformFrameworkStep must not leak under pure
+        MULTIPROCESSING (#1395)."""
+        plugin_collector = PluginCollector.enabled_feature_groups({_MpTransformSourceFG, _MpTransformDestFG})
+
+        result = mloda.run_all(
+            [Feature("mp_transform_doubled")],
+            compute_frameworks={PythonDictFramework, PyArrowTable},
+            plugin_collector=plugin_collector,
+            parallelization_modes={ParallelizationMode.MULTIPROCESSING},
+            flight_server=flight_server,
+        )
+
+        assert result is not None
+        assert len(result) == 1
+        assert result[0].column("mp_transform_doubled").to_pylist() == [2, 4, 6]
+
+        leftover = FlightServer.list_flight_infos(flight_server.location)
+        assert leftover == set(), f"leaked flight tables: {leftover}"

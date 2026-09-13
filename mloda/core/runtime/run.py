@@ -19,6 +19,7 @@ from mloda.core.runtime.data_lifecycle_manager import DataLifecycleManager
 from mloda.core.runtime.compute_framework_executor import ComputeFrameworkExecutor
 from mloda.core.core.cfw_manager import CfwManager, MyManager
 from mloda.core.abstract_plugins.components.parallelization_modes import ParallelizationMode
+from mloda.core.runtime.flight.flight_server import FlightServer
 from mloda.core.runtime.flight.runner_flight_server import ParallelRunnerFlightServer
 from mloda.core.runtime.mp_context import mp_spawn_context
 from mloda.core.core.step.feature_group_step import FeatureGroupStep
@@ -233,7 +234,25 @@ class ExecutionOrchestrator:
 
     def _finalize(self) -> None:
         self.data_lifecycle_manager.set_artifacts(self.cfw_register.get_artifacts())
+        # join() first: it terminates every worker and joins every thread, so nothing can still
+        # be uploading when the sweep below runs. Sweeping first races re-uploads on abnormal exit.
         self.join()
+        self._drop_all_uploaded_flight_tables()
+
+    def _drop_all_uploaded_flight_tables(self) -> None:
+        """Final sweep of every cfw's flight table by uuid key, including worker-dispatched cfws."""
+        if not self.location:
+            return
+        table_keys = {str(uuid) for uuid in self.executor.cfw_collection}
+        table_keys.update(oid for cfw in self.executor.cfw_collection.values() for oid in cfw.get_object_ids())
+        if not table_keys:
+            return
+        try:
+            FlightServer.drop_tables(self.location, table_keys)
+        except Exception as e:
+            # Best-effort cleanup runs inside a finally: raising here would replace whatever
+            # real exception is propagating (e.g. a dead flight server) with this one.
+            logger.warning(f"Failed to drop uploaded flight tables during finalize: {e}")
 
     def _check_for_error(self) -> bool:
         """Return True if the run loop should stop (compute framework manager gone).

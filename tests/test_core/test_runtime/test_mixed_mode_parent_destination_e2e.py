@@ -42,13 +42,25 @@ from tests.test_plugins.compute_framework.base_implementations.tfs_connection_e2
 )
 
 
+def _flight_table_keys(location: str | None) -> set[str]:
+    """Location is None until the first test starts the shared session-scoped flight server process."""
+    if location is None:
+        return set()
+    raw = FlightServer.list_flight_infos(location)
+    return {key.decode("utf-8") if isinstance(key, bytes) else key for key in raw}
+
+
 @pytest.fixture(autouse=True)
 def _clean_flight_server(flight_server: Any) -> Any:
-    """Drops every table left on the shared session-scoped flight server after each test."""
+    """Fails a test that leaves a new table on the shared session-scoped flight server, then sweeps it."""
+    before = _flight_table_keys(flight_server.location)
     yield
-    leftover = FlightServer.list_flight_infos(flight_server.location)
-    table_keys = {key.decode("utf-8") if isinstance(key, bytes) else key for key in leftover}
-    FlightServer.drop_tables(flight_server.location, table_keys)
+    after = _flight_table_keys(flight_server.location)
+    try:
+        assert not after - before, f"test leaked flight-server table(s): {after - before}"
+    finally:
+        if after:
+            FlightServer.drop_tables(flight_server.location, after)
 
 
 class _MixedModeDoubledDuckDBFG(FeatureGroup):
@@ -152,6 +164,31 @@ def _extract_mixed_mode_doubled_threading(final: Any) -> list[int]:
     if pa is not None and isinstance(final, pa.Table):
         return list(final.column("mixed_mode_doubled_threading").to_pylist())
     return list(final["mixed_mode_doubled_threading"])
+
+
+class _MixedModeDoubledMultiprocessingPythonDictFG(FeatureGroup):
+    """Destination on plain PythonDictFramework, which supports MULTIPROCESSING unlike the THREADING-only variant."""
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return {Feature("raw_val")}
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PythonDictFramework}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return {"mixed_mode_doubled_multiprocessing": [v * 2 for v in data["raw_val"]]}
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {"mixed_mode_doubled_multiprocessing"}
+
+
+def _extract_mixed_mode_doubled_multiprocessing(final: Any) -> list[int]:
+    if pa is not None and isinstance(final, pa.Table):
+        return list(final.column("mixed_mode_doubled_multiprocessing").to_pylist())
+    return list(final["mixed_mode_doubled_multiprocessing"])
 
 
 class _JoinLeftRootFG(FeatureGroup):
@@ -372,3 +409,21 @@ class TestMixedModeParentDestinationE2E:
         assert join_result["join_sum"] == [11, 22, 33]
 
         assert doubled_result.column("left_val_doubled").to_pylist() == [20, 40, 60]
+
+    def test_pure_multiprocessing_transform_step_leaves_no_flight_table(self, flight_server: Any) -> None:
+        """A TFS-only MULTIPROCESSING run (no SYNC/THREADING mixed in) must not leak its upload."""
+        plugin_collector = PluginCollector.enabled_feature_groups(
+            {TfsRawValPyArrowSource, _MixedModeDoubledMultiprocessingPythonDictFG}
+        )
+
+        result = mloda.run_all(
+            [Feature("mixed_mode_doubled_multiprocessing")],
+            compute_frameworks={PyArrowTable, PythonDictFramework},
+            plugin_collector=plugin_collector,
+            parallelization_modes={ParallelizationMode.MULTIPROCESSING},
+            flight_server=flight_server,
+        )
+
+        assert result is not None
+        assert len(result) == 1
+        assert _extract_mixed_mode_doubled_multiprocessing(result[0]) == [2, 4, 6]

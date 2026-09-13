@@ -292,8 +292,6 @@ class ComputeFrameworkExecutor:
             from_cfw = self.prepare_tfs_and_joinstep(step) or None
             cfw = self.cfw_collection[cfw_uuid]
             step.execute(self.cfw_register, cfw, from_cfw=from_cfw)
-            # a worker-side consumer of this cfw resolves the names through the register
-            self.cfw_register.add_column_names_to_cf_uuid(cfw_uuid, cfw.get_column_names())
             step.step_is_done = True
 
         except Exception as e:

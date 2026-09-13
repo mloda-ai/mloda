@@ -72,7 +72,7 @@ Readers are classified structurally; no reader code is executed for classificati
 
 ### Column discovery
 
-`BaseInputData.describe_columns(data_access) -> dict[str, DataType | None]` maps column name to `DataType`, `None` where the type is unknown, and raises `NotImplementedError` when a reader cannot enumerate columns for `data_access` at all. `ReadFile` supplies a family default that wraps `get_column_names`, so any file reader overriding that hook (`CsvReader`, and every other `ReadFile` subclass) gets a working `describe_columns` for free, with unknown types. `JsonReader`, `ParquetReader`, `FeatherReader`, `OrcReader`, and `SQLITEReader` override it directly to report real types from the format's own schema (or, for `SQLITEReader`, from `PRAGMA table_info`'s declared-type affinity).
+`BaseInputData.describe_columns(data_access) -> dict[str, DataType | None]` maps column name to `DataType` (`None` where unknown), and raises `NotImplementedError` when a reader can't enumerate columns. `ReadFile` supplies a family default wrapping `get_column_names` with unknown types; `JsonReader`, `ParquetReader`, `FeatherReader`, `OrcReader`, and `SQLITEReader` override it to report real types from the format's own schema.
 
 ### Selecting among sibling readers
 

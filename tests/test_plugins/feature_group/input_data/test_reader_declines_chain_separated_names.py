@@ -273,9 +273,8 @@ class TestPinnedNameExemptsSeparatorGuard:
     def test_validate_columns_never_applies_the_separator_guard(
         self, tmp_path: Path, rejection_window: dict[str, MatchRejection]
     ) -> None:
-        """A literal column named "price__scaled" is an ordinary pyarrow column name. Now that
-        FeatherReader overrides get_column_names, validate_columns finds it for real, so True
-        reflects the column genuinely existing, not a NotImplementedError being swallowed."""
+        """'price__scaled' is an ordinary pyarrow column name; validate_columns finds it for real,
+        so True reflects the column genuinely existing, not a NotImplementedError being swallowed."""
         table = pa.Table.from_pydict({"price__scaled": [1, 2, 3]})
         file_path = str(tmp_path / "pinned.feather")
         with pa.OSFile(file_path, "wb") as sink:

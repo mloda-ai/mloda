@@ -286,13 +286,8 @@ class SQLITEReader(ReadDB):
 
     @classmethod
     def describe_columns(cls, data_access: Any) -> dict[str, DataType | None]:
-        """Maps column name to DataType via PRAGMA table_info's declared-type affinity.
-
-        Deliberately returns None (not this method's own guess of STRING) for a
-        NUMERIC/DECIMAL-affinity or undeclared column, unlike the compute framework's
-        private ``_sqlite_affinity_to_arrow_type`` (sqlite_relation.py), which defaults
-        to TEXT: that affinity isn't reliably text.
-        """
+        """Maps column name to DataType via PRAGMA table_info's declared-type affinity; a
+        NUMERIC/DECIMAL or undeclared column maps to None rather than guessing STRING."""
         if not isinstance(data_access, dict) or not data_access.get("table_name"):
             raise ValueError(
                 f"{cls.__name__}.describe_columns requires data_access to be a dict with a 'table_name' key."

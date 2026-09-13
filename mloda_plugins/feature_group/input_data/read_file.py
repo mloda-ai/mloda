@@ -37,7 +37,7 @@ class ReadFile(BaseInputData):
     - load_data
     - suffix
     - get_column_names
-    - describe_columns (optional; the family default wraps get_column_names with unknown types)
+    - describe_columns (optional; default wraps get_column_names with unknown types)
 
     A ReadFile subclass classifies as a final reader by overriding ``load_data``
     wholesale. It may return its table directly, or a descriptor materialized by

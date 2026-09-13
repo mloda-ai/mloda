@@ -154,8 +154,7 @@ class TestReadDB:
             ReadDB.check_feature_in_data_access("", None)
 
     def test_describe_columns_not_implemented(self) -> None:
-        """ReadDB does not override describe_columns, so this pins BaseInputData's own
-        default raise (#858), not a family-level wrap of some other hook."""
+        """ReadDB does not override describe_columns, so this pins BaseInputData's own default raise."""
         with pytest.raises(NotImplementedError):
             ReadDB.describe_columns(None)
 

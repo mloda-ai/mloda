@@ -1,8 +1,6 @@
-"""FeatherReader and OrcReader override get_column_names, so matching opens the real
-file and checks real columns: a plain name matches only when the column genuinely
-exists, and a chain/column-separated name is validated (not blindly declined). This
-needs a real pyarrow install and a real file on disk, not a fake nonexistent path.
-"""
+"""FeatherReader and OrcReader override get_column_names, so matching opens the real file and checks
+real columns instead of blindly declining a chain/column-separated name. Needs a real pyarrow install
+and a real file on disk."""
 
 from collections.abc import Iterator
 from pathlib import Path
@@ -86,9 +84,8 @@ class TestShippedUnvalidatedReadersDeclineChainSeparatedNames:
 
 
 class TestFeatherOrcPyarrowAbsenceGuard:
-    """get_column_names/describe_columns run during matching, where an aborting exception other
-    than NotImplementedError takes down every reader sharing a DataAccessCollection; both must
-    raise NotImplementedError, not AttributeError, when their pyarrow submodule is absent."""
+    """Without pyarrow, get_column_names/describe_columns must raise NotImplementedError, not
+    AttributeError, since an aborting exception during matching takes down every sibling reader."""
 
     def test_feather_reader_raises_not_implemented_without_pyarrow(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
@@ -114,9 +111,7 @@ class TestFeatherOrcPyarrowAbsenceGuard:
 
 
 class TestJsonParquetPyarrowAbsenceGuard:
-    """Same contract as TestFeatherOrcPyarrowAbsenceGuard, for the two other pyarrow-conditional
-    file readers: JsonReader and ParquetReader, covering both their pre-existing
-    get_column_names and their new describe_columns."""
+    """Same contract as TestFeatherOrcPyarrowAbsenceGuard, for JsonReader and ParquetReader."""
 
     def test_json_reader_raises_not_implemented_without_pyarrow(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path

@@ -29,6 +29,7 @@ from mloda.core.abstract_plugins.components.feature_set import FeatureSet
 from mloda.core.abstract_plugins.components.error_utils import MlodaRunError, internal_invariant_error
 from mloda.core.abstract_plugins.feature_group import format_feature_group_class
 from mloda.core.runtime.validate_multiprocessing_link import (
+    raise_on_multiprocessing_connection_conflict,
     raise_on_unpicklable_child_bootstrap,
     raise_on_unpicklable_extender,
     raise_on_unpicklable_join_link,
@@ -513,6 +514,7 @@ class ExecutionOrchestrator:
             self.manager = None
             self.worker_extender_payload = None
         else:
+            raise_on_multiprocessing_connection_conflict(self.tfs_connection_map)
             raise_on_unpicklable_join_link(self.execution_planner)
             raise_on_unpicklable_step_feature_group(self.execution_planner)
             raise_on_unpicklable_child_bootstrap(run_context.child_bootstrap)

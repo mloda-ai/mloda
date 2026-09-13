@@ -1,13 +1,18 @@
 """Guards a Link, a feature group class, a child_bootstrap callable, or an extender against a value
 pickle cannot round-trip, which otherwise fails deep inside a multiprocessing worker with an opaque
-PicklingError instead of being rejected clearly at plan time. This only proves resolvability in the
-current process: a value resolvable here but not inside a freshly spawned worker can still fail there.
+PicklingError instead of being rejected clearly at plan time. Also guards against a compute framework
+that supports MULTIPROCESSING but resolved a live connection from the DataAccessCollection: such a
+TFS destination running in a spawned worker is never handed a connection at all, since the worker-side
+connection bind only runs on the sync and threading execute paths. This only proves resolvability in
+the current process: a value resolvable here but not inside a freshly spawned worker can still fail
+there.
 """
 
 import pickle  # nosec
 from collections.abc import Callable, Iterable
 from typing import Any
 
+from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.components.parallelization_modes import ParallelizationMode
 from mloda.core.abstract_plugins.function_extender import Extender
 from mloda.core.core.step.feature_group_step import FeatureGroupStep
@@ -156,3 +161,27 @@ def raise_on_unpicklable_extender(function_extender: set[Extender] | None) -> No
     for extender in function_extender:
         if not _is_picklable(extender):
             raise ValueError(_unpicklable_extender_error(extender))
+
+
+def _multiprocessing_connection_conflict_error(cfw_class: type[ComputeFramework]) -> str:
+    return (
+        f"{cfw_class.__name__} supports ParallelizationMode.MULTIPROCESSING and a connection was "
+        "resolved for it from the DataAccessCollection, but a TFS destination that runs in a spawned "
+        "worker is never handed a connection (the worker-side connection bind only runs on the sync "
+        "and threading execute paths).\n"
+        "Resolution: the framework author excludes ParallelizationMode.MULTIPROCESSING from "
+        f"{cfw_class.__name__}.supported_parallelization_modes(), or the caller runs without "
+        "ParallelizationMode.MULTIPROCESSING, or the caller omits that connection from the "
+        "DataAccessCollection."
+    )
+
+
+def raise_on_multiprocessing_connection_conflict(tfs_connection_map: dict[type[ComputeFramework], Any]) -> None:
+    """Raise ValueError if a cfw class in tfs_connection_map supports MULTIPROCESSING.
+
+    Every key is already a TFS destination class for which Engine resolved a real connection, so the
+    map alone carries the full condition; no Step objects need inspecting.
+    """
+    for cfw_class in tfs_connection_map:
+        if ParallelizationMode.MULTIPROCESSING in cfw_class.supported_parallelization_modes():
+            raise ValueError(_multiprocessing_connection_conflict_error(cfw_class))

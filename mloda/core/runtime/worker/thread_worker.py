@@ -14,7 +14,6 @@ def thread_worker(
 ) -> None:
     try:
         command.execute(cfw_register, cfw, from_cfw=from_cfw)
-        cfw_register.add_column_names_to_cf_uuid(cfw.uuid, cfw.get_column_names())
         command.step_is_done = True
     except Exception as e:
         error_message = f"An error occurred: {e}"

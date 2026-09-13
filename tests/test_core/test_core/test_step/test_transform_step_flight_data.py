@@ -64,7 +64,7 @@ def test_python_dict_to_pandas_accepts_a_flight_table() -> None:
     step = _step(PythonDictFramework, PandasDataFrame)
     cfw = _cfw(PandasDataFrame, ParallelizationMode.MULTIPROCESSING)
 
-    result = step.transform(cfw, _flight_table(), COLUMN_NAMES)
+    result = step.transform(cfw, _flight_table())
 
     assert isinstance(result, pd.DataFrame)
     assert set(result.columns) == COLUMN_NAMES
@@ -76,7 +76,7 @@ def test_pandas_to_python_dict_accepts_a_flight_table() -> None:
     step = _step(PandasDataFrame, PythonDictFramework)
     cfw = _cfw(PythonDictFramework, ParallelizationMode.MULTIPROCESSING)
 
-    result = step.transform(cfw, _flight_table(), COLUMN_NAMES)
+    result = step.transform(cfw, _flight_table())
 
     assert result == {"flight_data_key": KEYS, "flight_data_payload": PAYLOADS}
 
@@ -86,7 +86,7 @@ def test_pandas_to_pyarrow_passes_a_flight_table_through_unchanged() -> None:
     cfw = _cfw(PyArrowTable, ParallelizationMode.MULTIPROCESSING)
     data = _flight_table()
 
-    result = step.transform(cfw, data, COLUMN_NAMES)
+    result = step.transform(cfw, data)
 
     assert result is data
 
@@ -95,7 +95,7 @@ def test_pyarrow_source_still_transforms_a_flight_table() -> None:
     step = _step(PyArrowTable, PandasDataFrame)
     cfw = _cfw(PandasDataFrame, ParallelizationMode.MULTIPROCESSING)
 
-    result = step.transform(cfw, _flight_table(), COLUMN_NAMES)
+    result = step.transform(cfw, _flight_table())
 
     assert isinstance(result, pd.DataFrame)
     assert list(result["flight_data_key"]) == KEYS
@@ -107,7 +107,7 @@ def test_native_pandas_to_pyarrow_still_transforms() -> None:
     cfw = _cfw(PyArrowTable, ParallelizationMode.SYNC)
     frame = pd.DataFrame({"flight_data_key": KEYS, "flight_data_payload": PAYLOADS})
 
-    result = step.transform(cfw, frame, COLUMN_NAMES)
+    result = step.transform(cfw, frame)
 
     assert isinstance(result, pa.Table)
     assert result.column("flight_data_key").to_pylist() == KEYS
@@ -119,6 +119,6 @@ def test_equal_expected_frameworks_return_native_data_unchanged() -> None:
     cfw = _cfw(PandasDataFrame, ParallelizationMode.SYNC)
     frame = pd.DataFrame({"flight_data_key": KEYS, "flight_data_payload": PAYLOADS})
 
-    result = step.transform(cfw, frame, COLUMN_NAMES)
+    result = step.transform(cfw, frame)
 
     assert result is frame

@@ -72,7 +72,6 @@ def _execute_command(
             )
 
     data = command.execute(cfw_register, cfw, data=data, from_cfw=from_cfw)
-    cfw_register.add_column_names_to_cf_uuid(cfw.uuid, cfw.get_column_names())
     return data
 
 

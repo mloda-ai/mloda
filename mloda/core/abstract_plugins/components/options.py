@@ -296,7 +296,7 @@ class Options:
                 "Expected list, tuple, set, frozenset, str, or Feature object."
             )
 
-    def _rebuild(self, group: dict[str, Any], context: dict[str, Any]) -> "Options":
+    def rebuild(self, group: dict[str, Any], context: dict[str, Any]) -> "Options":
         """A new Options over the given dicts, carrying this one's provenance bookkeeping over."""
         copied = Options(group=group, context=context, propagate_context_keys=self.propagate_context_keys)
         copied.inherited_group_keys = self.inherited_group_keys
@@ -321,14 +321,14 @@ class Options:
 
         Container ownership without __deepcopy__'s copy requirement on the values themselves.
         """
-        return self._rebuild(dict(self.group), dict(self.context))
+        return self.rebuild(dict(self.group), dict(self.context))
 
     def __deepcopy__(self, memo: dict[int, Any]) -> "Options":
         def safe_deepcopy_dict(d: dict[str, Any]) -> dict[str, Any]:
             """Safely deepcopy a dictionary, falling back to shallow copy for unpickleable objects."""
             return {key: _safe_deepcopy(value, memo) for key, value in d.items()}
 
-        return self._rebuild(safe_deepcopy_dict(self.group), safe_deepcopy_dict(self.context))
+        return self.rebuild(safe_deepcopy_dict(self.group), safe_deepcopy_dict(self.context))
 
     def __str__(self) -> str:
         parts = f"Options(group={self.group}, context={self.context}"

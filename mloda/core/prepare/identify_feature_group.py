@@ -608,6 +608,7 @@ class IdentifyFeatureGroupClass:
         # Shallow copies, taken per candidate so an earlier match's write survives a later candidate's raise.
         group_before = dict(feature.options.group)
         context_before = dict(feature.options.context)
+        non_forwarded_before = feature.options.non_forwarded_group_keys
         probe = probe_match_criteria(feature_group, feature.name, feature.options, data_access_collection)
         if probe.matcher_error is not None or probe.value_rejection is not None:
             # Only the contained branch rolls back: a matcher that returns True keeps its write,
@@ -616,6 +617,7 @@ class IdentifyFeatureGroupClass:
             feature.options.group.update(group_before)
             feature.options.context.clear()
             feature.options.context.update(context_before)
+            feature.options.non_forwarded_group_keys = non_forwarded_before
         if probe.value_rejection is not None:
             exc = probe.value_rejection
             # Text, not exc: a retained record must not pin the traceback, its frames and the plugin class.

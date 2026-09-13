@@ -159,13 +159,21 @@ class Options:
         self.inherited_group_keys: frozenset[str] = frozenset()
         self.inherited_context_keys: frozenset[str] = frozenset()
         self.last_forwarded_group_keys: frozenset[str] = frozenset()
+        self.non_forwarded_group_keys: frozenset[str] = frozenset()
         OptionsValidator.validate_no_duplicate_keys(self.group, self.context)
         OptionsValidator.validate_propagate_keys_in_context(self.propagate_context_keys, self.context)
 
-    def add_to_group(self, key: str, value: Any) -> None:
-        """Add parameter to group (affects Feature Group resolution/splitting)."""
+    def add_to_group(self, key: str, value: Any, forward: bool = True) -> None:
+        """Add parameter to group (affects Feature Group resolution/splitting); ``forward=False``
+        marks the key via ``mark_non_forwarded`` so it never flows to input features through ``inherit_from``."""
         OptionsValidator.validate_can_add_to_group(key, value, self.group, self.context)
         self.group[key] = value
+        if not forward:
+            self.mark_non_forwarded(key)
+
+    def mark_non_forwarded(self, key: str) -> None:
+        """Union ``key`` into ``non_forwarded_group_keys``, opting it out of ``inherit_from`` forwarding."""
+        self.non_forwarded_group_keys = self.non_forwarded_group_keys | frozenset({key})
 
     def add_to_context(self, key: str, value: Any) -> None:
         """Add parameter to context (metadata only, doesn't affect splitting)."""
@@ -294,7 +302,19 @@ class Options:
         copied.inherited_group_keys = self.inherited_group_keys
         copied.inherited_context_keys = self.inherited_context_keys
         copied.last_forwarded_group_keys = self.last_forwarded_group_keys
+        copied.non_forwarded_group_keys = self.non_forwarded_group_keys
         return copied
+
+    def __getstate__(self) -> dict[str, Any]:
+        """Pickle protocol hook: strips every ``non_forwarded_group_keys`` entry from ``.group`` in the
+        picklable snapshot. Fires only for an actual pickle (e.g. the multiprocessing preflight check or
+        a real worker handoff), never for plain attribute access, and never for ``copy``/``deepcopy``
+        (those use ``__copy__``/``__deepcopy__`` instead)."""
+        if not self.non_forwarded_group_keys:
+            return self.__dict__
+        state = dict(self.__dict__)
+        state["group"] = {k: v for k, v in self.group.items() if k not in self.non_forwarded_group_keys}
+        return state
 
     def __copy__(self) -> "Options":
         """A new Options owning its group/context dicts while sharing every value by reference.
@@ -344,7 +364,10 @@ class Options:
           The push is skipped when forward_group is False (only the literal False blocks it; an
           empty frozenset allowlist does not).
 
-        DefaultOptionKeys.in_features is never inherited through any flow.
+        DefaultOptionKeys.in_features is never inherited through any flow. A key in
+        consumer.non_forwarded_group_keys IS still forwarded like any other key, but its mark
+        travels with it: self.non_forwarded_group_keys gains that key too, so it keeps being
+        excluded from pickling wherever it lands (see mark_non_forwarded/__getstate__).
 
         Every key actually forwarded (including keys self already held with an equal value) is
         unioned into self.inherited_group_keys, so provenance accumulates across consumers.
@@ -395,6 +418,7 @@ class Options:
         new_context = dict(self.context)
 
         inherited: set[str] = set()
+        propagated_non_forwarded: set[str] = set()
         for key in sorted(group_keys):
             if is_non_forwarded_key(key) or key not in consumer.group:
                 continue
@@ -418,6 +442,8 @@ class Options:
             OptionsValidator.validate_can_add_to_group(key, value, new_group, new_context)
             new_group[key] = value
             inherited.add(key)
+            if key in consumer.non_forwarded_group_keys:
+                propagated_non_forwarded.add(key)
 
         inherited_context: set[str] = set()
         for key in inherit_context_keys:
@@ -451,6 +477,7 @@ class Options:
         self.inherited_group_keys = self.inherited_group_keys | frozenset(inherited)
         self.last_forwarded_group_keys = frozenset(inherited)
         self.inherited_context_keys = self.inherited_context_keys | frozenset(inherited_context)
+        self.non_forwarded_group_keys = self.non_forwarded_group_keys | frozenset(propagated_non_forwarded)
         return frozenset(inherited)
 
 

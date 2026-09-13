@@ -46,6 +46,7 @@ class MatchData:
 
         matched_data_access = cls.match_data_access(feature_name, options, None, framework_connection_object)
         if matched_data_access:
+            options.mark_non_forwarded(cls_name)
             return True
         return False
 
@@ -96,6 +97,7 @@ class MatchData:
             existing_data = options.get(cls_name)
             # `is True`, not a truth test: a non-bool __eq__ result (numpy array) must not raise unmarked here.
             if (existing_data == matched_data_access) is True:
+                options.mark_non_forwarded(cls_name)
                 return
 
             # Marked: two conflicting readers for one feature is a user misconfiguration.
@@ -106,7 +108,7 @@ class MatchData:
                     f"incoming={type(matched_data_access).__name__}, existing={type(existing_data).__name__}"
                 )
             )
-        options.add_to_group(cls_name, matched_data_access)
+        options.add_to_group(cls_name, matched_data_access, forward=False)
 
     @classmethod
     def get_class_name(cls) -> str:

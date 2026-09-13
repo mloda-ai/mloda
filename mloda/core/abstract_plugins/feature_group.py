@@ -284,6 +284,7 @@ class FeatureGroup(ABC):
         result.inherited_group_keys = options.inherited_group_keys
         result.inherited_context_keys = options.inherited_context_keys
         result.last_forwarded_group_keys = options.last_forwarded_group_keys
+        result.non_forwarded_group_keys = options.non_forwarded_group_keys
         return result
 
     @final

@@ -130,3 +130,15 @@ def test_every_imported_key_keeps_its_own_category() -> None:
     assert unified.group.get(UFD_GROUP_KEY) == UFD_HOST_VALUE, f"a host group key must flow: {unified!s}"
     assert UFD_CONTEXT_KEY in unified.context, f"a host context key must flow: {unified!s}"
     assert UFD_CONTEXT_KEY not in unified.group, f"a context key must not leak into group: {unified!s}"
+
+
+def test_a_non_forwarded_marked_key_propagates_its_mark_onto_filter_options() -> None:
+    """A key both in feat_options.group and feat_options.non_forwarded_group_keys must, once copied
+    into filter_options, also mark that key non-forwarded on filter_options."""
+    host = Options(group={UFD_GROUP_KEY: UFD_HOST_VALUE})
+    host.mark_non_forwarded(UFD_GROUP_KEY)
+
+    unified = _unify(host)
+
+    assert unified.group.get(UFD_GROUP_KEY) == UFD_HOST_VALUE, f"the value must still flow: {unified!s}"
+    assert UFD_GROUP_KEY in unified.non_forwarded_group_keys, f"the mark must propagate: {unified!s}"

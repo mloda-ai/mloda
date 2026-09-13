@@ -147,6 +147,15 @@ class TestSubColumnFeatureMatching:
 
             assert result is True, f"Sub-column 'base_feature~{suffix}' should match the parent FeatureGroup"
 
+    def test_non_digit_suffix_does_not_match_parent_feature_group(self) -> None:
+        """A non-digit suffix (e.g. base_feature~mean) does not resolve to the parent FeatureGroup."""
+        feature_name = FeatureName("base_feature~mean")
+        options = Options({})
+
+        result = MultiColumnProducerForSubColumnTest.match_feature_group_criteria(feature_name, options, None)
+
+        assert result is False, "A non-digit sub-column suffix should not match the parent FeatureGroup"
+
 
 class TestSubColumnDependencyResolution:
     """Tests for resolving sub-column dependencies to parent FeatureGroups."""

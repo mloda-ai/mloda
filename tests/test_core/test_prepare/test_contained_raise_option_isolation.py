@@ -80,6 +80,39 @@ def _make_mutating_raise_fg() -> type[FeatureGroup]:
     return MutatingRaiseFG845r
 
 
+def _make_mutating_raise_fg_marks_non_forwarded() -> type[FeatureGroup]:
+    """Candidate that marks a key non-forwarded (forward=False) and then raises an UNMARKED exception."""
+    gc.collect()
+
+    class MutatingRaiseMarksNonForwardedFG845r(FeatureGroup):
+        """Stands in for a MatchData matcher that stamps its connection key before it breaks."""
+
+        @classmethod
+        def feature_names_supported(cls) -> set[str]:
+            return {SHARED_FEATURE}
+
+        @classmethod
+        def compute_framework_rule(cls) -> set[type[ComputeFramework]] | None:
+            return {OptionIsolationFw845r}
+
+        @classmethod
+        def match_feature_group_criteria(
+            cls,
+            feature_name: FeatureName | str,
+            options: Options,
+            data_access_collection: DataAccessCollection | None = None,
+        ) -> bool:
+            if str(feature_name) != SHARED_FEATURE:
+                return False
+            options.add_to_group(SIDE_EFFECT_KEY, SIDE_EFFECT_VALUE, forward=False)
+            raise RuntimeError(RAISE_MESSAGE)
+
+        def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+            return None
+
+    return MutatingRaiseMarksNonForwardedFG845r
+
+
 def _make_clean_owner_fg() -> type[FeatureGroup]:
     """Rival candidate that claims the same feature name cleanly and writes nothing."""
     gc.collect()
@@ -144,6 +177,7 @@ class _OptionsSnapshot:
     option_keys: tuple[str, ...]
     side_effect_value: str | None
     linked_value: str | None
+    non_forwarded_group_keys: tuple[str, ...]
 
 
 def _evaluate(builders: tuple[Callable[[], type[FeatureGroup]], ...]) -> _OptionsSnapshot:
@@ -160,6 +194,7 @@ def _evaluate(builders: tuple[Callable[[], type[FeatureGroup]], ...]) -> _Option
             option_keys=tuple(sorted(str(key) for key in feature.options.keys())),
             side_effect_value=feature.options.get(SIDE_EFFECT_KEY),
             linked_value=feature.options.get(LINKED_KEY),
+            non_forwarded_group_keys=tuple(sorted(feature.options.non_forwarded_group_keys)),
         )
         del result
         del plugins
@@ -197,6 +232,23 @@ class TestMatchingMatcherKeepsItsMutation:
         assert snapshot.identified_names == (LINKING_CLASS_NAME,)
         assert snapshot.linked_value == LINKED_VALUE
         assert LINKED_KEY in snapshot.option_keys
+
+
+class TestNonForwardedMarkRolledBackWithRejectedCandidate:
+    """A mark written during a contained-raise candidate's window must not leak into the next
+    candidate's window: the rollback that restores group/context must restore
+    non_forwarded_group_keys too."""
+
+    def test_mark_from_a_rejected_candidate_does_not_survive(self) -> None:
+        """The raising candidate's non_forwarded mark must not survive into the winning group's options."""
+        snapshot = _evaluate((_make_mutating_raise_fg_marks_non_forwarded, _make_clean_owner_fg))
+
+        assert snapshot.escaped is None
+        assert snapshot.identified_names == (CLEAN_CLASS_NAME,)
+        assert snapshot.non_forwarded_group_keys == (), (
+            f"a contained raise must roll back the mark too, found non_forwarded_group_keys="
+            f"{snapshot.non_forwarded_group_keys}"
+        )
 
 
 class TestRollbackIsPerCandidate:

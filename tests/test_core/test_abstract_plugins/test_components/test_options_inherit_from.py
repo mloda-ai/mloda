@@ -1883,3 +1883,141 @@ class TestInheritFromAtomicOnConflict:
         assert child.group == {}
         assert child.inherited_group_keys == frozenset()
         assert child.last_forwarded_group_keys == frozenset()
+
+
+class TestOptionsNonForwardedGroupKeys:
+    """Options.non_forwarded_group_keys: a per-instance opt-out that keeps a single group key off
+    inherit_from forwarding, closing the MatchData live-connection leak into upstream input features."""
+
+    def test_fresh_options_has_empty_non_forwarded_group_keys(self) -> None:
+        options = Options(group={"own_key": "own_value"})
+
+        assert isinstance(options.non_forwarded_group_keys, frozenset)
+        assert options.non_forwarded_group_keys == frozenset()
+
+    def test_mark_non_forwarded_unions_key(self) -> None:
+        options = Options(group={"conn": "handle"})
+
+        options.mark_non_forwarded("conn")
+
+        assert options.non_forwarded_group_keys == frozenset({"conn"})
+
+    def test_mark_non_forwarded_unions_across_calls(self) -> None:
+        options = Options(group={"a": 1, "b": 2})
+
+        options.mark_non_forwarded("a")
+        options.mark_non_forwarded("b")
+
+        assert options.non_forwarded_group_keys == frozenset({"a", "b"})
+
+    def test_add_to_group_default_forward_does_not_mark(self) -> None:
+        options = Options()
+
+        options.add_to_group("kg_backend", "neo4j")
+
+        assert options.non_forwarded_group_keys == frozenset()
+
+    def test_add_to_group_forward_false_marks_key(self) -> None:
+        options = Options()
+
+        options.add_to_group("MatchDataFG", "connection_handle", forward=False)
+
+        assert options.non_forwarded_group_keys == frozenset({"MatchDataFG"})
+
+    def test_add_to_group_forward_false_still_sets_value(self) -> None:
+        options = Options()
+
+        options.add_to_group("conn", "connection_handle", forward=False)
+
+        assert options.group["conn"] == "connection_handle"
+
+    def test_add_to_group_forward_true_is_same_as_default(self) -> None:
+        options = Options()
+
+        options.add_to_group("kg_backend", "neo4j", forward=True)
+
+        assert options.non_forwarded_group_keys == frozenset()
+
+
+class TestInheritFromPropagatesNonForwardedMark:
+    """inherit_from copies a marked key's VALUE like any other group key (forwarding stays
+    backward-compatible), but also propagates the non_forwarded MARK onto the child, so a key
+    that must never survive pickling keeps that property at every Options it reaches."""
+
+    def test_marked_key_value_is_still_copied_onto_child(self) -> None:
+        """Value forwarding is unchanged: a marked key's value flows to the child by default."""
+        consumer = Options(group={"conn": "handle", "kg_backend": "neo4j"})
+        consumer.mark_non_forwarded("conn")
+        child = Options()
+
+        child.inherit_from(consumer)
+
+        assert child.group["conn"] == "handle"
+
+    def test_marked_key_mark_propagates_to_child(self) -> None:
+        """The child's own non_forwarded_group_keys gains the key after inherit_from runs."""
+        consumer = Options(group={"conn": "handle", "kg_backend": "neo4j"})
+        consumer.mark_non_forwarded("conn")
+        child = Options()
+
+        child.inherit_from(consumer)
+
+        assert "conn" in child.non_forwarded_group_keys
+
+    def test_unmarked_sibling_key_copied_without_gaining_mark(self) -> None:
+        """A normal sibling key is copied but never picks up a non_forwarded mark."""
+        consumer = Options(group={"conn": "handle", "kg_backend": "neo4j"})
+        consumer.mark_non_forwarded("conn")
+        child = Options()
+
+        child.inherit_from(consumer)
+
+        assert child.group["kg_backend"] == "neo4j"
+        assert "kg_backend" not in child.non_forwarded_group_keys
+
+    def test_mark_propagates_under_forward_group_true(self) -> None:
+        """The mark propagation holds under an explicit forward_group=True, not only the default."""
+        consumer = Options(group={"conn": "handle"})
+        consumer.mark_non_forwarded("conn")
+        child = Options()
+
+        child.inherit_from(consumer, forward_group=True)
+
+        assert child.group["conn"] == "handle"
+        assert "conn" in child.non_forwarded_group_keys
+
+    def test_mark_propagates_under_explicit_allowlist_including_marked_key(self) -> None:
+        """No special-case opt-out: an allowlist that admits the marked key still propagates its mark."""
+        consumer = Options(group={"conn": "handle", "kg_backend": "neo4j"})
+        consumer.mark_non_forwarded("conn")
+        child = Options()
+
+        child.inherit_from(consumer, forward_group=frozenset({"conn", "kg_backend"}))
+
+        assert child.group["conn"] == "handle"
+        assert "conn" in child.non_forwarded_group_keys
+        assert "kg_backend" not in child.non_forwarded_group_keys
+
+    def test_marked_key_excluded_by_forward_group_exclude_is_not_copied_or_marked(self) -> None:
+        """A marked key carved out by forward_group_exclude never reaches the child at all."""
+        consumer = Options(group={"conn": "handle", "kg_backend": "neo4j"})
+        consumer.mark_non_forwarded("conn")
+        child = Options()
+
+        child.inherit_from(consumer, forward_group_exclude=frozenset({"conn"}))
+
+        assert "conn" not in child.group
+        assert "conn" not in child.non_forwarded_group_keys
+        assert child.group["kg_backend"] == "neo4j"
+
+    def test_marked_key_omitted_from_allowlist_is_not_copied_or_marked(self) -> None:
+        """A marked key simply left off an allowlist never reaches the child at all."""
+        consumer = Options(group={"conn": "handle", "kg_backend": "neo4j"})
+        consumer.mark_non_forwarded("conn")
+        child = Options()
+
+        child.inherit_from(consumer, forward_group=frozenset({"kg_backend"}))
+
+        assert "conn" not in child.group
+        assert "conn" not in child.non_forwarded_group_keys
+        assert child.group["kg_backend"] == "neo4j"

@@ -246,6 +246,8 @@ class GlobalFilter:
         for key, value in feat_options.group.items():
             if key not in filter_options:
                 filter_options.add_to_group(key, _isolate_forwarded_value(value, memo, _copy_feature_leaf))
+                if key in feat_options.non_forwarded_group_keys:
+                    filter_options.mark_non_forwarded(key)
         for key, value in feat_options.context.items():
             if key not in filter_options:
                 filter_options.add_to_context(key, _isolate_forwarded_value(value, memo, _copy_feature_leaf))

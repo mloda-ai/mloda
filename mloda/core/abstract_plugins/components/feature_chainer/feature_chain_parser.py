@@ -613,6 +613,7 @@ class FeatureChainParser:
         effective.inherited_group_keys = options.inherited_group_keys
         effective.inherited_context_keys = options.inherited_context_keys
         effective.last_forwarded_group_keys = options.last_forwarded_group_keys
+        effective.non_forwarded_group_keys = options.non_forwarded_group_keys
         return effective
 
     @classmethod

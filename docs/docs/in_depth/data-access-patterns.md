@@ -200,6 +200,11 @@ class DuckDBFeatureGroup(FeatureGroup, MatchData):
         return None
 ```
 
+### Connection Forwarding
+- The connection value forwards to input features like any other option, including across a same-class chain (an upstream feature resolved by the same MatchData class as its consumer).
+- Both entry points (`global_scope_data_access` and `feature_scope_data_access`) mark the class-name key non-forwarded for pickling, without blocking normal option flow.
+- Pickling an `Options` with a marked key (multiprocessing preflight or a worker handoff) drops that key from the snapshot, so MatchData features stay safe in mixed SYNC/MULTIPROCESSING runs even though the connection itself can't be pickled. In-process reads are unaffected.
+
 ## Key Differences
 
 | Aspect | BaseInputData | MatchData |

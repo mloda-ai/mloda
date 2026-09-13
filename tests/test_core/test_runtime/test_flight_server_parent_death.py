@@ -19,9 +19,11 @@ def _flight_server_is_gone(pid: int) -> bool:
     """A reparented child can sit as an unreaped zombie, which still answers os.kill(pid, 0);
     /proc state distinguishes that from actually running."""
     stat_path = Path(f"/proc/{pid}/stat")
-    if not stat_path.exists():
+    try:
+        content = stat_path.read_text()
+    except (FileNotFoundError, ProcessLookupError):
         return True
-    return stat_path.read_text().rsplit(")", 1)[1].split()[0] == "Z"
+    return content.rsplit(")", 1)[1].split()[0] == "Z"
 
 
 def _fake_parent_main(pid_file: str) -> None:

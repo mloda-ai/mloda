@@ -12,7 +12,8 @@ class RunResult(list[Any]):
     """The results list of a ``run_all`` call, plus the resolved plan of the run that produced it.
 
     Slicing and concatenation return a plain ``list`` without ``plan`` (standard list-subclass behavior).
-    The list is in completion order; ``frames()`` pairs each frame with its ``PlanStep`` by step identity.
+    The list is in plan order, one element per step that produced requested output; ``frames()``
+    pairs each frame with its ``PlanStep`` by step identity, regardless of order.
     """
 
     def __init__(
@@ -31,7 +32,7 @@ class RunResult(list[Any]):
         return self._plan
 
     def frames(self) -> list[tuple[PlanStep, Any]]:
-        """Pair each frame with the compute PlanStep that produced it, by ``step_uuid``, in completion order."""
+        """Pair each frame with the compute PlanStep that produced it, by ``step_uuid``, regardless of order."""
         steps = {step.step_uuid: step for step in self._plan}
         return [(steps[step_uuid], frame) for step_uuid, frame in self._result_items]
 

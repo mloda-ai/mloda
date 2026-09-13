@@ -174,8 +174,8 @@ class mlodaAPI:
                 MULTIPROCESSING worker before it processes its first command.
 
         Returns:
-            ``RunResult``, a list of computed results, one per feature group in
-            completion order. Each element is a compute-framework object
+            ``RunResult``, a list of computed results, one per feature group, in ``result.plan``
+            order. Each element is a compute-framework object
             (e.g. ``pd.DataFrame``, ``pa.Table``) containing only the columns
             for the requested features resolved by that group. When all
             requested features resolve to a single group, the list has one
@@ -235,9 +235,10 @@ class mlodaAPI:
         """Stream results at feature-group granularity.
 
         Like ``run_all`` but yields each feature group's result as it completes.
-        ``list(stream_all(...))`` equals ``run_all(...)``. Planning happens eagerly
-        at the call; the returned ``ResultStream`` exposes ``plan`` before iteration.
-        ``carrier``/``child_bootstrap`` behave as in ``run_all``.
+        ``list(stream_all(...))`` carries the same elements as ``run_all(...)``. Planning happens
+        eagerly at the call; the returned ``ResultStream`` exposes ``plan`` before iteration.
+        ``carrier``/``child_bootstrap`` behave as in ``run_all``. Unlike ``run_all``, it yields in
+        completion order, which can differ from ``run_all``'s plan order under THREADING/MULTIPROCESSING.
 
         Returns:
             ``ResultStream`` yielding one complete result per feature group; ``stream.frames()`` pairs each

@@ -570,7 +570,7 @@ class TestPopResultDataCollection:
         assert manager.result_data_collection == {}
 
     def test_multiple_items_yields_all_and_empties_collection(self) -> None:
-        """Should yield all items and leave the collection empty."""
+        """Should yield all items in insertion order and leave the collection empty."""
         manager = DataLifecycleManager()
         step_uuid1 = uuid4()
         step_uuid2 = uuid4()
@@ -586,10 +586,7 @@ class TestPopResultDataCollection:
         results = list(manager.pop_result_data_collection())
 
         assert len(results) == 3
-        result_dict = dict(results)
-        assert result_dict[step_uuid1] == data1
-        assert result_dict[step_uuid2] == data2
-        assert result_dict[step_uuid3] == data3
+        assert results == [(step_uuid1, data1), (step_uuid2, data2), (step_uuid3, data3)]
         assert manager.result_data_collection == {}
 
     def test_items_are_removed_during_iteration(self) -> None:

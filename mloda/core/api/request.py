@@ -240,7 +240,8 @@ class mlodaAPI:
         ``carrier``/``child_bootstrap`` behave as in ``run_all``.
 
         Returns:
-            ``ResultStream`` yielding one complete result per feature group.
+            ``ResultStream`` yielding one complete result per feature group; ``stream.frames()`` pairs each
+            result with the ``PlanStep`` that produced it.
         """
         session = cls.prepare(
             features,
@@ -258,13 +259,15 @@ class mlodaAPI:
         )
         # Planning is eager in prepare, so the plan snapshot is available before iteration.
         return ResultStream(
-            session.stream_run(
+            session._start_stream(
                 api_data=api_data,
                 parallelization_modes=parallelization_modes,
                 flight_server=flight_server,
                 function_extender=function_extender,
+                artifacts=None,
                 carrier=carrier,
                 child_bootstrap=child_bootstrap,
+                with_step_uuids=True,
             ),
             session.resolved_plan(),
         )
@@ -498,11 +501,34 @@ class mlodaAPI:
         time, not at first iteration: a function whose body itself contains ``yield`` only starts
         executing on first iteration, which would defer that read past the caller's intended scope.
         """
+        return self._start_stream(
+            api_data,
+            parallelization_modes,
+            flight_server,
+            function_extender,
+            artifacts,
+            carrier,
+            child_bootstrap,
+            with_step_uuids=False,
+        )
+
+    def _start_stream(
+        self,
+        api_data: dict[str, dict[str, Any]] | None,
+        parallelization_modes: set[ParallelizationMode],
+        flight_server: Any | None,
+        function_extender: set[Extender] | None,
+        artifacts: dict[str, Any] | None,
+        carrier: dict[str, str] | None,
+        child_bootstrap: Callable[[], None] | None,
+        with_step_uuids: bool,
+    ) -> Generator[Any, None, None]:
+        """Eager setup for ``stream_run``/``stream_all``; no yield, so carrier/verified_context read at call time."""
         _api_data = api_data if api_data is not None else self.api_data
         runner = self._setup_engine_runner(parallelization_modes, flight_server)
         run_context = self._build_run_context(carrier, child_bootstrap)
         return self._stream_run_results(
-            runner, parallelization_modes, function_extender, _api_data, artifacts, run_context
+            runner, parallelization_modes, function_extender, _api_data, artifacts, run_context, with_step_uuids
         )
 
     def _stream_run_results(
@@ -513,6 +539,7 @@ class mlodaAPI:
         api_data: dict[str, dict[str, Any]] | None,
         artifacts: dict[str, Any] | None,
         run_context: RunContext,
+        with_step_uuids: bool,
     ) -> Generator[Any, None, None]:
         """Deferred half of ``stream_run``: iterating this is what actually drives computation."""
         # Assign self.runner before the yield loop so that get_result()/get_artifacts()
@@ -530,8 +557,8 @@ class mlodaAPI:
                 artifacts=artifacts,
                 run_context=run_context,
             )
-            for _step_uuid, result in runner.compute_stream():
-                yield result
+            for step_uuid, result in runner.compute_stream():
+                yield (step_uuid, result) if with_step_uuids else result
         finally:
             self._exit_runner_context(runner)
 

@@ -630,12 +630,15 @@ class ExecutionOrchestrator:
 
     def get_result(self) -> list[Any]:
         """
-        Gets the results.
+        Gets the results, ordered like `get_result_items()`.
         """
-        return self.data_lifecycle_manager.get_results()
+        return [result for _, result in self.get_result_items()]
 
     def get_result_items(self) -> list[tuple[UUID, Any]]:
         """
-        Gets the results with their step uuids.
+        Gets the results with their step uuids, ordered by position in the resolved execution
+        plan. A uuid absent from the plan sorts last.
         """
-        return self.data_lifecycle_manager.get_result_items()
+        plan_position = {step.uuid: index for index, step in enumerate(self.execution_planner)}
+        items = self.data_lifecycle_manager.get_result_items()
+        return sorted(items, key=lambda item: plan_position.get(item[0], len(plan_position)))

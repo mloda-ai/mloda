@@ -16,11 +16,15 @@ Contract under test:
 
 The chained ``plan_info_sales__mean_aggr`` request reuses the feature groups registered by
 ``tests/test_core/test_api/test_plan_info.py`` so no new registry-wide DataCreator claim is made.
+``run_result_order_probe_value`` is a deliberate exception: it needs its own gated source to
+force completion order and plan order apart under THREADING.
 """
 
 import collections.abc
 import copy
 import pickle  # nosec B403
+import threading
+import time
 from typing import Any
 from unittest.mock import patch
 from uuid import uuid4
@@ -67,6 +71,67 @@ class RunResultProbe(FeatureGroup):
 
 
 _PROBE_PLUGINS = PluginCollector.enabled_feature_groups({RunResultProbe})
+
+
+class RunResultOrderProbe(FeatureGroup):
+    """Root source whose output value depends on ``probe_id``; a ``"slow"`` role blocks on a
+    class-level gate until a ``"fast"`` role signals it, giving a deterministic completion order
+    (a fixed sleep would be flaky under machine load).
+
+    The gate is a class attribute, not a Feature option: a ``threading.Event`` inside ``Options``
+    would pass through ``Engine.compute()``'s per-step deepcopy, which can silently produce a
+    broken, partially-copied ``Event`` that only fails later (e.g. an ``AttributeError`` on
+    ``.wait()``) rather than raising during the copy itself, so ``Options``' deepcopy-failure
+    fallback never catches it. A class attribute sidesteps the copy entirely.
+    """
+
+    _gate: threading.Event = threading.Event()
+
+    @classmethod
+    def reset_gate(cls) -> None:
+        """Fresh gate per test: the class attribute otherwise leaks state across test runs."""
+        cls._gate = threading.Event()
+
+    @classmethod
+    def input_data(cls) -> BaseInputData | None:
+        return DataCreator({"run_result_order_probe_value"})
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        assert features.options is not None
+        role = features.options.get("role")
+        if role == "slow":
+            assert cls._gate.wait(timeout=5.0), "fast role never signalled the gate"
+            # The gate alone only guarantees fast-before-slow completion order; without this
+            # margin the two can still land in the same no-sleep THREADING poll pass, where
+            # plan-order iteration masks the divergence this test needs to see.
+            time.sleep(0.25)
+        elif role == "fast":
+            cls._gate.set()
+        return pd.DataFrame({"run_result_order_probe_value": [features.options.get("probe_id")]})
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PandasDataFrame}
+
+
+_ORDER_PROBE_PLUGINS = PluginCollector.enabled_feature_groups({RunResultOrderProbe})
+
+
+def _order_probe_feature(probe_id: str, role: str | None = None) -> Feature:
+    context: dict[str, Any] = {} if role is None else {"role": role}
+    return Feature("run_result_order_probe_value", options=Options(group={"probe_id": probe_id}, context=context))
+
+
+def _order_probe_ids_in_plan(plan: list[PlanStep]) -> list[str]:
+    """The requested probe_id of each order-probe compute step, in plan order."""
+    ids: list[str] = []
+    for step in plan:
+        if step.step_kind != "compute" or "run_result_order_probe_value" not in step.feature_names:
+            continue
+        assert step.feature_set_options is not None
+        ids.append(step.feature_set_options.get("probe_id"))
+    return ids
 
 
 def _run_probe(features: list[Feature | str]) -> Any:
@@ -403,3 +468,65 @@ class TestResultStreamFrames:
         stream = ResultStream((item for item in [(uuid_b, frame_b), (uuid_a, frame_a)]), [step_a, step_b])
 
         assert list(stream.frames()) == [(step_b, frame_b), (step_a, frame_a)]
+
+
+class TestRunAllListOrderMatchesPlanOrder:
+    """The plain list order (and frames() order) must match plan order, not completion order.
+
+    Which of "alpha"/"beta" resolves first is never assumed: a SYNC-mode resolution discovers it,
+    then that one is made the slow ("gated") feature under THREADING, forcing completion order
+    and plan order apart so only a plan-order fix passes.
+    """
+
+    def _plan_first_probe_id(self) -> str:
+        session = mloda.prepare(
+            [_order_probe_feature("alpha"), _order_probe_feature("beta")],
+            compute_frameworks={PandasDataFrame},
+            plugin_collector=_ORDER_PROBE_PLUGINS,
+            parallelization_modes={ParallelizationMode.SYNC},
+        )
+        probe_ids = _order_probe_ids_in_plan(session.resolved_plan())
+        assert len(probe_ids) == 2
+        return probe_ids[0]
+
+    def _run_with_plan_first_gated(self) -> Any:
+        slow_probe_id = self._plan_first_probe_id()
+        fast_probe_id = "beta" if slow_probe_id == "alpha" else "alpha"
+        RunResultOrderProbe.reset_gate()
+
+        return mlodaAPI.run_all(
+            [
+                _order_probe_feature(slow_probe_id, role="slow"),
+                _order_probe_feature(fast_probe_id, role="fast"),
+            ],
+            compute_frameworks={PandasDataFrame},
+            plugin_collector=_ORDER_PROBE_PLUGINS,
+            parallelization_modes={ParallelizationMode.THREADING},
+        )
+
+    def test_threading_list_order_matches_plan_order(self) -> None:
+        results = self._run_with_plan_first_gated()
+
+        expected_order = _order_probe_ids_in_plan(results.plan)
+        actual_order = [frame["run_result_order_probe_value"].iloc[0] for frame in list(results)]
+        assert actual_order == expected_order
+
+    def test_threading_frames_enumerate_in_plan_order(self) -> None:
+        results = self._run_with_plan_first_gated()
+
+        expected_order = _order_probe_ids_in_plan(results.plan)
+        frame_order = [frame["run_result_order_probe_value"].iloc[0] for _, frame in results.frames()]
+        assert frame_order == expected_order
+
+    def test_sync_list_order_already_matches_plan_order(self) -> None:
+        """Regression guard: SYNC is single-threaded, so this already passes today."""
+        results = mlodaAPI.run_all(
+            [_order_probe_feature("alpha"), _order_probe_feature("beta")],
+            compute_frameworks={PandasDataFrame},
+            plugin_collector=_ORDER_PROBE_PLUGINS,
+            parallelization_modes={ParallelizationMode.SYNC},
+        )
+
+        expected_order = _order_probe_ids_in_plan(results.plan)
+        actual_order = [frame["run_result_order_probe_value"].iloc[0] for frame in list(results)]
+        assert actual_order == expected_order

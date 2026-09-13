@@ -11,6 +11,7 @@ import threading
 import uuid as uuid_mod
 from collections.abc import Callable
 from unittest.mock import Mock, patch, MagicMock
+from uuid import UUID
 
 import pytest
 
@@ -19,6 +20,7 @@ from mloda.core.prepare.execution_plan import ExecutionPlan
 
 from mloda.core.runtime.run import ExecutionOrchestrator
 from mloda.core.core.cfw_manager import CfwManager
+from mloda.core.core.step.feature_group_step import FeatureGroupStep
 from mloda.core.abstract_plugins.components.parallelization_modes import ParallelizationMode
 from mloda.core.abstract_plugins.run_context import RunContext
 
@@ -481,3 +483,57 @@ class TestSyncModeSkipsSleep:
         with patch("mloda.core.runtime.run.time.sleep") as mock_sleep:
             orchestrator.compute()
             mock_sleep.assert_not_called()
+
+
+class TestGetResultItemsPlanOrder:
+    """get_result_items()/get_result() must report plan order, not result_data_collection insertion order."""
+
+    def _make_step(self, step_uuid: UUID) -> Mock:
+        step = Mock(spec=FeatureGroupStep)
+        step.uuid = step_uuid
+        return step
+
+    def _orchestrator_with_plan(self, uuid_a: UUID, uuid_b: UUID, uuid_c: UUID) -> ExecutionOrchestrator:
+        planner = ExecutionPlan()
+        planner.execution_plan = [self._make_step(uuid_a), self._make_step(uuid_b), self._make_step(uuid_c)]
+        orchestrator = ExecutionOrchestrator(planner)
+
+        # Insertion order deliberately differs from plan order (c, a, b vs a, b, c).
+        collection = orchestrator.data_lifecycle_manager.result_data_collection
+        collection[uuid_c] = "result_c"
+        collection[uuid_a] = "result_a"
+        collection[uuid_b] = "result_b"
+        return orchestrator
+
+    def test_get_result_items_returns_plan_order_not_insertion_order(self) -> None:
+        uuid_a, uuid_b, uuid_c = uuid_mod.uuid4(), uuid_mod.uuid4(), uuid_mod.uuid4()
+        orchestrator = self._orchestrator_with_plan(uuid_a, uuid_b, uuid_c)
+
+        assert orchestrator.get_result_items() == [
+            (uuid_a, "result_a"),
+            (uuid_b, "result_b"),
+            (uuid_c, "result_c"),
+        ]
+
+    def test_get_result_returns_values_in_plan_order(self) -> None:
+        uuid_a, uuid_b, uuid_c = uuid_mod.uuid4(), uuid_mod.uuid4(), uuid_mod.uuid4()
+        orchestrator = self._orchestrator_with_plan(uuid_a, uuid_b, uuid_c)
+
+        assert orchestrator.get_result() == ["result_a", "result_b", "result_c"]
+
+    def test_uuid_missing_from_plan_sorts_after_known_order_and_does_not_raise(self) -> None:
+        """A result whose step is absent from execution_planner (a plan/collection mismatch) must
+        not crash lookup; it sorts after every uuid the plan does know about."""
+        uuid_a, uuid_b, uuid_c, uuid_unplanned = (
+            uuid_mod.uuid4(),
+            uuid_mod.uuid4(),
+            uuid_mod.uuid4(),
+            uuid_mod.uuid4(),
+        )
+        orchestrator = self._orchestrator_with_plan(uuid_a, uuid_b, uuid_c)
+        orchestrator.data_lifecycle_manager.result_data_collection[uuid_unplanned] = "result_unplanned"
+
+        items = orchestrator.get_result_items()
+
+        assert items[:3] == [(uuid_a, "result_a"), (uuid_b, "result_b"), (uuid_c, "result_c")]
+        assert items[3] == (uuid_unplanned, "result_unplanned")

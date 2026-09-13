@@ -1,7 +1,14 @@
 from typing import Any, ClassVar
 from mloda.user import DataAccessCollection
-from mloda.provider import FeatureSet, BaseInputData, PropertySpec, record_match_rejection
-from mloda.core.abstract_plugins.components.match_rejection import INPUT_DATA_STAGE
+from mloda.provider import (
+    CHAIN_SEPARATOR,
+    COLUMN_SEPARATOR,
+    FeatureSet,
+    BaseInputData,
+    INPUT_DATA_STAGE,
+    PropertySpec,
+    record_match_rejection,
+)
 from mloda.user import Options
 
 
@@ -20,6 +27,9 @@ class ReadDB(BaseInputData):
     (optionally ``prepare_credentials``/``build_query``/``check_feature_in_data_access``)
     instead of overriding ``load_data`` wholesale. Overriding ``load_data`` directly
     is still supported.
+
+    If check_feature_in_data_access is not overridden, the class declines a chain- or
+    column-separated feature name instead of assuming it owns it.
     """
 
     _auto_load_group: str = "feature_group/input_data/read_dbs"
@@ -160,7 +170,19 @@ class ReadDB(BaseInputData):
                         )
                         continue
                     except NotImplementedError:
-                        pass
+                        # COLUMN_SEPARATOR never reaches here in production (get_column_base_feature strips it
+                        # first); kept for direct callers of match_read_db_data_access.
+                        if not cls._is_overridden(ReadDB, "check_feature_in_data_access") and (
+                            CHAIN_SEPARATOR in feature_names[0] or COLUMN_SEPARATOR in feature_names[0]
+                        ):
+                            record_match_rejection(
+                                cls.get_class_name(),
+                                f"{cls.get_class_name()} accepted the credentials but does not override "
+                                f"check_feature_in_data_access, so it cannot confirm the chain/column-separated "
+                                f"feature '{feature_names[0]}'",
+                                stage=INPUT_DATA_STAGE,
+                            )
+                            continue
 
                     return data_access
             except NotImplementedError:

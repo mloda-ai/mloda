@@ -3,8 +3,14 @@ from pathlib import Path
 from typing import Any, ClassVar
 from mloda.user import DataAccessCollection
 from mloda.provider import FeatureSet
-from mloda.provider import BaseInputData, PropertySpec, record_match_rejection
-from mloda.core.abstract_plugins.components.match_rejection import INPUT_DATA_STAGE
+from mloda.provider import (
+    BaseInputData,
+    CHAIN_SEPARATOR,
+    COLUMN_SEPARATOR,
+    INPUT_DATA_STAGE,
+    PropertySpec,
+    record_match_rejection,
+)
 from mloda.user import Options
 
 
@@ -35,7 +41,10 @@ class ReadFile(BaseInputData):
     wholesale. It may return its table directly, or a descriptor materialized by
     the target compute framework (CsvReader returns a ``FileSource``).
 
-    If get_column_names is not implemented, the class will assume the columns are there.
+    If get_column_names is not overridden, the class assumes plain columns are present but
+    declines a chain- or column-separated name while matching (an explicit column_to_file pin
+    is exempt; overriding get_column_names opts out). A match_subclass_data_access override
+    should route through _file_matches to keep that guard.
     """
 
     _auto_load_group: str = "feature_group/input_data/read_files"
@@ -136,7 +145,29 @@ class ReadFile(BaseInputData):
             return False
         if document_suffixes and any(path.endswith(s) for s in document_suffixes):
             return False
+        if cls._declines_unvalidated_separator_name(path, feature_names):
+            return False
         return cls.validate_columns(path, feature_names) is not False
+
+    @classmethod
+    def _declines_unvalidated_separator_name(cls, file_name: str, feature_names: list[str]) -> bool:
+        """Declines a chain/column-separated name when get_column_names is not overridden."""
+        # An override whose get_column_names raises NotImplementedError still bypasses this guard.
+        if cls._is_overridden(ReadFile, "get_column_names"):
+            return False
+        # COLUMN_SEPARATOR never reaches here in production (get_column_base_feature strips it first); kept for
+        # direct callers. Sharing the owner name with the missing-column decline is safe: the two are mutually
+        # exclusive, since validate_columns records nothing when get_column_names is not overridden.
+        for feature in feature_names:
+            if CHAIN_SEPARATOR in feature or COLUMN_SEPARATOR in feature:
+                record_match_rejection(
+                    cls.get_class_name(),
+                    f"{cls.get_class_name()} matched the suffix of {file_name} but does not override "
+                    f"get_column_names, so it cannot confirm the chain/column-separated name '{feature}'",
+                    stage=INPUT_DATA_STAGE,
+                )
+                return True
+        return False
 
     @classmethod
     def match_read_file_data_access(
@@ -144,23 +175,14 @@ class ReadFile(BaseInputData):
     ) -> Any:
         for data_access in data_accesses:
             if data_access.endswith(cls.suffix()):
-                if document_suffixes and any(data_access.endswith(s) for s in document_suffixes):
-                    continue
-                if cls.validate_columns(data_access, feature_names) is False:
-                    continue
-
-                return data_access
+                if cls._file_matches(data_access, feature_names, document_suffixes):
+                    return data_access
+                continue
 
             if os.path.isdir(data_access):
                 for file in os.listdir(data_access):
-                    if file.endswith(cls.suffix()):
-                        if document_suffixes and any(file.endswith(s) for s in document_suffixes):
-                            continue
-                        file_name = os.path.join(data_access, file)
-
-                        if cls.validate_columns(file_name, feature_names) is False:
-                            continue
-
+                    file_name = os.path.join(data_access, file)
+                    if cls._file_matches(file_name, feature_names, document_suffixes):
                         return file_name
         return None
 

@@ -425,7 +425,9 @@ class ExecutionOrchestrator:
         if not step.owed_tokens:
             return
 
-        uuid = step.source_framework_uuid if step.source_framework_uuid else next(iter(step.required_uuids))
+        # owed_tokens is only ever non-empty for a plain hop (link_id is None), and
+        # source_framework_uuid is only ever set on a join-triggered hop, so it is always None here.
+        uuid = next(iter(step.required_uuids))
         from_cfw_uuid = self.cfw_register.get_cfw_uuid(step.from_framework.get_class_name(), uuid)
         if from_cfw_uuid is None:
             return

@@ -905,6 +905,63 @@ class _Gap1SiblingFG(FeatureGroup):
         return {"gap1_sibling_tripled"}
 
 
+class _DiamondHopRootFG(FeatureGroup):
+    """Root feature feeding both a plain cross-framework hop and a same-framework diamond
+    descendant that also reads the hop's own output."""
+
+    @classmethod
+    def input_data(cls) -> BaseInputData | None:
+        return DataCreator({"diamond_hop_root_val"})
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PythonDictFramework}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return {"diamond_hop_root_val": [1, 2, 3]}
+
+
+class _DiamondHopDestFG(FeatureGroup):
+    """Plain (non-join) cross-framework hop consumer of the root."""
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return {Feature("diamond_hop_root_val")}
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PyArrowTable}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return data.append_column("diamond_hop_doubled", pc.multiply(data["diamond_hop_root_val"], 2))
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {"diamond_hop_doubled"}
+
+
+class _DiamondHopDescendantFG(FeatureGroup):
+    """Reads the root DIRECTLY (same framework as the root, not via the hop) as well as the hop's
+    own output feature: a graph-descendant of BOTH the hop's source and its consumer, which
+    `owed_tokens` must not let the hop's own finish drop early."""
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return {Feature("diamond_hop_root_val"), Feature("diamond_hop_doubled")}
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PythonDictFramework}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return {"diamond_hop_result": [v * 7 for v in data["diamond_hop_root_val"]]}
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {"diamond_hop_result"}
+
+
 @pytest.mark.timeout(30)
 @pytest.mark.skipif(pa is None, reason="PyArrow not installed.")
 class TestTransformFrameworkStepSourceRootDropTiming:
@@ -965,11 +1022,16 @@ class TestTransformFrameworkStepSourceRootDropTiming:
         leftover = FlightServer.list_flight_infos(flight_server.location)
         assert leftover == set(), f"leaked flight tables: {leftover}"
 
-    def test_shared_root_survives_hop_until_independent_sibling_also_finishes(self, flight_server: Any) -> None:
+    def test_shared_root_survives_hop_until_independent_sibling_also_finishes(
+        self, flight_server: Any, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         """The shared root also feeds an independent, same-framework sibling chain (delayed by
         two gates so it cannot race the much shorter hop branch): the root must survive until
         BOTH have consumed it. Allowed to currently pass (today's bug under-drops via the
-        finalize-only sweep; it never over-drops)."""
+        finalize-only sweep; it never over-drops). A `ComputeFramework.upload_finished_data` spy
+        identifies the shared root's own cfw uuid (the specific flight-table key to watch):
+        asserting mere non-emptiness of the flight server would still pass under a mutation that
+        force-drops this exact cfw too early, so long as anything else remains on the server."""
         plugin_collector = PluginCollector.enabled_feature_groups(
             {
                 _Gap1SharedRootFG,
@@ -979,6 +1041,16 @@ class TestTransformFrameworkStepSourceRootDropTiming:
                 _Gap1SiblingFG,
             }
         )
+
+        shared_root_uuids: list[str] = []
+        original_upload = ComputeFramework.upload_finished_data
+
+        def _spy_upload(self: Any, location: str) -> Any:
+            if type(self).get_class_name() == _ThreadingOnlyPythonDictFramework.get_class_name():
+                shared_root_uuids.append(str(self.uuid))
+            return original_upload(self, location)
+
+        monkeypatch.setattr(ComputeFramework, "upload_finished_data", _spy_upload)
 
         stream = mloda.stream_all(
             [Feature("gap1_hop_doubled"), Feature("gap1_sibling_tripled")],
@@ -997,10 +1069,12 @@ class TestTransformFrameworkStepSourceRootDropTiming:
         )
         assert first_result.column("gap1_hop_doubled").to_pylist() == [2, 4, 6]
 
+        assert len(shared_root_uuids) == 1, f"expected exactly one shared-root upload, got {shared_root_uuids}"
         mid_run_keys = _flight_table_keys(flight_server.location)
-        assert mid_run_keys, (
-            "the independent sibling has not finished yet: the shared root's upload must still "
-            "be on the flight server, not dropped just because the hop alone finished"
+        assert shared_root_uuids[0] in mid_run_keys, (
+            f"the independent sibling has not finished yet: the shared root's own upload "
+            f"{shared_root_uuids[0]} must still be on the flight server, not dropped just because "
+            f"the hop alone finished: {mid_run_keys}"
         )
 
         second_step, second_result = next(frames)
@@ -1012,3 +1086,26 @@ class TestTransformFrameworkStepSourceRootDropTiming:
 
         leftover = FlightServer.list_flight_infos(flight_server.location)
         assert leftover == set(), f"leaked flight tables: {leftover}"
+
+    def test_diamond_descendant_of_hop_source_and_consumer_survives_hop_finish(self, flight_server: Any) -> None:
+        """A feature that graph-descends from BOTH the hop's source root AND the hop's own
+        consumer output must not be starved of the root: crediting the hop's consumer's full
+        `children_if_root` (instead of just the consumer's own uuids) into `owed_tokens`
+        double-counts this descendant, so the root's `children_if_root` looks fully satisfied and
+        gets dropped as soon as the hop finishes, even though this descendant's own step still
+        needs to read the root directly. Pure SYNC: the drop mechanism runs identically in-process,
+        so no flight server or MULTIPROCESSING is needed to reproduce the bug."""
+        plugin_collector = PluginCollector.enabled_feature_groups(
+            {_DiamondHopRootFG, _DiamondHopDestFG, _DiamondHopDescendantFG}
+        )
+
+        result = mloda.run_all(
+            [Feature("diamond_hop_result")],
+            compute_frameworks={PythonDictFramework, PyArrowTable},
+            plugin_collector=plugin_collector,
+            parallelization_modes={ParallelizationMode.SYNC},
+        )
+
+        assert result is not None
+        assert len(result) == 1
+        assert list(result[0]["diamond_hop_result"]) == [7, 14, 21]

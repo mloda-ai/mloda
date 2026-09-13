@@ -625,7 +625,7 @@ Available join types:
                     _ep.need_to_upload = True
 
         # A plain (non-join) hop's SOURCE-side cfw is never otherwise marked as consumed once the hop
-        # finishes, so credit owed_tokens from each downstream consumer's own children_if_root, letting
+        # finishes, so credit owed_tokens from each downstream consumer's own uuids, letting
         # _drop_tfs_source_if_possible mark it incrementally instead of only at run finalize. Two cases
         # are skipped and left with empty owed_tokens (a safe no-op): a join-triggered hop's own
         # source-root, whose destination-side drop _drop_join_source_if_possible already handles; and a
@@ -641,15 +641,21 @@ Available join types:
                 join_frameworks.add(_ep.source_framework)
                 join_frameworks.add(_ep.destination_framework)
 
-        for _ep in new_execution_plan:
-            if isinstance(_ep, TransformFrameworkStep) and _ep.link_id is None:
-                if _ep.from_framework in join_frameworks:
-                    continue
-                owed: set[UUID] = set()
-                for _consumer in new_execution_plan:
-                    if isinstance(_consumer, FeatureGroupStep) and _ep.uuid in _consumer.required_uuids:
-                        owed.update(_consumer.children_if_root)
-                _ep.owed_tokens = frozenset(owed)
+        eligible_hops: dict[UUID, TransformFrameworkStep] = {
+            _ep.uuid: _ep
+            for _ep in new_execution_plan
+            if isinstance(_ep, TransformFrameworkStep)
+            and _ep.link_id is None
+            and _ep.from_framework not in join_frameworks
+        }
+        owed_by_hop: dict[UUID, set[UUID]] = {hop_uuid: set() for hop_uuid in eligible_hops}
+        for _consumer in new_execution_plan:
+            if isinstance(_consumer, FeatureGroupStep):
+                for hop_uuid in _consumer.required_uuids & eligible_hops.keys():
+                    owed_by_hop[hop_uuid].update(_consumer.get_uuids())
+
+        for hop_uuid, owed in owed_by_hop.items():
+            eligible_hops[hop_uuid].owed_tokens = frozenset(owed)
 
         return new_execution_plan
 

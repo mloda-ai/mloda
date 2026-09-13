@@ -198,11 +198,10 @@ class ComputeFrameworkExecutor:
                     f"from_feature_uuid or from_cfw_uuid should not be none. {step, from_feature_uuid, from_cfw_uuid}"
                 )
 
-            from_cfw = self.cfw_collection[from_cfw_uuid]
-
             if step.link_id:
                 childrens = {step.link_id}
             else:
+                from_cfw = self.cfw_collection[from_cfw_uuid]
                 childrens = set(from_cfw.children_if_root)
 
             with self._cfw_lock:

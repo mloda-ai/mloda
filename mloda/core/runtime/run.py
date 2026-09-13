@@ -407,8 +407,7 @@ class ExecutionOrchestrator:
         self._mark_children_and_track(cfw, feature_uuids_to_possible_drop)
 
     def _drop_join_source_if_possible(self, step: JoinStep) -> None:
-        """Marks the cfw registered under the join's destination-framework-class-name and
-        link.uuid key with the link's own uuid, once the join step finishes; applies to both
+        """Marks the join's destination-registered cfw with the link's own uuid; applies to both
         same- and cross-framework joins, since only the join's own completion can supply it."""
         source_cfw_uuid = self.cfw_register.get_cfw_uuid_as_registered(
             step.destination_framework.get_class_name(), step.link.uuid

@@ -536,8 +536,6 @@ class TestPureMultiprocessingTransformHopDoesNotLeakFlightTable:
 
 
 class _ThreadingOnlyPyArrowTable(PyArrowTable):
-    """A PyArrowTable whose steps can only ever run under SYNC or THREADING."""
-
     @classmethod
     def supported_parallelization_modes(cls) -> set[ParallelizationMode]:
         return {ParallelizationMode.SYNC, ParallelizationMode.THREADING}

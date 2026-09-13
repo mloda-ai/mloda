@@ -35,6 +35,22 @@ class TestOptions:
         assert options.group == {"data_source": "prod", "environment": "staging"}
         assert options.context == {"aggregation_type": "sum", "debug_mode": True}
 
+    def test_rebuild_preserves_all_provenance_fields(self) -> None:
+        options = Options(group={"source": "raw"}, context={"mode": "train"})
+        options.inherited_group_keys = frozenset({"source"})
+        options.inherited_context_keys = frozenset({"mode"})
+        options.last_forwarded_group_keys = frozenset({"source"})
+        options.non_forwarded_group_keys = frozenset({"private"})
+
+        rebuilt = options.rebuild(group={"source": "clean"}, context={"mode": "eval"})
+
+        assert rebuilt.group == {"source": "clean"}
+        assert rebuilt.context == {"mode": "eval"}
+        assert rebuilt.inherited_group_keys == options.inherited_group_keys
+        assert rebuilt.inherited_context_keys == options.inherited_context_keys
+        assert rebuilt.last_forwarded_group_keys == options.last_forwarded_group_keys
+        assert rebuilt.non_forwarded_group_keys == options.non_forwarded_group_keys
+
     def test_unknown_parameter_error(self) -> None:
         """Test that using unknown parameters raises TypeError."""
         with pytest.raises(TypeError, match="got an unexpected keyword argument"):

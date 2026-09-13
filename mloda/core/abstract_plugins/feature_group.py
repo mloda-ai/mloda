@@ -276,15 +276,10 @@ class FeatureGroup(ABC):
                 fills_group[key] = value
         if not fills_group and not fills_context:
             return options
-        result = Options(
+        return options.rebuild(
             group={**options.group, **fills_group},
             context={**options.context, **fills_context},
-            propagate_context_keys=options.propagate_context_keys,
         )
-        result.inherited_group_keys = options.inherited_group_keys
-        result.inherited_context_keys = options.inherited_context_keys
-        result.last_forwarded_group_keys = options.last_forwarded_group_keys
-        return result
 
     @final
     @classmethod

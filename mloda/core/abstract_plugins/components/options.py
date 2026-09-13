@@ -289,11 +289,16 @@ class Options:
             )
 
     def _rebuild(self, group: dict[str, Any], context: dict[str, Any]) -> "Options":
-        """A new Options over the given dicts, carrying this one's provenance bookkeeping over."""
+        """Backward-compatible private alias for :meth:`rebuild`."""
+        return self.rebuild(group, context)
+
+    def rebuild(self, group: dict[str, Any], context: dict[str, Any]) -> "Options":
+        """Return new options over the given dicts, preserving provenance bookkeeping."""
         copied = Options(group=group, context=context, propagate_context_keys=self.propagate_context_keys)
         copied.inherited_group_keys = self.inherited_group_keys
         copied.inherited_context_keys = self.inherited_context_keys
         copied.last_forwarded_group_keys = self.last_forwarded_group_keys
+        copied.non_forwarded_group_keys = self.non_forwarded_group_keys
         return copied
 
     def __copy__(self) -> "Options":

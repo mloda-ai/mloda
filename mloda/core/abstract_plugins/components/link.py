@@ -9,6 +9,7 @@ from typing import Any, ClassVar, Literal
 
 from mloda.core.abstract_plugins.components.hashable_dict import _deep_hashable
 from mloda.core.abstract_plugins.components.index.index import Index
+from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.components.validators.link_validator import LinkValidator
 
 
@@ -589,6 +590,14 @@ class Link:
         return self.matches_exact(other_left_feature_group, other_right_feature_group) or self.matches_polymorphic(
             other_left_feature_group, other_right_feature_group
         )
+
+    @staticmethod
+    def matches_discriminator(discriminator: dict[str, Any], options: Options) -> bool:
+        """Whether every discriminator key-value pair is present and equal in options."""
+        for dk, dv in discriminator.items():
+            if dk not in options or options.get(dk) != dv:
+                return False
+        return True
 
     def __eq__(self, other: Any) -> bool:
         if not isinstance(other, Link):

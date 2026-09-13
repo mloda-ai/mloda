@@ -345,6 +345,21 @@ class Engine:
         for index in indexes:
             self._process_index_feature(feature_group_class, feature_group, feature, features, index)
 
+    def _link_sides(self, link: Link, feature_group_class: type[FeatureGroup], feature: Feature) -> tuple[bool, bool]:
+        """Which side(s) of a link this feature group class occupies, narrowed by discriminator for same-class links."""
+        left = link.left_feature_group == feature_group_class
+        right = link.right_feature_group == feature_group_class
+
+        if left and right:
+            left = link.left_discriminator is None or Link.matches_discriminator(
+                link.left_discriminator, feature.options
+            )
+            right = link.right_discriminator is None or Link.matches_discriminator(
+                link.right_discriminator, feature.options
+            )
+
+        return left, right
+
     def _add_index_feature_from_links(
         self,
         feature_group_class: type[FeatureGroup],
@@ -361,19 +376,21 @@ class Engine:
         for link in self.links:
             if link.jointype in (JoinType.APPEND, JoinType.UNION):
                 continue
-            if link.left_feature_group == feature_group_class and feature_name_str in link.left_index.index:
+            left, right = self._link_sides(link, feature_group_class, feature)
+            if left and feature_name_str in link.left_index.index:
                 return
-            if link.right_feature_group == feature_group_class and feature_name_str in link.right_index.index:
+            if right and feature_name_str in link.right_index.index:
                 return
 
         for link in self.links:
             if link.jointype in (JoinType.APPEND, JoinType.UNION):
                 continue
-            if link.left_feature_group == feature_group_class:
+            left, right = self._link_sides(link, feature_group_class, feature)
+            if left:
                 self._create_and_add_index_feature(
                     feature_group_class, feature_group, feature, features, link.left_index
                 )
-            if link.right_feature_group == feature_group_class:
+            if right:
                 self._create_and_add_index_feature(
                     feature_group_class, feature_group, feature, features, link.right_index
                 )
@@ -391,10 +408,11 @@ class Engine:
             return
 
         for link in self.links:
-            if link.left_feature_group == feature_group_class and link.left_index == index:
+            left, right = self._link_sides(link, feature_group_class, feature)
+            if left and link.left_index == index:
                 self._create_and_add_index_feature(feature_group_class, feature_group, feature, features, index)
 
-            if link.right_feature_group == feature_group_class and link.right_index == index:
+            if right and link.right_index == index:
                 self._create_and_add_index_feature(feature_group_class, feature_group, feature, features, index)
 
     def _create_and_add_index_feature(

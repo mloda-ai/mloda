@@ -240,16 +240,18 @@ class ComputeFrameworkExecutor:
 
         return cfw_uuid
 
-    def prepare_tfs_and_joinstep(self, step: Any) -> Any:
-        """
-        Prepares CFWs required for TransformFrameworkStep or JoinStep.
-        """
-        from_cfw: Any | None = None
+    def prepare_tfs_and_joinstep(self, step: Any) -> ComputeFramework | UUID | None:
+        """Resolve the source cfw for a transform or join step; a UUID when a worker owns the transform source."""
+        from_cfw: ComputeFramework | None = None
         if isinstance(step, TransformFrameworkStep):
-            from_cfw = self.prepare_tfs_right_cfw(step)
-            from_cfw = self.cfw_collection[from_cfw]
+            source_uuid = self.prepare_tfs_right_cfw(step)
+            if self.worker_manager.get_process_queues(source_uuid) is not None:
+                # A worker owns this source cfw; its data lives on the flight server, not here.
+                return source_uuid
+            from_cfw = self.cfw_collection[source_uuid]
         elif isinstance(step, JoinStep):
-            # Destination framework here, because it is already transformed beforehand
+            # Both join sides are destination-framework cfws, whose modes kept this join in the
+            # parent, so neither can be worker-owned.
             from_cfw_uuid = self.cfw_register.get_cfw_uuid(step.destination_framework.get_class_name(), step.link.uuid)
 
             if from_cfw_uuid is None:
@@ -288,7 +290,10 @@ class ComputeFrameworkExecutor:
 
         try:
             from_cfw = self.prepare_tfs_and_joinstep(step) or None
-            step.execute(self.cfw_register, self.cfw_collection[cfw_uuid], from_cfw=from_cfw)
+            cfw = self.cfw_collection[cfw_uuid]
+            step.execute(self.cfw_register, cfw, from_cfw=from_cfw)
+            # a worker-side consumer of this cfw resolves the names through the register
+            self.cfw_register.add_column_names_to_cf_uuid(cfw_uuid, cfw.get_column_names())
             step.step_is_done = True
 
         except Exception as e:
@@ -328,13 +333,10 @@ class ComputeFrameworkExecutor:
         existing = self.worker_manager.get_process_queues(cfw_uuid)
 
         if existing is None:
-            needs_tfs_connection = isinstance(step, TransformFrameworkStep) and (
-                self.tfs_connection_map.get(type(self.cfw_collection[cfw_uuid])) is not None
-            )
             process, command_queue, result_queue = self.worker_manager.create_worker_process(
                 cfw_uuid,
                 worker,
-                (self.cfw_register, self.cfw_collection[cfw_uuid], from_cfw, needs_tfs_connection),
+                (self.cfw_register, self.cfw_collection[cfw_uuid], from_cfw),
             )
         else:
             process, command_queue, result_queue = existing

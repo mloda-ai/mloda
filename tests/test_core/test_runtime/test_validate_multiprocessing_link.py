@@ -13,6 +13,7 @@ import pytest
 from mloda.core.core.step.join_step import JoinStep
 from mloda.provider import FeatureGroup
 from mloda.user import Index, JoinSpec, Link
+from mloda_plugins.compute_framework.base_implementations.duckdb.duckdb_framework import DuckDBFramework
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 
@@ -142,6 +143,18 @@ def test_a_link_with_unpicklable_discriminator_and_picklable_feature_groups_is_r
     assert f"references {ValidateLinkRight.__name__} (" not in message, (
         f"neither feature group is individually unpicklable; got: {message}"
     )
+
+
+def test_join_link_preflight_skips_destination_without_multiprocessing() -> None:
+    """A SYNC-only destination can never dispatch this join to a worker, so an unpicklable Link must not be rejected."""
+    unpicklable_left = _make_local_feature_group()
+    link = Link.inner(
+        JoinSpec(unpicklable_left, Index(("left_key",))),
+        JoinSpec(ValidateLinkRight, Index(("right_key",))),
+    )
+    step = JoinStep(link, DuckDBFramework, PandasDataFrame, set(), set(), set())
+
+    raise_on_unpicklable_join_link([step])
 
 
 def test_a_link_with_a_dynamic_feature_group_creator_class_is_rejected() -> None:

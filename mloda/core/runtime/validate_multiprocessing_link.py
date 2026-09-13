@@ -53,6 +53,9 @@ def raise_on_unpicklable_join_link(steps: Iterable[Any]) -> None:
         if not isinstance(step, JoinStep):
             continue
 
+        if ParallelizationMode.MULTIPROCESSING not in step.get_parallelization_mode():
+            continue
+
         if _is_picklable(step.link):
             continue
 

@@ -343,12 +343,11 @@ class ComputeFramework(ABC):
 
         self.run_validate_output_features(feature_group, features)
 
-        # case threading/sync
-        if not location:
+        # only a worker-resident instance hands its data on through the flight server
+        if not location or self.mode is not ParallelizationMode.MULTIPROCESSING:
             return None
 
-        # case multiprocessing
-        # return data to be used in next step of this framework in this process
+        # worker-resident: return data to be used in next step of this framework in this process
         if len(self.children_if_root) > len(self.already_calculated_children_tracker) + len(features.features):
             return self.data
 

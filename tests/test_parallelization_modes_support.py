@@ -6,6 +6,7 @@ These tests define requirements for:
 3. ComputeFramework.supported_parallelization_modes() base class returns all three modes
 4. SetupComputeFramework filters out frameworks incompatible with requested parallelization_modes
 5. FeatureGroupStep.get_parallelization_mode() delegates to compute_framework.supported_parallelization_modes()
+6. SparkFramework and IcebergFramework support SYNC and THREADING only (no MULTIPROCESSING)
 """
 
 from unittest.mock import MagicMock
@@ -24,6 +25,8 @@ from mloda.core.core.step.transform_frame_work_step import TransformFrameworkSte
 from mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_framework import SqliteFramework
 from mloda_plugins.compute_framework.base_implementations.duckdb.duckdb_framework import DuckDBFramework
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
+from mloda_plugins.compute_framework.base_implementations.spark.spark_framework import SparkFramework
+from mloda_plugins.compute_framework.base_implementations.iceberg.iceberg_framework import IcebergFramework
 
 
 class TestComputeFrameworkSupportedParallelizationModes:
@@ -97,6 +100,34 @@ class TestDuckDBFrameworkSupportedParallelizationModes:
         assert isinstance(result, set)
 
 
+class TestSparkFrameworkSupportedParallelizationModes:
+    """Tests for SparkFramework.supported_parallelization_modes()."""
+
+    def test_spark_returns_sync_and_threading(self) -> None:
+        """SparkFramework must support SYNC and THREADING only (no MULTIPROCESSING)."""
+        result = SparkFramework.supported_parallelization_modes()
+        assert result == {ParallelizationMode.SYNC, ParallelizationMode.THREADING}
+
+    def test_spark_does_not_support_multiprocessing(self) -> None:
+        """SparkFramework must not include MULTIPROCESSING in supported modes."""
+        result = SparkFramework.supported_parallelization_modes()
+        assert ParallelizationMode.MULTIPROCESSING not in result
+
+
+class TestIcebergFrameworkSupportedParallelizationModes:
+    """Tests for IcebergFramework.supported_parallelization_modes()."""
+
+    def test_iceberg_returns_sync_and_threading(self) -> None:
+        """IcebergFramework must support SYNC and THREADING only (no MULTIPROCESSING)."""
+        result = IcebergFramework.supported_parallelization_modes()
+        assert result == {ParallelizationMode.SYNC, ParallelizationMode.THREADING}
+
+    def test_iceberg_does_not_support_multiprocessing(self) -> None:
+        """IcebergFramework must not include MULTIPROCESSING in supported modes."""
+        result = IcebergFramework.supported_parallelization_modes()
+        assert ParallelizationMode.MULTIPROCESSING not in result
+
+
 class TestSetupComputeFrameworkParallelizationModeFiltering:
     """Tests for SetupComputeFramework filtering by parallelization_modes."""
 
@@ -148,6 +179,36 @@ class TestSetupComputeFrameworkParallelizationModeFiltering:
             features=features,
         )
         assert SqliteFramework in setup.compute_frameworks
+
+    def test_multiprocessing_mode_excludes_spark_framework(self) -> None:
+        """SparkFramework only supports SYNC and THREADING, so MULTIPROCESSING must raise ValueError."""
+        features = Features([Feature("test_feature")])
+        with pytest.raises(ValueError, match="parallelization modes"):
+            SetupComputeFramework(
+                user_compute_frameworks={SparkFramework},
+                features=features,
+                parallelization_modes={ParallelizationMode.MULTIPROCESSING},
+            )
+
+    def test_multiprocessing_mode_excludes_iceberg_framework(self) -> None:
+        """IcebergFramework only supports SYNC and THREADING, so MULTIPROCESSING must raise ValueError."""
+        features = Features([Feature("test_feature")])
+        with pytest.raises(ValueError, match="parallelization modes"):
+            SetupComputeFramework(
+                user_compute_frameworks={IcebergFramework},
+                features=features,
+                parallelization_modes={ParallelizationMode.MULTIPROCESSING},
+            )
+
+    def test_sync_mode_includes_iceberg_framework(self) -> None:
+        """IcebergFramework supports SYNC, so SetupComputeFramework must accept it."""
+        features = Features([Feature("test_feature")])
+        setup = SetupComputeFramework(
+            user_compute_frameworks={IcebergFramework},
+            features=features,
+            parallelization_modes={ParallelizationMode.SYNC},
+        )
+        assert IcebergFramework in setup.compute_frameworks
 
 
 class TestTransformFrameworkStepGetParallelizationMode:

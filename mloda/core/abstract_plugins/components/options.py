@@ -288,6 +288,10 @@ class Options:
                 "Expected list, tuple, set, frozenset, str, or Feature object."
             )
 
+    def rebuild(self, group: dict[str, Any], context: dict[str, Any]) -> "Options":
+        """Return new Options with replacement group/context dicts and preserved provenance."""
+        return self._rebuild(group, context)
+
     def _rebuild(self, group: dict[str, Any], context: dict[str, Any]) -> "Options":
         """A new Options over the given dicts, carrying this one's provenance bookkeeping over."""
         copied = Options(group=group, context=context, propagate_context_keys=self.propagate_context_keys)

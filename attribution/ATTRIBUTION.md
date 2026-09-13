@@ -3,6 +3,7 @@
 | PyYAML                  | 6.0.3           | MIT License                                        |
 | Pygments                | 2.20.0          | BSD-2-Clause                                       |
 | annotated-types         | 0.7.0           | MIT License                                        |
+| appnope                 | 0.1.4           | BSD License                                        |
 | ast_serialize           | 0.4.0           | MIT                                                |
 | asttokens               | 3.0.1           | Apache 2.0                                         |
 | bandit                  | 1.9.4           | Apache-2.0                                         |

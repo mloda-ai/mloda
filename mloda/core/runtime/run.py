@@ -234,8 +234,6 @@ class ExecutionOrchestrator:
 
     def _finalize(self) -> None:
         self.data_lifecycle_manager.set_artifacts(self.cfw_register.get_artifacts())
-        # join() first: it terminates every worker and joins every thread, so nothing can still
-        # be uploading when the sweep below runs. Sweeping first races re-uploads on abnormal exit.
         self.join()
         self._drop_all_uploaded_flight_tables()
 

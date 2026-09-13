@@ -142,14 +142,14 @@ def _find_root_and_doubled(results: list[Any]) -> tuple[Any, Any]:
 
 
 class _MixedModeDoubledThreadingPythonDictFG(FeatureGroup):
-    """Destination on a THREADING-only framework. Plain FeatureGroup on columnar dict data."""
+    """Destination candidate is THREADING-only or plain PythonDictFramework, whichever the run selects."""
 
     def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return {Feature("raw_val")}
 
     @classmethod
     def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
-        return {_ThreadingOnlyPythonDictFramework}
+        return {_ThreadingOnlyPythonDictFramework, PythonDictFramework}
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
@@ -164,31 +164,6 @@ def _extract_mixed_mode_doubled_threading(final: Any) -> list[int]:
     if pa is not None and isinstance(final, pa.Table):
         return list(final.column("mixed_mode_doubled_threading").to_pylist())
     return list(final["mixed_mode_doubled_threading"])
-
-
-class _MixedModeDoubledMultiprocessingPythonDictFG(FeatureGroup):
-    """Destination on plain PythonDictFramework, which supports MULTIPROCESSING unlike the THREADING-only variant."""
-
-    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
-        return {Feature("raw_val")}
-
-    @classmethod
-    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
-        return {PythonDictFramework}
-
-    @classmethod
-    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
-        return {"mixed_mode_doubled_multiprocessing": [v * 2 for v in data["raw_val"]]}
-
-    @classmethod
-    def feature_names_supported(cls) -> set[str]:
-        return {"mixed_mode_doubled_multiprocessing"}
-
-
-def _extract_mixed_mode_doubled_multiprocessing(final: Any) -> list[int]:
-    if pa is not None and isinstance(final, pa.Table):
-        return list(final.column("mixed_mode_doubled_multiprocessing").to_pylist())
-    return list(final["mixed_mode_doubled_multiprocessing"])
 
 
 class _JoinLeftRootFG(FeatureGroup):
@@ -291,17 +266,27 @@ class TestMixedModeParentDestinationE2E:
         assert len(result) == 1
         assert _extract_mixed_mode_doubled(result[0]) == [2, 4, 6]
 
-    def test_worker_source_feeds_parent_threading_only_destination(self, flight_server: Any) -> None:
-        """THREADING dispatch of the worker-owned-source handoff."""
+    @pytest.mark.parametrize(
+        "destination_framework,modes",
+        [
+            (_ThreadingOnlyPythonDictFramework, {ParallelizationMode.THREADING, ParallelizationMode.MULTIPROCESSING}),
+            (PythonDictFramework, {ParallelizationMode.MULTIPROCESSING}),
+        ],
+        ids=["threading_destination", "pure_multiprocessing"],
+    )
+    def test_worker_source_feeds_parent_threading_only_destination(
+        self, flight_server: Any, destination_framework: type[ComputeFramework], modes: set[ParallelizationMode]
+    ) -> None:
+        """THREADING and pure-MULTIPROCESSING dispatch of the worker-owned-source handoff."""
         plugin_collector = PluginCollector.enabled_feature_groups(
             {TfsRawValPyArrowSource, _MixedModeDoubledThreadingPythonDictFG}
         )
 
         result = mloda.run_all(
             [Feature("mixed_mode_doubled_threading")],
-            compute_frameworks={PyArrowTable, _ThreadingOnlyPythonDictFramework},
+            compute_frameworks={PyArrowTable, destination_framework},
             plugin_collector=plugin_collector,
-            parallelization_modes={ParallelizationMode.THREADING, ParallelizationMode.MULTIPROCESSING},
+            parallelization_modes=modes,
             flight_server=flight_server,
         )
 
@@ -409,21 +394,3 @@ class TestMixedModeParentDestinationE2E:
         assert join_result["join_sum"] == [11, 22, 33]
 
         assert doubled_result.column("left_val_doubled").to_pylist() == [20, 40, 60]
-
-    def test_pure_multiprocessing_transform_step_leaves_no_flight_table(self, flight_server: Any) -> None:
-        """A TFS-only MULTIPROCESSING run (no SYNC/THREADING mixed in) must not leak its upload."""
-        plugin_collector = PluginCollector.enabled_feature_groups(
-            {TfsRawValPyArrowSource, _MixedModeDoubledMultiprocessingPythonDictFG}
-        )
-
-        result = mloda.run_all(
-            [Feature("mixed_mode_doubled_multiprocessing")],
-            compute_frameworks={PyArrowTable, PythonDictFramework},
-            plugin_collector=plugin_collector,
-            parallelization_modes={ParallelizationMode.MULTIPROCESSING},
-            flight_server=flight_server,
-        )
-
-        assert result is not None
-        assert len(result) == 1
-        assert _extract_mixed_mode_doubled_multiprocessing(result[0]) == [2, 4, 6]

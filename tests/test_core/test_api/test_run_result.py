@@ -368,3 +368,38 @@ class TestRunResultFrames:
         [(step, frame)] = loaded.frames()
         assert step.feature_set_options == Options(group={"source_table": "A"})
         assert frame["run_result_probe_value"].tolist() == _PROBE_VALUES["A"]
+
+
+class TestResultStreamFrames:
+    """ResultStream.frames() pairs each frame with the compute PlanStep that produced it."""
+
+    def test_frames_pair_each_frame_with_the_step_whose_options_produced_it(self) -> None:
+        stream = mlodaAPI.stream_all(
+            [Feature("run_result_probe_value", options={"source_table": t}) for t in ("A", "B")],
+            compute_frameworks={PandasDataFrame},
+            parallelization_modes={ParallelizationMode.SYNC},
+            plugin_collector=_PROBE_PLUGINS,
+        )
+
+        pairs = list(stream.frames())
+
+        tables = set()
+        for step, frame in pairs:
+            assert step.feature_set_options is not None
+            table = step.feature_set_options.get("source_table")
+            tables.add(table)
+            assert frame["run_result_probe_value"].tolist() == _PROBE_VALUES[table]
+        assert tables == {"A", "B"}
+
+    def test_frames_pair_by_step_uuid_not_by_position(self) -> None:
+        from mloda.user import ResultStream
+
+        uuid_a = uuid4()
+        uuid_b = uuid4()
+        step_a = PlanStep("compute", ("a",), None, None, None, None, step_uuid=uuid_a)
+        step_b = PlanStep("compute", ("b",), None, None, None, None, step_uuid=uuid_b)
+        frame_a, frame_b = object(), object()
+
+        stream = ResultStream((item for item in [(uuid_b, frame_b), (uuid_a, frame_a)]), [step_a, step_b])
+
+        assert list(stream.frames()) == [(step_b, frame_b), (step_a, frame_a)]

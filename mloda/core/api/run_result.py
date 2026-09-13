@@ -39,7 +39,7 @@ class RunResult(list[Any]):
 class ResultStream(Generator[Any, None, None]):
     """A ``stream_all`` result stream: iterates like a generator and exposes the resolved plan."""
 
-    def __init__(self, stream: Generator[Any, None, None], plan: list[PlanStep]) -> None:
+    def __init__(self, stream: Generator[tuple[UUID, Any], None, None], plan: list[PlanStep]) -> None:
         self._stream = stream
         self._plan = plan
 
@@ -48,8 +48,14 @@ class ResultStream(Generator[Any, None, None]):
         """Resolved execution plan, available before any element is consumed."""
         return self._plan
 
+    def frames(self) -> Generator[tuple[PlanStep, Any], None, None]:
+        """Yield frames paired with the compute PlanStep that produced each, by ``step_uuid``; consumes this stream."""
+        steps = {step.step_uuid: step for step in self._plan}
+        for step_uuid, frame in self._stream:
+            yield steps[step_uuid], frame
+
     def send(self, value: None, /) -> Any:
-        return self._stream.send(value)
+        return self._stream.send(value)[1]
 
     def throw(
         self,
@@ -59,7 +65,7 @@ class ResultStream(Generator[Any, None, None]):
         /,
     ) -> Any:
         if isinstance(typ, BaseException):
-            return self._stream.throw(typ)
+            return self._stream.throw(typ)[1]
         if val is None and tb is None:
-            return self._stream.throw(typ)
-        return self._stream.throw(typ, val, tb)
+            return self._stream.throw(typ)[1]
+        return self._stream.throw(typ, val, tb)[1]

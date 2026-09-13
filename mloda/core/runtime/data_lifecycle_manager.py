@@ -167,15 +167,15 @@ class DataLifecycleManager:
         return list(self.result_data_collection.items())
 
     def pop_result_data_collection(self) -> Generator[tuple[UUID, Any], None, None]:
-        """Drain completed results one at a time.
+        """Drain completed results one at a time, in insertion order.
 
         Each yielded ``(step_uuid, result)`` pair contains a full result — not
         a partial chunk.  Results are removed from the internal collection as
         they are yielded.
         """
         while self.result_data_collection:
-            step_uuid, result = self.result_data_collection.popitem()
-            yield step_uuid, result
+            step_uuid = next(iter(self.result_data_collection))
+            yield step_uuid, self.result_data_collection.pop(step_uuid)
 
     def set_artifacts(self, artifacts: dict[str, Any]) -> None:
         """

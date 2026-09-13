@@ -87,8 +87,8 @@ class TestVerifiedContextAbsentWithoutScope:
 class TestStreamRunReadsVerifiedContextAtCreationNotAtIteration:
     """Bug: stream_run was a generator function, so its whole body (including the
     current_verified_context() read) only executed at first iteration, not at the stream_run()
-    call. stream_all is not a generator function and inherits the fix by calling stream_run
-    eagerly. The captured tenant must reflect the scope active when the stream was CREATED, not
+    call. stream_all is not a generator function and inherits the fix through the same eager
+    setup. The captured tenant must reflect the scope active when the stream was CREATED, not
     whatever scope (or lack of one) is active when it is later consumed."""
 
     def test_tenant_reflects_the_scope_active_at_creation_not_at_later_consumption(self) -> None:

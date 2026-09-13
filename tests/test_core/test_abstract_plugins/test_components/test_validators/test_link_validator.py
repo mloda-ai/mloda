@@ -142,6 +142,55 @@ class TestValidateNoDoubleJoins:
         # Act & Assert - should not raise for UNION
         LinkValidator.validate_no_double_joins(links=links_union)
 
+    def test_same_class_pair_differing_only_by_discriminator_passes(self) -> None:
+        link1 = Link.inner(
+            left=JoinSpec(MockFeatureGroupA, "id"),
+            right=JoinSpec(MockFeatureGroupA, "id"),
+            left_discriminator={"sclk_side": "left"},
+            right_discriminator={"sclk_side": "right"},
+        )
+        link2 = Link.inner(
+            left=JoinSpec(MockFeatureGroupA, "id"),
+            right=JoinSpec(MockFeatureGroupA, "id"),
+            left_discriminator={"sclk_side": "left"},
+            right_discriminator={"sclk_side": "other"},
+        )
+        links = {link1, link2}
+
+        LinkValidator.validate_no_double_joins(links=links)
+
+    def test_same_class_pair_with_swapped_discriminators_still_raises(self) -> None:
+        """Reversing the discriminators names the same two physical nodes, so this is still a double join."""
+        link1 = Link.inner(
+            left=JoinSpec(MockFeatureGroupA, "id"),
+            right=JoinSpec(MockFeatureGroupA, "id"),
+            left_discriminator={"sclk_side": "left"},
+            right_discriminator={"sclk_side": "right"},
+        )
+        link2 = Link.inner(
+            left=JoinSpec(MockFeatureGroupA, "id"),
+            right=JoinSpec(MockFeatureGroupA, "id"),
+            left_discriminator={"sclk_side": "right"},
+            right_discriminator={"sclk_side": "left"},
+        )
+        links = {link1, link2}
+
+        with pytest.raises(ValueError):
+            LinkValidator.validate_no_double_joins(links=links)
+
+    def test_undiscriminated_side_wildcard_overlaps_discriminated_node_raises(self) -> None:
+        """An undiscriminated A/B side is a wildcard, so it overlaps a discriminated B/A node."""
+        link1 = Link.inner(left=JoinSpec(MockFeatureGroupA, "id"), right=JoinSpec(MockFeatureGroupB, "id"))
+        link2 = Link.inner(
+            left=JoinSpec(MockFeatureGroupB, "id"),
+            right=JoinSpec(MockFeatureGroupA, "id"),
+            left_discriminator={"d": 1},
+        )
+        links = {link1, link2}
+
+        with pytest.raises(ValueError):
+            LinkValidator.validate_no_double_joins(links=links)
+
 
 class TestValidateNoConflictingJoinTypes:
     """Test the validate_no_conflicting_join_types static method."""
@@ -170,6 +219,55 @@ class TestValidateNoConflictingJoinTypes:
         # Verify error message mentions different join types
         error_msg = str(exc_info.value).lower()
         assert "different" in error_msg or "join type" in error_msg or "conflict" in error_msg
+
+    def test_same_class_pair_differing_only_by_discriminator_passes(self) -> None:
+        link1 = Link.inner(
+            left=JoinSpec(MockFeatureGroupA, "id"),
+            right=JoinSpec(MockFeatureGroupA, "id"),
+            left_discriminator={"sclk_side": "left"},
+            right_discriminator={"sclk_side": "right"},
+        )
+        link2 = Link.left(
+            left=JoinSpec(MockFeatureGroupA, "id"),
+            right=JoinSpec(MockFeatureGroupA, "id"),
+            left_discriminator={"sclk_side": "left"},
+            right_discriminator={"sclk_side": "other"},
+        )
+        links = {link1, link2}
+
+        LinkValidator.validate_no_conflicting_join_types(links=links)
+
+    def test_same_class_pair_with_same_discriminators_and_different_join_types_raises(self) -> None:
+        """Same discriminators name the same node pair, so a differing join type is still a conflict."""
+        link1 = Link.inner(
+            left=JoinSpec(MockFeatureGroupA, "id"),
+            right=JoinSpec(MockFeatureGroupA, "id"),
+            left_discriminator={"sclk_side": "left"},
+            right_discriminator={"sclk_side": "right"},
+        )
+        link2 = Link.left(
+            left=JoinSpec(MockFeatureGroupA, "id"),
+            right=JoinSpec(MockFeatureGroupA, "id"),
+            left_discriminator={"sclk_side": "left"},
+            right_discriminator={"sclk_side": "right"},
+        )
+        links = {link1, link2}
+
+        with pytest.raises(ValueError):
+            LinkValidator.validate_no_conflicting_join_types(links=links)
+
+    def test_undiscriminated_side_wildcard_conflicting_join_types_raises(self) -> None:
+        """An undiscriminated A side is a wildcard, so it conflicts with a discriminated A even with different types."""
+        link1 = Link.inner(left=JoinSpec(MockFeatureGroupA, "id"), right=JoinSpec(MockFeatureGroupB, "id"))
+        link2 = Link.left(
+            left=JoinSpec(MockFeatureGroupA, "id"),
+            right=JoinSpec(MockFeatureGroupB, "id"),
+            left_discriminator={"d": 1},
+        )
+        links = {link1, link2}
+
+        with pytest.raises(ValueError):
+            LinkValidator.validate_no_conflicting_join_types(links=links)
 
 
 class TestValidateRightJoinConstraints:
@@ -214,6 +312,96 @@ class TestValidateRightJoinConstraints:
         # Verify error message mentions the constraint violation
         error_msg = str(exc_info.value).lower()
         assert "right" in error_msg
+
+    def test_all_discriminated_distinct_same_class_nodes_pass(self) -> None:
+        """Three discriminated A nodes are distinct physical nodes, so no ambiguity exists."""
+        link1 = Link.right(
+            left=JoinSpec(MockFeatureGroupA, "id"),
+            right=JoinSpec(MockFeatureGroupB, "id"),
+            left_discriminator={"d": 1},
+        )
+        link2 = Link.inner(
+            left=JoinSpec(MockFeatureGroupA, "id"),
+            right=JoinSpec(MockFeatureGroupA, "id"),
+            left_discriminator={"d": 2},
+            right_discriminator={"d": 3},
+        )
+        links = {link1, link2}
+
+        LinkValidator.validate_right_join_constraints(links=links)
+
+    def test_undiscriminated_right_join_node_ambiguous_still_raises(self) -> None:
+        """Regression guard: an undiscriminated right-join A node may be either discriminated A node."""
+        link1 = Link.right(left=JoinSpec(MockFeatureGroupA, "id"), right=JoinSpec(MockFeatureGroupB, "id"))
+        link2 = Link.inner(
+            left=JoinSpec(MockFeatureGroupA, "id"),
+            right=JoinSpec(MockFeatureGroupA, "id"),
+            left_discriminator={"d": 2},
+            right_discriminator={"d": 3},
+        )
+        links = {link1, link2}
+
+        with pytest.raises(ValueError):
+            LinkValidator.validate_right_join_constraints(links=links)
+
+
+class TestValidateSameClassDiscriminatorPairs:
+    """Test the validate_same_class_discriminator_pairs static method."""
+
+    def test_single_discriminator_raises_from_validate_same_class_discriminator_pairs(self) -> None:
+        link = Link.inner(
+            left=JoinSpec(MockFeatureGroupA, "id"),
+            right=JoinSpec(MockFeatureGroupA, "id"),
+            left_discriminator={"d": 1},
+        )
+
+        with pytest.raises(ValueError) as exc_info:
+            LinkValidator.validate_same_class_discriminator_pairs(links={link})
+
+        error_msg = str(exc_info.value)
+        assert "left_discriminator" in error_msg
+        assert "right_discriminator" in error_msg
+
+    def test_single_discriminator_raises_from_validate_links(self) -> None:
+        link = Link.inner(
+            left=JoinSpec(MockFeatureGroupA, "id"),
+            right=JoinSpec(MockFeatureGroupA, "id"),
+            left_discriminator={"d": 1},
+        )
+
+        with pytest.raises(ValueError) as exc_info:
+            LinkValidator.validate_links(links={link})
+
+        error_msg = str(exc_info.value)
+        assert "left_discriminator" in error_msg
+        assert "right_discriminator" in error_msg
+
+    def test_both_discriminators_set_passes(self) -> None:
+        link = Link.inner(
+            left=JoinSpec(MockFeatureGroupA, "id"),
+            right=JoinSpec(MockFeatureGroupA, "id"),
+            left_discriminator={"d": 1},
+            right_discriminator={"d": 2},
+        )
+
+        LinkValidator.validate_same_class_discriminator_pairs(links={link})
+        LinkValidator.validate_links(links={link})
+
+    def test_neither_discriminator_set_passes(self) -> None:
+        link = Link.inner(left=JoinSpec(MockFeatureGroupA, "id"), right=JoinSpec(MockFeatureGroupA, "id"))
+
+        LinkValidator.validate_same_class_discriminator_pairs(links={link})
+        LinkValidator.validate_links(links={link})
+
+    def test_different_class_single_discriminator_passes(self) -> None:
+        link = Link.inner(
+            left=JoinSpec(MockFeatureGroupA, "id"),
+            right=JoinSpec(MockFeatureGroupB, "id"),
+            left_discriminator={"d": 1},
+        )
+
+        LinkValidator.validate_same_class_discriminator_pairs(links={link})
+        LinkValidator.validate_links(links={link})
 
 
 class TestValidateLinks:

@@ -273,6 +273,10 @@ features = {
 
 The execution planner validates that the discriminator key-value pairs exist in the corresponding feature's options to correctly identify which instance belongs to which side of the join.
 
+The two sides may use different key column names: each side's key column is injected only into the nodes matching that side's discriminator.
+
+Discriminators are part of a link's identity, so two links that differ only by their discriminators are distinct in `links=`, letting one node join to several same-class nodes.
+
 #### Polymorphic Link Matching
 
 Links support inheritance-based matching, allowing a link defined with base classes to automatically apply to subclasses. This enables defining generic join relationships that work across feature group hierarchies.

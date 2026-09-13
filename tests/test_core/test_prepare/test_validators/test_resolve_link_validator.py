@@ -127,3 +127,64 @@ class TestValidateNoConflictingJoinTypes:
 
         # Act & Assert - should not raise
         ResolveLinkValidator.validate_no_conflicting_join_types(data=data)
+
+    def test_same_class_pair_differing_only_by_discriminator_passes(self) -> None:
+        link1 = Link.inner(
+            left=JoinSpec(MockFeatureGroupA, "id"),
+            right=JoinSpec(MockFeatureGroupA, "id"),
+            left_discriminator={"sclk_side": "left"},
+            right_discriminator={"sclk_side": "right"},
+        )
+        link2 = Link.left(
+            left=JoinSpec(MockFeatureGroupA, "id"),
+            right=JoinSpec(MockFeatureGroupA, "id"),
+            left_discriminator={"sclk_side": "left"},
+            right_discriminator={"sclk_side": "other"},
+        )
+
+        link_fw_trekker1 = (link1, MockComputeFramework, MockComputeFramework)
+        link_fw_trekker2 = (link2, MockComputeFramework, MockComputeFramework)
+
+        data = {link_fw_trekker1: {uuid4()}, link_fw_trekker2: {uuid4()}}
+
+        ResolveLinkValidator.validate_no_conflicting_join_types(data=data)
+
+    def test_same_class_pair_with_same_discriminators_and_different_join_types_raises(self) -> None:
+        """Same discriminators name the same node pair, so a differing join type is still a conflict."""
+        link1 = Link.inner(
+            left=JoinSpec(MockFeatureGroupA, "id"),
+            right=JoinSpec(MockFeatureGroupA, "id"),
+            left_discriminator={"sclk_side": "left"},
+            right_discriminator={"sclk_side": "right"},
+        )
+        link2 = Link.left(
+            left=JoinSpec(MockFeatureGroupA, "id"),
+            right=JoinSpec(MockFeatureGroupA, "id"),
+            left_discriminator={"sclk_side": "left"},
+            right_discriminator={"sclk_side": "right"},
+        )
+
+        link_fw_trekker1 = (link1, MockComputeFramework, MockComputeFramework)
+        link_fw_trekker2 = (link2, MockComputeFramework, MockComputeFramework)
+
+        data = {link_fw_trekker1: {uuid4()}, link_fw_trekker2: {uuid4()}}
+
+        with pytest.raises(Exception):  # raises a bare Exception here, not ValueError
+            ResolveLinkValidator.validate_no_conflicting_join_types(data=data)
+
+    def test_undiscriminated_side_wildcard_conflicting_join_types_raises(self) -> None:
+        """An undiscriminated A side is a wildcard, so it conflicts with a discriminated A even with different types."""
+        link1 = Link.inner(left=JoinSpec(MockFeatureGroupA, "id"), right=JoinSpec(MockFeatureGroupB, "id"))
+        link2 = Link.left(
+            left=JoinSpec(MockFeatureGroupA, "id"),
+            right=JoinSpec(MockFeatureGroupB, "id"),
+            left_discriminator={"d": 1},
+        )
+
+        link_fw_trekker1 = (link1, MockComputeFramework, MockComputeFramework)
+        link_fw_trekker2 = (link2, MockComputeFramework, MockComputeFramework)
+
+        data = {link_fw_trekker1: {uuid4()}, link_fw_trekker2: {uuid4()}}
+
+        with pytest.raises(Exception):
+            ResolveLinkValidator.validate_no_conflicting_join_types(data=data)

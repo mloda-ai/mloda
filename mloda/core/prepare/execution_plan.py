@@ -1336,17 +1336,7 @@ Available join types:
             )
 
     def _matches_discriminator(self, discriminator: dict[str, Any], graph: Graph, uuid: UUID) -> bool:
-        """Check that every discriminator key-value pair is present in a node's feature options.
-
-        A discriminator identifies one node among several same-class FeatureGroup instances, so a
-        partial overlap is not enough: two nodes that differ on the deciding key but share another
-        one would both match.
-        """
-        options = graph.nodes[uuid].feature.options
-        for dk, dv in discriminator.items():
-            if dk not in options or options.get(dk) != dv:
-                return False
-        return True
+        return Link.matches_discriminator(discriminator, graph.nodes[uuid].feature.options)
 
     def check_pointer(
         self, pointer_dict: dict[str, Any], link_fw: LinkFrameworkTrekker, graph: Graph, uuid: UUID

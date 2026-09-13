@@ -346,9 +346,9 @@ class Engine:
             self._process_index_feature(feature_group_class, feature_group, feature, features, index)
 
     def _link_sides(self, link: Link, feature_group_class: type[FeatureGroup], feature: Feature) -> tuple[bool, bool]:
-        """Which side(s) of a link this feature group class occupies, narrowed by discriminator for same-class links."""
-        left = link.left_feature_group == feature_group_class
-        right = link.right_feature_group == feature_group_class
+        """Sides match by class or subclass; discriminators narrow only when the class matches both sides."""
+        left = issubclass(feature_group_class, link.left_feature_group)
+        right = issubclass(feature_group_class, link.right_feature_group)
 
         if left and right:
             left = link.left_discriminator is None or Link.matches_discriminator(

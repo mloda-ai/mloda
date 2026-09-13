@@ -12,9 +12,8 @@ class RunResult(list[Any]):
     """The results list of a ``run_all`` call, plus the resolved plan of the run that produced it.
 
     Slicing and concatenation return a plain ``list`` without ``plan`` (standard list-subclass behavior).
-    The list holds one element per compute step that produced requested output, in the relative order
-    those steps appear in ``plan`` (a step producing only injected/intermediate output contributes nothing);
-    ``frames()`` pairs each frame with its ``PlanStep`` by step identity instead, regardless of order.
+    The list is in plan order, one element per step that produced requested output; ``frames()``
+    pairs each frame with its ``PlanStep`` by step identity, regardless of order.
     """
 
     def __init__(

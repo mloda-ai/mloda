@@ -46,7 +46,7 @@ for result in mloda.stream_all(
     process(result)
 ```
 
-Both produce the same elements: `list(mloda.stream_all(...))` carries the same data as `mloda.run_all(...)`, though `stream_all` yields in completion order while `run_all`'s list follows plan order, so their positions can differ under THREADING/MULTIPROCESSING.
+Both produce the same elements, but `stream_all` yields in completion order while `run_all`'s list follows plan order (positions can differ under THREADING/MULTIPROCESSING).
 
 ## What "streaming" means here
 

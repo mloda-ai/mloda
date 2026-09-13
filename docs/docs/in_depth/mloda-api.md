@@ -133,7 +133,7 @@ for step in results.plan:
     print(step.step_kind, step.feature_names)
 ```
 
-`RunResult.frames()` pairs each result frame with the compute `PlanStep` that produced it, by `step_uuid`; the list itself holds one element per compute step that produced requested output, in the relative order those steps appear in `plan` (a step producing only injected/intermediate output contributes nothing).
+`RunResult.frames()` pairs each result frame with the compute `PlanStep` that produced it, by `step_uuid`; the list itself is in plan order, one element per step that produced requested output.
 
 To match a `run_all` resolution, pass the same `parallelization_modes`: `run_all` defaults to `{ParallelizationMode.SYNC}`, `prepare`/`explain` default to `None`, and compute frameworks are filtered by mode.
 

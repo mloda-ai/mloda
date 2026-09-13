@@ -16,8 +16,6 @@ Contract under test:
 
 The chained ``plan_info_sales__mean_aggr`` request reuses the feature groups registered by
 ``tests/test_core/test_api/test_plan_info.py`` so no new registry-wide DataCreator claim is made.
-``run_result_order_probe_value`` is a deliberate exception: it needs its own gated source to
-force completion order and plan order apart under THREADING.
 """
 
 import collections.abc
@@ -74,23 +72,11 @@ _PROBE_PLUGINS = PluginCollector.enabled_feature_groups({RunResultProbe})
 
 
 class RunResultOrderProbe(FeatureGroup):
-    """Root source whose output value depends on ``probe_id``; a ``"slow"`` role blocks on a
-    class-level gate until a ``"fast"`` role signals it, giving a deterministic completion order
-    (a fixed sleep would be flaky under machine load).
-
-    The gate is a class attribute, not a Feature option: a ``threading.Event`` inside ``Options``
-    would pass through ``Engine.compute()``'s per-step deepcopy, which can silently produce a
-    broken, partially-copied ``Event`` that only fails later (e.g. an ``AttributeError`` on
-    ``.wait()``) rather than raising during the copy itself, so ``Options``' deepcopy-failure
-    fallback never catches it. A class attribute sidesteps the copy entirely.
-    """
+    """The "slow" role blocks on a class-level gate until "fast" signals it, then adds a short
+    delay so a single THREADING poll pass can't hide the fix (a class attribute, since a
+    threading.Event in Options wouldn't survive Engine.compute()'s per-step deepcopy)."""
 
     _gate: threading.Event = threading.Event()
-
-    @classmethod
-    def reset_gate(cls) -> None:
-        """Fresh gate per test: the class attribute otherwise leaks state across test runs."""
-        cls._gate = threading.Event()
 
     @classmethod
     def input_data(cls) -> BaseInputData | None:
@@ -102,9 +88,6 @@ class RunResultOrderProbe(FeatureGroup):
         role = features.options.get("role")
         if role == "slow":
             assert cls._gate.wait(timeout=5.0), "fast role never signalled the gate"
-            # The gate alone only guarantees fast-before-slow completion order; without this
-            # margin the two can still land in the same no-sleep THREADING poll pass, where
-            # plan-order iteration masks the divergence this test needs to see.
             time.sleep(0.25)
         elif role == "fast":
             cls._gate.set()
@@ -471,28 +454,18 @@ class TestResultStreamFrames:
 
 
 class TestRunAllListOrderMatchesPlanOrder:
-    """The plain list order (and frames() order) must match plan order, not completion order.
+    """run_all's list and frames() follow plan order, not THREADING completion order."""
 
-    Which of "alpha"/"beta" resolves first is never assumed: a SYNC-mode resolution discovers it,
-    then that one is made the slow ("gated") feature under THREADING, forcing completion order
-    and plan order apart so only a plan-order fix passes.
-    """
-
-    def _plan_first_probe_id(self) -> str:
+    def _run_with_plan_first_gated(self) -> Any:
         session = mloda.prepare(
             [_order_probe_feature("alpha"), _order_probe_feature("beta")],
             compute_frameworks={PandasDataFrame},
             plugin_collector=_ORDER_PROBE_PLUGINS,
             parallelization_modes={ParallelizationMode.SYNC},
         )
-        probe_ids = _order_probe_ids_in_plan(session.resolved_plan())
-        assert len(probe_ids) == 2
-        return probe_ids[0]
-
-    def _run_with_plan_first_gated(self) -> Any:
-        slow_probe_id = self._plan_first_probe_id()
+        slow_probe_id = _order_probe_ids_in_plan(session.resolved_plan())[0]
         fast_probe_id = "beta" if slow_probe_id == "alpha" else "alpha"
-        RunResultOrderProbe.reset_gate()
+        RunResultOrderProbe._gate = threading.Event()
 
         return mlodaAPI.run_all(
             [
@@ -504,18 +477,13 @@ class TestRunAllListOrderMatchesPlanOrder:
             parallelization_modes={ParallelizationMode.THREADING},
         )
 
-    def test_threading_list_order_matches_plan_order(self) -> None:
+    def test_threading_list_and_frames_match_plan_order(self) -> None:
         results = self._run_with_plan_first_gated()
 
         expected_order = _order_probe_ids_in_plan(results.plan)
         actual_order = [frame["run_result_order_probe_value"].iloc[0] for frame in list(results)]
-        assert actual_order == expected_order
-
-    def test_threading_frames_enumerate_in_plan_order(self) -> None:
-        results = self._run_with_plan_first_gated()
-
-        expected_order = _order_probe_ids_in_plan(results.plan)
         frame_order = [frame["run_result_order_probe_value"].iloc[0] for _, frame in results.frames()]
+        assert actual_order == expected_order
         assert frame_order == expected_order
 
     def test_sync_list_order_already_matches_plan_order(self) -> None:

@@ -522,8 +522,6 @@ class TestGetResultItemsPlanOrder:
         assert orchestrator.get_result() == ["result_a", "result_b", "result_c"]
 
     def test_uuid_missing_from_plan_sorts_after_known_order_and_does_not_raise(self) -> None:
-        """A result whose step is absent from execution_planner (a plan/collection mismatch) must
-        not crash lookup; it sorts after every uuid the plan does know about."""
         uuid_a, uuid_b, uuid_c, uuid_unplanned = (
             uuid_mod.uuid4(),
             uuid_mod.uuid4(),

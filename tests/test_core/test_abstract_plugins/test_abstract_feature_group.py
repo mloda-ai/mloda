@@ -82,15 +82,17 @@ def test_apply_naming_convention_basic_multi_column() -> None:
         ("plain_name", "plain_name"),  # Edge case: no suffix
         ("feature~0", "feature"),  # Zero-indexed suffix
         ("complex_name~99", "complex_name"),  # Multi-digit suffix
+        ("x__op~2__next~5", "x__op~2__next"),  # only the LAST ~digits suffix is stripped
+        ("x__op~a__next~b", "x__op~a__next~b"),  # no trailing digit suffix -> unchanged (issue repro)
+        ("a~1~2", "a~1"),  # embedded ~1 kept, only trailing ~2 stripped
+        ("~5", "~5"),  # suffix with empty base -> unchanged
+        ("a~", "a~"),  # trailing separator with empty (non-digit) suffix -> unchanged
+        ("col_a__pca_2d~dim1", "col_a__pca_2d~dim1"),  # non-digit custom suffix -> unchanged
+        ("", ""),  # empty string -> unchanged
     ],
 )
 def test_get_column_base_feature_strips_suffix(column_name: str, expected_base_feature: str) -> None:
-    """Test that get_column_base_feature correctly extracts base feature name.
-
-    The method should:
-    - Strip the ~N suffix from column names (e.g., "category~1" -> "category")
-    - Return the original name if no ~N suffix exists (e.g., "plain_name" -> "plain_name")
-    """
+    """Test that get_column_base_feature strips only a trailing all-digit ~N suffix, matched from the last separator."""
     # Act: Extract base feature name
     result = FeatureGroup.get_column_base_feature(column_name)
 

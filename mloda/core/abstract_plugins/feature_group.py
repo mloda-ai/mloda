@@ -461,10 +461,9 @@ class FeatureGroup(ABC):
         result: Any, feature_name: str, suffix_generator: Callable[[int], str] | None = None
     ) -> dict[str, Any]:
         """
-        Applies naming convention to multi-column results.
+        Maps a 2D multi-column result (more than 1 column) to {feature_name~0: col0, ...}; returns {} otherwise.
 
-        For 2D arrays with multiple columns, creates a dictionary mapping
-        column names to column data using the pattern: feature_name~0, feature_name~1, etc.
+        A custom suffix_generator producing non-digit suffixes won't be stripped by get_column_base_feature.
         """
         if hasattr(result, "shape") and len(result.shape) > 1 and result.shape[1] > 1:
             output = {}
@@ -478,11 +477,15 @@ class FeatureGroup(ABC):
     @staticmethod
     def get_column_base_feature(column_name: str) -> str:
         """
-        Extracts the base feature name from a column name by stripping the ~N suffix.
+        Strips a trailing ~N (digits-only) suffix, matching the last separator, not the first.
 
-        Returns the original name if no ~N suffix exists.
+        Returns the name unchanged if there is no such trailing digit suffix, or nothing precedes
+        the separator (e.g. "~5").
         """
-        return column_name.split(COLUMN_SEPARATOR)[0]
+        base, separator, suffix = column_name.rpartition(COLUMN_SEPARATOR)
+        if separator and base and suffix.isdecimal():
+            return base
+        return column_name
 
     @staticmethod
     def expand_feature_columns(feature_name: str, num_columns: int) -> list[str]:

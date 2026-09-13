@@ -173,6 +173,6 @@ mloda provides several utilities for working with multi-column features:
 | `apply_naming_convention(result, feature_name)` | Create multi-column outputs | Producer: Generate `~N` suffixed columns from arrays |
 | `resolve_multi_column_feature(feature_name, columns)` | Discover multi-column inputs | Consumer: Auto-find all `~N` columns |
 | `expand_feature_columns(feature_name, num_columns)` | Generate column name list | Producer: Pre-generate expected column names |
-| `get_column_base_feature(column_name)` | Strip suffix from column | Both: Extract base feature from `feature~N` |
+| `get_column_base_feature(column_name)` | Strip trailing `~N` suffix from column | Both: Extract base feature from `feature~N` (last `~` wins) |
 
-**Note**: When declaring dependencies with `Feature("base_feature~N")`, the framework automatically resolves to the parent FeatureGroup that produces `base_feature` and extracts only the specified sub-column.
+**Note**: When declaring dependencies with `Feature("base_feature~N")`, the framework automatically resolves to the parent FeatureGroup that produces `base_feature` and extracts only the specified sub-column. Only a numeric suffix is recognized this way: `get_column_base_feature` does not strip a non-digit suffix such as `~mean` or `~dim1` back to its base, so a feature name like `Feature("base_feature~mean")` will NOT resolve to the producing FeatureGroup as a formal sub-column dependency.

@@ -141,11 +141,12 @@ The recorded decline renders as a near-miss line of the resolution failure:
 Rules for reader authors:
 
 - Record only when ownership is established but the content fails: right suffix but a missing column, valid credentials but a declined feature.
-- Plain non-matches (wrong suffix, invalid credentials) stay silent. `NotImplementedError` from `is_valid_credentials` is a silent non-match; from `check_feature_in_data_access` it is an accept (the reader matches on credentials alone).
+- Plain non-matches (wrong suffix, invalid credentials) stay silent. `NotImplementedError` from `is_valid_credentials` is a silent non-match; from `check_feature_in_data_access` it is an accept for a plain name (the reader matches on credentials alone).
 - Never raise to decline: anything but `NotImplementedError` in the DB match hooks aborts matching for every reader sharing the `DataAccessCollection`. Record, then return a falsy value.
 - Recording outside an engine-opened window is a no-op, so readers stay usable standalone.
 - Recorded reasons are discarded at the enclosing candidate level: when the reader ultimately matches, when a sibling reader matches, or, for unowned recordings, when the feature group matches by another rule. An owned veto instead gates the name-based rules (see the paragraph below). Only a decline surfaces them.
 - Name the reader and the concrete input in the reason, as the example does. Any label works as the owner name, an overridden `data_access_name()` included, but it must be distinct among the reader's own decline points: the first recording per owner wins, so a later reason under a name already used in the same window is dropped and never reaches the owned stage.
+- A `ReadFile` subclass that does not override `get_column_names`, and a `ReadDB` subclass that does not override `check_feature_in_data_access`, decline a chain- or column-separated feature name while matching. An explicit `column_to_file` pin is exempt; overriding the hook opts out.
 
 `ReadFile` column validation and the `ReadDB` feature check (`check_feature_in_data_access`) already record automatically; a custom reader only needs this for its own decline points.
 

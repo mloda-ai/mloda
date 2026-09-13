@@ -624,6 +624,36 @@ Available join types:
                 if not need_to_upload_collector.isdisjoint(_ep.get_uuids()):
                     _ep.need_to_upload = True
 
+        # A plain (non-join) hop's SOURCE-side cfw is never otherwise marked as consumed once the
+        # hop finishes; reusing its actual downstream consumer(s)' own children_if_root lets
+        # _drop_tfs_source_if_possible mark it incrementally instead of only at run finalize. A
+        # join-triggered hop's own source-root case is a separate, out-of-scope gap: its
+        # destination-side drop is already handled by _drop_join_source_if_possible, so it is left
+        # with empty owed_tokens (a safe no-op).
+        #
+        # A plain hop's own from_framework can also be a JoinStep's source or destination framework
+        # elsewhere in the same plan (a shared, canonicalized cfw instance, e.g. after a same-framework
+        # join re-points it): that join may still need to read from or merge into that exact cfw after
+        # this hop finishes, and children_if_root has no token representing that join's own outstanding
+        # read (only a same-framework join's already-executed side gets one, via
+        # add_value_to_children_if_root above). Crediting owed_tokens there would risk dropping the
+        # cfw before the join is done with it, so such a hop keeps the old, safe finalize-only timing.
+        join_frameworks: set[type[ComputeFramework]] = set()
+        for _ep in new_execution_plan:
+            if isinstance(_ep, JoinStep):
+                join_frameworks.add(_ep.source_framework)
+                join_frameworks.add(_ep.destination_framework)
+
+        for _ep in new_execution_plan:
+            if isinstance(_ep, TransformFrameworkStep) and _ep.link_id is None:
+                if _ep.from_framework in join_frameworks:
+                    continue
+                owed: set[UUID] = set()
+                for _consumer in new_execution_plan:
+                    if isinstance(_consumer, FeatureGroupStep) and _ep.uuid in _consumer.required_uuids:
+                        owed.update(_consumer.children_if_root)
+                _ep.owed_tokens = frozenset(owed)
+
         return new_execution_plan
 
     def set_store_value_to_left_most_index_and_update_feature_group(

@@ -201,8 +201,7 @@ class ComputeFrameworkExecutor:
             from_cfw = self.cfw_collection[from_cfw_uuid]
 
             if step.link_id:
-                from_feature_uuid = step.link_id
-                childrens = {from_feature_uuid}
+                childrens = {step.link_id}
             else:
                 childrens = set(from_cfw.children_if_root)
 

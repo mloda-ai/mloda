@@ -47,6 +47,10 @@ class TransformFrameworkStep(Step):
 
         self.step_is_done = False
 
+        # Consumer tokens that must all arrive before this hop's SOURCE-side cfw counts as fully
+        # consumed via this hop; set post-construction by ExecutionPlan.add_tfs.
+        self.owed_tokens: frozenset[UUID] = frozenset()
+
     def __eq__(self, other: Any) -> bool:
         if not isinstance(other, TransformFrameworkStep):
             return False

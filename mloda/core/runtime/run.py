@@ -380,6 +380,7 @@ class ExecutionOrchestrator:
             return False
 
         if isinstance(step, TransformFrameworkStep):
+            self._drop_tfs_source_if_possible(step)
             return True
 
         if isinstance(step, JoinStep):
@@ -409,14 +410,27 @@ class ExecutionOrchestrator:
     def _drop_join_source_if_possible(self, step: JoinStep) -> None:
         """Marks the join's destination-registered cfw with the link's own uuid; applies to both
         same- and cross-framework joins, since only the join's own completion can supply it."""
-        source_cfw_uuid = self.cfw_register.get_cfw_uuid_as_registered(
+        link_cfw_uuid = self.cfw_register.get_cfw_uuid_as_registered(
             step.destination_framework.get_class_name(), step.link.uuid
         )
-        if source_cfw_uuid is None:
+        if link_cfw_uuid is None:
             return
 
-        source_cfw = self.executor.cfw_collection[source_cfw_uuid]
-        self._mark_children_and_track(source_cfw, {step.link.uuid})
+        link_cfw = self.executor.cfw_collection[link_cfw_uuid]
+        self._mark_children_and_track(link_cfw, {step.link.uuid})
+
+    def _drop_tfs_source_if_possible(self, step: TransformFrameworkStep) -> None:
+        """Marks a plain hop's SOURCE-side cfw with its owed tokens once the hop itself finishes;
+        empty for a join-triggered hop, whose own destination-side drop is handled separately."""
+        if not step.owed_tokens:
+            return
+
+        uuid = step.source_framework_uuid if step.source_framework_uuid else next(iter(step.required_uuids))
+        from_cfw_uuid = self.cfw_register.get_cfw_uuid(step.from_framework.get_class_name(), uuid)
+        if from_cfw_uuid is None:
+            return
+
+        self._mark_children_and_track(self.executor.cfw_collection[from_cfw_uuid], set(step.owed_tokens))
 
     def _mark_children_and_track(self, cfw: ComputeFramework, children: set[UUID]) -> None:
         """

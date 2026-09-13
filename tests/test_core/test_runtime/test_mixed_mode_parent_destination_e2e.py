@@ -33,6 +33,7 @@ from mloda.user import (
 from mloda.provider import FeatureGroup, ComputeFramework, FeatureSet, BaseInputData, DataCreator, MatchData
 from mloda.core.runtime.flight.flight_server import FlightServer
 from mloda.core.core.step.transform_frame_work_step import TransformFrameworkStep
+from mloda.core.runtime.compute_framework_executor import ComputeFrameworkExecutor
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from mloda_plugins.compute_framework.base_implementations.duckdb.duckdb_framework import DuckDBFramework
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import (
@@ -744,10 +745,15 @@ class TestCrossFrameworkJoinHopDropTiming:
         leftover = FlightServer.list_flight_infos(flight_server.location)
         assert leftover == set(), f"leaked flight tables: {leftover}"
 
-    def test_shared_cross_framework_hop_not_dropped_until_all_consumers_finish(self, flight_server: Any) -> None:
-        """The join's source-side root also feeds an independent sibling feature: the shared upload
-        must survive until BOTH the sibling and the join have consumed it, not just the first to
-        finish. Allowed to currently pass (today's bug under-drops; it never over-drops)."""
+    def test_shared_cross_framework_hop_source_root_survives_until_join_and_sibling_finish(
+        self, flight_server: Any, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Guards the join's SOURCE ROOT cfw (not the hop itself, already covered above): it also
+        feeds an independent sibling feature, so it must survive until BOTH the sibling and the
+        join have consumed it, not just the first to finish. A `ComputeFramework.upload_finished_data`
+        spy identifies the source root's own cfw uuid (the specific flight-table key to watch):
+        asserting mere non-emptiness of the flight server would still pass under a mutation that
+        force-drops this exact cfw too early, so long as anything else remains on the server."""
         plugin_collector = PluginCollector.enabled_feature_groups(
             {_CrossFwHopLeftRootFG, _CrossFwHopRightRootFG, _CrossFwHopJoinChildFG, _CrossFwHopSiblingFG}
         )
@@ -755,6 +761,16 @@ class TestCrossFrameworkJoinHopDropTiming:
             JoinSpec(_CrossFwHopLeftRootFG, Index(("cfw_hop_join_key",))),
             JoinSpec(_CrossFwHopRightRootFG, Index(("cfw_hop_join_key",))),
         )
+
+        source_root_uuids: list[str] = []
+        original_upload = ComputeFramework.upload_finished_data
+
+        def _spy_upload(self: Any, location: str) -> Any:
+            if type(self).get_class_name() == _ThreadingOnlyPythonDictFramework.get_class_name():
+                source_root_uuids.append(str(self.uuid))
+            return original_upload(self, location)
+
+        monkeypatch.setattr(ComputeFramework, "upload_finished_data", _spy_upload)
 
         stream = mloda.stream_all(
             [Feature("cfw_hop_join_sum"), Feature("cfw_hop_sibling_doubled")],
@@ -779,10 +795,11 @@ class TestCrossFrameworkJoinHopDropTiming:
         )
         assert list(first_result["cfw_hop_sibling_doubled"]) == [20, 40, 60]
 
-        mid_run_keys = FlightServer.list_flight_infos(flight_server.location)
-        assert mid_run_keys, (
-            "the join has not finished yet: its shared source-side upload must still be on the "
-            "flight server, not dropped just because the unrelated sibling finished first"
+        assert len(source_root_uuids) == 1, f"expected exactly one source-root upload, got {source_root_uuids}"
+        mid_run_keys = _flight_table_keys(flight_server.location)
+        assert source_root_uuids[0] in mid_run_keys, (
+            f"the join has not finished yet: source root {source_root_uuids[0]} must still be on "
+            f"the flight server, not dropped just because the unrelated sibling finished first: {mid_run_keys}"
         )
 
         remaining = list(frames)
@@ -790,6 +807,209 @@ class TestCrossFrameworkJoinHopDropTiming:
         second_step, second_result = remaining[0]
         assert second_step.feature_names == ("cfw_hop_join_sum",)
         assert second_result.column("cfw_hop_join_sum").to_pylist() == [11, 22, 33]
+
+        leftover = FlightServer.list_flight_infos(flight_server.location)
+        assert leftover == set(), f"leaked flight tables: {leftover}"
+
+
+class _Gap1SharedRootFG(FeatureGroup):
+    """Shared root feeding both a cross-framework hop and an independent same-framework chain."""
+
+    @classmethod
+    def input_data(cls) -> BaseInputData | None:
+        return DataCreator({"gap1_shared_val"})
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {_ThreadingOnlyPythonDictFramework}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return {"gap1_shared_val": [1, 2, 3]}
+
+
+class _Gap1HopDestFG(FeatureGroup):
+    """Plain (non-join) cross-framework hop consumer of the shared root."""
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return {Feature("gap1_shared_val")}
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {_ThreadingOnlyPyArrowTable}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return data.append_column("gap1_hop_doubled", pc.multiply(data["gap1_shared_val"], 2))
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {"gap1_hop_doubled"}
+
+
+class _Gap1SiblingGate1FG(FeatureGroup):
+    """First of two same-framework gates ahead of the independent sibling: pads its own chain
+    long enough that it cannot finish within the same pass as the (much shorter) hop branch."""
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return {Feature("gap1_shared_val")}
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {_ThreadingOnlyPythonDictFramework}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return {**data, "gap1_sibling_gate1_val": list(data["gap1_shared_val"])}
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {"gap1_sibling_gate1_val"}
+
+
+class _Gap1SiblingGate2FG(FeatureGroup):
+    """Second gate; see `_Gap1SiblingGate1FG`."""
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return {Feature("gap1_sibling_gate1_val")}
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {_ThreadingOnlyPythonDictFramework}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return {**data, "gap1_sibling_gate2_val": list(data["gap1_sibling_gate1_val"])}
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {"gap1_sibling_gate2_val"}
+
+
+class _Gap1SiblingFG(FeatureGroup):
+    """Independent, same-framework consumer of the shared root, delayed by two gates."""
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return {Feature("gap1_sibling_gate2_val")}
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {_ThreadingOnlyPythonDictFramework}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return {"gap1_sibling_tripled": [v * 3 for v in data["gap1_sibling_gate2_val"]]}
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {"gap1_sibling_tripled"}
+
+
+@pytest.mark.timeout(30)
+@pytest.mark.skipif(pa is None, reason="PyArrow not installed.")
+class TestTransformFrameworkStepSourceRootDropTiming:
+    """Regression coverage for a TransformFrameworkStep's FROM-side (source) cfw: unlike a
+    JoinStep, `ExecutionOrchestrator._process_step_result` never marks anything as arrived on the
+    cfw a finished TransformFrameworkStep just consumed, so it survives until the run-finalize
+    sweep instead of being dropped incrementally once the hop that reads it has finished (#1409
+    follow-up)."""
+
+    def test_plain_hop_source_root_dropped_mid_run_not_only_at_finalize(
+        self, flight_server: Any, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The simplest possible shape: one MULTIPROCESSING root, one plain (non-join) hop, one
+        requested feature. A `ComputeFrameworkExecutor.add_compute_framework` spy identifies the
+        source root's own cfw uuid (the flight-table key to watch): there is no public-API way to
+        name it directly, mirroring the `TransformFrameworkStep.execute` spy used above for the
+        hop's own uuid."""
+        plugin_collector = PluginCollector.enabled_feature_groups({_MpTransformSourceFG, _MpTransformDestFG})
+
+        source_root_uuids: list[str] = []
+        original_add_cfw = ComputeFrameworkExecutor.add_compute_framework
+
+        def _spy_add_cfw(
+            self: Any, step: Any, parallelization_mode: Any, feature_uuid: Any, children_if_root: Any
+        ) -> Any:
+            result_uuid = original_add_cfw(self, step, parallelization_mode, feature_uuid, children_if_root)
+            if step.feature_group is _MpTransformSourceFG:
+                source_root_uuids.append(str(result_uuid))
+            return result_uuid
+
+        monkeypatch.setattr(ComputeFrameworkExecutor, "add_compute_framework", _spy_add_cfw)
+
+        stream = mloda.stream_all(
+            [Feature("mp_transform_doubled")],
+            compute_frameworks={PythonDictFramework, PyArrowTable},
+            plugin_collector=plugin_collector,
+            parallelization_modes={ParallelizationMode.MULTIPROCESSING},
+            flight_server=flight_server,
+        )
+
+        result = next(stream)
+        assert result.column("mp_transform_doubled").to_pylist() == [2, 4, 6]
+        assert len(source_root_uuids) == 1, f"expected exactly one source-root cfw, got {source_root_uuids}"
+
+        # Drain and finalize in `finally` regardless of the assertion's outcome: see the
+        # analogous comment on the cross-framework join hop test above.
+        try:
+            mid_run_keys = _flight_table_keys(flight_server.location)
+            assert source_root_uuids[0] not in mid_run_keys, (
+                f"TransformFrameworkStep source root {source_root_uuids[0]} is still on the flight "
+                f"server right after its own hop finished: {mid_run_keys}; it should have been "
+                "dropped incrementally, not left for the run-finalize sweep"
+            )
+        finally:
+            remaining = list(stream)
+
+        assert remaining == []
+
+        leftover = FlightServer.list_flight_infos(flight_server.location)
+        assert leftover == set(), f"leaked flight tables: {leftover}"
+
+    def test_shared_root_survives_hop_until_independent_sibling_also_finishes(self, flight_server: Any) -> None:
+        """The shared root also feeds an independent, same-framework sibling chain (delayed by
+        two gates so it cannot race the much shorter hop branch): the root must survive until
+        BOTH have consumed it. Allowed to currently pass (today's bug under-drops via the
+        finalize-only sweep; it never over-drops)."""
+        plugin_collector = PluginCollector.enabled_feature_groups(
+            {
+                _Gap1SharedRootFG,
+                _Gap1HopDestFG,
+                _Gap1SiblingGate1FG,
+                _Gap1SiblingGate2FG,
+                _Gap1SiblingFG,
+            }
+        )
+
+        stream = mloda.stream_all(
+            [Feature("gap1_hop_doubled"), Feature("gap1_sibling_tripled")],
+            compute_frameworks={_ThreadingOnlyPythonDictFramework, _ThreadingOnlyPyArrowTable},
+            plugin_collector=plugin_collector,
+            parallelization_modes={ParallelizationMode.SYNC, ParallelizationMode.MULTIPROCESSING},
+            flight_server=flight_server,
+        )
+
+        frames = stream.frames()
+
+        first_step, first_result = next(frames)
+        assert first_step.feature_names == ("gap1_hop_doubled",), (
+            "expected the (structurally much shorter) hop branch to finish before the "
+            "deliberately delayed independent sibling"
+        )
+        assert first_result.column("gap1_hop_doubled").to_pylist() == [2, 4, 6]
+
+        mid_run_keys = _flight_table_keys(flight_server.location)
+        assert mid_run_keys, (
+            "the independent sibling has not finished yet: the shared root's upload must still "
+            "be on the flight server, not dropped just because the hop alone finished"
+        )
+
+        second_step, second_result = next(frames)
+        assert second_step.feature_names == ("gap1_sibling_tripled",)
+        assert list(second_result["gap1_sibling_tripled"]) == [3, 6, 9]
+
+        remaining = list(frames)
+        assert remaining == []
 
         leftover = FlightServer.list_flight_infos(flight_server.location)
         assert leftover == set(), f"leaked flight tables: {leftover}"

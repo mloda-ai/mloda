@@ -110,20 +110,17 @@ class OrcReader(ReadFile):
 
     @classmethod
     def load_data(cls, data_access: Any, features: FeatureSet) -> Any:
-        if pyarrow_orc is None:
-            raise ImportError("pyarrow is required to read ORC files. Install it with: pip install 'mloda[pyarrow]'")
+        cls._require_dependency(pyarrow_orc, "ORC")
         columns = list(features.get_all_names())
         return pyarrow_orc.read_table(source=data_access, columns=columns).select(columns)
 
     @classmethod
     def get_column_names(cls, file_name: str) -> list[str]:
-        if pyarrow_orc is None:
-            raise NotImplementedError
+        cls._require_dependency(pyarrow_orc)
         return list(pyarrow_orc.ORCFile(file_name).schema.names)
 
     @classmethod
     def describe_columns(cls, data_access: Any) -> dict[str, DataType | None]:
-        if pyarrow_orc is None:
-            raise NotImplementedError
+        cls._require_dependency(pyarrow_orc)
         schema = pyarrow_orc.ORCFile(data_access).schema
         return {field.name: DataType.from_arrow_type_safe(field.type) for field in schema}

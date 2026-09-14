@@ -112,22 +112,17 @@ class ParquetReader(ReadFile):
 
     @classmethod
     def load_data(cls, data_access: Any, features: FeatureSet) -> Any:
-        if pyarrow_parquet is None:
-            raise ImportError(
-                "pyarrow is required to read Parquet files. Install it with: pip install 'mloda[pyarrow]'"
-            )
+        cls._require_dependency(pyarrow_parquet, "Parquet")
         return pyarrow_parquet.read_table(data_access, columns=list(features.get_all_names()))
 
     @classmethod
     def get_column_names(cls, file_name: str) -> Any:
-        if pyarrow_parquet is None:
-            raise NotImplementedError
+        cls._require_dependency(pyarrow_parquet)
         parquet_file = pyarrow_parquet.ParquetFile(file_name)
         return list(parquet_file.schema_arrow.names)
 
     @classmethod
     def describe_columns(cls, data_access: Any) -> dict[str, DataType | None]:
-        if pyarrow_parquet is None:
-            raise NotImplementedError
+        cls._require_dependency(pyarrow_parquet)
         parquet_file = pyarrow_parquet.ParquetFile(data_access)
         return {field.name: DataType.from_arrow_type_safe(field.type) for field in parquet_file.schema_arrow}

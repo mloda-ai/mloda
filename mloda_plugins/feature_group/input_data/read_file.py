@@ -88,6 +88,18 @@ class ReadFile(BaseInputData):
         """
         raise NotImplementedError
 
+    @staticmethod
+    def _require_dependency(module: Any, file_format: str | None = None) -> None:
+        """Raise ImportError with an install hint when `file_format` is given (load_data's contract);
+        otherwise raise a bare NotImplementedError, the signal validate_columns treats as non-fatal."""
+        if module is not None:
+            return
+        if file_format is None:
+            raise NotImplementedError
+        raise ImportError(
+            f"pyarrow is required to read {file_format} files. Install it with: pip install 'mloda[pyarrow]'"
+        )
+
     @classmethod
     def _final_reader_requires(cls) -> tuple[str, ...]:
         # ReadFile anchors its own subtree so a subclass classifies as a final reader only

@@ -128,8 +128,7 @@ class JsonReader(ReadFile):
 
     @classmethod
     def load_data(cls, data_access: Any, features: FeatureSet) -> Any:
-        if pyarrow_json is None:
-            raise ImportError("pyarrow is required to read JSON files. Install it with: pip install 'mloda[pyarrow]'")
+        cls._require_dependency(pyarrow_json, "JSON")
         result = pyarrow_json.read_json(
             data_access,
             parse_options=pyarrow_json.ParseOptions(
@@ -141,8 +140,7 @@ class JsonReader(ReadFile):
 
     @classmethod
     def get_column_names(cls, file_name: str) -> Any:
-        if pyarrow_json is None:
-            raise NotImplementedError
+        cls._require_dependency(pyarrow_json)
         # block_size is a chunking granularity, not a row-count sample; this parses the whole file.
         read_options = pyarrow_json.ReadOptions(block_size=65536)
         table = pyarrow_json.read_json(file_name, read_options=read_options)
@@ -150,8 +148,7 @@ class JsonReader(ReadFile):
 
     @classmethod
     def describe_columns(cls, data_access: Any) -> dict[str, DataType | None]:
-        if pyarrow_json is None:
-            raise NotImplementedError
+        cls._require_dependency(pyarrow_json)
         read_options = pyarrow_json.ReadOptions(block_size=65536)
         table = pyarrow_json.read_json(data_access, read_options=read_options)
         return {field.name: DataType.from_arrow_type_safe(field.type) for field in table.schema}

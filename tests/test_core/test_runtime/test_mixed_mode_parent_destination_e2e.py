@@ -48,6 +48,7 @@ from mloda_plugins.compute_framework.base_implementations.python_dict.python_dic
 from tests.test_plugins.compute_framework.base_implementations.tfs_connection_e2e_mixin import (
     TfsRawValPyArrowSource,
 )
+from tests.test_core.test_runtime.scheduling_jitter import run_under_scheduling_jitter
 
 
 def _flight_table_keys(location: str | None) -> set[str]:
@@ -1196,6 +1197,29 @@ class TestTransformFrameworkStepSourceRootDropTiming:
         assert result is not None
         assert len(result) == 1
         assert list(result[0]["diamond_hop_result"]) == [7, 14, 21]
+
+    def test_diamond_descendant_of_hop_source_and_consumer_survives_hop_finish_under_scheduling_jitter(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Same run as the test above, but replayed under seeded scheduling jitter (mloda-ai/mloda#1430):
+        SYNC's own JoinStep-waits-on-every-ancestor rule can otherwise hide the owed_tokens
+        ordering bug this class guards, by always running the hop before the diamond descendant."""
+        plugin_collector = PluginCollector.enabled_feature_groups(
+            {_DiamondHopRootFG, _DiamondHopDestFG, _DiamondHopDescendantFG}
+        )
+
+        def _run() -> Any:
+            return mloda.run_all(
+                [Feature("diamond_hop_result")],
+                compute_frameworks={PythonDictFramework, PyArrowTable},
+                plugin_collector=plugin_collector,
+                parallelization_modes={ParallelizationMode.SYNC},
+            )
+
+        for seed, result in run_under_scheduling_jitter(_run, seeds=[1, 2, 3, 4, 5], monkeypatch=monkeypatch):
+            assert result is not None, f"seed {seed} produced no result"
+            assert len(result) == 1, f"seed {seed} produced {len(result)} results"
+            assert list(result[0]["diamond_hop_result"]) == [7, 14, 21], f"seed {seed} produced a wrong result"
 
 
 class _H3ChainRootPandasFG(FeatureGroup):

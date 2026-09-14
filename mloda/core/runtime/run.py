@@ -202,7 +202,7 @@ class ExecutionOrchestrator:
                 continue
 
             if not self._can_run_step(
-                step.required_uuids, step.get_uuids(), finished_ids, currently_running_steps, step
+                step.required_uuids, step.get_uuids(), finished_ids, currently_running_steps, step, made_progress
             ):
                 continue
             self._execute_step(step)
@@ -603,6 +603,7 @@ class ExecutionOrchestrator:
         finished_steps: set[UUID],
         currently_running_steps: set[UUID],
         step: Any = None,
+        made_progress: bool = False,
     ) -> bool:
         """
         Checks if a step can be run. If it can, add it to the currently_running_steps set.
@@ -615,6 +616,9 @@ class ExecutionOrchestrator:
             if not required_uuids.issubset(finished_steps) or step_uuid.intersection(currently_running_steps):
                 return False
 
+            if self._defer_ready_step(step, made_progress):
+                return False
+
             cfw_uuid = self._cfw_to_occupy(step)
             if cfw_uuid is not None:
                 if cfw_uuid in self._occupied_cfws:
@@ -623,6 +627,13 @@ class ExecutionOrchestrator:
 
             currently_running_steps.update(step_uuid)
             return True
+
+    def _defer_ready_step(self, step: Any, made_progress: bool) -> bool:
+        """Test seam: return True to refuse an otherwise-runnable step for this pass.
+
+        Always False in production. Tests monkeypatch this to inject scheduling jitter.
+        """
+        return False
 
     def _mark_step_as_finished(
         self, step_uuid: set[UUID], finished_steps: set[UUID], currently_running_steps: set[UUID]

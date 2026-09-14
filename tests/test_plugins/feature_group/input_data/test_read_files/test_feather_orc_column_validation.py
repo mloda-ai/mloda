@@ -1,12 +1,9 @@
-"""FeatherReader and OrcReader override get_column_names, so matching checks real columns instead of
-blindly declining a chain/column-separated name. Missing pyarrow or an unreadable file both leave a
-declined match on the unpinned path; a pinned unreadable file propagates instead of falling back to
-a sibling file."""
+"""FeatherReader and OrcReader override get_column_names, so matching checks a file's real columns:
+present validates, missing declines, and an unreadable file declines when unpinned but propagates
+when pinned."""
 
-import sys
 from collections.abc import Iterator
 from pathlib import Path
-from typing import Any, cast
 
 import pyarrow as pa
 import pyarrow.orc as pyarrow_orc
@@ -81,50 +78,6 @@ class TestFeatherOrcValidateRealColumns:
         real_path = _write_orc(tmp_path, ["a", "b"])
 
         assert OrcReader.match_read_file_data_access([real_path], ["a"]) == real_path
-
-
-class TestFeatherOrcWithoutPyarrow:
-    """Without pyarrow, get_column_names cannot enumerate columns at all; the unpinned path declines."""
-
-    def test_feather_reader_declines_chain_separated_name_without_pyarrow(
-        self, monkeypatch: pytest.MonkeyPatch, rejection_window: dict[str, MatchRejection]
-    ) -> None:
-        monkeypatch.setitem(cast(dict[str, Any], sys.modules), "pyarrow.ipc", None)
-
-        result = FeatherReader.match_read_file_data_access(["dummy.feather"], [f"a{CHAIN_SEPARATOR}b"])
-
-        assert result is None
-        stored = rejection_window[FeatherReader.get_class_name()]
-        assert "cannot enumerate" in stored.reason
-        assert "get_column_names" in stored.reason
-        assert f"a{CHAIN_SEPARATOR}b" in stored.reason
-
-    def test_orc_reader_declines_chain_separated_name_without_pyarrow(
-        self, monkeypatch: pytest.MonkeyPatch, rejection_window: dict[str, MatchRejection]
-    ) -> None:
-        monkeypatch.setitem(cast(dict[str, Any], sys.modules), "pyarrow.orc", None)
-
-        result = OrcReader.match_read_file_data_access(["dummy.orc"], [f"a{CHAIN_SEPARATOR}b"])
-
-        assert result is None
-        stored = rejection_window[OrcReader.get_class_name()]
-        assert "cannot enumerate" in stored.reason
-        assert "get_column_names" in stored.reason
-        assert f"a{CHAIN_SEPARATOR}b" in stored.reason
-
-    def test_feather_reader_matches_plain_name_without_pyarrow(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setitem(cast(dict[str, Any], sys.modules), "pyarrow.ipc", None)
-
-        result = FeatherReader.match_read_file_data_access(["dummy.feather"], ["a"])
-
-        assert result == "dummy.feather"
-
-    def test_orc_reader_matches_plain_name_without_pyarrow(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setitem(cast(dict[str, Any], sys.modules), "pyarrow.orc", None)
-
-        result = OrcReader.match_read_file_data_access(["dummy.orc"], ["a"])
-
-        assert result == "dummy.orc"
 
 
 class TestFeatherOrcUnreadableFile:

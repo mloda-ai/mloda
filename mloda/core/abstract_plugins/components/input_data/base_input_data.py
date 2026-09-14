@@ -539,8 +539,8 @@ class BaseInputData(ABC):
 
     @classmethod
     def describe_columns(cls, data_access: Any) -> dict[str, DataType | None]:
-        """Maps column name to DataType (None if unknown); raises NotImplementedError if the reader can't
-        enumerate columns, or ImportError if a backend it needs is missing. A duplicate name collapses to one entry."""
+        """Maps column name to DataType (None if unknown; a duplicate name collapses to one entry). Raises
+        NotImplementedError (cannot enumerate), ImportError (backend missing), or OSError/ValueError (unreadable)."""
         raise NotImplementedError
 
     @classmethod

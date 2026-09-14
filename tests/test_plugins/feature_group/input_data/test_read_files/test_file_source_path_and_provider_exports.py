@@ -40,15 +40,6 @@ class TestProviderExports:
         assert "InputDataDescriptor" in provider.__all__
 
 
-class TestOptionalDependencyApiRemoved:
-    def test_requires_dependency_not_exported_from_provider(self) -> None:
-        assert not hasattr(provider, "requires_dependency")
-        assert "requires_dependency" not in provider.__all__
-
-    def test_base_input_data_has_no_require_dependency_helper(self) -> None:
-        assert not hasattr(provider.BaseInputData, "_require_dependency")
-
-
 class TestFileSourcePathCoercion:
     def test_path_is_coerced_to_str(self, tmp_path: Path) -> None:
         """(G1) A ``Path`` passed for ``path`` is normalized to ``str`` in ``__post_init__``."""

@@ -168,8 +168,8 @@ class ReadFile(BaseInputData):
         except (OSError, ValueError) as exc:
             if is_match_abort(exc):
                 raise
-            # An unreadable unpinned file declines so sibling readers still match; the pin path
-            # (_resolve_pinned_file) never comes through here, so a pinned file's error still propagates.
+            # An unreadable unpinned file declines so sibling readers still match; a pinned file is read
+            # first by _resolve_pinned_file through validate_columns, so its error propagates before any fallback.
             record_match_rejection(
                 cls.get_class_name(),
                 f"{cls.get_class_name()} matched the suffix of {path} but could not read its columns: {exc}",

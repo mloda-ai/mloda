@@ -314,10 +314,10 @@ class TestReadFileDeclinesChainSeparatedNames:
 class TestPinnedNameExemptsSeparatorGuard:
     """An explicit column_to_file pin IS the confirmation the separator guard demands; it must not be declined."""
 
-    def test_validate_columns_never_applies_the_separator_guard(
+    def test_validate_columns_accepts_a_real_separator_named_column(
         self, tmp_path: Path, rejection_window: dict[str, MatchRejection]
     ) -> None:
-        """validate_columns finds 'price__scaled' for real, so True means the column exists, not a swallowed error."""
+        """validate_columns finds 'price__scaled' for real: True means the column exists, not a swallowed error."""
         table = pa.Table.from_pydict({"price__scaled": [1, 2, 3]})
         file_path = str(tmp_path / "pinned.feather")
         with pa.OSFile(file_path, "wb") as sink:

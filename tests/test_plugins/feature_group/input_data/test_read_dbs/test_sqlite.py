@@ -261,12 +261,12 @@ class TestSQLITEReader:
         assert result["char_then_double"] == DataType.STRING
         assert result["double_then_blob"] == DataType.BINARY
 
-    def test_describe_columns_nonexistent_db_does_not_create_file(self, tmp_path: Any) -> None:
-        """sqlite3.connect would otherwise create the file; is_valid_credentials must fail fast first."""
+    def test_describe_columns_nonexistent_db_does_not_create_file_and_error_mentions_path(self, tmp_path: Any) -> None:
+        """sqlite3.connect would otherwise create the file; is_valid_credentials must fail fast, naming the path."""
         nonexistent_path = tmp_path / "nonexistent.db"
         assert not nonexistent_path.exists()
 
-        with pytest.raises(ValueError):
+        with pytest.raises(ValueError, match=re.escape(str(nonexistent_path))):
             SQLITEReader.describe_columns({"sqlite": str(nonexistent_path), "table_name": "t"})
 
         assert not nonexistent_path.exists()
@@ -284,13 +284,6 @@ class TestSQLITEReader:
         """A data_access dict without the 'sqlite' key must raise ValueError, not KeyError."""
         with pytest.raises(ValueError):
             SQLITEReader.describe_columns({"table_name": "t"})
-
-    def test_describe_columns_nonexistent_db_error_mentions_path(self, tmp_path: Any) -> None:
-        """The raised ValueError must name the missing db path, not just the table name."""
-        nonexistent_path = tmp_path / "nonexistent.db"
-
-        with pytest.raises(ValueError, match=re.escape(str(nonexistent_path))):
-            SQLITEReader.describe_columns({"sqlite": str(nonexistent_path), "table_name": "t"})
 
     def test_describe_columns_quotes_identifiers_blocks_injection(self, temp_sqlite_db: Any) -> None:
         """A crafted table_name must not break out of PRAGMA table_info(...)'s identifier position via quote_ident."""

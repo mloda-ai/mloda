@@ -104,3 +104,29 @@ def test_subclass_linked_plain_hop_and_join_plan_the_same_way_under_every_hash_s
         assert output == _SUBCLASS_LINKED_HOP_AND_JOIN_EXPECTED, (
             f"PYTHONHASHSEED={seed} produced {output}, expected {_SUBCLASS_LINKED_HOP_AND_JOIN_EXPECTED}"
         )
+
+
+# mloda-ai/mloda#1426: a consumer reads two plain hops out of one PythonDictFramework source
+# (p3_a via P3GateA, p3_b via P3GateB) whose from_feature_group classes, P3A and P3B(P3A), are
+# related only by subclassing for code reuse, not by sharing any parent feature/uuid. Unlike the
+# #1425 case override above, neither hop's parent is an ancestor of the other's, and no Link ties
+# the two gates together, so `_entries_linked`'s bare `issubclass` check wrongly merges the two
+# hops into one binding and drops one column's data instead of keeping both.
+_SUBCLASS_SIBLING_PLAIN_HOPS_PROBE = Path(__file__).with_name("subclass_sibling_plain_hops_probe.py")
+_SUBCLASS_SIBLING_PLAIN_HOPS_SEEDS = [0, 1, 3, 4, 6]
+_SUBCLASS_SIBLING_PLAIN_HOPS_EXPECTED = {"outcome": "accepted", "p3_x": "[6, 8, 10]"}
+
+
+@pytest.mark.timeout(60)
+def test_subclass_sibling_plain_hops_both_survive_under_every_hash_seed() -> None:
+    outputs = run_probes(
+        _SUBCLASS_SIBLING_PLAIN_HOPS_PROBE,
+        len(_SUBCLASS_SIBLING_PLAIN_HOPS_SEEDS),
+        seeds=_SUBCLASS_SIBLING_PLAIN_HOPS_SEEDS,
+    )
+
+    assert len(outputs) == len(_SUBCLASS_SIBLING_PLAIN_HOPS_SEEDS)
+    for seed, output in zip(_SUBCLASS_SIBLING_PLAIN_HOPS_SEEDS, outputs):
+        assert output == _SUBCLASS_SIBLING_PLAIN_HOPS_EXPECTED, (
+            f"PYTHONHASHSEED={seed} produced {output}, expected {_SUBCLASS_SIBLING_PLAIN_HOPS_EXPECTED}"
+        )

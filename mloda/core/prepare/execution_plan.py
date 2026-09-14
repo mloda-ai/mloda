@@ -615,6 +615,44 @@ Available join types:
                 for served_feature_group, served_parent in join_served_entries:
                     _add_to_groups(hop_groups, (_JoinServedParent(served_feature_group), served_parent))
 
+                # Two distinct hops linked only because one's from_feature_group subclasses the other's
+                # (mloda-ai/mloda#1426) read the same physical source cfw instance at runtime, but each
+                # only ever waited on its own parent; whichever a later runtime lookup happens to pick
+                # may transform a stale snapshot, taken before the sibling's parent landed in it. Widen
+                # each to wait on the other's parent too, scoped to the subclass pairing specifically:
+                # the same-class and join-bridged linkages `_entries_linked` also groups by already have
+                # their own, narrower reasons to keep separate required_uuids (see the two multi-member
+                # tests in test_add_tfs_multi_member_parents.py).
+                def _subclass_only_linked(hop_a: TransformFrameworkStep, hop_b: TransformFrameworkStep) -> bool:
+                    if hop_a.from_feature_group is hop_b.from_feature_group:
+                        return False
+                    return issubclass(hop_a.from_feature_group, hop_b.from_feature_group) or issubclass(
+                        hop_b.from_feature_group, hop_a.from_feature_group
+                    )
+
+                for group in hop_groups:
+                    tfs_members = [hop for hop, _member_parent in group if isinstance(hop, TransformFrameworkStep)]
+                    subclass_clusters: list[list[TransformFrameworkStep]] = []
+                    for tfs in tfs_members:
+                        linked_clusters = [
+                            cluster
+                            for cluster in subclass_clusters
+                            if any(_subclass_only_linked(tfs, member) for member in cluster)
+                        ]
+                        if linked_clusters:
+                            linked_clusters[0].append(tfs)
+                            for other_cluster in linked_clusters[1:]:
+                                linked_clusters[0].extend(other_cluster)
+                                subclass_clusters.remove(other_cluster)
+                        else:
+                            subclass_clusters.append([tfs])
+
+                    for cluster in subclass_clusters:
+                        if len(cluster) > 1:
+                            shared_required_uuids: set[UUID] = set().union(*(tfs.required_uuids for tfs in cluster))
+                            for tfs in cluster:
+                                tfs.required_uuids = set(shared_required_uuids)
+
                 if len(hop_groups) > 1:
                     raise ValueError(
                         self._conflicting_transform_hops_error(ep, hop_groups[0][0][0], hop_groups[1][0][0])

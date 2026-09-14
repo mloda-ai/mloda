@@ -420,14 +420,12 @@ class ExecutionOrchestrator:
         self._mark_children_and_track(link_cfw, {step.link.uuid})
 
     def _drop_tfs_source_if_possible(self, step: TransformFrameworkStep) -> None:
-        """Marks a plain hop's SOURCE-side cfw with its owed tokens once the hop itself finishes;
-        empty for a join-triggered hop, whose own destination-side drop is handled separately."""
+        """Marks a hop's SOURCE-side cfw with its owed tokens once the hop itself finishes, for both
+        a plain hop and a join-triggered hop; best-effort, so an unresolved cfw is left for later."""
         if not step.owed_tokens:
             return
 
-        # owed_tokens is only ever non-empty for a plain hop (link_id is None), and
-        # source_framework_uuid is only ever set on a join-triggered hop, so it is always None here.
-        uuid = next(iter(step.required_uuids))
+        uuid = step.source_framework_uuid or next(iter(step.required_uuids))
         from_cfw_uuid = self.cfw_register.get_cfw_uuid(step.from_framework.get_class_name(), uuid)
         if from_cfw_uuid is None:
             return

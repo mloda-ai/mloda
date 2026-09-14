@@ -433,6 +433,10 @@ Available join types:
         left_join_frameworks: set[JoinStep] = {ep for ep in execution_plan if isinstance(ep, JoinStep)}
         need_to_upload_collector: set[UUID] = set()
 
+        # Which JoinStep uuids a canonical cross-framework join hop serves; a join hop's owed-token
+        # route tokens are these, not its own uuid (see the owed-token block below).
+        hop_serves: dict[UUID, set[UUID]] = defaultdict(set)
+
         # Features produced together by one FeatureGroupStep live on the same physical source cfw
         # instance, so a hop should key on the owning step, not each member feature's own uuid.
         owning_step_of: dict[UUID, UUID] = {
@@ -455,6 +459,7 @@ Available join types:
                         new_execution_plan.append(new_tfs)
                         canonical_tfs = new_tfs
                     ep.required_uuids.add(canonical_tfs.uuid)
+                    hop_serves[canonical_tfs.uuid].add(ep.uuid)
 
                     need_to_upload_collector.update(ep.source_framework_uuids)
 
@@ -624,35 +629,59 @@ Available join types:
                 if not need_to_upload_collector.isdisjoint(_ep.get_uuids()):
                     _ep.need_to_upload = True
 
-        # A plain (non-join) hop's SOURCE-side cfw is never otherwise marked as consumed once the hop
-        # finishes, so credit owed_tokens from each downstream consumer's own uuids, letting
-        # _drop_tfs_source_if_possible mark it incrementally instead of only at run finalize. Two cases
-        # are skipped and left with empty owed_tokens (a safe no-op): a join-triggered hop's own
-        # source-root, whose destination-side drop _drop_join_source_if_possible already handles; and a
-        # plain hop whose from_framework is also a JoinStep's source or destination elsewhere in the plan
-        # (a shared, canonicalized cfw, e.g. after a same-framework join re-points it) - that join may
-        # still need to read from or merge into that cfw after this hop finishes, and children_if_root
-        # carries no token for that outstanding read (only a same-framework join's already-executed side
-        # gets one, via add_value_to_children_if_root above), so crediting here would risk dropping the
-        # cfw before the join is done with it.
-        join_frameworks: set[type[ComputeFramework]] = set()
-        for _ep in new_execution_plan:
-            if isinstance(_ep, JoinStep):
-                join_frameworks.add(_ep.source_framework)
-                join_frameworks.add(_ep.destination_framework)
+        # A hop's SOURCE-side cfw is never otherwise marked as consumed once the hop finishes, so credit
+        # owed_tokens from downstream consumers, letting _drop_tfs_source_if_possible mark it
+        # incrementally instead of only at run finalize. A hop is ineligible (owed_tokens stays empty)
+        # when its from_framework is also a source/destination framework of some OTHER JoinStep in the
+        # plan (that join may still need that shared cfw), or when a served JoinStep is APPEND/UNION
+        # (those gate only on their own two side uuids, so a same-cfw plain hop can still be pending).
+        # For a join hop, only a destination-framework consumer counts: a third-framework consumer
+        # reached through a further chained join is that further hop's own drop to make, not this one's.
+        joinsteps_by_uuid: dict[UUID, JoinStep] = {js.uuid: js for js in left_join_frameworks}
 
-        eligible_hops: dict[UUID, TransformFrameworkStep] = {
-            _ep.uuid: _ep
-            for _ep in new_execution_plan
-            if isinstance(_ep, TransformFrameworkStep)
-            and _ep.link_id is None
-            and _ep.from_framework not in join_frameworks
+        route_tokens_by_hop: dict[UUID, set[UUID]] = {}
+        eligible_hops: dict[UUID, TransformFrameworkStep] = {}
+        for _ep in new_execution_plan:
+            if not isinstance(_ep, TransformFrameworkStep):
+                continue
+
+            if _ep.link_id is None:
+                served_joinstep_uuids: set[UUID] = set()
+                route_tokens = {_ep.uuid}
+            else:
+                served_joinstep_uuids = hop_serves.get(_ep.uuid, set())
+                route_tokens = set(served_joinstep_uuids)
+
+            served_joinsteps = [joinsteps_by_uuid[uuid] for uuid in served_joinstep_uuids]
+            if any(js.link.jointype in (JoinType.APPEND, JoinType.UNION) for js in served_joinsteps):
+                continue
+
+            other_join_frameworks = {
+                fw
+                for js in joinsteps_by_uuid.values()
+                if js.uuid not in served_joinstep_uuids
+                for fw in (js.source_framework, js.destination_framework)
+            }
+            if _ep.from_framework in other_join_frameworks:
+                continue
+
+            eligible_hops[_ep.uuid] = _ep
+            route_tokens_by_hop[_ep.uuid] = route_tokens
+
+        hop_uuid_by_route_token: dict[UUID, UUID] = {
+            token: hop_uuid for hop_uuid, tokens in route_tokens_by_hop.items() for token in tokens
         }
+
         owed_by_hop: dict[UUID, set[UUID]] = {hop_uuid: set() for hop_uuid in eligible_hops}
         for _consumer in new_execution_plan:
-            if isinstance(_consumer, FeatureGroupStep):
-                for hop_uuid in _consumer.required_uuids & eligible_hops.keys():
-                    owed_by_hop[hop_uuid].update(_consumer.get_uuids())
+            if not isinstance(_consumer, FeatureGroupStep):
+                continue
+            for token in _consumer.required_uuids & hop_uuid_by_route_token.keys():
+                hop_uuid = hop_uuid_by_route_token[token]
+                hop = eligible_hops[hop_uuid]
+                if hop.link_id is not None and _consumer.compute_framework != hop.to_framework:
+                    continue
+                owed_by_hop[hop_uuid].update(_consumer.get_uuids())
 
         for hop_uuid, owed in owed_by_hop.items():
             eligible_hops[hop_uuid].owed_tokens = frozenset(owed)

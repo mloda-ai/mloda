@@ -18,6 +18,11 @@ except ImportError:
     pa = None  # type: ignore[assignment, unused-ignore]
     pc = None
 
+try:
+    import pandas as pd
+except ImportError:
+    pd = None
+
 from mloda.user import (
     mloda,
     Feature,
@@ -36,6 +41,7 @@ from mloda.core.core.step.transform_frame_work_step import TransformFrameworkSte
 from mloda.core.runtime.compute_framework_executor import ComputeFrameworkExecutor
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from mloda_plugins.compute_framework.base_implementations.duckdb.duckdb_framework import DuckDBFramework
+from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import (
     PythonDictFramework,
 )
@@ -660,8 +666,9 @@ class _CrossFwHopJoinChildFG(FeatureGroup):
         return {"cfw_hop_join_sum"}
 
 
-class _CrossFwHopSiblingFG(FeatureGroup):
-    """Independent consumer of the join's source-side root feature; unrelated to the join itself."""
+class _CrossFwHopSiblingGate1FG(FeatureGroup):
+    """First of three same-framework gates ahead of the independent sibling: pads its own chain
+    long enough that it cannot tie the (much longer) hop, join, and join-child branch."""
 
     def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return {Feature("cfw_hop_left_val")}
@@ -672,7 +679,65 @@ class _CrossFwHopSiblingFG(FeatureGroup):
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
-        return {"cfw_hop_sibling_doubled": [v * 2 for v in data["cfw_hop_left_val"]]}
+        return {**data, "cfw_hop_sibling_gate1_val": list(data["cfw_hop_left_val"])}
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {"cfw_hop_sibling_gate1_val"}
+
+
+class _CrossFwHopSiblingGate2FG(FeatureGroup):
+    """Second gate; see `_CrossFwHopSiblingGate1FG`."""
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return {Feature("cfw_hop_sibling_gate1_val")}
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {_ThreadingOnlyPythonDictFramework}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return {**data, "cfw_hop_sibling_gate2_val": list(data["cfw_hop_sibling_gate1_val"])}
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {"cfw_hop_sibling_gate2_val"}
+
+
+class _CrossFwHopSiblingGate3FG(FeatureGroup):
+    """Third gate; see `_CrossFwHopSiblingGate1FG`."""
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return {Feature("cfw_hop_sibling_gate2_val")}
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {_ThreadingOnlyPythonDictFramework}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return {**data, "cfw_hop_sibling_gate3_val": list(data["cfw_hop_sibling_gate2_val"])}
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {"cfw_hop_sibling_gate3_val"}
+
+
+class _CrossFwHopSiblingFG(FeatureGroup):
+    """Independent consumer of the join's source-side root feature, unrelated to the join itself,
+    delayed by three same-framework gates so it cannot race the shorter hop+join+child branch."""
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return {Feature("cfw_hop_sibling_gate3_val")}
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {_ThreadingOnlyPythonDictFramework}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return {"cfw_hop_sibling_doubled": [v * 2 for v in data["cfw_hop_sibling_gate3_val"]]}
 
     @classmethod
     def feature_names_supported(cls) -> set[str]:
@@ -687,10 +752,11 @@ class TestCrossFrameworkJoinHopDropTiming:
     def test_cross_framework_join_hop_dropped_mid_run_not_only_at_finalize(
         self, flight_server: Any, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """The join's transported hop table must be dropped as soon as the join that consumes it
-        finishes, not only by the blanket finalize sweep. A `TransformFrameworkStep.execute` spy
-        identifies the hop's own cfw uuid (the flight-table key to watch): there is no public-API
-        way to name it, since `PlanStep` records no uuid for "transform" steps."""
+        """The join's transported hop table AND its source-framework root cfw must both be dropped
+        as soon as the join that consumes them finishes, not only by the blanket finalize sweep. A
+        `TransformFrameworkStep.execute` spy identifies the hop's own cfw uuid, and a
+        `ComputeFramework.upload_finished_data` spy identifies the source root's own cfw uuid:
+        neither has a public-API name, since `PlanStep` records no uuid for "transform" steps."""
         plugin_collector = PluginCollector.enabled_feature_groups(
             {_XFwJoinLeftRootFG, _XFwJoinRightRootFG, _XFwJoinChildFG}
         )
@@ -707,6 +773,16 @@ class TestCrossFrameworkJoinHopDropTiming:
             return original_execute(self, cfw_register, cfw, from_cfw=from_cfw, data=data)
 
         monkeypatch.setattr(TransformFrameworkStep, "execute", _spy_execute)
+
+        source_root_uuids: list[str] = []
+        original_upload = ComputeFramework.upload_finished_data
+
+        def _spy_upload(self: Any, location: str) -> Any:
+            if type(self).get_class_name() == _ThreadingOnlyPythonDictFramework.get_class_name():
+                source_root_uuids.append(str(self.uuid))
+            return original_upload(self, location)
+
+        monkeypatch.setattr(ComputeFramework, "upload_finished_data", _spy_upload)
 
         stream = mloda.stream_all(
             [Feature("xfw_join_sum")],
@@ -726,6 +802,7 @@ class TestCrossFrameworkJoinHopDropTiming:
         result = next(stream)
         assert result.column("xfw_join_sum").to_pylist() == [11, 22, 33]
         assert len(hop_uuids) == 1, f"expected exactly one TransformFrameworkStep hop, got {hop_uuids}"
+        assert len(source_root_uuids) == 1, f"expected exactly one source-root upload, got {source_root_uuids}"
 
         # Drain and finalize in `finally` regardless of the assertion's outcome: a failure here must
         # not also leave the run's own cleanup undone, which would otherwise fail _clean_flight_server's
@@ -737,6 +814,11 @@ class TestCrossFrameworkJoinHopDropTiming:
                 f"own join finished: {mid_run_keys}; it should have been dropped incrementally, not left "
                 "for the run-finalize sweep"
             )
+            assert source_root_uuids[0] not in mid_run_keys, (
+                f"cross-framework join source root {source_root_uuids[0]} is still on the flight server "
+                f"right after its own join finished: {mid_run_keys}; it should have been dropped "
+                "incrementally, not left for the run-finalize sweep"
+            )
         finally:
             remaining = list(stream)
 
@@ -745,17 +827,26 @@ class TestCrossFrameworkJoinHopDropTiming:
         leftover = FlightServer.list_flight_infos(flight_server.location)
         assert leftover == set(), f"leaked flight tables: {leftover}"
 
-    def test_shared_cross_framework_hop_source_root_survives_until_join_and_sibling_finish(
+    def test_shared_cross_framework_hop_source_root_survives_until_gated_sibling_finishes(
         self, flight_server: Any, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """Guards the join's SOURCE ROOT cfw (not the hop itself, already covered above): it also
-        feeds an independent sibling feature, so it must survive until BOTH the sibling and the
-        join have consumed it, not just the first to finish. A `ComputeFramework.upload_finished_data`
-        spy identifies the source root's own cfw uuid (the specific flight-table key to watch):
-        asserting mere non-emptiness of the flight server would still pass under a mutation that
-        force-drops this exact cfw too early, so long as anything else remains on the server."""
+        feeds an independent sibling feature delayed by three same-framework gates, so the root must
+        survive while that real reader is still pending, even after the (structurally much shorter)
+        join branch has already finished. A `ComputeFramework.upload_finished_data` spy identifies
+        the source root's own cfw uuid (the specific flight-table key to watch): asserting mere
+        non-emptiness of the flight server would still pass under a mutation that force-drops this
+        exact cfw too early, so long as anything else remains on the server."""
         plugin_collector = PluginCollector.enabled_feature_groups(
-            {_CrossFwHopLeftRootFG, _CrossFwHopRightRootFG, _CrossFwHopJoinChildFG, _CrossFwHopSiblingFG}
+            {
+                _CrossFwHopLeftRootFG,
+                _CrossFwHopRightRootFG,
+                _CrossFwHopJoinChildFG,
+                _CrossFwHopSiblingGate1FG,
+                _CrossFwHopSiblingGate2FG,
+                _CrossFwHopSiblingGate3FG,
+                _CrossFwHopSiblingFG,
+            }
         )
         link = Link.inner(
             JoinSpec(_CrossFwHopLeftRootFG, Index(("cfw_hop_join_key",))),
@@ -790,23 +881,24 @@ class TestCrossFrameworkJoinHopDropTiming:
         frames = stream.frames()
 
         first_step, first_result = next(frames)
-        assert first_step.feature_names == ("cfw_hop_sibling_doubled",), (
-            "expected the independent sibling to finish before the cross-framework join's own child"
+        assert first_step.feature_names == ("cfw_hop_join_sum",), (
+            "expected the (structurally much shorter) join branch to finish before the "
+            "three-gate-delayed independent sibling"
         )
-        assert list(first_result["cfw_hop_sibling_doubled"]) == [20, 40, 60]
+        assert first_result.column("cfw_hop_join_sum").to_pylist() == [11, 22, 33]
 
         assert len(source_root_uuids) == 1, f"expected exactly one source-root upload, got {source_root_uuids}"
         mid_run_keys = _flight_table_keys(flight_server.location)
         assert source_root_uuids[0] in mid_run_keys, (
-            f"the join has not finished yet: source root {source_root_uuids[0]} must still be on "
-            f"the flight server, not dropped just because the unrelated sibling finished first: {mid_run_keys}"
+            f"the gated sibling has not finished yet: source root {source_root_uuids[0]} must still "
+            f"be on the flight server, not dropped just because the join finished first: {mid_run_keys}"
         )
 
         remaining = list(frames)
         assert len(remaining) == 1
         second_step, second_result = remaining[0]
-        assert second_step.feature_names == ("cfw_hop_join_sum",)
-        assert second_result.column("cfw_hop_join_sum").to_pylist() == [11, 22, 33]
+        assert second_step.feature_names == ("cfw_hop_sibling_doubled",)
+        assert list(second_result["cfw_hop_sibling_doubled"]) == [20, 40, 60]
 
         leftover = FlightServer.list_flight_infos(flight_server.location)
         assert leftover == set(), f"leaked flight tables: {leftover}"
@@ -1109,3 +1201,190 @@ class TestTransformFrameworkStepSourceRootDropTiming:
         assert result is not None
         assert len(result) == 1
         assert list(result[0]["diamond_hop_result"]) == [7, 14, 21]
+
+
+class _H3ChainRootPandasFG(FeatureGroup):
+    """Near root of a Pandas-PyArrow-PythonDict join chain, plus its own Pandas-only side chain."""
+
+    @classmethod
+    def input_data(cls) -> BaseInputData | None:
+        return DataCreator({"h3_key", "h3_p"})
+
+    @classmethod
+    def index_columns(cls) -> list[Index] | None:
+        return [Index(("h3_key",))]
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PandasDataFrame}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return pd.DataFrame({"h3_key": [1, 2, 3], "h3_p": [1, 2, 3]})
+
+
+class _H3ChainRootPyArrowFG(FeatureGroup):
+    """Middle join root of the chain, on PyArrow."""
+
+    @classmethod
+    def input_data(cls) -> BaseInputData | None:
+        return DataCreator({"h3_key", "h3_a"})
+
+    @classmethod
+    def index_columns(cls) -> list[Index] | None:
+        return [Index(("h3_key",))]
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PyArrowTable}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return pa.table({"h3_key": [1, 2, 3], "h3_a": [10, 20, 30]})
+
+
+class _H3ChainRootPythonDictFG(FeatureGroup):
+    """Far join root of the chain, on PythonDict: the source a plain hop must not credit too early."""
+
+    @classmethod
+    def input_data(cls) -> BaseInputData | None:
+        return DataCreator({"h3_key", "h3_d"})
+
+    @classmethod
+    def index_columns(cls) -> list[Index] | None:
+        return [Index(("h3_key",))]
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PythonDictFramework}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return {"h3_key": [1, 2, 3], "h3_d": [100, 200, 300]}
+
+
+class _H3ChainGate1FG(FeatureGroup):
+    """First of three Pandas-only gates padding the consumer's own direct-parent side chain."""
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return {Feature("h3_p")}
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PandasDataFrame}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        data["h3_g1"] = data["h3_p"]
+        return data
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {"h3_g1"}
+
+
+class _H3ChainGate2FG(FeatureGroup):
+    """Second gate; see `_H3ChainGate1FG`."""
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return {Feature("h3_g1")}
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PandasDataFrame}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        data["h3_g2"] = data["h3_g1"]
+        return data
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {"h3_g2"}
+
+
+class _H3ChainGate3FG(FeatureGroup):
+    """Third gate; see `_H3ChainGate1FG`."""
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return {Feature("h3_g2")}
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PandasDataFrame}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        data["h3_g3"] = data["h3_g2"]
+        return data
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {"h3_g3"}
+
+
+class _H3ChainConsumerFG(FeatureGroup):
+    """Reads all three join-chain roots plus the gated Pandas side chain in one shot."""
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return {Feature("h3_p"), Feature("h3_a"), Feature("h3_d"), Feature("h3_g3")}
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PandasDataFrame}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        data["h3_x"] = data["h3_p"] + data["h3_a"] + data["h3_d"] + data["h3_g3"]
+        return data
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {"h3_x"}
+
+
+@pytest.mark.timeout(30)
+@pytest.mark.skipif(pd is None, reason="Pandas not installed.")
+class TestPlainHopJoinFrameworksGuardRegression:
+    """A plain hop must stay excluded from owed-token crediting when its own source framework is
+    also a JoinStep's framework elsewhere in the plan, even once join hops get their own guard."""
+
+    def test_plain_hop_still_defers_to_a_join_reading_the_same_source_framework(self) -> None:
+        """A chained Pandas<-PyArrow<-PythonDict join also plans a plain PythonDict->Pandas hop for
+        the same PythonDict source (h3_d reaches the consumer both via the join chain and directly).
+        If the plain hop's `join_frameworks` guard were ever dropped while generalizing it to join
+        hops, it would credit the PythonDict root before the join hop reads it, and the run would
+        fail transforming PyArrow data out of an already-dropped PythonDict cfw. Pure SYNC: no
+        flight server or MULTIPROCESSING is needed to reproduce the bug."""
+        plugin_collector = PluginCollector.enabled_feature_groups(
+            {
+                _H3ChainRootPandasFG,
+                _H3ChainRootPyArrowFG,
+                _H3ChainRootPythonDictFG,
+                _H3ChainGate1FG,
+                _H3ChainGate2FG,
+                _H3ChainGate3FG,
+                _H3ChainConsumerFG,
+            }
+        )
+        links = {
+            Link.inner(
+                JoinSpec(_H3ChainRootPandasFG, Index(("h3_key",))), JoinSpec(_H3ChainRootPyArrowFG, Index(("h3_key",)))
+            ),
+            Link.inner(
+                JoinSpec(_H3ChainRootPyArrowFG, Index(("h3_key",))),
+                JoinSpec(_H3ChainRootPythonDictFG, Index(("h3_key",))),
+            ),
+        }
+
+        result = mloda.run_all(
+            [Feature("h3_x")],
+            compute_frameworks={PandasDataFrame, PyArrowTable, PythonDictFramework},
+            plugin_collector=plugin_collector,
+            links=links,
+            parallelization_modes={ParallelizationMode.SYNC},
+        )
+
+        assert result is not None
+        assert len(result) == 1
+        assert list(result[0]["h3_x"]) == [112, 224, 336]

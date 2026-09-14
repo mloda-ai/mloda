@@ -1,6 +1,7 @@
-"""FeatherReader and OrcReader override get_column_names, so matching opens the real file and checks
-real columns instead of blindly declining a chain/column-separated name. Needs a real pyarrow install
-and a real file on disk."""
+"""FeatherReader and OrcReader override get_column_names, so matching checks real columns instead of
+blindly declining a chain/column-separated name. Missing pyarrow or an unreadable file both leave a
+declined match on the unpinned path; a pinned unreadable file propagates instead of falling back to
+a sibling file."""
 
 import sys
 from collections.abc import Iterator
@@ -13,6 +14,7 @@ import pytest
 
 from mloda.core.abstract_plugins.components.match_rejection import MATCH_REJECTION_REASONS, MatchRejection
 from mloda.provider import CHAIN_SEPARATOR
+from mloda.user import DataAccessCollection, Options
 from mloda_plugins.feature_group.input_data.read_files.feather import FeatherReader
 from mloda_plugins.feature_group.input_data.read_files.orc import OrcReader
 
@@ -43,7 +45,9 @@ def _write_orc(directory: Path, columns: list[str]) -> str:
     return file_path
 
 
-class TestShippedUnvalidatedReadersDeclineChainSeparatedNames:
+class TestFeatherOrcValidateRealColumns:
+    """With pyarrow present and a real file, matching checks the file's actual columns."""
+
     def test_feather_reader_declines_chain_separated_name(
         self, tmp_path: Path, rejection_window: dict[str, MatchRejection]
     ) -> None:
@@ -79,25 +83,34 @@ class TestShippedUnvalidatedReadersDeclineChainSeparatedNames:
         assert OrcReader.match_read_file_data_access([real_path], ["a"]) == real_path
 
 
-class TestFeatherOrcPyarrowAbsenceGuardDeclinesMatch:
-    """Bug A: without pyarrow, get_column_names is still structurally overridden, so
-    _declines_unvalidated_separator_name never fires; validate_columns must decline the match instead."""
+class TestFeatherOrcWithoutPyarrow:
+    """Without pyarrow, get_column_names cannot enumerate columns at all; the unpinned path declines."""
 
     def test_feather_reader_declines_chain_separated_name_without_pyarrow(
-        self, monkeypatch: pytest.MonkeyPatch
+        self, monkeypatch: pytest.MonkeyPatch, rejection_window: dict[str, MatchRejection]
     ) -> None:
         monkeypatch.setitem(cast(dict[str, Any], sys.modules), "pyarrow.ipc", None)
 
         result = FeatherReader.match_read_file_data_access(["dummy.feather"], [f"a{CHAIN_SEPARATOR}b"])
 
         assert result is None
+        stored = rejection_window[FeatherReader.get_class_name()]
+        assert "cannot enumerate" in stored.reason
+        assert "get_column_names" in stored.reason
+        assert f"a{CHAIN_SEPARATOR}b" in stored.reason
 
-    def test_orc_reader_declines_chain_separated_name_without_pyarrow(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_orc_reader_declines_chain_separated_name_without_pyarrow(
+        self, monkeypatch: pytest.MonkeyPatch, rejection_window: dict[str, MatchRejection]
+    ) -> None:
         monkeypatch.setitem(cast(dict[str, Any], sys.modules), "pyarrow.orc", None)
 
         result = OrcReader.match_read_file_data_access(["dummy.orc"], [f"a{CHAIN_SEPARATOR}b"])
 
         assert result is None
+        stored = rejection_window[OrcReader.get_class_name()]
+        assert "cannot enumerate" in stored.reason
+        assert "get_column_names" in stored.reason
+        assert f"a{CHAIN_SEPARATOR}b" in stored.reason
 
     def test_feather_reader_matches_plain_name_without_pyarrow(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setitem(cast(dict[str, Any], sys.modules), "pyarrow.ipc", None)
@@ -114,9 +127,9 @@ class TestFeatherOrcPyarrowAbsenceGuardDeclinesMatch:
         assert result == "dummy.orc"
 
 
-class TestFeatherOrcUnreadableFileDeclinesMatch:
-    """Bug B: a real file get_column_names cannot read (corrupt, truncated, or missing)
-    must decline the match instead of letting the exception propagate out of matching."""
+class TestFeatherOrcUnreadableFile:
+    """A real file get_column_names cannot read (corrupt, truncated, or missing) declines on the
+    unpinned path, but propagates instead of falling back to a sibling when the file was pinned."""
 
     def test_feather_reader_declines_corrupt_file(
         self, tmp_path: Path, rejection_window: dict[str, MatchRejection]
@@ -147,3 +160,16 @@ class TestFeatherOrcUnreadableFileDeclinesMatch:
 
     def test_orc_reader_declines_nonexistent_path_plain_name(self) -> None:
         assert OrcReader.match_read_file_data_access(["dummy.orc"], ["a"]) is None
+
+    def test_pinned_corrupt_feather_file_propagates_instead_of_falling_back_to_sibling(self, tmp_path: Path) -> None:
+        """A pinned unreadable file must not silently fall through to an unpinned sibling file."""
+        good = _write_feather(tmp_path, ["a"])
+        corrupt = tmp_path / "corrupt.feather"
+        corrupt.write_bytes(b"not a real feather file")
+        dac = DataAccessCollection(
+            files={"pinned": str(corrupt), "sibling": good},
+            column_to_file={"a": "pinned"},
+        )
+
+        with pytest.raises(ValueError, match="Not an Arrow file"):
+            FeatherReader.match_subclass_data_access(dac, ["a"], Options())

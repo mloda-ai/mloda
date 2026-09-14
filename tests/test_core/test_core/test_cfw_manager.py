@@ -137,6 +137,110 @@ class TestCfwManagerGetCfwUuidBackHopResolution:
 
         assert resolved == hop_cfw_uuid
 
+    def test_get_cfw_uuid_does_not_pick_a_winner_between_two_identically_childrened_same_class_cfws(self) -> None:
+        """Two plain hops out of one shared source cfw into the same destination class (see
+        ComputeFrameworkExecutor.prepare_execute_step's TransformFrameworkStep branch) each copy
+        `children_if_root` verbatim from that shared source, so they register two same-class cfws
+        with an IDENTICAL children_if_root set. Queried by a single member of that shared set (not
+        either cfw's own key), get_cfw_uuid's bare class+single-uuid signature has no signal to
+        prefer one sibling over the other: both matches are equally valid. It must not silently
+        pick a winner by registration order (today's `<=` comparison makes whichever cfw is
+        registered LAST win, purely because it is the last one dict-iteration visits) - it must
+        defer by returning None, the same as a genuine not-found, rather than guess.
+        """
+        cls_name = "PythonDictFramework"
+        shared_member_uuid = uuid4()
+
+        cfw_register_a_then_b = CfwManager({ParallelizationMode.SYNC})
+        cfw_a = uuid4()
+        cfw_b = uuid4()
+        cfw_register_a_then_b.add_cfw_to_compute_frameworks(cfw_a, cls_name, {shared_member_uuid})
+        cfw_register_a_then_b.add_cfw_to_compute_frameworks(cfw_b, cls_name, {shared_member_uuid})
+
+        assert cfw_register_a_then_b.get_cfw_uuid(cls_name, shared_member_uuid) is None
+
+        cfw_register_b_then_a = CfwManager({ParallelizationMode.SYNC})
+        cfw_register_b_then_a.add_cfw_to_compute_frameworks(cfw_b, cls_name, {shared_member_uuid})
+        cfw_register_b_then_a.add_cfw_to_compute_frameworks(cfw_a, cls_name, {shared_member_uuid})
+
+        assert cfw_register_b_then_a.get_cfw_uuid(cls_name, shared_member_uuid) is None
+
+    def test_get_unique_cfw_uuid_prefers_the_tfs_id_that_is_a_cfws_own_key_over_an_identically_childrened_sibling(
+        self,
+    ) -> None:
+        """Same two identically-childrened sibling hops as above, but resolved the way a real
+        caller does: get_unique_cfw_uuid(cls_name, step.tfs_ids), where tfs_ids is the FULL set of
+        parent uuids a step reads, not a single bare uuid. That set can include one sibling's own
+        registered key directly (`cfw_a`) alongside the shared descendant uuid that ties both
+        siblings. A cfw's own key being directly among the queried tfs_ids is a far more meaningful
+        signal than indirect, identical children_if_root membership, and get_unique_cfw_uuid is the
+        layer with access to it (get_cfw_uuid, called with one uuid at a time, is not). The
+        resolution must prefer `cfw_a` regardless of which order the two siblings were registered
+        in, not flip depending on which was registered last.
+        """
+        cls_name = "PythonDictFramework"
+        shared_member_uuid = uuid4()
+
+        cfw_register_a_then_b = CfwManager({ParallelizationMode.SYNC})
+        cfw_a = uuid4()
+        cfw_b = uuid4()
+        cfw_register_a_then_b.add_cfw_to_compute_frameworks(cfw_a, cls_name, {shared_member_uuid})
+        cfw_register_a_then_b.add_cfw_to_compute_frameworks(cfw_b, cls_name, {shared_member_uuid})
+        tfs_ids = {cfw_a, shared_member_uuid}
+
+        assert cfw_register_a_then_b.get_unique_cfw_uuid(cls_name, tfs_ids) == cfw_a
+
+        cfw_register_b_then_a = CfwManager({ParallelizationMode.SYNC})
+        cfw_register_b_then_a.add_cfw_to_compute_frameworks(cfw_b, cls_name, {shared_member_uuid})
+        cfw_register_b_then_a.add_cfw_to_compute_frameworks(cfw_a, cls_name, {shared_member_uuid})
+
+        assert cfw_register_b_then_a.get_unique_cfw_uuid(cls_name, tfs_ids) == cfw_a
+
+
+class TestCfwManagerGetUniqueCfwUuidOwnKeyAmbiguityAfterMerge:
+    """get_unique_cfw_uuid classifies each tfs_id's resolution as an own-key match (never
+    ambiguous: two independent hops into one framework class is a normal, non-ambiguous shape) or
+    a genuine children_if_root-membership match (ambiguous when several disagree) by comparing the
+    resolved uuid to the queried tfs_id AFTER get_cfw_uuid ran it through find_leftmost. A JoinStep
+    merging one of those own-key cfws into its destination (JoinStep.execute ->
+    CfwManager.add_to_merge_relation) re-points that comparison's result, so a same-shape,
+    genuinely non-ambiguous case gets misclassified as membership-resolved and wrongly raises."""
+
+    def test_two_own_key_resolutions_repointed_by_a_merge_do_not_raise_ambiguous(self) -> None:
+        """hop1 and hop2 are each registered under their own step uuid (own-key cfws, exactly like
+        the back-hop cfw in TestCfwManagerGetCfwUuidBackHopResolution above), then each merged into
+        its own, distinct destination cfw the way JoinStep.execute merges a hop into a join's
+        destination. Resolving {hop1, hop2} together is the ordinary shape of a consumer reaching
+        two independent hops into the same framework, not an internal error: it must not raise,
+        the same as it does not raise before either hop is merged (see
+        test_get_unique_cfw_uuid_resolves_a_tfs_steps_own_registered_uuid above).
+        """
+        cfw_register = CfwManager({ParallelizationMode.SYNC})
+        cls_name = "PythonDictFramework"
+        hop1_uuid = uuid4()
+        hop2_uuid = uuid4()
+        dest1_uuid = uuid4()
+        dest2_uuid = uuid4()
+
+        cfw_register.add_cfw_to_compute_frameworks(hop1_uuid, cls_name, {uuid4()})
+        cfw_register.add_cfw_to_compute_frameworks(hop2_uuid, cls_name, {uuid4()})
+
+        # Sanity check, mirroring the pre-merge behavior pinned above: before either hop is
+        # merged, resolving both own keys together already does not raise.
+        assert cfw_register.get_unique_cfw_uuid(cls_name, {hop1_uuid, hop2_uuid}) is None
+
+        cfw_register.add_to_merge_relation(dest1_uuid, hop1_uuid, cls_name)
+        cfw_register.add_to_merge_relation(dest2_uuid, hop2_uuid, cls_name)
+
+        # Each hop's own-key match now resolves, via find_leftmost, to its own distinct
+        # destination cfw rather than to its own uuid - the merge is real and re-points both.
+        assert cfw_register.get_cfw_uuid(cls_name, hop1_uuid) == dest1_uuid
+        assert cfw_register.get_cfw_uuid(cls_name, hop2_uuid) == dest2_uuid
+
+        resolved = cfw_register.get_unique_cfw_uuid(cls_name, {hop1_uuid, hop2_uuid})
+
+        assert resolved is None
+
 
 class TestMyManagerStartAlwaysChainsTheParentDeathWatchdog:
     """MyManager.start() must always run the watchdog in the manager server process, and if the

@@ -95,33 +95,41 @@ class CfwManager:
 
         Usually, the feature UUID is a parent of the current feature; it also matches a cfw's own
         registered key directly, since a TFS-created cfw is keyed by its own step uuid rather than
-        listed in anyone's children_if_root. Among matches, the narrowest children_if_root wins
-        (a subset of every other match's), since a hop back into a framework re-registers the same
-        lineage more narrowly; unrelated routes whose children_if_root sets aren't nested keep the
-        first one registered.
+        listed in anyone's children_if_root. Among matches, the narrowest children_if_root wins (a
+        proper subset of every other match's), since a hop back into a framework re-registers the
+        same lineage more narrowly; unrelated routes whose children_if_root sets aren't nested keep
+        the first one registered, same as before. A genuine tie between two or more matches with the
+        EXACT SAME children_if_root set is not this method's job to break: it returns None rather
+        than pick one via incidental iteration/registration order, unless a later, strictly narrower
+        match resolves it.
 
         Args:
             cf_class_name: The class name of the Compute Framework.
             feature_uuid: The UUID of the feature.
 
         Returns:
-            The UUID of the Compute Framework, or None if not found.
+            The UUID of the Compute Framework, or None if not found or tied.
         """
         best_match: UUID | None = None
         best_children_if_root: set[UUID] | None = None
+        tied = False
         for cfw_uuid, value in self.compute_frameworks.items():
             cls_name, children_if_root = value
             if cf_class_name != cls_name:
                 continue
             if cfw_uuid != feature_uuid and feature_uuid not in children_if_root:
                 continue
-            if best_children_if_root is None or children_if_root <= best_children_if_root:
-                best_match = cfw_uuid
-                best_children_if_root = children_if_root
+            if best_children_if_root is None:
+                best_match, best_children_if_root, tied = cfw_uuid, children_if_root, False
+            elif children_if_root == best_children_if_root:
+                tied = True
+            elif children_if_root <= best_children_if_root:
+                best_match, best_children_if_root, tied = cfw_uuid, children_if_root, False
 
-        if best_match is not None:
-            return self.find_leftmost(best_match, cf_class_name)
-        return None
+        if best_match is None or tied:
+            return None
+
+        return self.find_leftmost(best_match, cf_class_name)
 
     def get_cfw_uuid_as_registered(self, cf_class_name: str, feature_uuid: UUID) -> UUID | None:
         """Same lookup as `get_cfw_uuid`, but without canonicalizing through `find_leftmost`/
@@ -136,23 +144,26 @@ class CfwManager:
         """
         Resolves a set of tfs_ids to at most one distinct Compute Framework UUID.
 
-        A resolution still equal to its own tfs_id is a hop's own freshly created cfw (matched
-        by `get_cfw_uuid`'s own-key check), not corroborated by any children_if_root membership;
-        several tfs_ids each resolving that way to a different cfw is the ordinary shape of a
-        consumer reaching several independent hops into the same framework, not an internal
-        error, so it does not raise: it is treated the same as no resolution at all, deferring
-        to the caller's own-feature-uuid fallback. Raises only when several tfs_ids resolve, via
-        genuine children_if_root membership, to more than one distinct cfw (ambiguous).
+        Each tfs_id is checked directly against `self.compute_frameworks` first: a tfs_id that IS
+        itself some cfw's own registered key for cf_class_name is a strictly stronger signal than
+        `get_cfw_uuid`'s membership-or-tie resolution, so it is resolved via `find_leftmost` alone,
+        without going through `get_cfw_uuid`. Several tfs_ids each independently matching their own
+        cfw this way is the ordinary shape of a consumer reaching several independent hops into the
+        same framework, even after a JoinStep merge re-points each into a different destination, so
+        it never raises: it is treated the same as no resolution at all, deferring to the caller's
+        own-feature-uuid fallback. Tfs_ids that aren't themselves a registered key fall back to
+        `get_cfw_uuid`'s children_if_root-membership resolution. Raises only when several tfs_ids
+        resolve, via genuine membership, to more than one distinct cfw (ambiguous).
         """
         membership_resolved: set[UUID] = set()
-        equality_resolved: set[UUID] = set()
+        own_key_resolved: set[UUID] = set()
         for tfs_id in tfs_ids:
-            resolved = self.get_cfw_uuid(cf_class_name, tfs_id)
-            if resolved is None:
+            own_entry = self.compute_frameworks.get(tfs_id)
+            if own_entry is not None and own_entry[0] == cf_class_name:
+                own_key_resolved.add(self.find_leftmost(tfs_id, cf_class_name))
                 continue
-            if resolved == tfs_id:
-                equality_resolved.add(resolved)
-            else:
+            resolved = self.get_cfw_uuid(cf_class_name, tfs_id)
+            if resolved is not None:
                 membership_resolved.add(resolved)
 
         if len(membership_resolved) > 1:
@@ -164,8 +175,8 @@ class CfwManager:
             )
         if len(membership_resolved) == 1:
             return next(iter(membership_resolved))
-        if len(equality_resolved) == 1:
-            return next(iter(equality_resolved))
+        if len(own_key_resolved) == 1:
+            return next(iter(own_key_resolved))
         return None
 
     def add_to_merge_relation(self, left_uuid: UUID, right_uuid: UUID, cls_name: str) -> None:

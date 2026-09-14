@@ -391,7 +391,7 @@ class ExecutionOrchestrator:
             if step.features.any_uuid is None:
                 raise ValueError(f"from_feature_uuid should not be none. {step}")
 
-            cfw = self.executor.get_cfw(step.compute_framework, step.features.any_uuid)
+            cfw = self.executor.get_cfw(step.compute_framework, step.features.any_uuid, step.tfs_ids)
             self.add_to_result_data_collection(cfw, step.features, step.uuid)
             self._drop_data_if_possible(cfw, step)
 
@@ -603,9 +603,19 @@ class ExecutionOrchestrator:
         resolved_uuid = self.cfw_register.get_unique_cfw_uuid(class_name, step.tfs_ids)
 
         if resolved_uuid is None:
-            if step.features.any_uuid is None:
-                return None
-            return self.cfw_register.get_cfw_uuid(class_name, step.features.any_uuid)
+            # get_unique_cfw_uuid defers, rather than picks, when several tfs_ids are each
+            # independently some cfw's own key (e.g. redundant sibling hops out of one shared
+            # source, see mloda-ai/mloda#1428). An already-established cfw the step's own output
+            # uuid already belongs to (e.g. a chained join's final destination) is tried first;
+            # only then is each tfs_id candidate tried directly.
+            if step.features.any_uuid is not None:
+                resolved_uuid = self.cfw_register.get_cfw_uuid(class_name, step.features.any_uuid)
+            if resolved_uuid is None:
+                for candidate_uuid in step.tfs_ids:
+                    resolved_uuid = self.cfw_register.get_cfw_uuid(class_name, candidate_uuid)
+                    if resolved_uuid is not None:
+                        break
+            return resolved_uuid
 
         # Mirrors ComputeFrameworkExecutor.prepare_execute_step's cross-check: a resolution that is
         # still literally one of the queried tfs_ids only proves this hop's own freshly created cfw

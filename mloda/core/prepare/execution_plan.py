@@ -678,10 +678,17 @@ Available join types:
 
         # A hop's SOURCE-side cfw is credited via owed_tokens, letting it drop once read. Multi-route rule: a consumer
         # reaching two or more hops out of one source framework is credited by none, since one hop finishing could drop
-        # the cfw while another still reads it. Shared-framework guard: a hop is ineligible when its source framework is
-        # also a source or destination of another JoinStep, which may still read or merge into it. Scope: a join hop
-        # credits only its destination-framework consumer; APPEND/UNION hops stay finalize-only.
+        # the cfw while another still reads it. Per-source guard (mloda-ai/mloda#1423): a hop is ineligible when its
+        # OWN source data - not merely its framework class - is also the source or destination of another JoinStep,
+        # which may still read into or merge the same physical cfw the hop's credit would resolve to (see
+        # CfwManager.find_leftmost/get_cfw_uuid). Scope: a join hop credits only its destination-framework consumer;
+        # APPEND/UNION hops stay finalize-only.
         joinsteps_by_uuid: dict[UUID, JoinStep] = {js.uuid: js for js in left_join_frameworks}
+
+        def _owning_step(feature_uuid: UUID) -> UUID:
+            """The uuid of the FeatureGroupStep that owns a feature uuid; a bare feature uuid
+            owns itself when it has no FeatureGroupStep of its own (hand-built steps, tests)."""
+            return owning_step_of.get(feature_uuid, feature_uuid)
 
         # Route tokens and from_framework are recorded for every hop, eligible or not: an ineligible hop
         # still reads its source cfw, so it still counts as a route for the multi-route rule below.
@@ -706,14 +713,37 @@ Available join types:
             if any(js.link.jointype in (JoinType.APPEND, JoinType.UNION) for js in served_joinsteps):
                 continue
 
-            other_join_frameworks = {
-                fw
-                for js in joinsteps_by_uuid.values()
-                if js.uuid not in served_joinstep_uuids
-                for fw in (js.source_framework, js.destination_framework)
-            }
-            if _ep.from_framework in other_join_frameworks:
-                continue
+            # The hop's own source identity, normalized to the owning FeatureGroupStep: a plain
+            # hop's source_step_uuid is already that owner; a join hop's source_framework_uuid is
+            # the raw feature uuid the served JoinStep reads from, so it needs the same normalizing.
+            if _ep.link_id is None:
+                hop_source_owner: UUID | None = _ep.source_step_uuid
+            elif _ep.source_framework_uuid is not None:
+                hop_source_owner = _owning_step(_ep.source_framework_uuid)
+            else:
+                hop_source_owner = None
+
+            if hop_source_owner is not None:
+                other_join_source_owners = {
+                    _owning_step(uuid)
+                    for js in joinsteps_by_uuid.values()
+                    if js.uuid not in served_joinstep_uuids
+                    for uuid in (js.source_framework_uuids | js.destination_framework_uuids)
+                }
+                if hop_source_owner in other_join_source_owners:
+                    continue
+            else:
+                # Fail closed: the hop's own source identity could not be resolved (should not
+                # happen given add_tfs always sets one of the two fields), fall back to the
+                # conservative framework-class guard rather than assume eligibility.
+                other_join_frameworks = {
+                    fw
+                    for js in joinsteps_by_uuid.values()
+                    if js.uuid not in served_joinstep_uuids
+                    for fw in (js.source_framework, js.destination_framework)
+                }
+                if _ep.from_framework in other_join_frameworks:
+                    continue
 
             eligible_hops[_ep.uuid] = _ep
 

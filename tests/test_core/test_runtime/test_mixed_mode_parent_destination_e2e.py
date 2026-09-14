@@ -1061,6 +1061,69 @@ class _DiamondHopDescendantFG(FeatureGroup):
         return {"diamond_hop_result"}
 
 
+class _FwClassGuardJoinLeftFG(FeatureGroup):
+    """Left side of an unrelated cross-framework join elsewhere in the plan: shares the
+    PythonDictFramework CLASS with `_MpTransformSourceFG`'s hop, but its own data
+    (`fw_class_guard_*`) is entirely disjoint from that hop's source (mloda-ai/mloda#1423)."""
+
+    @classmethod
+    def input_data(cls) -> BaseInputData | None:
+        return DataCreator({"fw_class_guard_join_key", "fw_class_guard_left_val"})
+
+    @classmethod
+    def index_columns(cls) -> list[Index] | None:
+        return [Index(("fw_class_guard_join_key",))]
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PythonDictFramework}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return {"fw_class_guard_join_key": [1, 2, 3], "fw_class_guard_left_val": [10, 20, 30]}
+
+
+class _FwClassGuardJoinRightFG(FeatureGroup):
+    """Right side, a different framework, forcing a cross-framework JoinStep."""
+
+    @classmethod
+    def input_data(cls) -> BaseInputData | None:
+        return DataCreator({"fw_class_guard_join_key", "fw_class_guard_right_val"})
+
+    @classmethod
+    def index_columns(cls) -> list[Index] | None:
+        return [Index(("fw_class_guard_join_key",))]
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PyArrowTable}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return pa.table({"fw_class_guard_join_key": [1, 2, 3], "fw_class_guard_right_val": [1, 2, 3]})
+
+
+class _FwClassGuardJoinChildFG(FeatureGroup):
+    """Sole consumer of the unrelated join; the only feature requested from that branch."""
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return {Feature("fw_class_guard_left_val"), Feature("fw_class_guard_right_val")}
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PyArrowTable}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return data.append_column(
+            "fw_class_guard_join_sum", pc.add(data["fw_class_guard_left_val"], data["fw_class_guard_right_val"])
+        )
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {"fw_class_guard_join_sum"}
+
+
 @pytest.mark.timeout(30)
 @pytest.mark.skipif(pa is None, reason="PyArrow not installed.")
 class TestTransformFrameworkStepSourceRootDropTiming:
@@ -1115,6 +1178,93 @@ class TestTransformFrameworkStepSourceRootDropTiming:
             remaining = list(stream)
 
         assert remaining == []
+
+        leftover = FlightServer.list_flight_infos(flight_server.location)
+        assert leftover == set(), f"leaked flight tables: {leftover}"
+
+    def test_plain_hop_source_root_dropped_right_after_its_hop_when_its_class_is_shared_by_an_unrelated_join(
+        self, flight_server: Any, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """mloda-ai/mloda#1423: the plain hop's source framework CLASS (PythonDictFramework) is also
+        the source of an unrelated cross-framework JoinStep elsewhere in the plan, but that join's own
+        data (`_FwClassGuardJoin*`) never overlaps with the hop's own source (`_MpTransformSourceFG`).
+        The hop's source root must drop as soon as its own hop finishes reading it: `owed_tokens`
+        crediting the hop's own destination consumer is the ONLY thing that can achieve that timing
+        here, since a plain hop's destination cfw only inherits (and must still separately satisfy)
+        the source's own `children_if_root`, so a snapshot taken any later than immediately after the
+        hop's own drop-check (e.g. after the destination consumer's own frame) would also pass once
+        the destination step's own, ordinary completion is recorded, masking a still-empty
+        `owed_tokens`. `ExecutionOrchestrator._drop_tfs_source_if_possible` is spied on directly (no
+        public-API hook exists) to capture the flight-server state at that exact moment."""
+        plugin_collector = PluginCollector.enabled_feature_groups(
+            {
+                _MpTransformSourceFG,
+                _MpTransformDestFG,
+                _FwClassGuardJoinLeftFG,
+                _FwClassGuardJoinRightFG,
+                _FwClassGuardJoinChildFG,
+            }
+        )
+        link = Link.inner(
+            JoinSpec(_FwClassGuardJoinLeftFG, Index(("fw_class_guard_join_key",))),
+            JoinSpec(_FwClassGuardJoinRightFG, Index(("fw_class_guard_join_key",))),
+        )
+
+        source_root_uuids: list[str] = []
+        original_add_cfw = ComputeFrameworkExecutor.add_compute_framework
+
+        def _spy_add_cfw(
+            self: Any, step: Any, parallelization_mode: Any, feature_uuid: Any, children_if_root: Any
+        ) -> Any:
+            result_uuid = original_add_cfw(self, step, parallelization_mode, feature_uuid, children_if_root)
+            if step.feature_group is _MpTransformSourceFG:
+                source_root_uuids.append(str(result_uuid))
+            return result_uuid
+
+        monkeypatch.setattr(ComputeFrameworkExecutor, "add_compute_framework", _spy_add_cfw)
+
+        from mloda.core.runtime.run import ExecutionOrchestrator
+
+        original_drop_tfs = ExecutionOrchestrator._drop_tfs_source_if_possible
+        keys_right_after_hop_drop_check: list[set[str]] = []
+
+        def _spy_drop_tfs(self: Any, step: Any) -> Any:
+            result = original_drop_tfs(self, step)
+            if step.link_id is None and step.from_framework is PythonDictFramework:
+                keys_right_after_hop_drop_check.append(_flight_table_keys(flight_server.location))
+            return result
+
+        monkeypatch.setattr(ExecutionOrchestrator, "_drop_tfs_source_if_possible", _spy_drop_tfs)
+
+        result = mloda.run_all(
+            [Feature("mp_transform_doubled"), Feature("fw_class_guard_join_sum")],
+            compute_frameworks={PythonDictFramework, PyArrowTable},
+            plugin_collector=plugin_collector,
+            links={link},
+            parallelization_modes={ParallelizationMode.MULTIPROCESSING},
+            flight_server=flight_server,
+        )
+
+        assert result is not None
+        by_columns = {tuple(table.column_names): table for table in result}
+        assert by_columns[("mp_transform_doubled",)].column("mp_transform_doubled").to_pylist() == [2, 4, 6]
+        assert by_columns[("fw_class_guard_join_sum",)].column("fw_class_guard_join_sum").to_pylist() == [
+            11,
+            22,
+            33,
+        ]
+
+        assert len(source_root_uuids) == 1, f"expected exactly one source-root cfw, got {source_root_uuids}"
+        assert len(keys_right_after_hop_drop_check) == 1, (
+            f"expected exactly one plain PythonDict->PyArrow hop, got {keys_right_after_hop_drop_check}"
+        )
+        assert source_root_uuids[0] not in keys_right_after_hop_drop_check[0], (
+            f"TransformFrameworkStep source root {source_root_uuids[0]} is still on the flight server "
+            f"right after its own hop's drop-check ran: {keys_right_after_hop_drop_check[0]}; an unrelated "
+            "JoinStep elsewhere in the plan merely sharing PythonDictFramework as a framework CLASS, with "
+            "disjoint source data, must not delay this credit to the destination consumer's own natural "
+            "completion or the run-finalize sweep"
+        )
 
         leftover = FlightServer.list_flight_infos(flight_server.location)
         assert leftover == set(), f"leaked flight tables: {leftover}"

@@ -913,3 +913,85 @@ def test_a_consumer_reaching_two_hops_of_one_source_framework_is_credited_by_nei
         assert not (hop.owed_tokens & consumer_uuids), (
             f"got owed_tokens={hop.owed_tokens}, consumer uuids={consumer_uuids}"
         )
+
+
+# A plain hop's source framework CLASS coincides with another JoinStep's framework elsewhere in the
+# plan, but that join's own source/destination data never overlaps with what the hop actually reads.
+# mloda-ai/mloda#1423: today the guard keys on the framework class alone, so it wrongly withholds
+# credit here; the fix must key on the hop's actual source data instead.
+
+
+class TokenIsolatedSource(FeatureGroup):
+    pass
+
+
+class TokenIsolatedConsumer(FeatureGroup):
+    pass
+
+
+class IsolatedGuardPlanned(NamedTuple):
+    consumer: FeatureGroupStep
+    plan: list[Step]
+
+
+def _plan_plain_hop_whose_source_framework_class_is_shared_by_an_unrelated_joins_data() -> IsolatedGuardPlanned:
+    """An isolated PythonDict->Pandas plain hop, read by no one but its own consumer, plus a wholly
+    unrelated PythonDict<->PyArrow join elsewhere in the plan (TokenOtherLeft/TokenOtherRight via
+    _other_link) that never touches the isolated hop's source feature. Only the framework CLASS
+    (PythonDictFramework) is shared; the actual data is disjoint."""
+    planned = _planned()
+    graph = planned.graph
+
+    isolated_source = feature("token_isolated_source", PythonDictFramework)
+    isolated_consumer = feature("token_isolated_consumer", PandasDataFrame)
+
+    graph.add_node(isolated_source.uuid, NodeProperties(isolated_source, TokenIsolatedSource))
+    graph.adjacency_list[isolated_source.uuid] = [isolated_consumer.uuid]
+    graph.add_node(isolated_consumer.uuid, NodeProperties(isolated_consumer, TokenIsolatedConsumer))
+    graph.adjacency_list[isolated_consumer.uuid] = []
+    graph.parent_to_children_mapping[isolated_consumer.uuid] = {isolated_source.uuid}
+
+    planned.queue.append((TokenIsolatedSource, {isolated_source}))
+    planned.queue.append((TokenIsolatedConsumer, {isolated_consumer}))
+
+    # Unrelated cross-framework join, sharing the PythonDict framework CLASS only: its own left/right
+    # data (TokenOtherLeft/TokenOtherRight) is disjoint from isolated_source.
+    _add_branch(planned, _other_link(), "isolated_guard", left_cfw=PythonDictFramework, right_cfw=PyArrowTable)
+
+    plan = _create_execution_plan(planned)
+    isolated_consumer_step = next(
+        s for s in plan if isinstance(s, FeatureGroupStep) and s.feature_group is TokenIsolatedConsumer
+    )
+    return IsolatedGuardPlanned(isolated_consumer_step, plan)
+
+
+def test_plain_hop_whose_source_framework_class_is_shared_but_data_is_disjoint_gets_credited() -> None:
+    """mloda-ai/mloda#1423: a plain hop's source framework CLASS coincides with another JoinStep's
+    framework elsewhere in the plan, but that join never reads or merges the hop's actual source
+    data, so the hop must still be credited (non-empty owed_tokens)."""
+    guarded = _plan_plain_hop_whose_source_framework_class_is_shared_by_an_unrelated_joins_data()
+
+    plain_hop = next(
+        step
+        for step in guarded.plan
+        if isinstance(step, TransformFrameworkStep)
+        and step.link_id is None
+        and step.from_framework is PythonDictFramework
+    )
+
+    # Guard: the consumer must reach only this one PythonDict hop, or a second route would let the
+    # multi-route rule mask the guard under test instead.
+    python_dict_hop_uuids = {
+        step.uuid
+        for step in guarded.plan
+        if isinstance(step, TransformFrameworkStep) and step.from_framework is PythonDictFramework
+    }
+    assert guarded.consumer.required_uuids & python_dict_hop_uuids == {plain_hop.uuid}, (
+        f"the consumer must reach exactly this one PythonDict hop; got "
+        f"{guarded.consumer.required_uuids & python_dict_hop_uuids}"
+    )
+
+    assert plain_hop.owed_tokens == guarded.consumer.get_uuids(), (
+        f"the hop's source data is disjoint from the unrelated join's own source/destination, so it "
+        f"must be credited; got owed_tokens={plain_hop.owed_tokens}"
+    )

@@ -1,8 +1,4 @@
-"""ExecutionOrchestrator.__enter__ must reject a tfs_connection_map entry whose compute framework
-class supports ParallelizationMode.MULTIPROCESSING before spawning any multiprocessing Manager,
-mirroring test_orchestrator_rejects_unpicklable_step_feature_group.py's wiring-test shape. It must
-not touch SYNC mode.
-"""
+"""ExecutionOrchestrator.__enter__ must reject a MULTIPROCESSING-capable connection before spawning a Manager."""
 
 from __future__ import annotations
 
@@ -15,9 +11,7 @@ from mloda.core.runtime.run import ExecutionOrchestrator
 
 
 class _ConnectionConflictOrchestratorCFW(ComputeFramework):
-    """A third-party framework that keeps the base default: supports all parallelization modes,
-    including MULTIPROCESSING. Reports unavailable so it never leaks into the accessible-plugin
-    pool for unrelated tests sharing this pytest-xdist worker."""
+    """Supports MULTIPROCESSING by default; reports unavailable to avoid leaking into other tests."""
 
     @staticmethod
     def is_available() -> bool:
@@ -25,13 +19,7 @@ class _ConnectionConflictOrchestratorCFW(ComputeFramework):
 
 
 def _empty_plan() -> ExecutionPlan:
-    """An ExecutionPlan with execution_plan explicitly set, mirroring
-    _plan_with_unpicklable_feature_group_step()'s pattern so this test does not rely on which
-    validator __enter__ happens to run first. A bare ExecutionPlan() has no execution_plan
-    attribute until create_execution_plan() runs, and raise_on_unpicklable_join_link (which reads
-    it) would crash with an unrelated AttributeError instead of the ValueError this test expects,
-    were it ever reordered ahead of the connection-conflict check.
-    """
+    """ExecutionPlan with execution_plan set, so an unrelated validator does not crash first."""
     plan = ExecutionPlan()
     plan.execution_plan = []
     return plan

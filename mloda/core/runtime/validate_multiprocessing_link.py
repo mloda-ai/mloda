@@ -1,10 +1,8 @@
 """Guards a Link, a feature group class, a child_bootstrap callable, or an extender against a value
 pickle cannot round-trip, which otherwise fails deep inside a multiprocessing worker with an opaque
-PicklingError instead of being rejected clearly at plan time. Also guards against a compute framework
-that supports MULTIPROCESSING but resolved a live connection from the DataAccessCollection: such a
-TFS destination running in a spawned worker is never handed a connection at all, since the worker-side
-connection bind only runs on the sync and threading execute paths. This only proves resolvability in
-the current process: a value resolvable here but not inside a freshly spawned worker can still fail
+PicklingError instead of being rejected clearly at plan time, and guards a MULTIPROCESSING-capable
+compute framework that resolved a live DataAccessCollection connection. This only proves resolvability
+in the current process: a value resolvable here but not inside a freshly spawned worker can still fail
 there.
 """
 
@@ -177,11 +175,7 @@ def _multiprocessing_connection_conflict_error(cfw_class: type[ComputeFramework]
 
 
 def raise_on_multiprocessing_connection_conflict(tfs_connection_map: dict[type[ComputeFramework], Any]) -> None:
-    """Raise ValueError if a cfw class in tfs_connection_map supports MULTIPROCESSING.
-
-    Every key is already a TFS destination class for which Engine resolved a real connection, so the
-    map alone carries the full condition; no Step objects need inspecting.
-    """
+    """Raise ValueError if a cfw class in tfs_connection_map supports MULTIPROCESSING."""
     for cfw_class in tfs_connection_map:
         if ParallelizationMode.MULTIPROCESSING in cfw_class.supported_parallelization_modes():
             raise ValueError(_multiprocessing_connection_conflict_error(cfw_class))

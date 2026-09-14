@@ -1,8 +1,4 @@
-"""Unit tests for raise_on_multiprocessing_connection_conflict, which rejects a compute framework
-that both supports ParallelizationMode.MULTIPROCESSING and resolved a connection from the
-DataAccessCollection at plan time, instead of letting that connection fail deep inside a spawned
-worker because a live connection cannot be pickled.
-"""
+"""Unit tests for raise_on_multiprocessing_connection_conflict."""
 
 from __future__ import annotations
 
@@ -17,9 +13,7 @@ from mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_framewor
 
 
 class _ConnectionConflictUnitCFW(ComputeFramework):
-    """A third-party framework that keeps the base default: supports all parallelization modes,
-    including MULTIPROCESSING. Reports unavailable so it never leaks into the accessible-plugin
-    pool for unrelated tests sharing this pytest-xdist worker."""
+    """Supports MULTIPROCESSING by default; reports unavailable to avoid leaking into other tests."""
 
     @staticmethod
     def is_available() -> bool:

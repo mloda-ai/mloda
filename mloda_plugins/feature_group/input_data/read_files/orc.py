@@ -7,7 +7,7 @@ except ImportError:
 
 from mloda.provider import FeatureSet
 from mloda.user import DataType
-from mloda_plugins.feature_group.input_data.read_file import ReadFile
+from mloda_plugins.feature_group.input_data.read_file import ReadFile, requires_dependency
 
 
 class OrcReader(ReadFile):
@@ -109,18 +109,18 @@ class OrcReader(ReadFile):
         )
 
     @classmethod
+    @requires_dependency("pyarrow_orc", file_format="ORC")
     def load_data(cls, data_access: Any, features: FeatureSet) -> Any:
-        cls._require_dependency(pyarrow_orc, file_format="ORC")
         columns = list(features.get_all_names())
         return pyarrow_orc.read_table(source=data_access, columns=columns).select(columns)
 
     @classmethod
+    @requires_dependency("pyarrow_orc")
     def get_column_names(cls, file_name: str) -> list[str]:
-        cls._require_dependency(pyarrow_orc)
         return list(pyarrow_orc.ORCFile(file_name).schema.names)
 
     @classmethod
+    @requires_dependency("pyarrow_orc")
     def describe_columns(cls, data_access: Any) -> dict[str, DataType | None]:
-        cls._require_dependency(pyarrow_orc)
         schema = pyarrow_orc.ORCFile(data_access).schema
         return {field.name: DataType.from_arrow_type_safe(field.type) for field in schema}

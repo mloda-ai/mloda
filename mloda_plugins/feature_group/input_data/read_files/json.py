@@ -7,7 +7,7 @@ except ImportError:
 
 from mloda.provider import FeatureSet
 from mloda.user import DataType
-from mloda_plugins.feature_group.input_data.read_file import ReadFile
+from mloda_plugins.feature_group.input_data.read_file import ReadFile, requires_dependency
 
 
 class JsonReader(ReadFile):
@@ -127,8 +127,8 @@ class JsonReader(ReadFile):
         )
 
     @classmethod
+    @requires_dependency("pyarrow_json", file_format="JSON")
     def load_data(cls, data_access: Any, features: FeatureSet) -> Any:
-        cls._require_dependency(pyarrow_json, file_format="JSON")
         result = pyarrow_json.read_json(
             data_access,
             parse_options=pyarrow_json.ParseOptions(
@@ -139,16 +139,16 @@ class JsonReader(ReadFile):
         return result.select(list(features.get_all_names()))
 
     @classmethod
+    @requires_dependency("pyarrow_json")
     def get_column_names(cls, file_name: str) -> Any:
-        cls._require_dependency(pyarrow_json)
         # block_size is a chunking granularity, not a row-count sample; this parses the whole file.
         read_options = pyarrow_json.ReadOptions(block_size=65536)
         table = pyarrow_json.read_json(file_name, read_options=read_options)
         return table.schema.names
 
     @classmethod
+    @requires_dependency("pyarrow_json")
     def describe_columns(cls, data_access: Any) -> dict[str, DataType | None]:
-        cls._require_dependency(pyarrow_json)
         read_options = pyarrow_json.ReadOptions(block_size=65536)
         table = pyarrow_json.read_json(data_access, read_options=read_options)
         return {field.name: DataType.from_arrow_type_safe(field.type) for field in table.schema}

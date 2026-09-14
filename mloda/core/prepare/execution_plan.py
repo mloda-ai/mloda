@@ -258,9 +258,15 @@ class ExecutionPlan:
         )
 
     @staticmethod
-    def _parents_linked_by_join(uuid_a: UUID, uuid_b: UUID, join_steps: set[JoinStep]) -> bool:
+    def _parents_linked_by_join(uuid_a: UUID, uuid_b: UUID, join_steps: set[JoinStep], graph: Graph) -> bool:
         """Whether two parents are linked, directly or transitively, via JoinSteps' genuine sides
-        (not ``required_uuids``, which unions all of a join's consumers' parents, not just its own two)."""
+        (not ``required_uuids``, which unions all of a join's consumers' parents, not just its own two).
+
+        Each side is widened to its own graph ancestors before the join-adjacency walk: a case-override
+        hop's parent (e.g. a derived feature) never sits on a JoinStep's side itself, only its own
+        upstream dependency does, so the bridge must be found through that dependency, not through
+        whichever sibling request happens to have pulled the join's index feature into its own parents
+        (an accident of feature-intake order, not a meaningful distinction)."""
         if uuid_a == uuid_b:
             return True
 
@@ -271,11 +277,14 @@ class ExecutionPlan:
             for src_uuid in js.source_framework_uuids:
                 adjacency[src_uuid].update(js.destination_framework_uuids)
 
-        visited = {uuid_a}
-        frontier = {uuid_a}
+        starts = {uuid_a} | graph.parent_to_children_mapping.get(uuid_a, set())
+        targets = {uuid_b} | graph.parent_to_children_mapping.get(uuid_b, set())
+
+        visited = set(starts)
+        frontier = set(starts)
         while frontier:
             frontier = set().union(*(adjacency[node] for node in frontier)) - visited
-            if uuid_b in frontier:
+            if frontier & targets:
                 return True
             visited |= frontier
         return False
@@ -580,7 +589,7 @@ Available join types:
                         hop_b.from_feature_group, hop_a.from_feature_group
                     ):
                         return True
-                    return self._parents_linked_by_join(parent_a, parent_b, left_join_frameworks)
+                    return self._parents_linked_by_join(parent_a, parent_b, left_join_frameworks, graph)
 
                 def _add_to_groups(
                     groups: list[list[tuple[TransformFrameworkStep | _JoinServedParent, UUID]]],

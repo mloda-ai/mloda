@@ -2,6 +2,7 @@
 must raise a "missing Links" ValueError at plan-build time, not silently bind only one hop's data.
 """
 
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -10,6 +11,7 @@ from mloda.provider import BaseInputData, ComputeFramework, DataCreator, Feature
 from mloda.user import Feature, FeatureName, Options, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
+from tests.helpers.probe_runner import run_probes
 
 
 class UnlinkedRootA(FeatureGroup):
@@ -79,3 +81,26 @@ def test_two_unlinked_source_framework_instances_raise_missing_links_error_at_pr
     assert "Link" in error_message, "Error should mention Links as the missing piece of guidance"
     assert "UnlinkedRootA" in error_message, "Error should name the first conflicting upstream feature group"
     assert "UnlinkedRootB" in error_message, "Error should name the second conflicting upstream feature group"
+
+
+# mloda-ai/mloda#1425: a consumer needing a plain hop from a case-override subclass (same family as
+# a join's own source side) plus that join's own destination side is fully covered by the single
+# declared Link, so it must plan and run under every PYTHONHASHSEED, not just some of them.
+_SUBCLASS_LINKED_HOP_AND_JOIN_PROBE = Path(__file__).with_name("subclass_linked_hop_and_join_probe.py")
+_SUBCLASS_LINKED_HOP_AND_JOIN_SEEDS = [0, 1, 3, 4, 6]
+_SUBCLASS_LINKED_HOP_AND_JOIN_EXPECTED = {"outcome": "accepted", "subclass_linked_x": "[111, 222, 333]"}
+
+
+@pytest.mark.timeout(60)
+def test_subclass_linked_plain_hop_and_join_plan_the_same_way_under_every_hash_seed() -> None:
+    outputs = run_probes(
+        _SUBCLASS_LINKED_HOP_AND_JOIN_PROBE,
+        len(_SUBCLASS_LINKED_HOP_AND_JOIN_SEEDS),
+        seeds=_SUBCLASS_LINKED_HOP_AND_JOIN_SEEDS,
+    )
+
+    assert len(outputs) == len(_SUBCLASS_LINKED_HOP_AND_JOIN_SEEDS)
+    for seed, output in zip(_SUBCLASS_LINKED_HOP_AND_JOIN_SEEDS, outputs):
+        assert output == _SUBCLASS_LINKED_HOP_AND_JOIN_EXPECTED, (
+            f"PYTHONHASHSEED={seed} produced {output}, expected {_SUBCLASS_LINKED_HOP_AND_JOIN_EXPECTED}"
+        )

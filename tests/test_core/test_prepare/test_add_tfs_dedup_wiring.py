@@ -278,8 +278,9 @@ def test_parents_linked_by_join_requires_genuine_opposite_sides() -> None:
         source_framework_uuids={src},
     )
 
-    assert ExecutionPlan._parents_linked_by_join(a, b, {join_step}) is False
-    assert ExecutionPlan._parents_linked_by_join(dest, src, {join_step}) is True
+    graph = Graph()
+    assert ExecutionPlan._parents_linked_by_join(a, b, {join_step}, graph) is False
+    assert ExecutionPlan._parents_linked_by_join(dest, src, {join_step}, graph) is True
 
 
 # ---------------------------------------------------------------------------

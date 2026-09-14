@@ -1124,6 +1124,81 @@ class _FwClassGuardJoinChildFG(FeatureGroup):
         return {"fw_class_guard_join_sum"}
 
 
+class _ChainHopRootFG(FeatureGroup):
+    """Root source on PythonDictFramework, the hop's SOURCE; read only by the hop itself, never by
+    anything further down the chain (mloda-ai/mloda#1424)."""
+
+    @classmethod
+    def input_data(cls) -> BaseInputData | None:
+        return DataCreator({"chain_hop_root_val"})
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PythonDictFramework}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return {"chain_hop_root_val": [1, 2, 3]}
+
+
+class _ChainHopMidFG(FeatureGroup):
+    """Plain cross-framework hop's DIRECT consumer: the only step that reads the root."""
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return {Feature("chain_hop_root_val")}
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PyArrowTable}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return data.append_column("chain_hop_mid_doubled", pc.multiply(data["chain_hop_root_val"], 2))
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {"chain_hop_mid_doubled"}
+
+
+class _ChainHopChain2FG(FeatureGroup):
+    """Same-framework descendant of the hop's direct consumer; reaches the root ONLY through
+    `_ChainHopMidFG`, never reading `chain_hop_root_val` itself, unlike `_DiamondHopDescendantFG`."""
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return {Feature("chain_hop_mid_doubled")}
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PyArrowTable}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return data.append_column("chain_hop_chain2_val", pc.add(data["chain_hop_mid_doubled"], 1))
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {"chain_hop_chain2_val"}
+
+
+class _ChainHopChain3FG(FeatureGroup):
+    """Further same-framework link, matching the issue's own `R -> hop -> A -> A2 -> A3` shape."""
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return {Feature("chain_hop_chain2_val")}
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PyArrowTable}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return data.append_column("chain_hop_chain3_val", pc.add(data["chain_hop_chain2_val"], 1))
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {"chain_hop_chain3_val"}
+
+
 @pytest.mark.timeout(30)
 @pytest.mark.skipif(pa is None, reason="PyArrow not installed.")
 class TestTransformFrameworkStepSourceRootDropTiming:
@@ -1374,6 +1449,73 @@ class TestTransformFrameworkStepSourceRootDropTiming:
             assert result is not None, f"seed {seed} produced no result"
             assert len(result) == 1, f"seed {seed} produced {len(result)} results"
             assert list(result[0]["diamond_hop_result"]) == [3, 6, 9], f"seed {seed} produced a wrong result"
+
+    def test_hop_source_root_dropped_right_after_direct_consumer_not_whole_downstream_chain(
+        self, flight_server: Any, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """mloda-ai/mloda#1424: a hop's SOURCE must drop once its DIRECT consumer (`_ChainHopMidFG`)
+        is credited, not wait for that consumer's own further same-framework chain
+        (`_ChainHopChain2FG`, `_ChainHopChain3FG`) to finish too - neither of those reads the root
+        directly, unlike `_DiamondHopDescendantFG` in the survival test above. Same
+        `add_compute_framework` / `_drop_tfs_source_if_possible` spy checkpoint pattern as
+        `test_plain_hop_source_root_dropped_right_after_its_hop_when_its_class_is_shared_by_an_unrelated_join`
+        (mloda-ai/mloda#1423)."""
+        plugin_collector = PluginCollector.enabled_feature_groups(
+            {_ChainHopRootFG, _ChainHopMidFG, _ChainHopChain2FG, _ChainHopChain3FG}
+        )
+
+        source_root_uuids: list[str] = []
+        original_add_cfw = ComputeFrameworkExecutor.add_compute_framework
+
+        def _spy_add_cfw(
+            self: Any, step: Any, parallelization_mode: Any, feature_uuid: Any, children_if_root: Any
+        ) -> Any:
+            result_uuid = original_add_cfw(self, step, parallelization_mode, feature_uuid, children_if_root)
+            if step.feature_group is _ChainHopRootFG:
+                source_root_uuids.append(str(result_uuid))
+            return result_uuid
+
+        monkeypatch.setattr(ComputeFrameworkExecutor, "add_compute_framework", _spy_add_cfw)
+
+        from mloda.core.runtime.run import ExecutionOrchestrator
+
+        original_drop_tfs = ExecutionOrchestrator._drop_tfs_source_if_possible
+        keys_right_after_hop_drop_check: list[set[str]] = []
+
+        def _spy_drop_tfs(self: Any, step: Any) -> Any:
+            result = original_drop_tfs(self, step)
+            if step.link_id is None and step.from_framework is PythonDictFramework:
+                keys_right_after_hop_drop_check.append(_flight_table_keys(flight_server.location))
+            return result
+
+        monkeypatch.setattr(ExecutionOrchestrator, "_drop_tfs_source_if_possible", _spy_drop_tfs)
+
+        result = mloda.run_all(
+            [Feature("chain_hop_chain3_val")],
+            compute_frameworks={PythonDictFramework, PyArrowTable},
+            plugin_collector=plugin_collector,
+            parallelization_modes={ParallelizationMode.MULTIPROCESSING},
+            flight_server=flight_server,
+        )
+
+        assert result is not None
+        assert len(result) == 1
+        assert result[0].column("chain_hop_chain3_val").to_pylist() == [4, 6, 8]
+
+        assert len(source_root_uuids) == 1, f"expected exactly one source-root cfw, got {source_root_uuids}"
+        assert len(keys_right_after_hop_drop_check) == 1, (
+            f"expected exactly one plain PythonDict->PyArrow hop, got {keys_right_after_hop_drop_check}"
+        )
+        assert source_root_uuids[0] not in keys_right_after_hop_drop_check[0], (
+            f"TransformFrameworkStep source root {source_root_uuids[0]} is still on the flight server "
+            f"right after its own hop's drop-check ran: {keys_right_after_hop_drop_check[0]}; nothing "
+            "past the hop's direct consumer (_ChainHopMidFG) reads the source directly, so its own "
+            "same-framework downstream chain (_ChainHopChain2FG, _ChainHopChain3FG) must not delay this "
+            "drop until they, too, finish"
+        )
+
+        leftover = FlightServer.list_flight_infos(flight_server.location)
+        assert leftover == set(), f"leaked flight tables: {leftover}"
 
 
 class _H3ChainRootPandasFG(FeatureGroup):

@@ -695,6 +695,9 @@ Available join types:
         route_tokens_by_hop: dict[UUID, set[UUID]] = {}
         hop_from_framework: dict[UUID, type[ComputeFramework]] = {}
         eligible_hops: dict[UUID, TransformFrameworkStep] = {}
+        # A hop's own source, keyed by hop uuid, for every hop whose source identity resolved (see
+        # the fail-closed branch below); read by the transitive reach walk further down.
+        hop_source_owner_by_hop: dict[UUID, UUID] = {}
         for _ep in new_execution_plan:
             if not isinstance(_ep, TransformFrameworkStep):
                 continue
@@ -724,6 +727,9 @@ Available join types:
                 hop_source_owner = None
 
             if hop_source_owner is not None:
+                hop_source_owner_by_hop[_ep.uuid] = hop_source_owner
+
+            if hop_source_owner is not None:
                 other_join_source_owners = {
                     _owning_step(uuid)
                     for js in joinsteps_by_uuid.values()
@@ -751,25 +757,87 @@ Available join types:
             token: hop_uuid for hop_uuid, tokens in route_tokens_by_hop.items() for token in tokens
         }
 
+        feature_group_steps_by_uuid: dict[UUID, FeatureGroupStep] = {
+            _ep.uuid: _ep for _ep in new_execution_plan if isinstance(_ep, FeatureGroupStep)
+        }
+
+        # A hop's credit extends past its own direct consumer to that consumer's same-framework
+        # descendants (mloda-ai/mloda#1424), but only along the part of a descendant's dependency
+        # chain that never branches away back to the hop's source, or to another hop out of a source
+        # framework the multi-route rule below already treats as ambiguous. `_reach` walks a
+        # FeatureGroupStep's required_uuids once, memoized: a hop-route token is a hop boundary,
+        # crossed unconditionally and tagged with the hop's own source owner, while a same-framework
+        # producer token is crossed only when frameworks match (tagged `None`, a bypass marker) and
+        # folds in whatever that dependency itself already reaches. A raw ancestor token whose owner's
+        # framework does NOT match is the ancestor set's own leftover bookkeeping - the same
+        # dependency is already captured, framework-correctly, by its own hop token elsewhere in
+        # required_uuids - so it is skipped rather than read as a spurious bypass. One pass per step,
+        # memoized, keeps this in the same O(steps * features) class as the rest of this block.
+        reach_cache: dict[UUID, dict[UUID, frozenset[UUID | None]]] = {}
+        all_hops_cache: dict[UUID, frozenset[UUID]] = {}
+
+        def _reach(step_uuid: UUID) -> dict[UUID, frozenset[UUID | None]]:
+            cached = reach_cache.get(step_uuid)
+            if cached is not None:
+                return cached
+            reach_cache[step_uuid] = {}
+            all_hops_cache[step_uuid] = frozenset()
+
+            step = feature_group_steps_by_uuid.get(step_uuid)
+            by_owner: dict[UUID, set[UUID | None]] = defaultdict(set)
+            hops: set[UUID] = set()
+            if step is not None:
+                for token in step.required_uuids:
+                    hop_uuid = hop_uuid_by_route_token.get(token)
+                    if hop_uuid is not None:
+                        hops.add(hop_uuid)
+                        owner = hop_source_owner_by_hop.get(hop_uuid)
+                        if owner is not None:
+                            by_owner[owner].add(hop_uuid)
+                            for other_owner, markers in _reach(owner).items():
+                                by_owner[other_owner] |= markers
+                            hops |= all_hops_cache[owner]
+                        continue
+
+                    dep_uuid = owning_step_of.get(token)
+                    if dep_uuid is None or dep_uuid == step_uuid:
+                        continue
+                    dep_step = feature_group_steps_by_uuid.get(dep_uuid)
+                    if dep_step is None or dep_step.compute_framework != step.compute_framework:
+                        continue
+                    by_owner[dep_uuid].add(None)
+                    for other_owner, markers in _reach(dep_uuid).items():
+                        by_owner[other_owner] |= markers
+                    hops |= all_hops_cache[dep_uuid]
+
+            frozen = {owner: frozenset(markers) for owner, markers in by_owner.items()}
+            reach_cache[step_uuid] = frozen
+            all_hops_cache[step_uuid] = frozenset(hops)
+            return frozen
+
         owed_by_hop: dict[UUID, set[UUID]] = {hop_uuid: set() for hop_uuid in eligible_hops}
         for _consumer in new_execution_plan:
             if not isinstance(_consumer, FeatureGroupStep):
                 continue
 
-            reached_hop_uuids = {
-                hop_uuid_by_route_token[token] for token in _consumer.required_uuids & hop_uuid_by_route_token.keys()
-            }
+            owner_reach = _reach(_consumer.uuid)
+            reached_hop_uuids = all_hops_cache[_consumer.uuid]
             frameworks_reached: dict[type[ComputeFramework], int] = defaultdict(int)
             for hop_uuid in reached_hop_uuids:
                 frameworks_reached[hop_from_framework[hop_uuid]] += 1
 
-            for hop_uuid in reached_hop_uuids:
-                if frameworks_reached[hop_from_framework[hop_uuid]] > 1:
+            for markers in owner_reach.values():
+                if len(markers) != 1:
                     continue
-                hop = eligible_hops.get(hop_uuid)
+                (sole_marker,) = markers
+                if sole_marker is None:
+                    continue
+                if frameworks_reached[hop_from_framework[sole_marker]] > 1:
+                    continue
+                hop = eligible_hops.get(sole_marker)
                 if hop is None or (hop.link_id is not None and _consumer.compute_framework != hop.to_framework):
                     continue
-                owed_by_hop[hop_uuid].update(_consumer.get_uuids())
+                owed_by_hop[sole_marker].update(_consumer.get_uuids())
 
         for hop_uuid, owed in owed_by_hop.items():
             eligible_hops[hop_uuid].owed_tokens = frozenset(owed)

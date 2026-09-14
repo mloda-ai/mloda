@@ -414,10 +414,7 @@ def test_raise_on_step_cycle_accepts_a_token_no_step_of_the_plan_produces() -> N
     ExecutionPlan().raise_on_step_cycle(steps)
 
 
-# ---------------------------------------------------------------------------
-# A join hop's owed_tokens: the destination-side credit a hop's own finish should stamp on its
-# SOURCE-side cfw, mirroring a plain hop's existing owed_tokens (see add_tfs in execution_plan.py).
-# ---------------------------------------------------------------------------
+# A join hop's owed_tokens mirrors a plain hop's: the destination-side credit stamped on its SOURCE-side cfw.
 
 CHAIN_INDEX = Index(("token_chain_key",))
 GUARD_INDEX = Index(("token_guard_key",))
@@ -554,8 +551,8 @@ def _plan_join_hop_whose_source_framework_is_also_another_joins_framework() -> G
 
 def test_chained_cross_framework_join_hop_owed_tokens_exclude_a_third_framework_consumer() -> None:
     """The join hop that reads the PythonDict source only ever delivers into PyArrow: it must not
-    credit the chain's own consumer, which sits on a third framework (Pandas), reached only through
-    a further chained join, not through this hop's own destination."""
+    credit the chain's own consumer, which can still read the PythonDict source through a plain hop
+    after this join hop finishes, not through this hop's own destination."""
     chained = _plan_chained_three_framework_join()
 
     python_dict_hop = next(
@@ -574,8 +571,7 @@ def test_chained_cross_framework_join_hop_owed_tokens_exclude_a_third_framework_
 
 def test_cross_framework_join_hop_owed_tokens_equal_its_destination_consumers_own_uuids() -> None:
     """A join hop's SOURCE-side cfw is only otherwise marked consumed by the join it serves; the hop
-    itself must credit the destination-framework consumer's own uuids, mirroring a plain hop's
-    owed_tokens. Fails today: a join hop (link_id is not None) never gets owed_tokens."""
+    itself must credit the destination-framework consumer's own uuids, mirroring a plain hop's owed_tokens."""
     planned = _planned()
     link = _token_link()
     branch = _add_branch(planned, link, "owed", PyArrowTable, PandasDataFrame)
@@ -588,8 +584,8 @@ def test_cross_framework_join_hop_owed_tokens_equal_its_destination_consumers_ow
 
 
 def test_cross_framework_append_join_hop_owed_tokens_stay_empty() -> None:
-    """APPEND/UNION join hops are excluded from owed-token crediting; their timing is already
-    governed by the append/union chaining machinery, not by an individual consumer's completion."""
+    """APPEND/UNION join hops stay excluded from owed-token crediting: such a join waits only on its
+    two side uuids, so a plain hop from the same source cfw can still be pending when its join hop finishes."""
     planned = _planned()
     link = Link.append(JoinSpec(TokenLeft, TOKEN_LEFT_INDEX), JoinSpec(TokenRight, TOKEN_RIGHT_INDEX))
     _add_branch(planned, link, "append_owed", PyArrowTable, PandasDataFrame)
@@ -602,10 +598,9 @@ def test_cross_framework_append_join_hop_owed_tokens_stay_empty() -> None:
 
 
 def test_join_hop_whose_source_framework_is_also_another_joins_framework_gets_empty_owed_tokens() -> None:
-    """A join hop is only eligible for owed-token crediting when its source framework is not the
-    source or destination of any OTHER JoinStep in the plan; here PythonDict is also the
-    same-framework partner of an unrelated join, so the hop stays uncredited even though a genuine
-    destination-framework consumer exists."""
+    """A join hop is ineligible for owed-token crediting when its source framework is also the source
+    or destination of another JoinStep; here PythonDict is also an unrelated join's same-framework
+    partner, so the hop stays uncredited even though a genuine destination-framework consumer exists."""
     guarded = _plan_join_hop_whose_source_framework_is_also_another_joins_framework()
 
     hop = next(

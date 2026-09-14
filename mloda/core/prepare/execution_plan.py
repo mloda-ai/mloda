@@ -629,14 +629,11 @@ Available join types:
                 if not need_to_upload_collector.isdisjoint(_ep.get_uuids()):
                     _ep.need_to_upload = True
 
-        # A hop's SOURCE-side cfw is never otherwise marked as consumed once the hop finishes, so credit
-        # owed_tokens from downstream consumers, letting _drop_tfs_source_if_possible mark it
-        # incrementally instead of only at run finalize. A hop is ineligible (owed_tokens stays empty)
-        # when its from_framework is also a source/destination framework of some OTHER JoinStep in the
-        # plan (that join may still need that shared cfw), or when a served JoinStep is APPEND/UNION
-        # (those gate only on their own two side uuids, so a same-cfw plain hop can still be pending).
-        # For a join hop, only a destination-framework consumer counts: a third-framework consumer
-        # reached through a further chained join is that further hop's own drop to make, not this one's.
+        # A hop's SOURCE-side cfw is never otherwise marked consumed once it finishes, so credit owed_tokens from
+        # downstream consumers, letting _drop_tfs_source_if_possible drop it incrementally. A hop is ineligible when its
+        # source framework is shared with another JoinStep, or serves an APPEND/UNION join. A join hop credits only its
+        # destination-framework consumer: a consumer on another framework (chained or star joins) can still read this
+        # source cfw through a plain hop after the join finishes, so crediting it here would drop the cfw too early.
         joinsteps_by_uuid: dict[UUID, JoinStep] = {js.uuid: js for js in left_join_frameworks}
 
         route_tokens_by_hop: dict[UUID, set[UUID]] = {}

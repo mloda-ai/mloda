@@ -1119,11 +1119,10 @@ class TestTransformFrameworkStepSourceRootDropTiming:
     ) -> None:
         """The shared root also feeds an independent, same-framework sibling chain (delayed by
         two gates so it cannot race the much shorter hop branch): the root must survive until
-        BOTH have consumed it. Allowed to currently pass (today's bug under-drops via the
-        finalize-only sweep; it never over-drops). A `ComputeFramework.upload_finished_data` spy
-        identifies the shared root's own cfw uuid (the specific flight-table key to watch):
-        asserting mere non-emptiness of the flight server would still pass under a mutation that
-        force-drops this exact cfw too early, so long as anything else remains on the server."""
+        both have consumed it. A `ComputeFramework.upload_finished_data` spy identifies the shared
+        root's own cfw uuid (the specific flight-table key to watch): asserting mere non-emptiness
+        of the flight server would still pass under a mutation that force-drops this exact cfw too
+        early, so long as anything else remains on the server."""
         plugin_collector = PluginCollector.enabled_feature_groups(
             {
                 _Gap1SharedRootFG,
@@ -1180,13 +1179,9 @@ class TestTransformFrameworkStepSourceRootDropTiming:
         assert leftover == set(), f"leaked flight tables: {leftover}"
 
     def test_diamond_descendant_of_hop_source_and_consumer_survives_hop_finish(self, flight_server: Any) -> None:
-        """A feature that graph-descends from BOTH the hop's source root AND the hop's own
-        consumer output must not be starved of the root: crediting the hop's consumer's full
-        `children_if_root` (instead of just the consumer's own uuids) into `owed_tokens`
-        double-counts this descendant, so the root's `children_if_root` looks fully satisfied and
-        gets dropped as soon as the hop finishes, even though this descendant's own step still
-        needs to read the root directly. Pure SYNC: the drop mechanism runs identically in-process,
-        so no flight server or MULTIPROCESSING is needed to reproduce the bug."""
+        """Guards against double-counting: crediting a hop's consumer's full `children_if_root`
+        (instead of just its own uuids) into `owed_tokens` would satisfy the root's `children_if_root`
+        early and drop it before this diamond descendant, which reads the root directly, has run."""
         plugin_collector = PluginCollector.enabled_feature_groups(
             {_DiamondHopRootFG, _DiamondHopDestFG, _DiamondHopDescendantFG}
         )
@@ -1347,15 +1342,14 @@ class _H3ChainConsumerFG(FeatureGroup):
 @pytest.mark.skipif(pd is None, reason="Pandas not installed.")
 class TestPlainHopJoinFrameworksGuardRegression:
     """A plain hop must stay excluded from owed-token crediting when its own source framework is
-    also a JoinStep's framework elsewhere in the plan, even once join hops get their own guard."""
+    also a JoinStep's framework elsewhere in the plan."""
 
     def test_plain_hop_still_defers_to_a_join_reading_the_same_source_framework(self) -> None:
         """A chained Pandas<-PyArrow<-PythonDict join also plans a plain PythonDict->Pandas hop for
         the same PythonDict source (h3_d reaches the consumer both via the join chain and directly).
-        If the plain hop's `join_frameworks` guard were ever dropped while generalizing it to join
-        hops, it would credit the PythonDict root before the join hop reads it, and the run would
-        fail transforming PyArrow data out of an already-dropped PythonDict cfw. Pure SYNC: no
-        flight server or MULTIPROCESSING is needed to reproduce the bug."""
+        If the plain hop's `join_frameworks` guard were ever dropped, it would credit the PythonDict
+        root before the join hop reads it, and the run would fail transforming PyArrow data out of
+        an already-dropped PythonDict cfw."""
         plugin_collector = PluginCollector.enabled_feature_groups(
             {
                 _H3ChainRootPandasFG,

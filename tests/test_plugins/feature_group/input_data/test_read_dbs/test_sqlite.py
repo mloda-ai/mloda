@@ -59,10 +59,8 @@ class TestSQLITEReader:
 
     @pytest.fixture(scope="class")
     def affinity_test_table(self, temp_sqlite_db: Any) -> Any:
-        """A second table on the same db, covering describe_columns affinity-mapping edge cases:
-        REAL/FLOAT/DOUBLE, BLOB, VARCHAR(255)/CLOB, an undeclared type, NUMERIC/DECIMAL, and
-        multi-keyword declared types that must resolve by SQLite's affinity precedence order
-        (INTEGER, then TEXT, then BLOB, then REAL) rather than by keyword-check order."""
+        """A second table covering describe_columns affinity edge cases: numeric/blob/text keywords, an
+        undeclared column, and multi-keyword types that must resolve by affinity precedence, not check order."""
         conn = sqlite3.connect(temp_sqlite_db)
         cursor = conn.cursor()
         cursor.execute("""
@@ -251,26 +249,20 @@ class TestSQLITEReader:
         # VARCHAR(255): substring match must still hit with a length modifier attached.
         assert result["label"] == DataType.STRING
         assert result["notes"] == DataType.STRING  # CLOB, not just plain TEXT
-        # SQLite allows a column with no declared type at all; PRAGMA table_info reports it
-        # as an empty string, which must map to None, not raise.
+        # No declared type at all (PRAGMA table_info reports an empty string) must map to None, not raise.
         assert result["untyped_col"] is None
-        # Deliberate divergence from the compute framework's private _sqlite_affinity_to_arrow_type,
-        # which defaults an unmatched declared type to TEXT/pa.string(); describe_columns returns
-        # None here instead of guessing STRING.
+        # Diverges from _sqlite_affinity_to_arrow_type, which defaults an unmatched type to TEXT; here it's None.
         assert result["amount"] is None
         assert result["precise"] is None
-        # SQLite's documented affinity order is INTEGER, then TEXT, then BLOB, then REAL/NUMERIC
-        # (https://www.sqlite.org/datatype3.html#determination_of_column_affinity); a declared
-        # type containing several keywords must resolve by that precedence, not by whichever
-        # keyword happens to be checked first.
+        # A declared type with several keywords must resolve by SQLite's affinity precedence
+        # (INTEGER, TEXT, BLOB, REAL/NUMERIC), not by whichever keyword is checked first.
         assert result["text_then_blob"] == DataType.STRING
         assert result["blob_sub_type_text"] == DataType.STRING
         assert result["char_then_double"] == DataType.STRING
         assert result["double_then_blob"] == DataType.BINARY
 
     def test_describe_columns_nonexistent_db_does_not_create_file(self, tmp_path: Any) -> None:
-        """describe_columns must not create a db file as a side effect of a wrong path
-        (sqlite3.connect creates the file); it should fail fast via is_valid_credentials."""
+        """sqlite3.connect would otherwise create the file; is_valid_credentials must fail fast first."""
         nonexistent_path = tmp_path / "nonexistent.db"
         assert not nonexistent_path.exists()
 
@@ -280,9 +272,7 @@ class TestSQLITEReader:
         assert not nonexistent_path.exists()
 
     def test_describe_columns_path_credential_rejected(self, tmp_path: Any) -> None:
-        """A pathlib.Path credential must fail is_valid_credentials's str check and be
-        rejected with ValueError, not silently passed on to sqlite3.connect (which would
-        create the file as a side effect)."""
+        """A Path credential must fail is_valid_credentials's str check, not reach sqlite3.connect and create a file."""
         db_path = tmp_path / "missing.db"
 
         with pytest.raises(ValueError):
@@ -296,16 +286,14 @@ class TestSQLITEReader:
             SQLITEReader.describe_columns({"table_name": "t"})
 
     def test_describe_columns_nonexistent_db_error_mentions_path(self, tmp_path: Any) -> None:
-        """The raised ValueError must name the missing db path, not just the table name,
-        so the error points at the real problem (wrong db path)."""
+        """The raised ValueError must name the missing db path, not just the table name."""
         nonexistent_path = tmp_path / "nonexistent.db"
 
         with pytest.raises(ValueError, match=re.escape(str(nonexistent_path))):
             SQLITEReader.describe_columns({"sqlite": str(nonexistent_path), "table_name": "t"})
 
     def test_describe_columns_quotes_identifiers_blocks_injection(self, temp_sqlite_db: Any) -> None:
-        """A crafted table_name must not break out of PRAGMA table_info(...)'s identifier position; quote_ident
-        confines it to one identifier, so the injected DROP never runs and describe_columns raises ValueError."""
+        """A crafted table_name must not break out of PRAGMA table_info(...)'s identifier position via quote_ident."""
         malicious_table_name = "test_table); DROP TABLE test_table; --"
 
         with pytest.raises(ValueError):

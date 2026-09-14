@@ -317,8 +317,7 @@ class TestPinnedNameExemptsSeparatorGuard:
     def test_validate_columns_never_applies_the_separator_guard(
         self, tmp_path: Path, rejection_window: dict[str, MatchRejection]
     ) -> None:
-        """'price__scaled' is an ordinary pyarrow column name; validate_columns finds it for real,
-        so True reflects the column genuinely existing, not a NotImplementedError being swallowed."""
+        """validate_columns finds 'price__scaled' for real, so True means the column exists, not a swallowed error."""
         table = pa.Table.from_pydict({"price__scaled": [1, 2, 3]})
         file_path = str(tmp_path / "pinned.feather")
         with pa.OSFile(file_path, "wb") as sink:

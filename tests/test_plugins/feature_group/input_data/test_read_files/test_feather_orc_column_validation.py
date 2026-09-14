@@ -128,8 +128,7 @@ class TestFeatherOrcWithoutPyarrow:
 
 
 class TestFeatherOrcUnreadableFile:
-    """A real file get_column_names cannot read (corrupt, truncated, or missing) declines on the
-    unpinned path, but propagates instead of falling back to a sibling when the file was pinned."""
+    """An unreadable file (corrupt, truncated, missing) declines when unpinned, but propagates when pinned."""
 
     def test_feather_reader_declines_corrupt_file(
         self, tmp_path: Path, rejection_window: dict[str, MatchRejection]
@@ -162,7 +161,6 @@ class TestFeatherOrcUnreadableFile:
         assert OrcReader.match_read_file_data_access(["dummy.orc"], ["a"]) is None
 
     def test_pinned_corrupt_feather_file_propagates_instead_of_falling_back_to_sibling(self, tmp_path: Path) -> None:
-        """A pinned unreadable file must not silently fall through to an unpinned sibling file."""
         good = _write_feather(tmp_path, ["a"])
         corrupt = tmp_path / "corrupt.feather"
         corrupt.write_bytes(b"not a real feather file")

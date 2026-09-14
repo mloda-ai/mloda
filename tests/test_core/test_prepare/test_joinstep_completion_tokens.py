@@ -5,6 +5,7 @@ The cycle guard runs over the finished plan, so it sees join steps and feature g
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from collections.abc import Sequence
 from typing import Any, NamedTuple
 from uuid import UUID, uuid4
@@ -565,8 +566,8 @@ def _plan_join_hop_whose_source_framework_is_also_another_joins_framework() -> G
 
 
 def test_chained_cross_framework_join_hop_owed_tokens_exclude_a_third_framework_consumer() -> None:
-    """Guards that the chain's Pandas consumer, which also reads the PythonDict source through a plain
-    hop, is not credited by the PythonDict join hop."""
+    """The chain's Pandas consumer also reads the PythonDict source through a plain hop, so it is
+    excluded by both the destination-framework filter and the multi-route rule; either alone suffices."""
     chained = _plan_chained_three_framework_join()
 
     python_dict_hop = next(
@@ -660,6 +661,77 @@ def test_join_hop_whose_source_framework_is_also_another_joins_framework_gets_em
     assert hop.owed_tokens == frozenset()
 
 
+# A consumer on the join's own SOURCE framework is join-served (JoinStep.matched), so it reaches no
+# plain hop; this pins the destination-framework filter without the multi-route rule ever engaging.
+
+
+class TokenSourceConsumer(FeatureGroup):
+    pass
+
+
+class SourceConsumerPlanned(NamedTuple):
+    consumer: FeatureGroupStep
+    join_hop: TransformFrameworkStep
+    plan: list[Step]
+
+
+def _plan_join_hop_reaching_a_source_framework_consumer() -> SourceConsumerPlanned:
+    """PyArrow destination, PythonDict source: a second consumer, computed on PythonDict itself,
+    reads both sides of the join. JoinStep.matched serves it directly, so it takes no plain hop."""
+    planned = _planned()
+    link = _token_link()
+    branch = _add_branch(planned, link, "srcfilter", PyArrowTable, PythonDictFramework)
+
+    graph = planned.graph
+    source_consumer_feature = feature("srcfilter_source_consumer", PythonDictFramework)
+    graph.add_node(source_consumer_feature.uuid, NodeProperties(source_consumer_feature, TokenSourceConsumer))
+    graph.adjacency_list[source_consumer_feature.uuid] = []
+    graph.adjacency_list[branch.left_uuid].append(source_consumer_feature.uuid)
+    graph.adjacency_list[branch.right_uuid].append(source_consumer_feature.uuid)
+    graph.parent_to_children_mapping[source_consumer_feature.uuid] = {branch.left_uuid, branch.right_uuid}
+
+    planned.queue.append((TokenSourceConsumer, {source_consumer_feature}))
+    trek(planned.link_trekker, link, (PyArrowTable, PythonDictFramework), source_consumer_feature.uuid)
+
+    plan = _create_execution_plan(planned)
+    source_consumer = next(
+        s for s in plan if isinstance(s, FeatureGroupStep) and s.feature_group is TokenSourceConsumer
+    )
+    join_hop = next(
+        s
+        for s in plan
+        if isinstance(s, TransformFrameworkStep) and s.link_id is not None and s.from_framework is PythonDictFramework
+    )
+    return SourceConsumerPlanned(source_consumer, join_hop, plan)
+
+
+def test_join_hop_owed_tokens_exclude_a_consumer_on_its_own_source_framework() -> None:
+    """Pins the destination-framework filter alone: this consumer sits on the join's own source
+    framework, so it is join-served with no plain hop and the multi-route rule cannot fire."""
+    guarded = _plan_join_hop_reaching_a_source_framework_consumer()
+    join_step = next(s for s in guarded.plan if isinstance(s, JoinStep))
+
+    # Guard: the consumer must be join-served, not routed through a plain hop, or a second route
+    # would let the multi-route rule mask the filter instead.
+    assert guarded.consumer.compute_framework is PythonDictFramework
+    assert join_step.uuid in guarded.consumer.required_uuids, (
+        f"the consumer must wait on the JoinStep; got {guarded.consumer.required_uuids}"
+    )
+    plain_python_dict_hops = {
+        s.uuid
+        for s in guarded.plan
+        if isinstance(s, TransformFrameworkStep) and s.link_id is None and s.from_framework is PythonDictFramework
+    }
+    assert not (guarded.consumer.required_uuids & plain_python_dict_hops), (
+        f"the consumer must reach no plain PythonDict hop; got {guarded.consumer.required_uuids}"
+    )
+
+    assert not (guarded.join_hop.owed_tokens & guarded.consumer.get_uuids()), (
+        f"the join hop must not credit a consumer on its own source framework; got owed_tokens="
+        f"{guarded.join_hop.owed_tokens}, consumer uuids={guarded.consumer.get_uuids()}"
+    )
+
+
 # One PythonDict source reaches one PyArrow consumer through both a join hop and a plain hop.
 
 SHARED_SOURCE_INDEX = Index(("token_shared_source_key",))
@@ -728,39 +800,116 @@ def _plan_join_hop_and_plain_hop_share_one_source_framework() -> SharedSourcePla
     return SharedSourcePlanned(consumer, plan, link)
 
 
-def test_a_consumer_reaching_two_hops_of_one_source_framework_is_credited_by_neither() -> None:
-    """A consumer that reaches the same PythonDict source through a join hop and a plain hop must get
-    no credit from either: crediting one lets the source cfw drop while the other hop is still pending."""
-    shared = _plan_join_hop_and_plain_hop_share_one_source_framework()
+class TokenPlainRoot(FeatureGroup):
+    pass
 
-    join_step = next(s for s in shared.plan if isinstance(s, JoinStep) and s.link is shared.link)
-    join_hop = next(
-        s
-        for s in shared.plan
-        if isinstance(s, TransformFrameworkStep) and s.link_id is not None and s.from_framework is PythonDictFramework
-    )
-    plain_hop = next(
-        s
-        for s in shared.plan
-        if isinstance(s, TransformFrameworkStep) and s.link_id is None and s.from_framework is PythonDictFramework
-    )
 
-    # Guard: the fixture must actually reach both hops, or the assertions below would pass vacuously.
-    assert plain_hop.uuid in shared.consumer.required_uuids, (
-        f"the consumer must wait directly on the plain hop; got {shared.consumer.required_uuids}"
-    )
-    assert join_step.uuid in shared.consumer.required_uuids, (
-        f"the consumer must wait on the JoinStep the join hop serves; got {shared.consumer.required_uuids}"
-    )
-    assert join_hop.uuid in join_step.required_uuids, (
-        f"the JoinStep must wait on the join hop that serves it; got {join_step.required_uuids}"
-    )
+class TokenPlainGateOne(FeatureGroup):
+    pass
 
-    consumer_uuids = shared.consumer.get_uuids()
-    assert not (join_hop.owed_tokens & consumer_uuids), (
-        f"the join hop must not credit a consumer that still needs a second, plain hop of the same "
-        f"source framework; got owed_tokens={join_hop.owed_tokens}, consumer uuids={consumer_uuids}"
-    )
-    assert not (plain_hop.owed_tokens & consumer_uuids), (
-        f"got owed_tokens={plain_hop.owed_tokens}, consumer uuids={consumer_uuids}"
-    )
+
+class TokenPlainGateTwo(FeatureGroup):
+    pass
+
+
+class TokenPlainBranchA(FeatureGroup):
+    pass
+
+
+class TokenPlainBranchB(TokenPlainBranchA):
+    pass
+
+
+class TokenPlainConsumer(FeatureGroup):
+    pass
+
+
+class TwoPlainHopsPlanned(NamedTuple):
+    consumer: FeatureGroupStep
+    plan: list[Step]
+
+
+def _plan_two_plain_hops_share_one_source_framework() -> TwoPlainHopsPlanned:
+    """No Links, no JoinSteps: a PythonDict root feeds two PythonDict gates, each feeding its own
+    PythonDict branch, and a PyArrow consumer reads both branches directly, opening two plain
+    PythonDict hops at once. TokenPlainBranchB subclasses TokenPlainBranchA so the planner links,
+    rather than rejects, the two hops."""
+    planned = _planned()
+    graph = planned.graph
+
+    root = feature("token_plain_root", PythonDictFramework)
+    gate_one = feature("token_plain_gate_one", PythonDictFramework)
+    gate_two = feature("token_plain_gate_two", PythonDictFramework)
+    branch_a = feature("token_plain_branch_a", PythonDictFramework)
+    branch_b = feature("token_plain_branch_b", PythonDictFramework)
+    consumer_feature = feature("token_plain_consumer", PyArrowTable)
+
+    graph.add_node(root.uuid, NodeProperties(root, TokenPlainRoot))
+    graph.adjacency_list[root.uuid] = [gate_one.uuid, gate_two.uuid]
+    graph.add_node(gate_one.uuid, NodeProperties(gate_one, TokenPlainGateOne))
+    graph.adjacency_list[gate_one.uuid] = [branch_a.uuid]
+    graph.parent_to_children_mapping[gate_one.uuid] = {root.uuid}
+    graph.add_node(gate_two.uuid, NodeProperties(gate_two, TokenPlainGateTwo))
+    graph.adjacency_list[gate_two.uuid] = [branch_b.uuid]
+    graph.parent_to_children_mapping[gate_two.uuid] = {root.uuid}
+    graph.add_node(branch_a.uuid, NodeProperties(branch_a, TokenPlainBranchA))
+    graph.adjacency_list[branch_a.uuid] = [consumer_feature.uuid]
+    graph.parent_to_children_mapping[branch_a.uuid] = {gate_one.uuid}
+    graph.add_node(branch_b.uuid, NodeProperties(branch_b, TokenPlainBranchB))
+    graph.adjacency_list[branch_b.uuid] = [consumer_feature.uuid]
+    graph.parent_to_children_mapping[branch_b.uuid] = {gate_two.uuid}
+    graph.add_node(consumer_feature.uuid, NodeProperties(consumer_feature, TokenPlainConsumer))
+    graph.adjacency_list[consumer_feature.uuid] = []
+    graph.parent_to_children_mapping[consumer_feature.uuid] = {branch_a.uuid, branch_b.uuid}
+
+    planned.queue.append((TokenPlainRoot, {root}))
+    planned.queue.append((TokenPlainGateOne, {gate_one}))
+    planned.queue.append((TokenPlainGateTwo, {gate_two}))
+    planned.queue.append((TokenPlainBranchA, {branch_a}))
+    planned.queue.append((TokenPlainBranchB, {branch_b}))
+    planned.queue.append((TokenPlainConsumer, {consumer_feature}))
+
+    plan = _create_execution_plan(planned)
+    consumer = next(s for s in plan if isinstance(s, FeatureGroupStep) and s.feature_group is TokenPlainConsumer)
+    return TwoPlainHopsPlanned(consumer, plan)
+
+
+def _pythondict_hops_reached_by(consumer: FeatureGroupStep, plan: Sequence[Step]) -> list[TransformFrameworkStep]:
+    """Every PythonDict-sourced hop the consumer reaches: directly by hop uuid, or via a JoinStep in
+    its required_uuids that the hop serves."""
+    join_steps = [step for step in plan if isinstance(step, JoinStep)]
+    hops = [
+        step for step in plan if isinstance(step, TransformFrameworkStep) and step.from_framework is PythonDictFramework
+    ]
+    served_join_uuids: dict[UUID, set[UUID]] = {
+        hop.uuid: {js.uuid for js in join_steps if hop.uuid in js.required_uuids} for hop in hops
+    }
+    return [
+        hop
+        for hop in hops
+        if hop.uuid in consumer.required_uuids or served_join_uuids[hop.uuid] & consumer.required_uuids
+    ]
+
+
+@pytest.mark.parametrize(
+    "build_plan",
+    [_plan_join_hop_and_plain_hop_share_one_source_framework, _plan_two_plain_hops_share_one_source_framework],
+    ids=["join_hop_and_plain_hop", "two_plain_hops"],
+)
+def test_a_consumer_reaching_two_hops_of_one_source_framework_is_credited_by_neither(
+    build_plan: Callable[[], SharedSourcePlanned | TwoPlainHopsPlanned],
+) -> None:
+    """A consumer that reaches two or more PythonDict hops must get no credit from any of them:
+    crediting one lets the source cfw drop while another hop of the same source framework is still
+    pending."""
+    planned = build_plan()
+    reached = _pythondict_hops_reached_by(planned.consumer, planned.plan)
+
+    # Guard: the fixture must actually reach at least two hops, or the assertion below is vacuous.
+    assert len(reached) >= 2, f"the fixture must reach at least two PythonDict hops; got {reached}"
+
+    consumer_uuids = planned.consumer.get_uuids()
+    for hop in reached:
+        assert not (hop.owed_tokens & consumer_uuids), (
+            f"got owed_tokens={hop.owed_tokens}, consumer uuids={consumer_uuids}"
+        )

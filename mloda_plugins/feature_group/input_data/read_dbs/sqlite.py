@@ -292,7 +292,11 @@ class SQLITEReader(ReadDB):
             raise ValueError(
                 f"{cls.__name__}.describe_columns requires data_access to be a dict with a 'table_name' key."
             )
-        cls.is_valid_credentials(data_access)
+        if not cls.is_valid_credentials(data_access):
+            raise ValueError(
+                f"{cls.__name__}.describe_columns requires data_access to have a str path under the "
+                f"'{cls.db_path()}' key."
+            )
         table_name = str(data_access["table_name"])
         result, _ = cls.read_db(data_access, query=f"PRAGMA table_info({quote_ident(table_name)});")
         if not result:
@@ -301,15 +305,16 @@ class SQLITEReader(ReadDB):
 
     @staticmethod
     def _affinity_to_datatype(declared_type: str) -> DataType | None:
-        # Independent of the compute framework's own _sqlite_affinity_to_arrow_type (sqlite_relation.py);
-        # the two may map BLOB to a different binary width, since neither seam is derived from the other.
+        # SQLite's documented affinity precedence (INTEGER, TEXT, BLOB, REAL/NUMERIC); independent
+        # of the compute framework's own _sqlite_affinity_to_arrow_type (sqlite_relation.py), which
+        # keeps a different order and may map BLOB to a different binary width.
         upper = declared_type.upper()
         if "INT" in upper:
             return DataType.INT64
-        if "REAL" in upper or "FLOA" in upper or "DOUB" in upper:
-            return DataType.DOUBLE
-        if "BLOB" in upper:
-            return DataType.BINARY
         if "CHAR" in upper or "CLOB" in upper or "TEXT" in upper:
             return DataType.STRING
+        if "BLOB" in upper:
+            return DataType.BINARY
+        if "REAL" in upper or "FLOA" in upper or "DOUB" in upper:
+            return DataType.DOUBLE
         return None

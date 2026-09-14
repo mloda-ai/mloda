@@ -60,7 +60,9 @@ class TestSQLITEReader:
     @pytest.fixture(scope="class")
     def affinity_test_table(self, temp_sqlite_db: Any) -> Any:
         """A second table on the same db, covering describe_columns affinity-mapping edge cases:
-        REAL/FLOAT/DOUBLE, BLOB, VARCHAR(255)/CLOB, an undeclared type, and NUMERIC/DECIMAL."""
+        REAL/FLOAT/DOUBLE, BLOB, VARCHAR(255)/CLOB, an undeclared type, NUMERIC/DECIMAL, and
+        multi-keyword declared types that must resolve by SQLite's affinity precedence order
+        (INTEGER, then TEXT, then BLOB, then REAL) rather than by keyword-check order."""
         conn = sqlite3.connect(temp_sqlite_db)
         cursor = conn.cursor()
         cursor.execute("""
@@ -73,7 +75,11 @@ class TestSQLITEReader:
                 notes CLOB,
                 untyped_col,
                 amount NUMERIC,
-                precise DECIMAL(10,5)
+                precise DECIMAL(10,5),
+                text_then_blob TEXT BLOB,
+                blob_sub_type_text BLOB SUB_TYPE TEXT,
+                char_then_double CHAR DOUBLE,
+                double_then_blob DOUBLE BLOB
             );
         """)
         conn.commit()
@@ -253,6 +259,14 @@ class TestSQLITEReader:
         # None here instead of guessing STRING.
         assert result["amount"] is None
         assert result["precise"] is None
+        # SQLite's documented affinity order is INTEGER, then TEXT, then BLOB, then REAL/NUMERIC
+        # (https://www.sqlite.org/datatype3.html#determination_of_column_affinity); a declared
+        # type containing several keywords must resolve by that precedence, not by whichever
+        # keyword happens to be checked first.
+        assert result["text_then_blob"] == DataType.STRING
+        assert result["blob_sub_type_text"] == DataType.STRING
+        assert result["char_then_double"] == DataType.STRING
+        assert result["double_then_blob"] == DataType.BINARY
 
     def test_describe_columns_nonexistent_db_does_not_create_file(self, tmp_path: Any) -> None:
         """describe_columns must not create a db file as a side effect of a wrong path
@@ -264,6 +278,22 @@ class TestSQLITEReader:
             SQLITEReader.describe_columns({"sqlite": str(nonexistent_path), "table_name": "t"})
 
         assert not nonexistent_path.exists()
+
+    def test_describe_columns_path_credential_rejected(self, tmp_path: Any) -> None:
+        """A pathlib.Path credential must fail is_valid_credentials's str check and be
+        rejected with ValueError, not silently passed on to sqlite3.connect (which would
+        create the file as a side effect)."""
+        db_path = tmp_path / "missing.db"
+
+        with pytest.raises(ValueError):
+            SQLITEReader.describe_columns({"sqlite": db_path, "table_name": "t"})
+
+        assert not db_path.exists()
+
+    def test_describe_columns_missing_sqlite_key(self) -> None:
+        """A data_access dict without the 'sqlite' key must raise ValueError, not KeyError."""
+        with pytest.raises(ValueError):
+            SQLITEReader.describe_columns({"table_name": "t"})
 
     def test_describe_columns_nonexistent_db_error_mentions_path(self, tmp_path: Any) -> None:
         """The raised ValueError must name the missing db path, not just the table name,

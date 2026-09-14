@@ -15,14 +15,19 @@ from uuid import UUID
 
 import pytest
 
-from mloda.provider import ComputeFramework  # noqa: F401
+from mloda.provider import ComputeFramework, FeatureGroup  # noqa: F401
 from mloda.core.prepare.execution_plan import ExecutionPlan
 
 from mloda.core.runtime.run import ExecutionOrchestrator
 from mloda.core.core.cfw_manager import CfwManager
 from mloda.core.core.step.feature_group_step import FeatureGroupStep
+from mloda.core.core.step.transform_frame_work_step import TransformFrameworkStep
 from mloda.core.abstract_plugins.components.parallelization_modes import ParallelizationMode
 from mloda.core.abstract_plugins.run_context import RunContext
+from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
+from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import (
+    PythonDictFramework,
+)
 
 
 class TestExecutionOrchestratorImport:
@@ -535,3 +540,48 @@ class TestGetResultItemsPlanOrder:
 
         assert items[:3] == [(uuid_a, "result_a"), (uuid_b, "result_b"), (uuid_c, "result_c")]
         assert items[3] == (uuid_unplanned, "result_unplanned")
+
+
+class _DropTfsSourceFromFG(FeatureGroup):
+    """Marker feature group, only used as a type reference on the transform hop."""
+
+
+class _DropTfsSourceToFG(FeatureGroup):
+    """Marker feature group, only used as a type reference on the transform hop."""
+
+
+class TestDropTfsSourceIfPossibleResolvesViaSourceFrameworkUuid:
+    """A join hop's required_uuids also holds destination-side uuids no source cfw knows about,
+    so only source_framework_uuid reliably names the hop's source cfw."""
+
+    def test_resolves_source_cfw_via_source_framework_uuid_not_required_uuids(self) -> None:
+        destination_uuid = uuid_mod.uuid4()
+        source_uuid = uuid_mod.uuid4()
+        consumer_uuid = uuid_mod.uuid4()
+        cfw_uuid = uuid_mod.uuid4()
+        source_cfw = object()
+
+        step = TransformFrameworkStep(
+            from_framework=PythonDictFramework,
+            to_framework=PyArrowTable,
+            required_uuids={destination_uuid},
+            from_feature_group=_DropTfsSourceFromFG,
+            to_feature_group=_DropTfsSourceToFG,
+            link_id=uuid_mod.uuid4(),
+            source_framework_uuids={source_uuid},
+        )
+        step.owed_tokens = frozenset({consumer_uuid})
+
+        mock_planner = Mock(spec=ExecutionPlan)
+        orchestrator = ExecutionOrchestrator(mock_planner)
+        orchestrator.cfw_register = Mock()
+        orchestrator.cfw_register.get_cfw_uuid.side_effect = lambda _class_name, uuid: (
+            cfw_uuid if uuid == source_uuid else None
+        )
+        orchestrator.executor = Mock()
+        orchestrator.executor.cfw_collection = {cfw_uuid: source_cfw}
+        orchestrator._mark_children_and_track = Mock()  # type: ignore[method-assign]
+
+        orchestrator._drop_tfs_source_if_possible(step)
+
+        orchestrator._mark_children_and_track.assert_called_once_with(source_cfw, {consumer_uuid})

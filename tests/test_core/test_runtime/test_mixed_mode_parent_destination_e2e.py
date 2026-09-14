@@ -1341,16 +1341,12 @@ class _H3ChainConsumerFG(FeatureGroup):
 
 @pytest.mark.timeout(30)
 @pytest.mark.skipif(pd is None or pa is None, reason="Pandas or PyArrow is not installed. Skipping this test.")
-class TestPlainHopJoinFrameworksGuardRegression:
-    """A plain hop must stay excluded from owed-token crediting when its own source framework is
-    also a JoinStep's framework elsewhere in the plan."""
+class TestChainedJoinSharedSourceSurvivesBothHops:
+    """A PythonDict source read by both a plain hop and a join hop must survive until both finish."""
 
-    def test_plain_hop_still_defers_to_a_join_reading_the_same_source_framework(self) -> None:
+    def test_source_read_by_a_plain_hop_and_a_join_hop_survives_until_both_finish(self) -> None:
         """A chained Pandas<-PyArrow<-PythonDict join also plans a plain PythonDict->Pandas hop for
-        the same PythonDict source (h3_d reaches the consumer both via the join chain and directly).
-        If a plain hop whose source framework another join also uses were ever credited owed tokens,
-        it would credit the PythonDict root before the join hop reads it, and the run would fail
-        transforming PyArrow data out of an already-dropped PythonDict cfw."""
+        the same PythonDict source (h3_d reaches the consumer both via the join chain and directly)."""
         plugin_collector = PluginCollector.enabled_feature_groups(
             {
                 _H3ChainRootPandasFG,

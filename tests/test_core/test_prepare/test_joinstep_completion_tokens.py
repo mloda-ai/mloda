@@ -456,6 +456,10 @@ class TokenGuardSiblingConsumer(FeatureGroup):
     pass
 
 
+class TokenGuardPlainConsumer(FeatureGroup):
+    pass
+
+
 class ChainPlanned(NamedTuple):
     consumer: FeatureGroupStep
     plan: list[Step]
@@ -463,6 +467,7 @@ class ChainPlanned(NamedTuple):
 
 class GuardPlanned(NamedTuple):
     dest_consumer: FeatureGroupStep
+    plain_consumer: FeatureGroupStep
     plan: list[Step]
 
 
@@ -503,7 +508,9 @@ def _plan_chained_three_framework_join() -> ChainPlanned:
 
 def _plan_join_hop_whose_source_framework_is_also_another_joins_framework() -> GuardPlanned:
     """A cross-framework join hop whose PythonDict source is ALSO the same-framework partner of an
-    unrelated JoinStep elsewhere in the plan (mirrors a same-framework join re-pointing a shared cfw)."""
+    unrelated JoinStep elsewhere in the plan (mirrors a same-framework join re-pointing a shared cfw).
+    Also plans an unrelated plain PythonDict->Pandas hop off that same source, read by no one else,
+    so the plain-hop guard can be pinned without the multi-route rule masking it."""
     planned = _planned()
     graph = planned.graph
 
@@ -512,9 +519,10 @@ def _plan_join_hop_whose_source_framework_is_also_another_joins_framework() -> G
     dest = feature("token_guard_dest", PyArrowTable, GUARD_INDEX)
     dest_consumer = feature("token_guard_dest_consumer", PyArrowTable)
     sibling_consumer = feature("token_guard_sibling_consumer", PythonDictFramework)
+    plain_consumer = feature("token_guard_plain_consumer", PandasDataFrame)
 
     graph.add_node(source.uuid, NodeProperties(source, TokenGuardSource))
-    graph.adjacency_list[source.uuid] = [dest_consumer.uuid, sibling_consumer.uuid]
+    graph.adjacency_list[source.uuid] = [dest_consumer.uuid, sibling_consumer.uuid, plain_consumer.uuid]
     graph.add_node(sibling.uuid, NodeProperties(sibling, TokenGuardSourceSibling))
     graph.adjacency_list[sibling.uuid] = [sibling_consumer.uuid]
     graph.add_node(dest.uuid, NodeProperties(dest, TokenGuardDest))
@@ -523,8 +531,11 @@ def _plan_join_hop_whose_source_framework_is_also_another_joins_framework() -> G
     graph.adjacency_list[dest_consumer.uuid] = []
     graph.add_node(sibling_consumer.uuid, NodeProperties(sibling_consumer, TokenGuardSiblingConsumer))
     graph.adjacency_list[sibling_consumer.uuid] = []
+    graph.add_node(plain_consumer.uuid, NodeProperties(plain_consumer, TokenGuardPlainConsumer))
+    graph.adjacency_list[plain_consumer.uuid] = []
     graph.parent_to_children_mapping[dest_consumer.uuid] = {source.uuid, dest.uuid}
     graph.parent_to_children_mapping[sibling_consumer.uuid] = {source.uuid, sibling.uuid}
+    graph.parent_to_children_mapping[plain_consumer.uuid] = {source.uuid}
 
     link_dest_source = Link.inner(JoinSpec(TokenGuardDest, GUARD_INDEX), JoinSpec(TokenGuardSource, GUARD_INDEX))
     link_source_sibling = Link.inner(
@@ -538,6 +549,7 @@ def _plan_join_hop_whose_source_framework_is_also_another_joins_framework() -> G
     planned.queue.append((link_dest_source, PyArrowTable, PythonDictFramework))
     planned.queue.append((TokenGuardSiblingConsumer, {sibling_consumer}))
     planned.queue.append((TokenGuardDestConsumer, {dest_consumer}))
+    planned.queue.append((TokenGuardPlainConsumer, {plain_consumer}))
 
     trek(planned.link_trekker, link_source_sibling, (PythonDictFramework, PythonDictFramework), sibling_consumer.uuid)
     trek(planned.link_trekker, link_dest_source, (PyArrowTable, PythonDictFramework), dest_consumer.uuid)
@@ -546,7 +558,10 @@ def _plan_join_hop_whose_source_framework_is_also_another_joins_framework() -> G
     dest_consumer_step = next(
         s for s in plan if isinstance(s, FeatureGroupStep) and s.feature_group is TokenGuardDestConsumer
     )
-    return GuardPlanned(dest_consumer_step, plan)
+    plain_consumer_step = next(
+        s for s in plan if isinstance(s, FeatureGroupStep) and s.feature_group is TokenGuardPlainConsumer
+    )
+    return GuardPlanned(dest_consumer_step, plain_consumer_step, plan)
 
 
 def test_chained_cross_framework_join_hop_owed_tokens_exclude_a_third_framework_consumer() -> None:
@@ -593,6 +608,39 @@ def test_cross_framework_append_join_hop_owed_tokens_stay_empty() -> None:
     hop = next(step for step in plan if isinstance(step, TransformFrameworkStep) and step.link_id == link.uuid)
 
     assert hop.owed_tokens == frozenset()
+
+
+def test_plain_hop_whose_source_framework_is_also_another_joins_framework_gets_empty_owed_tokens() -> None:
+    """A plain hop is ineligible for owed-token crediting when its source framework is also the source
+    or destination of a JoinStep elsewhere in the plan; its lone consumer reaches only this one hop out
+    of PythonDict, so the multi-route rule cannot mask the guard."""
+    guarded = _plan_join_hop_whose_source_framework_is_also_another_joins_framework()
+
+    plain_hop = next(
+        step
+        for step in guarded.plan
+        if isinstance(step, TransformFrameworkStep)
+        and step.link_id is None
+        and step.from_framework is PythonDictFramework
+    )
+
+    # Guard: the consumer must reach only this one PythonDict hop, directly or via a JoinStep it
+    # requires, or a second route would let the multi-route rule mask the guard instead.
+    join_step_uuids = {step.uuid for step in guarded.plan if isinstance(step, JoinStep)}
+    python_dict_hop_uuids = {
+        step.uuid
+        for step in guarded.plan
+        if isinstance(step, TransformFrameworkStep) and step.from_framework is PythonDictFramework
+    }
+    assert not (guarded.plain_consumer.required_uuids & join_step_uuids), (
+        f"the consumer must not reach any JoinStep; got {guarded.plain_consumer.required_uuids}"
+    )
+    assert guarded.plain_consumer.required_uuids & python_dict_hop_uuids == {plain_hop.uuid}, (
+        f"the consumer must reach exactly this one PythonDict hop; got "
+        f"{guarded.plain_consumer.required_uuids & python_dict_hop_uuids}"
+    )
+
+    assert plain_hop.owed_tokens == frozenset()
 
 
 def test_join_hop_whose_source_framework_is_also_another_joins_framework_gets_empty_owed_tokens() -> None:

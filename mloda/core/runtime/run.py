@@ -425,8 +425,20 @@ class ExecutionOrchestrator:
         if not step.owed_tokens:
             return
 
-        uuid = step.source_framework_uuid or next(iter(step.required_uuids))
-        from_cfw_uuid = self.cfw_register.get_cfw_uuid(step.from_framework.get_class_name(), uuid)
+        from_cfw_uuid: UUID | None = None
+        if step.source_framework_uuid:
+            from_cfw_uuid = self.cfw_register.get_cfw_uuid(
+                step.from_framework.get_class_name(), step.source_framework_uuid
+            )
+        else:
+            # A subclass-clustered hop's required_uuids can name parents owned by different
+            # sibling steps/frameworks (see execution_plan.py), so try each until one resolves
+            # instead of picking an arbitrary, possibly-wrong member.
+            for candidate_uuid in step.required_uuids:
+                from_cfw_uuid = self.cfw_register.get_cfw_uuid(step.from_framework.get_class_name(), candidate_uuid)
+                if from_cfw_uuid is not None:
+                    break
+
         if from_cfw_uuid is None:
             return
 

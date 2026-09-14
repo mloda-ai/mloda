@@ -241,13 +241,22 @@ class ComputeFrameworkExecutor:
         """
         Prepares the right CFW for a TransformFrameworkStep.
         """
-        uuid = step.source_framework_uuid if step.source_framework_uuid else next(iter(step.required_uuids))
-
-        cfw_uuid = self.cfw_register.get_cfw_uuid(step.from_framework.get_class_name(), uuid)
+        if step.source_framework_uuid:
+            cfw_uuid = self.cfw_register.get_cfw_uuid(step.from_framework.get_class_name(), step.source_framework_uuid)
+        else:
+            # A subclass-clustered hop's required_uuids can name parents owned by different
+            # sibling steps/frameworks (see execution_plan.py), so try each until one resolves
+            # instead of picking an arbitrary, possibly-wrong member.
+            cfw_uuid = None
+            for candidate_uuid in step.required_uuids:
+                cfw_uuid = self.cfw_register.get_cfw_uuid(step.from_framework.get_class_name(), candidate_uuid)
+                if cfw_uuid is not None:
+                    break
 
         if cfw_uuid is None or isinstance(cfw_uuid, UUID) is False:
             raise ValueError(
-                f"cfw_uuid should not be none in prepare_tfs: {step.from_framework.get_class_name()}, {uuid}"
+                f"cfw_uuid should not be none in prepare_tfs: {step.from_framework.get_class_name()}, "
+                f"{step.source_framework_uuid or step.required_uuids}"
             )
 
         return cfw_uuid

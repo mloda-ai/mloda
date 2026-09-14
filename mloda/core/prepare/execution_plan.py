@@ -562,8 +562,11 @@ Available join types:
                             seen_hop_uuids.add(canonical_tfs.uuid)
                             bound_entries.append((canonical_tfs, parent))
 
-                        # Records every parent the hop covers; they all share one owning step, so
-                        # this doesn't change the scheduling gate.
+                        # Records every parent the hop covers. On its own this doesn't change the
+                        # scheduling gate, since canonical_tfs is still the one owning step here;
+                        # but the subclass-cluster widening further below can still merge this
+                        # hop's required_uuids with a SIBLING hop's, so the set can end up spanning
+                        # more than one owning step/framework after all.
                         canonical_tfs.required_uuids.add(parent)
                         ep.required_uuids.add(canonical_tfs.uuid)
 
@@ -651,7 +654,8 @@ Available join types:
                         if len(cluster) > 1:
                             shared_required_uuids: set[UUID] = set().union(*(tfs.required_uuids for tfs in cluster))
                             for tfs in cluster:
-                                tfs.required_uuids = set(shared_required_uuids)
+                                # A step must never wait for a token it produces itself.
+                                tfs.required_uuids = shared_required_uuids - tfs.get_uuids()
 
                 if len(hop_groups) > 1:
                     raise ValueError(

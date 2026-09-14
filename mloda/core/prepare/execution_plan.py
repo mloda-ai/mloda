@@ -616,7 +616,7 @@ Available join types:
                     _add_to_groups(hop_groups, (_JoinServedParent(served_feature_group), served_parent))
 
                 # Two distinct hops linked only because one's from_feature_group subclasses the other's
-                # (mloda-ai/mloda#1426) read the same physical source cfw instance at runtime, but each
+                # read the same physical source cfw instance at runtime, but each
                 # only ever waited on its own parent; whichever a later runtime lookup happens to pick
                 # may transform a stale snapshot, taken before the sibling's parent landed in it. Widen
                 # each to wait on the other's parent too, scoped to the subclass pairing specifically:
@@ -678,7 +678,7 @@ Available join types:
 
         # A hop's SOURCE-side cfw is credited via owed_tokens, letting it drop once read. Multi-route rule: a consumer
         # reaching two or more hops out of one source framework is credited by none, since one hop finishing could drop
-        # the cfw while another still reads it. Per-source guard (mloda-ai/mloda#1423): a hop is ineligible when its
+        # the cfw while another still reads it. Per-source guard: a hop is ineligible when its
         # OWN source data - not merely its framework class - is also the source or destination of another JoinStep,
         # which may still read into or merge the same physical cfw the hop's credit would resolve to (see
         # CfwManager.find_leftmost/get_cfw_uuid). Scope: a join hop credits only its destination-framework consumer;
@@ -762,7 +762,7 @@ Available join types:
         }
 
         # A hop's credit extends past its own direct consumer to that consumer's same-framework
-        # descendants (mloda-ai/mloda#1424), but only along the part of a descendant's dependency
+        # descendants, but only along the part of a descendant's dependency
         # chain that never branches away back to the hop's source, or to another hop out of a source
         # framework the multi-route rule below already treats as ambiguous. `_reach` walks a
         # FeatureGroupStep's required_uuids once, memoized: a hop-route token is a hop boundary,

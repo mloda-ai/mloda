@@ -595,10 +595,10 @@ class ExecutionOrchestrator:
                 return None
             return self.cfw_register.get_cfw_uuid(class_name, step.features.any_uuid)
 
-        # Mirrors ComputeFrameworkExecutor.prepare_execute_step's cross-check (see
-        # mloda-ai/mloda#1428): a resolution that is still literally one of the queried tfs_ids
-        # only proves this hop's own freshly created cfw exists, not that this step should read
-        # from it over an already-established cfw a redundant hop leaves unused.
+        # Mirrors ComputeFrameworkExecutor.prepare_execute_step's cross-check: a resolution that is
+        # still literally one of the queried tfs_ids only proves this hop's own freshly created cfw
+        # exists, not that this step should read from it over an already-established cfw a redundant
+        # hop leaves unused.
         if resolved_uuid in step.tfs_ids and step.features.any_uuid is not None:
             by_feature_uuid = self.cfw_register.get_cfw_uuid(class_name, step.features.any_uuid)
             if by_feature_uuid is not None:

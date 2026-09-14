@@ -182,7 +182,7 @@ class ComputeFrameworkExecutor:
             # pre-registered cfw the ids merely point at) only proves this hop's own freshly
             # created cfw exists; it does not prove this step should read from it over an
             # already-established cfw an unrelated, redundant hop into the same framework leaves
-            # unused (mloda-ai/mloda#1428). Cross-check against the step's own feature uuid only
+            # unused. Cross-check against the step's own feature uuid only
             # in that case, preferring it when it already resolves to something.
             if resolved_uuid is not None and resolved_uuid in step.tfs_ids and step.features.any_uuid is not None:
                 by_feature_uuid = self.cfw_register.get_cfw_uuid(cls_name, step.features.any_uuid)

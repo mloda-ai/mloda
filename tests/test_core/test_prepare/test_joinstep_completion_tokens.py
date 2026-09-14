@@ -917,8 +917,8 @@ def test_a_consumer_reaching_two_hops_of_one_source_framework_is_credited_by_nei
 
 # A plain hop's source framework CLASS coincides with another JoinStep's framework elsewhere in the
 # plan, but that join's own source/destination data never overlaps with what the hop actually reads.
-# mloda-ai/mloda#1423: today the guard keys on the framework class alone, so it wrongly withholds
-# credit here; the fix must key on the hop's actual source data instead.
+# The guard must key on the hop's actual source data, not the framework class alone, or it wrongly
+# withholds credit here.
 
 
 class TokenIsolatedSource(FeatureGroup):
@@ -966,7 +966,7 @@ def _plan_plain_hop_whose_source_framework_class_is_shared_by_an_unrelated_joins
 
 
 def test_plain_hop_whose_source_framework_class_is_shared_but_data_is_disjoint_gets_credited() -> None:
-    """mloda-ai/mloda#1423: a plain hop's source framework CLASS coincides with another JoinStep's
+    """A plain hop's source framework CLASS coincides with another JoinStep's
     framework elsewhere in the plan, but that join never reads or merges the hop's actual source
     data, so the hop must still be credited (non-empty owed_tokens)."""
     guarded = _plan_plain_hop_whose_source_framework_class_is_shared_by_an_unrelated_joins_data()

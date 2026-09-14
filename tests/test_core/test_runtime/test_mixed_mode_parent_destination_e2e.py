@@ -1040,7 +1040,7 @@ class _DiamondHopDescendantFG(FeatureGroup):
     """Reads the root DIRECTLY (same framework as the root, not via the hop) as well as the hop's
     own output feature: a graph-descendant of BOTH the hop's source and its consumer, which
     `owed_tokens` must not let the hop's own finish drop early. Actually reads both columns in
-    calculate_feature (not just declares them) so a wrong cfw pick (mloda-ai/mloda#1428) surfaces
+    calculate_feature (not just declares them) so a wrong cfw pick surfaces
     as a KeyError rather than being silently unnoticed."""
 
     def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
@@ -1064,7 +1064,7 @@ class _DiamondHopDescendantFG(FeatureGroup):
 class _FwClassGuardJoinLeftFG(FeatureGroup):
     """Left side of an unrelated cross-framework join elsewhere in the plan: shares the
     PythonDictFramework CLASS with `_MpTransformSourceFG`'s hop, but its own data
-    (`fw_class_guard_*`) is entirely disjoint from that hop's source (mloda-ai/mloda#1423)."""
+    (`fw_class_guard_*`) is entirely disjoint from that hop's source."""
 
     @classmethod
     def input_data(cls) -> BaseInputData | None:
@@ -1126,7 +1126,7 @@ class _FwClassGuardJoinChildFG(FeatureGroup):
 
 class _ChainHopRootFG(FeatureGroup):
     """Root source on PythonDictFramework, the hop's SOURCE; read only by the hop itself, never by
-    anything further down the chain (mloda-ai/mloda#1424)."""
+    anything further down the chain."""
 
     @classmethod
     def input_data(cls) -> BaseInputData | None:
@@ -1181,7 +1181,7 @@ class _ChainHopChain2FG(FeatureGroup):
 
 
 class _ChainHopChain3FG(FeatureGroup):
-    """Further same-framework link, matching the issue's own `R -> hop -> A -> A2 -> A3` shape."""
+    """Further same-framework link, extending the `R -> hop -> A -> A2 -> A3` chain."""
 
     def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return {Feature("chain_hop_chain2_val")}
@@ -1260,7 +1260,7 @@ class TestTransformFrameworkStepSourceRootDropTiming:
     def test_plain_hop_source_root_dropped_right_after_its_hop_when_its_class_is_shared_by_an_unrelated_join(
         self, flight_server: Any, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """mloda-ai/mloda#1423: the plain hop's source framework CLASS (PythonDictFramework) is also
+        """The plain hop's source framework CLASS (PythonDictFramework) is also
         the source of an unrelated cross-framework JoinStep elsewhere in the plan, but that join's own
         data (`_FwClassGuardJoin*`) never overlaps with the hop's own source (`_MpTransformSourceFG`).
         The hop's source root must drop as soon as its own hop finishes reading it: `owed_tokens`
@@ -1430,7 +1430,7 @@ class TestTransformFrameworkStepSourceRootDropTiming:
     def test_diamond_descendant_of_hop_source_and_consumer_survives_hop_finish_under_scheduling_jitter(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """Same run as the test above, but replayed under seeded scheduling jitter (mloda-ai/mloda#1430):
+        """Same run as the test above, but replayed under seeded scheduling jitter:
         SYNC's own JoinStep-waits-on-every-ancestor rule can otherwise hide the owed_tokens
         ordering bug this class guards, by always running the hop before the diamond descendant."""
         plugin_collector = PluginCollector.enabled_feature_groups(
@@ -1453,13 +1453,12 @@ class TestTransformFrameworkStepSourceRootDropTiming:
     def test_hop_source_root_dropped_right_after_direct_consumer_not_whole_downstream_chain(
         self, flight_server: Any, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """mloda-ai/mloda#1424: a hop's SOURCE must drop once its DIRECT consumer (`_ChainHopMidFG`)
+        """A hop's SOURCE must drop once its DIRECT consumer (`_ChainHopMidFG`)
         is credited, not wait for that consumer's own further same-framework chain
         (`_ChainHopChain2FG`, `_ChainHopChain3FG`) to finish too - neither of those reads the root
         directly, unlike `_DiamondHopDescendantFG` in the survival test above. Same
         `add_compute_framework` / `_drop_tfs_source_if_possible` spy checkpoint pattern as
-        `test_plain_hop_source_root_dropped_right_after_its_hop_when_its_class_is_shared_by_an_unrelated_join`
-        (mloda-ai/mloda#1423)."""
+        `test_plain_hop_source_root_dropped_right_after_its_hop_when_its_class_is_shared_by_an_unrelated_join`."""
         plugin_collector = PluginCollector.enabled_feature_groups(
             {_ChainHopRootFG, _ChainHopMidFG, _ChainHopChain2FG, _ChainHopChain3FG}
         )

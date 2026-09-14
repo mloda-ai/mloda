@@ -1,6 +1,6 @@
-"""Prints one json line with the result a fresh interpreter plans and runs for the
-mloda-ai/mloda#1426 shape: a consumer reading two plain hops out of one PythonDictFramework
-source, whose from_feature_group classes are related only by subclassing (P3B(P3A)) for code
+"""Prints one json line with the result a fresh interpreter plans and runs for a
+consumer reading two plain hops out of one PythonDictFramework source, whose
+from_feature_group classes are related only by subclassing (P3B(P3A)) for code
 reuse, not by any shared parent data. No test_ prefix, so pytest never collects it; the
 regression test runs it as a script under several PYTHONHASHSEED values.
 """

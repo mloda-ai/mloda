@@ -83,7 +83,7 @@ def test_two_unlinked_source_framework_instances_raise_missing_links_error_at_pr
     assert "UnlinkedRootB" in error_message, "Error should name the second conflicting upstream feature group"
 
 
-# mloda-ai/mloda#1425: a consumer needing a plain hop from a case-override subclass (same family as
+# A consumer needing a plain hop from a case-override subclass (same family as
 # a join's own source side) plus that join's own destination side is fully covered by the single
 # declared Link, so it must plan and run under every PYTHONHASHSEED, not just some of them.
 _SUBCLASS_LINKED_HOP_AND_JOIN_PROBE = Path(__file__).with_name("subclass_linked_hop_and_join_probe.py")
@@ -106,10 +106,10 @@ def test_subclass_linked_plain_hop_and_join_plan_the_same_way_under_every_hash_s
         )
 
 
-# mloda-ai/mloda#1426: a consumer reads two plain hops out of one PythonDictFramework source
+# A consumer reads two plain hops out of one PythonDictFramework source
 # (p3_a via P3GateA, p3_b via P3GateB) whose from_feature_group classes, P3A and P3B(P3A), are
 # related only by subclassing for code reuse, not by sharing any parent feature/uuid. Unlike the
-# #1425 case override above, neither hop's parent is an ancestor of the other's, and no Link ties
+# case-override case above, neither hop's parent is an ancestor of the other's, and no Link ties
 # the two gates together, so `_entries_linked`'s bare `issubclass` check wrongly merges the two
 # hops into one binding and drops one column's data instead of keeping both.
 _SUBCLASS_SIBLING_PLAIN_HOPS_PROBE = Path(__file__).with_name("subclass_sibling_plain_hops_probe.py")

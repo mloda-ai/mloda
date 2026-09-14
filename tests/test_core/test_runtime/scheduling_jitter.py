@@ -3,7 +3,7 @@
 A real THREADING/MULTIPROCESSING run can finish a ready step several planner passes
 after it first becomes runnable. Plain SYNC always finishes it on the very next
 pass, which hides step-ordering bugs that a `JoinStep`'s "wait on every ancestor of
-its consumer" rule would otherwise mask (see mloda-ai/mloda#1430).
+its consumer" rule would otherwise mask.
 
 `run_under_scheduling_jitter` drives a zero-arg `run_fn` under several seeds, each
 seed randomly refusing otherwise-ready steps for up to `max_defers` planner passes
@@ -28,8 +28,7 @@ Because the hook is only consulted for a step that would otherwise be allowed to
 run, and because it is only permitted to defer once `made_progress` is already
 True, at least one ready step per pass is always let through without the hook
 itself needing to know how many other ready steps exist this pass: this is the
-seam-side half of the `_raise_if_stalled` guarantee
-(`ExecutionOrchestrator._raise_if_stalled`, run.py:213) the issue calls out.
+seam-side half of the `ExecutionOrchestrator._raise_if_stalled` guarantee.
 """
 
 from __future__ import annotations

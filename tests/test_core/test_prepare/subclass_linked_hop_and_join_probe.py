@@ -1,7 +1,7 @@
-"""Prints one json line with the result a fresh interpreter plans and runs for the
-mloda-ai/mloda#1425 shape: a consumer with a subclass-linked plain hop (case override)
-plus a join-served parent. No test_ prefix, so pytest never collects it; the regression
-test runs it as a script under several PYTHONHASHSEED values.
+"""Prints one json line with the result a fresh interpreter plans and runs for a
+consumer with a subclass-linked plain hop (case override) plus a join-served parent.
+No test_ prefix, so pytest never collects it; the regression test runs it as a script
+under several PYTHONHASHSEED values.
 """
 
 import json

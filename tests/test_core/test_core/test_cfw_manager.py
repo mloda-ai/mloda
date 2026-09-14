@@ -96,7 +96,7 @@ class TestCfwManagerFindLeftmostCycleDetection:
 
 
 class TestCfwManagerGetCfwUuidBackHopResolution:
-    """mloda-ai/mloda#1428: a descendant reading both a root feature and a feature hopped back
+    """A descendant reading both a root feature and a feature hopped back
     into the root's own framework must resolve to the back-hop's cfw, not the root's, even
     though the root's children_if_root transitively lists the same descendant uuid."""
 

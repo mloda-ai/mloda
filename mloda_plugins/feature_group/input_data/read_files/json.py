@@ -128,7 +128,7 @@ class JsonReader(ReadFile):
 
     @classmethod
     def load_data(cls, data_access: Any, features: FeatureSet) -> Any:
-        cls._require_dependency(pyarrow_json, "JSON")
+        cls._require_dependency(pyarrow_json, file_format="JSON")
         result = pyarrow_json.read_json(
             data_access,
             parse_options=pyarrow_json.ParseOptions(

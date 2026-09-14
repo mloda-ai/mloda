@@ -112,7 +112,7 @@ class ParquetReader(ReadFile):
 
     @classmethod
     def load_data(cls, data_access: Any, features: FeatureSet) -> Any:
-        cls._require_dependency(pyarrow_parquet, "Parquet")
+        cls._require_dependency(pyarrow_parquet, file_format="Parquet")
         return pyarrow_parquet.read_table(data_access, columns=list(features.get_all_names()))
 
     @classmethod

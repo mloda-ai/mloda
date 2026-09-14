@@ -89,7 +89,7 @@ class ReadFile(BaseInputData):
         raise NotImplementedError
 
     @staticmethod
-    def _require_dependency(module: Any, file_format: str | None = None) -> None:
+    def _require_dependency(module: Any, *, file_format: str | None = None) -> None:
         """Raise ImportError with an install hint when `file_format` is given (load_data's contract);
         otherwise raise a bare NotImplementedError, the signal validate_columns treats as non-fatal."""
         if module is not None:

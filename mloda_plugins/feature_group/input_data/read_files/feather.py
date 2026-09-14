@@ -110,7 +110,7 @@ class FeatherReader(ReadFile):
 
     @classmethod
     def load_data(cls, data_access: Any, features: FeatureSet) -> Any:
-        cls._require_dependency(pyarrow_ipc, "Feather")
+        cls._require_dependency(pyarrow_ipc, file_format="Feather")
         columns = list(features.get_all_names())
         # Feather V2 is the Arrow IPC file format; use ipc.open_file instead of the
         # deprecated pyarrow.feather.read_table (removed warning as of pyarrow 24).

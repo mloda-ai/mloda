@@ -110,7 +110,7 @@ class OrcReader(ReadFile):
 
     @classmethod
     def load_data(cls, data_access: Any, features: FeatureSet) -> Any:
-        cls._require_dependency(pyarrow_orc, "ORC")
+        cls._require_dependency(pyarrow_orc, file_format="ORC")
         columns = list(features.get_all_names())
         return pyarrow_orc.read_table(source=data_access, columns=columns).select(columns)
 

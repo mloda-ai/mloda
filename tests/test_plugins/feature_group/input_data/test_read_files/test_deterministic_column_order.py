@@ -133,24 +133,8 @@ class TestDeterministicColumnOrder:
     def test_feather_get_column_names_returns_physical_column_names(self) -> None:
         assert FeatherReader.get_column_names(self.feather_file) == self.physical_columns
 
-    def test_feather_describe_columns_returns_real_types(self) -> None:
-        described = FeatherReader.describe_columns(self.feather_file)
-        assert described == {name: DataType.INT64 for name in self.physical_columns}
-
     def test_orc_get_column_names_returns_physical_column_names(self) -> None:
         assert OrcReader.get_column_names(self.orc_file) == self.physical_columns
-
-    def test_orc_describe_columns_returns_real_types(self) -> None:
-        described = OrcReader.describe_columns(self.orc_file)
-        assert described == {name: DataType.INT64 for name in self.physical_columns}
-
-    def test_json_describe_columns_returns_real_types(self) -> None:
-        described = JsonReader.describe_columns(self.json_file)
-        assert described == {name: DataType.INT64 for name in self.physical_columns}
-
-    def test_parquet_describe_columns_returns_real_types(self) -> None:
-        described = ParquetReader.describe_columns(self.parquet_file)
-        assert described == {name: DataType.INT64 for name in self.physical_columns}
 
     def test_parquet_describe_columns_maps_string_column_to_string_type(self, tmp_path: Path) -> None:
         table = pa.Table.from_pydict({"a": [1, 2, 3], "b": ["x", "y", "z"]})

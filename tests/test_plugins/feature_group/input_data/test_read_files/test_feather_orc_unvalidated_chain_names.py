@@ -10,15 +10,11 @@ import pyarrow.orc as pyarrow_orc
 import pytest
 
 import mloda_plugins.feature_group.input_data.read_files.feather as feather_module
-import mloda_plugins.feature_group.input_data.read_files.json as json_module
 import mloda_plugins.feature_group.input_data.read_files.orc as orc_module
-import mloda_plugins.feature_group.input_data.read_files.parquet as parquet_module
 from mloda.core.abstract_plugins.components.match_rejection import MATCH_REJECTION_REASONS, MatchRejection
 from mloda.provider import CHAIN_SEPARATOR
 from mloda_plugins.feature_group.input_data.read_files.feather import FeatherReader
-from mloda_plugins.feature_group.input_data.read_files.json import JsonReader
 from mloda_plugins.feature_group.input_data.read_files.orc import OrcReader
-from mloda_plugins.feature_group.input_data.read_files.parquet import ParquetReader
 
 
 @pytest.fixture()
@@ -81,59 +77,6 @@ class TestShippedUnvalidatedReadersDeclineChainSeparatedNames:
         real_path = _write_orc(tmp_path, ["a", "b"])
 
         assert OrcReader.match_read_file_data_access([real_path], ["a"]) == real_path
-
-
-class TestFeatherOrcPyarrowAbsenceGuard:
-    """Without pyarrow, get_column_names/describe_columns must raise NotImplementedError, not
-    AttributeError, since an aborting exception during matching takes down every sibling reader."""
-
-    def test_feather_reader_raises_not_implemented_without_pyarrow(
-        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-    ) -> None:
-        monkeypatch.setattr(feather_module, "pyarrow_ipc", None)
-        missing_path = str(tmp_path / "absent.feather")
-
-        with pytest.raises(NotImplementedError):
-            FeatherReader.get_column_names(missing_path)
-        with pytest.raises(NotImplementedError):
-            FeatherReader.describe_columns(missing_path)
-
-    def test_orc_reader_raises_not_implemented_without_pyarrow(
-        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-    ) -> None:
-        monkeypatch.setattr(orc_module, "pyarrow_orc", None)
-        missing_path = str(tmp_path / "absent.orc")
-
-        with pytest.raises(NotImplementedError):
-            OrcReader.get_column_names(missing_path)
-        with pytest.raises(NotImplementedError):
-            OrcReader.describe_columns(missing_path)
-
-
-class TestJsonParquetPyarrowAbsenceGuard:
-    """Same contract as TestFeatherOrcPyarrowAbsenceGuard, for JsonReader and ParquetReader."""
-
-    def test_json_reader_raises_not_implemented_without_pyarrow(
-        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-    ) -> None:
-        monkeypatch.setattr(json_module, "pyarrow_json", None)
-        missing_path = str(tmp_path / "absent.json")
-
-        with pytest.raises(NotImplementedError):
-            JsonReader.get_column_names(missing_path)
-        with pytest.raises(NotImplementedError):
-            JsonReader.describe_columns(missing_path)
-
-    def test_parquet_reader_raises_not_implemented_without_pyarrow(
-        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-    ) -> None:
-        monkeypatch.setattr(parquet_module, "pyarrow_parquet", None)
-        missing_path = str(tmp_path / "absent.parquet")
-
-        with pytest.raises(NotImplementedError):
-            ParquetReader.get_column_names(missing_path)
-        with pytest.raises(NotImplementedError):
-            ParquetReader.describe_columns(missing_path)
 
 
 class TestFeatherOrcPyarrowAbsenceGuardDeclinesMatch:

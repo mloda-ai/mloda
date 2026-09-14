@@ -668,7 +668,7 @@ class _CrossFwHopJoinChildFG(FeatureGroup):
 
 class _CrossFwHopSiblingGate1FG(FeatureGroup):
     """First of three same-framework gates ahead of the independent sibling: pads its own chain
-    long enough that it cannot tie the (much longer) hop, join, and join-child branch."""
+    long enough that it cannot tie the (shorter) hop, join, and join-child branch."""
 
     def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return {Feature("cfw_hop_left_val")}
@@ -752,11 +752,12 @@ class TestCrossFrameworkJoinHopDropTiming:
     def test_cross_framework_join_hop_dropped_mid_run_not_only_at_finalize(
         self, flight_server: Any, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """The join's transported hop table AND its source-framework root cfw must both be dropped
-        as soon as the join that consumes them finishes, not only by the blanket finalize sweep. A
-        `TransformFrameworkStep.execute` spy identifies the hop's own cfw uuid, and a
-        `ComputeFramework.upload_finished_data` spy identifies the source root's own cfw uuid:
-        neither has a public-API name, since `PlanStep` records no uuid for "transform" steps."""
+        """The join's transported hop table drops as soon as the join that consumes it finishes; its
+        source-framework root cfw drops earlier, as soon as the hop that reads it finishes, before the
+        join even runs. Neither waits for the blanket finalize sweep. A `TransformFrameworkStep.execute`
+        spy identifies the hop's own cfw uuid, and a `ComputeFramework.upload_finished_data` spy
+        identifies the source root's own cfw uuid: neither has a public-API name, since `PlanStep`
+        records no uuid for "transform" steps."""
         plugin_collector = PluginCollector.enabled_feature_groups(
             {_XFwJoinLeftRootFG, _XFwJoinRightRootFG, _XFwJoinChildFG}
         )
@@ -816,7 +817,7 @@ class TestCrossFrameworkJoinHopDropTiming:
             )
             assert source_root_uuids[0] not in mid_run_keys, (
                 f"cross-framework join source root {source_root_uuids[0]} is still on the flight server "
-                f"right after its own join finished: {mid_run_keys}; it should have been dropped "
+                f"right after its own hop finished: {mid_run_keys}; it should have been dropped "
                 "incrementally, not left for the run-finalize sweep"
             )
         finally:
@@ -1339,7 +1340,7 @@ class _H3ChainConsumerFG(FeatureGroup):
 
 
 @pytest.mark.timeout(30)
-@pytest.mark.skipif(pd is None, reason="Pandas not installed.")
+@pytest.mark.skipif(pd is None or pa is None, reason="Pandas or PyArrow is not installed. Skipping this test.")
 class TestPlainHopJoinFrameworksGuardRegression:
     """A plain hop must stay excluded from owed-token crediting when its own source framework is
     also a JoinStep's framework elsewhere in the plan."""
@@ -1347,9 +1348,9 @@ class TestPlainHopJoinFrameworksGuardRegression:
     def test_plain_hop_still_defers_to_a_join_reading_the_same_source_framework(self) -> None:
         """A chained Pandas<-PyArrow<-PythonDict join also plans a plain PythonDict->Pandas hop for
         the same PythonDict source (h3_d reaches the consumer both via the join chain and directly).
-        If the plain hop's `join_frameworks` guard were ever dropped, it would credit the PythonDict
-        root before the join hop reads it, and the run would fail transforming PyArrow data out of
-        an already-dropped PythonDict cfw."""
+        If a plain hop whose source framework another join also uses were ever credited owed tokens,
+        it would credit the PythonDict root before the join hop reads it, and the run would fail
+        transforming PyArrow data out of an already-dropped PythonDict cfw."""
         plugin_collector = PluginCollector.enabled_feature_groups(
             {
                 _H3ChainRootPandasFG,

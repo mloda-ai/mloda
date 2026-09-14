@@ -551,8 +551,8 @@ class _DropTfsSourceToFG(FeatureGroup):
 
 
 class TestDropTfsSourceIfPossibleResolvesViaSourceFrameworkUuid:
-    """A join hop's required_uuids also holds destination-side uuids no source cfw knows about,
-    so only source_framework_uuid reliably names the hop's source cfw."""
+    """`next(iter(required_uuids))` can resolve to a uuid with no cfw at all, or to a different cfw
+    instance of the same framework; only source_framework_uuid reliably names the hop's own source cfw."""
 
     def test_resolves_source_cfw_via_source_framework_uuid_not_required_uuids(self) -> None:
         destination_uuid = uuid_mod.uuid4()

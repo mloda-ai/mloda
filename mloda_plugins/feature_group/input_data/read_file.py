@@ -102,10 +102,17 @@ class ReadFile(BaseInputData):
     def get_column_names(cls, file_name: str) -> list[str]:
         raise NotImplementedError
 
+    @staticmethod
+    def _file_path(data_access: Any) -> str:
+        """Coerce a str or Path data_access to a plain path string; anything else is a caller error."""
+        if isinstance(data_access, (str, Path)):
+            return str(data_access)
+        raise ValueError(f"describe_columns requires a file path (str or Path), got {type(data_access).__name__}.")
+
     @classmethod
     def describe_columns(cls, data_access: Any) -> dict[str, DataType | None]:
         """Family default: wraps get_column_names, mapping every column name to an unknown (None) type."""
-        return {name: None for name in cls.get_column_names(data_access)}
+        return {name: None for name in cls.get_column_names(cls._file_path(data_access))}
 
     @classmethod
     def match_subclass_data_access(cls, data_access: Any, feature_names: list[str], options: Options) -> Any:
@@ -198,10 +205,11 @@ class ReadFile(BaseInputData):
         """A suffix-owned file lacking a requested column records an attributable decline before returning False."""
         try:
             columns = cls.get_column_names(file_name)
-        except NotImplementedError:
-            # An override that raises NotImplementedError (e.g. an optional dependency is absent) still cannot
-            # confirm a chain/column-separated name; a base class that never overrides get_column_names defers
-            # to _declines_unvalidated_separator_name upstream, and a pin exempts that guard entirely.
+        except (NotImplementedError, ImportError):
+            # An override that raises NotImplementedError or ImportError (e.g. an optional dependency is
+            # absent) still cannot confirm a chain/column-separated name; a base class that never overrides
+            # get_column_names defers to _declines_unvalidated_separator_name upstream, and a pin exempts
+            # that guard entirely.
             if cls._is_overridden(ReadFile, "get_column_names") and any(
                 CHAIN_SEPARATOR in feature or COLUMN_SEPARATOR in feature for feature in feature_names
             ):

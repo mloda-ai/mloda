@@ -1,16 +1,17 @@
 """Shared describe_columns/get_column_names contract for pyarrow-backed ReadFile readers.
 
-Without its optional pyarrow submodule, a reader must raise a bare NotImplementedError from
-both methods; ReadFile.validate_columns relies on that to treat "can't confirm" as non-fatal.
-Named without a ``Test`` prefix so pytest does not collect it standalone.
+Without its pyarrow submodule, a reader raises ImportError naming mloda[pyarrow] from
+get_column_names, describe_columns, and load_data. Unprefixed so pytest skips it standalone.
 """
 
-import importlib
+import sys
 from pathlib import Path
+from typing import Any, cast
 
 import pytest
 
-from mloda.user import DataType
+from mloda.provider import FeatureSet
+from mloda.user import DataAccessCollection, DataType, Feature
 from mloda_plugins.feature_group.input_data.read_file import ReadFile
 
 PHYSICAL_COLUMNS = ["c1", "a1", "b1"]
@@ -21,7 +22,6 @@ class ColumnDiscoveryContractTestMixin:
 
     reader_cls: type[ReadFile]
     dependency_module: str
-    dependency_attr: str
 
     @pytest.fixture
     def data_file(self, tmp_path: Path) -> str:
@@ -37,15 +37,27 @@ class ColumnDiscoveryContractTestMixin:
         described = self.reader_cls.describe_columns(data_file)
         assert set(names) == set(described.keys())
 
-    def test_raises_not_implemented_without_optional_dependency(
+    def test_describe_columns_accepts_path(self, data_file: str) -> None:
+        from_str = self.reader_cls.describe_columns(data_file)
+        from_path = self.reader_cls.describe_columns(Path(data_file))
+        assert from_path == from_str
+
+    def test_describe_columns_rejects_non_path_data_access(self) -> None:
+        with pytest.raises(ValueError):
+            self.reader_cls.describe_columns(DataAccessCollection(files={"dummy.csv"}))
+
+    def test_raises_import_error_without_optional_dependency(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     ) -> None:
         """Guard fires before any filesystem access, so a nonexistent path also raises."""
-        module = importlib.import_module(self.dependency_module)
-        monkeypatch.setattr(module, self.dependency_attr, None)
+        monkeypatch.setitem(cast(dict[str, Any], sys.modules), self.dependency_module, None)
         absent = str(tmp_path / "absent")
+        features = FeatureSet()
+        features.add(Feature("a1"))
 
-        with pytest.raises(NotImplementedError):
+        with pytest.raises(ImportError, match=r"mloda\[pyarrow\]"):
             self.reader_cls.get_column_names(absent)
-        with pytest.raises(NotImplementedError):
+        with pytest.raises(ImportError, match=r"mloda\[pyarrow\]"):
             self.reader_cls.describe_columns(absent)
+        with pytest.raises(ImportError, match=r"mloda\[pyarrow\]"):
+            self.reader_cls.load_data(absent, features)

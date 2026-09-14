@@ -2,15 +2,15 @@
 real columns instead of blindly declining a chain/column-separated name. Needs a real pyarrow install
 and a real file on disk."""
 
+import sys
 from collections.abc import Iterator
 from pathlib import Path
+from typing import Any, cast
 
 import pyarrow as pa
 import pyarrow.orc as pyarrow_orc
 import pytest
 
-import mloda_plugins.feature_group.input_data.read_files.feather as feather_module
-import mloda_plugins.feature_group.input_data.read_files.orc as orc_module
 from mloda.core.abstract_plugins.components.match_rejection import MATCH_REJECTION_REASONS, MatchRejection
 from mloda.provider import CHAIN_SEPARATOR
 from mloda_plugins.feature_group.input_data.read_files.feather import FeatherReader
@@ -86,18 +86,32 @@ class TestFeatherOrcPyarrowAbsenceGuardDeclinesMatch:
     def test_feather_reader_declines_chain_separated_name_without_pyarrow(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        monkeypatch.setattr(feather_module, "pyarrow_ipc", None)
+        monkeypatch.setitem(cast(dict[str, Any], sys.modules), "pyarrow.ipc", None)
 
         result = FeatherReader.match_read_file_data_access(["dummy.feather"], [f"a{CHAIN_SEPARATOR}b"])
 
         assert result is None
 
     def test_orc_reader_declines_chain_separated_name_without_pyarrow(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setattr(orc_module, "pyarrow_orc", None)
+        monkeypatch.setitem(cast(dict[str, Any], sys.modules), "pyarrow.orc", None)
 
         result = OrcReader.match_read_file_data_access(["dummy.orc"], [f"a{CHAIN_SEPARATOR}b"])
 
         assert result is None
+
+    def test_feather_reader_matches_plain_name_without_pyarrow(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setitem(cast(dict[str, Any], sys.modules), "pyarrow.ipc", None)
+
+        result = FeatherReader.match_read_file_data_access(["dummy.feather"], ["a"])
+
+        assert result == "dummy.feather"
+
+    def test_orc_reader_matches_plain_name_without_pyarrow(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setitem(cast(dict[str, Any], sys.modules), "pyarrow.orc", None)
+
+        result = OrcReader.match_read_file_data_access(["dummy.orc"], ["a"])
+
+        assert result == "dummy.orc"
 
 
 class TestFeatherOrcUnreadableFileDeclinesMatch:

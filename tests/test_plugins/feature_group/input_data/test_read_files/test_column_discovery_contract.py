@@ -19,8 +19,7 @@ from tests.test_plugins.feature_group.input_data.test_read_files.column_discover
 
 class TestFeatherColumnDiscoveryContract(ColumnDiscoveryContractTestMixin):
     reader_cls = FeatherReader
-    dependency_module = "mloda_plugins.feature_group.input_data.read_files.feather"
-    dependency_attr = "pyarrow_ipc"
+    dependency_module = "pyarrow.ipc"
 
     @pytest.fixture
     def data_file(self, tmp_path: Path) -> str:
@@ -34,8 +33,7 @@ class TestFeatherColumnDiscoveryContract(ColumnDiscoveryContractTestMixin):
 
 class TestOrcColumnDiscoveryContract(ColumnDiscoveryContractTestMixin):
     reader_cls = OrcReader
-    dependency_module = "mloda_plugins.feature_group.input_data.read_files.orc"
-    dependency_attr = "pyarrow_orc"
+    dependency_module = "pyarrow.orc"
 
     @pytest.fixture
     def data_file(self, tmp_path: Path) -> str:
@@ -50,8 +48,7 @@ class TestOrcColumnDiscoveryContract(ColumnDiscoveryContractTestMixin):
 
 class TestJsonColumnDiscoveryContract(ColumnDiscoveryContractTestMixin):
     reader_cls = JsonReader
-    dependency_module = "mloda_plugins.feature_group.input_data.read_files.json"
-    dependency_attr = "pyarrow_json"
+    dependency_module = "pyarrow.json"
 
     @pytest.fixture
     def data_file(self, tmp_path: Path) -> str:
@@ -66,8 +63,7 @@ class TestJsonColumnDiscoveryContract(ColumnDiscoveryContractTestMixin):
 
 class TestParquetColumnDiscoveryContract(ColumnDiscoveryContractTestMixin):
     reader_cls = ParquetReader
-    dependency_module = "mloda_plugins.feature_group.input_data.read_files.parquet"
-    dependency_attr = "pyarrow_parquet"
+    dependency_module = "pyarrow.parquet"
 
     @pytest.fixture
     def data_file(self, tmp_path: Path) -> str:

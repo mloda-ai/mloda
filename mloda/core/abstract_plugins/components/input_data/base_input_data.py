@@ -1,6 +1,9 @@
+import functools
 import logging
+import sys
 from abc import ABC
-from typing import Any, ClassVar
+from collections.abc import Callable
+from typing import Any, ClassVar, TypeVar, cast
 
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.abstract_plugins.components.data_types import DataType
@@ -543,6 +546,18 @@ class BaseInputData(ABC):
         can't enumerate columns. A duplicate physical column name collapses to one entry."""
         raise NotImplementedError
 
+    @staticmethod
+    def _require_dependency(module: Any, *, file_format: str | None = None) -> None:
+        """Raise ImportError with an install hint when `file_format` is given (load_data's contract);
+        otherwise raise a bare NotImplementedError, the signal validate_columns treats as non-fatal."""
+        if module is not None:
+            return
+        if file_format is None:
+            raise NotImplementedError
+        raise ImportError(
+            f"pyarrow is required to read {file_format} files. Install it with: pip install 'mloda[pyarrow]'"
+        )
+
     @classmethod
     def _has_suffix(cls) -> bool:
         """Check if this class implements suffix() (concrete subclass vs abstract base)."""
@@ -590,6 +605,27 @@ class BaseInputData(ABC):
             return valid_candidates[0]
         # Marked: same as the mixed batch above.
         raise escalate_match_abort(ValueError(f"Features in batch are pinned to different files: {pinned_paths}"))
+
+
+F = TypeVar("F", bound=Callable[..., Any])
+
+
+def requires_dependency(module_attr: str, *, file_format: str | None = None) -> Callable[[F], F]:
+    """Decorator: before calling the wrapped classmethod, raise if the named module-level
+    attribute (e.g. "pyarrow_json") is None in the wrapped function's own module. Looked up
+    by name at call time so a test's monkeypatch is honored. See BaseInputData._require_dependency
+    for which exception this raises and why."""
+
+    def decorator(func: F) -> F:
+        @functools.wraps(func)
+        def wrapper(*args: Any, **kwargs: Any) -> Any:
+            module = sys.modules[func.__module__]
+            BaseInputData._require_dependency(getattr(module, module_attr), file_format=file_format)
+            return func(*args, **kwargs)
+
+        return cast(F, wrapper)
+
+    return decorator
 
 
 def _collect_filtered_subclasses(cls: Any, parent_class: Any) -> list[type[BaseInputData]]:

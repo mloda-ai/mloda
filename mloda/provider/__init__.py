@@ -36,7 +36,7 @@ from mloda.core.abstract_plugins.components.utils import get_all_subclasses
 from mloda.core.abstract_plugins.components.feature_set import FeatureSet
 
 # Input data classes
-from mloda.core.abstract_plugins.components.input_data.base_input_data import BaseInputData
+from mloda.core.abstract_plugins.components.input_data.base_input_data import BaseInputData, requires_dependency
 from mloda.core.abstract_plugins.components.input_data.file_source import FileSource
 from mloda.core.abstract_plugins.components.input_data.input_data_descriptor import InputDataDescriptor
 from mloda.core.abstract_plugins.components.input_data.api.api_input_data import ApiInputData
@@ -141,6 +141,7 @@ __all__ = [
     "FeatureSet",
     # Input data
     "BaseInputData",
+    "requires_dependency",
     "FileSource",
     "InputDataDescriptor",
     "ApiInputData",

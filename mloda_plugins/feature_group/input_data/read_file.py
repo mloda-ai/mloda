@@ -1,9 +1,6 @@
-import functools
 import os
-import sys
-from collections.abc import Callable
 from pathlib import Path
-from typing import Any, ClassVar, TypeVar, cast
+from typing import Any, ClassVar
 from mloda.user import DataAccessCollection
 from mloda.provider import FeatureSet
 from mloda.provider import (
@@ -90,18 +87,6 @@ class ReadFile(BaseInputData):
         This function should be implemented by child classes.
         """
         raise NotImplementedError
-
-    @staticmethod
-    def _require_dependency(module: Any, *, file_format: str | None = None) -> None:
-        """Raise ImportError with an install hint when `file_format` is given (load_data's contract);
-        otherwise raise a bare NotImplementedError, the signal validate_columns treats as non-fatal."""
-        if module is not None:
-            return
-        if file_format is None:
-            raise NotImplementedError
-        raise ImportError(
-            f"pyarrow is required to read {file_format} files. Install it with: pip install 'mloda[pyarrow]'"
-        )
 
     @classmethod
     def _final_reader_requires(cls) -> tuple[str, ...]:
@@ -248,24 +233,3 @@ class ReadFile(BaseInputData):
             )
             return False
         return True
-
-
-F = TypeVar("F", bound=Callable[..., Any])
-
-
-def requires_dependency(module_attr: str, *, file_format: str | None = None) -> Callable[[F], F]:
-    """Decorator: before calling the wrapped classmethod, raise if the named module-level
-    attribute (e.g. "pyarrow_json") is None in the wrapped function's own module. Looked up
-    by name at call time so a test's monkeypatch is honored. See ReadFile._require_dependency
-    for which exception this raises and why."""
-
-    def decorator(func: F) -> F:
-        @functools.wraps(func)
-        def wrapper(*args: Any, **kwargs: Any) -> Any:
-            module = sys.modules[func.__module__]
-            ReadFile._require_dependency(getattr(module, module_attr), file_format=file_format)
-            return func(*args, **kwargs)
-
-        return cast(F, wrapper)
-
-    return decorator

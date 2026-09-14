@@ -5,9 +5,9 @@ try:
 except ImportError:
     pyarrow_orc = None
 
-from mloda.provider import FeatureSet
+from mloda.provider import FeatureSet, requires_dependency
 from mloda.user import DataType
-from mloda_plugins.feature_group.input_data.read_file import ReadFile, requires_dependency
+from mloda_plugins.feature_group.input_data.read_file import ReadFile
 
 
 class OrcReader(ReadFile):

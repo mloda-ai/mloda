@@ -155,28 +155,8 @@ class ComputeFrameworkExecutor:
         cfw_uuid: UUID | None = None
         if tfs_ids:
             cls_name = compute_framework.get_class_name()
-            cfw_uuid = self.cfw_register.get_unique_cfw_uuid(cls_name, tfs_ids)
-
-            # Mirrors prepare_execute_step's cross-check: a raw own-key resolution only proves
-            # this hop's own cfw exists, not that it, rather than an already-established cfw a
-            # redundant hop leaves unused, is where this step's own finished data actually lives.
-            if cfw_uuid is not None and cfw_uuid in tfs_ids:
-                by_feature_uuid = self.cfw_register.get_cfw_uuid(cls_name, feature_uuid)
-                if by_feature_uuid is not None:
-                    cfw_uuid = by_feature_uuid
-
-            # get_unique_cfw_uuid defers, rather than picks, when several tfs_ids are each
-            # independently some cfw's own key (e.g. redundant sibling hops out of one shared
-            # source, see mloda-ai/mloda#1428). An already-established cfw feature_uuid already
-            # belongs to (e.g. a chained join's final destination) is tried first; only then is
-            # each tfs_id candidate tried directly.
-            if cfw_uuid is None:
-                cfw_uuid = self.cfw_register.get_cfw_uuid(cls_name, feature_uuid)
-            if cfw_uuid is None:
-                for candidate_uuid in tfs_ids:
-                    cfw_uuid = self.cfw_register.get_cfw_uuid(cls_name, candidate_uuid)
-                    if cfw_uuid is not None:
-                        break
+            # See CfwManager.resolve_cfw_uuid_by_tfs_ids for the shared fallback chain.
+            cfw_uuid = self.cfw_register.resolve_cfw_uuid_by_tfs_ids(cls_name, tfs_ids, feature_uuid)
 
         if cfw_uuid is None:
             cfw_uuid = self.cfw_register.get_initialized_compute_framework_uuid(
@@ -211,34 +191,13 @@ class ComputeFrameworkExecutor:
 
         if isinstance(step, FeatureGroupStep):
             cls_name = step.compute_framework.get_class_name()
-            resolved_uuid = self.cfw_register.get_unique_cfw_uuid(cls_name, step.tfs_ids)
-
-            # A resolution that is still literally one of the queried tfs_ids (not an existing,
-            # pre-registered cfw the ids merely point at) only proves this hop's own freshly
-            # created cfw exists; it does not prove this step should read from it over an
-            # already-established cfw an unrelated, redundant hop into the same framework leaves
-            # unused. Cross-check against the step's own feature uuid only
-            # in that case, preferring it when it already resolves to something.
-            if resolved_uuid is not None and resolved_uuid in step.tfs_ids and step.features.any_uuid is not None:
-                by_feature_uuid = self.cfw_register.get_cfw_uuid(cls_name, step.features.any_uuid)
-                if by_feature_uuid is not None:
-                    resolved_uuid = by_feature_uuid
-
-            if resolved_uuid is None:
-                # get_unique_cfw_uuid defers, rather than picks, when several tfs_ids are each
-                # independently some cfw's own key (e.g. redundant sibling hops out of one shared
-                # source, see mloda-ai/mloda#1428). An already-established cfw the consumer's own
-                # output uuid already belongs to (e.g. a chained join's final destination) is tried
-                # first, same as add_compute_framework's own check below; only then is each tfs_id
-                # candidate tried directly, since any one of them beats creating a brand new, empty
-                # cfw for a step that really has an existing home.
-                if step.features.any_uuid is not None:
-                    resolved_uuid = self.cfw_register.get_cfw_uuid(cls_name, step.features.any_uuid)
-                if resolved_uuid is None:
-                    for candidate_uuid in step.tfs_ids:
-                        resolved_uuid = self.cfw_register.get_cfw_uuid(cls_name, candidate_uuid)
-                        if resolved_uuid is not None:
-                            break
+            # See CfwManager.resolve_cfw_uuid_by_tfs_ids for the shared fallback chain: an
+            # already-established cfw the step's own output uuid already belongs to (e.g. a chained
+            # join's final destination) wins over creating a brand new, empty cfw for a step that
+            # really has an existing home.
+            resolved_uuid = self.cfw_register.resolve_cfw_uuid_by_tfs_ids(
+                cls_name, step.tfs_ids, step.features.any_uuid
+            )
 
             if resolved_uuid is not None:
                 return resolved_uuid

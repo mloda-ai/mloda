@@ -197,6 +197,49 @@ class TestCfwManagerGetCfwUuidBackHopResolution:
         assert cfw_register_b_then_a.get_unique_cfw_uuid(cls_name, tfs_ids) == cfw_a
 
 
+class TestCfwManagerGetCfwUuidAsRegisteredTieSafety:
+    """get_cfw_uuid_as_registered mirrors get_cfw_uuid's narrowest-children_if_root-wins tie-break
+    (but not its find_leftmost canonicalization, by design): a same-framework JoinStep's source side
+    can span more than one FeatureGroupStep, so add_tfs's same-framework JoinStep branch can tag more
+    than one FeatureGroupStep's own children_if_root with the same join link uuid."""
+
+    def test_prefers_the_narrower_children_if_root_over_an_earlier_broader_one(self) -> None:
+        cfw_register = CfwManager({ParallelizationMode.SYNC})
+        cls_name = "PythonDictFramework"
+        link_uuid = uuid4()
+        broad_cfw_uuid = uuid4()
+        narrow_cfw_uuid = uuid4()
+
+        cfw_register.add_cfw_to_compute_frameworks(broad_cfw_uuid, cls_name, {link_uuid, uuid4()})
+        cfw_register.add_cfw_to_compute_frameworks(narrow_cfw_uuid, cls_name, {link_uuid})
+
+        resolved = cfw_register.get_cfw_uuid_as_registered(cls_name, link_uuid)
+
+        assert resolved == narrow_cfw_uuid
+
+    def test_does_not_pick_a_winner_between_two_identically_childrened_same_class_cfws(self) -> None:
+        """Two FeatureGroupSteps tagged with the same join link uuid, each producing genuinely
+        distinct data but with an IDENTICAL children_if_root set (e.g. each carries only that one
+        link uuid), give this lookup no signal to prefer one over the other. It must not silently
+        pick a winner by registration order; it must defer by returning None."""
+        cls_name = "PythonDictFramework"
+        link_uuid = uuid4()
+
+        cfw_register_a_then_b = CfwManager({ParallelizationMode.SYNC})
+        cfw_a = uuid4()
+        cfw_b = uuid4()
+        cfw_register_a_then_b.add_cfw_to_compute_frameworks(cfw_a, cls_name, {link_uuid})
+        cfw_register_a_then_b.add_cfw_to_compute_frameworks(cfw_b, cls_name, {link_uuid})
+
+        assert cfw_register_a_then_b.get_cfw_uuid_as_registered(cls_name, link_uuid) is None
+
+        cfw_register_b_then_a = CfwManager({ParallelizationMode.SYNC})
+        cfw_register_b_then_a.add_cfw_to_compute_frameworks(cfw_b, cls_name, {link_uuid})
+        cfw_register_b_then_a.add_cfw_to_compute_frameworks(cfw_a, cls_name, {link_uuid})
+
+        assert cfw_register_b_then_a.get_cfw_uuid_as_registered(cls_name, link_uuid) is None
+
+
 class TestCfwManagerGetUniqueCfwUuidOwnKeyAmbiguityAfterMerge:
     """get_unique_cfw_uuid classifies each tfs_id's resolution as an own-key match (never
     ambiguous: two independent hops into one framework class is a normal, non-ambiguous shape) or

@@ -1199,6 +1199,112 @@ class _ChainHopChain3FG(FeatureGroup):
         return {"chain_hop_chain3_val"}
 
 
+class _CoarseGuardRootFG(FeatureGroup):
+    """Root: the source side of a cross-framework join AND feeds a same-framework descendant
+    below. The root and the descendant are distinct FeatureGroupSteps, but share ONE physical cfw
+    instance at runtime, since no framework transition separates them."""
+
+    @classmethod
+    def input_data(cls) -> BaseInputData | None:
+        return DataCreator({"coarse_guard_key", "coarse_guard_root_val"})
+
+    @classmethod
+    def index_columns(cls) -> list[Index] | None:
+        return [Index(("coarse_guard_key",))]
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PythonDictFramework}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return {"coarse_guard_key": [1, 2, 3], "coarse_guard_root_val": [1, 2, 3]}
+
+
+class _CoarseGuardDescendantFG(FeatureGroup):
+    """Same-framework descendant of the root: owns the plain hop's own source identity below,
+    though it shares the root's physical cfw instance at runtime."""
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return {Feature("coarse_guard_root_val")}
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PythonDictFramework}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        # Merges with, rather than replaces, the incoming dict: the root and this step share one
+        # physical cfw, so `coarse_guard_key` must survive for the join hop reading it later.
+        return {**data, "coarse_guard_descendant_val": [v * 2 for v in data["coarse_guard_root_val"]]}
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {"coarse_guard_descendant_val"}
+
+
+class _CoarseGuardHopDestFG(FeatureGroup):
+    """Plain (non-join) cross-framework hop consumer of the descendant."""
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return {Feature("coarse_guard_descendant_val")}
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PyArrowTable}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return data.append_column("coarse_guard_hop_val", pc.add(data["coarse_guard_descendant_val"], 1))
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {"coarse_guard_hop_val"}
+
+
+class _CoarseGuardJoinOtherSideFG(FeatureGroup):
+    """Join's other side, forcing a cross-framework JoinStep whose source side is the root
+    above, the same physical cfw the descendant's plain hop also reads."""
+
+    @classmethod
+    def input_data(cls) -> BaseInputData | None:
+        return DataCreator({"coarse_guard_key", "coarse_guard_other_val"})
+
+    @classmethod
+    def index_columns(cls) -> list[Index] | None:
+        return [Index(("coarse_guard_key",))]
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PyArrowTable}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return pa.table({"coarse_guard_key": [1, 2, 3], "coarse_guard_other_val": [10, 20, 30]})
+
+
+class _CoarseGuardJoinConsumerFG(FeatureGroup):
+    """Sole consumer of the join; reads both sides, forcing the join's own hop to move the root's
+    data (the descendant's shared physical cfw) into PyArrowTable."""
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return {Feature("coarse_guard_root_val"), Feature("coarse_guard_other_val")}
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PyArrowTable}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return data.append_column(
+            "coarse_guard_join_sum", pc.add(data["coarse_guard_root_val"], data["coarse_guard_other_val"])
+        )
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {"coarse_guard_join_sum"}
+
+
 @pytest.mark.timeout(30)
 @pytest.mark.skipif(pa is None, reason="PyArrow not installed.")
 class TestTransformFrameworkStepSourceRootDropTiming:
@@ -1515,6 +1621,106 @@ class TestTransformFrameworkStepSourceRootDropTiming:
 
         leftover = FlightServer.list_flight_infos(flight_server.location)
         assert leftover == set(), f"leaked flight tables: {leftover}"
+
+    def test_descendant_hop_stays_safe_while_shared_root_is_also_a_join_source(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """#1423's per-source owed-token guard keys hop-source identity on the OWNING STEP uuid,
+        coarser than true physical-cfw identity: `_CoarseGuardRootFG` and `_CoarseGuardDescendantFG`
+        are distinct FeatureGroupSteps that share ONE physical cfw at runtime, and the root is also
+        a cross-framework join's source side. The guard's own per-step check alone would call the
+        descendant's plain hop eligible for credit (its owning step differs from the join source's
+        owning step), but the transitive children_if_root gate downstream still waits on the join's
+        own read of the shared cfw, so the result stays correct regardless. An `add_compute_framework`
+        spy confirms the root and descendant do in fact share one PythonDictFramework cfw uuid."""
+        plugin_collector = PluginCollector.enabled_feature_groups(
+            {
+                _CoarseGuardRootFG,
+                _CoarseGuardDescendantFG,
+                _CoarseGuardHopDestFG,
+                _CoarseGuardJoinOtherSideFG,
+                _CoarseGuardJoinConsumerFG,
+            }
+        )
+        link = Link.inner(
+            JoinSpec(_CoarseGuardRootFG, Index(("coarse_guard_key",))),
+            JoinSpec(_CoarseGuardJoinOtherSideFG, Index(("coarse_guard_key",))),
+        )
+
+        python_dict_cfw_uuids: list[str] = []
+        original_add_cfw = ComputeFrameworkExecutor.add_compute_framework
+
+        def _spy_add_cfw(
+            self: Any, step: Any, parallelization_mode: Any, feature_uuid: Any, children_if_root: Any
+        ) -> Any:
+            result_uuid = original_add_cfw(self, step, parallelization_mode, feature_uuid, children_if_root)
+            if step.compute_framework is PythonDictFramework:
+                python_dict_cfw_uuids.append(str(result_uuid))
+            return result_uuid
+
+        monkeypatch.setattr(ComputeFrameworkExecutor, "add_compute_framework", _spy_add_cfw)
+
+        result = mloda.run_all(
+            [Feature("coarse_guard_hop_val"), Feature("coarse_guard_join_sum")],
+            compute_frameworks={PythonDictFramework, PyArrowTable},
+            plugin_collector=plugin_collector,
+            links={link},
+            parallelization_modes={ParallelizationMode.SYNC},
+        )
+
+        assert result is not None
+        by_columns = {tuple(table.column_names): table for table in result}
+        assert by_columns[("coarse_guard_hop_val",)].column("coarse_guard_hop_val").to_pylist() == [3, 5, 7]
+        assert by_columns[("coarse_guard_join_sum",)].column("coarse_guard_join_sum").to_pylist() == [11, 22, 33]
+
+        assert len(set(python_dict_cfw_uuids)) == 1, (
+            f"expected the root and its same-framework descendant to share one physical cfw, "
+            f"got {python_dict_cfw_uuids}"
+        )
+
+    def test_descendant_hop_stays_safe_while_shared_root_is_also_a_join_source_under_scheduling_jitter(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Same shape as the test above, replayed under seeded scheduling jitter: SYNC's ordinary
+        scheduling could otherwise mask a wrong drop by always running the join's own hop before the
+        descendant hop's drop-check, the same reason the diamond-descendant test above needs its
+        jitter twin."""
+        plugin_collector = PluginCollector.enabled_feature_groups(
+            {
+                _CoarseGuardRootFG,
+                _CoarseGuardDescendantFG,
+                _CoarseGuardHopDestFG,
+                _CoarseGuardJoinOtherSideFG,
+                _CoarseGuardJoinConsumerFG,
+            }
+        )
+        link = Link.inner(
+            JoinSpec(_CoarseGuardRootFG, Index(("coarse_guard_key",))),
+            JoinSpec(_CoarseGuardJoinOtherSideFG, Index(("coarse_guard_key",))),
+        )
+
+        def _run() -> Any:
+            return mloda.run_all(
+                [Feature("coarse_guard_hop_val"), Feature("coarse_guard_join_sum")],
+                compute_frameworks={PythonDictFramework, PyArrowTable},
+                plugin_collector=plugin_collector,
+                links={link},
+                parallelization_modes={ParallelizationMode.SYNC},
+            )
+
+        for seed, result in run_under_scheduling_jitter(_run, seeds=[1, 2, 3, 4, 5], monkeypatch=monkeypatch):
+            assert result is not None, f"seed {seed} produced no result"
+            by_columns = {tuple(table.column_names): table for table in result}
+            assert by_columns[("coarse_guard_hop_val",)].column("coarse_guard_hop_val").to_pylist() == [
+                3,
+                5,
+                7,
+            ], f"seed {seed} produced a wrong hop result"
+            assert by_columns[("coarse_guard_join_sum",)].column("coarse_guard_join_sum").to_pylist() == [
+                11,
+                22,
+                33,
+            ], f"seed {seed} produced a wrong join result"
 
 
 class _H3ChainRootPandasFG(FeatureGroup):

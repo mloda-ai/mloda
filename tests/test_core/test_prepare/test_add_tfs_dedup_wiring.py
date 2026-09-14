@@ -266,7 +266,11 @@ def test_two_hops_from_the_same_feature_group_class_do_not_raise() -> None:
 
 def test_parents_linked_by_join_requires_genuine_opposite_sides() -> None:
     """required_uuids on a JoinStep holds every parent of its consumers, not just its own two
-    sides; two parents merely co-occurring there must not read as linked."""
+    sides; two parents merely co-occurring there must not read as linked. Each side is also
+    widened to its own graph ancestors first (see _parents_linked_by_join's own docstring), so a
+    populated parent_to_children_mapping (ancestor set) needs its own coverage: an ancestor that
+    genuinely bridges to a join side must resolve True, and a populated-but-unrelated ancestor set
+    must still resolve False, not over-widen."""
     a, b, dest, src, unrelated = uuid4(), uuid4(), uuid4(), uuid4(), uuid4()
     link = Link.inner(JoinSpec(DedupLeftFG, "id"), JoinSpec(DedupRightFG, "id"))
     join_step = JoinStep(
@@ -281,6 +285,20 @@ def test_parents_linked_by_join_requires_genuine_opposite_sides() -> None:
     graph = Graph()
     assert ExecutionPlan._parents_linked_by_join(a, b, {join_step}, graph) is False
     assert ExecutionPlan._parents_linked_by_join(dest, src, {join_step}, graph) is True
+
+    # (a) A derived feature's own ancestor is a genuine join side (src); widening must bridge it
+    # to the join's other genuine side (dest) through that ancestor, not just through its own uuid.
+    derived = uuid4()
+    graph.parent_to_children_mapping[derived] = {src}
+    assert ExecutionPlan._parents_linked_by_join(derived, dest, {join_step}, graph) is True
+
+    # (b) Both sides have a populated, but genuinely unrelated, ancestor set: widening must not
+    # over-widen a link out of thin air.
+    unrelated_a, unrelated_a_ancestor = uuid4(), uuid4()
+    unrelated_b, unrelated_b_ancestor = uuid4(), uuid4()
+    graph.parent_to_children_mapping[unrelated_a] = {unrelated_a_ancestor}
+    graph.parent_to_children_mapping[unrelated_b] = {unrelated_b_ancestor}
+    assert ExecutionPlan._parents_linked_by_join(unrelated_a, unrelated_b, {join_step}, graph) is False
 
 
 # ---------------------------------------------------------------------------

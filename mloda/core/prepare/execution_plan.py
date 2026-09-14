@@ -266,7 +266,14 @@ class ExecutionPlan:
         hop's parent (e.g. a derived feature) never sits on a JoinStep's side itself, only its own
         upstream dependency does, so the bridge must be found through that dependency, not through
         whichever sibling request happens to have pulled the join's index feature into its own parents
-        (an accident of feature-intake order, not a meaningful distinction)."""
+        (an accident of feature-intake order, not a meaningful distinction).
+
+        This ancestor widening and the subclass-clustering `issubclass` check in `_entries_linked`
+        (see add_tfs) are two independent mechanisms that can each decide two hops/entries are
+        "linked"; either one alone deciding "linked" is safe only because the subclass-clustering
+        required_uuids widening it feeds into (added for the over-eager-linking issue that mechanism
+        itself was originally filed for) makes both hops correctly wait on each other's data, rather
+        than silently dropping one hop's."""
         if uuid_a == uuid_b:
             return True
 
@@ -682,11 +689,17 @@ Available join types:
 
         # A hop's SOURCE-side cfw is credited via owed_tokens, letting it drop once read. Multi-route rule: a consumer
         # reaching two or more hops out of one source framework is credited by none, since one hop finishing could drop
-        # the cfw while another still reads it. Per-source guard: a hop is ineligible when its
-        # OWN source data - not merely its framework class - is also the source or destination of another JoinStep,
-        # which may still read into or merge the same physical cfw the hop's credit would resolve to (see
-        # CfwManager.find_leftmost/get_cfw_uuid). Scope: a join hop credits only its destination-framework consumer;
-        # APPEND/UNION hops stay finalize-only.
+        # the cfw while another still reads it. Per-source guard: a hop is ineligible when its OWN source data - not
+        # merely its framework class - is also the source or destination of another JoinStep. The identity check is
+        # OWNING-STEP granularity (which FeatureGroupStep produced the data), not true physical-cfw granularity:
+        # several FeatureGroupSteps in one same-framework chain under a root can share ONE physical cfw instance at
+        # runtime (ComputeFrameworkExecutor.add_compute_framework reuses an existing cfw whenever CfwManager.get_cfw_uuid
+        # finds the feature in some cfw's children_if_root), so two different owning steps can disagree with true cfw
+        # sharing. That can only make the guard MORE conservative, never less: the transitive children_if_root
+        # membership check the runtime drop path applies downstream (see run.py's _drop_tfs_source_if_possible /
+        # _drop_join_source_if_possible) still gates the actual drop on every real reader of the shared cfw, whatever
+        # this guard decided. Scope: a join hop credits only its destination-framework consumer; APPEND/UNION hops
+        # stay finalize-only.
         joinsteps_by_uuid: dict[UUID, JoinStep] = {js.uuid: js for js in left_join_frameworks}
 
         def _owning_step(feature_uuid: UUID) -> UUID:
@@ -699,8 +712,8 @@ Available join types:
         route_tokens_by_hop: dict[UUID, set[UUID]] = {}
         hop_from_framework: dict[UUID, type[ComputeFramework]] = {}
         eligible_hops: dict[UUID, TransformFrameworkStep] = {}
-        # A hop's own source, keyed by hop uuid, for every hop whose source identity resolved (see
-        # the fail-closed branch below); read by the transitive reach walk further down.
+        # A hop's own source, keyed by hop uuid; always resolved (see the invariant checks below),
+        # read by the transitive reach walk further down.
         hop_source_owner_by_hop: dict[UUID, UUID] = {}
         for _ep in new_execution_plan:
             if not isinstance(_ep, TransformFrameworkStep):
@@ -723,37 +736,43 @@ Available join types:
             # The hop's own source identity, normalized to the owning FeatureGroupStep: a plain
             # hop's source_step_uuid is already that owner; a join hop's source_framework_uuid is
             # the raw feature uuid the served JoinStep reads from, so it needs the same normalizing.
+            # Both are always resolvable given how hops are built: a plain hop's source_step_uuid is
+            # set unconditionally above (owning_step_of.get(parent, parent) never returns None), and
+            # _validate_join_step_uuids guarantees every JoinStep - hence fill_tfs_by_joinstep's hop -
+            # has a non-empty source_framework_uuids, so a join hop's source_framework_uuid is never
+            # None either.
             if _ep.link_id is None:
-                hop_source_owner: UUID | None = _ep.source_step_uuid
-            elif _ep.source_framework_uuid is not None:
+                if _ep.source_step_uuid is None:
+                    raise ValueError(
+                        internal_invariant_error(
+                            "Plain hop has no source_step_uuid.",
+                            f"hop uuid={_ep.uuid}, from_framework={_ep.from_framework.get_class_name()}",
+                            "add_tfs always sets source_step_uuid when building a plain hop.",
+                        )
+                    )
+                hop_source_owner: UUID = _ep.source_step_uuid
+            else:
+                if _ep.source_framework_uuid is None:
+                    raise ValueError(
+                        internal_invariant_error(
+                            "Join hop has no source_framework_uuid.",
+                            f"hop uuid={_ep.uuid}, link_id={_ep.link_id}",
+                            "_validate_join_step_uuids guarantees every JoinStep has a non-empty "
+                            "source_framework_uuids.",
+                        )
+                    )
                 hop_source_owner = _owning_step(_ep.source_framework_uuid)
-            else:
-                hop_source_owner = None
 
-            if hop_source_owner is not None:
-                hop_source_owner_by_hop[_ep.uuid] = hop_source_owner
+            hop_source_owner_by_hop[_ep.uuid] = hop_source_owner
 
-            if hop_source_owner is not None:
-                other_join_source_owners = {
-                    _owning_step(uuid)
-                    for js in joinsteps_by_uuid.values()
-                    if js.uuid not in served_joinstep_uuids
-                    for uuid in (js.source_framework_uuids | js.destination_framework_uuids)
-                }
-                if hop_source_owner in other_join_source_owners:
-                    continue
-            else:
-                # Fail closed: the hop's own source identity could not be resolved (should not
-                # happen given add_tfs always sets one of the two fields), fall back to the
-                # conservative framework-class guard rather than assume eligibility.
-                other_join_frameworks = {
-                    fw
-                    for js in joinsteps_by_uuid.values()
-                    if js.uuid not in served_joinstep_uuids
-                    for fw in (js.source_framework, js.destination_framework)
-                }
-                if _ep.from_framework in other_join_frameworks:
-                    continue
+            other_join_source_owners = {
+                _owning_step(uuid)
+                for js in joinsteps_by_uuid.values()
+                if js.uuid not in served_joinstep_uuids
+                for uuid in (js.source_framework_uuids | js.destination_framework_uuids)
+            }
+            if hop_source_owner in other_join_source_owners:
+                continue
 
             eligible_hops[_ep.uuid] = _ep
 
@@ -775,22 +794,63 @@ Available join types:
         # folds in whatever that dependency itself already reaches. A raw ancestor token whose owner's
         # framework does NOT match is the ancestor set's own leftover bookkeeping - the same
         # dependency is already captured, framework-correctly, by its own hop token elsewhere in
-        # required_uuids - so it is skipped rather than read as a spurious bypass. One pass per step,
-        # memoized, keeps this in the same O(steps * features) class as the rest of this block.
+        # required_uuids - so it is skipped rather than read as a spurious bypass.
+        #
+        # Complexity: memoization visits each step once, but FeatureGroupStep.required_uuids holds
+        # the FULL TRANSITIVE ancestor set, not just direct parents, so a chain of N same-framework
+        # steps makes this walk do O(N) token-loop work per step across O(N) steps, merging O(N)-sized
+        # by_owner dicts at each - roughly O(N^3) for one long single-framework chain, not the
+        # O(steps * features) bound elsewhere in this block.
+        #
+        # Recursion depth: an explicit worklist, not native recursion, walks the dependency DAG below,
+        # so an arbitrarily long single-framework chain cannot raise RecursionError; this assumes the
+        # step dependency graph is acyclic, an invariant the rest of add_tfs already relies on.
         reach_cache: dict[UUID, dict[UUID, frozenset[UUID | None]]] = {}
         all_hops_cache: dict[UUID, frozenset[UUID]] = {}
 
-        def _reach(step_uuid: UUID) -> dict[UUID, frozenset[UUID | None]]:
-            cached = reach_cache.get(step_uuid)
+        def _reach(start_uuid: UUID) -> dict[UUID, frozenset[UUID | None]]:
+            cached = reach_cache.get(start_uuid)
             if cached is not None:
                 return cached
-            reach_cache[step_uuid] = {}
-            all_hops_cache[step_uuid] = frozenset()
 
-            step = feature_group_steps_by_uuid.get(step_uuid)
-            by_owner: dict[UUID, set[UUID | None]] = defaultdict(set)
-            hops: set[UUID] = set()
-            if step is not None:
+            work: list[tuple[UUID, bool]] = [(start_uuid, False)]
+            while work:
+                step_uuid, dependencies_ready = work.pop()
+                if step_uuid in reach_cache:
+                    continue
+
+                step = feature_group_steps_by_uuid.get(step_uuid)
+                if step is None:
+                    reach_cache[step_uuid] = {}
+                    all_hops_cache[step_uuid] = frozenset()
+                    continue
+
+                if not dependencies_ready:
+                    pending: list[UUID] = []
+                    for token in step.required_uuids:
+                        hop_uuid = hop_uuid_by_route_token.get(token)
+                        if hop_uuid is not None:
+                            owner = hop_source_owner_by_hop.get(hop_uuid)
+                            if owner is not None and owner not in reach_cache:
+                                pending.append(owner)
+                            continue
+
+                        dep_uuid = owning_step_of.get(token)
+                        if dep_uuid is None or dep_uuid == step_uuid:
+                            continue
+                        dep_step = feature_group_steps_by_uuid.get(dep_uuid)
+                        if dep_step is None or dep_step.compute_framework != step.compute_framework:
+                            continue
+                        if dep_uuid not in reach_cache:
+                            pending.append(dep_uuid)
+
+                    if pending:
+                        work.append((step_uuid, True))
+                        work.extend((dep_uuid, False) for dep_uuid in pending)
+                        continue
+
+                by_owner: dict[UUID, set[UUID | None]] = defaultdict(set)
+                hops: set[UUID] = set()
                 for token in step.required_uuids:
                     hop_uuid = hop_uuid_by_route_token.get(token)
                     if hop_uuid is not None:
@@ -798,7 +858,7 @@ Available join types:
                         owner = hop_source_owner_by_hop.get(hop_uuid)
                         if owner is not None:
                             by_owner[owner].add(hop_uuid)
-                            for other_owner, markers in _reach(owner).items():
+                            for other_owner, markers in reach_cache[owner].items():
                                 by_owner[other_owner] |= markers
                             hops |= all_hops_cache[owner]
                         continue
@@ -810,14 +870,14 @@ Available join types:
                     if dep_step is None or dep_step.compute_framework != step.compute_framework:
                         continue
                     by_owner[dep_uuid].add(None)
-                    for other_owner, markers in _reach(dep_uuid).items():
+                    for other_owner, markers in reach_cache[dep_uuid].items():
                         by_owner[other_owner] |= markers
                     hops |= all_hops_cache[dep_uuid]
 
-            frozen = {owner: frozenset(markers) for owner, markers in by_owner.items()}
-            reach_cache[step_uuid] = frozen
-            all_hops_cache[step_uuid] = frozenset(hops)
-            return frozen
+                reach_cache[step_uuid] = {owner: frozenset(markers) for owner, markers in by_owner.items()}
+                all_hops_cache[step_uuid] = frozenset(hops)
+
+            return reach_cache[start_uuid]
 
         owed_by_hop: dict[UUID, set[UUID]] = {hop_uuid: set() for hop_uuid in eligible_hops}
         for _consumer in new_execution_plan:

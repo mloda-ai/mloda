@@ -44,6 +44,11 @@ def _feature_group_step(tfs_ids: set[UUID]) -> Mock:
     step.compute_framework = Mock()
     step.compute_framework.get_class_name.return_value = CLASS_NAME
     step.get_parallelization_mode.return_value = set()
+    # A real FeatureGroupStep always has .features set; resolve_cfw_uuid_by_tfs_ids's callers
+    # read .features.any_uuid unconditionally as an argument. Tests that care about its value
+    # override it themselves below.
+    step.features = Mock()
+    step.features.any_uuid = uuid4()
     return step
 
 

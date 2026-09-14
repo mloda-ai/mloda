@@ -1039,7 +1039,9 @@ class _DiamondHopDestFG(FeatureGroup):
 class _DiamondHopDescendantFG(FeatureGroup):
     """Reads the root DIRECTLY (same framework as the root, not via the hop) as well as the hop's
     own output feature: a graph-descendant of BOTH the hop's source and its consumer, which
-    `owed_tokens` must not let the hop's own finish drop early."""
+    `owed_tokens` must not let the hop's own finish drop early. Actually reads both columns in
+    calculate_feature (not just declares them) so a wrong cfw pick (mloda-ai/mloda#1428) surfaces
+    as a KeyError rather than being silently unnoticed."""
 
     def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return {Feature("diamond_hop_root_val"), Feature("diamond_hop_doubled")}
@@ -1050,7 +1052,9 @@ class _DiamondHopDescendantFG(FeatureGroup):
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
-        return {"diamond_hop_result": [v * 7 for v in data["diamond_hop_root_val"]]}
+        return {
+            "diamond_hop_result": [v + d for v, d in zip(data["diamond_hop_root_val"], data["diamond_hop_doubled"])]
+        }
 
     @classmethod
     def feature_names_supported(cls) -> set[str]:
@@ -1196,7 +1200,7 @@ class TestTransformFrameworkStepSourceRootDropTiming:
 
         assert result is not None
         assert len(result) == 1
-        assert list(result[0]["diamond_hop_result"]) == [7, 14, 21]
+        assert list(result[0]["diamond_hop_result"]) == [3, 6, 9]
 
     def test_diamond_descendant_of_hop_source_and_consumer_survives_hop_finish_under_scheduling_jitter(
         self, monkeypatch: pytest.MonkeyPatch
@@ -1219,7 +1223,7 @@ class TestTransformFrameworkStepSourceRootDropTiming:
         for seed, result in run_under_scheduling_jitter(_run, seeds=[1, 2, 3, 4, 5], monkeypatch=monkeypatch):
             assert result is not None, f"seed {seed} produced no result"
             assert len(result) == 1, f"seed {seed} produced {len(result)} results"
-            assert list(result[0]["diamond_hop_result"]) == [7, 14, 21], f"seed {seed} produced a wrong result"
+            assert list(result[0]["diamond_hop_result"]) == [3, 6, 9], f"seed {seed} produced a wrong result"
 
 
 class _H3ChainRootPandasFG(FeatureGroup):

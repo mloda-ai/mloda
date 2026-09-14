@@ -93,7 +93,12 @@ class CfwManager:
         """
         Retrieves the UUID of a Compute Framework based on its class name and a feature UUID.
 
-        Usually, the feature UUID is a parent of the current feature.
+        Usually, the feature UUID is a parent of the current feature; it also matches a cfw's own
+        registered key directly, since a TFS-created cfw is keyed by its own step uuid rather than
+        listed in anyone's children_if_root. Among matches, the narrowest children_if_root wins
+        (a subset of every other match's), since a hop back into a framework re-registers the same
+        lineage more narrowly; unrelated routes whose children_if_root sets aren't nested keep the
+        first one registered.
 
         Args:
             cf_class_name: The class name of the Compute Framework.
@@ -102,11 +107,20 @@ class CfwManager:
         Returns:
             The UUID of the Compute Framework, or None if not found.
         """
+        best_match: UUID | None = None
+        best_children_if_root: set[UUID] | None = None
         for cfw_uuid, value in self.compute_frameworks.items():
             cls_name, children_if_root = value
-            if cf_class_name == cls_name and feature_uuid in children_if_root:
-                cfw_uuid = self.find_leftmost(cfw_uuid, cls_name)
-                return cfw_uuid
+            if cf_class_name != cls_name:
+                continue
+            if cfw_uuid != feature_uuid and feature_uuid not in children_if_root:
+                continue
+            if best_children_if_root is None or children_if_root <= best_children_if_root:
+                best_match = cfw_uuid
+                best_children_if_root = children_if_root
+
+        if best_match is not None:
+            return self.find_leftmost(best_match, cf_class_name)
         return None
 
     def get_cfw_uuid_as_registered(self, cf_class_name: str, feature_uuid: UUID) -> UUID | None:
@@ -122,19 +136,36 @@ class CfwManager:
         """
         Resolves a set of tfs_ids to at most one distinct Compute Framework UUID.
 
-        Raises if the tfs_ids resolve to more than one distinct cfw (ambiguous).
-        Returns None if none of the tfs_ids resolve.
+        A resolution still equal to its own tfs_id is a hop's own freshly created cfw (matched
+        by `get_cfw_uuid`'s own-key check), not corroborated by any children_if_root membership;
+        several tfs_ids each resolving that way to a different cfw is the ordinary shape of a
+        consumer reaching several independent hops into the same framework, not an internal
+        error, so it does not raise: it is treated the same as no resolution at all, deferring
+        to the caller's own-feature-uuid fallback. Raises only when several tfs_ids resolve, via
+        genuine children_if_root membership, to more than one distinct cfw (ambiguous).
         """
-        resolved_uuids = {resolved for tfs_id in tfs_ids if (resolved := self.get_cfw_uuid(cf_class_name, tfs_id))}
-        if len(resolved_uuids) > 1:
+        membership_resolved: set[UUID] = set()
+        equality_resolved: set[UUID] = set()
+        for tfs_id in tfs_ids:
+            resolved = self.get_cfw_uuid(cf_class_name, tfs_id)
+            if resolved is None:
+                continue
+            if resolved == tfs_id:
+                equality_resolved.add(resolved)
+            else:
+                membership_resolved.add(resolved)
+
+        if len(membership_resolved) > 1:
             raise ValueError(
                 internal_invariant_error(
                     "step.tfs_ids resolved to more than one distinct compute framework: ambiguous.",
-                    f"cf_class_name={cf_class_name}, resolved cfw_uuids={resolved_uuids}, tfs_ids={tfs_ids}",
+                    f"cf_class_name={cf_class_name}, resolved cfw_uuids={membership_resolved}, tfs_ids={tfs_ids}",
                 )
             )
-        if len(resolved_uuids) == 1:
-            return next(iter(resolved_uuids))
+        if len(membership_resolved) == 1:
+            return next(iter(membership_resolved))
+        if len(equality_resolved) == 1:
+            return next(iter(equality_resolved))
         return None
 
     def add_to_merge_relation(self, left_uuid: UUID, right_uuid: UUID, cls_name: str) -> None:

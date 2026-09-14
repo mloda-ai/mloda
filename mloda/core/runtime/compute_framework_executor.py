@@ -175,7 +175,20 @@ class ComputeFrameworkExecutor:
         cfw_uuid: UUID | None = None
 
         if isinstance(step, FeatureGroupStep):
-            resolved_uuid = self.cfw_register.get_unique_cfw_uuid(step.compute_framework.get_class_name(), step.tfs_ids)
+            cls_name = step.compute_framework.get_class_name()
+            resolved_uuid = self.cfw_register.get_unique_cfw_uuid(cls_name, step.tfs_ids)
+
+            # A resolution that is still literally one of the queried tfs_ids (not an existing,
+            # pre-registered cfw the ids merely point at) only proves this hop's own freshly
+            # created cfw exists; it does not prove this step should read from it over an
+            # already-established cfw an unrelated, redundant hop into the same framework leaves
+            # unused (mloda-ai/mloda#1428). Cross-check against the step's own feature uuid only
+            # in that case, preferring it when it already resolves to something.
+            if resolved_uuid is not None and resolved_uuid in step.tfs_ids and step.features.any_uuid is not None:
+                by_feature_uuid = self.cfw_register.get_cfw_uuid(cls_name, step.features.any_uuid)
+                if by_feature_uuid is not None:
+                    resolved_uuid = by_feature_uuid
+
             if resolved_uuid is not None:
                 return resolved_uuid
 

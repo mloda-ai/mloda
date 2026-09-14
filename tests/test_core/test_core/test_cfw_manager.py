@@ -95,6 +95,49 @@ class TestCfwManagerFindLeftmostCycleDetection:
         assert cfw_register.find_leftmost(uuid_a, cls_name) == uuid_a
 
 
+class TestCfwManagerGetCfwUuidBackHopResolution:
+    """mloda-ai/mloda#1428: a descendant reading both a root feature and a feature hopped back
+    into the root's own framework must resolve to the back-hop's cfw, not the root's, even
+    though the root's children_if_root transitively lists the same descendant uuid."""
+
+    def test_get_unique_cfw_uuid_resolves_a_tfs_steps_own_registered_uuid(self) -> None:
+        """A TFS-created cfw is registered under its own step uuid (see
+        ComputeFrameworkExecutor.init_compute_framework's `uuid=step.uuid` call for a
+        TransformFrameworkStep). get_unique_cfw_uuid(cls_name, {that uuid}) must resolve to that
+        cfw itself, the way ComputeFrameworkExecutor.prepare_execute_step relies on via
+        step.tfs_ids, not only to a cfw whose children_if_root happens to list it as a member.
+        """
+        cfw_register = CfwManager({ParallelizationMode.SYNC})
+        cls_name = "PythonDictFramework"
+        hop_cfw_uuid = uuid4()  # the back-hop TFS step's own uuid, used as the created cfw's key
+
+        cfw_register.add_cfw_to_compute_frameworks(hop_cfw_uuid, cls_name, {uuid4(), uuid4()})
+
+        resolved = cfw_register.get_unique_cfw_uuid(cls_name, {hop_cfw_uuid})
+
+        assert resolved == hop_cfw_uuid
+
+    def test_get_cfw_uuid_picks_the_back_hop_cfw_over_an_earlier_root_cfw_sharing_the_uuid(self) -> None:
+        """The root cfw's children_if_root transitively lists every descendant uuid, including
+        one actually produced by a back-hop cfw registered afterwards under the same class name.
+        get_cfw_uuid must not let the earlier, root cfw win just because it was registered first.
+        """
+        cfw_register = CfwManager({ParallelizationMode.SYNC})
+        cls_name = "PythonDictFramework"
+        descendant_feature_uuid = uuid4()
+        root_cfw_uuid = uuid4()
+        hop_cfw_uuid = uuid4()
+
+        # Root cfw registered first; its children_if_root transitively includes every descendant,
+        # including the one actually produced by the back-hop cfw registered afterwards.
+        cfw_register.add_cfw_to_compute_frameworks(root_cfw_uuid, cls_name, {descendant_feature_uuid, uuid4()})
+        cfw_register.add_cfw_to_compute_frameworks(hop_cfw_uuid, cls_name, {descendant_feature_uuid})
+
+        resolved = cfw_register.get_cfw_uuid(cls_name, descendant_feature_uuid)
+
+        assert resolved == hop_cfw_uuid
+
+
 class TestMyManagerStartAlwaysChainsTheParentDeathWatchdog:
     """MyManager.start() must always run the watchdog in the manager server process, and if the
     caller also supplied an initializer, chain it after the watchdog rather than replacing it."""

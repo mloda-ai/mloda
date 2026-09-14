@@ -747,7 +747,8 @@ class _CrossFwHopSiblingFG(FeatureGroup):
 @pytest.mark.timeout(30)
 @pytest.mark.skipif(pa is None, reason="PyArrow not installed.")
 class TestCrossFrameworkJoinHopDropTiming:
-    """Regression coverage for the cross-framework branch of `_drop_join_source_if_possible`."""
+    """Guards that a cross-framework join's transported hop table and its source root both drop
+    mid-run, and that the source root survives while a real reader is still pending."""
 
     def test_cross_framework_join_hop_dropped_mid_run_not_only_at_finalize(
         self, flight_server: Any, monkeypatch: pytest.MonkeyPatch
@@ -1058,10 +1059,8 @@ class _DiamondHopDescendantFG(FeatureGroup):
 @pytest.mark.timeout(30)
 @pytest.mark.skipif(pa is None, reason="PyArrow not installed.")
 class TestTransformFrameworkStepSourceRootDropTiming:
-    """Regression coverage for a TransformFrameworkStep's FROM-side (source) cfw: unlike a
-    JoinStep, `ExecutionOrchestrator._process_step_result` never marks anything as arrived on the
-    cfw a finished TransformFrameworkStep just consumed, so it survives until the run-finalize
-    sweep instead of being dropped incrementally once the hop that reads it has finished."""
+    """Guards that a plain transform hop's source-side cfw drops once the hop finishes, but not
+    while a real reader, such as an independent sibling or a diamond descendant, still needs it."""
 
     def test_plain_hop_source_root_dropped_mid_run_not_only_at_finalize(
         self, flight_server: Any, monkeypatch: pytest.MonkeyPatch

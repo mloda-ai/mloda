@@ -57,6 +57,7 @@ All code must pass the automated checks enforced by tox. The toolchain includes:
 - No code in `__init__.py` files.
 - Avoid `try/except` blocks unless absolutely necessary.
 - Keep documentation to the necessary minimum.
+- Adding an illustrative ```` ```py ```` block to a page under `docs/docs/` may need its `ILLUSTRATIVE_BLOCK_ALLOWLIST` entry in `tests/test_docs_fences.py` raised in the same PR.
 - Use [Conventional Commits](https://www.conventionalcommits.org/) for commit messages (`fix:`, `feat:`, `chore:`, etc.).
 
 ### Testing resolution changes

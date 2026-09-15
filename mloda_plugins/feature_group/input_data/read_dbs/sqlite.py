@@ -8,6 +8,7 @@ from mloda.provider import FeatureSet
 from mloda.user import DataType
 from mloda.user import Options
 from mloda_plugins.compute_framework.base_implementations.sql.sql_utils import quote_ident
+from mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_affinity import sqlite_affinity_class
 from mloda_plugins.feature_group.input_data.read_db import ReadDB
 
 
@@ -305,15 +306,15 @@ class SQLITEReader(ReadDB):
 
     @staticmethod
     def _affinity_to_datatype(declared_type: str) -> DataType | None:
-        # Shares its affinity precedence with the compute framework's _sqlite_affinity_to_arrow_type, but
-        # falls back to None instead of pa.string() and targets DataType instead of pa.DataType.
-        upper = declared_type.upper()
-        if "INT" in upper:
+        # Shares its affinity precedence with sqlite_affinity_class, but falls back to
+        # None instead of NUMERIC/string, and targets DataType instead of pa.DataType.
+        label = sqlite_affinity_class(declared_type)
+        if label == "INTEGER":
             return DataType.INT64
-        if "CHAR" in upper or "CLOB" in upper or "TEXT" in upper:
+        if label == "TEXT":
             return DataType.STRING
-        if "BLOB" in upper:
+        if label == "BLOB":
             return DataType.BINARY
-        if "REAL" in upper or "FLOA" in upper or "DOUB" in upper:
+        if label == "REAL":
             return DataType.DOUBLE
         return None

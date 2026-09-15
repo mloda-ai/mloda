@@ -12,4 +12,7 @@ def sqlite_affinity_class(declared_type: str) -> str:
         return "BLOB"
     if "REAL" in upper or "FLOA" in upper or "DOUB" in upper:
         return "REAL"
+    # Diverges from SQLite's own rule 3 (no type specified -> BLOB affinity): both call
+    # sites have always treated the undeclared case as their generic fallback
+    # (pa.string() / None), so NUMERIC is returned here to preserve that behavior.
     return "NUMERIC"

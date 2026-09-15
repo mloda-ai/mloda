@@ -10,8 +10,6 @@ from mloda.user import DataType
 from mloda.user import Feature
 from mloda.user import Options
 from mloda.provider import FeatureSet
-from mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_affinity import sqlite_affinity_class
-from mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_relation import _sqlite_affinity_to_arrow_type
 from mloda_plugins.feature_group.input_data.read_dbs.sqlite import SQLITEReader
 
 
@@ -253,7 +251,7 @@ class TestSQLITEReader:
         assert result["notes"] == DataType.STRING  # CLOB, not just plain TEXT
         # No declared type at all (PRAGMA table_info reports an empty string) must map to None, not raise.
         assert result["untyped_col"] is None
-        # Diverges from _sqlite_affinity_to_arrow_type, which defaults an unmatched type to TEXT; here it's None.
+        # Diverges from _sqlite_affinity_to_arrow_type, whose NUMERIC fallback maps to pa.string(); here it's None.
         assert result["amount"] is None
         assert result["precise"] is None
         # A declared type with several keywords must resolve by SQLite's affinity precedence
@@ -262,68 +260,6 @@ class TestSQLITEReader:
         assert result["blob_sub_type_text"] == DataType.STRING
         assert result["char_then_double"] == DataType.STRING
         assert result["double_then_blob"] == DataType.BINARY
-
-        # The same declared-type strings used above (per the affinity_table DDL) must resolve to the
-        # same labels via the shared sqlite_affinity_class classifier, not just via describe_columns.
-        assert sqlite_affinity_class("REAL") == "REAL"
-        assert sqlite_affinity_class("FLOAT") == "REAL"
-        assert sqlite_affinity_class("DOUBLE") == "REAL"
-        assert sqlite_affinity_class("BLOB") == "BLOB"
-        assert sqlite_affinity_class("VARCHAR(255)") == "TEXT"
-        assert sqlite_affinity_class("CLOB") == "TEXT"
-        assert sqlite_affinity_class("") == "NUMERIC"
-        assert sqlite_affinity_class("NUMERIC") == "NUMERIC"
-        assert sqlite_affinity_class("DECIMAL(10,5)") == "NUMERIC"
-        assert sqlite_affinity_class("TEXT BLOB") == "TEXT"
-        assert sqlite_affinity_class("BLOB SUB_TYPE TEXT") == "TEXT"
-        assert sqlite_affinity_class("CHAR DOUBLE") == "TEXT"
-        assert sqlite_affinity_class("DOUBLE BLOB") == "BLOB"
-
-    def test_affinity_class_matches_relation_and_reader_call_sites(self) -> None:
-        """Both call sites must agree with sqlite_affinity_class's label for the same declared type.
-
-        Compared via labels rather than arrow-type equality, since TEXT and NUMERIC both map to pa.string().
-        """
-        label_to_arrow_type = {
-            "INTEGER": pa.int64(),
-            "TEXT": pa.string(),
-            "BLOB": pa.large_binary(),
-            "REAL": pa.float64(),
-            "NUMERIC": pa.string(),
-        }
-        label_to_datatype: dict[str, DataType | None] = {
-            "INTEGER": DataType.INT64,
-            "TEXT": DataType.STRING,
-            "BLOB": DataType.BINARY,
-            "REAL": DataType.DOUBLE,
-            "NUMERIC": None,
-        }
-        declared_types = [
-            "INTEGER",
-            "INT CHAR",
-            "TEXT BLOB",
-            "BLOB SUB_TYPE TEXT",
-            "CHAR DOUBLE",
-            "BLOB",
-            "DOUBLE BLOB",
-            "REAL",
-            "FLOAT",
-            "DOUBLE",
-            "VARCHAR(255)",
-            "CLOB",
-            "NUMERIC",
-            "DECIMAL(10,5)",
-            "",
-        ]
-
-        for declared_type in declared_types:
-            label = sqlite_affinity_class(declared_type)
-            assert _sqlite_affinity_to_arrow_type(declared_type) == label_to_arrow_type[label], (
-                f"{declared_type!r}: relation call site disagrees with sqlite_affinity_class label {label!r}"
-            )
-            assert SQLITEReader._affinity_to_datatype(declared_type) == label_to_datatype[label], (
-                f"{declared_type!r}: reader call site disagrees with sqlite_affinity_class label {label!r}"
-            )
 
     def test_describe_columns_nonexistent_db_does_not_create_file_and_error_mentions_path(self, tmp_path: Any) -> None:
         """sqlite3.connect would otherwise create the file; is_valid_credentials must fail fast, naming the path."""

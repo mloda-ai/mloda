@@ -6,6 +6,7 @@ from typing import Any
 import pyarrow as pa
 import pytest
 
+from mloda.user import DataType
 from mloda_plugins.compute_framework.base_implementations.sql.sql_utils import quote_ident
 from mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_affinity import sqlite_affinity_class
 from mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_relation import (
@@ -13,6 +14,7 @@ from mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_relation
     _infer_sqlite_type_from_values,
     _sqlite_affinity_to_arrow_type,
 )
+from mloda_plugins.feature_group.input_data.read_dbs.sqlite import SQLITEReader
 from tests.test_plugins.compute_framework.base_implementations.relation_test_mixin import (
     RelationTestMixin,
 )
@@ -412,6 +414,26 @@ class TestSqliteAffinityToArrowType:
     ) -> None:
         result = sqlite_affinity_class(declared_type)
         assert result == expected_label, f"Expected {expected_label} but got {result}"
+
+
+_LABEL_TO_DATATYPE: dict[str, DataType | None] = {
+    "INTEGER": DataType.INT64,
+    "TEXT": DataType.STRING,
+    "BLOB": DataType.BINARY,
+    "REAL": DataType.DOUBLE,
+    "NUMERIC": None,
+}
+
+
+class TestAffinityClassMatchesRelationAndReaderCallSites:
+    """Both call sites must agree with sqlite_affinity_class's label for the same declared type,
+    parametrized over the shared _AFFINITY_CASES list rather than a second hardcoded one."""
+
+    @pytest.mark.parametrize("declared_type,expected_label,expected_arrow_type", _AFFINITY_CASES)
+    def test_call_sites_agree(self, declared_type: str, expected_label: str, expected_arrow_type: pa.DataType) -> None:
+        assert sqlite_affinity_class(declared_type) == expected_label
+        assert _sqlite_affinity_to_arrow_type(declared_type) == expected_arrow_type
+        assert SQLITEReader._affinity_to_datatype(declared_type) == _LABEL_TO_DATATYPE[expected_label]
 
 
 class TestSqliteDatetimeAdapter:

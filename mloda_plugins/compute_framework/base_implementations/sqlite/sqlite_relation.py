@@ -80,7 +80,9 @@ def _sqlite_affinity_to_arrow_type(affinity: str) -> pa.DataType:
         return pa.string()
     if label == "BLOB":
         return pa.large_binary()
-    return pa.float64()
+    if label == "REAL":
+        return pa.float64()
+    return pa.string()
 
 
 def _infer_arrow_type_from_values(values: list[Any]) -> pa.DataType:

@@ -93,49 +93,145 @@ class CfwManager:
         """
         Retrieves the UUID of a Compute Framework based on its class name and a feature UUID.
 
-        Usually, the feature UUID is a parent of the current feature.
+        Usually, the feature UUID is a parent of the current feature; it also matches a cfw's own
+        registered key directly, since a TFS-created cfw is keyed by its own step uuid rather than
+        listed in anyone's children_if_root. Among matches, the narrowest children_if_root wins (a
+        proper subset of every other match's), since a hop back into a framework re-registers the
+        same lineage more narrowly; unrelated routes whose children_if_root sets aren't nested keep
+        the first one registered, same as before. A genuine tie between two or more matches with the
+        EXACT SAME children_if_root set is not this method's job to break: it returns None rather
+        than pick one via incidental iteration/registration order, unless a later, strictly narrower
+        match resolves it.
 
         Args:
             cf_class_name: The class name of the Compute Framework.
             feature_uuid: The UUID of the feature.
 
         Returns:
-            The UUID of the Compute Framework, or None if not found.
+            The UUID of the Compute Framework, or None if not found or tied.
         """
+        best_match: UUID | None = None
+        best_children_if_root: set[UUID] | None = None
+        tied = False
         for cfw_uuid, value in self.compute_frameworks.items():
             cls_name, children_if_root = value
-            if cf_class_name == cls_name and feature_uuid in children_if_root:
-                cfw_uuid = self.find_leftmost(cfw_uuid, cls_name)
-                return cfw_uuid
-        return None
+            if cf_class_name != cls_name:
+                continue
+            if cfw_uuid != feature_uuid and feature_uuid not in children_if_root:
+                continue
+            if best_children_if_root is None:
+                best_match, best_children_if_root, tied = cfw_uuid, children_if_root, False
+            elif children_if_root == best_children_if_root:
+                tied = True
+            elif children_if_root <= best_children_if_root:
+                best_match, best_children_if_root, tied = cfw_uuid, children_if_root, False
+
+        if best_match is None or tied:
+            return None
+
+        return self.find_leftmost(best_match, cf_class_name)
 
     def get_cfw_uuid_as_registered(self, cf_class_name: str, feature_uuid: UUID) -> UUID | None:
         """Same lookup as `get_cfw_uuid`, but without canonicalizing through `find_leftmost`/
-        `cfw_merge_relation`, which a join already executed would re-point at a different cfw."""
+        `cfw_merge_relation`, which a join already executed would re-point at a different cfw.
+
+        Applies the same narrowest-children_if_root-wins tie-break as `get_cfw_uuid` (a genuine tie,
+        identical children_if_root, returns None rather than picking a winner by iteration order):
+        a same-framework JoinStep's source side can span more than one FeatureGroupStep (a
+        subclass-clustered case-override hop), and add_tfs's same-framework JoinStep branch tags
+        EVERY matching FeatureGroupStep's own children_if_root with the join's link uuid, not just
+        one, so this lookup can face the same multi-match shape `get_cfw_uuid` does.
+        """
+        best_match: UUID | None = None
+        best_children_if_root: set[UUID] | None = None
+        tied = False
         for cfw_uuid, value in self.compute_frameworks.items():
             cls_name, children_if_root = value
-            if cf_class_name == cls_name and feature_uuid in children_if_root:
-                return cfw_uuid
-        return None
+            if cf_class_name != cls_name or feature_uuid not in children_if_root:
+                continue
+            if best_children_if_root is None:
+                best_match, best_children_if_root, tied = cfw_uuid, children_if_root, False
+            elif children_if_root == best_children_if_root:
+                tied = True
+            elif children_if_root <= best_children_if_root:
+                best_match, best_children_if_root, tied = cfw_uuid, children_if_root, False
+
+        if tied:
+            return None
+        return best_match
 
     def get_unique_cfw_uuid(self, cf_class_name: str, tfs_ids: set[UUID]) -> UUID | None:
         """
         Resolves a set of tfs_ids to at most one distinct Compute Framework UUID.
 
-        Raises if the tfs_ids resolve to more than one distinct cfw (ambiguous).
-        Returns None if none of the tfs_ids resolve.
+        Each tfs_id is checked directly against `self.compute_frameworks` first: a tfs_id that IS
+        itself some cfw's own registered key for cf_class_name is a strictly stronger signal than
+        `get_cfw_uuid`'s membership-or-tie resolution, so it is resolved via `find_leftmost` alone,
+        without going through `get_cfw_uuid`. Several tfs_ids each independently matching their own
+        cfw this way is the ordinary shape of a consumer reaching several independent hops into the
+        same framework, even after a JoinStep merge re-points each into a different destination, so
+        it never raises: it is treated the same as no resolution at all, deferring to the caller's
+        own-feature-uuid fallback. Tfs_ids that aren't themselves a registered key fall back to
+        `get_cfw_uuid`'s children_if_root-membership resolution. Raises only when several tfs_ids
+        resolve, via genuine membership, to more than one distinct cfw (ambiguous).
         """
-        resolved_uuids = {resolved for tfs_id in tfs_ids if (resolved := self.get_cfw_uuid(cf_class_name, tfs_id))}
-        if len(resolved_uuids) > 1:
+        membership_resolved: set[UUID] = set()
+        own_key_resolved: set[UUID] = set()
+        for tfs_id in tfs_ids:
+            own_entry = self.compute_frameworks.get(tfs_id)
+            if own_entry is not None and own_entry[0] == cf_class_name:
+                own_key_resolved.add(self.find_leftmost(tfs_id, cf_class_name))
+                continue
+            resolved = self.get_cfw_uuid(cf_class_name, tfs_id)
+            if resolved is not None:
+                membership_resolved.add(resolved)
+
+        if len(membership_resolved) > 1:
             raise ValueError(
                 internal_invariant_error(
                     "step.tfs_ids resolved to more than one distinct compute framework: ambiguous.",
-                    f"cf_class_name={cf_class_name}, resolved cfw_uuids={resolved_uuids}, tfs_ids={tfs_ids}",
+                    f"cf_class_name={cf_class_name}, resolved cfw_uuids={membership_resolved}, tfs_ids={tfs_ids}",
                 )
             )
-        if len(resolved_uuids) == 1:
-            return next(iter(resolved_uuids))
+        if len(membership_resolved) == 1:
+            return next(iter(membership_resolved))
+        if len(own_key_resolved) == 1:
+            return next(iter(own_key_resolved))
         return None
+
+    def resolve_cfw_uuid_by_tfs_ids(
+        self, cf_class_name: str, tfs_ids: set[UUID], own_feature_uuid: UUID | None
+    ) -> UUID | None:
+        """Resolves a step's tfs_ids to at most one cfw uuid, the shared fallback chain behind
+        `ComputeFrameworkExecutor.prepare_execute_step`, `ComputeFrameworkExecutor.get_cfw`, and
+        `ExecutionOrchestrator._cfw_to_occupy`.
+
+        Tries `get_unique_cfw_uuid(tfs_ids)` first. A resolution that is still literally one of the
+        queried tfs_ids only proves that hop's own freshly created cfw exists, not that the caller
+        should read from it over an already-established cfw a redundant hop leaves unused, so it is
+        cross-checked against `own_feature_uuid` (e.g. a chained join's final destination) and
+        overridden when that resolves. When `get_unique_cfw_uuid` resolves nothing at all (several
+        tfs_ids are each independently some cfw's own key - an ordinary shape, see
+        `get_unique_cfw_uuid`'s own docstring), `own_feature_uuid` is tried first, then each tfs_id
+        candidate directly, since any one of them beats treating the step as having no cfw at all.
+        """
+        resolved_uuid = self.get_unique_cfw_uuid(cf_class_name, tfs_ids)
+
+        if resolved_uuid is not None and resolved_uuid in tfs_ids and own_feature_uuid is not None:
+            by_feature_uuid = self.get_cfw_uuid(cf_class_name, own_feature_uuid)
+            if by_feature_uuid is not None:
+                resolved_uuid = by_feature_uuid
+
+        if resolved_uuid is None:
+            if own_feature_uuid is not None:
+                resolved_uuid = self.get_cfw_uuid(cf_class_name, own_feature_uuid)
+            if resolved_uuid is None:
+                for candidate_uuid in tfs_ids:
+                    resolved_uuid = self.get_cfw_uuid(cf_class_name, candidate_uuid)
+                    if resolved_uuid is not None:
+                        break
+
+        return resolved_uuid
 
     def add_to_merge_relation(self, left_uuid: UUID, right_uuid: UUID, cls_name: str) -> None:
         """

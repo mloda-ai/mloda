@@ -136,17 +136,32 @@ class ComputeFrameworkExecutor:
 
             return cfw_uuid
 
-    def get_cfw(self, compute_framework: type[ComputeFramework], feature_uuid: UUID) -> ComputeFramework:
+    def get_cfw(
+        self, compute_framework: type[ComputeFramework], feature_uuid: UUID, tfs_ids: set[UUID] | None = None
+    ) -> ComputeFramework:
         """
         Retrieves a compute framework based on its type and a feature UUID.
+
+        tfs_ids, when given, is tried first via get_unique_cfw_uuid: a bare feature_uuid lookup
+        cannot tell apart two same-class cfws with identical children_if_root (e.g. a root and a
+        back-hop into that same root's own framework), while tfs_ids carries the step's own-key
+        signal that can.
 
         Args:
             compute_framework: The type of compute framework to retrieve.
             feature_uuid: The UUID of the feature associated with the compute framework.
+            tfs_ids: The step's own tfs_ids, tried first when given.
         """
-        cfw_uuid = self.cfw_register.get_initialized_compute_framework_uuid(
-            compute_framework, feature_uuid=feature_uuid
-        )
+        cfw_uuid: UUID | None = None
+        if tfs_ids:
+            cls_name = compute_framework.get_class_name()
+            # See CfwManager.resolve_cfw_uuid_by_tfs_ids for the shared fallback chain.
+            cfw_uuid = self.cfw_register.resolve_cfw_uuid_by_tfs_ids(cls_name, tfs_ids, feature_uuid)
+
+        if cfw_uuid is None:
+            cfw_uuid = self.cfw_register.get_initialized_compute_framework_uuid(
+                compute_framework, feature_uuid=feature_uuid
+            )
         if cfw_uuid is None:
             raise ValueError(f"cfw_uuid should not be none: {compute_framework}.")
         return self.cfw_collection[cfw_uuid]
@@ -175,7 +190,15 @@ class ComputeFrameworkExecutor:
         cfw_uuid: UUID | None = None
 
         if isinstance(step, FeatureGroupStep):
-            resolved_uuid = self.cfw_register.get_unique_cfw_uuid(step.compute_framework.get_class_name(), step.tfs_ids)
+            cls_name = step.compute_framework.get_class_name()
+            # See CfwManager.resolve_cfw_uuid_by_tfs_ids for the shared fallback chain: an
+            # already-established cfw the step's own output uuid already belongs to (e.g. a chained
+            # join's final destination) wins over creating a brand new, empty cfw for a step that
+            # really has an existing home.
+            resolved_uuid = self.cfw_register.resolve_cfw_uuid_by_tfs_ids(
+                cls_name, step.tfs_ids, step.features.any_uuid
+            )
+
             if resolved_uuid is not None:
                 return resolved_uuid
 
@@ -198,12 +221,11 @@ class ComputeFrameworkExecutor:
                     f"from_feature_uuid or from_cfw_uuid should not be none. {step, from_feature_uuid, from_cfw_uuid}"
                 )
 
-            from_cfw = self.cfw_collection[from_cfw_uuid]
-            childrens = set(from_cfw.children_if_root)
-
             if step.link_id:
-                from_feature_uuid = step.link_id
-                childrens.add(from_feature_uuid)
+                childrens = {step.link_id}
+            else:
+                from_cfw = self.cfw_collection[from_cfw_uuid]
+                childrens = set(from_cfw.children_if_root)
 
             with self._cfw_lock:
                 cfw_uuid = self.init_compute_framework(step.to_framework, parallelization_mode, childrens, step.uuid)
@@ -229,13 +251,22 @@ class ComputeFrameworkExecutor:
         """
         Prepares the right CFW for a TransformFrameworkStep.
         """
-        uuid = step.source_framework_uuid if step.source_framework_uuid else next(iter(step.required_uuids))
-
-        cfw_uuid = self.cfw_register.get_cfw_uuid(step.from_framework.get_class_name(), uuid)
+        if step.source_framework_uuid:
+            cfw_uuid = self.cfw_register.get_cfw_uuid(step.from_framework.get_class_name(), step.source_framework_uuid)
+        else:
+            # A subclass-clustered hop's required_uuids can name parents owned by different
+            # sibling steps/frameworks (see execution_plan.py), so try each until one resolves
+            # instead of picking an arbitrary, possibly-wrong member.
+            cfw_uuid = None
+            for candidate_uuid in step.required_uuids:
+                cfw_uuid = self.cfw_register.get_cfw_uuid(step.from_framework.get_class_name(), candidate_uuid)
+                if cfw_uuid is not None:
+                    break
 
         if cfw_uuid is None or isinstance(cfw_uuid, UUID) is False:
             raise ValueError(
-                f"cfw_uuid should not be none in prepare_tfs: {step.from_framework.get_class_name()}, {uuid}"
+                f"cfw_uuid should not be none in prepare_tfs: {step.from_framework.get_class_name()}, "
+                f"{step.source_framework_uuid or step.required_uuids}"
             )
 
         return cfw_uuid

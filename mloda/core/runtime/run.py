@@ -202,7 +202,7 @@ class ExecutionOrchestrator:
                 continue
 
             if not self._can_run_step(
-                step.required_uuids, step.get_uuids(), finished_ids, currently_running_steps, step
+                step.required_uuids, step.get_uuids(), finished_ids, currently_running_steps, step, made_progress
             ):
                 continue
             self._execute_step(step)
@@ -380,6 +380,7 @@ class ExecutionOrchestrator:
             return False
 
         if isinstance(step, TransformFrameworkStep):
+            self._drop_tfs_source_if_possible(step)
             return True
 
         if isinstance(step, JoinStep):
@@ -390,7 +391,7 @@ class ExecutionOrchestrator:
             if step.features.any_uuid is None:
                 raise ValueError(f"from_feature_uuid should not be none. {step}")
 
-            cfw = self.executor.get_cfw(step.compute_framework, step.features.any_uuid)
+            cfw = self.executor.get_cfw(step.compute_framework, step.features.any_uuid, step.tfs_ids)
             self.add_to_result_data_collection(cfw, step.features, step.uuid)
             self._drop_data_if_possible(cfw, step)
 
@@ -407,19 +408,41 @@ class ExecutionOrchestrator:
         self._mark_children_and_track(cfw, feature_uuids_to_possible_drop)
 
     def _drop_join_source_if_possible(self, step: JoinStep) -> None:
-        """A same-framework join marks its source cfw's children_if_root with the link's own
-        uuid (execution_plan.add_tfs); only the join's own completion can supply it."""
-        if step.destination_framework != step.source_framework:
-            return
-
-        source_cfw_uuid = self.cfw_register.get_cfw_uuid_as_registered(
+        """Marks the join's destination-registered cfw with the link's own uuid; applies to both
+        same- and cross-framework joins, since only the join's own completion can supply it."""
+        link_cfw_uuid = self.cfw_register.get_cfw_uuid_as_registered(
             step.destination_framework.get_class_name(), step.link.uuid
         )
-        if source_cfw_uuid is None:
+        if link_cfw_uuid is None:
             return
 
-        source_cfw = self.executor.cfw_collection[source_cfw_uuid]
-        self._mark_children_and_track(source_cfw, {step.link.uuid})
+        link_cfw = self.executor.cfw_collection[link_cfw_uuid]
+        self._mark_children_and_track(link_cfw, {step.link.uuid})
+
+    def _drop_tfs_source_if_possible(self, step: TransformFrameworkStep) -> None:
+        """Marks a hop's SOURCE-side cfw with its owed tokens once the hop itself finishes, for both
+        a plain hop and a join-triggered hop; best-effort, so an unresolved cfw is left for later."""
+        if not step.owed_tokens:
+            return
+
+        from_cfw_uuid: UUID | None = None
+        if step.source_framework_uuid:
+            from_cfw_uuid = self.cfw_register.get_cfw_uuid(
+                step.from_framework.get_class_name(), step.source_framework_uuid
+            )
+        else:
+            # A subclass-clustered hop's required_uuids can name parents owned by different
+            # sibling steps/frameworks (see execution_plan.py), so try each until one resolves
+            # instead of picking an arbitrary, possibly-wrong member.
+            for candidate_uuid in step.required_uuids:
+                from_cfw_uuid = self.cfw_register.get_cfw_uuid(step.from_framework.get_class_name(), candidate_uuid)
+                if from_cfw_uuid is not None:
+                    break
+
+        if from_cfw_uuid is None:
+            return
+
+        self._mark_children_and_track(self.executor.cfw_collection[from_cfw_uuid], set(step.owed_tokens))
 
     def _mark_children_and_track(self, cfw: ComputeFramework, children: set[UUID]) -> None:
         """
@@ -577,13 +600,8 @@ class ExecutionOrchestrator:
 
         class_name = step.compute_framework.get_class_name()
 
-        resolved_uuid = self.cfw_register.get_unique_cfw_uuid(class_name, step.tfs_ids)
-        if resolved_uuid is not None:
-            return resolved_uuid
-
-        if step.features.any_uuid is None:
-            return None
-        return self.cfw_register.get_cfw_uuid(class_name, step.features.any_uuid)
+        # See CfwManager.resolve_cfw_uuid_by_tfs_ids for the shared fallback chain.
+        return self.cfw_register.resolve_cfw_uuid_by_tfs_ids(class_name, step.tfs_ids, step.features.any_uuid)
 
     def _can_run_step(
         self,
@@ -592,6 +610,7 @@ class ExecutionOrchestrator:
         finished_steps: set[UUID],
         currently_running_steps: set[UUID],
         step: Any = None,
+        made_progress: bool = False,
     ) -> bool:
         """
         Checks if a step can be run. If it can, add it to the currently_running_steps set.
@@ -604,6 +623,9 @@ class ExecutionOrchestrator:
             if not required_uuids.issubset(finished_steps) or step_uuid.intersection(currently_running_steps):
                 return False
 
+            if self._defer_ready_step(step, made_progress):
+                return False
+
             cfw_uuid = self._cfw_to_occupy(step)
             if cfw_uuid is not None:
                 if cfw_uuid in self._occupied_cfws:
@@ -612,6 +634,13 @@ class ExecutionOrchestrator:
 
             currently_running_steps.update(step_uuid)
             return True
+
+    def _defer_ready_step(self, step: Any, made_progress: bool) -> bool:
+        """Test seam: return True to refuse an otherwise-runnable step for this pass.
+
+        Always False in production. Tests monkeypatch this to inject scheduling jitter.
+        """
+        return False
 
     def _mark_step_as_finished(
         self, step_uuid: set[UUID], finished_steps: set[UUID], currently_running_steps: set[UUID]

@@ -74,8 +74,8 @@ class WorkerManager:
 
     def poll_result_queues(self) -> None:
         """Non-blocking poll of all result queues; collects step-UUID strings and drains DROP_COMPLETE tuples into
-        completed_drops. Each queue is drained to empty per call, not just one message, though a message still
-        in flight through the queue's feeder thread may not be visible until a later poll."""
+        completed_drops. Drains each queue to empty per call; a message still in flight through the queue's
+        feeder thread may not appear until a later poll."""
         for r_queue in self.result_queues_collection:
             while True:
                 try:

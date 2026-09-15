@@ -386,11 +386,8 @@ class TestWorkerManagerResultPolling:
     def test_poll_result_queues_drains_multiple_messages_in_a_single_call(self) -> None:
         """A single poll_result_queues() call must drain every queued message, not just the first.
 
-        Today's implementation does one get() per queue per call, so a queue holding several
-        messages leaks the rest until further calls. The fix drains each queue to empty within
-        one call. side_effect holds 3 real messages (two step-uuid strings around a 3-tuple
-        DROP_COMPLETE with an explicit resolved flag) followed by the Empty sentinel that ends
-        the drain.
+        side_effect holds two step-uuid strings around a DROP_COMPLETE tuple with an explicit
+        resolved flag, followed by Empty to end the drain.
         """
         manager = WorkerManager()
         uuid1 = str(uuid4())
@@ -411,9 +408,7 @@ class TestWorkerManagerResultPolling:
         assert UUID(uuid1) in manager.result_uuids_collection
         assert UUID(uuid2) in manager.result_uuids_collection
         assert manager.completed_drops[cfw_uuid] is False
-        # Proves the single call issued multiple .get() calls (one per queued item, plus the
-        # final Empty that ends the drain), not just one: today's code stops after the first
-        # item, so call_count is 1 here instead of 4.
+        # One get() per queued item, plus the Empty that ends the drain.
         assert mock_queue.get.call_count == 4
 
     def test_poll_result_queues_drains_real_multiprocessing_queue_without_blocking(self) -> None:
@@ -429,9 +424,7 @@ class TestWorkerManagerResultPolling:
         mp_queue.put(("DROP_COMPLETE", cfw_uuid, True))
         mp_queue.put(uuid2)
 
-        # put() hands items to a background feeder thread that flushes them into the
-        # underlying pipe asynchronously; give it a moment so the poll below sees every
-        # item instead of racing an empty pipe.
+        # put() flushes via a background feeder thread; wait so the poll below doesn't race an empty pipe.
         time.sleep(0.2)
 
         manager.result_queues_collection.add(mp_queue)

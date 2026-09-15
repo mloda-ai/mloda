@@ -2,6 +2,7 @@ from typing import Any
 from unittest.mock import patch
 from mloda.user import DataType
 
+from mloda.user import Feature
 from mloda.user import FeatureName
 from mloda.core.core.engine import Engine
 from mloda.core.prepare.accessible_plugins import PreFilterPlugins
@@ -217,3 +218,31 @@ class TestEngine:
                 f"but was instantiated {init_call_count} time(s). "
                 f"setup_features_recursion should reuse self.accessible_plugins from __init__"
             )
+
+    def test_setup_features_recursion_does_not_mutate_callers_links_set(self) -> None:
+        """Engine.__init__ stores the caller's links set by reference (self.links = links); the
+        per-batch pre-pass in setup_features_recursion must not add into that same object, or a
+        caller reusing its own links set across runs would see it grow with every run."""
+        with (
+            patch(
+                "mloda.core.prepare.accessible_plugins.PreFilterPlugins.resolve_feature_group_compute_framework_limitations"
+            ) as mocked_derived_accessible_plugins,
+            patch("mloda.core.core.engine.Engine.create_setup_execution_plan"),
+        ):
+            mocked_derived_accessible_plugins.return_value = {
+                BaseTestFeatureGroup1: [BaseTestComputeFramework1, BaseTestComputeFramework2],
+                BaseTestFeatureGroup2: [BaseTestComputeFramework1],
+            }
+
+            link = Link.inner(
+                JoinSpec(BaseLinkTestFeatureGroup1, Index(tuple(["Index1"]))),
+                JoinSpec(BaseTestGraphFeatureGroup3, Index(tuple(["Index1"]))),
+            )
+            links: set[Link] = set()
+            features = Features([Feature("BaseTestFeature1", link=link), "BaseTestFeature2"])
+            compute_framework = {BaseTestComputeFramework1, BaseTestComputeFramework2}
+
+            engine = Engine(features, compute_framework, links)
+            engine.setup_features_recursion(features)
+
+            assert links == set(), "Engine must not mutate the caller's own links set object"

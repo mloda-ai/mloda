@@ -83,7 +83,7 @@ class Engine:
         self.accessible_plugins = PreFilterPlugins(compute_frameworks, plugin_collector).get_accessible_plugins()
         # get links
         LinkValidator.validate_links(links)
-        self.links = links
+        self.links = set(links) if links is not None else None
 
         # set api input collection if relevant
         self.api_input_data_collection = api_input_data_collection

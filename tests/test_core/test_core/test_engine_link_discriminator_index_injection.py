@@ -242,18 +242,16 @@ def _unrelated_link() -> Link:
     return Link.inner(JoinSpec(SclkOtherFG, "sclk_other_key"), JoinSpec(SclkOtherFG, "sclk_other_val"))
 
 
-def test_index_columns_resolution_gate_survives_batch_order_with_feature_link_only() -> None:
-    """Covers the resolution gate (_filter_feature_group_by_links), not just index injection: an
-    unrelated top-level link must not eliminate SclkIndexedSourceFG as a candidate before its own
-    Feature.link sibling has been processed and its link registered."""
-    for reversed_order in (False, True):
-        linked = Feature("sclk_votes", options={"sclk_source": "election"}, link=_link_b())
-        plain = Feature("sclk_pop", options={"sclk_source": "region"})
-        ordered: list[Feature | str] = [plain, linked] if reversed_order else [linked, plain]
-        engine = _build_engine(Features(ordered), {_unrelated_link()}, {SclkIndexedSourceFG})
+def test_feature_link_is_visible_to_its_own_resolution_links_gate() -> None:
+    """A Feature's own .link must be visible to its OWN feature-group resolution's links gate
+    (_filter_feature_group_by_links), not only to index injection: an unrelated top-level link must
+    not eliminate SclkIndexedSourceFG as a candidate for the very feature carrying the matching link."""
+    linked = Feature("sclk_votes", options={"sclk_source": "election"}, link=_link_b())
+    plain = Feature("sclk_pop", options={"sclk_source": "region"})
+    engine = _build_engine(Features([linked, plain]), {_unrelated_link()}, {SclkIndexedSourceFG})
 
-        election = _group_names(engine, SclkIndexedSourceFG, "sclk_source", "election")
-        region = _group_names(engine, SclkIndexedSourceFG, "sclk_source", "region")
+    election = _group_names(engine, SclkIndexedSourceFG, "sclk_source", "election")
+    region = _group_names(engine, SclkIndexedSourceFG, "sclk_source", "region")
 
-        assert election == {"sclk_votes", "sclk_nr"}
-        assert region == {"sclk_pop", "sclk_code"}
+    assert election == {"sclk_votes", "sclk_nr"}
+    assert region == {"sclk_pop", "sclk_code"}

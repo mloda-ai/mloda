@@ -183,8 +183,12 @@ class Engine:
         return execution_planner
 
     def setup_features_recursion(self, features: Features, requested: bool = True, depth: int = 0) -> None:
-        # Register every sibling's own link before processing any of them, so index injection and
-        # feature-group resolution see the whole batch's links regardless of processing order.
+        # Register every sibling's own link before processing any, so index injection and feature-group
+        # resolution see the whole batch regardless of order. Does not cover a link nested in a
+        # co-sibling's input_features() subtree (see xfail
+        # test_same_class_feature_link_nested_in_co_siblings_input_features_is_not_seen_in_time): only
+        # index injection could defer that way, since identify_feature_group.py's
+        # _filter_feature_group_by_links gate runs during resolution itself, before recursion completes.
         for feature in features:
             self.add_feature_link_to_links(feature)
         for feature in features:

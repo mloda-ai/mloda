@@ -115,8 +115,6 @@ OPTIONAL_DEPENDENCIES = ("some_optional_lib",)
 
 The declaration is scoped to the distribution that published it (matched by the installed package, not the entry-point name), so two unrelated packages reusing the same entry-point label never collide.
 
-The same traceback-frame attribution used above is importable directly: `traceback_blames_root(exc, root)` from `mloda.provider` or `mloda.steward`, for downstream packages building their own optional-dependency guards.
-
 ### Loading
 
 Discovery is lazy: installing a package does nothing by itself. Manifests are imported and registered only when `load_entry_points()` runs, either directly or as the final step of `PluginLoader.all()`. Discovered classes register into the default registry with provenance `source="entry_point"` (see [Plugin Registry](plugin_registry.md)).
@@ -140,5 +138,6 @@ fg_keys = loader.load_entry_points(group="mloda.feature_groups")
 - **Abstract classes are skipped** silently; manifests may list a shared abstract base alongside its concrete subclasses.
 - **Collisions raise.** If a different class already holds a manifest class's `module:qualname` key, loading raises `PluginRegistryCollisionError`. Loading the same manifests twice is idempotent.
 - **Missing optional dependencies skip.** `ImportError` (covers `ModuleNotFoundError` too) around an entry point's `.load()` is caught. It is attributed to a declared (or global `OPTIONAL_PLUGIN_DEPENDENCIES`) optional root either by the error's own module name, or by the innermost (deepest) traceback frame, i.e. where the failure actually happened, belonging to that root's code. A match skips only that entry point and logs at WARNING naming the entry point and the missing module; otherwise the error re-raises.
+- **Reusable directly.** The traceback-frame attribution above is importable directly: `traceback_blames_root(exc, root)` from `mloda.provider` or `mloda.steward`, for downstream packages building their own optional-dependency guards. Callers must exclude their own module's root from the roots they pass in, the same way `load_entry_points` excludes the entry point's own module, so a namespace collision can't misattribute the caller's own bug to that root.
 - **Own-package failures always raise.** If the missing root is the entry point's own module root, it re-raises even if declared optional. The entry point's own namespace (and anything under it) is also never eligible for the traceback-based attribution, so a genuine failure in the plugin's own code still always raises even if it happens to share a name with a declared optional root.
 - **Policies apply, after import.** A registration denied by an installed [plugin policy](plugin_registry.md#governance) raises inside `register()`; the loader catches the denial, skips the class, leaves its key out of the returned list, and logs one warning per denied key per registry instance. The policy gates registration only, not import: the manifest module is imported before the policy applies, so installing a package implies trusting its import side effects.

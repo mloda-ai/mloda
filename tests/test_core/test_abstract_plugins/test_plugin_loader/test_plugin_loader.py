@@ -435,5 +435,5 @@ class TestTracebackBlamesRoot:
         assert plugin_loader_module.traceback_blames_root(exc, "anything") is False
 
     def test_rename_removes_private_alias(self) -> None:
-        """Green must rename, not alias: the private name must be gone entirely."""
+        """The rename must drop the old private name entirely, not leave it as an alias."""
         assert not hasattr(plugin_loader_module, "_traceback_blames_root")

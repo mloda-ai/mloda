@@ -73,6 +73,11 @@ class Extender(ABC):
     def __call__(self, func: Any, *args: Any, **kwargs: Any) -> Any:
         pass
 
+    def close(self) -> None:
+        """Optional bounded shutdown hook: called once per worker-side copy of this extender when a
+        MULTIPROCESSING worker exits gracefully. Override to flush a buffering sink. A raised exception
+        here is caught and logged by the caller, never propagated."""
+
     @staticmethod
     def feature_group_name(func: Any) -> str:
         """Resolve the owning feature group class name of the hooked callable.

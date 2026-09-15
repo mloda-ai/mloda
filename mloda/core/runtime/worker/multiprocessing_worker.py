@@ -22,6 +22,15 @@ def _handle_stop_command(command_queue: multiprocessing.Queue[Any]) -> None:
         command_queue.put("STOP", block=False)
 
 
+def _close_extenders(cfw: ComputeFramework) -> None:
+    """Calls close() on every function_extender; a raising extender must not stop the others."""
+    for extender in cfw.function_extender:
+        try:
+            extender.close()
+        except Exception as e:
+            logging.error(f"Extender {extender.__class__.__name__}.close() raised: {e}")
+
+
 def _handle_data_dropping(
     command_queue: multiprocessing.Queue[Any],
     cfw: ComputeFramework,
@@ -119,68 +128,71 @@ def worker(
 
     cfw.worker_index = worker_index
 
-    bootstrap = cfw_register.get_run_context().child_bootstrap
-    if bootstrap is not None:
-        try:
-            bootstrap()
-        except Exception as e:
-            error_message = f"An error occurred: {e}"
-            msg = f"{error_message}\nFull traceback:\n{traceback.format_exc()}"
-            logging.error(msg)
-            exc_info = traceback.format_exc()
-            if cfw_register:
-                try:
-                    cfw_register.set_error(msg, exc_info, exception=e)
-                except Exception:
-                    # exception not picklable across the manager proxy; degrade to string-only
-                    cfw_register.set_error(msg, exc_info)
+    try:
+        bootstrap = cfw_register.get_run_context().child_bootstrap
+        if bootstrap is not None:
+            try:
+                bootstrap()
+            except Exception as e:
+                error_message = f"An error occurred: {e}"
+                msg = f"{error_message}\nFull traceback:\n{traceback.format_exc()}"
+                logging.error(msg)
+                exc_info = traceback.format_exc()
+                if cfw_register:
+                    try:
+                        cfw_register.set_error(msg, exc_info, exception=e)
+                    except Exception:
+                        # exception not picklable across the manager proxy; degrade to string-only
+                        cfw_register.set_error(msg, exc_info)
 
-            _handle_stop_command(command_queue)
-            return
+                _handle_stop_command(command_queue)
+                return
 
-    while True:
-        try:
-            command = command_queue.get(block=False)
-        except Empty:
-            # Lets an orphaned worker exit on its own if its parent dies (e.g. SIGKILL).
-            # Only checked here at poll time, so a command already in progress runs to
-            # completion before this loop is reached again (best-effort, not preemptive).
-            parent = multiprocessing.parent_process()
-            if parent is not None and not parent.is_alive():
+        while True:
+            try:
+                command = command_queue.get(block=False)
+            except Empty:
+                # Lets an orphaned worker exit on its own if its parent dies (e.g. SIGKILL).
+                # Only checked here at poll time, so a command already in progress runs to
+                # completion before this loop is reached again (best-effort, not preemptive).
+                parent = multiprocessing.parent_process()
+                if parent is not None and not parent.is_alive():
+                    break
+                time.sleep(0.01)
+                continue
+
+            if command == "STOP":
                 break
-            time.sleep(0.01)
-            continue
 
-        if command == "STOP":
-            break
+            if isinstance(command, set):
+                if _handle_data_dropping(command_queue, cfw, command, location, result_queue):
+                    break
+                continue
 
-        if isinstance(command, set):
-            if _handle_data_dropping(command_queue, cfw, command, location, result_queue):
+            try:
+                data = _execute_command(command, cfw_register, cfw, data, from_cfw)
+                _handle_command_result(command, cfw, location, data, result_queue)
+
+            except Exception as e:
+                error_message = f"An error occurred: {e}"
+                msg = f"{error_message}\nFull traceback:\n{traceback.format_exc()}"
+                logging.error(msg)
+                exc_info = traceback.format_exc()
+                if cfw_register:
+                    try:
+                        cfw_register.set_error(msg, exc_info, exception=e)
+                    except Exception:
+                        # The exception object is not picklable across the manager
+                        # proxy; degrade to the string-only path (surfaces as MlodaRunError)
+                        # rather than let this raise and skip the STOP below (which would hang the run).
+                        cfw_register.set_error(msg, exc_info)
+
+                _handle_stop_command(command_queue)
                 break
-            continue
 
-        try:
-            data = _execute_command(command, cfw_register, cfw, data, from_cfw)
-            _handle_command_result(command, cfw, location, data, result_queue)
-
-        except Exception as e:
-            error_message = f"An error occurred: {e}"
-            msg = f"{error_message}\nFull traceback:\n{traceback.format_exc()}"
-            logging.error(msg)
-            exc_info = traceback.format_exc()
-            if cfw_register:
-                try:
-                    cfw_register.set_error(msg, exc_info, exception=e)
-                except Exception:
-                    # The exception object is not picklable across the manager
-                    # proxy; degrade to the string-only path (surfaces as MlodaRunError)
-                    # rather than let this raise and skip the STOP below (which would hang the run).
-                    cfw_register.set_error(msg, exc_info)
-
-            _handle_stop_command(command_queue)
-            break
-
-        time.sleep(0.0001)
+            time.sleep(0.0001)
+    finally:
+        _close_extenders(cfw)
 
 
 def error_out(cfw_register: CfwManager, command_queue: multiprocessing.Queue[Any]) -> None:

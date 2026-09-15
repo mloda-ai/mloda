@@ -475,7 +475,7 @@ class ExecutionOrchestrator:
         """
         Joins all tasks (threads or processes) and terminates multiprocessing processes.
         """
-        self.worker_manager.join_all()
+        self.worker_manager.join_all(graceful_timeout=self.cfw_register.get_run_context().graceful_shutdown_timeout)
 
     def add_to_result_data_collection(self, cfw: ComputeFramework, features: FeatureSet, step_uuid: UUID) -> None:
         """

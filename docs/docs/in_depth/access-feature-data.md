@@ -121,7 +121,7 @@ result = mloda.run_all(
 ```
 
 Rules:
-- `column_to_file` only applies to global-scope resolution. Per-feature `options` always take precedence.
+- A `column_to_file` pin is authoritative once it applies to a requested feature: it short-circuits the resolver and takes precedence over `data_access_handle`, regardless of whether the `DataAccessCollection` is global- or per-feature-scoped.
 - Values may be either a file handle (a key of the `files` dict) or a file path (a value of the `files` dict); they are normalized to handles internally. Construction raises `ValueError` if a value matches neither.
 - If a batch of features has some columns pinned and others not, a `ValueError` is raised (use `column_to_file` for all columns or none in a batch).
 - For columns not listed in the map, the consumer falls back to the shared resolver: a single matching file binds, multiple matching files raise `ValueError` listing the candidates. Set `data_access_handle` on the feature's `Options` to disambiguate without `column_to_file`. See [Named Data Access Handles](named-data-access-handles.md).

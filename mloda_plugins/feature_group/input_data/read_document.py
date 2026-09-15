@@ -96,10 +96,8 @@ class ReadDocument(BaseInputData):
     @classmethod
     def match_subclass_data_access(cls, data_access: Any, feature_names: list[str], options: Options) -> Any:
         if isinstance(data_access, DataAccessCollection):
-            if data_access.column_to_file is not None:
-                pinned = cls._resolve_pinned_file(data_access, feature_names)
-                if pinned is not None:
-                    return pinned
+            if cls._pin_applies(data_access, feature_names):
+                return cls._resolve_pinned_file(data_access, feature_names)
             document_suffixes = cls.reader_option("document_suffixes", options)
             hint = options.get("data_access_handle")
             if hint is not None:

@@ -10,6 +10,7 @@ from mloda_plugins.compute_framework.base_implementations.sql.sql_utils import q
 from mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_relation import (
     SqliteRelation,
     _infer_sqlite_type_from_values,
+    _sqlite_affinity_to_arrow_type,
 )
 from tests.test_plugins.compute_framework.base_implementations.relation_test_mixin import (
     RelationTestMixin,
@@ -369,6 +370,24 @@ class TestInferSqliteType:
         """TEXT dominates: a string before a float must not be overridden by the float."""
         result = _infer_sqlite_type_from_values(["hello", 1.5])
         assert result == "TEXT", f"Expected TEXT but got {result}"
+
+
+class TestSqliteAffinityToArrowType:
+    @pytest.mark.parametrize(
+        "declared_type,expected_arrow_type",
+        [
+            ("TEXT BLOB", pa.string()),
+            ("BLOB SUB_TYPE TEXT", pa.string()),
+            ("CHAR DOUBLE", pa.string()),
+            ("DOUBLE BLOB", pa.large_binary()),
+            ("NUMERIC", pa.string()),
+            # Empty/undeclared type stays at the string fallback here, unlike SQLite's real BLOB-affinity rule.
+            ("", pa.string()),
+        ],
+    )
+    def test_affinity_check_order_matches_sqlite(self, declared_type: str, expected_arrow_type: pa.DataType) -> None:
+        result = _sqlite_affinity_to_arrow_type(declared_type)
+        assert result == expected_arrow_type, f"Expected {expected_arrow_type} but got {result}"
 
 
 class TestSqliteDatetimeAdapter:

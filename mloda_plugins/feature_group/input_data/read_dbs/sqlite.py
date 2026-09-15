@@ -305,8 +305,8 @@ class SQLITEReader(ReadDB):
 
     @staticmethod
     def _affinity_to_datatype(declared_type: str) -> DataType | None:
-        # SQLite's documented affinity precedence (INTEGER, TEXT, BLOB, REAL/NUMERIC); independent of the
-        # compute framework's own _sqlite_affinity_to_arrow_type, which orders and maps BLOB differently.
+        # Shares its affinity precedence with the compute framework's _sqlite_affinity_to_arrow_type, but
+        # falls back to None instead of pa.string() and targets DataType instead of pa.DataType.
         upper = declared_type.upper()
         if "INT" in upper:
             return DataType.INT64

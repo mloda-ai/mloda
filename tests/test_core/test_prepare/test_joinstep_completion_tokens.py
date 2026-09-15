@@ -854,13 +854,22 @@ def _plan_two_plain_hops_share_one_source_framework() -> TwoPlainHopsPlanned:
     graph.parent_to_children_mapping[gate_two.uuid] = {root.uuid}
     graph.add_node(branch_a.uuid, NodeProperties(branch_a, TokenPlainBranchA))
     graph.adjacency_list[branch_a.uuid] = [consumer_feature.uuid]
-    graph.parent_to_children_mapping[branch_a.uuid] = {gate_one.uuid}
+    # Full transitive closure, as Graph.set_all_parents_for_each_child would compute in a real graph
+    # (this fixture bypasses that call): branch_a and branch_b share ancestor root.uuid, which is
+    # what makes the two hops genuinely linked.
+    graph.parent_to_children_mapping[branch_a.uuid] = {gate_one.uuid, root.uuid}
     graph.add_node(branch_b.uuid, NodeProperties(branch_b, TokenPlainBranchB))
     graph.adjacency_list[branch_b.uuid] = [consumer_feature.uuid]
-    graph.parent_to_children_mapping[branch_b.uuid] = {gate_two.uuid}
+    graph.parent_to_children_mapping[branch_b.uuid] = {gate_two.uuid, root.uuid}
     graph.add_node(consumer_feature.uuid, NodeProperties(consumer_feature, TokenPlainConsumer))
     graph.adjacency_list[consumer_feature.uuid] = []
-    graph.parent_to_children_mapping[consumer_feature.uuid] = {branch_a.uuid, branch_b.uuid}
+    graph.parent_to_children_mapping[consumer_feature.uuid] = {
+        branch_a.uuid,
+        branch_b.uuid,
+        gate_one.uuid,
+        gate_two.uuid,
+        root.uuid,
+    }
 
     planned.queue.append((TokenPlainRoot, {root}))
     planned.queue.append((TokenPlainGateOne, {gate_one}))

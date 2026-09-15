@@ -1,6 +1,7 @@
 import os
 from pathlib import Path
 from typing import Any, ClassVar
+from mloda.core.abstract_plugins.components.utils import is_match_abort
 from mloda.user import DataAccessCollection
 from mloda.provider import FeatureSet
 from mloda.provider import (
@@ -11,6 +12,7 @@ from mloda.provider import (
     PropertySpec,
     record_match_rejection,
 )
+from mloda.user import DataType
 from mloda.user import Options
 
 
@@ -36,15 +38,17 @@ class ReadFile(BaseInputData):
     - load_data
     - suffix
     - get_column_names
+    - describe_columns (optional; default wraps get_column_names with unknown types)
 
     A ReadFile subclass classifies as a final reader by overriding ``load_data``
     wholesale. It may return its table directly, or a descriptor materialized by
     the target compute framework (CsvReader returns a ``FileSource``).
 
-    If get_column_names is not overridden, the class assumes plain columns are present but
-    declines a chain- or column-separated name while matching (an explicit column_to_file pin
-    is exempt; overriding get_column_names opts out). A match_subclass_data_access override
-    should route through _file_matches to keep that guard.
+    A reader that cannot enumerate columns (get_column_names not overridden, or raising NotImplementedError
+    or ImportError) assumes plain columns are present but declines a chain- or column-separated name while
+    matching; an explicit column_to_file pin is exempt. An unpinned file whose columns cannot be read
+    (OSError, ValueError) is declined; a pinned one raises. A match_subclass_data_access override should
+    route through _file_matches to keep these rules.
     """
 
     _auto_load_group: str = "feature_group/input_data/read_files"
@@ -100,6 +104,18 @@ class ReadFile(BaseInputData):
     def get_column_names(cls, file_name: str) -> list[str]:
         raise NotImplementedError
 
+    @staticmethod
+    def _file_path(data_access: Any) -> str:
+        """Coerce a str or Path data_access to a plain path string; anything else is a caller error."""
+        if isinstance(data_access, (str, Path)):
+            return str(data_access)
+        raise ValueError(f"describe_columns requires a file path (str or Path), got {type(data_access).__name__}.")
+
+    @classmethod
+    def describe_columns(cls, data_access: Any) -> dict[str, DataType | None]:
+        """Family default: wraps get_column_names, mapping every column name to an unknown (None) type."""
+        return {name: None for name in cls.get_column_names(cls._file_path(data_access))}
+
     @classmethod
     def match_subclass_data_access(cls, data_access: Any, feature_names: list[str], options: Options) -> Any:
         document_suffixes: "frozenset[str]" = cls.reader_option("document_suffixes", options)
@@ -145,29 +161,37 @@ class ReadFile(BaseInputData):
             return False
         if document_suffixes and any(path.endswith(s) for s in document_suffixes):
             return False
-        if cls._declines_unvalidated_separator_name(path, feature_names):
+        try:
+            if cls.validate_columns(path, feature_names) is False:
+                return False
+            return not cls._declines_unvalidated_separator_name(path, feature_names)
+        except (OSError, ValueError) as exc:
+            if is_match_abort(exc):
+                raise
+            # An unreadable unpinned file declines so sibling readers still match; a pinned file is read
+            # first by _resolve_pinned_file through validate_columns, so its error propagates before any fallback.
+            record_match_rejection(
+                cls.get_class_name(),
+                f"{cls.get_class_name()} matched the suffix of {path} but could not read its columns: {exc}",
+                stage=INPUT_DATA_STAGE,
+            )
             return False
-        return cls.validate_columns(path, feature_names) is not False
 
     @classmethod
     def _declines_unvalidated_separator_name(cls, file_name: str, feature_names: list[str]) -> bool:
-        """Declines a chain/column-separated name when get_column_names is not overridden."""
-        # An override whose get_column_names raises NotImplementedError still bypasses this guard.
-        if cls._is_overridden(ReadFile, "get_column_names"):
+        """Declines a chain/column-separated name this reader cannot confirm by enumerating columns."""
+        feature = next((name for name in feature_names if CHAIN_SEPARATOR in name or COLUMN_SEPARATOR in name), None)
+        if feature is None:
             return False
-        # COLUMN_SEPARATOR never reaches here in production (get_column_base_feature strips it first); kept for
-        # direct callers. Sharing the owner name with the missing-column decline is safe: the two are mutually
-        # exclusive, since validate_columns records nothing when get_column_names is not overridden.
-        for feature in feature_names:
-            if CHAIN_SEPARATOR in feature or COLUMN_SEPARATOR in feature:
-                record_match_rejection(
-                    cls.get_class_name(),
-                    f"{cls.get_class_name()} matched the suffix of {file_name} but does not override "
-                    f"get_column_names, so it cannot confirm the chain/column-separated name '{feature}'",
-                    stage=INPUT_DATA_STAGE,
-                )
-                return True
-        return False
+        if cls._column_names_or_none(file_name) is not None:
+            return False
+        record_match_rejection(
+            cls.get_class_name(),
+            f"{cls.get_class_name()} matched the suffix of {file_name} but cannot enumerate its columns via "
+            f"get_column_names, so it cannot confirm the chain/column-separated name '{feature}'",
+            stage=INPUT_DATA_STAGE,
+        )
+        return True
 
     @classmethod
     def match_read_file_data_access(
@@ -187,11 +211,20 @@ class ReadFile(BaseInputData):
         return None
 
     @classmethod
+    def _column_names_or_none(cls, file_name: str) -> "list[str] | None":
+        """get_column_names' result, or None when it cannot enumerate (NotImplementedError or ImportError)."""
+        try:
+            return cls.get_column_names(file_name)
+        except (NotImplementedError, ImportError) as exc:
+            if is_match_abort(exc):
+                raise
+            return None
+
+    @classmethod
     def validate_columns(cls, file_name: str, feature_names: list[str]) -> bool:
         """A suffix-owned file lacking a requested column records an attributable decline before returning False."""
-        try:
-            columns = cls.get_column_names(file_name)
-        except NotImplementedError:
+        columns = cls._column_names_or_none(file_name)
+        if columns is None:
             return True
 
         missing = [feature for feature in feature_names if feature not in columns]

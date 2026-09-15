@@ -1,6 +1,7 @@
 import json
 import shutil
 import tempfile
+from pathlib import Path
 from typing import Any
 
 import pyarrow as pa
@@ -8,6 +9,7 @@ import pyarrow.orc as pyarrow_orc
 import pyarrow.parquet as pyarrow_parquet
 
 from mloda.core.abstract_plugins.components.input_data.file_source import FileSource
+from mloda.user import DataType
 from mloda_plugins.feature_group.input_data.read_files.csv import CsvReader
 from mloda_plugins.feature_group.input_data.read_files.feather import FeatherReader
 from mloda_plugins.feature_group.input_data.read_files.json import JsonReader
@@ -127,3 +129,38 @@ class TestDeterministicColumnOrder:
         for cls, path in self._all_readers():
             columns = _loaded_column_names(cls.load_data(path, features))
             assert columns == ["a1"], f"{cls.__name__} returned columns {columns}, expected ['a1']"
+
+    def test_feather_get_column_names_returns_physical_column_names(self) -> None:
+        assert FeatherReader.get_column_names(self.feather_file) == self.physical_columns
+
+    def test_orc_get_column_names_returns_physical_column_names(self) -> None:
+        assert OrcReader.get_column_names(self.orc_file) == self.physical_columns
+
+    def test_parquet_describe_columns_maps_string_column_to_string_type(self, tmp_path: Path) -> None:
+        table = pa.Table.from_pydict({"a": [1, 2, 3], "b": ["x", "y", "z"]})
+        file_path = str(tmp_path / "typed.parquet")
+        pyarrow_parquet.write_table(table, file_path)
+
+        described = ParquetReader.describe_columns(file_path)
+
+        assert described == {"a": DataType.INT64, "b": DataType.STRING}
+
+    def test_parquet_describe_columns_maps_unmapped_nested_type_to_none(self, tmp_path: Path) -> None:
+        table = pa.Table.from_pydict({"a": [1, 2, 3], "nested": [[1, 2], [3], []]})
+        file_path = str(tmp_path / "nested.parquet")
+        pyarrow_parquet.write_table(table, file_path)
+
+        described = ParquetReader.describe_columns(file_path)
+
+        assert described == {"a": DataType.INT64, "nested": None}
+
+    def test_parquet_get_column_names_returns_top_level_names_for_nested_column(self, tmp_path: Path) -> None:
+        """Must report top-level names, not pyarrow's leaf-flattened nested fields, and agree with describe_columns."""
+        table = pa.Table.from_pydict({"a": [1, 2, 3], "nested": [[1, 2], [3], []]})
+        file_path = str(tmp_path / "nested_names.parquet")
+        pyarrow_parquet.write_table(table, file_path)
+
+        column_names = ParquetReader.get_column_names(file_path)
+
+        assert sorted(column_names) == ["a", "nested"]
+        assert set(column_names) == set(ParquetReader.describe_columns(file_path).keys())

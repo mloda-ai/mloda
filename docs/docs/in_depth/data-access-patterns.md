@@ -70,6 +70,10 @@ Readers are classified structurally; no reader code is executed for classificati
 
 `_final_reader_requires` is underscore-named but is a stable, documented extension point for third-party reader families.
 
+### Column discovery
+
+`BaseInputData.describe_columns(data_access) -> dict[str, DataType | None]` maps column name to `DataType` (`None` where unknown). It raises `NotImplementedError` when a reader can't enumerate columns, and `ImportError` when a backend it needs is missing; a missing or unreadable source raises `OSError` or `ValueError`. `ReadFile` supplies a family default wrapping `get_column_names` with unknown types and accepting a `str` or `Path` data access (anything else raises `ValueError`); `ParquetReader`, `FeatherReader`, and `OrcReader` override it to report the types stored in the file's own schema, and `JsonReader` the types pyarrow infers while parsing. `SQLITEReader` overrides it too, from SQLite's declared (unenforced) column types; it needs `data_access["table_name"]` already set, e.g. `{"sqlite": path, "table_name": "customers"}`.
+
 ### Selecting among sibling readers
 
 A feature selects a specific reader with an Option whose key equals the reader's `BaseInputData.data_access_name()`, which defaults to `cls.__name__` (unique per class, so sibling readers cannot collide) and which a reader that overrides it keeps unique within its family itself:
@@ -146,7 +150,8 @@ Rules for reader authors:
 - Recording outside an engine-opened window is a no-op, so readers stay usable standalone.
 - Recorded reasons are discarded at the enclosing candidate level: when the reader ultimately matches, when a sibling reader matches, or, for unowned recordings, when the feature group matches by another rule. An owned veto instead gates the name-based rules (see the paragraph below). Only a decline surfaces them.
 - Name the reader and the concrete input in the reason, as the example does. Any label works as the owner name, an overridden `data_access_name()` included, but it must be distinct among the reader's own decline points: the first recording per owner wins, so a later reason under a name already used in the same window is dropped and never reaches the owned stage.
-- A `ReadFile` subclass that does not override `get_column_names`, and a `ReadDB` subclass that does not override `check_feature_in_data_access`, decline a chain- or column-separated feature name while matching. An explicit `column_to_file` pin is exempt; overriding the hook opts out.
+- A `ReadFile` subclass that cannot enumerate columns (no `get_column_names` override, or one raising `NotImplementedError` or `ImportError`), and a `ReadDB` subclass that does not override `check_feature_in_data_access`, decline a chain- or column-separated feature name while matching. An explicit `column_to_file` pin is exempt; for `ReadDB`, overriding the hook opts out.
+- In `ReadFile` matching, an unpinned file whose columns cannot be read (`OSError`, `ValueError`) is declined with a recorded reason, so a shipped file reader needs the file to be readable when features resolve. A pinned file that cannot be read raises instead of falling back to another file. Any other exception from `get_column_names` ends reader selection for that feature group candidate, so no sibling reader is tried (the engine contains it as a non-match for that candidate); a raise marked with `escalate_match_abort` propagates out of matching.
 
 `ReadFile` column validation and the `ReadDB` feature check (`check_feature_in_data_access`) already record automatically; a custom reader only needs this for its own decline points.
 

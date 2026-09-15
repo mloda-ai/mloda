@@ -1,11 +1,8 @@
 from typing import Any
 
-try:
-    from pyarrow import ipc as pyarrow_ipc
-except ImportError:
-    pyarrow_ipc = None
-
+from mloda.core.optional_dependency import require
 from mloda.provider import FeatureSet
+from mloda.user import DataType
 from mloda_plugins.feature_group.input_data.read_file import ReadFile
 
 
@@ -109,12 +106,20 @@ class FeatherReader(ReadFile):
 
     @classmethod
     def load_data(cls, data_access: Any, features: FeatureSet) -> Any:
-        if pyarrow_ipc is None:
-            raise ImportError(
-                "pyarrow is required to read Feather files. Install it with: pip install 'mloda[pyarrow]'"
-            )
+        pyarrow_ipc = require("pyarrow.ipc", "reading Feather files")
         columns = list(features.get_all_names())
         # Feather V2 is the Arrow IPC file format; use ipc.open_file instead of the
         # deprecated pyarrow.feather.read_table (removed warning as of pyarrow 24).
         with pyarrow_ipc.open_file(data_access) as reader:
             return reader.read_all().select(columns)
+
+    @classmethod
+    def get_column_names(cls, file_name: str) -> list[str]:
+        return list(cls.describe_columns(file_name))
+
+    @classmethod
+    def describe_columns(cls, data_access: Any) -> dict[str, DataType | None]:
+        pyarrow_ipc = require("pyarrow.ipc", "reading Feather files")
+        file_name = cls._file_path(data_access)
+        with pyarrow_ipc.open_file(file_name) as reader:
+            return {field.name: DataType.from_arrow_type_safe(field.type) for field in reader.schema}

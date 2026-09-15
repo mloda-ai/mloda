@@ -1,11 +1,8 @@
 from typing import Any
 
-try:
-    from pyarrow import parquet as pyarrow_parquet
-except ImportError:
-    pyarrow_parquet = None
-
+from mloda.core.optional_dependency import require
 from mloda.provider import FeatureSet
+from mloda.user import DataType
 from mloda_plugins.feature_group.input_data.read_file import ReadFile
 
 
@@ -111,13 +108,16 @@ class ParquetReader(ReadFile):
 
     @classmethod
     def load_data(cls, data_access: Any, features: FeatureSet) -> Any:
-        if pyarrow_parquet is None:
-            raise ImportError(
-                "pyarrow is required to read Parquet files. Install it with: pip install 'mloda[pyarrow]'"
-            )
+        pyarrow_parquet = require("pyarrow.parquet", "reading Parquet files")
         return pyarrow_parquet.read_table(data_access, columns=list(features.get_all_names()))
 
     @classmethod
-    def get_column_names(cls, file_name: str) -> Any:
+    def get_column_names(cls, file_name: str) -> list[str]:
+        return list(cls.describe_columns(file_name))
+
+    @classmethod
+    def describe_columns(cls, data_access: Any) -> dict[str, DataType | None]:
+        pyarrow_parquet = require("pyarrow.parquet", "reading Parquet files")
+        file_name = cls._file_path(data_access)
         parquet_file = pyarrow_parquet.ParquetFile(file_name)
-        return [column.name for column in parquet_file.schema]
+        return {field.name: DataType.from_arrow_type_safe(field.type) for field in parquet_file.schema_arrow}

@@ -1,11 +1,8 @@
 from typing import Any
 
-try:
-    from pyarrow import orc as pyarrow_orc
-except ImportError:
-    pyarrow_orc = None
-
+from mloda.core.optional_dependency import require
 from mloda.provider import FeatureSet
+from mloda.user import DataType
 from mloda_plugins.feature_group.input_data.read_file import ReadFile
 
 
@@ -109,7 +106,17 @@ class OrcReader(ReadFile):
 
     @classmethod
     def load_data(cls, data_access: Any, features: FeatureSet) -> Any:
-        if pyarrow_orc is None:
-            raise ImportError("pyarrow is required to read ORC files. Install it with: pip install 'mloda[pyarrow]'")
+        pyarrow_orc = require("pyarrow.orc", "reading ORC files")
         columns = list(features.get_all_names())
         return pyarrow_orc.read_table(source=data_access, columns=columns).select(columns)
+
+    @classmethod
+    def get_column_names(cls, file_name: str) -> list[str]:
+        return list(cls.describe_columns(file_name))
+
+    @classmethod
+    def describe_columns(cls, data_access: Any) -> dict[str, DataType | None]:
+        pyarrow_orc = require("pyarrow.orc", "reading ORC files")
+        file_name = cls._file_path(data_access)
+        schema = pyarrow_orc.ORCFile(file_name).schema
+        return {field.name: DataType.from_arrow_type_safe(field.type) for field in schema}

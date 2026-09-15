@@ -23,7 +23,8 @@ A fourth pass reads the other pairing on one ``try``: a ``finally`` that discard
 through a return, break or continue or by raising a replacement, undoes every escalation it encloses: the
 re-raises of its own clauses, and the marked raises in the arms those clauses never catch.
 
-Not covered: plugin code under ``mloda_plugins``; dynamic dispatch, which is why SEEDS is hand-written;
+Not covered: plugin code under ``mloda_plugins``, except ReadFile's match helpers, checked by the test
+below; dynamic dispatch, which is why SEEDS is hand-written;
 decorators; ``except*`` groups, which neither pass over a ``try`` reads, as their clauses split an exception
 group between them instead of racing for it, so the third pass's first-match reasoning does not hold there
 and the fourth drops them with it; a raise in the body of a nested try that has handlers, assumed caught there, and
@@ -2552,3 +2553,18 @@ def test_the_sweep_flags_a_returning_finally_spliced_into_the_real_seam() -> Non
     assert spliced == [FinallySite(module, lineno, function, discarded)], (
         f"a return spliced into the seam's own finally was not flagged: {spliced}"
     )
+
+
+def test_read_file_match_handlers_escalate_or_declare_a_swallow() -> None:
+    """ReadFile's match helpers are plugin code, outside the walked graph, so they get their own direct check."""
+    module = "mloda_plugins/feature_group/input_data/read_file.py"
+    source = (_REPO_ROOT / module).read_text(encoding="utf-8")
+
+    handlers = classify_handlers(source, module, functions=None)
+    unannotated = [site for site in handlers if site.kind == "unannotated"]
+    misannotated = [site for site in handlers if site.kind == "misannotated"]
+    escalating = [site for site in handlers if site.kind == "escalating"]
+
+    assert unannotated == [], f"unannotated ReadFile match handlers: {[s.location() for s in unannotated]}"
+    assert misannotated == [], f"misannotated ReadFile match handlers: {[s.location() for s in misannotated]}"
+    assert escalating != [], "expected at least one escalating handler among ReadFile's match helpers"

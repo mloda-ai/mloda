@@ -1,6 +1,7 @@
 import csv
 import os
 import tempfile
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -336,6 +337,31 @@ class TestReadFile:
         features.add(Feature("V2", options=options))
         data = TestReadFile().load(features)
         assert data.column_names == ["id", "V1", "V2"]
+
+    def test_describe_columns_wraps_get_column_names(self) -> None:
+        class TestReadFile(ReadFile):
+            @classmethod
+            def get_column_names(cls, file_name: str) -> list[str]:
+                return ["id", "V1", "V2"]
+
+            @classmethod
+            def suffix(cls) -> tuple[str, ...]:
+                return (".csv",)
+
+        expected = {"id": None, "V1": None, "V2": None}
+        assert TestReadFile.describe_columns("dummy.csv") == expected
+        assert TestReadFile.describe_columns(Path("dummy.csv")) == expected
+        with pytest.raises(ValueError):
+            TestReadFile.describe_columns(DataAccessCollection(files={"dummy.csv"}))
+
+    def test_describe_columns_not_implemented_by_default(self) -> None:
+        class TestReadFile(ReadFile):
+            @classmethod
+            def suffix(cls) -> tuple[str, ...]:
+                return (".csv",)
+
+        with pytest.raises(NotImplementedError):
+            TestReadFile.describe_columns("dummy.csv")
 
 
 class TestSameClassFGLinkWithDifferentDataSources:

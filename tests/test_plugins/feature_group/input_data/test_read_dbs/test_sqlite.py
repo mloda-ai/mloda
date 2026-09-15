@@ -6,6 +6,7 @@ from unittest.mock import MagicMock, patch
 
 import pyarrow as pa
 
+from mloda.user import DataType
 from mloda.user import Feature
 from mloda.user import Options
 from mloda.provider import FeatureSet
@@ -55,6 +56,33 @@ class TestSQLITEReader:
         conn.commit()
         conn.close()
         return str(db_path)
+
+    @pytest.fixture(scope="class")
+    def affinity_test_table(self, temp_sqlite_db: Any) -> Any:
+        """A second table covering describe_columns affinity edge cases: numeric/blob/text keywords, an
+        undeclared column, and multi-keyword types that must resolve by affinity precedence, not check order."""
+        conn = sqlite3.connect(temp_sqlite_db)
+        cursor = conn.cursor()
+        cursor.execute("""
+            CREATE TABLE affinity_table (
+                price REAL,
+                weight FLOAT,
+                distance DOUBLE,
+                payload BLOB,
+                label VARCHAR(255),
+                notes CLOB,
+                untyped_col,
+                amount NUMERIC,
+                precise DECIMAL(10,5),
+                text_then_blob TEXT BLOB,
+                blob_sub_type_text BLOB SUB_TYPE TEXT,
+                char_then_double CHAR DOUBLE,
+                double_then_blob DOUBLE BLOB
+            );
+        """)
+        conn.commit()
+        conn.close()
+        return "affinity_table"
 
     @pytest.fixture(scope="class")
     def valid_credentials(self, temp_sqlite_db: Any) -> Any:
@@ -198,3 +226,72 @@ class TestSQLITEReader:
         options = MockOptions(("BaseInputData", {}))
         with pytest.raises(KeyError, match="'table_name'"):
             SQLITEReader.get_table(options)  # type: ignore
+
+    def test_describe_columns_happy_path(self, temp_sqlite_db: Any) -> None:
+        result = SQLITEReader.describe_columns({"sqlite": temp_sqlite_db, "table_name": "test_table"})
+        assert result == {"id": DataType.INT64, "name": DataType.STRING, "age": DataType.INT64}
+
+    def test_describe_columns_missing_table_name(self, temp_sqlite_db: Any) -> None:
+        with pytest.raises(ValueError, match="table_name"):
+            SQLITEReader.describe_columns({"sqlite": temp_sqlite_db})
+
+    def test_describe_columns_unknown_table(self, temp_sqlite_db: Any) -> None:
+        with pytest.raises(ValueError, match="does_not_exist"):
+            SQLITEReader.describe_columns({"sqlite": temp_sqlite_db, "table_name": "does_not_exist"})
+
+    def test_describe_columns_affinity_edge_cases(self, temp_sqlite_db: Any, affinity_test_table: Any) -> None:
+        result = SQLITEReader.describe_columns({"sqlite": temp_sqlite_db, "table_name": affinity_test_table})
+
+        assert result["price"] == DataType.DOUBLE
+        assert result["weight"] == DataType.DOUBLE
+        assert result["distance"] == DataType.DOUBLE
+        assert result["payload"] == DataType.BINARY
+        # VARCHAR(255): substring match must still hit with a length modifier attached.
+        assert result["label"] == DataType.STRING
+        assert result["notes"] == DataType.STRING  # CLOB, not just plain TEXT
+        # No declared type at all (PRAGMA table_info reports an empty string) must map to None, not raise.
+        assert result["untyped_col"] is None
+        # Diverges from _sqlite_affinity_to_arrow_type, which defaults an unmatched type to TEXT; here it's None.
+        assert result["amount"] is None
+        assert result["precise"] is None
+        # A declared type with several keywords must resolve by SQLite's affinity precedence
+        # (INTEGER, TEXT, BLOB, REAL/NUMERIC), not by whichever keyword is checked first.
+        assert result["text_then_blob"] == DataType.STRING
+        assert result["blob_sub_type_text"] == DataType.STRING
+        assert result["char_then_double"] == DataType.STRING
+        assert result["double_then_blob"] == DataType.BINARY
+
+    def test_describe_columns_nonexistent_db_does_not_create_file_and_error_mentions_path(self, tmp_path: Any) -> None:
+        """sqlite3.connect would otherwise create the file; is_valid_credentials must fail fast, naming the path."""
+        nonexistent_path = tmp_path / "nonexistent.db"
+        assert not nonexistent_path.exists()
+
+        with pytest.raises(ValueError, match=re.escape(str(nonexistent_path))):
+            SQLITEReader.describe_columns({"sqlite": str(nonexistent_path), "table_name": "t"})
+
+        assert not nonexistent_path.exists()
+
+    def test_describe_columns_path_credential_rejected(self, tmp_path: Any) -> None:
+        """A Path credential must fail is_valid_credentials's str check, not reach sqlite3.connect and create a file."""
+        db_path = tmp_path / "missing.db"
+
+        with pytest.raises(ValueError):
+            SQLITEReader.describe_columns({"sqlite": db_path, "table_name": "t"})
+
+        assert not db_path.exists()
+
+    def test_describe_columns_missing_sqlite_key(self) -> None:
+        """A data_access dict without the 'sqlite' key must raise ValueError, not KeyError."""
+        with pytest.raises(ValueError):
+            SQLITEReader.describe_columns({"table_name": "t"})
+
+    def test_describe_columns_quotes_identifiers_blocks_injection(self, temp_sqlite_db: Any) -> None:
+        """A crafted table_name must not break out of PRAGMA table_info(...)'s identifier position via quote_ident."""
+        malicious_table_name = "test_table); DROP TABLE test_table; --"
+
+        with pytest.raises(ValueError):
+            SQLITEReader.describe_columns({"sqlite": temp_sqlite_db, "table_name": malicious_table_name})
+
+        # test_table must still exist and be intact: the injected DROP never executed.
+        result = SQLITEReader.describe_columns({"sqlite": temp_sqlite_db, "table_name": "test_table"})
+        assert result == {"id": DataType.INT64, "name": DataType.STRING, "age": DataType.INT64}

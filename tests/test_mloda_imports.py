@@ -118,6 +118,7 @@ def test_import_user_full() -> None:
 
 def test_import_provider_base_classes() -> None:
     """from mloda.provider import ... (Data Provider base classes)"""
+    import mloda.provider as provider_module
     from mloda.provider import (
         # Base classes
         FeatureGroup,
@@ -159,6 +160,8 @@ def test_import_provider_base_classes() -> None:
         # Transformers
         BaseTransformer,
         ComputeFrameworkTransformer,
+        # Optional-dependency import guards
+        traceback_blames_root,
         # Engines
         BaseFilterEngine,
         BaseMergeEngine,
@@ -204,6 +207,9 @@ def test_import_provider_base_classes() -> None:
     # Transformers
     assert BaseTransformer is not None
     assert ComputeFrameworkTransformer is not None
+    # Optional-dependency import guards
+    assert callable(traceback_blames_root)
+    assert "traceback_blames_root" in provider_module.__all__
     # Engines
     assert BaseFilterEngine is not None
     assert BaseMergeEngine is not None
@@ -216,6 +222,7 @@ def test_import_provider_base_classes() -> None:
 
 def test_import_steward_governance() -> None:
     """from mloda.steward import ... (Data Steward governance)"""
+    import mloda.steward as steward_module
     from mloda.steward import (
         # Plugin inspection
         FeatureGroupInfo,
@@ -228,6 +235,8 @@ def test_import_steward_governance() -> None:
         # Function extenders (audit, monitoring, observability)
         Extender,
         ExtenderHook,
+        # Optional-dependency import guards
+        traceback_blames_root,
         # Resolved execution plan
         PlanStep,
     )
@@ -245,6 +254,9 @@ def test_import_steward_governance() -> None:
     # Function extenders
     assert Extender is not None
     assert ExtenderHook is not None
+    # Optional-dependency import guards
+    assert callable(traceback_blames_root)
+    assert "traceback_blames_root" in steward_module.__all__
 
 
 # =============================================================================

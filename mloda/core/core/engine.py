@@ -472,10 +472,12 @@ class Engine:
         if feature.link is None:
             return
 
-        if self.links is None:
-            self.links = {feature.link}
-        else:
-            self.links.add(feature.link)
+        if self.links is not None and feature.link in self.links:
+            return
+
+        candidate = {feature.link} if self.links is None else self.links | {feature.link}
+        LinkValidator.validate_links(candidate)
+        self.links = candidate
 
     def add_feature_to_collection(
         self,

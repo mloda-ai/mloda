@@ -9,7 +9,7 @@ import pytest
 
 from mloda.core.core.engine import Engine
 from mloda.core.core.step.join_step import JoinStep
-from mloda.provider import BaseInputData, ComputeFramework, DataCreator, FeatureGroup, FeatureSet
+from mloda.provider import BaseInputData, ComputeFramework, DataCreator, FeatureGroup, FeatureSet, LinkValidator
 from mloda.user import Feature, FeatureName, Features, Index, JoinSpec, Link, Options, PluginCollector
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 
@@ -292,3 +292,39 @@ def test_feature_link_is_visible_to_its_own_resolution_links_gate() -> None:
 
     assert election == {"sclk_votes", "sclk_nr"}
     assert region == {"sclk_pop", "sclk_code"}
+
+
+def test_feature_link_double_join_pair_raises_like_top_level_links() -> None:
+    """A double-join pair via Feature.link must raise like top-level links=; without the fix it silently passes."""
+    link1 = Link.inner(JoinSpec(SclkSourceFG, "sclk_nr"), JoinSpec(SclkOtherFG, "sclk_other_key"))
+    link2 = Link.inner(JoinSpec(SclkOtherFG, "sclk_other_key"), JoinSpec(SclkSourceFG, "sclk_nr"))
+
+    # Sanity: the equivalent top-level links= case already raises via LinkValidator.
+    with pytest.raises(ValueError, match="at least two different defined joins"):
+        LinkValidator.validate_links({link1, link2})
+
+    features = Features(
+        [
+            Feature("sclk_votes", options={"sclk_source": "election"}, link=link1),
+            Feature("sclk_other_val", link=link2),
+        ]
+    )
+
+    with pytest.raises(ValueError, match="at least two different defined joins"):
+        Engine(
+            features,
+            {PyArrowTable},
+            None,
+            plugin_collector=PluginCollector.enabled_feature_groups({SclkSourceFG, SclkOtherFG}),
+        )
+
+
+def test_valid_feature_link_still_registers_in_engine_links() -> None:
+    """A valid Feature-attached link must still register in engine.links."""
+    link = _link_a()
+    linked = Feature("sclk_votes", options={"sclk_source": "election"}, link=link)
+    plain = Feature("sclk_pop", options={"sclk_source": "region"})
+    engine = _build_engine(Features([linked, plain]), None, {SclkSourceFG})
+
+    assert engine.links is not None
+    assert link in engine.links

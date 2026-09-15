@@ -280,14 +280,9 @@ class TestSQLITEReader:
         assert sqlite_affinity_class("DOUBLE BLOB") == "BLOB"
 
     def test_affinity_class_matches_relation_and_reader_call_sites(self) -> None:
-        """Cross-check: sqlite_affinity_class is the single source of truth behind both call sites.
+        """Both call sites must agree with sqlite_affinity_class's label for the same declared type.
 
-        _sqlite_affinity_to_arrow_type (compute-framework relation) and
-        SQLITEReader._affinity_to_datatype (this reader) must each agree with the label
-        sqlite_affinity_class returns for the same declared type, once mapped through each
-        call site's own label -> output table. Driven off labels, not arrow-type equality:
-        _sqlite_affinity_to_arrow_type returns pa.string() for both TEXT and NUMERIC, so
-        comparing arrow-type output directly could not distinguish those two cases.
+        Compared via labels rather than arrow-type equality, since TEXT and NUMERIC both map to pa.string().
         """
         label_to_arrow_type = {
             "INTEGER": pa.int64(),

@@ -77,6 +77,9 @@ class WorkerManager:
         completed_drops. Drains each queue to empty per call; a message still in flight through the queue's
         feeder thread may not appear until a later poll."""
         for r_queue in self.result_queues_collection:
+            # Safe to drain unbounded: a worker puts at most one message per command it
+            # processes (one step-uuid or one DROP_COMPLETE tuple), so a queue's backlog
+            # is bounded by commands already dispatched to that worker, never unbounded.
             while True:
                 try:
                     msg = r_queue.get(block=False)

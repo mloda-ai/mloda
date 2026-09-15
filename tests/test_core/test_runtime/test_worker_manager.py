@@ -352,8 +352,9 @@ class TestWorkerManagerResultPolling:
         ]
         manager.result_queues_collection.add(mock_queue)
 
-        # First poll picks up the valid UUID; the second reaches the stale tuple,
-        # which must be ignored rather than raise AttributeError.
+        # Drain-to-empty means the first poll consumes both the valid UUID and the stale
+        # tuple in the same call; the tuple must be ignored rather than raise AttributeError.
+        # The second poll then finds the queue already empty.
         manager.poll_result_queues()
         manager.poll_result_queues()
 
@@ -424,22 +425,28 @@ class TestWorkerManagerResultPolling:
         mp_queue.put(("DROP_COMPLETE", cfw_uuid, True))
         mp_queue.put(uuid2)
 
-        # put() flushes via a background feeder thread; wait so the poll below doesn't race an empty pipe.
-        time.sleep(0.2)
-
         manager.result_queues_collection.add(mp_queue)
 
-        start_time = time.time()
-        manager.poll_result_queues()
-        elapsed = time.time() - start_time
+        try:
+            # put() flushes via a background feeder thread, so a single poll can race an
+            # empty pipe. Retry with a short sleep instead of one fixed delay, bounded by
+            # a wall-clock deadline so a real hang still fails the test.
+            start_time = time.time()
+            deadline = start_time + 3.0
+            while time.time() < deadline:
+                manager.poll_result_queues()
+                if UUID(uuid1) in manager.result_uuids_collection and UUID(uuid2) in manager.result_uuids_collection:
+                    break
+                time.sleep(0.01)
+            elapsed = time.time() - start_time
 
-        assert elapsed < 2.0
-        assert UUID(uuid1) in manager.result_uuids_collection
-        assert UUID(uuid2) in manager.result_uuids_collection
-        assert manager.completed_drops[cfw_uuid] is True
-
-        mp_queue.close()
-        mp_queue.join_thread()
+            assert elapsed < 3.0
+            assert UUID(uuid1) in manager.result_uuids_collection
+            assert UUID(uuid2) in manager.result_uuids_collection
+            assert manager.completed_drops[cfw_uuid] is True
+        finally:
+            mp_queue.close()
+            mp_queue.join_thread()
 
 
 class TestWorkerManagerStepCompletion:

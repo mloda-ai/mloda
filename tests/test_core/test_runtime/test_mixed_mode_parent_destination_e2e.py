@@ -3,6 +3,7 @@ directions: a worker-owned source feeding a parent-resident destination, and a p
 join result feeding its own parent-resident child, without leaking a stale or wrong-typed cfw."""
 
 from typing import Any
+from uuid import UUID
 
 import pytest
 
@@ -1376,7 +1377,9 @@ class TestTransformFrameworkStepSourceRootDropTiming:
         hop's own drop-check (e.g. after the destination consumer's own frame) would also pass once
         the destination step's own, ordinary completion is recorded, masking a still-empty
         `owed_tokens`. `ExecutionOrchestrator._drop_tfs_source_if_possible` is spied on directly (no
-        public-API hook exists) to capture the flight-server state at that exact moment."""
+        public-API hook exists) to capture the flight-server state at that exact moment. The drop
+        itself is async now, so the spy waits for the worker's own drop acknowledgement before
+        snapshotting, rather than asserting an instantaneous state right after the queueing call."""
         plugin_collector = PluginCollector.enabled_feature_groups(
             {
                 _MpTransformSourceFG,
@@ -1412,6 +1415,15 @@ class TestTransformFrameworkStepSourceRootDropTiming:
         def _spy_drop_tfs(self: Any, step: Any) -> Any:
             result = original_drop_tfs(self, step)
             if step.link_id is None and step.from_framework is PythonDictFramework:
+                # The drop is async now: wait for the worker's own ack of the just-queued drop
+                # before snapshotting, instead of relying on the old synchronous wait.
+                entry = self.worker_manager.process_register.get(UUID(source_root_uuids[0]))
+                if entry is not None:
+                    _, _, result_queue = entry
+                    resolved = self.worker_manager.wait_for_drop_completion(
+                        result_queue, UUID(source_root_uuids[0]), timeout=2.0
+                    )
+                    assert resolved is not None, "no drop ack for the source root within the wait window"
                 keys_right_after_hop_drop_check.append(_flight_table_keys(flight_server.location))
             return result
 
@@ -1564,7 +1576,8 @@ class TestTransformFrameworkStepSourceRootDropTiming:
         (`_ChainHopChain2FG`, `_ChainHopChain3FG`) to finish too - neither of those reads the root
         directly, unlike `_DiamondHopDescendantFG` in the survival test above. Same
         `add_compute_framework` / `_drop_tfs_source_if_possible` spy checkpoint pattern as
-        `test_plain_hop_source_root_dropped_right_after_its_hop_when_its_class_is_shared_by_an_unrelated_join`."""
+        `test_plain_hop_source_root_dropped_right_after_its_hop_when_its_class_is_shared_by_an_unrelated_join`,
+        including the wait for the worker's own drop acknowledgement, since the drop is async now."""
         plugin_collector = PluginCollector.enabled_feature_groups(
             {_ChainHopRootFG, _ChainHopMidFG, _ChainHopChain2FG, _ChainHopChain3FG}
         )
@@ -1590,6 +1603,15 @@ class TestTransformFrameworkStepSourceRootDropTiming:
         def _spy_drop_tfs(self: Any, step: Any) -> Any:
             result = original_drop_tfs(self, step)
             if step.link_id is None and step.from_framework is PythonDictFramework:
+                # The drop is async now: wait for the worker's own ack of the just-queued drop
+                # before snapshotting, instead of relying on the old synchronous wait.
+                entry = self.worker_manager.process_register.get(UUID(source_root_uuids[0]))
+                if entry is not None:
+                    _, _, result_queue = entry
+                    resolved = self.worker_manager.wait_for_drop_completion(
+                        result_queue, UUID(source_root_uuids[0]), timeout=2.0
+                    )
+                    assert resolved is not None, "no drop ack for the source root within the wait window"
                 keys_right_after_hop_drop_check.append(_flight_table_keys(flight_server.location))
             return result
 

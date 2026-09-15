@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import multiprocessing
 import pickle  # nosec B403
 import threading
 import time
@@ -145,7 +144,7 @@ class ExecutionOrchestrator:
     def _drop_cfw_data_routed(self, cfw_uuid: UUID, cfw: ComputeFramework) -> None:
         """Drop a cfw's uploaded data, routed through its worker if still alive: `cfw_collection`
         here only ever holds the pre-dispatch snapshot, whose `object_ids` stays empty."""
-        process, command_queue, result_queue = self.worker_manager.process_register.get(cfw_uuid, (None, None, None))
+        process, command_queue, _ = self.worker_manager.process_register.get(cfw_uuid, (None, None, None))
         if command_queue is None or process is None or not process.is_alive():
             # No worker left to ask (never dispatched, or it already exited after resolving its
             # own drop earlier): cfw_collection's entry is then either the live in-process instance
@@ -155,8 +154,6 @@ class ExecutionOrchestrator:
 
         self.worker_manager.clear_completed_drop(cfw_uuid)
         command_queue.put(set(cfw.children_if_root))
-        if result_queue is not None:
-            self._wait_for_drop_completion(result_queue, cfw_uuid)
 
     def _init_run(self) -> tuple[set[UUID], set[UUID], set[UUID]]:
         """Validate state, construct the executor, and return fresh id-tracking sets."""
@@ -447,9 +444,11 @@ class ExecutionOrchestrator:
     def _mark_children_and_track(self, cfw: ComputeFramework, children: set[UUID]) -> None:
         """
         Records newly-finished children on a CFW and, if not yet fully satisfied, tracks the
-        remaining wait-condition so a later `_drop_data_for_finished_cfws` pass can flush it.
+        remaining wait-condition so a later `_drop_data_for_finished_cfws` pass can flush it. The
+        worker-owned branch always tracks, without awaiting the drop ack, since that later flush
+        is a safe no-op if the worker already resolved and exited on its own.
         """
-        process, command_queue, result_queue = self.worker_manager.process_register.get(cfw.uuid, (None, None, None))
+        _, command_queue, _ = self.worker_manager.process_register.get(cfw.uuid, (None, None, None))
 
         if command_queue is None:
             data_to_drop = cfw.add_already_calculated_children_and_drop_if_possible(children, self.location)
@@ -459,31 +458,9 @@ class ExecutionOrchestrator:
             self.worker_manager.clear_completed_drop(cfw.uuid)
             command_queue.put(children)
 
-            resolved = self._wait_for_drop_completion(result_queue, cfw.uuid) if result_queue is not None else None
-            if resolved:
-                # The worker already dropped its own data and is exiting; nothing left to track.
-                return
-
             flyway_datasets = self.cfw_register.get_uuid_flyway_datasets(cfw.uuid) or set(cfw.children_if_root)
             if flyway_datasets:
                 self.data_lifecycle_manager.track_data_to_drop[cfw.uuid] = flyway_datasets
-
-    def _wait_for_drop_completion(
-        self, result_queue: multiprocessing.Queue[Any], cfw_uuid: UUID, timeout: float = 5.0
-    ) -> bool | None:
-        """
-        Wait for drop operation to complete from worker process.
-
-        Args:
-            result_queue: The queue to receive completion signals from the worker.
-            cfw_uuid: The UUID of the compute framework being dropped.
-            timeout: Maximum time to wait for completion in seconds.
-
-        Returns:
-            The worker's own resolved flag (True once its data is dropped and it is exiting),
-            or None if no acknowledgement arrived before the timeout.
-        """
-        return self.worker_manager.wait_for_drop_completion(result_queue, cfw_uuid, timeout)
 
     def _execute_step(self, step: Any) -> None:
         """

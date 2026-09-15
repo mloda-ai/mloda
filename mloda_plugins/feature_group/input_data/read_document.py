@@ -2,6 +2,7 @@ import os
 from pathlib import Path
 from typing import Any, ClassVar
 
+from mloda.core.abstract_plugins.components.utils import is_match_abort
 from mloda.provider import BaseInputData, FeatureSet, PropertySpec
 from mloda.user import DataAccessCollection, Options
 from mloda_plugins.feature_group.input_data.read_file import ReadFile
@@ -136,7 +137,9 @@ class ReadDocument(BaseInputData):
     ) -> Any:
         try:
             suffix = cls.suffix()
-        except NotImplementedError:
+        except NotImplementedError as exc:
+            if is_match_abort(exc):
+                raise
             return None
         for da in data_accesses:
             if da.endswith(suffix):

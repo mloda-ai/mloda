@@ -5,6 +5,8 @@ from __future__ import annotations
 from typing import Any
 from unittest.mock import patch
 
+import pytest
+
 from mloda.core.core.engine import Engine
 from mloda.core.core.step.join_step import JoinStep
 from mloda.provider import BaseInputData, ComputeFramework, DataCreator, FeatureGroup, FeatureSet
@@ -223,6 +225,39 @@ def test_region_side_feature_named_after_the_other_sides_key_still_gets_its_own_
     region = _group_names(engine, SclkSourceFG, "sclk_source", "region")
 
     assert "sclk_code" in region
+
+
+class SclkWrapperFG(FeatureGroup):
+    """Sole child carries .link one level below the top-level batch, inside input_features()."""
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return {Feature("sclk_pop", options={"sclk_source": "region"}, link=_link_a())}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return data
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PyArrowTable}
+
+
+@pytest.mark.xfail(
+    strict=True,
+    reason="setup_features_recursion's per-batch pre-pass only registers a sibling's own .link, missing "
+    "one nested inside a co-sibling's input_features() subtree, so a sibling processed first permanently "
+    "skips index injection.",
+)
+def test_same_class_feature_link_nested_in_co_siblings_input_features_is_not_seen_in_time() -> None:
+    plain = Feature("sclk_votes", options={"sclk_source": "election"})
+    wrapper = Feature(SclkWrapperFG.get_class_name())
+    engine = _build_engine(Features([plain, wrapper]), None, {SclkSourceFG, SclkWrapperFG})
+
+    election = _group_names(engine, SclkSourceFG, "sclk_source", "election")
+    region = _group_names(engine, SclkSourceFG, "sclk_source", "region")
+
+    assert election == {"sclk_votes", "sclk_nr"}
+    assert region == {"sclk_pop", "sclk_code"}
 
 
 def test_scenario_a_plans_exactly_one_join_step() -> None:

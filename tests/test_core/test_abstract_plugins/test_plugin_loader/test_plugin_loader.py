@@ -43,6 +43,24 @@ def _write_fake_base_package_bad_from_import(
     importlib.invalidate_caches()
 
 
+def _raise_import_error(module_name: str, message: str = "boom") -> None:
+    """Raise ImportError from a frame whose f_globals['__name__'] is module_name."""
+    code = compile(f"raise ImportError({message!r})", "<tb_test>", "exec")
+    # Static literal source compiled above, no external/attacker input.
+    exec(code, {"__name__": module_name})  # nosec B102
+
+
+def _raise_import_error_nested(outer_name: str, inner_name: str, message: str = "boom") -> None:
+    """Raise ImportError two frames deep: outer frame's __name__ is outer_name, inner frame's is inner_name."""
+    inner_code = compile(f"raise ImportError({message!r})", "<tb_test_inner>", "exec")
+    outer_code = compile("exec(inner_code, inner_globals)", "<tb_test_outer>", "exec")
+    # Static literal source compiled above, no external/attacker input.
+    exec(  # nosec B102
+        outer_code,
+        {"__name__": outer_name, "inner_code": inner_code, "inner_globals": {"__name__": inner_name}},
+    )
+
+
 class TestPluginLoader:
     def test_plugin_loader_init(self) -> None:
         plugin_loader = PluginLoader()
@@ -376,3 +394,46 @@ class TestLoadGroupContinuesPastSkippedPlugin:
 
         assert f"{base_pkg}.{group_name}.broken" not in loader.plugins
         assert f"{base_pkg}.{group_name}.good" in loader.plugins
+
+
+class TestTracebackBlamesRoot:
+    def test_exact_root_match_returns_true(self) -> None:
+        root = "pltest_tb_exact_root"
+        with pytest.raises(ImportError) as exc_info:
+            _raise_import_error(root)
+        assert plugin_loader_module.traceback_blames_root(exc_info.value, root) is True
+
+    def test_submodule_match_returns_true(self) -> None:
+        root = "pltest_tb_submodule_root"
+        with pytest.raises(ImportError) as exc_info:
+            _raise_import_error(f"{root}.sub")
+        assert plugin_loader_module.traceback_blames_root(exc_info.value, root) is True
+
+    def test_sibling_prefix_does_not_match(self) -> None:
+        """A shared string prefix without a dot boundary must not count as a match."""
+        with pytest.raises(ImportError) as exc_info:
+            _raise_import_error("foox")
+        assert plugin_loader_module.traceback_blames_root(exc_info.value, "foo") is False
+
+    def test_innermost_frame_wins_when_only_outer_matches(self) -> None:
+        """The outer frame matches root but the innermost frame does not: must not blame root."""
+        root = "pltest_tb_outer_only_root"
+        with pytest.raises(ImportError) as exc_info:
+            _raise_import_error_nested(outer_name=root, inner_name="pltest_tb_unrelated_inner")
+        assert plugin_loader_module.traceback_blames_root(exc_info.value, root) is False
+
+    def test_innermost_frame_wins_when_only_inner_matches(self) -> None:
+        """The innermost frame matches root while the outer frame does not: must blame root."""
+        root = "pltest_tb_inner_only_root"
+        with pytest.raises(ImportError) as exc_info:
+            _raise_import_error_nested(outer_name="pltest_tb_unrelated_outer", inner_name=root)
+        assert plugin_loader_module.traceback_blames_root(exc_info.value, root) is True
+
+    def test_no_traceback_returns_false(self) -> None:
+        exc = ImportError("boom")
+        assert exc.__traceback__ is None
+        assert plugin_loader_module.traceback_blames_root(exc, "anything") is False
+
+    def test_rename_removes_private_alias(self) -> None:
+        """The rename must drop the old private name entirely, not leave it as an alias."""
+        assert not hasattr(plugin_loader_module, "_traceback_blames_root")

@@ -109,6 +109,9 @@ from mloda.core.abstract_plugins.plugin_registry.plugin_registry import (
     register_plugin,
 )
 
+# Optional-dependency import guards
+from mloda.core.abstract_plugins.plugin_loader.plugin_loader import traceback_blames_root
+
 # Engines
 from mloda.core.filter.filter_engine import BaseFilterEngine
 from mloda.core.abstract_plugins.components.mask.base_mask_engine import BaseMaskEngine
@@ -190,6 +193,8 @@ __all__ = [
     # Plugin registry
     "PluginRegistryCollisionError",
     "register_plugin",
+    # Optional-dependency import guards
+    "traceback_blames_root",
     # Engines
     "BaseFilterEngine",
     "BaseMaskEngine",

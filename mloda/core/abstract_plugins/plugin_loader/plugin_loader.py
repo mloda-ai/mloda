@@ -62,7 +62,7 @@ OPTIONAL_DEPENDENCY_ENTRY_POINT_GROUP: str = "mloda.optional_dependencies"
 CORE_PLUGIN_MODULES: tuple[str, ...] = ("mloda.core.abstract_plugins.components.input_data.api.api_input_data_feature",)
 
 
-def _traceback_blames_root(exc: ImportError, root: str) -> bool:
+def traceback_blames_root(exc: ImportError, root: str) -> bool:
     """True if the innermost (deepest) frame of exc's traceback, i.e. where the failure actually
     occurred, belongs to root or a submodule of it."""
     tb = exc.__traceback__
@@ -189,7 +189,7 @@ class PluginLoader:
                     # collision can't misattribute the plugin's own bug to that root's traceback frame.
                     own_module = entry_point.module
                     tb_roots = [r for r in optional_roots if own_module != r and not own_module.startswith(f"{r}.")]
-                    blamed_root = next((r for r in tb_roots if _traceback_blames_root(e, r)), None)
+                    blamed_root = next((r for r in tb_roots if traceback_blames_root(e, r)), None)
                     if root in optional_roots or blamed_root is not None:
                         logger.warning(
                             "Skipping entry point %s (%s): missing optional dependency %s",
@@ -306,7 +306,7 @@ class PluginLoader:
             root = e.name.split(".")[0] if e.name else None
             if root == self.base_package:
                 raise
-            blamed_root = next((r for r in OPTIONAL_PLUGIN_DEPENDENCIES if _traceback_blames_root(e, r)), None)
+            blamed_root = next((r for r in OPTIONAL_PLUGIN_DEPENDENCIES if traceback_blames_root(e, r)), None)
             if root in OPTIONAL_PLUGIN_DEPENDENCIES or blamed_root is not None:
                 logger.debug(
                     "Skipping plugin %s: missing optional dependency %s", full_module_name, e.name or blamed_root

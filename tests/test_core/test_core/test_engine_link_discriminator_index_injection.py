@@ -244,6 +244,7 @@ class SclkWrapperFG(FeatureGroup):
 
 @pytest.mark.xfail(
     strict=True,
+    raises=AssertionError,
     reason="setup_features_recursion's per-batch pre-pass only registers a sibling's own .link, missing "
     "one nested inside a co-sibling's input_features() subtree, so a sibling processed first permanently "
     "skips index injection.",
@@ -251,6 +252,7 @@ class SclkWrapperFG(FeatureGroup):
 def test_same_class_feature_link_nested_in_co_siblings_input_features_is_not_seen_in_time() -> None:
     plain = Feature("sclk_votes", options={"sclk_source": "election"})
     wrapper = Feature(SclkWrapperFG.get_class_name())
+    # order is load-bearing: reversing to [wrapper, plain] registers the link first and would XPASS (fails strict=True)
     engine = _build_engine(Features([plain, wrapper]), None, {SclkSourceFG, SclkWrapperFG})
 
     election = _group_names(engine, SclkSourceFG, "sclk_source", "election")

@@ -87,8 +87,9 @@ class TestColumnToFileHint:
             files={"a.csv", "b.csv"},
             column_to_file={"id": "a.csv", "val": "b.csv"},
         )
-        with pytest.raises(ValueError):
+        with pytest.raises(ValueError) as excinfo:
             TestRF.match_subclass_data_access(dac, ["id", "val"], options=Options({}))
+        assert "pinned to different files" in str(excinfo.value)
 
     def test_mixed_batch_raises(self) -> None:
         class TestRF(ReadFile):
@@ -104,10 +105,11 @@ class TestColumnToFileHint:
             files={"a.csv", "b.csv"},
             column_to_file={"id": "a.csv"},
         )
-        with pytest.raises(ValueError):
+        with pytest.raises(ValueError) as excinfo:
             TestRF.match_subclass_data_access(dac, ["id", "unpinned_col"], options=Options({}))
+        assert "Mixed batch" in str(excinfo.value)
 
-    def test_wrong_suffix_falls_through(self) -> None:
+    def test_wrong_suffix_declines_without_falling_back_to_an_unpinned_file(self) -> None:
         class TestRFCsv(ReadFile):
             @classmethod
             def get_column_names(cls, file_name: str) -> list[str]:
@@ -117,12 +119,27 @@ class TestColumnToFileHint:
             def suffix(cls) -> tuple[str, ...]:
                 return (".csv",)
 
-        # column_to_file points to parquet files, but this reader only handles .csv
+        # The pin points to a parquet file this reader can't serve; an unpinned .csv match must not be a fallback.
         dac = DataAccessCollection(
-            files={"a.parquet", "b.parquet"},
+            files={"a.parquet", "b.csv"},
             column_to_file={"id": "a.parquet", "val": "a.parquet"},
         )
         result = TestRFCsv.match_subclass_data_access(dac, ["id", "val"], options=Options({}))
+        assert result is None
+
+    def test_pin_wins_over_a_data_access_handle_hint_pointing_elsewhere(self) -> None:
+        class TestRFCsv(ReadFile):
+            @classmethod
+            def get_column_names(cls, file_name: str) -> list[str]:
+                return ["id", "val"]
+
+            @classmethod
+            def suffix(cls) -> tuple[str, ...]:
+                return (".csv",)
+
+        # The pin (wrong suffix) beats a data_access_handle hint pointing at an otherwise-valid file.
+        dac = DataAccessCollection(files={"a": "a.parquet", "b": "b.csv"}, column_to_file={"id": "a"})
+        result = TestRFCsv.match_subclass_data_access(dac, ["id"], options=Options(context={"data_access_handle": "b"}))
         assert result is None
 
     def test_construction_rejects_unknown_file(self) -> None:

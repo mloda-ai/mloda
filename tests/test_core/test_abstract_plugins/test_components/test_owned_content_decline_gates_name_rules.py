@@ -1,4 +1,4 @@
-"""ONLY an owned CONTENT decline gates the name rules; unrecorded non-matches and pin-then-match keep resolving."""
+"""ONLY an owned CONTENT decline gates the name rules, pinned or not; unrecorded non-matches keep resolving."""
 
 from __future__ import annotations
 
@@ -305,24 +305,10 @@ class TestOwnedContentDeclineGatesNameRules:
         assert "declined" in elimination.reason
         assert VG961_DB_FEATURE in elimination.reason
 
-
-class TestOwnedShapesThatMustNotGate:
-    """The owned shapes without an eligible recording, or with a later match, must keep resolving."""
-
-    def test_an_owned_plain_non_match_without_a_recording_does_not_gate(self, tmp_path: Path) -> None:
-        """A wrong-suffix path never establishes ownership of the file, so the name rule still recovers."""
-        path = tmp_path / "data.vg961other"
-        path.write_text("vg961_other_a,vg961_other_b\n1,2\n", encoding="utf-8")
-        feature = Feature(name=VG961_FILE_FEATURE, options={Vg961CsvReader.__name__: str(path)})
-        accessible_plugins: FeatureGroupEnvironmentMapping = {Vg961FileFG: {PandasDataFrame}}
-
-        result = IdentifyFeatureGroupClass.evaluate(feature, accessible_plugins, None, None)
-
-        assert Vg961FileFG in result.identified
-        assert "BaseInputData" not in feature.options
-
-    def test_an_owned_decline_on_one_file_with_a_match_on_another_still_pins_the_pair(self, tmp_path: Path) -> None:
-        """The pinned file declines with a recording, then the resolve fallback matches the other file."""
+    def test_an_owned_decline_on_the_pinned_file_gates_the_name_rule_even_with_a_match_on_another(
+        self, tmp_path: Path
+    ) -> None:
+        """The pinned file lacks the column: eliminated, even though a second, unpinned file would match."""
         path_a = tmp_path / f"a{VG961_FILE_SUFFIX}"
         path_a.write_text("vg961_other\n1\n", encoding="utf-8")
         path_b = tmp_path / f"b{VG961_FILE_SUFFIX}"
@@ -336,9 +322,32 @@ class TestOwnedShapesThatMustNotGate:
 
         result = IdentifyFeatureGroupClass.evaluate(feature, accessible_plugins, None, None)
 
+        assert result.identified == {}
+        elimination = result.eliminations.get(Vg961FileFG)
+        assert elimination is not None
+        assert elimination.stage == "input_data"
+        assert Vg961CsvReader.get_class_name() in elimination.reason
+        assert "lacks the column" in elimination.reason
+
+        message = render_resolution_failure(result, feature)
+        assert message is not None
+        assert f"  - {Vg961FileFG.__name__} (input data): {elimination.reason}" in message
+
+
+class TestOwnedShapesThatMustNotGate:
+    """The owned shapes without an eligible recording, or with a later unpinned match, must keep resolving."""
+
+    def test_an_owned_plain_non_match_without_a_recording_does_not_gate(self, tmp_path: Path) -> None:
+        """A wrong-suffix path never establishes ownership of the file, so the name rule still recovers."""
+        path = tmp_path / "data.vg961other"
+        path.write_text("vg961_other_a,vg961_other_b\n1,2\n", encoding="utf-8")
+        feature = Feature(name=VG961_FILE_FEATURE, options={Vg961CsvReader.__name__: str(path)})
+        accessible_plugins: FeatureGroupEnvironmentMapping = {Vg961FileFG: {PandasDataFrame}}
+
+        result = IdentifyFeatureGroupClass.evaluate(feature, accessible_plugins, None, None)
+
         assert Vg961FileFG in result.identified
-        assert result.eliminations == {}
-        assert feature.options.get("BaseInputData") == (Vg961CsvReader, str(path_b))
+        assert "BaseInputData" not in feature.options
 
     def test_an_owned_decline_then_a_global_match_still_pins_the_pair(self, tmp_path: Path) -> None:
         """The addressed file declines with a recording, then the global collection matches the other file."""
@@ -377,8 +386,10 @@ class TestAliasedDataAccessNameOwnership:
         assert VG1006_ALIAS_NAME in elimination.reason
         assert "lacks the column" in elimination.reason
 
-    def test_an_aliased_decline_on_one_file_with_a_match_on_another_still_pins_the_pair(self, tmp_path: Path) -> None:
-        """The pinned file declines with a recording, then the resolve fallback matches the other file."""
+    def test_an_aliased_decline_on_the_pinned_file_gates_the_name_rule_even_with_a_match_on_another(
+        self, tmp_path: Path
+    ) -> None:
+        """The pinned file lacks the column: eliminated, even though a second, unpinned file would match."""
         path_a = tmp_path / f"a{VG1006_FILE_SUFFIX}"
         path_a.write_text("vg1006_other\n1\n", encoding="utf-8")
         path_b = tmp_path / f"b{VG1006_FILE_SUFFIX}"
@@ -392,9 +403,12 @@ class TestAliasedDataAccessNameOwnership:
 
         result = IdentifyFeatureGroupClass.evaluate(feature, accessible_plugins, None, None)
 
-        assert Vg1006AliasFG in result.identified
-        assert result.eliminations == {}
-        assert feature.options.get("BaseInputData") == (Vg1006AliasReader, str(path_b))
+        assert result.identified == {}
+        elimination = result.eliminations.get(Vg1006AliasFG)
+        assert elimination is not None
+        assert elimination.stage == "input_data"
+        assert VG1006_ALIAS_NAME in elimination.reason
+        assert "lacks the column" in elimination.reason
 
 
 class TestReaderClassKeyNormalization:

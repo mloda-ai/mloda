@@ -20,12 +20,9 @@ def _noop_target(*args: Any, **kwargs: Any) -> None:
     return None
 
 
-def _loop_forever_target(command_queue: Any, result_queue: Any) -> None:
-    """Picklable worker target that never exits on its own.
-
-    Module-level so it pickles under the spawn context. create_worker_process
-    prepends command_queue and result_queue to the args it passes to the target.
-    """
+def _loop_forever_target(command_queue: Any, result_queue: Any, worker_index: int) -> None:
+    """Picklable infinite worker receiving command/result queues followed by worker_index."""
+    result_queue.put("READY")
     while True:
         time.sleep(0.1)
 
@@ -759,11 +756,14 @@ class TestWorkerManagerJoinAll:
         forever on a worker that does not exit on its own (GitHub issue #514).
         """
         manager = WorkerManager()
-        process, _, _ = manager.create_worker_process(cfw_uuid=uuid4(), target=_loop_forever_target, args=())
+        process, _, result_queue = manager.create_worker_process(cfw_uuid=uuid4(), target=_loop_forever_target, args=())
 
         join_thread = threading.Thread(target=manager.join_all, daemon=True)
-        join_thread.start()
         try:
+            assert result_queue.get(timeout=5) == "READY"
+            assert process.is_alive(), "worker exited before join_all() could terminate it"
+            assert process.exitcode is None
+            join_thread.start()
             deadline = time.time() + 5.0
             while join_thread.is_alive() and time.time() < deadline:
                 join_thread.join(timeout=0.1)
@@ -777,7 +777,8 @@ class TestWorkerManagerJoinAll:
             if process.is_alive():
                 process.kill()
                 process.join(timeout=5)
-            join_thread.join(timeout=1.0)
+            if join_thread.ident is not None:
+                join_thread.join(timeout=1.0)
 
 
 class TestWorkerManagerIntegration:

@@ -585,3 +585,83 @@ class TestDropTfsSourceIfPossibleResolvesViaSourceFrameworkUuid:
         orchestrator._drop_tfs_source_if_possible(step)
 
         orchestrator._mark_children_and_track.assert_called_once_with(source_cfw, {consumer_uuid})
+
+
+class TestMarkChildrenAndTrackNeverBlocksOnWorkerOwnedCfw:
+    """The planner thread must not stall on a worker's drop ack; the flyway fallback still tracks."""
+
+    def test_worker_owned_branch_never_calls_wait_for_drop_completion(self) -> None:
+        cfw_uuid = uuid_mod.uuid4()
+        child_uuid = uuid_mod.uuid4()
+        tracked_uuid = uuid_mod.uuid4()
+
+        mock_planner = Mock(spec=ExecutionPlan)
+        orchestrator = ExecutionOrchestrator(mock_planner)
+
+        process, command_queue, result_queue = Mock(), Mock(), Mock()
+        orchestrator.worker_manager.process_register[cfw_uuid] = (process, command_queue, result_queue)
+        orchestrator.worker_manager.wait_for_drop_completion = Mock(return_value=None)  # type: ignore[method-assign]
+
+        orchestrator.cfw_register = Mock()
+        orchestrator.cfw_register.get_uuid_flyway_datasets.return_value = None
+
+        cfw = Mock()
+        cfw.uuid = cfw_uuid
+        cfw.children_if_root = frozenset({tracked_uuid})
+
+        children = {child_uuid}
+
+        orchestrator._mark_children_and_track(cfw, children)
+
+        command_queue.put.assert_called_once_with(children)
+        orchestrator.worker_manager.wait_for_drop_completion.assert_not_called()
+        assert orchestrator.data_lifecycle_manager.track_data_to_drop[cfw.uuid] == set(cfw.children_if_root)
+
+
+class TestDropCfwDataRoutedNeverBlocksWhenWorkerAlive:
+    """_drop_cfw_data_routed's return value is never read; the wait only ever blocked the caller."""
+
+    def test_never_calls_wait_for_drop_completion_when_worker_alive(self) -> None:
+        cfw_uuid = uuid_mod.uuid4()
+        child_uuid = uuid_mod.uuid4()
+
+        mock_planner = Mock(spec=ExecutionPlan)
+        orchestrator = ExecutionOrchestrator(mock_planner)
+
+        process = Mock()
+        process.is_alive.return_value = True
+        command_queue, result_queue = Mock(), Mock()
+        orchestrator.worker_manager.process_register[cfw_uuid] = (process, command_queue, result_queue)
+        orchestrator.worker_manager.wait_for_drop_completion = Mock(return_value=None)  # type: ignore[method-assign]
+
+        cfw = Mock()
+        cfw.children_if_root = frozenset({child_uuid})
+
+        orchestrator._drop_cfw_data_routed(cfw_uuid, cfw)
+
+        command_queue.put.assert_called_once_with(set(cfw.children_if_root))
+        orchestrator.worker_manager.wait_for_drop_completion.assert_not_called()
+
+
+class TestDropCfwDataRoutedFallsBackToDirectDropWhenWorkerDead:
+    """A dead worker's queue must not be touched; the fallback drops directly instead."""
+
+    def test_drops_directly_without_touching_worker_queue_when_worker_not_alive(self) -> None:
+        cfw_uuid = uuid_mod.uuid4()
+        child_uuid = uuid_mod.uuid4()
+
+        mock_planner = Mock(spec=ExecutionPlan)
+        orchestrator = ExecutionOrchestrator(mock_planner)
+
+        process = Mock()
+        process.is_alive.return_value = False
+        command_queue, result_queue = Mock(), Mock()
+        orchestrator.worker_manager.process_register[cfw_uuid] = (process, command_queue, result_queue)
+
+        cfw = Mock()
+        cfw.children_if_root = frozenset({child_uuid})
+
+        orchestrator._drop_cfw_data_routed(cfw_uuid, cfw)
+
+        cfw.drop_last_data.assert_called_once_with(orchestrator.location)
+        command_queue.put.assert_not_called()

@@ -2,6 +2,7 @@ import inspect
 from collections.abc import Sequence
 from copy import deepcopy
 from dataclasses import replace
+from typing import Any
 
 from mloda.core.prepare.accessible_plugins import FeatureGroupEnvironmentMapping
 
@@ -437,6 +438,12 @@ class IdentifyFeatureGroupClass:
         _identified_feature_groups: FeatureGroupEnvironmentMapping = {}
 
         for feature_group, compute_frameworks in accessible_plugins.items():
+            # Snapshot ahead of the criteria call: a later gate (domain, scope, ...) rejecting a candidate
+            # whose criteria match SUCCEEDED must undo that candidate's write too, not just a failing probe's.
+            group_before = dict(feature.options.group)
+            context_before = dict(feature.options.context)
+            non_forwarded_before = feature.options.non_forwarded_group_keys
+
             # A criteria non-match records a value_rejection only when the first pass recorded a reason for it:
             # a plain name mismatch is not a near-miss, but a value the candidate declined (with a reportable
             # reason) is. The criteria call above just recorded any rejection under this candidate's window, so
@@ -459,16 +466,19 @@ class IdentifyFeatureGroupClass:
 
             if not self._filter_feature_group_by_domain(feature_group, feature):
                 self._record_elimination(feature_group, "domain", self._domain_reason(feature_group, feature))
+                self._restore_options(feature, group_before, context_before, non_forwarded_before)
                 continue
 
             if not self._filter_feature_group_by_scope(feature_group, feature):
                 self._record_elimination(feature_group, "scope", "outside the requested feature group scope")
+                self._restore_options(feature, group_before, context_before, non_forwarded_before)
                 continue
 
             # Abstract bases can match name+domain+scope but cannot be instantiated; never let one win, and
             # never record one as a near-miss: the abstract_only message owns them.
             if inspect.isabstract(feature_group):
                 self._abstract_matched_feature_groups.add(feature_group)
+                self._restore_options(feature, group_before, context_before, non_forwarded_before)
                 continue
 
             self._criteria_matched_feature_groups.add(feature_group)
@@ -501,6 +511,7 @@ class IdentifyFeatureGroupClass:
                         "frameworks_not_enabled",
                         "none of its compute frameworks are enabled for this run",
                     )
+                self._restore_options(feature, group_before, context_before, non_forwarded_before)
                 continue
 
             if not self._filter_feature_group_by_framework(supported_frameworks, feature):
@@ -511,10 +522,12 @@ class IdentifyFeatureGroupClass:
                     "framework_pin",
                     f"pinned compute framework '{pin_name}' is not among its supported {supported_names}",
                 )
+                self._restore_options(feature, group_before, context_before, non_forwarded_before)
                 continue
 
             if not self._filter_feature_group_by_links(feature_group, links):
                 self._record_elimination(feature_group, "links", "no index column matches the run's links")
+                self._restore_options(feature, group_before, context_before, non_forwarded_before)
                 continue
 
             _identified_feature_groups[feature_group] = supported_frameworks
@@ -591,6 +604,20 @@ class IdentifyFeatureGroupClass:
 
         return False
 
+    @staticmethod
+    def _restore_options(
+        feature: Feature,
+        group_before: dict[str, Any],
+        context_before: dict[str, Any],
+        non_forwarded_before: frozenset[str],
+    ) -> None:
+        """Roll ``feature.options`` back to a snapshot taken before a candidate's own write."""
+        feature.options.group.clear()
+        feature.options.group.update(group_before)
+        feature.options.context.clear()
+        feature.options.context.update(context_before)
+        feature.options.non_forwarded_group_keys = non_forwarded_before
+
     def _filter_feature_group_by_criteria(
         self,
         feature_group: type[FeatureGroup],
@@ -613,11 +640,7 @@ class IdentifyFeatureGroupClass:
         if probe.matcher_error is not None or probe.value_rejection is not None:
             # Only the contained branch rolls back: a matcher that returns True keeps its write,
             # which is how a matched reader is linked through mloda.
-            feature.options.group.clear()
-            feature.options.group.update(group_before)
-            feature.options.context.clear()
-            feature.options.context.update(context_before)
-            feature.options.non_forwarded_group_keys = non_forwarded_before
+            self._restore_options(feature, group_before, context_before, non_forwarded_before)
         if probe.value_rejection is not None:
             exc = probe.value_rejection
             # Text, not exc: a retained record must not pin the traceback, its frames and the plugin class.

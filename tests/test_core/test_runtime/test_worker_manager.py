@@ -12,6 +12,7 @@ from uuid import UUID, uuid4
 
 import pytest
 
+from mloda.core.runtime.mp_context import mp_spawn_context
 from mloda.core.runtime.worker_manager import WorkerManager
 
 
@@ -351,8 +352,9 @@ class TestWorkerManagerResultPolling:
         ]
         manager.result_queues_collection.add(mock_queue)
 
-        # First poll picks up the valid UUID; the second reaches the stale tuple,
-        # which must be ignored rather than raise AttributeError.
+        # Drain-to-empty means the first poll consumes both the valid UUID and the stale
+        # tuple in the same call; the tuple must be ignored rather than raise AttributeError.
+        # The second poll then finds the queue already empty.
         manager.poll_result_queues()
         manager.poll_result_queues()
 
@@ -381,6 +383,70 @@ class TestWorkerManagerResultPolling:
         elapsed = time.time() - start_time
 
         assert elapsed < 0.5
+
+    def test_poll_result_queues_drains_multiple_messages_in_a_single_call(self) -> None:
+        """A single poll_result_queues() call must drain every queued message, not just the first.
+
+        side_effect holds two step-uuid strings around a DROP_COMPLETE tuple with an explicit
+        resolved flag, followed by Empty to end the drain.
+        """
+        manager = WorkerManager()
+        uuid1 = str(uuid4())
+        uuid2 = str(uuid4())
+        cfw_uuid = uuid4()
+
+        mock_queue = MagicMock()
+        mock_queue.get.side_effect = [
+            uuid1,
+            ("DROP_COMPLETE", cfw_uuid, False),
+            uuid2,
+            queue.Empty(),
+        ]
+        manager.result_queues_collection.add(mock_queue)
+
+        manager.poll_result_queues()
+
+        assert UUID(uuid1) in manager.result_uuids_collection
+        assert UUID(uuid2) in manager.result_uuids_collection
+        assert manager.completed_drops[cfw_uuid] is False
+        # One get() per queued item, plus the Empty that ends the drain.
+        assert mock_queue.get.call_count == 4
+
+    def test_poll_result_queues_drains_real_multiprocessing_queue_without_blocking(self) -> None:
+        """Drain-to-empty must hold for a real (non-mocked) multiprocessing.Queue too, and return promptly."""
+        manager = WorkerManager()
+        mp_queue: Any = mp_spawn_context().Queue()
+
+        uuid1 = str(uuid4())
+        uuid2 = str(uuid4())
+        cfw_uuid = uuid4()
+
+        mp_queue.put(uuid1)
+        mp_queue.put(("DROP_COMPLETE", cfw_uuid, True))
+        mp_queue.put(uuid2)
+
+        manager.result_queues_collection.add(mp_queue)
+
+        try:
+            # put() flushes via a background feeder thread, so a single poll can race an
+            # empty pipe. Retry with a short sleep instead of one fixed delay, bounded by
+            # a wall-clock deadline so a real hang still fails the test.
+            start_time = time.time()
+            deadline = start_time + 3.0
+            while time.time() < deadline:
+                manager.poll_result_queues()
+                if UUID(uuid1) in manager.result_uuids_collection and UUID(uuid2) in manager.result_uuids_collection:
+                    break
+                time.sleep(0.01)
+            elapsed = time.time() - start_time
+
+            assert elapsed < 3.0
+            assert UUID(uuid1) in manager.result_uuids_collection
+            assert UUID(uuid2) in manager.result_uuids_collection
+            assert manager.completed_drops[cfw_uuid] is True
+        finally:
+            mp_queue.close()
+            mp_queue.join_thread()
 
 
 class TestWorkerManagerStepCompletion:

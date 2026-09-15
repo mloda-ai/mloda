@@ -74,18 +74,23 @@ class WorkerManager:
 
     def poll_result_queues(self) -> None:
         """Non-blocking poll of all result queues; collects step-UUID strings and drains DROP_COMPLETE tuples into
-        completed_drops."""
+        completed_drops. Drains each queue to empty per call; a message still in flight through the queue's
+        feeder thread may not appear until a later poll."""
         for r_queue in self.result_queues_collection:
-            try:
-                msg = r_queue.get(block=False)
-            except queue.Empty:
-                continue
-            if isinstance(msg, str):
-                self.result_uuids_collection.add(UUID(msg))
-            elif isinstance(msg, tuple) and len(msg) >= 2 and msg[0] == "DROP_COMPLETE":
-                # A 2-tuple (no resolved flag) is treated as resolved, matching the meaning a
-                # bare ack always had before the flag was added.
-                self.completed_drops[msg[1]] = bool(msg[2]) if len(msg) >= 3 else True
+            # Safe to drain unbounded: a worker puts at most one message per command it
+            # processes (one step-uuid or one DROP_COMPLETE tuple), so a queue's backlog
+            # is bounded by commands already dispatched to that worker, never unbounded.
+            while True:
+                try:
+                    msg = r_queue.get(block=False)
+                except queue.Empty:
+                    break
+                if isinstance(msg, str):
+                    self.result_uuids_collection.add(UUID(msg))
+                elif isinstance(msg, tuple) and len(msg) >= 2 and msg[0] == "DROP_COMPLETE":
+                    # A 2-tuple (no resolved flag) is treated as resolved, matching the meaning a
+                    # bare ack always had before the flag was added.
+                    self.completed_drops[msg[1]] = bool(msg[2]) if len(msg) >= 3 else True
 
     def record_assignment(self, cfw_uuid: UUID, step_uuids: set[UUID]) -> None:
         """Remember that these steps were dispatched to this worker."""

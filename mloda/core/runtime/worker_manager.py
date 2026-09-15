@@ -153,7 +153,8 @@ class WorkerManager:
 
     def join_all(self, graceful_timeout: float = 2.0) -> None:
         """Sends STOP to alive workers and waits up to graceful_timeout for them to exit
-        (running their close() teardown) before terminating any that remain."""
+        (running their close() teardown) before terminating any that remain. Raises an
+        Exception if any task fails to join or terminate."""
         for process, command_queue, _ in self.process_register.values():
             try:
                 if process.is_alive():

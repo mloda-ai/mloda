@@ -435,7 +435,10 @@ class mlodaAPI:
         return deepcopy(self.engine.resolution_records)
 
     def _build_run_context(
-        self, carrier: dict[str, str] | None, child_bootstrap: Callable[[], None] | None
+        self,
+        carrier: dict[str, str] | None,
+        child_bootstrap: Callable[[], None] | None,
+        graceful_shutdown_timeout: float = 2.0,
     ) -> RunContext:
         """Derive this run's context from the engine's plan-time base."""
         if self.engine is None:
@@ -446,6 +449,7 @@ class mlodaAPI:
             run_id=self.run_id,
             carrier=carrier,
             child_bootstrap=child_bootstrap,
+            graceful_shutdown_timeout=graceful_shutdown_timeout,
             tenant_id=verified.tenant_id if verified else None,
             project_id=verified.project_id if verified else None,
             principal=verified.principal if verified else None,
@@ -460,6 +464,7 @@ class mlodaAPI:
         artifacts: dict[str, Any] | None = None,
         carrier: dict[str, str] | None = None,
         child_bootstrap: Callable[[], None] | None = None,
+        graceful_shutdown_timeout: float = 2.0,
     ) -> list[Any]:
         """Execute the prepared session and return results.
 
@@ -474,6 +479,9 @@ class mlodaAPI:
                 workflows without re-preparing.
             carrier/child_bootstrap: See ``run_all``. Unlike ``run_id`` (minted once per
                 session), ``carrier`` may differ on each ``run()`` call.
+            graceful_shutdown_timeout: Seconds a MULTIPROCESSING worker gets to run its
+                extenders' ``close()`` before being terminated, shared across every extender in
+                that worker.
         """
         runner = self._batch_run(
             parallelization_modes,
@@ -481,7 +489,7 @@ class mlodaAPI:
             function_extender,
             api_data=api_data,
             artifacts=artifacts,
-            run_context=self._build_run_context(carrier, child_bootstrap),
+            run_context=self._build_run_context(carrier, child_bootstrap, graceful_shutdown_timeout),
         )
         self.runner = runner
         return self.get_result()
@@ -495,6 +503,7 @@ class mlodaAPI:
         artifacts: dict[str, Any] | None = None,
         carrier: dict[str, str] | None = None,
         child_bootstrap: Callable[[], None] | None = None,
+        graceful_shutdown_timeout: float = 2.0,
     ) -> Generator[Any, None, None]:
         """Execute the prepared session and yield each feature group's result as it completes.
 
@@ -511,6 +520,7 @@ class mlodaAPI:
             carrier,
             child_bootstrap,
             with_step_uuids=False,
+            graceful_shutdown_timeout=graceful_shutdown_timeout,
         )
 
     def _start_stream(
@@ -523,11 +533,12 @@ class mlodaAPI:
         carrier: dict[str, str] | None,
         child_bootstrap: Callable[[], None] | None,
         with_step_uuids: bool,
+        graceful_shutdown_timeout: float = 2.0,
     ) -> Generator[Any, None, None]:
         """Eager setup for ``stream_run``/``stream_all``; no yield, so carrier/verified_context read at call time."""
         _api_data = api_data if api_data is not None else self.api_data
         runner = self._setup_engine_runner(parallelization_modes, flight_server)
-        run_context = self._build_run_context(carrier, child_bootstrap)
+        run_context = self._build_run_context(carrier, child_bootstrap, graceful_shutdown_timeout)
         return self._stream_run_results(
             runner, parallelization_modes, function_extender, _api_data, artifacts, run_context, with_step_uuids
         )

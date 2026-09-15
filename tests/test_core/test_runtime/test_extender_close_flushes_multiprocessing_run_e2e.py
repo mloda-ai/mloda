@@ -5,6 +5,7 @@ the worker is torn down.
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from typing import Any
 
@@ -18,14 +19,6 @@ from mloda_plugins.compute_framework.base_implementations.python_dict.python_dic
 _SENTINEL_CONTENT = "flushed-by-close"
 
 
-class _MultiprocessingOnlyCloseFlushFramework(PythonDictFramework):
-    """Restricted to MULTIPROCESSING only, so its FeatureGroupStep always runs in a spawned worker."""
-
-    @classmethod
-    def supported_parallelization_modes(cls) -> set[ParallelizationMode]:
-        return {ParallelizationMode.MULTIPROCESSING}
-
-
 class _CloseFlushFeatureGroup(FeatureGroup):
     @classmethod
     def input_data(cls) -> BaseInputData | None:
@@ -33,7 +26,7 @@ class _CloseFlushFeatureGroup(FeatureGroup):
 
     @classmethod
     def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
-        return {_MultiprocessingOnlyCloseFlushFramework}
+        return {PythonDictFramework}
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
@@ -44,8 +37,8 @@ _ENABLED = PluginCollector.enabled_feature_groups({_CloseFlushFeatureGroup})
 
 
 class _BufferingSinkExtender(Extender):
-    """Writes the sentinel to output_path only from close(), proving the write happens inside
-    the worker's own close() call rather than at pickling time."""
+    """Writes the sentinel and the closing pid to output_path only from close(), proving the
+    write happens inside the worker's own close() call, in the worker's own process."""
 
     def __init__(self, output_path: Path) -> None:
         self._output_path = output_path
@@ -57,7 +50,7 @@ class _BufferingSinkExtender(Extender):
         return func(*args, **kwargs)
 
     def close(self) -> None:
-        self._output_path.write_text(_SENTINEL_CONTENT)
+        self._output_path.write_text(f"{_SENTINEL_CONTENT}\n{os.getpid()}")
 
 
 @pytest.mark.timeout(30)
@@ -70,13 +63,13 @@ class TestExtenderCloseFlushesBufferedEventsInAMultiprocessingWorker:
 
         session = mloda.prepare(
             [Feature(name="close_flush_e2e_col")],
-            compute_frameworks=["_MultiprocessingOnlyCloseFlushFramework"],
+            compute_frameworks=["PythonDictFramework"],
             plugin_collector=_ENABLED,
-            parallelization_modes={ParallelizationMode.SYNC, ParallelizationMode.MULTIPROCESSING},
+            parallelization_modes={ParallelizationMode.MULTIPROCESSING},
         )
 
         session.run(
-            parallelization_modes={ParallelizationMode.SYNC, ParallelizationMode.MULTIPROCESSING},
+            parallelization_modes={ParallelizationMode.MULTIPROCESSING},
             function_extender={probe},
             flight_server=flight_server,
         )
@@ -84,4 +77,8 @@ class TestExtenderCloseFlushesBufferedEventsInAMultiprocessingWorker:
         assert output_path.exists(), (
             "close() was never called inside the worker before it exited: buffered events would be lost"
         )
-        assert output_path.read_text() == _SENTINEL_CONTENT
+        content, closing_pid = output_path.read_text().split("\n")
+        assert content == _SENTINEL_CONTENT
+        assert int(closing_pid) != os.getpid(), (
+            "close() must run inside the spawned worker's own pid, not the parent test process"
+        )

@@ -24,7 +24,7 @@ def _handle_stop_command(command_queue: multiprocessing.Queue[Any]) -> None:
 
 def _close_extenders(cfw: ComputeFramework) -> None:
     """A raising extender's close() must not stop the others from running."""
-    for extender in cfw.function_extender:
+    for extender in getattr(cfw, "function_extender", None) or ():
         try:
             extender.close()
         except Exception as e:

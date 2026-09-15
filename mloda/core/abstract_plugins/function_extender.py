@@ -74,9 +74,8 @@ class Extender(ABC):
         pass
 
     def close(self) -> None:
-        """Optional bounded shutdown hook: called once per worker-side copy of this extender when a
-        MULTIPROCESSING worker exits gracefully. Override to flush a buffering sink. A raised exception
-        here is caught and logged by the caller, never propagated."""
+        """Called once per worker-side copy on graceful MULTIPROCESSING worker exit, to flush a
+        buffering sink. Exceptions raised here are caught and logged, never propagated."""
 
     @staticmethod
     def feature_group_name(func: Any) -> str:

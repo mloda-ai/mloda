@@ -20,8 +20,6 @@ from mloda_plugins.compute_framework.base_implementations.python_dict.python_dic
 
 
 class _CloseRecordingExtender(Extender):
-    """Records each close() call; wraps()/__call__ are no-ops, only close() is exercised here."""
-
     def __init__(self) -> None:
         self.close_calls: list[bool] = []
 
@@ -36,7 +34,7 @@ class _CloseRecordingExtender(Extender):
 
 
 class _RaisingCloseExtender(Extender):
-    """close() always raises; worker() must catch and log it per extender, never propagate."""
+    """close() always raises."""
 
     def wraps(self) -> set[ExtenderHook]:
         return set()
@@ -153,8 +151,8 @@ class TestWorkerExitsWhenTheParentProcessIsNoLongerAlive:
 
 
 class TestWorkerClosesExtendersOnStop:
-    """worker() must call every function_extender's close() exactly once as it exits, via the
-    STOP command loop-break path. GitHub issue #1439."""
+    """worker() must call every function_extender's close() exactly once, via the STOP
+    command loop-break path."""
 
     def test_close_called_exactly_once_on_stop(self) -> None:
         ctx = mp_spawn_context()
@@ -190,10 +188,8 @@ class TestWorkerSwallowsExtenderCloseExceptions:
         cfw.function_extender = {ok_extender, raising_extender}
         command_queue.put("STOP")
 
-        # Must not raise, even though raising_extender.close() does.
         worker(command_queue, result_queue, cfw_register, cfw, uuid4(), worker_index=0)
 
-        # The raising extender's failure must not stop the other extender's close() from running.
         assert ok_extender.close_calls == [True]
 
 
@@ -245,5 +241,4 @@ class TestWorkerProcessesQueuedCommandsBeforeClosingExtendersOnStop:
         # The queued drop command's effect (its DROP_COMPLETE ack) must have been produced.
         drop_ack = result_queue.get(timeout=2)
         assert drop_ack == ("DROP_COMPLETE", cfw.uuid, False)
-        # close() only runs once the loop has drained both queued commands and exited via STOP.
         assert extender.close_calls == [True]

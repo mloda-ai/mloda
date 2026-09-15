@@ -31,12 +31,8 @@ def _loop_forever_target(command_queue: Any, result_queue: Any) -> None:
 
 
 def _loop_forever_target_matching_worker_signature(command_queue: Any, result_queue: Any, worker_index: int) -> None:
-    """Picklable worker target matching the real 3-positional-arg calling convention
-    (command_queue, result_queue, worker_index) that create_worker_process actually uses.
-
-    Never drains its command queue, so it never exits gracefully on its own STOP;
-    only a graceful-timeout-driven terminate() can end it.
-    """
+    """Matches create_worker_process's real calling convention but never drains its queue,
+    so only a graceful-timeout-driven terminate() can end it."""
     while True:
         time.sleep(0.1)
 
@@ -791,9 +787,8 @@ class TestWorkerManagerJoinAll:
             join_thread.join(timeout=1.0)
 
     def test_join_all_sends_graceful_stop_to_registered_processes_before_final_terminate(self) -> None:
-        """Phase 1 puts a graceful STOP on every alive registered process's command_queue,
-        and the existing final terminate-fallback loop (phase 3, over self.tasks) still runs
-        unconditionally afterward. GitHub issue #1439."""
+        """Sends a graceful STOP to every alive registered process, and the final
+        terminate-fallback loop over self.tasks still runs afterward."""
         manager = WorkerManager()
         cfw_uuid = uuid4()
 
@@ -812,7 +807,7 @@ class TestWorkerManagerJoinAll:
     @pytest.mark.timeout(30)
     def test_join_all_terminates_after_graceful_timeout_when_worker_ignores_stop(self) -> None:
         """A worker that never drains its command queue must still be terminated once
-        graceful_timeout elapses, proving the timeout-exhaustion path is genuinely exercised."""
+        graceful_timeout elapses."""
         manager = WorkerManager()
         process, _, _ = manager.create_worker_process(
             cfw_uuid=uuid4(), target=_loop_forever_target_matching_worker_signature, args=()

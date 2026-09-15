@@ -1,6 +1,6 @@
 """E2E: a buffering-sink Extender's close() must run inside a real spawned MULTIPROCESSING
 worker before that worker exits, so events "flushed" only at close() time are not lost when
-the worker is torn down. GitHub issue #1439.
+the worker is torn down.
 """
 
 from __future__ import annotations
@@ -44,11 +44,8 @@ _ENABLED = PluginCollector.enabled_feature_groups({_CloseFlushFeatureGroup})
 
 
 class _BufferingSinkExtender(Extender):
-    """Buffers nothing until close(), which writes the sentinel to output_path.
-
-    output_path is set in __init__, before the extender is pickled into the worker; the
-    write itself must happen from the worker's own close() call.
-    """
+    """Writes the sentinel to output_path only from close(), proving the write happens inside
+    the worker's own close() call rather than at pickling time."""
 
     def __init__(self, output_path: Path) -> None:
         self._output_path = output_path

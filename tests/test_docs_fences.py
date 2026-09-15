@@ -20,6 +20,7 @@ VOCABULARY_HINT = (
 )
 
 # Repo-relative doc path -> permitted number of ```py blocks. An absent file permits zero.
+# Adding a ```py block to a docs/docs page means raising its entry here (see CONTRIBUTING.md).
 ILLUSTRATIVE_BLOCK_ALLOWLIST: dict[str, int] = {
     "docs/docs/chapter1/api-request.md": 1,
     "docs/docs/chapter1/compute-frameworks.md": 4,

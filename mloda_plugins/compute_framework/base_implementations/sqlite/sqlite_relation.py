@@ -72,6 +72,7 @@ def _assert_window_supported() -> None:
 
 
 def _sqlite_affinity_to_arrow_type(affinity: str) -> pa.DataType:
+    # Precedence order per SQLite's rules: INT, then CHAR/CLOB/TEXT, then BLOB, then REAL/FLOA/DOUB, else string.
     upper = affinity.upper()
     if "INT" in upper:
         return pa.int64()

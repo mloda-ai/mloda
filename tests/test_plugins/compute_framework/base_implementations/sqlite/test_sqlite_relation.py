@@ -381,6 +381,8 @@ class TestSqliteAffinityToArrowType:
             ("CHAR DOUBLE", pa.string()),
             ("DOUBLE BLOB", pa.large_binary()),
             ("NUMERIC", pa.string()),
+            # Empty/undeclared type stays at the string fallback here, unlike SQLite's real BLOB-affinity rule.
+            ("", pa.string()),
         ],
     )
     def test_affinity_check_order_matches_sqlite(self, declared_type: str, expected_arrow_type: pa.DataType) -> None:

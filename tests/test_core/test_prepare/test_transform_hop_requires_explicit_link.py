@@ -132,19 +132,12 @@ def test_subclass_sibling_plain_hops_both_survive_under_every_hash_seed() -> Non
         )
 
 
-# #1426's fix widens a subclass-clustered hop's required_uuids to the union of every member's
-# parent in the cluster (execution_plan.py), so the set can now name parents owned by DIFFERENT
-# steps and frameworks. `prepare_tfs_right_cfw` (compute_framework_executor.py) and
-# `_drop_tfs_source_if_possible` (run.py) still grab a single arbitrary
-# `next(iter(step.required_uuids))` member instead of looping through candidates like
-# `prepare_execute_step` already does, so a hash-order-dependent pick can name the SIBLING hop's
-# parent and crash with "cfw_uuid should not be none in prepare_tfs" - worse than the pre-#1426-fix
-# behavior, which degraded gracefully into a "missing Links" ValueError instead (still wrong, since
-# ScRootA/ScRootB share no physical lineage at all and only one hop's column survives, but not a
-# crash). Same-framework roots never reach the buggy pick (both candidate uuids resolve against the
-# same from_framework class name, so an arbitrary pick still resolves to *a* valid cfw); only the
-# cross-framework variant is hash-seed-dependent. Both are pinned here: cross-framework must stop
-# crashing, same-framework must keep NOT crashing.
+# ScRootA and ScRootB(ScRootA) are related only by subclassing for code reuse: each is its own
+# independent DataCreator root with zero shared physical lineage. Since the two parents share no
+# ancestor, the plan must reject this shape deterministically at plan-build time with a "missing
+# Links" ValueError under every hash seed, for both the cross-framework and same-framework variants,
+# never a crash (from the candidate loop in `prepare_tfs_right_cfw` / `_drop_tfs_source_if_possible`
+# resolving to the wrong sibling's physical instance) and never a silently-wrong result.
 _SUBCLASS_UNRELATED_ROOTS_CROSS_FRAMEWORK_PROBE = Path(__file__).with_name(
     "subclass_unrelated_roots_cross_framework_probe.py"
 )
@@ -155,7 +148,7 @@ _SUBCLASS_UNRELATED_ROOTS_SEEDS = [0, 1, 3, 4, 6]
 
 
 @pytest.mark.timeout(60)
-def test_subclass_unrelated_roots_hop_widening_does_not_crash_under_every_hash_seed() -> None:
+def test_subclass_unrelated_roots_reject_missing_links_under_every_hash_seed() -> None:
     cross_outputs = run_probes(
         _SUBCLASS_UNRELATED_ROOTS_CROSS_FRAMEWORK_PROBE,
         len(_SUBCLASS_UNRELATED_ROOTS_SEEDS),
@@ -171,11 +164,22 @@ def test_subclass_unrelated_roots_hop_widening_does_not_crash_under_every_hash_s
     assert len(same_outputs) == len(_SUBCLASS_UNRELATED_ROOTS_SEEDS)
 
     for seed, output in zip(_SUBCLASS_UNRELATED_ROOTS_SEEDS, cross_outputs):
-        assert output["outcome"] != "crashed", (
-            f"cross-framework PYTHONHASHSEED={seed} crashed instead of degrading gracefully: {output}"
+        assert output["outcome"] == "rejected", (
+            f"cross-framework PYTHONHASHSEED={seed} should be rejected with a missing-Links error: {output}"
         )
+        assert "depends on parents from two different, unlinked source feature" in output["error"], (
+            f"cross-framework PYTHONHASHSEED={seed} should hit the plan-time rejection, not a runtime "
+            f"KeyError: {output}"
+        )
+        assert "ScRootA" in output["error"], f"cross-framework PYTHONHASHSEED={seed}: {output}"
+        assert "ScRootB" in output["error"], f"cross-framework PYTHONHASHSEED={seed}: {output}"
 
     for seed, output in zip(_SUBCLASS_UNRELATED_ROOTS_SEEDS, same_outputs):
-        assert output["outcome"] != "crashed", (
-            f"same-framework PYTHONHASHSEED={seed} crashed instead of degrading gracefully: {output}"
+        assert output["outcome"] == "rejected", (
+            f"same-framework PYTHONHASHSEED={seed} should be rejected with a missing-Links error: {output}"
         )
+        assert "depends on parents from two different, unlinked source feature" in output["error"], (
+            f"same-framework PYTHONHASHSEED={seed} should hit the plan-time rejection, not a runtime KeyError: {output}"
+        )
+        assert "ScRootA" in output["error"], f"same-framework PYTHONHASHSEED={seed}: {output}"
+        assert "ScRootB" in output["error"], f"same-framework PYTHONHASHSEED={seed}: {output}"

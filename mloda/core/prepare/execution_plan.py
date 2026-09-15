@@ -258,6 +258,14 @@ class ExecutionPlan:
         )
 
     @staticmethod
+    def _shares_graph_ancestor(uuid_a: UUID, uuid_b: UUID, graph: Graph) -> bool:
+        """Whether two parents' full transitive ancestor closures (already computed by
+        Graph.set_all_parents_for_each_child) intersect."""
+        closure_a = {uuid_a} | graph.parent_to_children_mapping.get(uuid_a, set())
+        closure_b = {uuid_b} | graph.parent_to_children_mapping.get(uuid_b, set())
+        return bool(closure_a & closure_b)
+
+    @staticmethod
     def _parents_linked_by_join(uuid_a: UUID, uuid_b: UUID, join_steps: set[JoinStep], graph: Graph) -> bool:
         """Whether two parents are linked, directly or transitively, via JoinSteps' genuine sides
         (not ``required_uuids``, which unions all of a join's consumers' parents, not just its own two).
@@ -268,12 +276,12 @@ class ExecutionPlan:
         whichever sibling request happens to have pulled the join's index feature into its own parents
         (an accident of feature-intake order, not a meaningful distinction).
 
-        This ancestor widening and the subclass-clustering `issubclass` check in `_entries_linked`
-        (see add_tfs) are two independent mechanisms that can each decide two hops/entries are
-        "linked"; either one alone deciding "linked" is safe only because the subclass-clustering
-        required_uuids widening it feeds into (added for the over-eager-linking issue that mechanism
-        itself was originally filed for) makes both hops correctly wait on each other's data, rather
-        than silently dropping one hop's."""
+        This ancestor walk and the subclass check in `_entries_linked` (see add_tfs) are independent
+        mechanisms that can both decide two hops are linked. A join-served subclass pairing stays
+        linked unconditionally, since the join machinery already resolves it; every other subclass
+        pairing is additionally gated on `_shares_graph_ancestor`, confirming shared physical lineage
+        rather than independent roots that merely subclass for code reuse, with this walk as the
+        fallback for a subclass pair whose bridge has no shared ancestor of its own."""
         if uuid_a == uuid_b:
             return True
 
@@ -586,7 +594,9 @@ Available join types:
                 # subclass (or superclass) of the other's (catches a case-override hop whose parent lost the
                 # JoinStep's own uuid to a same-role sibling, see `_case_override_beats_nearer_wrong_framework_left`,
                 # without also bridging two entries that merely share an unrelated common ancestor via some
-                # third join's declared side), or `_parents_linked_by_join`.
+                # third join's declared side), or `_parents_linked_by_join`. A subclass pairing must
+                # additionally share genuine graph ancestry unless it is join-served, so two plain hops that
+                # merely subclass one another over otherwise unrelated roots are not merged.
                 def _entries_linked(
                     entry_a: tuple[TransformFrameworkStep | _JoinServedParent, UUID],
                     entry_b: tuple[TransformFrameworkStep | _JoinServedParent, UUID],
@@ -598,7 +608,9 @@ Available join types:
                     if issubclass(hop_a.from_feature_group, hop_b.from_feature_group) or issubclass(
                         hop_b.from_feature_group, hop_a.from_feature_group
                     ):
-                        return True
+                        join_adjacent = isinstance(hop_a, _JoinServedParent) or isinstance(hop_b, _JoinServedParent)
+                        if join_adjacent or self._shares_graph_ancestor(parent_a, parent_b, graph):
+                            return True
                     return self._parents_linked_by_join(parent_a, parent_b, left_join_frameworks, graph)
 
                 def _add_to_groups(
@@ -632,7 +644,8 @@ Available join types:
                 # each to wait on the other's parent too, scoped to the subclass pairing specifically:
                 # the same-class and join-bridged linkages `_entries_linked` also groups by already have
                 # their own, narrower reasons to keep separate required_uuids (see the two multi-member
-                # tests in test_add_tfs_multi_member_parents.py).
+                # tests in test_add_tfs_multi_member_parents.py). This widening does not re-check
+                # `_shares_graph_ancestor` for a pair only transitively grouped via a third member.
                 def _subclass_only_linked(hop_a: TransformFrameworkStep, hop_b: TransformFrameworkStep) -> bool:
                     if hop_a.from_feature_group is hop_b.from_feature_group:
                         return False

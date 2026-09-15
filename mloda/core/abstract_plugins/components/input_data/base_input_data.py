@@ -591,6 +591,12 @@ class BaseInputData(ABC):
         # Marked: same as the mixed batch above.
         raise escalate_match_abort(ValueError(f"Features in batch are pinned to different files: {pinned_paths}"))
 
+    @classmethod
+    def _pin_applies(cls, data_access: Any, feature_names: list[str]) -> bool:
+        """True once any requested feature is pinned; then _resolve_pinned_file's result, including None, is final."""
+        column_map: dict[str, str] | None = data_access.column_to_file
+        return column_map is not None and any(name in column_map for name in feature_names)
+
 
 def _collect_filtered_subclasses(cls: Any, parent_class: Any) -> list[type[BaseInputData]]:
     result = []

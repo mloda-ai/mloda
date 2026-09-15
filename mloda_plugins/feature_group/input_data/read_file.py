@@ -48,7 +48,8 @@ class ReadFile(BaseInputData):
     or ImportError) assumes plain columns are present but declines a chain- or column-separated name while
     matching; an explicit column_to_file pin is exempt. An unpinned file whose columns cannot be read
     (OSError, ValueError) is declined; a pinned one raises. A match_subclass_data_access override should
-    route through _file_matches to keep these rules.
+    route through _file_matches, and through _pin_applies/_resolve_pinned_file for pinned requests, to
+    keep these rules.
     """
 
     _auto_load_group: str = "feature_group/input_data/read_files"
@@ -121,10 +122,8 @@ class ReadFile(BaseInputData):
         document_suffixes: "frozenset[str]" = cls.reader_option("document_suffixes", options)
 
         if isinstance(data_access, DataAccessCollection):
-            if data_access.column_to_file is not None:
-                pinned = cls._resolve_pinned_file(data_access, feature_names)
-                if pinned is not None:
-                    return pinned
+            if cls._pin_applies(data_access, feature_names):
+                return cls._resolve_pinned_file(data_access, feature_names)
             hint = options.get("data_access_handle")
             if hint is not None:
                 handle_kind = data_access.handles().get(hint)
@@ -169,7 +168,8 @@ class ReadFile(BaseInputData):
             if is_match_abort(exc):
                 raise
             # An unreadable unpinned file declines so sibling readers still match; a pinned file is read
-            # first by _resolve_pinned_file through validate_columns, so its error propagates before any fallback.
+            # first by _resolve_pinned_file through validate_columns, and once a pin applies there is no
+            # fallback path for its error to bypass.
             record_match_rejection(
                 cls.get_class_name(),
                 f"{cls.get_class_name()} matched the suffix of {path} but could not read its columns: {exc}",

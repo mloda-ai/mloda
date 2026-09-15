@@ -3,6 +3,7 @@ from typing import Any
 
 import pytest
 
+from mloda.core.abstract_plugins.components.utils import escalate_match_abort, is_match_abort
 from mloda.provider import BaseInputData, FeatureSet
 from mloda.user import DataAccessCollection, Feature, Options
 from mloda_plugins.feature_group.input_data.read_document import ReadDocument
@@ -46,6 +47,29 @@ class TestReadDocumentMatchSubclass:
     def test_match_subclass_data_access_returns_none_with_arbitrary_object(self) -> None:
         result = ReadDocument.match_subclass_data_access(object(), ["content"], options=Options({}))
         assert result is None
+
+
+class MarkedAbortSuffixReader(ReadDocument):
+    """suffix() raises a marked NotImplementedError instead of declaring one. Not a final reader:
+    ReadDocument needs BOTH produce_document and suffix overridden (or load_data wholesale) to
+    qualify, and this fixture overrides only suffix, so it stays excluded from global discovery."""
+
+    @classmethod
+    def suffix(cls) -> tuple[str, ...]:
+        raise escalate_match_abort(NotImplementedError("read_document marked abort"))
+
+
+class TestReadDocumentMatchDocumentDataAccessMarkedAbort:
+    """A marked NotImplementedError from suffix() must escape match_document_data_access, not decline silently."""
+
+    def test_marked_abort_from_suffix_reraises(self) -> None:
+        with pytest.raises(NotImplementedError) as excinfo:
+            MarkedAbortSuffixReader.match_document_data_access(["/path/to/doc.json"], ["content"])
+
+        assert is_match_abort(excinfo.value)
+
+    def test_marked_abort_suffix_reader_is_not_a_final_reader(self) -> None:
+        assert MarkedAbortSuffixReader.is_final_reader() is False
 
 
 class TestReadDocumentAbstractMethods:

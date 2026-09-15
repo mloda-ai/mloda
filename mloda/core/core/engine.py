@@ -183,6 +183,10 @@ class Engine:
         return execution_planner
 
     def setup_features_recursion(self, features: Features, requested: bool = True, depth: int = 0) -> None:
+        # Register every sibling's own link before processing any of them, so index injection and
+        # feature-group resolution see the whole batch's links regardless of processing order.
+        for feature in features:
+            self.add_feature_link_to_links(feature)
         for feature in features:
             self._process_feature(feature, features, requested, depth)
 

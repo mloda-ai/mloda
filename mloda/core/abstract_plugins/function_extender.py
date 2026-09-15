@@ -73,6 +73,14 @@ class Extender(ABC):
     def __call__(self, func: Any, *args: Any, **kwargs: Any) -> Any:
         pass
 
+    def close(self) -> None:
+        """Called once per worker-side copy on graceful MULTIPROCESSING worker exit, to flush a
+        buffering sink. Never called in SYNC or THREADING mode. Exceptions raised here are caught
+        and logged, never propagated. On the parent-death watchdog's ``os._exit(0)`` path this is
+        best-effort and racy: it may not run at all, since that path skips Python cleanup. It must
+        return within the run's ``graceful_shutdown_timeout`` (default 2.0s), a budget shared across
+        every extender closing in that worker, or the worker may be terminated mid-close."""
+
     @staticmethod
     def feature_group_name(func: Any) -> str:
         """Resolve the owning feature group class name of the hooked callable.

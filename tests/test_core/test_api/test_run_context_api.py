@@ -84,6 +84,36 @@ class TestBuildRunContextPicksUpActiveVerifiedContext:
         assert built.principal is None
 
 
+class TestBuildRunContextGracefulShutdownTimeout:
+    def test_default_graceful_shutdown_timeout_is_two_point_zero(self) -> None:
+        session = _prepare_session()
+
+        assert session._build_run_context(None, None).graceful_shutdown_timeout == 2.0
+
+    def test_custom_graceful_shutdown_timeout_round_trips_through_build_run_context(self) -> None:
+        session = _prepare_session()
+
+        built = session._build_run_context(None, None, graceful_shutdown_timeout=7.5)
+
+        assert built.graceful_shutdown_timeout == 7.5
+
+    def test_custom_graceful_shutdown_timeout_round_trips_through_session_run(self) -> None:
+        session = _prepare_session()
+
+        session.run(parallelization_modes={ParallelizationMode.SYNC}, graceful_shutdown_timeout=9.5)
+
+        assert session.runner is not None
+        assert session.runner.cfw_register.get_run_context().graceful_shutdown_timeout == 9.5
+
+    def test_default_graceful_shutdown_timeout_round_trips_through_session_run(self) -> None:
+        session = _prepare_session()
+
+        session.run(parallelization_modes={ParallelizationMode.SYNC})
+
+        assert session.runner is not None
+        assert session.runner.cfw_register.get_run_context().graceful_shutdown_timeout == 2.0
+
+
 class TestBatchRunWithoutRunContextUsesSessionBase:
     def test_batch_run_without_run_context_falls_back_to_session_base_context(self) -> None:
         session = _prepare_session()

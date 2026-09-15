@@ -151,8 +151,24 @@ class WorkerManager:
         logger.warning(f"Drop operation for CFW {cfw_uuid} timed out after {timeout}s")
         return None
 
-    def join_all(self) -> None:
-        """Terminate processes (not threads), join all tasks, raise Exception if any fail."""
+    def join_all(self, graceful_timeout: float = 2.0) -> None:
+        """Sends STOP to alive workers and waits up to graceful_timeout for them to exit
+        (running their close() teardown) before terminating any that remain. Raises an
+        Exception if any task fails to join or terminate."""
+        for process, command_queue, _ in self.process_register.values():
+            try:
+                if process.is_alive():
+                    command_queue.put("STOP", block=False)
+            except Exception as e:
+                logger.error(f"Error sending graceful STOP: {e}")
+
+        deadline = time.time() + graceful_timeout
+        for process, _, _ in self.process_register.values():
+            try:
+                process.join(timeout=max(0.0, deadline - time.time()))
+            except Exception as e:
+                logger.error(f"Error joining process during graceful shutdown: {e}")
+
         failures: list[str] = []
         for task in self.tasks:
             try:

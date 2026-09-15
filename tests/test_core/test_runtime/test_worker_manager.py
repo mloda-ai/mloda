@@ -30,6 +30,13 @@ def _loop_forever_target(command_queue: Any, result_queue: Any) -> None:
         time.sleep(0.1)
 
 
+def _loop_forever_target_matching_worker_signature(command_queue: Any, result_queue: Any, worker_index: int) -> None:
+    """Matches create_worker_process's real calling convention but never drains its queue,
+    so only a graceful-timeout-driven terminate() can end it."""
+    while True:
+        time.sleep(0.1)
+
+
 class TestWorkerManagerInit:
     """Test WorkerManager initialization."""
 
@@ -778,6 +785,47 @@ class TestWorkerManagerJoinAll:
                 process.kill()
                 process.join(timeout=5)
             join_thread.join(timeout=1.0)
+
+    def test_join_all_sends_graceful_stop_to_registered_processes_before_final_terminate(self) -> None:
+        """Sends a graceful STOP to every alive registered process, and the final
+        terminate-fallback loop over self.tasks still runs afterward."""
+        manager = WorkerManager()
+        cfw_uuid = uuid4()
+
+        mock_process = Mock(spec=multiprocessing.Process)
+        mock_process.is_alive.return_value = True
+        mock_command_queue = MagicMock()
+        mock_result_queue = MagicMock()
+        manager.process_register[cfw_uuid] = (mock_process, mock_command_queue, mock_result_queue)
+        manager.tasks.append(mock_process)
+
+        manager.join_all()
+
+        mock_command_queue.put.assert_called_once_with("STOP", block=False)
+        mock_process.terminate.assert_called_once()
+
+    @pytest.mark.timeout(30)
+    def test_join_all_terminates_after_graceful_timeout_when_worker_ignores_stop(self) -> None:
+        """A worker that never drains its command queue must still be terminated once
+        graceful_timeout elapses."""
+        manager = WorkerManager()
+        process, _, _ = manager.create_worker_process(
+            cfw_uuid=uuid4(), target=_loop_forever_target_matching_worker_signature, args=()
+        )
+        try:
+            start_time = time.time()
+            manager.join_all(graceful_timeout=0.3)
+            elapsed = time.time() - start_time
+
+            assert not process.is_alive()
+            assert elapsed < 10.0
+        finally:
+            if process.is_alive():
+                process.terminate()
+                process.join(timeout=5)
+                if process.is_alive():
+                    process.kill()
+                    process.join(timeout=5)
 
 
 class TestWorkerManagerIntegration:

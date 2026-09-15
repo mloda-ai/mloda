@@ -59,6 +59,10 @@ CHAINDECLINE_ABORT_NIE_SUFFIX = ".chaindeclineabortnotimplemented"
 CHAINDECLINE_TYPE_ERROR_SUFFIX = ".chaindeclinetypeerror"
 CHAINDECLINE_ABORT_PLAIN_FEATURE = "chaindecline_abort_plain_column"
 
+CHAINDECLINE_DB_ABORT_MARKER_KEY = "chaindecline_db_abort_marker"
+CHAINDECLINE_DB_ABORT_ACCESS: dict[str, Any] = {CHAINDECLINE_DB_ABORT_MARKER_KEY: True}
+CHAINDECLINE_DB_ABORT_PLAIN_FEATURE = "chaindecline_db_abort_plain_column"
+
 
 class ChainDeclineUnvalidatedReader(ReadFile):
     """Final reader owning CHAINDECLINE_FILE_SUFFIX; never overrides get_column_names."""
@@ -150,6 +154,36 @@ class ChainDeclineUnvalidatedDbReader(ReadDB):
     @classmethod
     def load_data(cls, data_access: Any, features: FeatureSet) -> Any:
         return {CHAINDECLINE_DB_PLAIN_FEATURE: [1]}
+
+
+class ChainDeclineAbortCredentialsDbReader(ReadDB):
+    """Accepts only the marker credentials; is_valid_credentials then raises a marked NotImplementedError."""
+
+    @classmethod
+    def is_valid_credentials(cls, credentials: dict[str, Any]) -> bool:
+        if credentials.get(CHAINDECLINE_DB_ABORT_MARKER_KEY) is not True:
+            return False
+        raise escalate_match_abort(NotImplementedError("chaindecline db marked abort"))
+
+    @classmethod
+    def load_data(cls, data_access: Any, features: FeatureSet) -> Any:
+        return {CHAINDECLINE_DB_ABORT_PLAIN_FEATURE: [1]}
+
+
+class ChainDeclineAbortFeatureDbReader(ReadDB):
+    """Accepts only the marker credentials; check_feature_in_data_access then raises a marked NotImplementedError."""
+
+    @classmethod
+    def is_valid_credentials(cls, credentials: dict[str, Any]) -> bool:
+        return credentials.get(CHAINDECLINE_DB_ABORT_MARKER_KEY) is True
+
+    @classmethod
+    def check_feature_in_data_access(cls, feature_name: str, data_access: Any) -> bool:
+        raise escalate_match_abort(NotImplementedError("chaindecline db marked abort"))
+
+    @classmethod
+    def load_data(cls, data_access: Any, features: FeatureSet) -> Any:
+        return {CHAINDECLINE_DB_ABORT_PLAIN_FEATURE: [1]}
 
 
 class ChainDeclineRootFG(FeatureGroup):
@@ -440,6 +474,42 @@ class TestReadDbDeclinesChainSeparatedNames:
 
         assert matched is CHAINDECLINE_DB_ACCESS
         assert rejection_window == {}
+
+
+class TestReadDbMarkedAbortsPropagate:
+    """A marked NotImplementedError from ReadDB's credential/feature hooks must escape matching, not decline
+    silently: _credentials_predicate and match_read_db_data_access's own is_valid_credentials/
+    check_feature_in_data_access calls are independent call sites, each needing its own guard."""
+
+    def test_marked_abort_from_is_valid_credentials_reraises_via_match_read_db_data_access(self) -> None:
+        with pytest.raises(NotImplementedError) as excinfo:
+            ChainDeclineAbortCredentialsDbReader.match_read_db_data_access(
+                [CHAINDECLINE_DB_ABORT_ACCESS], [CHAINDECLINE_DB_ABORT_PLAIN_FEATURE]
+            )
+
+        assert is_match_abort(excinfo.value)
+
+    def test_marked_abort_from_check_feature_in_data_access_reraises_via_match_read_db_data_access(self) -> None:
+        """Needs BOTH the check_feature_in_data_access handler and the outer is_valid_credentials handler fixed:
+        the inner handler's re-raise falls straight into the outer try's own except clause."""
+        with pytest.raises(NotImplementedError) as excinfo:
+            ChainDeclineAbortFeatureDbReader.match_read_db_data_access(
+                [CHAINDECLINE_DB_ABORT_ACCESS], [CHAINDECLINE_DB_ABORT_PLAIN_FEATURE]
+            )
+
+        assert is_match_abort(excinfo.value)
+
+    def test_marked_abort_from_is_valid_credentials_reraises_via_credentials_predicate(self) -> None:
+        """_credentials_predicate is a separate caller of is_valid_credentials, reached through
+        DataAccessCollection.resolve's predicate parameter before match_read_db_data_access ever runs."""
+        dac = DataAccessCollection(credentials={"chaindecline_abort_handle": CHAINDECLINE_DB_ABORT_ACCESS})
+
+        with pytest.raises(NotImplementedError) as excinfo:
+            ChainDeclineAbortCredentialsDbReader.match_subclass_data_access(
+                dac, [CHAINDECLINE_DB_ABORT_PLAIN_FEATURE], Options()
+            )
+
+        assert is_match_abort(excinfo.value)
 
 
 class TestChainedFeatureResolvesToSingleFeatureGroup:

@@ -1,4 +1,5 @@
 from typing import Any, ClassVar
+from mloda.core.abstract_plugins.components.utils import is_match_abort
 from mloda.user import DataAccessCollection
 from mloda.provider import (
     CHAIN_SEPARATOR,
@@ -92,9 +93,10 @@ class ReadDB(BaseInputData):
     def is_valid_credentials(cls, credentials: dict[str, Any]) -> bool:
         """Checks if the given dictionary is a valid credentials object.
 
-        Matcher exception contract: match_read_db_data_access treats only NotImplementedError
-        as a soft no-match; any other exception propagates and aborts matching for every
-        reader sharing the DataAccessCollection.
+        Matcher exception contract: match_read_db_data_access treats only an unmarked
+        NotImplementedError as a soft no-match; anything else, including one marked with
+        escalate_match_abort, propagates and aborts matching for every reader sharing the
+        DataAccessCollection.
 
         match_subclass_data_access also enforces this via the _credentials_predicate wrapper,
         and may invoke it once per registered credentials entry while matching, not only the
@@ -106,17 +108,20 @@ class ReadDB(BaseInputData):
     def check_feature_in_data_access(cls, feature_name: str, data_access: Any) -> bool:
         """Obligatory function to check if the feature is in the data access.
 
-        Same matcher exception contract as is_valid_credentials: only NotImplementedError
-        is a soft no-match, any other exception propagates.
+        Same matcher exception contract as is_valid_credentials: only an unmarked
+        NotImplementedError is a soft no-match; anything else, including a marked one,
+        propagates.
         """
         raise NotImplementedError
 
     @classmethod
     def _credentials_predicate(cls, credentials: Any) -> bool:
-        """Wraps is_valid_credentials as a predicate, treating NotImplementedError as no match."""
+        """Wraps is_valid_credentials as a predicate, treating an unmarked NotImplementedError as no match."""
         try:
             return cls.is_valid_credentials(credentials)
-        except NotImplementedError:
+        except NotImplementedError as exc:
+            if is_match_abort(exc):
+                raise
             return False
 
     @classmethod
@@ -169,7 +174,9 @@ class ReadDB(BaseInputData):
                             stage=INPUT_DATA_STAGE,
                         )
                         continue
-                    except NotImplementedError:
+                    except NotImplementedError as exc:
+                        if is_match_abort(exc):
+                            raise
                         # COLUMN_SEPARATOR never reaches here in production (get_column_base_feature strips it
                         # first); kept for direct callers of match_read_db_data_access.
                         if not cls._is_overridden(ReadDB, "check_feature_in_data_access") and (
@@ -185,7 +192,9 @@ class ReadDB(BaseInputData):
                             continue
 
                     return data_access
-            except NotImplementedError:
+            except NotImplementedError as exc:
+                if is_match_abort(exc):
+                    raise
                 continue
         return None
 

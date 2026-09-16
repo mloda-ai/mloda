@@ -4,7 +4,7 @@ from mloda.core.abstract_plugins.components.data_types import DataType
 from mloda.provider import BaseMergeEngine
 from mloda_plugins.compute_framework.base_implementations.pandas.pandas_merge_engine import PandasMergeEngine
 from mloda.user import FeatureName
-from mloda.provider import ComputeFramework
+from mloda.provider import ComputeFramework, OutputSchema
 from mloda.provider import BaseFilterEngine, BaseMaskEngine
 from mloda_plugins.compute_framework.base_implementations.pandas.pandas_filter_engine import PandasFilterEngine
 from mloda_plugins.compute_framework.base_implementations.pandas.pandas_mask_engine import PandasMaskEngine
@@ -76,6 +76,20 @@ class PandasDataFrame(ComputeFramework):
             unit = dtype_str[len("datetime64[") : -1] if "[" in dtype_str else "ns"
             return DataType.TIMESTAMP_MILLIS if unit == "ms" else DataType.TIMESTAMP_MICROS
         return None
+
+    def _output_schema(self, data: Any) -> OutputSchema | None:
+        """Zip columns/dtypes positionally (indexing by name breaks on duplicates); first
+        occurrence's dtype wins for duplicate names.
+        """
+        if isinstance(data, dict):
+            return super()._output_schema(data)
+        columns = data.columns
+        if len(columns) == 0:
+            return None
+        seen: dict[str, str] = {}
+        for name, dtype in zip(columns, data.dtypes):
+            seen.setdefault(str(name), str(dtype))
+        return tuple((name, seen[name]) for name in sorted(seen, key=str))
 
     @classmethod
     def pd_dataframe(cls) -> Any:

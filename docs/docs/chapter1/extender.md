@@ -136,3 +136,25 @@ A parent-resident extender is one shared object, invoked by every framework buil
 For a framework whose class declares `MULTIPROCESSING` support, a framework dispatched to a spawned worker gets an independent copy, materialized only when the framework is unpickled inside the worker: the parent only ever holds the pickled snapshot taken at run start. The extender must be picklable at that point: a live handle that pickle can't round-trip (a client, tracer, connection, lock) must be stripped in `__getstate__` and rebuilt in `__setstate__` or on first use in `__call__`. Constructing the handle eagerly in `__init__` is fine as long as `__getstate__` strips it before pickling. State a worker copy accumulates stays in that worker unless the extender ships it out itself (a file, a socket, an exporter).
 
 Two copies in the same process that resolve to the same underlying handle (e.g. a pooled client) share its lifecycle, not two independently rebuilt handles: an extender exposing `close()` must make the closed state visible to every copy resolving to that handle, or closing one leaves the others writing to a dead handle.
+
+An extender that accepts an injected sink (client, provider, connection) should trial-pickle it in `__getstate__`, drop it if it can't survive, and log that drop once per instance rather than letting the real pickle call fail with an opaque error. `mloda.steward` ships two small primitives for this: `pickle_failure_reason(value)` (`None` if `value` pickles cleanly, else the caught exception's type name) and `WarnOncePerInstance`, a thread-safe double-checked-locking guard whose `warn_once(emit)` fires `emit` at most once per instance and always resets to unwarned on any copy, so a pickled worker copy decides independently whether to warn instead of inheriting the parent's already-fired state:
+
+```py
+from mloda.steward import pickle_failure_reason, WarnOncePerInstance
+
+class MyExtender(Extender):
+    def __init__(self, sink=None):
+        self._sink = sink
+        self._drop_guard = WarnOncePerInstance()
+        ...
+
+    def __getstate__(self):
+        state = dict(self.__dict__)
+        reason = pickle_failure_reason(self._sink) if self._sink is not None else None
+        if reason is not None:
+            self._drop_guard.warn_once(lambda: logger.warning(f"dropping unpicklable sink ({reason})"))
+            state["_sink"] = None
+        return state
+```
+
+No custom `__setstate__` is needed for `_drop_guard` itself: pickle reconstructs it as a fresh, unwarned guard on its own. With an eagerly-validated run (the common case), this drop-and-warn fires once in the parent process, during plan-time picklability validation, before the worker-dispatch pickle; the later dispatch is then silent since the guard has already fired for that instance.

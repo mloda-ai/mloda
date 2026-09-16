@@ -33,6 +33,13 @@ from mloda.core.abstract_plugins.plugin_registry.plugin_registry import PluginRe
 # Optional-dependency import guards
 from mloda.core.abstract_plugins.plugin_loader.plugin_loader import traceback_blames_root
 
+# Pickle safety for Extender authors (trial-pickle-and-warn-once for an injected sink)
+from mloda.core.abstract_plugins.pickle_safety import (
+    pickle_failure_reason,
+    is_picklable,
+    WarnOncePerInstance,
+)
+
 # Plugin governance
 from mloda.core.abstract_plugins.plugin_registry.plugin_policy import (
     ApprovalStatus,
@@ -77,6 +84,10 @@ __all__ = [
     "PluginRegistry",
     # Optional-dependency import guards
     "traceback_blames_root",
+    # Pickle safety for Extender authors
+    "pickle_failure_reason",
+    "is_picklable",
+    "WarnOncePerInstance",
     # Plugin governance
     "ApprovalStatus",
     "PluginPolicy",

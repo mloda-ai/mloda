@@ -197,7 +197,7 @@ DataAccessCollection(
 )
 ```
 
-For columns listed in the map, the resolver short-circuits to the pinned file. For columns not listed, the regular resolver rule applies (single match binds; multiple raises and asks for `data_access_handle`). If the pinned file cannot serve the request (wrong reader, missing column), the feature is declined rather than falling back to another file.
+For columns listed in the map, the resolver short-circuits to the pinned file. For columns not listed, the regular resolver rule applies (single match binds; multiple raises and asks for `data_access_handle`). If the pinned file cannot serve the request (wrong reader, missing column), the feature is declined rather than falling back to another file. When no registered reader anywhere owns the pinned file's suffix, this is recorded as an attributable elimination instead of a silent decline.
 
 See [Disambiguating columns shared across multiple files](access-feature-data.md#disambiguating-columns-shared-across-multiple-files) for the full example.
 

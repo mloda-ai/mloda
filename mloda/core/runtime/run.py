@@ -107,6 +107,7 @@ class ExecutionOrchestrator:
         self.manager: Any = None
         self.function_extender: set[Extender] | None = None
         self.worker_extender_payload: bytes | None = None
+        self._graceful_shutdown_timeout: float = RunContext().graceful_shutdown_timeout
 
         # multiprocessing - delegate to WorkerManager
         self.location: str | None = None
@@ -475,7 +476,7 @@ class ExecutionOrchestrator:
         """
         Joins all tasks (threads or processes) and terminates multiprocessing processes.
         """
-        self.worker_manager.join_all()
+        self.worker_manager.join_all(graceful_timeout=self._graceful_shutdown_timeout)
 
     def add_to_result_data_collection(self, cfw: ComputeFramework, features: FeatureSet, step_uuid: UUID) -> None:
         """
@@ -508,6 +509,7 @@ class ExecutionOrchestrator:
         """
         run_context = run_context if run_context is not None else RunContext()
         self.function_extender = function_extender
+        self._graceful_shutdown_timeout = run_context.graceful_shutdown_timeout
 
         if ParallelizationMode.MULTIPROCESSING not in parallelization_modes:
             self.cfw_register = CfwManager(parallelization_modes)

@@ -154,6 +154,18 @@ class TestRunContextReplace:
         assert replaced.principal == "hash123"
 
 
+class TestRunContextGracefulShutdownTimeout:
+    def test_default_is_two_point_zero_seconds(self) -> None:
+        ctx = RunContext()
+
+        assert ctx.graceful_shutdown_timeout == 2.0
+
+    def test_custom_value_round_trips_through_the_constructor(self) -> None:
+        ctx = RunContext(graceful_shutdown_timeout=7.5)
+
+        assert ctx.graceful_shutdown_timeout == 7.5
+
+
 class TestRunContextIsInternal:
     def test_docstring_states_the_class_is_internal_and_not_public_api(self) -> None:
         assert RunContext.__doc__ is not None

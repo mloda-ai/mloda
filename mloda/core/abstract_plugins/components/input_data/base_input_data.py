@@ -546,7 +546,10 @@ class BaseInputData(ABC):
 
     @classmethod
     def _has_suffix(cls) -> bool:
-        """Check if this class implements suffix() (concrete subclass vs abstract base)."""
+        """Check if this class implements suffix() (concrete subclass vs abstract base).
+
+        A raise marked with escalate_match_abort propagates instead of being read as "no suffix".
+        """
         try:
             cls.suffix()  # type: ignore[attr-defined]
             return True

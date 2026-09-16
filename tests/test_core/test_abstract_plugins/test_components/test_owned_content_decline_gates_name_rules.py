@@ -29,7 +29,7 @@ from mloda_plugins.feature_group.input_data.read_db import ReadDB
 from mloda_plugins.feature_group.input_data.read_file import ReadFile
 
 
-MODULE_SUFFIX_MARKERS = ("vg961", "vg1006")
+MODULE_SUFFIX_MARKERS = ("vg961", "vg1006", "vg1454")
 """Markers a module-level file reader's suffixes must carry, so none of them can fire on a foreign path."""
 
 VG961_FILE_FEATURE = "vg961_file_column"
@@ -48,6 +48,10 @@ VG1006_UNIT_REASON = "vg1006 unit reason"
 
 VG1006_FOREIGN_OWNER = "vg1006_foreign_owner"
 VG1006_FOREIGN_REASON = "vg1006 foreign reason"
+
+VG1454_FILE_FEATURE = "vg1454_file_column"
+VG1454_FILE_SUFFIX = ".vg1454csv"
+VG1454_JSON_SUFFIX = ".vg1454json"
 
 
 class Vg961FileFamily(ReadFile):
@@ -173,6 +177,58 @@ class Vg1006AliasFG(FeatureGroup):
     @classmethod
     def feature_names_supported(cls) -> set[str]:
         return {VG1006_FILE_FEATURE}
+
+
+class Vg1454FileFamily(ReadFile):
+    """Family base of the file shape; it overrides nothing, so it never classifies as final."""
+
+
+class Vg1454CsvReader(Vg1454FileFamily):
+    """Final reader owning the unique .vg1454csv suffix; introspects the comma-separated header line."""
+
+    @classmethod
+    def suffix(cls) -> tuple[str, ...]:
+        return (VG1454_FILE_SUFFIX,)
+
+    @classmethod
+    def get_column_names(cls, file_name: str) -> list[str]:
+        with open(file_name, encoding="utf-8") as handle:
+            return handle.readline().strip().split(",")
+
+    @classmethod
+    def load_data(cls, data_access: Any, features: FeatureSet) -> Any:
+        return {VG1454_FILE_FEATURE: [1]}
+
+
+class Vg1454JsonReader(Vg1454FileFamily):
+    """Final reader owning the unique .vg1454json suffix; unused by the tests beyond existing as a sibling."""
+
+    @classmethod
+    def suffix(cls) -> tuple[str, ...]:
+        return (VG1454_JSON_SUFFIX,)
+
+    @classmethod
+    def get_column_names(cls, file_name: str) -> list[str]:
+        return []
+
+    @classmethod
+    def load_data(cls, data_access: Any, features: FeatureSet) -> Any:
+        return {VG1454_FILE_FEATURE: [1]}
+
+
+class Vg1454FileFG(FeatureGroup):
+    """Root FG whose name rule claims vg1454_file_column while its addressed reader declines on content."""
+
+    @classmethod
+    def input_data(cls) -> BaseInputData | None:
+        return Vg1454FileFamily()
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return None
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {VG1454_FILE_FEATURE}
 
 
 @pytest.fixture()
@@ -332,6 +388,69 @@ class TestOwnedContentDeclineGatesNameRules:
         message = render_resolution_failure(result, feature)
         assert message is not None
         assert f"  - {Vg961FileFG.__name__} (input data): {elimination.reason}" in message
+
+
+class TestUnownedPinGatesTheNameRule:
+    """Engine level: every feature here is bare, so matching routes through global_scope_data_access ->
+    match_data_access, never the by-name feature_scope_data_access."""
+
+    def test_a_pin_no_registered_reader_owns_gates_the_name_rule(self, tmp_path: Path) -> None:
+        """No reader anywhere owns the pinned suffix: eliminated, not recovered by the name rule."""
+        path = tmp_path / "data.vg1454nobodyowns"
+        path.write_text("a,b\n1,2\n", encoding="utf-8")
+        dac = DataAccessCollection(files={"vg1454_h": str(path)}, column_to_file={VG1454_FILE_FEATURE: "vg1454_h"})
+        accessible_plugins: FeatureGroupEnvironmentMapping = {Vg1454FileFG: {PandasDataFrame}}
+
+        result = IdentifyFeatureGroupClass.evaluate(Feature(name=VG1454_FILE_FEATURE), accessible_plugins, None, dac)
+
+        assert result.identified == {}
+        elimination = result.eliminations.get(Vg1454FileFG)
+        assert elimination is not None
+        assert elimination.stage == "input_data"
+        assert str(path) in elimination.reason
+        assert "no registered reader" in elimination.reason
+
+    def test_a_pin_owned_by_a_sibling_that_declines_on_content_is_not_masked_by_a_false_no_owner_reason(
+        self, tmp_path: Path, rejection_window: dict[str, MatchRejection]
+    ) -> None:
+        """The family's own match pass already attributes a sibling's content decline; ownership detection
+        must not layer a spurious 'no registered reader' entry on top of it."""
+        path = tmp_path / f"data{VG1454_FILE_SUFFIX}"
+        path.write_text("vg1454_other_a,vg1454_other_b\n1,2\n", encoding="utf-8")
+        dac = DataAccessCollection(files={"vg1454_h": str(path)}, column_to_file={VG1454_FILE_FEATURE: "vg1454_h"})
+
+        matched = Vg1454FileFamily.global_scope_data_access(
+            feature_name=VG1454_FILE_FEATURE, options=Options({}), data_access_collection=dac
+        )
+
+        assert matched is False
+        rejection = rejection_window[Vg1454CsvReader.get_class_name()]
+        assert "lacks the column" in rejection.reason
+        assert not any("no registered reader" in r.reason for r in rejection_window.values())
+
+    def test_a_pin_owned_and_valid_still_binds_normally(self, tmp_path: Path) -> None:
+        """The pinned file is owned and valid: the loop's own match wins, the post-loop check never fires."""
+        path = tmp_path / f"data{VG1454_FILE_SUFFIX}"
+        path.write_text(f"{VG1454_FILE_FEATURE}\n1\n", encoding="utf-8")
+        dac = DataAccessCollection(files={"vg1454_h": str(path)}, column_to_file={VG1454_FILE_FEATURE: "vg1454_h"})
+        accessible_plugins: FeatureGroupEnvironmentMapping = {Vg1454FileFG: {PandasDataFrame}}
+
+        result = IdentifyFeatureGroupClass.evaluate(Feature(name=VG1454_FILE_FEATURE), accessible_plugins, None, dac)
+
+        assert Vg1454FileFG in result.identified
+        assert result.eliminations == {}
+
+    def test_a_pin_owned_by_an_unrelated_family_elsewhere_does_not_falsely_gate(self, tmp_path: Path) -> None:
+        """Ownership scoped to the WHOLE plugin set: a suffix owned by an unrelated family must not falsely gate."""
+        path = tmp_path / f"data{VG961_FILE_SUFFIX}"
+        path.write_text(f"{VG1454_FILE_FEATURE}\n1\n", encoding="utf-8")
+        dac = DataAccessCollection(files={"vg1454_h": str(path)}, column_to_file={VG1454_FILE_FEATURE: "vg1454_h"})
+        accessible_plugins: FeatureGroupEnvironmentMapping = {Vg1454FileFG: {PandasDataFrame}}
+
+        result = IdentifyFeatureGroupClass.evaluate(Feature(name=VG1454_FILE_FEATURE), accessible_plugins, None, dac)
+
+        assert Vg1454FileFG in result.identified
+        assert result.eliminations.get(Vg1454FileFG) is None
 
 
 class TestOwnedShapesThatMustNotGate:

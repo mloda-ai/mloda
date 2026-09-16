@@ -365,7 +365,32 @@ class BaseInputData(ABC):
             )
             if matched_data_access:
                 return (subclass, matched_data_access)
+
+        cls._record_unowned_pin(data_access_collection, feature_names)
         return None, None
+
+    @classmethod
+    def _record_unowned_pin(cls, data_access_collection: DataAccessCollection, feature_names: list[str]) -> None:
+        """Records one attributable elimination when no reader anywhere owns the pinned file's suffix.
+        Recorded at the owned stage since a plain-stage recording is never harvested once a name rule
+        matches. Checked against every registered reader, not just this family, so an unrelated family
+        is never blamed for a suffix it doesn't own.
+        """
+        column_to_file = data_access_collection.column_to_file
+        if column_to_file is None:
+            return
+        pinned_handles = {column_to_file[name] for name in feature_names if name in column_to_file}
+        if len(pinned_handles) != 1 or not all(name in column_to_file for name in feature_names):
+            return
+        pinned_path = data_access_collection.files[next(iter(pinned_handles))]
+        all_readers = get_all_filtered_subclasses(BaseInputData, BaseInputData)
+        if any(reader._has_suffix() and reader._matches_suffix(pinned_path) for reader in all_readers):
+            return
+        record_match_rejection(
+            cls.data_access_name(),
+            f"pinned file {pinned_path} has a suffix no registered reader owns",
+            stage=INPUT_DATA_OWNED_STAGE,
+        )
 
     @classmethod
     def add_base_input_data_to_options(

@@ -29,6 +29,7 @@ from mloda.core.abstract_plugins.components.utils import (
     contained_raise_reason,
     escalate_match_abort,
     get_all_subclasses,
+    is_match_abort,
 )
 
 logger = logging.getLogger(__name__)
@@ -549,8 +550,9 @@ class BaseInputData(ABC):
         try:
             cls.suffix()  # type: ignore[attr-defined]
             return True
-        # Swallows: the probe asks whether suffix() is implemented, and both classes ARE that answer.
-        except (NotImplementedError, AttributeError):
+        except (NotImplementedError, AttributeError) as exc:
+            if is_match_abort(exc):
+                raise
             return False
 
     @classmethod

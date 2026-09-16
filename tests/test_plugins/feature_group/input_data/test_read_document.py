@@ -71,6 +71,15 @@ class TestReadDocumentMatchDocumentDataAccessMarkedAbort:
     def test_marked_abort_suffix_reader_is_not_a_final_reader(self) -> None:
         assert MarkedAbortSuffixReader.is_final_reader() is False
 
+    def test_marked_abort_from_suffix_reraises_via_file_handle_branch(self) -> None:
+        data_access = DataAccessCollection(files={"handle": "/path/to/doc.json"})
+        with pytest.raises(NotImplementedError) as excinfo:
+            MarkedAbortSuffixReader.match_subclass_data_access(
+                data_access, ["content"], options=Options({"data_access_handle": "handle"})
+            )
+
+        assert is_match_abort(excinfo.value)
+
 
 class TestReadDocumentAbstractMethods:
     def test_load_data_raises_not_implemented(self) -> None:

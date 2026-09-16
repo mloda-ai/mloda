@@ -20,11 +20,12 @@ def _noop_target(*args: Any, **kwargs: Any) -> None:
     return None
 
 
-def _loop_forever_target(command_queue: Any, result_queue: Any) -> None:
+def _loop_forever_target(command_queue: Any, result_queue: Any, worker_index: int = 0, *args: Any) -> None:
     """Picklable worker target that never exits on its own.
 
     Module-level so it pickles under the spawn context. create_worker_process
-    prepends command_queue and result_queue to the args it passes to the target.
+    prepends command_queue and result_queue and appends worker_index to the args
+    it passes to the target.
     """
     while True:
         time.sleep(0.1)
@@ -778,6 +779,23 @@ class TestWorkerManagerJoinAll:
                 process.kill()
                 process.join(timeout=5)
             join_thread.join(timeout=1.0)
+
+    @pytest.mark.timeout(30)
+    def test_loop_forever_target_runs_without_argument_type_error(self) -> None:
+        """WorkerManager.create_worker_process must spawn _loop_forever_target with worker_index without TypeError."""
+        manager = WorkerManager()
+        process, _, _ = manager.create_worker_process(cfw_uuid=uuid4(), target=_loop_forever_target, args=())
+        try:
+            time.sleep(0.3)
+            # Worker must still be alive and looping; it must not exit immediately due to argument count mismatch.
+            assert process.is_alive(), f"Worker died prematurely with exitcode {process.exitcode}"
+            assert process.exitcode is None
+        finally:
+            process.terminate()
+            process.join(timeout=5)
+            if process.is_alive():
+                process.kill()
+                process.join(timeout=5)
 
 
 class TestWorkerManagerIntegration:

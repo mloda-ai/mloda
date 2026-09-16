@@ -371,26 +371,50 @@ class BaseInputData(ABC):
 
     @classmethod
     def _record_unowned_pin(cls, data_access_collection: DataAccessCollection, feature_names: list[str]) -> None:
-        """Records one attributable elimination when no reader anywhere owns the pinned file's suffix.
-        Recorded at the owned stage since a plain-stage recording is never harvested once a name rule
-        matches. Checked against every registered reader, not just this family, so an unrelated family
-        is never blamed for a suffix it doesn't own.
+        """Records one attributable elimination when no reader this process can load owns the pinned
+        file's suffix. Recorded at the owned stage since a plain-stage recording is never harvested once a
+        name rule matches. Keyed apart from the candidate's own data_access_name() so an earlier plain
+        rejection recorded under that same key in this window cannot silently absorb this one.
         """
         column_to_file = data_access_collection.column_to_file
-        if column_to_file is None:
+        if column_to_file is None or not all(name in column_to_file for name in feature_names):
             return
-        pinned_handles = {column_to_file[name] for name in feature_names if name in column_to_file}
-        if len(pinned_handles) != 1 or not all(name in column_to_file for name in feature_names):
+        pinned_paths = {data_access_collection.files[column_to_file[name]] for name in feature_names}
+        if len(pinned_paths) != 1:
             return
-        pinned_path = data_access_collection.files[next(iter(pinned_handles))]
-        all_readers = get_all_filtered_subclasses(BaseInputData, BaseInputData)
-        if any(reader._has_suffix() and reader._matches_suffix(pinned_path) for reader in all_readers):
+        pinned_path = next(iter(pinned_paths))
+        if any(cls._reader_owns_suffix(reader, pinned_path) for reader in cls._all_loadable_readers()):
             return
         record_match_rejection(
-            cls.data_access_name(),
+            f"{cls.data_access_name()} (unowned pin)",
             f"pinned file {pinned_path} has a suffix no registered reader owns",
             stage=INPUT_DATA_OWNED_STAGE,
         )
+
+    @classmethod
+    def _all_loadable_readers(cls) -> list[type["BaseInputData"]]:
+        """Forces every already-visible family's own auto-load group once before collecting, since
+        get_all_filtered_subclasses only auto-loads a family whose OWN filtered list is currently empty;
+        a family with even one final reader already defined (e.g. a user's own custom subclass) would
+        otherwise never load its siblings (the stock CsvReader alongside a user's own ReadFile subclass,
+        say).
+        """
+        from mloda.core.abstract_plugins.plugin_loader.plugin_loader import PluginLoader
+
+        for family in BaseInputData.__subclasses__():
+            auto_load_group = family.__dict__.get("_auto_load_group")
+            if auto_load_group is not None and auto_load_group not in PluginLoader._disabled_groups:
+                PluginLoader().load_group(auto_load_group)
+        return list(get_all_subclasses(BaseInputData))
+
+    @staticmethod
+    def _reader_owns_suffix(reader: type["BaseInputData"], path: str) -> bool:
+        try:
+            return reader.is_final_reader() and reader._has_suffix() and reader._matches_suffix(path)
+        # Swallows: this probes readers OUTSIDE the current candidate's own family; a mark meant to
+        # abort that reader's own family's matching must not abort a different, unrelated candidate's.
+        except Exception:
+            return False
 
     @classmethod
     def add_base_input_data_to_options(

@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
+from unittest.mock import patch
 
 import pytest
 
@@ -19,6 +20,7 @@ from mloda.core.abstract_plugins.components.match_rejection import (
     restamp_match_rejections_since,
 )
 from mloda.core.abstract_plugins.components.utils import get_all_subclasses
+from mloda.core.abstract_plugins.plugin_loader.plugin_loader import PluginLoader
 from mloda.core.prepare.accessible_plugins import FeatureGroupEnvironmentMapping
 from mloda.core.prepare.identify_feature_group import IdentifyFeatureGroupClass
 from mloda.core.prepare.resolution_failure_renderer import render_resolution_failure
@@ -214,6 +216,35 @@ class Vg1454JsonReader(Vg1454FileFamily):
     @classmethod
     def load_data(cls, data_access: Any, features: FeatureSet) -> Any:
         return {VG1454_FILE_FEATURE: [1]}
+
+
+VG1454_BROKEN_DB_FEATURE = "vg1454_broken_db_feature"
+
+
+class Vg1454BrokenSuffixDbFamily(ReadDB):
+    """Family base of an unrelated db shape; it overrides nothing, so it never classifies as final."""
+
+
+class Vg1454BrokenSuffixDbReader(Vg1454BrokenSuffixDbFamily):
+    """Final db reader from a totally different family than Vg1454FileFamily; its suffix() raises an
+    unrelated exception instead of returning a tuple or raising NotImplementedError, modeling a broken
+    third-party plugin for bug 2's cross-family exception containment."""
+
+    @classmethod
+    def suffix(cls) -> tuple[str, ...]:
+        raise RuntimeError("broken plugin")
+
+    @classmethod
+    def load_data(cls, data_access: Any, features: FeatureSet) -> Any:
+        return {VG1454_BROKEN_DB_FEATURE: [1]}
+
+    @classmethod
+    def is_valid_credentials(cls, credentials: dict[str, Any]) -> bool:
+        return VG961_DB_MARKER in credentials
+
+    @classmethod
+    def check_feature_in_data_access(cls, feature_name: str, data_access: Any) -> bool:
+        return False
 
 
 class Vg1454FileFG(FeatureGroup):
@@ -451,6 +482,88 @@ class TestUnownedPinGatesTheNameRule:
 
         assert Vg1454FileFG in result.identified
         assert result.eliminations.get(Vg1454FileFG) is None
+
+
+class TestUnconditionalAutoLoadBeforeOwnershipScan:
+    """Bug 1: the ownership scan's bootstrap must not rely on get_all_filtered_subclasses' own
+    emptiness-gated short-circuit. Vg1454CsvReader/Vg1454JsonReader are already imported final readers
+    of ReadFile in this process, so that short-circuit never fires for the ReadFile family; a fix that
+    still relies on it would leave stock readers like CsvReader/ParquetReader invisible to the ownership
+    scan even though ReadFile itself is already imported."""
+
+    def test_the_no_owner_probe_unconditionally_loads_read_files_auto_load_group(self, tmp_path: Path) -> None:
+        """The post-loop ownership probe triggered by an unowned pin must call
+        PluginLoader.load_group("feature_group/input_data/read_files") (ReadFile's own _auto_load_group)
+        even though ReadFile already has final readers imported in this process. Expected entry point:
+        BaseInputData._all_loadable_readers(), called unconditionally before the ownership scan."""
+        path = tmp_path / "data.vg1454nobodyowns"
+        path.write_text("a,b\n1,2\n", encoding="utf-8")
+        dac = DataAccessCollection(files={"vg1454_h": str(path)}, column_to_file={VG1454_FILE_FEATURE: "vg1454_h"})
+
+        with patch.object(PluginLoader, "load_group") as mock_load_group:
+            Vg1454FileFamily.match_data_access([VG1454_FILE_FEATURE], dac, options=Options({}))
+
+        called_groups = [arg for call in mock_load_group.call_args_list for arg in call.args]
+        assert "feature_group/input_data/read_files" in called_groups
+
+    def test_all_loadable_readers_is_the_expected_bootstrap_entry_point(self) -> None:
+        """Names the exact bootstrap entry point the fix is expected to add on BaseInputData. Round 1 has
+        no such method, so this currently fails with AttributeError; that is the correct failure mode for
+        "this doesn't exist yet", not something to work around here."""
+        with patch.object(PluginLoader, "load_group") as mock_load_group:
+            BaseInputData._all_loadable_readers()
+
+        called_groups = [arg for call in mock_load_group.call_args_list for arg in call.args]
+        assert "feature_group/input_data/read_files" in called_groups
+
+
+class TestUnownedPinKeyDoesNotCollideWithTheCandidatesOwnKey:
+    """Bug 3: MATCH_REJECTION_REASONS.setdefault means _record_unowned_pin's key must not collide with a
+    key cls's own natural rejection machinery may already have written earlier in the same probe window."""
+
+    def test_a_pre_seeded_rejection_under_the_candidates_own_key_does_not_swallow_the_unowned_pin_reason(
+        self, tmp_path: Path, rejection_window: dict[str, MatchRejection]
+    ) -> None:
+        """A plain-stage rejection already recorded under Vg1454FileFamily's own key, before the post-loop
+        check runs (mirroring cls's own _reader_options_admit machinery having written there earlier in
+        the same window), must not silently absorb the distinct "unowned pin" gating rejection
+        _record_unowned_pin tries to record next under that same base key."""
+        path = tmp_path / "data.vg1454nobodyowns"
+        path.write_text("a,b\n1,2\n", encoding="utf-8")
+        dac = DataAccessCollection(
+            files={"vg1454_h": str(path)}, column_to_file={"vg1454_no_owner_feature": "vg1454_h"}
+        )
+        record_match_rejection(Vg1454FileFamily.data_access_name(), "unrelated earlier reason", stage=INPUT_DATA_STAGE)
+
+        Vg1454FileFamily.match_data_access(["vg1454_no_owner_feature"], dac, options=Options({}))
+
+        assert len(rejection_window) > 1
+        assert rejection_window[Vg1454FileFamily.data_access_name()].reason == "unrelated earlier reason"
+        assert any("no registered reader" in r.reason for r in rejection_window.values())
+
+
+class TestUnrelatedFamilyExceptionContainment:
+    """Bug 2: cross-family exception containment. An unrelated family's broken suffix() must not abort
+    or corrupt a completely different family's ownership probe."""
+
+    def test_a_broken_sibling_familys_suffix_does_not_abort_an_unrelated_no_owner_probe(
+        self, tmp_path: Path, rejection_window: dict[str, MatchRejection]
+    ) -> None:
+        """Vg1454BrokenSuffixDbReader lives in a totally different (ReadDB) family from Vg1454FileFamily
+        and raises RuntimeError from suffix(); round 1 probes every registered reader's suffix() with no
+        per-reader containment, so today this is expected to raise the RuntimeError unhandled out of this
+        call (previously impossible: a reader's suffix() was only ever probed while matching its own
+        family)."""
+        path = tmp_path / "data.vg1454nobodyowns"
+        path.write_text("a,b\n1,2\n", encoding="utf-8")
+        dac = DataAccessCollection(files={"vg1454_h": str(path)}, column_to_file={VG1454_FILE_FEATURE: "vg1454_h"})
+
+        matched = Vg1454FileFamily.global_scope_data_access(
+            feature_name=VG1454_FILE_FEATURE, options=Options({}), data_access_collection=dac
+        )
+
+        assert matched is False
+        assert not any("broken plugin" in r.reason for r in rejection_window.values())
 
 
 class TestOwnedShapesThatMustNotGate:

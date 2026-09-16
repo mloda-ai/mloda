@@ -11,6 +11,7 @@ from typing import Any
 from mloda_plugins.compute_framework.base_implementations.sql.sql_base_relation import SqlBaseRelation
 from mloda_plugins.compute_framework.base_implementations.sql.sql_utils import quote_ident
 from mloda_plugins.compute_framework.base_implementations.sql.sql_window import OrderBy
+from mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_affinity import sqlite_affinity_class
 
 try:
     import pyarrow as pa
@@ -72,15 +73,14 @@ def _assert_window_supported() -> None:
 
 
 def _sqlite_affinity_to_arrow_type(affinity: str) -> pa.DataType:
-    # Precedence order per SQLite's rules: INT, then CHAR/CLOB/TEXT, then BLOB, then REAL/FLOA/DOUB, else string.
-    upper = affinity.upper()
-    if "INT" in upper:
+    label = sqlite_affinity_class(affinity)
+    if label == "INTEGER":
         return pa.int64()
-    if "CHAR" in upper or "CLOB" in upper or "TEXT" in upper:
+    if label == "TEXT" or label == "NUMERIC":
         return pa.string()
-    if "BLOB" in upper:
+    if label == "BLOB":
         return pa.large_binary()
-    if "REAL" in upper or "FLOA" in upper or "DOUB" in upper:
+    if label == "REAL":
         return pa.float64()
     return pa.string()
 

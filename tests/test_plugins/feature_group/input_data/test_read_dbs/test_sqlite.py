@@ -251,7 +251,7 @@ class TestSQLITEReader:
         assert result["notes"] == DataType.STRING  # CLOB, not just plain TEXT
         # No declared type at all (PRAGMA table_info reports an empty string) must map to None, not raise.
         assert result["untyped_col"] is None
-        # Diverges from _sqlite_affinity_to_arrow_type, which defaults an unmatched type to TEXT; here it's None.
+        # Diverges from _sqlite_affinity_to_arrow_type, whose NUMERIC fallback maps to pa.string(); here it's None.
         assert result["amount"] is None
         assert result["precise"] is None
         # A declared type with several keywords must resolve by SQLite's affinity precedence

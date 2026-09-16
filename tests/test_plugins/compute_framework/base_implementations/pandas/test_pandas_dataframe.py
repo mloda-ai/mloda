@@ -1,13 +1,11 @@
-import pytest
-import pyarrow as pa
+import logging
 from typing import Any
+
+import pyarrow as pa
+import pytest
+
+from mloda.user import FeatureName, ParallelizationMode
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
-from mloda.user import FeatureName
-from mloda.user import ParallelizationMode
-from tests.test_plugins.compute_framework.test_tooling.dataframe_test_base import DataFrameTestBase
-from tests.test_plugins.compute_framework.test_tooling.availability_test_helper import (
-    assert_unavailable_when_import_blocked,
-)
 from tests.test_plugins.compute_framework.base_implementations.datatype_validator_test_mixin import (
     DataTypeValidatorFrameworkTestMixin,
 )
@@ -16,12 +14,15 @@ from tests.test_plugins.compute_framework.base_implementations.dict_interchange_
 )
 from tests.test_plugins.compute_framework.base_implementations.dtype_extraction_test_mixin import (
     DtypeExtractionTestMixin,
+    DuplicateColumnDtypeExtractionTestMixin,
 )
 from tests.test_plugins.compute_framework.base_implementations.empty_result_test_mixin import (
     EmptyResultFrameworkTestMixin,
 )
-
-import logging
+from tests.test_plugins.compute_framework.test_tooling.availability_test_helper import (
+    assert_unavailable_when_import_blocked,
+)
+from tests.test_plugins.compute_framework.test_tooling.dataframe_test_base import DataFrameTestBase
 
 logger = logging.getLogger(__name__)
 
@@ -134,7 +135,7 @@ class TestPandasDataFrameMerge(DataFrameTestBase):
 
 
 @pytest.mark.skipif(pd is None, reason="Pandas is not installed. Skipping this test.")
-class TestPandasDtypeExtraction(DtypeExtractionTestMixin):
+class TestPandasDtypeExtraction(DtypeExtractionTestMixin, DuplicateColumnDtypeExtractionTestMixin):
     """Test PandasDataFrame._extract_column_dtype using shared mixin."""
 
     @pytest.fixture
@@ -144,6 +145,14 @@ class TestPandasDtypeExtraction(DtypeExtractionTestMixin):
     @pytest.fixture
     def dtype_sample_data(self) -> Any:
         return pd.DataFrame({"int_col": [1, 2, 3], "str_col": ["a", "b", "c"], "float_col": [1.0, 2.0, 3.0]})
+
+    @pytest.fixture
+    def dtype_duplicate_column_data(self) -> Any:
+        return pd.DataFrame([[1, "x"], [2, "y"], [3, "z"]], columns=["dup_col", "dup_col"])
+
+    @pytest.fixture
+    def dtype_duplicate_column_data_reversed(self) -> Any:
+        return pd.DataFrame([["x", 1], ["y", 2], ["z", 3]], columns=["dup_col", "dup_col"])
 
 
 @pytest.mark.skipif(pd is None, reason="Pandas is not installed. Skipping this test.")

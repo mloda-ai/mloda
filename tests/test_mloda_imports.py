@@ -237,6 +237,10 @@ def test_import_steward_governance() -> None:
         ExtenderHook,
         # Optional-dependency import guards
         traceback_blames_root,
+        # Pickle safety
+        pickle_failure_reason,
+        is_picklable,
+        WarnOncePerInstance,
         # Resolved execution plan
         PlanStep,
     )
@@ -257,6 +261,13 @@ def test_import_steward_governance() -> None:
     # Optional-dependency import guards
     assert callable(traceback_blames_root)
     assert "traceback_blames_root" in steward_module.__all__
+    # Pickle safety
+    assert callable(pickle_failure_reason)
+    assert callable(is_picklable)
+    assert WarnOncePerInstance is not None
+    assert "pickle_failure_reason" in steward_module.__all__
+    assert "is_picklable" in steward_module.__all__
+    assert "WarnOncePerInstance" in steward_module.__all__
 
 
 # =============================================================================

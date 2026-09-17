@@ -59,6 +59,11 @@ All code must pass the automated checks enforced by tox. The toolchain includes:
 - Keep documentation to the necessary minimum.
 - Use [Conventional Commits](https://www.conventionalcommits.org/) for commit messages (`fix:`, `feat:`, `chore:`, etc.).
 
+### Documentation fences
+
+Adding a ` ```py ` example under `docs/docs/` may require bumping that page's
+`ILLUSTRATIVE_BLOCK_ALLOWLIST` entry in `tests/test_docs_fences.py` in the same PR.
+
 ### Testing resolution changes
 
 Tests that drive FeatureGroup resolution target the seam in `tests/test_core/test_prepare/identify_seam.py`

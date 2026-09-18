@@ -1,7 +1,7 @@
-import yaml
 from pathlib import Path
 from typing import Any
 
+from mloda.core.optional_dependency import require
 from mloda_plugins.feature_group.input_data.read_document import ReadDocument
 
 
@@ -14,6 +14,7 @@ class YamlDocumentReader(ReadDocument):
 
     @classmethod
     def produce_document(cls, file_path: str) -> Any:
+        yaml = require("yaml", "reading YAML documents")
         with open(file_path, "r", encoding="utf-8") as f:
             documents = list(yaml.safe_load_all(f))
         content = documents[0] if len(documents) == 1 else documents

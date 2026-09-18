@@ -110,6 +110,17 @@ For troubleshooting guide, see: https://mloda-ai.github.io/mloda/in_depth/troubl
 
 For the first shape, import or enable a concrete implementation. For the second, enable one of the named compute frameworks; the list comes from the base's accessible concrete implementations, so check that the one you enable actually serves the name. Eliminated candidates, if any, still render in their block, and the message closes with the same pointer lines as the ordinary form. Only the Did-you-mean suggestion is dropped, because the name already matched a base.
 
+### The skipped plugin modules block
+
+A "No Feature Groups Found" or "Only abstract feature group bases matched" message may end with a block like:
+
+```
+Plugin module(s) skipped for a missing optional dependency, so their feature groups are not loaded:
+  - mloda_plugins.some.module: some_dependency
+```
+
+Each line names a plugin module or entry point `PluginLoader` skipped at import time because one of its optional dependencies is not installed, so the feature group it would have defined never entered the candidate universe. Install the named dependency, or the `mloda` extra that bundles it, then rerun; `PluginLoader.skipped_plugins()` returns the same mapping for programmatic inspection.
+
 ## Multiple Feature Groups Error
 
 ### The Problem

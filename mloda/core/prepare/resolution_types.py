@@ -67,6 +67,8 @@ class RenderFacts:
     # Names that no live accessible group declares and that no live group's class-name prefix covers, so no
     # surviving candidate is known to own them.
     dead_only_names: frozenset[str] = frozenset()
+    # Every plugin module/entry point PluginLoader skipped for a missing optional dependency, sorted.
+    skipped_plugins: tuple[tuple[str, str], ...] = ()
 
 
 @dataclass(frozen=True)

@@ -38,6 +38,7 @@ from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.link import Link
+from mloda.core.abstract_plugins.plugin_loader.plugin_loader import PluginLoader
 
 import logging
 
@@ -178,7 +179,7 @@ class IdentifyFeatureGroupClass:
     ) -> RenderFacts:
         """Capture the non-elimination facts the messages still need. Only reached when the pass has no winner.
 
-        The renderer alone owns which message wins, so this does not mirror its branch order: the four cheap
+        The renderer alone owns which message wins, so this does not mirror its branch order: the five cheap
         facts are captured whatever the failure kind is. domains feeds the multiple message, concrete_frameworks
         the abstract_only message, and known_names, eliminated_hints and dead_only_names the none message.
         dead_only_names is the one exception, gated on its own kind: its sweep retests the links gate over every
@@ -196,6 +197,7 @@ class IdentifyFeatureGroupClass:
                 if result.failure_kind == "none"
                 else frozenset()
             ),
+            skipped_plugins=tuple(sorted(PluginLoader.skipped_plugins().items())),
         )
 
     def _capture_eliminated_hints(self, result: EvaluationResult) -> frozenset[str]:

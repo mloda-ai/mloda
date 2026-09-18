@@ -277,7 +277,7 @@ class TestPluginLoader:
 
 class TestLoadPluginTransitiveOptionalDependency:
     def test_transitive_missing_dependency_inside_declared_optional_root_is_skipped(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
     ) -> None:
         """A declared-optional root whose OWN import fails must be skipped by _load_plugin, mirroring
         the already-fixed load_entry_points traceback fallback."""
@@ -299,9 +299,132 @@ class TestLoadPluginTransitiveOptionalDependency:
         loader = PluginLoader()
         loader.base_package = base_pkg
 
-        loader._load_plugin(submodule)
+        with caplog.at_level(logging.WARNING, logger=plugin_loader_module.__name__):
+            loader._load_plugin(submodule)
 
         assert f"{base_pkg}.{submodule}" not in loader.plugins
+        warning_messages = [record.getMessage() for record in caplog.records if record.levelno == logging.WARNING]
+        assert any(missing_subdep in message for message in warning_messages), (
+            f"expected a WARNING message naming the missing transitive module, got: {warning_messages}"
+        )
+        assert PluginLoader.skipped_plugins() == {f"{base_pkg}.{submodule}": missing_subdep}
+
+    def test_second_load_of_same_skipped_module_warns_only_once(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        optional_root_pkg = "pltest_repeat_optional_dep"
+        missing_subdep = "pltest_repeat_missing_subdep"
+        _write_broken_optional_root_package(tmp_path, optional_root_pkg, missing_subdep)
+
+        base_pkg = "pltest_repeat_fake_base_pkg"
+        submodule = "broken_consumer"
+        _write_fake_base_package(tmp_path, base_pkg, submodule, optional_root_pkg)
+
+        monkeypatch.syspath_prepend(str(tmp_path))
+        monkeypatch.setattr(
+            plugin_loader_module,
+            "OPTIONAL_PLUGIN_DEPENDENCIES",
+            plugin_loader_module.OPTIONAL_PLUGIN_DEPENDENCIES | frozenset({optional_root_pkg}),
+        )
+
+        loader = PluginLoader()
+        loader.base_package = base_pkg
+
+        with caplog.at_level(logging.WARNING, logger=plugin_loader_module.__name__):
+            loader._load_plugin(submodule)
+            loader._load_plugin(submodule)
+
+        warning_count = sum(
+            1
+            for record in caplog.records
+            if record.levelno == logging.WARNING and record.name == plugin_loader_module.__name__
+        )
+        assert warning_count == 1, f"expected exactly one WARNING across two loads, got {warning_count}"
+
+    def test_module_healed_after_dependency_becomes_importable_drops_from_record(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        optional_root_pkg = "pltest_heal_optional_dep"
+        missing_subdep = "pltest_heal_missing_subdep"
+        _write_broken_optional_root_package(tmp_path, optional_root_pkg, missing_subdep)
+
+        base_pkg = "pltest_heal_fake_base_pkg"
+        submodule = "broken_consumer"
+        _write_fake_base_package(tmp_path, base_pkg, submodule, optional_root_pkg)
+
+        monkeypatch.syspath_prepend(str(tmp_path))
+        monkeypatch.setattr(
+            plugin_loader_module,
+            "OPTIONAL_PLUGIN_DEPENDENCIES",
+            plugin_loader_module.OPTIONAL_PLUGIN_DEPENDENCIES | frozenset({optional_root_pkg}),
+        )
+
+        loader = PluginLoader()
+        loader.base_package = base_pkg
+        loader._load_plugin(submodule)
+
+        full_module_name = f"{base_pkg}.{submodule}"
+        assert full_module_name in PluginLoader.skipped_plugins()
+
+        # Heal the dependency: writing the missing transitive module lets the optional root import cleanly.
+        (tmp_path / f"{missing_subdep}.py").write_text("")
+        importlib.invalidate_caches()
+
+        loader._load_plugin(submodule)
+
+        assert full_module_name not in PluginLoader.skipped_plugins()
+        assert full_module_name in loader.plugins
+
+    def test_reset_cache_clears_skipped_plugins_record(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        optional_root_pkg = "pltest_resetrecord_optional_dep"
+        missing_subdep = "pltest_resetrecord_missing_subdep"
+        _write_broken_optional_root_package(tmp_path, optional_root_pkg, missing_subdep)
+
+        base_pkg = "pltest_resetrecord_fake_base_pkg"
+        submodule = "broken_consumer"
+        _write_fake_base_package(tmp_path, base_pkg, submodule, optional_root_pkg)
+
+        monkeypatch.syspath_prepend(str(tmp_path))
+        monkeypatch.setattr(
+            plugin_loader_module,
+            "OPTIONAL_PLUGIN_DEPENDENCIES",
+            plugin_loader_module.OPTIONAL_PLUGIN_DEPENDENCIES | frozenset({optional_root_pkg}),
+        )
+
+        loader = PluginLoader()
+        loader.base_package = base_pkg
+        loader._load_plugin(submodule)
+
+        assert PluginLoader.skipped_plugins()
+
+        PluginLoader.reset_cache()
+
+        assert PluginLoader.skipped_plugins() == {}
+
+    def test_skipped_plugins_returns_a_copy(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        optional_root_pkg = "pltest_copyrecord_optional_dep"
+        missing_subdep = "pltest_copyrecord_missing_subdep"
+        _write_broken_optional_root_package(tmp_path, optional_root_pkg, missing_subdep)
+
+        base_pkg = "pltest_copyrecord_fake_base_pkg"
+        submodule = "broken_consumer"
+        _write_fake_base_package(tmp_path, base_pkg, submodule, optional_root_pkg)
+
+        monkeypatch.syspath_prepend(str(tmp_path))
+        monkeypatch.setattr(
+            plugin_loader_module,
+            "OPTIONAL_PLUGIN_DEPENDENCIES",
+            plugin_loader_module.OPTIONAL_PLUGIN_DEPENDENCIES | frozenset({optional_root_pkg}),
+        )
+
+        loader = PluginLoader()
+        loader.base_package = base_pkg
+        loader._load_plugin(submodule)
+
+        first = PluginLoader.skipped_plugins()
+        first["mutated_key_should_not_leak"] = "mutated_value"
+
+        assert "mutated_key_should_not_leak" not in PluginLoader.skipped_plugins()
 
 
 class TestLoadPluginPlainImportError:
@@ -327,14 +450,15 @@ class TestLoadPluginPlainImportError:
         loader = PluginLoader()
         loader.base_package = base_pkg
 
-        with caplog.at_level(logging.DEBUG, logger=plugin_loader_module.__name__):
+        with caplog.at_level(logging.WARNING, logger=plugin_loader_module.__name__):
             loader._load_plugin(submodule)
 
         assert f"{base_pkg}.{submodule}" not in loader.plugins
-        debug_messages = [record.getMessage() for record in caplog.records if record.levelno == logging.DEBUG]
-        assert any(root_module in message for message in debug_messages), (
-            f"expected a DEBUG message naming the missing root, got: {debug_messages}"
+        warning_messages = [record.getMessage() for record in caplog.records if record.levelno == logging.WARNING]
+        assert any(root_module in message for message in warning_messages), (
+            f"expected a WARNING message naming the missing root, got: {warning_messages}"
         )
+        assert PluginLoader.skipped_plugins() == {f"{base_pkg}.{submodule}": root_module}
 
     def test_undeclared_root_import_error_still_propagates(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -360,7 +484,7 @@ class TestLoadPluginPlainImportError:
 
 class TestLoadGroupContinuesPastSkippedPlugin:
     def test_broken_optional_dependency_plugin_does_not_abort_group_scan(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
     ) -> None:
         """One bundled plugin hitting a skippable optional-dependency failure must not abort the
         rest of the group scan, proving load_all_plugins()'s DoD through the real load_group path."""
@@ -390,10 +514,16 @@ class TestLoadGroupContinuesPastSkippedPlugin:
         loader = PluginLoader()
         loader.base_package = base_pkg
 
-        loader.load_group(group_name)
+        with caplog.at_level(logging.WARNING, logger=plugin_loader_module.__name__):
+            loader.load_group(group_name)
 
         assert f"{base_pkg}.{group_name}.broken" not in loader.plugins
         assert f"{base_pkg}.{group_name}.good" in loader.plugins
+        warning_messages = [record.getMessage() for record in caplog.records if record.levelno == logging.WARNING]
+        assert any(missing_subdep in message for message in warning_messages), (
+            f"expected a WARNING message naming the missing transitive module, got: {warning_messages}"
+        )
+        assert PluginLoader.skipped_plugins() == {f"{base_pkg}.{group_name}.broken": missing_subdep}
 
 
 class TestTracebackBlamesRoot:

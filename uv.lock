@@ -1444,6 +1444,7 @@ all = [
     { name = "pytest-order" },
     { name = "pytest-timeout" },
     { name = "pytest-xdist" },
+    { name = "pyyaml" },
     { name = "ruff" },
     { name = "scikit-learn", version = "1.7.2", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
     { name = "scikit-learn", version = "1.8.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
@@ -1520,6 +1521,7 @@ test = [
     { name = "pytest-order" },
     { name = "pytest-timeout" },
     { name = "pytest-xdist" },
+    { name = "pyyaml" },
     { name = "ruff" },
     { name = "scikit-learn", version = "1.7.2", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
     { name = "scikit-learn", version = "1.8.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
@@ -1530,6 +1532,9 @@ test = [
 ]
 text-cleaning = [
     { name = "nltk" },
+]
+yaml = [
+    { name = "pyyaml" },
 ]
 
 [package.metadata]
@@ -1558,6 +1563,7 @@ requires-dist = [
     { name = "mloda", extras = ["sqlite"], marker = "extra == 'all'" },
     { name = "mloda", extras = ["test"], marker = "extra == 'all'" },
     { name = "mloda", extras = ["text-cleaning"], marker = "extra == 'all'" },
+    { name = "mloda", extras = ["yaml"], marker = "extra == 'all'" },
     { name = "mypy", marker = "extra == 'test'" },
     { name = "nltk", marker = "extra == 'text-cleaning'", specifier = ">=3.8" },
     { name = "notebook", marker = "extra == 'docs'" },
@@ -1583,6 +1589,8 @@ requires-dist = [
     { name = "pytest-timeout", marker = "extra == 'test'" },
     { name = "pytest-xdist", marker = "extra == 'nopyarrow-test'" },
     { name = "pytest-xdist", marker = "extra == 'test'" },
+    { name = "pyyaml", marker = "extra == 'test'" },
+    { name = "pyyaml", marker = "extra == 'yaml'" },
     { name = "ruff", marker = "extra == 'test'" },
     { name = "scikit-learn", marker = "extra == 'sklearn'", specifier = ">=1.0.0" },
     { name = "scikit-learn", marker = "extra == 'test'", specifier = ">=1.0.0" },
@@ -1592,7 +1600,7 @@ requires-dist = [
     { name = "types-requests", marker = "extra == 'test'" },
     { name = "types-toml", marker = "extra == 'test'" },
 ]
-provides-extras = ["test", "pyarrow", "pandas", "polars", "numpy", "duckdb", "sqlite", "iceberg", "spark", "sklearn", "text-cleaning", "nopyarrow-test", "docs", "all"]
+provides-extras = ["test", "pyarrow", "pandas", "polars", "numpy", "yaml", "duckdb", "sqlite", "iceberg", "spark", "sklearn", "text-cleaning", "nopyarrow-test", "docs", "all"]
 
 [[package]]
 name = "mmh3"

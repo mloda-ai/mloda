@@ -688,6 +688,42 @@ class TestLoadEntryPointsOptionalDependenciesDeclaration:
         assert any("demo" in message and "eptest_declopt_missing_root" in message for message in warning_messages), (
             f"expected a WARNING naming the entry point and the missing module, got: {warning_messages}"
         )
+        assert PluginLoader.skipped_plugins() == {
+            f"demo ({broken_pkg}.manifest:EXTENDERS)": "eptest_declopt_missing_root"
+        }
+
+    def test_skipped_entry_point_is_dropped_from_record_when_a_later_load_succeeds(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        broken_pkg = "eptest_declopt_heals_pkg"
+        _build_distribution(
+            tmp_path,
+            broken_pkg,
+            _DECLARED_OPTIONAL_EXTENDER_MANIFEST,
+            f"""
+            [mloda.extenders]
+            demo = {broken_pkg}.manifest:EXTENDERS
+
+            [mloda.optional_dependencies]
+            demo = {broken_pkg}.optional_deps:OPTIONAL_DEPENDENCIES
+            """,
+        )
+        _write_module(tmp_path, broken_pkg, "optional_deps", _DECLARED_OPTIONAL_DEPS_MODULE_SOURCE)
+        monkeypatch.syspath_prepend(str(tmp_path))
+
+        with caplog.at_level(logging.WARNING, logger=plugin_loader_module.__name__):
+            PluginLoader().load_entry_points()
+
+        skipped_key = f"demo ({broken_pkg}.manifest:EXTENDERS)"
+        assert PluginLoader.skipped_plugins() == {skipped_key: "eptest_declopt_missing_root"}
+
+        _write_root_module(tmp_path, "eptest_declopt_missing_root")
+        importlib.invalidate_caches()
+
+        keys = PluginLoader().load_entry_points()
+
+        assert f"{broken_pkg}.manifest:EpDeclOptExtender" in keys
+        assert skipped_key not in PluginLoader.skipped_plugins()
 
     def test_declared_optional_root_catches_plain_import_error(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture

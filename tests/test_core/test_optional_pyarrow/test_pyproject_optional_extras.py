@@ -8,6 +8,8 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
+import pytest
+
 if sys.version_info >= (3, 11):
     import tomllib
 else:
@@ -40,17 +42,21 @@ def test_sqlite_extra_exists_and_contains_pyarrow() -> None:
     assert any("pyarrow" in dep for dep in sqlite_deps), f"Expected pyarrow in sqlite extra. Got: {sqlite_deps}"
 
 
-def test_all_extra_references_sqlite() -> None:
-    """The all extra must reference mloda[sqlite]."""
+@pytest.mark.parametrize("referenced_extra", ["sqlite", "yaml"])
+def test_all_extra_references(referenced_extra: str) -> None:
+    """The all extra must reference the sqlite and yaml extras."""
     optional = _load_optional_deps()
     assert "all" in optional, "No all extra found in pyproject.toml"
     all_deps = optional["all"]
-    assert any("mloda[sqlite]" in dep for dep in all_deps), f"Expected mloda[sqlite] in all extra. Got: {all_deps}"
+    assert any(f"mloda[{referenced_extra}]" in dep for dep in all_deps), (
+        f"Expected mloda[{referenced_extra}] in all extra. Got: {all_deps}"
+    )
 
 
-def test_numpy_extra_exists() -> None:
-    """A numpy optional-dependency extra must exist, so require()'s pyarrow-aggregation install hint is real."""
+@pytest.mark.parametrize(("extra", "dependency"), [("numpy", "numpy"), ("yaml", "pyyaml"), ("test", "pyyaml")])
+def test_extra_exists_and_contains_dependency(extra: str, dependency: str) -> None:
+    """The extras that install hints and tests rely on must exist and list their distribution."""
     optional = _load_optional_deps()
-    assert "numpy" in optional, f"No numpy extra found in pyproject.toml. Available extras: {list(optional.keys())}"
-    numpy_deps = optional["numpy"]
-    assert any("numpy" in dep for dep in numpy_deps), f"Expected numpy in numpy extra. Got: {numpy_deps}"
+    assert extra in optional, f"No {extra} extra found in pyproject.toml. Available extras: {list(optional.keys())}"
+    deps = optional[extra]
+    assert any(dependency in dep for dep in deps), f"Expected {dependency} in {extra} extra. Got: {deps}"

@@ -3407,3 +3407,91 @@ class TestAnUnlabeledStageStillRenders:
             "Use resolve_feature(name, options=...) to debug feature resolution.\n"
             f"{TROUBLESHOOTING_LINE}"
         )
+
+
+SKIPPED_PLUGINS_BLOCK_HEADING = (
+    "Plugin module(s) skipped for a missing optional dependency, so their feature groups are not loaded:"
+)
+
+
+def _skipped_plugins_791(count: int) -> tuple[tuple[str, str], ...]:
+    return tuple((f"pkg.skiptest_module_{i:02d}", f"skiptest_dep_{i:02d}") for i in range(count))
+
+
+class TestSkippedPluginsRenderBlock:
+    def test_none_message_appends_skipped_plugins_block(self) -> None:
+        feature = Feature("skiptest_none_feature_791")
+        result = EvaluationResult(identified={}, facts=RenderFacts(skipped_plugins=_skipped_plugins_791(2)))
+
+        assert result.failure_kind == "none"
+        message = render_resolution_failure(result, feature)
+
+        assert message is not None
+        assert (
+            f"{SKIPPED_PLUGINS_BLOCK_HEADING}\n"
+            "  - pkg.skiptest_module_00: skiptest_dep_00\n"
+            "  - pkg.skiptest_module_01: skiptest_dep_01"
+        ) in message
+
+    def test_abstract_only_message_appends_skipped_plugins_block(self) -> None:
+        feature = Feature("skiptest_abstract_feature_791")
+        result = EvaluationResult(
+            identified={},
+            abstract_matched={FeatureGroup},
+            facts=RenderFacts(skipped_plugins=_skipped_plugins_791(1)),
+        )
+
+        assert result.failure_kind == "abstract_only"
+        message = render_resolution_failure(result, feature)
+
+        assert message is not None
+        assert f"{SKIPPED_PLUGINS_BLOCK_HEADING}\n  - pkg.skiptest_module_00: skiptest_dep_00" in message
+
+    def test_block_sits_before_the_resolve_feature_pointer_line(self) -> None:
+        feature = Feature("skiptest_order_feature_791")
+        result = EvaluationResult(identified={}, facts=RenderFacts(skipped_plugins=_skipped_plugins_791(1)))
+
+        message = render_resolution_failure(result, feature)
+
+        assert message is not None
+        block_index = message.index(SKIPPED_PLUGINS_BLOCK_HEADING)
+        pointer_index = message.index("Use resolve_feature(")
+        assert block_index < pointer_index
+
+    def test_empty_skipped_plugins_renders_no_block(self) -> None:
+        feature = Feature("skiptest_empty_feature_791")
+        result = EvaluationResult(identified={}, facts=RenderFacts())
+
+        message = render_resolution_failure(result, feature)
+
+        assert message is not None
+        assert SKIPPED_PLUGINS_BLOCK_HEADING not in message
+
+    def test_multiple_message_never_carries_the_block(self) -> None:
+        result = EvaluationResult(
+            identified={
+                RendererMultipleAFG791: {RendererFwOne791},
+                RendererMultipleBFG791: {RendererFwOne791},
+            },
+            facts=RenderFacts(skipped_plugins=_skipped_plugins_791(1)),
+        )
+
+        assert result.failure_kind == "multiple"
+        message = render_resolution_failure(result, Feature(MULTIPLE_FEATURE_791))
+
+        assert message is not None
+        assert SKIPPED_PLUGINS_BLOCK_HEADING not in message
+
+    def test_overflow_truncates_at_max_and_appends_more_line(self) -> None:
+        from mloda.core.prepare.resolution_failure_renderer import MAX_SKIPPED_PLUGINS
+
+        feature = Feature("skiptest_overflow_feature_791")
+        entries = _skipped_plugins_791(MAX_SKIPPED_PLUGINS + 2)
+        result = EvaluationResult(identified={}, facts=RenderFacts(skipped_plugins=entries))
+
+        message = render_resolution_failure(result, feature)
+
+        assert message is not None
+        bullet_lines = [line for line in message.split("\n") if line.startswith("  - pkg.skiptest_module_")]
+        assert len(bullet_lines) == MAX_SKIPPED_PLUGINS
+        assert "  ... and 2 more, see PluginLoader.skipped_plugins()." in message

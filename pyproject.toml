@@ -31,6 +31,7 @@ test = [
     "pyarrow",
     "ipykernel",
     "bandit",
+    "pyyaml",
     "types-PyYAML",
     "types-requests",
     "types-toml",
@@ -43,6 +44,7 @@ pyarrow = ["pyarrow"]
 pandas = ["pandas"]
 polars = ["polars"]
 numpy = ["numpy"]
+yaml = ["pyyaml"]
 duckdb = ["duckdb", "pyarrow"]
 sqlite = ["pyarrow"]
 iceberg = ["pyiceberg", "pyarrow"]
@@ -77,6 +79,7 @@ all = [
     "mloda[pandas]",
     "mloda[polars]",
     "mloda[numpy]",
+    "mloda[yaml]",
     "mloda[duckdb]",
     "mloda[sqlite]",
     "mloda[iceberg]",

@@ -165,3 +165,34 @@ class TestEvaluateOrRaiseAbstractOnly:
 
         assert exc_info.value.result.failure_kind == "abstract_only"
         assert SeamContract014AbstractFG in exc_info.value.result.abstract_matched
+
+
+class TestCaptureRenderFactsSkippedPlugins:
+    """_capture_render_facts folds PluginLoader.skipped_plugins() into RenderFacts, failure path only."""
+
+    def test_failed_evaluation_captures_sorted_skipped_plugins(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        from mloda.core.abstract_plugins.plugin_loader.plugin_loader import PluginLoader
+
+        unsorted = {"pkg.zzz_module": "zzz_dep", "pkg.aaa_module": "aaa_dep"}
+        monkeypatch.setattr(PluginLoader, "skipped_plugins", classmethod(lambda cls: unsorted))
+
+        feature = Feature(SEAM_CONTRACT_NO_MATCH_FEATURE)
+        accessible_plugins: FeatureGroupEnvironmentMapping = {SeamContract014FG: {SeamContract014Fw}}
+
+        result = IdentifyFeatureGroupClass.evaluate(feature, accessible_plugins, links=None)
+
+        assert result.failure_kind == "none"
+        assert result.facts.skipped_plugins == tuple(sorted(unsorted.items()))
+
+    def test_successful_evaluation_leaves_skipped_plugins_empty(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        from mloda.core.abstract_plugins.plugin_loader.plugin_loader import PluginLoader
+
+        monkeypatch.setattr(PluginLoader, "skipped_plugins", classmethod(lambda cls: {"pkg.some_module": "some_dep"}))
+
+        feature = Feature(SEAM_CONTRACT_MATCH_FEATURE)
+        accessible_plugins: FeatureGroupEnvironmentMapping = {SeamContract014FG: {SeamContract014Fw}}
+
+        result = IdentifyFeatureGroupClass.evaluate(feature, accessible_plugins, links=None)
+
+        assert result.failure_kind is None
+        assert result.facts.skipped_plugins == ()

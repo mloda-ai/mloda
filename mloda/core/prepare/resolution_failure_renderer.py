@@ -15,6 +15,7 @@ logger = logging.getLogger(__name__)
 TROUBLESHOOTING_URL = "https://mloda-ai.github.io/mloda/in_depth/troubleshooting/feature-group-resolution-errors/"
 
 MAX_SUGGESTIONS = 5
+MAX_SKIPPED_PLUGINS = 10
 
 
 def scope_callout(scope: str | type[FeatureGroup] | None) -> str | None:
@@ -110,6 +111,21 @@ def _render_multiple(result: EvaluationResult, feature: Feature, callout: str | 
     )
 
 
+def _render_skipped_plugins_block(skipped_plugins: tuple[tuple[str, str], ...]) -> str | None:
+    """Trailing block naming every plugin module/entry point PluginLoader skipped, capped at MAX_SKIPPED_PLUGINS."""
+    if not skipped_plugins:
+        return None
+    shown = skipped_plugins[:MAX_SKIPPED_PLUGINS]
+    lines = "\n".join(f"  - {name}: {dependency}" for name, dependency in shown)
+    block = (
+        f"Plugin module(s) skipped for a missing optional dependency, so their feature groups are not loaded:\n{lines}"
+    )
+    overflow = len(skipped_plugins) - len(shown)
+    if overflow > 0:
+        block += f"\n  ... and {overflow} more, see PluginLoader.skipped_plugins()."
+    return block
+
+
 def _pointer_lines(callout: str | None) -> str:
     """The trailing resolve_feature pointer and troubleshooting-link lines; the returned string starts
     with a newline so callers append it bare."""
@@ -148,6 +164,11 @@ def _render_abstract_only(
     near_miss = _render_near_miss_block(result, feature)
     if near_miss is not None:
         msg += f"\n{near_miss}"
+
+    skipped_block = _render_skipped_plugins_block(result.facts.skipped_plugins)
+    if skipped_block is not None:
+        msg += f"\n{skipped_block}"
+
     return msg + _pointer_lines(callout)
 
 
@@ -170,6 +191,10 @@ def _render_none(result: EvaluationResult, feature: Feature, callout: str | None
     similar = get_close_matches(feature_name, known_names, n=MAX_SUGGESTIONS, cutoff=0.5)
     if similar:
         msg += f"\nDid you mean one of: {similar}?"
+
+    skipped_block = _render_skipped_plugins_block(result.facts.skipped_plugins)
+    if skipped_block is not None:
+        msg += f"\n{skipped_block}"
 
     return msg + _pointer_lines(callout)
 

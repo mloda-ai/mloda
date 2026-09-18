@@ -42,6 +42,7 @@ test = [
 pyarrow = ["pyarrow"]
 pandas = ["pandas"]
 polars = ["polars"]
+numpy = ["numpy"]
 duckdb = ["duckdb", "pyarrow"]
 sqlite = ["pyarrow"]
 iceberg = ["pyiceberg", "pyarrow"]
@@ -75,6 +76,7 @@ all = [
     "mloda[pyarrow]",
     "mloda[pandas]",
     "mloda[polars]",
+    "mloda[numpy]",
     "mloda[duckdb]",
     "mloda[sqlite]",
     "mloda[iceberg]",

@@ -1430,6 +1430,8 @@ all = [
     { name = "mypy" },
     { name = "nltk" },
     { name = "notebook" },
+    { name = "numpy", version = "2.2.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
+    { name = "numpy", version = "2.4.5", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
     { name = "pandas", version = "2.3.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
     { name = "pandas", version = "3.0.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
     { name = "pandera" },
@@ -1478,6 +1480,10 @@ nopyarrow-test = [
     { name = "pytest-timeout" },
     { name = "pytest-xdist" },
     { name = "tomli", marker = "python_full_version < '3.11'" },
+]
+numpy = [
+    { name = "numpy", version = "2.2.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
+    { name = "numpy", version = "2.4.5", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
 ]
 pandas = [
     { name = "pandas", version = "2.3.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
@@ -1540,6 +1546,7 @@ requires-dist = [
     { name = "mloda", extras = ["docs"], marker = "extra == 'all'" },
     { name = "mloda", extras = ["duckdb"], marker = "extra == 'all'" },
     { name = "mloda", extras = ["iceberg"], marker = "extra == 'all'" },
+    { name = "mloda", extras = ["numpy"], marker = "extra == 'all'" },
     { name = "mloda", extras = ["pandas"], marker = "extra == 'all'" },
     { name = "mloda", extras = ["pandas"], marker = "extra == 'docs'" },
     { name = "mloda", extras = ["polars"], marker = "extra == 'all'" },
@@ -1554,6 +1561,7 @@ requires-dist = [
     { name = "mypy", marker = "extra == 'test'" },
     { name = "nltk", marker = "extra == 'text-cleaning'", specifier = ">=3.8" },
     { name = "notebook", marker = "extra == 'docs'" },
+    { name = "numpy", marker = "extra == 'numpy'" },
     { name = "pandas", marker = "extra == 'pandas'" },
     { name = "pandera", marker = "extra == 'test'" },
     { name = "pip-audit", marker = "extra == 'test'", specifier = "<2.11.0" },
@@ -1584,7 +1592,7 @@ requires-dist = [
     { name = "types-requests", marker = "extra == 'test'" },
     { name = "types-toml", marker = "extra == 'test'" },
 ]
-provides-extras = ["test", "pyarrow", "pandas", "polars", "duckdb", "sqlite", "iceberg", "spark", "sklearn", "text-cleaning", "nopyarrow-test", "docs", "all"]
+provides-extras = ["test", "pyarrow", "pandas", "polars", "numpy", "duckdb", "sqlite", "iceberg", "spark", "sklearn", "text-cleaning", "nopyarrow-test", "docs", "all"]
 
 [[package]]
 name = "mmh3"

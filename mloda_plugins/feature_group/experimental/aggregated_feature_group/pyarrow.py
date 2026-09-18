@@ -4,16 +4,21 @@ PyArrow implementation for aggregated feature groups.
 
 from __future__ import annotations
 
-from typing import Any, Callable
+from typing import TYPE_CHECKING, Any, Callable
 
-import numpy as np
 import pyarrow as pa
 import pyarrow.compute as pc
 
+from mloda.core.optional_dependency import loaded, require
 from mloda.provider import ComputeFramework
 
 from mloda.user.pyarrow import PyArrowTable
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.base import AggregatedFeatureGroup
+
+if TYPE_CHECKING:
+    import numpy as np
+
+_NUMPY_REASON = "pyarrow row-wise aggregation across multiple columns"
 
 
 def _reduce_without_nan_warning(
@@ -29,11 +34,13 @@ def _reduce_without_nan_warning(
     """
     if not degenerate_rows.any():
         return reducer(stacked)
+    numpy = require("numpy", _NUMPY_REASON)
     patched = stacked.copy()
-    nan_mask = np.isnan(patched)
-    patched[degenerate_rows[:, np.newaxis] & nan_mask] = 0.0
+    nan_mask = numpy.isnan(patched)
+    patched[degenerate_rows[:, numpy.newaxis] & nan_mask] = 0.0
     result = reducer(patched)
-    return np.where(degenerate_rows, np.nan, result)
+    restored: np.ndarray[Any, Any] = numpy.where(degenerate_rows, numpy.nan, result)
+    return restored
 
 
 class PyArrowAggregatedFeatureGroup(AggregatedFeatureGroup):
@@ -75,7 +82,8 @@ class PyArrowAggregatedFeatureGroup(AggregatedFeatureGroup):
     @classmethod
     def _add_result_to_data(cls, data: pa.Table, feature_name: str, result: Any) -> pa.Table:
         """Add the result to the Table."""
-        if isinstance(result, np.ndarray):
+        numpy = loaded("numpy")
+        if numpy is not None and isinstance(result, numpy.ndarray):
             # Multi-column (row-wise) aggregation: one value per row already.
             result_array = pa.array(result)
         else:
@@ -107,6 +115,8 @@ class PyArrowAggregatedFeatureGroup(AggregatedFeatureGroup):
             The result of the aggregation (scalar for single-column, array for multi-column)
         """
         if len(in_features) > 1:
+            np = require("numpy", _NUMPY_REASON)
+
             # Multi-column: aggregate across columns row-wise
             # PyArrow doesn't have direct horizontal operations, need to implement manually
             columns = [data.column(name) for name in in_features]

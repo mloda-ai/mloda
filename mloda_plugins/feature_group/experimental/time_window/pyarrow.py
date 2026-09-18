@@ -10,11 +10,14 @@ import bisect
 import pyarrow as pa
 import pyarrow.compute as pc
 
+from mloda.core.optional_dependency import require
 from mloda.provider import ComputeFramework
 
 from mloda_plugins.compute_framework.base_implementations.pyarrow import pyarrow_type_semantics
 from mloda.user.pyarrow import PyArrowTable
 from mloda_plugins.feature_group.experimental.time_window.base import TimeWindowFeatureGroup
+
+_NUMPY_REASON = "multi-column time-window aggregation"
 
 
 class PyArrowTimeWindowFeatureGroup(TimeWindowFeatureGroup):
@@ -185,7 +188,7 @@ class PyArrowTimeWindowFeatureGroup(TimeWindowFeatureGroup):
 
                 # If multi-column, aggregate across columns
                 if len(in_features) > 1:
-                    import numpy as np
+                    np = require("numpy", _NUMPY_REASON)
 
                     column_array = np.array(column_results)
                     if window_function == "sum":

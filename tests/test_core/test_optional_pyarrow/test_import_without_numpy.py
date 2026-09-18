@@ -8,6 +8,23 @@ from tests.test_core.test_optional_pyarrow._pyarrow_blocker import run_blocked
 
 _IMPORT_BODY: str = """
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.pyarrow import PyArrowAggregatedFeatureGroup
+from mloda_plugins.feature_group.experimental.time_window.pyarrow import PyArrowTimeWindowFeatureGroup
+print("OK")
+"""
+
+_SINGLE_COLUMN_BODY: str = """
+import sys
+
+import pyarrow as pa
+
+from mloda_plugins.feature_group.experimental.aggregated_feature_group.pyarrow import PyArrowAggregatedFeatureGroup
+
+table = pa.table({"a": [1.0, 2.0, 3.0]})
+result = PyArrowAggregatedFeatureGroup._perform_aggregation(table, "sum", ["a"])
+out = PyArrowAggregatedFeatureGroup._add_result_to_data(table, "agg", result)
+
+assert out.column("agg").to_pylist() == [6.0, 6.0, 6.0], f"unexpected result: {out.column('agg').to_pylist()}"
+assert "numpy" not in sys.modules, "single-column aggregation must not import numpy"
 print("OK")
 """
 
@@ -62,10 +79,19 @@ except Exception as e:
 
 @pytest.mark.timeout(30)
 def test_aggregated_feature_group_imports_with_numpy_blocked() -> None:
-    """PyArrowAggregatedFeatureGroup must be importable without numpy installed."""
+    """PyArrowAggregatedFeatureGroup and PyArrowTimeWindowFeatureGroup must both import without numpy installed."""
     pytest.importorskip("pyarrow")
     result = run_blocked(_IMPORT_BODY, module="numpy")
     assert result.returncode == 0, f"Import failed.\nstdout: {result.stdout}\nstderr:\n{result.stderr}"
+    assert "OK" in result.stdout, f"Expected OK sentinel. Got stdout: {result.stdout!r}\nstderr: {result.stderr}"
+
+
+@pytest.mark.timeout(30)
+def test_aggregated_feature_group_single_column_works_without_numpy() -> None:
+    """Single-column aggregation must produce correct results without numpy installed at all."""
+    pytest.importorskip("pyarrow")
+    result = run_blocked(_SINGLE_COLUMN_BODY, module="numpy")
+    assert result.returncode == 0, f"Body crashed unexpectedly.\nstdout: {result.stdout}\nstderr:\n{result.stderr}"
     assert "OK" in result.stdout, f"Expected OK sentinel. Got stdout: {result.stdout!r}\nstderr: {result.stderr}"
 
 

@@ -25,21 +25,22 @@ def _reduce_without_nan_warning(
     stacked: np.ndarray[Any, Any],
     degenerate_rows: np.ndarray[Any, Any],
     reducer: Callable[[np.ndarray[Any, Any]], np.ndarray[Any, Any]],
-) -> Any:
+) -> np.ndarray[Any, Any]:
     """Run a np.nan* row-wise reducer without ever triggering its RuntimeWarning.
 
     Rows flagged as degenerate (e.g. all-NaN, or too few valid values for ddof=1) have their
     NaN cells temporarily patched with 0.0 in a copy so the reducer never sees a degenerate
     row; those rows' results are then overwritten back to NaN, matching the unpatched result.
     """
-    np = require("numpy", _NUMPY_REASON)
     if not degenerate_rows.any():
         return reducer(stacked)
+    numpy = require("numpy", _NUMPY_REASON)
     patched = stacked.copy()
-    nan_mask = np.isnan(patched)
-    patched[degenerate_rows[:, np.newaxis] & nan_mask] = 0.0
+    nan_mask = numpy.isnan(patched)
+    patched[degenerate_rows[:, numpy.newaxis] & nan_mask] = 0.0
     result = reducer(patched)
-    return np.where(degenerate_rows, np.nan, result)
+    restored: np.ndarray[Any, Any] = numpy.where(degenerate_rows, numpy.nan, result)
+    return restored
 
 
 class PyArrowAggregatedFeatureGroup(AggregatedFeatureGroup):

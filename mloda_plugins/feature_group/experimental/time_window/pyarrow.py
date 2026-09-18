@@ -141,6 +141,8 @@ class PyArrowTimeWindowFeatureGroup(TimeWindowFeatureGroup):
         # Create a list to store the results
         results = []
 
+        numpy = require("numpy", _NUMPY_REASON) if len(in_features) > 1 else None
+
         # For each row, calculate the window operation over the time-based window
         for i in range(len(sorted_sources[0])):
             # Rows are time-sorted ascending, so the window is a contiguous slice
@@ -188,7 +190,8 @@ class PyArrowTimeWindowFeatureGroup(TimeWindowFeatureGroup):
 
                 # If multi-column, aggregate across columns
                 if len(in_features) > 1:
-                    np = require("numpy", _NUMPY_REASON)
+                    assert numpy is not None
+                    np = numpy
 
                     column_array = np.array(column_results)
                     if window_function == "sum":

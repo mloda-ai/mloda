@@ -202,13 +202,15 @@ class PluginLoader:
                     if root in optional_roots or blamed_root is not None:
                         dependency = e.name or blamed_root
                         assert dependency is not None
+                        already_recorded = self._skipped.get(skipped_key) == dependency
                         self._skipped[skipped_key] = dependency
-                        logger.warning(
-                            "Skipping entry point %s (%s): missing optional dependency %s",
-                            entry_point.name,
-                            entry_point.value,
-                            dependency,
-                        )
+                        if not already_recorded:
+                            logger.warning(
+                                "Skipping entry point %s (%s): missing optional dependency %s",
+                                entry_point.name,
+                                entry_point.value,
+                                dependency,
+                            )
                         continue
                     raise
                 self._skipped.pop(skipped_key, None)

@@ -646,6 +646,61 @@ class TestLoadEntryPointsOptionalDependenciesDeclaration:
     """The new `mloda.optional_dependencies` group: per-entry-point optional-root declarations,
     plain ImportError handling, and the own-package re-raise guard."""
 
+    @pytest.mark.parametrize("rearm", ["changed_dependency", "reset_cache"])
+    def test_missing_dependency_warns_once_until_dependency_changes_or_cache_resets(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture, rearm: str
+    ) -> None:
+        pkg = f"eptest_warn_once_{rearm}_pkg"
+        first_dependency = f"{pkg}_first_missing"
+        second_dependency = f"{pkg}_second_missing"
+        _build_distribution(
+            tmp_path,
+            pkg,
+            f"import {first_dependency}\nimport {second_dependency}\nFEATURE_GROUPS = []\n",
+            f"""
+            [mloda.feature_groups]
+            first = {pkg}.manifest:FEATURE_GROUPS
+            second = {pkg}.manifest:FEATURE_GROUPS
+            """,
+        )
+        monkeypatch.syspath_prepend(str(tmp_path))
+        monkeypatch.setattr(
+            plugin_loader_module, "OPTIONAL_PLUGIN_DEPENDENCIES", frozenset({first_dependency, second_dependency})
+        )
+        caplog.set_level(logging.WARNING, logger=plugin_loader_module.__name__)
+        loader = PluginLoader()
+        skipped_keys = [f"{label} ({pkg}.manifest:FEATURE_GROUPS)" for label in ("first", "second")]
+        expected_messages = [
+            f"Skipping entry point {key}: missing optional dependency {first_dependency}" for key in skipped_keys
+        ]
+
+        assert loader.load_entry_points() == []
+        assert sorted(caplog.messages) == sorted(expected_messages)
+        assert PluginLoader.skipped_plugins() == dict.fromkeys(skipped_keys, first_dependency)
+
+        caplog.clear()
+        assert loader.load_entry_points() == []
+        assert PluginLoader().load_entry_points() == []
+        assert caplog.messages == []
+        assert PluginLoader.skipped_plugins() == dict.fromkeys(skipped_keys, first_dependency)
+
+        if rearm == "changed_dependency":
+            _write_root_module(tmp_path, first_dependency)
+            importlib.invalidate_caches()
+            expected_dependency = second_dependency
+        else:
+            PluginLoader.reset_cache()
+            expected_dependency = first_dependency
+
+        assert PluginLoader().load_entry_points() == []
+        assert sorted(caplog.messages) == sorted(
+            f"Skipping entry point {key}: missing optional dependency {expected_dependency}" for key in skipped_keys
+        )
+        assert PluginLoader.skipped_plugins() == dict.fromkeys(skipped_keys, expected_dependency)
+        caplog.clear()
+        assert PluginLoader().load_entry_points() == []
+        assert caplog.messages == []
+
     def test_declared_optional_root_skips_entry_point_and_logs_warning(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
     ) -> None:

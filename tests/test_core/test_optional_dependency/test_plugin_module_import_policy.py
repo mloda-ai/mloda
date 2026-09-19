@@ -1,7 +1,7 @@
 """Static AST policy check: a module under mloda_plugins/** may only import, at module level, a
 third-party root that its own pyproject extra (directly or through IMPLIED) declares. An unguarded
 import of an undeclared library makes the plugin loader silently skip the module when it is absent.
-It also checks that each require() literal names an existing pyproject extra."""
+It also checks that each require() literal names an extra, and that MODULE_EXTRA maps every backend-reaching module."""
 
 from __future__ import annotations
 
@@ -26,18 +26,160 @@ from tests.test_core.test_optional_dependency.test_no_optional_backend_imports_i
 )
 from tests.test_core.test_optional_pyarrow.test_pyproject_optional_extras import _load_optional_deps
 
-# A row exists only when a module unconditionally reaches a third party; the extra is the future per-backend package.
+_BACKENDS = "mloda_plugins.compute_framework.base_implementations"
+_EXPERIMENTAL = "mloda_plugins.feature_group.experimental"
+_INPUT_DATA = "mloda_plugins.feature_group.input_data"
+
+# Module -> home extra (the future per-backend package). Only EAGER_MODULES import it unconditionally.
 MODULE_EXTRA: dict[str, str] = {
-    "mloda_plugins.feature_group.experimental.aggregated_feature_group.pyarrow": "pyarrow",
-    "mloda_plugins.feature_group.experimental.data_quality.missing_value.pyarrow": "pyarrow",
-    "mloda_plugins.feature_group.experimental.time_window.pyarrow": "pyarrow",
-    "mloda_plugins.feature_group.experimental.geo_distance.pandas": "pandas",
-    "mloda_plugins.feature_group.experimental.time_window.pandas": "pandas",
-    "mloda_plugins.feature_group.input_data.read_dbs.sqlite": "sqlite",
+    f"{_BACKENDS}.duckdb.duckdb_filter_engine": "duckdb",
+    f"{_BACKENDS}.duckdb.duckdb_framework": "duckdb",
+    f"{_BACKENDS}.duckdb.duckdb_mask_engine": "duckdb",
+    f"{_BACKENDS}.duckdb.duckdb_merge_engine": "duckdb",
+    f"{_BACKENDS}.duckdb.duckdb_pyarrow_transformer": "duckdb",
+    f"{_BACKENDS}.duckdb.duckdb_relation": "duckdb",
+    f"{_BACKENDS}.iceberg.iceberg_filter_engine": "iceberg",
+    f"{_BACKENDS}.iceberg.iceberg_framework": "iceberg",
+    f"{_BACKENDS}.iceberg.iceberg_pyarrow_transformer": "iceberg",
+    f"{_BACKENDS}.pandas.dataframe": "pandas",
+    f"{_BACKENDS}.pandas.pandas_filter_engine": "pandas",
+    f"{_BACKENDS}.pandas.pandas_mask_engine": "pandas",
+    f"{_BACKENDS}.pandas.pandas_merge_engine": "pandas",
+    f"{_BACKENDS}.pandas.pandas_pyarrow_transformer": "pandas",
+    f"{_BACKENDS}.pandas.pandas_type_semantics": "pandas",
+    f"{_BACKENDS}.polars.dataframe": "polars",
+    f"{_BACKENDS}.polars.lazy_dataframe": "polars",
+    f"{_BACKENDS}.polars.polars_expr_mask_engine": "polars",
+    f"{_BACKENDS}.polars.polars_filter_engine": "polars",
+    f"{_BACKENDS}.polars.polars_lazy_merge_engine": "polars",
+    f"{_BACKENDS}.polars.polars_lazy_pyarrow_transformer": "polars",
+    f"{_BACKENDS}.polars.polars_mask_engine": "polars",
+    f"{_BACKENDS}.polars.polars_merge_engine": "polars",
+    f"{_BACKENDS}.polars.polars_pyarrow_transformer": "polars",
+    f"{_BACKENDS}.polars.polars_type_semantics": "polars",
+    f"{_BACKENDS}.pyarrow.pyarrow_file_source_transformer": "pyarrow",
+    f"{_BACKENDS}.pyarrow.pyarrow_filter_engine": "pyarrow",
+    f"{_BACKENDS}.pyarrow.pyarrow_mask_engine": "pyarrow",
+    f"{_BACKENDS}.pyarrow.pyarrow_merge_engine": "pyarrow",
+    f"{_BACKENDS}.pyarrow.pyarrow_type_semantics": "pyarrow",
+    f"{_BACKENDS}.pyarrow.table": "pyarrow",
+    f"{_BACKENDS}.python_dict.python_dict_pyarrow_transformer": "pyarrow",
+    f"{_BACKENDS}.spark.spark_filter_engine": "spark",
+    f"{_BACKENDS}.spark.spark_framework": "spark",
+    f"{_BACKENDS}.spark.spark_mask_engine": "spark",
+    f"{_BACKENDS}.spark.spark_merge_engine": "spark",
+    f"{_BACKENDS}.spark.spark_pyarrow_transformer": "spark",
+    f"{_BACKENDS}.spark.spark_type_semantics": "spark",
+    f"{_BACKENDS}.sql.sql_base_filter_engine": "pyarrow",
+    f"{_BACKENDS}.sql.sql_base_mask_engine": "pyarrow",
+    f"{_BACKENDS}.sql.sql_base_merge_engine": "pyarrow",
+    f"{_BACKENDS}.sql.sql_base_pyarrow_transformer": "pyarrow",
+    f"{_BACKENDS}.sql.sql_base_relation": "pyarrow",
+    f"{_BACKENDS}.sql.sql_type_semantics": "pyarrow",
+    f"{_BACKENDS}.sql.sql_utils": "pyarrow",
+    f"{_BACKENDS}.sql.sql_window": "pyarrow",
+    f"{_BACKENDS}.sqlite.sqlite_filter_engine": "sqlite",
+    f"{_BACKENDS}.sqlite.sqlite_framework": "sqlite",
+    f"{_BACKENDS}.sqlite.sqlite_mask_engine": "sqlite",
+    f"{_BACKENDS}.sqlite.sqlite_merge_engine": "sqlite",
+    f"{_BACKENDS}.sqlite.sqlite_pyarrow_transformer": "sqlite",
+    f"{_BACKENDS}.sqlite.sqlite_relation": "sqlite",
+    f"{_BACKENDS}.sqlite.sqlite_value_sample": "sqlite",
+    f"{_EXPERIMENTAL}.aggregated_feature_group.pandas": "pandas",
+    f"{_EXPERIMENTAL}.aggregated_feature_group.polars_lazy": "polars",
+    f"{_EXPERIMENTAL}.aggregated_feature_group.pyarrow": "pyarrow",
+    f"{_EXPERIMENTAL}.clustering.pandas": "pandas",
+    f"{_EXPERIMENTAL}.data_quality.missing_value.pandas": "pandas",
+    f"{_EXPERIMENTAL}.data_quality.missing_value.pyarrow": "pyarrow",
+    f"{_EXPERIMENTAL}.dimensionality_reduction.pandas": "pandas",
+    f"{_EXPERIMENTAL}.environment.installed_packages_feature_group": "pandas",
+    f"{_EXPERIMENTAL}.environment.list_directory_feature_group": "pandas",
+    f"{_EXPERIMENTAL}.forecasting.pandas": "pandas",
+    f"{_EXPERIMENTAL}.geo_distance.pandas": "pandas",
+    f"{_EXPERIMENTAL}.node_centrality.pandas": "pandas",
+    f"{_EXPERIMENTAL}.sklearn.encoding.base": "sklearn",
+    f"{_EXPERIMENTAL}.sklearn.encoding.pandas": "sklearn",
+    f"{_EXPERIMENTAL}.sklearn.pipeline.base": "sklearn",
+    f"{_EXPERIMENTAL}.sklearn.pipeline.pandas": "sklearn",
+    f"{_EXPERIMENTAL}.sklearn.scaling.base": "sklearn",
+    f"{_EXPERIMENTAL}.sklearn.scaling.pandas": "sklearn",
+    f"{_EXPERIMENTAL}.sklearn.sklearn_artifact": "sklearn",
+    f"{_EXPERIMENTAL}.text_cleaning.pandas": "pandas",
+    f"{_EXPERIMENTAL}.text_cleaning.python_dict": "text_cleaning",
+    f"{_EXPERIMENTAL}.time_window.pandas": "pandas",
+    f"{_EXPERIMENTAL}.time_window.pyarrow": "pyarrow",
+    f"{_INPUT_DATA}.read_context_files": "pandas",
+    f"{_INPUT_DATA}.read_dbs.sqlite": "sqlite",
+    f"{_INPUT_DATA}.read_files.feather": "pyarrow",
+    f"{_INPUT_DATA}.read_files.json": "pyarrow",
+    f"{_INPUT_DATA}.read_files.orc": "pyarrow",
+    f"{_INPUT_DATA}.read_files.parquet": "pyarrow",
+    f"{_INPUT_DATA}.read_files.yaml_document_reader": "yaml",
 }
 
+# Extras a module reaches only lazily, guarded or through an import edge, on top of its home extra.
+ALSO_NEEDS: dict[str, tuple[str, ...]] = {
+    f"{_BACKENDS}.iceberg.iceberg_framework": ("pandas",),
+    f"{_BACKENDS}.pandas.pandas_pyarrow_transformer": ("pyarrow",),
+    f"{_BACKENDS}.polars.polars_lazy_pyarrow_transformer": ("pyarrow",),
+    f"{_BACKENDS}.polars.polars_pyarrow_transformer": ("pyarrow",),
+    f"{_BACKENDS}.pyarrow.table": ("pandas",),
+    f"{_EXPERIMENTAL}.aggregated_feature_group.pyarrow": ("pandas",),
+    f"{_EXPERIMENTAL}.clustering.pandas": ("sklearn",),
+    f"{_EXPERIMENTAL}.data_quality.missing_value.pyarrow": ("pandas",),
+    f"{_EXPERIMENTAL}.dimensionality_reduction.pandas": ("sklearn",),
+    f"{_EXPERIMENTAL}.forecasting.pandas": ("sklearn",),
+    f"{_EXPERIMENTAL}.sklearn.encoding.pandas": ("pandas",),
+    f"{_EXPERIMENTAL}.sklearn.pipeline.pandas": ("pandas",),
+    f"{_EXPERIMENTAL}.sklearn.scaling.pandas": ("pandas",),
+    f"{_EXPERIMENTAL}.text_cleaning.pandas": ("text_cleaning",),
+    f"{_EXPERIMENTAL}.time_window.pyarrow": ("pandas",),
+}
+
+# The only modules allowed to import their home extra's roots unconditionally.
+EAGER_MODULES: frozenset[str] = frozenset(
+    {
+        "mloda_plugins.feature_group.experimental.aggregated_feature_group.pyarrow",
+        "mloda_plugins.feature_group.experimental.data_quality.missing_value.pyarrow",
+        "mloda_plugins.feature_group.experimental.time_window.pyarrow",
+        "mloda_plugins.feature_group.experimental.geo_distance.pandas",
+        "mloda_plugins.feature_group.experimental.time_window.pandas",
+        "mloda_plugins.feature_group.input_data.read_dbs.sqlite",
+    }
+)
+
+# Modules asserted to reach no third-party root.
+BACKEND_NEUTRAL: frozenset[str] = frozenset(
+    {
+        "mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_file_source_transformer",
+        "mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_filter_engine",
+        "mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework",
+        "mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_mask_engine",
+        "mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_merge_engine",
+        "mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_type_semantics",
+        "mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_utils",
+        "mloda_plugins.feature_group.experimental.aggregated_feature_group.base",
+        "mloda_plugins.feature_group.experimental.clustering.base",
+        "mloda_plugins.feature_group.experimental.data_quality.missing_value.base",
+        "mloda_plugins.feature_group.experimental.data_quality.missing_value.python_dict",
+        "mloda_plugins.feature_group.experimental.dimensionality_reduction.base",
+        "mloda_plugins.feature_group.experimental.forecasting.base",
+        "mloda_plugins.feature_group.experimental.geo_distance.base",
+        "mloda_plugins.feature_group.experimental.node_centrality.base",
+        "mloda_plugins.feature_group.experimental.text_cleaning.base",
+        "mloda_plugins.feature_group.experimental.time_window.base",
+    }
+)
+
+BACKEND_EXTRAS: frozenset[str] = frozenset(
+    {"pyarrow", "pandas", "polars", "numpy", "yaml", "duckdb", "sqlite", "iceberg", "spark", "sklearn", "text_cleaning"}
+)
+
 # Import roots a library hard-depends on, still covered by the extra that ships the library itself.
-IMPLIED: dict[str, frozenset[str]] = {"pandas": frozenset({"numpy"})}
+IMPLIED: dict[str, frozenset[str]] = {
+    "pandas": frozenset({"numpy"}),
+    "sklearn": frozenset({"numpy", "scipy"}),
+}
 
 # Distribution name -> top-level import it provides, for names that don't match "lowercased, '-' to '_'".
 DISTRIBUTION_IMPORT_ROOT: dict[str, str] = {"pyyaml": "yaml", "scikit-learn": "sklearn"}
@@ -52,6 +194,9 @@ _FIRST_PARTY_ROOT_DIRS: dict[str, list[Path]] = {
     "mloda": [Path(entry) for entry in mloda.__path__ if Path(entry).is_dir()],
     "mloda_plugins": [_MLODA_PLUGINS_DIR],
 }
+
+# Other mloda.* core is deliberately not followed: it is backend-neutral, never a plugin backend.
+_MAP_FOLLOW_PREFIXES: tuple[str, ...] = ("mloda_plugins.", "mloda.user.")
 
 
 def _strip_requirement(requirement: str) -> str:
@@ -179,32 +324,61 @@ def _require_call_target(call: ast.Call) -> str | None:
     return first.value
 
 
+def _statement_import_targets(node: ast.Import | ast.ImportFrom, package: str) -> Iterator[ImportTarget]:
+    if isinstance(node, ast.Import):
+        for alias in node.names:
+            yield ImportTarget(alias.name, alias.name)
+        return
+    if node.module == "__future__" and node.level == 0:
+        return
+    module = _resolve_relative(node.module, node.level, package)
+    for alias in node.names:
+        yield ImportTarget(f"{module}.{alias.name}", module)
+
+
+def _call_import_target(call: ast.Call, aliases: set[str]) -> ImportTarget | None:
+    name = _dynamic_import_root(call, aliases)
+    if name is None:
+        name = _require_call_target(call)
+    return ImportTarget(name, name) if name is not None else None
+
+
 def unconditional_import_targets(tree: ast.Module, package: str) -> frozenset[ImportTarget]:
     aliases = _dynamic_import_aliases(tree)
     targets: set[ImportTarget] = set()
 
     for node in _unconditional_statements(tree.body):
-        if isinstance(node, ast.Import):
-            for alias in node.names:
-                targets.add(ImportTarget(alias.name, alias.name))
-        elif isinstance(node, ast.ImportFrom):
-            if node.module == "__future__" and node.level == 0:
-                continue
-            module = _resolve_relative(node.module, node.level, package)
-            for alias in node.names:
-                targets.add(ImportTarget(f"{module}.{alias.name}", module))
+        if isinstance(node, (ast.Import, ast.ImportFrom)):
+            targets.update(_statement_import_targets(node, package))
         elif isinstance(node, (ast.Expr, ast.Assign, ast.AnnAssign)):
             value = node.value
             if value is None:
                 continue
             for call in _calls_excluding_lambdas(value):
-                root = _dynamic_import_root(call, aliases)
-                if root is not None:
-                    targets.add(ImportTarget(root, root))
-                    continue
-                required = _require_call_target(call)
-                if required is not None:
-                    targets.add(ImportTarget(required, required))
+                target = _call_import_target(call, aliases)
+                if target is not None:
+                    targets.add(target)
+
+    return frozenset(targets)
+
+
+def reachable_import_targets(tree: ast.Module, package: str) -> frozenset[ImportTarget]:
+    aliases = _dynamic_import_aliases(tree)
+    targets: set[ImportTarget] = set()
+
+    stack: list[ast.AST] = [tree]
+    while stack:
+        node = stack.pop()
+        if isinstance(node, ast.If) and _is_type_checking_test(node.test):
+            stack.extend(node.orelse)
+            continue
+        if isinstance(node, (ast.Import, ast.ImportFrom)):
+            targets.update(_statement_import_targets(node, package))
+        elif isinstance(node, ast.Call):
+            target = _call_import_target(node, aliases)
+            if target is not None:
+                targets.add(target)
+        stack.extend(ast.iter_child_nodes(node))
 
     return frozenset(targets)
 
@@ -276,6 +450,7 @@ class _DirectEdges(NamedTuple):
 
 _DIRECT_EDGES_CACHE: dict[str, _DirectEdges] = {}
 _EFFECTIVE_ROOTS_CACHE: dict[str, frozenset[str]] = {}
+_REACHABLE_OWN_ROOTS_CACHE: dict[str, frozenset[str]] = {}
 
 
 def _direct_edges(module: str) -> _DirectEdges:
@@ -327,6 +502,39 @@ def effective_roots(module: str) -> frozenset[str]:
     return result
 
 
+def _own_reachable_roots(module: str) -> frozenset[str]:
+    cached = _REACHABLE_OWN_ROOTS_CACHE.get(module)
+    if cached is not None:
+        return cached
+
+    package, source = _module_source(module)
+    tree = ast.parse(source, filename=module)
+    roots = frozenset(
+        target.root
+        for target in reachable_import_targets(tree, package)
+        if target.root != "__future__" and target.root not in _STDLIB and target.root not in _FIRST_PARTY_ROOT_DIRS
+    )
+    _REACHABLE_OWN_ROOTS_CACHE[module] = roots
+    return roots
+
+
+# Follows import-time first-party edges only; a sibling imported inside a function is not a dependency edge.
+def reachable_roots(module: str) -> frozenset[str]:
+    visited: set[str] = set()
+    pending = [module]
+    roots: set[str] = set()
+    while pending:
+        current = pending.pop()
+        if current in visited:
+            continue
+        visited.add(current)
+        roots |= _own_reachable_roots(current)
+        for candidate in _direct_edges(current).first_party_modules:
+            if candidate.startswith(_MAP_FOLLOW_PREFIXES) and candidate not in visited:
+                pending.append(candidate)
+    return frozenset(roots)
+
+
 def _dotted_plugin_module(path: Path) -> str:
     relative = path.relative_to(_MLODA_PLUGINS_DIR).with_suffix("")
     return ".".join(("mloda_plugins", *relative.parts))
@@ -337,8 +545,8 @@ _PLUGIN_MODULE_NAMES: list[str] = sorted(
 )
 
 _HINT = (
-    "Fix by reaching the library at the point of use with mloda.core.optional_dependency.require() "
-    "(or guard the import), or add a MODULE_EXTRA row whose extra declares it."
+    "Use mloda.core.optional_dependency.require() at the point of use or guard the import, "
+    "or list the module in EAGER_MODULES with a MODULE_EXTRA row."
 )
 
 
@@ -347,7 +555,7 @@ def test_every_plugin_module_imports_only_what_its_extra_declares() -> None:
 
     violations: list[str] = []
     for module in _PLUGIN_MODULE_NAMES:
-        allowed = allowed_roots(MODULE_EXTRA[module]) if module in MODULE_EXTRA else frozenset()
+        allowed = allowed_roots(MODULE_EXTRA[module]) if module in EAGER_MODULES else frozenset()
         offending = effective_roots(module) - allowed
         if offending:
             violations.append(f"{module}: {sorted(offending)}")
@@ -364,8 +572,57 @@ def test_module_extra_table_has_no_stale_rows() -> None:
     optional = _load_optional_deps()
     for module, extra in MODULE_EXTRA.items():
         assert module in _PLUGIN_MODULE_NAMES, f"MODULE_EXTRA row '{module}' does not exist on disk"
-        assert effective_roots(module), f"MODULE_EXTRA row '{module}' has no unguarded third-party imports"
+        if module in EAGER_MODULES:
+            assert effective_roots(module), f"MODULE_EXTRA row '{module}' has no unguarded third-party imports"
+        assert reachable_roots(module), f"MODULE_EXTRA row '{module}' reaches no third-party root"
         assert extra in optional, f"MODULE_EXTRA row '{module}' names extra '{extra}', absent from pyproject.toml"
+        assert extra in BACKEND_EXTRAS, f"MODULE_EXTRA row '{module}' names extra '{extra}', not a backend extra"
+
+    for module, extras in ALSO_NEEDS.items():
+        assert module in MODULE_EXTRA, f"ALSO_NEEDS key '{module}' has no MODULE_EXTRA row"
+        for extra in extras:
+            assert extra in optional, f"ALSO_NEEDS entry '{module}' names extra '{extra}', absent from pyproject.toml"
+            assert extra in BACKEND_EXTRAS, f"ALSO_NEEDS entry '{module}' names extra '{extra}', not a backend extra"
+            covered_without = allowed_roots(MODULE_EXTRA[module])
+            for other in extras:
+                if other != extra:
+                    covered_without = covered_without | allowed_roots(other)
+            assert reachable_roots(module) - covered_without, (
+                f"ALSO_NEEDS entry '{module}' extra '{extra}' is redundant: no reachable root needs it"
+            )
+
+    orphans = EAGER_MODULES - MODULE_EXTRA.keys()
+    assert not orphans, f"EAGER_MODULES names modules without a MODULE_EXTRA row: {sorted(orphans)}"
+
+
+def test_every_plugin_module_with_a_backend_root_is_mapped(_isolated_effective_roots_cache: None) -> None:
+    violations: list[str] = []
+    for module in _PLUGIN_MODULE_NAMES:
+        roots = reachable_roots(module)
+        if not roots:
+            continue
+        home = MODULE_EXTRA.get(module)
+        if home is None:
+            violations.append(f"{module}: no MODULE_EXTRA row, reaches {sorted(roots)}")
+            continue
+        covered = allowed_roots(home)
+        for extra in ALSO_NEEDS.get(module, ()):
+            covered = covered | allowed_roots(extra)
+        uncovered = roots - covered
+        if uncovered:
+            violations.append(f"{module}: home extra '{home}' and ALSO_NEEDS do not cover {sorted(uncovered)}")
+
+    assert violations == [], (
+        "Plugin modules reaching an unmapped third-party root:\n"
+        + "\n".join(violations)
+        + "\n\nAdd a MODULE_EXTRA row, or an ALSO_NEEDS entry for the extra that declares the root."
+    )
+
+
+def test_backend_neutral_modules_reach_no_third_party_root(_isolated_effective_roots_cache: None) -> None:
+    for module in sorted(BACKEND_NEUTRAL):
+        assert module in _PLUGIN_MODULE_NAMES, f"BACKEND_NEUTRAL entry '{module}' does not exist on disk"
+        assert reachable_roots(module) == frozenset(), f"BACKEND_NEUTRAL entry '{module}' reaches a third-party root"
 
 
 _UNCONDITIONAL_IMPORT_CASES: list[tuple[str, str, frozenset[str]]] = [
@@ -468,13 +725,78 @@ def test_regression_pyarrow_module_reports_numpy_violation() -> None:
     assert violation == {"numpy"}
 
 
+_REACHABLE_IMPORT_CASES: list[tuple[str, str, frozenset[str]]] = [
+    ("function_body_import_counted", "def f():\n    import numpy\n", frozenset({"numpy"})),
+    (
+        "try_except_import_error_body_counted",
+        "try:\n    import numpy\nexcept ImportError:\n    numpy = None\n",
+        frozenset({"numpy"}),
+    ),
+    (
+        "type_checking_body_excluded",
+        "from typing import TYPE_CHECKING\n\nif TYPE_CHECKING:\n    import pyarrow as pa\n",
+        frozenset({"typing"}),
+    ),
+    (
+        "type_checking_else_branch_counted",
+        "from typing import TYPE_CHECKING\n\nif TYPE_CHECKING:\n    import pyarrow as pa\nelse:\n    import numpy\n",
+        frozenset({"typing", "numpy"}),
+    ),
+    (
+        "require_inside_method_counted",
+        "class Foo:\n    def method(self):\n        require('numpy', 'x')\n",
+        frozenset({"numpy"}),
+    ),
+    (
+        "return_require_counted",
+        "def f():\n    return require('numpy', 'x')\n",
+        frozenset({"numpy"}),
+    ),
+    (
+        "require_inside_lambda_counted",
+        "getter = lambda: require('numpy', 'x')\n",
+        frozenset({"numpy"}),
+    ),
+    (
+        "loaded_call_not_counted",
+        "def f():\n    return loaded('numpy')\n",
+        frozenset(),
+    ),
+    (
+        "future_import_skipped",
+        "from __future__ import annotations\n",
+        frozenset(),
+    ),
+    (
+        "dynamic_import_inside_function_counted",
+        "import importlib\n\ndef f():\n    return importlib.import_module('pyarrow')\n",
+        frozenset({"importlib", "pyarrow"}),
+    ),
+]
+
+_REACHABLE_IMPORT_IDS = [case[0] for case in _REACHABLE_IMPORT_CASES]
+
+
+@pytest.mark.parametrize(
+    ("source", "expected_roots"), [case[1:] for case in _REACHABLE_IMPORT_CASES], ids=_REACHABLE_IMPORT_IDS
+)
+def test_reachable_import_targets_reports_guarded_and_lazy_imports_but_not_type_checking_bodies(
+    source: str, expected_roots: frozenset[str]
+) -> None:
+    tree = ast.parse(source)
+    targets = reachable_import_targets(tree, package="synthetic")
+    assert {target.root for target in targets} == expected_roots
+
+
 @pytest.fixture
 def _isolated_effective_roots_cache() -> Iterator[None]:
     _DIRECT_EDGES_CACHE.clear()
     _EFFECTIVE_ROOTS_CACHE.clear()
+    _REACHABLE_OWN_ROOTS_CACHE.clear()
     yield
     _DIRECT_EDGES_CACHE.clear()
     _EFFECTIVE_ROOTS_CACHE.clear()
+    _REACHABLE_OWN_ROOTS_CACHE.clear()
 
 
 _CYCLE_MODULES = ("cycletest_root.a", "cycletest_root.b", "cycletest_root.c")
@@ -600,3 +922,48 @@ def test_every_require_call_names_an_existing_extra() -> None:
         + "\n\n"
         + _REQUIRE_EXTRA_HINT
     )
+
+
+def test_reachable_roots_follows_a_module_level_import_and_counts_the_callee_guarded_imports(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    _isolated_effective_roots_cache: None,
+) -> None:
+    (tmp_path / "a.py").write_text("import reachtest_root.b\n")
+    (tmp_path / "b.py").write_text("def load():\n    import numpy\n    return numpy\n")
+    monkeypatch.setitem(_FIRST_PARTY_ROOT_DIRS, "reachtest_root", [tmp_path])
+    monkeypatch.setattr(sys.modules[__name__], "_MAP_FOLLOW_PREFIXES", ("reachtest_root.",))
+
+    assert reachable_roots("reachtest_root.a") == frozenset({"numpy"})
+
+
+def test_reachable_roots_does_not_follow_a_module_imported_only_inside_a_function(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    _isolated_effective_roots_cache: None,
+) -> None:
+    (tmp_path / "a.py").write_text("def load():\n    import reachtest_root.b\n")
+    (tmp_path / "b.py").write_text("import numpy\n")
+    monkeypatch.setitem(_FIRST_PARTY_ROOT_DIRS, "reachtest_root", [tmp_path])
+    monkeypatch.setattr(sys.modules[__name__], "_MAP_FOLLOW_PREFIXES", ("reachtest_root.",))
+
+    assert reachable_roots("reachtest_root.a") == frozenset()
+
+
+def test_reachable_roots_does_not_follow_a_module_outside_the_followed_prefixes(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    _isolated_effective_roots_cache: None,
+) -> None:
+    followed_dir = tmp_path / "followed"
+    other_dir = tmp_path / "other"
+    followed_dir.mkdir()
+    other_dir.mkdir()
+    (followed_dir / "a.py").write_text("import reachtest_root.c\nimport reachother_root.b\n")
+    (followed_dir / "c.py").write_text("import pyarrow\n")
+    (other_dir / "b.py").write_text("import pandas\n")
+    monkeypatch.setitem(_FIRST_PARTY_ROOT_DIRS, "reachtest_root", [followed_dir])
+    monkeypatch.setitem(_FIRST_PARTY_ROOT_DIRS, "reachother_root", [other_dir])
+    monkeypatch.setattr(sys.modules[__name__], "_MAP_FOLLOW_PREFIXES", ("reachtest_root.",))
+
+    assert reachable_roots("reachtest_root.a") == frozenset({"pyarrow"})

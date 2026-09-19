@@ -345,6 +345,38 @@ _DECLARED_OPTIONAL_DEPS_MODULE_SOURCE = """
     OPTIONAL_DEPENDENCIES = frozenset({"eptest_declopt_missing_root"})
 """
 
+
+def _build_declared_optional_extender_distribution(base_dir: Path, pkg_name: str, missing_root: str) -> None:
+    _build_distribution(
+        base_dir,
+        pkg_name,
+        _DECLARED_OPTIONAL_EXTENDER_MANIFEST.replace("eptest_declopt_missing_root", missing_root),
+        f"""
+        [mloda.extenders]
+        demo = {pkg_name}.manifest:EXTENDERS
+
+        [mloda.optional_dependencies]
+        demo = {pkg_name}.optional_deps:OPTIONAL_DEPENDENCIES
+        """,
+    )
+    _write_module(
+        base_dir,
+        pkg_name,
+        "optional_deps",
+        _DECLARED_OPTIONAL_DEPS_MODULE_SOURCE.replace("eptest_declopt_missing_root", missing_root),
+    )
+
+
+def _count_skip_warnings(caplog: pytest.LogCaptureFixture, pkg_name: str) -> int:
+    return sum(
+        1
+        for record in caplog.records
+        if record.name == plugin_loader_module.__name__
+        and record.levelno == logging.WARNING
+        and pkg_name in record.getMessage()
+    )
+
+
 # Fails with ModuleNotFoundError on root "pandas" specifically (submodule genuinely does not exist,
 # regardless of whether the real pandas package is installed), a root already in the global
 # OPTIONAL_PLUGIN_DEPENDENCIES set.
@@ -724,6 +756,56 @@ class TestLoadEntryPointsOptionalDependenciesDeclaration:
 
         assert f"{broken_pkg}.manifest:EpDeclOptExtender" in keys
         assert skipped_key not in PluginLoader.skipped_plugins()
+
+    @pytest.mark.parametrize(
+        ("reset_between", "expected_warnings"),
+        [
+            pytest.param(False, 1, id="second_load_same_dependency_warns_once"),
+            pytest.param(True, 2, id="reset_cache_between_loads_warns_again"),
+        ],
+    )
+    def test_repeated_load_warns_once_per_missing_dependency(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        caplog: pytest.LogCaptureFixture,
+        reset_between: bool,
+        expected_warnings: int,
+    ) -> None:
+        broken_pkg = f"eptest_declopt_repeat{int(reset_between)}_pkg"
+        _build_declared_optional_extender_distribution(
+            tmp_path, broken_pkg, f"eptest_declopt_repeat{int(reset_between)}_root"
+        )
+        monkeypatch.syspath_prepend(str(tmp_path))
+
+        with caplog.at_level(logging.WARNING, logger=plugin_loader_module.__name__):
+            PluginLoader().load_entry_points()
+            if reset_between:
+                PluginLoader.reset_cache()
+            PluginLoader().load_entry_points()
+
+        assert _count_skip_warnings(caplog, broken_pkg) == expected_warnings
+
+    def test_changed_missing_dependency_warns_again(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        broken_pkg = "eptest_declopt_changed_pkg"
+        declared_root = "eptest_declopt_changed_root"
+        new_subdep = "eptest_declopt_changed_new_subdep"
+        _build_declared_optional_extender_distribution(tmp_path, broken_pkg, declared_root)
+        monkeypatch.syspath_prepend(str(tmp_path))
+        skipped_key = f"demo ({broken_pkg}.manifest:EXTENDERS)"
+
+        with caplog.at_level(logging.WARNING, logger=plugin_loader_module.__name__):
+            PluginLoader().load_entry_points()
+            assert PluginLoader.skipped_plugins().get(skipped_key) == declared_root
+
+            _write_root_module(tmp_path, declared_root, f"import {new_subdep}\n")
+            importlib.invalidate_caches()
+            PluginLoader().load_entry_points()
+
+        assert _count_skip_warnings(caplog, broken_pkg) == 2
+        assert PluginLoader.skipped_plugins().get(skipped_key) == new_subdep
 
     def test_declared_optional_root_catches_plain_import_error(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture

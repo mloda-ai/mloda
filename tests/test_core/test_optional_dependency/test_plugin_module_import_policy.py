@@ -1,13 +1,14 @@
 """Static AST policy check: a module under mloda_plugins/** may only import, at module level, a
 third-party root that its own pyproject extra (directly or through IMPLIED) declares. An unguarded
-import of an undeclared library makes the plugin loader silently skip the module when it is absent."""
+import of an undeclared library makes the plugin loader silently skip the module when it is absent.
+It also checks that each require() literal names an existing pyproject extra."""
 
 from __future__ import annotations
 
 import ast
 import re
 import sys
-from collections.abc import Iterator
+from collections.abc import Collection, Iterator
 from pathlib import Path
 from typing import NamedTuple
 
@@ -509,3 +510,93 @@ def test_effective_roots_includes_a_parent_packages_own_unguarded_import(
     monkeypatch.setitem(_FIRST_PARTY_ROOT_DIRS, "ptest", [tmp_path])
 
     assert effective_roots("ptest.parentpkgtest.child") == frozenset({"numpy"})
+
+
+class RequireSite(NamedTuple):
+    path: Path
+    lineno: int
+    literal: str
+
+    @property
+    def root(self) -> str:
+        return self.literal.partition(".")[0]
+
+
+# Only a first positional string literal is scanned; keyword and f-string forms are not.
+def require_sites(root: Path) -> list[RequireSite]:
+    sites: list[RequireSite] = []
+    for path in sorted(root.rglob("*.py")):
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        found = [
+            RequireSite(path, node.lineno, literal)
+            for node in ast.walk(tree)
+            if isinstance(node, ast.Call) and (literal := _require_call_target(node)) is not None
+        ]
+        sites.extend(sorted(found, key=lambda site: site.lineno))
+    return sites
+
+
+_UNDECLARED_MESSAGE = (
+    "{path}:{lineno}: require('{literal}') hints 'pip install mloda[{root}]' but pyproject.toml has no '{root}' extra"
+)
+
+
+def undeclared_require_messages(sites: list[RequireSite], extras: Collection[str]) -> list[str]:
+    return [
+        _UNDECLARED_MESSAGE.format(path=site.path, lineno=site.lineno, literal=site.literal, root=site.root)
+        for site in sites
+        if site.root not in extras
+    ]
+
+
+_SYNTHETIC_EXTRAS = frozenset({"pyarrow", "numpy"})
+
+_REQUIRE_SITE_CASES: list[tuple[str, str, list[tuple[int, str]]]] = [
+    ("undeclared_at_module_level", "import os\n\nrequire('somelib', 'x')\n", [(3, "somelib")]),
+    ("declared_root_reports_nothing", "require('numpy', 'x')\n", []),
+    ("declared_submodule_reduces_to_root", "require('pyarrow.flight', 'x')\n", []),
+    ("undeclared_submodule_reduces_to_root", "require('somelib.sub', 'x')\n", [(1, "somelib.sub")]),
+    ("undeclared_inside_function_body", "def f():\n    require('somelib', 'x')\n", [(2, "somelib")]),
+]
+
+
+@pytest.mark.parametrize(
+    ("source", "expected"), [case[1:] for case in _REQUIRE_SITE_CASES], ids=[case[0] for case in _REQUIRE_SITE_CASES]
+)
+def test_undeclared_require_messages_reports_only_roots_missing_from_extras(
+    tmp_path: Path, source: str, expected: list[tuple[int, str]]
+) -> None:
+    module = tmp_path / "mod.py"
+    module.write_text(source)
+
+    messages = undeclared_require_messages(require_sites(tmp_path), _SYNTHETIC_EXTRAS)
+
+    assert len(messages) == len(expected)
+    for message, (lineno, literal) in zip(messages, expected):
+        root = literal.partition(".")[0]
+        assert message.startswith(f"{module}:{lineno}: ")
+        assert f"mloda[{root}]" in message
+        assert f"no '{root}' extra" in message
+
+
+_REQUIRE_EXTRA_HINT = (
+    "Add the extra under [project.optional-dependencies], or teach require() a distribution-to-extra mapping."
+)
+
+
+def test_every_require_call_names_an_existing_extra() -> None:
+    extras = _load_optional_deps()
+    messages: list[str] = []
+    for package in ("mloda", "mloda_plugins"):
+        directories = list(dict.fromkeys(directory.resolve() for directory in _FIRST_PARTY_ROOT_DIRS[package]))
+        assert directories, f"no {package} package directory"
+        sites = [site for directory in directories for site in require_sites(directory)]
+        assert sites, f"no require() call under {package}/"
+        messages.extend(undeclared_require_messages(sites, extras))
+
+    assert messages == [], (
+        "require() names an extra pyproject.toml does not declare:\n"
+        + "\n".join(messages)
+        + "\n\n"
+        + _REQUIRE_EXTRA_HINT
+    )

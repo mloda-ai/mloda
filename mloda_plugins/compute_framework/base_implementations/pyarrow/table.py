@@ -18,11 +18,6 @@ try:
 except ImportError:
     pa = None  # type: ignore[assignment, unused-ignore]
 
-try:
-    import pandas as pd
-except ImportError:
-    pd = None
-
 
 def arrow_schema_output_schema(schema: Any) -> OutputSchema | None:
     """Read a pyarrow Schema's names/types once and zip them, rather than calling schema.field()

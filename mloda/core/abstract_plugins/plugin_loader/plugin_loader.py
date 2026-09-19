@@ -82,6 +82,8 @@ class PluginLoader:
     _cache_lock: ClassVar[threading.Lock] = threading.Lock()
     # Process-wide, not per-instance: every skipped plugin module or entry point, mapped to its missing dependency.
     _skipped: ClassVar[dict[str, str]] = {}
+    # Separate from _skipped (which only tracks skipped plugins): last problem warned about per malformed marker.
+    _warned_markers: ClassVar[dict[tuple[str | None, str], str]] = {}
 
     @classmethod
     def disable_auto_load(cls, group: str) -> None:
@@ -172,6 +174,7 @@ class PluginLoader:
             cls._cached_loader = None
             cls._cached_generation = None
             cls._skipped.clear()
+            cls._warned_markers.clear()
 
     def load_entry_points(self, group: str | None = None) -> list[str]:
         """Discover installed entry-point manifests and register their plugin classes."""
@@ -219,25 +222,29 @@ class PluginLoader:
 
     def _load_declared_optional_dependencies(self) -> dict[tuple[str | None, str], frozenset[str]]:
         """Load per-(distribution, entry-point) optional-root declarations; a marker that fails to
-        load, or isn't a non-string iterable of roots, is skipped with a WARNING.
+        load, or isn't a non-string iterable of roots, is skipped with a WARNING logged once per problem.
         """
         declared: dict[tuple[str | None, str], frozenset[str]] = {}
         for entry_point in importlib.metadata.entry_points(group=OPTIONAL_DEPENDENCY_ENTRY_POINT_GROUP):
+            dist_name = entry_point.dist.name if entry_point.dist is not None else None
             try:
                 roots = entry_point.load()
             except (ImportError, AttributeError, TypeError) as e:
-                logger.warning("Ignoring optional-dependency marker %s: failed to load (%s)", entry_point.name, e)
+                self._warn_marker_once(dist_name, entry_point.name, f"failed to load ({e})")
                 continue
             if isinstance(roots, (str, bytes)) or not isinstance(roots, Iterable):
-                logger.warning(
-                    "Ignoring optional-dependency marker %s: expected an iterable of module roots, got %r",
-                    entry_point.name,
-                    roots,
+                self._warn_marker_once(
+                    dist_name, entry_point.name, f"expected an iterable of module roots, got {roots!r}"
                 )
                 continue
-            dist_name = entry_point.dist.name if entry_point.dist is not None else None
             declared[(dist_name, entry_point.name)] = frozenset(roots)
         return declared
+
+    def _warn_marker_once(self, dist_name: str | None, name: str, problem: str) -> None:
+        if self._warned_markers.get((dist_name, name)) == problem:
+            return
+        self._warned_markers[(dist_name, name)] = problem
+        logger.warning("Ignoring optional-dependency marker %s: %s", name, problem)
 
     def _register_manifest(self, label: str, group_name: str, base_type: type[Any], manifest: Any) -> list[str]:
         """Validate a manifest sequence and register its concrete classes."""

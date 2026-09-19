@@ -27,6 +27,7 @@ package name, so importlib.metadata discovery is exercised for real and tests st
 
 import importlib
 import logging
+import sys
 import textwrap
 from pathlib import Path
 
@@ -930,6 +931,31 @@ class TestLoadEntryPointsOptionalDependenciesDeclaration:
         )
 
 
+def _build_malformed_marker_distribution(base_dir: Path, pkg_name: str, marker_source: str) -> None:
+    """A distribution whose only entry point is a `mloda.optional_dependencies` marker labelled `pkg_name`."""
+    _build_distribution(
+        base_dir,
+        pkg_name,
+        _FG_MANIFEST,
+        f"""
+        [mloda.optional_dependencies]
+        {pkg_name} = {pkg_name}.optional_deps:OPTIONAL_DEPENDENCIES
+        """,
+    )
+    _write_module(base_dir, pkg_name, "optional_deps", marker_source)
+
+
+def _marker_warnings(caplog: pytest.LogCaptureFixture, label: str) -> list[str]:
+    return [
+        record.getMessage()
+        for record in caplog.records
+        if record.name == plugin_loader_module.__name__
+        and record.levelno == logging.WARNING
+        and "Ignoring optional-dependency marker" in record.getMessage()
+        and label in record.getMessage()
+    ]
+
+
 class TestOptionalDependencyMarkerMalformedValues:
     """A malformed `mloda.optional_dependencies` marker is skipped with a WARNING, never fatal."""
 
@@ -1039,6 +1065,61 @@ class TestOptionalDependencyMarkerMalformedValues:
         assert any("demo" in message for message in warning_messages), (
             f"expected a WARNING about the malformed (bare-string) marker, got: {warning_messages}"
         )
+
+    @pytest.mark.parametrize(
+        ("marker_kind", "marker_source"),
+        [
+            pytest.param("attrerr", "", id="load_failure_missing_attribute"),
+            pytest.param("typeerr", "OPTIONAL_DEPENDENCIES = 42\n", id="non_iterable_value"),
+        ],
+    )
+    @pytest.mark.parametrize(
+        ("reset_between", "expected_warnings"),
+        [
+            pytest.param(False, 1, id="second_load_same_problem_warns_once"),
+            pytest.param(True, 2, id="reset_cache_between_loads_warns_again"),
+        ],
+    )
+    def test_repeated_load_warns_once_per_malformed_marker(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        caplog: pytest.LogCaptureFixture,
+        marker_kind: str,
+        marker_source: str,
+        reset_between: bool,
+        expected_warnings: int,
+    ) -> None:
+        marker_pkg = f"eptest_marker_once_{marker_kind}{int(reset_between)}_pkg"
+        _build_malformed_marker_distribution(tmp_path, marker_pkg, marker_source)
+        monkeypatch.syspath_prepend(str(tmp_path))
+
+        with caplog.at_level(logging.WARNING, logger=plugin_loader_module.__name__):
+            PluginLoader().load_entry_points()
+            if reset_between:
+                PluginLoader.reset_cache()
+            PluginLoader().load_entry_points()
+
+        assert len(_marker_warnings(caplog, marker_pkg)) == expected_warnings
+
+    def test_changed_malformed_marker_problem_warns_again(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        marker_pkg = "eptest_marker_changed_pkg"
+        _build_malformed_marker_distribution(tmp_path, marker_pkg, "")
+        monkeypatch.syspath_prepend(str(tmp_path))
+
+        with caplog.at_level(logging.WARNING, logger=plugin_loader_module.__name__):
+            PluginLoader().load_entry_points()
+
+            _write_module(tmp_path, marker_pkg, "optional_deps", "OPTIONAL_DEPENDENCIES = 42\n")
+            monkeypatch.delitem(sys.modules, f"{marker_pkg}.optional_deps")
+            importlib.invalidate_caches()
+            PluginLoader().load_entry_points()
+
+        messages = _marker_warnings(caplog, marker_pkg)
+        assert len(messages) == 2
+        assert "42" in messages[1]
 
 
 class TestOptionalDependencyDeclarationScopedPerDistribution:

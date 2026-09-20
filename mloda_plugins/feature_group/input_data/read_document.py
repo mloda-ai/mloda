@@ -3,7 +3,15 @@ from pathlib import Path
 from typing import Any, ClassVar
 
 from mloda.core.abstract_plugins.components.utils import is_match_abort
-from mloda.provider import BaseInputData, FeatureSet, PropertySpec
+from mloda.provider import (
+    BaseInputData,
+    CHAIN_SEPARATOR,
+    COLUMN_SEPARATOR,
+    INPUT_DATA_STAGE,
+    FeatureSet,
+    PropertySpec,
+    record_match_rejection,
+)
 from mloda.user import DataAccessCollection, Options
 from mloda_plugins.feature_group.input_data.read_file import ReadFile
 
@@ -32,6 +40,9 @@ class ReadDocument(BaseInputData):
     plus ``suffix`` instead of overriding ``load_data`` wholesale; both are
     required for the class to be discovered as a final reader. Overriding
     ``load_data`` directly is still supported.
+
+    On a DataAccessCollection an unpinned chain- or column-separated name is declined unless a subclass
+    overrides ``match_subclass_data_access``.
     """
 
     _auto_load_group: str = "feature_group/input_data/read_files"
@@ -105,19 +116,22 @@ class ReadDocument(BaseInputData):
                 handle_kind = data_access.handles().get(hint)
                 if handle_kind not in (None, "file"):
                     hint = None
-                elif handle_kind == "file" and not cls._document_file_matches(
-                    data_access.files[hint], document_suffixes
+                elif handle_kind == "file" and not cls._accepts_file(
+                    data_access.files[hint], feature_names, document_suffixes
                 ):
                     return None
             file_match = data_access.resolve(
                 "file",
-                predicate=lambda p: cls._document_file_matches(p, document_suffixes),
+                predicate=lambda p: cls._accepts_file(p, feature_names, document_suffixes),
                 hint=hint,
             )
             if file_match is not None:
                 return file_match
             folder_paths = list(data_access.folders.values())
-            return cls.match_document_data_access(folder_paths, feature_names, document_suffixes)
+            folder_match = cls.match_document_data_access(folder_paths, feature_names, document_suffixes)
+            if folder_match is not None and cls._declines_separator_name(folder_match, feature_names):
+                return None
+            return folder_match
         if isinstance(data_access, (str, Path)):
             path_str = str(data_access)
             result = cls.match_document_data_access([path_str], feature_names)
@@ -151,6 +165,27 @@ class ReadDocument(BaseInputData):
                             continue
                         return os.path.join(da, file)
         return None
+
+    @classmethod
+    def _declines_separator_name(cls, path: str, feature_names: list[str]) -> bool:
+        """Declines a chain/column-separated name; document readers cannot confirm one."""
+        feature = next((name for name in feature_names if CHAIN_SEPARATOR in name or COLUMN_SEPARATOR in name), None)
+        if feature is None:
+            return False
+        record_match_rejection(
+            cls.get_class_name(),
+            f"{cls.get_class_name()} matched the suffix of {path} but declines the chain/column-separated name "
+            f"'{feature}': a document reader has no columns to confirm such a name",
+            stage=INPUT_DATA_STAGE,
+        )
+        return True
+
+    @classmethod
+    def _accepts_file(cls, path: str, feature_names: list[str], document_suffixes: frozenset[str]) -> bool:
+        """Suffix ownership first, then the separator decline, so only owned files record a rejection."""
+        return cls._document_file_matches(path, document_suffixes) and not cls._declines_separator_name(
+            path, feature_names
+        )
 
     @classmethod
     def _document_file_matches(cls, path: str, document_suffixes: frozenset[str]) -> bool:

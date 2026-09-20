@@ -8,12 +8,16 @@ These tests define the target behavior after migration:
 
 import os
 import tempfile
+from pathlib import Path
 from typing import Any
 
+import pytest
 
-from mloda.user import Options
+from mloda.user import Feature, Options, PluginCollector, mloda
+from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
 from mloda_plugins.feature_group.input_data.read_files.text_file_reader import PyFileReader, TextFileReader
 from mloda_plugins.feature_group.input_data.read_document import ReadDocument
+from mloda_plugins.feature_group.input_data.read_document_feature import ReadDocumentFeature
 from mloda_plugins.feature_group.input_data.read_file import ReadFile
 
 
@@ -39,8 +43,8 @@ class TestTextFileReaderInheritance:
         assert not issubclass(TextFileReader, ReadFile)
 
     def test_text_file_reader_suffix(self) -> None:
-        """TextFileReader suffix should remain ('.text',)."""
-        assert TextFileReader.suffix() == (".text",)
+        """TextFileReader claims .text first (file_type source), then .txt and .TXT."""
+        assert TextFileReader.suffix() == (".text", ".txt", ".TXT")
 
 
 class TestTextFileReaderLoadData:
@@ -92,6 +96,23 @@ class TestTextFileReaderLoadData:
             os.unlink(temp_path)
 
 
+class TestTextFileReaderEndToEnd:
+    def test_txt_file_runs_through_read_document_feature(self, tmp_path: Path) -> None:
+        file_path = tmp_path / "note.txt"
+        file_path.write_text("plain txt body\n", encoding="utf-8")
+
+        result = mloda.run_all(
+            [
+                Feature(name, options={"TextFileReader": str(file_path)})
+                for name in ("TextFileReader", "source", "file_type")
+            ],
+            compute_frameworks={PythonDictFramework},
+            plugin_collector=PluginCollector.enabled_feature_groups({ReadDocumentFeature}),
+        )
+
+        assert result == [{"TextFileReader": ["plain txt body\n"], "source": [str(file_path)], "file_type": ["text"]}]
+
+
 class TestPyFileReaderInheritance:
     """Tests for PyFileReader class hierarchy after migration."""
 
@@ -134,15 +155,19 @@ class TestPyFileReaderLoadData:
 class TestMatchSubclassDataAccess:
     """Tests for match_subclass_data_access inherited from ReadDocument."""
 
-    def test_match_subclass_data_access_returns_path_for_string(self) -> None:
+    @pytest.mark.parametrize("suffix", [".text", ".txt", ".TXT"])
+    def test_match_subclass_data_access_returns_path_for_string(self, suffix: str) -> None:
         """TextFileReader returns path for explicit string (feature scope)."""
-        result = TextFileReader.match_subclass_data_access("some_path.text", ["TextFileReader"], options=Options({}))
-        assert result == "some_path.text"
+        result = TextFileReader.match_subclass_data_access(
+            f"some_path{suffix}", ["TextFileReader"], options=Options({})
+        )
+        assert result == f"some_path{suffix}"
 
-    def test_match_subclass_data_access_resolves_from_data_access_collection(self) -> None:
+    @pytest.mark.parametrize("suffix", [".text", ".txt", ".TXT"])
+    def test_match_subclass_data_access_resolves_from_data_access_collection(self, suffix: str) -> None:
         """TextFileReader resolves file path from DataAccessCollection by suffix."""
         from mloda.user import DataAccessCollection, Options
 
-        dac = DataAccessCollection(files={"some_path.text"})
+        dac = DataAccessCollection(files={f"some_path{suffix}"})
         result = TextFileReader.match_subclass_data_access(dac, ["TextFileReader"], options=Options({}))
-        assert result == "some_path.text"
+        assert result == f"some_path{suffix}"

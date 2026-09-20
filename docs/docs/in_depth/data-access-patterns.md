@@ -47,7 +47,7 @@ class ReadFileFeature(FeatureGroup):
 
 ### Common BaseInputData Implementations
 - **ReadFile**: For structured file-based data loading (see [access-feature-data](access-feature-data.md#global-scope-data-access))
-- **ReadDocument**: For unstructured document loading (Markdown, YAML, text). Skips file types owned by ReadFile by default.
+- **ReadDocument**: For unstructured document loading (Markdown `.md`, YAML `.yaml`/`.yml`, text `.text`/`.txt`/`.TXT`). Skips file types owned by ReadFile by default.
 - **DataCreator**: For generating synthetic data (see [access-feature-data](access-feature-data.md#data-creator))
 - **ApiInputData**: For runtime data injection (see [access-feature-data](access-feature-data.md#apidata))
 - **ReadDB**: For database-backed loading

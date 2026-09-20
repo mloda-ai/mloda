@@ -2,7 +2,10 @@
 real mlodaAPI SYNC execution path, down to HookContext. Also proves Options can never override
 the seam's values."""
 
+import contextlib
 from typing import Any
+
+import pytest
 
 from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook
 from mloda.core.abstract_plugins.hook_context import HookContext
@@ -48,12 +51,31 @@ class _ContextCapturingExtender(Extender):
         return result
 
 
-def _prepare_session(options: dict[str, Any] | None = None) -> mlodaAPI:
+class _HookRecordingExtender(Extender):
+    """Records the last HookContext seen per hook."""
+
+    def __init__(self, priority: int = 100) -> None:
+        self.priority = priority
+        self.captured: dict[ExtenderHook, HookContext] = {}
+
+    def wraps(self) -> set[ExtenderHook]:
+        return {ExtenderHook.FEATURE_GROUP_MATCHED, ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE}
+
+    def __call__(self, func: Any, *args: Any, **kwargs: Any) -> Any:
+        result = func(*args, **kwargs)
+        context = HookContext.current()
+        assert context is not None
+        self.captured[context.hook] = context
+        return result
+
+
+def _prepare_session(options: dict[str, Any] | None = None, function_extender: set[Extender] | None = None) -> mlodaAPI:
     return mloda.prepare(
         [Feature(name="verified_context_e2e_col", options=options)],
         compute_frameworks=["PythonDictFramework"],
         plugin_collector=_ENABLED,
         parallelization_modes={ParallelizationMode.SYNC},
+        function_extender=function_extender,
     )
 
 
@@ -168,3 +190,31 @@ class TestOptionsCannotOverrideVerifiedContext:
         assert extender.captured.project_id is None
         assert extender.captured.principal is None
         self._assert_spoofed_options_present_on_the_feature(extender)
+
+
+_PREPARE_SCOPE = {"tenant_id": "acme-prepare", "project_id": "proj-prepare", "principal": "hash-prepare"}
+_RUN_SCOPE = {"tenant_id": "tenant-run", "project_id": "proj-run", "principal": "hash-run"}
+_NO_SCOPE: dict[str, str | None] = {"tenant_id": None, "project_id": None, "principal": None}
+
+
+def _identity(context: HookContext) -> dict[str, str | None]:
+    return {"tenant_id": context.tenant_id, "project_id": context.project_id, "principal": context.principal}
+
+
+class TestEachHookReportsTheIdentityActiveWhenItsPhaseBegan:
+    """A run outside any scope must not inherit the identity of the scope that prepared the session."""
+
+    @pytest.mark.parametrize("run_scope", [_RUN_SCOPE, None])
+    def test_match_reports_prepare_scope_and_calculate_reports_run_scope(
+        self, run_scope: dict[str, str] | None
+    ) -> None:
+        extender = _HookRecordingExtender()
+
+        with verified_context(**_PREPARE_SCOPE):
+            session = _prepare_session(function_extender={extender})
+
+        with verified_context(**run_scope) if run_scope else contextlib.nullcontext():
+            session.run(parallelization_modes={ParallelizationMode.SYNC})
+
+        assert _identity(extender.captured[ExtenderHook.FEATURE_GROUP_MATCHED]) == _PREPARE_SCOPE
+        assert _identity(extender.captured[ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE]) == (run_scope or _NO_SCOPE)

@@ -688,7 +688,7 @@ class _RunCompleteRecorder(Extender):
         priority: int = 100,
         hooks: set[ExtenderHook] | None = None,
         raises: bool = False,
-        error: type[Exception] = RuntimeError,
+        error: type[BaseException] = RuntimeError,
     ) -> None:
         self.label = label
         self.log = log
@@ -715,7 +715,12 @@ def _entered_orchestrator(extenders: set[Extender]) -> ExecutionOrchestrator:
     return orchestrator
 
 
-class TestFinalizeNotifiesExtendersOfRunCompletion:
+def _finalize_then_exit(orchestrator: ExecutionOrchestrator) -> None:
+    orchestrator._finalize()
+    orchestrator.__exit__(None, None, None)
+
+
+class TestExitNotifiesExtendersOfRunCompletion:
     def test_notifies_with_the_run_id_after_join_and_the_flight_table_sweep(self) -> None:
         log: _RunLog = []
         orchestrator = _entered_orchestrator({_RunCompleteRecorder("extender", log)})
@@ -726,27 +731,55 @@ class TestFinalizeNotifiesExtendersOfRunCompletion:
 
         orchestrator._finalize()
 
+        assert log == [("join", None), ("sweep", None)]
+
+        orchestrator.__exit__(None, None, None)
+
         assert log == [("join", None), ("sweep", None), ("extender", "run-1")]
+
+    def test_exit_shuts_the_manager_down_when_an_extender_raises_a_base_exception(self) -> None:
+        log: _RunLog = []
+        extender = _RunCompleteRecorder("extender", log, raises=True, error=KeyboardInterrupt)
+        orchestrator = _entered_orchestrator({extender})
+        orchestrator.manager = Mock()
+        orchestrator.manager.shutdown.side_effect = lambda: log.append(("shutdown", None))
+
+        with pytest.raises(KeyboardInterrupt):
+            orchestrator.__exit__(None, None, None)
+
+        assert log == [("extender", "run-1"), ("shutdown", None)]
+
+    def test_exit_on_a_never_entered_orchestrator_does_not_raise(self) -> None:
+        ExecutionOrchestrator(Mock(spec=ExecutionPlan)).__exit__(None, None, None)
 
     def test_notifies_when_compute_raises_and_the_run_exception_propagates(self) -> None:
         log: _RunLog = []
         orchestrator = _entered_orchestrator({_RunCompleteRecorder("extender", log)})
+        orchestrator.join = Mock(side_effect=lambda: log.append(("join", None)))  # type: ignore[method-assign]
         failure = RuntimeError("compute failed")
         orchestrator._check_for_error = Mock(side_effect=failure)  # type: ignore[method-assign]
 
         with pytest.raises(RuntimeError) as raised:
-            orchestrator.compute()
+            try:
+                orchestrator.compute()
+            finally:
+                orchestrator.__exit__(None, None, None)
 
         assert raised.value is failure
-        assert log == [("extender", "run-1")]
+        assert log == [("join", None), ("extender", "run-1")]
 
-    def test_does_not_notify_when_join_raises(self) -> None:
+    @pytest.mark.parametrize("failing_call", ["join", "set_artifacts"])
+    def test_does_not_notify_when_the_worker_join_did_not_complete(
+        self, failing_call: str, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         log: _RunLog = []
         orchestrator = _entered_orchestrator({_RunCompleteRecorder("extender", log)})
-        orchestrator.join = Mock(side_effect=Exception("workers could not be joined"))  # type: ignore[method-assign]
+        owner = orchestrator.data_lifecycle_manager if failing_call == "set_artifacts" else orchestrator
+        monkeypatch.setattr(owner, failing_call, Mock(side_effect=Exception("teardown failed")))
 
-        with pytest.raises(Exception, match="workers could not be joined"):
+        with pytest.raises(Exception, match="teardown failed"):
             orchestrator._finalize()
+        orchestrator.__exit__(None, None, None)
 
         assert log == []
 
@@ -755,7 +788,7 @@ class TestFinalizeNotifiesExtendersOfRunCompletion:
         priorities = [50, 20, 60, 10, 40, 30]
         orchestrator = _entered_orchestrator({_RunCompleteRecorder(f"p{p}", log, priority=p) for p in priorities})
 
-        orchestrator._finalize()
+        _finalize_then_exit(orchestrator)
 
         assert [label for label, _ in log] == [f"p{p}" for p in sorted(priorities)]
 
@@ -763,7 +796,7 @@ class TestFinalizeNotifiesExtendersOfRunCompletion:
         log: _RunLog = []
         orchestrator = _entered_orchestrator({_RunCompleteRecorder("wraps_nothing", log, hooks=set())})
 
-        orchestrator._finalize()
+        _finalize_then_exit(orchestrator)
 
         assert log == [("wraps_nothing", "run-1")]
 
@@ -776,7 +809,7 @@ class TestFinalizeNotifiesExtendersOfRunCompletion:
         orchestrator = _entered_orchestrator({raiser, survivor})
 
         with caplog.at_level(logging.ERROR):
-            orchestrator._finalize()
+            _finalize_then_exit(orchestrator)
 
         assert log == [("raiser", "run-1"), ("survivor", "run-1")]
         error_records = [r for r in caplog.records if r.levelno == logging.ERROR]
@@ -789,16 +822,14 @@ class TestFinalizeNotifiesExtendersOfRunCompletion:
         arg_values = args.values() if isinstance(args, Mapping) else (args or ())
         assert not [a for a in arg_values if isinstance(a, BaseException)]
 
-    def test_extender_whose_exception_str_raises_does_not_escape_finalize(
-        self, caplog: pytest.LogCaptureFixture
-    ) -> None:
+    def test_extender_whose_exception_str_raises_does_not_escape_exit(self, caplog: pytest.LogCaptureFixture) -> None:
         log: _RunLog = []
         raiser = _RunCompleteRecorder("raiser", log, priority=10, raises=True, error=_UnprintableError)
         survivor = _RunCompleteRecorder("survivor", log, priority=20)
         orchestrator = _entered_orchestrator({raiser, survivor})
 
         with caplog.at_level(logging.ERROR):
-            orchestrator._finalize()
+            _finalize_then_exit(orchestrator)
 
         assert log == [("raiser", "run-1"), ("survivor", "run-1")]
         assert [r for r in caplog.records if r.levelno == logging.ERROR]
@@ -810,7 +841,10 @@ class TestFinalizeNotifiesExtendersOfRunCompletion:
         orchestrator._check_for_error = Mock(side_effect=failure)  # type: ignore[method-assign]
 
         with pytest.raises(RuntimeError) as raised:
-            orchestrator.compute()
+            try:
+                orchestrator.compute()
+            finally:
+                orchestrator.__exit__(None, None, None)
 
         assert log == [("raiser", "run-1")]
         assert raised.value is failure

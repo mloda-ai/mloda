@@ -1,3 +1,4 @@
+import contextlib
 from copy import deepcopy
 from dataclasses import replace
 from typing import Any, Callable, Generator
@@ -570,8 +571,9 @@ class mlodaAPI:
                 artifacts=artifacts,
                 run_context=run_context,
             )
-            for step_uuid, result in runner.compute_stream():
-                yield (step_uuid, result) if with_step_uuids else result
+            with contextlib.closing(runner.compute_stream()) as stream:
+                for step_uuid, result in stream:
+                    yield (step_uuid, result) if with_step_uuids else result
         finally:
             self._exit_runner_context(runner)
 

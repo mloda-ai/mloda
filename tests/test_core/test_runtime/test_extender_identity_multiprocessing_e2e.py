@@ -308,3 +308,34 @@ class TestRunCompleteFiresAfterAMultiprocessingWorkerClosedItsExtender:
         )
 
         assert [sentinel_seen for _, _, sentinel_seen in probe.completions] == [True]
+
+
+class _UnpicklableExtender(Extender):
+    def __init__(self) -> None:
+        self.lock = threading.Lock()
+
+    def wraps(self) -> set[ExtenderHook]:
+        return set()
+
+    def __call__(self, func: Any, *args: Any, **kwargs: Any) -> Any:
+        return func(*args, **kwargs)
+
+
+@pytest.mark.timeout(30)
+class TestRunCompleteFiresWhenSetupFails:
+    @pytest.mark.parametrize("call_site", ["run", "stream_run"])
+    def test_multiprocessing_preflight_rejection_notifies_the_probe_once_in_the_parent(
+        self, call_site: str, tmp_path: Path
+    ) -> None:
+        probe = _RunCompleteProbeExtender(tmp_path / "closed.txt")
+        session = _prepare_run_complete_session(ParallelizationMode.MULTIPROCESSING)
+
+        with pytest.raises(ValueError, match="cannot be pickled"):
+            list(
+                getattr(session, call_site)(
+                    parallelization_modes={ParallelizationMode.MULTIPROCESSING},
+                    function_extender={probe, _UnpicklableExtender()},
+                )
+            )
+
+        assert [(run_id, pid) for run_id, pid, _ in probe.completions] == [(session.run_id, os.getpid())]

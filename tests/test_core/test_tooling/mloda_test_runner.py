@@ -204,10 +204,8 @@ class MlodaTestRunner:
         try:
             runner.__enter__(parallelization_modes, function_extender, api_data)
             runner.compute()
-            runner.__exit__(None, None, None)
         finally:
-            if runner.manager is not None:
-                runner.manager.shutdown()
+            runner.__exit__(None, None, None)
 
         return runner
 

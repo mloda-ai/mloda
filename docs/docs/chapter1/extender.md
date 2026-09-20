@@ -170,3 +170,28 @@ class MyExtender(Extender):
 ```
 
 No custom `__setstate__` is needed for `_drop_guard` itself: pickle reconstructs it as a fresh, unwarned guard on its own. Plan-time picklability validation and worker-dispatch pickling both pickle the same live extender instance, so this drop-and-warn fires once, in the parent, during plan-time validation; the later dispatch pickle is then silent, since the guard has already fired for that instance.
+
+#### 8. Knowing when a run is finished
+
+`on_run_complete(run_id)` is a no-op hook called once per `run()`, `run_all()`, `stream_run()` or `stream_all()` call whose execution started. A stream starts on its first iteration: one never iterated never runs and never fires, a started one fires when exhausted or closed. It runs in the parent, on the caller's own extender objects that the run used (registry strict mode drops unregistered ones, see section 4), after all workers were joined, in every parallelization mode; `close()`, by contrast, runs only on a MULTIPROCESSING worker's copy. It fires when execution raised, but not when the run failed before execution started (setup or validation errors) or when joining or terminating the workers raised. A worker that does not exit within `graceful_shutdown_timeout` (one deadline for all workers) is terminated, possibly mid-`close()`, and the hook still fires: a sink whose records must not be lost should flush synchronously, not only in `close()`.
+
+`run_id` is the session's id, the same value as `HookContext.run_id` in the per-calculation hooks, so records can be correlated; re-running a prepared session fires again with the same id. `HookContext.current()` is `None` inside this hook. Extenders are notified in ascending `priority` order (ties in no fixed order), even if `wraps()` returns nothing. The hook is synchronous with no time budget: a blocking hook blocks the caller. An `Exception` raised in it is logged and never propagated, `raise_on_error` and `never_fall_back` do not apply, and the remaining extenders are still notified.
+
+```python
+from typing import Any
+
+from mloda.steward import Extender, ExtenderHook
+
+class SealingExtender(Extender):
+    def __init__(self) -> None:
+        self.completed_run_ids: list[str | None] = []
+
+    def wraps(self) -> set[ExtenderHook]:
+        return set()
+
+    def __call__(self, func: Any, *args: Any, **kwargs: Any) -> Any:
+        return func(*args, **kwargs)
+
+    def on_run_complete(self, run_id: str | None) -> None:
+        self.completed_run_ids.append(run_id)
+```

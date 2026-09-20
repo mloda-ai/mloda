@@ -108,11 +108,12 @@ _ENABLED_CAUSE_CHAIN = PluginCollector.enabled_feature_groups({CauseChainFeature
 # --------------------------------------------------------------------------- #
 
 
-def test_sync_preserves_import_error_type() -> None:
+def test_sync_preserves_import_error_type(caplog: pytest.LogCaptureFixture) -> None:
     """SYNC ``run_all`` must surface the original ``ImportError`` type, not a bare Exception.
 
     FAILS today: ``_check_for_error`` raises a bare ``Exception`` so
     ``pytest.raises(ImportError)`` does not match and the Exception propagates.
+    It also logs the traceback exactly once, on an mloda logger, never on the root logger.
     """
     with pytest.raises(ImportError, match="bm25s"):
         mloda.run_all(
@@ -121,6 +122,10 @@ def test_sync_preserves_import_error_type() -> None:
             plugin_collector=_ENABLED_IMPORT_ERROR,
             parallelization_modes={ParallelizationMode.SYNC},
         )
+
+    assert [r.name for r in caplog.records if r.name == "root"] == []
+    traceback_records = [r for r in caplog.records if "Traceback" in r.getMessage()]
+    assert [r.name for r in traceback_records] == ["mloda.core.runtime.run"]
 
 
 # --------------------------------------------------------------------------- #

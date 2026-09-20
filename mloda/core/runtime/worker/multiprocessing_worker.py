@@ -16,6 +16,9 @@ from mloda.core.core.step.join_step import JoinStep
 from mloda.core.core.step.transform_frame_work_step import TransformFrameworkStep
 
 
+logger = logging.getLogger(__name__)
+
+
 def _handle_stop_command(command_queue: multiprocessing.Queue[Any]) -> None:
     """Puts a 'STOP' command in the command queue."""
     if command_queue:
@@ -28,7 +31,7 @@ def _close_extenders(cfw: ComputeFramework) -> None:
         try:
             extender.close()
         except Exception as e:
-            logging.error(f"Extender {extender.__class__.__name__}.close() raised: {e}")
+            logger.error(f"Extender {extender.__class__.__name__}.close() raised: {e}")
 
 
 def _handle_data_dropping(
@@ -136,7 +139,6 @@ def worker(
             except Exception as e:
                 error_message = f"An error occurred: {e}"
                 msg = f"{error_message}\nFull traceback:\n{traceback.format_exc()}"
-                logging.error(msg)
                 exc_info = traceback.format_exc()
                 if cfw_register:
                     try:
@@ -176,7 +178,6 @@ def worker(
             except Exception as e:
                 error_message = f"An error occurred: {e}"
                 msg = f"{error_message}\nFull traceback:\n{traceback.format_exc()}"
-                logging.error(msg)
                 exc_info = traceback.format_exc()
                 if cfw_register:
                     try:
@@ -197,7 +198,7 @@ def worker(
 
 def error_out(cfw_register: CfwManager, command_queue: multiprocessing.Queue[Any]) -> None:
     msg = """This is a critical error, the location should not be None."""
-    logging.error(msg)
+    logger.error(msg)
     exc_info = traceback.format_exc()
     if cfw_register:
         cfw_register.set_error(msg, exc_info)

@@ -46,6 +46,16 @@ class _RaisingCloseExtender(Extender):
         raise RuntimeError("close boom")
 
 
+class _RaisingCommand:
+    """Module-level so it pickles through the spawn-context queue."""
+
+    def execute(self, *args: Any, **kwargs: Any) -> Any:
+        raise RuntimeError("command boom")
+
+
+_WORKER_LOGGER_NAME = "mloda.core.runtime.worker.multiprocessing_worker"
+
+
 class TestWorkerSetsWorkerIndexBeforeTheCommandLoop:
     def test_worker_index_is_set_on_the_cfw_instance(self) -> None:
         ctx = mp_spawn_context()
@@ -101,7 +111,9 @@ class TestWorkerRunsChildBootstrapBeforeTheCommandLoop:
 
 
 class TestWorkerReportsChildBootstrapExceptionThroughTheErrorChannel:
-    def test_bootstrap_exception_is_reported_via_set_error_and_stop_without_propagating(self) -> None:
+    def test_bootstrap_exception_is_reported_via_set_error_and_stop_without_propagating(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
         ctx = mp_spawn_context()
         command_queue: multiprocessing.Queue[Any] = ctx.Queue()
         result_queue: multiprocessing.Queue[Any] = ctx.Queue()
@@ -125,6 +137,50 @@ class TestWorkerReportsChildBootstrapExceptionThroughTheErrorChannel:
         # exactly like the existing except block at the bottom of the while-True loop does.
         stopped_command = command_queue.get(timeout=2)
         assert stopped_command == "STOP"
+
+        # The parent logs the traceback once; the child must not log it, least of all on the root logger.
+        assert "root" not in {r.name for r in caplog.records}
+        assert not [r for r in caplog.records if "Traceback" in r.getMessage()]
+
+
+class TestWorkerReportsCommandExceptionThroughTheErrorChannel:
+    def test_command_exception_is_reported_via_set_error_and_stop_without_logging_a_traceback(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        ctx = mp_spawn_context()
+        command_queue: multiprocessing.Queue[Any] = ctx.Queue()
+        result_queue: multiprocessing.Queue[Any] = ctx.Queue()
+        cfw_register = Mock(spec=CfwManager)
+        cfw_register.get_location.return_value = "grpc://localhost:9999"
+        cfw_register.get_run_context.return_value = RunContext()
+        cfw = PythonDictFramework(mode=ParallelizationMode.MULTIPROCESSING, children_if_root=frozenset())
+        command_queue.put(_RaisingCommand())
+
+        worker(command_queue, result_queue, cfw_register, cfw, uuid4(), worker_index=0)
+
+        cfw_register.set_error.assert_called_once()
+        call_args = cfw_register.set_error.call_args
+        assert "command boom" in call_args.args[0]
+        assert isinstance(call_args.kwargs.get("exception"), RuntimeError)
+        assert command_queue.get(timeout=2) == "STOP"
+
+        assert "root" not in {r.name for r in caplog.records}
+        assert not [r for r in caplog.records if "Traceback" in r.getMessage()]
+
+
+class TestWorkerLogsCriticalLocationErrorOnItsOwnLogger:
+    def test_missing_location_error_is_not_logged_on_the_root_logger(self, caplog: pytest.LogCaptureFixture) -> None:
+        ctx = mp_spawn_context()
+        command_queue: multiprocessing.Queue[Any] = ctx.Queue()
+        result_queue: multiprocessing.Queue[Any] = ctx.Queue()
+        cfw_register = Mock(spec=CfwManager)
+        cfw_register.get_location.return_value = None
+        cfw = PythonDictFramework(mode=ParallelizationMode.MULTIPROCESSING, children_if_root=frozenset())
+
+        worker(command_queue, result_queue, cfw_register, cfw, uuid4(), worker_index=0)
+
+        cfw_register.set_error.assert_called_once()
+        assert [r.name for r in caplog.records if "critical error" in r.getMessage()] == [_WORKER_LOGGER_NAME]
 
 
 class TestWorkerExitsWhenTheParentProcessIsNoLongerAlive:
@@ -175,7 +231,7 @@ class TestWorkerSwallowsExtenderCloseExceptions:
     """A raising close() must not propagate out of worker(), and must not prevent other
     extenders' close() from running."""
 
-    def test_worker_does_not_raise_and_other_extender_still_closes(self) -> None:
+    def test_worker_does_not_raise_and_other_extender_still_closes(self, caplog: pytest.LogCaptureFixture) -> None:
         ctx = mp_spawn_context()
         command_queue: multiprocessing.Queue[Any] = ctx.Queue()
         result_queue: multiprocessing.Queue[Any] = ctx.Queue()
@@ -191,6 +247,8 @@ class TestWorkerSwallowsExtenderCloseExceptions:
         worker(command_queue, result_queue, cfw_register, cfw, uuid4(), worker_index=0)
 
         assert ok_extender.close_calls == [True]
+        assert "root" not in {r.name for r in caplog.records}
+        assert [r.name for r in caplog.records if "close boom" in r.getMessage()] == [_WORKER_LOGGER_NAME]
 
 
 class TestWorkerClosesExtendersEvenWhenChildBootstrapRaises:

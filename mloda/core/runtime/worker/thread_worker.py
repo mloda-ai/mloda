@@ -20,4 +20,3 @@ def thread_worker(
         msg = f"{error_message}\nFull traceback:\n{traceback.format_exc()}"
         exc_info = traceback.format_exc()
         cfw_register.set_error(msg, exc_info, exception=e)
-        raise

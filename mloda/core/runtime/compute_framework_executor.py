@@ -328,7 +328,6 @@ class ComputeFrameworkExecutor:
         except Exception as e:
             error_message = f"An error occurred: {e}"
             msg = f"{error_message}\nFull traceback:\n{traceback.format_exc()}"
-            logging.error(msg)
             exc_info = traceback.format_exc()
             self.cfw_register.set_error(msg, exc_info, exception=e)
 

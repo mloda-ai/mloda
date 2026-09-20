@@ -92,6 +92,12 @@ Read it *after* calling `func(*args, **kwargs)` in your own `__call__` to also s
 
 `FEATURE_GROUP_MATCHED`, `INPUT_DATA_LOAD`, and `JOIN` populate their own extra fields and leave the rest at their defaults. On `INPUT_DATA_LOAD`, `data_access_identity` and `data_access_format` carry a string identity and format for the data-access handle/value; `data_access_dataset_version` stays `None`, since no dataset versioning exists yet. On `JOIN`, `join_type` and `join_keys` come from the `Link` being merged. On `FEATURE_GROUP_MATCHED`, `plan_feature_count`, `plan_node_count`, and `plan_depth` are running counts and recursion depth at match time, not final totals for the whole plan.
 
+`FEATURE_GROUP_MATCHED` reads the `mloda.steward.verified_context()` scope active while a session is planned (for example `prepare()`, `explain()`, `diagnose()`, and the planning half of `run_all()`/`stream_all()`). Every other hook reads the scope active at run-call time (`run()`, `stream_run()`, and the run half of `run_all()`/`stream_all()`; for the stream calls that is creation, not first iteration).
+
+A session prepared under one scope and run under another (or none) therefore reports each hook its own phase's identity, so a match-time gate authorizes the preparer, not the runner. Wrap `prepare()` and `run()` in one scope or use `run_all()`/`stream_all()`; a server that prepares once and runs per tenant should gate on a run-time hook such as `FEATURE_GROUP_CALCULATE_FEATURE`. Identity is not snapshotted at prepare, so a run outside any scope never inherits the preparer's identity.
+
+`explain()` and `diagnose()` let an exception a breaking extender (`raise_on_error = True`) raises propagate, for example a refusal at `FEATURE_GROUP_MATCHED`; `diagnose()` still projects it when it is one of the error types it projects. An extender with `raise_on_error = False` is logged and swallowed instead, so resolution falls back.
+
 ```python
 from mloda.steward import Extender, ExtenderHook, HookContext
 

@@ -332,6 +332,21 @@ class TestDenyBeforeMatch:
                 function_extender={extender},
             )
 
+    def test_diagnose_does_not_project_the_extender_refusal_and_lets_it_propagate(self) -> None:
+        veto_name = f"{_MARKER}_veto_col_a"
+        extender = _MatchVetoExtender(veto_name)
+
+        with pytest.raises(RuntimeError, match="denied match"):
+            mloda.diagnose(
+                [Feature(veto_name)],
+                compute_frameworks=["PythonDictFramework"],
+                plugin_collector=PluginCollector.enabled_feature_groups(
+                    {_MatchVetoFeatureGroupA, _MatchVetoFeatureGroupB}
+                ),
+                parallelization_modes={ParallelizationMode.SYNC},
+                function_extender={extender},
+            )
+
     def test_veto_does_not_affect_an_unrelated_sibling_feature_requested_alone(self) -> None:
         veto_name = f"{_MARKER}_veto_col_a"
         sibling_name = f"{_MARKER}_veto_col_b"

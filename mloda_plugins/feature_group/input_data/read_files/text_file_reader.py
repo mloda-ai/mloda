@@ -6,7 +6,7 @@ from mloda_plugins.feature_group.input_data.read_document import ReadDocument
 class TextFileReader(ReadDocument):
     @classmethod
     def suffix(cls) -> tuple[str, ...]:
-        return (".text",)
+        return (".text", ".txt", ".TXT")
 
     @classmethod
     def produce_document(cls, file_path: str) -> Any:

@@ -82,9 +82,12 @@ Output
 
 #### ReadDocument: Unstructured File Access
 
-For unstructured files (Markdown, YAML, text), mloda provides `ReadDocumentFeature`.
+For unstructured files (Markdown `.md`, YAML `.yaml`/`.yml`, text `.text`/`.txt`/`.TXT`), mloda provides `ReadDocumentFeature`.
 It skips structured file types (CSV, JSON, Parquet, etc.) by default to avoid conflicts
 with `ReadFile`.
+ReadDocument matches by file suffix only and ignores feature names, so when a folder or file set mixes document
+suffixes such as `.txt` with structured files (CSV, Parquet), exclude `ReadDocumentFeature` through the
+`PluginCollector` (`PluginCollector.disabled_feature_groups({ReadDocumentFeature})`) to avoid multiple feature group matches.
 
 To read a structured file type as a document, use the `document_suffixes` option:
 

@@ -84,6 +84,13 @@ class Extender(ABC):
         return within the run's ``graceful_shutdown_timeout`` (default 2.0s), a budget shared across
         every extender closing in that worker, or the worker may be terminated mid-close."""
 
+    def on_run_complete(self, run_id: str | None) -> None:
+        """Called once per run in the PARENT on the caller's own extender objects, after all workers
+        were joined, in every mode (close() is MULTIPROCESSING worker only). Fires when execution raised,
+        not when the run failed before execution started (setup or validation errors) nor when joining
+        the workers raised. A session re-run fires again with the same run_id. raise_on_error and
+        never_fall_back do not apply: an Exception raised here is always logged, never propagated."""
+
     @staticmethod
     def feature_group_name(func: Any) -> str:
         """Resolve the owning feature group class name of the hooked callable.

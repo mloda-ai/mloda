@@ -13,6 +13,9 @@ from typing import Any, Generator, Iterator
 from unittest.mock import Mock, MagicMock
 from uuid import UUID, uuid4
 
+from mloda.core.abstract_plugins.components.parallelization_modes import ParallelizationMode
+from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook
+from mloda.core.abstract_plugins.run_context import RunContext
 from mloda.core.prepare.execution_plan import ExecutionPlan
 from mloda.core.runtime.run import ExecutionOrchestrator
 
@@ -262,6 +265,42 @@ class TestComputeStreamCleanup:
 
         orchestrator.data_lifecycle_manager.set_artifacts.assert_called_once()
         orchestrator.join.assert_called_once()
+
+
+class _RunCompleteProbe(Extender):
+    def __init__(self) -> None:
+        self.run_ids: list[str | None] = []
+
+    def wraps(self) -> set[ExtenderHook]:
+        return set()
+
+    def __call__(self, func: Any, *args: Any, **kwargs: Any) -> Any:
+        return func(*args, **kwargs)
+
+    def on_run_complete(self, run_id: str | None) -> None:
+        self.run_ids.append(run_id)
+
+
+class TestComputeStreamNotifiesExtenders:
+    def test_early_closed_stream_notifies_extenders_once(self) -> None:
+        probe = _RunCompleteProbe()
+        mock_planner = Mock(spec=ExecutionPlan)
+        mock_planner.__iter__ = Mock(return_value=iter([]))
+        orchestrator = ExecutionOrchestrator(mock_planner)
+        orchestrator.__enter__({ParallelizationMode.SYNC}, {probe}, None, None, RunContext(run_id="stream-run"))
+
+        def mock_pop() -> Generator[tuple[UUID, Any], None, None]:
+            yield uuid4(), "data_1"
+            yield uuid4(), "data_2"
+
+        orchestrator.data_lifecycle_manager = MagicMock()
+        orchestrator.data_lifecycle_manager.pop_result_data_collection = mock_pop
+
+        gen = orchestrator.compute_stream()
+        next(gen)
+        gen.close()
+
+        assert probe.run_ids == ["stream-run"]
 
 
 class TestComputeStreamErrorHandling:

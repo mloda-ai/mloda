@@ -26,6 +26,7 @@ from mloda.core.core.step.join_step import JoinStep
 from mloda.core.core.step.transform_frame_work_step import TransformFrameworkStep
 from mloda.core.abstract_plugins.components.feature_set import FeatureSet
 from mloda.core.abstract_plugins.components.error_utils import MlodaRunError, internal_invariant_error
+from mloda.core.abstract_plugins.components.utils import contained_raise_reason
 from mloda.core.abstract_plugins.feature_group import format_feature_group_class
 from mloda.core.runtime.validate_multiprocessing_link import (
     raise_on_multiprocessing_connection_conflict,
@@ -106,6 +107,7 @@ class ExecutionOrchestrator:
         self.cfw_register: CfwManager
         self.manager: Any = None
         self.function_extender: set[Extender] | None = None
+        self._run_id: str | None = None
         self.worker_extender_payload: bytes | None = None
         self._graceful_shutdown_timeout: float = RunContext().graceful_shutdown_timeout
 
@@ -251,6 +253,15 @@ class ExecutionOrchestrator:
         self.data_lifecycle_manager.set_artifacts(self.cfw_register.get_artifacts())
         self.join()
         self._drop_all_uploaded_flight_tables()
+        self._notify_run_complete()
+
+    def _notify_run_complete(self) -> None:
+        """A raising extender's on_run_complete() must not stop the others from running."""
+        for extender in sorted(self.function_extender or (), key=lambda e: e.priority):
+            try:
+                extender.on_run_complete(self._run_id)
+            except Exception as e:
+                logger.error("Extender %s.on_run_complete() %s", extender.__class__.__name__, contained_raise_reason(e))
 
     def _drop_all_uploaded_flight_tables(self) -> None:
         """Final sweep of every cfw's flight table by uuid key, including worker-dispatched cfws."""
@@ -509,6 +520,7 @@ class ExecutionOrchestrator:
         """
         run_context = run_context if run_context is not None else RunContext()
         self.function_extender = function_extender
+        self._run_id = run_context.run_id
         self._graceful_shutdown_timeout = run_context.graceful_shutdown_timeout
 
         if ParallelizationMode.MULTIPROCESSING not in parallelization_modes:

@@ -10,12 +10,16 @@ Drives ExecutionOrchestrator.__enter__ and ComputeFrameworkExecutor.init_compute
 (real machinery, no mocks), for precise control over which mode each individual framework resolves
 to. test_extender_handle_survives_multiprocessing_run_e2e.py covers the same guarantee through a
 real mlodaAPI run, where an ExtenderHook's __call__ does fire in-parent for a step whose compute
-framework resolves to a non-MULTIPROCESSING mode."""
+framework resolves to a non-MULTIPROCESSING mode. The run-complete cases at the end check that the
+caller's own object, not a worker's copy, is notified in the parent."""
 
 from __future__ import annotations
 
+import os
 import pickle  # nosec B403
 import threading
+import time
+from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
@@ -24,7 +28,8 @@ import pytest
 from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook
 from mloda.core.prepare.execution_plan import ExecutionPlan
 from mloda.core.runtime.run import ExecutionOrchestrator
-from mloda.user import ParallelizationMode
+from mloda.provider import BaseInputData, ComputeFramework, DataCreator, FeatureGroup, FeatureSet
+from mloda.user import Feature, ParallelizationMode, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
 
 
@@ -207,3 +212,99 @@ class TestHandleStrippingExtenderNeverLosesStateToTheRegisterProxy:
             )
         finally:
             orchestrator.__exit__(None, None, None)
+
+
+_RUN_COMPLETE_COLUMN = "run_complete_notification_e2e_col"
+
+
+class _RunCompleteFeatureGroup(FeatureGroup):
+    @classmethod
+    def input_data(cls) -> BaseInputData | None:
+        return DataCreator({_RUN_COMPLETE_COLUMN})
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PythonDictFramework}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return {_RUN_COMPLETE_COLUMN: [1, 2, 3]}
+
+
+_RUN_COMPLETE_ENABLED = PluginCollector.enabled_feature_groups({_RunCompleteFeatureGroup})
+
+
+class _RunCompleteProbeExtender(Extender):
+    """Records (run_id, pid, sentinel_exists) in the caller's own object; close() runs only in a worker's copy."""
+
+    def __init__(self, sentinel_path: Path, close_delay: float = 0.0) -> None:
+        self._sentinel_path = sentinel_path
+        self._close_delay = close_delay
+        self.completions: list[tuple[str | None, int, bool]] = []
+
+    def wraps(self) -> set[ExtenderHook]:
+        return set()
+
+    def __call__(self, func: Any, *args: Any, **kwargs: Any) -> Any:
+        return func(*args, **kwargs)
+
+    def close(self) -> None:
+        time.sleep(self._close_delay)
+        self._sentinel_path.write_text("closed")
+
+    def on_run_complete(self, run_id: str | None) -> None:
+        self.completions.append((run_id, os.getpid(), self._sentinel_path.exists()))
+
+
+def _prepare_run_complete_session(mode: ParallelizationMode) -> mloda:
+    return mloda.prepare(
+        [Feature(name=_RUN_COMPLETE_COLUMN)],
+        compute_frameworks=["PythonDictFramework"],
+        plugin_collector=_RUN_COMPLETE_ENABLED,
+        parallelization_modes={mode},
+    )
+
+
+@pytest.mark.timeout(30)
+@pytest.mark.parametrize(
+    "mode", [ParallelizationMode.SYNC, ParallelizationMode.THREADING, ParallelizationMode.MULTIPROCESSING]
+)
+class TestRunCompleteNotifiesTheCallersOwnExtenderInTheParent:
+    def test_notified_once_in_the_parent_with_the_session_run_id(
+        self, mode: ParallelizationMode, tmp_path: Path, flight_server: Any
+    ) -> None:
+        probe = _RunCompleteProbeExtender(tmp_path / "closed.txt")
+        session = _prepare_run_complete_session(mode)
+
+        session.run(parallelization_modes={mode}, function_extender={probe}, flight_server=flight_server)
+
+        assert [(run_id, pid) for run_id, pid, _ in probe.completions] == [(session.run_id, os.getpid())]
+
+    def test_running_the_session_twice_notifies_twice_with_the_same_run_id(
+        self, mode: ParallelizationMode, tmp_path: Path, flight_server: Any
+    ) -> None:
+        probe = _RunCompleteProbeExtender(tmp_path / "closed.txt")
+        session = _prepare_run_complete_session(mode)
+
+        session.run(parallelization_modes={mode}, function_extender={probe}, flight_server=flight_server)
+        session.run(parallelization_modes={mode}, function_extender={probe}, flight_server=flight_server)
+
+        assert [run_id for run_id, _, _ in probe.completions] == [session.run_id, session.run_id]
+
+
+@pytest.mark.timeout(30)
+class TestRunCompleteFiresAfterAMultiprocessingWorkerClosedItsExtender:
+    def test_worker_close_sentinel_already_exists_when_the_parent_is_notified(
+        self, tmp_path: Path, flight_server: Any
+    ) -> None:
+        probe = _RunCompleteProbeExtender(tmp_path / "closed.txt", close_delay=0.5)
+        session = _prepare_run_complete_session(ParallelizationMode.MULTIPROCESSING)
+
+        session.run(
+            parallelization_modes={ParallelizationMode.MULTIPROCESSING},
+            function_extender={probe},
+            flight_server=flight_server,
+            graceful_shutdown_timeout=5.0,
+        )
+
+        assert [sentinel_seen for _, _, sentinel_seen in probe.completions] == [True]

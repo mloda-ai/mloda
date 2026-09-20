@@ -86,9 +86,13 @@ class Extender(ABC):
 
     def on_run_complete(self, run_id: str | None) -> None:
         """Called once per run in the PARENT on the caller's own extender objects, after all workers
-        were joined, in every mode (close() is MULTIPROCESSING worker only). Fires when execution raised,
-        not when the run failed before execution started (setup or validation errors) nor when joining
-        the workers raised. A session re-run fires again with the same run_id. raise_on_error and
+        were joined, in every mode (close() is MULTIPROCESSING worker only). Fires once per run(),
+        run_all(), stream_run() or stream_all() call that got as far as setting up execution (a stream
+        does on its first iteration; one closed early fires after its workers are joined). Fires when
+        setup (e.g. the MULTIPROCESSING picklability preflight) or execution raised, so it is not a
+        success signal. Does not fire for prepare, explain, a never-iterated stream, a failure while
+        planning before setup, or when finalizing raised (collecting artifacts, joining or terminating
+        the workers). A session re-run fires again with the same run_id. raise_on_error and
         never_fall_back do not apply: an Exception raised here is always logged, never propagated."""
 
     @staticmethod

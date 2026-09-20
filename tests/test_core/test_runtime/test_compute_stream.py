@@ -13,11 +13,16 @@ from typing import Any, Generator, Iterator
 from unittest.mock import Mock, MagicMock
 from uuid import UUID, uuid4
 
+import pytest
+
 from mloda.core.abstract_plugins.components.parallelization_modes import ParallelizationMode
 from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook
 from mloda.core.abstract_plugins.run_context import RunContext
 from mloda.core.prepare.execution_plan import ExecutionPlan
 from mloda.core.runtime.run import ExecutionOrchestrator
+from mloda.provider import BaseInputData, ComputeFramework, DataCreator, FeatureGroup, FeatureSet
+from mloda.user import Feature, PluginCollector, mloda
+from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
 
 
 class TestComputeStreamExists:
@@ -281,6 +286,23 @@ class _RunCompleteProbe(Extender):
         self.run_ids.append(run_id)
 
 
+_EARLY_CLOSE_COLUMN = "early_closed_stream_col"
+
+
+class _EarlyCloseFeatureGroup(FeatureGroup):
+    @classmethod
+    def input_data(cls) -> BaseInputData | None:
+        return DataCreator({_EARLY_CLOSE_COLUMN})
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PythonDictFramework}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return {_EARLY_CLOSE_COLUMN: [1, 2, 3]}
+
+
 class TestComputeStreamNotifiesExtenders:
     def test_early_closed_stream_notifies_extenders_once(self) -> None:
         probe = _RunCompleteProbe()
@@ -299,8 +321,36 @@ class TestComputeStreamNotifiesExtenders:
         gen = orchestrator.compute_stream()
         next(gen)
         gen.close()
+        orchestrator.__exit__(None, None, None)
 
         assert probe.run_ids == ["stream-run"]
+
+    def test_api_stream_closed_early_joins_workers_before_signalling_while_the_inner_generator_is_referenced(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        order: list[str] = []
+        probe = _RunCompleteProbe()
+        monkeypatch.setattr(probe, "on_run_complete", lambda run_id: order.append("signal"))
+        monkeypatch.setattr(ExecutionOrchestrator, "join", lambda self: order.append("join"))
+        real_compute_stream = ExecutionOrchestrator.compute_stream
+        inner_generators: list[Any] = []
+
+        def keep_inner_referenced(self: ExecutionOrchestrator) -> Any:
+            inner_generators.append(real_compute_stream(self))
+            return inner_generators[-1]
+
+        monkeypatch.setattr(ExecutionOrchestrator, "compute_stream", keep_inner_referenced)
+        session = mloda.prepare(
+            [Feature(name=_EARLY_CLOSE_COLUMN)],
+            compute_frameworks=["PythonDictFramework"],
+            plugin_collector=PluginCollector.enabled_feature_groups({_EarlyCloseFeatureGroup}),
+        )
+
+        stream = session.stream_run(function_extender={probe})
+        next(stream)
+        stream.close()
+
+        assert order == ["join", "signal"]
 
 
 class TestComputeStreamErrorHandling:

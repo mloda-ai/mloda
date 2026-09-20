@@ -108,6 +108,7 @@ class ExecutionOrchestrator:
         self.manager: Any = None
         self.function_extender: set[Extender] | None = None
         self._run_id: str | None = None
+        self._workers_joined: bool = True
         self.worker_extender_payload: bytes | None = None
         self._graceful_shutdown_timeout: float = RunContext().graceful_shutdown_timeout
 
@@ -250,10 +251,11 @@ class ExecutionOrchestrator:
         )
 
     def _finalize(self) -> None:
+        self._workers_joined = False
         self.data_lifecycle_manager.set_artifacts(self.cfw_register.get_artifacts())
         self.join()
+        self._workers_joined = True
         self._drop_all_uploaded_flight_tables()
-        self._notify_run_complete()
 
     def _notify_run_complete(self) -> None:
         """A raising extender's on_run_complete() must not stop the others from running."""
@@ -563,15 +565,19 @@ class ExecutionOrchestrator:
 
     def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
         """
-        Exits the context of the ExecutionOrchestrator.
+        Exits the context of the ExecutionOrchestrator and signals run completion to the extenders.
 
         Args:
             exc_type: The exception type.
             exc_val: The exception value.
             exc_tb: The exception traceback.
         """
-        if self.manager is not None:
-            self.manager.shutdown()
+        try:
+            if self._workers_joined:
+                self._notify_run_complete()
+        finally:
+            if self.manager is not None:
+                self.manager.shutdown()
 
     def get_artifacts(self) -> dict[str, Any]:
         """

@@ -42,6 +42,7 @@ class MockExtender(Extender):
         priority: int = 100,
         should_fail: bool = False,
         raise_on_error: bool = True,
+        never_fall_back: bool = False,
     ):
         self.name = name
         self.priority = priority
@@ -49,6 +50,7 @@ class MockExtender(Extender):
         # Uses the base-class property/setter (same pattern as ``priority``)
         # so the mock reports its opt-in via ``raise_on_error``.
         self.raise_on_error = raise_on_error
+        self.never_fall_back = never_fall_back
         self.call_count = 0
 
     def wraps(self) -> set[ExtenderHook]:
@@ -70,10 +72,11 @@ class _PostFailExtender(Extender):
     already-computed inner result WITHOUT re-running the wrapped function.
     """
 
-    def __init__(self, name: str, priority: int = 100) -> None:
+    def __init__(self, name: str, priority: int = 100, never_fall_back: bool = False) -> None:
         self.name = name
         self.priority = priority
         self.raise_on_error = False
+        self.never_fall_back = never_fall_back
 
     def wraps(self) -> set[ExtenderHook]:
         return {ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE}
@@ -529,6 +532,31 @@ class TestWarningOnlyDoesNotSwallowInnerErrors:
             "Warning-only outer extender must not log a spurious warning for the breaking inner extender's failure"
         )
 
+    def test_warning_only_outer_does_not_swallow_never_fall_back_inner(self, caplog: Any) -> None:
+        """A warning-only OUTER must not swallow a never_fall_back INNER gate's refusal."""
+
+        base_calls = {"n": 0}
+
+        def base(x: int) -> int:
+            base_calls["n"] += 1
+            return x * 2
+
+        warn = MockExtender("outer", priority=10, raise_on_error=False)
+        gate = MockExtender("gate", priority=20, should_fail=True, raise_on_error=False, never_fall_back=True)
+        composite = CompositeExtender([warn, gate])
+
+        with caplog.at_level(logging.WARNING):
+            with pytest.raises(ValueError, match="MockExtender gate intentionally failed"):
+                composite(base, 5)
+
+        assert base_calls["n"] == 0, "A never_fall_back gate must never let the wrapped function run as a fallback"
+        assert gate.call_count == 1, (
+            "The never_fall_back gate must run exactly once; the outer warning-only fallback must not re-run it"
+        )
+        assert not [r for r in caplog.records if r.levelno == logging.WARNING], (
+            "A never_fall_back gate's failure must not be logged as a fallback warning"
+        )
+
     def test_warning_only_does_not_swallow_inner_function_error(self) -> None:
         """COMPOSITE B: an inner-function exception through a warning-only extender propagates, single run."""
 
@@ -570,6 +598,27 @@ class TestWarningOnlyDoesNotSwallowInnerErrors:
         assert any(
             r.levelno == logging.WARNING and "post boom" in r.message and "posty" in r.message for r in caplog.records
         ), "The failing extender must be identified in a WARNING"
+
+    def test_never_fall_back_post_failure_propagates_without_fallback(self, caplog: Any) -> None:
+        """A never_fall_back extender failing AFTER inner ran must propagate, not return the computed result."""
+
+        base_calls = {"n": 0}
+
+        def base(x: int) -> int:
+            base_calls["n"] += 1
+            return x * 3
+
+        gate = _PostFailExtender("gate", priority=10, never_fall_back=True)
+        composite = CompositeExtender([gate])
+
+        with caplog.at_level(logging.WARNING):
+            with pytest.raises(ValueError, match="post boom"):
+                composite(base, 7)
+
+        assert base_calls["n"] == 1, "The wrapped function must run exactly once; the gate's failure must not re-run it"
+        assert not [r for r in caplog.records if r.levelno == logging.WARNING], (
+            "A never_fall_back gate's post-delegation failure must not be logged as a fallback warning"
+        )
 
 
 class TestSingleExtenderPathHonorsRaiseOnError:

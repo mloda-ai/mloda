@@ -57,13 +57,16 @@ class Extender(ABC):
 
         True (default) means a failure in this extender propagates and breaks the
         calculation; False means the failure is logged as a warning and the wrapped
-        function is called instead.
+        function is called instead. Ignored when never_fall_back is True.
         """
         return getattr(self, "_raise_on_error", True)
 
     @raise_on_error.setter
     def raise_on_error(self, value: bool) -> None:
         self._raise_on_error = value
+
+    # For gates: True makes a failure always propagate, never falling back to the wrapped call.
+    never_fall_back: bool = False
 
     @abstractmethod
     def wraps(self) -> set[ExtenderHook]:
@@ -178,8 +181,8 @@ class CompositeExtender(Extender):
 def _invoke_extender(ext: Extender, inner_func: Any, *args: Any, **kwargs: Any) -> Any:
     """Invoke an extender around inner_func, scoping any warning-only fallback to the
     extender's OWN code so inner-function failures propagate and inner never re-runs."""
-    # Breaking (default): call directly, everything propagates.
-    if ext.raise_on_error:
+    # Breaking (default) or never_fall_back: call directly, everything propagates.
+    if ext.raise_on_error or ext.never_fall_back:
         return ext.__call__(inner_func, *args, **kwargs)
 
     # Warning-only: guard ONLY the extender's own code. Wrap inner_func so we can tell

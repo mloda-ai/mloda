@@ -180,9 +180,10 @@ def _feature_name_from_args(args: tuple[Any, ...], kwargs: dict[str, Any]) -> st
 class _MatchVetoExtender(Extender):
     """raise_on_error selects deny-before-match (True, default) vs deny-with-fallback (False)."""
 
-    def __init__(self, veto_feature_name: str, raise_on_error: bool = True) -> None:
+    def __init__(self, veto_feature_name: str, raise_on_error: bool = True, never_fall_back: bool = False) -> None:
         self.priority = 100
         self.raise_on_error = raise_on_error
+        self.never_fall_back = never_fall_back
         self.name = "match_veto"
         self._veto_feature_name = veto_feature_name
 
@@ -368,6 +369,25 @@ class TestDenyWithFallback:
 
         assert len(result) == 1
         assert any(record.levelno == logging.WARNING and "denied match" in record.message for record in caplog.records)
+
+
+class TestNeverFallBackDeniesMatch:
+    """A never_fall_back extender denies the match even with raise_on_error=False."""
+
+    def test_never_fall_back_veto_raises_instead_of_falling_back(self) -> None:
+        veto_name = f"{_MARKER}_veto_col_a"
+        extender = _MatchVetoExtender(veto_name, raise_on_error=False, never_fall_back=True)
+
+        with pytest.raises(RuntimeError, match="denied match"):
+            mloda.run_all(
+                [Feature(veto_name)],
+                compute_frameworks=["PythonDictFramework"],
+                plugin_collector=PluginCollector.enabled_feature_groups(
+                    {_MatchVetoFeatureGroupA, _MatchVetoFeatureGroupB}
+                ),
+                parallelization_modes={ParallelizationMode.SYNC},
+                function_extender={extender},
+            )
 
 
 class TestPlanCountsAndDepthOnMatchContext:

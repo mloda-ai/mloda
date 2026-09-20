@@ -370,7 +370,7 @@ class mlodaAPI:
         parallelization_modes: set[ParallelizationMode] | None = None,
         function_extender: set[Extender] | None = None,
     ) -> ResolutionDiagnosis:
-        """Non-raising whole-request resolution preflight.
+        """Whole-request resolution preflight that does not raise on resolution or setup failures.
 
         Runs the same eager planning as prepare() but projects the outcome instead of raising: on success
         records equals resolution_report() with complete True; on a resolution failure records holds the
@@ -380,7 +380,8 @@ class mlodaAPI:
         column_ordering or an unknown compute framework name) yields only the message. Environment-build
         failures (EnvironmentPreconditionError, RedefinitionConflictError, FrameworkDeclarationError) and
         compute-framework pin misuse (ComputeFrameworkPinError) are likewise projected into the diagnosis
-        instead of raising; any other error propagates. Every parameter after features is keyword-only.
+        instead of raising; any other error propagates, including an exception a breaking extender raises unless
+        it is one of the types above. Every parameter after features is keyword-only.
         """
         try:
             session = cls(

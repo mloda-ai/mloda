@@ -7,7 +7,7 @@ deny-with-fallback, and the "activate only when needed" short-circuit.
 
 import logging
 import sqlite3
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from types import MappingProxyType
 from typing import Any
 
@@ -272,6 +272,21 @@ class _DirectLoadReader(BaseInputData):
         return [1, 2, 3]
 
 
+def _identity_of(data_access: Any) -> str:
+    extender = _InputDataLoadCapturingExtender()
+    cfw = ComputeFramework(function_extender={extender})
+    reader = _DirectLoadReader()
+    features = FeatureSet()
+
+    with cfw.activate(), _build_calc_context().activate():
+        BaseInputData._load_data_via_hook(reader, data_access, features)
+
+    assert extender.captured is not None
+    identity = extender.captured.data_access_identity
+    assert identity is not None
+    return identity
+
+
 class TestDataAccessIdentityHidesDictCredentialValues:
     """Fix: a dict-shaped data_access (real ReadDB credentials) must expose only key
     names in data_access_identity, never values, since DB credentials pass through
@@ -384,33 +399,7 @@ class TestDataAccessIdentityOfUriStrings:
         ],
     )
     def test_identity_keeps_host_and_path_only(self, uri: str, expected: str) -> None:
-        extender = _InputDataLoadCapturingExtender()
-        cfw = ComputeFramework(function_extender={extender})
-        reader = _DirectLoadReader()
-        features = FeatureSet()
-
-        with cfw.activate(), _build_calc_context().activate():
-            BaseInputData._load_data_via_hook(reader, uri, features)
-
-        assert extender.captured is not None
-        identity = extender.captured.data_access_identity
-        assert identity is not None
-        assert identity == expected
-
-
-def _identity_of(data_access: Any) -> str:
-    extender = _InputDataLoadCapturingExtender()
-    cfw = ComputeFramework(function_extender={extender})
-    reader = _DirectLoadReader()
-    features = FeatureSet()
-
-    with cfw.activate(), _build_calc_context().activate():
-        BaseInputData._load_data_via_hook(reader, data_access, features)
-
-    assert extender.captured is not None
-    identity = extender.captured.data_access_identity
-    assert identity is not None
-    return identity
+        assert _identity_of(uri) == expected
 
 
 class TestDataAccessIdentityOfSchemeLessConnectionStrings:
@@ -444,9 +433,75 @@ class TestDataAccessIdentityOfSchemeLessConnectionStrings:
             ),
             pytest.param("user:p@ss@host/db", "host/db", "p@ss", id="at-sign-in-userinfo-password"),
             pytest.param("dbname=x user=y", "{dbname, user}", "=y", id="dbname-and-user"),
+            pytest.param(
+                "password = hunter2 host = localhost", "{host, password}", "hunter2", id="whitespace-around-equals"
+            ),
+            pytest.param(
+                "password= hunter2 host =localhost", "{host, password}", "hunter2", id="uneven-whitespace-around-equals"
+            ),
+            pytest.param(
+                "dbname = mydb password = hunter2 port = 5432",
+                "{dbname, password, port}",
+                "hunter2",
+                id="spaced-dbname-password-port",
+            ),
+            pytest.param("PWD={x; secret1 host=y};UID=a", "{pwd, uid}", "secret1", id="odbc-brace-value-with-fake-key"),
+            pytest.param("user = alice password = hunter2", "{password, user}", "hunter2", id="spaced-user-password"),
+            pytest.param(
+                "host=h password=correct horse=battery",
+                "{host, password}",
+                "horse",
+                id="unrecognized-key-after-secret-not-printed",
+            ),
+            pytest.param(
+                "host=h password='my pass=word'",
+                "{host, password}",
+                "my pass=word",
+                id="quoted-value-with-key-fragment",
+            ),
+            pytest.param("pass=hunter2", "{pass}", "hunter2", id="secret-key-pass"),
+            pytest.param("sslpassword=hunter2", "{sslpassword}", "hunter2", id="secret-key-sslpassword"),
+            pytest.param("key=abc", "{key}", "abc", id="secret-key-key"),
+            pytest.param(
+                "access_key=abc secret_key=def", "{access_key, secret_key}", "abc", id="secret-keys-access-secret"
+            ),
+            pytest.param(
+                "aws_secret_access_key=hunter2", "{aws_secret_access_key}", "hunter2", id="secret-key-aws-secret-access"
+            ),
+            pytest.param("client_secret=x client_id=abc", "{client_secret}", "abc", id="client-id-not-printed"),
+            pytest.param("account_key=hunter2", "{account_key}", "hunter2", id="secret-key-account-key"),
+            pytest.param("auth_token=hunter2", "{auth_token}", "hunter2", id="secret-key-auth-token"),
+            pytest.param("credentials=hunter2", "{credentials}", "hunter2", id="secret-key-credentials"),
+            pytest.param("sas=hunter2", "{sas}", "hunter2", id="secret-key-sas"),
+            pytest.param(
+                "service-account-key=hunter2", "{service-account-key}", "hunter2", id="secret-key-with-dashes"
+            ),
+            pytest.param(
+                "jdbc:sqlserver://host:1433;databaseName=db;user=a;password=hunter2",
+                "{password, user}",
+                "hunter2",
+                id="jdbc-url-with-secret-key",
+            ),
+            pytest.param(
+                "host=/var/run/postgresql user=alice password=hunter2",
+                "{host, password, user}",
+                "hunter2",
+                id="host-value-is-a-path",
+            ),
+            pytest.param("u:p/w@host/db", "host/db", "p/w", id="slash-in-userinfo-password"),
+            pytest.param("u:p w@host/db", "host/db", "p w", id="space-in-userinfo-password"),
+            pytest.param("u:p\\w@host/db", "host/db", "p\\w", id="backslash-in-userinfo-password"),
+            pytest.param(":hunter2@host/db", "host/db", "hunter2", id="empty-user-userinfo"),
+            pytest.param(
+                Path("host=localhost password=hunter2"), "{host, password}", "hunter2", id="path-object-keywords"
+            ),
+            pytest.param(Path("user:hunter2@host/db"), "host/db", "hunter2", id="path-object-userinfo"),
+            pytest.param(
+                PurePosixPath("s3://alice:hunter2@bucket/key"), "bucket/key", "hunter2", id="pure-posix-path-uri"
+            ),
         ],
     )
-    def test_connection_string_identity_hides_values(self, value: str, expected: str, secret: str) -> None:
+    def test_connection_string_identity_hides_values(self, value: Any, expected: str, secret: str) -> None:
         identity = _identity_of(value)
         assert identity == expected
         assert secret not in identity
@@ -454,11 +509,12 @@ class TestDataAccessIdentityOfSchemeLessConnectionStrings:
     @pytest.mark.parametrize(
         ("value", "expected"),
         [
-            pytest.param("u:p/w@host/db", "u:p/w@host/db", id="slash-in-password-accepted-loss"),
-            pytest.param("notes:2024@work.txt", "work.txt", id="userinfo-lookalike-accepted-loss"),
+            pytest.param("notes:2024@work.txt", "work.txt", id="userinfo-lookalike"),
+            pytest.param("user=alice.csv", "{user}", id="file-name-starting-with-connection-key"),
         ],
     )
     def test_documented_accepted_loss(self, value: str, expected: str) -> None:
+        """Known false positives: a file name that looks like userinfo or a keyword pair is reduced."""
         assert _identity_of(value) == expected
 
     @pytest.mark.parametrize(
@@ -473,15 +529,29 @@ class TestDataAccessIdentityOfSchemeLessConnectionStrings:
             pytest.param("C:\\dir\\a@b", id="windows-backslash-path"),
             pytest.param("C:/a@b", id="windows-forward-slash-path"),
             pytest.param("me@work.txt", id="email-like"),
+            pytest.param("alice@host/db", id="username-only-userinfo"),
+            pytest.param("/mnt/share/my db=main.csv", id="path-with-space-and-key"),
+            pytest.param("/var/log/app db=1.log", id="path-with-space-and-db-key"),
+            pytest.param("https://host/p;user=alice/x", id="uri-with-plain-connection-key"),
+            pytest.param("s3://bucket/a;db=main/part.parquet", id="s3-uri-with-plain-connection-key"),
+            pytest.param("/srv/a;host=b", id="absolute-path-with-semicolon-key"),
+            pytest.param("C:\\data;user=1", id="windows-path-with-semicolon-key"),
+            pytest.param(Path("data/plain.csv"), id="plain-path-object"),
         ],
     )
-    def test_non_connection_strings_are_unchanged(self, value: str) -> None:
-        assert _identity_of(value) == value
+    def test_non_connection_strings_are_unchanged(self, value: Any) -> None:
+        assert _identity_of(value) == str(value)
 
-    @pytest.mark.parametrize("value", ["x=1 host=y", "user:hunter2@host/db", "host=localhost password=hunter2"])
-    def test_path_objects_never_take_the_connection_string_branches(self, value: str) -> None:
-        path = Path(value)
-        assert _identity_of(path) == str(path)
+    def test_path_objects_are_scanned_like_strings(self) -> None:
+        assert _identity_of(Path("host=localhost password=hunter2")) == "{host, password}"
+        assert _identity_of(Path("user:hunter2@host/db")) == "host/db"
+        assert _identity_of(Path("data/plain.csv")) == str(Path("data/plain.csv"))
+        assert "hunter2" not in _identity_of(PurePosixPath("s3://alice:hunter2@bucket/key"))
+        assert _identity_of(PurePosixPath("s3://alice:hunter2@bucket/key")) == "bucket/key"
+
+    def test_long_string_without_equals_returns_quickly(self) -> None:
+        value = "a " * 20000
+        assert _identity_of(value) == value
 
 
 class _SecretBearingAccess:
@@ -511,18 +581,7 @@ class TestDataAccessIdentityOfNonStringValues:
         ],
     )
     def test_identity_of_non_string_value(self, value: Any, expected: str) -> None:
-        extender = _InputDataLoadCapturingExtender()
-        cfw = ComputeFramework(function_extender={extender})
-        reader = _DirectLoadReader()
-        features = FeatureSet()
-
-        with cfw.activate(), _build_calc_context().activate():
-            BaseInputData._load_data_via_hook(reader, value, features)
-
-        assert extender.captured is not None
-        identity = extender.captured.data_access_identity
-        assert identity is not None
-        assert identity == expected
+        assert _identity_of(value) == expected
 
 
 class TestDataAccessIdentityBaselineForNonCredentialShapedValues:

@@ -1,7 +1,7 @@
 import logging
 import re
 from abc import ABC
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from pathlib import PurePath
 from typing import Any, ClassVar
 
@@ -44,46 +44,60 @@ logger = logging.getLogger(__name__)
 RESERVED_READER_OPTION_KEY = "BaseInputData"
 
 
-_CONNECTION_KEY_PATTERN = re.compile(r"(?:^|[;\s])([A-Za-z_][A-Za-z0-9_ ]*)=")
+_VALUE_SPAN_PATTERN = re.compile(r"\s{2,}|\{[^}]{0,256}\}|'[^']{0,256}'|\"[^\"]{0,256}\"")
+_CONNECTION_KEY_PATTERN = re.compile(r"(?:^|[;\s])\s*([A-Za-z_][A-Za-z0-9_.\-]{0,63})\s*=")
 _CONNECTION_KEYS = frozenset(
-    "host hostaddr hostname server dsn driver dbname database db user username uid password passwd pwd passfile port "
-    "accountkey sharedaccesskey token api_key apikey secret".split()
+    "host hostaddr hostname server dsn driver dbname database db user username uid password passwd pwd passfile port".split()
 )
-_USERINFO_PATTERN = re.compile(r"^[^/\\@\s:]+:[^/\\@\s]*@")
+_SECRET_KEY_PARTS = ("pass", "pwd", "secret", "token", "credential", "auth", "sas", "sig", "key")
+_URI_PATTERN = re.compile(r"^[A-Za-z][A-Za-z0-9+.:-]*://")
+_USERINFO_PATTERN = re.compile(r"^[^/\\@\s:]*:[^@]*@")
+_DRIVE_LETTER_PATTERN = re.compile(r"^[A-Za-z]:[\\/]")
 
 
-def _format_keys(keys: Any) -> str:
-    return "{" + ", ".join(sorted(keys)) + "}"
+def _format_keys(keys: Iterable[str]) -> str:
+    return "{" + ", ".join(sorted(set(keys))) + "}"
+
+
+def _is_secret_key(key: str) -> bool:
+    return any(part in key for part in _SECRET_KEY_PARTS)
 
 
 def _connection_string_identity(value: str) -> str | None:
-    keys = {key.strip().lower() for key in _CONNECTION_KEY_PATTERN.findall(value)}
-    return _format_keys(keys) if keys & _CONNECTION_KEYS else None
+    blanked = _VALUE_SPAN_PATTERN.sub(" ", value)
+    matches = list(_CONNECTION_KEY_PATTERN.finditer(blanked))
+    keys = {match[1].lower() for match in matches}
+    recognized = {key for key in keys if key in _CONNECTION_KEYS or _is_secret_key(key)}
+    if not recognized:
+        return None
+    if _URI_PATTERN.match(value):
+        return _format_keys(recognized) if any(_is_secret_key(key) for key in recognized) else None
+    prefix = blanked[: matches[0].start(1)]
+    return None if "/" in prefix or "\\" in prefix else _format_keys(recognized)
 
 
 def _strip_scheme_less_userinfo(value: str) -> str:
-    if not _USERINFO_PATTERN.match(value):
+    if _DRIVE_LETTER_PATTERN.match(value) or not _USERINFO_PATTERN.match(value):
         return value
     head, slash, path = value.partition("/")
-    return head.rpartition("@")[2] + slash + path
+    if "@" in head:
+        return head.rpartition("@")[2] + slash + path
+    return value.rpartition("@")[2]
 
 
 def _data_access_identity(data_access: Any) -> str:
     """Mapping: sorted key names. str or PurePath: a scheme:// URI keeps scheme, host and path (abfs/abfss/wasb/wasbs,
-    case-insensitive, also the container), user info, query and fragment dropped. A scheme-less keyword/ODBC string is
-    identified by its key names and user:pw@host drops user info; any other string as is. Anything else: type name."""
+    case-insensitive, also the container), user info, query and fragment dropped. A scheme-less string with recognized
+    connection or secret keys is identified by those key names, user:pw@host drops user info; otherwise as is."""
     if isinstance(data_access, Mapping):
         return _format_keys(str(key) for key in data_access)
-    value = str(data_access) if isinstance(data_access, PurePath) else data_access
-    if isinstance(data_access, str):
+    if isinstance(data_access, (str, PurePath)):
+        value = str(data_access)
         identity = _connection_string_identity(value)
         if identity is not None:
             return identity
-    if isinstance(value, str):
         if "://" not in value:
-            if isinstance(data_access, str):
-                return _strip_scheme_less_userinfo(value)
-            return str(value)
+            return _strip_scheme_less_userinfo(value)
         scheme, _, rest = value.partition("://")
         head = rest.split("/", 1)[0].split("?", 1)[0].split("#", 1)[0]
         tail = head.rpartition(":")[2]

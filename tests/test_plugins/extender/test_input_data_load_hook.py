@@ -8,6 +8,7 @@ deny-with-fallback, and the "activate only when needed" short-circuit.
 import logging
 import sqlite3
 from pathlib import Path
+from types import MappingProxyType
 from typing import Any
 
 import pytest
@@ -359,6 +360,47 @@ class TestDataAccessIdentityOfUriStrings:
 
         with cfw.activate(), _build_calc_context().activate():
             BaseInputData._load_data_via_hook(reader, uri, features)
+
+        assert extender.captured is not None
+        identity = extender.captured.data_access_identity
+        assert identity is not None
+        assert identity == expected
+
+
+class _SecretBearingAccess:
+    """Object whose repr and str both carry a secret."""
+
+    def __repr__(self) -> str:
+        return "SecretBearingAccess(password=hunter2)"
+
+    __str__ = __repr__
+
+
+class TestDataAccessIdentityOfNonStringValues:
+    """Mappings are identified by sorted keys, a path by its path, any other non-str by type name only."""
+
+    @pytest.mark.parametrize(
+        ("value", "expected"),
+        [
+            pytest.param(
+                MappingProxyType({"user": "alice", "password": "hunter2"}),  # nosec B105
+                "{password, user}",
+                id="mapping-proxy-key-names-only",
+            ),
+            pytest.param(_SecretBearingAccess(), "_SecretBearingAccess", id="arbitrary-object-type-name"),
+            pytest.param(b"postgresql://u:hunter2@host/db", "bytes", id="bytes-type-name"),
+            pytest.param(["postgresql://u:hunter2@host/db"], "list", id="list-type-name"),
+            pytest.param(Path("data/plain.csv"), str(Path("data/plain.csv")), id="plain-path"),
+        ],
+    )
+    def test_identity_of_non_string_value(self, value: Any, expected: str) -> None:
+        extender = _InputDataLoadCapturingExtender()
+        cfw = ComputeFramework(function_extender={extender})
+        reader = _DirectLoadReader()
+        features = FeatureSet()
+
+        with cfw.activate(), _build_calc_context().activate():
+            BaseInputData._load_data_via_hook(reader, value, features)
 
         assert extender.captured is not None
         identity = extender.captured.data_access_identity

@@ -610,8 +610,8 @@ silence the warning. Otherwise give one key no `default` (making it unconditiona
 
 A mixin class with `MIN_IN_FEATURES >= 1` that declares no `in_features` key, no pattern and no
 source or matcher override matches only when the caller passes `in_features` in options. The mixin warns at
-class definition: declare an `in_features` key (with a default when the source is optional), or set
-`MIN_IN_FEATURES = 0` for a source-less group. Pattern groups are exempt, since the name path supplies the sources.
+class definition: declare an `in_features` key to state the sources come from options (a non-None default lets
+the group match without them), or set `MIN_IN_FEATURES = 0` for a source-less group. Pattern groups are exempt, since the name path supplies the sources.
 
 ## Migrating from the dict form
 

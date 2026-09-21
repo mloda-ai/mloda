@@ -247,14 +247,19 @@ def warn_min_in_features_without_in_features(owner: type[Any]) -> None:
     Silent for MIN_IN_FEATURES = 0, a pattern group, an input_features override, or a custom matcher
     or source extraction.
     """
+    # imported here: the mixin imports this module at module level
     from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser_mixin import (
         FeatureChainParserMixin,
     )
 
-    if getattr(owner, "MIN_IN_FEATURES", 1) < 1:
+    min_in_features = getattr(owner, "MIN_IN_FEATURES", 1)
+    if min_in_features < 1:
         return
     property_mapping = getattr(owner, "PROPERTY_MAPPING", None)
-    if not isinstance(property_mapping, dict) or DefaultOptionKeys.in_features.value in property_mapping:
+    if not isinstance(property_mapping, dict):
+        return
+    # The key is an intent declaration (a non-None default is what makes the group match without sources).
+    if DefaultOptionKeys.in_features.value in property_mapping:
         return
     if owner.input_features is not FeatureChainParserMixin.input_features:
         return
@@ -268,9 +273,10 @@ def warn_min_in_features_without_in_features(owner: type[Any]) -> None:
     logger.warning(
         "%s declares no in_features key in its PROPERTY_MAPPING but MIN_IN_FEATURES is %s, so it matches "
         "only when the caller passes in_features in options. Declare an in_features key in PROPERTY_MAPPING "
-        "(with a default when the source is optional), or set MIN_IN_FEATURES = 0 for a source-less group.",
+        "to state the sources come from options (a non-None default lets the group match without them), "
+        "or set MIN_IN_FEATURES = 0 for a source-less group.",
         owner.__name__,
-        getattr(owner, "MIN_IN_FEATURES", 1),
+        min_in_features,
     )
 
 

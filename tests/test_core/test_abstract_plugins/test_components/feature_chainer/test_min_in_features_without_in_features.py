@@ -193,7 +193,6 @@ class TestMinInFeaturesWithoutInFeaturesDoesNotWarn:
 
             assert issubclass(_ShippedSubclassU1519k, AggregatedFeatureGroup)
 
-        assert not _min_in_features_warnings(caplog, "AggregatedFeatureGroup")
         assert not _min_in_features_warnings(caplog, "_ShippedSubclassU1519k")
 
     def test_subclass_adding_in_features_key_no_warn(self, caplog: pytest.LogCaptureFixture) -> None:

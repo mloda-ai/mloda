@@ -1,4 +1,5 @@
 import logging
+import re
 from abc import ABC
 from collections.abc import Mapping
 from pathlib import PurePath
@@ -43,16 +44,32 @@ logger = logging.getLogger(__name__)
 RESERVED_READER_OPTION_KEY = "BaseInputData"
 
 
+_CONNECTION_STRING = re.compile(r"^[^/\\=;]+=[^/\\;\s]*[;\s]")
+_CONNECTION_KEY = re.compile(r"(?:^|[;\s])([^\s;=]+)=")
+_USERINFO_PREFIX = re.compile(r"^(?![A-Za-z]:[\\/])[^\s/\\@:]+:[^/\\]*@")
+
+
+def _schemeless_identity(value: str) -> str:
+    """A keyword or ODBC string: its sorted lower-cased key names; user:pw@host/db: what follows the @."""
+    if _CONNECTION_STRING.match(value):
+        return "{" + ", ".join(sorted(key.lower() for key in _CONNECTION_KEY.findall(value))) + "}"
+    match = _USERINFO_PREFIX.match(value)
+    if match:
+        return value[match.end() :].split("?", 1)[0].split("#", 1)[0]
+    return value
+
+
 def _data_access_identity(data_access: Any) -> str:
     """Mapping: sorted key names. str or PurePath: a scheme:// URI keeps scheme, host and path (abfs/abfss/wasb/wasbs,
-    case-insensitive, also the container), user info, query and fragment dropped; any other string as is.
+    case-insensitive, also the container), user info, query and fragment dropped; a scheme-less keyword or ODBC
+    string is its lower-cased key names, user:pw@host/db keeps what follows the @, any other string as is.
     Anything else: its type name."""
     if isinstance(data_access, Mapping):
         return "{" + ", ".join(sorted(str(key) for key in data_access)) + "}"
     value = str(data_access) if isinstance(data_access, PurePath) else data_access
     if isinstance(value, str):
         if "://" not in value:
-            return str(value)
+            return value if isinstance(data_access, PurePath) else _schemeless_identity(value)
         scheme, _, rest = value.partition("://")
         head = rest.split("/", 1)[0].split("?", 1)[0].split("#", 1)[0]
         tail = head.rpartition(":")[2]

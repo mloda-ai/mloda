@@ -398,6 +398,57 @@ class TestDataAccessIdentityOfUriStrings:
         assert identity == expected
 
 
+class TestDataAccessIdentityOfSchemelessStrings:
+    """Scheme-less strings: connection strings show key names only, user:pw@host/db keeps host/db, paths stay."""
+
+    @pytest.mark.parametrize(
+        ("value", "expected"),
+        [
+            pytest.param(
+                "host=localhost user=alice password=hunter2",  # nosec B105
+                "{host, password, user}",
+                id="libpq-keyword-string",
+            ),
+            pytest.param("host=h password='a b'", "{host, password}", id="libpq-quoted-value"),  # nosec B105
+            pytest.param(
+                "DRIVER={ODBC};UID=alice;PWD=hunter2",  # nosec B105
+                "{driver, pwd, uid}",
+                id="odbc-semicolon-string",
+            ),
+            pytest.param(
+                "DefaultEndpointsProtocol=https;AccountName=acct;AccountKey=abc==;EndpointSuffix=core.windows.net",
+                "{accountkey, accountname, defaultendpointsprotocol, endpointsuffix}",
+                id="azure-connection-string",
+            ),
+            pytest.param("user:hunter2@host/db", "host/db", id="userinfo-host-db"),  # nosec B105
+            pytest.param("user:hunter2@host/db?sslmode=require", "host/db", id="userinfo-host-db-query"),  # nosec B105
+            pytest.param("year=2020/month=01/x.csv", "year=2020/month=01/x.csv", id="hive-partition-path"),
+            pytest.param("user=42/part.parquet", "user=42/part.parquet", id="key-value-directory"),
+            pytest.param("C:\\data\\x.csv", "C:\\data\\x.csv", id="windows-drive-backslash"),
+            pytest.param("C:\\Users\\a@b\\x.csv", "C:\\Users\\a@b\\x.csv", id="windows-drive-at-sign"),
+            pytest.param("C:/data/x@y.csv", "C:/data/x@y.csv", id="windows-drive-forward-slash-at-sign"),
+            pytest.param("data/a@b.csv", "data/a@b.csv", id="relative-path-at-sign"),
+            pytest.param("/tmp/a@b/c.csv", "/tmp/a@b/c.csv", id="absolute-path-at-sign"),  # nosec B108
+            pytest.param("notes:v2@final.csv", "final.csv", id="limit-colon-at-file-name"),
+            pytest.param("user:pa/ss@host/db", "user:pa/ss@host/db", id="limit-slash-in-password"),  # nosec B105
+            pytest.param(Path("user=42/part.parquet"), "user=42/part.parquet", id="path-object-key-value-directory"),
+        ],
+    )
+    def test_identity_of_schemeless_value(self, value: Any, expected: str) -> None:
+        extender = _InputDataLoadCapturingExtender()
+        cfw = ComputeFramework(function_extender={extender})
+        reader = _DirectLoadReader()
+        features = FeatureSet()
+
+        with cfw.activate(), _build_calc_context().activate():
+            BaseInputData._load_data_via_hook(reader, value, features)
+
+        assert extender.captured is not None
+        identity = extender.captured.data_access_identity
+        assert identity is not None
+        assert identity == expected
+
+
 class _SecretBearingAccess:
     """Object whose repr and str both carry a secret."""
 

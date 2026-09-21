@@ -166,7 +166,9 @@ class mlodaAPI:
                 one input source (e.g. ``"CustomerData"``). During feature
                 resolution, columns listed under a KeyName are matched to
                 requested features by name. Multiple KeyNames allow passing
-                independent datasets in a single call.
+                independent datasets in a single call. Each set returns its own
+                result frame (order not guaranteed); the same column name in two
+                sets is not supported.
             plugin_collector: Plugin collector.
             copy_features: Whether to deep copy features (default True).
             strict_type_enforcement: If True, enforce strict type matching for typed features.

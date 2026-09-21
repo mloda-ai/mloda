@@ -13,6 +13,8 @@ Simplified mloda:
 
 from typing import Any
 
+import pytest
+
 from mloda.user import mloda
 from mloda.provider import FeatureGroup
 from mloda.user import Feature
@@ -241,6 +243,25 @@ class TestSimplifiedApiData:
             ("a",): ("one",),
             ("b",): ("one", "two"),
         }
+
+    def test_features_from_same_api_data_set_share_a_frame(self) -> None:
+        result = mloda.run_all(
+            ["a", "a2", "b"],
+            compute_frameworks={PythonDictFramework},
+            api_data={"first": {"a": [1], "a2": [2]}, "second": {"b": [1, 2]}},
+        )
+
+        frames = sorted((dict(frame) for frame in result), key=lambda frame: sorted(frame))
+        assert frames == [{"a": [1], "a2": [2]}, {"b": [1, 2]}]
+
+    def test_derived_feature_needing_two_api_data_sets_raises_without_link(self) -> None:
+        with pytest.raises(ValueError, match=r"(?s)MultiKeyApiFeature.*missing Links"):
+            mloda.run_all(
+                [Feature(name="MultiKeyApiFeature")],
+                plugin_collector=self._enabled_multikey,
+                compute_frameworks={PandasDataFrame},
+                api_data={"First": {"first_id": [1, 2]}, "Second": {"second_id": [1, 2], "second_value": ["x", "y"]}},
+            )
 
     def test_simplified_api_data_two_keys_first_key_used(self) -> None:
         """

@@ -52,6 +52,8 @@ def _data_access_identity(data_access: Any) -> str:
     if isinstance(data_access, str) and "://" in data_access:
         scheme, _, rest = data_access.partition("://")
         if "@" in rest:
+            if scheme.lower() in ("abfs", "abfss", "wasb", "wasbs"):
+                return data_access
             host_and_path = rest.rpartition("@")[2]
             return f"{scheme}://{host_and_path}"
     return str(data_access)

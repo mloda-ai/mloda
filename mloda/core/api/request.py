@@ -87,7 +87,15 @@ class mlodaAPI:
             api_input_data_collection: ApiInputDataCollection | None = None
             if api_data is not None and len(api_data) > 0:
                 api_input_data_collection = ApiInputDataCollection()
+                column_owner: dict[str, str] = {}
                 for key_name, key_data in api_data.items():
+                    for column in key_data:
+                        if column in column_owner:
+                            raise ValueError(
+                                f"Column '{column}' appears in api_data sets '{column_owner[column]}' and "
+                                f"'{key_name}'; column names must be unique across sets."
+                            )
+                        column_owner[column] = key_name
                     api_input_data_collection.setup_key_class(key_name, list(key_data.keys()))
 
             self.strict_type_enforcement = strict_type_enforcement
@@ -167,8 +175,8 @@ class mlodaAPI:
                 resolution, columns listed under a KeyName are matched to
                 requested features by name. Multiple KeyNames allow passing
                 independent datasets in a single call. Each set returns its own
-                result frame (order not guaranteed); the same column name in two
-                sets is not supported.
+                result frame (order not guaranteed); a column name shared by two
+                sets raises ``SetupConfigurationError``.
             plugin_collector: Plugin collector.
             copy_features: Whether to deep copy features (default True).
             strict_type_enforcement: If True, enforce strict type matching for typed features.

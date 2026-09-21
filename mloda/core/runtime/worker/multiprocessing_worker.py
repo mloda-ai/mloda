@@ -9,6 +9,7 @@ from uuid import UUID
 from queue import Empty
 
 from mloda.core.abstract_plugins.components.error_utils import internal_invariant_error
+from mloda.core.abstract_plugins.components.utils import contained_raise_reason
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.core.cfw_manager import CfwManager
 from mloda.core.core.step.feature_group_step import FeatureGroupStep
@@ -28,7 +29,7 @@ def _close_extenders(cfw: ComputeFramework) -> None:
         try:
             extender.close()
         except Exception as e:
-            logging.error(f"Extender {extender.__class__.__name__}.close() raised: {e}")
+            logging.error("Extender %s.close() %s", extender.__class__.__name__, contained_raise_reason(e))
 
 
 def _handle_data_dropping(

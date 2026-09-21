@@ -67,6 +67,7 @@ from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_author
     install_required_when_guard,
     validate_name_binding,
     warn_captureless_without_binding,
+    warn_min_in_features_without_in_features,
     warn_universal_optional_matcher,
 )
 from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser import (
@@ -106,7 +107,8 @@ class FeatureChainParserMixin:
     - PREFIX_PATTERN or SUFFIX_PATTERN: Regex patterns for matching
     - PROPERTY_MAPPING: Property validation mapping (see docs/in_depth/property-mapping.md)
     - IN_FEATURE_SEPARATOR: Optional custom separator (default: "&")
-    - MIN_IN_FEATURES: Optional minimum in_feature count (default: 1)
+    - MIN_IN_FEATURES: Optional minimum in_feature count (default: 1); a class with no in_features key,
+      no pattern and no source override warns at definition, so declare the key or set it to 0
     - MAX_IN_FEATURES: Optional maximum in_feature count (default: None)
     - RECOGNITION_ONLY_PATTERN: Optional marker for a recognition-only pattern that binds no key
       from the name (all values come from options); default False (#772)
@@ -158,6 +160,7 @@ class FeatureChainParserMixin:
         install_name_path_presence_guard(cls)
         install_required_when_guard(cls)
         warn_universal_optional_matcher(cls)
+        warn_min_in_features_without_in_features(cls)
 
     @classmethod
     def _validate_string_match(cls, _feature_name: str, _operation_config: str, _in_feature: str) -> bool:

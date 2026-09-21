@@ -82,6 +82,7 @@ does not understand can be absorbed silently.
 | Match time (mixin) | `MIN/MAX_IN_FEATURES` | In-feature count is within bounds | The in-features | Non-match (`False`) |
 | Match time (guard installed at class definition) | `required_when` | A conditionally required option is present | `Options` | Non-match (`False`) |
 | Class definition (mixin) | Universal-matcher diagnostic | An all-optional `PROPERTY_MAPPING` inherits the configuration matcher, so it matches any name once `in_features` supplies a source | The class | `logger.warning`, unless `ALLOW_UNIVERSAL_MATCHER = True` |
+| Class definition (mixin) | Missing-source diagnostic | `MIN_IN_FEATURES >= 1`, no `in_features` key, no pattern, and no `input_features`, matcher or source-extraction override, so the group matches only when the caller passes `in_features` | The class | `logger.warning`, unless the key is declared or `MIN_IN_FEATURES = 0` |
 | Author time (reader surface) | `mypy --strict` | `READER_OPTIONS` holds `PropertySpec` values | The constructor call | mypy error at the declaration |
 | Class definition (`BaseInputData.__init_subclass__`) | Spec type + surface guard | Every value IS a `PropertySpec` and declares nothing inert on a reader (`match_guard`, `deferred_binding`, `context=False`, enforcement fields on a `framework_set` key); the reserved key's **winning** declaration across the MRO keeps `framework_set=True` | Every value in that class's declaration, plus the reserved key as the MRO merge resolves it | `ValueError` naming class, key and field |
 | Match time (reader selection) | Presence + strict validation | Required keys are present and present strict values pass, element-wise unless `scalar_only` rejects a collection outright; `framework_set` keys exempt | The candidate's merged specs and the options | Reader non-match. Addressed-reader and supplied-value failures record a `stage="input_data"` rejection; unaddressed absence and an unjudgeable predicate decline silently |
@@ -605,6 +606,13 @@ Set `ALLOW_UNIVERSAL_MATCHER = True` on the class to declare the universal match
 silence the warning. Otherwise give one key no `default` (making it unconditionally required), or a
 `required_when` predicate that fires when the option is absent.
 
+## Guarding against a missing in_features key
+
+A mixin class with `MIN_IN_FEATURES >= 1` that declares no `in_features` key, no pattern and no
+source or matcher override matches only when the caller passes `in_features` in options. The mixin warns at
+class definition: declare an `in_features` key (with a default when the source is optional), or set
+`MIN_IN_FEATURES = 0` for a source-less group. Pattern groups are exempt, since the name path supplies the sources.
+
 ## Migrating from the dict form
 
 Spec dicts are gone. Every value in a `PROPERTY_MAPPING` must be a `PropertySpec`; an
@@ -656,6 +664,7 @@ if it really is a whole-value check.
 | `property_spec` builder surface | `tests/.../feature_chainer/test_property_spec_builder.py` |
 | Rejection reasons surfaced to the end user | `tests/test_core/test_prepare/test_identify_feature_group_error_message.py` |
 | The all-optional universal-matcher diagnostic and its `ALLOW_UNIVERSAL_MATCHER` escape hatch | `tests/.../feature_chainer/test_universal_optional_matcher.py` |
+| The missing `in_features` key diagnostic | `tests/.../feature_chainer/test_min_in_features_without_in_features.py` |
 
 ## Context propagation
 

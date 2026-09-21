@@ -233,6 +233,47 @@ def warn_universal_optional_matcher(owner: type[Any]) -> None:
     )
 
 
+def _unguarded_function(member: Any) -> Any:
+    """The underlying function of a classmethod, with the required_when and name-path guard wrappers peeled off."""
+    func = getattr(member, "__func__", member)
+    while getattr(func, REQUIRED_WHEN_GUARD_FLAG, False) or getattr(func, NAME_PATH_PRESENCE_GUARD_FLAG, False):
+        func = func.__wrapped__
+    return func
+
+
+def warn_min_in_features_without_in_features(owner: type[Any]) -> None:
+    """Warn when a mixin class requires sources but declares no in_features key and no other source path.
+
+    Silent for MIN_IN_FEATURES = 0, a pattern group, an input_features override, or a custom matcher
+    or source extraction.
+    """
+    from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser_mixin import (
+        FeatureChainParserMixin,
+    )
+
+    if getattr(owner, "MIN_IN_FEATURES", 1) < 1:
+        return
+    property_mapping = getattr(owner, "PROPERTY_MAPPING", None)
+    if not isinstance(property_mapping, dict) or DefaultOptionKeys.in_features.value in property_mapping:
+        return
+    if owner.input_features is not FeatureChainParserMixin.input_features:
+        return
+    # A pattern group is exempt: the name path supplies the sources and enforces the arity gate,
+    # so MIN_IN_FEATURES = 0 would be wrong advice there.
+    if FeatureChainParser.prefix_patterns_of(owner):
+        return
+    for hook in ("_extract_source_features", "match_feature_group_criteria"):
+        if _unguarded_function(getattr(owner, hook)) is not _unguarded_function(getattr(FeatureChainParserMixin, hook)):
+            return
+    logger.warning(
+        "%s declares no in_features key in its PROPERTY_MAPPING but MIN_IN_FEATURES is %s, so it matches "
+        "only when the caller passes in_features in options. Declare an in_features key in PROPERTY_MAPPING "
+        "(with a default when the source is optional), or set MIN_IN_FEATURES = 0 for a source-less group.",
+        owner.__name__,
+        getattr(owner, "MIN_IN_FEATURES", 1),
+    )
+
+
 def check_required_when(
     owner_name: str,
     feature_name: str | FeatureName,

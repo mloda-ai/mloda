@@ -158,3 +158,12 @@ class TestNameSourceCountRejectionIsRecorded:
 
         assert result is False
         assert rejection_window == {}
+
+    def test_the_option_path_with_no_in_features_records_nothing(
+        self, rejection_window: dict[str, MatchRejection]
+    ) -> None:
+        """Pinned: an absent in_features counts 0, below MIN, yet the option path records no rejection."""
+        result = _NameSourceGate944.match_feature_group_criteria("any_name", _options())
+
+        assert result is False
+        assert rejection_window == {}

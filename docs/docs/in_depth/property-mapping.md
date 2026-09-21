@@ -609,10 +609,12 @@ silence the warning. Otherwise give one key no `default` (making it unconditiona
 ## Declaring the source contract
 
 A mixin group whose `PROPERTY_MAPPING` has no `in_features` key and whose `MIN_IN_FEATURES` is 1 or more
-counts an absent `in_features` as zero sources. It then matches by options only when the caller passes
-`in_features`, which is rarely the intent. At class definition the mixin warns, naming the class, unless the group
-overrides `input_features` or `match_feature_group_criteria`. The option path records no rejection reason for
-this case, so the resolution failure report does not name it; the warning is the diagnostic.
+counts an absent `in_features` as zero sources, so it matches by options only when the caller passes
+`in_features`. At class definition the mixin warns, naming the class, unless the group overrides
+`input_features` or `match_feature_group_criteria` (a pass-through matcher override that delegates to the
+mixin is exempt too), or has a `PREFIX_PATTERN`/`SUFFIX_PATTERN` (the source can come from the name). It warns
+once per hierarchy: a subclass of a class that already warned stays silent. The option path records no rejection reason for this case,
+so the resolution failure report does not name it; the warning is the diagnostic.
 
 Fix it with `MIN_IN_FEATURES = 0` if the group is source-less, or declare an `in_features` key in
 `PROPERTY_MAPPING` (with a `default` if the group should match without one).
@@ -668,7 +670,7 @@ if it really is a whole-value check.
 | `property_spec` builder surface | `tests/.../feature_chainer/test_property_spec_builder.py` |
 | Rejection reasons surfaced to the end user | `tests/test_core/test_prepare/test_identify_feature_group_error_message.py` |
 | The all-optional universal-matcher diagnostic and its `ALLOW_UNIVERSAL_MATCHER` escape hatch | `tests/.../feature_chainer/test_universal_optional_matcher.py` |
-| The missing-`in_features` definition-time diagnostic and its zero-source rejection | `tests/.../feature_chainer/test_missing_in_features_declaration.py` |
+| The missing-`in_features` definition-time diagnostic and its zero-source rejection | `tests/.../feature_chainer/test_missing_in_features_declaration.py` (the diagnostic), `tests/.../feature_chainer/test_in_feature_count_gate_name_sources.py` (the option-path zero-source non-match records no rejection) |
 
 ## Context propagation
 

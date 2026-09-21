@@ -12,7 +12,6 @@ from __future__ import annotations
 
 import contextvars
 import functools
-import inspect
 import logging
 import re
 from typing import Any
@@ -46,6 +45,12 @@ NAME_PATH_PRESENCE_GUARD_FLAG = "_mloda_name_path_presence_guard"
 # Marks a class whose captureless diagnostic already ran, so the two __init_subclass__ hooks
 # emit it at most once. Checked on the class's OWN dict so a subclass still evaluates fresh.
 CAPTURELESS_DIAGNOSTIC_FLAG = "_mloda_captureless_diagnostic_emitted"
+
+# Marks a class whose missing-in_features diagnostic already ran; a subclass of it skips the warning (once per hierarchy).
+MISSING_IN_FEATURES_DIAGNOSTIC_FLAG = "_mloda_missing_in_features_diagnostic_emitted"
+
+# Upper bound on ``__wrapped__`` hops when resolving a matcher, so a cyclic chain cannot hang or raise.
+_MAX_WRAPPED_HOPS = 16
 
 # An unrelated feature name used to probe whether a matcher is universal: does it accept a name it
 # has no business matching, once in_features supplies a source? It carries NO chain separator, so no
@@ -234,17 +239,24 @@ def warn_universal_optional_matcher(owner: type[Any]) -> None:
     )
 
 
-def warn_missing_in_features_declaration(owner: type[Any]) -> None:
-    """Nudge authors whose mixin group declares no in_features source contract but keeps MIN_IN_FEATURES >= 1.
+def _unwrapped_matcher_function(owner: type[Any]) -> Any:
+    """The function behind a class's resolved matcher, following ``__wrapped__`` for at most 16 hops."""
+    matcher = getattr(owner, "match_feature_group_criteria", None)
+    function = getattr(matcher, "__func__", matcher)
+    for _ in range(_MAX_WRAPPED_HOPS):
+        inner = getattr(function, "__wrapped__", None)
+        if inner is None:
+            break
+        function = inner
+    return function
 
-    Such a group counts an absent in_features as zero sources, so it matches by options only when the caller
-    passes in_features. Silent when the group declares an in_features key, is source-less (MIN_IN_FEATURES = 0),
-    or overrides input_features or the matcher (it then owns its source handling).
+
+def warn_missing_in_features_declaration(owner: type[Any], mixin: type[Any]) -> None:
+    """Warn when a mixin group has no in_features key but keeps MIN_IN_FEATURES >= 1.
+
+    Silent if the group has a name pattern (the source can come from the name), overrides input_features or
+    the matcher, or a class above it already warned (once per hierarchy). Never raises.
     """
-    from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser_mixin import (
-        FeatureChainParserMixin,
-    )
-
     property_mapping = getattr(owner, "PROPERTY_MAPPING", None)
     if not isinstance(property_mapping, dict) or DefaultOptionKeys.in_features.value in property_mapping:
         return
@@ -253,17 +265,22 @@ def warn_missing_in_features_declaration(owner: type[Any]) -> None:
     minimum = owner.MIN_IN_FEATURES
     if not isinstance(minimum, int) or minimum < 1:
         return
-    if getattr(owner, "input_features", None) is not FeatureChainParserMixin.input_features:
+    if FeatureChainParser.prefix_patterns_of(owner):
         return
-    matcher = getattr(owner, "match_feature_group_criteria")
-    own_matcher = inspect.getattr_static(FeatureChainParserMixin, "match_feature_group_criteria").__func__
-    if inspect.unwrap(getattr(matcher, "__func__", matcher)) is not own_matcher:
+    if getattr(owner, "input_features", None) is not getattr(mixin, "input_features", None):
         return
+    if getattr(owner, "match_feature_group_criteria", None) is None:
+        return
+    if _unwrapped_matcher_function(owner) is not _unwrapped_matcher_function(mixin):
+        return
+    if any(klass.__dict__.get(MISSING_IN_FEATURES_DIAGNOSTIC_FLAG, False) for klass in owner.__mro__[1:]):
+        return
+    setattr(owner, MISSING_IN_FEATURES_DIAGNOSTIC_FLAG, True)
     logger.warning(
-        "%s declares no in_features source contract, so an absent in_features counts as zero sources and it "
-        "matches by options only when the caller passes in_features. Set MIN_IN_FEATURES = 0 if the group is "
-        "source-less, or declare an in_features key in PROPERTY_MAPPING (with a default if it should match "
-        "without one).",
+        "%s declares no in_features source contract and has no name pattern that could carry its source, so an "
+        "absent in_features counts as zero sources and it matches by options only when the caller passes "
+        "in_features. Set MIN_IN_FEATURES = 0 if the group is source-less, or declare an in_features key in "
+        "PROPERTY_MAPPING (with a default if it should match without one).",
         owner.__name__,
     )
 

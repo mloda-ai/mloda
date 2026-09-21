@@ -161,24 +161,23 @@ class TestNameSourceCountRejectionIsRecorded:
 
 
 class _OptionsOnlyGroupM951(FeatureChainParserMixin):
-    """Options-only group: one declared non-in_features key, no in_features key, default MIN_IN_FEATURES."""
+    """Options-only group: no in_features key, default MIN_IN_FEATURES."""
 
     PROPERTY_MAPPING = {"mode_m951": PropertySpec("Mode", allowed_values={"fast_m951": "Fast"}, context=True)}
 
 
 class _AllOptionalGroupM951(FeatureChainParserMixin):
-    """All-optional mapping, so it matches options that never mention its keys."""
+    """All-optional mapping."""
 
     PROPERTY_MAPPING = {"tuning_m951": PropertySpec("Tuning", default=None, context=True)}
 
 
 class TestOptionPathZeroSourceRecordsNoRejection:
-    """The option path records no rejection reason for a zero-source non-match, whatever the options address."""
+    """The option path records no rejection reason for a zero-source non-match."""
 
     def test_addressed_group_without_in_features_does_not_match_and_records_nothing(
         self, rejection_window: dict[str, MatchRejection]
     ) -> None:
-        """The option path keeps its "not mine" meaning; the definition-time warning is the mitigation."""
         options = Options(context={"mode_m951": "fast_m951"})
 
         result = _OptionsOnlyGroupM951.match_feature_group_criteria("any_name_m951", options)

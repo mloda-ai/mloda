@@ -536,6 +536,7 @@ class BaseInputData(ABC):
             plugin_version=calc_context.plugin_version,
             feature_names=calc_context.feature_names,
             input_features=calc_context.input_features,
+            input_feature_edges=calc_context.input_feature_edges,
             compute_framework_name=cfw.get_class_name(),
             run_id=cfw.run_context.run_id,
             carrier=cfw.run_context.carrier,

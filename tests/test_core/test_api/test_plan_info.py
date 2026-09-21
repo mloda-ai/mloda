@@ -49,6 +49,7 @@ import ast
 import copy
 import dataclasses
 from collections import Counter
+from collections.abc import Mapping
 from pathlib import Path
 from typing import Any, Literal, get_args, get_origin
 from uuid import UUID
@@ -468,6 +469,7 @@ class TestPlanStepDataclass:
             "declared_right_frameworks",
             "feature_set_options",
             "step_uuid",
+            "input_feature_edges",
         ]
 
     def test_join_type_defaults_to_none(self) -> None:
@@ -642,6 +644,57 @@ class TestPlanStepInputFeatureNamesField:
 
         assert base != with_inputs
         assert with_inputs == dataclasses.replace(base, input_feature_names=("plan_info_sales",))
+
+
+class TestPlanStepInputFeatureEdgesField:
+    """input_feature_edges is an optional per-output-feature mapping appended after step_uuid."""
+
+    @staticmethod
+    def _compute_step() -> PlanStep:
+        return PlanStep(
+            step_kind="compute",
+            feature_names=("plan_info_sales__mean_aggr",),
+            feature_group=PandasAggregatedFeatureGroup,
+            compute_framework=PandasDataFrame,
+            source_feature_group=None,
+            source_compute_framework=None,
+        )
+
+    def test_input_feature_edges_defaults_to_an_empty_mapping(self) -> None:
+        step = self._compute_step()
+
+        assert step.input_feature_edges == {}
+
+        fields_by_name = {field.name: field for field in dataclasses.fields(PlanStep)}
+        assert fields_by_name["input_feature_edges"].default_factory is not dataclasses.MISSING
+
+    def test_input_feature_edges_default_is_not_shared_between_steps(self) -> None:
+        first = self._compute_step()
+        second = self._compute_step()
+
+        assert first.input_feature_edges is not second.input_feature_edges
+
+    def test_input_feature_edges_is_annotated_as_a_mapping_of_string_tuples(self) -> None:
+        annotation = PlanStep.__annotations__["input_feature_edges"]
+
+        origin: Any = get_origin(annotation)
+        assert origin is Mapping, f"input_feature_edges must be a Mapping type, got {annotation!r}"
+        assert get_args(annotation) == (str, tuple[str, ...])
+
+    def test_input_feature_edges_follows_step_uuid(self) -> None:
+        field_names = [field.name for field in dataclasses.fields(PlanStep)]
+
+        assert field_names.index("input_feature_edges") == field_names.index("step_uuid") + 1
+
+    def test_input_feature_edges_participates_in_equality_but_not_hashing(self) -> None:
+        base = self._compute_step()
+        replaced = dataclasses.replace(base, input_feature_edges={"plan_info_sales__mean_aggr": ("plan_info_sales",)})
+
+        assert base != replaced
+        assert replaced == dataclasses.replace(
+            base, input_feature_edges={"plan_info_sales__mean_aggr": ("plan_info_sales",)}
+        )
+        assert hash(base) == hash(replaced)
 
 
 class TestJoinOrientationFieldsOnTheDataclass:
@@ -1426,6 +1479,59 @@ class TestBuildPlanStepsInputFeatureNames:
             assert build_plan_steps([step])[0].input_feature_names == ()
 
 
+class TestBuildPlanStepsInputFeatureEdges:
+    """build_plan_steps copies a compute step's FeatureSet.declared_input_feature_edges."""
+
+    @staticmethod
+    def _source_compute_step() -> Any:
+        compute_steps = _raw_steps_by_kind(_prepare_chained_session())["compute"]
+        return next(step for step in compute_steps if step.feature_group is PlanInfoPandasSource)
+
+    def test_declared_edges_are_reported(self) -> None:
+        step = self._source_compute_step()
+        step.features.declared_input_feature_edges = {"plan_info_sales": ("a", "b")}
+
+        assert build_plan_steps([step])[0].input_feature_edges == {"plan_info_sales": ("a", "b")}
+
+    def test_edge_values_are_reported_sorted(self) -> None:
+        step = self._source_compute_step()
+        step.features.declared_input_feature_edges = {"plan_info_sales": ("b", "a")}
+
+        assert build_plan_steps([step])[0].input_feature_edges == {"plan_info_sales": ("a", "b")}
+
+    def test_edges_are_copied_and_mutation_does_not_leak(self) -> None:
+        step = self._source_compute_step()
+        original = {"plan_info_sales": ("a",)}
+        step.features.declared_input_feature_edges = original
+
+        record = build_plan_steps([step])[0]
+        assert record.input_feature_edges is not original
+        record.input_feature_edges["mutated"] = ("x",)  # type: ignore[index]
+
+        assert "mutated" not in original
+        assert "mutated" not in build_plan_steps([step])[0].input_feature_edges
+
+    def test_undeclared_edges_yield_an_empty_mapping(self) -> None:
+        step = self._source_compute_step()
+        step.features.declared_input_feature_edges = None
+
+        assert build_plan_steps([step])[0].input_feature_edges == {}
+
+    def test_a_root_feature_group_step_has_no_edges(self) -> None:
+        step = self._source_compute_step()
+
+        assert getattr(step.features, "declared_input_feature_edges", None) is None
+        assert build_plan_steps([step])[0].input_feature_edges == {}
+
+    def test_join_and_transform_steps_report_no_edges(self) -> None:
+        raw_steps = _raw_steps_by_kind(_prepare_cross_framework_join_session())
+        assert raw_steps["join"], "the fixture must plan a join"
+        assert raw_steps["transform"], "the fixture must plan a transform"
+
+        for step in raw_steps["join"] + raw_steps["transform"]:
+            assert build_plan_steps([step])[0].input_feature_edges == {}
+
+
 class TestInputFeatureNamesForChainedFeature:
     """The aggregation step names the source it chains off; the root source names nothing."""
 
@@ -1475,6 +1581,87 @@ class TestInputFeatureNamesMatchTheRuntimeHookContext:
             key = (f"{step.feature_group.__module__}.{step.feature_group.__qualname__}", step.feature_names)
             assert key in hook_inputs, f"no calculate hook captured for {key}"
             assert frozenset(step.input_feature_names) == hook_inputs[key]
+
+
+class TestInputFeatureEdgesForChainedFeature:
+    """The aggregation step maps its output feature to the source it chains off; the root maps nothing."""
+
+    def test_derived_step_maps_its_output_to_the_declared_source(self) -> None:
+        plan = _prepare_chained_session().resolved_plan()
+
+        aggregation_step = next(step for step in plan if step.feature_group is PandasAggregatedFeatureGroup)
+
+        assert aggregation_step.input_feature_edges == {"plan_info_sales__mean_aggr": ("plan_info_sales",)}
+
+    def test_root_step_has_no_edges(self) -> None:
+        plan = _prepare_chained_session().resolved_plan()
+
+        source_step = next(step for step in plan if step.feature_group is PlanInfoPandasSource)
+
+        assert source_step.input_feature_edges == {}
+
+    def test_edges_are_unchanged_by_run(self) -> None:
+        session = _prepare_chained_session()
+
+        before_run = [dict(step.input_feature_edges) for step in session.resolved_plan()]
+        session.run()
+        after_run = [dict(step.input_feature_edges) for step in session.resolved_plan()]
+
+        assert after_run == before_run
+        assert {"plan_info_sales__mean_aggr": ("plan_info_sales",)} in after_run
+
+
+class TestInputFeatureEdgesMatchTheRuntimeHookContext:
+    """input_feature_edges is the prepare-time twin of the run-time HookContext.input_feature_edges."""
+
+    def test_every_compute_step_matches_its_calculate_hook_context(self) -> None:
+        recorder = PlanInfoCalculateHookRecorder()
+        session = _prepare_chained_session_with(recorder)
+
+        session.run()
+
+        compute_steps = [step for step in session.resolved_plan() if step.step_kind == "compute"]
+        assert len(compute_steps) == 2
+        assert any(step.input_feature_edges for step in compute_steps), "an all-empty comparison proves nothing"
+
+        hook_edges = {
+            (context.feature_group_class, context.feature_names): context.input_feature_edges
+            for context in recorder.captured
+        }
+        assert len(hook_edges) == len(compute_steps), "every compute step must be hooked exactly once"
+
+        for step in compute_steps:
+            assert step.feature_group is not None
+            key = (f"{step.feature_group.__module__}.{step.feature_group.__qualname__}", step.feature_names)
+            assert key in hook_edges, f"no calculate hook captured for {key}"
+            assert dict(step.input_feature_edges) == (hook_edges[key] or {})
+
+
+class TestInputFeatureEdgesExcludeInjectedFeatures:
+    """Injected link-index features have no engine entry: absent from the edges, union unchanged."""
+
+    def test_link_index_feature_is_absent_from_the_edges(self) -> None:
+        plan = _prepare_cross_framework_join_session().resolved_plan()
+
+        left_step = next(step for step in plan if step.feature_group is PlanInfoCrossLeftPandas)
+        assert "plan_info_xjid" in left_step.injected_feature_names
+        assert "plan_info_xjid" not in left_step.input_feature_edges
+
+        consumer_step = next(step for step in plan if step.feature_group is PlanInfoCrossConsumer)
+        assert consumer_step.input_feature_edges == {
+            "PlanInfoCrossConsumer": ("plan_info_xleft_val", "plan_info_xright_val")
+        }
+        for step in plan:
+            assert "plan_info_xjid" not in step.input_feature_edges
+            assert all("plan_info_xjid" not in inputs for inputs in step.input_feature_edges.values())
+
+    def test_union_of_declared_inputs_is_still_present(self) -> None:
+        plan = _prepare_cross_framework_join_session().resolved_plan()
+
+        consumer_step = next(step for step in plan if step.feature_group is PlanInfoCrossConsumer)
+
+        assert consumer_step.input_feature_names == ("plan_info_xleft_val", "plan_info_xright_val")
+        assert consumer_step.input_feature_edges  # non-vacuity
 
 
 # ---------------------------------------------------------------------------

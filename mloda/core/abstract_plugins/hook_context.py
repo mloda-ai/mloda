@@ -30,6 +30,7 @@ class HookContext:
     plugin_version: str | None = None
     feature_names: tuple[str, ...] = ()
     input_features: frozenset[str] | None = None
+    input_feature_edges: dict[str, tuple[str, ...]] | None = None
     compute_framework_name: str
     rows_in: int | None = None
     rows_out: int | None = None
@@ -55,6 +56,8 @@ class HookContext:
         # Copy on ingest so a hook mutating the carrier never reaches the caller's dict.
         if self.carrier is not None:
             self.carrier = dict(self.carrier)
+        if self.input_feature_edges is not None:
+            self.input_feature_edges = dict(self.input_feature_edges)
 
     @staticmethod
     def row_count(data: Any) -> int | None:

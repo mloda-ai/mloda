@@ -41,7 +41,7 @@ from mloda.core.core.step.join_step import JoinStep
 from mloda.core.core.step.transform_frame_work_step import TransformFrameworkStep
 from mloda.core.abstract_plugins.feature_group import FeatureGroup, format_feature_group_class
 from mloda.core.abstract_plugins.components.feature import Feature
-from mloda.core.abstract_plugins.components.feature_set import FeatureSet
+from mloda.core.abstract_plugins.components.feature_set import FeatureSet, merge_input_feature_edges
 from mloda.core.abstract_plugins.components.link import JoinType, Link
 from collections import defaultdict
 import logging
@@ -1746,9 +1746,13 @@ Available join types:
                     # An injected filter or index feature is batched with its host and takes the host's
                     # inputs, so the union over the resolved members is what the engine wired for the step.
                     union: set[str] = set()
+                    edge_pairs: list[tuple[str, frozenset[str]]] = []
                     for feature in sub_features:
-                        union.update(self.resolved_input_feature_names.get(feature.uuid) or frozenset())
+                        resolved_names = self.resolved_input_feature_names.get(feature.uuid) or frozenset()
+                        union.update(resolved_names)
+                        edge_pairs.append((str(feature.name), resolved_names))
                     feature_set.declared_input_feature_names = frozenset(union) or None
+                    feature_set.declared_input_feature_edges = merge_input_feature_edges(edge_pairs)
                     feature_set.declared_input_features_resolved = True
 
                 self.add_artifact_to_feature_set(feature_group, feature_set)

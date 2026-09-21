@@ -485,6 +485,36 @@ class TestCarrierIsNotAliasedAcrossTwoInputDataLoadHookContexts:
         assert "mutated" not in cfw.run_context.carrier
 
 
+class TestInputDataLoadHookCarriesInputFeatureEdges:
+    """The INPUT_DATA_LOAD HookContext copies input_feature_edges from the enclosing calculate context."""
+
+    def test_edges_are_copied_from_the_calculate_context(self) -> None:
+        extender = _InputDataLoadCapturingExtender()
+        cfw = ComputeFramework(function_extender={extender})
+        cfw.run_context = RunContext()
+        reader = _DirectLoadReader()
+        calc_context = _build_calc_context()
+        calc_context.input_feature_edges = {"a": ("src_a",), "b": ("src_b",)}
+
+        with cfw.activate(), calc_context.activate():
+            BaseInputData._load_data_via_hook(reader, "access", FeatureSet())
+
+        assert extender.captured is not None
+        assert extender.captured.input_feature_edges == {"a": ("src_a",), "b": ("src_b",)}
+
+    def test_edges_default_to_none_when_the_calculate_context_has_none(self) -> None:
+        extender = _InputDataLoadCapturingExtender()
+        cfw = ComputeFramework(function_extender={extender})
+        cfw.run_context = RunContext()
+        reader = _DirectLoadReader()
+
+        with cfw.activate(), _build_calc_context().activate():
+            BaseInputData._load_data_via_hook(reader, "access", FeatureSet())
+
+        assert extender.captured is not None
+        assert extender.captured.input_feature_edges is None
+
+
 _ROW_COUNT_SENTINEL = 424242
 
 

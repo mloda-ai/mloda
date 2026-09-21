@@ -816,9 +816,11 @@ class ComputeFramework(ABC):
 
         feature_names: tuple[str, ...] = ()
         input_features: frozenset[str] | None = None
+        input_feature_edges: dict[str, tuple[str, ...]] | None = None
         if isinstance(features, FeatureSet):
             feature_names = tuple(str(name) for name in features.get_all_names())
             input_features = self._declared_input_feature_names(feature_group_cls, features)
+            input_feature_edges = getattr(features, "declared_input_feature_edges", None)
 
         return HookContext(
             hook=hook,
@@ -832,6 +834,7 @@ class ComputeFramework(ABC):
             plugin_version=resolve_plugin_version(feature_group_cls.__module__),
             feature_names=feature_names,
             input_features=input_features,
+            input_feature_edges=input_feature_edges,
             compute_framework_name=self.get_class_name(),
             rows_in=safe_field(lambda: self._row_count(self.data), None),
             run_id=self.run_context.run_id,
@@ -849,12 +852,15 @@ class ComputeFramework(ABC):
 
         A root feature group or an unreadable options/instance degrades silently to None.
         """
+        from mloda.core.abstract_plugins.components.feature_set import merge_input_feature_edges
+
         resolved: bool = getattr(features, "declared_input_features_resolved", False)
         memoized: frozenset[str] | None = getattr(features, "declared_input_feature_names", None)
         if resolved:
             return memoized
 
         result: frozenset[str] | None = None
+        pairs: list[tuple[str, list[str]]] = []
         if features.options is not None:
             instance = safe_field(lambda: feature_group(), None)
             if instance is not None:
@@ -868,11 +874,13 @@ class ComputeFramework(ABC):
 
                     declared = safe_field(_read, None)
                     if declared:
-                        for entry in declared:
-                            names.add(str(entry) if isinstance(entry, str) else str(entry.name))
+                        entries = [str(entry) if isinstance(entry, str) else str(entry.name) for entry in declared]
+                        names.update(entries)
+                        pairs.append((str(feature.name), entries))
                 result = frozenset(names) or None
 
         features.declared_input_feature_names = result
+        features.declared_input_feature_edges = merge_input_feature_edges(pairs)
         features.declared_input_features_resolved = True
         return result
 

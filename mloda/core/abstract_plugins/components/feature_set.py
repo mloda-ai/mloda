@@ -14,6 +14,16 @@ if TYPE_CHECKING:
     from mloda.core.abstract_plugins.feature_group import FeatureGroup
 
 
+def merge_input_feature_edges(pairs: Iterable[tuple[str, Iterable[str]]]) -> dict[str, tuple[str, ...]] | None:
+    """Fold (feature name, declared input names) pairs into output name -> sorted inputs; None when empty."""
+    merged: dict[str, set[str]] = {}
+    for name, inputs in pairs:
+        declared = {str(entry) for entry in inputs}
+        if declared:
+            merged.setdefault(str(name), set()).update(declared)
+    return {name: tuple(sorted(inputs)) for name, inputs in merged.items()} or None
+
+
 class FeatureSet:
     def __init__(self, features: Iterable[Feature] | None = None) -> None:
         self.features: set[Feature] = set()
@@ -29,6 +39,7 @@ class FeatureSet:
         self.mask_engine: type[BaseMaskEngine] | None = None
         self.declared_input_feature_names: frozenset[str] | None = None
         self.declared_input_features_resolved: bool = False
+        self.declared_input_feature_edges: dict[str, tuple[str, ...]] | None = None
 
         if features is not None:
             for feature in features:
@@ -140,6 +151,7 @@ class FeatureSet:
         if rebound or self.options is not options_before:
             self.declared_input_features_resolved = False
             self.declared_input_feature_names = None
+            self.declared_input_feature_edges = None
 
     def get_all_feature_ids(self) -> set[UUID]:
         return {feature.uuid for feature in self.features}

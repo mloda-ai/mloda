@@ -1,5 +1,7 @@
 import logging
+import os
 from abc import ABC
+from collections.abc import Mapping
 from typing import Any, ClassVar
 
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
@@ -42,12 +44,15 @@ RESERVED_READER_OPTION_KEY = "BaseInputData"
 
 
 def _data_access_identity(data_access: Any) -> str:
-    """A dict is identified by its sorted key names; a scheme:// URI by scheme, host and path (abfs/abfss also keep
-    the container), user info, query and fragment dropped; user info must percent-encode "/", "?" and "#"."""
-    if isinstance(data_access, dict):
+    """Mapping: sorted key names. str or path-like: scheme://host/path with user info, query and fragment dropped
+    (abfs/abfss keep the container). Anything else: its type name."""
+    if isinstance(data_access, Mapping):
         return "{" + ", ".join(sorted(str(key) for key in data_access)) + "}"
-    if isinstance(data_access, str) and "://" in data_access:
-        scheme, _, rest = data_access.partition("://")
+    value = os.fspath(data_access) if isinstance(data_access, os.PathLike) else data_access
+    if isinstance(value, str):
+        if "://" not in value:
+            return value
+        scheme, _, rest = value.partition("://")
         head = rest.split("/", 1)[0].split("?", 1)[0].split("#", 1)[0]
         tail = head.rpartition(":")[2]
         # Best effort: an unencoded "/", "?" or "#" in a password puts its "@" past the authority. Caught only when the
@@ -60,7 +65,7 @@ def _data_access_identity(data_access: Any) -> str:
         if scheme not in ("abfs", "abfss") or ":" in userinfo:
             authority = host
         return f"{scheme}://{authority}{slash}{path}"
-    return str(data_access)
+    return type(data_access).__name__
 
 
 class BaseInputData(ABC):

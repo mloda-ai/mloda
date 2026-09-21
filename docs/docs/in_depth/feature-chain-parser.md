@@ -140,7 +140,7 @@ class MyFeatureGroup(FeatureChainParserMixin, FeatureGroup):
 |-----------|------|---------|-------------|
 | `PREFIX_PATTERN` | `str` | Required | Regex pattern for matching feature names |
 | `PROPERTY_MAPPING` | `dict[str, PropertySpec]` | Required | Parameter validation configuration |
-| `MIN_IN_FEATURES` | `int` | `1` | Minimum required in_features |
+| `MIN_IN_FEATURES` | `int` | `1` | Minimum required in_features (an absent `in_features` counts as zero on the configuration path) |
 | `MAX_IN_FEATURES` | `int \| None` | `None` | Maximum allowed in_features (None = unlimited) |
 | `IN_FEATURE_SEPARATOR` | `str` | `"&"` | Separator for multiple in_features |
 | `RECOGNITION_ONLY_PATTERN` | `bool` | `False` | Declares a captureless pattern as recognition-only (binds no key from the name) |

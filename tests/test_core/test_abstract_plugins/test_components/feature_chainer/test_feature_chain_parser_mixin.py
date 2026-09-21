@@ -12,7 +12,7 @@ from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser
     FeatureChainParserMixin,
 )
 from mloda.core.abstract_plugins.components.utils import escalate_match_abort
-from mloda.provider import DefaultOptionKeys, PropertySpec
+from mloda.provider import DefaultOptionKeys, PropertySpec, property_spec
 
 
 MIXIN_LOGGER_NAME = "mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser_mixin"
@@ -315,7 +315,7 @@ class TestFeatureChainParserMixinMatchFeatureGroupCriteria:
         which returns True for valid config even if pattern doesn't match.
         """
         feature_name = FeatureName("source_feature__invalid_suffix")
-        options = Options(context={"operation": "op1"})
+        options = Options(context={"operation": "op1", "in_features": "source_feature"})
 
         result = MockFeatureGroup.match_feature_group_criteria(feature_name, options)
 
@@ -325,7 +325,7 @@ class TestFeatureChainParserMixinMatchFeatureGroupCriteria:
     def test_match_feature_group_criteria_config_based(self) -> None:
         """Test that config-based matching works when pattern doesn't match."""
         feature_name = FeatureName("any_name_without_pattern")
-        options = Options(context={"operation": "op1"})
+        options = Options(context={"operation": "op1", "in_features": "source_feature"})
 
         result = MockFeatureGroup.match_feature_group_criteria(feature_name, options)
 
@@ -378,7 +378,7 @@ class TestFeatureChainParserMixinValidateStringMatchHook:
     def test_validate_string_match_hook_not_called_for_config_based(self) -> None:
         """Test that hook is not called for config-based matching."""
         feature_name = FeatureName("simple_name")
-        options = Options(context={"operation": "op1"})
+        options = Options(context={"operation": "op1", "in_features": "source_feature"})
 
         # Should succeed via config-based matching without calling hook
         result = MockFeatureGroupWithValidationHook.match_feature_group_criteria(feature_name, options)
@@ -538,12 +538,11 @@ class TestFeatureChainParserMixinMinMaxInFeatures:
         result = MockFeatureGroupWithMinMax.match_feature_group_criteria("any_name", options)
         assert result is True
 
-    def test_no_in_features_skips_validation(self) -> None:
-        """When in_features is not in options, MIN/MAX validation is skipped."""
+    def test_absent_in_features_counts_as_zero_sources(self) -> None:
+        """When in_features is not in options, it counts as zero sources, below MIN=2."""
         options = Options(context={"operation": "op1"})
-        # Should match based on config, no in_features to validate
         result = MockFeatureGroupWithMinMax.match_feature_group_criteria("any_name", options)
-        assert result is True
+        assert result is False
 
     def test_default_min_max_allows_single(self) -> None:
         """Default MIN=1, MAX=None allows any count of in_features."""
@@ -620,15 +619,76 @@ class TestFeatureChainParserMixinMinMaxInFeatures:
         assert repr(value) in debugs[0], f"the DEBUG record must carry the offending value: {debugs[0]}"
         assert loud == [], f"an unresolvable value is one group's non-match, not a defect, got: {loud}"
 
-    def test_absent_in_features_still_matches(self) -> None:
-        """Regression pin: an absent in_features never enters the MIN/MAX gate."""
+    def test_absent_in_features_still_matches_when_min_is_zero(self) -> None:
+        """A group with MIN_IN_FEATURES = 0 is unaffected by an absent in_features."""
         options = Options(context={"operation": "op1"})
-        assert MockFeatureGroupWithMinMax.match_feature_group_criteria("any_name", options) is True
+        assert MockFeatureGroupMinZero.match_feature_group_criteria("any_name", options) is True
 
-    def test_none_in_features_still_matches(self) -> None:
-        """Regression pin: an explicit None skips the gate; it is not an unresolvable value."""
+    def test_recognition_only_group_needs_a_source_off_the_name_path(self) -> None:
+        """A name-recognized group matches by name; by configuration it needs at least one in_feature."""
+
+        class UpperGroup(FeatureChainParserMixin):
+            PREFIX_PATTERN = r".*__upper$"
+            RECOGNITION_ONLY_PATTERN = True
+            MIN_IN_FEATURES = 1
+            MAX_IN_FEATURES = 1
+            PROPERTY_MAPPING = {"upper_mode": property_spec("How to upper-case")}
+
+        options = Options(context={"upper_mode": "all"})
+        with_empty = Options(context={"upper_mode": "all", "in_features": []})
+        with_source = Options(context={"upper_mode": "all", "in_features": ["src"]})
+        assert UpperGroup.match_feature_group_criteria("word__upper", options) is True
+        assert UpperGroup.match_feature_group_criteria("word", options) is False
+        assert UpperGroup.match_feature_group_criteria("word", with_empty) is False
+        assert UpperGroup.match_feature_group_criteria("word", with_source) is True
+
+    def test_none_in_features_counts_as_zero_sources(self) -> None:
+        """An explicit None counts as zero sources exactly like an absent key, below MIN=2."""
         options = Options(context={"operation": "op1", "in_features": None})
-        assert MockFeatureGroupWithMinMax.match_feature_group_criteria("any_name", options) is True
+        assert MockFeatureGroupWithMinMax.match_feature_group_criteria("any_name", options) is False
+
+    @pytest.mark.parametrize("explicit_none", [False, True], ids=["absent", "none"])
+    def test_declared_in_features_default_keeps_the_gate_open(self, explicit_none: bool) -> None:
+        """A real in_features default is materialized at intake, so an absent or None value still matches."""
+
+        class DefaultedSourceGroup(FeatureChainParserMixin):
+            MIN_IN_FEATURES = 1
+            PROPERTY_MAPPING = {
+                "operation": PropertySpec(
+                    "Operation to apply",
+                    allowed_values={"op1": "Operation 1"},
+                    context=True,
+                    strict_validation=True,
+                ),
+                "in_features": PropertySpec("source", default=["defaulted_src"]),
+            }
+
+        context: dict[str, Any] = {"operation": "op1"}
+        if explicit_none:
+            context["in_features"] = None
+        assert DefaultedSourceGroup.match_feature_group_criteria("any_name", Options(context=context)) is True
+
+    @pytest.mark.parametrize("value", [["a", "b"], []], ids=["too_many", "empty"])
+    def test_declared_in_features_default_does_not_exempt_a_supplied_value(self, value: list[str]) -> None:
+        """Only an absent or None in_features skips the count; a supplied value is still held to MIN/MAX."""
+
+        class CappedDefaultedGroup(FeatureChainParserMixin):
+            MIN_IN_FEATURES = 1
+            MAX_IN_FEATURES = 1
+            PROPERTY_MAPPING = {
+                "operation": PropertySpec(
+                    "Operation to apply",
+                    allowed_values={"op1": "Operation 1"},
+                    context=True,
+                    strict_validation=True,
+                ),
+                "in_features": PropertySpec("source", default=["defaulted_src"]),
+            }
+
+        absent = Options(context={"operation": "op1"})
+        supplied = Options(context={"operation": "op1", "in_features": value})
+        assert CappedDefaultedGroup.match_feature_group_criteria("any_name", absent) is True
+        assert CappedDefaultedGroup.match_feature_group_criteria("any_name", supplied) is False
 
     @pytest.mark.parametrize("value", [[], (), frozenset()], ids=["empty_list", "empty_tuple", "empty_frozenset"])
     def test_empty_collection_still_counts_as_zero_in_features(self, value: Any) -> None:
@@ -669,7 +729,7 @@ class TestFeatureChainParserMixinListValuedOptions:
                 ),
             }
 
-        options = Options(context={"partition_by": ["region", "category"]})
+        options = Options(context={"partition_by": ["region", "category"], "in_features": "src"})
         result = ListValuedFeatureGroup.match_feature_group_criteria("my_feature", options)
         assert result is True
 
@@ -685,7 +745,7 @@ class TestFeatureChainParserMixinListValuedOptions:
                 ),
             }
 
-        options = Options(context={"partition_by": ("region", "category")})
+        options = Options(context={"partition_by": ("region", "category"), "in_features": "src"})
         result = TupleValuedFeatureGroup.match_feature_group_criteria("my_feature", options)
         assert result is True
 
@@ -706,7 +766,7 @@ class TestFeatureChainParserMixinListValuedOptions:
 
     def test_scalar_option_still_works(self) -> None:
         """Test that scalar (non-list) options still work after the fix."""
-        options = Options(context={"operation": "op1"})
+        options = Options(context={"operation": "op1", "in_features": "src"})
         result = MockFeatureGroup.match_feature_group_criteria("my_feature", options)
         assert result is True
 

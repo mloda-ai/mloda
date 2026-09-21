@@ -413,6 +413,23 @@ class TestUnresolvableInFeaturesIsNotADrop:
         assert snapshot.warnings == (), f"a non-match must not warn, got: {snapshot.warnings}"
 
 
+class TestFilterOnRawColumnWithoutInFeatures:
+    def test_chained_group_with_default_min_does_not_match_a_raw_column_filter(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """Effective options carry no in_features, so a MIN=1 chained group is a non-match, not a drop."""
+        snapshot = _drive_criteria(
+            _make_in_features_mixin_fg,
+            "gfc_raw_source_column_filter",
+            caplog,
+            options=Options(context={"operation": "op1"}),
+        )
+
+        assert snapshot.escaped is None, f"nothing may cross GlobalFilter.criteria: {snapshot.escaped}"
+        assert snapshot.results == (False,), f"an absent in_features is a non-match, got: {snapshot.results}"
+        assert snapshot.entries == (), f"a non-match is not a drop, got: {snapshot.entries}"
+
+
 class TestHostileExceptionStaysInsideTheExceptBlock:
     """The except block reads the exception itself, so a hostile double must not escape from in there."""
 

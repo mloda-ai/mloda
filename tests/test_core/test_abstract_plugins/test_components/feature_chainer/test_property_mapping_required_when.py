@@ -37,6 +37,7 @@ class MockWithConditionalRequired(FeatureChainParserMixin):
     """Feature group with a conditionally required order_by in PROPERTY_MAPPING."""
 
     PREFIX_PATTERN = r".*__([\w]+)_windowed$"
+    MIN_IN_FEATURES = 0
 
     PROPERTY_MAPPING = {
         "aggregation_type": PropertySpec(
@@ -160,6 +161,7 @@ class TestRequiredWhenUnit:
 
         class MockWithBothDefaultAndRequiredWhen(FeatureChainParserMixin):
             PREFIX_PATTERN = r".*__([\w]+)_windowed$"
+            MIN_IN_FEATURES = 0
             PROPERTY_MAPPING = {
                 "aggregation_type": PropertySpec(
                     "Aggregation to apply",
@@ -248,6 +250,7 @@ class ConditionalRequiredFeatureGroup(FeatureChainParserMixin, FeatureGroup):
     """Full FeatureGroup with required_when for mloda.run_all integration testing."""
 
     PREFIX_PATTERN = r".*__([\w]+)_windowed$"
+    MIN_IN_FEATURES = 0
 
     PROPERTY_MAPPING = {
         "aggregation_type": PropertySpec(

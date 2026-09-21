@@ -81,7 +81,7 @@ does not understand can be absorbed silently.
 | Match time (mixin) | `match_guard` | The whole value has an acceptable shape | The raw value | Non-match (`False`) |
 | Match time (mixin) | `MIN/MAX_IN_FEATURES` | In-feature count is within bounds | The in-features | Non-match (`False`) |
 | Match time (guard installed at class definition) | `required_when` | A conditionally required option is present | `Options` | Non-match (`False`) |
-| Class definition (mixin) | Universal-matcher diagnostic | An all-optional `PROPERTY_MAPPING` inherits the configuration matcher, so it matches any name with empty options | The class | `logger.warning`, unless `ALLOW_UNIVERSAL_MATCHER = True` |
+| Class definition (mixin) | Universal-matcher diagnostic | An all-optional `PROPERTY_MAPPING` inherits the configuration matcher, so it matches any name once `in_features` supplies a source | The class | `logger.warning`, unless `ALLOW_UNIVERSAL_MATCHER = True` |
 | Author time (reader surface) | `mypy --strict` | `READER_OPTIONS` holds `PropertySpec` values | The constructor call | mypy error at the declaration |
 | Class definition (`BaseInputData.__init_subclass__`) | Spec type + surface guard | Every value IS a `PropertySpec` and declares nothing inert on a reader (`match_guard`, `deferred_binding`, `context=False`, enforcement fields on a `framework_set` key); the reserved key's **winning** declaration across the MRO keeps `framework_set=True` | Every value in that class's declaration, plus the reserved key as the MRO merge resolves it | `ValueError` naming class, key and field |
 | Match time (reader selection) | Presence + strict validation | Required keys are present and present strict values pass, element-wise unless `scalar_only` rejects a collection outright; `framework_set` keys exempt | The candidate's merged specs and the options | Reader non-match. Addressed-reader and supplied-value failures record a `stage="input_data"` rejection; unaddressed absence and an unjudgeable predicate decline silently |
@@ -496,7 +496,7 @@ alone. A key is flagged when it declares no `default`, no `required_when`, and
 `deferred_binding=False`, and is still absent after declared defaults and name captures are
 resolved. Exempt from the check: a declared default, a `required_when` key, a
 `deferred_binding=True` key, and the source key (`in_features`), whose presence the name prefix
-supplies and whose count `MIN/MAX_IN_FEATURES` enforces.
+supplies and whose count `MIN/MAX_IN_FEATURES` enforces (an absent `in_features` counts as zero on the configuration path).
 
 A flagged missing key makes the match a **non-match**: a warning names the group, the feature,
 and the missing key(s), and the resolution-failure report names the missing key(s) too.
@@ -590,14 +590,14 @@ This guard, the name-path presence guard, and the class-definition diagnostics b
 
 A key is unconditionally required only when it declares no `default` and no `required_when`. A
 `PROPERTY_MAPPING` with only declared-default keys (and, as the degenerate case, an empty mapping)
-has no such key, so on the configuration path it matches any feature name with empty options. A
-feature group that inherits the mixin's `match_feature_group_criteria` and declares such a mapping
-is a universal matcher: it claims features it was never meant to.
+has no such key, so on the configuration path it matches any feature name once `in_features` supplies a
+source. A feature group that inherits the mixin's `match_feature_group_criteria` and declares such a
+mapping is a universal matcher: it claims features it was never meant to.
 
 At class definition the mixin warns about this, naming the class and the escape hatch. A key that is
 unconditionally required, or conditionally required via `required_when`, gates the match, so the
 mapping is not warned. For the remaining all-default mappings, universality is confirmed by calling
-the resolved matcher with an unrelated, separator-free name and empty options: a genuinely
+the resolved matcher with an unrelated, separator-free name and a synthetic `in_features` source: a genuinely
 discriminating `match_feature_group_criteria` is not warned, while a pass-through override that only
 delegates to the base still is.
 

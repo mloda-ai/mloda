@@ -16,6 +16,7 @@ import logging
 import re
 from typing import Any
 
+from mloda.core.abstract_plugins.components.default_options_key import DefaultOptionKeys
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser import (
@@ -46,10 +47,12 @@ NAME_PATH_PRESENCE_GUARD_FLAG = "_mloda_name_path_presence_guard"
 CAPTURELESS_DIAGNOSTIC_FLAG = "_mloda_captureless_diagnostic_emitted"
 
 # An unrelated feature name used to probe whether a matcher is universal: does it accept a name it
-# has no business matching, with empty options? It carries NO chain separator, so no
+# has no business matching, once in_features supplies a source? It carries NO chain separator, so no
 # PREFIX_PATTERN/SUFFIX_PATTERN can capture it and the resolved matcher falls through to the
 # configuration path, where the universal-matcher problem actually lives.
 _UNIVERSAL_MATCHER_PROBE_NAME = "mloda_universal_matcher_probe"
+# Supplied as in_features so the probe tests name-universality independent of the MIN_IN_FEATURES gate.
+_UNIVERSAL_MATCHER_PROBE_SOURCE = "mloda_universal_matcher_probe_source"
 
 # How many guards the current match call is nested in. A guarded matcher that delegates via super()
 # reaches the guard of its parent, and only the outermost one may evaluate the predicates.
@@ -177,10 +180,10 @@ def warn_universal_optional_matcher(owner: type[Any]) -> None:
     """Nudge authors whose all-optional PROPERTY_MAPPING inherits the universal configuration matcher (#771).
 
     With zero unconditionally required keys, the configuration path matches any feature name given
-    empty options. Warn unless the class opts in with ALLOW_UNIVERSAL_MATCHER = True. A key that is
-    unconditionally required, or conditionally required via required_when, gates the match, so the
+    a source supplied through in_features. Warn unless the class opts in with ALLOW_UNIVERSAL_MATCHER = True.
+    A key that is unconditionally required, or conditionally required via required_when, gates the match, so the
     mapping is not warned. Universality is confirmed behaviorally: the resolved matcher is called
-    with an unrelated, separator-free name and empty options, which exempts a genuine custom matcher
+    with an unrelated, separator-free name and a synthetic in_features source, which exempts a genuine custom matcher
     while still catching a pass-through override that delegates to the universal base.
     """
     if getattr(owner, "ALLOW_UNIVERSAL_MATCHER", False):
@@ -207,8 +210,10 @@ def warn_universal_optional_matcher(owner: type[Any]) -> None:
     if matcher is None:
         return
     # A matcher that raises on the probe is doing custom work, so it is not treated as universal.
+    sources = [f"{_UNIVERSAL_MATCHER_PROBE_SOURCE}_{i}" for i in range(max(getattr(owner, "MIN_IN_FEATURES", 1), 1))]
+    probe_options = Options(context={DefaultOptionKeys.in_features: sources})
     try:
-        universal = bool(matcher(_UNIVERSAL_MATCHER_PROBE_NAME, Options()))
+        universal = bool(matcher(_UNIVERSAL_MATCHER_PROBE_NAME, probe_options))
     except Exception as exc:
         # Text, not exc: a retained record must not pin the traceback, its frames and the plugin class.
         logger.debug(
@@ -221,7 +226,7 @@ def warn_universal_optional_matcher(owner: type[Any]) -> None:
         return
     logger.warning(
         "%s declares a PROPERTY_MAPPING with no unconditionally required key and inherits the "
-        "universal configuration matcher: with empty options it matches any feature name. Add a "
+        "universal configuration matcher: once in_features supplies a source it matches any feature name. Add a "
         "required key (a PropertySpec with no default, or a required_when predicate that fires), or "
         "set ALLOW_UNIVERSAL_MATCHER = True to declare the universal match intentional.",
         owner.__name__,

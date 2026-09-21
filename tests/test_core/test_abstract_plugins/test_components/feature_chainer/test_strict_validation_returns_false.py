@@ -10,6 +10,8 @@ from mloda.provider import PropertySpec
 class BaseMode(FeatureChainParserMixin):
     """Base class with strict validation on 'mode' key."""
 
+    MIN_IN_FEATURES = 0
+
     PROPERTY_MAPPING = {
         "mode": PropertySpec(
             "Mode of operation",

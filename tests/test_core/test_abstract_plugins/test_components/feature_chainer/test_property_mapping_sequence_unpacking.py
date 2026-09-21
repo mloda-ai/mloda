@@ -42,6 +42,7 @@ def _strict_element_validator_group(validator: Any) -> type[FeatureChainParserMi
     """A feature group whose single key is strictly validated element-wise."""
 
     class ElementFeatureGroup(FeatureChainParserMixin):
+        MIN_IN_FEATURES = 0
         PROPERTY_MAPPING = {
             "ops": PropertySpec(
                 "Operations to apply",
@@ -58,6 +59,7 @@ def _strict_membership_group() -> type[FeatureChainParserMixin]:
     """A feature group whose single key is strictly validated against an accepted set."""
 
     class MembershipFeatureGroup(FeatureChainParserMixin):
+        MIN_IN_FEATURES = 0
         PROPERTY_MAPPING = {
             "ops": PropertySpec(
                 "Operations to apply",
@@ -74,6 +76,7 @@ def _match_guard_group(guard: Any) -> type[FeatureChainParserMixin]:
     """A feature group whose single key is guarded on its raw, whole value."""
 
     class GuardedFeatureGroup(FeatureChainParserMixin):
+        MIN_IN_FEATURES = 0
         PROPERTY_MAPPING = {
             "ops": PropertySpec(
                 "Operations to apply",
@@ -270,6 +273,7 @@ class TestMatchGuardSeesTheRawValue:
         guard = _Recorder(verdict=False)
 
         class BothFeatureGroup(FeatureChainParserMixin):
+            MIN_IN_FEATURES = 0
             PROPERTY_MAPPING = {
                 "ops": PropertySpec(
                     "Operations to apply",

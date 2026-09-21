@@ -8,6 +8,7 @@ deny-with-fallback, and the "activate only when needed" short-circuit.
 import logging
 import sqlite3
 from pathlib import Path
+from types import MappingProxyType
 from typing import Any
 
 import pytest
@@ -350,6 +351,62 @@ class TestDataAccessIdentityBaselineForNonCredentialShapedValues:
         identity = fetch_context.data_access_identity
         assert identity
         assert str(path) in identity
+
+
+class TestDataAccessIdentityHidesMappingProxyCredentialValues:
+    """A non-dict Mapping (MappingProxyType) must be scrubbed the same way a dict is: only
+    its sorted key names may reach the identity, never its values."""
+
+    def test_mappingproxy_credential_values_are_not_leaked_into_identity(self) -> None:
+        extender = _InputDataLoadCapturingExtender()
+        cfw = ComputeFramework(function_extender={extender})
+        reader = _DirectLoadReader()
+        features = FeatureSet()
+        data_access = MappingProxyType({"user": "alice", "password": "hunter2"})
+
+        with cfw.activate(), _build_calc_context().activate():
+            BaseInputData._load_data_via_hook(reader, data_access, features)
+
+        assert extender.captured is not None
+        identity = extender.captured.data_access_identity
+        assert identity is not None
+        assert "hunter2" not in identity
+        assert "alice" not in identity
+        assert "user" in identity
+        assert "password" in identity
+
+
+class TestDataAccessIdentityFallsBackToTypeNameForOtherShapes:
+    """A data_access that is neither a Mapping nor a str (a list or bytes wrapping a
+    credentialed URI, a connection object) must not put its repr in the identity."""
+
+    def test_list_wrapped_uri_password_is_not_leaked_into_identity(self) -> None:
+        extender = _InputDataLoadCapturingExtender()
+        cfw = ComputeFramework(function_extender={extender})
+        reader = _DirectLoadReader()
+        features = FeatureSet()
+        data_access = ["postgresql://admin:s3cr3t@host:5432/db"]
+
+        with cfw.activate(), _build_calc_context().activate():
+            BaseInputData._load_data_via_hook(reader, data_access, features)
+
+        assert extender.captured is not None
+        identity = extender.captured.data_access_identity
+        assert identity == "<list>"
+
+    def test_bytes_wrapped_uri_password_is_not_leaked_into_identity(self) -> None:
+        extender = _InputDataLoadCapturingExtender()
+        cfw = ComputeFramework(function_extender={extender})
+        reader = _DirectLoadReader()
+        features = FeatureSet()
+        data_access = b"postgresql://admin:s3cr3t@host:5432/db"
+
+        with cfw.activate(), _build_calc_context().activate():
+            BaseInputData._load_data_via_hook(reader, data_access, features)
+
+        assert extender.captured is not None
+        identity = extender.captured.data_access_identity
+        assert identity == "<bytes>"
 
 
 class TestCarrierIsNotAliasedAcrossTwoInputDataLoadHookContexts:

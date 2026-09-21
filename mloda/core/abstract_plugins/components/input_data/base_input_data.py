@@ -1,5 +1,6 @@
 import logging
 from abc import ABC
+from collections.abc import Mapping
 from typing import Any, ClassVar
 
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
@@ -44,17 +45,21 @@ RESERVED_READER_OPTION_KEY = "BaseInputData"
 def _data_access_identity(data_access: Any) -> str:
     """Build a data_access_identity string that never leaks credential values.
 
-    A dict (e.g. DB credentials) is identified by its sorted key names only. A URI-shaped
+    A Mapping (e.g. DB credentials) is identified by its sorted key names only. A URI-shaped
     string with a user[:pass]@ userinfo segment has that segment stripped before the host.
+    Anything else falls back to its type name rather than its repr, which could hold a
+    credential (a list or bytes wrapping a URI, a connection object).
     """
-    if isinstance(data_access, dict):
+    if isinstance(data_access, Mapping):
         return "{" + ", ".join(sorted(str(key) for key in data_access)) + "}"
-    if isinstance(data_access, str) and "://" in data_access:
-        scheme, _, rest = data_access.partition("://")
-        if "@" in rest:
-            host_and_path = rest.rpartition("@")[2]
-            return f"{scheme}://{host_and_path}"
-    return str(data_access)
+    if isinstance(data_access, str):
+        if "://" in data_access:
+            scheme, _, rest = data_access.partition("://")
+            if "@" in rest:
+                host_and_path = rest.rpartition("@")[2]
+                return f"{scheme}://{host_and_path}"
+        return data_access
+    return f"<{type(data_access).__name__}>"
 
 
 class BaseInputData(ABC):

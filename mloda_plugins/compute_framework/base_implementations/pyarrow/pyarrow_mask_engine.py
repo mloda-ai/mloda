@@ -17,7 +17,7 @@ class PyArrowMaskEngine(BaseMaskEngine):
 
     @classmethod
     def all_true(cls, data: Any) -> Any:
-        return pa.array([True] * data.num_rows)
+        return pa.array([True] * data.num_rows, type=pa.bool_())
 
     @classmethod
     def combine(cls, mask1: Any, mask2: Any) -> Any:

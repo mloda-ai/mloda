@@ -34,3 +34,9 @@ class TestPolarsMaskEngine(MaskEngineTestMixin):
 
     def evaluate_mask(self, mask: Any, data: Any) -> list[bool]:
         return list(mask)
+
+    def test_all_true_on_empty_frame_combines_with_condition(self, engine: type[BaseMaskEngine]) -> None:
+        df = pl.DataFrame({"a": pl.Series([], dtype=pl.String)})
+        all_true = engine.all_true(df)
+        assert all_true.dtype == pl.Boolean
+        assert engine.combine(all_true, engine.equal(df, "a", "x")).to_list() == []

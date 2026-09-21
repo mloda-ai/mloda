@@ -21,7 +21,7 @@ class PolarsMaskEngine(BaseMaskEngine):
 
     @classmethod
     def all_true(cls, data: Any) -> Any:
-        return _require_polars().Series([True] * data.height)
+        return _require_polars().Series([True] * data.height, dtype=_require_polars().Boolean)
 
     @classmethod
     def combine(cls, mask1: Any, mask2: Any) -> Any:

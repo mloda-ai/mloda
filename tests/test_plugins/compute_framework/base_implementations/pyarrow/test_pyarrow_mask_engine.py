@@ -28,3 +28,9 @@ class TestPyArrowMaskEngine(MaskEngineTestMixin):
 
     def evaluate_mask(self, mask: Any, data: Any) -> list[bool]:
         return mask.to_pylist()  # type: ignore[no-any-return]
+
+    def test_all_true_on_empty_table_combines_with_condition(self, engine: type[BaseMaskEngine]) -> None:
+        table = pa.table({"a": pa.array([], type=pa.string())})
+        all_true = engine.all_true(table)
+        assert all_true.type == pa.bool_()
+        assert engine.combine(all_true, engine.equal(table, "a", "x")).to_pylist() == []

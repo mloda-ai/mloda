@@ -3,7 +3,9 @@ seam (invoked once before the command loop, exceptions reported via the standard
 """
 
 import inspect
+import logging
 import multiprocessing
+from collections.abc import Mapping
 from typing import Any
 from unittest.mock import Mock
 from uuid import uuid4
@@ -44,6 +46,22 @@ class _RaisingCloseExtender(Extender):
 
     def close(self) -> None:
         raise RuntimeError("close boom")
+
+
+class _UnstringifiableCloseError(RuntimeError):
+    def __str__(self) -> str:
+        raise AssertionError("the close exception's __str__ must be contained")
+
+
+class _UnstringifiableRaisingCloseExtender(Extender):
+    def wraps(self) -> set[ExtenderHook]:
+        return set()
+
+    def __call__(self, func: Any, *args: Any, **kwargs: Any) -> Any:
+        return func(*args, **kwargs)
+
+    def close(self) -> None:
+        raise _UnstringifiableCloseError()
 
 
 class TestWorkerSetsWorkerIndexBeforeTheCommandLoop:
@@ -191,6 +209,33 @@ class TestWorkerSwallowsExtenderCloseExceptions:
         worker(command_queue, result_queue, cfw_register, cfw, uuid4(), worker_index=0)
 
         assert ok_extender.close_calls == [True]
+
+    def test_unstringifiable_close_exception_is_logged_without_retaining_it(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        ctx = mp_spawn_context()
+        command_queue: multiprocessing.Queue[Any] = ctx.Queue()
+        result_queue: multiprocessing.Queue[Any] = ctx.Queue()
+        cfw_register = Mock(spec=CfwManager)
+        cfw_register.get_location.return_value = "grpc://localhost:9999"
+        cfw_register.get_run_context.return_value = RunContext()
+        cfw = PythonDictFramework(mode=ParallelizationMode.MULTIPROCESSING, children_if_root=frozenset())
+        ok_extender = _CloseRecordingExtender()
+        cfw.function_extender = {ok_extender, _UnstringifiableRaisingCloseExtender()}
+        command_queue.put("STOP")
+
+        with caplog.at_level(logging.ERROR):
+            worker(command_queue, result_queue, cfw_register, cfw, uuid4(), worker_index=0)
+
+        assert ok_extender.close_calls == [True]
+        records = [record for record in caplog.records if record.levelno == logging.ERROR]
+        assert len(records) == 1
+        record = records[0]
+        assert "_UnstringifiableRaisingCloseExtender" in record.getMessage()
+        assert "_UnstringifiableCloseError" in record.getMessage()
+        args = list(record.args.values()) if isinstance(record.args, Mapping) else list(record.args or ())
+        assert not any(isinstance(arg, BaseException) for arg in args)
+        assert record.exc_info is None
 
 
 class TestWorkerClosesExtendersEvenWhenChildBootstrapRaises:

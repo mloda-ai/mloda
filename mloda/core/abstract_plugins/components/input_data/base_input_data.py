@@ -1,7 +1,7 @@
 import logging
-import os
 from abc import ABC
 from collections.abc import Mapping
+from pathlib import PurePath
 from typing import Any, ClassVar
 
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
@@ -44,14 +44,14 @@ RESERVED_READER_OPTION_KEY = "BaseInputData"
 
 
 def _data_access_identity(data_access: Any) -> str:
-    """Mapping: sorted key names. str or path-like: scheme://host/path with user info, query and fragment dropped
-    (abfs/abfss keep the container). Anything else: its type name."""
+    """Mapping: sorted key names. str or PurePath: a scheme:// URI keeps scheme, host and path (abfs/abfss also the
+    container), user info, query and fragment dropped; any other string as is. Anything else: its type name."""
     if isinstance(data_access, Mapping):
         return "{" + ", ".join(sorted(str(key) for key in data_access)) + "}"
-    value = os.fspath(data_access) if isinstance(data_access, os.PathLike) else data_access
+    value = str(data_access) if isinstance(data_access, PurePath) else data_access
     if isinstance(value, str):
         if "://" not in value:
-            return value
+            return str(value)
         scheme, _, rest = value.partition("://")
         head = rest.split("/", 1)[0].split("?", 1)[0].split("#", 1)[0]
         tail = head.rpartition(":")[2]

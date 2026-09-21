@@ -376,33 +376,24 @@ class _SecretBearingAccess:
     __str__ = __repr__
 
 
-class _UriPathLike:
-    """os.PathLike whose fspath keeps a scheme:// URI intact (pathlib.Path would collapse the slashes)."""
-
-    def __fspath__(self) -> str:
-        return "postgresql://u:hunter2@host/db"
-
-
 class TestDataAccessIdentityOfNonStringValues:
-    """Mappings are identified by sorted keys, PathLike by fspath, any other non-str by type name only."""
+    """Mappings are identified by sorted keys, a path by its path, any other non-str by type name only."""
 
     @pytest.mark.parametrize(
-        ("value", "expected", "forbidden"),
+        ("value", "expected"),
         [
             pytest.param(
                 MappingProxyType({"user": "alice", "password": "hunter2"}),  # nosec B105
                 "{password, user}",
-                "hunter2",
                 id="mapping-proxy-key-names-only",
             ),
-            pytest.param(_SecretBearingAccess(), "_SecretBearingAccess", "hunter2", id="arbitrary-object-type-name"),
-            pytest.param(b"postgresql://u:hunter2@host/db", "bytes", "hunter2", id="bytes-type-name"),
-            pytest.param(["postgresql://u:hunter2@host/db"], "list", "hunter2", id="list-type-name"),
-            pytest.param(Path("data/plain.csv"), str(Path("data/plain.csv")), None, id="plain-path"),
-            pytest.param(_UriPathLike(), "postgresql://host/db", "hunter2", id="pathlike-uri-scrubbed"),
+            pytest.param(_SecretBearingAccess(), "_SecretBearingAccess", id="arbitrary-object-type-name"),
+            pytest.param(b"postgresql://u:hunter2@host/db", "bytes", id="bytes-type-name"),
+            pytest.param(["postgresql://u:hunter2@host/db"], "list", id="list-type-name"),
+            pytest.param(Path("data/plain.csv"), str(Path("data/plain.csv")), id="plain-path"),
         ],
     )
-    def test_identity_of_non_string_value(self, value: Any, expected: str, forbidden: str | None) -> None:
+    def test_identity_of_non_string_value(self, value: Any, expected: str) -> None:
         extender = _InputDataLoadCapturingExtender()
         cfw = ComputeFramework(function_extender={extender})
         reader = _DirectLoadReader()
@@ -415,8 +406,6 @@ class TestDataAccessIdentityOfNonStringValues:
         identity = extender.captured.data_access_identity
         assert identity is not None
         assert identity == expected
-        if forbidden is not None:
-            assert forbidden not in identity
 
 
 class TestDataAccessIdentityBaselineForNonCredentialShapedValues:

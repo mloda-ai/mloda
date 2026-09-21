@@ -14,7 +14,7 @@ from typing import Any
 import pytest
 
 from mloda.core.abstract_plugins.components.feature_set import FeatureSet
-from mloda.core.abstract_plugins.components.input_data.base_input_data import BaseInputData, _data_access_identity
+from mloda.core.abstract_plugins.components.input_data.base_input_data import BaseInputData
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook
 from mloda.core.abstract_plugins.hook_context import HookContext
@@ -308,7 +308,7 @@ class TestDataAccessIdentityHidesDictCredentialValues:
 
 
 class TestDataAccessIdentityOfUriStrings:
-    """A scheme:// data_access drops user info, query and fragment; abfs/abfss keep the container."""
+    """A scheme:// data_access drops user info, query and fragment; abfs/abfss/wasb/wasbs keep the container (scheme case-insensitive)."""
 
     @pytest.mark.parametrize(
         ("uri", "expected"),
@@ -346,6 +346,37 @@ class TestDataAccessIdentityOfUriStrings:
                 "abfs://container@account.dfs.core.windows.net/p",
                 id="abfs-keeps-container",
             ),
+            pytest.param(
+                "wasb://container@account.blob.core.windows.net/p",
+                "wasb://container@account.blob.core.windows.net/p",
+                id="wasb-keeps-container",
+            ),
+            pytest.param(
+                "wasbs://container@account.blob.core.windows.net/p",
+                "wasbs://container@account.blob.core.windows.net/p",
+                id="wasbs-keeps-container",
+            ),
+            pytest.param(
+                "ABFSS://container@account.dfs.core.windows.net/p",
+                "ABFSS://container@account.dfs.core.windows.net/p",
+                id="upper-case-abfss-keeps-container",
+            ),
+            pytest.param(
+                "WASB://container@account.blob.core.windows.net/p",
+                "WASB://container@account.blob.core.windows.net/p",
+                id="upper-case-wasb-keeps-container",
+            ),
+            pytest.param(
+                "wasbs://key:secret@account.blob.core.windows.net/p",
+                "wasbs://account.blob.core.windows.net/p",
+                id="wasbs-userinfo-with-colon-is-stripped",
+            ),
+            pytest.param(
+                "wasbs://container@account.blob.core.windows.net/p?sig=S",
+                "wasbs://container@account.blob.core.windows.net/p",
+                id="wasbs-keeps-container-drops-query",
+            ),
+            pytest.param("postgresql://token@host/db", "postgresql://host/db", id="non-azure-colon-free-userinfo"),
             pytest.param("postgresql://u:pa/ss@host/db", "postgresql://host/db", id="slash-in-userinfo"),
             pytest.param("postgresql://u:pa?ss@host/db", "postgresql://host/db", id="question-mark-in-userinfo"),
             pytest.param("postgresql://u:pa#ss@host/db", "postgresql://host/db", id="hash-in-userinfo"),
@@ -406,43 +437,6 @@ class TestDataAccessIdentityOfNonStringValues:
         identity = extender.captured.data_access_identity
         assert identity is not None
         assert identity == expected
-
-
-@pytest.mark.parametrize(
-    ("data_access", "expected_identity"),
-    [
-        (
-            "abfss://container@account.dfs.core.windows.net/p",
-            "abfss://container@account.dfs.core.windows.net/p",
-        ),
-        (
-            "wasb://container@account.blob.core.windows.net/p",
-            "wasb://container@account.blob.core.windows.net/p",
-        ),
-        (
-            "wasbs://container@account.blob.core.windows.net/p",
-            "wasbs://container@account.blob.core.windows.net/p",
-        ),
-        (
-            "ABFS://container@account.dfs.core.windows.net/p",
-            "ABFS://container@account.dfs.core.windows.net/p",
-        ),
-        (
-            "ABFSS://container@account.dfs.core.windows.net/p",
-            "ABFSS://container@account.dfs.core.windows.net/p",
-        ),
-        (
-            "WASB://container@account.blob.core.windows.net/p",
-            "WASB://container@account.blob.core.windows.net/p",
-        ),
-        (
-            "WASBS://container@account.blob.core.windows.net/p",
-            "WASBS://container@account.blob.core.windows.net/p",
-        ),
-    ],
-)
-def test_azure_storage_uri_identity_preserves_container(data_access: str, expected_identity: str) -> None:
-    assert _data_access_identity(data_access) == expected_identity
 
 
 class TestDataAccessIdentityBaselineForNonCredentialShapedValues:

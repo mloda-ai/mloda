@@ -44,8 +44,9 @@ RESERVED_READER_OPTION_KEY = "BaseInputData"
 
 
 def _data_access_identity(data_access: Any) -> str:
-    """Mapping: sorted key names. str or PurePath: a scheme:// URI keeps scheme, host and path (abfs/abfss/wasb/wasbs
-    also the container), user info, query and fragment dropped; any other string as is. Anything else: its type name."""
+    """Mapping: sorted key names. str or PurePath: a scheme:// URI keeps scheme, host and path (abfs/abfss/wasb/wasbs,
+    case-insensitive, also the container), user info, query and fragment dropped; any other string as is.
+    Anything else: its type name."""
     if isinstance(data_access, Mapping):
         return "{" + ", ".join(sorted(str(key) for key in data_access)) + "}"
     value = str(data_access) if isinstance(data_access, PurePath) else data_access

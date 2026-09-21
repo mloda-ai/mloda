@@ -1,4 +1,5 @@
 import logging
+import re
 from abc import ABC
 from collections.abc import Mapping
 from pathlib import PurePath
@@ -43,15 +44,45 @@ logger = logging.getLogger(__name__)
 RESERVED_READER_OPTION_KEY = "BaseInputData"
 
 
+_CONNECTION_KEY_PATTERN = re.compile(r"(?:^|[;\s])([A-Za-z_][A-Za-z0-9_ ]*)=")
+_CONNECTION_KEYS = frozenset(
+    "host hostaddr hostname server dsn driver dbname database db user username uid password passwd pwd passfile port "
+    "accountkey sharedaccesskey token api_key apikey secret".split()
+)
+_USERINFO_PATTERN = re.compile(r"^[^/\\@\s:]+:[^/\\@\s]*@")
+
+
+def _format_keys(keys: Any) -> str:
+    return "{" + ", ".join(sorted(keys)) + "}"
+
+
+def _connection_string_identity(value: str) -> str | None:
+    keys = {key.strip().lower() for key in _CONNECTION_KEY_PATTERN.findall(value)}
+    return _format_keys(keys) if keys & _CONNECTION_KEYS else None
+
+
+def _strip_scheme_less_userinfo(value: str) -> str:
+    if not _USERINFO_PATTERN.match(value):
+        return value
+    head, slash, path = value.partition("/")
+    return head.rpartition("@")[2] + slash + path
+
+
 def _data_access_identity(data_access: Any) -> str:
     """Mapping: sorted key names. str or PurePath: a scheme:// URI keeps scheme, host and path (abfs/abfss/wasb/wasbs,
-    case-insensitive, also the container), user info, query and fragment dropped; any other string as is.
-    Anything else: its type name."""
+    case-insensitive, also the container), user info, query and fragment dropped. A scheme-less keyword/ODBC string is
+    identified by its key names and user:pw@host drops user info; any other string as is. Anything else: type name."""
     if isinstance(data_access, Mapping):
-        return "{" + ", ".join(sorted(str(key) for key in data_access)) + "}"
+        return _format_keys(str(key) for key in data_access)
     value = str(data_access) if isinstance(data_access, PurePath) else data_access
+    if isinstance(data_access, str):
+        identity = _connection_string_identity(value)
+        if identity is not None:
+            return identity
     if isinstance(value, str):
         if "://" not in value:
+            if isinstance(data_access, str):
+                return _strip_scheme_less_userinfo(value)
             return str(value)
         scheme, _, rest = value.partition("://")
         head = rest.split("/", 1)[0].split("?", 1)[0].split("#", 1)[0]

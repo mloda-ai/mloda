@@ -398,6 +398,92 @@ class TestDataAccessIdentityOfUriStrings:
         assert identity == expected
 
 
+def _identity_of(data_access: Any) -> str:
+    extender = _InputDataLoadCapturingExtender()
+    cfw = ComputeFramework(function_extender={extender})
+    reader = _DirectLoadReader()
+    features = FeatureSet()
+
+    with cfw.activate(), _build_calc_context().activate():
+        BaseInputData._load_data_via_hook(reader, data_access, features)
+
+    assert extender.captured is not None
+    identity = extender.captured.data_access_identity
+    assert identity is not None
+    return identity
+
+
+class TestDataAccessIdentityOfSchemeLessConnectionStrings:
+    """Scheme-less keyword/ODBC and user:pw@host strings must not leak credentials; other strings stay as is."""
+
+    @pytest.mark.parametrize(
+        ("value", "expected", "secret"),
+        [
+            pytest.param(
+                "host=localhost user=alice password=hunter2",
+                "{host, password, user}",
+                "hunter2",
+                id="libpq-keywords",
+            ),
+            pytest.param("DRIVER={ODBC};UID=alice;PWD=hunter2", "{driver, pwd, uid}", "hunter2", id="odbc-keywords"),
+            pytest.param("user:hunter2@host/db", "host/db", "hunter2", id="userinfo-scheme-less"),
+            pytest.param("host=localhost password='hunter 2'", "{host, password}", "hunter 2", id="libpq-quoted-value"),
+            pytest.param(
+                "DRIVER={ODBC Driver 17};UID=alice;PWD={hun;ter2}",
+                "{driver, pwd, uid}",
+                "hun;ter2",
+                id="odbc-braces-with-separator",
+            ),
+            pytest.param("Host=a HOST=b", "{host}", "=b", id="mixed-case-duplicate-keys"),
+            pytest.param("password=hunter2", "{password}", "hunter2", id="single-known-key"),
+            pytest.param(
+                "DRIVER={x};Server=https://host;PWD=secret",
+                "{driver, pwd, server}",
+                "secret",
+                id="keyword-string-containing-scheme-separator",
+            ),
+            pytest.param("user:p@ss@host/db", "host/db", "p@ss", id="at-sign-in-userinfo-password"),
+            pytest.param("dbname=x user=y", "{dbname, user}", "=y", id="dbname-and-user"),
+        ],
+    )
+    def test_connection_string_identity_hides_values(self, value: str, expected: str, secret: str) -> None:
+        identity = _identity_of(value)
+        assert identity == expected
+        assert secret not in identity
+
+    @pytest.mark.parametrize(
+        ("value", "expected"),
+        [
+            pytest.param("u:p/w@host/db", "u:p/w@host/db", id="slash-in-password-accepted-loss"),
+            pytest.param("notes:2024@work.txt", "work.txt", id="userinfo-lookalike-accepted-loss"),
+        ],
+    )
+    def test_documented_accepted_loss(self, value: str, expected: str) -> None:
+        assert _identity_of(value) == expected
+
+    @pytest.mark.parametrize(
+        "value",
+        [
+            pytest.param("data/plain.csv", id="relative-path"),
+            pytest.param("/data/year=2024/part.parquet", id="hive-path"),
+            pytest.param("report=2024.csv", id="unknown-key-file-name"),
+            pytest.param("a=1 b=2", id="unknown-keys"),
+            pytest.param("year=2024 month=01", id="unknown-keys-partition-like"),
+            pytest.param("", id="empty-string"),
+            pytest.param("C:\\dir\\a@b", id="windows-backslash-path"),
+            pytest.param("C:/a@b", id="windows-forward-slash-path"),
+            pytest.param("me@work.txt", id="email-like"),
+        ],
+    )
+    def test_non_connection_strings_are_unchanged(self, value: str) -> None:
+        assert _identity_of(value) == value
+
+    @pytest.mark.parametrize("value", ["x=1 host=y", "user:hunter2@host/db", "host=localhost password=hunter2"])
+    def test_path_objects_never_take_the_connection_string_branches(self, value: str) -> None:
+        path = Path(value)
+        assert _identity_of(path) == str(path)
+
+
 class _SecretBearingAccess:
     """Object whose repr and str both carry a secret."""
 

@@ -14,7 +14,7 @@ from typing import Any
 import pytest
 
 from mloda.core.abstract_plugins.components.feature_set import FeatureSet
-from mloda.core.abstract_plugins.components.input_data.base_input_data import BaseInputData
+from mloda.core.abstract_plugins.components.input_data.base_input_data import BaseInputData, _data_access_identity
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook
 from mloda.core.abstract_plugins.hook_context import HookContext
@@ -406,6 +406,43 @@ class TestDataAccessIdentityOfNonStringValues:
         identity = extender.captured.data_access_identity
         assert identity is not None
         assert identity == expected
+
+
+@pytest.mark.parametrize(
+    ("data_access", "expected_identity"),
+    [
+        (
+            "abfss://container@account.dfs.core.windows.net/p",
+            "abfss://container@account.dfs.core.windows.net/p",
+        ),
+        (
+            "wasb://container@account.blob.core.windows.net/p",
+            "wasb://container@account.blob.core.windows.net/p",
+        ),
+        (
+            "wasbs://container@account.blob.core.windows.net/p",
+            "wasbs://container@account.blob.core.windows.net/p",
+        ),
+        (
+            "ABFS://container@account.dfs.core.windows.net/p",
+            "ABFS://container@account.dfs.core.windows.net/p",
+        ),
+        (
+            "ABFSS://container@account.dfs.core.windows.net/p",
+            "ABFSS://container@account.dfs.core.windows.net/p",
+        ),
+        (
+            "WASB://container@account.blob.core.windows.net/p",
+            "WASB://container@account.blob.core.windows.net/p",
+        ),
+        (
+            "WASBS://container@account.blob.core.windows.net/p",
+            "WASBS://container@account.blob.core.windows.net/p",
+        ),
+    ],
+)
+def test_azure_storage_uri_identity_preserves_container(data_access: str, expected_identity: str) -> None:
+    assert _data_access_identity(data_access) == expected_identity
 
 
 class TestDataAccessIdentityBaselineForNonCredentialShapedValues:

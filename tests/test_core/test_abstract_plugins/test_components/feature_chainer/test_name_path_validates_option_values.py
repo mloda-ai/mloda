@@ -185,7 +185,7 @@ class TestConfigPathPresenceUnchanged:
     def test_config_path_matches_when_required_keys_present(self) -> None:
         """All required keys present with valid values: the config path matches."""
         result = NamePathFeatureGroup.match_feature_group_criteria(
-            "placeholder", Options(context={"algorithm": "pca", "size": 2})
+            "placeholder", Options(context={"algorithm": "pca", "size": 2, "in_features": "src"})
         )
 
         assert result is True

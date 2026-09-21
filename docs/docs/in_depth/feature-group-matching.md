@@ -62,6 +62,7 @@ PROPERTY_MAPPING = {
 Every value in the mapping is a `PropertySpec`; accepted values go under `allowed_values`.
 A raw dict spec raises at class definition, and an unknown field is a constructor
 `TypeError`. See [PROPERTY_MAPPING Configuration](property-mapping.md) for the full model.
+On the configuration path, a class with the default `MIN_IN_FEATURES = 1` does not match options that omit `in_features`, because an absent or explicit `None` `in_features` counts as zero; a source-less chained group sets `MIN_IN_FEATURES = 0` to opt out.
 
 ### 3. Validation Modes
 

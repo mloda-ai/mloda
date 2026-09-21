@@ -1,8 +1,8 @@
 """Definition-time diagnostic for a "universal configuration matcher" PROPERTY_MAPPING (issue #771).
 
 A FeatureGroup whose PROPERTY_MAPPING has ZERO unconditionally-required keys, declares no capturing
-pattern, and inherits the mixin's configuration matcher will match ANY feature name with EMPTY
-options (Finding 10 of #750). That silent over-matching is what this diagnostic warns about at
+pattern, and inherits the mixin's configuration matcher will match ANY feature name given only an
+in_features source. That silent over-matching is what this diagnostic warns about at
 class-definition time. The warning names the escape hatch ``ALLOW_UNIVERSAL_MATCHER`` and the class.
 
 Authors silence it legitimately by: declaring an unconditionally-required key, supplying a genuinely
@@ -47,6 +47,12 @@ AUTHOR_GUARDS_LOGGER = "mloda.core.abstract_plugins.components.feature_chainer.f
 # A name that no fixture pattern would ever recognize, used as the "unrelated probe".
 UNRELATED_NAME_U771 = "some_unrelated_feature_u771"
 
+
+def _source_only_options() -> Options:
+    """Options carrying only an in_features source, the minimal input a universal matcher accepts."""
+    return Options(context={"in_features": "src_u771"})
+
+
 # Case 5's two mutually-exclusive conditional keys (modeled on the sklearn PIPELINE_NAME/PIPELINE_STEPS
 # pattern): each is required only when the other is absent, so EMPTY options leaves both required.
 COND_KEY_A_U771 = "pipe_a_u771e"
@@ -81,7 +87,7 @@ def _universal_matcher_warnings(
 
 
 class TestUniversalMatcherWarns:
-    """The guard warns when an inherited config matcher matches any feature name with empty options."""
+    """The guard warns when an inherited config matcher matches any feature name given only a source."""
 
     def test_inherited_all_declared_default_warns(self, caplog: pytest.LogCaptureFixture) -> None:
         """Case 1: every key declares ``default=None``, no pattern -> universal matcher -> WARNS."""
@@ -139,8 +145,8 @@ class TestUniversalMatcherWarns:
                 ) -> bool:
                     return super().match_feature_group_criteria(feature_name, options, data_access_collection)
 
-            # Precondition: the pass-through override still matches an unrelated name with empty options.
-            assert _PassThroughU771d.match_feature_group_criteria("anything_u771d", Options()) is True
+            # Precondition: the pass-through override still matches an unrelated name given only a source.
+            assert _PassThroughU771d.match_feature_group_criteria("anything_u771d", _source_only_options()) is True
 
         warnings = _universal_matcher_warnings(caplog, "_PassThroughU771d")
         assert warnings, "a pass-through override is still a universal matcher and must warn"
@@ -149,7 +155,7 @@ class TestUniversalMatcherWarns:
         """Case 10: a named-capture pattern plus an all-optional mapping is universal via config -> WARNS.
 
         An unrelated name WITHOUT a chain separator reaches the configuration path, where the sole key is
-        optional, so the class matches it with empty options: it is a universal matcher. The definition-time
+        optional, so the class matches it given only a source: it is a universal matcher. The definition-time
         probe must confirm universality on a name the pattern does NOT capture. Today's ``__``-bearing probe
         IS captured by the pattern, the captured value fails strict validation, the match returns False, and
         no warning fires. Fixed once the probe stops using a name that contains the chain separator.
@@ -165,8 +171,11 @@ class TestUniversalMatcherWarns:
                 }
 
             # Precondition (holds now and after the fix): a name with NO chain separator reaches the config
-            # path, where the optional key lets the class match with empty options -> universal.
-            assert _NamedOptionalPatternU771j.match_feature_group_criteria("plainunrelatedu771j", Options()) is True
+            # path, where the optional key lets the class match given only a source -> universal.
+            assert (
+                _NamedOptionalPatternU771j.match_feature_group_criteria("plainunrelatedu771j", _source_only_options())
+                is True
+            )
 
         warnings = _universal_matcher_warnings(caplog, "_NamedOptionalPatternU771j")
         assert warnings, "a named-capture pattern with an all-optional mapping is still a universal matcher"
@@ -174,7 +183,7 @@ class TestUniversalMatcherWarns:
     def test_empty_mapping_warns(self, caplog: pytest.LogCaptureFixture) -> None:
         """Case 11: an explicit empty PROPERTY_MAPPING validates vacuously -> universal matcher -> WARNS.
 
-        An empty mapping enforces nothing, so with empty options it matches any feature name: it is the most
+        An empty mapping enforces nothing, so given only a source it matches any feature name: it is the most
         universal shape there is. Today the guard early-returns on the empty dict and stays silent; it must
         warn once that early return is removed.
         """
@@ -184,10 +193,26 @@ class TestUniversalMatcherWarns:
                 PROPERTY_MAPPING = {}
 
             # Precondition: an empty mapping validates vacuously, so an unrelated name matches -> universal.
-            assert _EmptyMappingU771k.match_feature_group_criteria("unrelatedu771k", Options()) is True
+            assert _EmptyMappingU771k.match_feature_group_criteria("unrelatedu771k", _source_only_options()) is True
 
         warnings = _universal_matcher_warnings(caplog, "_EmptyMappingU771k")
         assert warnings, "an empty PROPERTY_MAPPING is vacuously universal and must warn"
+
+    def test_min_two_in_features_all_optional_warns(self, caplog: pytest.LogCaptureFixture) -> None:
+        """An all-optional mapping needing two sources is still universal: the probe supplies MIN sources."""
+        with caplog.at_level(logging.WARNING):
+
+            class _MinTwoOptionalU771z(FeatureChainParserMixin, FeatureGroup):
+                MIN_IN_FEATURES = 2
+                MAX_IN_FEATURES = None
+                PROPERTY_MAPPING = {"opt_u771z": PropertySpec("optional", default=None)}
+
+            # Precondition: given two sources the inherited matcher claims an unrelated name.
+            two_sources = Options(context={"in_features": ["src_a_u771z", "src_b_u771z"]})
+            assert _MinTwoOptionalU771z.match_feature_group_criteria(UNRELATED_NAME_U771, two_sources) is True
+
+        warnings = _universal_matcher_warnings(caplog, "_MinTwoOptionalU771z")
+        assert warnings, "MIN_IN_FEATURES = 2 must not hide a universal matcher from the probe"
 
     def test_warns_exactly_once(self, caplog: pytest.LogCaptureFixture) -> None:
         """Case 15 (pin, once-count): the definition-time warning fires exactly once per class.
@@ -495,7 +520,9 @@ class TestUniversalMatcherMotivation:
         class _UniversalMotivationU771h(FeatureChainParserMixin, FeatureGroup):
             PROPERTY_MAPPING = {"opt_u771h": PropertySpec("optional", default=None)}
 
-        assert _UniversalMotivationU771h.match_feature_group_criteria(UNRELATED_NAME_U771, Options()) is True
+        assert (
+            _UniversalMotivationU771h.match_feature_group_criteria(UNRELATED_NAME_U771, _source_only_options()) is True
+        )
 
     def test_shipped_aggregated_feature_group_is_not_universal(self) -> None:
         """Case 9: a representative shipped plugin has an unconditionally-required key -> out of scope.

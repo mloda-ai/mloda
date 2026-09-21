@@ -161,7 +161,7 @@ class TestFixAPositionalOptionalFirst:
     def test_required_key_present_matches(self) -> None:
         """Guard against over-rejecting: the required key present and valid still matches."""
         result = PositionalOptionalFirstGroup.match_feature_group_criteria(
-            POSITIONAL_NAME, Options(context={OP_KEY: "alpha"})
+            POSITIONAL_NAME, Options(context={OP_KEY: "alpha", "in_features": "src"})
         )
 
         assert result is True

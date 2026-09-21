@@ -42,6 +42,7 @@ class MockWithTypeConstraint(FeatureChainParserMixin):
     """Feature group with a type-constrained PROPERTY_MAPPING entry."""
 
     PREFIX_PATTERN = r".*__([\w]+)_typed$"
+    MIN_IN_FEATURES = 0
 
     PARTITION_BY = "partition_by"
 
@@ -65,6 +66,7 @@ class MockStrictWithMatchGuard(FeatureChainParserMixin):
     """Feature group combining strict_validation=True with match_guard on the same entry."""
 
     PREFIX_PATTERN = r".*__([\w]+)_strict$"
+    MIN_IN_FEATURES = 0
 
     PROPERTY_MAPPING = {
         "mode": PropertySpec(
@@ -86,6 +88,7 @@ class MockStrictWithOrthogonalMatchGuard(FeatureChainParserMixin):
     """
 
     PREFIX_PATTERN = r".*__([\w]+)_ortho$"
+    MIN_IN_FEATURES = 0
 
     PROPERTY_MAPPING = {
         "mode": PropertySpec(
@@ -102,6 +105,7 @@ class MockWithRaisingValidator(FeatureChainParserMixin):
     """Feature group whose match_guard raises on invalid input."""
 
     PREFIX_PATTERN = r".*__([\w]+)_raise$"
+    MIN_IN_FEATURES = 0
 
     PROPERTY_MAPPING = {
         "items": PropertySpec(
@@ -117,6 +121,7 @@ class MockWithoutTypeConstraint(FeatureChainParserMixin):
     """Feature group without any type constraints (baseline)."""
 
     PREFIX_PATTERN = r".*__([\w]+)_typed$"
+    MIN_IN_FEATURES = 0
 
     PROPERTY_MAPPING = {
         "operation": PropertySpec(

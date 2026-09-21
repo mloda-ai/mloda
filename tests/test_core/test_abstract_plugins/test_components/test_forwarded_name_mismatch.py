@@ -51,6 +51,7 @@ class _NameMismatchChainedGroup(FeatureChainParserMixin):
     """
 
     PREFIX_PATTERN = r".*__(sum|max)_namemis579$"
+    MIN_IN_FEATURES = 0
     PROPERTY_MAPPING = {
         OPERATION_KEY: PropertySpec(
             "Operation of the namemis579 fixture",

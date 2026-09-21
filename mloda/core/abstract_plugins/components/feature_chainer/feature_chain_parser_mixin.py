@@ -77,7 +77,7 @@ from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser
     option_key_is_present,
 )
 from mloda.core.abstract_plugins.components.match_rejection import record_match_rejection
-from mloda.core.abstract_plugins.components.property_spec import PropertySpec
+from mloda.core.abstract_plugins.components.property_spec import PropertySpec, is_no_default
 from mloda.core.abstract_plugins.components.default_options_key import DefaultOptionKeys
 from mloda.core.abstract_plugins.components.utils import (
     contained_raise_log_level,
@@ -142,8 +142,8 @@ class FeatureChainParserMixin:
     MAX_IN_FEATURES: int | None = None
     # A recognition-only pattern binds no key from the name; all values come from options (#772).
     RECOGNITION_ONLY_PATTERN: bool = False
-    # An all-optional PROPERTY_MAPPING that inherits the config matcher matches any feature name with
-    # empty options; set True to declare that universal match intentional and silence the #771 warning.
+    # An all-optional PROPERTY_MAPPING that inherits the config matcher matches any feature name once
+    # in_features supplies a source; set True to declare that universal match intentional and silence the #771 warning.
     ALLOW_UNIVERSAL_MATCHER: bool = False
     # The column-wise hooks a family's calculate_feature calls; a family base declares it so its
     # framework implementations can be checked against it with missing_columnwise_hooks below.
@@ -262,7 +262,8 @@ class FeatureChainParserMixin:
         Also enforces MIN_IN_FEATURES / MAX_IN_FEATURES, counting the sources the name
         carries when it identifies the group, else the in_features option value. A
         name-carried count outside the range is recorded as a reportable rejection; an
-        in_features option value the matcher cannot resolve is a silent non-match.
+        in_features option value the matcher cannot resolve is a silent non-match. An
+        absent in_features counts as zero on the configuration path.
 
         ``required_when`` is NOT evaluated here. The guard installed at class definition
         runs the predicates after this method (or any override of it) returns True.
@@ -550,9 +551,16 @@ class FeatureChainParserMixin:
 
         in_features_raw = options.get(DefaultOptionKeys.in_features)
         if in_features_raw is None:
-            return True
-        if isinstance(in_features_raw, (list, tuple, set, frozenset)) and not in_features_raw:
-            # Present but empty: zero in_features, a non-match rather than an error.
+            property_mapping = cls._get_property_mapping()
+            declared = property_mapping.get(DefaultOptionKeys.in_features.value) if property_mapping else None
+            if declared is not None and not is_no_default(declared.default) and declared.default is not None:
+                # A declared in_features default is supplied at intake, so the group keeps matching without it.
+                return True
+
+        if in_features_raw is None or (
+            isinstance(in_features_raw, (list, tuple, set, frozenset)) and not in_features_raw
+        ):
+            # None counts as absent; absent or empty is zero in_features, a non-match rather than an error.
             count = 0
         else:
             # An in_features value this matcher cannot count is a non-match, not an error:
@@ -572,11 +580,7 @@ class FeatureChainParserMixin:
                 )
                 return False
 
-        if count < cls.MIN_IN_FEATURES:
-            return False
-        if cls.MAX_IN_FEATURES is not None and count > cls.MAX_IN_FEATURES:
-            return False
-        return True
+        return cls._in_feature_count_reason(feature_name, count) is None
 
     @classmethod
     def _get_prefix_patterns(cls) -> list[Any]:

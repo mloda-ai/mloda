@@ -306,25 +306,64 @@ class TestDataAccessIdentityHidesDictCredentialValues:
         assert "password" in identity
 
 
-class TestDataAccessIdentityHidesUriEmbeddedPassword:
-    """A postgresql://user:pass@host/db-style data_access string must not leak its password
-    segment. No built-in reader accepts a raw credentialed URI as data_access, so this pins
-    the contract directly against BaseInputData._load_data_via_hook."""
+class TestDataAccessIdentityOfUriStrings:
+    """A scheme:// data_access drops user info, query and fragment; abfs/abfss keep the container."""
 
-    def test_uri_password_segment_is_not_in_identity(self) -> None:
+    @pytest.mark.parametrize(
+        ("uri", "expected"),
+        [
+            pytest.param(
+                "postgresql://admin:s3cr3t@host:5432/db",
+                "postgresql://host:5432/db",
+                id="userinfo-stripped",
+            ),
+            pytest.param("https://host/p?email=a@b.com/x&sig=S", "https://host/p", id="at-sign-in-query"),
+            pytest.param(
+                "postgresql://host/db?user=u&password=p@ss/word",
+                "postgresql://host/db",
+                id="secret-with-at-and-slash-in-query",
+            ),
+            pytest.param("https://host:8080/a@b/c", "https://host:8080/a@b/c", id="at-sign-in-path"),
+            pytest.param("https://u:p@host/a@b/c", "https://host/a@b/c", id="at-sign-in-path-with-userinfo"),
+            pytest.param("https://host:/a@b/c", "https://host:/a@b/c", id="empty-port-at-sign-in-path"),
+            pytest.param("postgresql://u:pa]/ss@host/db", "postgresql://host/db", id="bracket-in-userinfo"),
+            pytest.param(
+                "abfss://key:s3cr3t@account.dfs.core.windows.net/p",
+                "abfss://account.dfs.core.windows.net/p",
+                id="abfss-userinfo-with-colon-is-stripped",
+            ),
+            pytest.param("https://host/p#a@b", "https://host/p", id="at-sign-in-fragment"),
+            pytest.param("postgresql://u:p@ss@host/db", "postgresql://host/db", id="at-sign-in-userinfo"),
+            pytest.param("postgresql://u:p@host", "postgresql://host", id="no-path"),
+            pytest.param(
+                "abfss://container@account.dfs.core.windows.net/p?sig=S",
+                "abfss://container@account.dfs.core.windows.net/p",
+                id="abfss-keeps-container-drops-query",
+            ),
+            pytest.param(
+                "abfs://container@account.dfs.core.windows.net/p",
+                "abfs://container@account.dfs.core.windows.net/p",
+                id="abfs-keeps-container",
+            ),
+            pytest.param("postgresql://u:pa/ss@host/db", "postgresql://host/db", id="slash-in-userinfo"),
+            pytest.param("postgresql://u:pa?ss@host/db", "postgresql://host/db", id="question-mark-in-userinfo"),
+            pytest.param("postgresql://u:pa#ss@host/db", "postgresql://host/db", id="hash-in-userinfo"),
+            pytest.param("http://[::1]/x@y", "http://[::1]/x@y", id="ipv6-host-at-sign-in-path"),
+        ],
+    )
+    def test_identity_keeps_host_and_path_only(self, uri: str, expected: str) -> None:
         extender = _InputDataLoadCapturingExtender()
         cfw = ComputeFramework(function_extender={extender})
         reader = _DirectLoadReader()
         features = FeatureSet()
-        data_access = "postgresql://admin:s3cr3t@host:5432/db"
 
         with cfw.activate(), _build_calc_context().activate():
-            BaseInputData._load_data_via_hook(reader, data_access, features)
+            BaseInputData._load_data_via_hook(reader, uri, features)
 
         assert extender.captured is not None
         identity = extender.captured.data_access_identity
         assert identity is not None
-        assert "s3cr3t" not in identity
+        assert identity == expected
 
 
 class TestDataAccessIdentityBaselineForNonCredentialShapedValues:

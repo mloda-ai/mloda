@@ -288,6 +288,13 @@ class TestIcebergDtypeExtraction(DtypeExtractionTestMixin):
         )
         return TestIcebergDataTypeValidator._wrap_schema(schema)
 
+    def test_extract_decimal_column_data_type_is_decimal(self, framework_instance: Any) -> None:
+        from pyiceberg.types import DecimalType
+
+        table = TestIcebergDataTypeValidator._wrap_schema(Schema(NestedField(1, "d", DecimalType(10, 2))))
+
+        assert framework_instance._extract_column_data_type(table, "d") == DataType.DECIMAL
+
 
 @pytest.mark.skipif(
     pyiceberg is None or pa is None, reason="PyIceberg or PyArrow is not installed. Skipping this test."

@@ -1,4 +1,5 @@
 import logging
+from decimal import Decimal
 from typing import Any
 
 import pyarrow as pa
@@ -145,6 +146,13 @@ class TestPandasDtypeExtraction(DtypeExtractionTestMixin, DuplicateColumnDtypeEx
     @pytest.fixture
     def dtype_sample_data(self) -> Any:
         return pd.DataFrame({"int_col": [1, 2, 3], "str_col": ["a", "b", "c"], "float_col": [1.0, 2.0, 3.0]})
+
+    @pytest.mark.parametrize("arrow_backed", [False, True], ids=["object", "arrow_decimal128"])
+    def test_extract_decimal_column_data_type_is_none(self, framework_instance: Any, arrow_backed: bool) -> None:
+        values = [Decimal("12.34"), Decimal("5.50"), Decimal("99.99"), None]
+        series = pd.Series(values, dtype=pd.ArrowDtype(pa.decimal128(10, 2))) if arrow_backed else pd.Series(values)
+
+        assert framework_instance._extract_column_data_type(pd.DataFrame({"d": series}), "d") is None
 
     # Dtypes are declared explicitly because pandas 2.x infers `object` where pandas 3.x infers `str`,
     # which would make the first-occurrence assertions depend on the installed pandas version.

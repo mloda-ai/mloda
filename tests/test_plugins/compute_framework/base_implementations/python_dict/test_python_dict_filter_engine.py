@@ -1,5 +1,6 @@
 """Unit tests for the PythonDictFilterEngine class."""
 
+from decimal import Decimal
 from typing import Any
 
 import pytest
@@ -85,6 +86,15 @@ class TestPythonDictFilterEngine(FilterEngineTestMixin, TimeRangeFilterEngineTes
 
         with pytest.raises(ValueError, match="Filter parameter 'value' not found"):
             PythonDictFilterEngine.do_min_filter(data, single_filter)
+
+    def test_min_filter_decimal_keeps_decimal_values(self) -> None:
+        data = {"d": [Decimal("12.34"), Decimal("5.50"), Decimal("99.99"), None]}
+        single_filter = SingleFilter(Feature("d"), FilterType.MIN, {"value": Decimal("12.34")})
+
+        result = PythonDictFilterEngine.do_min_filter(data, single_filter)
+
+        assert result["d"] == [Decimal("12.34"), Decimal("99.99")]
+        assert all(isinstance(v, Decimal) for v in result["d"])
 
     def test_do_equal_filter_missing_value(self, sample_data: Any) -> None:
         """Test equal filter with missing value parameter."""

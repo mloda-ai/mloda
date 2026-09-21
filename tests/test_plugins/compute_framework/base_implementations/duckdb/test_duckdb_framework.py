@@ -1,9 +1,11 @@
 import os
 from datetime import datetime, timezone
+from decimal import Decimal
 from typing import Any
 import pytest
 from mloda_plugins.compute_framework.base_implementations.duckdb.duckdb_framework import DuckDBFramework
 from mloda_plugins.compute_framework.base_implementations.duckdb.duckdb_relation import DuckdbRelation
+from mloda.user import DataType
 from mloda.user import FeatureName
 from mloda.user import ParallelizationMode
 from tests.test_plugins.compute_framework.test_tooling.dataframe_test_base import DataFrameTestBase
@@ -290,6 +292,12 @@ class TestDuckDBDtypeExtraction(DtypeExtractionTestMixin):
             {"int_col": [1, 2, 3], "str_col": ["a", "b", "c"], "float_col": [1.0, 2.0, 3.0]}
         )
         return DuckdbRelation.from_arrow(connection, arrow_table)
+
+    def test_extract_decimal_column_data_type_is_decimal(self, connection: Any, framework_instance: Any) -> None:
+        values = [Decimal("12.34"), Decimal("5.50"), Decimal("99.99"), None]
+        relation = DuckdbRelation.from_arrow(connection, pa.table({"d": pa.array(values, type=pa.decimal128(10, 2))}))
+
+        assert framework_instance._extract_column_data_type(relation, "d") == DataType.DECIMAL
 
 
 @pytest.mark.skipif(duckdb is None, reason="DuckDB is not installed. Skipping this test.")

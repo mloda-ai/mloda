@@ -1,5 +1,6 @@
 """Unit tests for the PyArrowFilterEngine class."""
 
+from decimal import Decimal
 from typing import Any
 
 import pytest
@@ -43,6 +44,16 @@ class TestPyArrowFilterEngine(FilterEngineTestMixin):
     def get_column_values(self, result: Any, column: str) -> list[Any]:
         """Extract column values from PyArrow table."""
         return result[column].to_pylist()  # type: ignore[no-any-return]
+
+    def test_min_filter_decimal_keeps_decimal128_type(self, filter_engine: Any) -> None:
+        values = [Decimal("12.34"), Decimal("5.50"), Decimal("99.99"), None]
+        table = pa.table({"d": pa.array(values, type=pa.decimal128(10, 2))})
+        single_filter = SingleFilter(Feature("d"), FilterType.MIN, {"value": Decimal("12.34")})
+
+        result = filter_engine.do_min_filter(table, single_filter)
+
+        assert result["d"].type == pa.decimal128(10, 2)
+        assert result["d"].to_pylist() == [Decimal("12.34"), Decimal("99.99")]
 
     def test_categorical_inclusion_on_dictionary_encoded_column(self, filter_engine: Any) -> None:
         """CATEGORICAL_INCLUSION must work on dictionary-encoded (categorical) columns.

@@ -154,6 +154,21 @@ Not every backend's native type system can distinguish every precision mloda dec
 | SQLite | no (INTEGER affinity) | no (REAL affinity) | no (stored as TEXT) |
 | PythonDict | no (`type.__name__` is "int") | no (Python float is 64-bit) | no (`datetime.datetime` is microsecond) |
 
+## Decimal Columns
+
+`DataType.DECIMAL` is a single type: precision and scale are never declared or checked, and converting it back to Arrow gives `decimal128(38, 18)`. A `Feature` cannot declare a precision or scale.
+
+| Framework | Extraction | Filter, mask, merge | PyArrow transformer |
+|---|---|---|---|
+| Pandas | none (column is not validated) | exact | precision inferred, Arrow-backed dtype not restored |
+| Polars | `DECIMAL` | exact, except `is_in` (fails) | exact |
+| PyArrow | `DECIMAL` | exact | native |
+| DuckDB | `DECIMAL` | merge exact; filter and mask reject `Decimal` values | exact |
+| SQLite | no decimal column (`Decimal` cannot be bound) | not applicable | fails |
+| PythonDict | `DECIMAL` | exact | precision inferred |
+| Spark | `DECIMAL` (not run in CI here) | not verified | no schema passed, precision likely lost |
+| Iceberg | `DECIMAL` | filter expressions exact, no mask or merge | pass-through |
+
 ## Execution Plan Grouping
 
 Features with different explicit data types are separated into different execution groups at plan time. This allows type-specific processing paths.

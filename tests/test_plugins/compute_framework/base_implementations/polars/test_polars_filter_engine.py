@@ -1,5 +1,6 @@
 """Unit tests for the PolarsFilterEngine class."""
 
+from decimal import Decimal
 from typing import Any
 import logging
 
@@ -69,6 +70,16 @@ class TestPolarsFilterEngine(FilterEngineTestMixin, TimeRangeFilterEngineTestMix
         return list(result["id"].to_list())
 
     # Framework-specific tests below
+
+    def test_min_filter_decimal_keeps_decimal_dtype(self) -> None:
+        values = [Decimal("12.34"), Decimal("5.50"), Decimal("99.99"), None]
+        data = pl.DataFrame({"d": values}, schema={"d": pl.Decimal(10, 2)})
+        single_filter = SingleFilter(Feature("d"), FilterType.MIN, {"value": Decimal("12.34")})
+
+        result = PolarsFilterEngine.do_min_filter(data, single_filter)
+
+        assert result.schema["d"] == pl.Decimal(10, 2)
+        assert result["d"].to_list() == [Decimal("12.34"), Decimal("99.99")]
 
     def test_filter_with_null_values(self, sample_data: Any) -> None:
         """Test filtering with null values in data."""

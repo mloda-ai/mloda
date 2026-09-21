@@ -1,5 +1,7 @@
+from decimal import Decimal
 from typing import Any
 
+from mloda.user import DataType
 from mloda.user import ParallelizationMode
 import pyarrow as pa
 import pytest
@@ -189,6 +191,11 @@ class TestPythonDictDtypeExtraction(DtypeExtractionTestMixin):
             "str_col": ["a", "b", "c"],
             "float_col": [1.0, 2.0, 3.0],
         }
+
+    def test_extract_decimal_column_data_type_is_decimal(self, framework_instance: Any) -> None:
+        data = {"d": [Decimal("12.34"), Decimal("5.50"), Decimal("99.99"), None]}
+
+        assert framework_instance._extract_column_data_type(data, "d") == DataType.DECIMAL
 
 
 class TestPythonDictDataTypeValidator(DataTypeValidatorFrameworkTestMixin):

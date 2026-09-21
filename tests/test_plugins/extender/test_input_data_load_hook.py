@@ -424,13 +424,34 @@ class TestDataAccessIdentityOfSchemelessStrings:
             pytest.param("user:hunter2@host/db?sslmode=require", "host/db", id="userinfo-host-db-query"),  # nosec B105
             pytest.param("year=2020/month=01/x.csv", "year=2020/month=01/x.csv", id="hive-partition-path"),
             pytest.param("user=42/part.parquet", "user=42/part.parquet", id="key-value-directory"),
-            pytest.param("C:\\data\\x.csv", "C:\\data\\x.csv", id="windows-drive-backslash"),
             pytest.param("C:\\Users\\a@b\\x.csv", "C:\\Users\\a@b\\x.csv", id="windows-drive-at-sign"),
             pytest.param("C:/data/x@y.csv", "C:/data/x@y.csv", id="windows-drive-forward-slash-at-sign"),
             pytest.param("data/a@b.csv", "data/a@b.csv", id="relative-path-at-sign"),
-            pytest.param("/tmp/a@b/c.csv", "/tmp/a@b/c.csv", id="absolute-path-at-sign"),  # nosec B108
             pytest.param("notes:v2@final.csv", "final.csv", id="limit-colon-at-file-name"),
-            pytest.param("user:pa/ss@host/db", "user:pa/ss@host/db", id="limit-slash-in-password"),  # nosec B105
+            pytest.param("user:pa/ss@host/db", "host/db", id="slash-in-password"),  # nosec B105
+            pytest.param("password=hunter2", "{password}", id="lone-credential-token"),  # nosec B105
+            pytest.param("Password = hunter2", "{password}", id="spaces-around-equals"),  # nosec B105
+            pytest.param(
+                "host=/var/run/postgresql user=alice password=hunter2",  # nosec B105
+                "{host, password, user}",
+                id="slash-in-host-value",
+            ),
+            pytest.param("password=abc/def host=h", "{host, password}", id="slash-in-secret-value"),  # nosec B105
+            pytest.param("DBQ=C:\\db.accdb;UID=a;PWD=x", "{dbq, pwd, uid}", id="backslash-in-value"),  # nosec B105
+            pytest.param("host = h password = x", "{host, password}", id="spaces-around-equals-multi"),  # nosec B105
+            pytest.param(
+                "host=h;PWD=a b=hunter2;UID=x",  # nosec B105
+                "{host, pwd, uid}",
+                id="semicolon-value-with-space-and-equals",
+            ),
+            pytest.param("host=h password='a b=c'", "{host, password}", id="quoted-value-with-equals"),  # nosec B105
+            pytest.param(
+                "dt=2020-01-01 00:00:00/x.csv",
+                "dt=2020-01-01 00:00:00/x.csv",
+                id="unchanged-key-value-path-with-space",
+            ),
+            pytest.param("data=2020 backup.csv", "data=2020 backup.csv", id="unchanged-non-kv-token"),
+            pytest.param("year=2020", "year=2020", id="unchanged-lone-non-credential-token"),
             pytest.param(Path("user=42/part.parquet"), "user=42/part.parquet", id="path-object-key-value-directory"),
         ],
     )

@@ -44,25 +44,41 @@ logger = logging.getLogger(__name__)
 RESERVED_READER_OPTION_KEY = "BaseInputData"
 
 
-_CONNECTION_STRING = re.compile(r"^[^/\\=;]+=[^/\\;\s]*[;\s]")
-_CONNECTION_KEY = re.compile(r"(?:^|[;\s])([^\s;=]+)=")
-_USERINFO_PREFIX = re.compile(r"^(?![A-Za-z]:[\\/])[^\s/\\@:]+:[^/\\]*@")
+_QUOTED_SEGMENT = re.compile(r"'[^']*'|\"[^\"]*\"|\{[^}]*\}")
+_DRIVE_PREFIX = re.compile(r"^[A-Za-z]:[\\/]")
+_CREDENTIAL_KEYS = frozenset(
+    {"password", "pwd", "passwd", "pass", "secret", "token", "accountkey", "sharedaccesssignature", "apikey"}
+)
+
+
+def _connection_keys(value: str) -> list[str] | None:
+    text = _QUOTED_SEGMENT.sub("", re.sub(r"\s*=\s*", "=", value))
+    tokens = [t.strip() for t in (text.split(";") if ";" in text else text.split())]
+    tokens = [t for t in tokens if t]
+    keys = [t.partition("=")[0].strip() for t in tokens]
+    if not tokens or any("=" not in t or not k or "/" in k or "\\" in k for t, k in zip(tokens, keys)):
+        return None
+    if len(tokens) == 1 and keys[0].lower() not in _CREDENTIAL_KEYS:
+        return None
+    return sorted(k.lower() for k in keys)
 
 
 def _schemeless_identity(value: str) -> str:
-    """A keyword or ODBC string: its sorted lower-cased key names; user:pw@host/db: what follows the @."""
-    if _CONNECTION_STRING.match(value):
-        return "{" + ", ".join(sorted(key.lower() for key in _CONNECTION_KEY.findall(value))) + "}"
-    match = _USERINFO_PREFIX.match(value)
-    if match:
-        return value[match.end() :].split("?", 1)[0].split("#", 1)[0]
+    """A keyword or ODBC string: its sorted lower-cased keys; user:pw@host: what follows the last @."""
+    keys = _connection_keys(value)
+    if keys is not None:
+        return "{" + ", ".join(keys) + "}"
+    if ":" in value.split("/", 1)[0] and not _DRIVE_PREFIX.match(value):
+        head = re.split(r"[?#]", value, maxsplit=1)[0]
+        if "@" in head:
+            return head.rpartition("@")[2]
     return value
 
 
 def _data_access_identity(data_access: Any) -> str:
     """Mapping: sorted key names. str or PurePath: a scheme:// URI keeps scheme, host and path (abfs/abfss/wasb/wasbs,
     case-insensitive, also the container), user info, query and fragment dropped; a scheme-less keyword or ODBC
-    string is its lower-cased key names, user:pw@host/db keeps what follows the @, any other string as is.
+    string is its lower-cased key names, user:pw@host/db keeps what follows the last @, any other string as is.
     Anything else: its type name."""
     if isinstance(data_access, Mapping):
         return "{" + ", ".join(sorted(str(key) for key in data_access)) + "}"

@@ -1713,7 +1713,16 @@ Available join types:
         pre_required_uuids: set[UUID],
     ) -> dict[Any, FeatureGroupStep]:
         feature_group, features = feature_group_features[0], feature_group_features[1]
-        features_grouped_by_framework_and_options = self.group_features_by_compute_framework_and_options(features)
+        features_grouped_by_framework_and_options: dict[Any, set[Feature]] = (
+            self.group_features_by_compute_framework_and_options(features)
+        )
+        if isinstance(feature_group.input_data(), ApiInputData) and self.api_input_data_collection is not None:
+            api_groups: dict[tuple[int, str], set[Feature]] = defaultdict(set)
+            for f_hash, grouped_features in features_grouped_by_framework_and_options.items():
+                for feature in grouped_features:
+                    source_key, _ = self.api_input_data_collection.get_name_cls_by_matching_column_name(feature.name)
+                    api_groups[(f_hash, source_key)].add(feature)
+            features_grouped_by_framework_and_options = api_groups
 
         fg_steps: dict[Any, FeatureGroupStep] = {}
 

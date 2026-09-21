@@ -25,6 +25,7 @@ from mloda.user import Link, JoinSpec
 from mloda.user import Options
 from mloda.user import PluginCollector
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
+from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
 from mloda.provider import ApiInputDataFeature
 
 
@@ -225,6 +226,21 @@ class TestSimplifiedApiData:
         assert "SimpleApiFeature" in df.columns
         assert len(df) == 2
         assert df["SimpleApiFeature"].tolist() == ["1_a", "2_b"]
+
+    def test_requested_features_from_two_api_data_sets_return_separate_results(self) -> None:
+        result = mloda.run_all(
+            ["a", "b"],
+            compute_frameworks={PythonDictFramework},
+            api_data={"first": {"a": ["one"]}, "second": {"b": ["one", "two"]}},
+        )
+
+        frames = [dict(frame) for frame in result]
+        assert len(frames) == 2, f"both requested features must be returned in separate frames, got {frames!r}"
+        assert {next(iter(frame)) for frame in frames} == {"a", "b"}
+        assert {tuple(frame): tuple(next(iter(frame.values()))) for frame in frames} == {
+            ("a",): ("one",),
+            ("b",): ("one", "two"),
+        }
 
     def test_simplified_api_data_two_keys_first_key_used(self) -> None:
         """

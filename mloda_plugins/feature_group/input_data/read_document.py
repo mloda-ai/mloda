@@ -5,8 +5,6 @@ from typing import Any, ClassVar
 from mloda.core.abstract_plugins.components.utils import is_match_abort
 from mloda.provider import (
     BaseInputData,
-    CHAIN_SEPARATOR,
-    COLUMN_SEPARATOR,
     INPUT_DATA_STAGE,
     FeatureSet,
     PropertySpec,
@@ -169,7 +167,7 @@ class ReadDocument(BaseInputData):
     @classmethod
     def _declines_separator_name(cls, path: str, feature_names: list[str]) -> bool:
         """Declines a chain/column-separated name; document readers cannot confirm one."""
-        feature = next((name for name in feature_names if CHAIN_SEPARATOR in name or COLUMN_SEPARATOR in name), None)
+        feature = cls._first_separator_name(feature_names)
         if feature is None:
             return False
         record_match_rejection(

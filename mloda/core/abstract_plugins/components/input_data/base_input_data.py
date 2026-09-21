@@ -4,6 +4,10 @@ from typing import Any, ClassVar
 
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.abstract_plugins.components.data_types import DataType
+from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser import (
+    CHAIN_SEPARATOR,
+    COLUMN_SEPARATOR,
+)
 from mloda.core.abstract_plugins.components.property_spec import PropertySpec, is_no_default
 from mloda.core.abstract_plugins.components.feature_set import FeatureSet
 from mloda.core.abstract_plugins.function_extender import ExtenderHook, _invoke_extender
@@ -265,6 +269,11 @@ class BaseInputData(ABC):
     def _is_overridden(cls, base: type, method_name: str) -> bool:
         """Structurally check whether cls overrides method_name relative to base."""
         return cls._underlying(getattr(cls, method_name)) is not cls._underlying(getattr(base, method_name))
+
+    @staticmethod
+    def _first_separator_name(feature_names: list[str]) -> str | None:
+        """The first chain- or column-separated name, or None; the one definition of a separator name."""
+        return next((name for name in feature_names if CHAIN_SEPARATOR in name or COLUMN_SEPARATOR in name), None)
 
     def matches(
         self,

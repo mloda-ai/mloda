@@ -288,6 +288,25 @@ def _document_dac(route: str, tmp_path: Path, file_name: str) -> tuple[DataAcces
     return DataAccessCollection(folders={str(tmp_path)}), str(path)
 
 
+class TestFirstSeparatorName:
+    """BaseInputData._first_separator_name finds the first chain/column-separated name, else None."""
+
+    @pytest.mark.parametrize(
+        ("feature_names", "expected"),
+        [
+            ([CHAINDECLINE_PLAIN_FEATURE, CHAINDECLINE_CHAIN_FEATURE], CHAINDECLINE_CHAIN_FEATURE),
+            ([CHAINDECLINE_PLAIN_FEATURE, CHAINDECLINE_MULTI_OUTPUT_FEATURE], CHAINDECLINE_MULTI_OUTPUT_FEATURE),
+            ([CHAINDECLINE_PLAIN_FEATURE, "chaindecline_other_column"], None),
+            ([], None),
+            ([CHAINDECLINE_CHAIN_FEATURE, CHAINDECLINE_MULTI_OUTPUT_FEATURE], CHAINDECLINE_CHAIN_FEATURE),
+            ([CHAINDECLINE_MULTI_OUTPUT_FEATURE, CHAINDECLINE_CHAIN_FEATURE], CHAINDECLINE_MULTI_OUTPUT_FEATURE),
+        ],
+        ids=["chain", "column", "plain_names", "empty", "chain_before_column", "column_before_chain"],
+    )
+    def test_returns_first_offending_name_or_none(self, feature_names: list[str], expected: str | None) -> None:
+        assert BaseInputData._first_separator_name(feature_names) == expected
+
+
 class TestDocumentedOverrideReader:
     """A validate_columns override matching the documented super-delegating shape still gates the general path."""
 

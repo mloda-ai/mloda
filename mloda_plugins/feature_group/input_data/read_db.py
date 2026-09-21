@@ -2,8 +2,6 @@ from typing import Any, ClassVar
 from mloda.core.abstract_plugins.components.utils import is_match_abort
 from mloda.user import DataAccessCollection
 from mloda.provider import (
-    CHAIN_SEPARATOR,
-    COLUMN_SEPARATOR,
     FeatureSet,
     BaseInputData,
     INPUT_DATA_STAGE,
@@ -179,14 +177,15 @@ class ReadDB(BaseInputData):
                             raise
                         # COLUMN_SEPARATOR never reaches here in production (get_column_base_feature strips it
                         # first); kept for direct callers of match_read_db_data_access.
-                        if not cls._is_overridden(ReadDB, "check_feature_in_data_access") and (
-                            CHAIN_SEPARATOR in feature_names[0] or COLUMN_SEPARATOR in feature_names[0]
+                        separator_name = cls._first_separator_name(feature_names)
+                        if separator_name is not None and not cls._is_overridden(
+                            ReadDB, "check_feature_in_data_access"
                         ):
                             record_match_rejection(
                                 cls.get_class_name(),
                                 f"{cls.get_class_name()} accepted the credentials but does not override "
                                 f"check_feature_in_data_access, so it cannot confirm the chain/column-separated "
-                                f"feature '{feature_names[0]}'",
+                                f"feature '{separator_name}'",
                                 stage=INPUT_DATA_STAGE,
                             )
                             continue

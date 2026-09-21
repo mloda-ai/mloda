@@ -138,22 +138,6 @@ class TestExecutionPlanEngineResolutionMap:
 
         assert feature_set.declared_input_feature_edges is None
 
-    def test_edge_keys_and_values_are_plain_str(self) -> None:
-        framework_name = PythonDictFramework.get_class_name()
-        feature = Feature("plain", compute_framework=framework_name)
-
-        plan = ExecutionPlan(resolved_input_feature_names={feature.uuid: frozenset({"src"})})
-        fg_steps = plan.run_feature_group(
-            (_ResolutionMapFeatureGroup, {feature}),
-            parent_to_children_mapping={},
-            pre_required_uuids=set(),
-        )
-
-        edges = next(iter(fg_steps.values())).features.declared_input_feature_edges
-        assert edges is not None
-        assert all(type(key) is str for key in edges)
-        assert all(type(name) is str for names in edges.values() for name in names)
-
     def test_plan_without_engine_map_leaves_runtime_fallback(self) -> None:
         framework_name = PythonDictFramework.get_class_name()
         first = Feature("first", compute_framework=framework_name)

@@ -55,7 +55,8 @@ class PlanStep:
     ``feature_set_options`` is a compute step's group-only, deep-copied snapshot of ``FeatureSet.options``,
     and ``step_uuid`` its ``FeatureGroupStep.uuid``, the key ``RunResult.frames()`` pairs frames by; both
     are None for join/transform steps and, like ``join_token``, excluded from equality.
-    ``input_feature_edges`` maps each output feature name to its declared inputs (injected features absent).
+    ``input_feature_edges`` maps each output feature name to its declared inputs (injected features absent);
+    it participates in equality but is excluded from hashing.
     """
 
     step_kind: Literal["compute", "join", "transform"]
@@ -149,7 +150,7 @@ def build_plan_steps(
                     step_uuid=step.uuid,
                     input_feature_edges={
                         name: tuple(sorted(inputs))
-                        for name, inputs in (getattr(step.features, "declared_input_feature_edges", None) or {}).items()
+                        for name, inputs in (step.features.declared_input_feature_edges or {}).items()
                     },
                 )
             )

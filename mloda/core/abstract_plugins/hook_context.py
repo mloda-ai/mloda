@@ -53,7 +53,7 @@ class HookContext:
     plan_depth: int | None = None
 
     def __post_init__(self) -> None:
-        # Copy on ingest so a hook mutating the carrier never reaches the caller's dict.
+        # Copy on ingest so a hook mutating the carrier or input_feature_edges never reaches the caller's dict.
         if self.carrier is not None:
             self.carrier = dict(self.carrier)
         if self.input_feature_edges is not None:

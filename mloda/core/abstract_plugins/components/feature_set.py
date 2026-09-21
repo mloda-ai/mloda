@@ -21,7 +21,7 @@ def merge_input_feature_edges(pairs: Iterable[tuple[str, Iterable[str]]]) -> dic
         declared = {str(entry) for entry in inputs}
         if declared:
             merged.setdefault(str(name), set()).update(declared)
-    return {name: tuple(sorted(inputs)) for name, inputs in merged.items()} or None
+    return {name: tuple(sorted(inputs)) for name, inputs in sorted(merged.items())} or None
 
 
 class FeatureSet:

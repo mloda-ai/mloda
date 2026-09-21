@@ -263,6 +263,14 @@ class TestSimplifiedApiData:
                 api_data={"First": {"first_id": [1, 2]}, "Second": {"second_id": [1, 2], "second_value": ["x", "y"]}},
             )
 
+    def test_duplicate_column_across_api_data_sets_raises(self) -> None:
+        with pytest.raises(ValueError, match=r"(?s)(?=.*'a')(?=.*first)(?=.*second)"):
+            mloda.run_all(
+                ["a"],
+                compute_frameworks={PythonDictFramework},
+                api_data={"first": {"a": [1]}, "second": {"a": [1, 2]}},
+            )
+
     def test_simplified_api_data_two_keys_first_key_used(self) -> None:
         """
         Test that run_all() can register multiple mloda keys and use the first key's data.

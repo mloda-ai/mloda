@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import contextvars
 import functools
+import inspect
 import logging
 import re
 from typing import Any
@@ -229,6 +230,40 @@ def warn_universal_optional_matcher(owner: type[Any]) -> None:
         "universal configuration matcher: once in_features supplies a source it matches any feature name. Add a "
         "required key (a PropertySpec with no default, or a required_when predicate that fires), or "
         "set ALLOW_UNIVERSAL_MATCHER = True to declare the universal match intentional.",
+        owner.__name__,
+    )
+
+
+def warn_missing_in_features_declaration(owner: type[Any]) -> None:
+    """Nudge authors whose mixin group declares no in_features source contract but keeps MIN_IN_FEATURES >= 1.
+
+    Such a group counts an absent in_features as zero sources, so it matches by options only when the caller
+    passes in_features. Silent when the group declares an in_features key, is source-less (MIN_IN_FEATURES = 0),
+    or overrides input_features or the matcher (it then owns its source handling).
+    """
+    from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser_mixin import (
+        FeatureChainParserMixin,
+    )
+
+    property_mapping = getattr(owner, "PROPERTY_MAPPING", None)
+    if not isinstance(property_mapping, dict) or DefaultOptionKeys.in_features.value in property_mapping:
+        return
+    if not (hasattr(owner, "MIN_IN_FEATURES") and hasattr(owner, "MAX_IN_FEATURES")):
+        return
+    minimum = owner.MIN_IN_FEATURES
+    if not isinstance(minimum, int) or minimum < 1:
+        return
+    if getattr(owner, "input_features", None) is not FeatureChainParserMixin.input_features:
+        return
+    matcher = getattr(owner, "match_feature_group_criteria")
+    own_matcher = inspect.getattr_static(FeatureChainParserMixin, "match_feature_group_criteria").__func__
+    if inspect.unwrap(getattr(matcher, "__func__", matcher)) is not own_matcher:
+        return
+    logger.warning(
+        "%s declares no in_features source contract, so an absent in_features counts as zero sources and it "
+        "matches by options only when the caller passes in_features. Set MIN_IN_FEATURES = 0 if the group is "
+        "source-less, or declare an in_features key in PROPERTY_MAPPING (with a default if it should match "
+        "without one).",
         owner.__name__,
     )
 

@@ -158,3 +158,56 @@ class TestNameSourceCountRejectionIsRecorded:
 
         assert result is False
         assert rejection_window == {}
+
+
+class _OptionsOnlyGroupM951(FeatureChainParserMixin):
+    """Options-only group: one declared non-in_features key, no in_features key, default MIN_IN_FEATURES."""
+
+    PROPERTY_MAPPING = {"mode_m951": PropertySpec("Mode", allowed_values={"fast_m951": "Fast"}, context=True)}
+
+
+class _AllOptionalGroupM951(FeatureChainParserMixin):
+    """All-optional mapping, so it matches options that never mention its keys."""
+
+    PROPERTY_MAPPING = {"tuning_m951": PropertySpec("Tuning", default=None, context=True)}
+
+
+class TestOptionPathZeroSourceRecordsNoRejection:
+    """The option path records no rejection reason for a zero-source non-match, whatever the options address."""
+
+    def test_addressed_group_without_in_features_does_not_match_and_records_nothing(
+        self, rejection_window: dict[str, MatchRejection]
+    ) -> None:
+        """The option path keeps its "not mine" meaning; the definition-time warning is the mitigation."""
+        options = Options(context={"mode_m951": "fast_m951"})
+
+        result = _OptionsOnlyGroupM951.match_feature_group_criteria("any_name_m951", options)
+
+        assert result is False
+        assert rejection_window == {}
+
+    def test_options_addressing_none_of_the_group_record_nothing(
+        self, rejection_window: dict[str, MatchRejection]
+    ) -> None:
+        result = _AllOptionalGroupM951.match_feature_group_criteria("any_name_m951", Options())
+
+        assert result is False
+        assert rejection_window == {}
+
+    def test_unrelated_options_record_nothing(self, rejection_window: dict[str, MatchRejection]) -> None:
+        options = Options(context={"unrelated_key_m951": "x"})
+
+        result = _AllOptionalGroupM951.match_feature_group_criteria("any_name_m951", options)
+
+        assert result is False
+        assert rejection_window == {}
+
+    def test_supplied_in_features_still_matches_and_records_nothing(
+        self, rejection_window: dict[str, MatchRejection]
+    ) -> None:
+        options = Options(context={"mode_m951": "fast_m951", DefaultOptionKeys.in_features: "src_m951"})
+
+        result = _OptionsOnlyGroupM951.match_feature_group_criteria("any_name_m951", options)
+
+        assert result is True
+        assert rejection_window == {}

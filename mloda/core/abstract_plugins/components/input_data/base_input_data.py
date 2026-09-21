@@ -42,20 +42,24 @@ RESERVED_READER_OPTION_KEY = "BaseInputData"
 
 
 def _data_access_identity(data_access: Any) -> str:
-    """Build a data_access_identity string that never leaks credential values.
-
-    A dict (e.g. DB credentials) is identified by its sorted key names only. A URI-shaped
-    string with a user[:pass]@ userinfo segment has that segment stripped before the host.
-    """
+    """A dict is identified by its sorted key names; a scheme:// URI by scheme, host and path (abfs/abfss/wasb/wasbs also keep
+    the container), user info, query and fragment dropped; user info must percent-encode "/", "?" and "#"."""
     if isinstance(data_access, dict):
         return "{" + ", ".join(sorted(str(key) for key in data_access)) + "}"
     if isinstance(data_access, str) and "://" in data_access:
         scheme, _, rest = data_access.partition("://")
-        if "@" in rest:
-            if scheme.lower() in ("abfs", "abfss", "wasb", "wasbs"):
-                return data_access
-            host_and_path = rest.rpartition("@")[2]
-            return f"{scheme}://{host_and_path}"
+        head = rest.split("/", 1)[0].split("?", 1)[0].split("#", 1)[0]
+        tail = head.rpartition(":")[2]
+        # Best effort: an unencoded "/", "?" or "#" in a password puts its "@" past the authority. Caught only when the
+        # authority then fails to parse as host[:port]; a password that is digits before the delimiter reads as a port.
+        if "@" not in head and ":" in head and not head.startswith("[") and tail and not tail.isdigit():
+            rest = rest.rpartition("@")[2]
+        body = rest.split("?", 1)[0].split("#", 1)[0]
+        authority, slash, path = body.partition("/")
+        userinfo, _, host = authority.rpartition("@")
+        if scheme.lower() not in ("abfs", "abfss", "wasb", "wasbs") or ":" in userinfo:
+            authority = host
+        return f"{scheme}://{authority}{slash}{path}"
     return str(data_access)
 
 

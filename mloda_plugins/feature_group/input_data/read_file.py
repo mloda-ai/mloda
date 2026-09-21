@@ -6,8 +6,6 @@ from mloda.user import DataAccessCollection
 from mloda.provider import FeatureSet
 from mloda.provider import (
     BaseInputData,
-    CHAIN_SEPARATOR,
-    COLUMN_SEPARATOR,
     INPUT_DATA_STAGE,
     PropertySpec,
     record_match_rejection,
@@ -180,7 +178,7 @@ class ReadFile(BaseInputData):
     @classmethod
     def _declines_unvalidated_separator_name(cls, file_name: str, feature_names: list[str]) -> bool:
         """Declines a chain/column-separated name this reader cannot confirm by enumerating columns."""
-        feature = next((name for name in feature_names if CHAIN_SEPARATOR in name or COLUMN_SEPARATOR in name), None)
+        feature = cls._first_separator_name(feature_names)
         if feature is None:
             return False
         if cls._column_names_or_none(file_name) is not None:

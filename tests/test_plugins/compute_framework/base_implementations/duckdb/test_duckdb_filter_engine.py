@@ -1,5 +1,6 @@
 """Unit tests for the DuckDBFilterEngine class."""
 
+from decimal import Decimal
 from typing import Any
 import logging
 
@@ -103,6 +104,14 @@ class TestDuckDBFilterEngine(FilterEngineTestMixin, TimeRangeFilterEngineTestMix
         ages = result_df["age"].tolist()
         assert None not in ages
         assert sorted(ages) == [30, 35, 40, 45]
+
+    def test_min_filter_decimal_value_raises_type_error(self, connection: Any) -> None:
+        arrow_table = pa.table({"d": pa.array([Decimal("12.34"), Decimal("5.50")], type=pa.decimal128(10, 2))})
+        data = DuckdbRelation.from_arrow(connection, arrow_table)
+        single_filter = SingleFilter(Feature("d"), FilterType.MIN, {"value": Decimal("12.34")})
+
+        with pytest.raises(TypeError, match="Unsupported type for SQL literal"):
+            DuckDBFilterEngine.do_min_filter(data, single_filter)
 
     def test_filter_with_empty_data(self) -> None:
         """Test filtering with empty DuckDB relation."""

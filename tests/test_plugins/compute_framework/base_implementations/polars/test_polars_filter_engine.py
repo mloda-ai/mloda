@@ -81,6 +81,15 @@ class TestPolarsFilterEngine(FilterEngineTestMixin, TimeRangeFilterEngineTestMix
         assert result.schema["d"] == pl.Decimal(10, 2)
         assert result["d"].to_list() == [Decimal("12.34"), Decimal("99.99")]
 
+    def test_categorical_inclusion_decimal_values_raises(self) -> None:
+        data = pl.DataFrame({"d": [Decimal("12.34"), Decimal("5.50")]}, schema={"d": pl.Decimal(10, 2)})
+        single_filter = SingleFilter(
+            Feature("d"), FilterType.CATEGORICAL_INCLUSION, {"values": [Decimal("12.34"), Decimal("5.50")]}
+        )
+
+        with pytest.raises(pl.exceptions.InvalidOperationError):
+            PolarsFilterEngine.do_categorical_inclusion_filter(data, single_filter)
+
     def test_filter_with_null_values(self, sample_data: Any) -> None:
         """Test filtering with null values in data."""
         extended_data = pl.concat(

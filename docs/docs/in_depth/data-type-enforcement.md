@@ -156,18 +156,20 @@ Not every backend's native type system can distinguish every precision mloda dec
 
 ## Decimal Columns
 
-`DataType.DECIMAL` is a single type: precision and scale are never declared or checked, and converting it back to Arrow gives `decimal128(38, 18)`. A `Feature` cannot declare a precision or scale.
+`DataType.DECIMAL` is a single type: precision and scale are never declared or checked, and converting it back to Arrow gives `decimal128(38, 18)`. A `Feature` cannot declare a precision or scale. `DECIMAL` is not in the lenient numeric family, so a `DECIMAL` feature over a `DOUBLE` column raises `DataTypeMismatchError` in both modes.
 
 | Framework | Extraction | Filter, mask, merge | PyArrow transformer |
 |---|---|---|---|
-| Pandas | none (column is not validated) | exact | precision inferred, Arrow-backed dtype not restored |
-| Polars | `DECIMAL` | exact, except `is_in` (fails) | exact |
+| Pandas | none (column is not validated) | exact | object column: precision inferred; Arrow-backed dtype kept outbound, returned as `object` |
+| Polars (eager / lazy) | `DECIMAL` | exact, except `is_in` (categorical inclusion filter and `is_in` mask raise) | exact |
 | PyArrow | `DECIMAL` | exact | native |
 | DuckDB | `DECIMAL` | merge exact; filter and mask reject `Decimal` values | exact |
-| SQLite | no decimal column (`Decimal` cannot be bound) | not applicable | fails |
+| SQLite | TEXT affinity column; inserting `Decimal` values fails | not applicable | fails |
 | PythonDict | `DECIMAL` | exact | precision inferred |
-| Spark | `DECIMAL` (not run in CI here) | not verified | no schema passed, precision likely lost |
-| Iceberg | `DECIMAL` | filter expressions exact, no mask or merge | pass-through |
+| Spark | `DECIMAL` (source mapping, no test: needs Java) | not checked | not checked (no schema is passed on the way in) |
+| Iceberg | `DECIMAL` | filter expressions exact for the column scale (other scales raise), no mask or merge | pass-through |
+
+Cells were checked by running each framework except Spark; only some are pinned by tests.
 
 ## Execution Plan Grouping
 

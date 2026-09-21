@@ -41,7 +41,7 @@ class TestDuckDBSqlMaskEngine(SqlMaskEngineTestMixin):
         return DuckdbRelation.from_arrow(connection, table)
 
     def test_equal_decimal_value_raises_type_error(self, engine: type[DuckDBMaskEngine], sample_data: Any) -> None:
-        with pytest.raises(TypeError):
+        with pytest.raises(TypeError, match="Unsupported type for SQL literal"):
             engine.equal(sample_data, "value", Decimal("12.34"))
 
     def evaluate_mask(self, mask: Any, data: DuckdbRelation) -> list[bool]:

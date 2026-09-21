@@ -220,10 +220,10 @@ class TestSqliteDtypeExtraction(DtypeExtractionTestMixin):
         )
         return SqliteRelation.from_arrow(connection, arrow_table)
 
-    def test_relation_from_decimal_column_raises_programming_error(self, connection: sqlite3.Connection) -> None:
+    def test_relation_from_decimal_column_raises(self, connection: sqlite3.Connection) -> None:
         values = [Decimal("12.34"), Decimal("5.50"), Decimal("99.99"), None]
 
-        with pytest.raises(sqlite3.ProgrammingError):
+        with pytest.raises((sqlite3.InterfaceError, sqlite3.ProgrammingError)):
             SqliteRelation.from_arrow(connection, pa.table({"d": pa.array(values, type=pa.decimal128(10, 2))}))
 
     def test_extract_raw_sql_expression_column_data_type_is_numeric(

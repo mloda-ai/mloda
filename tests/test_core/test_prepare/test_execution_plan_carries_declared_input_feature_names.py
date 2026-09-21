@@ -93,3 +93,31 @@ class TestExecutionPlanCarriesDeclaredInputFeatureNames:
         assert len(dependent_contexts) == 1
         assert dependent_contexts[0].input_features == frozenset({CIF_ROOT_FEATURE})
         assert _CifDependentFeatureGroup.input_features_calls == 1
+
+
+class TestExecutionPlanCarriesDeclaredInputFeatureEdges:
+    """The per-output-feature edges reach HookContext from the same single planning-time resolution."""
+
+    def test_hook_context_input_feature_edges_match_engine_resolution_and_input_features_calls_once(self) -> None:
+        _CifDependentFeatureGroup.input_features_calls = 0
+        collector = PluginCollector.enabled_feature_groups({_CifRootFeatureGroup, _CifDependentFeatureGroup})
+        extender = _CifCapturingExtender()
+
+        mloda.run_all(
+            [Feature(CIF_DEPENDENT_FEATURE)],
+            compute_frameworks={PythonDictFramework},
+            plugin_collector=collector,
+            function_extender={extender},
+        )
+
+        dependent_contexts = [
+            context for context in extender.captured if CIF_DEPENDENT_FEATURE in context.feature_names
+        ]
+        assert len(dependent_contexts) == 1
+        assert dependent_contexts[0].input_feature_edges == {CIF_DEPENDENT_FEATURE: (CIF_ROOT_FEATURE,)}
+        assert dependent_contexts[0].input_features == frozenset({CIF_ROOT_FEATURE})
+        assert _CifDependentFeatureGroup.input_features_calls == 1
+
+        root_contexts = [context for context in extender.captured if CIF_ROOT_FEATURE in context.feature_names]
+        assert len(root_contexts) == 1
+        assert root_contexts[0].input_feature_edges is None

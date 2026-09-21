@@ -1,4 +1,4 @@
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 from typing import Literal, TYPE_CHECKING
 from uuid import UUID
@@ -55,6 +55,8 @@ class PlanStep:
     ``feature_set_options`` is a compute step's group-only, deep-copied snapshot of ``FeatureSet.options``,
     and ``step_uuid`` its ``FeatureGroupStep.uuid``, the key ``RunResult.frames()`` pairs frames by; both
     are None for join/transform steps and, like ``join_token``, excluded from equality.
+    ``input_feature_edges`` maps each output feature name to its declared inputs (injected features absent);
+    it participates in equality but is excluded from hashing.
     """
 
     step_kind: Literal["compute", "join", "transform"]
@@ -73,6 +75,7 @@ class PlanStep:
     declared_right_frameworks: tuple[type["ComputeFramework"], ...] = ()
     feature_set_options: Options | None = field(default=None, compare=False)
     step_uuid: UUID | None = field(default=None, compare=False)
+    input_feature_edges: Mapping[str, tuple[str, ...]] = field(default_factory=dict, hash=False)
 
     @property
     def feature_group_name(self) -> str | None:
@@ -145,6 +148,10 @@ def build_plan_steps(
                         else None
                     ),
                     step_uuid=step.uuid,
+                    input_feature_edges={
+                        name: tuple(sorted(inputs))
+                        for name, inputs in (step.features.declared_input_feature_edges or {}).items()
+                    },
                 )
             )
         elif isinstance(step, TransformFrameworkStep):

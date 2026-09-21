@@ -88,6 +88,33 @@ class TestHookContextCarrierField:
         assert "mutated" not in carrier
 
 
+class TestHookContextInputFeatureEdgesField:
+    """HookContext carries the per-output-feature declared input names, None when unknown."""
+
+    def test_input_feature_edges_defaults_to_none(self) -> None:
+        context = _make_context()
+
+        assert context.input_feature_edges is None
+
+    def test_input_feature_edges_can_be_set_via_constructor(self) -> None:
+        context = _make_context(input_feature_edges={"a": ("src_a",)})
+
+        assert context.input_feature_edges == {"a": ("src_a",)}
+
+    def test_input_feature_edges_is_copied_not_aliased_and_mutation_does_not_leak_into_original(self) -> None:
+        edges = {"a": ("src_a",)}
+
+        context = _make_context(input_feature_edges=edges)
+
+        assert context.input_feature_edges == edges
+        assert context.input_feature_edges is not edges
+
+        assert context.input_feature_edges is not None
+        context.input_feature_edges["mutated"] = ("yes",)
+
+        assert "mutated" not in edges
+
+
 class TestHookContextWorkerIndexField:
     """HookContext carries the worker index of the multiprocessing worker it ran in."""
 

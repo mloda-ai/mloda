@@ -168,16 +168,18 @@ class Options:
 
     @property
     def own_group_keys(self) -> frozenset[str]:
-        """Group keys this feature declared on its own before any inherit_from ran, still present."""
+        """Group keys declared on this feature before mloda started resolving it, still present."""
         return self._own_group_keys & self.group.keys()
 
     @property
     def own_context_keys(self) -> frozenset[str]:
-        """Context keys this feature declared on its own before any inherit_from ran, still present."""
+        """Context keys declared on this feature before mloda started resolving it, still present."""
         return self._own_context_keys & self.context.keys()
 
     def is_own(self, key: str) -> bool:
-        """True if key was declared on this feature's own Options before any inherit_from ran."""
+        """True if key was declared on this feature before mloda started resolving it (engine intake or
+        its first committed inherit_from, whichever came first). After an engine intake merge, a key is
+        own if any merged request declared it."""
         return key in self.own_group_keys or key in self.own_context_keys
 
     def union_own_keys(self, other: "Options") -> None:
@@ -188,6 +190,10 @@ class Options:
         self._own_group_keys = self._own_group_keys | other._own_group_keys
         self._own_context_keys = self._own_context_keys | other._own_context_keys
         self._own_keys_locked = self._own_keys_locked or other._own_keys_locked
+
+    def lock_own_keys(self) -> None:
+        """Stop later set/add_to_group/add_to_context calls from extending own keys. Idempotent."""
+        self._own_keys_locked = True
 
     def add_to_group(self, key: str, value: Any, forward: bool = True) -> None:
         """Add parameter to group (affects Feature Group resolution/splitting); ``forward=False``
@@ -407,8 +413,8 @@ class Options:
         Every key actually forwarded (including keys self already held with an equal value) is
         unioned into self.inherited_group_keys, so provenance accumulates across consumers.
 
-        The first call that commits (per instance) sets self._own_keys_locked, regardless of whether
-        anything ends up forwarded; a raising call leaves it unset. Once locked, further
+        The first call that commits (per instance) calls lock_own_keys, regardless of whether
+        anything ends up forwarded; a raising call does not lock. Once locked, further
         ``set``/``add_to_group``/``add_to_context`` calls no longer extend ``own_group_keys``/``own_context_keys``.
 
         Forwarded values are isolated by a container-spine copy as they are stored: the
@@ -509,7 +515,7 @@ class Options:
             new_context.update({key: _isolate_forwarded_value(value, memo) for key, value in propagating.items()})
             inherited_context.update(propagating.keys())
 
-        self._own_keys_locked = True
+        self.lock_own_keys()
         self.group.clear()
         self.group.update(new_group)
         self.context.clear()

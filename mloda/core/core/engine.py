@@ -197,6 +197,8 @@ class Engine:
     def _process_feature(self, feature: Feature, features: Features, requested: bool, depth: int = 0) -> None:
         """Processes a single feature by delegating tasks to helper methods."""
 
+        # Feature-group matchers write into the options; those writes are never the feature's own declaration.
+        feature.options.lock_own_keys()
         feature_group_class, compute_frameworks, result = self._identify_feature_group_and_frameworks(feature, depth)
         self.resolution_records.append(ResolutionRecord(str(feature.name), requested, result))
         self._warn_on_dual_option_consumption(feature, feature_group_class)

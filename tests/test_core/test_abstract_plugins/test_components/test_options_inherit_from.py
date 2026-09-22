@@ -2251,6 +2251,52 @@ class TestOwnKeysLocking:
         copied.add_to_context("post_copy_key", 1)
         assert "post_copy_key" not in copied.own_context_keys
 
+    def test_lock_own_keys_keeps_constructor_keys_and_blocks_later_writes(self) -> None:
+        """After lock_own_keys, constructor keys stay own; later group/context/set writes are not own."""
+        options = Options(group={"g": 1}, context={"c": 1})
+
+        options.lock_own_keys()
+        options.add_to_group("late_group_key", 1)
+        options.add_to_context("late_context_key", 1)
+        options.set("late_set_key", 1)
+
+        assert "late_group_key" in options.group
+        assert "late_context_key" in options.context
+        assert "late_set_key" in options.group
+        assert options.own_group_keys == frozenset({"g"})
+        assert options.own_context_keys == frozenset({"c"})
+        assert options.is_own("late_group_key") is False
+        assert options.is_own("late_context_key") is False
+        assert options.is_own("late_set_key") is False
+
+    def test_lock_own_keys_is_idempotent(self) -> None:
+        """Locking twice does not raise and yields the same own keys as locking once."""
+        locked_once = Options(group={"g": 1}, context={"c": 1})
+        locked_twice = Options(group={"g": 1}, context={"c": 1})
+
+        locked_once.lock_own_keys()
+        locked_twice.lock_own_keys()
+        locked_twice.lock_own_keys()
+        for options in (locked_once, locked_twice):
+            options.add_to_group("late_group_key", 1)
+            options.add_to_context("late_context_key", 1)
+
+        assert locked_twice.own_group_keys == locked_once.own_group_keys == frozenset({"g"})
+        assert locked_twice.own_context_keys == locked_once.own_context_keys == frozenset({"c"})
+
+    def test_inherit_from_after_lock_own_keys(self) -> None:
+        """inherit_from still commits after lock_own_keys; inherited keys are not own, pre-lock keys are."""
+        consumer = Options(group={"kg_backend": "neo4j"})
+        child = Options(group={"own_key": "own_value"})
+        child.lock_own_keys()
+
+        forwarded = child.inherit_from(consumer)
+
+        assert forwarded == frozenset({"kg_backend"})
+        assert child.group["kg_backend"] == "neo4j"
+        assert child.is_own("kg_backend") is False
+        assert child.is_own("own_key") is True
+
 
 class TestUnionOwnKeys:
     """When two value-equal Feature requests from different consumers merge into one surviving

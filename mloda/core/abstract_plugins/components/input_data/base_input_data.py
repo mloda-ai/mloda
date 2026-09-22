@@ -4,6 +4,7 @@ from abc import ABC
 from collections.abc import Iterable, Mapping
 from pathlib import PurePath
 from typing import Any, ClassVar
+from urllib.parse import unquote
 
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.abstract_plugins.components.data_types import DataType
@@ -55,6 +56,7 @@ _USERINFO_PATTERN = re.compile(r"^[^/\\@\s:]*:[^@]*@")
 _DRIVE_LETTER_PATTERN = re.compile(r"^[A-Za-z]:[\\/]")
 _QUERY_KEY_PATTERN = re.compile(r"[?&#;]\s*([A-Za-z_][A-Za-z0-9_.\-]{0,63})\s*=")
 _QUERY_START_PATTERN = re.compile(r"[?#]")
+_ENCODED_QUERY_START_PATTERN = re.compile(r"[?#]|%(?:3[fF]|23)")
 
 
 def _format_keys(keys: Iterable[str]) -> str:
@@ -94,11 +96,11 @@ def _strip_scheme_less_userinfo(value: str) -> str:
 
 
 def _strip_credential_query(value: str) -> str:
-    match = _QUERY_START_PATTERN.search(value)
+    match = _ENCODED_QUERY_START_PATTERN.search(value)
     if match is None:
         return value
     head, tail = value[: match.start()], value[match.start() :]
-    keys = {m[1].lower() for m in _QUERY_KEY_PATTERN.finditer(tail)}
+    keys = {m[1].lower() for m in _QUERY_KEY_PATTERN.finditer(unquote(tail))}
     if any(key in _CONNECTION_KEYS or _is_secret_key(key) for key in keys):
         return head
     return value
@@ -107,9 +109,11 @@ def _strip_credential_query(value: str) -> str:
 def _data_access_identity(data_access: Any) -> str:
     """Mapping: sorted key names. str or PurePath: a scheme:// URI keeps scheme, host and path (abfs/abfss/wasb/wasbs,
     case-insensitive, also the container), user info, query and fragment dropped. A scheme-less string with recognized
-    connection or secret keys is identified by those key names. user:pw@host unconditionally drops query and fragment
-    along with the user info; without userinfo, its own query or fragment is dropped only when it holds a recognized
-    or secret key, otherwise left as is."""
+    connection or secret keys is identified by those key names. user:pw@host unconditionally drops a literal query
+    and fragment along with the user info; any other scheme-less query or fragment is dropped only when it holds a
+    recognized or secret key. That key scan also takes an encoded ?/# as an anchor, in a URI path too, and
+    percent-decodes the tail once; not detected: double encoding, percent-encoded text before any ?/# anchor, and
+    a secret carried as a value under an unrecognized key."""
     if isinstance(data_access, Mapping):
         return _format_keys(str(key) for key in data_access)
     if isinstance(data_access, (str, PurePath)):
@@ -131,7 +135,7 @@ def _data_access_identity(data_access: Any) -> str:
         userinfo, _, host = authority.rpartition("@")
         if scheme.lower() not in ("abfs", "abfss", "wasb", "wasbs") or ":" in userinfo:
             authority = host
-        return f"{scheme}://{authority}{slash}{path}"
+        return _strip_credential_query(f"{scheme}://{authority}{slash}{path}")
     return type(data_access).__name__
 
 

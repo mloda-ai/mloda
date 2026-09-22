@@ -50,5 +50,7 @@ class SqlBaseMaskEngine(BaseMaskEngine):
     @classmethod
     def is_in(cls, data: Any, column: str, values: Any) -> str:
         value_list = values if isinstance(values, (list, tuple)) else [values]
+        if not value_list:
+            return "1 = 0"
         quoted = ", ".join(quote_value(v) for v in value_list)
         return f"{quote_ident(column)} IN ({quoted})"

@@ -26,5 +26,16 @@ class TestPandasMaskEngine(MaskEngineTestMixin):
             }
         )
 
+    @pytest.fixture
+    def empty_data(self) -> Any:
+        return pd.DataFrame({"status": pd.Series([], dtype=str), "value": pd.Series([], dtype="int64")})
+
     def evaluate_mask(self, mask: Any, data: Any) -> list[bool]:
         return list(mask)
+
+    def is_boolean_mask(self, mask: Any, data: Any) -> bool:
+        return bool(mask.dtype == bool)
+
+    def test_all_true_on_empty_frame_keeps_columns(self, engine: type[BaseMaskEngine], empty_data: Any) -> None:
+        mask = engine.all_true(empty_data)
+        assert empty_data[mask].shape == (0, 2)

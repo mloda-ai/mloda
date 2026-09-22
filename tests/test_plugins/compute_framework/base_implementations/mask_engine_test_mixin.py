@@ -4,7 +4,9 @@ This mixin provides common test methods that verify the mask engine contract.
 Each framework-specific test class should inherit from this mixin and provide:
 - engine fixture: Returns the mask engine class
 - sample_data fixture: Returns framework-specific test data
+- empty_data fixture: Returns the same schema as sample_data, typed, with zero rows
 - evaluate_mask method: Converts framework-specific mask to a Python list of booleans
+- is_boolean_mask method: Checks that a mask is boolean-typed
 """
 
 from abc import abstractmethod
@@ -23,7 +25,10 @@ class MaskEngineTestMixin:
     - sample_data fixture returning data with columns:
         status: ["active", "inactive", "active", "inactive"]
         value: [10, 20, 30, 40]
+    - empty_data fixture returning the same schema (status: string, value: int), typed,
+      with zero rows
     - evaluate_mask(mask, data) converting the mask to list[bool]
+    - is_boolean_mask(mask, data) checking that a mask is boolean-typed
     """
 
     @pytest.fixture
@@ -36,8 +41,18 @@ class MaskEngineTestMixin:
     def sample_data(self) -> Any:
         raise NotImplementedError
 
+    @pytest.fixture
+    @abstractmethod
+    def empty_data(self) -> Any:
+        raise NotImplementedError
+
     @abstractmethod
     def evaluate_mask(self, mask: Any, data: Any) -> list[bool]:
+        raise NotImplementedError
+
+    @abstractmethod
+    def is_boolean_mask(self, mask: Any, data: Any) -> bool:
+        """List-based engines can only check element types; also checked on sample_data, not just empty_data."""
         raise NotImplementedError
 
     def test_equal(self, engine: type[BaseMaskEngine], sample_data: Any) -> None:
@@ -116,3 +131,19 @@ class MaskEngineTestMixin:
         m2 = engine.less_equal(sample_data, "value", 30)
         mask = engine.all_of(sample_data, [m1, m2])
         assert self.evaluate_mask(mask, sample_data) == [False, True, True, False]
+
+    def test_is_in_empty_values_is_all_false(self, engine: type[BaseMaskEngine], sample_data: Any) -> None:
+        mask = engine.is_in(sample_data, "status", ())
+        assert self.evaluate_mask(mask, sample_data) == [False, False, False, False]
+
+    def test_all_true_on_empty_data_is_boolean(
+        self, engine: type[BaseMaskEngine], sample_data: Any, empty_data: Any
+    ) -> None:
+        assert self.is_boolean_mask(engine.all_true(sample_data), sample_data)
+        mask = engine.all_true(empty_data)
+        assert self.is_boolean_mask(mask, empty_data) is True
+        assert self.evaluate_mask(mask, empty_data) == []
+
+    def test_combine_on_empty_data(self, engine: type[BaseMaskEngine], empty_data: Any) -> None:
+        mask = engine.combine(engine.all_true(empty_data), engine.equal(empty_data, "status", "x"))
+        assert self.evaluate_mask(mask, empty_data) == []

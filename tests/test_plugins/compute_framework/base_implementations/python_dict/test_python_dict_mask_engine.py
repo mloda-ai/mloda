@@ -23,8 +23,15 @@ class TestPythonDictMaskEngine(MaskEngineTestMixin):
             "value": [10, 20, 30, 40],
         }
 
+    @pytest.fixture
+    def empty_data(self) -> Any:
+        return {"status": [], "value": []}
+
     def evaluate_mask(self, mask: Any, data: Any) -> list[bool]:
         return list(mask)
+
+    def is_boolean_mask(self, mask: Any, data: Any) -> bool:
+        return all(isinstance(v, bool) for v in mask)
 
 
 class TestPythonDictMaskEngineMissingColumn:

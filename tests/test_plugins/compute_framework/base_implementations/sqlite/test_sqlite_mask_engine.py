@@ -1,5 +1,6 @@
 from typing import Any
 
+import pyarrow as pa
 import pytest
 
 from mloda_plugins.compute_framework.base_implementations.sql.sql_base_mask_engine import (
@@ -29,6 +30,11 @@ class TestSqliteSqlMaskEngine(SqlMaskEngineTestMixin):
                 "value": [10, 20, 30, 40],
             },
         )
+
+    @pytest.fixture
+    def empty_data(self, connection: Any) -> Any:
+        table = pa.table({"status": pa.array([], type=pa.string()), "value": pa.array([], type=pa.int64())})
+        return SqliteRelation.from_arrow(connection, table)
 
     def evaluate_mask(self, mask: Any, data: SqliteRelation) -> list[bool]:
         conn = data.connection

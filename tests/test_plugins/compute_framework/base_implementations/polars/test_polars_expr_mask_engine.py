@@ -43,9 +43,16 @@ class TestPolarsExprMaskEngine(MaskEngineTestMixin):
             }
         )
 
+    @pytest.fixture
+    def empty_data(self) -> Any:
+        return pl.LazyFrame({"status": pl.Series([], dtype=pl.String), "value": pl.Series([], dtype=pl.Int64)})
+
     def evaluate_mask(self, mask: Any, data: Any) -> list[bool]:
         result: list[bool] = data.select(mask.alias("__mask")).collect()["__mask"].to_list()
         return result
+
+    def is_boolean_mask(self, mask: Any, data: Any) -> bool:
+        return bool(data.select(mask.alias("__mask")).collect()["__mask"].dtype == pl.Boolean)
 
     # -- Polars-expr-specific tests --
 

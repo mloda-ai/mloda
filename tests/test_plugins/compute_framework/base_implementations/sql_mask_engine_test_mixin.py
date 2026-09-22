@@ -110,3 +110,10 @@ class SqlMaskEngineTestMixin(MaskEngineTestMixin):
     def test_all_of_empty_returns_all_true(self, engine: type[SqlBaseMaskEngine], sample_data: Any) -> None:
         result = engine.all_of(sample_data, [])
         assert result == "1 = 1"
+
+    def test_is_in_empty_values_condition(self, engine: type[SqlBaseMaskEngine], sample_data: Any) -> None:
+        result = engine.is_in(sample_data, "status", ())
+        assert result == "1 = 0"
+
+    def is_boolean_mask(self, mask: Any, data: Any) -> bool:
+        return isinstance(mask, str)

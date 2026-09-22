@@ -40,6 +40,11 @@ if DUCKDB_AVAILABLE:
             )
             return DuckdbRelation.from_arrow(connection, table)
 
+        @pytest.fixture
+        def empty_data(self, connection: Any) -> Any:
+            table = pa.table({"status": pa.array([], type=pa.string()), "value": pa.array([], type=pa.int64())})
+            return DuckdbRelation.from_arrow(connection, table)
+
         def evaluate_mask(self, mask: Any, data: DuckdbRelation) -> list[bool]:
             bool_expr = f"CASE WHEN {mask} THEN 1 ELSE 0 END AS __match__"
             projected = data.project(bool_expr)

@@ -81,14 +81,14 @@ class PyArrowAggregatedFeatureGroup(AggregatedFeatureGroup):
 
     @classmethod
     def _add_result_to_data(cls, data: pa.Table, feature_name: str, result: Any) -> pa.Table:
-        """Add the result to the Table."""
+        """Add the result to the Table. Also accepts plain Python values from overrides."""
         numpy = loaded("numpy")
         if numpy is not None and isinstance(result, numpy.ndarray):
             # Multi-column (row-wise) aggregation: one value per row already.
             result_array = pa.array(result)
         else:
             # Single-column (vertical) aggregation: a scalar broadcast to every row.
-            result_array = pa.array([result] * data.num_rows)
+            result_array = pa.repeat(result, data.num_rows)
 
         if feature_name in data.schema.names:
             column_index = data.schema.names.index(feature_name)
@@ -112,7 +112,8 @@ class PyArrowAggregatedFeatureGroup(AggregatedFeatureGroup):
             in_features: List of source feature names (may be single or multiple columns)
 
         Returns:
-            The result of the aggregation (scalar for single-column, array for multi-column)
+            The result of the aggregation (pa.Scalar for single-column, preserving type on zero-row and
+            all-null input; array for multi-column)
         """
         if len(in_features) > 1:
             np = require("numpy", _NUMPY_REASON)
@@ -170,24 +171,24 @@ class PyArrowAggregatedFeatureGroup(AggregatedFeatureGroup):
             column = data.column(in_features[0])
 
             if aggregation_type == "sum":
-                return pc.sum(column).as_py()
+                return pc.sum(column)
             elif aggregation_type == "min":
-                return pc.min(column).as_py()
+                return pc.min(column)
             elif aggregation_type == "max":
-                return pc.max(column).as_py()
+                return pc.max(column)
             elif aggregation_type in ["avg", "mean"]:
-                return pc.mean(column).as_py()
+                return pc.mean(column)
             elif aggregation_type == "count":
-                return pc.count(column).as_py()
+                return pc.count(column)
             elif aggregation_type == "std":
-                return pc.stddev(column, ddof=1).as_py()
+                return pc.stddev(column, ddof=1)
             elif aggregation_type == "var":
-                return pc.variance(column, ddof=1).as_py()
+                return pc.variance(column, ddof=1)
             elif aggregation_type == "median":
                 # PyArrow doesn't have a direct median function
                 # We can approximate it using quantile with q=0.5
                 # quantile returns an array, so we need to extract the first value
                 result = pc.quantile(column, q=0.5)
-                return result[0].as_py()
+                return result[0]
             else:
                 raise ValueError(f"Unsupported aggregation type: {aggregation_type}")

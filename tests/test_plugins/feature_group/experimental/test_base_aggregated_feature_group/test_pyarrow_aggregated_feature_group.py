@@ -50,6 +50,23 @@ def feature_set_multiple() -> FeatureSet:
 
 
 @pytest.fixture
+def zero_row_table() -> pa.Table:
+    """Zero-row table with typed columns, for pinning zero-row aggregation column types."""
+    return pa.table(
+        {
+            "sales": pa.array([], type=pa.int64()),
+            "price": pa.array([], type=pa.float64()),
+        }
+    )
+
+
+@pytest.fixture
+def int32_sales_table() -> pa.Table:
+    """Populated table whose sales column is int32, narrower than the int64 default."""
+    return pa.table({"sales": pa.array([100, 200, 300], type=pa.int32())})
+
+
+@pytest.fixture
 def multi_source_table() -> pa.Table:
     """Table with multi-column source features (metrics~0, metrics~1) for row-wise aggregation."""
     return pa.table(
@@ -93,49 +110,50 @@ class TestPyArrowAggregatedFeatureGroup:
     def test_perform_aggregation_sum(self, sample_table: pa.Table) -> None:
         """Test _perform_aggregation method with sum aggregation."""
         result = PyArrowAggregatedFeatureGroup._perform_aggregation(sample_table, "sum", ["sales"])
-        assert result == 1500  # Sum of [100, 200, 300, 400, 500]
+        assert isinstance(result, pa.Scalar)
+        assert result.as_py() == 1500  # Sum of [100, 200, 300, 400, 500]
 
     def test_perform_aggregation_min(self, sample_table: pa.Table) -> None:
         """Test _perform_aggregation method with min aggregation."""
         result = PyArrowAggregatedFeatureGroup._perform_aggregation(sample_table, "min", ["sales"])
-        assert result == 100  # Min of [100, 200, 300, 400, 500]
+        assert result.as_py() == 100  # Min of [100, 200, 300, 400, 500]
 
     def test_perform_aggregation_max(self, sample_table: pa.Table) -> None:
         """Test _perform_aggregation method with max aggregation."""
         result = PyArrowAggregatedFeatureGroup._perform_aggregation(sample_table, "max", ["sales"])
-        assert result == 500  # Max of [100, 200, 300, 400, 500]
+        assert result.as_py() == 500  # Max of [100, 200, 300, 400, 500]
 
     def test_perform_aggregation_avg(self, sample_table: pa.Table) -> None:
         """Test _perform_aggregation method with avg aggregation."""
         result = PyArrowAggregatedFeatureGroup._perform_aggregation(sample_table, "avg", ["sales"])
-        assert result == 300  # Avg of [100, 200, 300, 400, 500]
+        assert result.as_py() == 300  # Avg of [100, 200, 300, 400, 500]
 
     def test_perform_aggregation_mean(self, sample_table: pa.Table) -> None:
         """Test _perform_aggregation method with mean aggregation."""
         result = PyArrowAggregatedFeatureGroup._perform_aggregation(sample_table, "mean", ["sales"])
-        assert result == 300  # Mean of [100, 200, 300, 400, 500]
+        assert result.as_py() == 300  # Mean of [100, 200, 300, 400, 500]
 
     def test_perform_aggregation_count(self, sample_table: pa.Table) -> None:
         """Test _perform_aggregation method with count aggregation."""
         result = PyArrowAggregatedFeatureGroup._perform_aggregation(sample_table, "count", ["sales"])
-        assert result == 5  # Count of [100, 200, 300, 400, 500]
+        assert result.as_py() == 5  # Count of [100, 200, 300, 400, 500]
 
     def test_perform_aggregation_std(self, sample_table: pa.Table) -> None:
         """Test _perform_aggregation method with std aggregation."""
         result = PyArrowAggregatedFeatureGroup._perform_aggregation(sample_table, "std", ["sales"])
         # ddof=1 sample standard deviation, matching pandas' default.
-        assert abs(result - 158.11) < 0.1  # Std of [100, 200, 300, 400, 500] with sample formula
+        assert abs(result.as_py() - 158.11) < 0.1  # Std of [100, 200, 300, 400, 500] with sample formula
 
     def test_perform_aggregation_var(self, sample_table: pa.Table) -> None:
         """Test _perform_aggregation method with var aggregation."""
         result = PyArrowAggregatedFeatureGroup._perform_aggregation(sample_table, "var", ["sales"])
         # ddof=1 sample variance, matching pandas' default.
-        assert abs(result - 25000) < 0.1  # Var of [100, 200, 300, 400, 500] with sample formula
+        assert abs(result.as_py() - 25000) < 0.1  # Var of [100, 200, 300, 400, 500] with sample formula
 
     def test_perform_aggregation_median(self, sample_table: pa.Table) -> None:
         """Test _perform_aggregation method with median aggregation."""
         result = PyArrowAggregatedFeatureGroup._perform_aggregation(sample_table, "median", ["sales"])
-        assert result == 300  # Median of [100, 200, 300, 400, 500]
+        assert result.as_py() == 300  # Median of [100, 200, 300, 400, 500]
 
     def test_perform_aggregation_invalid(self, sample_table: pa.Table) -> None:
         """Test _perform_aggregation method with invalid aggregation type."""
@@ -205,6 +223,53 @@ class TestPyArrowAggregatedFeatureGroup:
             # Restore the original AGGREGATION_TYPES
             AggregatedFeatureGroup.AGGREGATION_TYPES = original_types
 
+    def test_calculate_feature_zero_rows_sum_keeps_int64(self, zero_row_table: pa.Table) -> None:
+        """A single-column sum over a zero-row int64 column must yield an int64 result column."""
+        feature_set = FeatureSet()
+        feature_set.add(Feature("sales__sum_aggr"))
+
+        result = PyArrowAggregatedFeatureGroup.calculate_feature(zero_row_table, feature_set)
+
+        assert result.num_rows == 0
+        assert result.column("sales__sum_aggr").type == pa.int64()
+
+    def test_calculate_feature_zero_rows_avg_keeps_float64(self, zero_row_table: pa.Table) -> None:
+        """A single-column avg over a zero-row float64 column must yield a float64 result column."""
+        feature_set = FeatureSet()
+        feature_set.add(Feature("price__avg_aggr"))
+
+        result = PyArrowAggregatedFeatureGroup.calculate_feature(zero_row_table, feature_set)
+
+        assert result.num_rows == 0
+        assert result.column("price__avg_aggr").type == pa.float64()
+
+    def test_calculate_feature_zero_rows_count_keeps_int64(self, zero_row_table: pa.Table) -> None:
+        """A single-column count over a zero-row column must yield an int64 result column."""
+        feature_set = FeatureSet()
+        feature_set.add(Feature("sales__count_aggr"))
+
+        result = PyArrowAggregatedFeatureGroup.calculate_feature(zero_row_table, feature_set)
+
+        assert result.num_rows == 0
+        assert result.column("sales__count_aggr").type == pa.int64()
+
+    def test_add_result_to_data_zero_rows_keeps_scalar_type(self, zero_row_table: pa.Table) -> None:
+        """_add_result_to_data given a typed null scalar on a zero-row table must keep that type."""
+        result = pa.scalar(None, type=pa.int64())
+
+        updated = PyArrowAggregatedFeatureGroup._add_result_to_data(zero_row_table, "sales__sum_aggr", result)
+
+        assert updated.column("sales__sum_aggr").type == pa.int64()
+
+    def test_calculate_feature_min_preserves_int32_source_width(self, int32_sales_table: pa.Table) -> None:
+        """A single-column min over an int32 column must yield an int32 result column, not int64."""
+        feature_set = FeatureSet()
+        feature_set.add(Feature("sales__min_aggr"))
+
+        result = PyArrowAggregatedFeatureGroup.calculate_feature(int32_sales_table, feature_set)
+
+        assert result.column("sales__min_aggr").type == pa.int32()
+
 
 class TestPyArrowAggregatedFeatureGroupMultiColumn:
     """Pins down bugs in _add_result_to_data for multi-column (row-wise) aggregation results."""
@@ -262,7 +327,7 @@ class TestPyArrowAggregatedFeatureGroupDdofAndNullSkip:
 
         expected = pd.Series(sample_table.column("sales").to_pylist()).std()  # ddof=1 by default
 
-        assert abs(result - expected) < 1e-6
+        assert abs(result.as_py() - expected) < 1e-6
 
     def test_perform_aggregation_var_single_column_matches_pandas_ddof1(self, sample_table: pa.Table) -> None:
         """PyArrow single-column var must use ddof=1 (sample), not ddof=0 (population)."""
@@ -270,7 +335,7 @@ class TestPyArrowAggregatedFeatureGroupDdofAndNullSkip:
 
         expected = pd.Series(sample_table.column("sales").to_pylist()).var()  # ddof=1 by default
 
-        assert abs(result - expected) < 1e-6
+        assert abs(result.as_py() - expected) < 1e-6
 
     def test_perform_aggregation_sum_multi_column_skips_null(self, multi_source_table_with_null: pa.Table) -> None:
         """A null in one source column must be skipped, not propagated as NaN, for the row's sum."""

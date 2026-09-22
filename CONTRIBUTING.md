@@ -102,6 +102,10 @@ Start with the [Plugin Journey overview](https://github.com/mloda-ai/mloda-regis
 
 To scaffold a new standalone plugin package with pre-configured CI/CD, use the [mloda-plugin-template](https://github.com/mloda-ai/mloda-plugin-template).
 
+#### Adding a plugin module that imports an optional backend
+
+Guard optional-backend imports in the same way as neighboring plugin modules. Add every new backend-importing module to `MODULE_EXTRA` in [`test_plugin_module_import_policy.py`](tests/test_core/test_optional_dependency/test_plugin_module_import_policy.py), under the extra that provides that backend. If the module also reaches a second backend, record that dependency in `ALSO_NEEDS`.
+
 ### Core Development
 
 For contributions to the mloda core framework, see our [Documentation](https://mloda-ai.github.io/mloda/).

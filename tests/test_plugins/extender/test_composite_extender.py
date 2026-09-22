@@ -173,6 +173,18 @@ class TestCompositeExtender:
             "CompositeExtender should wrap all function types from child extenders"
         )
 
+    def test_composite_extender_chain_tampering_is_discarded(self) -> None:
+        tamperer = _TamperingExtender("tamperer", priority=10, tampered="tampered-by-first-link")
+        honest = MockExtender("honest", priority=20)
+        composite = CompositeExtender([tamperer, honest])
+
+        def test_func(x: int) -> int:
+            return x * 2
+
+        result = composite(test_func, 5)
+
+        assert result == 10, "wrapped-function result must win over a link's tampered value"
+
 
 class TestExtenderExecutionOrder:
     """Test that extenders execute in priority order (lower first)."""
@@ -621,6 +633,65 @@ class TestWarningOnlyDoesNotSwallowInnerErrors:
         )
 
 
+class _TamperingExtender(Extender):
+    """Calls func for the real result, then returns a DIFFERENT value instead of it."""
+
+    def __init__(
+        self,
+        name: str,
+        priority: int = 100,
+        raise_on_error: bool = True,
+        never_fall_back: bool = False,
+        tampered: Any = "tampered",
+    ) -> None:
+        self.name = name
+        self.priority = priority
+        self.raise_on_error = raise_on_error
+        self.never_fall_back = never_fall_back
+        self._tampered = tampered
+
+    def wraps(self) -> set[ExtenderHook]:
+        return {ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE}
+
+    def __call__(self, func: Any, *args: Any, **kwargs: Any) -> Any:
+        func(*args, **kwargs)
+        return self._tampered
+
+
+class _NeverCallsExtender(Extender):
+    """Never invokes the wrapped function at all; its own return value stays the fallback."""
+
+    def __init__(self, name: str, priority: int = 100, constant: Any = "constant") -> None:
+        self.name = name
+        self.priority = priority
+        self.raise_on_error = True
+        self._constant = constant
+
+    def wraps(self) -> set[ExtenderHook]:
+        return {ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE}
+
+    def __call__(self, func: Any, *args: Any, **kwargs: Any) -> Any:
+        return self._constant
+
+
+class _MultiCallExtender(Extender):
+    """Calls func twice with different args, returning the FIRST successful result."""
+
+    def __init__(self, name: str, priority: int = 100) -> None:
+        self.name = name
+        self.priority = priority
+        self.raise_on_error = True
+
+    def wraps(self) -> set[ExtenderHook]:
+        return {ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE}
+
+    def __call__(self, func: Any, *args: Any, **kwargs: Any) -> Any:
+        real = func(*args, **kwargs)
+        other_args = ("SHADOW",) + args[1:]
+        func(*other_args, **kwargs)
+        return real
+
+
 class TestSingleExtenderPathHonorsRaiseOnError:
     """The single-extender path (run_calculate_feature) must honor raise_on_error identically."""
 
@@ -696,3 +767,69 @@ class TestSingleExtenderPathHonorsRaiseOnError:
         assert fg.calc_count == 1, (
             "calculate_feature must run exactly once on inner RuntimeError through a warning-only extender"
         )
+
+
+class TestSingleExtenderCannotSubstituteTheCalculatedResult:
+    """The single-extender path must not let an extender substitute the real calculated result."""
+
+    @staticmethod
+    def _make_compute_framework(extenders: list[Extender]) -> Any:
+        cf = Mock(spec=ComputeFramework)
+        cf.data = "DATA"
+        cf.function_extender = extenders
+        cf.run_context = RunContext()
+        cf.worker_index = None
+        cf.get_function_extender = ComputeFramework.get_function_extender.__get__(cf)
+        cf.run_calculate_feature = ComputeFramework.run_calculate_feature.__get__(cf)
+        cf._raise_helpful_missing_column_error = ComputeFramework._raise_helpful_missing_column_error.__get__(cf)
+        cf._build_hook_context = ComputeFramework._build_hook_context.__get__(cf)
+        cf._run_hook = ComputeFramework._run_hook.__get__(cf)
+        cf.activate = ComputeFramework.activate.__get__(cf)
+        return cf
+
+    def test_single_default_extender_tampered_result_is_discarded(self) -> None:
+        cf = self._make_compute_framework([_TamperingExtender("tamper")])
+        fg = _FakeFeatureGroup()
+
+        result = cf.run_calculate_feature(fg, "features")
+
+        assert result == "calculated:DATA", "real result must win over the tampered one"
+        assert fg.calc_count == 1
+
+    def test_never_fall_back_tampered_result_is_discarded(self) -> None:
+        cf = self._make_compute_framework(
+            [_TamperingExtender("gate-tamper", raise_on_error=False, never_fall_back=True)]
+        )
+        fg = _FakeFeatureGroup()
+
+        result = cf.run_calculate_feature(fg, "features")
+
+        assert result == "calculated:DATA"
+        assert fg.calc_count == 1
+
+    def test_single_warning_only_extender_tampered_result_is_discarded(self) -> None:
+        cf = self._make_compute_framework([_TamperingExtender("warn-tamper", raise_on_error=False)])
+        fg = _FakeFeatureGroup()
+
+        result = cf.run_calculate_feature(fg, "features")
+
+        assert result == "calculated:DATA"
+        assert fg.calc_count == 1
+
+    def test_single_extender_that_never_calls_wrapped_function_returns_its_own_value(self) -> None:
+        cf = self._make_compute_framework([_NeverCallsExtender("skip", constant="own-value")])
+        fg = _FakeFeatureGroup()
+
+        result = cf.run_calculate_feature(fg, "features")
+
+        assert result == "own-value"
+        assert fg.calc_count == 0, "calculate_feature must never run when the extender never delegates to it"
+
+    def test_multi_call_extender_returns_result_of_first_successful_call(self) -> None:
+        cf = self._make_compute_framework([_MultiCallExtender("multi")])
+        fg = _FakeFeatureGroup()
+
+        result = cf.run_calculate_feature(fg, "features")
+
+        assert result == "calculated:DATA", "first successful call's result must win, not the shadow call's"
+        assert fg.calc_count == 2, "both the real call and the shadow call must have run"

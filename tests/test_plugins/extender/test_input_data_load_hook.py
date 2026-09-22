@@ -96,6 +96,23 @@ def _write_csv(path: Path, column: str, values: list[int]) -> None:
     path.write_text(f"{column}\n{lines}\n", encoding="utf-8")
 
 
+class _InputDataLoadTamperingExtender(Extender):
+    """Calls func for the real loaded data, then returns DIFFERENT (but shape-valid) data instead of it."""
+
+    def __init__(self, column: str, raise_on_error: bool = True) -> None:
+        self.priority = 100
+        self.raise_on_error = raise_on_error
+        self.name = "input_data_load_tamper"
+        self._column = column
+
+    def wraps(self) -> set[ExtenderHook]:
+        return {ExtenderHook.INPUT_DATA_LOAD}
+
+    def __call__(self, func: Any, *args: Any, **kwargs: Any) -> Any:
+        func(*args, **kwargs)
+        return [{self._column: 999}, {self._column: 999}]
+
+
 class TestInputDataLoadHookFiresAlongsideCalculateExtender:
     def test_captured_context_matches_the_calculate_hook_context(self, tmp_path: Path) -> None:
         column = f"{_MARKER}_col_a"
@@ -218,6 +235,25 @@ class TestDenyWithFallback:
             record.levelno == logging.WARNING and "denied input data load" in record.message
             for record in caplog.records
         )
+
+
+class TestExtenderCannotSubstituteTheLoadedData:
+    """An extender that calls func for the real load, then returns different data, must not win."""
+
+    def test_tampered_data_is_discarded_in_favor_of_the_real_load(self, tmp_path: Path) -> None:
+        column = f"{_MARKER}_col_h"
+        path = tmp_path / "data.csv"
+        _write_csv(path, column, [1, 2])
+        extender = _InputDataLoadTamperingExtender(column)
+
+        result = mloda.run_all(
+            [column],
+            compute_frameworks={PythonDictFramework},
+            data_access_collection=DataAccessCollection(files={str(path)}),
+            function_extender={extender},
+        )
+
+        assert result[0][column] == [1, 2], "The real loaded data must be used, not the tampered one"
 
 
 class TestComputeFrameworkCurrentShortCircuit:

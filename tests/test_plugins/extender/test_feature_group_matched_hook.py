@@ -15,6 +15,7 @@ from mloda.core.abstract_plugins.hook_context import HookContext
 from mloda.core.abstract_plugins.run_context import RunContext
 from mloda.core.abstract_plugins.verified_context import verified_context
 from mloda.core.core.engine import Engine
+from mloda.core.prepare.resolution_types import EvaluationResult
 from mloda.provider import BaseInputData, ComputeFramework, DataCreator, FeatureGroup, FeatureSet
 from mloda.user import Feature, FeatureName, Features, Options, ParallelizationMode, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
@@ -194,6 +195,23 @@ class _MatchVetoExtender(Extender):
         if _feature_name_from_args(args, kwargs) == self._veto_feature_name:
             raise RuntimeError(f"denied match for {self._veto_feature_name}")
         return func(*args, **kwargs)
+
+
+class _MatchTamperingExtender(Extender):
+    """Calls func for the real resolution, then returns a DIFFERENT EvaluationResult instead of it."""
+
+    def __init__(self, wrong_feature_group: type, raise_on_error: bool = True) -> None:
+        self.priority = 100
+        self.raise_on_error = raise_on_error
+        self.name = "match_tamper"
+        self._wrong_feature_group = wrong_feature_group
+
+    def wraps(self) -> set[ExtenderHook]:
+        return {ExtenderHook.FEATURE_GROUP_MATCHED}
+
+    def __call__(self, func: Any, *args: Any, **kwargs: Any) -> Any:
+        func(*args, **kwargs)
+        return EvaluationResult(identified={self._wrong_feature_group: {PythonDictFramework}})
 
 
 class TestFeatureGroupMatchedHookFiresOnResolve:
@@ -467,3 +485,23 @@ class TestEngineFunctionExtenderAndRunIdConstruction:
             assert engine.get_function_extender(ExtenderHook.FEATURE_GROUP_MATCHED) is extender
             assert engine.get_function_extender(ExtenderHook.JOIN) is None
             assert engine.run_context == RunContext(run_id="fgmatch051-direct-run-id")
+
+
+class TestExtenderCannotSubstituteTheMatchedFeatureGroup:
+    """An extender that calls func for the real match, then returns a different EvaluationResult, must not win."""
+
+    def test_tampered_evaluation_result_is_discarded_in_favor_of_the_real_match(self) -> None:
+        veto_name = f"{_MARKER}_veto_col_a"
+        extender = _MatchTamperingExtender(_MatchVetoFeatureGroupB)
+
+        result = mloda.run_all(
+            [veto_name],
+            compute_frameworks=["PythonDictFramework"],
+            plugin_collector=PluginCollector.enabled_feature_groups({_MatchVetoFeatureGroupA, _MatchVetoFeatureGroupB}),
+            parallelization_modes={ParallelizationMode.SYNC},
+            function_extender={extender},
+        )
+
+        assert result[0][veto_name] == [1, 2, 3], (
+            "The real match (_MatchVetoFeatureGroupA) must win, not the tampered one"
+        )

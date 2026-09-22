@@ -50,7 +50,18 @@ class SqlBaseMaskEngine(BaseMaskEngine):
     @classmethod
     def is_in(cls, data: Any, column: str, values: Any) -> str:
         value_list = values if isinstance(values, (list, tuple)) else [values]
-        if not value_list:
+        non_null = [v for v in value_list if v is not None]
+        has_null = len(non_null) != len(value_list)
+
+        conditions: list[str] = []
+        if non_null:
+            quoted = ", ".join(quote_value(v) for v in non_null)
+            conditions.append(f"{quote_ident(column)} IN ({quoted})")
+        if has_null:
+            conditions.append(f"{quote_ident(column)} IS NULL")
+
+        if not conditions:
             return "1 = 0"
-        quoted = ", ".join(quote_value(v) for v in value_list)
-        return f"{quote_ident(column)} IN ({quoted})"
+        if len(conditions) == 1:
+            return conditions[0]
+        return f"({' OR '.join(conditions)})"

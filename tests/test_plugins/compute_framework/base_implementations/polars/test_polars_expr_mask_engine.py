@@ -41,6 +41,16 @@ class TestPolarsExprMaskEngine(MaskEngineTestMixin):
     def empty_data(self) -> Any:
         return pl.LazyFrame({"status": pl.Series([], dtype=pl.String), "value": pl.Series([], dtype=pl.Int64)})
 
+    @pytest.fixture
+    def null_data(self) -> Any:
+        return pl.LazyFrame(
+            {
+                "status": pl.Series(["active", None, "inactive", None], dtype=pl.String),
+                "value": pl.Series([10, 20, 30, 40], dtype=pl.Int64),
+                "score": pl.Series([1, None, 3, None], dtype=pl.Int64),
+            }
+        )
+
     def evaluate_mask(self, mask: Any, data: Any) -> list[bool]:
         result: list[bool] = data.select(mask.alias("__mask")).collect()["__mask"].to_list()
         return result

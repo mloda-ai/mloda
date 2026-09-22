@@ -56,4 +56,9 @@ class PolarsExprMaskEngine(BaseMaskEngine):
 
     @classmethod
     def is_in(cls, data: Any, column: str, values: Any) -> Any:
-        return _require_polars().col(column).is_in(values)
+        _pl = _require_polars()
+        non_null = [v for v in values if v is not None]
+        mask = _pl.col(column).is_in(non_null)
+        if len(non_null) != len(values):
+            mask = mask | _pl.col(column).is_null()
+        return mask

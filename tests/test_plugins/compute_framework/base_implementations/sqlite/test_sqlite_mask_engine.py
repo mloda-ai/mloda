@@ -31,6 +31,17 @@ class TestSqliteSqlMaskEngine(SqlMaskEngineTestMixin):
         table = pa.table({"status": pa.array([], type=pa.string()), "value": pa.array([], type=pa.int64())})
         return SqliteRelation.from_arrow(connection, table)
 
+    @pytest.fixture
+    def null_data(self, connection: Any) -> Any:
+        table = pa.table(
+            {
+                "status": pa.array(["active", None, "inactive", None], type=pa.string()),
+                "value": pa.array([10, 20, 30, 40], type=pa.int64()),
+                "score": pa.array([1, None, 3, None], type=pa.int64()),
+            }
+        )
+        return SqliteRelation.from_arrow(connection, table)
+
     def evaluate_mask(self, mask: Any, data: SqliteRelation) -> list[bool]:
         conn = data.connection
         table_name = data.table_name

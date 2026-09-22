@@ -39,6 +39,17 @@ class TestDuckDBSqlMaskEngine(SqlMaskEngineTestMixin):
         table = pa.table({"status": pa.array([], type=pa.string()), "value": pa.array([], type=pa.int64())})
         return DuckdbRelation.from_arrow(connection, table)
 
+    @pytest.fixture
+    def null_data(self, connection: Any) -> Any:
+        table = pa.table(
+            {
+                "status": pa.array(["active", None, "inactive", None], type=pa.string()),
+                "value": pa.array([10, 20, 30, 40], type=pa.int64()),
+                "score": pa.array([1, None, 3, None], type=pa.int64()),
+            }
+        )
+        return DuckdbRelation.from_arrow(connection, table)
+
     def evaluate_mask(self, mask: Any, data: DuckdbRelation) -> list[bool]:
         bool_expr = f"CASE WHEN {mask} THEN 1 ELSE 0 END AS __match__"
         projected = data.project(bool_expr)

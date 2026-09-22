@@ -27,6 +27,16 @@ class TestPyArrowMaskEngine(MaskEngineTestMixin):
     def empty_data(self) -> Any:
         return pa.table({"status": pa.array([], type=pa.string()), "value": pa.array([], type=pa.int64())})
 
+    @pytest.fixture
+    def null_data(self) -> Any:
+        return pa.table(
+            {
+                "status": pa.array(["active", None, "inactive", None], type=pa.string()),
+                "value": pa.array([10, 20, 30, 40], type=pa.int64()),
+                "score": pa.array([1, None, 3, None], type=pa.int64()),
+            }
+        )
+
     def evaluate_mask(self, mask: Any, data: Any) -> list[bool]:
         return mask.to_pylist()  # type: ignore[no-any-return]
 

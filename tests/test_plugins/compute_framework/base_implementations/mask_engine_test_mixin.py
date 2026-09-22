@@ -5,6 +5,8 @@ Each framework-specific test class should inherit from this mixin and provide:
 - mask_engine_class attribute: The mask engine class, served by the engine fixture
 - sample_data fixture: Returns framework-specific test data
 - empty_data fixture: Returns the same schema as sample_data, typed, with zero rows
+- null_data fixture: Returns the same schema as sample_data plus a nullable numeric "score"
+  column, typed, with null status and score values
 - evaluate_mask method: Converts framework-specific mask to a Python list of booleans
 - is_boolean_mask method: Checks that a mask is boolean-typed
 - apply_mask method: Selects rows with the mask the framework's native way, returns column -> values
@@ -29,6 +31,9 @@ class MaskEngineTestMixin:
         value: [10, 20, 30, 40]
     - empty_data fixture returning the same schema (status: string, value: int), typed,
       with zero rows
+    - null_data fixture returning the same schema (status: string, value: int) plus a nullable
+      numeric score column, typed, with status: ["active", None, "inactive", None],
+      value: [10, 20, 30, 40], and score: [1, None, 3, None]
     - evaluate_mask(mask, data) converting the mask to list[bool]
     - is_boolean_mask(mask, data) checking that a mask is boolean-typed
     - apply_mask(mask, data) selecting rows with the mask the framework's native way and
@@ -49,6 +54,11 @@ class MaskEngineTestMixin:
     @pytest.fixture
     @abstractmethod
     def empty_data(self) -> Any:
+        raise NotImplementedError
+
+    @pytest.fixture
+    @abstractmethod
+    def null_data(self) -> Any:
         raise NotImplementedError
 
     @abstractmethod
@@ -174,3 +184,26 @@ class MaskEngineTestMixin:
     def test_apply_all_true_on_empty_data_keeps_columns(self, engine: type[BaseMaskEngine], empty_data: Any) -> None:
         """Pins #1535: selecting with all_true on zero rows must keep every column."""
         assert self.apply_mask(engine.all_true(empty_data), empty_data) == {"status": [], "value": []}
+
+    @pytest.mark.parametrize(
+        "column,values,expected_mask,expected_values",
+        [
+            ("status", ["active", None], [True, True, False, True], [10, 20, 40]),
+            ("status", [None], [False, True, False, True], [20, 40]),
+            ("score", [1, None], [True, True, False, True], [10, 20, 40]),
+            ("status", (None,), [False, True, False, True], [20, 40]),
+        ],
+        ids=["active-or-null", "null-only", "score-null", "status-tuple-null-only"],
+    )
+    def test_is_in_none_matches_null_rows(
+        self,
+        engine: type[BaseMaskEngine],
+        null_data: Any,
+        column: str,
+        values: list[Any] | tuple[Any, ...],
+        expected_mask: list[bool],
+        expected_values: list[Any],
+    ) -> None:
+        mask = engine.is_in(null_data, column, values)
+        assert self.evaluate_mask(mask, null_data) == expected_mask
+        assert self.apply_mask(mask, null_data)["value"] == expected_values

@@ -34,7 +34,7 @@ Every `BaseMaskEngine` subclass implements these abstract classmethods:
 | `greater_than(data, column, value)` | `data[column] > value` |
 | `less_equal(data, column, value)` | `data[column] <= value` |
 | `less_than(data, column, value)` | `data[column] < value` |
-| `is_in(data, column, values)` | `data[column]` is in `values`; an empty `values` matches nothing |
+| `is_in(data, column, values)` | `data[column]` is in `values`; empty matches nothing, `None` matches null rows |
 | `combine(mask1, mask2)` | logical AND of two masks |
 | `all_true(data)` | all `True` (no filtering), boolean-typed even at zero rows |
 

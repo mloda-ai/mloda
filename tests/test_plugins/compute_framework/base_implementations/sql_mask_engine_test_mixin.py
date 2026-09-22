@@ -7,6 +7,7 @@ Each framework-specific test class should inherit from this mixin and provide:
 - mask_engine_class attribute: The SQL mask engine class, served by the engine fixture
 - sample_data fixture: Returns framework-specific test data
 - empty_data fixture: Returns the same schema as sample_data, typed, with zero rows
+- null_data fixture: Returns the same schema as sample_data, typed, with null values
 - evaluate_mask method: Executes a SQL condition against data, returns list[bool]
 - apply_mask method: Filters data by a SQL condition, returns column -> values
 """
@@ -125,3 +126,17 @@ class SqlMaskEngineTestMixin(MaskEngineTestMixin):
     ) -> None:
         result = engine.is_in(sample_data, "status", values)
         assert result == "1 = 0"
+
+    @pytest.mark.parametrize(
+        "values,expected",
+        [
+            (["active", None], '("status" IN (\'active\') OR "status" IS NULL)'),
+            ([None], '"status" IS NULL'),
+        ],
+        ids=["active-or-null", "null-only"],
+    )
+    def test_is_in_none_condition(
+        self, engine: type[SqlBaseMaskEngine], sample_data: Any, values: list[Any], expected: str
+    ) -> None:
+        result = engine.is_in(sample_data, "status", values)
+        assert result == expected

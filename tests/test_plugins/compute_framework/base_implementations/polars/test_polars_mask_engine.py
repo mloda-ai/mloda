@@ -32,6 +32,16 @@ class TestPolarsMaskEngine(MaskEngineTestMixin):
     def empty_data(self) -> Any:
         return pl.DataFrame({"status": pl.Series([], dtype=pl.String), "value": pl.Series([], dtype=pl.Int64)})
 
+    @pytest.fixture
+    def null_data(self) -> Any:
+        return pl.DataFrame(
+            {
+                "status": pl.Series(["active", None, "inactive", None], dtype=pl.String),
+                "value": pl.Series([10, 20, 30, 40], dtype=pl.Int64),
+                "score": pl.Series([1, None, 3, None], dtype=pl.Int64),
+            }
+        )
+
     def evaluate_mask(self, mask: Any, data: Any) -> list[bool]:
         return list(mask)
 

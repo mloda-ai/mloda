@@ -34,6 +34,18 @@ class TestSparkMaskEngine(MaskEngineTestMixin):
     def empty_data(self, spark_session: Any) -> Any:
         return spark_session.createDataFrame([], "status string, value bigint")
 
+    @pytest.fixture
+    def null_data(self, spark_session: Any) -> Any:
+        return spark_session.createDataFrame(
+            [
+                ("active", 10, 1),
+                (None, 20, None),
+                ("inactive", 30, 3),
+                (None, 40, None),
+            ],
+            "status string, value bigint, score bigint",
+        )
+
     def evaluate_mask(self, mask: Any, data: Any) -> list[bool]:
         return list(mask)
 

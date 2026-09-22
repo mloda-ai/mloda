@@ -24,6 +24,14 @@ class TestPythonDictMaskEngine(MaskEngineTestMixin):
     def empty_data(self) -> Any:
         return {"status": [], "value": []}
 
+    @pytest.fixture
+    def null_data(self) -> Any:
+        return {
+            "status": ["active", None, "inactive", None],
+            "value": [10, 20, 30, 40],
+            "score": [1, None, 3, None],
+        }
+
     def evaluate_mask(self, mask: Any, data: Any) -> list[bool]:
         return list(mask)
 

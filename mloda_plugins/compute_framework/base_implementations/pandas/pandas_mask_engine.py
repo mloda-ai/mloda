@@ -43,4 +43,8 @@ class PandasMaskEngine(BaseMaskEngine):
 
     @classmethod
     def is_in(cls, data: Any, column: str, values: Any) -> Any:
-        return data[column].isin(values)
+        non_null = [v for v in values if v is not None]
+        mask = data[column].isin(non_null)
+        if len(non_null) != len(values):
+            mask = mask | data[column].isna()
+        return mask

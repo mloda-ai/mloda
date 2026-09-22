@@ -1573,7 +1573,7 @@ requires-dist = [
     { name = "pandera", marker = "extra == 'test'" },
     { name = "pip-audit", marker = "extra == 'test'", specifier = "<2.11.0" },
     { name = "pip-licenses-cli", marker = "extra == 'test'" },
-    { name = "polars", marker = "extra == 'polars'" },
+    { name = "polars", marker = "extra == 'polars'", specifier = ">=1.21" },
     { name = "pyarrow", marker = "extra == 'duckdb'" },
     { name = "pyarrow", marker = "extra == 'iceberg'" },
     { name = "pyarrow", marker = "extra == 'pyarrow'" },

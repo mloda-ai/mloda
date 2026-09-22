@@ -32,6 +32,8 @@ def _source_options() -> Options:
     for name, value in list(vars(options).items()):
         if isinstance(value, frozenset) and not value:
             setattr(options, name, frozenset({name}))
+        elif isinstance(value, bool) and not value:
+            setattr(options, name, True)
     return options
 
 

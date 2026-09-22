@@ -445,6 +445,9 @@ class IdentifyFeatureGroupClass:
             group_before = dict(feature.options.group)
             context_before = dict(feature.options.context)
             non_forwarded_before = feature.options.non_forwarded_group_keys
+            own_group_keys_before = feature.options._own_group_keys
+            own_context_keys_before = feature.options._own_context_keys
+            own_keys_locked_before = feature.options._own_keys_locked
 
             # A criteria non-match records a value_rejection only when the first pass recorded a reason for it:
             # a plain name mismatch is not a near-miss, but a value the candidate declined (with a reportable
@@ -468,19 +471,43 @@ class IdentifyFeatureGroupClass:
 
             if not self._filter_feature_group_by_domain(feature_group, feature):
                 self._record_elimination(feature_group, "domain", self._domain_reason(feature_group, feature))
-                self._restore_options(feature, group_before, context_before, non_forwarded_before)
+                self._restore_options(
+                    feature,
+                    group_before,
+                    context_before,
+                    non_forwarded_before,
+                    own_group_keys_before,
+                    own_context_keys_before,
+                    own_keys_locked_before,
+                )
                 continue
 
             if not self._filter_feature_group_by_scope(feature_group, feature):
                 self._record_elimination(feature_group, "scope", "outside the requested feature group scope")
-                self._restore_options(feature, group_before, context_before, non_forwarded_before)
+                self._restore_options(
+                    feature,
+                    group_before,
+                    context_before,
+                    non_forwarded_before,
+                    own_group_keys_before,
+                    own_context_keys_before,
+                    own_keys_locked_before,
+                )
                 continue
 
             # Abstract bases can match name+domain+scope but cannot be instantiated; never let one win, and
             # never record one as a near-miss: the abstract_only message owns them.
             if inspect.isabstract(feature_group):
                 self._abstract_matched_feature_groups.add(feature_group)
-                self._restore_options(feature, group_before, context_before, non_forwarded_before)
+                self._restore_options(
+                    feature,
+                    group_before,
+                    context_before,
+                    non_forwarded_before,
+                    own_group_keys_before,
+                    own_context_keys_before,
+                    own_keys_locked_before,
+                )
                 continue
 
             self._criteria_matched_feature_groups.add(feature_group)
@@ -513,7 +540,15 @@ class IdentifyFeatureGroupClass:
                         "frameworks_not_enabled",
                         "none of its compute frameworks are enabled for this run",
                     )
-                self._restore_options(feature, group_before, context_before, non_forwarded_before)
+                self._restore_options(
+                    feature,
+                    group_before,
+                    context_before,
+                    non_forwarded_before,
+                    own_group_keys_before,
+                    own_context_keys_before,
+                    own_keys_locked_before,
+                )
                 continue
 
             if not self._filter_feature_group_by_framework(supported_frameworks, feature):
@@ -524,12 +559,28 @@ class IdentifyFeatureGroupClass:
                     "framework_pin",
                     f"pinned compute framework '{pin_name}' is not among its supported {supported_names}",
                 )
-                self._restore_options(feature, group_before, context_before, non_forwarded_before)
+                self._restore_options(
+                    feature,
+                    group_before,
+                    context_before,
+                    non_forwarded_before,
+                    own_group_keys_before,
+                    own_context_keys_before,
+                    own_keys_locked_before,
+                )
                 continue
 
             if not self._filter_feature_group_by_links(feature_group, links):
                 self._record_elimination(feature_group, "links", "no index column matches the run's links")
-                self._restore_options(feature, group_before, context_before, non_forwarded_before)
+                self._restore_options(
+                    feature,
+                    group_before,
+                    context_before,
+                    non_forwarded_before,
+                    own_group_keys_before,
+                    own_context_keys_before,
+                    own_keys_locked_before,
+                )
                 continue
 
             _identified_feature_groups[feature_group] = supported_frameworks
@@ -612,13 +663,20 @@ class IdentifyFeatureGroupClass:
         group_before: dict[str, Any],
         context_before: dict[str, Any],
         non_forwarded_before: frozenset[str],
+        own_group_keys_before: frozenset[str],
+        own_context_keys_before: frozenset[str],
+        own_keys_locked_before: bool,
     ) -> None:
-        """Roll ``feature.options`` back to a snapshot taken before a candidate's own write."""
+        """Roll ``feature.options`` back to a snapshot taken before a candidate's own write, including
+        ``_own_group_keys``/``_own_context_keys``/``_own_keys_locked``."""
         feature.options.group.clear()
         feature.options.group.update(group_before)
         feature.options.context.clear()
         feature.options.context.update(context_before)
         feature.options.non_forwarded_group_keys = non_forwarded_before
+        feature.options._own_group_keys = own_group_keys_before
+        feature.options._own_context_keys = own_context_keys_before
+        feature.options._own_keys_locked = own_keys_locked_before
 
     def _filter_feature_group_by_criteria(
         self,
@@ -638,11 +696,22 @@ class IdentifyFeatureGroupClass:
         group_before = dict(feature.options.group)
         context_before = dict(feature.options.context)
         non_forwarded_before = feature.options.non_forwarded_group_keys
+        own_group_keys_before = feature.options._own_group_keys
+        own_context_keys_before = feature.options._own_context_keys
+        own_keys_locked_before = feature.options._own_keys_locked
         probe = probe_match_criteria(feature_group, feature.name, feature.options, data_access_collection)
         if probe.matcher_error is not None or probe.value_rejection is not None:
             # Only the contained branch rolls back: a matcher that returns True keeps its write,
             # which is how a matched reader is linked through mloda.
-            self._restore_options(feature, group_before, context_before, non_forwarded_before)
+            self._restore_options(
+                feature,
+                group_before,
+                context_before,
+                non_forwarded_before,
+                own_group_keys_before,
+                own_context_keys_before,
+                own_keys_locked_before,
+            )
         if probe.value_rejection is not None:
             exc = probe.value_rejection
             # Text, not exc: a retained record must not pin the traceback, its frames and the plugin class.

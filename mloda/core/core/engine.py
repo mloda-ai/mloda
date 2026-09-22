@@ -508,6 +508,7 @@ class Engine:
         existing_feature = next((f for f in feature_collection if feature == f), None)
 
         if existing_feature is not None:
+            existing_feature.options.union_own_keys(feature.options)
             self._warn_on_default_equivalent_merge(feature, declared_options, existing_feature)
             # Propagate the requested flag: filter twins must not displace requested output columns (issue #712).
             if feature.initial_requested_data and not existing_feature.initial_requested_data:

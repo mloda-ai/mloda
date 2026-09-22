@@ -328,7 +328,7 @@ class TestGuardAnswersInsteadOfRaising:
 
 
 class TestStaticMethodMatcherRejected:
-    """The guard reinstalls the matcher as a classmethod, so a staticmethod matcher must not reach it."""
+    """The guard reinstalls the matcher as a classmethod, so a staticmethod or plain-function matcher must not reach it."""
 
     def test_staticmethod_matcher_with_required_when_is_rejected_at_class_definition(self) -> None:
         """Wrapping a staticmethod injects cls as the first argument, so the matcher would misread its own
@@ -376,6 +376,48 @@ class TestStaticMethodMatcherRejected:
                 return True
 
         assert StaticMatcherNoContract.match_feature_group_criteria("x__sum_guarded", NOT_REQUIRED) is True
+
+    def test_bare_function_matcher_with_required_when_is_rejected_at_class_definition(self) -> None:
+        """A bare function would misread cls as its feature_name once wrapped as a classmethod: reject it too."""
+        predicate = CountingPredicate()
+
+        def bare_matcher(
+            feature_name: str | FeatureName,
+            options: Options,
+            data_access_collection: Any = None,
+        ) -> bool:
+            return True
+
+        with pytest.raises(ValueError) as excinfo:
+
+            class BareFunctionMatcherFeatureGroup(FeatureGroup):
+                PROPERTY_MAPPING = _mapping(predicate)
+                match_feature_group_criteria = bare_matcher  # type: ignore[assignment]
+
+        message = str(excinfo.value)
+        assert "BareFunctionMatcherFeatureGroup" in message
+        assert "classmethod" in message
+
+    def test_bare_function_matcher_without_guard_is_left_alone(self) -> None:
+        """Nothing to enforce means nothing to install: a bare function matcher keeps its own calling convention."""
+
+        def bare_matcher_no_guard(*args: Any, **kwargs: Any) -> bool:
+            first = args[0] if args else next(iter(kwargs.values()), None)
+            return isinstance(first, str)
+
+        class BareFunctionMatcherNoGuardFeatureGroup(FeatureGroup):
+            PROPERTY_MAPPING = {
+                OP_TYPE: PropertySpec(
+                    "Operation to apply",
+                    allowed_values={"sum": "Sum of values"},
+                    context=True,
+                    strict_validation=True,
+                    default="sum",
+                ),
+            }
+            match_feature_group_criteria = bare_matcher_no_guard
+
+        assert BareFunctionMatcherNoGuardFeatureGroup.match_feature_group_criteria("some_name", Options()) is True
 
 
 class TestExactlyOnceAcrossInheritance:

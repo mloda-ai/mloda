@@ -187,6 +187,34 @@ class TestStaticmethodOverrideBypass:
         assert not _presence_warnings(caplog, "_StaticDeferredR769pg8")
 
 
+class TestBareFunctionMatcherRejected:
+    """A bare function matcher (no classmethod/staticmethod descriptor) must be rejected too."""
+
+    def test_bare_function_matcher_is_rejected_at_class_definition(self) -> None:
+        """Wrapping it as a classmethod would misread cls as the feature name: reject at class definition."""
+
+        def bare_matcher(
+            feature_name: str | FeatureName,
+            options: Options,
+            data_access_collection: Any = None,
+        ) -> bool:
+            return True
+
+        with pytest.raises(ValueError) as excinfo:
+
+            class _BareFunctionR769pg20(FeatureChainParserMixin):
+                PREFIX_PATTERN = r".*__(?P<carried_r769pg20>\w+)$"
+                PROPERTY_MAPPING = {
+                    "carried_r769pg20": PropertySpec("required, carried by the name", context=True),
+                    "missing_r769pg20": PropertySpec("required, options-only, absent", context=True),
+                }
+                match_feature_group_criteria = bare_matcher  # type: ignore[assignment]
+
+        message = str(excinfo.value)
+        assert "_BareFunctionR769pg20" in message
+        assert "classmethod" in message
+
+
 class TestGuardHonorsTheInnerRule:
     """The guard mirrors the inner rule: same exemptions, name-path only, no false rejections."""
 

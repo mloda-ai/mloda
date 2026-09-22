@@ -33,6 +33,9 @@ class TestPythonDictMaskEngine(MaskEngineTestMixin):
     def is_boolean_mask(self, mask: Any, data: Any) -> bool:
         return all(isinstance(v, bool) for v in mask)
 
+    def apply_mask(self, mask: Any, data: Any) -> dict[str, list[Any]]:
+        return {column: [v for v, keep in zip(values, mask) if keep] for column, values in data.items()}
+
 
 class TestPythonDictMaskEngineMissingColumn:
     """Red-phase regression tests for Defect 3 (Opus #1): a mask over a MISSING column must

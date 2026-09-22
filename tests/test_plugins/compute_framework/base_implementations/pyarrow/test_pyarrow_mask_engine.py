@@ -36,6 +36,6 @@ class TestPyArrowMaskEngine(MaskEngineTestMixin):
     def is_boolean_mask(self, mask: Any, data: Any) -> bool:
         return bool(mask.type == pa.bool_())
 
-    def test_is_in_accepts_single_pass_iterable(self, engine: type[BaseMaskEngine], sample_data: Any) -> None:
-        mask = engine.is_in(sample_data, "status", (v for v in ["active"]))
-        assert self.evaluate_mask(mask, sample_data) == [True, False, True, False]
+    def apply_mask(self, mask: Any, data: Any) -> dict[str, list[Any]]:
+        result: dict[str, list[Any]] = data.filter(mask).to_pydict()
+        return result

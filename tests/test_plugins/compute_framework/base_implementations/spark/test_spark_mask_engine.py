@@ -44,3 +44,7 @@ class TestSparkMaskEngine(MaskEngineTestMixin):
 
     def is_boolean_mask(self, mask: Any, data: Any) -> bool:
         return all(isinstance(v, bool) for v in mask)
+
+    def apply_mask(self, mask: Any, data: Any) -> dict[str, list[Any]]:
+        kept = [row for row, keep in zip(data.collect(), mask) if keep]
+        return {column: [row[column] for row in kept] for column in data.columns}

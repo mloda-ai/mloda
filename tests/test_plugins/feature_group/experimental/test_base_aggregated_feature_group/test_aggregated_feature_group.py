@@ -1,5 +1,6 @@
 from typing import Any
 
+import numpy as np
 import pandas as pd
 import pytest
 
@@ -13,6 +14,9 @@ from mloda_plugins.compute_framework.base_implementations.pandas.dataframe impor
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.base import AggregatedFeatureGroup
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.pandas import PandasAggregatedFeatureGroup
 
+from tests.test_plugins.feature_group.experimental.test_base_aggregated_feature_group.aggregated_zero_row_test_mixin import (
+    AggregatedZeroRowTestMixin,
+)
 from tests.test_plugins.feature_group.experimental.test_base_aggregated_feature_group.test_aggregated_utils import (
     PandasAggregatedTestDataCreator,
     validate_aggregated_features,
@@ -285,6 +289,40 @@ class TestPandasAggregatedFeatureGroup:
         finally:
             # Restore the original AGGREGATION_TYPES
             AggregatedFeatureGroup.AGGREGATION_TYPES = original_types
+
+
+class TestPandasAggregatedZeroRow(AggregatedZeroRowTestMixin):
+    int32_type = np.dtype("int32")
+    untyped_column_types = (np.dtype(object),)
+
+    @pytest.fixture
+    def feature_group(self) -> type[AggregatedFeatureGroup]:
+        return PandasAggregatedFeatureGroup
+
+    @pytest.fixture
+    def zero_row_data(self) -> pd.DataFrame:
+        return pd.DataFrame(
+            {
+                "sales": pd.Series([], dtype="int64"),
+                "price": pd.Series([], dtype="float64"),
+                "metrics~0": pd.Series([], dtype="int64"),
+                "metrics~1": pd.Series([], dtype="int64"),
+            }
+        )
+
+    @pytest.fixture
+    def all_null_data(self) -> pd.DataFrame:
+        return pd.DataFrame({"price": pd.Series([None, None, None], dtype="float64")})
+
+    @pytest.fixture
+    def int32_data(self) -> pd.DataFrame:
+        return pd.DataFrame({"sales": pd.Series([100, 200, 300], dtype="int32")})
+
+    def row_count(self, result: Any) -> int:
+        return len(result)
+
+    def column_type(self, result: Any, column: str) -> Any:
+        return result[column].dtype
 
 
 class TestAggPandasIntegration:

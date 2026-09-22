@@ -11,6 +11,9 @@ from mloda_plugins.feature_group.experimental.aggregated_feature_group.polars_la
     PolarsLazyAggregatedFeatureGroup,
 )
 
+from tests.test_plugins.feature_group.experimental.test_base_aggregated_feature_group.aggregated_zero_row_test_mixin import (
+    AggregatedZeroRowTestMixin,
+)
 from tests.test_plugins.feature_group.experimental.test_base_aggregated_feature_group.test_aggregated_utils import (
     AggregatedTestDataCreator,
     validate_aggregated_features,
@@ -283,6 +286,42 @@ class TestPolarsLazyAggregatedFeatureGroupMultiColumnDdofAndNullSkip:
             assert abs(result[row_index] - expected[row_index]) < 1e-6, (
                 f"row {row_index}: expected {expected[row_index]} (pandas ddof=1, skipna), got {result[row_index]}"
             )
+
+
+@pytest.mark.skipif(pl is None, reason="Polars not available")
+class TestPolarsLazyAggregatedZeroRow(AggregatedZeroRowTestMixin):
+    int32_type = pl.Int32 if POLARS_AVAILABLE else None
+    untyped_column_types = (pl.Null, pl.Object) if POLARS_AVAILABLE else ()
+    unsupported_multi_column_aggregations = {"median": "Median aggregation across multiple columns is not supported"}
+
+    @pytest.fixture
+    def feature_group(self) -> type[AggregatedFeatureGroup]:
+        return PolarsLazyAggregatedFeatureGroup
+
+    @pytest.fixture
+    def zero_row_data(self) -> Any:
+        return pl.LazyFrame(
+            {
+                "sales": pl.Series([], dtype=pl.Int64),
+                "price": pl.Series([], dtype=pl.Float64),
+                "metrics~0": pl.Series([], dtype=pl.Int64),
+                "metrics~1": pl.Series([], dtype=pl.Int64),
+            }
+        )
+
+    @pytest.fixture
+    def all_null_data(self) -> Any:
+        return pl.LazyFrame({"price": pl.Series([None, None, None], dtype=pl.Float64)})
+
+    @pytest.fixture
+    def int32_data(self) -> Any:
+        return pl.LazyFrame({"sales": pl.Series([100, 200, 300], dtype=pl.Int32)})
+
+    def row_count(self, result: Any) -> int:
+        return int(result.collect().height)
+
+    def column_type(self, result: Any, column: str) -> Any:
+        return result.collect()[column].dtype
 
 
 @pytest.mark.skipif(pl is None, reason="Polars not available")

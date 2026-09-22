@@ -6,10 +6,14 @@ condition strings and their structure.
 Each framework-specific test class should inherit from this mixin and provide:
 - engine fixture: Returns the SQL mask engine class
 - sample_data fixture: Returns framework-specific test data
+- empty_data fixture: Returns the same schema as sample_data, typed, with zero rows
 - evaluate_mask method: Executes a SQL condition against data, returns list[bool]
+- apply_mask method: Filters data by a SQL condition, returns column -> values
 """
 
 from typing import Any
+
+import pytest
 
 from mloda_plugins.compute_framework.base_implementations.sql.sql_base_mask_engine import (
     SqlBaseMaskEngine,
@@ -25,6 +29,10 @@ class SqlMaskEngineTestMixin(MaskEngineTestMixin):
     These unit tests verify that individual engine methods return SQL condition
     strings with the expected structure.
     """
+
+    def is_boolean_mask(self, mask: Any, data: Any) -> bool:
+        """SQL masks are condition strings, so this only checks the string form; override for a real type check."""
+        return isinstance(mask, str)
 
     def test_all_true_returns_string(self, engine: type[SqlBaseMaskEngine], sample_data: Any) -> None:
         result = engine.all_true(sample_data)
@@ -111,9 +119,9 @@ class SqlMaskEngineTestMixin(MaskEngineTestMixin):
         result = engine.all_of(sample_data, [])
         assert result == "1 = 1"
 
-    def test_is_in_empty_values_condition(self, engine: type[SqlBaseMaskEngine], sample_data: Any) -> None:
-        result = engine.is_in(sample_data, "status", ())
+    @pytest.mark.parametrize("values", [[], ()], ids=["list", "tuple"])
+    def test_is_in_empty_values_condition(
+        self, engine: type[SqlBaseMaskEngine], sample_data: Any, values: list[Any] | tuple[Any, ...]
+    ) -> None:
+        result = engine.is_in(sample_data, "status", values)
         assert result == "1 = 0"
-
-    def is_boolean_mask(self, mask: Any, data: Any) -> bool:
-        return isinstance(mask, str)

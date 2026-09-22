@@ -42,3 +42,7 @@ class TestSqliteSqlMaskEngine(SqlMaskEngineTestMixin):
         sql = f"SELECT CASE WHEN {mask} THEN 1 ELSE 0 END AS match FROM {quote_ident(table_name)}"  # nosec
         rows = conn.execute(sql).fetchall()
         return [bool(row[0]) for row in rows]
+
+    def apply_mask(self, mask: Any, data: SqliteRelation) -> dict[str, list[Any]]:
+        result: dict[str, list[Any]] = data.filter(mask).to_arrow_table().to_pydict()
+        return result

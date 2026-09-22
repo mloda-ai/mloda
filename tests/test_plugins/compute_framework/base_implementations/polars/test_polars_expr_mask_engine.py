@@ -54,6 +54,10 @@ class TestPolarsExprMaskEngine(MaskEngineTestMixin):
     def is_boolean_mask(self, mask: Any, data: Any) -> bool:
         return bool(data.select(mask.alias("__mask")).collect()["__mask"].dtype == pl.Boolean)
 
+    def apply_mask(self, mask: Any, data: Any) -> dict[str, list[Any]]:
+        result: dict[str, list[Any]] = data.filter(mask).collect().to_dict(as_series=False)
+        return result
+
     # -- Polars-expr-specific tests --
 
     def test_supported_data_type(self, engine: type[BaseMaskEngine]) -> None:

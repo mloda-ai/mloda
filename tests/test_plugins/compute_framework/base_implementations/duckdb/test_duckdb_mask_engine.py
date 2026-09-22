@@ -50,3 +50,11 @@ if DUCKDB_AVAILABLE:
             projected = data.project(bool_expr)
             arrow = projected.to_arrow_table()
             return [bool(arrow.column("__match__")[i].as_py()) for i in range(arrow.num_rows)]
+
+        def is_boolean_mask(self, mask: Any, data: DuckdbRelation) -> bool:
+            """Projects the condition and checks its DuckDB type, which works at zero rows."""
+            return [str(t) for t in data.project(f"({mask}) AS __m").types] == ["BOOLEAN"]
+
+        def apply_mask(self, mask: Any, data: DuckdbRelation) -> dict[str, list[Any]]:
+            result: dict[str, list[Any]] = data.filter(mask).to_arrow_table().to_pydict()
+            return result

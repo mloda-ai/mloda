@@ -7,6 +7,7 @@ Each framework-specific test class should inherit from this mixin and provide:
 - empty_data fixture: Returns the same schema as sample_data, typed, with zero rows
 - evaluate_mask method: Converts framework-specific mask to a Python list of booleans
 - is_boolean_mask method: Checks that a mask is boolean-typed
+- apply_mask method: Selects rows with the mask the framework's native way, returns column -> values
 """
 
 from abc import abstractmethod
@@ -29,6 +30,8 @@ class MaskEngineTestMixin:
       with zero rows
     - evaluate_mask(mask, data) converting the mask to list[bool]
     - is_boolean_mask(mask, data) checking that a mask is boolean-typed
+    - apply_mask(mask, data) selecting rows with the mask the framework's native way and
+      returning the result as a column -> values dict
     """
 
     @pytest.fixture
@@ -52,7 +55,11 @@ class MaskEngineTestMixin:
 
     @abstractmethod
     def is_boolean_mask(self, mask: Any, data: Any) -> bool:
-        """List-based engines can only check element types; also checked on sample_data, not just empty_data."""
+        """List-based engines can only check element types, so test_all_true_is_boolean covers them on sample_data."""
+        raise NotImplementedError
+
+    @abstractmethod
+    def apply_mask(self, mask: Any, data: Any) -> dict[str, list[Any]]:
         raise NotImplementedError
 
     def test_equal(self, engine: type[BaseMaskEngine], sample_data: Any) -> None:
@@ -132,18 +139,36 @@ class MaskEngineTestMixin:
         mask = engine.all_of(sample_data, [m1, m2])
         assert self.evaluate_mask(mask, sample_data) == [False, True, True, False]
 
-    def test_is_in_empty_values_is_all_false(self, engine: type[BaseMaskEngine], sample_data: Any) -> None:
-        mask = engine.is_in(sample_data, "status", ())
+    @pytest.mark.parametrize("values", [[], ()], ids=["list", "tuple"])
+    def test_is_in_empty_values_is_all_false(
+        self, engine: type[BaseMaskEngine], sample_data: Any, values: list[Any] | tuple[Any, ...]
+    ) -> None:
+        mask = engine.is_in(sample_data, "status", values)
         assert self.evaluate_mask(mask, sample_data) == [False, False, False, False]
 
-    def test_all_true_on_empty_data_is_boolean(
-        self, engine: type[BaseMaskEngine], sample_data: Any, empty_data: Any
+    @pytest.mark.parametrize("values", [[], ()], ids=["list", "tuple"])
+    def test_is_in_empty_values_on_empty_data(
+        self, engine: type[BaseMaskEngine], empty_data: Any, values: list[Any] | tuple[Any, ...]
     ) -> None:
+        mask = engine.is_in(empty_data, "status", values)
+        assert self.evaluate_mask(mask, empty_data) == []
+
+    def test_all_true_is_boolean(self, engine: type[BaseMaskEngine], sample_data: Any) -> None:
         assert self.is_boolean_mask(engine.all_true(sample_data), sample_data)
+
+    def test_all_true_on_empty_data_is_boolean(self, engine: type[BaseMaskEngine], empty_data: Any) -> None:
         mask = engine.all_true(empty_data)
-        assert self.is_boolean_mask(mask, empty_data) is True
+        assert self.is_boolean_mask(mask, empty_data)
         assert self.evaluate_mask(mask, empty_data) == []
 
     def test_combine_on_empty_data(self, engine: type[BaseMaskEngine], empty_data: Any) -> None:
         mask = engine.combine(engine.all_true(empty_data), engine.equal(empty_data, "status", "x"))
         assert self.evaluate_mask(mask, empty_data) == []
+
+    def test_apply_mask_selects_rows(self, engine: type[BaseMaskEngine], sample_data: Any) -> None:
+        mask = engine.equal(sample_data, "status", "active")
+        assert self.apply_mask(mask, sample_data) == {"status": ["active", "active"], "value": [10, 30]}
+
+    def test_apply_all_true_on_empty_data_keeps_columns(self, engine: type[BaseMaskEngine], empty_data: Any) -> None:
+        """Pins #1535: selecting with all_true on zero rows must keep every column."""
+        assert self.apply_mask(engine.all_true(empty_data), empty_data) == {"status": [], "value": []}

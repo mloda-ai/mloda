@@ -88,9 +88,11 @@ class DtypeExtractionTestMixin:
 class DuplicateColumnDtypeExtractionTestMixin:
     """Shared tests for _extract_column_dtype/_extract_column_data_type on duplicate-column data.
 
-    Opt-in, not part of DtypeExtractionTestMixin's abstract fixture contract: only frameworks
-    that can represent two columns sharing a name (Pandas, PyArrow, and Iceberg's post-transform
-    PyArrow branch) mix this in. Polars/DuckDB/Sqlite/Spark cannot construct this shape.
+    Opt-in, not part of DtypeExtractionTestMixin's abstract fixture contract: frameworks whose
+    _extract_column_dtype resolves the name positionally mix this in (Pandas, PyArrow, and
+    Iceberg's post-transform PyArrow branch). DuckDB and Spark are already first-occurrence safe
+    and could be mixed in too; frameworks that pin duplicate-column behavior at the
+    _output_schema level cover it in test_output_schema_hook.py instead.
 
     The mixin is intentionally named without a ``Test`` prefix so pytest does not collect it
     standalone. Framework subclasses pick up the test methods by inheritance.

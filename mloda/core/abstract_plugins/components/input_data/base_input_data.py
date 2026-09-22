@@ -53,6 +53,8 @@ _SECRET_KEY_PARTS = ("pass", "pwd", "secret", "token", "credential", "auth", "sa
 _URI_PATTERN = re.compile(r"^[A-Za-z][A-Za-z0-9+.:-]*://")
 _USERINFO_PATTERN = re.compile(r"^[^/\\@\s:]*:[^@]*@")
 _DRIVE_LETTER_PATTERN = re.compile(r"^[A-Za-z]:[\\/]")
+_QUERY_KEY_PATTERN = re.compile(r"[?&#;]\s*([A-Za-z_][A-Za-z0-9_.\-]{0,63})\s*=")
+_QUERY_START_PATTERN = re.compile(r"[?#]")
 
 
 def _format_keys(keys: Iterable[str]) -> str:
@@ -73,7 +75,9 @@ def _connection_string_identity(value: str) -> str | None:
     if _URI_PATTERN.match(value):
         return _format_keys(recognized) if any(_is_secret_key(key) for key in recognized) else None
     prefix = blanked[: matches[0].start(1)]
-    if "/" in prefix or "\\" in prefix:
+    prefix_has_query_anchor = _QUERY_START_PATTERN.search(prefix) is not None
+    prefix_has_secret_without_anchor = any(_is_secret_key(key) for key in recognized) and not prefix_has_query_anchor
+    if ("/" in prefix or "\\" in prefix) and not prefix_has_secret_without_anchor:
         return None
     if len(matches) == 1 and not any(_is_secret_key(key) for key in recognized) and "/" in value:
         return None
@@ -89,11 +93,23 @@ def _strip_scheme_less_userinfo(value: str) -> str:
     return body.rpartition("@")[2].split("?", 1)[0].split("#", 1)[0]
 
 
+def _strip_credential_query(value: str) -> str:
+    match = _QUERY_START_PATTERN.search(value)
+    if match is None:
+        return value
+    head, tail = value[: match.start()], value[match.start() :]
+    keys = {m[1].lower() for m in _QUERY_KEY_PATTERN.finditer(tail)}
+    if any(key in _CONNECTION_KEYS or _is_secret_key(key) for key in keys):
+        return head
+    return value
+
+
 def _data_access_identity(data_access: Any) -> str:
     """Mapping: sorted key names. str or PurePath: a scheme:// URI keeps scheme, host and path (abfs/abfss/wasb/wasbs,
     case-insensitive, also the container), user info, query and fragment dropped. A scheme-less string with recognized
-    connection or secret keys is identified by those key names, user:pw@host drops user info, query and fragment;
-    otherwise as is."""
+    connection or secret keys is identified by those key names. user:pw@host unconditionally drops query and fragment
+    along with the user info; without userinfo, its own query or fragment is dropped only when it holds a recognized
+    or secret key, otherwise left as is."""
     if isinstance(data_access, Mapping):
         return _format_keys(str(key) for key in data_access)
     if isinstance(data_access, (str, PurePath)):
@@ -101,8 +117,8 @@ def _data_access_identity(data_access: Any) -> str:
         identity = _connection_string_identity(value)
         if identity is not None:
             return identity
-        if "://" not in value:
-            return _strip_scheme_less_userinfo(value)
+        if not _URI_PATTERN.match(value):
+            return _strip_credential_query(_strip_scheme_less_userinfo(value))
         scheme, _, rest = value.partition("://")
         head = rest.split("/", 1)[0].split("?", 1)[0].split("#", 1)[0]
         tail = head.rpartition(":")[2]

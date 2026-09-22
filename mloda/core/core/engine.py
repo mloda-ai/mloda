@@ -197,6 +197,8 @@ class Engine:
     def _process_feature(self, feature: Feature, features: Features, requested: bool, depth: int = 0) -> None:
         """Processes a single feature by delegating tasks to helper methods."""
 
+        # Feature-group matchers write into the options; those writes are never the feature's own declaration.
+        feature.options.lock_own_keys()
         feature_group_class, compute_frameworks, result = self._identify_feature_group_and_frameworks(feature, depth)
         self.resolution_records.append(ResolutionRecord(str(feature.name), requested, result))
         self._warn_on_dual_option_consumption(feature, feature_group_class)
@@ -508,6 +510,7 @@ class Engine:
         existing_feature = next((f for f in feature_collection if feature == f), None)
 
         if existing_feature is not None:
+            existing_feature.options.union_own_keys(feature.options)
             self._warn_on_default_equivalent_merge(feature, declared_options, existing_feature)
             # Propagate the requested flag: filter twins must not displace requested output columns (issue #712).
             if feature.initial_requested_data and not existing_feature.initial_requested_data:

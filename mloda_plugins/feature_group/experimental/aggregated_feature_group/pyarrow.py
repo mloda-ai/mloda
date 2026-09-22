@@ -88,7 +88,10 @@ class PyArrowAggregatedFeatureGroup(AggregatedFeatureGroup):
             result_array = pa.array(result)
         else:
             # Single-column (vertical) aggregation: a scalar broadcast to every row.
-            result_array = pa.array([result] * data.num_rows)
+            if isinstance(result, pa.Scalar):
+                result_array = pa.array([], type=result.type)
+            else:
+                result_array = pa.array([result] * data.num_rows)
 
         if feature_name in data.schema.names:
             column_index = data.schema.names.index(feature_name)
@@ -170,24 +173,25 @@ class PyArrowAggregatedFeatureGroup(AggregatedFeatureGroup):
             column = data.column(in_features[0])
 
             if aggregation_type == "sum":
-                return pc.sum(column).as_py()
+                result = pc.sum(column)
             elif aggregation_type == "min":
-                return pc.min(column).as_py()
+                result = pc.min(column)
             elif aggregation_type == "max":
-                return pc.max(column).as_py()
+                result = pc.max(column)
             elif aggregation_type in ["avg", "mean"]:
-                return pc.mean(column).as_py()
+                result = pc.mean(column)
             elif aggregation_type == "count":
-                return pc.count(column).as_py()
+                result = pc.count(column)
             elif aggregation_type == "std":
-                return pc.stddev(column, ddof=1).as_py()
+                result = pc.stddev(column, ddof=1)
             elif aggregation_type == "var":
-                return pc.variance(column, ddof=1).as_py()
+                result = pc.variance(column, ddof=1)
             elif aggregation_type == "median":
                 # PyArrow doesn't have a direct median function
                 # We can approximate it using quantile with q=0.5
                 # quantile returns an array, so we need to extract the first value
-                result = pc.quantile(column, q=0.5)
-                return result[0].as_py()
+                result = pc.quantile(column, q=0.5)[0]
             else:
                 raise ValueError(f"Unsupported aggregation type: {aggregation_type}")
+
+            return result if data.num_rows == 0 else result.as_py()

@@ -340,6 +340,15 @@ class TestPyArrowAggregatedFeatureGroupDdofAndNullSkip:
         for row_index in range(len(expected)):
             assert abs(result[row_index] - expected[row_index]) < 1e-6
 
+    def test_calculate_feature_empty_table_preserves_result_type(
+        self, feature_set_sum: FeatureSet
+    ) -> None:
+        data = pa.table({"sales": pa.array([], type=pa.int64())})
+
+        result = PyArrowAggregatedFeatureGroup.calculate_feature(data, feature_set_sum)
+
+        assert result.column("sales__sum_aggr").type == pa.int64()
+
 
 class TestPyArrowAggregatedFeatureGroupMultiColumnIntegerHandling:
     """Pins int64 handling for multi-column aggregation: no unconditional float64 cast."""

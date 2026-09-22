@@ -146,13 +146,23 @@ class TestPandasDtypeExtraction(DtypeExtractionTestMixin, DuplicateColumnDtypeEx
     def dtype_sample_data(self) -> Any:
         return pd.DataFrame({"int_col": [1, 2, 3], "str_col": ["a", "b", "c"], "float_col": [1.0, 2.0, 3.0]})
 
+    # Dtypes are declared explicitly because pandas 2.x infers `object` where pandas 3.x infers `str`,
+    # which would make the first-occurrence assertions depend on the installed pandas version.
     @pytest.fixture
     def dtype_duplicate_column_data(self) -> Any:
-        return pd.DataFrame([[1, "x"], [2, "y"], [3, "z"]], columns=["dup_col", "dup_col"])
+        frame = pd.DataFrame(
+            {"first": pd.Series([1, 2, 3], dtype="int64"), "second": pd.Series(["x", "y", "z"], dtype="string")}
+        )
+        frame.columns = ["dup_col", "dup_col"]
+        return frame
 
     @pytest.fixture
     def dtype_duplicate_column_data_reversed(self) -> Any:
-        return pd.DataFrame([["x", 1], ["y", 2], ["z", 3]], columns=["dup_col", "dup_col"])
+        frame = pd.DataFrame(
+            {"first": pd.Series(["x", "y", "z"], dtype="string"), "second": pd.Series([1, 2, 3], dtype="int64")}
+        )
+        frame.columns = ["dup_col", "dup_col"]
+        return frame
 
 
 @pytest.mark.skipif(pd is None, reason="Pandas is not installed. Skipping this test.")

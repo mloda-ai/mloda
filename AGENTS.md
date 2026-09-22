@@ -92,6 +92,12 @@ source .venv/bin/activate
 - A stray local build (`python -m build` or `pip wheel .`) creates a `build/` directory. mypy picks it up and reports spurious errors. Clean it with `rm -rf build/` before running tox. The `[tool.mypy]` exclude list in `pyproject.toml` includes `build/` to prevent this at the gate.
 - Running `mypy --strict .` in the dev venv (outside tox) may surface pyspark-related errors that tox's isolated env does not see; trust the tox run as the source of truth.
 
+### Documentation fence notes
+
+- A ` ```py ` fence is illustrative and is not executed; a ` ```python ` fence is executed by the documentation test suite.
+- When adding or removing an illustrative ` ```py ` block, update that file's count in `tests/test_docs_fences.py`'s `ILLUSTRATIVE_BLOCK_ALLOWLIST`.
+- The fence-count check runs in the default tox environment; it is not gated to `python314`.
+
 ## Issue Creation
 
 When filing a GitHub issue (via `gh issue create` or otherwise), follow the structure in `.github/ISSUE_TEMPLATE/issue.yml`:

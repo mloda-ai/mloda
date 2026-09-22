@@ -12,7 +12,7 @@ from mloda.user import FilterType
 from mloda_plugins.compute_framework.base_implementations.polars.polars_filter_engine import PolarsFilterEngine
 
 from tests.test_plugins.compute_framework.base_implementations.filter_engine_test_mixin import (
-    DecimalFilterEngineTestMixin,
+    FilterEngineTestMixin,
 )
 from tests.test_plugins.compute_framework.base_implementations.time_range_filter_engine_test_mixin import (
     SAMPLE_IDS,
@@ -30,7 +30,7 @@ except ImportError:
 
 
 @pytest.mark.skipif(pl is None, reason="Polars is not installed. Skipping this test.")
-class TestPolarsFilterEngine(DecimalFilterEngineTestMixin, TimeRangeFilterEngineTestMixin):
+class TestPolarsFilterEngine(FilterEngineTestMixin, TimeRangeFilterEngineTestMixin):
     """Unit tests for the PolarsFilterEngine class using shared mixins."""
 
     @pytest.fixture

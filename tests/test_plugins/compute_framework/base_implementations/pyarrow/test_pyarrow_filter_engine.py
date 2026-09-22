@@ -12,11 +12,11 @@ from mloda.user import FilterType
 from mloda_plugins.compute_framework.base_implementations.pyarrow.pyarrow_filter_engine import PyArrowFilterEngine
 
 from tests.test_plugins.compute_framework.base_implementations.filter_engine_test_mixin import (
-    DecimalFilterEngineTestMixin,
+    FilterEngineTestMixin,
 )
 
 
-class TestPyArrowFilterEngine(DecimalFilterEngineTestMixin):
+class TestPyArrowFilterEngine(FilterEngineTestMixin):
     """Unit tests for the PyArrowFilterEngine class using shared mixin."""
 
     @pytest.fixture

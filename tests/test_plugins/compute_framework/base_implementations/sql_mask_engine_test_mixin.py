@@ -14,6 +14,8 @@ Each framework-specific test class should inherit from this mixin and provide:
 from decimal import Decimal
 from typing import Any
 
+import pytest
+
 from mloda_plugins.compute_framework.base_implementations.sql.sql_base_mask_engine import (
     SqlBaseMaskEngine,
 )
@@ -95,10 +97,7 @@ class SqlMaskEngineTestMixin(MaskEngineTestMixin):
 
     def test_is_in_decimal_values(self, engine: type[SqlBaseMaskEngine], sample_data: Any) -> None:
         result = engine.is_in(sample_data, "value", [Decimal("12.34"), Decimal("5.50")])
-        assert isinstance(result, str)
-        assert "12.34" in result
-        assert "5.50" in result
-        assert "IN" in result
+        assert result == '"value" IN (12.34, 5.50)'
 
     def test_combine_and_joins_conditions(self, engine: type[SqlBaseMaskEngine], sample_data: Any) -> None:
         cond1 = engine.greater_equal(sample_data, "value", 20)

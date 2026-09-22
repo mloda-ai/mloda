@@ -6,11 +6,7 @@ from typing import Any
 import pytest
 import numpy as np
 import pandas as pd
-
-try:
-    import pyarrow as pa
-except ImportError:
-    pa = None  # type: ignore[assignment, unused-ignore]
+import pyarrow as pa
 
 from mloda.user import Feature
 from mloda.user import SingleFilter
@@ -19,7 +15,7 @@ from mloda.user import FilterType
 from mloda_plugins.compute_framework.base_implementations.pandas.pandas_filter_engine import PandasFilterEngine
 
 from tests.test_plugins.compute_framework.base_implementations.filter_engine_test_mixin import (
-    DecimalFilterEngineTestMixin,
+    FilterEngineTestMixin,
 )
 from tests.test_plugins.compute_framework.base_implementations.time_range_filter_engine_test_mixin import (
     SAMPLE_IDS,
@@ -28,7 +24,7 @@ from tests.test_plugins.compute_framework.base_implementations.time_range_filter
 )
 
 
-class TestPandasFilterEngine(DecimalFilterEngineTestMixin, TimeRangeFilterEngineTestMixin):
+class TestPandasFilterEngine(FilterEngineTestMixin, TimeRangeFilterEngineTestMixin):
     """Unit tests for the PandasFilterEngine class using shared mixins."""
 
     @pytest.fixture

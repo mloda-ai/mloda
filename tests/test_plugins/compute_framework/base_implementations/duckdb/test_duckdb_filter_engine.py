@@ -13,7 +13,7 @@ from mloda_plugins.compute_framework.base_implementations.duckdb.duckdb_filter_e
 from mloda_plugins.compute_framework.base_implementations.duckdb.duckdb_relation import DuckdbRelation
 
 from tests.test_plugins.compute_framework.base_implementations.filter_engine_test_mixin import (
-    DecimalFilterEngineTestMixin,
+    FilterEngineTestMixin,
 )
 from tests.test_plugins.compute_framework.base_implementations.time_range_filter_engine_test_mixin import (
     SAMPLE_IDS,
@@ -33,7 +33,7 @@ except ImportError:
 
 
 @pytest.mark.skipif(duckdb is None or pa is None, reason="DuckDB or PyArrow is not installed. Skipping this test.")
-class TestDuckDBFilterEngine(DecimalFilterEngineTestMixin, TimeRangeFilterEngineTestMixin):
+class TestDuckDBFilterEngine(FilterEngineTestMixin, TimeRangeFilterEngineTestMixin):
     """Unit tests for the DuckDBFilterEngine class using shared mixins."""
 
     @pytest.fixture

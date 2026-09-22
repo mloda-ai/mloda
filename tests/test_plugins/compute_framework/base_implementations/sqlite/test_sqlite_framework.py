@@ -19,7 +19,7 @@ from tests.test_plugins.compute_framework.base_implementations.dict_interchange_
     DictInterchangeOutputSchemaTestMixin,
 )
 from tests.test_plugins.compute_framework.base_implementations.dtype_extraction_test_mixin import (
-    BasicDtypeExtractionTestMixin,
+    DtypeExtractionTestMixin,
 )
 from tests.test_plugins.compute_framework.base_implementations.empty_result_test_mixin import (
     EmptyResultFrameworkTestMixin,
@@ -206,7 +206,7 @@ class TestSqliteFrameworkMerge(DataFrameTestBase):
         return MergeEngineFactory()
 
 
-class TestSqliteDtypeExtraction(BasicDtypeExtractionTestMixin):
+class TestSqliteDtypeExtraction(DtypeExtractionTestMixin):
     """Test SqliteFramework._extract_column_dtype using shared mixin."""
 
     @pytest.fixture
@@ -219,6 +219,9 @@ class TestSqliteDtypeExtraction(BasicDtypeExtractionTestMixin):
             {"int_col": [1, 2, 3], "str_col": ["a", "b", "c"], "float_col": [1.0, 2.0, 3.0]}
         )
         return SqliteRelation.from_arrow(connection, arrow_table)
+
+    @pytest.mark.skip(reason="SQLite has no decimal storage type; a decimal column cannot be inserted")
+    def test_extract_decimal_column_data_type(self, framework_instance: Any, decimal_sample_data: Any) -> None: ...
 
     def test_relation_from_decimal_column_raises(self, connection: sqlite3.Connection) -> None:
         values = [Decimal("12.34"), Decimal("5.50"), Decimal("99.99"), None]

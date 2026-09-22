@@ -1,11 +1,7 @@
-"""
-Shared test mixin for all BaseFilterEngine implementations.
+"""Shared filter engine tests for BaseFilterEngine implementations.
 
-This mixin provides common test methods that verify the filter engine contract.
-Each framework-specific test class should inherit from this mixin and provide:
-- filter_engine fixture: Returns the filter engine class
-- sample_data fixture: Returns framework-specific test data
-- get_column_values method: Extracts column values as a list from results
+The default suite covers decimal data; frameworks that cannot support a test override it and skip it with a reason.
+Consumers implement every abstract fixture and method, including `decimal_sample_data` and `get_decimal_column_dtype`.
 """
 
 from abc import abstractmethod
@@ -301,10 +297,6 @@ class FilterEngineTestMixin:
 
         with pytest.raises(ValueError, match="Filter parameter .* not supported"):
             filter_engine.do_range_filter(sample_data, single_filter)
-
-
-class DecimalFilterEngineTestMixin(FilterEngineTestMixin):
-    """Shared decimal filtering checks."""
 
     @pytest.fixture
     @abstractmethod

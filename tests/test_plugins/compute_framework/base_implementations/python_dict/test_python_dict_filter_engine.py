@@ -13,7 +13,7 @@ from mloda_plugins.compute_framework.base_implementations.python_dict.python_dic
 )
 
 from tests.test_plugins.compute_framework.base_implementations.filter_engine_test_mixin import (
-    DecimalFilterEngineTestMixin,
+    FilterEngineTestMixin,
 )
 from tests.test_plugins.compute_framework.base_implementations.time_range_filter_engine_test_mixin import (
     SAMPLE_IDS,
@@ -22,7 +22,7 @@ from tests.test_plugins.compute_framework.base_implementations.time_range_filter
 )
 
 
-class TestPythonDictFilterEngine(DecimalFilterEngineTestMixin, TimeRangeFilterEngineTestMixin):
+class TestPythonDictFilterEngine(FilterEngineTestMixin, TimeRangeFilterEngineTestMixin):
     """Unit tests for the PythonDictFilterEngine class using shared mixins."""
 
     @pytest.fixture

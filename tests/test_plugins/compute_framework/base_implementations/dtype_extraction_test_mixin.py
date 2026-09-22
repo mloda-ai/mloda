@@ -1,7 +1,7 @@
 """Shared dtype extraction tests for compute frameworks.
 
-The default suite covers decimal data; unsupported frameworks explicitly opt out.
-Fixture contract: `framework_instance`, and `dtype_sample_data` with `int_col`, `str_col`, `float_col`.
+The default suite covers decimal data; frameworks that cannot support a test override it and skip it with a reason.
+Fixture contract: `framework_instance`, `dtype_sample_data` (`int_col`, `str_col`, `float_col`), `decimal_sample_data`.
 """
 
 from abc import abstractmethod
@@ -13,8 +13,8 @@ from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.user import DataType
 
 
-class BasicDtypeExtractionTestMixin:
-    """Shared non-decimal tests for _extract_column_dtype across compute frameworks."""
+class DtypeExtractionTestMixin:
+    """Shared tests for _extract_column_dtype across all compute frameworks."""
 
     @pytest.fixture
     @abstractmethod
@@ -78,10 +78,6 @@ class BasicDtypeExtractionTestMixin:
         assert not ComputeFramework._is_numeric_dtype(str(dtype).lower()), (
             f"string dtype '{dtype}' incorrectly classified as numeric"
         )
-
-
-class DtypeExtractionTestMixin(BasicDtypeExtractionTestMixin):
-    """Shared dtype extraction tests, including decimal by default."""
 
     @pytest.fixture
     @abstractmethod

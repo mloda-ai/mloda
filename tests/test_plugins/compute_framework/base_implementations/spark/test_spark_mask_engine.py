@@ -1,3 +1,4 @@
+from decimal import Decimal
 from typing import Any
 
 import pytest
@@ -33,6 +34,11 @@ class TestSparkMaskEngine(MaskEngineTestMixin):
     @pytest.fixture
     def empty_data(self, spark_session: Any) -> Any:
         return spark_session.createDataFrame([], "status string, value bigint")
+
+    @pytest.fixture
+    def decimal_sample_data(self, spark_session: Any) -> Any:
+        rows = [(Decimal("12.34"),), (Decimal("5.50"),), (None,)]
+        return spark_session.createDataFrame(rows, "d decimal(10,2)")
 
     def evaluate_mask(self, mask: Any, data: Any) -> list[bool]:
         return list(mask)

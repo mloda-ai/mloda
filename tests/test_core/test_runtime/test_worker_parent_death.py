@@ -6,6 +6,7 @@ import os
 import signal
 import time
 from pathlib import Path
+from typing import Any
 from unittest import mock
 from uuid import uuid4
 
@@ -32,11 +33,14 @@ class _FakeCfwManager:
 def _worker_is_gone(pid: int) -> bool:
     """A reparented child can sit as an unreaped zombie, which still answers os.kill(pid, 0);
     /proc state distinguishes that from actually running. The pid can also be reaped between
-    an exists() check and a subsequent read, so read directly and treat a vanished entry as gone."""
+    an exists() check and a subsequent read, so read directly and treat a vanished entry as gone.
+    The reap can land in either gap around the read: before open() (ENOENT, FileNotFoundError)
+    or after open() but before the actual read (ESRCH, ProcessLookupError); both are OSError
+    siblings, not parent/child, so both need to be caught explicitly."""
     stat_path = Path(f"/proc/{pid}/stat")
     try:
         stat_text = stat_path.read_text()
-    except FileNotFoundError:
+    except (FileNotFoundError, ProcessLookupError):
         return True
     return stat_text.rsplit(")", 1)[1].split()[0] == "Z"
 
@@ -86,6 +90,37 @@ class TestWorkerIsGoneSurvivesAConcurrentReap:
                 return real_read_text(self, *args, **kwargs)  # type: ignore[arg-type]
 
             with mock.patch.object(Path, "read_text", reap_then_read):
+                assert _worker_is_gone(pid) is True
+        finally:
+            try:
+                os.waitpid(pid, os.WNOHANG)
+            except ChildProcessError:
+                pass
+
+    def test_pid_reaped_between_open_and_read_reads_as_gone(self) -> None:
+        """Same race, the other ordering: the reap lands after Path.open() succeeds (the pid
+        was still alive) but before the actual read, which raises ProcessLookupError (ESRCH)
+        rather than FileNotFoundError (ENOENT)."""
+        pid = os.fork()
+        if pid == 0:
+            os._exit(0)
+
+        try:
+            deadline = time.time() + 2.0
+            while time.time() < deadline and not Path(f"/proc/{pid}/stat").exists():
+                time.sleep(0.01)
+            assert Path(f"/proc/{pid}/stat").exists(), "child never became a visible zombie"
+
+            real_path_open = Path.open
+
+            def open_then_reap(self: Path, *args: Any, **kwargs: Any) -> Any:
+                # The open() itself succeeds because the pid is still alive here; win the
+                # race a concurrent reaper could win against the read that follows.
+                f = real_path_open(self, *args, **kwargs)
+                os.waitpid(pid, 0)
+                return f
+
+            with mock.patch.object(Path, "open", open_then_reap):
                 assert _worker_is_gone(pid) is True
         finally:
             try:

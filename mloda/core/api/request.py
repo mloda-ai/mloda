@@ -131,6 +131,8 @@ class mlodaAPI:
 
         for feature in features:
             feature.initial_requested_data = True
+            # Framework stamps below are never the feature's own declaration.
+            feature.options.lock_own_keys()
             self._add_api_input_data(feature, api_input_data_collection)
             # Propagate strict_type_enforcement to typed features only
             if self.strict_type_enforcement and feature.data_type is not None:

@@ -176,6 +176,8 @@ class GlobalFilter:
         for filter in self.filters:
             # We are making a deepcopy so that, we do not change the original filter.
             _filter = deepcopy(filter)
+            # Host keys imported below are never the filter feature's own declaration.
+            _filter.filter_feature.options.lock_own_keys()
             _filter.filter_feature.options = self.unify_options(feat.options, _filter.filter_feature.options)
 
             # criteria records its own drops: only it can tell a defect from a decline from a plain non-match.

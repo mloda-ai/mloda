@@ -177,9 +177,9 @@ class Options:
         return self._own_context_keys & self.context.keys()
 
     def is_own(self, key: str) -> bool:
-        """True if key was declared on this feature before mloda started resolving it (engine intake or
-        its first committed inherit_from, whichever came first). After an engine intake merge, a key is
-        own if any merged request declared it."""
+        """True if key was declared on this feature before mloda started resolving it (API or engine intake,
+        or its first committed inherit_from, whichever came first). After an engine intake merge, a key is own
+        if any merged request declared it."""
         return key in self.own_group_keys or key in self.own_context_keys
 
     def union_own_keys(self, other: "Options") -> None:

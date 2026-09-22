@@ -8,12 +8,14 @@ and it must reach both the mixin matcher and the default FeatureGroup matcher.
 
 from __future__ import annotations
 
+import functools
 import re
 from typing import Any
 
 import pytest
 
 from mloda.core.abstract_plugins.components.default_options_key import DefaultOptionKeys
+from mloda.core.abstract_plugins.components.feature_chainer import feature_chain_author_guards
 from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_author_guards import (
     NAME_PATH_PRESENCE_GUARD_FLAG,
     REQUIRED_WHEN_GUARD_FLAG,
@@ -267,9 +269,9 @@ class TestGuardInstallation:
             }
 
         resolved = NoRequiredWhen.match_feature_group_criteria.__func__  # type: ignore[attr-defined]
-        assert getattr(resolved, REQUIRED_WHEN_GUARD_FLAG, False) is False
+        assert getattr(resolved, REQUIRED_WHEN_GUARD_FLAG, None) is not resolved
         # The wrapper that is present is the presence guard, not a mislabeled required_when guard.
-        assert getattr(resolved, NAME_PATH_PRESENCE_GUARD_FLAG, False) is True
+        assert getattr(resolved, NAME_PATH_PRESENCE_GUARD_FLAG, None) is resolved
 
     def test_no_flaggable_required_key_installs_no_guard_at_all(self) -> None:
         """A defaulted-only mapping (in_features is name-satisfied) gives neither guard a job."""
@@ -422,3 +424,86 @@ class TestPatternDiscovery:
 
         assert StringPatternGroup.match_feature_group_criteria("x__first_compiled", Options()) is True
         assert CompiledPatternGroup.match_feature_group_criteria("x__first_compiled", Options()) is True
+
+
+class TestFunctoolsWrapsOverrideKeepsItsOwnGuard:
+    """A genuine override written as ``@classmethod @functools.wraps(<parent's matcher>)``.
+
+    functools.wraps copies the wrapped callable's __dict__ onto the override, so a guard flag the
+    parent's matcher carries must not be read as already covering this, independently-bodied, matcher.
+    """
+
+    def test_required_when_guard_is_enforced_on_a_wrapped_non_delegating_override(self) -> None:
+        predicate = CountingPredicate()
+
+        class GuardedParent(FeatureChainParserMixin, FeatureGroup):
+            PREFIX_PATTERN = GUARDED_PATTERN
+            PROPERTY_MAPPING = _mapping(predicate)
+
+        class WrappedOverride(GuardedParent):
+            @classmethod
+            @functools.wraps(GuardedParent.match_feature_group_criteria)
+            def match_feature_group_criteria(  # type: ignore[override]
+                cls,
+                feature_name: str | FeatureName,
+                options: Options,
+                data_access_collection: Any = None,
+            ) -> bool:
+                # Genuine, non-delegating body: ignores the predicate entirely.
+                return True
+
+        assert WrappedOverride.match_feature_group_criteria("x__first_guarded", REQUIRES_ORDER_BY) is False  # type: ignore[call-arg,arg-type]
+        assert WrappedOverride.match_feature_group_criteria("x__first_guarded", SATISFIED) is True  # type: ignore[call-arg,arg-type]
+
+    def test_name_path_presence_guard_is_enforced_on_a_wrapped_non_delegating_override(self) -> None:
+        name_path_pattern = r".*__([\w]+)_npguard$"
+
+        class PresenceGuardedParent(FeatureChainParserMixin, FeatureGroup):
+            PREFIX_PATTERN = name_path_pattern
+            PROPERTY_MAPPING = {
+                OP_TYPE: PropertySpec(
+                    "Operation to apply",
+                    allowed_values={"sum": "Sum of values"},
+                    context=True,
+                    strict_validation=True,
+                ),
+                "missing_npguard": PropertySpec("required, options-only, absent on the name path", context=True),
+            }
+
+        class WrappedOverride(PresenceGuardedParent):
+            @classmethod
+            @functools.wraps(PresenceGuardedParent.match_feature_group_criteria)
+            def match_feature_group_criteria(  # type: ignore[override]
+                cls,
+                feature_name: str | FeatureName,
+                options: Options,
+                data_access_collection: Any = None,
+            ) -> bool:
+                # Genuine, non-delegating body: ignores the required key entirely.
+                return True
+
+        assert WrappedOverride.match_feature_group_criteria("x__sum_npguard", Options()) is False  # type: ignore[call-arg,arg-type]
+        assert (
+            WrappedOverride.match_feature_group_criteria(  # type: ignore[call-arg]
+                "x__sum_npguard",  # type: ignore[arg-type]
+                Options(context={"missing_npguard": "present"}),  # type: ignore[arg-type]
+            )
+            is True
+        )
+
+    def test_plain_subclass_of_a_guarded_matcher_still_stacks_no_extra_wrapper(self) -> None:
+        """Regression guard: an ordinary subclass (no override at all) must still get no new wrapper."""
+        predicate = CountingPredicate()
+
+        class GuardedParent(FeatureChainParserMixin, FeatureGroup):
+            PREFIX_PATTERN = GUARDED_PATTERN
+            PROPERTY_MAPPING = _mapping(predicate)
+
+        class PlainChild(GuardedParent):
+            """No override: inherits the already guarded matcher as-is."""
+
+        assert "match_feature_group_criteria" not in PlainChild.__dict__
+
+        resolved = GuardedParent.match_feature_group_criteria.__func__  # type: ignore[attr-defined]
+        assert feature_chain_author_guards._matcher_carries_guard(resolved, REQUIRED_WHEN_GUARD_FLAG)
+        assert feature_chain_author_guards._matcher_carries_guard(resolved, NAME_PATH_PRESENCE_GUARD_FLAG)

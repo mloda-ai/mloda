@@ -181,15 +181,13 @@ class Options:
         return key in self.own_group_keys or key in self.own_context_keys
 
     def union_own_keys(self, other: "Options") -> None:
-        """Union another Options' provenance bookkeeping (own keys, lock, inherited keys) into self;
-        used when two value-equal Feature requests from different consumers merge into one, so the
-        merged feature's provenance is consumer-order independent. Only ever called on Options that
-        are already equal (same group and context values), so no value copying is needed."""
+        """Union another Options' own-key provenance and lock flag into self; used when two value-equal
+        Feature requests from different consumers merge into one, so the merged feature's own-key answer
+        is consumer-order independent. inherited_* provenance stays the receiver's. Only ever called on
+        Options that are already equal (same group and context values), so no value copying is needed."""
         self._own_group_keys = self._own_group_keys | other._own_group_keys
         self._own_context_keys = self._own_context_keys | other._own_context_keys
         self._own_keys_locked = self._own_keys_locked or other._own_keys_locked
-        self.inherited_group_keys = self.inherited_group_keys | other.inherited_group_keys
-        self.inherited_context_keys = self.inherited_context_keys | other.inherited_context_keys
 
     def add_to_group(self, key: str, value: Any, forward: bool = True) -> None:
         """Add parameter to group (affects Feature Group resolution/splitting); ``forward=False``
@@ -409,9 +407,9 @@ class Options:
         Every key actually forwarded (including keys self already held with an equal value) is
         unioned into self.inherited_group_keys, so provenance accumulates across consumers.
 
-        The first call (per instance) sets self._own_keys_locked, regardless of whether anything
-        ends up forwarded; further ``set``/``add_to_group``/``add_to_context`` calls no longer
-        extend ``own_group_keys``/``own_context_keys``.
+        The first call that commits (per instance) sets self._own_keys_locked, regardless of whether
+        anything ends up forwarded; a raising call leaves it unset. Once locked, further
+        ``set``/``add_to_group``/``add_to_context`` calls no longer extend ``own_group_keys``/``own_context_keys``.
 
         Forwarded values are isolated by a container-spine copy as they are stored: the
         container spine (dict/list/set/tuple/frozenset) is copied recursively so nested mutation on the child

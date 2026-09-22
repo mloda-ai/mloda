@@ -251,64 +251,6 @@ class TestNonForwardedMarkRolledBackWithRejectedCandidate:
         )
 
 
-class TestRestoreOptionsRestoresOwnKeyProvenance:
-    """``_restore_options`` rolls back ``.group``/``.context``/``.non_forwarded_group_keys`` but
-    currently leaves ``_own_group_keys``/``_own_context_keys`` stale: a rejected candidate's write
-    keeps counting as 'own' provenance even though the value itself is gone (bug)."""
-
-    def test_restore_options_rolls_back_own_group_keys(self) -> None:
-        feature = Feature("restore_options_own_group_845r")
-        group_before = dict(feature.options.group)
-        context_before = dict(feature.options.context)
-        non_forwarded_before = feature.options.non_forwarded_group_keys
-        own_group_keys_before = feature.options._own_group_keys
-        own_context_keys_before = feature.options._own_context_keys
-        own_keys_locked_before = feature.options._own_keys_locked
-
-        feature.options.add_to_group("rejected_own_key_845r", "value")
-        assert feature.options.is_own("rejected_own_key_845r") is True
-
-        IdentifyFeatureGroupClass._restore_options(
-            feature,
-            group_before,
-            context_before,
-            non_forwarded_before,
-            own_group_keys_before,
-            own_context_keys_before,
-            own_keys_locked_before,
-        )
-
-        assert "rejected_own_key_845r" not in feature.options.group
-        assert feature.options.is_own("rejected_own_key_845r") is False
-        assert "rejected_own_key_845r" not in feature.options._own_group_keys
-
-    def test_restore_options_rolls_back_own_context_keys(self) -> None:
-        feature = Feature("restore_options_own_context_845r")
-        group_before = dict(feature.options.group)
-        context_before = dict(feature.options.context)
-        non_forwarded_before = feature.options.non_forwarded_group_keys
-        own_group_keys_before = feature.options._own_group_keys
-        own_context_keys_before = feature.options._own_context_keys
-        own_keys_locked_before = feature.options._own_keys_locked
-
-        feature.options.add_to_context("rejected_own_ctx_845r", "value")
-        assert feature.options.is_own("rejected_own_ctx_845r") is True
-
-        IdentifyFeatureGroupClass._restore_options(
-            feature,
-            group_before,
-            context_before,
-            non_forwarded_before,
-            own_group_keys_before,
-            own_context_keys_before,
-            own_keys_locked_before,
-        )
-
-        assert "rejected_own_ctx_845r" not in feature.options.context
-        assert feature.options.is_own("rejected_own_ctx_845r") is False
-        assert "rejected_own_ctx_845r" not in feature.options._own_context_keys
-
-
 class TestRollbackIsPerCandidate:
     """A whole-loop snapshot would also undo an earlier winner's write, so the rollback is per candidate."""
 

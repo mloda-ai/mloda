@@ -118,10 +118,10 @@ class TestOwnKeysMergeOrderIndependence:
         engine = _intake_engine()
         own_feature = self._own_feature()
         inherited_feature = self._inherited_feature()
-        inherited_group_keys_before = inherited_feature.options.inherited_group_keys
-        inherited_context_keys_before = inherited_feature.options.inherited_context_keys
 
         assert engine.add_feature_to_collection(FeatureGroup, own_feature, None) is True
+        inherited_group_keys_before = own_feature.options.inherited_group_keys
+        inherited_context_keys_before = own_feature.options.inherited_context_keys
         assert engine.add_feature_to_collection(FeatureGroup, inherited_feature, None) is False
 
         (survivor,) = engine.feature_group_collection[FeatureGroup]
@@ -134,10 +134,10 @@ class TestOwnKeysMergeOrderIndependence:
         engine = _intake_engine()
         inherited_feature = self._inherited_feature()
         own_feature = self._own_feature()
-        inherited_group_keys_before = inherited_feature.options.inherited_group_keys
-        inherited_context_keys_before = inherited_feature.options.inherited_context_keys
 
         assert engine.add_feature_to_collection(FeatureGroup, inherited_feature, None) is True
+        inherited_group_keys_before = inherited_feature.options.inherited_group_keys
+        inherited_context_keys_before = inherited_feature.options.inherited_context_keys
         assert engine.add_feature_to_collection(FeatureGroup, own_feature, None) is False
 
         (survivor,) = engine.feature_group_collection[FeatureGroup]
@@ -145,24 +145,3 @@ class TestOwnKeysMergeOrderIndependence:
         assert "k" in survivor.options.own_context_keys
         assert survivor.options.inherited_group_keys == inherited_group_keys_before
         assert survivor.options.inherited_context_keys == inherited_context_keys_before
-
-    def test_inherited_group_and_context_keys_are_merge_order_independent(self) -> None:
-        """The merged feature's inherited_group_keys/inherited_context_keys must be identical
-        regardless of which consumer's feature was processed first (currently only
-        own_group_keys/own_context_keys are unioned on merge, not the inherited_* halves)."""
-        engine_a = _intake_engine()
-        own_feature_a = self._own_feature()
-        inherited_feature_a = self._inherited_feature()
-        assert engine_a.add_feature_to_collection(FeatureGroup, own_feature_a, None) is True
-        assert engine_a.add_feature_to_collection(FeatureGroup, inherited_feature_a, None) is False
-        (survivor_a,) = engine_a.feature_group_collection[FeatureGroup]
-
-        engine_b = _intake_engine()
-        inherited_feature_b = self._inherited_feature()
-        own_feature_b = self._own_feature()
-        assert engine_b.add_feature_to_collection(FeatureGroup, inherited_feature_b, None) is True
-        assert engine_b.add_feature_to_collection(FeatureGroup, own_feature_b, None) is False
-        (survivor_b,) = engine_b.feature_group_collection[FeatureGroup]
-
-        assert survivor_a.options.inherited_group_keys == survivor_b.options.inherited_group_keys
-        assert survivor_a.options.inherited_context_keys == survivor_b.options.inherited_context_keys

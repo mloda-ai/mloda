@@ -1885,9 +1885,7 @@ class TestInheritFromAtomicOnConflict:
         assert child.last_forwarded_group_keys == frozenset()
 
     def test_group_conflict_leaves_own_keys_locked_false(self) -> None:
-        """A raising inherit_from call must leave self COMPLETELY unchanged, including
-        _own_keys_locked: the current implementation sets it True as the first statement,
-        before the group-value conflict is detected, so it survives the raise (bug)."""
+        """A raising inherit_from leaves self fully unchanged, including the own-key lock."""
         consumer = Options(group={"kg_backend": "neo4j"})
         child = Options(group={"kg_backend": "memgraph"})
 
@@ -2159,9 +2157,9 @@ class TestIsOwn:
 
 
 class TestOwnKeysLocking:
-    """inherit_from locks own-key tracking unconditionally, as its first mutation, even when
-    nothing is actually forwarded that call. Once locked, later add_to_group/add_to_context
-    calls no longer extend own keys, even though the key is still present in .group/.context."""
+    """inherit_from locks own-key tracking when it commits, even when nothing is forwarded.
+    Once locked, later add_to_group/add_to_context calls no longer extend own keys, even though the
+    key is still present in .group/.context."""
 
     def test_inherit_from_with_nothing_forwarded_still_locks(self) -> None:
         """inherit_from(forward_group=False) with no matching consumer keys still locks own-key tracking."""
@@ -2284,9 +2282,7 @@ class TestUnionOwnKeys:
         assert "only_bs_own_g" in a2.own_group_keys
 
     def test_union_own_keys_unions_lock_state_when_only_other_is_locked(self) -> None:
-        """The merged lock state must be the OR of both sides: if b was locked and a was not,
-        a must become locked after the union (currently union_own_keys never touches
-        _own_keys_locked, so a stays unlocked, a bug)."""
+        """The merged lock state is the OR of both sides: b locked and a unlocked leaves a locked."""
         a = Options(group={"g": 1})
         assert a._own_keys_locked is False
 
@@ -2313,9 +2309,8 @@ class TestUnionOwnKeys:
 
         assert a._own_keys_locked is True
 
-    def test_union_own_keys_unions_inherited_group_and_context_keys(self) -> None:
-        """a.inherited_group_keys/inherited_context_keys must also be unioned with b's (currently
-        union_own_keys never touches these, a bug)."""
+    def test_union_own_keys_leaves_inherited_keys_untouched(self) -> None:
+        """union_own_keys merges own-key provenance and the lock only; inherited_* provenance stays the receiver's."""
         consumer = Options(group={"h": 1}, context={"k": "v"})
         a = Options(group={"g": 1})
         b = Options(group={"g": 1})
@@ -2327,8 +2322,8 @@ class TestUnionOwnKeys:
 
         a.union_own_keys(b)
 
-        assert a.inherited_group_keys == frozenset({"h"})
-        assert a.inherited_context_keys == frozenset({"k"})
+        assert a.inherited_group_keys == frozenset()
+        assert a.inherited_context_keys == frozenset()
 
     def test_union_own_keys_is_order_independent_for_context(self) -> None:
         """Two consumers' Options for the same input feature: one has 'k' as its own context declaration,

@@ -13,10 +13,14 @@ from mloda_plugins.compute_framework.base_implementations.pandas.dataframe impor
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.base import AggregatedFeatureGroup
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.pandas import PandasAggregatedFeatureGroup
 
+from tests.test_plugins.feature_group.experimental.test_base_aggregated_feature_group.aggregated_zero_row_test_mixin import (
+    AggregatedZeroRowTestMixin,
+)
 from tests.test_plugins.feature_group.experimental.test_base_aggregated_feature_group.test_aggregated_utils import (
     PandasAggregatedTestDataCreator,
     validate_aggregated_features,
 )
+from tests.test_plugins.feature_group.experimental.zero_row_result_type_test_mixin import PandasZeroRowAdapter
 
 
 class ConcreteAggregatedFeatureGroupForTest(AggregatedFeatureGroup):
@@ -285,6 +289,10 @@ class TestPandasAggregatedFeatureGroup:
         finally:
             # Restore the original AGGREGATION_TYPES
             AggregatedFeatureGroup.AGGREGATION_TYPES = original_types
+
+
+class TestPandasAggregatedZeroRow(PandasZeroRowAdapter, AggregatedZeroRowTestMixin):
+    feature_group_class = PandasAggregatedFeatureGroup
 
 
 class TestAggPandasIntegration:

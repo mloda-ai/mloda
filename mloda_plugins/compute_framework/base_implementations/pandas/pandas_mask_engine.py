@@ -15,7 +15,7 @@ class PandasMaskEngine(BaseMaskEngine):
 
     @classmethod
     def all_true(cls, data: Any) -> Any:
-        return pd.Series([True] * len(data), index=data.index)
+        return pd.Series(True, index=data.index, dtype=bool)
 
     @classmethod
     def combine(cls, mask1: Any, mask2: Any) -> Any:

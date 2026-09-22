@@ -2,26 +2,22 @@ from typing import Any
 
 import pytest
 
-from mloda.provider import BaseMaskEngine
+from mloda_plugins.compute_framework.base_implementations.polars.polars_mask_engine import (
+    PolarsMaskEngine,
+)
 from tests.test_plugins.compute_framework.base_implementations.mask_engine_test_mixin import (
     MaskEngineTestMixin,
 )
 
 try:
     import polars as pl
-    from mloda_plugins.compute_framework.base_implementations.polars.polars_mask_engine import (
-        PolarsMaskEngine,
-    )
 except ImportError:
     pl = None  # type: ignore[assignment]
-    PolarsMaskEngine = None  # type: ignore[assignment, misc]
 
 
 @pytest.mark.skipif(pl is None, reason="polars not installed")
 class TestPolarsMaskEngine(MaskEngineTestMixin):
-    @pytest.fixture
-    def engine(self) -> type[BaseMaskEngine]:
-        return PolarsMaskEngine
+    mask_engine_class = PolarsMaskEngine
 
     @pytest.fixture
     def sample_data(self) -> Any:
@@ -32,11 +28,16 @@ class TestPolarsMaskEngine(MaskEngineTestMixin):
             }
         )
 
+    @pytest.fixture
+    def empty_data(self) -> Any:
+        return pl.DataFrame({"status": pl.Series([], dtype=pl.String), "value": pl.Series([], dtype=pl.Int64)})
+
     def evaluate_mask(self, mask: Any, data: Any) -> list[bool]:
         return list(mask)
 
-    def test_all_true_on_empty_frame_combines_with_condition(self, engine: type[BaseMaskEngine]) -> None:
-        df = pl.DataFrame({"a": pl.Series([], dtype=pl.String)})
-        all_true = engine.all_true(df)
-        assert all_true.dtype == pl.Boolean
-        assert engine.combine(all_true, engine.equal(df, "a", "x")).to_list() == []
+    def is_boolean_mask(self, mask: Any, data: Any) -> bool:
+        return bool(mask.dtype == pl.Boolean)
+
+    def apply_mask(self, mask: Any, data: Any) -> dict[str, list[Any]]:
+        result: dict[str, list[Any]] = data.filter(mask).to_dict(as_series=False)
+        return result

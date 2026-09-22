@@ -1,10 +1,8 @@
 from typing import Any
 
+import pyarrow as pa
 import pytest
 
-from mloda_plugins.compute_framework.base_implementations.sql.sql_base_mask_engine import (
-    SqlBaseMaskEngine,
-)
 from mloda_plugins.compute_framework.base_implementations.sql.sql_utils import quote_ident
 from mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_mask_engine import (
     SqliteMaskEngine,
@@ -16,9 +14,7 @@ from tests.test_plugins.compute_framework.base_implementations.sql_mask_engine_t
 
 
 class TestSqliteSqlMaskEngine(SqlMaskEngineTestMixin):
-    @pytest.fixture
-    def engine(self) -> type[SqlBaseMaskEngine]:
-        return SqliteMaskEngine
+    mask_engine_class = SqliteMaskEngine
 
     @pytest.fixture
     def sample_data(self, connection: Any) -> Any:
@@ -30,9 +26,18 @@ class TestSqliteSqlMaskEngine(SqlMaskEngineTestMixin):
             },
         )
 
+    @pytest.fixture
+    def empty_data(self, connection: Any) -> Any:
+        table = pa.table({"status": pa.array([], type=pa.string()), "value": pa.array([], type=pa.int64())})
+        return SqliteRelation.from_arrow(connection, table)
+
     def evaluate_mask(self, mask: Any, data: SqliteRelation) -> list[bool]:
         conn = data.connection
         table_name = data.table_name
         sql = f"SELECT CASE WHEN {mask} THEN 1 ELSE 0 END AS match FROM {quote_ident(table_name)}"  # nosec
         rows = conn.execute(sql).fetchall()
         return [bool(row[0]) for row in rows]
+
+    def apply_mask(self, mask: Any, data: SqliteRelation) -> dict[str, list[Any]]:
+        result: dict[str, list[Any]] = data.filter(mask).to_arrow_table().to_pydict()
+        return result

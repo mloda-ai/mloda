@@ -1,6 +1,7 @@
 from typing import Any
 
 from mloda.core.abstract_plugins.components.mask.base_mask_engine import BaseMaskEngine
+from mloda_plugins.compute_framework.base_implementations.pyarrow.pyarrow_value_set import value_set
 
 try:
     import pyarrow as pa
@@ -45,4 +46,4 @@ class PyArrowMaskEngine(BaseMaskEngine):
 
     @classmethod
     def is_in(cls, data: Any, column: str, values: Any) -> Any:
-        return pc.is_in(data[column], pa.array(values))
+        return pc.is_in(data[column], value_set(data[column], values))

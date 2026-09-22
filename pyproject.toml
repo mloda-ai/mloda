@@ -42,7 +42,7 @@ test = [
 ]
 pyarrow = ["pyarrow"]
 pandas = ["pandas"]
-polars = ["polars"]
+polars = ["polars>=1.21"]
 numpy = ["numpy"]
 yaml = ["pyyaml"]
 duckdb = ["duckdb", "pyarrow"]

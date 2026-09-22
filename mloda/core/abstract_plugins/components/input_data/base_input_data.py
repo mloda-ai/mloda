@@ -73,22 +73,27 @@ def _connection_string_identity(value: str) -> str | None:
     if _URI_PATTERN.match(value):
         return _format_keys(recognized) if any(_is_secret_key(key) for key in recognized) else None
     prefix = blanked[: matches[0].start(1)]
-    return None if "/" in prefix or "\\" in prefix else _format_keys(recognized)
+    if "/" in prefix or "\\" in prefix:
+        return None
+    if len(matches) == 1 and not any(_is_secret_key(key) for key in recognized) and "/" in value:
+        return None
+    return _format_keys(recognized)
 
 
 def _strip_scheme_less_userinfo(value: str) -> str:
     if _DRIVE_LETTER_PATTERN.match(value) or not _USERINFO_PATTERN.match(value):
         return value
-    head, slash, path = value.partition("/")
-    if "@" in head:
-        return head.rpartition("@")[2] + slash + path
-    return value.rpartition("@")[2]
+    body = value.split("?", 1)[0].split("#", 1)[0]
+    if "@" not in body:
+        body = value
+    return body.rpartition("@")[2].split("?", 1)[0].split("#", 1)[0]
 
 
 def _data_access_identity(data_access: Any) -> str:
     """Mapping: sorted key names. str or PurePath: a scheme:// URI keeps scheme, host and path (abfs/abfss/wasb/wasbs,
     case-insensitive, also the container), user info, query and fragment dropped. A scheme-less string with recognized
-    connection or secret keys is identified by those key names, user:pw@host drops user info; otherwise as is."""
+    connection or secret keys is identified by those key names, user:pw@host drops user info, query and fragment;
+    otherwise as is."""
     if isinstance(data_access, Mapping):
         return _format_keys(str(key) for key in data_access)
     if isinstance(data_access, (str, PurePath)):

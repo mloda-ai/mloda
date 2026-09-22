@@ -416,6 +416,10 @@ class TestDataAccessIdentityOfSchemeLessConnectionStrings:
             ),
             pytest.param("DRIVER={ODBC};UID=alice;PWD=hunter2", "{driver, pwd, uid}", "hunter2", id="odbc-keywords"),
             pytest.param("user:hunter2@host/db", "host/db", "hunter2", id="userinfo-scheme-less"),
+            pytest.param("user:pw@host/db?token=hunter2", "host/db", "hunter2", id="scheme-less-userinfo-query-secret"),
+            pytest.param(
+                "user:pw@host/db#token=hunter2", "host/db", "hunter2", id="scheme-less-userinfo-fragment-secret"
+            ),
             pytest.param("host=localhost password='hunter 2'", "{host, password}", "hunter 2", id="libpq-quoted-value"),
             pytest.param(
                 "DRIVER={ODBC Driver 17};UID=alice;PWD={hun;ter2}",
@@ -432,6 +436,7 @@ class TestDataAccessIdentityOfSchemeLessConnectionStrings:
                 id="keyword-string-containing-scheme-separator",
             ),
             pytest.param("user:p@ss@host/db", "host/db", "p@ss", id="at-sign-in-userinfo-password"),
+            pytest.param("user:p@ss/word@host/db", "host/db", "ss/word", id="at-sign-and-slash-in-password"),
             pytest.param("dbname=x user=y", "{dbname, user}", "=y", id="dbname-and-user"),
             pytest.param(
                 "password = hunter2 host = localhost", "{host, password}", "hunter2", id="whitespace-around-equals"
@@ -521,6 +526,7 @@ class TestDataAccessIdentityOfSchemeLessConnectionStrings:
         "value",
         [
             pytest.param("data/plain.csv", id="relative-path"),
+            pytest.param("user=42/part.parquet", id="connection-key-lookalike-path"),
             pytest.param("/data/year=2024/part.parquet", id="hive-path"),
             pytest.param("report=2024.csv", id="unknown-key-file-name"),
             pytest.param("a=1 b=2", id="unknown-keys"),

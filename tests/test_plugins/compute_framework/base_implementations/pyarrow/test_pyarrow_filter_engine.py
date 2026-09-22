@@ -12,11 +12,11 @@ from mloda.user import FilterType
 from mloda_plugins.compute_framework.base_implementations.pyarrow.pyarrow_filter_engine import PyArrowFilterEngine
 
 from tests.test_plugins.compute_framework.base_implementations.filter_engine_test_mixin import (
-    FilterEngineTestMixin,
+    DecimalFilterEngineTestMixin,
 )
 
 
-class TestPyArrowFilterEngine(FilterEngineTestMixin):
+class TestPyArrowFilterEngine(DecimalFilterEngineTestMixin):
     """Unit tests for the PyArrowFilterEngine class using shared mixin."""
 
     @pytest.fixture
@@ -41,19 +41,17 @@ class TestPyArrowFilterEngine(FilterEngineTestMixin):
         """Create a sample PyArrow table with null categories for testing."""
         return pa.Table.from_pydict({"id": [1, 2, 3, 4, 5], "category": ["A", None, "B", None, "C"]})
 
+    @pytest.fixture
+    def decimal_sample_data(self) -> Any:
+        values = [Decimal("12.34"), Decimal("5.50"), Decimal("99.99"), None]
+        return pa.table({"d": pa.array(values, type=pa.decimal128(10, 2))})
+
+    def get_decimal_column_dtype(self, data: Any) -> Any:
+        return data["d"].type
+
     def get_column_values(self, result: Any, column: str) -> list[Any]:
         """Extract column values from PyArrow table."""
         return result[column].to_pylist()  # type: ignore[no-any-return]
-
-    def test_min_filter_decimal_keeps_decimal128_type(self, filter_engine: Any) -> None:
-        values = [Decimal("12.34"), Decimal("5.50"), Decimal("99.99"), None]
-        table = pa.table({"d": pa.array(values, type=pa.decimal128(10, 2))})
-        single_filter = SingleFilter(Feature("d"), FilterType.MIN, {"value": Decimal("12.34")})
-
-        result = filter_engine.do_min_filter(table, single_filter)
-
-        assert result["d"].type == pa.decimal128(10, 2)
-        assert result["d"].to_pylist() == [Decimal("12.34"), Decimal("99.99")]
 
     def test_categorical_inclusion_on_dictionary_encoded_column(self, filter_engine: Any) -> None:
         """CATEGORICAL_INCLUSION must work on dictionary-encoded (categorical) columns.

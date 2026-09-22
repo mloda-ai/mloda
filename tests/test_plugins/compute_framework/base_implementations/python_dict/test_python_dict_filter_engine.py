@@ -13,7 +13,7 @@ from mloda_plugins.compute_framework.base_implementations.python_dict.python_dic
 )
 
 from tests.test_plugins.compute_framework.base_implementations.filter_engine_test_mixin import (
-    FilterEngineTestMixin,
+    DecimalFilterEngineTestMixin,
 )
 from tests.test_plugins.compute_framework.base_implementations.time_range_filter_engine_test_mixin import (
     SAMPLE_IDS,
@@ -22,7 +22,7 @@ from tests.test_plugins.compute_framework.base_implementations.time_range_filter
 )
 
 
-class TestPythonDictFilterEngine(FilterEngineTestMixin, TimeRangeFilterEngineTestMixin):
+class TestPythonDictFilterEngine(DecimalFilterEngineTestMixin, TimeRangeFilterEngineTestMixin):
     """Unit tests for the PythonDictFilterEngine class using shared mixins."""
 
     @pytest.fixture
@@ -44,6 +44,13 @@ class TestPythonDictFilterEngine(FilterEngineTestMixin, TimeRangeFilterEngineTes
     def nullable_category_sample_data(self) -> Any:
         """Create a sample columnar dict with null categories for testing."""
         return {"id": [1, 2, 3, 4, 5], "category": ["A", None, "B", None, "C"]}
+
+    @pytest.fixture
+    def decimal_sample_data(self) -> Any:
+        return {"d": [Decimal("12.34"), Decimal("5.50"), Decimal("99.99"), None]}
+
+    def get_decimal_column_dtype(self, data: Any) -> Any:
+        return type(data["d"][0])
 
     def result_row_count(self, result: Any) -> int:
         """A columnar dict's row count is the length of any of its columns."""
@@ -86,15 +93,6 @@ class TestPythonDictFilterEngine(FilterEngineTestMixin, TimeRangeFilterEngineTes
 
         with pytest.raises(ValueError, match="Filter parameter 'value' not found"):
             PythonDictFilterEngine.do_min_filter(data, single_filter)
-
-    def test_min_filter_decimal_keeps_decimal_values(self) -> None:
-        data = {"d": [Decimal("12.34"), Decimal("5.50"), Decimal("99.99"), None]}
-        single_filter = SingleFilter(Feature("d"), FilterType.MIN, {"value": Decimal("12.34")})
-
-        result = PythonDictFilterEngine.do_min_filter(data, single_filter)
-
-        assert result["d"] == [Decimal("12.34"), Decimal("99.99")]
-        assert all(isinstance(v, Decimal) for v in result["d"])
 
     def test_do_equal_filter_missing_value(self, sample_data: Any) -> None:
         """Test equal filter with missing value parameter."""

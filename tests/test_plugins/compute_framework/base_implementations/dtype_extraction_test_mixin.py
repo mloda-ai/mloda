@@ -85,6 +85,21 @@ class DtypeExtractionTestMixin:
         )
 
 
+class DecimalDtypeExtractionTestMixin(DtypeExtractionTestMixin):
+    """Shared decimal type extraction checks for frameworks with decimal sample data."""
+
+    expected_decimal_data_type: DataType | None = DataType.DECIMAL
+
+    @pytest.fixture
+    @abstractmethod
+    def decimal_sample_data(self) -> Any:
+        """Return a decimal column named d, including a null where supported."""
+        raise NotImplementedError
+
+    def test_extract_decimal_column_data_type(self, framework_instance: Any, decimal_sample_data: Any) -> None:
+        assert framework_instance._extract_column_data_type(decimal_sample_data, "d") == self.expected_decimal_data_type
+
+
 class DuplicateColumnDtypeExtractionTestMixin:
     """Shared tests for _extract_column_dtype/_extract_column_data_type on duplicate-column data.
 

@@ -4,7 +4,6 @@ from typing import Any
 import pytest
 import pyarrow as pa
 from mloda_plugins.compute_framework.base_implementations.polars.dataframe import PolarsDataFrame
-from mloda.user import DataType
 from mloda.user import FeatureName
 from mloda.user import ParallelizationMode
 from tests.test_plugins.compute_framework.test_tooling.dataframe_test_base import DataFrameTestBase
@@ -15,7 +14,7 @@ from tests.test_plugins.compute_framework.base_implementations.datatype_validato
     DataTypeValidatorFrameworkTestMixin,
 )
 from tests.test_plugins.compute_framework.base_implementations.dtype_extraction_test_mixin import (
-    DtypeExtractionTestMixin,
+    DecimalDtypeExtractionTestMixin,
 )
 from tests.test_plugins.compute_framework.base_implementations.empty_result_test_mixin import (
     EmptyResultFrameworkTestMixin,
@@ -119,7 +118,7 @@ class TestPolarsDataFrameMerge(DataFrameTestBase):
 
 
 @pytest.mark.skipif(pl is None, reason="Polars is not installed. Skipping this test.")
-class TestPolarsDtypeExtraction(DtypeExtractionTestMixin):
+class TestPolarsDtypeExtraction(DecimalDtypeExtractionTestMixin):
     """Test PolarsDataFrame._extract_column_dtype using shared mixin."""
 
     @pytest.fixture
@@ -130,11 +129,10 @@ class TestPolarsDtypeExtraction(DtypeExtractionTestMixin):
     def dtype_sample_data(self) -> Any:
         return pl.DataFrame({"int_col": [1, 2, 3], "str_col": ["a", "b", "c"], "float_col": [1.0, 2.0, 3.0]})
 
-    def test_extract_decimal_column_data_type_is_decimal(self, framework_instance: Any) -> None:
+    @pytest.fixture
+    def decimal_sample_data(self) -> Any:
         values = [Decimal("12.34"), Decimal("5.50"), Decimal("99.99"), None]
-        data = pl.DataFrame({"d": values}, schema={"d": pl.Decimal(10, 2)})
-
-        assert framework_instance._extract_column_data_type(data, "d") == DataType.DECIMAL
+        return pl.DataFrame({"d": values}, schema={"d": pl.Decimal(10, 2)})
 
 
 @pytest.mark.skipif(pl is None, reason="Polars is not installed. Skipping this test.")

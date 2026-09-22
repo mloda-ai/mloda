@@ -14,7 +14,7 @@ from tests.test_plugins.compute_framework.base_implementations.dict_interchange_
     DictInterchangeOutputSchemaTestMixin,
 )
 from tests.test_plugins.compute_framework.base_implementations.dtype_extraction_test_mixin import (
-    DtypeExtractionTestMixin,
+    DecimalDtypeExtractionTestMixin,
     DuplicateColumnDtypeExtractionTestMixin,
 )
 from tests.test_plugins.compute_framework.base_implementations.empty_result_test_mixin import (
@@ -136,7 +136,7 @@ class TestPandasDataFrameMerge(DataFrameTestBase):
 
 
 @pytest.mark.skipif(pd is None, reason="Pandas is not installed. Skipping this test.")
-class TestPandasDtypeExtraction(DtypeExtractionTestMixin, DuplicateColumnDtypeExtractionTestMixin):
+class TestPandasDtypeExtraction(DecimalDtypeExtractionTestMixin, DuplicateColumnDtypeExtractionTestMixin):
     """Test PandasDataFrame._extract_column_dtype using shared mixin."""
 
     @pytest.fixture
@@ -147,12 +147,13 @@ class TestPandasDtypeExtraction(DtypeExtractionTestMixin, DuplicateColumnDtypeEx
     def dtype_sample_data(self) -> Any:
         return pd.DataFrame({"int_col": [1, 2, 3], "str_col": ["a", "b", "c"], "float_col": [1.0, 2.0, 3.0]})
 
-    @pytest.mark.parametrize("arrow_backed", [False, True], ids=["object", "arrow_decimal128"])
-    def test_extract_decimal_column_data_type_is_none(self, framework_instance: Any, arrow_backed: bool) -> None:
-        values = [Decimal("12.34"), Decimal("5.50"), Decimal("99.99"), None]
-        series = pd.Series(values, dtype=pd.ArrowDtype(pa.decimal128(10, 2))) if arrow_backed else pd.Series(values)
+    expected_decimal_data_type = None
 
-        assert framework_instance._extract_column_data_type(pd.DataFrame({"d": series}), "d") is None
+    @pytest.fixture(params=[False, True], ids=["object", "arrow_decimal128"])
+    def decimal_sample_data(self, request: pytest.FixtureRequest) -> Any:
+        values = [Decimal("12.34"), Decimal("5.50"), Decimal("99.99"), None]
+        series = pd.Series(values, dtype=pd.ArrowDtype(pa.decimal128(10, 2))) if request.param else pd.Series(values)
+        return pd.DataFrame({"d": series})
 
     # Dtypes are declared explicitly because pandas 2.x infers `object` where pandas 3.x infers `str`,
     # which would make the first-occurrence assertions depend on the installed pandas version.

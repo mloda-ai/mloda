@@ -1,4 +1,3 @@
-from decimal import Decimal
 from typing import Any
 
 import pyarrow as pa
@@ -39,10 +38,6 @@ class TestDuckDBSqlMaskEngine(SqlMaskEngineTestMixin):
     def empty_data(self, connection: Any) -> Any:
         table = pa.table({"status": pa.array([], type=pa.string()), "value": pa.array([], type=pa.int64())})
         return DuckdbRelation.from_arrow(connection, table)
-
-    def test_equal_decimal_value_raises_type_error(self, engine: type[DuckDBMaskEngine], sample_data: Any) -> None:
-        with pytest.raises(TypeError, match="Unsupported type for SQL literal"):
-            engine.equal(sample_data, "value", Decimal("12.34"))
 
     def evaluate_mask(self, mask: Any, data: DuckdbRelation) -> list[bool]:
         bool_expr = f"CASE WHEN {mask} THEN 1 ELSE 0 END AS __match__"

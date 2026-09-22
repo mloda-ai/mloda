@@ -5,7 +5,6 @@ from typing import Any
 import pytest
 from mloda_plugins.compute_framework.base_implementations.duckdb.duckdb_framework import DuckDBFramework
 from mloda_plugins.compute_framework.base_implementations.duckdb.duckdb_relation import DuckdbRelation
-from mloda.user import DataType
 from mloda.user import FeatureName
 from mloda.user import ParallelizationMode
 from tests.test_plugins.compute_framework.test_tooling.dataframe_test_base import DataFrameTestBase
@@ -19,7 +18,7 @@ from tests.test_plugins.compute_framework.base_implementations.dict_interchange_
     DictInterchangeOutputSchemaTestMixin,
 )
 from tests.test_plugins.compute_framework.base_implementations.dtype_extraction_test_mixin import (
-    DtypeExtractionTestMixin,
+    DecimalDtypeExtractionTestMixin,
 )
 from tests.test_plugins.compute_framework.base_implementations.empty_result_test_mixin import (
     EmptyResultFrameworkTestMixin,
@@ -279,7 +278,7 @@ class TestDuckDBFrameworkMerge(DataFrameTestBase):
 
 
 @pytest.mark.skipif(duckdb is None, reason="DuckDB is not installed. Skipping this test.")
-class TestDuckDBDtypeExtraction(DtypeExtractionTestMixin):
+class TestDuckDBDtypeExtraction(DecimalDtypeExtractionTestMixin):
     """Test DuckDBFramework._extract_column_dtype using shared mixin."""
 
     @pytest.fixture
@@ -293,11 +292,10 @@ class TestDuckDBDtypeExtraction(DtypeExtractionTestMixin):
         )
         return DuckdbRelation.from_arrow(connection, arrow_table)
 
-    def test_extract_decimal_column_data_type_is_decimal(self, connection: Any, framework_instance: Any) -> None:
+    @pytest.fixture
+    def decimal_sample_data(self, connection: Any) -> Any:
         values = [Decimal("12.34"), Decimal("5.50"), Decimal("99.99"), None]
-        relation = DuckdbRelation.from_arrow(connection, pa.table({"d": pa.array(values, type=pa.decimal128(10, 2))}))
-
-        assert framework_instance._extract_column_data_type(relation, "d") == DataType.DECIMAL
+        return DuckdbRelation.from_arrow(connection, pa.table({"d": pa.array(values, type=pa.decimal128(10, 2))}))
 
 
 @pytest.mark.skipif(duckdb is None, reason="DuckDB is not installed. Skipping this test.")

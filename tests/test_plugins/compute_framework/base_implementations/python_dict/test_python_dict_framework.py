@@ -1,7 +1,6 @@
 from decimal import Decimal
 from typing import Any
 
-from mloda.user import DataType
 from mloda.user import ParallelizationMode
 import pyarrow as pa
 import pytest
@@ -11,7 +10,7 @@ from tests.test_plugins.compute_framework.base_implementations.datatype_validato
     DataTypeValidatorFrameworkTestMixin,
 )
 from tests.test_plugins.compute_framework.base_implementations.dtype_extraction_test_mixin import (
-    DtypeExtractionTestMixin,
+    DecimalDtypeExtractionTestMixin,
 )
 
 
@@ -177,7 +176,7 @@ class TestFrameworkColumnarValidationAgreesWithHelper:
             validate_columnar_dict(ragged)
 
 
-class TestPythonDictDtypeExtraction(DtypeExtractionTestMixin):
+class TestPythonDictDtypeExtraction(DecimalDtypeExtractionTestMixin):
     """Test PythonDictFramework._extract_column_dtype using shared mixin."""
 
     @pytest.fixture
@@ -192,10 +191,9 @@ class TestPythonDictDtypeExtraction(DtypeExtractionTestMixin):
             "float_col": [1.0, 2.0, 3.0],
         }
 
-    def test_extract_decimal_column_data_type_is_decimal(self, framework_instance: Any) -> None:
-        data = {"d": [Decimal("12.34"), Decimal("5.50"), Decimal("99.99"), None]}
-
-        assert framework_instance._extract_column_data_type(data, "d") == DataType.DECIMAL
+    @pytest.fixture
+    def decimal_sample_data(self) -> Any:
+        return {"d": [Decimal("12.34"), Decimal("5.50"), Decimal("99.99"), None]}
 
 
 class TestPythonDictDataTypeValidator(DataTypeValidatorFrameworkTestMixin):

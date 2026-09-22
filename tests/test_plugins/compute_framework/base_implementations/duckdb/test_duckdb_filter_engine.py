@@ -1,5 +1,6 @@
 """Unit tests for the DuckDBFilterEngine class."""
 
+from contextlib import AbstractContextManager
 from decimal import Decimal
 from typing import Any
 import logging
@@ -13,7 +14,7 @@ from mloda_plugins.compute_framework.base_implementations.duckdb.duckdb_filter_e
 from mloda_plugins.compute_framework.base_implementations.duckdb.duckdb_relation import DuckdbRelation
 
 from tests.test_plugins.compute_framework.base_implementations.filter_engine_test_mixin import (
-    FilterEngineTestMixin,
+    DecimalFilterEngineTestMixin,
 )
 from tests.test_plugins.compute_framework.base_implementations.time_range_filter_engine_test_mixin import (
     SAMPLE_IDS,
@@ -33,7 +34,7 @@ except ImportError:
 
 
 @pytest.mark.skipif(duckdb is None or pa is None, reason="DuckDB or PyArrow is not installed. Skipping this test.")
-class TestDuckDBFilterEngine(FilterEngineTestMixin, TimeRangeFilterEngineTestMixin):
+class TestDuckDBFilterEngine(DecimalFilterEngineTestMixin, TimeRangeFilterEngineTestMixin):
     """Unit tests for the DuckDBFilterEngine class using shared mixins."""
 
     @pytest.fixture
@@ -59,6 +60,22 @@ class TestDuckDBFilterEngine(FilterEngineTestMixin, TimeRangeFilterEngineTestMix
         """Create a sample DuckDB relation with null categories for testing."""
         arrow_table = pa.Table.from_pydict({"id": [1, 2, 3, 4, 5], "category": ["A", None, "B", None, "C"]})
         return DuckdbRelation.from_arrow(connection, arrow_table)
+
+    @pytest.fixture
+    def decimal_sample_data(self, connection: Any) -> Any:
+        values = [Decimal("12.34"), Decimal("5.50"), Decimal("99.99"), None]
+        return DuckdbRelation.from_arrow(connection, pa.table({"d": pa.array(values, type=pa.decimal128(10, 2))}))
+
+    def get_decimal_column_dtype(self, data: Any) -> Any:
+        return data.types[data.columns.index("d")]
+
+    @pytest.fixture
+    def decimal_min_filter_context(self) -> AbstractContextManager[Any]:
+        return pytest.raises(TypeError, match="Unsupported type for SQL literal")
+
+    @pytest.fixture
+    def decimal_categorical_filter_context(self) -> AbstractContextManager[Any]:
+        return pytest.raises(TypeError, match="Unsupported type for SQL literal")
 
     def get_column_values(self, result: Any, column: str) -> list[Any]:
         """Extract column values from DuckDB relation via pandas DataFrame."""
@@ -104,14 +121,6 @@ class TestDuckDBFilterEngine(FilterEngineTestMixin, TimeRangeFilterEngineTestMix
         ages = result_df["age"].tolist()
         assert None not in ages
         assert sorted(ages) == [30, 35, 40, 45]
-
-    def test_min_filter_decimal_value_raises_type_error(self, connection: Any) -> None:
-        arrow_table = pa.table({"d": pa.array([Decimal("12.34"), Decimal("5.50")], type=pa.decimal128(10, 2))})
-        data = DuckdbRelation.from_arrow(connection, arrow_table)
-        single_filter = SingleFilter(Feature("d"), FilterType.MIN, {"value": Decimal("12.34")})
-
-        with pytest.raises(TypeError, match="Unsupported type for SQL literal"):
-            DuckDBFilterEngine.do_min_filter(data, single_filter)
 
     def test_filter_with_empty_data(self) -> None:
         """Test filtering with empty DuckDB relation."""

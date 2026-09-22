@@ -11,6 +11,7 @@ Each framework-specific test class should inherit from this mixin and provide:
 - apply_mask method: Filters data by a SQL condition, returns column -> values
 """
 
+from decimal import Decimal
 from typing import Any
 
 import pytest
@@ -53,6 +54,10 @@ class SqlMaskEngineTestMixin(MaskEngineTestMixin):
         assert isinstance(result, str)
         assert '"value"' in result
         assert "10" in result
+
+    def test_equal_decimal_value_raises_type_error(self, engine: type[SqlBaseMaskEngine], sample_data: Any) -> None:
+        with pytest.raises(TypeError, match="Unsupported type for SQL literal"):
+            engine.equal(sample_data, "value", Decimal("12.34"))
 
     def test_greater_equal_returns_condition_string(self, engine: type[SqlBaseMaskEngine], sample_data: Any) -> None:
         result = engine.greater_equal(sample_data, "value", 20)

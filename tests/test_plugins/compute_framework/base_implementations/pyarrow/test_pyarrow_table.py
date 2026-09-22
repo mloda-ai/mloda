@@ -4,7 +4,6 @@ import pytest
 import pyarrow as pa
 
 from mloda.provider import EmptyResultError
-from mloda.user import DataType
 from mloda.user import FeatureName
 from mloda.user import ParallelizationMode
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
@@ -19,7 +18,7 @@ from tests.test_plugins.compute_framework.base_implementations.dict_interchange_
     DictInterchangeOutputSchemaTestMixin,
 )
 from tests.test_plugins.compute_framework.base_implementations.dtype_extraction_test_mixin import (
-    DtypeExtractionTestMixin,
+    DecimalDtypeExtractionTestMixin,
     DuplicateColumnDtypeExtractionTestMixin,
 )
 from tests.test_plugins.compute_framework.base_implementations.empty_result_test_mixin import (
@@ -104,7 +103,7 @@ class TestPyArrowTableMerge(DataFrameTestBase):
         pass
 
 
-class TestPyArrowDtypeExtraction(DtypeExtractionTestMixin, DuplicateColumnDtypeExtractionTestMixin):
+class TestPyArrowDtypeExtraction(DecimalDtypeExtractionTestMixin, DuplicateColumnDtypeExtractionTestMixin):
     """Test PyArrowTable._extract_column_dtype using shared mixins."""
 
     @pytest.fixture
@@ -115,11 +114,10 @@ class TestPyArrowDtypeExtraction(DtypeExtractionTestMixin, DuplicateColumnDtypeE
     def dtype_sample_data(self) -> Any:
         return pa.table({"int_col": [1, 2, 3], "str_col": ["a", "b", "c"], "float_col": [1.0, 2.0, 3.0]})
 
-    def test_extract_decimal_column_data_type_is_decimal(self, framework_instance: Any) -> None:
+    @pytest.fixture
+    def decimal_sample_data(self) -> Any:
         values = [Decimal("12.34"), Decimal("5.50"), Decimal("99.99"), None]
-        table = pa.table({"d": pa.array(values, type=pa.decimal128(10, 2))})
-
-        assert framework_instance._extract_column_data_type(table, "d") == DataType.DECIMAL
+        return pa.table({"d": pa.array(values, type=pa.decimal128(10, 2))})
 
     @pytest.fixture
     def dtype_duplicate_column_data(self) -> Any:

@@ -432,6 +432,11 @@ class TestDataAccessIdentityOfUriStrings:
             pytest.param("postgresql://u:pa?ss@host/db", "postgresql://host/db", id="question-mark-in-userinfo"),
             pytest.param("postgresql://u:pa#ss@host/db", "postgresql://host/db", id="hash-in-userinfo"),
             pytest.param("http://[::1]/x@y", "http://[::1]/x@y", id="ipv6-host-at-sign-in-path"),
+            pytest.param(
+                "postgresql://host/db%3Fpassword=hunter2",
+                "postgresql://host/db",
+                id="percent-encoded-question-mark-secret-in-uri",
+            ),
         ],
     )
     def test_identity_keeps_host_and_path_only(self, uri: str, expected: str) -> None:
@@ -540,6 +545,15 @@ class TestDataAccessIdentityOfSchemeLessConnectionStrings:
             pytest.param(
                 PurePosixPath("s3://alice:hunter2@bucket/key"), "bucket/key", "hunter2", id="pure-posix-path-uri"
             ),
+            pytest.param(
+                "user:pw@host/db%3Ftoken=hunter2", "host/db", "hunter2", id="userinfo-percent-encoded-question-mark"
+            ),
+            pytest.param(
+                "host.com/db%3Fx password=hunter2",
+                "{password}",
+                "hunter2",
+                id="percent-encoded-question-mark-then-keyword-scan-guard",
+            ),
         ],
     )
     def test_connection_string_identity_hides_values(self, value: Any, expected: str, secret: str) -> None:
@@ -552,10 +566,23 @@ class TestDataAccessIdentityOfSchemeLessConnectionStrings:
         [
             pytest.param("notes:2024@work.txt", "work.txt", id="userinfo-lookalike"),
             pytest.param("user=alice.csv", "{user}", id="file-name-starting-with-connection-key"),
+            pytest.param(
+                "host.com/db?config=password:hunter2",
+                "host.com/db?config=password:hunter2",
+                id="secret-value-under-unrecognized-key-not-scrubbed",
+            ),
+            pytest.param(
+                "host.com/db%253Fpassword=hunter2",
+                "host.com/db%253Fpassword=hunter2",
+                id="double-percent-encoded-question-mark-not-detected",
+            ),
+            pytest.param(
+                "password%3Dhunter2", "password%3Dhunter2", id="percent-encoded-pair-without-anchor-not-detected"
+            ),
         ],
     )
     def test_documented_accepted_loss(self, value: str, expected: str) -> None:
-        """Known false positives: a file name that looks like userinfo or a keyword pair is reduced."""
+        """Known heuristic limits: false positives are reduced, false negatives pass through unchanged."""
         assert _identity_of(value) == expected
 
     @pytest.mark.parametrize(
@@ -580,6 +607,41 @@ class TestDataAccessIdentityOfSchemeLessConnectionStrings:
                 "host.com/db?  password=hunter2",
                 "host.com/db",
                 id="scheme-less-query-secret-with-whitespace-after-delimiter",
+            ),
+            pytest.param(
+                "host.com/db%3Fpassword=hunter2",
+                "host.com/db",
+                id="percent-encoded-question-mark-secret",
+            ),
+            pytest.param(
+                "host.com/db%3fpassword=hunter2",
+                "host.com/db",
+                id="percent-encoded-lower-case-question-mark-secret",
+            ),
+            pytest.param(
+                "host.com/db?password%3Dhunter2",
+                "host.com/db",
+                id="percent-encoded-equals-in-query-secret",
+            ),
+            pytest.param(
+                "host.com/db%23password=hunter2",
+                "host.com/db",
+                id="percent-encoded-hash-secret",
+            ),
+            pytest.param(
+                "host.com/db?a=1%26password=hunter2",
+                "host.com/db",
+                id="percent-encoded-ampersand-in-query-secret",
+            ),
+            pytest.param(
+                "host.com/db?%20password=hunter2",
+                "host.com/db",
+                id="percent-encoded-leading-space-secret",
+            ),
+            pytest.param(
+                "host.com/db?pass%77ord=hunter2",
+                "host.com/db",
+                id="percent-encoded-key-letter-secret",
             ),
         ],
     )
@@ -675,6 +737,9 @@ class TestDataAccessIdentityOfSchemeLessConnectionStrings:
             pytest.param("C:\\data;user=1", id="windows-path-with-semicolon-key"),
             pytest.param(Path("data/plain.csv"), id="plain-path-object"),
             pytest.param("host.com/db?limit=10", id="scheme-less-query-with-non-secret-key-unchanged"),
+            pytest.param("data/file%3Fname.csv", id="percent-encoded-question-mark-in-file-name"),
+            pytest.param("host.com/db%3Flimit=10", id="percent-encoded-question-mark-with-non-secret-key"),
+            pytest.param("https://host/a%3Fb.csv", id="percent-encoded-question-mark-in-uri-path"),
         ],
     )
     def test_non_connection_strings_are_unchanged(self, value: Any) -> None:

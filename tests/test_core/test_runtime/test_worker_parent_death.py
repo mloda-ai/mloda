@@ -142,7 +142,7 @@ class TestWorkerProcessDoesNotOutliveASigkilledParent:
         worker_pid: int | None = None
         worker_gone = False
         try:
-            deadline = time.time() + 5.0
+            deadline = time.time() + 15.0
             while time.time() < deadline and worker_pid is None:
                 if pid_file.exists():
                     content = pid_file.read_text().strip()

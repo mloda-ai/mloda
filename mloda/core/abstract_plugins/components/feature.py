@@ -158,7 +158,8 @@ class Feature:
 
         # Resolution-only metadata stamped by the engine: one (consumer class name, consumer
         # PROPERTY_MAPPING keys) entry appended per consumer feature group that declares this
-        # feature as an input feature; excluded from equality and hash like link/index.
+        # feature as an input feature; excluded from equality and hash like link/index. Also
+        # unioned in when value-equal requests merge at intake; membership is order-independent.
         self.consumer_attributions: list[tuple[str, frozenset[str]]] = []
 
         # Group keys forwarded onto this input feature, set by Features.merge_options; excluded
@@ -190,7 +191,7 @@ class Feature:
 
         Appended per consumer feature group that declares this feature as an input feature.
         Idempotent so re-stamping the same Feature instance across mloda runs does not grow
-        the list unboundedly.
+        the list unboundedly. Also called by the engine to union a merged twin's entries in.
         """
         entry = (name, keys)
         if entry not in self.consumer_attributions:
@@ -377,6 +378,8 @@ class Feature:
 
         compute_frameworks is hashed too, so it is owned for the same reason. A shallow set() copy is
         enough: its elements are classes, not option values with a repr/address hazard.
+
+        consumer_attributions is owned too, since the engine appends to it in place.
         """
         # One level: a Feature nested inside child_options.group keeps sharing its own options, the
         # documented limitation class of _isolate_forwarded_value.
@@ -387,6 +390,7 @@ class Feature:
             duplicate.child_options = copy(self.child_options)
         if self.compute_frameworks is not None:
             duplicate.compute_frameworks = set(self.compute_frameworks)
+        duplicate.consumer_attributions = list(self.consumer_attributions)
         return duplicate
 
     def _child_options_key(self) -> Any:

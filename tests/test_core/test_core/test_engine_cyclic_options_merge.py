@@ -1,13 +1,16 @@
 """The default-equivalent merge warning compares declared options, so it must survive cyclic values.
 
 The branch is reached exactly when the feature equality probe matched, which cycle-safe Options
-equality newly makes possible for cyclic group values.
+equality newly makes possible for cyclic group values. The provenance classes below cover
+merge-order independence for own-key and consumer-attribution bookkeeping, including that a
+pre-merge `copy()` of a survivor must not observe a later merge.
 """
 
 from __future__ import annotations
 
 import logging
 from collections import defaultdict
+from copy import copy
 from typing import Any
 
 import pytest
@@ -145,3 +148,41 @@ class TestOwnKeysMergeOrderIndependence:
         assert "k" in survivor.options.own_context_keys
         assert survivor.options.inherited_group_keys == inherited_group_keys_before
         assert survivor.options.inherited_context_keys == inherited_context_keys_before
+
+
+class TestConsumerAttributionsMergeOrderIndependence:
+    """A merge of two value-equal Feature requests must union both requests' consumer_attributions."""
+
+    @pytest.mark.parametrize("order", ["a-first", "b-first"])
+    def test_merge_unions_consumer_attributions_regardless_of_order(self, order: str) -> None:
+        engine = _intake_engine()
+        a = Feature(name="x", options=Options(group={"g": 1}))
+        b = Feature(name="x", options=Options(group={"g": 1}))
+        a.add_consumer_attribution("ConsumerA", frozenset({"a"}))
+        b.add_consumer_attribution("ConsumerB", frozenset())
+
+        first, second = (a, b) if order == "a-first" else (b, a)
+
+        assert engine.add_feature_to_collection(FeatureGroup, first, None) is True
+        assert engine.add_feature_to_collection(FeatureGroup, second, None) is False
+
+        (survivor,) = engine.feature_group_collection[FeatureGroup]
+        assert survivor is first
+        assert set(survivor.consumer_attributions) == {
+            ("ConsumerA", frozenset({"a"})),
+            ("ConsumerB", frozenset()),
+        }
+
+    def test_copy_taken_before_merge_does_not_see_later_merge(self) -> None:
+        """A `copy()` of the survivor made before the merge must not observe the merged-in attribution."""
+        engine = _intake_engine()
+        a = Feature(name="x", options=Options(group={"g": 1}))
+        b = Feature(name="x", options=Options(group={"g": 1}))
+        a.add_consumer_attribution("ConsumerA", frozenset({"a"}))
+        b.add_consumer_attribution("ConsumerB", frozenset())
+
+        assert engine.add_feature_to_collection(FeatureGroup, a, None) is True
+        stored = copy(a)
+        assert engine.add_feature_to_collection(FeatureGroup, b, None) is False
+
+        assert stored.consumer_attributions == [("ConsumerA", frozenset({"a"}))]

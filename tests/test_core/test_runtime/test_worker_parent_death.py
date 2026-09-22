@@ -6,6 +6,7 @@ import os
 import signal
 import time
 from pathlib import Path
+from unittest import mock
 from uuid import uuid4
 
 import pytest
@@ -30,11 +31,14 @@ class _FakeCfwManager:
 
 def _worker_is_gone(pid: int) -> bool:
     """A reparented child can sit as an unreaped zombie, which still answers os.kill(pid, 0);
-    /proc state distinguishes that from actually running."""
+    /proc state distinguishes that from actually running. The pid can also be reaped between
+    an exists() check and a subsequent read, so read directly and treat a vanished entry as gone."""
     stat_path = Path(f"/proc/{pid}/stat")
-    if not stat_path.exists():
+    try:
+        stat_text = stat_path.read_text()
+    except FileNotFoundError:
         return True
-    return stat_path.read_text().rsplit(")", 1)[1].split()[0] == "Z"
+    return stat_text.rsplit(")", 1)[1].split()[0] == "Z"
 
 
 def _fake_parent_main(pid_file: str) -> None:
@@ -55,6 +59,39 @@ def _fake_parent_main(pid_file: str) -> None:
     # Non-daemonic (it has its own child); if the test process dies uncleanly,
     # multiprocessing's exit handling would join this for the full sleep duration.
     time.sleep(20)
+
+
+class TestWorkerIsGoneSurvivesAConcurrentReap:
+    """_worker_is_gone must not raise when a pid it just confirmed exists is reaped
+    before the follow-up read, which is exactly what a concurrent reaper (multiprocessing's
+    own bookkeeping, or the subreaper after a SIGKILLed parent) can do to it."""
+
+    def test_pid_reaped_between_check_and_read_reads_as_gone(self) -> None:
+        pid = os.fork()
+        if pid == 0:
+            os._exit(0)
+
+        try:
+            deadline = time.time() + 2.0
+            while time.time() < deadline and not Path(f"/proc/{pid}/stat").exists():
+                time.sleep(0.01)
+            assert Path(f"/proc/{pid}/stat").exists(), "child never became a visible zombie"
+
+            real_read_text = Path.read_text
+
+            def reap_then_read(self: Path, *args: object, **kwargs: object) -> str:
+                # Wins the race a concurrent reaper could win: the pid still existed when
+                # _worker_is_gone checked, but is gone by the time it actually reads.
+                os.waitpid(pid, 0)
+                return real_read_text(self, *args, **kwargs)  # type: ignore[arg-type]
+
+            with mock.patch.object(Path, "read_text", reap_then_read):
+                assert _worker_is_gone(pid) is True
+        finally:
+            try:
+                os.waitpid(pid, os.WNOHANG)
+            except ChildProcessError:
+                pass
 
 
 class TestWorkerProcessDoesNotOutliveASigkilledParent:

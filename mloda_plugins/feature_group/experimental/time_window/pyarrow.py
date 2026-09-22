@@ -160,33 +160,9 @@ class PyArrowTimeWindowFeatureGroup(TimeWindowFeatureGroup):
                 results.append(sorted_sources[0][i].as_py())
             else:
                 # For multi-column, first compute rolling window per column, then aggregate across columns
-                column_results = []
-                for window_values in all_window_values:
-                    if window_function == "sum":
-                        column_results.append(pc.sum(window_values).as_py())
-                    elif window_function == "min":
-                        column_results.append(pc.min(window_values).as_py())
-                    elif window_function == "max":
-                        column_results.append(pc.max(window_values).as_py())
-                    elif window_function in ["avg", "mean"]:
-                        column_results.append(pc.mean(window_values).as_py())
-                    elif window_function == "count":
-                        column_results.append(pc.count(window_values).as_py())
-                    elif window_function == "std":
-                        column_results.append(pc.stddev(window_values).as_py())
-                    elif window_function == "var":
-                        column_results.append(pc.variance(window_values).as_py())
-                    elif window_function == "median":
-                        # PyArrow doesn't have a direct median function
-                        # We can approximate it using quantile with q=0.5
-                        result = pc.quantile(window_values, q=0.5)
-                        column_results.append(result[0].as_py())
-                    elif window_function == "first":
-                        column_results.append(window_values[0].as_py())
-                    elif window_function == "last":
-                        column_results.append(window_values[-1].as_py())
-                    else:
-                        raise ValueError(f"Unsupported window function: {window_function}")
+                column_results = [
+                    cls._window_scalar(window_values, window_function).as_py() for window_values in all_window_values
+                ]
 
                 # If multi-column, aggregate across columns
                 if len(in_features) > 1:
@@ -222,5 +198,40 @@ class PyArrowTimeWindowFeatureGroup(TimeWindowFeatureGroup):
         for k, orig_pos in enumerate(sorted_idx_list):
             reordered_results[orig_pos] = results[k]
 
+        if not reordered_results:
+            # pa.array([]) infers the null type; take the type the window function yields on the empty source.
+            source = sorted_sources[0]
+            if window_function in ["first", "last"]:
+                return pa.array([], type=source.type)
+            return pa.array([], type=cls._window_scalar(source, window_function).type)
+
         # Convert the results to a PyArrow array
         return pa.array(reordered_results)
+
+    @classmethod
+    def _window_scalar(cls, window_values: pa.ChunkedArray, window_function: str) -> pa.Scalar:
+        """Apply the window function to one window of a single column, keeping the pyarrow result type."""
+        if window_function == "sum":
+            return pc.sum(window_values)
+        elif window_function == "min":
+            return pc.min(window_values)
+        elif window_function == "max":
+            return pc.max(window_values)
+        elif window_function in ["avg", "mean"]:
+            return pc.mean(window_values)
+        elif window_function == "count":
+            return pc.count(window_values)
+        elif window_function == "std":
+            return pc.stddev(window_values)
+        elif window_function == "var":
+            return pc.variance(window_values)
+        elif window_function == "median":
+            # PyArrow doesn't have a direct median function
+            # We can approximate it using quantile with q=0.5
+            return pc.quantile(window_values, q=0.5)[0]
+        elif window_function == "first":
+            return window_values[0]
+        elif window_function == "last":
+            return window_values[-1]
+        else:
+            raise ValueError(f"Unsupported window function: {window_function}")

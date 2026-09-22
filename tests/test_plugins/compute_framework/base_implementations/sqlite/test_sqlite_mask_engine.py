@@ -3,9 +3,6 @@ from typing import Any
 import pyarrow as pa
 import pytest
 
-from mloda_plugins.compute_framework.base_implementations.sql.sql_base_mask_engine import (
-    SqlBaseMaskEngine,
-)
 from mloda_plugins.compute_framework.base_implementations.sql.sql_utils import quote_ident
 from mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_mask_engine import (
     SqliteMaskEngine,
@@ -17,9 +14,7 @@ from tests.test_plugins.compute_framework.base_implementations.sql_mask_engine_t
 
 
 class TestSqliteSqlMaskEngine(SqlMaskEngineTestMixin):
-    @pytest.fixture
-    def engine(self) -> type[SqlBaseMaskEngine]:
-        return SqliteMaskEngine
+    mask_engine_class = SqliteMaskEngine
 
     @pytest.fixture
     def sample_data(self, connection: Any) -> Any:

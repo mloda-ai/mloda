@@ -3,7 +3,6 @@ from typing import Any
 import pyarrow as pa
 import pytest
 
-from mloda.provider import BaseMaskEngine
 from mloda_plugins.compute_framework.base_implementations.pyarrow.pyarrow_mask_engine import (
     PyArrowMaskEngine,
 )
@@ -13,9 +12,7 @@ from tests.test_plugins.compute_framework.base_implementations.mask_engine_test_
 
 
 class TestPyArrowMaskEngine(MaskEngineTestMixin):
-    @pytest.fixture
-    def engine(self) -> type[BaseMaskEngine]:
-        return PyArrowMaskEngine
+    mask_engine_class = PyArrowMaskEngine
 
     @pytest.fixture
     def sample_data(self) -> Any:

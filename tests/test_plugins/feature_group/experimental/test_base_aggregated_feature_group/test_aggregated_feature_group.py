@@ -1,6 +1,5 @@
 from typing import Any
 
-import numpy as np
 import pandas as pd
 import pytest
 
@@ -21,6 +20,7 @@ from tests.test_plugins.feature_group.experimental.test_base_aggregated_feature_
     PandasAggregatedTestDataCreator,
     validate_aggregated_features,
 )
+from tests.test_plugins.feature_group.experimental.zero_row_result_type_test_mixin import PandasZeroRowAdapter
 
 
 class ConcreteAggregatedFeatureGroupForTest(AggregatedFeatureGroup):
@@ -291,38 +291,8 @@ class TestPandasAggregatedFeatureGroup:
             AggregatedFeatureGroup.AGGREGATION_TYPES = original_types
 
 
-class TestPandasAggregatedZeroRow(AggregatedZeroRowTestMixin):
-    int32_type = np.dtype("int32")
-    untyped_column_types = (np.dtype(object),)
-
-    @pytest.fixture
-    def feature_group(self) -> type[AggregatedFeatureGroup]:
-        return PandasAggregatedFeatureGroup
-
-    @pytest.fixture
-    def zero_row_data(self) -> pd.DataFrame:
-        return pd.DataFrame(
-            {
-                "sales": pd.Series([], dtype="int64"),
-                "price": pd.Series([], dtype="float64"),
-                "metrics~0": pd.Series([], dtype="int64"),
-                "metrics~1": pd.Series([], dtype="int64"),
-            }
-        )
-
-    @pytest.fixture
-    def all_null_data(self) -> pd.DataFrame:
-        return pd.DataFrame({"price": pd.Series([None, None, None], dtype="float64")})
-
-    @pytest.fixture
-    def int32_data(self) -> pd.DataFrame:
-        return pd.DataFrame({"sales": pd.Series([100, 200, 300], dtype="int32")})
-
-    def row_count(self, result: Any) -> int:
-        return len(result)
-
-    def column_type(self, result: Any, column: str) -> Any:
-        return result[column].dtype
+class TestPandasAggregatedZeroRow(PandasZeroRowAdapter, AggregatedZeroRowTestMixin):
+    feature_group_class = PandasAggregatedFeatureGroup
 
 
 class TestAggPandasIntegration:

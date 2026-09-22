@@ -4,7 +4,7 @@ Extends MaskEngineTestMixin with SQL-specific unit tests that verify
 condition strings and their structure.
 
 Each framework-specific test class should inherit from this mixin and provide:
-- engine fixture: Returns the SQL mask engine class
+- mask_engine_class attribute: The SQL mask engine class, served by the engine fixture
 - sample_data fixture: Returns framework-specific test data
 - empty_data fixture: Returns the same schema as sample_data, typed, with zero rows
 - evaluate_mask method: Executes a SQL condition against data, returns list[bool]

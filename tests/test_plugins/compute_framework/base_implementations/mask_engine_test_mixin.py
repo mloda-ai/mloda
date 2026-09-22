@@ -2,7 +2,7 @@
 
 This mixin provides common test methods that verify the mask engine contract.
 Each framework-specific test class should inherit from this mixin and provide:
-- engine fixture: Returns the mask engine class
+- mask_engine_class attribute: The mask engine class, served by the engine fixture
 - sample_data fixture: Returns framework-specific test data
 - empty_data fixture: Returns the same schema as sample_data, typed, with zero rows
 - evaluate_mask method: Converts framework-specific mask to a Python list of booleans
@@ -11,7 +11,7 @@ Each framework-specific test class should inherit from this mixin and provide:
 """
 
 from abc import abstractmethod
-from typing import Any
+from typing import Any, ClassVar
 
 import pytest
 
@@ -22,7 +22,8 @@ class MaskEngineTestMixin:
     """Shared tests for all BaseMaskEngine implementations.
 
     Each framework test class must provide:
-    - engine fixture returning the engine class
+    - mask_engine_class attribute naming the engine class, also read by
+      tests/test_plugins/test_mixin_consumer_coverage.py
     - sample_data fixture returning data with columns:
         status: ["active", "inactive", "active", "inactive"]
         value: [10, 20, 30, 40]
@@ -34,10 +35,11 @@ class MaskEngineTestMixin:
       returning the result as a column -> values dict
     """
 
+    mask_engine_class: ClassVar[type[BaseMaskEngine]]
+
     @pytest.fixture
-    @abstractmethod
     def engine(self) -> type[BaseMaskEngine]:
-        raise NotImplementedError
+        return self.mask_engine_class
 
     @pytest.fixture
     @abstractmethod

@@ -9,6 +9,9 @@ from typing import Any
 import pytest
 
 from mloda.provider import BaseMaskEngine
+from mloda_plugins.compute_framework.base_implementations.polars.polars_expr_mask_engine import (
+    PolarsExprMaskEngine,
+)
 from tests.test_plugins.compute_framework.base_implementations.mask_engine_test_mixin import (
     MaskEngineTestMixin,
 )
@@ -18,21 +21,12 @@ try:
 except ImportError:
     pl = None  # type: ignore[assignment]
 
-try:
-    from mloda_plugins.compute_framework.base_implementations.polars.polars_expr_mask_engine import (
-        PolarsExprMaskEngine,
-    )
-except ImportError:
-    PolarsExprMaskEngine = None  # type: ignore[assignment, misc]
-
 
 @pytest.mark.skipif(pl is None, reason="polars not installed")
 class TestPolarsExprMaskEngine(MaskEngineTestMixin):
     """Tests for the PolarsExprMaskEngine that returns pl.Expr objects."""
 
-    @pytest.fixture
-    def engine(self) -> type[BaseMaskEngine]:
-        return PolarsExprMaskEngine
+    mask_engine_class = PolarsExprMaskEngine
 
     @pytest.fixture
     def sample_data(self) -> Any:

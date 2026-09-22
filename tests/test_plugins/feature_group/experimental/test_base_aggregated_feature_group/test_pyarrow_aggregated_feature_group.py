@@ -1,5 +1,3 @@
-from typing import Any
-
 import pyarrow as pa
 import pandas as pd
 import pytest
@@ -19,6 +17,7 @@ from tests.test_plugins.feature_group.experimental.test_base_aggregated_feature_
     PyArrowAggregatedTestDataCreator,
     validate_aggregated_features,
 )
+from tests.test_plugins.feature_group.experimental.zero_row_result_type_test_mixin import PyArrowZeroRowAdapter
 
 
 @pytest.fixture
@@ -246,38 +245,8 @@ class TestPyArrowAggregatedFeatureGroup:
         assert len(column) == 0
 
 
-class TestPyArrowAggregatedZeroRow(AggregatedZeroRowTestMixin):
-    int32_type = pa.int32()
-    untyped_column_types = (pa.null(),)
-
-    @pytest.fixture
-    def feature_group(self) -> type[AggregatedFeatureGroup]:
-        return PyArrowAggregatedFeatureGroup
-
-    @pytest.fixture
-    def zero_row_data(self) -> pa.Table:
-        return pa.table(
-            {
-                "sales": pa.array([], type=pa.int64()),
-                "price": pa.array([], type=pa.float64()),
-                "metrics~0": pa.array([], type=pa.int64()),
-                "metrics~1": pa.array([], type=pa.int64()),
-            }
-        )
-
-    @pytest.fixture
-    def all_null_data(self) -> pa.Table:
-        return pa.table({"price": pa.array([None, None, None], type=pa.float64())})
-
-    @pytest.fixture
-    def int32_data(self) -> pa.Table:
-        return pa.table({"sales": pa.array([100, 200, 300], type=pa.int32())})
-
-    def row_count(self, result: Any) -> int:
-        return int(result.num_rows)
-
-    def column_type(self, result: Any, column: str) -> Any:
-        return result.column(column).type
+class TestPyArrowAggregatedZeroRow(PyArrowZeroRowAdapter, AggregatedZeroRowTestMixin):
+    feature_group_class = PyArrowAggregatedFeatureGroup
 
 
 class TestPyArrowAggregatedFeatureGroupMultiColumn:

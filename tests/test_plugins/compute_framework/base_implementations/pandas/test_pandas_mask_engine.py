@@ -3,7 +3,6 @@ from typing import Any
 import pandas as pd
 import pytest
 
-from mloda.provider import BaseMaskEngine
 from mloda_plugins.compute_framework.base_implementations.pandas.pandas_mask_engine import (
     PandasMaskEngine,
 )
@@ -13,9 +12,7 @@ from tests.test_plugins.compute_framework.base_implementations.mask_engine_test_
 
 
 class TestPandasMaskEngine(MaskEngineTestMixin):
-    @pytest.fixture
-    def engine(self) -> type[BaseMaskEngine]:
-        return PandasMaskEngine
+    mask_engine_class = PandasMaskEngine
 
     @pytest.fixture
     def sample_data(self) -> Any:

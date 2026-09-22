@@ -64,6 +64,20 @@ class TestTypesCompatible:
         # BOOLEAN to INT is not allowed
         assert DataTypeValidator._types_compatible(DataType.INT32, DataType.BOOLEAN) is False
 
+    def test_decimal_never_coerces(self) -> None:
+        """DECIMAL never coerces to or from other numeric types, only to itself."""
+        assert DataTypeValidator._types_compatible(DataType.DECIMAL, DataType.DOUBLE) is False
+        assert DataTypeValidator._types_compatible(DataType.DOUBLE, DataType.DECIMAL) is False
+        assert DataTypeValidator._types_compatible(DataType.DECIMAL, DataType.INT64) is False
+        assert DataTypeValidator._types_compatible(DataType.INT64, DataType.DECIMAL) is False
+        assert DataTypeValidator._types_compatible(DataType.DECIMAL, DataType.DECIMAL) is True
+
+        assert DataTypeValidator._types_loosely_compatible(DataType.DECIMAL, DataType.DOUBLE) is False
+        assert DataTypeValidator._types_loosely_compatible(DataType.DOUBLE, DataType.DECIMAL) is False
+        assert DataTypeValidator._types_loosely_compatible(DataType.DECIMAL, DataType.INT64) is False
+        assert DataTypeValidator._types_loosely_compatible(DataType.INT64, DataType.DECIMAL) is False
+        assert DataTypeValidator._types_loosely_compatible(DataType.DECIMAL, DataType.DECIMAL) is True
+
 
 class TestValidate:
     """Test the validate static method."""

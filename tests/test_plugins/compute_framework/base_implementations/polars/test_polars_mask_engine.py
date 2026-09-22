@@ -43,8 +43,14 @@ class TestPolarsMaskEngine(MaskEngineTestMixin):
         result: dict[str, list[Any]] = data.filter(mask).to_dict(as_series=False)
         return result
 
-    def test_is_in_decimal_raises_invalid_operation(self) -> None:
+    def test_is_in_decimal(self) -> None:
         data = pl.DataFrame({"d": [Decimal("12.34"), Decimal("5.50"), None]}, schema={"d": pl.Decimal(10, 2)})
 
-        with pytest.raises(pl.exceptions.InvalidOperationError):
-            PolarsMaskEngine.is_in(data, "d", [Decimal("12.34")])
+        result = PolarsMaskEngine.is_in(data, "d", [Decimal("12.34")])
+        assert result.to_list() == [True, False, None]
+
+    def test_is_in_decimal_unrepresentable_values_match_nothing(self) -> None:
+        data = pl.DataFrame({"d": [Decimal("12.34"), Decimal("5.50"), None]}, schema={"d": pl.Decimal(10, 2)})
+
+        result = PolarsMaskEngine.is_in(data, "d", [Decimal("12.345"), Decimal("99999999999.99")])
+        assert result.to_list() == [False, False, None]

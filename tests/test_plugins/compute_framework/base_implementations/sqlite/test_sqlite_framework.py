@@ -19,7 +19,7 @@ from tests.test_plugins.compute_framework.base_implementations.dict_interchange_
     DictInterchangeOutputSchemaTestMixin,
 )
 from tests.test_plugins.compute_framework.base_implementations.dtype_extraction_test_mixin import (
-    DtypeExtractionWithoutDecimalTestMixin,
+    BasicDtypeExtractionTestMixin,
 )
 from tests.test_plugins.compute_framework.base_implementations.empty_result_test_mixin import (
     EmptyResultFrameworkTestMixin,
@@ -206,7 +206,7 @@ class TestSqliteFrameworkMerge(DataFrameTestBase):
         return MergeEngineFactory()
 
 
-class TestSqliteDtypeExtraction(DtypeExtractionWithoutDecimalTestMixin):
+class TestSqliteDtypeExtraction(BasicDtypeExtractionTestMixin):
     """Test SqliteFramework._extract_column_dtype using shared mixin."""
 
     @pytest.fixture

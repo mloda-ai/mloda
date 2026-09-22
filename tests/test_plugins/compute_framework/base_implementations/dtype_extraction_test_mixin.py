@@ -1,6 +1,7 @@
 """Shared dtype extraction tests for compute frameworks.
 
 The default suite covers decimal data; unsupported frameworks explicitly opt out.
+Fixture contract: `framework_instance`, and `dtype_sample_data` with `int_col`, `str_col`, `float_col`.
 """
 
 from abc import abstractmethod
@@ -82,8 +83,6 @@ class BasicDtypeExtractionTestMixin:
 class DtypeExtractionTestMixin(BasicDtypeExtractionTestMixin):
     """Shared dtype extraction tests, including decimal by default."""
 
-    expected_decimal_data_type: DataType | None = DataType.DECIMAL
-
     @pytest.fixture
     @abstractmethod
     def decimal_sample_data(self) -> Any:
@@ -91,11 +90,7 @@ class DtypeExtractionTestMixin(BasicDtypeExtractionTestMixin):
         raise NotImplementedError
 
     def test_extract_decimal_column_data_type(self, framework_instance: Any, decimal_sample_data: Any) -> None:
-        assert framework_instance._extract_column_data_type(decimal_sample_data, "d") == self.expected_decimal_data_type
-
-
-class DtypeExtractionWithoutDecimalTestMixin(BasicDtypeExtractionTestMixin):
-    """Shared dtype extraction tests for frameworks that cannot run decimal checks."""
+        assert framework_instance._extract_column_data_type(decimal_sample_data, "d") == DataType.DECIMAL
 
 
 class DuplicateColumnDtypeExtractionTestMixin:

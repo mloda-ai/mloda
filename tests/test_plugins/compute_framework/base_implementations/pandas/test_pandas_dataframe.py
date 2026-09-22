@@ -147,13 +147,15 @@ class TestPandasDtypeExtraction(DtypeExtractionTestMixin, DuplicateColumnDtypeEx
     def dtype_sample_data(self) -> Any:
         return pd.DataFrame({"int_col": [1, 2, 3], "str_col": ["a", "b", "c"], "float_col": [1.0, 2.0, 3.0]})
 
-    expected_decimal_data_type = None
-
-    @pytest.fixture(params=[False, True], ids=["object", "arrow_decimal128"])
-    def decimal_sample_data(self, request: pytest.FixtureRequest) -> Any:
+    @pytest.fixture
+    def decimal_sample_data(self) -> Any:
         values = [Decimal("12.34"), Decimal("5.50"), Decimal("99.99"), None]
-        series = pd.Series(values, dtype=pd.ArrowDtype(pa.decimal128(10, 2))) if request.param else pd.Series(values)
-        return pd.DataFrame({"d": series})
+        return pd.DataFrame({"d": pd.Series(values, dtype=pd.ArrowDtype(pa.decimal128(10, 2)))})
+
+    def test_extract_object_decimal_column_data_type_is_none(self, framework_instance: Any) -> None:
+        values = [Decimal("12.34"), Decimal("5.50"), Decimal("99.99"), None]
+        data = pd.DataFrame({"d": pd.Series(values)})
+        assert framework_instance._extract_column_data_type(data, "d") is None
 
     # Dtypes are declared explicitly because pandas 2.x infers `object` where pandas 3.x infers `str`,
     # which would make the first-occurrence assertions depend on the installed pandas version.

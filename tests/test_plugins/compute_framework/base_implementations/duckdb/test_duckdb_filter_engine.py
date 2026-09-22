@@ -1,6 +1,5 @@
 """Unit tests for the DuckDBFilterEngine class."""
 
-from contextlib import AbstractContextManager
 from decimal import Decimal
 from typing import Any
 import logging
@@ -69,17 +68,9 @@ class TestDuckDBFilterEngine(DecimalFilterEngineTestMixin, TimeRangeFilterEngine
     def get_decimal_column_dtype(self, data: Any) -> Any:
         return data.types[data.columns.index("d")]
 
-    @pytest.fixture
-    def decimal_min_filter_context(self) -> AbstractContextManager[Any]:
-        return pytest.raises(TypeError, match="Unsupported type for SQL literal")
-
-    @pytest.fixture
-    def decimal_categorical_filter_context(self) -> AbstractContextManager[Any]:
-        return pytest.raises(TypeError, match="Unsupported type for SQL literal")
-
     def get_column_values(self, result: Any, column: str) -> list[Any]:
-        """Extract column values from DuckDB relation via pandas DataFrame."""
-        return result.df()[column].tolist()  # type: ignore[no-any-return]
+        """Extract column values from DuckDB relation via Arrow."""
+        return result.to_arrow_table()[column].to_pylist()  # type: ignore[no-any-return]
 
     @pytest.fixture
     def sample_time_data(self, connection: Any) -> Any:

@@ -14,8 +14,6 @@ Each framework-specific test class should inherit from this mixin and provide:
 from decimal import Decimal
 from typing import Any
 
-import pytest
-
 from mloda_plugins.compute_framework.base_implementations.sql.sql_base_mask_engine import (
     SqlBaseMaskEngine,
 )
@@ -55,9 +53,9 @@ class SqlMaskEngineTestMixin(MaskEngineTestMixin):
         assert '"value"' in result
         assert "10" in result
 
-    def test_equal_decimal_value_raises_type_error(self, engine: type[SqlBaseMaskEngine], sample_data: Any) -> None:
-        with pytest.raises(TypeError, match="Unsupported type for SQL literal"):
-            engine.equal(sample_data, "value", Decimal("12.34"))
+    def test_equal_decimal_value(self, engine: type[SqlBaseMaskEngine], sample_data: Any) -> None:
+        result = engine.equal(sample_data, "value", Decimal("12.34"))
+        assert result == '"value" = 12.34'
 
     def test_greater_equal_returns_condition_string(self, engine: type[SqlBaseMaskEngine], sample_data: Any) -> None:
         result = engine.greater_equal(sample_data, "value", 20)
@@ -94,6 +92,13 @@ class SqlMaskEngineTestMixin(MaskEngineTestMixin):
         assert "IN" in result
         assert "'active'" in result
         assert "'inactive'" in result
+
+    def test_is_in_decimal_values(self, engine: type[SqlBaseMaskEngine], sample_data: Any) -> None:
+        result = engine.is_in(sample_data, "value", [Decimal("12.34"), Decimal("5.50")])
+        assert isinstance(result, str)
+        assert "12.34" in result
+        assert "5.50" in result
+        assert "IN" in result
 
     def test_combine_and_joins_conditions(self, engine: type[SqlBaseMaskEngine], sample_data: Any) -> None:
         cond1 = engine.greater_equal(sample_data, "value", 20)

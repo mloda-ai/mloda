@@ -1,6 +1,5 @@
 """Unit tests for the PolarsFilterEngine class."""
 
-from contextlib import AbstractContextManager
 from decimal import Decimal
 from typing import Any
 import logging
@@ -63,10 +62,6 @@ class TestPolarsFilterEngine(DecimalFilterEngineTestMixin, TimeRangeFilterEngine
 
     def get_decimal_column_dtype(self, data: Any) -> Any:
         return data.schema["d"]
-
-    @pytest.fixture
-    def decimal_categorical_filter_context(self) -> AbstractContextManager[Any]:
-        return pytest.raises(pl.exceptions.InvalidOperationError)
 
     def get_column_values(self, result: Any, column: str) -> list[Any]:
         """Extract column values from Polars DataFrame."""

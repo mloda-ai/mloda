@@ -37,7 +37,7 @@ from tests.test_plugins.compute_framework.base_implementations.datatype_validato
     DataTypeValidatorFrameworkTestMixin,
 )
 from tests.test_plugins.compute_framework.base_implementations.dtype_extraction_test_mixin import (
-    DtypeExtractionWithoutDecimalTestMixin,
+    BasicDtypeExtractionTestMixin,
 )
 from tests.test_plugins.compute_framework.base_implementations.empty_result_test_mixin import (
     EmptyResultFrameworkTestMixin,
@@ -320,7 +320,7 @@ class TestSparkFrameworkComputeFramework:
 
 
 @pytest.mark.skipif(not PYSPARK_AVAILABLE, reason=SKIP_REASON or "PySpark is not available")
-class TestSparkDtypeExtraction(DtypeExtractionWithoutDecimalTestMixin):
+class TestSparkDtypeExtraction(BasicDtypeExtractionTestMixin):
     """Test SparkFramework._extract_column_dtype using shared mixin."""
 
     @pytest.fixture

@@ -50,7 +50,7 @@ class TestPythonDictFilterEngine(DecimalFilterEngineTestMixin, TimeRangeFilterEn
         return {"d": [Decimal("12.34"), Decimal("5.50"), Decimal("99.99"), None]}
 
     def get_decimal_column_dtype(self, data: Any) -> Any:
-        return type(data["d"][0])
+        return type(next((value for value in data["d"] if value is not None), Decimal("0")))
 
     def result_row_count(self, result: Any) -> int:
         """A columnar dict's row count is the length of any of its columns."""

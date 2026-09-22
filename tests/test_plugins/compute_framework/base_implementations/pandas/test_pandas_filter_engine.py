@@ -1,10 +1,16 @@
 """Unit tests for the PandasFilterEngine class."""
 
+from decimal import Decimal
 from typing import Any
 
 import pytest
 import numpy as np
 import pandas as pd
+
+try:
+    import pyarrow as pa
+except ImportError:
+    pa = None  # type: ignore[assignment, unused-ignore]
 
 from mloda.user import Feature
 from mloda.user import SingleFilter
@@ -13,7 +19,7 @@ from mloda.user import FilterType
 from mloda_plugins.compute_framework.base_implementations.pandas.pandas_filter_engine import PandasFilterEngine
 
 from tests.test_plugins.compute_framework.base_implementations.filter_engine_test_mixin import (
-    FilterEngineTestMixin,
+    DecimalFilterEngineTestMixin,
 )
 from tests.test_plugins.compute_framework.base_implementations.time_range_filter_engine_test_mixin import (
     SAMPLE_IDS,
@@ -22,7 +28,7 @@ from tests.test_plugins.compute_framework.base_implementations.time_range_filter
 )
 
 
-class TestPandasFilterEngine(FilterEngineTestMixin, TimeRangeFilterEngineTestMixin):
+class TestPandasFilterEngine(DecimalFilterEngineTestMixin, TimeRangeFilterEngineTestMixin):
     """Unit tests for the PandasFilterEngine class using shared mixins."""
 
     @pytest.fixture
@@ -48,8 +54,16 @@ class TestPandasFilterEngine(FilterEngineTestMixin, TimeRangeFilterEngineTestMix
         return pd.DataFrame({"id": [1, 2, 3, 4, 5], "category": ["A", None, "B", None, "C"]})
 
     def get_column_values(self, result: Any, column: str) -> list[Any]:
-        """Extract column values from pandas DataFrame."""
-        return result[column].tolist()  # type: ignore[no-any-return]
+        """Extract column values from pandas DataFrame, mapping missing values to None."""
+        return [None if pd.isna(value) else value for value in result[column].tolist()]
+
+    @pytest.fixture
+    def decimal_sample_data(self) -> Any:
+        values = [Decimal("12.34"), Decimal("5.50"), Decimal("99.99"), None]
+        return pd.DataFrame({"d": pd.Series(values, dtype=pd.ArrowDtype(pa.decimal128(10, 2)))})
+
+    def get_decimal_column_dtype(self, data: Any) -> Any:
+        return data["d"].dtype
 
     @pytest.fixture
     def sample_time_data(self) -> Any:

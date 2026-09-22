@@ -9,7 +9,6 @@ Each framework-specific test class should inherit from this mixin and provide:
 """
 
 from abc import abstractmethod
-from contextlib import AbstractContextManager, nullcontext
 from decimal import Decimal
 from typing import Any
 
@@ -305,12 +304,12 @@ class FilterEngineTestMixin:
 
 
 class DecimalFilterEngineTestMixin(FilterEngineTestMixin):
-    """Shared decimal filtering checks with explicit backend rejection expectations."""
+    """Shared decimal filtering checks."""
 
     @pytest.fixture
     @abstractmethod
     def decimal_sample_data(self) -> Any:
-        """Return d values 12.34, 5.50, 99.99 and None, with decimal precision 10 and scale 2."""
+        """Return a decimal column d, including a null, with precision 10 and scale 2."""
         raise NotImplementedError
 
     @abstractmethod
@@ -318,44 +317,64 @@ class DecimalFilterEngineTestMixin(FilterEngineTestMixin):
         """Return the native dtype of d, or its Python value type for dictionary data."""
         raise NotImplementedError
 
-    @pytest.fixture
-    def decimal_min_filter_context(self) -> AbstractContextManager[Any]:
-        return nullcontext()
-
-    @pytest.fixture
-    def decimal_categorical_filter_context(self) -> AbstractContextManager[Any]:
-        return nullcontext()
-
     def test_min_filter_decimal(
         self,
         filter_engine: Any,
         decimal_sample_data: Any,
-        decimal_min_filter_context: AbstractContextManager[Any],
     ) -> None:
         single_filter = SingleFilter(Feature("d"), FilterType.MIN, {"value": Decimal("12.34")})
 
-        with decimal_min_filter_context:
-            result = filter_engine.do_min_filter(decimal_sample_data, single_filter)
+        result = filter_engine.do_min_filter(decimal_sample_data, single_filter)
 
-            values = self.get_column_values(result, "d")
-            assert values == [Decimal("12.34"), Decimal("99.99")]
-            assert all(isinstance(value, Decimal) for value in values)
-            assert self.get_decimal_column_dtype(result) == self.get_decimal_column_dtype(decimal_sample_data)
+        values = self.get_column_values(result, "d")
+        assert values == [Decimal("12.34"), Decimal("99.99")]
+        assert all(isinstance(value, Decimal) for value in values)
+        assert self.get_decimal_column_dtype(result) == self.get_decimal_column_dtype(decimal_sample_data)
 
     def test_categorical_inclusion_decimal(
         self,
         filter_engine: Any,
         decimal_sample_data: Any,
-        decimal_categorical_filter_context: AbstractContextManager[Any],
     ) -> None:
         single_filter = SingleFilter(
             Feature("d"), FilterType.CATEGORICAL_INCLUSION, {"values": [Decimal("12.34"), Decimal("5.50")]}
         )
 
-        with decimal_categorical_filter_context:
-            result = filter_engine.do_categorical_inclusion_filter(decimal_sample_data, single_filter)
+        result = filter_engine.do_categorical_inclusion_filter(decimal_sample_data, single_filter)
 
-            values = self.get_column_values(result, "d")
-            assert values == [Decimal("12.34"), Decimal("5.50")]
-            assert all(isinstance(value, Decimal) for value in values)
-            assert self.get_decimal_column_dtype(result) == self.get_decimal_column_dtype(decimal_sample_data)
+        values = self.get_column_values(result, "d")
+        assert values == [Decimal("12.34"), Decimal("5.50")]
+        assert all(isinstance(value, Decimal) for value in values)
+        assert self.get_decimal_column_dtype(result) == self.get_decimal_column_dtype(decimal_sample_data)
+
+    def test_categorical_inclusion_decimal_unrepresentable_values_match_nothing(
+        self,
+        filter_engine: Any,
+        decimal_sample_data: Any,
+    ) -> None:
+        """Values that do not survive a round-trip cast to the column's precision/scale must match nothing."""
+        single_filter = SingleFilter(
+            Feature("d"),
+            FilterType.CATEGORICAL_INCLUSION,
+            {"values": [Decimal("12.345"), Decimal("99999999999.99")]},
+        )
+
+        result = filter_engine.do_categorical_inclusion_filter(decimal_sample_data, single_filter)
+
+        assert self.get_column_values(result, "d") == []
+        assert self.get_decimal_column_dtype(result) == self.get_decimal_column_dtype(decimal_sample_data)
+
+    def test_categorical_inclusion_decimal_with_null(
+        self,
+        filter_engine: Any,
+        decimal_sample_data: Any,
+    ) -> None:
+        single_filter = SingleFilter(
+            Feature("d"), FilterType.CATEGORICAL_INCLUSION, {"values": [Decimal("12.34"), None]}
+        )
+
+        result = filter_engine.do_categorical_inclusion_filter(decimal_sample_data, single_filter)
+
+        values = self.get_column_values(result, "d")
+        assert values == [Decimal("12.34"), None]
+        assert self.get_decimal_column_dtype(result) == self.get_decimal_column_dtype(decimal_sample_data)

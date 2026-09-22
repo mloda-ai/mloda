@@ -69,6 +69,8 @@ class PandasDataFrame(ComputeFramework):
         if dtype is None:
             return None
 
+        if isinstance(dtype, pd.ArrowDtype) and DataType.from_arrow_type_safe(dtype.pyarrow_dtype) == DataType.DECIMAL:
+            return DataType.DECIMAL
         if isinstance(dtype, pd.StringDtype):
             return DataType.STRING
         if isinstance(dtype, pd.BooleanDtype):

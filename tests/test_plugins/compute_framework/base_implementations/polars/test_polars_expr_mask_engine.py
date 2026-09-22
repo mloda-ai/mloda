@@ -4,6 +4,7 @@ This file adds Polars-expr-specific unit tests that verify pl.Expr return types
 and a LazyFrame end-to-end test.
 """
 
+from decimal import Decimal
 from typing import Any
 
 import pytest
@@ -56,6 +57,18 @@ class TestPolarsExprMaskEngine(MaskEngineTestMixin):
 
     def test_supported_data_type(self, engine: type[BaseMaskEngine]) -> None:
         assert engine.supported_data_type() is pl.LazyFrame
+
+    def test_is_in_decimal(self, engine: type[BaseMaskEngine]) -> None:
+        data = pl.LazyFrame({"d": [Decimal("12.34"), Decimal("5.50"), None]}, schema={"d": pl.Decimal(10, 2)})
+
+        mask = engine.is_in(data, "d", [Decimal("12.34")])
+        assert self.evaluate_mask(mask, data) == [True, False, None]
+
+    def test_is_in_decimal_unrepresentable_values_match_nothing(self, engine: type[BaseMaskEngine]) -> None:
+        data = pl.LazyFrame({"d": [Decimal("12.34"), Decimal("5.50"), None]}, schema={"d": pl.Decimal(10, 2)})
+
+        mask = engine.is_in(data, "d", [Decimal("12.345"), Decimal("99999999999.99")])
+        assert self.evaluate_mask(mask, data) == [False, False, None]
 
     def test_all_methods_return_expr(self, engine: type[BaseMaskEngine], sample_data: Any) -> None:
         """Verify every engine method returns pl.Expr, not pl.Series or list."""

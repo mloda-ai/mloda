@@ -559,6 +559,101 @@ class TestDataAccessIdentityOfSchemeLessConnectionStrings:
         assert _identity_of(value) == expected
 
     @pytest.mark.parametrize(
+        ("value", "expected"),
+        [
+            pytest.param(
+                "host.com/db?user=alice&password=hunter2",
+                "host.com/db",
+                id="scheme-less-query-secret-drops-whole-query",
+            ),
+            pytest.param(
+                "localhost:5432/db?password=hunter2",
+                "localhost:5432/db",
+                id="scheme-less-query-secret-with-port-drops-whole-query",
+            ),
+            pytest.param(
+                "host.com/db#password=hunter2",
+                "host.com/db",
+                id="scheme-less-fragment-secret-drops-fragment",
+            ),
+            pytest.param(
+                "host.com/db?  password=hunter2",
+                "host.com/db",
+                id="scheme-less-query-secret-with-whitespace-after-delimiter",
+            ),
+        ],
+    )
+    def test_scheme_less_query_or_fragment_secret_drops_query(self, value: str, expected: str) -> None:
+        """A scheme-less host/path with a credential-shaped key in its ?query or #fragment drops it (issue #1543)."""
+        identity = _identity_of(value)
+        assert identity == expected
+        assert "hunter2" not in identity
+
+    def test_query_fragment_fix_does_not_widen_uri_or_path_scope(self) -> None:
+        """Guards: fixing #1543 must not touch the URI branch, ordinary paths, or the already-fixed ODBC case."""
+        assert _identity_of("https://host/p?email=a@b.com/x&sig=S") == "https://host/p"
+        assert _identity_of("postgresql://host/db?user=u&password=p@ss/word") == "postgresql://host/db"
+        assert (
+            _identity_of("abfss://container@account.dfs.core.windows.net/p?sig=S")
+            == "abfss://container@account.dfs.core.windows.net/p"
+        )
+        assert _identity_of("some/path/user=alice.csv") == "some/path/user=alice.csv"
+        assert _identity_of("data/q?a/report=2024.csv") == "data/q?a/report=2024.csv"
+        assert _identity_of("Data Source=srv;User Id=alice;Password=hunter2") == "{password}"
+
+    @pytest.mark.parametrize(
+        ("value", "expected"),
+        [
+            pytest.param(
+                "host.com/db?redirect=https://x&password=y",
+                "host.com/db",
+                id="scheme-less-value-containing-embedded-scheme-in-query-is-not-misrouted-to-uri-branch",
+            ),
+            pytest.param(
+                "host.com/db?a=1;password=2",
+                "host.com/db",
+                id="semicolon-bounded-secret-after-question-mark-anchor-is-scrubbed",
+            ),
+            pytest.param(
+                "host.com/db?a=1&b=2;password=3",
+                "host.com/db",
+                id="semicolon-bounded-secret-after-ampersand-then-question-mark-anchor-is-scrubbed",
+            ),
+            pytest.param(
+                "host.com/db;password=hunter2",
+                "{password}",
+                id="semicolon-bounded-secret-with-no-query-or-fragment-anchor-collapses-to-key-names",
+            ),
+        ],
+    )
+    def test_credential_leaks_not_covered_by_the_current_query_string_fix(self, value: str, expected: str) -> None:
+        """Currently fails: a scheme-less value containing "://" inside its query (not as its own leading
+        scheme) is misrouted into the URI branch and bypasses _strip_credential_query entirely; and
+        _QUERY_KEY_PATTERN does not treat ";" as a boundary, so a ";"-bounded secret key survives even when a
+        "?"/"#" anchor is present, or (with no anchor at all) survives the path-prefix bail-out guard in
+        _connection_string_identity."""
+        identity = _identity_of(value)
+        assert identity == expected
+        assert "hunter2" not in identity
+        assert "password=y" not in identity
+        assert "password=2" not in identity
+        assert "password=3" not in identity
+
+    def test_credential_leak_fix_must_not_widen_scope_regression_guards(self) -> None:
+        """Regression guards for the fix to the cases above: these must keep behaving exactly as today."""
+        assert _identity_of("/srv/a;host=b") == "/srv/a;host=b"
+        assert _identity_of("C:\\data;user=1") == "C:\\data;user=1"
+        assert _identity_of("some/path/user=alice.csv") == "some/path/user=alice.csv"
+        assert _identity_of("Data Source=srv;User Id=alice;Password=hunter2") == "{password}"
+        assert _identity_of("host.com/db?limit=10") == "host.com/db?limit=10"
+        assert _identity_of("https://host/p?email=a@b.com/x&sig=S") == "https://host/p"
+        assert _identity_of("postgresql://host/db?user=u&password=p@ss/word") == "postgresql://host/db"
+        assert (
+            _identity_of("abfss://container@account.dfs.core.windows.net/p?sig=S")
+            == "abfss://container@account.dfs.core.windows.net/p"
+        )
+
+    @pytest.mark.parametrize(
         "value",
         [
             pytest.param("data/plain.csv", id="relative-path"),
@@ -579,6 +674,7 @@ class TestDataAccessIdentityOfSchemeLessConnectionStrings:
             pytest.param("/srv/a;host=b", id="absolute-path-with-semicolon-key"),
             pytest.param("C:\\data;user=1", id="windows-path-with-semicolon-key"),
             pytest.param(Path("data/plain.csv"), id="plain-path-object"),
+            pytest.param("host.com/db?limit=10", id="scheme-less-query-with-non-secret-key-unchanged"),
         ],
     )
     def test_non_connection_strings_are_unchanged(self, value: Any) -> None:

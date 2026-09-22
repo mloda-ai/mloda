@@ -1,3 +1,4 @@
+from decimal import Decimal
 from typing import Any
 
 import pytest
@@ -11,7 +12,6 @@ from tests.test_plugins.compute_framework.base_implementations.datatype_validato
     DataTypeValidatorFrameworkTestMixin,
 )
 from tests.test_plugins.compute_framework.base_implementations.dtype_extraction_test_mixin import (
-    DecimalDtypeExtractionTestMixin,
     DtypeExtractionTestMixin,
     DuplicateColumnDtypeExtractionTestMixin,
 )
@@ -268,7 +268,7 @@ class TestIcebergDataTypeValidator(DataTypeValidatorFrameworkTestMixin):
 @pytest.mark.skipif(
     pyiceberg is None or pa is None, reason="PyIceberg or PyArrow is not installed. Skipping this test."
 )
-class TestIcebergDtypeExtraction(DecimalDtypeExtractionTestMixin):
+class TestIcebergDtypeExtraction(DtypeExtractionTestMixin):
     """Test IcebergFramework._extract_column_dtype using shared mixin.
 
     Iceberg tables need catalog context to construct, so the fixture wraps a real
@@ -308,6 +308,11 @@ class TestIcebergDtypeExtractionPyArrow(DtypeExtractionTestMixin, DuplicateColum
     @pytest.fixture
     def dtype_sample_data(self) -> Any:
         return pa.table({"int_col": [1, 2, 3], "str_col": ["a", "b", "c"], "float_col": [1.0, 2.0, 3.0]})
+
+    @pytest.fixture
+    def decimal_sample_data(self) -> Any:
+        values = [Decimal("12.34"), Decimal("5.50"), Decimal("99.99"), None]
+        return pa.table({"d": pa.array(values, type=pa.decimal128(10, 2))})
 
     @pytest.fixture
     def dtype_duplicate_column_data(self) -> Any:

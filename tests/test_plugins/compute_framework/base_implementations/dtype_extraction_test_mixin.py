@@ -1,12 +1,6 @@
-"""
-Shared test mixin for _extract_column_dtype implementations.
+"""Shared dtype extraction tests for compute frameworks.
 
-This mixin verifies that each compute framework's _extract_column_dtype method
-returns dtype strings that are correctly classified by the _is_string_dtype and
-_is_numeric_dtype static methods. Each framework-specific test class should
-inherit from this mixin and provide:
-- framework_instance fixture: Returns a compute framework instance
-- dtype_sample_data fixture: Returns framework-specific data with int_col, str_col, float_col
+The default suite covers decimal data; unsupported frameworks explicitly opt out.
 """
 
 from abc import abstractmethod
@@ -18,8 +12,8 @@ from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.user import DataType
 
 
-class DtypeExtractionTestMixin:
-    """Shared tests for _extract_column_dtype across all compute frameworks."""
+class BasicDtypeExtractionTestMixin:
+    """Shared non-decimal tests for _extract_column_dtype across compute frameworks."""
 
     @pytest.fixture
     @abstractmethod
@@ -85,8 +79,8 @@ class DtypeExtractionTestMixin:
         )
 
 
-class DecimalDtypeExtractionTestMixin(DtypeExtractionTestMixin):
-    """Shared decimal type extraction checks for frameworks with decimal sample data."""
+class DtypeExtractionTestMixin(BasicDtypeExtractionTestMixin):
+    """Shared dtype extraction tests, including decimal by default."""
 
     expected_decimal_data_type: DataType | None = DataType.DECIMAL
 
@@ -98,6 +92,10 @@ class DecimalDtypeExtractionTestMixin(DtypeExtractionTestMixin):
 
     def test_extract_decimal_column_data_type(self, framework_instance: Any, decimal_sample_data: Any) -> None:
         assert framework_instance._extract_column_data_type(decimal_sample_data, "d") == self.expected_decimal_data_type
+
+
+class DtypeExtractionWithoutDecimalTestMixin(BasicDtypeExtractionTestMixin):
+    """Shared dtype extraction tests for frameworks that cannot run decimal checks."""
 
 
 class DuplicateColumnDtypeExtractionTestMixin:

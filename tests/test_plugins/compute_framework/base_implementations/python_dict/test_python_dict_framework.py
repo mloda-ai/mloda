@@ -10,7 +10,7 @@ from tests.test_plugins.compute_framework.base_implementations.datatype_validato
     DataTypeValidatorFrameworkTestMixin,
 )
 from tests.test_plugins.compute_framework.base_implementations.dtype_extraction_test_mixin import (
-    DecimalDtypeExtractionTestMixin,
+    DtypeExtractionTestMixin,
 )
 
 
@@ -176,7 +176,7 @@ class TestFrameworkColumnarValidationAgreesWithHelper:
             validate_columnar_dict(ragged)
 
 
-class TestPythonDictDtypeExtraction(DecimalDtypeExtractionTestMixin):
+class TestPythonDictDtypeExtraction(DtypeExtractionTestMixin):
     """Test PythonDictFramework._extract_column_dtype using shared mixin."""
 
     @pytest.fixture

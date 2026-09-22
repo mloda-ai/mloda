@@ -18,7 +18,7 @@ from tests.test_plugins.compute_framework.base_implementations.dict_interchange_
     DictInterchangeOutputSchemaTestMixin,
 )
 from tests.test_plugins.compute_framework.base_implementations.dtype_extraction_test_mixin import (
-    DecimalDtypeExtractionTestMixin,
+    DtypeExtractionTestMixin,
 )
 from tests.test_plugins.compute_framework.base_implementations.empty_result_test_mixin import (
     EmptyResultFrameworkTestMixin,
@@ -278,7 +278,7 @@ class TestDuckDBFrameworkMerge(DataFrameTestBase):
 
 
 @pytest.mark.skipif(duckdb is None, reason="DuckDB is not installed. Skipping this test.")
-class TestDuckDBDtypeExtraction(DecimalDtypeExtractionTestMixin):
+class TestDuckDBDtypeExtraction(DtypeExtractionTestMixin):
     """Test DuckDBFramework._extract_column_dtype using shared mixin."""
 
     @pytest.fixture

@@ -18,7 +18,7 @@ from tests.test_plugins.compute_framework.base_implementations.dict_interchange_
     DictInterchangeOutputSchemaTestMixin,
 )
 from tests.test_plugins.compute_framework.base_implementations.dtype_extraction_test_mixin import (
-    DecimalDtypeExtractionTestMixin,
+    DtypeExtractionTestMixin,
     DuplicateColumnDtypeExtractionTestMixin,
 )
 from tests.test_plugins.compute_framework.base_implementations.empty_result_test_mixin import (
@@ -103,7 +103,7 @@ class TestPyArrowTableMerge(DataFrameTestBase):
         pass
 
 
-class TestPyArrowDtypeExtraction(DecimalDtypeExtractionTestMixin, DuplicateColumnDtypeExtractionTestMixin):
+class TestPyArrowDtypeExtraction(DtypeExtractionTestMixin, DuplicateColumnDtypeExtractionTestMixin):
     """Test PyArrowTable._extract_column_dtype using shared mixins."""
 
     @pytest.fixture

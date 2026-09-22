@@ -14,7 +14,7 @@ from tests.test_plugins.compute_framework.base_implementations.dict_interchange_
     DictInterchangeOutputSchemaTestMixin,
 )
 from tests.test_plugins.compute_framework.base_implementations.dtype_extraction_test_mixin import (
-    DecimalDtypeExtractionTestMixin,
+    DtypeExtractionTestMixin,
     DuplicateColumnDtypeExtractionTestMixin,
 )
 from tests.test_plugins.compute_framework.base_implementations.empty_result_test_mixin import (
@@ -136,7 +136,7 @@ class TestPandasDataFrameMerge(DataFrameTestBase):
 
 
 @pytest.mark.skipif(pd is None, reason="Pandas is not installed. Skipping this test.")
-class TestPandasDtypeExtraction(DecimalDtypeExtractionTestMixin, DuplicateColumnDtypeExtractionTestMixin):
+class TestPandasDtypeExtraction(DtypeExtractionTestMixin, DuplicateColumnDtypeExtractionTestMixin):
     """Test PandasDataFrame._extract_column_dtype using shared mixin."""
 
     @pytest.fixture

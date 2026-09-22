@@ -47,6 +47,9 @@ GUARDS_FUNCTIONS = (
     "_pattern_named_and_total_groups",
     "_flatten_patterns",
     "_str_reachable_values",
+    "_is_guard_wrapper",
+    "_matcher_carries_guard",
+    "_unwrapped_matcher_function",
 )
 
 # The public moved names, which must NOT come back as FeatureChainParser attributes.

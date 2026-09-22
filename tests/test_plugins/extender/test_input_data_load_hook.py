@@ -437,6 +437,11 @@ class TestDataAccessIdentityOfUriStrings:
                 "postgresql://host/db",
                 id="percent-encoded-question-mark-secret-in-uri",
             ),
+            pytest.param(
+                "postgresql://host/db%23password=hunter2",
+                "postgresql://host/db",
+                id="percent-encoded-hash-secret-in-uri",
+            ),
         ],
     )
     def test_identity_keeps_host_and_path_only(self, uri: str, expected: str) -> None:
@@ -578,6 +583,11 @@ class TestDataAccessIdentityOfSchemeLessConnectionStrings:
             ),
             pytest.param(
                 "password%3Dhunter2", "password%3Dhunter2", id="percent-encoded-pair-without-anchor-not-detected"
+            ),
+            pytest.param(
+                "host.com/db%3Bpassword=hunter2",
+                "host.com/db%3Bpassword=hunter2",
+                id="percent-encoded-semicolon-without-anchor-not-detected",
             ),
         ],
     )
@@ -740,6 +750,9 @@ class TestDataAccessIdentityOfSchemeLessConnectionStrings:
             pytest.param("data/file%3Fname.csv", id="percent-encoded-question-mark-in-file-name"),
             pytest.param("host.com/db%3Flimit=10", id="percent-encoded-question-mark-with-non-secret-key"),
             pytest.param("https://host/a%3Fb.csv", id="percent-encoded-question-mark-in-uri-path"),
+            pytest.param(
+                "postgresql://host/db%3Flimit=10", id="scheme-percent-encoded-question-mark-with-non-secret-key"
+            ),
         ],
     )
     def test_non_connection_strings_are_unchanged(self, value: Any) -> None:

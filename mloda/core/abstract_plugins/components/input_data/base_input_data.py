@@ -109,10 +109,10 @@ def _strip_credential_query(value: str) -> str:
 def _data_access_identity(data_access: Any) -> str:
     """Mapping: sorted key names. str or PurePath: a scheme:// URI keeps scheme, host and path (abfs/abfss/wasb/wasbs,
     case-insensitive, also the container), user info, query and fragment dropped. A scheme-less string with recognized
-    connection or secret keys is identified by those key names. user:pw@host unconditionally drops query and fragment
-    along with the user info; without userinfo, its own query or fragment is dropped only when it holds a recognized
-    or secret key, otherwise left as is. An encoded ?/# anchor and the query/fragment are percent-decoded once before
-    the key scan (a URI path is cut there too); not detected: double encoding, encoded pairs with no ?/# anchor, and
+    connection or secret keys is identified by those key names. user:pw@host unconditionally drops a literal query
+    and fragment along with the user info; any other scheme-less query or fragment is dropped only when it holds a
+    recognized or secret key. That key scan also takes an encoded ?/# as an anchor, in a URI path too, and
+    percent-decodes the tail once; not detected: double encoding, percent-encoded text before any ?/# anchor, and
     a secret carried as a value under an unrecognized key."""
     if isinstance(data_access, Mapping):
         return _format_keys(str(key) for key in data_access)

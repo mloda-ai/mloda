@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import functools
 import re
+from collections.abc import Callable
 from typing import Any
 
 import pytest
@@ -93,6 +94,17 @@ REQUIRES_ORDER_BY = Options(context={OP_TYPE: "first"})
 SATISFIED = Options(context={OP_TYPE: "first", ORDER_BY: "ts"})
 NOT_REQUIRED = Options(context={OP_TYPE: "sum"})
 ONLY_ORDER_BY = Options(context={ORDER_BY: "ts"})
+
+
+class _CallableMatcher:
+    """A callable-instance matcher: no descriptor, so a classmethod wrap would pass it the class."""
+
+    def __call__(self, *args: Any, **kwargs: Any) -> bool:
+        return True
+
+
+def _permissive_matcher(*args: Any, **kwargs: Any) -> bool:
+    return True
 
 
 class TestOverriddenMatcher:
@@ -418,6 +430,44 @@ class TestStaticMethodMatcherRejected:
             match_feature_group_criteria = bare_matcher_no_guard
 
         assert BareFunctionMatcherNoGuardFeatureGroup.match_feature_group_criteria("some_name", Options()) is True
+
+    @pytest.mark.parametrize(
+        "make_matcher",
+        [_CallableMatcher, lambda: functools.partial(_permissive_matcher)],
+        ids=["callable_instance", "functools_partial"],
+    )
+    def test_non_function_callable_matcher_with_required_when_is_rejected_at_class_definition(
+        self, make_matcher: Callable[[], Callable[..., bool]]
+    ) -> None:
+        """A callable instance or partial has no descriptor either: reject it like a bare function."""
+        predicate = CountingPredicate()
+
+        with pytest.raises(ValueError) as excinfo:
+
+            class CallableMatcherFeatureGroup(FeatureGroup):
+                PROPERTY_MAPPING = _mapping(predicate)
+                match_feature_group_criteria = make_matcher()
+
+        message = str(excinfo.value)
+        assert "CallableMatcherFeatureGroup" in message
+        assert "classmethod" in message
+
+    def test_bound_classmethod_from_another_guarded_group_is_accepted(self) -> None:
+        """A bound method keeps its own class binding, so it answers exactly the source group's verdict."""
+        predicate = CountingPredicate()
+
+        class SourceGuardedGroup(FeatureChainParserMixin, FeatureGroup):
+            PREFIX_PATTERN = GUARDED_PATTERN
+            PROPERTY_MAPPING = _mapping(predicate)
+
+        class BorrowedMatcherGroup(FeatureChainParserMixin, FeatureGroup):
+            PREFIX_PATTERN = GUARDED_PATTERN
+            PROPERTY_MAPPING = _mapping(predicate)
+            match_feature_group_criteria = SourceGuardedGroup.match_feature_group_criteria
+
+        for options, expected in ((REQUIRES_ORDER_BY, False), (SATISFIED, True)):
+            assert SourceGuardedGroup.match_feature_group_criteria("x__first_guarded", options) is expected
+            assert BorrowedMatcherGroup.match_feature_group_criteria("x__first_guarded", options) is expected
 
 
 class TestExactlyOnceAcrossInheritance:

@@ -84,6 +84,8 @@ class MetricsExtender(Extender):
 
 Only the extender's own failure is caught: an exception raised by the wrapped function (or by a downstream breaking extender) always propagates, and the wrapped function is never run twice. Concrete extenders can also expose the flag as a constructor argument (for example `MetricsExtender(raise_on_error=True)`) to let callers opt back into breaking behavior.
 
+Once the wrapped call has run, an extender's return value is discarded: it can observe or fail the calculation but not substitute a different result. An extender that never calls the wrapped function has no wrapped result to prefer, so its own return value is used instead (this is what keeps a gate's raise-to-refuse or fallback pattern below working).
+
 A gate (an authorization or identity check that refuses a call by raising) sets `never_fall_back = True` in its class body or `__init__`: its failure always propagates, whatever `raise_on_error` says, and the wrapped function never runs as a fallback. Give a gate a `priority` value strictly lower than every other extender's on its hook, so it sorts outermost (equal values sort in no fixed order); an outer extender that catches errors from `func` could otherwise swallow the refusal. Registry strict mode (`"strict"`, see [Plugin Registry](../in_depth/plugin_registry.md#strict-mode)) drops unregistered extenders, gates included.
 
 #### 5. Reading call facts via HookContext

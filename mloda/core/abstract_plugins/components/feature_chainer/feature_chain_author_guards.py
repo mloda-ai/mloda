@@ -437,14 +437,16 @@ def _reject_staticmethod_matcher(owner: type[Any]) -> None:
         return
 
 
-def _reject_bare_function_matcher(owner: type[Any]) -> None:
-    """Reject a plain-function matcher on a class that would have a guard installed."""
-    if inspect.isfunction(inspect.getattr_static(owner, "match_feature_group_criteria", None)):
-        raise ValueError(
-            f"{owner.__name__} guards its match_feature_group_criteria, but it is a plain function "
-            f"with no classmethod or staticmethod descriptor. Decorate it with @classmethod: the "
-            f"guard is installed as a classmethod and passes the class as the first argument."
-        )
+def _reject_descriptorless_matcher(owner: type[Any]) -> None:
+    """Reject a matcher with no classmethod/staticmethod descriptor (and not a bound method) on a guarded class."""
+    attr = inspect.getattr_static(owner, "match_feature_group_criteria", None)
+    if attr is None or isinstance(attr, (classmethod, staticmethod)) or inspect.ismethod(attr):
+        return
+    raise ValueError(
+        f"{owner.__name__} guards its match_feature_group_criteria, but it is a {type(attr).__name__} "
+        f"with no classmethod or staticmethod descriptor. Decorate it with @classmethod: the "
+        f"guard is installed as a classmethod and passes the class as the first argument."
+    )
 
 
 def install_required_when_guard(owner: type[Any]) -> None:
@@ -468,7 +470,7 @@ def install_required_when_guard(owner: type[Any]) -> None:
         return
 
     _reject_staticmethod_matcher(owner)
-    _reject_bare_function_matcher(owner)
+    _reject_descriptorless_matcher(owner)
 
     matcher = getattr(owner, "match_feature_group_criteria", None)
     if matcher is None:
@@ -528,7 +530,7 @@ def install_name_path_presence_guard(owner: type[Any]) -> None:
     if not FeatureChainParser._name_path_missing_required_keys(Options(), property_mapping):
         return
 
-    _reject_bare_function_matcher(owner)
+    _reject_descriptorless_matcher(owner)
 
     # Wrapping a staticmethod matcher would hide it from _reject_staticmethod_matcher, so the
     # required_when installer's existing definition-time ValueError keeps precedence.

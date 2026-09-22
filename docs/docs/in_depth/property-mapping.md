@@ -579,9 +579,9 @@ The enforcement is installed on the class, not on one matcher, so overriding
 returns `True`. Nested guards (an override that delegates into an already guarded parent) do
 not stack: only the outermost one evaluates, so the predicates run exactly once per match call.
 The matcher must be a `classmethod`; a `staticmethod` matcher on a class that declares
-`required_when` is rejected at class definition. A plain function (no `classmethod` or
-`staticmethod` descriptor) is rejected on any class that carries this guard or the name-path
-presence guard.
+`required_when` is rejected at class definition. A plain function, callable instance, or
+`functools.partial` (no `classmethod` or `staticmethod` descriptor) is rejected on any class that
+carries this guard or the name-path presence guard.
 
 The guard is installed at class definition, so mutating `PROPERTY_MAPPING` or replacing
 `match_feature_group_criteria` after the class body escapes it.

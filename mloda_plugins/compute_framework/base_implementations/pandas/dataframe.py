@@ -49,24 +49,25 @@ class PandasDataFrame(ComputeFramework):
     def _extract_column_names(self, data: Any) -> set[str]:
         return set(data.columns)
 
-    def _get_first_column_by_name(self, data: Any, column_name: str) -> Any | None:
-        for idx, name in enumerate(data.columns):
+    def _first_column_dtype(self, data: Any, column_name: str) -> Any | None:
+        """Return column_name's dtype from its first occurrence; indexing by a duplicated label
+        returns a DataFrame, which has no .dtype.
+        """
+        for name, dtype in zip(data.columns, data.dtypes):
             if name == column_name:
-                return data.iloc[:, idx]
+                return dtype
         return None
 
     def _extract_column_dtype(self, data: Any, column_name: str) -> str | None:
-        column = self._get_first_column_by_name(data, column_name)
-        if column is None:
+        dtype = self._first_column_dtype(data, column_name)
+        if dtype is None:
             return None
-        return str(column.dtype)
+        return str(dtype)
 
     def _extract_column_data_type(self, data: Any, column_name: str) -> DataType | None:
-        column = self._get_first_column_by_name(data, column_name)
-        if column is None:
+        dtype = self._first_column_dtype(data, column_name)
+        if dtype is None:
             return None
-
-        dtype = column.dtype
 
         if isinstance(dtype, pd.StringDtype):
             return DataType.STRING

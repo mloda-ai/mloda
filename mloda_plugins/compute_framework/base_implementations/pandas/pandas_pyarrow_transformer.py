@@ -13,6 +13,13 @@ except ImportError:
     pa = None  # type: ignore[assignment, unused-ignore]
 
 
+def _decimal_types_mapper(arrow_type: Any) -> Any | None:
+    """Keep decimal columns Arrow-backed to preserve precision and scale; numpy dtypes otherwise."""
+    if pa.types.is_decimal(arrow_type):
+        return pd.ArrowDtype(arrow_type)
+    return None
+
+
 class PandasPyArrowTransformer(BaseTransformer):
     """
     Transformer for converting between Pandas DataFrame and PyArrow Table.
@@ -60,4 +67,4 @@ class PandasPyArrowTransformer(BaseTransformer):
 
     @classmethod
     def transform_other_fw_to_fw(cls, data: Any, framework_connection_object: Any | None = None) -> Any:
-        return pa.Table.to_pandas(data)
+        return pa.Table.to_pandas(data, types_mapper=_decimal_types_mapper)

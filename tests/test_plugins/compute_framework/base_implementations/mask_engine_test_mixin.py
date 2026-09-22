@@ -8,9 +8,13 @@ Each framework-specific test class should inherit from this mixin and provide:
 - evaluate_mask method: Converts framework-specific mask to a Python list of booleans
 - is_boolean_mask method: Checks that a mask is boolean-typed
 - apply_mask method: Selects rows with the mask the framework's native way, returns column -> values
+- decimal_sample_data fixture: Returns a decimal(10, 2) column d with values [12.34, 5.50, null]
+
+A framework that cannot support a test overrides it and skips it with a reason.
 """
 
 from abc import abstractmethod
+from decimal import Decimal
 from typing import Any, ClassVar
 
 import pytest
@@ -33,6 +37,7 @@ class MaskEngineTestMixin:
     - is_boolean_mask(mask, data) checking that a mask is boolean-typed
     - apply_mask(mask, data) selecting rows with the mask the framework's native way and
       returning the result as a column -> values dict
+    - decimal_sample_data fixture returning a decimal(10, 2) column d: [12.34, 5.50, null]
     """
 
     mask_engine_class: ClassVar[type[BaseMaskEngine]]
@@ -63,6 +68,15 @@ class MaskEngineTestMixin:
     @abstractmethod
     def apply_mask(self, mask: Any, data: Any) -> dict[str, list[Any]]:
         raise NotImplementedError
+
+    @pytest.fixture
+    @abstractmethod
+    def decimal_sample_data(self) -> Any:
+        raise NotImplementedError
+
+    def matched_rows(self, mask: Any, data: Any) -> list[bool]:
+        """Polars yields None for a null row where other engines yield False; both mean not matched."""
+        return [bool(v) for v in self.evaluate_mask(mask, data)]
 
     def test_equal(self, engine: type[BaseMaskEngine], sample_data: Any) -> None:
         mask = engine.equal(sample_data, "status", "active")
@@ -174,3 +188,13 @@ class MaskEngineTestMixin:
     def test_apply_all_true_on_empty_data_keeps_columns(self, engine: type[BaseMaskEngine], empty_data: Any) -> None:
         """Pins #1535: selecting with all_true on zero rows must keep every column."""
         assert self.apply_mask(engine.all_true(empty_data), empty_data) == {"status": [], "value": []}
+
+    def test_is_in_decimal(self, engine: type[BaseMaskEngine], decimal_sample_data: Any) -> None:
+        mask = engine.is_in(decimal_sample_data, "d", [Decimal("12.34")])
+        assert self.matched_rows(mask, decimal_sample_data) == [True, False, False]
+
+    def test_is_in_decimal_unrepresentable_values_match_nothing(
+        self, engine: type[BaseMaskEngine], decimal_sample_data: Any
+    ) -> None:
+        mask = engine.is_in(decimal_sample_data, "d", [Decimal("12.345"), Decimal("99999999999.99")])
+        assert self.matched_rows(mask, decimal_sample_data) == [False, False, False]

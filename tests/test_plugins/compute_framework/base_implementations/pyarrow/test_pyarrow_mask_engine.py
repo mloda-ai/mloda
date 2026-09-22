@@ -1,3 +1,4 @@
+from decimal import Decimal
 from typing import Any
 
 import pyarrow as pa
@@ -26,6 +27,11 @@ class TestPyArrowMaskEngine(MaskEngineTestMixin):
     @pytest.fixture
     def empty_data(self) -> Any:
         return pa.table({"status": pa.array([], type=pa.string()), "value": pa.array([], type=pa.int64())})
+
+    @pytest.fixture
+    def decimal_sample_data(self) -> Any:
+        values = [Decimal("12.34"), Decimal("5.50"), None]
+        return pa.table({"d": pa.array(values, type=pa.decimal128(10, 2))})
 
     def evaluate_mask(self, mask: Any, data: Any) -> list[bool]:
         return mask.to_pylist()  # type: ignore[no-any-return]

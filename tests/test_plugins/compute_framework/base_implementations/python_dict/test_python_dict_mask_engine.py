@@ -1,3 +1,4 @@
+from decimal import Decimal
 from typing import Any
 
 import pytest
@@ -23,6 +24,10 @@ class TestPythonDictMaskEngine(MaskEngineTestMixin):
     @pytest.fixture
     def empty_data(self) -> Any:
         return {"status": [], "value": []}
+
+    @pytest.fixture
+    def decimal_sample_data(self) -> Any:
+        return {"d": [Decimal("12.34"), Decimal("5.50"), None]}
 
     def evaluate_mask(self, mask: Any, data: Any) -> list[bool]:
         return list(mask)

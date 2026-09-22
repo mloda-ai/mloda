@@ -1,5 +1,6 @@
 """Unit tests for the DuckDBFilterEngine class."""
 
+from decimal import Decimal
 from typing import Any
 import logging
 
@@ -59,9 +60,17 @@ class TestDuckDBFilterEngine(FilterEngineTestMixin, TimeRangeFilterEngineTestMix
         arrow_table = pa.Table.from_pydict({"id": [1, 2, 3, 4, 5], "category": ["A", None, "B", None, "C"]})
         return DuckdbRelation.from_arrow(connection, arrow_table)
 
+    @pytest.fixture
+    def decimal_sample_data(self, connection: Any) -> Any:
+        values = [Decimal("12.34"), Decimal("5.50"), Decimal("99.99"), None]
+        return DuckdbRelation.from_arrow(connection, pa.table({"d": pa.array(values, type=pa.decimal128(10, 2))}))
+
+    def get_decimal_column_dtype(self, data: Any) -> Any:
+        return data.types[data.columns.index("d")]
+
     def get_column_values(self, result: Any, column: str) -> list[Any]:
-        """Extract column values from DuckDB relation via pandas DataFrame."""
-        return result.df()[column].tolist()  # type: ignore[no-any-return]
+        """Extract column values from DuckDB relation via Arrow."""
+        return result.to_arrow_table()[column].to_pylist()  # type: ignore[no-any-return]
 
     @pytest.fixture
     def sample_time_data(self, connection: Any) -> Any:

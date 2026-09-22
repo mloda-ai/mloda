@@ -1,6 +1,8 @@
+from decimal import Decimal
 from typing import Any
 
 import pandas as pd
+import pyarrow as pa
 import pytest
 
 from mloda_plugins.compute_framework.base_implementations.pandas.pandas_mask_engine import (
@@ -26,6 +28,11 @@ class TestPandasMaskEngine(MaskEngineTestMixin):
     @pytest.fixture
     def empty_data(self) -> Any:
         return pd.DataFrame({"status": pd.Series([], dtype=str), "value": pd.Series([], dtype="int64")})
+
+    @pytest.fixture
+    def decimal_sample_data(self) -> Any:
+        values = [Decimal("12.34"), Decimal("5.50"), None]
+        return pd.DataFrame({"d": pd.Series(values, dtype=pd.ArrowDtype(pa.decimal128(10, 2)))})
 
     def evaluate_mask(self, mask: Any, data: Any) -> list[bool]:
         return list(mask)

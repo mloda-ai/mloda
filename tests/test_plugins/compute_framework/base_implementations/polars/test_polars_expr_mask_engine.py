@@ -4,6 +4,7 @@ This file adds Polars-expr-specific unit tests that verify pl.Expr return types
 and a LazyFrame end-to-end test.
 """
 
+from decimal import Decimal
 from typing import Any
 
 import pytest
@@ -40,6 +41,10 @@ class TestPolarsExprMaskEngine(MaskEngineTestMixin):
     @pytest.fixture
     def empty_data(self) -> Any:
         return pl.LazyFrame({"status": pl.Series([], dtype=pl.String), "value": pl.Series([], dtype=pl.Int64)})
+
+    @pytest.fixture
+    def decimal_sample_data(self) -> Any:
+        return pl.LazyFrame({"d": [Decimal("12.34"), Decimal("5.50"), None]}, schema={"d": pl.Decimal(10, 2)})
 
     def evaluate_mask(self, mask: Any, data: Any) -> list[bool]:
         result: list[bool] = data.select(mask.alias("__mask")).collect()["__mask"].to_list()

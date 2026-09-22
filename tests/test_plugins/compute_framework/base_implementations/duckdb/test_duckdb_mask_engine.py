@@ -1,3 +1,4 @@
+from decimal import Decimal
 from typing import Any
 
 import pyarrow as pa
@@ -38,6 +39,11 @@ class TestDuckDBSqlMaskEngine(SqlMaskEngineTestMixin):
     def empty_data(self, connection: Any) -> Any:
         table = pa.table({"status": pa.array([], type=pa.string()), "value": pa.array([], type=pa.int64())})
         return DuckdbRelation.from_arrow(connection, table)
+
+    @pytest.fixture
+    def decimal_sample_data(self, connection: Any) -> Any:
+        values = [Decimal("12.34"), Decimal("5.50"), None]
+        return DuckdbRelation.from_arrow(connection, pa.table({"d": pa.array(values, type=pa.decimal128(10, 2))}))
 
     def evaluate_mask(self, mask: Any, data: DuckdbRelation) -> list[bool]:
         bool_expr = f"CASE WHEN {mask} THEN 1 ELSE 0 END AS __match__"

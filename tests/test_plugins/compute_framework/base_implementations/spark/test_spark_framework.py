@@ -21,6 +21,7 @@ ensure proper resource management across all test methods.
 """
 
 import os
+from decimal import Decimal
 from typing import Any
 from mloda.user import DataType
 from mloda.user import JoinType
@@ -65,6 +66,7 @@ if PYSPARK_AVAILABLE:
         LongType,
         FloatType,
         DoubleType,
+        DecimalType,
         TimestampType,
     )
     import pyspark
@@ -77,6 +79,7 @@ else:
     LongType = None
     FloatType = None
     DoubleType = None
+    DecimalType = None
     TimestampType = None
     pyspark = None
 
@@ -335,6 +338,11 @@ class TestSparkDtypeExtraction(DtypeExtractionTestMixin):
             {"int_col": 3, "str_col": "c", "float_col": 3.0},
         ]
         return spark_session.createDataFrame(data)
+
+    @pytest.fixture
+    def decimal_sample_data(self, spark_session: Any) -> Any:
+        schema = StructType([StructField("d", DecimalType(10, 2))])
+        return spark_session.createDataFrame([(Decimal("12.34"),), (Decimal("5.50"),), (None,)], schema=schema)
 
 
 @pytest.mark.skipif(not PYSPARK_AVAILABLE, reason=SKIP_REASON or "PySpark is not available")

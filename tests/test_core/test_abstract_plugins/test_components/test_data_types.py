@@ -51,6 +51,9 @@ class TestFromArrowType:
         assert DataType.from_arrow_type(pa.decimal128(10, 2)) == DataType.DECIMAL
         assert DataType.from_arrow_type(pa.decimal128(20, 5)) == DataType.DECIMAL
 
+    def test_to_arrow_type_decimal_is_decimal128_38_18(self) -> None:
+        assert DataType.to_arrow_type(DataType.DECIMAL) == pa.decimal128(38, 18)
+
     def test_from_arrow_type_round_trip(self) -> None:
         """Test that converting to arrow and back preserves the DataType."""
         all_data_types = [

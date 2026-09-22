@@ -1,5 +1,6 @@
 """Unit tests for the PyArrowFilterEngine class."""
 
+from decimal import Decimal
 from typing import Any
 
 import pytest
@@ -39,6 +40,14 @@ class TestPyArrowFilterEngine(FilterEngineTestMixin):
     def nullable_category_sample_data(self) -> Any:
         """Create a sample PyArrow table with null categories for testing."""
         return pa.Table.from_pydict({"id": [1, 2, 3, 4, 5], "category": ["A", None, "B", None, "C"]})
+
+    @pytest.fixture
+    def decimal_sample_data(self) -> Any:
+        values = [Decimal("12.34"), Decimal("5.50"), Decimal("99.99"), None]
+        return pa.table({"d": pa.array(values, type=pa.decimal128(10, 2))})
+
+    def get_decimal_column_dtype(self, data: Any) -> Any:
+        return data["d"].type
 
     def get_column_values(self, result: Any, column: str) -> list[Any]:
         """Extract column values from PyArrow table."""

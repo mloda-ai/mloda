@@ -1,3 +1,5 @@
+from decimal import Decimal
+
 import pytest
 
 from mloda_plugins.compute_framework.base_implementations.sql.sql_utils import (
@@ -40,6 +42,22 @@ class TestQuoteValue:
 
     def test_float(self) -> None:
         assert quote_value(3.14) == "3.14"
+
+    def test_decimal(self) -> None:
+        assert quote_value(Decimal("12.34")) == "12.34"
+        assert quote_value(Decimal("-0.50")) == "-0.50"
+        assert quote_value(Decimal("100")) == "100"
+
+    def test_decimal_exponent_form_is_positional(self) -> None:
+        assert quote_value(Decimal("1E+2")) == "100"
+
+    def test_decimal_nan_raises(self) -> None:
+        with pytest.raises(ValueError):
+            quote_value(Decimal("NaN"))
+
+    def test_decimal_infinity_raises(self) -> None:
+        with pytest.raises(ValueError):
+            quote_value(Decimal("Infinity"))
 
     def test_string(self) -> None:
         assert quote_value("hello") == "'hello'"

@@ -1,3 +1,4 @@
+from decimal import Decimal
 from typing import Any
 
 import pytest
@@ -31,6 +32,10 @@ class TestPolarsMaskEngine(MaskEngineTestMixin):
     @pytest.fixture
     def empty_data(self) -> Any:
         return pl.DataFrame({"status": pl.Series([], dtype=pl.String), "value": pl.Series([], dtype=pl.Int64)})
+
+    @pytest.fixture
+    def decimal_sample_data(self) -> Any:
+        return pl.DataFrame({"d": [Decimal("12.34"), Decimal("5.50"), None]}, schema={"d": pl.Decimal(10, 2)})
 
     def evaluate_mask(self, mask: Any, data: Any) -> list[bool]:
         return list(mask)

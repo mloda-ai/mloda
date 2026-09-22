@@ -11,6 +11,7 @@ Each framework-specific test class should inherit from this mixin and provide:
 - apply_mask method: Filters data by a SQL condition, returns column -> values
 """
 
+from decimal import Decimal
 from typing import Any
 
 import pytest
@@ -54,6 +55,10 @@ class SqlMaskEngineTestMixin(MaskEngineTestMixin):
         assert '"value"' in result
         assert "10" in result
 
+    def test_equal_decimal_value(self, engine: type[SqlBaseMaskEngine], sample_data: Any) -> None:
+        result = engine.equal(sample_data, "value", Decimal("12.34"))
+        assert result == '"value" = 12.34'
+
     def test_greater_equal_returns_condition_string(self, engine: type[SqlBaseMaskEngine], sample_data: Any) -> None:
         result = engine.greater_equal(sample_data, "value", 20)
         assert isinstance(result, str)
@@ -89,6 +94,10 @@ class SqlMaskEngineTestMixin(MaskEngineTestMixin):
         assert "IN" in result
         assert "'active'" in result
         assert "'inactive'" in result
+
+    def test_is_in_decimal_values(self, engine: type[SqlBaseMaskEngine], sample_data: Any) -> None:
+        result = engine.is_in(sample_data, "value", [Decimal("12.34"), Decimal("5.50")])
+        assert result == '"value" IN (12.34, 5.50)'
 
     def test_combine_and_joins_conditions(self, engine: type[SqlBaseMaskEngine], sample_data: Any) -> None:
         cond1 = engine.greater_equal(sample_data, "value", 20)

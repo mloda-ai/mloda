@@ -154,6 +154,21 @@ Not every backend's native type system can distinguish every precision mloda dec
 | SQLite | no (INTEGER affinity) | no (REAL affinity) | no (stored as TEXT) |
 | PythonDict | no (`type.__name__` is "int") | no (Python float is 64-bit) | no (`datetime.datetime` is microsecond) |
 
+## Decimal Columns
+
+`DataType.DECIMAL` means a decimal of any precision and scale: a `Feature` cannot declare precision or scale, and validation checks only the family. `to_arrow_type` maps `DECIMAL` to `decimal128(38, 18)` only when mloda must build an Arrow schema without data (the SQLite reader). `DECIMAL` never coerces to or from the float or integer family, in strict and lenient mode alike: exactness is the reason to declare it.
+
+| Framework | Extraction | Filter, mask, merge | PyArrow transformer |
+|---|---|---|---|
+| Pandas | `DECIMAL` for an Arrow-backed decimal dtype; `object` columns are not validated (indistinguishable from object strings) | exact | Arrow-backed decimals are kept in both directions; an `object` column of `Decimal` has its precision inferred from the values on the way out, and comes back Arrow-backed after a round trip through Arrow |
+| Polars (eager / lazy) | `DECIMAL` | exact (including `is_in`; values the column cannot represent never match) | exact |
+| PyArrow | `DECIMAL` | exact | native |
+| DuckDB | `DECIMAL` | exact (a `Decimal` value renders as an exact decimal literal) | exact |
+| SQLite | no decimal storage type: inserting `Decimal` values fails | a `Decimal` filter or mask value renders as a numeric literal, which SQLite compares as REAL against a TEXT column | fails |
+| PythonDict | `DECIMAL` | exact | precision inferred from the values (a dict carries no schema) |
+| Spark | `DECIMAL` | mask `is_in` exact; filter and merge not checked | not checked (no schema is passed on the way in) |
+| Iceberg | `DECIMAL` | filter expressions exact for the column scale (other scales raise), no mask or merge | pass-through |
+
 ## Execution Plan Grouping
 
 Features with different explicit data types are separated into different execution groups at plan time. This allows type-specific processing paths.

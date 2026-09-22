@@ -59,6 +59,20 @@ class TestSqliteFilterEngine(FilterEngineTestMixin, TimeRangeFilterEngineTestMix
     def get_id_column_values(self, result: Any) -> list[int]:
         return list(result.df()["id"].tolist())
 
+    @pytest.mark.skip(reason="SQLite has no decimal storage type; a decimal column cannot be inserted")
+    def test_min_filter_decimal(self, filter_engine: Any, decimal_sample_data: Any) -> None: ...
+
+    @pytest.mark.skip(reason="SQLite has no decimal storage type; a decimal column cannot be inserted")
+    def test_categorical_inclusion_decimal(self, filter_engine: Any, decimal_sample_data: Any) -> None: ...
+
+    @pytest.mark.skip(reason="SQLite has no decimal storage type; a decimal column cannot be inserted")
+    def test_categorical_inclusion_decimal_unrepresentable_values_match_nothing(
+        self, filter_engine: Any, decimal_sample_data: Any
+    ) -> None: ...
+
+    @pytest.mark.skip(reason="SQLite has no decimal storage type; a decimal column cannot be inserted")
+    def test_categorical_inclusion_decimal_with_null(self, filter_engine: Any, decimal_sample_data: Any) -> None: ...
+
     def test_filter_with_null_values(self, connection: sqlite3.Connection) -> None:
         arrow_table = pa.Table.from_pydict(
             {

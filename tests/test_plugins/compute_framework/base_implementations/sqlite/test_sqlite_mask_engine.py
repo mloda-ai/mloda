@@ -3,6 +3,7 @@ from typing import Any
 import pyarrow as pa
 import pytest
 
+from mloda.provider import BaseMaskEngine
 from mloda_plugins.compute_framework.base_implementations.sql.sql_utils import quote_ident
 from mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_mask_engine import (
     SqliteMaskEngine,
@@ -41,3 +42,11 @@ class TestSqliteSqlMaskEngine(SqlMaskEngineTestMixin):
     def apply_mask(self, mask: Any, data: SqliteRelation) -> dict[str, list[Any]]:
         result: dict[str, list[Any]] = data.filter(mask).to_arrow_table().to_pydict()
         return result
+
+    @pytest.mark.skip(reason="SQLite has no decimal storage type; a decimal column cannot be inserted")
+    def test_is_in_decimal(self, engine: type[BaseMaskEngine], decimal_sample_data: Any) -> None: ...
+
+    @pytest.mark.skip(reason="SQLite has no decimal storage type; a decimal column cannot be inserted")
+    def test_is_in_decimal_unrepresentable_values_match_nothing(
+        self, engine: type[BaseMaskEngine], decimal_sample_data: Any
+    ) -> None: ...

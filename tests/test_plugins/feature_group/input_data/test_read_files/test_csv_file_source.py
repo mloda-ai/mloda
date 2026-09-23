@@ -23,11 +23,10 @@ from __future__ import annotations
 
 import csv
 import os
-import sys
 import tempfile
 from collections.abc import Iterator
 from pathlib import Path
-from typing import Any, cast
+from typing import Any
 
 import pytest
 
@@ -215,11 +214,40 @@ class TestCsvReaderCountRows:
         for candidate in (csv_path_with_blanks_and_embedded_newline, Path(csv_path_with_blanks_and_embedded_newline)):
             assert CsvReader.count_rows(candidate, PythonDictFramework) == expected
 
-    def test_count_rows_still_counts_without_pyarrow(
-        self, monkeypatch: pytest.MonkeyPatch, csv_path_with_blanks_and_embedded_newline: str
-    ) -> None:
-        monkeypatch.setitem(cast(dict[str, Any], sys.modules), "pyarrow", None)
-        assert CsvReader.count_rows(csv_path_with_blanks_and_embedded_newline, PythonDictFramework) == 2
+    def test_count_rows_raises_value_error_on_ragged_row_like_the_transformer(self, tmp_path: Path) -> None:
+        """A short data row is a ValueError in FileSourceDictTransformer; count_rows must match."""
+        path = tmp_path / "ragged.csv"
+        with open(path, "w", newline="") as f:
+            writer = csv.writer(f)
+            writer.writerow(["A", "B"])
+            writer.writerow(["1"])
+
+        transformer_map = ComputeFrameworkTransformer().transformer_map
+        transformer = transformer_map[(FileSource, dict)]
+        source = FileSource(path=str(path), format="csv", columns=("A", "B"))
+
+        with pytest.raises(ValueError):
+            transformer.transform(FileSource, dict, source, None)
+        with pytest.raises(ValueError):
+            CsvReader.count_rows(str(path), PythonDictFramework)
+
+    def test_count_rows_rejects_non_path_data_access_under_dict_framework(self) -> None:
+        with pytest.raises(ValueError):
+            CsvReader.count_rows(DataAccessCollection(files={"dummy.csv"}), PythonDictFramework)
+
+    def test_count_rows_raises_oserror_for_absent_file_under_dict_framework(self, tmp_path: Path) -> None:
+        with pytest.raises(OSError):
+            CsvReader.count_rows(str(tmp_path / "absent.csv"), PythonDictFramework)
+
+    def test_count_rows_counts_zero_for_empty_and_header_only_files(self, tmp_path: Path) -> None:
+        empty_path = tmp_path / "empty.csv"
+        empty_path.write_bytes(b"")
+        assert CsvReader.count_rows(str(empty_path), PythonDictFramework) == 0
+
+        header_only_path = tmp_path / "header_only.csv"
+        with open(header_only_path, "w", newline="") as f:
+            csv.writer(f).writerow(["A", "B"])
+        assert CsvReader.count_rows(str(header_only_path), PythonDictFramework) == 0
 
     def test_count_rows_is_none_under_non_dict_frameworks(self, csv_path_with_blanks_and_embedded_newline: str) -> None:
         assert CsvReader.count_rows(csv_path_with_blanks_and_embedded_newline, PyArrowTable) is None

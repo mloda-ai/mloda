@@ -78,7 +78,7 @@ Readers are classified structurally; no reader code is executed for classificati
 
 ### Row counts
 
-`BaseInputData.count_rows(data_access, compute_framework) -> int | None` returns the row count of `data_access` without loading it, or `None` when only a read can tell (the default). `ParquetReader`, `OrcReader`, and `FeatherReader` count from file metadata for every compute framework; `CsvReader` only under PythonDict, since other frameworks read CSV through pyarrow, whose row split can differ. A subclass overriding `load_data` gets `None` unless it also overrides `count_rows`. Filters are not applied to the count.
+`BaseInputData.count_rows(data_access, compute_framework) -> int | None` returns the row count of `data_access` without loading it, or `None` when only a read can tell (the default); it raises `ImportError` when a backend it needs is missing, and `OSError`/`ValueError` for a non-path, missing, or unreadable source. `ParquetReader`, `OrcReader`, and `FeatherReader` count from file metadata for every compute framework; `CsvReader` only under PythonDict, since other frameworks read CSV through pyarrow, whose row split can differ. A subclass overriding `load_data` gets `None` unless it also overrides `count_rows`. The count is of `data_access` itself, not of the step's output: filters, extenders, and feature-group logic may change what the step actually reports.
 
 ### Selecting among sibling readers
 

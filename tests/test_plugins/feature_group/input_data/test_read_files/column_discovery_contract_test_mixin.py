@@ -4,6 +4,7 @@ Without its pyarrow submodule, a reader raises ImportError naming mloda[pyarrow]
 get_column_names, describe_columns, load_data, and count_rows. Unprefixed so pytest skips it standalone.
 """
 
+import shutil
 import sys
 from collections.abc import Iterator
 from pathlib import Path
@@ -131,6 +132,18 @@ class ColumnDiscoveryContractTestMixin:
             return
         with pytest.raises(ImportError, match=r"mloda\[pyarrow\]"):
             self.reader_cls.count_rows(absent, PyArrowTable)
+
+    def test_count_rows_raises_oserror_for_a_directory_data_access(self, data_file: str, tmp_path: Path) -> None:
+        """A directory is not this reader's file; it must not be silently summed as a dataset."""
+        directory = tmp_path / f"dir{self.reader_cls.suffix()[0]}"
+        directory.mkdir()
+        shutil.copyfile(data_file, directory / "inner.arrow")
+
+        if self.expected_row_count is None:
+            assert self.reader_cls.count_rows(str(directory), PyArrowTable) is None
+            return
+        with pytest.raises(OSError):
+            self.reader_cls.count_rows(str(directory), PyArrowTable)
 
     def test_count_rows_reports_none_for_a_load_data_overriding_subclass(self, data_file: str) -> None:
         base = self.reader_cls

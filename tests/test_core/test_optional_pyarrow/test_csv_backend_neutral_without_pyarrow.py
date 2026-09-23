@@ -100,12 +100,16 @@ with open(path, "w", newline="") as f:
     writer.writerow(["2", "4"])
 
 try:
+    from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import (
+        PythonDictFramework,
+    )
     from mloda_plugins.feature_group.input_data.read_files.csv import CsvReader
 
     cols = list(CsvReader.get_column_names(path))
     print("COLS:" + ",".join(cols))
     if cols == ["A", "B"]:
         print("OK")
+    print("COUNT:" + str(CsvReader.count_rows(path, PythonDictFramework)))
     sys.exit(0)
 except Exception as e:
     print("FAILED:" + type(e).__name__ + ":" + str(e))
@@ -146,4 +150,7 @@ def test_get_column_names_uses_stdlib_without_pyarrow() -> None:
     )
     assert "OK" in result.stdout.splitlines(), (
         f"Expected standalone OK sentinel. Got stdout:\n{result.stdout}\nstderr:\n{result.stderr}"
+    )
+    assert "COUNT:2" in result.stdout, (
+        f"Expected COUNT:2 sentinel (stdlib-only row count). Got stdout:\n{result.stdout}\nstderr:\n{result.stderr}"
     )

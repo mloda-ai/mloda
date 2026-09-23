@@ -173,5 +173,14 @@ class CsvReader(ReadFile):
         file_name = cls._file_path(data_access)
         with open(file_name, newline="", encoding="utf-8-sig") as f:
             reader = csv.reader(f)
-            next(reader, None)
-            return sum(1 for row in reader if row)
+            header = next(reader, [])
+            count = 0
+            for row_number, row in enumerate(reader, start=1):
+                if not row:
+                    continue
+                if len(row) != len(header):
+                    raise ValueError(
+                        f"Ragged row {row_number} in {file_name}: expected {len(header)} columns, got {len(row)}."
+                    )
+                count += 1
+            return count

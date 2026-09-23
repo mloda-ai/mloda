@@ -132,7 +132,9 @@ class FeatherReader(ReadFile):
         if cls._is_overridden(FeatherReader, "load_data"):
             return None
         pyarrow_dataset = require("pyarrow.dataset", "counting Feather rows")
+        pyarrow_fs = require("pyarrow.fs", "counting Feather rows")
         file_name = cls._file_path(data_access)
-        # Reads batch headers only; ipc get_batch would decompress.
-        count: int = pyarrow_dataset.dataset(file_name, format="ipc").count_rows()
+        # One local file, not a dataset: a directory or missing path raises OSError, no URI fetch.
+        fragment = pyarrow_dataset.IpcFileFormat().make_fragment(file_name, filesystem=pyarrow_fs.LocalFileSystem())
+        count: int = fragment.count_rows()
         return count

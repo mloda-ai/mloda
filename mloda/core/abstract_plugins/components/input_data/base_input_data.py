@@ -639,7 +639,8 @@ class BaseInputData(ABC):
 
     @classmethod
     def count_rows(cls, data_access: Any, compute_framework: "type[ComputeFramework]") -> int | None:
-        """Rows of data_access without loading its data; None when only a read can tell."""
+        """Rows of data_access without loading its data; None when only a read can tell.
+        Raises ImportError (backend missing), or OSError/ValueError (non-path, missing or unreadable source)."""
         return None
 
     @classmethod

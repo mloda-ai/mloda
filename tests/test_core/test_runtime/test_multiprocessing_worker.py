@@ -64,6 +64,13 @@ class _RaisingCommand:
         raise RuntimeError("command boom")
 
 
+class _UnprintableRaisingCommand:
+    """Module-level so it pickles through the spawn-context queue."""
+
+    def execute(self, *args: Any, **kwargs: Any) -> Any:
+        raise _UnprintableError()
+
+
 _WORKER_LOGGER_NAME = "mloda.core.runtime.worker.multiprocessing_worker"
 
 
@@ -153,6 +160,25 @@ class TestWorkerReportsChildBootstrapExceptionThroughTheErrorChannel:
         assert "root" not in {r.name for r in caplog.records}
         assert not [r for r in caplog.records if "Traceback" in r.getMessage()]
 
+    def test_bootstrap_exception_whose_str_raises_is_still_reported_and_stops(self) -> None:
+        ctx = mp_spawn_context()
+        command_queue: multiprocessing.Queue[Any] = ctx.Queue()
+        result_queue: multiprocessing.Queue[Any] = ctx.Queue()
+        cfw_register = Mock(spec=CfwManager)
+        cfw_register.get_location.return_value = "grpc://localhost:9999"
+        boom = _UnprintableError()
+        bootstrap = Mock(side_effect=boom)
+        cfw_register.get_run_context.return_value = RunContext(child_bootstrap=bootstrap)
+        cfw = PythonDictFramework(mode=ParallelizationMode.MULTIPROCESSING, children_if_root=frozenset())
+
+        worker(command_queue, result_queue, cfw_register, cfw, uuid4(), worker_index=0)
+
+        cfw_register.set_error.assert_called_once()
+        call_args = cfw_register.set_error.call_args
+        assert call_args.args[0].startswith("An error occurred: _UnprintableError\n")
+        assert call_args.kwargs.get("exception") is boom
+        assert command_queue.get(timeout=2) == "STOP"
+
 
 class TestWorkerReportsCommandExceptionThroughTheErrorChannel:
     def test_command_exception_is_reported_via_set_error_and_stop_without_logging_a_traceback(
@@ -177,6 +203,24 @@ class TestWorkerReportsCommandExceptionThroughTheErrorChannel:
 
         assert "root" not in {r.name for r in caplog.records}
         assert not [r for r in caplog.records if "Traceback" in r.getMessage()]
+
+    def test_command_exception_whose_str_raises_is_still_reported_and_stops(self) -> None:
+        ctx = mp_spawn_context()
+        command_queue: multiprocessing.Queue[Any] = ctx.Queue()
+        result_queue: multiprocessing.Queue[Any] = ctx.Queue()
+        cfw_register = Mock(spec=CfwManager)
+        cfw_register.get_location.return_value = "grpc://localhost:9999"
+        cfw_register.get_run_context.return_value = RunContext()
+        cfw = PythonDictFramework(mode=ParallelizationMode.MULTIPROCESSING, children_if_root=frozenset())
+        command_queue.put(_UnprintableRaisingCommand())
+
+        worker(command_queue, result_queue, cfw_register, cfw, uuid4(), worker_index=0)
+
+        cfw_register.set_error.assert_called_once()
+        call_args = cfw_register.set_error.call_args
+        assert call_args.args[0].startswith("An error occurred: _UnprintableError\n")
+        assert isinstance(call_args.kwargs.get("exception"), _UnprintableError)
+        assert command_queue.get(timeout=2) == "STOP"
 
 
 class TestWorkerLogsCriticalLocationErrorOnItsOwnLogger:

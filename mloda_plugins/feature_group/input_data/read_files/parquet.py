@@ -1,9 +1,12 @@
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from mloda.core.optional_dependency import require
 from mloda.provider import FeatureSet
 from mloda.user import DataType
 from mloda_plugins.feature_group.input_data.read_file import ReadFile
+
+if TYPE_CHECKING:
+    from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 
 
 class ParquetReader(ReadFile):
@@ -121,3 +124,12 @@ class ParquetReader(ReadFile):
         file_name = cls._file_path(data_access)
         parquet_file = pyarrow_parquet.ParquetFile(file_name)
         return {field.name: DataType.from_arrow_type_safe(field.type) for field in parquet_file.schema_arrow}
+
+    @classmethod
+    def count_rows(cls, data_access: Any, compute_framework: "type[ComputeFramework]") -> int | None:
+        if cls._is_overridden(ParquetReader, "load_data"):
+            return None
+        pyarrow_parquet = require("pyarrow.parquet", "reading Parquet files")
+        file_name = cls._file_path(data_access)
+        num_rows: int = pyarrow_parquet.ParquetFile(file_name).metadata.num_rows
+        return num_rows

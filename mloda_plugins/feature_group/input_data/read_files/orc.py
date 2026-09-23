@@ -1,9 +1,12 @@
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from mloda.core.optional_dependency import require
 from mloda.provider import FeatureSet
 from mloda.user import DataType
 from mloda_plugins.feature_group.input_data.read_file import ReadFile
+
+if TYPE_CHECKING:
+    from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 
 
 class OrcReader(ReadFile):
@@ -120,3 +123,12 @@ class OrcReader(ReadFile):
         file_name = cls._file_path(data_access)
         schema = pyarrow_orc.ORCFile(file_name).schema
         return {field.name: DataType.from_arrow_type_safe(field.type) for field in schema}
+
+    @classmethod
+    def count_rows(cls, data_access: Any, compute_framework: "type[ComputeFramework]") -> int | None:
+        if cls._is_overridden(OrcReader, "load_data"):
+            return None
+        pyarrow_orc = require("pyarrow.orc", "reading ORC files")
+        file_name = cls._file_path(data_access)
+        nrows: int = pyarrow_orc.ORCFile(file_name).nrows
+        return nrows

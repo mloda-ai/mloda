@@ -4,7 +4,7 @@ import re
 from abc import ABC
 from collections.abc import Iterable, Mapping
 from pathlib import PurePath
-from typing import Any, ClassVar
+from typing import TYPE_CHECKING, Any, ClassVar
 
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.abstract_plugins.components.data_types import DataType
@@ -39,6 +39,9 @@ from mloda.core.abstract_plugins.components.utils import (
     get_all_subclasses,
     is_match_abort,
 )
+
+if TYPE_CHECKING:
+    from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 
 logger = logging.getLogger(__name__)
 
@@ -633,6 +636,11 @@ class BaseInputData(ABC):
         """Maps column name to DataType (None if unknown; a duplicate name collapses to one entry). Raises
         NotImplementedError (cannot enumerate), ImportError (backend missing), or OSError/ValueError (unreadable)."""
         raise NotImplementedError
+
+    @classmethod
+    def count_rows(cls, data_access: Any, compute_framework: "type[ComputeFramework]") -> int | None:
+        """Rows of data_access without loading its data; None when only a read can tell."""
+        return None
 
     @classmethod
     def _has_suffix(cls) -> bool:

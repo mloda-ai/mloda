@@ -1,9 +1,12 @@
 import csv
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from mloda.core.abstract_plugins.components.input_data.file_source import FileSource
 from mloda.provider import FeatureSet
 from mloda_plugins.feature_group.input_data.read_file import ReadFile
+
+if TYPE_CHECKING:
+    from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 
 
 class CsvReader(ReadFile):
@@ -159,3 +162,16 @@ class CsvReader(ReadFile):
     def get_column_names(cls, file_name: str) -> Any:
         with open(file_name, newline="", encoding="utf-8-sig") as f:
             return next(csv.reader(f), [])
+
+    @classmethod
+    def count_rows(cls, data_access: Any, compute_framework: "type[ComputeFramework]") -> int | None:
+        # Other frameworks read CSV through pyarrow, whose row split can differ.
+        if compute_framework.expected_data_framework() is not dict:
+            return None
+        if cls._is_overridden(CsvReader, "load_data"):
+            return None
+        file_name = cls._file_path(data_access)
+        with open(file_name, newline="", encoding="utf-8-sig") as f:
+            reader = csv.reader(f)
+            next(reader, None)
+            return sum(1 for row in reader if row)

@@ -23,8 +23,11 @@ from __future__ import annotations
 
 import csv
 import os
+import sys
 import tempfile
 from collections.abc import Iterator
+from pathlib import Path
+from typing import Any, cast
 
 import pytest
 
@@ -34,7 +37,12 @@ from mloda.core.abstract_plugins.components.framework_transformer.cfw_transforme
 from mloda.core.abstract_plugins.components.input_data.file_source import FileSource
 from mloda.core.abstract_plugins.components.input_data.input_data_descriptor import InputDataDescriptor
 from mloda.provider import FeatureSet
-from mloda.user import Feature
+from mloda.user import DataAccessCollection, Feature, Options
+from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
+from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
+from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import (
+    PythonDictFramework,
+)
 from mloda_plugins.feature_group.input_data.read_files.csv import CsvReader
 
 
@@ -174,3 +182,67 @@ class TestCsvHeaderIsUtf8Decoded:
             assert names == ["café", "B"]
         finally:
             os.remove(path)
+
+
+@pytest.fixture()
+def csv_path_with_blanks_and_embedded_newline() -> Iterator[str]:
+    """One quoted embedded-newline row, a blank interior line, and a trailing blank line."""
+    fd, path = tempfile.mkstemp(suffix=".csv")
+    os.close(fd)
+    with open(path, "w", newline="") as f:
+        writer = csv.writer(f)
+        writer.writerow(["A", "B"])
+        writer.writerow(["1", "line1\nline2"])
+        writer.writerow([])
+        writer.writerow(["2", "y"])
+        writer.writerow([])
+    yield path
+    os.remove(path)
+
+
+class TestCsvReaderCountRows:
+    """CsvReader.count_rows counts like FileSourceDictTransformer, dict framework only."""
+
+    def test_count_rows_matches_transformer_row_count_for_str_and_path(
+        self, csv_path_with_blanks_and_embedded_newline: str
+    ) -> None:
+        transformer_map = ComputeFrameworkTransformer().transformer_map
+        transformer = transformer_map[(FileSource, dict)]
+        source = FileSource(path=csv_path_with_blanks_and_embedded_newline, format="csv", columns=("A", "B"))
+        materialized = transformer.transform(FileSource, dict, source, None)
+        expected = len(materialized["A"])
+
+        for candidate in (csv_path_with_blanks_and_embedded_newline, Path(csv_path_with_blanks_and_embedded_newline)):
+            assert CsvReader.count_rows(candidate, PythonDictFramework) == expected
+
+    def test_count_rows_still_counts_without_pyarrow(
+        self, monkeypatch: pytest.MonkeyPatch, csv_path_with_blanks_and_embedded_newline: str
+    ) -> None:
+        monkeypatch.setitem(cast(dict[str, Any], sys.modules), "pyarrow", None)
+        assert CsvReader.count_rows(csv_path_with_blanks_and_embedded_newline, PythonDictFramework) == 2
+
+    def test_count_rows_is_none_under_non_dict_frameworks(self, csv_path_with_blanks_and_embedded_newline: str) -> None:
+        assert CsvReader.count_rows(csv_path_with_blanks_and_embedded_newline, PyArrowTable) is None
+        assert CsvReader.count_rows(csv_path_with_blanks_and_embedded_newline, PandasDataFrame) is None
+
+    def test_count_rows_is_none_for_non_path_data_access_under_non_dict_framework(self) -> None:
+        """expected_data_framework is checked first, so a non-path access never reaches ValueError."""
+        non_path = DataAccessCollection(files={"dummy.csv"})
+        assert CsvReader.count_rows(non_path, PyArrowTable) is None
+        assert CsvReader.count_rows(non_path, PandasDataFrame) is None
+
+    def test_count_rows_reports_none_for_a_load_data_overriding_subclass(
+        self, csv_path_with_blanks_and_embedded_newline: str
+    ) -> None:
+        class _CsvCountRowsProbeReader(CsvReader):
+            @classmethod
+            def load_data(cls, data_access: Any, features: FeatureSet) -> Any:
+                return super().load_data(data_access, features)
+
+            @classmethod
+            def match_subclass_data_access(cls, data_access: Any, feature_names: list[str], options: Options) -> Any:
+                return None
+
+        assert (
+            _CsvCountRowsProbeReader.count_rows(csv_path_with_blanks_and_embedded_newline, PythonDictFramework) is None
+        )

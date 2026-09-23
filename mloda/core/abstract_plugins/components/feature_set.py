@@ -40,6 +40,7 @@ class FeatureSet:
         self.declared_input_feature_names: frozenset[str] | None = None
         self.declared_input_features_resolved: bool = False
         self.declared_input_feature_edges: dict[str, tuple[str, ...]] | None = None
+        self.option_split_hint: tuple[str, frozenset[str]] | None = None
 
         if features is not None:
             for feature in features:

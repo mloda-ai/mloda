@@ -899,18 +899,31 @@ class ComputeFramework(ABC):
             )
         except KeyError as e:
             # Provide helpful error message for missing columns
-            self._raise_helpful_missing_column_error(feature_group, e)
+            self._raise_helpful_missing_column_error(feature_group, e, features)
 
-    def _raise_helpful_missing_column_error(self, feature_group: Any, error: KeyError) -> None:
+    def _raise_helpful_missing_column_error(self, feature_group: Any, error: KeyError, features: Any) -> None:
         """
         Raises a helpful ValueError suggesting the KeyError might be due to missing Links.
         """
+        # Local import: feature_set -> feature -> compute_framework would cycle at module level.
+        from mloda.core.abstract_plugins.components.feature_set import FeatureSet
+
         feature_name = feature_group.get_class_name()
         error_str = str(error)
 
+        option_split_paragraph = ""
+        if isinstance(features, FeatureSet) and features.option_split_hint is not None:
+            split_feature_group_name, differing_keys = features.option_split_hint
+            differing_keys_str = ", ".join(sorted(differing_keys))
+            option_split_paragraph = f"""
+'{split_feature_group_name}' also ran as a separate step with differing option(s) ({differing_keys_str})
+in this run, which is the likely cause. Align the differing option(s) across the requests, or add
+a Link if the split is intentional.
+"""
+
         error_message = f"""
 Feature '{feature_name}' failed with a KeyError: {error_str}
-
+{option_split_paragraph}
 This might be caused by missing Links when your feature has multiple dependencies.
 
 When a feature depends on multiple input features, you must provide explicit Links to specify

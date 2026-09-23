@@ -42,6 +42,7 @@ from mloda.core.core.step.transform_frame_work_step import TransformFrameworkSte
 from mloda.core.abstract_plugins.feature_group import FeatureGroup, format_feature_group_class
 from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.feature_set import FeatureSet, merge_input_feature_edges
+from mloda.core.abstract_plugins.components.hashable_dict import _deep_hashable
 from mloda.core.abstract_plugins.components.link import JoinType, Link
 from collections import defaultdict
 import logging
@@ -116,6 +117,11 @@ class ExecutionPlan:
         self.resolved_join_plan = ResolvedJoinPlan((), ())
         self.join_signatures_at_build: frozenset[JoinSignature] = frozenset()
 
+        # Per feature_group class, the distinct option/context buckets run_feature_group split it
+        # into: f_hash -> (a representative feature, the union of feature uuids in that bucket).
+        # Feeds the missing-Links error's option-split hint.
+        self._option_split_buckets: dict[type[FeatureGroup], dict[Any, tuple[Feature, set[UUID]]]] = {}
+
     def __iter__(self) -> Generator[TransformFrameworkStep | JoinStep | FeatureGroupStep, None, None]:
         yield from self.execution_plan
 
@@ -136,6 +142,7 @@ class ExecutionPlan:
         self.joinstep_collection = JoinStepCollection()
         self.feature_set_collections = []
         self.declared_frameworks = declared_frameworks if declared_frameworks is not None else {}
+        self._option_split_buckets = {}
 
         child_links = self.invert_link_trekker(link_trekker)
         pre_execution_plan = self.add_feature_group_step(queue, graph.parent_to_children_mapping, child_links)
@@ -185,7 +192,75 @@ class ExecutionPlan:
 
             else:
                 raise ValueError(f"Element {element} is not a valid element.")
+
+        self._stamp_option_split_hints(pre_execution_plan, parent_to_children_mapping)
         return pre_execution_plan
+
+    def _stamp_option_split_hints(
+        self,
+        pre_execution_plan: list[LinkFrameworkTrekker | FeatureGroupStep],
+        parent_to_children_mapping: dict[UUID, set[UUID]],
+    ) -> None:
+        """Stamp an option-split hint on steps whose ancestors span two option/context buckets of a root feature group."""
+        split_feature_groups: dict[type[FeatureGroup], tuple[frozenset[str], dict[Any, set[UUID]]]] = {}
+        for feature_group, buckets in self._option_split_buckets.items():
+            if len(buckets) < 2:
+                continue
+            differing_keys = self._differing_option_keys([representative for representative, _ in buckets.values()])
+            if not differing_keys:
+                continue
+            split_feature_groups[feature_group] = (
+                differing_keys,
+                {f_hash: uuids for f_hash, (_, uuids) in buckets.items()},
+            )
+
+        if not split_feature_groups:
+            return
+
+        ordered_split_feature_groups = sorted(split_feature_groups, key=lambda fg: fg.get_class_name())
+
+        for step in pre_execution_plan:
+            if not isinstance(step, FeatureGroupStep):
+                continue
+
+            ancestor_union: set[UUID] = set()
+            for uuid in step.features.get_all_feature_ids():
+                ancestor_union.update(parent_to_children_mapping.get(uuid, set()))
+
+            for feature_group in ordered_split_feature_groups:
+                differing_keys, bucket_uuids_by_hash = split_feature_groups[feature_group]
+                intersecting_buckets = sum(
+                    1 for bucket_uuids in bucket_uuids_by_hash.values() if ancestor_union & bucket_uuids
+                )
+                if intersecting_buckets >= 2:
+                    step.features.option_split_hint = (feature_group.get_class_name(), differing_keys)
+                    break
+
+    def _differing_option_keys(self, representatives: list[Feature]) -> frozenset[str]:
+        """Option/forwarded-context keys whose value differs across the given representative features, counting a key present in one and absent in another as differing."""
+        if len(representatives) < 2:
+            return frozenset()
+
+        split_keys = frozenset(key for feature in representatives for key in feature.options.inherited_context_keys)
+        candidate_keys: set[str] = set()
+        for feature in representatives:
+            candidate_keys.update(feature.options.group.keys())
+            candidate_keys.update(key for key in split_keys if key in feature.options.context)
+
+        _ABSENT = object()
+        differing_keys: set[str] = set()
+        for key in candidate_keys:
+            observed: set[Any] = set()
+            for feature in representatives:
+                if key in feature.options.group:
+                    observed.add(_deep_hashable(feature.options.group[key]))
+                elif key in split_keys and key in feature.options.context:
+                    observed.add(_deep_hashable(feature.options.context[key]))
+                else:
+                    observed.add(_ABSENT)
+            if len(observed) > 1:
+                differing_keys.add(key)
+        return frozenset(differing_keys)
 
     def add_joinstep(
         self,
@@ -1723,6 +1798,12 @@ Available join types:
                     source_key, _ = self.api_input_data_collection.get_name_cls_by_matching_column_name(feature.name)
                     api_groups[(f_hash, source_key)].add(feature)
             features_grouped_by_framework_and_options = api_groups
+
+        split_buckets = self._option_split_buckets.setdefault(feature_group, {})
+        for f_hash, grouped_features in features_grouped_by_framework_and_options.items():
+            representative = next(iter(grouped_features))
+            bucket = split_buckets.setdefault(f_hash, (representative, set()))
+            bucket[1].update(feature.uuid for feature in grouped_features)
 
         fg_steps: dict[Any, FeatureGroupStep] = {}
 

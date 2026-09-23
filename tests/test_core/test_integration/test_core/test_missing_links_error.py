@@ -88,6 +88,61 @@ class MultiDependencyFeature(FeatureGroup):
         return {cls.get_class_name(): pc.add(col_a, col_b)}
 
 
+class SplitMetricSource(FeatureGroup):
+    """Root feature group producing two columns from one DataCreator; requested with
+    differing Options it plans as two separate option buckets."""
+
+    @classmethod
+    def input_data(cls) -> BaseInputData | None:
+        return DataCreator(supports_features={"metric_a", "metric_b"})
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]] | None:
+        return None
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        values = {"metric_a": [10, 20, 30], "metric_b": [100, 200, 300]}
+        return {"id": [1, 2, 3], **{name: values[name] for name in features.get_all_names() if name in values}}
+
+
+class MetricConverter(FeatureGroup):
+    """Requests metric_a with an extra group option, splitting SplitMetricSource into a
+    second option bucket relative to a sibling requesting metric_b without it."""
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return {Feature.int32_of("metric_a", options={"unit": "x"})}
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]] | None:
+        return None
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return {cls.get_class_name(): data.column("metric_a")}
+
+
+class MetricCombiner(FeatureGroup):
+    """Declares inputs spanning both option buckets of SplitMetricSource (via MetricConverter
+    and directly via metric_b) with no Link, triggering the runtime KeyError."""
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return {
+            Feature.int32_of("MetricConverter"),
+            Feature.int32_of("metric_b"),
+        }
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]] | None:
+        return None
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        col_conv = data.column("MetricConverter")
+        col_b = data.column("metric_b")
+        return {cls.get_class_name(): pc.add(col_conv, col_b)}
+
+
 class TestMissingLinksError:
     """Test suite for missing Links validation"""
 
@@ -133,3 +188,41 @@ class TestMissingLinksError:
         assert any(join_type in error_message for join_type in ["inner", "left", "right", "outer"]), (
             "Error should list available join types"
         )
+
+    def test_missing_links_error_has_no_option_split_hint_when_no_split_occurred(self) -> None:
+        """Regression pin: without an option-split root, the error must not carry the new hint."""
+        with pytest.raises(Exception) as exc_info:
+            mloda.run_all(
+                features=[Feature.int32_of("MultiDependencyFeature")],
+                links=set(),
+                compute_frameworks={PyArrowTable},
+                plugin_collector=PluginCollector.enabled_feature_groups(
+                    {RootFeatureA, RootFeatureB, MultiDependencyFeature}
+                ),
+            )
+
+        error_message = str(exc_info.value)
+        assert "differing option" not in error_message.lower(), (
+            "Error should not mention a differing-option split when the root feature groups never split by options"
+        )
+
+    def test_missing_links_error_hints_option_split_when_root_splits_by_options(self) -> None:
+        """When a downstream step's ancestors span two option buckets of one root feature group,
+        the error must name that root and the differing option key."""
+        with pytest.raises(Exception) as exc_info:
+            mloda.run_all(
+                features=[Feature.int32_of("MetricCombiner")],
+                links=set(),
+                compute_frameworks={PyArrowTable},
+                plugin_collector=PluginCollector.enabled_feature_groups(
+                    {SplitMetricSource, MetricConverter, MetricCombiner}
+                ),
+            )
+
+        error_message = str(exc_info.value)
+
+        assert "differing option" in error_message.lower(), "Error should mention the differing-option split hint"
+        assert "SplitMetricSource" in error_message, (
+            "Error should name the feature group whose option-based split caused the mismatch"
+        )
+        assert "unit" in error_message, "Error should name the differing option key that caused the split"

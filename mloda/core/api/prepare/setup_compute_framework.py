@@ -77,8 +77,9 @@ class SetupComputeFramework:
 
         if not compute_frameworks:
             available_names = sorted(cls.get_class_name() for cls in sub_classes)
+            plugin_loader_hint = " Did you call PluginLoader.all()?" if not sub_classes else ""
             raise ValueError(
                 f"No given compute frameworks {api_request_compute_frameworks} found in "
-                f"available compute frameworks: {available_names}."
+                f"available compute frameworks: {available_names}.{plugin_loader_hint}"
             )
         return compute_frameworks

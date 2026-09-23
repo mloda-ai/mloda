@@ -39,11 +39,11 @@ first (during property mapping validation) on each parsed element, then
 element, the match fails with a ``ValueError`` before ``match_guard`` is
 reached.
 
-A guard rejection on a spec that also sets ``strict_validation=True`` is
-reportable: the match pass records it as it happens, and the recorded reason
-feeds the resolution-failure report. ``_strict_validation_rejection_reason``
-remains a standalone diagnostic facade producing the same message. A guard on
-a non-strict spec keeps its "not mine" meaning and reports nothing.
+A guard rejection on a spec that also sets ``strict_validation=True``, or that declares
+``expected``, is reportable: the match pass records it as it happens, and the recorded
+reason feeds the resolution-failure report. ``_strict_validation_rejection_reason``
+remains a standalone diagnostic facade producing the same message. A guard on a
+non-strict spec with no ``expected`` keeps its "not mine" meaning and reports nothing.
 
 Validators must be pure functions with no side effects. They may be called
 multiple times during feature group resolution (once per candidate feature
@@ -56,6 +56,7 @@ from __future__ import annotations
 import inspect
 import logging
 import os
+import reprlib
 from collections.abc import Callable
 from typing import Any, cast
 
@@ -369,15 +370,15 @@ class FeatureChainParserMixin:
 
         1. A ValueError raised by option-value validation (a strict_validation rejection). Present
            option values are validated on both match paths, the string-named one included.
-        2. A match_guard rejection on a spec that also declares strict_validation, which the match
-           path turns into a silent non-match.
+        2. A match_guard rejection on a spec that also declares strict_validation or ``expected``,
+           which the match path would otherwise turn into a silent non-match.
 
-        A guard on a non-strict spec means "this feature group does not match", not "this value is
-        wrong", so it stays unreported. A ValueError raised while parsing a PREFIX_PATTERN match
-        (malformed feature name, no chain separator) is a parse error, not an option-value
-        rejection, and is likewise nothing to report. Returns None when nothing was rejected (the
-        match succeeded, or the candidate is unrelated). Diagnostic-only: does not affect
-        match_feature_group_criteria's behavior.
+        A guard on a non-strict spec with no ``expected`` means "this feature group does not
+        match", not "this value is wrong", so it stays unreported. A ValueError raised while
+        parsing a PREFIX_PATTERN match (malformed feature name, no chain separator) is a parse
+        error, not an option-value rejection, and is likewise nothing to report. Returns None
+        when nothing was rejected (the match succeeded, or the candidate is unrelated).
+        Diagnostic-only: does not affect match_feature_group_criteria's behavior.
         """
         property_mapping = cls._get_property_mapping()
         if property_mapping is None:
@@ -423,9 +424,7 @@ class FeatureChainParserMixin:
             return None
 
         key, value = rejection
-        if not property_mapping[key].strict_validation:
-            return None
-        return f"Property value '{value}' rejected by match_guard for '{key}'"
+        return cls._guard_rejection_reason(key, value, property_mapping[key])
 
     @classmethod
     def _validate_forwarded_name_mismatch(
@@ -515,6 +514,25 @@ class FeatureChainParserMixin:
         return None
 
     @classmethod
+    def _guard_rejection_reason(cls, key: str, value: Any, spec: PropertySpec) -> str | None:
+        """The reportable reason for a guard rejection of ``key``/``value``, or ``None`` if unreportable.
+
+        Shared by the match-time recorder and the diagnostic facade, so the two text sources cannot drift.
+        """
+        if spec.expected is not None:
+            if type(value) in (str, int, float, bool):
+                shown = f"{type(value).__name__} {reprlib.repr(value)}"
+            elif value is None:
+                shown = "None"
+            else:
+                # No value text: a composite can hold data the caller should not see.
+                shown = type(value).__name__
+            return f"option '{key}' must be {spec.expected}, got {shown}"
+        if spec.strict_validation:
+            return f"Property value '{value}' rejected by match_guard for '{key}'"
+        return None
+
+    @classmethod
     def _validate_match_guards(
         cls, result: bool, options: Options, property_mapping: dict[str, PropertySpec] | None
     ) -> bool:
@@ -528,8 +546,10 @@ class FeatureChainParserMixin:
 
         key, value = rejection
         logger.debug("match_guard for '%s' rejected value %r", key, value)
-        if property_mapping is not None and property_mapping[key].strict_validation:
-            record_match_rejection(cls.__name__, f"Property value '{value}' rejected by match_guard for '{key}'")
+        if property_mapping is not None:
+            reason = cls._guard_rejection_reason(key, value, property_mapping[key])
+            if reason is not None:
+                record_match_rejection(cls.__name__, reason)
         return False
 
     @classmethod

@@ -25,6 +25,8 @@ def match_feature_group_criteria(cls, feature_name, options, data_access_collect
 
 Do not call `FeatureChainParser.match_configuration_feature_chain_parser` directly from a match hook: it raises on an option value the `PROPERTY_MAPPING` rejects. An exception out of a match hook is contained as a `match hook` near-miss for that candidate instead of taking the whole resolution down, but a contained crash is a worse reason than a rejection. `match_parser_criteria` turns that rejection into a non-match, and the reason still reaches the user in the "No feature groups found" error.
 
+To report why a `match_guard` declined a value without overriding `match_feature_group_criteria`, declare `expected` on the spec instead; see [PROPERTY_MAPPING Configuration](property-mapping.md).
+
 Containment covers plugin raises only: a framework-owned raise (a two-readers conflict, a forwarded value contradicting the feature name, a rejected effective-options build) still aborts the whole resolution, because it reports a misconfiguration you have to fix.
 
 Filter matching contains the same way: a raise is a non-match for that probe, like a `False` return, and is recorded in `GlobalFilter.dropped_filters` as a `match hook` near-miss, as is a typed decline the matcher records; a framework-owned raise still aborts. Every entry names the gate that dropped the filter and that gate's reason. [How filters reach your FeatureGroup](filter_data.md#how-filters-reach-your-featuregroup) tables the gates the two paths share and where filter policy differs.

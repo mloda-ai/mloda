@@ -1,6 +1,7 @@
 from typing import Any, Callable
 
 from mloda.core.abstract_plugins.components.mask.base_mask_engine import BaseMaskEngine
+from mloda.core.abstract_plugins.components.utils import require_value_collection
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_utils import row_count
 
 
@@ -54,5 +55,6 @@ class PythonDictMaskEngine(BaseMaskEngine):
 
     @classmethod
     def is_in(cls, data: Any, column: str, values: Any) -> list[Any]:
-        allowed = set(values) if isinstance(values, (list, tuple, set, frozenset)) else {values}
+        require_value_collection(values, "is_in values")
+        allowed = set(values)
         return cls._mask(data, column, lambda v: v in allowed)

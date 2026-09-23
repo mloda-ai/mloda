@@ -106,6 +106,6 @@ class PythonDictFilterEngine(BaseFilterEngine):
         if values is None:
             raise ValueError(f"Filter parameter 'values' not found in {filter_feature.parameter}")
 
-        allowed_set = set(values) if isinstance(values, (list, tuple)) else {values}
+        allowed_set = set(values)
 
         return cls._apply_keep(data, column_name, lambda v: v in allowed_set)

@@ -119,6 +119,12 @@ def as_str(value: Any) -> str:
     return value
 
 
+def require_value_collection(values: Any, what: str) -> None:
+    """Raise TypeError unless values is a list, tuple, set or frozenset; a str or bytes is rejected, never split."""
+    if not isinstance(values, (list, tuple, set, frozenset)):
+        raise TypeError(f"{what} must be a list, tuple, set or frozenset, got {type(values).__name__}.")
+
+
 def unhashable_part(value: Any, catching: tuple[type[Exception], ...] = (Exception,)) -> str | None:
     """Name of the first part of `value` whose hash raises one of `catching`, None when the whole value hashes."""
     # Probe the real hash, not isinstance(value, Hashable): a tuple carrying a dict and a __hash__ that

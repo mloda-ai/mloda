@@ -1,6 +1,7 @@
 from typing import Any
 
 from mloda.core.abstract_plugins.components.mask.base_mask_engine import BaseMaskEngine
+from mloda.core.abstract_plugins.components.utils import require_value_collection
 
 try:
     import pandas as pd
@@ -45,4 +46,5 @@ class PandasMaskEngine(BaseMaskEngine):
 
     @classmethod
     def is_in(cls, data: Any, column: str, values: Any) -> Any:
+        require_value_collection(values, "is_in values")
         return data[column].isin(values)

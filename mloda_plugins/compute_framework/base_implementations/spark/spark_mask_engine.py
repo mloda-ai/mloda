@@ -1,6 +1,7 @@
 from typing import Any
 
 from mloda.core.abstract_plugins.components.mask.base_mask_engine import BaseMaskEngine
+from mloda.core.abstract_plugins.components.utils import require_value_collection
 
 try:
     from pyspark.sql import DataFrame
@@ -48,6 +49,7 @@ class SparkMaskEngine(BaseMaskEngine):
 
     @classmethod
     def is_in(cls, data: Any, column: str, values: Any) -> list[Any]:
-        allowed = set(values) if isinstance(values, (list, tuple, set, frozenset)) else {values}
+        require_value_collection(values, "is_in values")
+        allowed = set(values)
         col_values = [row[column] for row in data.collect()]
         return [v in allowed for v in col_values]

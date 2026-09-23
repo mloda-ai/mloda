@@ -1,6 +1,7 @@
 from typing import Any
 
 from mloda.core.abstract_plugins.components.mask.base_mask_engine import BaseMaskEngine
+from mloda.core.abstract_plugins.components.utils import require_value_collection
 from mloda_plugins.compute_framework.base_implementations.pyarrow.pyarrow_value_set import value_set
 
 try:
@@ -52,4 +53,5 @@ class PyArrowMaskEngine(BaseMaskEngine):
 
     @classmethod
     def is_in(cls, data: Any, column: str, values: Any) -> Any:
+        require_value_collection(values, "is_in values")
         return pc.is_in(data[column], value_set(data[column], values))

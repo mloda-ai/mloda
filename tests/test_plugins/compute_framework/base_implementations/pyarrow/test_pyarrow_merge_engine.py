@@ -67,7 +67,7 @@ class TestPyArrowMergeEngineHelperColumnCollision:
 
 @pytest.mark.skipif(pa is None, reason="PyArrow is not installed. Skipping this test.")
 class TestPyArrowMergeEngineNestedColumns:
-    """Joins must preserve list/struct non-key columns instead of raising ArrowInvalid."""
+    """Joins must preserve non-key columns of types Arrow's join rejects, not raise ArrowInvalid."""
 
     @pytest.mark.parametrize("jointype", [JoinType.INNER, JoinType.LEFT, JoinType.RIGHT, JoinType.OUTER])
     @pytest.mark.parametrize("keys", [("k", "k"), ("lk", "rk")])
@@ -126,6 +126,94 @@ class TestPyArrowMergeEngineNestedColumns:
             assert row["ls"] == expected[key]["ls"]
             assert row["rs"] == expected[key]["rs"]
             assert row["st"] == expected[key]["st"]
+
+    @pytest.mark.parametrize(
+        "type_name",
+        [
+            "null",
+            "string_view",
+            "binary_view",
+            "run_end_encoded",
+            "fixed_shape_tensor",
+            "list_string_view",
+            "dictionary_of_list",
+        ],
+        ids=[
+            "null",
+            "string_view",
+            "binary_view",
+            "run_end_encoded",
+            "fixed_shape_tensor",
+            "list_string_view",
+            "dictionary_of_list",
+        ],
+    )
+    def test_merge_preserves_join_rejected_payload_types(self, type_name: str) -> None:
+        """Non-key columns of types Arrow's join rejects must survive an outer join."""
+
+        def build_column(n: int, values: list[str]) -> Any:
+            if type_name == "null":
+                return pa.array([None] * n, type=pa.null())
+            if type_name == "string_view":
+                return pa.array(values, type=pa.string_view())
+            if type_name == "binary_view":
+                return pa.array([v.encode() for v in values], type=pa.binary_view())
+            if type_name == "run_end_encoded":
+                # Multi-row run (run ends [2, 3]) exercises decode/re-encode beyond length-1 runs.
+                logical = [values[0], values[0], values[1]]
+                return pa.RunEndEncodedArray.from_arrays(pa.array([2, 3], type=pa.int32()), pa.array(logical))
+            if type_name == "fixed_shape_tensor":
+                return pa.ExtensionArray.from_storage(
+                    pa.fixed_shape_tensor(pa.int64(), [2]),
+                    pa.array([[i, i + 1] for i in range(n)], pa.list_(pa.int64(), 2)),
+                )
+            if type_name == "list_string_view":
+                rows = [[values[0]], [], [values[1], values[2]]]
+                return pa.array(rows, type=pa.list_(pa.string_view()))
+            dictionary = pa.array([[values[0]], [values[1]]], type=pa.list_(pa.string()))
+            indices = pa.array([0, 1, 0], type=pa.int32())
+            return pa.DictionaryArray.from_arrays(indices, dictionary)
+
+        left_col = build_column(3, ["a", "b", "c"])
+        right_col = build_column(3, ["x", "y", "z"])
+
+        left = pa.Table.from_pydict({"k": [1, 2, 3], "lp": left_col})
+        right = pa.Table.from_pydict({"k": [1, 2, 4], "rp": right_col})
+
+        result = PyArrowMergeEngine().merge(left, right, make_merge_link(JoinType.OUTER, Index(("k",)), Index(("k",))))
+
+        assert result.schema.field("lp").type == left_col.type
+        assert result.schema.field("rp").type == right_col.type
+        assert set(result.column_names) == {"k", "lp", "rp"}
+
+        left_values = left_col.to_pylist()
+        right_values = right_col.to_pylist()
+        left_by_key = dict(zip(left["k"].to_pylist(), left_values))
+        right_by_key = dict(zip(right["k"].to_pylist(), right_values))
+
+        rows = result.to_pylist()
+        by_key = {row["k"]: row for row in rows}
+        assert set(by_key.keys()) == {1, 2, 3, 4}
+        for key, row in by_key.items():
+            assert row["lp"] == left_by_key.get(key)
+            assert row["rp"] == right_by_key.get(key)
+
+    def test_merge_widens_run_end_type_when_join_output_outgrows_it(self) -> None:
+        """An int16 run-end type that can no longer address the join output must widen, not error."""
+        left = pa.Table.from_pydict(
+            {
+                "k": [1],
+                "lp": pa.RunEndEncodedArray.from_arrays(pa.array([1], type=pa.int16()), pa.array(["a"])),
+            }
+        )
+        right = pa.Table.from_pydict({"k": [1] * 40000})
+
+        result = PyArrowMergeEngine().merge(left, right, make_merge_link(JoinType.INNER, Index(("k",)), Index(("k",))))
+
+        assert result.num_rows == 40000
+        assert pa.types.is_run_end_encoded(result.schema.field("lp").type)
+        assert result.schema.field("lp").type.value_type == pa.string()
+        assert result.column("lp").to_pylist() == ["a"] * 40000
 
 
 class TestPyArrowMergeEngineMultiIndex(MultiIndexMergeEngineTestBase):

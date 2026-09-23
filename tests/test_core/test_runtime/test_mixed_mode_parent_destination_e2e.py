@@ -2,8 +2,8 @@
 directions: a worker-owned source feeding a parent-resident destination, and a parent-resident
 join result feeding its own parent-resident child, without leaking a stale or wrong-typed cfw."""
 
+import time
 from typing import Any
-from uuid import UUID
 
 import pytest
 
@@ -58,6 +58,16 @@ def _flight_table_keys(location: str | None) -> set[str]:
         return set()
     raw = FlightServer.list_flight_infos(location)
     return {key.decode("utf-8") if isinstance(key, bytes) else key for key in raw}
+
+
+def _flight_table_keys_once_dropped(location: str | None, key: str, timeout: float = 2.0) -> set[str]:
+    """Poll until ``key`` leaves the flight server or ``timeout`` passes; return the last snapshot."""
+    deadline = time.monotonic() + timeout
+    keys = _flight_table_keys(location)
+    while key in keys and time.monotonic() < deadline:
+        time.sleep(0.01)
+        keys = _flight_table_keys(location)
+    return keys
 
 
 @pytest.fixture(autouse=True)
@@ -1415,16 +1425,10 @@ class TestTransformFrameworkStepSourceRootDropTiming:
         def _spy_drop_tfs(self: Any, step: Any) -> Any:
             result = original_drop_tfs(self, step)
             if step.link_id is None and step.from_framework is PythonDictFramework:
-                # The drop is async now: wait for the worker's own ack of the just-queued drop
-                # before snapshotting, instead of relying on the old synchronous wait.
-                entry = self.worker_manager.process_register.get(UUID(source_root_uuids[0]))
-                if entry is not None:
-                    _, _, result_queue = entry
-                    resolved = self.worker_manager.wait_for_drop_completion(
-                        result_queue, UUID(source_root_uuids[0]), timeout=2.0
-                    )
-                    assert resolved is not None, "no drop ack for the source root within the wait window"
-                keys_right_after_hop_drop_check.append(_flight_table_keys(flight_server.location))
+                # The drop is async: wait for the source root to leave the flight server.
+                keys_right_after_hop_drop_check.append(
+                    _flight_table_keys_once_dropped(flight_server.location, source_root_uuids[0])
+                )
             return result
 
         monkeypatch.setattr(ExecutionOrchestrator, "_drop_tfs_source_if_possible", _spy_drop_tfs)
@@ -1603,16 +1607,10 @@ class TestTransformFrameworkStepSourceRootDropTiming:
         def _spy_drop_tfs(self: Any, step: Any) -> Any:
             result = original_drop_tfs(self, step)
             if step.link_id is None and step.from_framework is PythonDictFramework:
-                # The drop is async now: wait for the worker's own ack of the just-queued drop
-                # before snapshotting, instead of relying on the old synchronous wait.
-                entry = self.worker_manager.process_register.get(UUID(source_root_uuids[0]))
-                if entry is not None:
-                    _, _, result_queue = entry
-                    resolved = self.worker_manager.wait_for_drop_completion(
-                        result_queue, UUID(source_root_uuids[0]), timeout=2.0
-                    )
-                    assert resolved is not None, "no drop ack for the source root within the wait window"
-                keys_right_after_hop_drop_check.append(_flight_table_keys(flight_server.location))
+                # The drop is async: wait for the source root to leave the flight server.
+                keys_right_after_hop_drop_check.append(
+                    _flight_table_keys_once_dropped(flight_server.location, source_root_uuids[0])
+                )
             return result
 
         monkeypatch.setattr(ExecutionOrchestrator, "_drop_tfs_source_if_possible", _spy_drop_tfs)

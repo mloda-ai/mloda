@@ -32,8 +32,8 @@ Contract under test:
   * Compute steps carry ``feature_set_options`` (a deep-copied, group-only snapshot of the step's
     ``FeatureSet.options``) and ``step_uuid``; both stay out of equality.
   * ``PlanStep.reader_data_access`` is a read-only property: the ``(ReaderClass, data_access)`` pair a
-    compute step resolved for reading its input file, read from ``feature_set_options``, or ``None``
-    for a join/transform step or a compute step with no such reader (e.g. a ``DataCreator`` source).
+    compute step resolved for reading its input file, or ``None`` for join/transform steps or a
+    compute step with no reader.
   * ``mlodaAPI.resolved_plan()`` returns ``list[PlanStep]`` on a prepared session, both before
     and after ``run()``, in execution-plan order, and matches the plan that actually executed.
   * ``mlodaAPI.explain(features, ...)`` mirrors the ``prepare`` parameter shape with keyword-only

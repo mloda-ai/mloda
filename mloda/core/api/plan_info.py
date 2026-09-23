@@ -60,8 +60,7 @@ class PlanStep:
     ``input_feature_edges`` maps each output feature name to its declared inputs (injected features absent);
     it participates in equality but is excluded from hashing.
 
-    ``reader_data_access`` is a derived property: the (reader class, data access) pair recorded in a
-    compute step's group options, else None.
+    ``reader_data_access`` is a derived property reading the (reader class, data access) pair from group options.
     """
 
     step_kind: Literal["compute", "join", "transform"]

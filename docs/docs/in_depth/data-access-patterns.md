@@ -78,7 +78,7 @@ Readers are classified structurally; no reader code is executed for classificati
 
 ### Row counts
 
-`BaseInputData.count_rows(data_access, compute_framework) -> int | None` returns the rows of `data_access` without loading its data, or `None` when only a read can tell (the default; `JsonReader` and the DB readers never override it). `ParquetReader`, `OrcReader`, and `FeatherReader` count rows from file metadata for every compute framework. `CsvReader` counts only when `compute_framework` is PythonDict (its native type is `dict`), since every other framework reads CSV through pyarrow, whose row split can differ. A subclass overriding `load_data` reports `None` until it overrides `count_rows` itself. The count is the rows of `data_access`, not of the feature after filters are applied.
+`BaseInputData.count_rows(data_access, compute_framework) -> int | None` returns the row count of `data_access` without loading it, or `None` when only a read can tell (the default). `ParquetReader`, `OrcReader`, and `FeatherReader` count from file metadata for every compute framework; `CsvReader` only under PythonDict, since other frameworks read CSV through pyarrow, whose row split can differ. A subclass overriding `load_data` gets `None` unless it also overrides `count_rows`. Filters are not applied to the count.
 
 ### Selecting among sibling readers
 
@@ -90,7 +90,7 @@ Feature("value", options={UbaAirReader.__name__: url})
 
 The reader class itself is also accepted as the key, e.g. `Feature("value", options={UbaAirReader: url})`; it is normalized to the class-name string when the Options object is constructed, so both forms are one identity.
 
-The matched `(ReaderClass, data_access)` pair is stored under the reserved `"BaseInputData"` options key and consumed by `init_reader` at load time. `PlanStep.reader_data_access` exposes the same pair on a resolved plan. The raw `data_access` may hold credentials, so use `reader.data_access_identity(data_access)` for display and logs, not `data_access` itself.
+The matched `(ReaderClass, data_access)` pair is stored under the reserved `"BaseInputData"` options key and consumed by `init_reader` at load time; `PlanStep.reader_data_access` exposes the same pair on a resolved plan. `data_access` may hold credentials, so use `reader.data_access_identity(data_access)` for display and logs.
 
 For non-file sources such as HTTP endpoints, subclassing `ReadFile` and overriding `match_subclass_data_access` plus `load_data` is a supported pattern; on that path `suffix()` is never consulted (it is inert). `ApiInputData` injects in-memory data passed through the API request and is not an HTTP client.
 

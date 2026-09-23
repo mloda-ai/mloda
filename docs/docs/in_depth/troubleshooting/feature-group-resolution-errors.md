@@ -73,7 +73,7 @@ No enabled feature group both declared the requested name and survived every mat
 
 ### The eliminated candidates block
 
-Each line names a candidate the matcher considered and dropped: the first gate that eliminated it (the parenthesized label) and that gate's reason. A line does not prove the candidate declared the requested name; a candidate whose match hook raised or whose input-data gate declined is recorded regardless.
+Each line names a candidate the matcher considered and dropped: the first gate that eliminated it (the parenthesized label) and that gate's reason. A line does not prove the candidate declared the requested name; a candidate whose match hook raised, whose input-data gate declined, or that refused the name itself is recorded regardless.
 
 | Label | What eliminated the candidate | Typical fix |
 | --- | --- | --- |

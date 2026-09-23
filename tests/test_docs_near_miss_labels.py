@@ -260,6 +260,7 @@ PROSE_LABEL_PAGES: tuple[tuple[str, EliminationStage], ...] = (
     ("in_depth/feature-chain-parser.md", "matcher_error"),
     ("in_depth/feature-group-matching.md", "matcher_error"),
     ("in_depth/feature-group-matching.md", "name"),
+    ("in_depth/feature-group-matching.md", "value_rejection"),
     ("in_depth/filter_data.md", "capability"),
     ("in_depth/filter_data.md", "scope"),
 )

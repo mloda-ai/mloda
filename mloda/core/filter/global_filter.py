@@ -35,7 +35,7 @@ _STAGE_DEPTH: dict[EliminationStage, int] = {
     "matcher_error": 0,
     "input_data": 1,
     "value_rejection": 2,
-    "name": 2,
+    "name": 2,  # same criteria hook as value_rejection
     "domain": 3,
     "scope": 4,
     "capability": 5,

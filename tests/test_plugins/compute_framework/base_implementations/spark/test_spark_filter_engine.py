@@ -3,6 +3,7 @@
 Requires PySpark installed and JAVA_HOME set; see conftest.py for the shared SparkSession.
 """
 
+from decimal import Decimal
 from typing import Any
 import pytest
 from mloda.user import Feature
@@ -84,8 +85,6 @@ class TestSparkFilterEngine(FilterEngineTestMixin):
 
     @pytest.fixture
     def decimal_sample_data(self, spark_session: Any) -> Any:
-        from decimal import Decimal
-
         rows = [(Decimal("12.34"),), (Decimal("5.50"),), (Decimal("99.99"),), (None,)]
         return spark_session.createDataFrame(rows, "d decimal(10,2)")
 

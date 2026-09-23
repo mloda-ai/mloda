@@ -1,8 +1,8 @@
 """Shared filter engine tests for BaseFilterEngine implementations.
 
-The default suite covers decimal data; frameworks that cannot support a test override it and skip it with a reason.
-Consumers set `filter_engine_class` and implement every other abstract fixture and method, including
-`decimal_sample_data` and `get_decimal_column_dtype`.
+Consumers set `filter_engine_class`, also read by `tests/test_plugins/test_mixin_consumer_coverage.py`, and
+implement the abstract fixtures and methods their tests need, including `decimal_sample_data` and
+`get_decimal_column_dtype`. A framework that cannot support a test overrides it and skips it with a reason.
 """
 
 from abc import abstractmethod

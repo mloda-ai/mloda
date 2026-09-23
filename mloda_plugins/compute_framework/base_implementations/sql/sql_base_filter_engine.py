@@ -1,3 +1,4 @@
+from abc import abstractmethod
 from typing import Any
 
 from mloda.provider import BaseFilterEngine
@@ -27,6 +28,7 @@ class SqlBaseFilterEngine(BaseFilterEngine):
         return data.filter(condition, params)
 
     @classmethod
+    @abstractmethod
     def _build_regex_condition(cls, column_name: str, value: str) -> tuple[str, tuple[Any, ...]]:
         raise NotImplementedError
 

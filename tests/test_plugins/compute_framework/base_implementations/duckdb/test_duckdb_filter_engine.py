@@ -36,10 +36,7 @@ except ImportError:
 class TestDuckDBFilterEngine(FilterEngineTestMixin, TimeRangeFilterEngineTestMixin):
     """Unit tests for the DuckDBFilterEngine class using shared mixins."""
 
-    @pytest.fixture
-    def filter_engine(self) -> Any:
-        """Return the DuckDBFilterEngine class."""
-        return DuckDBFilterEngine
+    filter_engine_class = DuckDBFilterEngine
 
     @pytest.fixture
     def sample_data(self, connection: Any) -> Any:

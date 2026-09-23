@@ -27,10 +27,7 @@ from tests.test_plugins.compute_framework.base_implementations.time_range_filter
 class TestPandasFilterEngine(FilterEngineTestMixin, TimeRangeFilterEngineTestMixin):
     """Unit tests for the PandasFilterEngine class using shared mixins."""
 
-    @pytest.fixture
-    def filter_engine(self) -> Any:
-        """Return the PandasFilterEngine class."""
-        return PandasFilterEngine
+    filter_engine_class = PandasFilterEngine
 
     @pytest.fixture
     def sample_data(self) -> Any:

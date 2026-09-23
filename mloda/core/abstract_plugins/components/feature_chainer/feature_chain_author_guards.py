@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import contextvars
 import functools
+import inspect
 import logging
 import re
 from typing import Any
@@ -37,9 +38,13 @@ from mloda.core.abstract_plugins.components.utils import (
 logger = logging.getLogger(__name__)
 
 # Marks a matcher that already carries the required_when guard, so it is never wrapped twice.
+# The VALUE is the wrapper itself (self-reference), which is why a functools.wraps copy onto
+# another function never reads as that function's own guard.
 REQUIRED_WHEN_GUARD_FLAG = "_mloda_required_when_guard"
 
 # Marks a matcher that already carries the name-path presence guard, so it is never wrapped twice.
+# The VALUE is the wrapper itself (self-reference), which is why a functools.wraps copy onto
+# another function never reads as that function's own guard.
 NAME_PATH_PRESENCE_GUARD_FLAG = "_mloda_name_path_presence_guard"
 
 # Marks a class whose captureless diagnostic already ran, so the two __init_subclass__ hooks
@@ -49,8 +54,13 @@ CAPTURELESS_DIAGNOSTIC_FLAG = "_mloda_captureless_diagnostic_emitted"
 # Marks a class whose missing-in_features diagnostic already ran; a subclass of it skips the warning (once per hierarchy).
 MISSING_IN_FEATURES_DIAGNOSTIC_FLAG = "_mloda_missing_in_features_diagnostic_emitted"
 
-# Upper bound on ``__wrapped__`` hops when resolving a matcher, so a cyclic chain cannot hang or raise.
+# The walk self-terminates at the first non-guard-wrapper function; this bound is a residual
+# defense against a hand-mutated __wrapped__ on an actual guard wrapper, not normal operation.
 _MAX_WRAPPED_HOPS = 16
+
+# Sentinel default for the guard-flag lookups below: unlike None, it can never equal a real
+# function, so a missing flag is never mistaken for a self-reference.
+_NO_GUARD_FLAG = object()
 
 # An unrelated feature name used to probe whether a matcher is universal: does it accept a name it
 # has no business matching, once in_features supplies a source? It carries NO chain separator, so no
@@ -239,11 +249,46 @@ def warn_universal_optional_matcher(owner: type[Any]) -> None:
     )
 
 
+def _is_guard_wrapper(function: Any) -> bool:
+    """True when the function is one of this module's own guard wrappers, identified by self-reference."""
+    return (
+        getattr(function, REQUIRED_WHEN_GUARD_FLAG, _NO_GUARD_FLAG) is function
+        or getattr(function, NAME_PATH_PRESENCE_GUARD_FLAG, _NO_GUARD_FLAG) is function
+    )
+
+
+def _matcher_carries_guard(function: Any, flag_name: str) -> bool:
+    """True when function, or a guard wrapper it delegates to through ``__wrapped__``, already is that guard.
+
+    A class stacking two guards produces an outer wrapper whose OWN flag is the other guard's, so a
+    subclass that inherits the fully stacked matcher unchanged must still be recognized as already
+    carrying each guard by walking the chain, not just checking the immediate function's own flag.
+    """
+    current = function
+    for _ in range(_MAX_WRAPPED_HOPS):
+        if getattr(current, flag_name, _NO_GUARD_FLAG) is current:
+            return True
+        if not _is_guard_wrapper(current):
+            return False
+        inner = getattr(current, "__wrapped__", None)
+        if inner is None:
+            return False
+        current = inner
+    return False
+
+
 def _unwrapped_matcher_function(owner: type[Any]) -> Any:
-    """The function behind a class's resolved matcher, following ``__wrapped__`` for at most 16 hops."""
+    """The function behind a class's resolved matcher, unwrapped while it is a guard wrapper.
+
+    Only hops while the current function is itself an installer-created guard wrapper, so a genuine
+    override that happens to carry its own unrelated ``__wrapped__`` is never followed past. The hop
+    count is bounded only as a residual defense against a hand-mutated ``__wrapped__``.
+    """
     matcher = getattr(owner, "match_feature_group_criteria", None)
     function = getattr(matcher, "__func__", matcher)
     for _ in range(_MAX_WRAPPED_HOPS):
+        if not _is_guard_wrapper(function):
+            break
         inner = getattr(function, "__wrapped__", None)
         if inner is None:
             break
@@ -392,6 +437,18 @@ def _reject_staticmethod_matcher(owner: type[Any]) -> None:
         return
 
 
+def _reject_descriptorless_matcher(owner: type[Any]) -> None:
+    """Reject a matcher with no classmethod/staticmethod descriptor (and not a bound method) on a guarded class."""
+    attr = inspect.getattr_static(owner, "match_feature_group_criteria", None)
+    if attr is None or isinstance(attr, (classmethod, staticmethod)) or inspect.ismethod(attr):
+        return
+    raise ValueError(
+        f"{owner.__name__} guards its match_feature_group_criteria, but it is a {type(attr).__name__} "
+        f"with no classmethod or staticmethod descriptor. Decorate it with @classmethod: the "
+        f"guard is installed as a classmethod and passes the class as the first argument."
+    )
+
+
 def install_required_when_guard(owner: type[Any]) -> None:
     """Wrap a class's RESOLVED matcher so its required_when predicates run whatever matcher it kept.
 
@@ -413,13 +470,14 @@ def install_required_when_guard(owner: type[Any]) -> None:
         return
 
     _reject_staticmethod_matcher(owner)
+    _reject_descriptorless_matcher(owner)
 
     matcher = getattr(owner, "match_feature_group_criteria", None)
     if matcher is None:
         return
 
     inner: Any = getattr(matcher, "__func__", matcher)
-    if getattr(inner, REQUIRED_WHEN_GUARD_FLAG, False):
+    if _matcher_carries_guard(inner, REQUIRED_WHEN_GUARD_FLAG):
         return
 
     @functools.wraps(inner)
@@ -450,7 +508,7 @@ def install_required_when_guard(owner: type[Any]) -> None:
         finally:
             REQUIRED_WHEN_GUARD_DEPTH.reset(token)
 
-    setattr(guarded, REQUIRED_WHEN_GUARD_FLAG, True)
+    setattr(guarded, REQUIRED_WHEN_GUARD_FLAG, guarded)
     setattr(owner, "match_feature_group_criteria", classmethod(guarded))
 
 
@@ -472,6 +530,8 @@ def install_name_path_presence_guard(owner: type[Any]) -> None:
     if not FeatureChainParser._name_path_missing_required_keys(Options(), property_mapping):
         return
 
+    _reject_descriptorless_matcher(owner)
+
     # Wrapping a staticmethod matcher would hide it from _reject_staticmethod_matcher, so the
     # required_when installer's existing definition-time ValueError keeps precedence.
     is_static = _matcher_is_staticmethod(owner)
@@ -485,7 +545,7 @@ def install_name_path_presence_guard(owner: type[Any]) -> None:
         return
 
     inner: Any = getattr(matcher, "__func__", matcher)
-    if getattr(inner, NAME_PATH_PRESENCE_GUARD_FLAG, False):
+    if _matcher_carries_guard(inner, NAME_PATH_PRESENCE_GUARD_FLAG):
         return
 
     @functools.wraps(inner)
@@ -531,5 +591,5 @@ def install_name_path_presence_guard(owner: type[Any]) -> None:
         finally:
             NAME_PATH_PRESENCE_GUARD_DEPTH.reset(token)
 
-    setattr(guarded, NAME_PATH_PRESENCE_GUARD_FLAG, True)
+    setattr(guarded, NAME_PATH_PRESENCE_GUARD_FLAG, guarded)
     setattr(owner, "match_feature_group_criteria", classmethod(guarded))

@@ -17,9 +17,13 @@ from mloda_plugins.feature_group.experimental.data_quality.missing_value.python_
     PythonDictMissingValueFeatureGroup,
 )
 
+from tests.test_plugins.feature_group.experimental.test_missing_value_feature_group.missing_value_zero_row_test_mixin import (
+    MissingValueZeroRowTestMixin,
+)
 from tests.test_plugins.feature_group.experimental.test_missing_value_feature_group.test_missing_value_utils import (
     validate_missing_value_features,
 )
+from tests.test_plugins.feature_group.experimental.zero_row_result_type_test_mixin import PythonDictZeroRowAdapter
 from tests.test_plugins.integration_plugins.test_data_creator import ATestDataCreator
 
 
@@ -337,6 +341,10 @@ class TestPythonDictMissingValueFeatureGroup:
         data_copy = _copy_columnar(sample_data_with_missing)
         with pytest.raises(ValueError, match="Constant value must be provided for constant imputation method"):
             PythonDictMissingValueFeatureGroup.calculate_feature(data_copy, feature_set)
+
+
+class TestPythonDictMissingValueZeroRow(PythonDictZeroRowAdapter, MissingValueZeroRowTestMixin):
+    feature_group_class = PythonDictMissingValueFeatureGroup
 
 
 class TestMissingValuePythonDictIntegration:

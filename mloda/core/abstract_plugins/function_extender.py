@@ -38,6 +38,10 @@ class Extender(ABC):
     - metrics on feature calculation
     - visibility / observability
     - Performance
+
+    Once __call__ invokes the wrapped call, its own return value is discarded in favor of
+    the wrapped result (mutating shared args in place still works). If it calls the wrapped
+    function more than once, only the first successful call's result is used.
     """
 
     @property
@@ -192,13 +196,8 @@ class CompositeExtender(Extender):
 def _invoke_extender(ext: Extender, inner_func: Any, *args: Any, **kwargs: Any) -> Any:
     """Invoke an extender around inner_func, scoping any warning-only fallback to the
     extender's OWN code so inner-function failures propagate and inner never re-runs."""
-    # Breaking (default) or never_fall_back: call directly, everything propagates.
-    if ext.raise_on_error or ext.never_fall_back:
-        return ext.__call__(inner_func, *args, **kwargs)
-
-    # Warning-only: guard ONLY the extender's own code. Wrap inner_func so we can tell
-    # whether a raised exception came from inner_func (must propagate, never swallow,
-    # never re-run) versus the extender's own instrumentation (log + fall back).
+    # Guard inner_func so its result wins over ext.__call__'s return, and (warning-only
+    # branch) so an inner exception can be told apart from the extender's own failure.
     sentinel = object()
     state: dict[str, Any] = {"result": sentinel, "inner_raised": False}
 
@@ -209,11 +208,20 @@ def _invoke_extender(ext: Extender, inner_func: Any, *args: Any, **kwargs: Any) 
         except BaseException:
             state["inner_raised"] = True
             raise
-        state["result"] = result
+        if state["result"] is sentinel:
+            state["result"] = result
         return result
 
+    def _settle(ext_return: Any) -> Any:
+        return state["result"] if state["result"] is not sentinel else ext_return
+
+    # Breaking (default) or never_fall_back: call directly, everything propagates.
+    if ext.raise_on_error or ext.never_fall_back:
+        return _settle(ext.__call__(guarded_inner, *args, **kwargs))
+
+    # Warning-only: guard ONLY the extender's own code.
     try:
-        return ext.__call__(guarded_inner, *args, **kwargs)
+        return _settle(ext.__call__(guarded_inner, *args, **kwargs))
     except Exception as e:
         if state["inner_raised"]:
             # The failure came from the wrapped function / downstream chain, not this

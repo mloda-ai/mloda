@@ -1,5 +1,6 @@
 """Unit tests for the PolarsFilterEngine class."""
 
+from decimal import Decimal
 from typing import Any
 import logging
 
@@ -53,6 +54,14 @@ class TestPolarsFilterEngine(FilterEngineTestMixin, TimeRangeFilterEngineTestMix
     def nullable_category_sample_data(self) -> Any:
         """Create a sample Polars DataFrame with null categories for testing."""
         return pl.DataFrame({"id": [1, 2, 3, 4, 5], "category": ["A", None, "B", None, "C"]})
+
+    @pytest.fixture
+    def decimal_sample_data(self) -> Any:
+        values = [Decimal("12.34"), Decimal("5.50"), Decimal("99.99"), None]
+        return pl.DataFrame({"d": values}, schema={"d": pl.Decimal(10, 2)})
+
+    def get_decimal_column_dtype(self, data: Any) -> Any:
+        return data.schema["d"]
 
     def get_column_values(self, result: Any, column: str) -> list[Any]:
         """Extract column values from Polars DataFrame."""

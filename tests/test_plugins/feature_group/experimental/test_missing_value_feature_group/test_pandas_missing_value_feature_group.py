@@ -10,10 +10,14 @@ from mloda.user import PluginCollector
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.feature_group.experimental.data_quality.missing_value.pandas import PandasMissingValueFeatureGroup
 
+from tests.test_plugins.feature_group.experimental.test_missing_value_feature_group.missing_value_zero_row_test_mixin import (
+    MissingValueZeroRowTestMixin,
+)
 from tests.test_plugins.feature_group.experimental.test_missing_value_feature_group.test_missing_value_utils import (
     PandasMissingValueTestDataCreator,
     validate_missing_value_features,
 )
+from tests.test_plugins.feature_group.experimental.zero_row_result_type_test_mixin import PandasZeroRowAdapter
 
 
 @pytest.fixture
@@ -274,6 +278,10 @@ class TestPandasMissingValueFeatureGroup:
 
         with pytest.raises(ValueError, match="Constant value must be provided for constant imputation method"):
             PandasMissingValueFeatureGroup.calculate_feature(sample_dataframe_with_missing, feature_set)
+
+
+class TestPandasMissingValueZeroRow(PandasZeroRowAdapter, MissingValueZeroRowTestMixin):
+    feature_group_class = PandasMissingValueFeatureGroup
 
 
 class TestMissingValuePandasIntegration:

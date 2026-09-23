@@ -12,6 +12,10 @@ from mloda_plugins.compute_framework.base_implementations.pandas.dataframe impor
 from mloda.provider import DefaultOptionKeys
 from mloda_plugins.feature_group.experimental.time_window.pandas import PandasTimeWindowFeatureGroup
 from tests.test_plugins.feature_group.experimental.test_time_window_feature_group.conftest import EXPECTED_VALUES
+from tests.test_plugins.feature_group.experimental.test_time_window_feature_group.time_window_zero_row_test_mixin import (
+    TimeWindowZeroRowTestMixin,
+)
+from tests.test_plugins.feature_group.experimental.zero_row_result_type_test_mixin import PandasZeroRowAdapter
 
 
 class TestPandasTimeWindowFeatureGroup:
@@ -129,3 +133,7 @@ class TestPandasTimeWindowFeatureGroup:
             match=f"Reference time column '{DefaultOptionKeys.reference_time}' not found in data.*",
         ):
             PandasTimeWindowFeatureGroup.calculate_feature(df, feature_set)
+
+
+class TestPandasTimeWindowZeroRow(PandasZeroRowAdapter, TimeWindowZeroRowTestMixin):
+    feature_group_class = PandasTimeWindowFeatureGroup

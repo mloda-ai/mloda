@@ -13,7 +13,9 @@ feature groups in the global registry.
 
 from __future__ import annotations
 
+import functools
 import logging
+from collections.abc import Callable
 from typing import Any
 
 import pytest
@@ -40,6 +42,17 @@ def _presence_warnings(caplog: pytest.LogCaptureFixture, class_name: str) -> lis
         and MARKER in record.getMessage()
         and class_name in record.getMessage()
     ]
+
+
+class _CallableMatcher:
+    """A callable-instance matcher: no descriptor, so a classmethod wrap would pass it the class."""
+
+    def __call__(self, *args: Any, **kwargs: Any) -> bool:
+        return True
+
+
+def _permissive_matcher(*args: Any, **kwargs: Any) -> bool:
+    return True
 
 
 class TestOverrideBypass:
@@ -185,6 +198,57 @@ class TestStaticmethodOverrideBypass:
 
         assert result is True, "deferred_binding=True must keep the staticmethod's match"
         assert not _presence_warnings(caplog, "_StaticDeferredR769pg8")
+
+
+class TestBareFunctionMatcherRejected:
+    """A bare function matcher (no classmethod/staticmethod descriptor) must be rejected too."""
+
+    def test_bare_function_matcher_is_rejected_at_class_definition(self) -> None:
+        """Wrapping it as a classmethod would misread cls as the feature name: reject at class definition."""
+
+        def bare_matcher(
+            feature_name: str | FeatureName,
+            options: Options,
+            data_access_collection: Any = None,
+        ) -> bool:
+            return True
+
+        with pytest.raises(ValueError) as excinfo:
+
+            class _BareFunctionR769pg20(FeatureChainParserMixin):
+                PREFIX_PATTERN = r".*__(?P<carried_r769pg20>\w+)$"
+                PROPERTY_MAPPING = {
+                    "carried_r769pg20": PropertySpec("required, carried by the name", context=True),
+                    "missing_r769pg20": PropertySpec("required, options-only, absent", context=True),
+                }
+                match_feature_group_criteria = bare_matcher  # type: ignore[assignment]
+
+        message = str(excinfo.value)
+        assert "_BareFunctionR769pg20" in message
+        assert "classmethod" in message
+
+    @pytest.mark.parametrize(
+        "make_matcher",
+        [_CallableMatcher, lambda: functools.partial(_permissive_matcher)],
+        ids=["callable_instance", "functools_partial"],
+    )
+    def test_non_function_callable_matcher_is_rejected_at_class_definition(
+        self, make_matcher: Callable[[], Callable[..., bool]]
+    ) -> None:
+        """A callable instance or partial has no descriptor either: reject it like a bare function."""
+        with pytest.raises(ValueError) as excinfo:
+
+            class _CallableMatcherR769pg21(FeatureChainParserMixin):
+                PREFIX_PATTERN = r".*__(?P<carried_r769pg21>\w+)$"
+                PROPERTY_MAPPING = {
+                    "carried_r769pg21": PropertySpec("required, carried by the name", context=True),
+                    "missing_r769pg21": PropertySpec("required, options-only, absent", context=True),
+                }
+                match_feature_group_criteria = make_matcher()
+
+        message = str(excinfo.value)
+        assert "_CallableMatcherR769pg21" in message
+        assert "classmethod" in message
 
 
 class TestGuardHonorsTheInnerRule:

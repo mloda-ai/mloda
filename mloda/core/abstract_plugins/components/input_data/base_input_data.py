@@ -1,8 +1,10 @@
 import logging
+import re
 from abc import ABC
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from pathlib import PurePath
 from typing import Any, ClassVar
+from urllib.parse import unquote
 
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.abstract_plugins.components.data_types import DataType
@@ -43,16 +45,84 @@ logger = logging.getLogger(__name__)
 RESERVED_READER_OPTION_KEY = "BaseInputData"
 
 
+_VALUE_SPAN_PATTERN = re.compile(r"\s{2,}|\{[^}]{0,256}\}|'[^']{0,256}'|\"[^\"]{0,256}\"")
+_CONNECTION_KEY_PATTERN = re.compile(r"(?:^|[;\s])\s*([A-Za-z_][A-Za-z0-9_.\-]{0,63})\s*=")
+_CONNECTION_KEYS = frozenset(
+    "host hostaddr hostname server dsn driver dbname database db user username uid password passwd pwd passfile port".split()
+)
+_SECRET_KEY_PARTS = ("pass", "pwd", "secret", "token", "credential", "auth", "sas", "sig", "key")
+_URI_PATTERN = re.compile(r"^[A-Za-z][A-Za-z0-9+.:-]*://")
+_USERINFO_PATTERN = re.compile(r"^[^/\\@\s:]*:[^@]*@")
+_DRIVE_LETTER_PATTERN = re.compile(r"^[A-Za-z]:[\\/]")
+_QUERY_KEY_PATTERN = re.compile(r"[?&#;]\s*([A-Za-z_][A-Za-z0-9_.\-]{0,63})\s*=")
+_QUERY_START_PATTERN = re.compile(r"[?#]")
+_ENCODED_QUERY_START_PATTERN = re.compile(r"[?#]|%(?:3[fF]|23)")
+
+
+def _format_keys(keys: Iterable[str]) -> str:
+    return "{" + ", ".join(sorted(set(keys))) + "}"
+
+
+def _is_secret_key(key: str) -> bool:
+    return any(part in key for part in _SECRET_KEY_PARTS)
+
+
+def _connection_string_identity(value: str) -> str | None:
+    blanked = _VALUE_SPAN_PATTERN.sub(" ", value)
+    matches = list(_CONNECTION_KEY_PATTERN.finditer(blanked))
+    keys = {match[1].lower() for match in matches}
+    recognized = {key for key in keys if key in _CONNECTION_KEYS or _is_secret_key(key)}
+    if not recognized:
+        return None
+    if _URI_PATTERN.match(value):
+        return _format_keys(recognized) if any(_is_secret_key(key) for key in recognized) else None
+    prefix = blanked[: matches[0].start(1)]
+    prefix_has_query_anchor = _QUERY_START_PATTERN.search(prefix) is not None
+    prefix_has_secret_without_anchor = any(_is_secret_key(key) for key in recognized) and not prefix_has_query_anchor
+    if ("/" in prefix or "\\" in prefix) and not prefix_has_secret_without_anchor:
+        return None
+    if len(matches) == 1 and not any(_is_secret_key(key) for key in recognized) and "/" in value:
+        return None
+    return _format_keys(recognized)
+
+
+def _strip_scheme_less_userinfo(value: str) -> str:
+    if _DRIVE_LETTER_PATTERN.match(value) or not _USERINFO_PATTERN.match(value):
+        return value
+    body = value.split("?", 1)[0].split("#", 1)[0]
+    if "@" not in body:
+        body = value
+    return body.rpartition("@")[2].split("?", 1)[0].split("#", 1)[0]
+
+
+def _strip_credential_query(value: str) -> str:
+    match = _ENCODED_QUERY_START_PATTERN.search(value)
+    if match is None:
+        return value
+    head, tail = value[: match.start()], value[match.start() :]
+    keys = {m[1].lower() for m in _QUERY_KEY_PATTERN.finditer(unquote(tail))}
+    if any(key in _CONNECTION_KEYS or _is_secret_key(key) for key in keys):
+        return head
+    return value
+
+
 def _data_access_identity(data_access: Any) -> str:
     """Mapping: sorted key names. str or PurePath: a scheme:// URI keeps scheme, host and path (abfs/abfss/wasb/wasbs,
-    case-insensitive, also the container), user info, query and fragment dropped; any other string as is.
-    Anything else: its type name."""
+    case-insensitive, also the container), user info, query and fragment dropped. A scheme-less string with recognized
+    connection or secret keys is identified by those key names. user:pw@host unconditionally drops a literal query
+    and fragment along with the user info; any other scheme-less query or fragment is dropped only when it holds a
+    recognized or secret key. That key scan also takes an encoded ?/# as an anchor, in a URI path too, and
+    percent-decodes the tail once; not detected: double encoding, percent-encoded text before any ?/# anchor, and
+    a secret carried as a value under an unrecognized key."""
     if isinstance(data_access, Mapping):
-        return "{" + ", ".join(sorted(str(key) for key in data_access)) + "}"
-    value = str(data_access) if isinstance(data_access, PurePath) else data_access
-    if isinstance(value, str):
-        if "://" not in value:
-            return str(value)
+        return _format_keys(str(key) for key in data_access)
+    if isinstance(data_access, (str, PurePath)):
+        value = str(data_access)
+        identity = _connection_string_identity(value)
+        if identity is not None:
+            return identity
+        if not _URI_PATTERN.match(value):
+            return _strip_credential_query(_strip_scheme_less_userinfo(value))
         scheme, _, rest = value.partition("://")
         head = rest.split("/", 1)[0].split("?", 1)[0].split("#", 1)[0]
         tail = head.rpartition(":")[2]
@@ -65,7 +135,7 @@ def _data_access_identity(data_access: Any) -> str:
         userinfo, _, host = authority.rpartition("@")
         if scheme.lower() not in ("abfs", "abfss", "wasb", "wasbs") or ":" in userinfo:
             authority = host
-        return f"{scheme}://{authority}{slash}{path}"
+        return _strip_credential_query(f"{scheme}://{authority}{slash}{path}")
     return type(data_access).__name__
 
 

@@ -81,7 +81,7 @@ class PyArrowAggregatedFeatureGroup(AggregatedFeatureGroup):
 
     @classmethod
     def _add_result_to_data(cls, data: pa.Table, feature_name: str, result: Any) -> pa.Table:
-        """Add the result to the Table."""
+        """Add the result to the Table. Also accepts plain Python values from overrides."""
         numpy = loaded("numpy")
         if numpy is not None and isinstance(result, numpy.ndarray):
             # Multi-column (row-wise) aggregation: one value per row already.
@@ -115,7 +115,8 @@ class PyArrowAggregatedFeatureGroup(AggregatedFeatureGroup):
             in_features: List of source feature names (may be single or multiple columns)
 
         Returns:
-            The result of the aggregation (scalar for single-column, array for multi-column)
+            The result of the aggregation (pa.Scalar for single-column, preserving type on zero-row and
+            all-null input; array for multi-column)
         """
         if len(in_features) > 1:
             np = require("numpy", _NUMPY_REASON)

@@ -168,6 +168,14 @@ class TestOptionsWithDefaultsMechanism:
         assert isinstance(filled, Options)
         assert filled.propagate_context_keys == frozenset({CTX_KEY})
 
+    def test_materialized_default_is_never_own(self) -> None:
+        """A PROPERTY_MAPPING concrete default filled by options_with_defaults lands in .context but is
+        never counted as the feature's own declaration."""
+        fg = _make_probe_fg()
+        filled = _options_with_defaults(fg, Options())
+        assert CTX_KEY in filled.context
+        assert CTX_KEY not in filled.own_context_keys
+
     def test_fill_path_preserves_forwarding_provenance(self) -> None:
         """The filled view keeps inherited/forwarded provenance; a public Options must not silently drop it."""
         fg = _make_probe_fg()

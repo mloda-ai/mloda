@@ -1,8 +1,8 @@
+from decimal import Decimal
 from typing import Any
 
 import pytest
 
-from mloda.provider import BaseMaskEngine
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_mask_engine import (
     PythonDictMaskEngine,
 )
@@ -12,9 +12,7 @@ from tests.test_plugins.compute_framework.base_implementations.mask_engine_test_
 
 
 class TestPythonDictMaskEngine(MaskEngineTestMixin):
-    @pytest.fixture
-    def engine(self) -> type[BaseMaskEngine]:
-        return PythonDictMaskEngine
+    mask_engine_class = PythonDictMaskEngine
 
     @pytest.fixture
     def sample_data(self) -> Any:
@@ -23,8 +21,22 @@ class TestPythonDictMaskEngine(MaskEngineTestMixin):
             "value": [10, 20, 30, 40],
         }
 
+    @pytest.fixture
+    def empty_data(self) -> Any:
+        return {"status": [], "value": []}
+
+    @pytest.fixture
+    def decimal_sample_data(self) -> Any:
+        return {"d": [Decimal("12.34"), Decimal("5.50"), None]}
+
     def evaluate_mask(self, mask: Any, data: Any) -> list[bool]:
         return list(mask)
+
+    def is_boolean_mask(self, mask: Any, data: Any) -> bool:
+        return all(isinstance(v, bool) for v in mask)
+
+    def apply_mask(self, mask: Any, data: Any) -> dict[str, list[Any]]:
+        return {column: [v for v, keep in zip(values, mask) if keep] for column, values in data.items()}
 
 
 class TestPythonDictMaskEngineMissingColumn:

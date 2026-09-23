@@ -5,6 +5,7 @@ Fixtures carry an "m951" marker in class names, keys, and values because they le
 
 from __future__ import annotations
 
+import functools
 import inspect
 import logging
 from typing import Any
@@ -337,6 +338,45 @@ class TestMissingInFeaturesDoesNotWarn:
             assert "req_m951m" in _NonIntMinM951m.PROPERTY_MAPPING
 
         assert not _missing_in_features_warnings(caplog, "_NonIntMinM951m")
+
+    def test_wrapped_override_child_keeps_its_own_matcher_identity(self, caplog: pytest.LogCaptureFixture) -> None:
+        """functools.wraps on a genuine override must not make it resolve to the mixin's own matcher.
+
+        The parent declares an in_features key (so it returns early on its own in_features check and never
+        sets the diagnostic flag on the hierarchy) plus a required_when key (so it earns the required_when
+        guard). The child overrides the matcher with a genuine, non-delegating body written as
+        ``@classmethod @functools.wraps(<parent's resolved matcher>)`` and redeclares a PROPERTY_MAPPING
+        WITHOUT the in_features key, making it a candidate for the missing-in_features warning on its own
+        mapping. Following ``__wrapped__`` must stop at the child's own function, not walk through the
+        parent's guard wrapper into the mixin's plain default, or the child is misread as sharing the
+        mixin's matcher and wrongly warned.
+        """
+        with caplog.at_level(logging.WARNING):
+
+            class _ParentM951w(FeatureChainParserMixin):
+                PROPERTY_MAPPING = {
+                    DefaultOptionKeys.in_features.value: PropertySpec("sources"),
+                    "req_m951w": PropertySpec("required", default=None, required_when=(lambda options: False)),
+                }
+
+            class _ChildM951w(_ParentM951w):
+                PROPERTY_MAPPING = {
+                    "req_m951w": PropertySpec("required", allowed_values=("v_m951w",)),
+                }
+
+                @classmethod
+                @functools.wraps(_ParentM951w.match_feature_group_criteria)
+                def match_feature_group_criteria(  # type: ignore[override]
+                    cls,
+                    feature_name: str | FeatureName,
+                    options: Options,
+                    data_access_collection: Any = None,
+                ) -> bool:
+                    return str(feature_name) == "specific_m951w"
+
+            assert "req_m951w" in _ChildM951w.PROPERTY_MAPPING
+
+        assert not _missing_in_features_warnings(caplog, "_ChildM951w")
 
     def test_class_without_min_max_attrs_is_silent(self, caplog: pytest.LogCaptureFixture) -> None:
         with caplog.at_level(logging.WARNING):

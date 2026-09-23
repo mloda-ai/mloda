@@ -62,6 +62,7 @@ MODULE_EXTRA: dict[str, str] = {
     f"{_BACKENDS}.pyarrow.pyarrow_mask_engine": "pyarrow",
     f"{_BACKENDS}.pyarrow.pyarrow_merge_engine": "pyarrow",
     f"{_BACKENDS}.pyarrow.pyarrow_type_semantics": "pyarrow",
+    f"{_BACKENDS}.pyarrow.pyarrow_value_set": "pyarrow",
     f"{_BACKENDS}.pyarrow.table": "pyarrow",
     f"{_BACKENDS}.python_dict.python_dict_pyarrow_transformer": "pyarrow",
     f"{_BACKENDS}.spark.spark_filter_engine": "spark",

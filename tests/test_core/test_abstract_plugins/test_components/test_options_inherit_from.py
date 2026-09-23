@@ -1884,6 +1884,16 @@ class TestInheritFromAtomicOnConflict:
         assert child.inherited_group_keys == frozenset()
         assert child.last_forwarded_group_keys == frozenset()
 
+    def test_group_conflict_leaves_own_keys_locked_false(self) -> None:
+        """A raising inherit_from leaves self fully unchanged, including the own-key lock."""
+        consumer = Options(group={"kg_backend": "neo4j"})
+        child = Options(group={"kg_backend": "memgraph"})
+
+        with pytest.raises(ValueError):
+            child.inherit_from(consumer)
+
+        assert child._own_keys_locked is False
+
 
 class TestOptionsNonForwardedGroupKeys:
     """Options.non_forwarded_group_keys: a per-instance opt-out that keeps a single group key off
@@ -2021,3 +2031,365 @@ class TestInheritFromPropagatesNonForwardedMark:
         assert "conn" not in child.group
         assert "conn" not in child.non_forwarded_group_keys
         assert child.group["kg_backend"] == "neo4j"
+
+
+class TestOwnGroupKeys:
+    """Options.own_group_keys is the intersection of what the feature declared on itself
+    at/after construction with what is still actually present in .group."""
+
+    def test_fresh_options_has_own_group_keys_from_constructor(self) -> None:
+        """A freshly constructed Options reports its constructor group keys as own, immediately."""
+        options = Options(group={"g": 1}, context={"c": 1})
+
+        assert options.own_group_keys == frozenset({"g"})
+
+    def test_builder_pattern_add_to_group_counts_as_own(self) -> None:
+        """Options() then add_to_group before any inherit_from counts as own (builder pattern, per docstring)."""
+        options = Options()
+        options.add_to_group("g", 1)
+        options.add_to_context("c", 1)
+
+        assert options.own_group_keys == frozenset({"g"})
+
+    def test_own_and_inherited_group_key_overlap(self) -> None:
+        """A feature's own group key equal to the consumer's group key is BOTH own and inherited after the call."""
+        consumer = Options(group={"kg_backend": "neo4j"})
+        child = Options(group={"kg_backend": "neo4j"})
+
+        child.inherit_from(consumer)
+
+        assert "kg_backend" in child.own_group_keys
+        assert "kg_backend" in child.inherited_group_keys
+
+    def test_purely_inherited_group_key_is_not_own(self) -> None:
+        """A key absent from the feature's own declaration before inherit_from is inherited but not own."""
+        consumer = Options(group={"kg_backend": "neo4j"})
+        child = Options()
+
+        child.inherit_from(consumer)
+
+        assert "kg_backend" in child.inherited_group_keys
+        assert "kg_backend" not in child.own_group_keys
+
+
+class TestOwnContextKeys:
+    """Mirrors TestOwnGroupKeys for context."""
+
+    def test_fresh_options_has_own_context_keys_from_constructor(self) -> None:
+        """A freshly constructed Options reports its constructor context keys as own, immediately."""
+        options = Options(group={"g": 1}, context={"c": 1})
+
+        assert options.own_context_keys == frozenset({"c"})
+
+    def test_builder_pattern_add_to_context_counts_as_own(self) -> None:
+        """Options() then add_to_context before any inherit_from counts as own."""
+        options = Options()
+        options.add_to_group("g", 1)
+        options.add_to_context("c", 1)
+
+        assert options.own_context_keys == frozenset({"c"})
+
+    def test_own_and_inherited_context_key_overlap(self) -> None:
+        """A key that is BOTH the feature's own declared context key AND delivered via inherit_from is in
+        BOTH own_context_keys AND inherited_context_keys after the call."""
+        consumer = Options(context={"tenant": "acme"})
+        child = Options(context={"tenant": "acme"})
+
+        child.inherit_from(consumer, inherit_context_keys=frozenset({"tenant"}))
+
+        assert "tenant" in child.own_context_keys
+        assert "tenant" in child.inherited_context_keys
+
+    def test_purely_inherited_context_key_is_not_own(self) -> None:
+        """A context key absent from the feature's own declaration before inherit_from is inherited but not own."""
+        consumer = Options(context={"tenant": "acme"})
+        child = Options()
+
+        child.inherit_from(consumer, inherit_context_keys=frozenset({"tenant"}))
+
+        assert "tenant" in child.inherited_context_keys
+        assert "tenant" not in child.own_context_keys
+
+
+class TestIsOwn:
+    """Options.is_own(key) is True for group OR context own keys."""
+
+    def test_is_own_true_for_own_group_key(self) -> None:
+        options = Options(group={"g": 1})
+
+        assert options.is_own("g") is True
+
+    def test_is_own_true_for_own_context_key(self) -> None:
+        options = Options(context={"c": 1})
+
+        assert options.is_own("c") is True
+
+    def test_is_own_false_for_purely_inherited_group_key(self) -> None:
+        """A purely inherited key (case (e)) is not own."""
+        consumer = Options(group={"kg_backend": "neo4j"})
+        child = Options()
+        child.inherit_from(consumer)
+
+        assert child.is_own("kg_backend") is False
+
+    def test_is_own_false_for_purely_inherited_context_key(self) -> None:
+        consumer = Options(context={"tenant": "acme"})
+        child = Options()
+        child.inherit_from(consumer, inherit_context_keys=frozenset({"tenant"}))
+
+        assert child.is_own("tenant") is False
+
+    def test_is_own_true_for_overlap_group_key(self) -> None:
+        """Case (d): own AND inherited key still reports is_own True."""
+        consumer = Options(group={"kg_backend": "neo4j"})
+        child = Options(group={"kg_backend": "neo4j"})
+        child.inherit_from(consumer)
+
+        assert child.is_own("kg_backend") is True
+
+    def test_is_own_true_for_overlap_context_key(self) -> None:
+        """Case (c): own AND inherited context key still reports is_own True."""
+        consumer = Options(context={"tenant": "acme"})
+        child = Options(context={"tenant": "acme"})
+        child.inherit_from(consumer, inherit_context_keys=frozenset({"tenant"}))
+
+        assert child.is_own("tenant") is True
+
+
+class TestOwnKeysLocking:
+    """inherit_from locks own-key tracking when it commits, even when nothing is forwarded.
+    Once locked, later add_to_group/add_to_context calls no longer extend own keys, even though the
+    key is still present in .group/.context."""
+
+    def test_inherit_from_with_nothing_forwarded_still_locks(self) -> None:
+        """inherit_from(forward_group=False) with no matching consumer keys still locks own-key tracking."""
+        consumer = Options(group={"unrelated": 1})
+        options = Options()
+
+        options.inherit_from(consumer, forward_group=False)
+        options.add_to_context("late_key", 1)
+
+        assert "late_key" in options.context
+        assert "late_key" not in options.own_context_keys
+
+    def test_late_add_to_group_after_lock_is_not_own(self) -> None:
+        """A group key added after inherit_from has run is present in .group but not own."""
+        consumer = Options(group={"unrelated": 1})
+        options = Options()
+
+        options.inherit_from(consumer, forward_group=False)
+        options.add_to_group("late_group_key", 1)
+
+        assert "late_group_key" in options.group
+        assert "late_group_key" not in options.own_group_keys
+
+    def test_key_removed_from_dict_drops_out_of_own_group_keys(self) -> None:
+        """A key later popped from .group is never reported as still own (intersection with live dict)."""
+        options = Options(group={"domain": "x", "other": 1})
+        del options.group["domain"]
+
+        assert "domain" not in options.own_group_keys
+        assert "other" in options.own_group_keys
+
+    def test_key_removed_from_dict_drops_out_of_own_context_keys(self) -> None:
+        options = Options(context={"domain": "x", "other": 1})
+        del options.context["domain"]
+
+        assert "domain" not in options.own_context_keys
+        assert "other" in options.own_context_keys
+
+    def test_set_new_key_before_lock_counts_as_own(self) -> None:
+        """Options.set on a brand-new key (before any inherit_from) is unioned into own_group_keys."""
+        options = Options()
+        options.set("new_key", 1)
+
+        assert "new_key" in options.own_group_keys
+
+    def test_setitem_new_key_before_lock_counts_as_own(self) -> None:
+        """The __setitem__ path (options[key] = value) follows the same own-key rule as .set."""
+        options = Options()
+        options["new_key"] = 1
+
+        assert "new_key" in options.own_group_keys
+
+    def test_set_existing_key_does_not_change_own_key_tracking(self) -> None:
+        """Updating an already-existing key's value does not add/remove own-key membership."""
+        consumer = Options(group={"kg_backend": "neo4j"})
+        options = Options()
+        options.inherit_from(consumer)
+        assert "kg_backend" not in options.own_group_keys
+
+        options.set("kg_backend", "memgraph")
+
+        assert "kg_backend" not in options.own_group_keys
+
+    def test_set_new_key_after_lock_is_not_own(self) -> None:
+        """Options.set on a brand-new key after inherit_from has run is not unioned into own_group_keys."""
+        consumer = Options(group={"unrelated": 1})
+        options = Options()
+        options.inherit_from(consumer, forward_group=False)
+
+        options.set("post_pipeline_key", 1)
+
+        assert "post_pipeline_key" in options.group
+        assert "post_pipeline_key" not in options.own_group_keys
+
+    def test_deepcopy_carries_own_keys_and_lock(self) -> None:
+        """rebuild/deepcopy carry own_group_keys, own_context_keys, and the lock forward unchanged."""
+        consumer = Options(group={"kg_backend": "neo4j"}, context={"trace_id": "abc"})
+        options = Options(group={"own_key": "own_value"}, context={"own_ctx": "v"})
+        options.inherit_from(consumer, inherit_context_keys=frozenset({"trace_id"}))
+        assert options.own_group_keys == frozenset({"own_key"})
+        assert options.own_context_keys == frozenset({"own_ctx"})
+
+        copied = deepcopy(options)
+
+        assert copied.own_group_keys == frozenset({"own_key"})
+        assert copied.own_context_keys == frozenset({"own_ctx"})
+
+        # The lock survives too: further enrichment on the deep copy still does not become own.
+        copied.add_to_context("post_copy_key", 1)
+        assert "post_copy_key" not in copied.own_context_keys
+
+    def test_lock_own_keys_keeps_constructor_keys_and_blocks_later_writes(self) -> None:
+        """After lock_own_keys, constructor keys stay own; later group/context/set writes are not own."""
+        options = Options(group={"g": 1}, context={"c": 1})
+
+        options.lock_own_keys()
+        options.add_to_group("late_group_key", 1)
+        options.add_to_context("late_context_key", 1)
+        options.set("late_set_key", 1)
+
+        assert "late_group_key" in options.group
+        assert "late_context_key" in options.context
+        assert "late_set_key" in options.group
+        assert options.own_group_keys == frozenset({"g"})
+        assert options.own_context_keys == frozenset({"c"})
+        assert options.is_own("late_group_key") is False
+        assert options.is_own("late_context_key") is False
+        assert options.is_own("late_set_key") is False
+
+    def test_lock_own_keys_is_idempotent(self) -> None:
+        """Locking twice does not raise and yields the same own keys as locking once."""
+        locked_once = Options(group={"g": 1}, context={"c": 1})
+        locked_twice = Options(group={"g": 1}, context={"c": 1})
+
+        locked_once.lock_own_keys()
+        locked_twice.lock_own_keys()
+        locked_twice.lock_own_keys()
+        for options in (locked_once, locked_twice):
+            options.add_to_group("late_group_key", 1)
+            options.add_to_context("late_context_key", 1)
+
+        assert locked_twice.own_group_keys == locked_once.own_group_keys == frozenset({"g"})
+        assert locked_twice.own_context_keys == locked_once.own_context_keys == frozenset({"c"})
+
+    def test_inherit_from_after_lock_own_keys(self) -> None:
+        """inherit_from still commits after lock_own_keys; inherited keys are not own, pre-lock keys are."""
+        consumer = Options(group={"kg_backend": "neo4j"})
+        child = Options(group={"own_key": "own_value"})
+        child.lock_own_keys()
+
+        forwarded = child.inherit_from(consumer)
+
+        assert forwarded == frozenset({"kg_backend"})
+        assert child.group["kg_backend"] == "neo4j"
+        assert child.is_own("kg_backend") is False
+        assert child.is_own("own_key") is True
+
+
+class TestUnionOwnKeys:
+    """When two value-equal Feature requests from different consumers merge into one surviving
+    Feature, the merged feature's "own" answer must be the union of both requesters' own
+    declarations, deterministic regardless of merge order."""
+
+    def test_union_own_keys_unions_group_and_context(self) -> None:
+        """Real invariant: union_own_keys is only ever called on two Options with equal group/context
+        (Engine.add_feature_to_collection's merge branch only merges value-equal features); it unions
+        which keys count as 'own', never copies values across mismatched Options. Exercises the real
+        union direction: the receiver (a) does NOT already own the keys b is unioning in."""
+        a = Options(group={"shared_g": 1}, context={"shared_c": 1})
+        b = Options()
+        b.group["shared_g"] = 1  # same value, but NOT b's own declaration (simulates pure inheritance)
+        b.context["shared_c"] = 1
+
+        a.union_own_keys(b)
+
+        assert a.own_group_keys == frozenset({"shared_g"})
+        assert a.own_context_keys == frozenset({"shared_c"})
+
+        # Real union direction: a does NOT already own the key b is bringing in.
+        a2 = Options()
+        a2.group["only_bs_own_g"] = 1  # present but not a's own declaration
+        b2 = Options(group={"only_bs_own_g": 1})
+
+        a2.union_own_keys(b2)
+
+        assert "only_bs_own_g" in a2.own_group_keys
+
+    def test_union_own_keys_unions_lock_state_when_only_other_is_locked(self) -> None:
+        """The merged lock state is the OR of both sides: b locked and a unlocked leaves a locked."""
+        a = Options(group={"g": 1})
+        assert a._own_keys_locked is False
+
+        consumer = Options(group={"g": 1})
+        b = Options(group={"g": 1})
+        b.inherit_from(consumer)
+        assert b._own_keys_locked is True
+
+        a.union_own_keys(b)
+
+        assert a._own_keys_locked is True
+
+    def test_union_own_keys_unions_lock_state_when_only_self_is_locked(self) -> None:
+        """Symmetric case: a already locked, b not locked; a must remain locked after the union."""
+        consumer = Options(group={"g": 1})
+        a = Options(group={"g": 1})
+        a.inherit_from(consumer)
+        assert a._own_keys_locked is True
+
+        b = Options(group={"g": 1})
+        assert b._own_keys_locked is False
+
+        a.union_own_keys(b)
+
+        assert a._own_keys_locked is True
+
+    def test_union_own_keys_leaves_inherited_keys_untouched(self) -> None:
+        """union_own_keys merges own-key provenance and the lock only; inherited_* provenance stays the receiver's."""
+        consumer = Options(group={"h": 1}, context={"k": "v"})
+        a = Options(group={"g": 1})
+        b = Options(group={"g": 1})
+        b.inherit_from(consumer, inherit_context_keys=frozenset({"k"}))
+        assert b.inherited_group_keys == frozenset({"h"})
+        assert b.inherited_context_keys == frozenset({"k"})
+        assert a.inherited_group_keys == frozenset()
+        assert a.inherited_context_keys == frozenset()
+
+        a.union_own_keys(b)
+
+        assert a.inherited_group_keys == frozenset()
+        assert a.inherited_context_keys == frozenset()
+
+    def test_union_own_keys_is_order_independent_for_context(self) -> None:
+        """Two consumers' Options for the same input feature: one has 'k' as its own context declaration,
+        the other receives 'k' purely via inherit_from propagation. Both merge directions agree on the result."""
+        consumer = Options(context={"k": "v"})
+
+        a = Options(context={"k": "v"})
+        b = Options()
+        b.inherit_from(consumer, inherit_context_keys=frozenset({"k"}))
+        assert "k" in a.own_context_keys
+        assert "k" not in b.own_context_keys
+
+        a_copy = deepcopy(a)
+        b_copy = deepcopy(b)
+        a_copy.union_own_keys(b_copy)
+
+        b_copy2 = deepcopy(b)
+        a_copy2 = deepcopy(a)
+        b_copy2.union_own_keys(a_copy2)
+
+        assert "k" in a_copy.own_context_keys
+        assert "k" in b_copy2.own_context_keys
+        assert a_copy.own_context_keys == b_copy2.own_context_keys

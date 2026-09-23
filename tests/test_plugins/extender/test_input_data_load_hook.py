@@ -7,7 +7,7 @@ deny-with-fallback, and the "activate only when needed" short-circuit.
 
 import logging
 import sqlite3
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from types import MappingProxyType
 from typing import Any
 
@@ -94,6 +94,23 @@ class _NoOpValidateInputFeatureExtender(Extender):
 def _write_csv(path: Path, column: str, values: list[int]) -> None:
     lines = "\n".join(str(v) for v in values)
     path.write_text(f"{column}\n{lines}\n", encoding="utf-8")
+
+
+class _InputDataLoadTamperingExtender(Extender):
+    """Calls func for the real loaded data, then returns DIFFERENT (but shape-valid) data instead of it."""
+
+    def __init__(self, column: str, raise_on_error: bool = True) -> None:
+        self.priority = 100
+        self.raise_on_error = raise_on_error
+        self.name = "input_data_load_tamper"
+        self._column = column
+
+    def wraps(self) -> set[ExtenderHook]:
+        return {ExtenderHook.INPUT_DATA_LOAD}
+
+    def __call__(self, func: Any, *args: Any, **kwargs: Any) -> Any:
+        func(*args, **kwargs)
+        return [{self._column: 999}, {self._column: 999}]
 
 
 class TestInputDataLoadHookFiresAlongsideCalculateExtender:
@@ -220,6 +237,25 @@ class TestDenyWithFallback:
         )
 
 
+class TestExtenderCannotSubstituteTheLoadedData:
+    """An extender that calls func for the real load, then returns different data, must not win."""
+
+    def test_tampered_data_is_discarded_in_favor_of_the_real_load(self, tmp_path: Path) -> None:
+        column = f"{_MARKER}_col_h"
+        path = tmp_path / "data.csv"
+        _write_csv(path, column, [1, 2])
+        extender = _InputDataLoadTamperingExtender(column)
+
+        result = mloda.run_all(
+            [column],
+            compute_frameworks={PythonDictFramework},
+            data_access_collection=DataAccessCollection(files={str(path)}),
+            function_extender={extender},
+        )
+
+        assert result[0][column] == [1, 2], "The real loaded data must be used, not the tampered one"
+
+
 class TestComputeFrameworkCurrentShortCircuit:
     """ComputeFramework.current() stays None unless a calculate or fetch extender is registered."""
 
@@ -270,6 +306,21 @@ class _DirectLoadReader(BaseInputData):
     @classmethod
     def load_data(cls, data_access: Any, features: FeatureSet) -> Any:
         return [1, 2, 3]
+
+
+def _identity_of(data_access: Any) -> str:
+    extender = _InputDataLoadCapturingExtender()
+    cfw = ComputeFramework(function_extender={extender})
+    reader = _DirectLoadReader()
+    features = FeatureSet()
+
+    with cfw.activate(), _build_calc_context().activate():
+        BaseInputData._load_data_via_hook(reader, data_access, features)
+
+    assert extender.captured is not None
+    identity = extender.captured.data_access_identity
+    assert identity is not None
+    return identity
 
 
 class TestDataAccessIdentityHidesDictCredentialValues:
@@ -381,21 +432,342 @@ class TestDataAccessIdentityOfUriStrings:
             pytest.param("postgresql://u:pa?ss@host/db", "postgresql://host/db", id="question-mark-in-userinfo"),
             pytest.param("postgresql://u:pa#ss@host/db", "postgresql://host/db", id="hash-in-userinfo"),
             pytest.param("http://[::1]/x@y", "http://[::1]/x@y", id="ipv6-host-at-sign-in-path"),
+            pytest.param(
+                "postgresql://host/db%3Fpassword=hunter2",
+                "postgresql://host/db",
+                id="percent-encoded-question-mark-secret-in-uri",
+            ),
+            pytest.param(
+                "postgresql://host/db%23password=hunter2",
+                "postgresql://host/db",
+                id="percent-encoded-hash-secret-in-uri",
+            ),
         ],
     )
     def test_identity_keeps_host_and_path_only(self, uri: str, expected: str) -> None:
-        extender = _InputDataLoadCapturingExtender()
-        cfw = ComputeFramework(function_extender={extender})
-        reader = _DirectLoadReader()
-        features = FeatureSet()
+        assert _identity_of(uri) == expected
 
-        with cfw.activate(), _build_calc_context().activate():
-            BaseInputData._load_data_via_hook(reader, uri, features)
 
-        assert extender.captured is not None
-        identity = extender.captured.data_access_identity
-        assert identity is not None
+class TestDataAccessIdentityOfSchemeLessConnectionStrings:
+    """Scheme-less keyword/ODBC and user:pw@host strings must not leak credentials; other strings stay as is."""
+
+    @pytest.mark.parametrize(
+        ("value", "expected", "secret"),
+        [
+            pytest.param(
+                "host=localhost user=alice password=hunter2",
+                "{host, password, user}",
+                "hunter2",
+                id="libpq-keywords",
+            ),
+            pytest.param("DRIVER={ODBC};UID=alice;PWD=hunter2", "{driver, pwd, uid}", "hunter2", id="odbc-keywords"),
+            pytest.param("user:hunter2@host/db", "host/db", "hunter2", id="userinfo-scheme-less"),
+            pytest.param("user:pw@host/db?token=hunter2", "host/db", "hunter2", id="scheme-less-userinfo-query-secret"),
+            pytest.param(
+                "user:pw@host/db#token=hunter2", "host/db", "hunter2", id="scheme-less-userinfo-fragment-secret"
+            ),
+            pytest.param("host=localhost password='hunter 2'", "{host, password}", "hunter 2", id="libpq-quoted-value"),
+            pytest.param(
+                "DRIVER={ODBC Driver 17};UID=alice;PWD={hun;ter2}",
+                "{driver, pwd, uid}",
+                "hun;ter2",
+                id="odbc-braces-with-separator",
+            ),
+            pytest.param("Host=a HOST=b", "{host}", "=b", id="mixed-case-duplicate-keys"),
+            pytest.param("password=hunter2", "{password}", "hunter2", id="single-known-key"),
+            pytest.param(
+                "DRIVER={x};Server=https://host;PWD=secret",
+                "{driver, pwd, server}",
+                "secret",
+                id="keyword-string-containing-scheme-separator",
+            ),
+            pytest.param("user:p@ss@host/db", "host/db", "p@ss", id="at-sign-in-userinfo-password"),
+            pytest.param("user:p@ss/word@host/db", "host/db", "ss/word", id="at-sign-and-slash-in-password"),
+            pytest.param("dbname=x user=y", "{dbname, user}", "=y", id="dbname-and-user"),
+            pytest.param(
+                "password = hunter2 host = localhost", "{host, password}", "hunter2", id="whitespace-around-equals"
+            ),
+            pytest.param(
+                "password= hunter2 host =localhost", "{host, password}", "hunter2", id="uneven-whitespace-around-equals"
+            ),
+            pytest.param(
+                "dbname = mydb password = hunter2 port = 5432",
+                "{dbname, password, port}",
+                "hunter2",
+                id="spaced-dbname-password-port",
+            ),
+            pytest.param("PWD={x; secret1 host=y};UID=a", "{pwd, uid}", "secret1", id="odbc-brace-value-with-fake-key"),
+            pytest.param("user = alice password = hunter2", "{password, user}", "hunter2", id="spaced-user-password"),
+            pytest.param(
+                "host=h password=correct horse=battery",
+                "{host, password}",
+                "horse",
+                id="unrecognized-key-after-secret-not-printed",
+            ),
+            pytest.param(
+                "host=h password='my pass=word'",
+                "{host, password}",
+                "my pass=word",
+                id="quoted-value-with-key-fragment",
+            ),
+            pytest.param("pass=hunter2", "{pass}", "hunter2", id="secret-key-pass"),
+            pytest.param("sslpassword=hunter2", "{sslpassword}", "hunter2", id="secret-key-sslpassword"),
+            pytest.param("key=abc", "{key}", "abc", id="secret-key-key"),
+            pytest.param(
+                "access_key=abc secret_key=def", "{access_key, secret_key}", "abc", id="secret-keys-access-secret"
+            ),
+            pytest.param(
+                "aws_secret_access_key=hunter2", "{aws_secret_access_key}", "hunter2", id="secret-key-aws-secret-access"
+            ),
+            pytest.param("client_secret=x client_id=abc", "{client_secret}", "abc", id="client-id-not-printed"),
+            pytest.param("account_key=hunter2", "{account_key}", "hunter2", id="secret-key-account-key"),
+            pytest.param("auth_token=hunter2", "{auth_token}", "hunter2", id="secret-key-auth-token"),
+            pytest.param("credentials=hunter2", "{credentials}", "hunter2", id="secret-key-credentials"),
+            pytest.param("sas=hunter2", "{sas}", "hunter2", id="secret-key-sas"),
+            pytest.param(
+                "service-account-key=hunter2", "{service-account-key}", "hunter2", id="secret-key-with-dashes"
+            ),
+            pytest.param(
+                "jdbc:sqlserver://host:1433;databaseName=db;user=a;password=hunter2",
+                "{password, user}",
+                "hunter2",
+                id="jdbc-url-with-secret-key",
+            ),
+            pytest.param(
+                "host=/var/run/postgresql user=alice password=hunter2",
+                "{host, password, user}",
+                "hunter2",
+                id="host-value-is-a-path",
+            ),
+            pytest.param("u:p/w@host/db", "host/db", "p/w", id="slash-in-userinfo-password"),
+            pytest.param("u:p w@host/db", "host/db", "p w", id="space-in-userinfo-password"),
+            pytest.param("u:p\\w@host/db", "host/db", "p\\w", id="backslash-in-userinfo-password"),
+            pytest.param(":hunter2@host/db", "host/db", "hunter2", id="empty-user-userinfo"),
+            pytest.param(
+                Path("host=localhost password=hunter2"), "{host, password}", "hunter2", id="path-object-keywords"
+            ),
+            pytest.param(Path("user:hunter2@host/db"), "host/db", "hunter2", id="path-object-userinfo"),
+            pytest.param(
+                PurePosixPath("s3://alice:hunter2@bucket/key"), "bucket/key", "hunter2", id="pure-posix-path-uri"
+            ),
+            pytest.param(
+                "user:pw@host/db%3Ftoken=hunter2", "host/db", "hunter2", id="userinfo-percent-encoded-question-mark"
+            ),
+            pytest.param(
+                "host.com/db%3Fx password=hunter2",
+                "{password}",
+                "hunter2",
+                id="percent-encoded-question-mark-then-keyword-scan-guard",
+            ),
+        ],
+    )
+    def test_connection_string_identity_hides_values(self, value: Any, expected: str, secret: str) -> None:
+        identity = _identity_of(value)
         assert identity == expected
+        assert secret not in identity
+
+    @pytest.mark.parametrize(
+        ("value", "expected"),
+        [
+            pytest.param("notes:2024@work.txt", "work.txt", id="userinfo-lookalike"),
+            pytest.param("user=alice.csv", "{user}", id="file-name-starting-with-connection-key"),
+            pytest.param(
+                "host.com/db?config=password:hunter2",
+                "host.com/db?config=password:hunter2",
+                id="secret-value-under-unrecognized-key-not-scrubbed",
+            ),
+            pytest.param(
+                "host.com/db%253Fpassword=hunter2",
+                "host.com/db%253Fpassword=hunter2",
+                id="double-percent-encoded-question-mark-not-detected",
+            ),
+            pytest.param(
+                "password%3Dhunter2", "password%3Dhunter2", id="percent-encoded-pair-without-anchor-not-detected"
+            ),
+            pytest.param(
+                "host.com/db%3Bpassword=hunter2",
+                "host.com/db%3Bpassword=hunter2",
+                id="percent-encoded-semicolon-without-anchor-not-detected",
+            ),
+        ],
+    )
+    def test_documented_accepted_loss(self, value: str, expected: str) -> None:
+        """Known heuristic limits: false positives are reduced, false negatives pass through unchanged."""
+        assert _identity_of(value) == expected
+
+    @pytest.mark.parametrize(
+        ("value", "expected"),
+        [
+            pytest.param(
+                "host.com/db?user=alice&password=hunter2",
+                "host.com/db",
+                id="scheme-less-query-secret-drops-whole-query",
+            ),
+            pytest.param(
+                "localhost:5432/db?password=hunter2",
+                "localhost:5432/db",
+                id="scheme-less-query-secret-with-port-drops-whole-query",
+            ),
+            pytest.param(
+                "host.com/db#password=hunter2",
+                "host.com/db",
+                id="scheme-less-fragment-secret-drops-fragment",
+            ),
+            pytest.param(
+                "host.com/db?  password=hunter2",
+                "host.com/db",
+                id="scheme-less-query-secret-with-whitespace-after-delimiter",
+            ),
+            pytest.param(
+                "host.com/db%3Fpassword=hunter2",
+                "host.com/db",
+                id="percent-encoded-question-mark-secret",
+            ),
+            pytest.param(
+                "host.com/db%3fpassword=hunter2",
+                "host.com/db",
+                id="percent-encoded-lower-case-question-mark-secret",
+            ),
+            pytest.param(
+                "host.com/db?password%3Dhunter2",
+                "host.com/db",
+                id="percent-encoded-equals-in-query-secret",
+            ),
+            pytest.param(
+                "host.com/db%23password=hunter2",
+                "host.com/db",
+                id="percent-encoded-hash-secret",
+            ),
+            pytest.param(
+                "host.com/db?a=1%26password=hunter2",
+                "host.com/db",
+                id="percent-encoded-ampersand-in-query-secret",
+            ),
+            pytest.param(
+                "host.com/db?%20password=hunter2",
+                "host.com/db",
+                id="percent-encoded-leading-space-secret",
+            ),
+            pytest.param(
+                "host.com/db?pass%77ord=hunter2",
+                "host.com/db",
+                id="percent-encoded-key-letter-secret",
+            ),
+        ],
+    )
+    def test_scheme_less_query_or_fragment_secret_drops_query(self, value: str, expected: str) -> None:
+        """A scheme-less host/path with a credential-shaped key in its ?query or #fragment drops it (issue #1543)."""
+        identity = _identity_of(value)
+        assert identity == expected
+        assert "hunter2" not in identity
+
+    def test_query_fragment_fix_does_not_widen_uri_or_path_scope(self) -> None:
+        """Guards: fixing #1543 must not touch the URI branch, ordinary paths, or the already-fixed ODBC case."""
+        assert _identity_of("https://host/p?email=a@b.com/x&sig=S") == "https://host/p"
+        assert _identity_of("postgresql://host/db?user=u&password=p@ss/word") == "postgresql://host/db"
+        assert (
+            _identity_of("abfss://container@account.dfs.core.windows.net/p?sig=S")
+            == "abfss://container@account.dfs.core.windows.net/p"
+        )
+        assert _identity_of("some/path/user=alice.csv") == "some/path/user=alice.csv"
+        assert _identity_of("data/q?a/report=2024.csv") == "data/q?a/report=2024.csv"
+        assert _identity_of("Data Source=srv;User Id=alice;Password=hunter2") == "{password}"
+
+    @pytest.mark.parametrize(
+        ("value", "expected"),
+        [
+            pytest.param(
+                "host.com/db?redirect=https://x&password=y",
+                "host.com/db",
+                id="scheme-less-value-containing-embedded-scheme-in-query-is-not-misrouted-to-uri-branch",
+            ),
+            pytest.param(
+                "host.com/db?a=1;password=2",
+                "host.com/db",
+                id="semicolon-bounded-secret-after-question-mark-anchor-is-scrubbed",
+            ),
+            pytest.param(
+                "host.com/db?a=1&b=2;password=3",
+                "host.com/db",
+                id="semicolon-bounded-secret-after-ampersand-then-question-mark-anchor-is-scrubbed",
+            ),
+            pytest.param(
+                "host.com/db;password=hunter2",
+                "{password}",
+                id="semicolon-bounded-secret-with-no-query-or-fragment-anchor-collapses-to-key-names",
+            ),
+        ],
+    )
+    def test_credential_leaks_not_covered_by_the_current_query_string_fix(self, value: str, expected: str) -> None:
+        """Currently fails: a scheme-less value containing "://" inside its query (not as its own leading
+        scheme) is misrouted into the URI branch and bypasses _strip_credential_query entirely; and
+        _QUERY_KEY_PATTERN does not treat ";" as a boundary, so a ";"-bounded secret key survives even when a
+        "?"/"#" anchor is present, or (with no anchor at all) survives the path-prefix bail-out guard in
+        _connection_string_identity."""
+        identity = _identity_of(value)
+        assert identity == expected
+        assert "hunter2" not in identity
+        assert "password=y" not in identity
+        assert "password=2" not in identity
+        assert "password=3" not in identity
+
+    def test_credential_leak_fix_must_not_widen_scope_regression_guards(self) -> None:
+        """Regression guards for the fix to the cases above: these must keep behaving exactly as today."""
+        assert _identity_of("/srv/a;host=b") == "/srv/a;host=b"
+        assert _identity_of("C:\\data;user=1") == "C:\\data;user=1"
+        assert _identity_of("some/path/user=alice.csv") == "some/path/user=alice.csv"
+        assert _identity_of("Data Source=srv;User Id=alice;Password=hunter2") == "{password}"
+        assert _identity_of("host.com/db?limit=10") == "host.com/db?limit=10"
+        assert _identity_of("https://host/p?email=a@b.com/x&sig=S") == "https://host/p"
+        assert _identity_of("postgresql://host/db?user=u&password=p@ss/word") == "postgresql://host/db"
+        assert (
+            _identity_of("abfss://container@account.dfs.core.windows.net/p?sig=S")
+            == "abfss://container@account.dfs.core.windows.net/p"
+        )
+
+    @pytest.mark.parametrize(
+        "value",
+        [
+            pytest.param("data/plain.csv", id="relative-path"),
+            pytest.param("user=42/part.parquet", id="connection-key-lookalike-path"),
+            pytest.param("/data/year=2024/part.parquet", id="hive-path"),
+            pytest.param("report=2024.csv", id="unknown-key-file-name"),
+            pytest.param("a=1 b=2", id="unknown-keys"),
+            pytest.param("year=2024 month=01", id="unknown-keys-partition-like"),
+            pytest.param("", id="empty-string"),
+            pytest.param("C:\\dir\\a@b", id="windows-backslash-path"),
+            pytest.param("C:/a@b", id="windows-forward-slash-path"),
+            pytest.param("me@work.txt", id="email-like"),
+            pytest.param("alice@host/db", id="username-only-userinfo"),
+            pytest.param("/mnt/share/my db=main.csv", id="path-with-space-and-key"),
+            pytest.param("/var/log/app db=1.log", id="path-with-space-and-db-key"),
+            pytest.param("https://host/p;user=alice/x", id="uri-with-plain-connection-key"),
+            pytest.param("s3://bucket/a;db=main/part.parquet", id="s3-uri-with-plain-connection-key"),
+            pytest.param("/srv/a;host=b", id="absolute-path-with-semicolon-key"),
+            pytest.param("C:\\data;user=1", id="windows-path-with-semicolon-key"),
+            pytest.param(Path("data/plain.csv"), id="plain-path-object"),
+            pytest.param("host.com/db?limit=10", id="scheme-less-query-with-non-secret-key-unchanged"),
+            pytest.param("data/file%3Fname.csv", id="percent-encoded-question-mark-in-file-name"),
+            pytest.param("host.com/db%3Flimit=10", id="percent-encoded-question-mark-with-non-secret-key"),
+            pytest.param("https://host/a%3Fb.csv", id="percent-encoded-question-mark-in-uri-path"),
+            pytest.param(
+                "postgresql://host/db%3Flimit=10", id="scheme-percent-encoded-question-mark-with-non-secret-key"
+            ),
+        ],
+    )
+    def test_non_connection_strings_are_unchanged(self, value: Any) -> None:
+        assert _identity_of(value) == str(value)
+
+    def test_path_objects_are_scanned_like_strings(self) -> None:
+        assert _identity_of(Path("host=localhost password=hunter2")) == "{host, password}"
+        assert _identity_of(Path("user:hunter2@host/db")) == "host/db"
+        assert _identity_of(Path("data/plain.csv")) == str(Path("data/plain.csv"))
+        assert "hunter2" not in _identity_of(PurePosixPath("s3://alice:hunter2@bucket/key"))
+        assert _identity_of(PurePosixPath("s3://alice:hunter2@bucket/key")) == "bucket/key"
+
+    def test_long_string_without_equals_returns_quickly(self) -> None:
+        value = "a " * 20000
+        assert _identity_of(value) == value
 
 
 class _SecretBearingAccess:
@@ -425,18 +797,7 @@ class TestDataAccessIdentityOfNonStringValues:
         ],
     )
     def test_identity_of_non_string_value(self, value: Any, expected: str) -> None:
-        extender = _InputDataLoadCapturingExtender()
-        cfw = ComputeFramework(function_extender={extender})
-        reader = _DirectLoadReader()
-        features = FeatureSet()
-
-        with cfw.activate(), _build_calc_context().activate():
-            BaseInputData._load_data_via_hook(reader, value, features)
-
-        assert extender.captured is not None
-        identity = extender.captured.data_access_identity
-        assert identity is not None
-        assert identity == expected
+        assert _identity_of(value) == expected
 
 
 class TestDataAccessIdentityBaselineForNonCredentialShapedValues:

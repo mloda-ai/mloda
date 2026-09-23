@@ -11,10 +11,14 @@ from mloda.user import PluginCollector
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from mloda_plugins.feature_group.experimental.data_quality.missing_value.pyarrow import PyArrowMissingValueFeatureGroup
 
+from tests.test_plugins.feature_group.experimental.test_missing_value_feature_group.missing_value_zero_row_test_mixin import (
+    MissingValueZeroRowTestMixin,
+)
 from tests.test_plugins.feature_group.experimental.test_missing_value_feature_group.test_missing_value_utils import (
     PyArrowMissingValueTestDataCreator,
     validate_missing_value_features,
 )
+from tests.test_plugins.feature_group.experimental.zero_row_result_type_test_mixin import PyArrowZeroRowAdapter
 
 
 @pytest.fixture
@@ -362,6 +366,10 @@ class TestPyArrowMissingValueFeatureGroup:
 
         with pytest.raises(ValueError, match="Constant value must be provided for constant imputation method"):
             PyArrowMissingValueFeatureGroup.calculate_feature(sample_table_with_missing, feature_set)
+
+
+class TestPyArrowMissingValueZeroRow(PyArrowZeroRowAdapter, MissingValueZeroRowTestMixin):
+    feature_group_class = PyArrowMissingValueFeatureGroup
 
 
 class TestMissingValuePyArrowIntegration:

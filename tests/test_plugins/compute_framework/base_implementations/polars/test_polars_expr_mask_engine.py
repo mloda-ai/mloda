@@ -4,11 +4,15 @@ This file adds Polars-expr-specific unit tests that verify pl.Expr return types
 and a LazyFrame end-to-end test.
 """
 
+from decimal import Decimal
 from typing import Any
 
 import pytest
 
 from mloda.provider import BaseMaskEngine
+from mloda_plugins.compute_framework.base_implementations.polars.polars_expr_mask_engine import (
+    PolarsExprMaskEngine,
+)
 from tests.test_plugins.compute_framework.base_implementations.mask_engine_test_mixin import (
     MaskEngineTestMixin,
 )
@@ -18,21 +22,12 @@ try:
 except ImportError:
     pl = None  # type: ignore[assignment]
 
-try:
-    from mloda_plugins.compute_framework.base_implementations.polars.polars_expr_mask_engine import (
-        PolarsExprMaskEngine,
-    )
-except ImportError:
-    PolarsExprMaskEngine = None  # type: ignore[assignment, misc]
-
 
 @pytest.mark.skipif(pl is None, reason="polars not installed")
 class TestPolarsExprMaskEngine(MaskEngineTestMixin):
     """Tests for the PolarsExprMaskEngine that returns pl.Expr objects."""
 
-    @pytest.fixture
-    def engine(self) -> type[BaseMaskEngine]:
-        return PolarsExprMaskEngine
+    mask_engine_class = PolarsExprMaskEngine
 
     @pytest.fixture
     def sample_data(self) -> Any:
@@ -43,8 +38,23 @@ class TestPolarsExprMaskEngine(MaskEngineTestMixin):
             }
         )
 
+    @pytest.fixture
+    def empty_data(self) -> Any:
+        return pl.LazyFrame({"status": pl.Series([], dtype=pl.String), "value": pl.Series([], dtype=pl.Int64)})
+
+    @pytest.fixture
+    def decimal_sample_data(self) -> Any:
+        return pl.LazyFrame({"d": [Decimal("12.34"), Decimal("5.50"), None]}, schema={"d": pl.Decimal(10, 2)})
+
     def evaluate_mask(self, mask: Any, data: Any) -> list[bool]:
         result: list[bool] = data.select(mask.alias("__mask")).collect()["__mask"].to_list()
+        return result
+
+    def is_boolean_mask(self, mask: Any, data: Any) -> bool:
+        return bool(data.select(mask.alias("__mask")).collect()["__mask"].dtype == pl.Boolean)
+
+    def apply_mask(self, mask: Any, data: Any) -> dict[str, list[Any]]:
+        result: dict[str, list[Any]] = data.filter(mask).collect().to_dict(as_series=False)
         return result
 
     # -- Polars-expr-specific tests --

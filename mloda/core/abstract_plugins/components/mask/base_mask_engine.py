@@ -18,7 +18,7 @@ class BaseMaskEngine(ABC):
     @classmethod
     @abstractmethod
     def all_true(cls, data: Any) -> Any:
-        """Return a mask of all True with length matching the number of rows in data."""
+        """Return an all-True mask matching data's row count, boolean-typed even at zero rows."""
         ...
 
     @classmethod
@@ -60,7 +60,7 @@ class BaseMaskEngine(ABC):
     @classmethod
     @abstractmethod
     def is_in(cls, data: Any, column: str, values: Any) -> Any:
-        """Return a boolean mask where data[column] is in the values collection."""
+        """Return a boolean mask where data[column] is in values (a list or tuple); an empty one matches nothing."""
         ...
 
     # -- Convenience methods (concrete, built from primitives above) ----------

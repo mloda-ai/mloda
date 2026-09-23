@@ -31,3 +31,16 @@ def column_semantics(df: Any, column: str) -> ColumnSemantics:
         unit=unit,
         is_tz_aware=is_tz_aware,
     )
+
+
+def is_in_values(values: Any, dtype: Any) -> Any:
+    """Wrap ``values`` for ``is_in`` against a ``pl.Decimal`` column; values the column cannot
+    represent exactly never match. Pass through unchanged for every other dtype.
+    """
+    import polars as pl
+
+    if isinstance(dtype, pl.Decimal):
+        cast = pl.Series(values, dtype=dtype, strict=False)
+        kept = [v for v, c in zip(values, cast.to_list()) if v is None or c == v]
+        return pl.Series(kept, dtype=dtype).implode()
+    return values

@@ -36,6 +36,7 @@ from mloda.core.prepare.identify_feature_group import (
 )
 from mloda.core.prepare.resolution_failure_renderer import render_resolution_failure
 from mloda.core.prepare.resolution_types import Elimination
+from mloda.provider import NAME_STAGE, record_match_rejection
 from tests.test_core.test_prepare.identify_seam import evaluate_or_raise, identify_winner
 
 
@@ -57,6 +58,7 @@ NONMATCH_ONLY_NAME = "elim_only_this_other_name_011"
 WIN_WITH_REJECTOR_FEATURE = "elim_win_with_rejector_feat_011"
 DOMAIN_AND_VALUE_REJECT_FEATURE = "elim_domain_and_value_reject_feat_011"
 REPROBE_FEATURE = "elim_reprobe_feat_011"
+NAME_FEATURE = "elim_name_reject_feat_011"
 SCOPED_ABSTRACT_SCOPE = "_ElimBaseFG"
 
 REQUESTED_DOMAIN = "elim_requested_domain_011"
@@ -68,6 +70,7 @@ VALUE_REJECT_REASON = "Property value '14' failed validation for 'window_size'"
 WIN_REJECT_REASON = "Property value 'bad' rejected by match_guard for 'mode'"
 DOMAIN_VALUE_REASON = "Property value '7' failed validation for 'k'"
 REPROBE_REASON = "a criteria-matched candidate must never be re-probed as a value rejection"
+NAME_REJECT_REASON = "unknown part ~edition; ElimNameRejectFG011 returns ~key, ~year"
 
 # A criteria-matched candidate's value must be inspected once (at match time). A failure-path capture that
 # re-probed such a candidate via ``_strict_validation_rejection_reason`` would inspect it a second time.
@@ -374,6 +377,24 @@ class ElimReprobeBFG011(_ElimReprobeFG011):
     MATCHES = frozenset({REPROBE_FEATURE})
 
 
+class ElimNameRejectFG011(_ElimBaseFG):
+    """Name matches, but the criteria hook refuses it as an unknown output part, not an option value."""
+
+    MATCHES = frozenset({NAME_FEATURE})
+    FRAMEWORK_RULE = {ElimFwOne011}
+
+    @classmethod
+    def match_feature_group_criteria(
+        cls,
+        feature_name: FeatureName | str,
+        options: Options,
+        data_access_collection: DataAccessCollection | None = None,
+    ) -> bool:
+        if str(feature_name) == NAME_FEATURE:
+            record_match_rejection(cls.__name__, NAME_REJECT_REASON, stage=NAME_STAGE)
+        return False
+
+
 # A link whose indexes ElimLinksFG011 does not support, driving the links gate to reject.
 ELIM_LINK = Link.inner(
     JoinSpec(ElimLinksFG011, "elim_left_index_011"),
@@ -474,6 +495,15 @@ class TestEliminationStages:
         reason = "no index column matches the run's links"
         assert err.result.eliminations[ElimLinksFG011] == Elimination(stage="links", reason=reason)
         assert f"  - ElimLinksFG011 (links): {reason}" in str(err)
+
+    def test_name_stage(self) -> None:
+        feature = Feature(NAME_FEATURE)
+        plugins: FeatureGroupEnvironmentMapping = {ElimNameRejectFG011: {ElimFwOne011}}
+
+        err = _fail(feature, plugins)
+
+        assert err.result.eliminations[ElimNameRejectFG011] == Elimination(stage="name", reason=NAME_REJECT_REASON)
+        assert f"  - ElimNameRejectFG011 (feature name): {NAME_REJECT_REASON}" in str(err)
 
 
 class TestNearMissMessageBlock:

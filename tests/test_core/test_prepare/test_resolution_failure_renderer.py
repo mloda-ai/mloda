@@ -141,9 +141,9 @@ DEAD_CLASS_NAME_TYPO_791 = "RendererCrossDoaminNameFG791"
 VALUE_STAGE_REJECTION_REASON_791 = "renderer_value_stage_791 declines every value of this option"
 
 # The stages whose gate CAN see the feature name, so a sibling name of a candidate eliminated there may still
-# resolve. Pinned here as the complement of NAME_INDEPENDENT_STAGES: a tenth stage fails the partition test.
+# resolve. Pinned here as the complement of NAME_INDEPENDENT_STAGES: a new stage fails the partition test.
 NAME_DEPENDENT_STAGES_791: frozenset[EliminationStage] = frozenset(
-    {"value_rejection", "input_data", "matcher_error", "capability", "framework_pin"}
+    {"value_rejection", "input_data", "matcher_error", "capability", "framework_pin", "name"}
 )
 
 # The label each stage renders, stated here independently of the renderer: EliminationStage is checked against
@@ -160,13 +160,14 @@ EXPECTED_STAGE_LABELS_791: dict[EliminationStage, str] = {
     "frameworks_not_enabled": "compute framework",
     "framework_pin": "compute framework pin",
     "links": "links",
+    "name": "feature name",
 }
 
 # One synthetic near-miss, rendered once per stage, so every label is read back off a real rendered line.
 STAGE_LABEL_FEATURE_791 = "renderer_stage_label_791"
 STAGE_LABEL_REASON_791 = "eliminated at this stage"
 
-# Stands in for a tenth stage shipped without a near-miss label: no entry of the label table covers this token.
+# Stands in for a new stage shipped without a near-miss label: no entry of the label table covers this token.
 UNLABELED_STAGE_791 = "renderer_unlabeled_stage_791"
 UNLABELED_STAGE_FEATURE_791 = "renderer_unlabeled_stage_feature_791"
 UNLABELED_STAGE_REASON_791 = "eliminated at a stage this build has no label for"
@@ -3289,7 +3290,7 @@ class TestAMalformedDomainReturnIsDecidedLikeTheGateDecidesIt:
 
 
 class TestEveryEliminationStageIsClassified:
-    """A tenth stage must be classified and labelled before it ships, or it silently misrenders or misdrops names."""
+    """A new stage must be classified and labelled before it ships, or it silently misrenders or misdrops names."""
 
     def test_the_two_stage_sets_partition_the_stage_literal(self) -> None:
         """NAME_INDEPENDENT_STAGES and its name-dependent complement cover EliminationStage exactly once."""
@@ -3307,7 +3308,7 @@ class TestEveryEliminationStageIsClassified:
 class TestEveryStageLabelIsPinned:
     """TestEveryEliminationStageIsClassified pins the label table's KEYS; this one pins its VALUES as rendered text.
 
-    Every stage shipping today also has a hand-written rendered line: seven in
+    Every stage shipping today also has a hand-written rendered line: eight in
     tests/test_core/test_prepare/test_candidate_elimination_reasons.py, input_data in
     tests/test_plugins/feature_group/input_data/test_reader_match_rejections.py, matcher_error in
     tests/test_core/test_prepare/test_raising_matcher_containment.py, so a RENAME is already caught per stage.
@@ -3315,7 +3316,7 @@ class TestEveryStageLabelIsPinned:
     """
 
     def test_the_expected_table_names_every_stage(self) -> None:
-        """A tenth stage fails here until someone states the label it renders."""
+        """A new stage fails here until someone states the label it renders."""
         assert frozenset(EXPECTED_STAGE_LABELS_791) == frozenset(get_args(EliminationStage))
 
     @pytest.mark.parametrize(

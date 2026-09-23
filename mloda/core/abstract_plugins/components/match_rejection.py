@@ -22,6 +22,9 @@ class MatchRejection:
 INPUT_DATA_STAGE = "input_data"
 INPUT_DATA_OWNED_STAGE = "input_data_owned"
 
+# The candidate refused the feature name itself, not an option value.
+NAME_STAGE = "name"
+
 
 # Active for one candidate's match call: the engine opens a window per candidate. Maps the recording
 # site's owner name to the first structured rejection the real match pass produced, and the

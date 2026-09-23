@@ -70,3 +70,10 @@ class TestDuckDBSqlMaskEngine(SqlMaskEngineTestMixin):
     def apply_mask(self, mask: Any, data: DuckdbRelation) -> dict[str, list[Any]]:
         result: dict[str, list[Any]] = data.filter(mask).to_arrow_table().to_pydict()
         return result
+
+    def test_greater_equal_lowercase_column_matches_nan_semantics(self, connection: Any) -> None:
+        """DuckDB binds identifiers case-insensitively; a lowercase name must still hit NaN handling."""
+        table = pa.table({"Ratio": pa.array([1.0, float("nan"), 3.0, None], type=pa.float64())})
+        rel = DuckdbRelation.from_arrow(connection, table)
+        mask = DuckDBMaskEngine.greater_equal(rel, "ratio", 1.0)
+        assert self.evaluate_mask(mask, rel) == [True, False, True, False]

@@ -1,11 +1,14 @@
 import math
+import numbers
 from collections.abc import Iterable
 from typing import Any
 
 
 def is_null_or_nan(value: Any) -> bool:
-    """Return True for None or a float NaN (numpy float64 included, a float subclass)."""
-    return value is None or (isinstance(value, float) and math.isnan(value))
+    """Return True for None or a non-integral real NaN (float, numpy float64, ...)."""
+    return value is None or (
+        isinstance(value, numbers.Real) and not isinstance(value, numbers.Integral) and math.isnan(value)
+    )
 
 
 def split_null_or_nan(values: Iterable[Any]) -> tuple[list[Any], bool]:

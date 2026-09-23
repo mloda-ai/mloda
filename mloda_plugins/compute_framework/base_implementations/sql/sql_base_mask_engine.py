@@ -54,7 +54,7 @@ class SqlBaseMaskEngine(BaseMaskEngine):
         cond = f"{quote_ident(column)} >= {quote_value(value)}"
         nan_cond = cls._nan_condition(data, column)
         if nan_cond is not None:
-            return f"({cond}) AND NOT {nan_cond}"
+            return f"(({cond}) AND NOT {nan_cond})"
         return cond
 
     @classmethod
@@ -70,7 +70,7 @@ class SqlBaseMaskEngine(BaseMaskEngine):
         cond = f"{quote_ident(column)} > {quote_value(value)}"
         nan_cond = cls._nan_condition(data, column)
         if nan_cond is not None:
-            return f"({cond}) AND NOT {nan_cond}"
+            return f"(({cond}) AND NOT {nan_cond})"
         return cond
 
     @classmethod

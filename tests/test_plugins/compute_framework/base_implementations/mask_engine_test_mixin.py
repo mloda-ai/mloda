@@ -20,6 +20,7 @@ from abc import abstractmethod
 from decimal import Decimal
 from typing import Any, ClassVar
 
+import numpy as np
 import pytest
 
 from mloda.provider import BaseMaskEngine
@@ -258,6 +259,7 @@ class MaskEngineTestMixin:
             ("greater_than", "score", 1, [False, False, True, False]),
             ("equal", "ratio", None, [False, True, False, True]),
             ("equal", "ratio", float("nan"), [False, True, False, True]),
+            ("equal", "ratio", np.float32("nan"), [False, True, False, True]),
             ("greater_equal", "ratio", 1.0, [True, False, True, False]),
             ("greater_than", "ratio", 1.0, [False, False, True, False]),
             ("is_in", "ratio", [None], [False, True, False, True]),
@@ -275,6 +277,7 @@ class MaskEngineTestMixin:
             "greater_than-score-1",
             "equal-ratio-none",
             "equal-ratio-nan",
+            "equal-ratio-float32-nan",
             "greater_equal-ratio-1",
             "greater_than-ratio-1",
             "is_in-ratio-none",

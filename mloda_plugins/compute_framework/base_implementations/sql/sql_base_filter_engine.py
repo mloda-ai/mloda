@@ -73,7 +73,7 @@ class SqlBaseFilterEngine(BaseFilterEngine):
         condition = f"{quote_ident(column_name)} >= ?"
         nan_cond = cls._nan_condition(data, column_name)
         if nan_cond is not None:
-            condition = f"({condition}) AND NOT {nan_cond}"
+            condition = f"(({condition}) AND NOT {nan_cond})"
         return cls._apply_filter(data, condition, (value,))
 
     @classmethod

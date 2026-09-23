@@ -48,8 +48,8 @@ def column_semantics(df: "pd.DataFrame", column: str) -> ColumnSemantics:
 
 
 def null_or_nan_mask(series: "pd.Series[Any]") -> Any:
-    """Return a NumPy-bool Series flagging null or NaN rows; a float column's isna()
-    misses NaN (both NumPy and ArrowDtype), so its values are checked for NaN too.
+    """Return a NumPy-bool Series flagging null or NaN rows; isna() misses NaN on
+    ArrowDtype and nullable Float columns, so a float column's values are checked for NaN too.
     """
     import numpy as np
     import pandas as pd

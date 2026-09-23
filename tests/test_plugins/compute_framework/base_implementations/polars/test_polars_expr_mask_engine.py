@@ -100,6 +100,13 @@ class TestPolarsExprMaskEngine(MaskEngineTestMixin):
         assert result["status"].to_list() == ["active", "active"]
         assert result["value"].to_list() == [10, 30]
 
+    def test_greater_equal_missing_column_raises_column_not_found(self, engine: type[BaseMaskEngine]) -> None:
+        """A missing column must surface polars' own error, not an AttributeError from the NaN check."""
+        lf = pl.LazyFrame({"a": [1.0, 2.0]})
+        with pytest.raises(pl.exceptions.ColumnNotFoundError):
+            mask = engine.greater_equal(lf, "missing", 1.0)
+            lf.select(mask).collect()
+
 
 @pytest.mark.skipif(pl is None, reason="polars not installed")
 class TestPolarsLazyDataFrameMaskEngine:

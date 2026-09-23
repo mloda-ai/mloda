@@ -34,15 +34,21 @@ def column_semantics(df: Any, column: str) -> ColumnSemantics:
 
 
 def nan_as_null(col: Any, dtype: Any) -> Any:
-    """Turn NaN into null on a float column/expr (fill_nan raises on str and Decimal)."""
-    if dtype.is_float():
+    """Turn NaN into null on a float column/expr (fill_nan raises on str and Decimal).
+
+    A ``None`` dtype means the column is missing; skip fill_nan so polars raises its own error.
+    """
+    if dtype is not None and dtype.is_float():
         return col.fill_nan(None)
     return col
 
 
 def null_or_nan(col: Any, dtype: Any) -> Any:
-    """Return a null-or-NaN boolean mask for a column/expr, given its dtype."""
-    if dtype.is_float():
+    """Return a null-or-NaN boolean mask for a column/expr, given its dtype.
+
+    A ``None`` dtype means the column is missing; skip is_nan so polars raises its own error.
+    """
+    if dtype is not None and dtype.is_float():
         return col.is_null() | col.is_nan()
     return col.is_null()
 

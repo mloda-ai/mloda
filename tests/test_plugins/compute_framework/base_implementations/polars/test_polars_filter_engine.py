@@ -100,3 +100,13 @@ class TestPolarsFilterEngine(FilterEngineTestMixin, TimeRangeFilterEngineTestMix
         ages = result["age"].to_list()
         assert None not in ages
         assert ages == [30, 35, 40, 45]
+
+    def test_do_min_filter_missing_column_raises_column_not_found(self) -> None:
+        """A missing column must surface polars' own error, not an AttributeError from the NaN check."""
+        data = pl.DataFrame({"a": [1.0, 2.0]})
+        single_filter = SingleFilter(Feature("missing"), FilterType.MIN, {"value": 1.0})
+
+        with pytest.raises(pl.exceptions.ColumnNotFoundError):
+            result = PolarsFilterEngine.do_min_filter(data, single_filter)
+            if hasattr(result, "collect"):
+                result.collect()

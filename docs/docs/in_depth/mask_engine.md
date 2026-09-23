@@ -39,8 +39,9 @@ Every `BaseMaskEngine` subclass implements these abstract classmethods:
 | `all_true(data)` | all `True` (no filtering), boolean-typed even at zero rows |
 
 A null or NaN row never matches (a mask holds `False` there) unless the call targets them, as
-`equal(..., None)` and `is_in` with `None` do; a NaN value counts as `None`. The engines do not tell
-NaN from null, so use the framework's native API directly when that distinction matters.
+`equal(..., None)` and `is_in` with `None` do; a NaN value counts as `None`; SQL conditions yield
+NULL, which is treated as no match. The engines do not tell NaN from null, so use the framework's
+native API directly when that distinction matters.
 
 ### Convenience methods
 

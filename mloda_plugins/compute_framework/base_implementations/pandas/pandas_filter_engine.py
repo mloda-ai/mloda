@@ -1,8 +1,10 @@
 from typing import Any
 from mloda.core.abstract_plugins.components.contract.comparison_contract import ColumnSemantics
+from mloda.core.abstract_plugins.components.mask.null_or_nan import split_null_or_nan
 from mloda.provider import BaseFilterEngine
 from mloda.user import SingleFilter
 from mloda_plugins.compute_framework.base_implementations.pandas import pandas_type_semantics
+from mloda_plugins.compute_framework.base_implementations.pandas.pandas_type_semantics import null_or_nan_mask
 
 
 class PandasFilterEngine(BaseFilterEngine):
@@ -66,8 +68,8 @@ class PandasFilterEngine(BaseFilterEngine):
         if values is None:
             raise ValueError(f"Filter parameter 'values' not found in {filter_feature.parameter}")
         column = data[filter_feature.name]
-        non_null = [v for v in values if v is not None]
-        mask = column.isin(non_null)
-        if len(non_null) != len(values):
-            mask = mask | column.isna()
+        present, has_null_or_nan = split_null_or_nan(values)
+        mask = column.isin(present)
+        if has_null_or_nan:
+            mask = mask | null_or_nan_mask(column)
         return data[mask]

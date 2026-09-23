@@ -1,6 +1,7 @@
 import re
 from typing import Any, Callable, cast
 from mloda.core.abstract_plugins.components.contract.comparison_contract import ColumnSemantics
+from mloda.core.abstract_plugins.components.mask.null_or_nan import is_null_or_nan, split_null_or_nan
 from mloda.core.filter.filter_engine import BaseFilterEngine
 from mloda.core.filter.single_filter import SingleFilter
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_utils import rows_to_columnar
@@ -106,6 +107,8 @@ class PythonDictFilterEngine(BaseFilterEngine):
         if values is None:
             raise ValueError(f"Filter parameter 'values' not found in {filter_feature.parameter}")
 
-        allowed_set = set(values)
-
-        return cls._apply_keep(data, column_name, lambda v: v in allowed_set)
+        present, has_null_or_nan = split_null_or_nan(values)
+        present_set = set(present)
+        if has_null_or_nan:
+            return cls._apply_keep(data, column_name, lambda v: v in present_set or is_null_or_nan(v))
+        return cls._apply_keep(data, column_name, lambda v: v in present_set)

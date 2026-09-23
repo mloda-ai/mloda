@@ -1,5 +1,6 @@
 from typing import Any
 from mloda.core.abstract_plugins.components.contract.comparison_contract import ColumnSemantics
+from mloda.core.abstract_plugins.components.mask.null_or_nan import split_null_or_nan
 from mloda.provider import BaseFilterEngine
 from mloda.user import SingleFilter
 from mloda_plugins.compute_framework.base_implementations.polars import polars_type_semantics
@@ -50,7 +51,8 @@ class PolarsFilterEngine(BaseFilterEngine):
         if value is None:
             raise ValueError(f"Filter parameter 'value' not found in {filter_feature.parameter}")
 
-        return data.filter(pl.col(column_name) >= value)
+        dtype = data.collect_schema().get(column_name)
+        return data.filter(polars_type_semantics.nan_as_null(pl.col(column_name), dtype) >= value)
 
     @classmethod
     def _apply_max_exclusive_filter(cls, data: Any, column_name: str, threshold: Any) -> Any:
@@ -94,9 +96,9 @@ class PolarsFilterEngine(BaseFilterEngine):
         if values is None:
             raise ValueError(f"Filter parameter 'values' not found in {filter_feature.parameter}")
 
-        non_null = [v for v in values if v is not None]
+        present, has_null_or_nan = split_null_or_nan(values)
         dtype = data.collect_schema().get(column_name)
-        mask = pl.col(column_name).is_in(polars_type_semantics.is_in_values(non_null, dtype))
-        if len(non_null) != len(values):
-            mask = mask | pl.col(column_name).is_null()
+        mask = pl.col(column_name).is_in(polars_type_semantics.is_in_values(present, dtype))
+        if has_null_or_nan:
+            mask = mask | polars_type_semantics.null_or_nan(pl.col(column_name), dtype)
         return data.filter(mask)

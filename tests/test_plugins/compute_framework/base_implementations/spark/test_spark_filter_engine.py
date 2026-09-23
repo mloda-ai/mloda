@@ -324,6 +324,42 @@ class TestSparkFilterEngine(FilterEngineTestMixin):
         assert None not in ages
         assert sorted(ages) == [30, 35]
 
+    @pytest.mark.parametrize(
+        ("filter_type", "parameter", "expected_ids"),
+        [
+            pytest.param(FilterType.MIN, {"value": 2.0}, [3, 5], id="min_drops_null_and_nan"),
+            pytest.param(FilterType.CATEGORICAL_INCLUSION, {"values": [None]}, [2, 4], id="only_none_keeps_nulls"),
+            pytest.param(
+                FilterType.CATEGORICAL_INCLUSION,
+                {"values": [1.0, float("nan")]},
+                [1, 2, 4],
+                id="nan_in_values_keeps_null_and_nan",
+            ),
+        ],
+    )
+    def test_null_or_nan_rows(
+        self, spark_session: Any, filter_type: FilterType, parameter: Any, expected_ids: list[int]
+    ) -> None:
+        data = [
+            (1, 1.0),
+            (2, float("nan")),
+            (3, 2.0),
+            (4, None),
+            (5, 3.0),
+        ]
+        ratio_data = spark_session.createDataFrame(data, "id int, ratio double")
+
+        feature = Feature("ratio")
+        single_filter = SingleFilter(feature, filter_type, parameter)
+
+        if filter_type == FilterType.MIN:
+            result = SparkFilterEngine.do_min_filter(ratio_data, single_filter)
+        else:
+            result = SparkFilterEngine.do_categorical_inclusion_filter(ratio_data, single_filter)
+
+        result_data = result.collect()
+        assert sorted(row["id"] for row in result_data) == expected_ids
+
     def test_filter_with_empty_data(self, spark_session: Any) -> None:
         """Test filtering with empty Spark DataFrame."""
         schema = StructType(

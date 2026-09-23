@@ -51,7 +51,12 @@ class TestPolarsFilterEngine(FilterEngineTestMixin, TimeRangeFilterEngineTestMix
     def nullable_category_sample_data(self) -> Any:
         """Create a sample Polars DataFrame with null categories for testing."""
         return pl.DataFrame(
-            {"id": [1, 2, 3, 4, 5], "category": ["A", None, "B", None, "C"], "score": [1, None, 2, None, 3]}
+            {
+                "id": [1, 2, 3, 4, 5],
+                "category": ["A", None, "B", None, "C"],
+                "score": [1, None, 2, None, 3],
+                "ratio": pl.Series([1.0, float("nan"), 2.0, None, 3.0], dtype=pl.Float64),
+            }
         )
 
     @pytest.fixture

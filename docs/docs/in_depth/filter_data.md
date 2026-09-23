@@ -26,6 +26,9 @@ class FilterType(Enum):
     CATEGORICAL_INCLUSION = "categorical_inclusion"
 ```
 
+A null or NaN row never passes a range, min, max or equal filter, and categorical inclusion keeps null and
+NaN rows only when its `values` contain `None` (a NaN value counts as `None`).
+
 #### GlobalFilter
 
 The GlobalFilter provides methods to add filters to the collection. The preferred way to use the GlobalFilter is by using the following functions.

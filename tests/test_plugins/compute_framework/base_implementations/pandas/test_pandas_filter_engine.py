@@ -44,8 +44,16 @@ class TestPandasFilterEngine(FilterEngineTestMixin, TimeRangeFilterEngineTestMix
     @pytest.fixture
     def nullable_category_sample_data(self) -> Any:
         """Create a sample pandas DataFrame with null categories for testing."""
+        ratio = pd.Series(
+            pd.arrays.ArrowExtensionArray(pa.array([1.0, float("nan"), 2.0, None, 3.0], type=pa.float64()))
+        )
         return pd.DataFrame(
-            {"id": [1, 2, 3, 4, 5], "category": ["A", None, "B", None, "C"], "score": [1, None, 2, None, 3]}
+            {
+                "id": [1, 2, 3, 4, 5],
+                "category": ["A", None, "B", None, "C"],
+                "score": [1, None, 2, None, 3],
+                "ratio": ratio,
+            }
         )
 
     def get_column_values(self, result: Any, column: str) -> list[Any]:

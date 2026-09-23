@@ -2,9 +2,13 @@ from abc import abstractmethod
 from typing import Any
 
 from mloda.provider import BaseFilterEngine
+from mloda.core.abstract_plugins.components.mask.null_or_nan import split_null_or_nan
 from mloda.user import SingleFilter
 
-from mloda_plugins.compute_framework.base_implementations.sql.sql_utils import quote_ident
+from mloda_plugins.compute_framework.base_implementations.sql.sql_utils import (
+    null_or_nan_condition,
+    quote_ident,
+)
 
 
 class SqlBaseFilterEngine(BaseFilterEngine):
@@ -17,11 +21,21 @@ class SqlBaseFilterEngine(BaseFilterEngine):
 
     Subclasses must implement:
     - _build_regex_condition(column_name, value): Build regex SQL for the specific dialect
+    A dialect whose float columns can store NaN overrides _nan_condition().
     """
 
     @classmethod
     def final_filters(cls) -> bool:
         return True
+
+    @classmethod
+    def _nan_condition(cls, data: Any, column: str) -> str | None:
+        """Return a SQL condition true when column holds NaN, or None if the dialect cannot."""
+        return None
+
+    @classmethod
+    def _null_or_nan_condition(cls, data: Any, column: str) -> str:
+        return null_or_nan_condition(quote_ident(column), cls._nan_condition(data, column))
 
     @classmethod
     def _apply_filter(cls, data: Any, condition: str, params: tuple[Any, ...] = ()) -> Any:
@@ -57,6 +71,9 @@ class SqlBaseFilterEngine(BaseFilterEngine):
             raise ValueError(f"Filter parameter 'value' not found in {filter_feature.parameter}")
 
         condition = f"{quote_ident(column_name)} >= ?"
+        nan_cond = cls._nan_condition(data, column_name)
+        if nan_cond is not None:
+            condition = f"({condition}) AND NOT {nan_cond}"
         return cls._apply_filter(data, condition, (value,))
 
     @classmethod
@@ -99,17 +116,16 @@ class SqlBaseFilterEngine(BaseFilterEngine):
         if values is None:
             raise ValueError(f"Filter parameter 'values' not found in {filter_feature.parameter}")
 
-        non_null = [v for v in values if v is not None]
-        has_null = len(non_null) != len(values)
+        present, has_null_or_nan = split_null_or_nan(values)
 
         conditions: list[str] = []
         params: list[Any] = []
-        if non_null:
-            placeholders = ", ".join("?" for _ in non_null)
+        if present:
+            placeholders = ", ".join("?" for _ in present)
             conditions.append(f"{quote_ident(column_name)} IN ({placeholders})")
-            params.extend(non_null)
-        if has_null:
-            conditions.append(f"{quote_ident(column_name)} IS NULL")
+            params.extend(present)
+        if has_null_or_nan:
+            conditions.append(cls._null_or_nan_condition(data, column_name))
 
         condition = " OR ".join(conditions) if conditions else "1 = 0"
         return cls._apply_filter(data, condition, tuple(params))

@@ -53,11 +53,24 @@ class TestDuckDBFilterEngine(FilterEngineTestMixin, TimeRangeFilterEngineTestMix
 
     @pytest.fixture
     def nullable_category_sample_data(self, connection: Any) -> Any:
-        """Create a sample DuckDB relation with null categories for testing."""
+        """Create a sample DuckDB relation with null categories for testing.
+
+        Materialized as a native table, not an Arrow scan, so the min filter exercises DuckDB's own
+        NaN comparison semantics rather than Arrow's.
+        """
         arrow_table = pa.Table.from_pydict(
-            {"id": [1, 2, 3, 4, 5], "category": ["A", None, "B", None, "C"], "score": [1, None, 2, None, 3]}
+            {
+                "id": [1, 2, 3, 4, 5],
+                "category": ["A", None, "B", None, "C"],
+                "score": [1, None, 2, None, 3],
+                "ratio": pa.array([1.0, float("nan"), 2.0, None, 3.0], type=pa.float64()),
+            }
         )
-        return DuckdbRelation.from_arrow(connection, arrow_table)
+        connection.register("nullable_category_sample_data_src", arrow_table)
+        connection.execute(
+            "CREATE TABLE nullable_category_sample_data_tbl AS SELECT * FROM nullable_category_sample_data_src"
+        )
+        return DuckdbRelation(connection, connection.table("nullable_category_sample_data_tbl"))
 
     @pytest.fixture
     def decimal_sample_data(self, connection: Any) -> Any:

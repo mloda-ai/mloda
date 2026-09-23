@@ -4,7 +4,11 @@ from typing import Any
 from mloda.core.abstract_plugins.components.mask.base_mask_engine import BaseMaskEngine
 from mloda.core.abstract_plugins.components.mask.null_or_nan import is_null_or_nan, split_null_or_nan
 from mloda.core.abstract_plugins.components.utils import require_value_collection
-from mloda_plugins.compute_framework.base_implementations.sql.sql_utils import quote_ident, quote_value
+from mloda_plugins.compute_framework.base_implementations.sql.sql_utils import (
+    null_or_nan_condition,
+    quote_ident,
+    quote_value,
+)
 
 
 class SqlBaseMaskEngine(BaseMaskEngine):
@@ -29,11 +33,7 @@ class SqlBaseMaskEngine(BaseMaskEngine):
 
     @classmethod
     def _null_or_nan_condition(cls, data: Any, column: str) -> str:
-        cond = f"{quote_ident(column)} IS NULL"
-        nan_cond = cls._nan_condition(data, column)
-        if nan_cond is not None:
-            return f"({cond} OR {nan_cond})"
-        return cond
+        return null_or_nan_condition(quote_ident(column), cls._nan_condition(data, column))
 
     @classmethod
     def all_true(cls, data: Any) -> str:

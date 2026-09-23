@@ -7,8 +7,9 @@ class BaseMaskEngine(ABC):
 
     Each compute framework provides a subclass implementing these primitives
     and wires it via ComputeFramework.mask_engine().
-    A null row never matches (a mask holds False there) unless the call targets nulls, as
-    ``equal(..., None)`` does; SQL conditions yield NULL, which WHERE and CASE WHEN treat as no match.
+    A null or NaN row never matches (a mask holds False there) unless the call targets them, as
+    ``equal(..., None)`` and ``is_in`` with None do; a NaN value counts as None. SQL conditions
+    yield NULL, which WHERE and CASE WHEN treat as no match.
     """
 
     @classmethod
@@ -32,7 +33,7 @@ class BaseMaskEngine(ABC):
     @classmethod
     @abstractmethod
     def equal(cls, data: Any, column: str, value: Any) -> Any:
-        """Return a boolean mask where data[column] == value; a None value matches null rows."""
+        """Return a boolean mask where data[column] == value; None or NaN matches null/NaN rows."""
         ...
 
     @classmethod
@@ -62,7 +63,8 @@ class BaseMaskEngine(ABC):
     @classmethod
     @abstractmethod
     def is_in(cls, data: Any, column: str, values: Any) -> Any:
-        """Boolean mask of data[column] in values (list/tuple/set/frozenset, else TypeError); empty matches none."""
+        """Boolean mask of data[column] in values (list/tuple/set/frozenset, else TypeError); empty matches
+        nothing, a None or NaN in values matches null/NaN rows."""
         ...
 
     # -- Convenience methods (concrete, built from primitives above) ----------

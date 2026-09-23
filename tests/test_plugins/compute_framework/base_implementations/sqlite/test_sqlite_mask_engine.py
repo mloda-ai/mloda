@@ -39,6 +39,7 @@ class TestSqliteSqlMaskEngine(SqlMaskEngineTestMixin):
                 "status": pa.array(["active", None, "inactive", None], type=pa.string()),
                 "value": pa.array([10, 20, 30, 40], type=pa.int64()),
                 "score": pa.array([1, None, 3, None], type=pa.int64()),
+                "ratio": pa.array([1.0, float("nan"), 3.0, None], type=pa.float64()),
             }
         )
         return SqliteRelation.from_arrow(connection, table)

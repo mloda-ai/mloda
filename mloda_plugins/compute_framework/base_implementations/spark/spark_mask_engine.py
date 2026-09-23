@@ -1,6 +1,7 @@
 from typing import Any
 
 from mloda.core.abstract_plugins.components.mask.base_mask_engine import BaseMaskEngine
+from mloda.core.abstract_plugins.components.mask.null_or_nan import is_null_or_nan, split_null_or_nan
 from mloda.core.abstract_plugins.components.utils import require_value_collection
 
 try:
@@ -25,6 +26,8 @@ class SparkMaskEngine(BaseMaskEngine):
     @classmethod
     def equal(cls, data: Any, column: str, value: Any) -> list[Any]:
         values = [row[column] for row in data.collect()]
+        if is_null_or_nan(value):
+            return [is_null_or_nan(v) for v in values]
         return [v == value for v in values]
 
     @classmethod
@@ -51,5 +54,9 @@ class SparkMaskEngine(BaseMaskEngine):
     def is_in(cls, data: Any, column: str, values: Any) -> list[Any]:
         require_value_collection(values, "is_in values")
         allowed = set(values)
+        present, has_null_or_nan = split_null_or_nan(allowed)
+        present_set = set(present)
         col_values = [row[column] for row in data.collect()]
-        return [v in allowed for v in col_values]
+        if has_null_or_nan:
+            return [v in present_set or is_null_or_nan(v) for v in col_values]
+        return [v in present_set for v in col_values]

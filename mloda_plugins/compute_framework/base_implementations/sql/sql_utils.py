@@ -27,6 +27,13 @@ def is_ordered_arrow_type(t: "pa.DataType") -> bool:
     return bool(pa.types.is_integer(t) or pa.types.is_floating(t) or pa.types.is_decimal(t) or pa.types.is_temporal(t))
 
 
+def is_floating_arrow_type(t: "pa.DataType") -> bool:
+    """Return True if a pyarrow DataType is a floating-point type."""
+    import pyarrow as pa
+
+    return bool(pa.types.is_floating(t))
+
+
 def quote_ident(name: str) -> str:
     """Quote a SQL identifier with double-quote escaping (SQL standard)."""
     return f'"{name.replace(chr(34), chr(34) + chr(34))}"'

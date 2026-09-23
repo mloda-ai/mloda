@@ -29,17 +29,18 @@ Every `BaseMaskEngine` subclass implements these abstract classmethods:
 | Method | Returns mask where... |
 |--------|----------------------|
 | `supported_data_type()` | (not a mask) the data container type this engine handles, e.g. `pd.DataFrame` |
-| `equal(data, column, value)` | `data[column] == value`; `None` matches null rows |
+| `equal(data, column, value)` | `data[column] == value`; `None` matches null and NaN rows |
 | `greater_equal(data, column, value)` | `data[column] >= value` |
 | `greater_than(data, column, value)` | `data[column] > value` |
 | `less_equal(data, column, value)` | `data[column] <= value` |
 | `less_than(data, column, value)` | `data[column] < value` |
-| `is_in(data, column, values)` | `data[column]` is in `values` (list, tuple, set or frozenset); an empty `values` matches nothing; any other type (a string, a generator, a NumPy array or pandas Series) raises `TypeError` |
+| `is_in(data, column, values)` | `data[column]` is in `values` (list, tuple, set or frozenset); any other type (a string, a generator, a NumPy array or pandas Series) raises `TypeError`; an empty `values` matches nothing, and a `None` in `values` matches null and NaN rows |
 | `combine(mask1, mask2)` | logical AND of two masks |
 | `all_true(data)` | all `True` (no filtering), boolean-typed even at zero rows |
 
-A null row never matches (a mask holds `False` there) unless the call targets nulls, as `equal(..., None)`
-does; SQL conditions yield NULL, treated as no match. On a pandas NumPy float column NaN counts as null.
+A null or NaN row never matches (a mask holds `False` there) unless the call targets them, as
+`equal(..., None)` and `is_in` with `None` do; a NaN value counts as `None`. The engines do not tell
+NaN from null, so use the framework's native API directly when that distinction matters.
 
 ### Convenience methods
 

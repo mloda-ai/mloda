@@ -1,6 +1,7 @@
 from typing import Any
 
 from mloda.core.abstract_plugins.components.mask.base_mask_engine import BaseMaskEngine
+from mloda.core.abstract_plugins.components.mask.null_or_nan import is_null_or_nan, split_null_or_nan
 from mloda.core.abstract_plugins.components.utils import require_value_collection
 from mloda_plugins.compute_framework.base_implementations.pyarrow.pyarrow_value_set import value_set
 
@@ -31,8 +32,8 @@ class PyArrowMaskEngine(BaseMaskEngine):
 
     @classmethod
     def equal(cls, data: Any, column: str, value: Any) -> Any:
-        if value is None:
-            return pc.is_null(data[column])
+        if is_null_or_nan(value):
+            return pc.is_null(data[column], nan_is_null=True)
         return _no_null(pc.equal(data[column], value))
 
     @classmethod
@@ -54,4 +55,8 @@ class PyArrowMaskEngine(BaseMaskEngine):
     @classmethod
     def is_in(cls, data: Any, column: str, values: Any) -> Any:
         require_value_collection(values, "is_in values")
-        return pc.is_in(data[column], value_set(data[column], values))
+        present, has_null_or_nan = split_null_or_nan(values)
+        mask = pc.is_in(data[column], value_set(data[column], present))
+        if has_null_or_nan:
+            mask = pc.or_(mask, pc.is_null(data[column], nan_is_null=True))
+        return mask

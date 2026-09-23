@@ -39,12 +39,12 @@ class TestSparkMaskEngine(MaskEngineTestMixin):
     def null_data(self, spark_session: Any) -> Any:
         return spark_session.createDataFrame(
             [
-                ("active", 10, 1),
-                (None, 20, None),
-                ("inactive", 30, 3),
-                (None, 40, None),
+                ("active", 10, 1, 1.0),
+                (None, 20, None, float("nan")),
+                ("inactive", 30, 3, 3.0),
+                (None, 40, None, None),
             ],
-            "status string, value bigint, score bigint",
+            "status string, value bigint, score bigint, ratio double",
         )
 
     @pytest.fixture

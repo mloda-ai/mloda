@@ -37,6 +37,9 @@ class TestPandasMaskEngine(MaskEngineTestMixin):
                 "status": pd.Series(["active", None, "inactive", None], dtype=str),
                 "value": pd.Series([10, 20, 30, 40], dtype="int64"),
                 "score": [1, None, 3, None],
+                "ratio": pd.Series(
+                    pd.arrays.ArrowExtensionArray(pa.array([1.0, float("nan"), 3.0, None], type=pa.float64()))
+                ),
             }
         )
 

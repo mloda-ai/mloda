@@ -49,6 +49,7 @@ class TestPolarsExprMaskEngine(MaskEngineTestMixin):
                 "status": pl.Series(["active", None, "inactive", None], dtype=pl.String),
                 "value": pl.Series([10, 20, 30, 40], dtype=pl.Int64),
                 "score": pl.Series([1, None, 3, None], dtype=pl.Int64),
+                "ratio": pl.Series([1.0, float("nan"), 3.0, None], dtype=pl.Float64),
             }
         )
 

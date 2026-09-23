@@ -6,7 +6,8 @@ Each framework-specific test class should inherit from this mixin and provide:
 - sample_data fixture: Returns framework-specific test data
 - empty_data fixture: Returns the same schema as sample_data, typed, with zero rows
 - null_data fixture: Returns the same schema as sample_data plus a nullable numeric "score"
-  column, typed, with null status and score values
+  column and a float "ratio" column, typed, with null status and score values, and a NaN
+  distinct from null in ratio
 - evaluate_mask method: Converts framework-specific mask to a Python list of booleans
 - is_boolean_mask method: Checks that a mask is boolean-typed
 - apply_mask method: Selects rows with the mask the framework's native way, returns column -> values
@@ -48,8 +49,9 @@ class MaskEngineTestMixin:
     - empty_data fixture returning the same schema (status: string, value: int), typed,
       with zero rows
     - null_data fixture returning the same schema (status: string, value: int) plus a nullable
-      numeric score column, typed, with status: ["active", None, "inactive", None],
-      value: [10, 20, 30, 40], and score: [1, None, 3, None]
+      numeric score column and a float ratio column, typed, with status: ["active", None,
+      "inactive", None], value: [10, 20, 30, 40], score: [1, None, 3, None], and
+      ratio: [1.0, NaN, 3.0, None] (NaN distinct from null)
     - evaluate_mask(mask, data) converting the mask to list[bool]
     - is_boolean_mask(mask, data) checking that a mask is boolean-typed
     - apply_mask(mask, data) selecting rows with the mask the framework's native way and
@@ -254,6 +256,13 @@ class MaskEngineTestMixin:
             ("less_equal", "score", 3, [True, False, True, False]),
             ("less_than", "score", 3, [True, False, False, False]),
             ("greater_than", "score", 1, [False, False, True, False]),
+            ("equal", "ratio", None, [False, True, False, True]),
+            ("equal", "ratio", float("nan"), [False, True, False, True]),
+            ("greater_equal", "ratio", 1.0, [True, False, True, False]),
+            ("greater_than", "ratio", 1.0, [False, False, True, False]),
+            ("is_in", "ratio", [None], [False, True, False, True]),
+            ("is_in", "ratio", [float("nan")], [False, True, False, True]),
+            ("is_in", "status", ["active", None], [True, True, False, True]),
         ],
         ids=[
             "equal-status-none",
@@ -264,6 +273,13 @@ class MaskEngineTestMixin:
             "less_equal-score-3",
             "less_than-score-3",
             "greater_than-score-1",
+            "equal-ratio-none",
+            "equal-ratio-nan",
+            "greater_equal-ratio-1",
+            "greater_than-ratio-1",
+            "is_in-ratio-none",
+            "is_in-ratio-nan",
+            "is_in-status-active-none",
         ],
     )
     def test_null_row_matches_only_none(

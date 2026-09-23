@@ -42,6 +42,7 @@ from mloda.core.core.step.transform_frame_work_step import TransformFrameworkSte
 from mloda.core.abstract_plugins.feature_group import FeatureGroup, format_feature_group_class
 from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.feature_set import FeatureSet, merge_input_feature_edges
+from mloda.core.abstract_plugins.components.hashable_dict import _deep_hashable
 from mloda.core.abstract_plugins.components.link import JoinType, Link
 from collections import defaultdict
 import logging
@@ -116,6 +117,16 @@ class ExecutionPlan:
         self.resolved_join_plan = ResolvedJoinPlan((), ())
         self.join_signatures_at_build: frozenset[JoinSignature] = frozenset()
 
+        # Per root feature_group class, the distinct option/context buckets run_feature_group split
+        # it into: f_hash -> (a representative feature, the union of feature uuids in that bucket).
+        # Non-root feature groups (their features have upstream ancestors) are never recorded here,
+        # since a split with no ancestors can never be the actual cause of a missing-Links error.
+        # Feeds the missing-Links error's option-split hint.
+        self._option_split_buckets: dict[type[FeatureGroup], dict[Any, tuple[Feature, set[UUID]]]] = {}
+        # Per root feature_group class, the union of inherited_context_keys used to hash its
+        # buckets (the actual split_keys `group_features_by_compute_framework_and_options` used).
+        self._option_split_keys: dict[type[FeatureGroup], frozenset[Any]] = {}
+
     def __iter__(self) -> Generator[TransformFrameworkStep | JoinStep | FeatureGroupStep, None, None]:
         yield from self.execution_plan
 
@@ -136,10 +147,17 @@ class ExecutionPlan:
         self.joinstep_collection = JoinStepCollection()
         self.feature_set_collections = []
         self.declared_frameworks = declared_frameworks if declared_frameworks is not None else {}
+        self._option_split_buckets = {}
+        self._option_split_keys = {}
 
         child_links = self.invert_link_trekker(link_trekker)
         pre_execution_plan = self.add_feature_group_step(queue, graph.parent_to_children_mapping, child_links)
         fw_execution_plan = self.add_joinstep(pre_execution_plan, link_trekker, graph)
+
+        # Run after add_joinstep, not inside add_feature_group_step: self.planned_records (which
+        # records already-resolved Links) is only populated by add_joinstep's run_link calls, and a
+        # split already bridged by a Link must not be blamed (see _stamp_option_split_hints).
+        self._stamp_option_split_hints(fw_execution_plan, graph.parent_to_children_mapping)
 
         # Built before add_tfs, whose write serialization edges are not part of the join decision.
         join_steps = [step for step in fw_execution_plan if isinstance(step, JoinStep)]
@@ -185,7 +203,115 @@ class ExecutionPlan:
 
             else:
                 raise ValueError(f"Element {element} is not a valid element.")
+
         return pre_execution_plan
+
+    def _stamp_option_split_hints(
+        self,
+        plan: list[JoinStep | FeatureGroupStep],
+        parent_to_children_mapping: dict[UUID, set[UUID]],
+    ) -> None:
+        """Stamp an option-split hint on steps whose ancestors span two option/context buckets of a
+        root feature group, computing the differing keys only from the buckets that consumer's own
+        ancestors actually intersect, and only when those buckets are not already bridged by a
+        resolved Link."""
+        candidate_feature_groups = {
+            feature_group: buckets for feature_group, buckets in self._option_split_buckets.items() if len(buckets) >= 2
+        }
+        if not candidate_feature_groups:
+            self._option_split_buckets = {}
+            self._option_split_keys = {}
+            return
+
+        ordered_feature_groups = sorted(candidate_feature_groups, key=lambda fg: fg.get_class_name())
+
+        for step in plan:
+            if not isinstance(step, FeatureGroupStep):
+                continue
+
+            ancestor_union: set[UUID] = set()
+            for uuid in step.features.get_all_feature_ids():
+                ancestor_union.update(parent_to_children_mapping.get(uuid, set()))
+
+            for feature_group in ordered_feature_groups:
+                buckets = candidate_feature_groups[feature_group]
+                intersected_hashes = [f_hash for f_hash, (_, uuids) in buckets.items() if ancestor_union & uuids]
+                if len(intersected_hashes) < 2:
+                    continue
+
+                unresolved_hashes = self._exclude_link_resolved_buckets(intersected_hashes, buckets)
+                if len(unresolved_hashes) < 2:
+                    continue
+
+                representatives = [buckets[f_hash][0] for f_hash in unresolved_hashes]
+                split_keys = self._option_split_keys.get(feature_group, frozenset())
+                differing_keys = self._differing_option_keys(representatives, split_keys)
+                if not differing_keys:
+                    continue
+
+                step.features.option_split_hint = (feature_group.get_class_name(), differing_keys)
+                break
+
+        self._option_split_buckets = {}
+        self._option_split_keys = {}
+
+    def _exclude_link_resolved_buckets(
+        self,
+        hashes: list[Any],
+        buckets: dict[Any, tuple[Feature, set[UUID]]],
+    ) -> list[Any]:
+        """Collapse the given buckets into connected components bridged by an already-resolved Link
+        (``self.planned_records``); one representative hash survives per component. All buckets
+        already resolved into a single component means the split caused no actual problem."""
+        parent: dict[Any, Any] = {f_hash: f_hash for f_hash in hashes}
+
+        def find(x: Any) -> Any:
+            while parent[x] != x:
+                parent[x] = parent[parent[x]]
+                x = parent[x]
+            return x
+
+        def union(a: Any, b: Any) -> None:
+            root_a, root_b = find(a), find(b)
+            if root_a != root_b:
+                parent[root_a] = root_b
+
+        for record in self.planned_records:
+            left_hashes = [f_hash for f_hash in hashes if buckets[f_hash][1] & record.left.uuids]
+            right_hashes = [f_hash for f_hash in hashes if buckets[f_hash][1] & record.right.uuids]
+            for left_hash in left_hashes:
+                for right_hash in right_hashes:
+                    union(left_hash, right_hash)
+
+        components: dict[Any, Any] = {}
+        for f_hash in hashes:
+            components.setdefault(find(f_hash), f_hash)
+        return list(components.values())
+
+    def _differing_option_keys(self, representatives: list[Feature], split_keys: frozenset[Any]) -> frozenset[Any]:
+        """Option/forwarded-context keys whose value differs across the given representative features, counting a key present in one and absent in another as differing."""
+        if len(representatives) < 2:
+            return frozenset()
+
+        candidate_keys: set[Any] = set()
+        for feature in representatives:
+            candidate_keys.update(feature.options.group.keys())
+            candidate_keys.update(key for key in split_keys if key in feature.options.context)
+
+        _ABSENT = object()
+        differing_keys: set[Any] = set()
+        for key in candidate_keys:
+            observed: set[Any] = set()
+            for feature in representatives:
+                if key in feature.options.group:
+                    observed.add(_deep_hashable(feature.options.group[key]))
+                elif key in split_keys and key in feature.options.context:
+                    observed.add(_deep_hashable(feature.options.context[key]))
+                else:
+                    observed.add(_ABSENT)
+            if len(observed) > 1:
+                differing_keys.add(key)
+        return frozenset(differing_keys)
 
     def add_joinstep(
         self,
@@ -1723,6 +1849,20 @@ Available join types:
                     source_key, _ = self.api_input_data_collection.get_name_cls_by_matching_column_name(feature.name)
                     api_groups[(f_hash, source_key)].add(feature)
             features_grouped_by_framework_and_options = api_groups
+
+        # Only a root feature group (no upstream ancestors) can be the actual cause of a
+        # missing-Links error: a split with ancestors of its own is never the source read directly.
+        is_root = not any(parent_to_children_mapping.get(feature.uuid) for feature in features)
+        if is_root:
+            split_keys = frozenset(key for feature in features for key in feature.options.inherited_context_keys)
+            self._option_split_keys[feature_group] = self._option_split_keys.get(feature_group, frozenset()) | (
+                split_keys
+            )
+            split_buckets = self._option_split_buckets.setdefault(feature_group, {})
+            for f_hash, grouped_features in features_grouped_by_framework_and_options.items():
+                representative = next(iter(grouped_features))
+                bucket = split_buckets.setdefault(f_hash, (representative, set()))
+                bucket[1].update(feature.uuid for feature in grouped_features)
 
         fg_steps: dict[Any, FeatureGroupStep] = {}
 

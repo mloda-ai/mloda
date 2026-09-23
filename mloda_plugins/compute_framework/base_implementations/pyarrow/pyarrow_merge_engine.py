@@ -61,21 +61,110 @@ class PyArrowMergeEngine(BaseMergeEngine):
         return pa.table(new_columns, schema=pa.schema(new_fields))
 
     @staticmethod
-    def _swap_out_nested_columns(
-        table: pa.Table, key_columns: list[str], taken: set[str], placeholders: dict[str, tuple[str, pa.ChunkedArray]]
+    def _joins_natively(t: pa.DataType, asof: bool) -> bool:
+        """Whether Arrow's join/asof-join kernels can carry this payload type without a row-index swap."""
+        always = (
+            pa.types.is_boolean(t)
+            or pa.types.is_integer(t)
+            or pa.types.is_float32(t)
+            or pa.types.is_float64(t)
+            or pa.types.is_date(t)
+            or pa.types.is_time(t)
+            or pa.types.is_timestamp(t)
+            or pa.types.is_string(t)
+            or pa.types.is_large_string(t)
+            or pa.types.is_binary(t)
+            or pa.types.is_large_binary(t)
+        )
+        if always:
+            return True
+        if asof:
+            return False
+        if (
+            pa.types.is_float16(t)
+            or pa.types.is_decimal(t)
+            or pa.types.is_duration(t)
+            or pa.types.is_interval(t)
+            or pa.types.is_fixed_size_binary(t)
+        ):
+            return True
+        if pa.types.is_dictionary(t):
+            return PyArrowMergeEngine._joins_natively(t.value_type, asof)
+        if isinstance(t, pa.BaseExtensionType):
+            return PyArrowMergeEngine._joins_natively(t.storage_type, asof)
+        return False
+
+    @staticmethod
+    def _without_views(t: pa.DataType) -> pa.DataType:
+        """Replace string_view/binary_view with large_string/large_binary, recursing through nested types."""
+        if pa.types.is_string_view(t):
+            return pa.large_string()
+        if pa.types.is_binary_view(t):
+            return pa.large_binary()
+        if pa.types.is_list(t) or pa.types.is_large_list(t):
+            value_type = PyArrowMergeEngine._without_views(t.value_type)
+            return pa.large_list(value_type) if pa.types.is_large_list(t) else pa.list_(value_type)
+        if pa.types.is_fixed_size_list(t):
+            return pa.list_(PyArrowMergeEngine._without_views(t.value_type), t.list_size)
+        if pa.types.is_list_view(t) or pa.types.is_large_list_view(t):
+            value_field = t.value_field.with_type(PyArrowMergeEngine._without_views(t.value_field.type))
+            return pa.large_list_view(value_field) if pa.types.is_large_list_view(t) else pa.list_view(value_field)
+        if pa.types.is_struct(t):
+            return pa.struct([f.with_type(PyArrowMergeEngine._without_views(f.type)) for f in t])
+        if pa.types.is_map(t):
+            key_field = t.key_field.with_type(PyArrowMergeEngine._without_views(t.key_field.type))
+            item_field = t.item_field.with_type(PyArrowMergeEngine._without_views(t.item_field.type))
+            return pa.map_(key_field, item_field, keys_sorted=t.keys_sorted)
+        return t
+
+    @staticmethod
+    def _swap_out_payload_columns(
+        table: pa.Table,
+        key_columns: list[str],
+        taken: set[str],
+        placeholders: dict[str, tuple[str, pa.ChunkedArray]],
+        asof: bool,
     ) -> pa.Table:
-        """Swap nested non-key columns for row-index placeholders: Arrow's hash join rejects nested columns."""
+        """Swap payload columns the join cannot carry for row-index placeholders."""
         row_index: pa.Array | None = None
         for i, field in enumerate(table.schema):
-            if field.name in key_columns or not pa.types.is_nested(field.type):
+            if field.name in key_columns:
+                continue
+            if PyArrowMergeEngine._joins_natively(field.type, asof):
                 continue
             if row_index is None:
                 n = table.num_rows
                 row_index = pc.subtract(pc.cumulative_sum(pa.repeat(pa.scalar(1, pa.int64()), n)), 1)
-            placeholder_name = pick_helper_column_name(taken=taken, prefix="mloda_nested_row")
+            placeholder_name = pick_helper_column_name(taken=taken, prefix="mloda_payload_row")
             taken.add(placeholder_name)
             placeholders[placeholder_name] = (field.name, table.column(i))
             table = table.set_column(i, placeholder_name, row_index)
+        return table
+
+    @classmethod
+    def _take_rows(cls, column: pa.ChunkedArray, idx: pa.ChunkedArray) -> pa.ChunkedArray:
+        """Take rows, working around missing take kernels for run-end-encoded, view and nested view types."""
+        t = column.type
+        if pa.types.is_run_end_encoded(t):
+            taken = cls._take_rows(pc.run_end_decode(column), idx)
+            run_end_type = t.run_end_type if len(taken) < 1 << (t.run_end_type.bit_width - 1) else pa.int64()
+            return pc.run_end_encode(taken, run_end_type=run_end_type)
+        # No take kernel for view types (nor nested types containing them): cast to their
+        # non-view equivalent, take, and cast back.
+        plain = cls._without_views(t)
+        if plain != t:
+            return column.cast(plain).take(idx).cast(t)
+        return column.take(idx)
+
+    @classmethod
+    def _restore_payload_columns(
+        cls, table: pa.Table, placeholders: dict[str, tuple[str, pa.ChunkedArray]]
+    ) -> pa.Table:
+        """Replace row-index placeholders with the original payload columns, reindexed by the join result."""
+        for i, name in enumerate(table.column_names):
+            if name in placeholders:
+                original_name, original_column = placeholders[name]
+                table = table.set_column(i, original_name, cls._take_rows(original_column, table.column(i)))
         return table
 
     def merge_inner(self, left_data: Any, right_data: Any, left_index: Index, right_index: Index) -> Any:
@@ -156,6 +245,10 @@ class PyArrowMergeEngine(BaseMergeEngine):
         left_data = self._normalize_string_types(left_data, by_left)
         right_join = self._normalize_string_types(right_join, by_right)
 
+        placeholders: dict[str, tuple[str, pa.ChunkedArray]] = {}
+        left_data = self._swap_out_payload_columns(left_data, by_left + [lt], taken, placeholders, asof=True)
+        right_join = self._swap_out_payload_columns(right_join, by_right + [rt], taken, placeholders, asof=True)
+
         if tol is not None:
             magnitude = int(cast(float, tol))
         else:
@@ -177,6 +270,8 @@ class PyArrowMergeEngine(BaseMergeEngine):
             right_by=by_right,
             tolerance=signed_tol,
         )
+
+        result = self._restore_payload_columns(result, placeholders)
 
         if carry_to_original:
             new_names = [carry_to_original.get(name, name) for name in result.column_names]
@@ -225,8 +320,8 @@ class PyArrowMergeEngine(BaseMergeEngine):
 
         taken = set(left_data.column_names) | set(right_data.column_names)
         placeholders: dict[str, tuple[str, pa.ChunkedArray]] = {}
-        left_data = self._swap_out_nested_columns(left_data, left_keys, taken, placeholders)
-        right_data = self._swap_out_nested_columns(right_data, right_keys, taken, placeholders)
+        left_data = self._swap_out_payload_columns(left_data, left_keys, taken, placeholders, asof=False)
+        right_data = self._swap_out_payload_columns(right_data, right_keys, taken, placeholders, asof=False)
 
         left_data = left_data.join(
             right_data,
@@ -235,10 +330,7 @@ class PyArrowMergeEngine(BaseMergeEngine):
             join_type=join_type,
         )
 
-        for i, name in enumerate(left_data.column_names):
-            if name in placeholders:
-                original_name, original_column = placeholders[name]
-                left_data = left_data.set_column(i, original_name, original_column.take(left_data.column(i)))
+        left_data = self._restore_payload_columns(left_data, placeholders)
 
         if helper_columns:
             # Drop helpers by index: a shared non-key column name would make a name-based select ambiguous.

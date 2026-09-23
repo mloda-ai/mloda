@@ -6,6 +6,7 @@ under test and the interchange format used by the DataConverter.
 """
 
 from datetime import datetime, timedelta, timezone
+from decimal import Decimal
 from typing import Any
 
 import pytest
@@ -167,6 +168,48 @@ class TestPyArrowAsofMergeEngine(AsofMergeEngineTestBase):
         assert rows[0]["rv"] == "B"
         assert rows[1]["lv"] == 200
         assert rows[1]["rv"] is None
+
+    def test_asof_preserves_nested_and_join_asof_rejected_payload_types(self) -> None:
+        """List, decimal and dictionary-encoded non-key columns must survive an as-of join."""
+        left = pa.Table.from_pydict(
+            {
+                "k": [1, 1],
+                "t": [3, 10],
+                "ls": pa.array([["a"], []], type=pa.list_(pa.string())),
+            }
+        )
+        right = pa.Table.from_pydict(
+            {
+                "k": [1],
+                "t": [5],
+                "rs": pa.array([["x", "y"]], type=pa.list_(pa.string())),
+                "rd": pa.array([Decimal("1.25")], type=pa.decimal128(5, 2)),
+                "rc": pa.array(["c"]).dictionary_encode(),
+            }
+        )
+
+        engine = PyArrowMergeEngine()
+        cfg = AsOfJoinConfig(left_time_column="t", right_time_column="t", direction="backward")
+        result = engine.merge_asof(left, right, Index(("k",)), Index(("k",)), cfg)
+
+        assert set(result.column_names) == {"k", "t", "ls", "rs", "rd", "rc"}
+        assert result.schema.field("ls").type == pa.list_(pa.string())
+        assert result.schema.field("rs").type == pa.list_(pa.string())
+        assert result.schema.field("rd").type == pa.decimal128(5, 2)
+        assert result.schema.field("rc").type == pa.dictionary(pa.int32(), pa.string())
+
+        rows = sorted(result.to_pylist(), key=lambda r: r["t"])
+        assert rows[0]["t"] == 3
+        assert rows[0]["ls"] == ["a"]
+        assert rows[0]["rs"] is None
+        assert rows[0]["rd"] is None
+        assert rows[0]["rc"] is None
+
+        assert rows[1]["t"] == 10
+        assert rows[1]["ls"] == []
+        assert rows[1]["rs"] == ["x", "y"]
+        assert rows[1]["rd"] == Decimal("1.25")
+        assert rows[1]["rc"] == "c"
 
     def test_colliding_right_value_column_dropped(self) -> None:
         """A right VALUE column colliding with a left column is dropped; the left column survives."""

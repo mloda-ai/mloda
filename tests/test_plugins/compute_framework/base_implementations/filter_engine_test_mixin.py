@@ -51,6 +51,8 @@ class FilterEngineTestMixin:
         Data should contain columns:
             id: [1, 2, 3, 4, 5]
             category: ["A", None, "B", None, "C"]
+            score: [1, None, 2, None, 3]
+        Nulls in both category and score sit at ids 2 and 4.
         """
         raise NotImplementedError
 
@@ -209,18 +211,20 @@ class FilterEngineTestMixin:
 
         assert self.result_row_count(result) == 0
 
+    @pytest.mark.parametrize(
+        ("column", "values"),
+        [
+            pytest.param("category", ["A", None], id="string_category"),
+            pytest.param("score", [1, None], id="numeric_score"),
+        ],
+    )
     def test_do_categorical_inclusion_keeps_null_when_none_present(
-        self, filter_engine: Any, nullable_category_sample_data: Any
+        self, filter_engine: Any, nullable_category_sample_data: Any, column: str, values: list[Any]
     ) -> None:
-        """When None is in the allowed-values list, null rows must be KEPT.
-
-        Data: id=[1,2,3,4,5], category=["A", None, "B", None, "C"].
-        With values ["A", None], keep category == "A" OR category is null -> ids {1, 2, 4}.
-        Asserting on the id column avoids NaN/None comparison issues on the category column.
-        """
-        feature = Feature("category")
+        """When None is in the allowed-values list, null rows must be KEPT."""
+        feature = Feature(column)
         filter_type = FilterType.CATEGORICAL_INCLUSION
-        parameter = {"values": ["A", None]}
+        parameter = {"values": values}
         single_filter = SingleFilter(feature, filter_type, parameter)
 
         result = filter_engine.do_categorical_inclusion_filter(nullable_category_sample_data, single_filter)
@@ -228,17 +232,20 @@ class FilterEngineTestMixin:
         assert self.result_row_count(result) == 3
         self._assert_values_equal(self.get_column_values(result, "id"), [1, 2, 4])
 
+    @pytest.mark.parametrize(
+        ("column", "values"),
+        [
+            pytest.param("category", ["A"], id="string_category"),
+            pytest.param("score", [1], id="numeric_score"),
+        ],
+    )
     def test_do_categorical_inclusion_drops_null_when_none_absent(
-        self, filter_engine: Any, nullable_category_sample_data: Any
+        self, filter_engine: Any, nullable_category_sample_data: Any, column: str, values: list[Any]
     ) -> None:
-        """When None is absent from the allowed-values list, null rows must be DROPPED.
-
-        Data: id=[1,2,3,4,5], category=["A", None, "B", None, "C"].
-        With values ["A"], keep only category == "A"; nulls dropped -> id {1}.
-        """
-        feature = Feature("category")
+        """When None is absent from the allowed-values list, null rows must be DROPPED."""
+        feature = Feature(column)
         filter_type = FilterType.CATEGORICAL_INCLUSION
-        parameter = {"values": ["A"]}
+        parameter = {"values": values}
         single_filter = SingleFilter(feature, filter_type, parameter)
 
         result = filter_engine.do_categorical_inclusion_filter(nullable_category_sample_data, single_filter)
@@ -246,13 +253,20 @@ class FilterEngineTestMixin:
         assert self.result_row_count(result) == 1
         self._assert_values_equal(self.get_column_values(result, "id"), [1])
 
+    @pytest.mark.parametrize(
+        ("column", "values"),
+        [
+            pytest.param("category", [None], id="string_category"),
+            pytest.param("score", [None], id="numeric_score"),
+        ],
+    )
     def test_do_categorical_inclusion_only_none_keeps_only_nulls(
-        self, filter_engine: Any, nullable_category_sample_data: Any
+        self, filter_engine: Any, nullable_category_sample_data: Any, column: str, values: list[Any]
     ) -> None:
         """An allowed-values list of only [None] keeps exactly the null rows."""
-        feature = Feature("category")
+        feature = Feature(column)
         filter_type = FilterType.CATEGORICAL_INCLUSION
-        parameter = {"values": [None]}
+        parameter = {"values": values}
         single_filter = SingleFilter(feature, filter_type, parameter)
 
         result = filter_engine.do_categorical_inclusion_filter(nullable_category_sample_data, single_filter)

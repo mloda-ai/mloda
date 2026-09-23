@@ -47,7 +47,9 @@ class TestPandasFilterEngine(FilterEngineTestMixin, TimeRangeFilterEngineTestMix
     @pytest.fixture
     def nullable_category_sample_data(self) -> Any:
         """Create a sample pandas DataFrame with null categories for testing."""
-        return pd.DataFrame({"id": [1, 2, 3, 4, 5], "category": ["A", None, "B", None, "C"]})
+        return pd.DataFrame(
+            {"id": [1, 2, 3, 4, 5], "category": ["A", None, "B", None, "C"], "score": [1, None, 2, None, 3]}
+        )
 
     def get_column_values(self, result: Any, column: str) -> list[Any]:
         """Extract column values from pandas DataFrame, mapping missing values to None."""
@@ -67,6 +69,38 @@ class TestPandasFilterEngine(FilterEngineTestMixin, TimeRangeFilterEngineTestMix
 
     def get_id_column_values(self, result: Any) -> list[int]:
         return list(result["id"].tolist())
+
+    @pytest.mark.parametrize(
+        ("column", "series", "values", "expected_ids"),
+        [
+            pytest.param(
+                "nullable_int",
+                pd.Series([1, None, 2, None, 3], dtype="Int64"),
+                [1, None],
+                [1, 2, 4],
+                id="Int64_pd_NA",
+            ),
+            pytest.param(
+                "ts",
+                pd.Series(
+                    [pd.Timestamp("2024-01-01"), None, pd.Timestamp("2024-01-02"), None, pd.Timestamp("2024-01-03")]
+                ),
+                [None],
+                [2, 4],
+                id="datetime64_NaT_only",
+            ),
+        ],
+    )
+    def test_do_categorical_inclusion_keeps_null_pandas_only_dtypes(
+        self, column: str, series: Any, values: list[Any], expected_ids: list[int]
+    ) -> None:
+        """Nullable pandas-only dtypes (Int64/pd.NA, datetime64/NaT) must keep null rows when None is allowed."""
+        data = pd.DataFrame({"id": [1, 2, 3, 4, 5], column: series})
+        single_filter = SingleFilter(Feature(column), FilterType.CATEGORICAL_INCLUSION, {"values": values})
+
+        result = PandasFilterEngine.do_categorical_inclusion_filter(data, single_filter)
+
+        assert sorted(result["id"].tolist()) == expected_ids
 
     def test_do_regex_filter_excludes_null_rows(self) -> None:
         """A regex matching "a" must not match null cells that stringify to "nan" via astype(str).

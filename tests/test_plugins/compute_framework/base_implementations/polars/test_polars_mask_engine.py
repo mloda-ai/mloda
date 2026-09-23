@@ -34,6 +34,16 @@ class TestPolarsMaskEngine(MaskEngineTestMixin):
         return pl.DataFrame({"status": pl.Series([], dtype=pl.String), "value": pl.Series([], dtype=pl.Int64)})
 
     @pytest.fixture
+    def null_data(self) -> Any:
+        return pl.DataFrame(
+            {
+                "status": pl.Series(["active", None, "inactive", None], dtype=pl.String),
+                "value": pl.Series([10, 20, 30, 40], dtype=pl.Int64),
+                "score": pl.Series([1, None, 3, None], dtype=pl.Int64),
+            }
+        )
+
+    @pytest.fixture
     def decimal_sample_data(self) -> Any:
         return pl.DataFrame({"d": [Decimal("12.34"), Decimal("5.50"), None]}, schema={"d": pl.Decimal(10, 2)})
 

@@ -7,6 +7,7 @@ Each framework-specific test class should inherit from this mixin and provide:
 - mask_engine_class attribute: The SQL mask engine class, served by the engine fixture
 - sample_data fixture: Returns framework-specific test data
 - empty_data fixture: Returns the same schema as sample_data, typed, with zero rows
+- null_data fixture: Returns the same schema as sample_data, typed, with null values
 - evaluate_mask method: Executes a SQL condition against data, returns list[bool]
 - apply_mask method: Filters data by a SQL condition, returns column -> values
 """

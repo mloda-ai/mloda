@@ -5,6 +5,8 @@ Each framework-specific test class should inherit from this mixin and provide:
 - mask_engine_class attribute: The mask engine class, served by the engine fixture
 - sample_data fixture: Returns framework-specific test data
 - empty_data fixture: Returns the same schema as sample_data, typed, with zero rows
+- null_data fixture: Returns the same schema as sample_data plus a nullable numeric "score"
+  column, typed, with null status and score values
 - evaluate_mask method: Converts framework-specific mask to a Python list of booleans
 - is_boolean_mask method: Checks that a mask is boolean-typed
 - apply_mask method: Selects rows with the mask the framework's native way, returns column -> values
@@ -33,6 +35,9 @@ class MaskEngineTestMixin:
         value: [10, 20, 30, 40]
     - empty_data fixture returning the same schema (status: string, value: int), typed,
       with zero rows
+    - null_data fixture returning the same schema (status: string, value: int) plus a nullable
+      numeric score column, typed, with status: ["active", None, "inactive", None],
+      value: [10, 20, 30, 40], and score: [1, None, 3, None]
     - evaluate_mask(mask, data) converting the mask to list[bool]
     - is_boolean_mask(mask, data) checking that a mask is boolean-typed
     - apply_mask(mask, data) selecting rows with the mask the framework's native way and
@@ -56,6 +61,11 @@ class MaskEngineTestMixin:
     def empty_data(self) -> Any:
         raise NotImplementedError
 
+    @pytest.fixture
+    @abstractmethod
+    def null_data(self) -> Any:
+        raise NotImplementedError
+
     @abstractmethod
     def evaluate_mask(self, mask: Any, data: Any) -> list[bool]:
         raise NotImplementedError
@@ -73,10 +83,6 @@ class MaskEngineTestMixin:
     @abstractmethod
     def decimal_sample_data(self) -> Any:
         raise NotImplementedError
-
-    def matched_rows(self, mask: Any, data: Any) -> list[bool]:
-        """Polars yields None for a null row where other engines yield False; both mean not matched."""
-        return [bool(v) for v in self.evaluate_mask(mask, data)]
 
     def test_equal(self, engine: type[BaseMaskEngine], sample_data: Any) -> None:
         mask = engine.equal(sample_data, "status", "active")
@@ -210,10 +216,70 @@ class MaskEngineTestMixin:
         self, engine: type[BaseMaskEngine], decimal_sample_data: Any, values: list[Decimal] | set[Decimal]
     ) -> None:
         mask = engine.is_in(decimal_sample_data, "d", values)
-        assert self.matched_rows(mask, decimal_sample_data) == [True, False, False]
+        assert self.evaluate_mask(mask, decimal_sample_data) == [True, False, False]
 
     def test_is_in_decimal_unrepresentable_values_match_nothing(
         self, engine: type[BaseMaskEngine], decimal_sample_data: Any
     ) -> None:
         mask = engine.is_in(decimal_sample_data, "d", [Decimal("12.345"), Decimal("99999999999.99")])
-        assert self.matched_rows(mask, decimal_sample_data) == [False, False, False]
+        assert self.evaluate_mask(mask, decimal_sample_data) == [False, False, False]
+
+    @pytest.mark.parametrize(
+        "method,column,arg,expected_mask",
+        [
+            ("equal", "status", None, [False, True, False, True]),
+            ("equal", "score", None, [False, True, False, True]),
+            ("equal", "status", "active", [True, False, False, False]),
+            ("is_in", "status", ["active"], [True, False, False, False]),
+            ("greater_equal", "score", 1, [True, False, True, False]),
+            ("less_equal", "score", 3, [True, False, True, False]),
+            ("less_than", "score", 3, [True, False, False, False]),
+            ("greater_than", "score", 1, [False, False, True, False]),
+        ],
+        ids=[
+            "equal-status-none",
+            "equal-score-none",
+            "equal-status-active",
+            "is_in-status-active",
+            "greater_equal-score-1",
+            "less_equal-score-3",
+            "less_than-score-3",
+            "greater_than-score-1",
+        ],
+    )
+    def test_null_row_matches_only_none(
+        self,
+        engine: type[BaseMaskEngine],
+        null_data: Any,
+        method: str,
+        column: str,
+        arg: Any,
+        expected_mask: list[bool],
+    ) -> None:
+        mask = getattr(engine, method)(null_data, column, arg)
+        assert self.is_boolean_mask(mask, null_data)
+        assert self.evaluate_mask(mask, null_data) == expected_mask
+        expected_values = [v for v, keep in zip([10, 20, 30, 40], expected_mask) if keep]
+        assert self.apply_mask(mask, null_data)["value"] == expected_values
+
+    @pytest.mark.parametrize(
+        "method,expected_mask",
+        [
+            ("equal", [False, True, False]),
+            ("greater_equal", [True, True, False]),
+            ("less_equal", [False, True, False]),
+            ("less_than", [False, False, False]),
+            ("greater_than", [True, False, False]),
+        ],
+        ids=["equal", "greater_equal", "less_equal", "less_than", "greater_than"],
+    )
+    def test_decimal_comparison_null_row_is_false(
+        self,
+        engine: type[BaseMaskEngine],
+        decimal_sample_data: Any,
+        method: str,
+        expected_mask: list[bool],
+    ) -> None:
+        mask = getattr(engine, method)(decimal_sample_data, "d", Decimal("5.50"))
+        assert self.is_boolean_mask(mask, decimal_sample_data)
+        assert self.evaluate_mask(mask, decimal_sample_data) == expected_mask

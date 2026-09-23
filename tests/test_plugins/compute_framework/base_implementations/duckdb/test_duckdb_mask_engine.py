@@ -41,6 +41,17 @@ class TestDuckDBSqlMaskEngine(SqlMaskEngineTestMixin):
         return DuckdbRelation.from_arrow(connection, table)
 
     @pytest.fixture
+    def null_data(self, connection: Any) -> Any:
+        table = pa.table(
+            {
+                "status": pa.array(["active", None, "inactive", None], type=pa.string()),
+                "value": pa.array([10, 20, 30, 40], type=pa.int64()),
+                "score": pa.array([1, None, 3, None], type=pa.int64()),
+            }
+        )
+        return DuckdbRelation.from_arrow(connection, table)
+
+    @pytest.fixture
     def decimal_sample_data(self, connection: Any) -> Any:
         values = [Decimal("12.34"), Decimal("5.50"), None]
         return DuckdbRelation.from_arrow(connection, pa.table({"d": pa.array(values, type=pa.decimal128(10, 2))}))

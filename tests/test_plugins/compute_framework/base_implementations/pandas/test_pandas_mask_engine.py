@@ -30,6 +30,16 @@ class TestPandasMaskEngine(MaskEngineTestMixin):
         return pd.DataFrame({"status": pd.Series([], dtype=str), "value": pd.Series([], dtype="int64")})
 
     @pytest.fixture
+    def null_data(self) -> Any:
+        return pd.DataFrame(
+            {
+                "status": pd.Series(["active", None, "inactive", None], dtype=str),
+                "value": pd.Series([10, 20, 30, 40], dtype="int64"),
+                "score": [1, None, 3, None],
+            }
+        )
+
+    @pytest.fixture
     def decimal_sample_data(self) -> Any:
         values = [Decimal("12.34"), Decimal("5.50"), None]
         return pd.DataFrame({"d": pd.Series(values, dtype=pd.ArrowDtype(pa.decimal128(10, 2)))})

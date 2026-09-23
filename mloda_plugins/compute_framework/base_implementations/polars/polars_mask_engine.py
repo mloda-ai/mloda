@@ -30,24 +30,24 @@ class PolarsMaskEngine(BaseMaskEngine):
 
     @classmethod
     def equal(cls, data: Any, column: str, value: Any) -> Any:
-        return data[column] == value
+        return data[column].eq_missing(value)
 
     @classmethod
     def greater_equal(cls, data: Any, column: str, value: Any) -> Any:
-        return data[column] >= value
+        return (data[column] >= value).fill_null(False)
 
     @classmethod
     def less_equal(cls, data: Any, column: str, value: Any) -> Any:
-        return data[column] <= value
+        return (data[column] <= value).fill_null(False)
 
     @classmethod
     def less_than(cls, data: Any, column: str, value: Any) -> Any:
-        return data[column] < value
+        return (data[column] < value).fill_null(False)
 
     @classmethod
     def greater_than(cls, data: Any, column: str, value: Any) -> Any:
-        return data[column] > value
+        return (data[column] > value).fill_null(False)
 
     @classmethod
     def is_in(cls, data: Any, column: str, values: Any) -> Any:
-        return data[column].is_in(is_in_values(values, data[column].dtype))
+        return data[column].is_in(is_in_values(values, data[column].dtype)).fill_null(False)

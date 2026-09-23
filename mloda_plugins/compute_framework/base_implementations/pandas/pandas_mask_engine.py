@@ -23,23 +23,25 @@ class PandasMaskEngine(BaseMaskEngine):
 
     @classmethod
     def equal(cls, data: Any, column: str, value: Any) -> Any:
-        return data[column] == value
+        if value is None:
+            return data[column].isna()
+        return (data[column] == value).fillna(False).astype(bool)
 
     @classmethod
     def greater_equal(cls, data: Any, column: str, value: Any) -> Any:
-        return data[column] >= value
+        return (data[column] >= value).fillna(False).astype(bool)
 
     @classmethod
     def less_equal(cls, data: Any, column: str, value: Any) -> Any:
-        return data[column] <= value
+        return (data[column] <= value).fillna(False).astype(bool)
 
     @classmethod
     def less_than(cls, data: Any, column: str, value: Any) -> Any:
-        return data[column] < value
+        return (data[column] < value).fillna(False).astype(bool)
 
     @classmethod
     def greater_than(cls, data: Any, column: str, value: Any) -> Any:
-        return data[column] > value
+        return (data[column] > value).fillna(False).astype(bool)
 
     @classmethod
     def is_in(cls, data: Any, column: str, values: Any) -> Any:

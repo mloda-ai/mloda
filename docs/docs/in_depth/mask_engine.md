@@ -29,7 +29,7 @@ Every `BaseMaskEngine` subclass implements these abstract classmethods:
 | Method | Returns mask where... |
 |--------|----------------------|
 | `supported_data_type()` | (not a mask) the data container type this engine handles, e.g. `pd.DataFrame` |
-| `equal(data, column, value)` | `data[column] == value` |
+| `equal(data, column, value)` | `data[column] == value`; `None` matches null rows |
 | `greater_equal(data, column, value)` | `data[column] >= value` |
 | `greater_than(data, column, value)` | `data[column] > value` |
 | `less_equal(data, column, value)` | `data[column] <= value` |
@@ -37,6 +37,9 @@ Every `BaseMaskEngine` subclass implements these abstract classmethods:
 | `is_in(data, column, values)` | `data[column]` is in `values` (list, tuple, set or frozenset); an empty `values` matches nothing |
 | `combine(mask1, mask2)` | logical AND of two masks |
 | `all_true(data)` | all `True` (no filtering), boolean-typed even at zero rows |
+
+A null row never matches (a mask holds `False` there) unless the call targets nulls, as `equal(..., None)`
+does; SQL conditions yield NULL, treated as no match. On a pandas NumPy float column NaN counts as null.
 
 ### Convenience methods
 

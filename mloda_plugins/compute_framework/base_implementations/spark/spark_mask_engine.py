@@ -48,6 +48,6 @@ class SparkMaskEngine(BaseMaskEngine):
 
     @classmethod
     def is_in(cls, data: Any, column: str, values: Any) -> list[Any]:
-        allowed = set(values) if isinstance(values, (list, tuple)) else {values}
+        allowed = set(values) if isinstance(values, (list, tuple, set, frozenset)) else {values}
         col_values = [row[column] for row in data.collect()]
         return [v in allowed for v in col_values]

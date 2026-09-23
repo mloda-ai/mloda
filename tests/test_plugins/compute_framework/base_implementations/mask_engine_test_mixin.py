@@ -98,8 +98,18 @@ class MaskEngineTestMixin:
         mask = engine.greater_than(sample_data, "value", 20)
         assert self.evaluate_mask(mask, sample_data) == [False, False, True, True]
 
-    def test_is_in(self, engine: type[BaseMaskEngine], sample_data: Any) -> None:
-        mask = engine.is_in(sample_data, "status", ("active",))
+    @pytest.mark.parametrize(
+        "values",
+        [["active"], ("active",), {"active"}, frozenset({"active"})],
+        ids=["list", "tuple", "set", "frozenset"],
+    )
+    def test_is_in(
+        self,
+        engine: type[BaseMaskEngine],
+        sample_data: Any,
+        values: list[Any] | tuple[Any, ...] | set[Any] | frozenset[Any],
+    ) -> None:
+        mask = engine.is_in(sample_data, "status", values)
         assert self.evaluate_mask(mask, sample_data) == [True, False, True, False]
 
     def test_all_true(self, engine: type[BaseMaskEngine], sample_data: Any) -> None:
@@ -155,16 +165,22 @@ class MaskEngineTestMixin:
         mask = engine.all_of(sample_data, [m1, m2])
         assert self.evaluate_mask(mask, sample_data) == [False, True, True, False]
 
-    @pytest.mark.parametrize("values", [[], ()], ids=["list", "tuple"])
+    @pytest.mark.parametrize("values", [[], (), set(), frozenset()], ids=["list", "tuple", "set", "frozenset"])
     def test_is_in_empty_values_is_all_false(
-        self, engine: type[BaseMaskEngine], sample_data: Any, values: list[Any] | tuple[Any, ...]
+        self,
+        engine: type[BaseMaskEngine],
+        sample_data: Any,
+        values: list[Any] | tuple[Any, ...] | set[Any] | frozenset[Any],
     ) -> None:
         mask = engine.is_in(sample_data, "status", values)
         assert self.evaluate_mask(mask, sample_data) == [False, False, False, False]
 
-    @pytest.mark.parametrize("values", [[], ()], ids=["list", "tuple"])
+    @pytest.mark.parametrize("values", [[], (), set(), frozenset()], ids=["list", "tuple", "set", "frozenset"])
     def test_is_in_empty_values_on_empty_data(
-        self, engine: type[BaseMaskEngine], empty_data: Any, values: list[Any] | tuple[Any, ...]
+        self,
+        engine: type[BaseMaskEngine],
+        empty_data: Any,
+        values: list[Any] | tuple[Any, ...] | set[Any] | frozenset[Any],
     ) -> None:
         mask = engine.is_in(empty_data, "status", values)
         assert self.evaluate_mask(mask, empty_data) == []
@@ -189,8 +205,11 @@ class MaskEngineTestMixin:
         """Pins #1535: selecting with all_true on zero rows must keep every column."""
         assert self.apply_mask(engine.all_true(empty_data), empty_data) == {"status": [], "value": []}
 
-    def test_is_in_decimal(self, engine: type[BaseMaskEngine], decimal_sample_data: Any) -> None:
-        mask = engine.is_in(decimal_sample_data, "d", [Decimal("12.34")])
+    @pytest.mark.parametrize("values", [[Decimal("12.34")], {Decimal("12.34")}], ids=["list", "set"])
+    def test_is_in_decimal(
+        self, engine: type[BaseMaskEngine], decimal_sample_data: Any, values: list[Decimal] | set[Decimal]
+    ) -> None:
+        mask = engine.is_in(decimal_sample_data, "d", values)
         assert self.matched_rows(mask, decimal_sample_data) == [True, False, False]
 
     def test_is_in_decimal_unrepresentable_values_match_nothing(

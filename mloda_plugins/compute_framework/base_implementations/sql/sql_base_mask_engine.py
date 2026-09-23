@@ -49,7 +49,12 @@ class SqlBaseMaskEngine(BaseMaskEngine):
 
     @classmethod
     def is_in(cls, data: Any, column: str, values: Any) -> str:
-        value_list = values if isinstance(values, (list, tuple)) else [values]
+        if isinstance(values, (set, frozenset)):
+            value_list = sorted(values, key=repr)
+        elif isinstance(values, (list, tuple)):
+            value_list = list(values)
+        else:
+            value_list = [values]
         if not value_list:
             return "1 = 0"
         quoted = ", ".join(quote_value(v) for v in value_list)

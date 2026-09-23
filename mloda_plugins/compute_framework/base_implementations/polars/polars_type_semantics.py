@@ -40,6 +40,7 @@ def is_in_values(values: Any, dtype: Any) -> Any:
     import polars as pl
 
     if isinstance(dtype, pl.Decimal):
+        values = list(values)
         cast = pl.Series(values, dtype=dtype, strict=False)
         kept = [v for v, c in zip(values, cast.to_list()) if v is None or c == v]
         return pl.Series(kept, dtype=dtype).implode()

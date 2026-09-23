@@ -54,5 +54,5 @@ class PythonDictMaskEngine(BaseMaskEngine):
 
     @classmethod
     def is_in(cls, data: Any, column: str, values: Any) -> list[Any]:
-        allowed = set(values) if isinstance(values, (list, tuple)) else {values}
+        allowed = set(values) if isinstance(values, (list, tuple, set, frozenset)) else {values}
         return cls._mask(data, column, lambda v: v in allowed)

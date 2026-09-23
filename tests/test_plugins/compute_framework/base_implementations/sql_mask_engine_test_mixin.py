@@ -128,9 +128,17 @@ class SqlMaskEngineTestMixin(MaskEngineTestMixin):
         result = engine.all_of(sample_data, [])
         assert result == "1 = 1"
 
-    @pytest.mark.parametrize("values", [[], ()], ids=["list", "tuple"])
+    @pytest.mark.parametrize("values", [[], (), set(), frozenset()], ids=["list", "tuple", "set", "frozenset"])
     def test_is_in_empty_values_condition(
-        self, engine: type[SqlBaseMaskEngine], sample_data: Any, values: list[Any] | tuple[Any, ...]
+        self,
+        engine: type[SqlBaseMaskEngine],
+        sample_data: Any,
+        values: list[Any] | tuple[Any, ...] | set[Any] | frozenset[Any],
     ) -> None:
         result = engine.is_in(sample_data, "status", values)
         assert result == "1 = 0"
+
+    def test_is_in_set_values_deterministic_order(self, engine: type[SqlBaseMaskEngine], sample_data: Any) -> None:
+        """A mixed-type set has no inherent order; pin that rendering sorts by repr for deterministic SQL."""
+        result = engine.is_in(sample_data, "status", {"b", 1, Decimal("2.5"), "a", 3.0})
+        assert result == "\"status\" IN ('a', 'b', 1, 3.0, 2.5)"

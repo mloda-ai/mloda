@@ -591,7 +591,7 @@ class TestDropTfsSourceIfPossibleResolvesViaSourceFrameworkUuid:
 
 
 class TestMarkChildrenAndTrackNeverBlocksOnWorkerOwnedCfw:
-    """The planner thread must not stall on a worker's drop ack; the flyway fallback still tracks."""
+    """The planner never reads a worker's result queue; the flyway fallback still tracks."""
 
     def test_worker_owned_branch_never_touches_result_queue(self) -> None:
         cfw_uuid = uuid_mod.uuid4()
@@ -621,7 +621,7 @@ class TestMarkChildrenAndTrackNeverBlocksOnWorkerOwnedCfw:
 
 
 class TestDropCfwDataRoutedNeverBlocksWhenWorkerAlive:
-    """_drop_cfw_data_routed must only queue the drop command, never wait on the worker's ack."""
+    """_drop_cfw_data_routed must only queue the drop command; it never reads the worker's result queue."""
 
     def test_never_touches_result_queue_when_worker_alive(self) -> None:
         cfw_uuid = uuid_mod.uuid4()

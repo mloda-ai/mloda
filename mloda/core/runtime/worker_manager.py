@@ -69,20 +69,19 @@ class WorkerManager:
         command_queue.put(command)
 
     def poll_result_queues(self) -> None:
-        """Non-blocking poll of all result queues; collects step-UUID strings and discards the worker's
-        DROP_COMPLETE acks. Drains each queue to empty per call; a message still in flight through the
-        queue's feeder thread may not appear until a later poll."""
+        """Non-blocking poll of all result queues; collects step-UUID strings. Drains each queue to
+        empty per call; a message still in flight through the queue's feeder thread may not appear
+        until a later poll."""
         for r_queue in self.result_queues_collection:
-            # Safe to drain unbounded: a worker puts at most one message per command it
-            # processes (one step-uuid or one DROP_COMPLETE ack), so a queue's backlog
-            # is bounded by commands already dispatched to that worker, never unbounded.
+            # Safe to drain unbounded: a worker puts at most one step-uuid per step command it
+            # processes, so a queue's backlog is bounded by commands already dispatched to that
+            # worker, never unbounded.
             while True:
                 try:
                     msg = r_queue.get(block=False)
                 except queue.Empty:
                     break
-                if isinstance(msg, str):
-                    self.result_uuids_collection.add(UUID(msg))
+                self.result_uuids_collection.add(UUID(msg))
 
     def record_assignment(self, cfw_uuid: UUID, step_uuids: set[UUID]) -> None:
         """Remember that these steps were dispatched to this worker."""

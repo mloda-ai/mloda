@@ -458,8 +458,8 @@ class ExecutionOrchestrator:
         """
         Records newly-finished children on a CFW and, if not yet fully satisfied, tracks the
         remaining wait-condition so a later `_drop_data_for_finished_cfws` pass can flush it. The
-        worker-owned branch always tracks, without awaiting the drop ack, since that later flush
-        is a safe no-op if the worker already resolved and exited on its own.
+        worker-owned branch always tracks, since that later flush is a safe no-op if the worker
+        already resolved and exited on its own.
         """
         _, command_queue, _ = self.worker_manager.process_register.get(cfw.uuid, (None, None, None))
 

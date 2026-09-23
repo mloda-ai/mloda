@@ -521,6 +521,27 @@ PROPERTY_MAPPING = {
 }
 ```
 
+## What the end user sees on a rejection
+
+A direct `FeatureChainParser` call raises `ValueError` immediately. Going through
+`FeatureChainParserMixin.match_feature_group_criteria` (the default for most feature groups)
+is different: it catches that `ValueError` and returns `False`, because during resolution one
+candidate's "no match" must not abort the search for another candidate that might still accept
+the feature. This holds on both paths: a bad option value on a string-named feature is the same
+non-match as on a configuration-based one.
+
+If every candidate rejects the feature, the final "No feature groups found" error names each
+discarded candidate and why it dropped:
+
+```
+Feature group(s) eliminated while matching 'window_size_windowed':
+  - WindowedFeatureGroup (option value): Property value '14' failed validation for 'window_size'
+```
+
+This is diagnostic only. It does not change the `True`/`False` contract, so a value rejected by
+one feature group can still match another, and multi-group fallback resolution keeps working.
+Authors get this for free.
+
 ### Naming what a guard expects
 
 A `match_guard` rejection is silent by default unless the spec is strict. Declare `expected`
@@ -545,30 +566,11 @@ PROPERTY_MAPPING = {
   - WorkerPoolFeatureGroup (option value): option 'concurrency' must be a whole number of 1 or more, got str '4'
 ```
 
-The rejected value is echoed only for `str`, `int`, `float`, `bool` (capped) and `None`; any
-other value is named by its type only. The reason reaches the "No feature groups found" error
-and the filter near-miss warnings the same way a strict rejection does.
-
-## What the end user sees on a rejection
-
-A direct `FeatureChainParser` call raises `ValueError` immediately. Going through
-`FeatureChainParserMixin.match_feature_group_criteria` (the default for most feature groups)
-is different: it catches that `ValueError` and returns `False`, because during resolution one
-candidate's "no match" must not abort the search for another candidate that might still accept
-the feature. This holds on both paths: a bad option value on a string-named feature is the same
-non-match as on a configuration-based one.
-
-If every candidate rejects the feature, the final "No feature groups found" error names each
-discarded candidate and why it dropped:
-
-```
-Feature group(s) eliminated while matching 'window_size_windowed':
-  - WindowedFeatureGroup (option value): Property value '14' failed validation for 'window_size'
-```
-
-This is diagnostic only. It does not change the `True`/`False` contract, so a value rejected by
-one feature group can still match another, and multi-group fallback resolution keeps working.
-Authors get this for free.
+The rejected value is echoed only when its type is exactly `str`, `int`, `float` or `bool`, with
+its text cut to about 30 characters, or when it is `None`. Any other value, a `str` subclass or a
+numpy scalar included, is named by its type only. The reason reaches the "No feature groups
+found" error and the filter near-miss warnings, like a strict rejection does, so do not declare
+`expected` on a key that can carry a secret such as a token or a connection string.
 
 ## Conditional requirements with `required_when`
 

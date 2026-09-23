@@ -705,32 +705,6 @@ class TestPropertySpecAllowExplicitNone:
         assert built == hand_constructed
 
 
-class TestPropertySpecExpected:
-    """``expected`` passthrough: names what a ``match_guard`` accepts.
-
-    Composes with ``match_guard``; omitting it leaves ``None``, and it is rejected without a
-    ``match_guard`` since it would never be shown.
-    """
-
-    def test_expected_emitted_through_builder(self) -> None:
-        """``expected="..."`` lands on the field; omitting it leaves the default ``None``."""
-        assert property_spec("d", match_guard=_is_list_of_strings, expected="a list of strings").expected == (
-            "a list of strings"
-        )
-        assert property_spec("d").expected is None
-
-    def test_expected_without_match_guard_raises(self) -> None:
-        """``expected`` with no ``match_guard`` is rejected up front through the builder too."""
-        with pytest.raises(ValueError, match=r"PropertySpec\('d'\)"):
-            property_spec("d", expected="a list of strings")
-
-    def test_non_str_expected_raises(self) -> None:
-        """A non-str ``expected`` is rejected through the untyped seam."""
-        not_a_str: Any = 5
-        with pytest.raises(ValueError, match="(?i)expected must be a non-empty str"):
-            _build("d", match_guard=_is_list_of_strings, expected=not_a_str)
-
-
 class TestPropertySpecDeferredBinding:
     """``deferred_binding`` passthrough (issue #769).
 

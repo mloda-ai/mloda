@@ -5,7 +5,7 @@ Matching RECORDS each rejection as it happens: ``record_match_rejection`` writes
 per owner wins, and the failure facts render from that recording. The engine never replays diagnosis
 through ``_strict_validation_rejection_reason``; that method stays a standalone diagnostic facade.
 
-All names carry an ``os005r`` suffix: test feature groups become global subclasses and the suite runs
+All names carry a unique suffix: test feature groups become global subclasses and the suite runs
 in parallel, so a shared name would leak into another module's candidate universe. Every group here is
 inert for unrelated features (it matches only its own unique name or option keys), so no disarm
 fixture is needed.
@@ -174,6 +174,7 @@ EXPECTED_STRICT_REASON_MGE = "option 'concurrency_strict_mge' must be a whole nu
 class ExpectedGuardFGMge(FeatureChainParserMixin, FeatureGroup):
     """Non-strict spec with ``expected``: a guard rejection is still reportable."""
 
+    MIN_IN_FEATURES = 0
     PROPERTY_MAPPING = {
         "concurrency_mge": property_spec(
             "concurrency count",
@@ -189,6 +190,7 @@ class ExpectedGuardFGMge(FeatureChainParserMixin, FeatureGroup):
 class ExpectedGuardNoneFGMge(FeatureChainParserMixin, FeatureGroup):
     """Non-strict spec with ``expected`` and ``allow_explicit_none``: an explicit None reaches the guard."""
 
+    MIN_IN_FEATURES = 0
     PROPERTY_MAPPING = {
         "concurrency_none_mge": property_spec(
             "concurrency count",
@@ -205,6 +207,7 @@ class ExpectedGuardNoneFGMge(FeatureChainParserMixin, FeatureGroup):
 class ExpectedGuardStrictFGMge(FeatureChainParserMixin, FeatureGroup):
     """Strict spec with ``expected``: the strict path uses the new expected-based text too."""
 
+    MIN_IN_FEATURES = 0
     PROPERTY_MAPPING = {
         "concurrency_strict_mge": property_spec(
             "concurrency count",
@@ -222,6 +225,7 @@ class ExpectedGuardStrictFGMge(FeatureChainParserMixin, FeatureGroup):
 class NoExpectedGuardFGMge(FeatureChainParserMixin, FeatureGroup):
     """Non-strict spec with no ``expected``: a guard rejection stays silent, as today."""
 
+    MIN_IN_FEATURES = 0
     PROPERTY_MAPPING = {
         "concurrency_bare_mge": property_spec(
             "concurrency count",
@@ -236,8 +240,48 @@ class NoExpectedGuardFGMge(FeatureChainParserMixin, FeatureGroup):
 class ExpectedGuardEndToEndFGMge(FeatureChainParserMixin, FeatureGroup):
     """End-to-end counterpart of ``ExpectedGuardFGMge``, run through ``mlodaAPI.run_all``."""
 
+    MIN_IN_FEATURES = 0
     PROPERTY_MAPPING = {
         "concurrency_e2e_mge": property_spec(
+            "concurrency count",
+            match_guard=_is_int_geq1_mge,
+            expected="a whole number of 1 or more",
+        ),
+    }
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return None
+
+
+def _raise_type_error_mge(_value: Any) -> bool:
+    """Guard that raises instead of judging the value: still counted as a rejection."""
+    raise TypeError("boom")
+
+
+class ExpectedGuardRaisingFGMge(FeatureChainParserMixin, FeatureGroup):
+    """A guard that raises is treated as a rejection; the expected text is reported all the same."""
+
+    MIN_IN_FEATURES = 0
+    PROPERTY_MAPPING = {
+        "concurrency_raise_mge": property_spec(
+            "concurrency count",
+            match_guard=_raise_type_error_mge,
+            expected="a whole number of 1 or more",
+        ),
+    }
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return None
+
+
+class ExpectedGuardNamePathFGMge(FeatureChainParserMixin, FeatureGroup):
+    """Name-path group: an options-only guarded key still records its expected reason."""
+
+    MIN_IN_FEATURES = 0
+    PREFIX_PATTERN = r".*__(?P<op_mge>\w+)_mgename$"
+    PROPERTY_MAPPING = {
+        "op_mge": property_spec("operation carried by the name", context=True),
+        "concurrency_name_mge": property_spec(
             "concurrency count",
             match_guard=_is_int_geq1_mge,
             expected="a whole number of 1 or more",
@@ -375,98 +419,143 @@ class TestFirstPassRejectionRecording:
 
 
 class TestExpectedGuardRejectionRecording:
-    """``expected`` names what the guard accepts; the recorded reason uses that text."""
+    """``expected`` names what the guard accepts; the recorded reason uses that text, and the facade agrees."""
 
-    def test_non_strict_expected_str_scalar_is_reported(self) -> None:
-        """A non-strict spec with ``expected`` still records: str '4' names its own type and repr."""
-        feature = Feature(EXPECTED_STR_FEATURE_MGE, Options(context={"concurrency_mge": "4"}))
-        accessible_plugins: FeatureGroupEnvironmentMapping = {ExpectedGuardFGMge: {RecorderFwOneOs005r}}
+    def test_valid_value_matches(self) -> None:
+        """A valid int value passes the guard: match_feature_group_criteria returns True."""
+        options = Options(context={"concurrency_mge": 4})
+
+        assert ExpectedGuardFGMge.match_feature_group_criteria(EXPECTED_STR_FEATURE_MGE, options) is True
+
+    @pytest.mark.parametrize(
+        "feature_name, group, option_key, option_value, expected_reason",
+        [
+            pytest.param(
+                EXPECTED_STR_FEATURE_MGE,
+                ExpectedGuardFGMge,
+                "concurrency_mge",
+                "4",
+                EXPECTED_STR_REASON_MGE,
+                id="str_scalar",
+            ),
+            pytest.param(
+                "expected_guard_int_zero_mge",
+                ExpectedGuardFGMge,
+                "concurrency_mge",
+                0,
+                "option 'concurrency_mge' must be a whole number of 1 or more, got int 0",
+                id="int_zero",
+            ),
+            pytest.param(
+                "expected_guard_float_mge",
+                ExpectedGuardFGMge,
+                "concurrency_mge",
+                1.5,
+                "option 'concurrency_mge' must be a whole number of 1 or more, got float 1.5",
+                id="float_value",
+            ),
+            pytest.param(
+                "expected_guard_bool_mge",
+                ExpectedGuardFGMge,
+                "concurrency_mge",
+                True,
+                "option 'concurrency_mge' must be a whole number of 1 or more, got bool True",
+                id="bool_value",
+            ),
+            pytest.param(
+                "expected_guard_long_str_mge",
+                ExpectedGuardFGMge,
+                "concurrency_mge",
+                "x" * 100,
+                "option 'concurrency_mge' must be a whole number of 1 or more, got str 'xxxxxxxxxxxx...xxxxxxxxxxxxx'",
+                id="long_str_capped_repr",
+            ),
+            pytest.param(
+                EXPECTED_LIST_FEATURE_MGE,
+                ExpectedGuardFGMge,
+                "concurrency_mge",
+                [1, 2],
+                EXPECTED_LIST_REASON_MGE,
+                id="list_value",
+            ),
+            pytest.param(
+                "expected_guard_dict_mge",
+                ExpectedGuardFGMge,
+                "concurrency_mge",
+                {"payload": "hidden_mge"},
+                "option 'concurrency_mge' must be a whole number of 1 or more, got dict",
+                id="dict_value",
+            ),
+            pytest.param(
+                EXPECTED_NONE_FEATURE_MGE,
+                ExpectedGuardNoneFGMge,
+                "concurrency_none_mge",
+                None,
+                EXPECTED_NONE_REASON_MGE,
+                id="explicit_none",
+            ),
+            pytest.param(
+                "expected_guard_raises_mge",
+                ExpectedGuardRaisingFGMge,
+                "concurrency_raise_mge",
+                7,
+                "option 'concurrency_raise_mge' must be a whole number of 1 or more, got int 7",
+                id="guard_raises",
+            ),
+            pytest.param(
+                EXPECTED_STRICT_FEATURE_MGE,
+                ExpectedGuardStrictFGMge,
+                "concurrency_strict_mge",
+                "4",
+                EXPECTED_STRICT_REASON_MGE,
+                id="strict_expected",
+            ),
+            pytest.param(
+                NO_EXPECTED_FEATURE_MGE,
+                NoExpectedGuardFGMge,
+                "concurrency_bare_mge",
+                "4",
+                None,
+                id="non_strict_no_expected",
+            ),
+            pytest.param(
+                "src__run_mgename",
+                ExpectedGuardNamePathFGMge,
+                "concurrency_name_mge",
+                "4",
+                "option 'concurrency_name_mge' must be a whole number of 1 or more, got str '4'",
+                id="name_path_guarded_key",
+            ),
+        ],
+    )
+    def test_expected_guard_rejection_matches_the_facade(
+        self,
+        feature_name: str,
+        group: type[FeatureGroup],
+        option_key: str,
+        option_value: Any,
+        expected_reason: str | None,
+    ) -> None:
+        """The engine's recorded eliminations and the facade agree on the same reason (or both stay silent)."""
+        feature = Feature(feature_name, Options(context={option_key: option_value}))
+        accessible_plugins: FeatureGroupEnvironmentMapping = {group: {RecorderFwOneOs005r}}
 
         result = _failed_result(feature, accessible_plugins)
-
-        assert result.eliminations == {
-            ExpectedGuardFGMge: Elimination(stage="value_rejection", reason=EXPECTED_STR_REASON_MGE)
-        }
-
-    def test_non_strict_expected_list_value_carries_no_value_text(self) -> None:
-        """A list value names only its type: no value text is echoed."""
-        feature = Feature(EXPECTED_LIST_FEATURE_MGE, Options(context={"concurrency_mge": [1, 2]}))
-        accessible_plugins: FeatureGroupEnvironmentMapping = {ExpectedGuardFGMge: {RecorderFwOneOs005r}}
-
-        result = _failed_result(feature, accessible_plugins)
-
-        assert result.eliminations == {
-            ExpectedGuardFGMge: Elimination(stage="value_rejection", reason=EXPECTED_LIST_REASON_MGE)
-        }
-
-    def test_explicit_none_with_allow_explicit_none_is_reported(self) -> None:
-        """An opted-in explicit ``None`` reaches the guard and is reported as 'got None'."""
-        feature = Feature(EXPECTED_NONE_FEATURE_MGE, Options(context={"concurrency_none_mge": None}))
-        accessible_plugins: FeatureGroupEnvironmentMapping = {ExpectedGuardNoneFGMge: {RecorderFwOneOs005r}}
-
-        result = _failed_result(feature, accessible_plugins)
-
-        assert result.eliminations == {
-            ExpectedGuardNoneFGMge: Elimination(stage="value_rejection", reason=EXPECTED_NONE_REASON_MGE)
-        }
-
-    def test_strict_expected_uses_the_new_expected_text(self) -> None:
-        """A strict spec with ``expected`` uses the new text too, not the old strict-only wording."""
-        feature = Feature(EXPECTED_STRICT_FEATURE_MGE, Options(context={"concurrency_strict_mge": "4"}))
-        accessible_plugins: FeatureGroupEnvironmentMapping = {ExpectedGuardStrictFGMge: {RecorderFwOneOs005r}}
-
-        result = _failed_result(feature, accessible_plugins)
-
-        assert result.eliminations == {
-            ExpectedGuardStrictFGMge: Elimination(stage="value_rejection", reason=EXPECTED_STRICT_REASON_MGE)
-        }
-
-    def test_non_strict_without_expected_stays_silent(self) -> None:
-        """A non-strict guard rejection with no ``expected`` records nothing, exactly as today."""
-        feature = Feature(NO_EXPECTED_FEATURE_MGE, Options(context={"concurrency_bare_mge": "4"}))
-        accessible_plugins: FeatureGroupEnvironmentMapping = {NoExpectedGuardFGMge: {RecorderFwOneOs005r}}
-
-        result = _failed_result(feature, accessible_plugins)
-
-        assert result.eliminations == {}
-
-    def test_facade_parity_for_str_scalar(self) -> None:
-        """The facade returns the identical reason for the str-scalar case."""
-        options = Options(context={"concurrency_mge": "4"})
-
-        assert ExpectedGuardFGMge._strict_validation_rejection_reason(EXPECTED_STR_FEATURE_MGE, options) == (
-            EXPECTED_STR_REASON_MGE
+        facade_reason = cast(type[FeatureChainParserMixin], group)._strict_validation_rejection_reason(
+            feature_name, Options(context={option_key: option_value})
         )
 
-    def test_facade_parity_for_list_value(self) -> None:
-        """The facade returns the identical reason for the list-value case."""
-        options = Options(context={"concurrency_mge": [1, 2]})
+        if expected_reason is None:
+            assert result.eliminations == {}
+            assert facade_reason is None
+            return
 
-        assert ExpectedGuardFGMge._strict_validation_rejection_reason(EXPECTED_LIST_FEATURE_MGE, options) == (
-            EXPECTED_LIST_REASON_MGE
-        )
-
-    def test_facade_parity_for_explicit_none(self) -> None:
-        """The facade returns the identical reason for the explicit-None case."""
-        options = Options(context={"concurrency_none_mge": None})
-
-        assert ExpectedGuardNoneFGMge._strict_validation_rejection_reason(EXPECTED_NONE_FEATURE_MGE, options) == (
-            EXPECTED_NONE_REASON_MGE
-        )
-
-    def test_facade_parity_for_strict_expected(self) -> None:
-        """The facade returns the identical reason for the strict-expected case."""
-        options = Options(context={"concurrency_strict_mge": "4"})
-
-        assert ExpectedGuardStrictFGMge._strict_validation_rejection_reason(EXPECTED_STRICT_FEATURE_MGE, options) == (
-            EXPECTED_STRICT_REASON_MGE
-        )
-
-    def test_facade_parity_for_non_strict_without_expected_is_none(self) -> None:
-        """The facade returns ``None`` for the non-strict, no-``expected`` case, matching the match pass."""
-        options = Options(context={"concurrency_bare_mge": "4"})
-
-        assert NoExpectedGuardFGMge._strict_validation_rejection_reason(NO_EXPECTED_FEATURE_MGE, options) is None
+        elimination = result.eliminations.get(group)
+        assert elimination == Elimination(stage="value_rejection", reason=expected_reason)
+        assert facade_reason == expected_reason
+        if isinstance(option_value, dict):
+            assert elimination is not None and "hidden_mge" not in elimination.reason
+            assert facade_reason is not None and "hidden_mge" not in facade_reason
 
     def test_end_to_end_expected_guard_rejection_near_miss_line(self) -> None:
         """``mlodaAPI.run_all`` surfaces the exact near-miss line for an ``expected`` guard rejection."""

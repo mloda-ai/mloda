@@ -914,7 +914,7 @@ class ComputeFramework(ABC):
         option_split_paragraph = ""
         if isinstance(features, FeatureSet) and features.option_split_hint is not None:
             split_feature_group_name, differing_keys = features.option_split_hint
-            differing_keys_str = ", ".join(sorted(differing_keys))
+            differing_keys_str = ", ".join(sorted((str(k) for k in differing_keys), key=str))
             option_split_paragraph = f"""
 '{split_feature_group_name}' also ran as a separate step with differing option(s) ({differing_keys_str})
 in this run, which is the likely cause. Align the differing option(s) across the requests, or add

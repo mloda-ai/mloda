@@ -263,6 +263,30 @@ class TestSimplifiedApiData:
                 api_data={"First": {"first_id": [1, 2]}, "Second": {"second_id": [1, 2], "second_value": ["x", "y"]}},
             )
 
+    def test_missing_links_error_ignores_unrelated_api_source_partition(self) -> None:
+        """Regression pin (codex finding): ApiInputDataFeature partitions its own bucket further by
+        API source key. MultiKeyApiFeature spans two source-key partitions of ApiInputDataFeature
+        that share identical Options (no option differs between 'First' and 'Second'); a third,
+        unrelated top-level request for 'first_id' with an actual option ('unit') creates a genuinely
+        differing bucket elsewhere. The resulting missing-Links error must not blame a differing
+        option, since the two partitions MultiKeyApiFeature itself spans never differed by Options,
+        only by source key."""
+        with pytest.raises(ValueError, match=r"(?s)MultiKeyApiFeature.*missing Links") as exc_info:
+            mloda.run_all(
+                [
+                    Feature(name="MultiKeyApiFeature"),
+                    Feature(name="first_id", options={"unit": "x"}, index=Index(("first_id",))),
+                ],
+                plugin_collector=self._enabled_multikey,
+                compute_frameworks={PandasDataFrame},
+                api_data={"First": {"first_id": [1, 2]}, "Second": {"second_id": [1, 2], "second_value": ["x", "y"]}},
+            )
+
+        assert "differing option" not in str(exc_info.value).lower(), (
+            "MultiKeyApiFeature spans two ApiInputDataFeature source-key partitions with identical "
+            "Options; the unrelated 'unit' bucket from a third, disjoint request must not be blamed"
+        )
+
     def test_duplicate_column_across_api_data_sets_raises(self) -> None:
         with pytest.raises(ValueError, match=r"(?s)(?=.*'a')(?=.*first)(?=.*second)"):
             mloda.run_all(

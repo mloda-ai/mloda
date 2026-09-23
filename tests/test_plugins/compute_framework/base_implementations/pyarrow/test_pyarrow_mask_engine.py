@@ -29,6 +29,16 @@ class TestPyArrowMaskEngine(MaskEngineTestMixin):
         return pa.table({"status": pa.array([], type=pa.string()), "value": pa.array([], type=pa.int64())})
 
     @pytest.fixture
+    def null_data(self) -> Any:
+        return pa.table(
+            {
+                "status": pa.array(["active", None, "inactive", None], type=pa.string()),
+                "value": pa.array([10, 20, 30, 40], type=pa.int64()),
+                "score": pa.array([1, None, 3, None], type=pa.int64()),
+            }
+        )
+
+    @pytest.fixture
     def decimal_sample_data(self) -> Any:
         values = [Decimal("12.34"), Decimal("5.50"), None]
         return pa.table({"d": pa.array(values, type=pa.decimal128(10, 2))})

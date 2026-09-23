@@ -37,25 +37,25 @@ class PolarsExprMaskEngine(BaseMaskEngine):
 
     @classmethod
     def equal(cls, data: Any, column: str, value: Any) -> Any:
-        return _require_polars().col(column) == value
+        return _require_polars().col(column).eq_missing(value)
 
     @classmethod
     def greater_equal(cls, data: Any, column: str, value: Any) -> Any:
-        return _require_polars().col(column) >= value
+        return (_require_polars().col(column) >= value).fill_null(False)
 
     @classmethod
     def less_equal(cls, data: Any, column: str, value: Any) -> Any:
-        return _require_polars().col(column) <= value
+        return (_require_polars().col(column) <= value).fill_null(False)
 
     @classmethod
     def less_than(cls, data: Any, column: str, value: Any) -> Any:
-        return _require_polars().col(column) < value
+        return (_require_polars().col(column) < value).fill_null(False)
 
     @classmethod
     def greater_than(cls, data: Any, column: str, value: Any) -> Any:
-        return _require_polars().col(column) > value
+        return (_require_polars().col(column) > value).fill_null(False)
 
     @classmethod
     def is_in(cls, data: Any, column: str, values: Any) -> Any:
         dtype = data.collect_schema().get(column)
-        return _require_polars().col(column).is_in(is_in_values(values, dtype))
+        return _require_polars().col(column).is_in(is_in_values(values, dtype)).fill_null(False)

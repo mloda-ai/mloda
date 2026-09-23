@@ -32,6 +32,17 @@ class TestSqliteSqlMaskEngine(SqlMaskEngineTestMixin):
         table = pa.table({"status": pa.array([], type=pa.string()), "value": pa.array([], type=pa.int64())})
         return SqliteRelation.from_arrow(connection, table)
 
+    @pytest.fixture
+    def null_data(self, connection: Any) -> Any:
+        table = pa.table(
+            {
+                "status": pa.array(["active", None, "inactive", None], type=pa.string()),
+                "value": pa.array([10, 20, 30, 40], type=pa.int64()),
+                "score": pa.array([1, None, 3, None], type=pa.int64()),
+            }
+        )
+        return SqliteRelation.from_arrow(connection, table)
+
     def evaluate_mask(self, mask: Any, data: SqliteRelation) -> list[bool]:
         conn = data.connection
         table_name = data.table_name
@@ -48,5 +59,10 @@ class TestSqliteSqlMaskEngine(SqlMaskEngineTestMixin):
 
     @pytest.mark.skip(reason="SQLite has no decimal storage type; a decimal column cannot be inserted")
     def test_is_in_decimal_unrepresentable_values_match_nothing(
+        self, engine: type[BaseMaskEngine], decimal_sample_data: Any
+    ) -> None: ...
+
+    @pytest.mark.skip(reason="SQLite has no decimal storage type; a decimal column cannot be inserted")
+    def test_decimal_comparison_null_row_is_false(
         self, engine: type[BaseMaskEngine], decimal_sample_data: Any
     ) -> None: ...

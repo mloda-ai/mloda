@@ -7,6 +7,8 @@ class BaseMaskEngine(ABC):
 
     Each compute framework provides a subclass implementing these primitives
     and wires it via ComputeFramework.mask_engine().
+    A null row never matches (a mask holds False there) unless the call targets nulls, as
+    ``equal(..., None)`` does; SQL conditions yield NULL, which WHERE and CASE WHEN treat as no match.
     """
 
     @classmethod
@@ -30,7 +32,7 @@ class BaseMaskEngine(ABC):
     @classmethod
     @abstractmethod
     def equal(cls, data: Any, column: str, value: Any) -> Any:
-        """Return a boolean mask where data[column] == value."""
+        """Return a boolean mask where data[column] == value; a None value matches null rows."""
         ...
 
     @classmethod

@@ -36,6 +36,18 @@ class TestSparkMaskEngine(MaskEngineTestMixin):
         return spark_session.createDataFrame([], "status string, value bigint")
 
     @pytest.fixture
+    def null_data(self, spark_session: Any) -> Any:
+        return spark_session.createDataFrame(
+            [
+                ("active", 10, 1),
+                (None, 20, None),
+                ("inactive", 30, 3),
+                (None, 40, None),
+            ],
+            "status string, value bigint, score bigint",
+        )
+
+    @pytest.fixture
     def decimal_sample_data(self, spark_session: Any) -> Any:
         rows = [(Decimal("12.34"),), (Decimal("5.50"),), (None,)]
         return spark_session.createDataFrame(rows, "d decimal(10,2)")

@@ -29,6 +29,8 @@ class SqlBaseMaskEngine(BaseMaskEngine):
 
     @classmethod
     def equal(cls, data: Any, column: str, value: Any) -> str:
+        if value is None:
+            return f"{quote_ident(column)} IS NULL"
         return f"{quote_ident(column)} = {quote_value(value)}"
 
     @classmethod

@@ -11,6 +11,10 @@ except ImportError:
     pc = None
 
 
+def _no_null(mask: Any) -> Any:
+    return pc.fill_null(mask, False)
+
+
 class PyArrowMaskEngine(BaseMaskEngine):
     @classmethod
     def supported_data_type(cls) -> type[Any]:
@@ -26,23 +30,25 @@ class PyArrowMaskEngine(BaseMaskEngine):
 
     @classmethod
     def equal(cls, data: Any, column: str, value: Any) -> Any:
-        return pc.equal(data[column], value)
+        if value is None:
+            return pc.is_null(data[column])
+        return _no_null(pc.equal(data[column], value))
 
     @classmethod
     def greater_equal(cls, data: Any, column: str, value: Any) -> Any:
-        return pc.greater_equal(data[column], value)
+        return _no_null(pc.greater_equal(data[column], value))
 
     @classmethod
     def less_equal(cls, data: Any, column: str, value: Any) -> Any:
-        return pc.less_equal(data[column], value)
+        return _no_null(pc.less_equal(data[column], value))
 
     @classmethod
     def less_than(cls, data: Any, column: str, value: Any) -> Any:
-        return pc.less(data[column], value)
+        return _no_null(pc.less(data[column], value))
 
     @classmethod
     def greater_than(cls, data: Any, column: str, value: Any) -> Any:
-        return pc.greater(data[column], value)
+        return _no_null(pc.greater(data[column], value))
 
     @classmethod
     def is_in(cls, data: Any, column: str, values: Any) -> Any:

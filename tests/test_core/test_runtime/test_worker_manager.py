@@ -334,8 +334,8 @@ class TestWorkerManagerResultPolling:
         uuid3 = str(uuid4())
 
         mp_queue.put(uuid1)
-        mp_queue.put(uuid3)
         mp_queue.put(uuid2)
+        mp_queue.put(uuid3)
 
         manager.result_queues_collection.add(mp_queue)
 

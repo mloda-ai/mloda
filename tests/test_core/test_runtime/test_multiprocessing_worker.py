@@ -361,7 +361,7 @@ class TestWorkerProcessesQueuedCommandsBeforeClosingExtendersOnStop:
     def test_queued_drop_command_effect_precedes_close(self) -> None:
         ctx = mp_spawn_context()
         command_queue: multiprocessing.Queue[Any] = ctx.Queue()
-        result_queue: multiprocessing.Queue[Any] = ctx.Queue()
+        result_queue = Mock()
         cfw_register = Mock(spec=CfwManager)
         cfw_register.get_location.return_value = "grpc://localhost:9999"
         cfw_register.get_run_context.return_value = RunContext()
@@ -370,8 +370,8 @@ class TestWorkerProcessesQueuedCommandsBeforeClosingExtendersOnStop:
         # command (STOP) instead of breaking on the drop command itself.
         child = uuid4()
         cfw = PythonDictFramework(mode=ParallelizationMode.MULTIPROCESSING, children_if_root=frozenset({uuid4()}))
-        # A truthy but unresolved drop() return, so a worker that mistakes any truthy
-        # result for "resolved" is caught too.
+        # A truthy but unresolved add_already_calculated_children_and_drop_if_possible()
+        # return, so a worker that mistakes any truthy result for "resolved" is caught too.
         cfw.object_ids = ["x"]
         extender = _CloseRecordingExtender()
         cfw.function_extender = {extender}
@@ -383,9 +383,29 @@ class TestWorkerProcessesQueuedCommandsBeforeClosingExtendersOnStop:
         # The queued drop command's effect ran (worker() runs in-process, so cfw is shared).
         assert child in cfw.already_calculated_children_tracker
         # A drop command posts nothing on the result queue.
-        with pytest.raises(queue.Empty):
-            result_queue.get(timeout=0.2)
+        result_queue.put.assert_not_called()
         # No stray STOP left behind on the command queue.
         with pytest.raises(queue.Empty):
             command_queue.get(timeout=0.2)
+        assert extender.close_calls == [True]
+
+    def test_resolved_drop_command_stops_worker_without_posting_a_result(self) -> None:
+        """The resolved-drop path (all children_if_root satisfied) queues its own STOP."""
+        ctx = mp_spawn_context()
+        command_queue: multiprocessing.Queue[Any] = ctx.Queue()
+        result_queue = Mock()
+        cfw_register = Mock(spec=CfwManager)
+        cfw_register.get_location.return_value = "grpc://localhost:9999"
+        cfw_register.get_run_context.return_value = RunContext()
+        child = uuid4()
+        cfw = PythonDictFramework(mode=ParallelizationMode.MULTIPROCESSING, children_if_root=frozenset({child}))
+        extender = _CloseRecordingExtender()
+        cfw.function_extender = {extender}
+        command_queue.put({child})
+
+        worker(command_queue, result_queue, cfw_register, cfw, uuid4(), worker_index=0)
+
+        assert child in cfw.already_calculated_children_tracker
+        assert command_queue.get(timeout=2) == "STOP"
+        result_queue.put.assert_not_called()
         assert extender.close_calls == [True]

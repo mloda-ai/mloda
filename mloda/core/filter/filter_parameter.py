@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from typing import Any, Protocol, cast, runtime_checkable
 
-from mloda.core.abstract_plugins.components.utils import unhashable_part
+from mloda.core.abstract_plugins.components.utils import require_value_collection, unhashable_part
 
 
 @runtime_checkable
@@ -47,6 +47,8 @@ class FilterParameterImpl:
         for key in params:
             if not isinstance(key, str):
                 raise ValueError(f"Filter parameter key {key!r} is not a string.")
+        if "values" in params:
+            require_value_collection(params["values"], "Filter parameter 'values'")
         normalized = {k: _normalize_collections(v) for k, v in params.items()}
         # This site rejects what still does not hash; _deep_hashable in hashable_dict coerces instead.
         for key, value in normalized.items():
@@ -71,7 +73,7 @@ class FilterParameterImpl:
             return sorted(stored, key=repr)
         if isinstance(stored, tuple):
             return list(stored)
-        return cast(list[Any] | None, stored)
+        return None
 
     @property
     def min_value(self) -> Any | None:

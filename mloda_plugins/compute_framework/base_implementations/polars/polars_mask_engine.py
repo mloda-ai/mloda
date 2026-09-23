@@ -1,6 +1,7 @@
 from typing import Any
 
 from mloda.core.abstract_plugins.components.mask.base_mask_engine import BaseMaskEngine
+from mloda.core.abstract_plugins.components.utils import require_value_collection
 from mloda_plugins.compute_framework.base_implementations.polars.polars_type_semantics import is_in_values
 
 try:
@@ -50,4 +51,5 @@ class PolarsMaskEngine(BaseMaskEngine):
 
     @classmethod
     def is_in(cls, data: Any, column: str, values: Any) -> Any:
+        require_value_collection(values, "is_in values")
         return data[column].is_in(is_in_values(values, data[column].dtype)).fill_null(False)

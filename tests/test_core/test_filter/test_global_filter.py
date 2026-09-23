@@ -309,13 +309,12 @@ class TestGlobalFilterCategoricalInclusion:
         assert isinstance(values, list)
         assert sorted(values) == ["EU", "NA"]
 
-    def test_add_filter_with_string_value_is_not_exploded(self) -> None:
-        """Test a scalar string value is not split into its characters."""
-        self.global_filter.add_filter("region", FilterType.CATEGORICAL_INCLUSION, {"values": "EU"})
+    def test_add_filter_rejects_string_values(self) -> None:
+        """Test a scalar string values argument raises TypeError and nothing is stored."""
+        with pytest.raises(TypeError, match="list, tuple, set or frozenset"):
+            self.global_filter.add_filter("region", FilterType.CATEGORICAL_INCLUSION, {"values": "EU"})
 
-        values: Any = self._only_filter().parameter.values
-        assert values == "EU"
-        assert values != ["E", "U"]
+        assert len(self.global_filter.filters) == 0
 
     def test_add_filter_deduplicates_list_and_tuple_values(self) -> None:
         """Test list and tuple values normalize to the same filter and deduplicate in the set."""

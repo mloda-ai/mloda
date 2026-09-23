@@ -13,6 +13,9 @@ import pytest
 from mloda.user import Feature
 from mloda.user import SingleFilter
 from mloda.user import FilterType
+from tests.test_plugins.compute_framework.base_implementations.mask_engine_test_mixin import (
+    NON_COLLECTION_VALUES,
+)
 
 
 class FilterEngineTestMixin:
@@ -199,6 +202,17 @@ class FilterEngineTestMixin:
         assert self.result_row_count(result) == 4
         assert set(self.get_column_values(result, "category")) == {"A", "B"}
         assert set(self.get_column_values(result, "id")) == {1, 2, 3, 5}
+
+    @pytest.mark.parametrize("make_values", NON_COLLECTION_VALUES)
+    def test_do_categorical_inclusion_rejects_non_collection_values(
+        self, filter_engine: Any, sample_data: Any, make_values: Any
+    ) -> None:
+        """Building the SingleFilter raises, so no engine ever filters on a non-collection values."""
+        with pytest.raises(TypeError, match="list, tuple, set or frozenset"):
+            single_filter = SingleFilter(
+                Feature("category"), FilterType.CATEGORICAL_INCLUSION, {"values": make_values()}
+            )
+            filter_engine.do_categorical_inclusion_filter(sample_data, single_filter)
 
     def test_do_categorical_inclusion_empty_values(self, filter_engine: Any, sample_data: Any) -> None:
         """An empty allowed-values list must yield an empty result across all frameworks."""

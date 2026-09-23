@@ -2,6 +2,7 @@ from abc import abstractmethod
 from typing import Any
 
 from mloda.core.abstract_plugins.components.mask.base_mask_engine import BaseMaskEngine
+from mloda.core.abstract_plugins.components.utils import require_value_collection
 from mloda_plugins.compute_framework.base_implementations.sql.sql_utils import quote_ident, quote_value
 
 
@@ -51,12 +52,11 @@ class SqlBaseMaskEngine(BaseMaskEngine):
 
     @classmethod
     def is_in(cls, data: Any, column: str, values: Any) -> str:
+        require_value_collection(values, "is_in values")
         if isinstance(values, (set, frozenset)):
             value_list = sorted(values, key=repr)
-        elif isinstance(values, (list, tuple)):
-            value_list = list(values)
         else:
-            value_list = [values]
+            value_list = list(values)
         if not value_list:
             return "1 = 0"
         quoted = ", ".join(quote_value(v) for v in value_list)

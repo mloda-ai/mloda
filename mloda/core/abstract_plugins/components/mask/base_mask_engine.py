@@ -62,7 +62,7 @@ class BaseMaskEngine(ABC):
     @classmethod
     @abstractmethod
     def is_in(cls, data: Any, column: str, values: Any) -> Any:
-        """Return a boolean mask where data[column] is in values (list/tuple/set/frozenset); empty matches nothing."""
+        """Boolean mask of data[column] in values (list/tuple/set/frozenset, else TypeError); empty matches none."""
         ...
 
     # -- Convenience methods (concrete, built from primitives above) ----------

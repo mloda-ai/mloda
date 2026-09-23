@@ -1,6 +1,7 @@
 from decimal import Decimal
 from typing import Any
 
+import numpy as np
 import pandas as pd
 import pyarrow as pa
 import pytest
@@ -53,3 +54,12 @@ class TestPandasMaskEngine(MaskEngineTestMixin):
     def apply_mask(self, mask: Any, data: Any) -> dict[str, list[Any]]:
         result: dict[str, list[Any]] = data[mask].to_dict("list")
         return result
+
+    @pytest.mark.parametrize(
+        "values",
+        [np.array(["active"]), pd.Series(["active"])],
+        ids=["numpy_array", "pandas_series"],
+    )
+    def test_is_in_rejects_numpy_and_series_values(self, sample_data: Any, values: Any) -> None:
+        with pytest.raises(TypeError, match="list, tuple, set or frozenset"):
+            PandasMaskEngine.is_in(sample_data, "status", values)

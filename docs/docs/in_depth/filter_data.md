@@ -9,6 +9,7 @@ That however means that a data project typically contains multiple filters. For 
 -    filter_feature: It can be a Feature or a feature name as string.
 -    parameter: A dictionary of parameters to filter. Example: {"min": 2, "max": 3}
     Parameter values must be hashable (scalars, or lists, sets or tuples of hashables); anything else raises `ValueError`.
+    The `values` key must be a list, tuple, set or frozenset; anything else (a string, a range, a generator) raises `TypeError`.
 -    filter_type: It can be a str or a FilterType.
 
 #### FilterType

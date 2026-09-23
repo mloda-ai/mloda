@@ -23,6 +23,18 @@ import pytest
 
 from mloda.provider import BaseMaskEngine
 
+# Zero-arg factories (not bare values) so a fresh generator is produced per test run.
+NON_COLLECTION_VALUES: list[Any] = [
+    pytest.param(lambda: "active", id="str"),
+    pytest.param(lambda: b"active", id="bytes"),
+    pytest.param(lambda: None, id="none"),
+    pytest.param(lambda: 5, id="int"),
+    pytest.param(lambda: range(2), id="range"),
+    pytest.param(lambda: (v for v in ["active"]), id="generator"),
+    pytest.param(lambda: {"active": 1}.keys(), id="dict_keys"),
+    pytest.param(lambda: {"active": 1}, id="dict"),
+]
+
 
 class MaskEngineTestMixin:
     """Shared tests for all BaseMaskEngine implementations.
@@ -117,6 +129,13 @@ class MaskEngineTestMixin:
     ) -> None:
         mask = engine.is_in(sample_data, "status", values)
         assert self.evaluate_mask(mask, sample_data) == [True, False, True, False]
+
+    @pytest.mark.parametrize("make_values", NON_COLLECTION_VALUES)
+    def test_is_in_rejects_non_collection_values(
+        self, engine: type[BaseMaskEngine], sample_data: Any, make_values: Any
+    ) -> None:
+        with pytest.raises(TypeError, match="list, tuple, set or frozenset"):
+            engine.is_in(sample_data, "status", make_values())
 
     def test_all_true(self, engine: type[BaseMaskEngine], sample_data: Any) -> None:
         mask = engine.all_true(sample_data)

@@ -1,10 +1,10 @@
 import logging
+import os
 import re
 from abc import ABC
 from collections.abc import Iterable, Mapping
 from pathlib import PurePath
 from typing import Any, ClassVar
-from urllib.parse import unquote
 
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.abstract_plugins.components.data_types import DataType
@@ -45,98 +45,34 @@ logger = logging.getLogger(__name__)
 RESERVED_READER_OPTION_KEY = "BaseInputData"
 
 
-_VALUE_SPAN_PATTERN = re.compile(r"\s{2,}|\{[^}]{0,256}\}|'[^']{0,256}'|\"[^\"]{0,256}\"")
-_CONNECTION_KEY_PATTERN = re.compile(r"(?:^|[;\s])\s*([A-Za-z_][A-Za-z0-9_.\-]{0,63})\s*=")
-_CONNECTION_KEYS = frozenset(
-    "host hostaddr hostname server dsn driver dbname database db user username uid password passwd pwd passfile port".split()
+_URI_PATTERN = re.compile(
+    r"(?P<scheme>(?:jdbc:)?[A-Za-z][A-Za-z0-9+.-]*)://"
+    r"(?:(?P<userinfo>[^/?#]*)@)?"
+    r"(?P<host>(?:[\w.~-]*|\[[0-9A-Fa-f:.]+\])(?::\d+)?)"
+    r"(?P<path>/[\w.~%/:=+-]*)?"
+    r"(?:[?#][^@]*)?"
 )
-_SECRET_KEY_PARTS = ("pass", "pwd", "secret", "token", "credential", "auth", "sas", "sig", "key")
-_URI_PATTERN = re.compile(r"^[A-Za-z][A-Za-z0-9+.:-]*://")
-_USERINFO_PATTERN = re.compile(r"^[^/\\@\s:]*:[^@]*@")
-_DRIVE_LETTER_PATTERN = re.compile(r"^[A-Za-z]:[\\/]")
-_QUERY_KEY_PATTERN = re.compile(r"[?&#;]\s*([A-Za-z_][A-Za-z0-9_.\-]{0,63})\s*=")
-_QUERY_START_PATTERN = re.compile(r"[?#]")
-_ENCODED_QUERY_START_PATTERN = re.compile(r"[?#]|%(?:3[fF]|23)")
+_AZURE_CONTAINER_SCHEMES = frozenset({"abfs", "abfss", "wasb", "wasbs"})
+_AZURE_CONTAINER_PATTERN = re.compile(r"[a-z0-9-]{3,63}|\$(?:root|web|logs)")
 
 
 def _format_keys(keys: Iterable[str]) -> str:
     return "{" + ", ".join(sorted(set(keys))) + "}"
 
 
-def _is_secret_key(key: str) -> bool:
-    return any(part in key for part in _SECRET_KEY_PARTS)
-
-
-def _connection_string_identity(value: str) -> str | None:
-    blanked = _VALUE_SPAN_PATTERN.sub(" ", value)
-    matches = list(_CONNECTION_KEY_PATTERN.finditer(blanked))
-    keys = {match[1].lower() for match in matches}
-    recognized = {key for key in keys if key in _CONNECTION_KEYS or _is_secret_key(key)}
-    if not recognized:
+def _uri_projection(match: re.Match[str]) -> str | None:
+    scheme, userinfo, host, path = match["scheme"], match["userinfo"], match["host"], match["path"] or ""
+    container = ""
+    if userinfo and scheme.lower() in _AZURE_CONTAINER_SCHEMES and _AZURE_CONTAINER_PATTERN.fullmatch(userinfo):
+        container = f"{userinfo}@"
+    if scheme.startswith("jdbc:"):
+        return f"{scheme}://{container}{host}"
+    if any("=" in segment.partition(":")[2] for segment in path.split("/")):
         return None
-    if _URI_PATTERN.match(value):
-        return _format_keys(recognized) if any(_is_secret_key(key) for key in recognized) else None
-    prefix = blanked[: matches[0].start(1)]
-    prefix_has_query_anchor = _QUERY_START_PATTERN.search(prefix) is not None
-    prefix_has_secret_without_anchor = any(_is_secret_key(key) for key in recognized) and not prefix_has_query_anchor
-    if ("/" in prefix or "\\" in prefix) and not prefix_has_secret_without_anchor:
-        return None
-    if len(matches) == 1 and not any(_is_secret_key(key) for key in recognized) and "/" in value:
-        return None
-    return _format_keys(recognized)
-
-
-def _strip_scheme_less_userinfo(value: str) -> str:
-    if _DRIVE_LETTER_PATTERN.match(value) or not _USERINFO_PATTERN.match(value):
-        return value
-    body = value.split("?", 1)[0].split("#", 1)[0]
-    if "@" not in body:
-        body = value
-    return body.rpartition("@")[2].split("?", 1)[0].split("#", 1)[0]
-
-
-def _strip_credential_query(value: str) -> str:
-    match = _ENCODED_QUERY_START_PATTERN.search(value)
-    if match is None:
-        return value
-    head, tail = value[: match.start()], value[match.start() :]
-    keys = {m[1].lower() for m in _QUERY_KEY_PATTERN.finditer(unquote(tail))}
-    if any(key in _CONNECTION_KEYS or _is_secret_key(key) for key in keys):
-        return head
-    return value
-
-
-def _data_access_identity(data_access: Any) -> str:
-    """Mapping: sorted key names. str or PurePath: a scheme:// URI keeps scheme, host and path (abfs/abfss/wasb/wasbs,
-    case-insensitive, also the container), user info, query and fragment dropped. A scheme-less string with recognized
-    connection or secret keys is identified by those key names. user:pw@host unconditionally drops a literal query
-    and fragment along with the user info; any other scheme-less query or fragment is dropped only when it holds a
-    recognized or secret key. That key scan also takes an encoded ?/# as an anchor, in a URI path too, and
-    percent-decodes the tail once; not detected: double encoding, percent-encoded text before any ?/# anchor, and
-    a secret carried as a value under an unrecognized key."""
-    if isinstance(data_access, Mapping):
-        return _format_keys(str(key) for key in data_access)
-    if isinstance(data_access, (str, PurePath)):
-        value = str(data_access)
-        identity = _connection_string_identity(value)
-        if identity is not None:
-            return identity
-        if not _URI_PATTERN.match(value):
-            return _strip_credential_query(_strip_scheme_less_userinfo(value))
-        scheme, _, rest = value.partition("://")
-        head = rest.split("/", 1)[0].split("?", 1)[0].split("#", 1)[0]
-        tail = head.rpartition(":")[2]
-        # Best effort: an unencoded "/", "?" or "#" in a password puts its "@" past the authority. Caught only when the
-        # authority then fails to parse as host[:port]; a password that is digits before the delimiter reads as a port.
-        if "@" not in head and ":" in head and not head.startswith("[") and tail and not tail.isdigit():
-            rest = rest.rpartition("@")[2]
-        body = rest.split("?", 1)[0].split("#", 1)[0]
-        authority, slash, path = body.partition("/")
-        userinfo, _, host = authority.rpartition("@")
-        if scheme.lower() not in ("abfs", "abfss", "wasb", "wasbs") or ":" in userinfo:
-            authority = host
-        return _strip_credential_query(f"{scheme}://{authority}{slash}{path}")
-    return type(data_access).__name__
+    head, percent, _ = path.partition("%")
+    if percent:
+        path = head[: head.rfind("/") + 1]
+    return f"{scheme}://{container}{host}{path}"
 
 
 class BaseInputData(ABC):
@@ -341,6 +277,19 @@ class BaseInputData(ABC):
     def data_access_name(cls) -> str:
         """This function should return the name of the data access."""
         return cls.__name__
+
+    @classmethod
+    def data_access_identity(cls, data_access: Any) -> str:
+        """Mapping keys, a parsed URI's projection, an existing local path, else the type name."""
+        if isinstance(data_access, Mapping):
+            return _format_keys(str(key) for key in data_access)
+        if isinstance(data_access, str):
+            match = _URI_PATTERN.fullmatch(data_access)
+            if match is not None:
+                return _uri_projection(match) or type(data_access).__name__
+        if isinstance(data_access, (str, PurePath)) and os.path.exists(data_access):
+            return str(data_access)
+        return type(data_access).__name__
 
     @staticmethod
     def _underlying(member: Any) -> Any:
@@ -615,7 +564,7 @@ class BaseInputData(ABC):
             project_id=cfw.run_context.project_id,
             principal=cfw.run_context.principal,
             worker_index=cfw.worker_index,
-            data_access_identity=_data_access_identity(data_access),
+            data_access_identity=reader.data_access_identity(data_access),
             data_access_format=reader.data_access_name(),
             data_access_dataset_version=None,
         )

@@ -1,21 +1,24 @@
-"""Tests for multiprocessing_worker.worker(): worker_index assignment and the child_bootstrap
-seam (invoked once before the command loop, exceptions reported via the standard error channel).
+"""Tests for multiprocessing_worker.worker(): worker_index assignment, the child_bootstrap
+seam, and the extender-close cleanup path.
 """
 
 import inspect
+import logging
 import multiprocessing
+from collections.abc import Mapping
 from typing import Any
 from unittest.mock import Mock
 from uuid import uuid4
 
 import pytest
 
+from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.components.parallelization_modes import ParallelizationMode
 from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook
 from mloda.core.abstract_plugins.run_context import RunContext
 from mloda.core.core.cfw_manager import CfwManager
 from mloda.core.runtime.mp_context import mp_spawn_context
-from mloda.core.runtime.worker.multiprocessing_worker import worker
+from mloda.core.runtime.worker.multiprocessing_worker import _close_extenders, worker
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
 
 
@@ -34,7 +37,10 @@ class _CloseRecordingExtender(Extender):
 
 
 class _RaisingCloseExtender(Extender):
-    """close() always raises."""
+    """close() always raises the configured error type."""
+
+    def __init__(self, error: type[BaseException] = RuntimeError) -> None:
+        self.error = error
 
     def wraps(self) -> set[ExtenderHook]:
         return set()
@@ -43,7 +49,12 @@ class _RaisingCloseExtender(Extender):
         return func(*args, **kwargs)
 
     def close(self) -> None:
-        raise RuntimeError("close boom")
+        raise self.error("close boom")
+
+
+class _UnprintableError(Exception):
+    def __str__(self) -> str:
+        raise ValueError("str() of this exception is broken")
 
 
 class _RaisingCommand:
@@ -249,6 +260,30 @@ class TestWorkerSwallowsExtenderCloseExceptions:
         assert ok_extender.close_calls == [True]
         assert "root" not in {r.name for r in caplog.records}
         assert [r.name for r in caplog.records if "close boom" in r.getMessage()] == [_WORKER_LOGGER_NAME]
+
+    def test_close_exceptions_whose_str_raises_do_not_escape_and_other_extender_still_closes(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        ok_extender = _CloseRecordingExtender()
+        raising_extender = _RaisingCloseExtender(error=_UnprintableError)
+        # A list pins the raising extender first; a real cfw's function_extender is an unordered set.
+        cfw = Mock(spec=ComputeFramework)
+        cfw.function_extender = [raising_extender, ok_extender]
+
+        with caplog.at_level(logging.ERROR):
+            _close_extenders(cfw)
+
+        assert ok_extender.close_calls == [True]
+        error_records = [r for r in caplog.records if r.levelno == logging.ERROR]
+        assert len(error_records) == 1
+        record = error_records[0]
+        assert record.name == _WORKER_LOGGER_NAME
+        assert "_RaisingCloseExtender" in record.getMessage()
+        assert "_UnprintableError" in record.getMessage()
+        assert record.exc_info is None
+        args = record.args
+        arg_values = args.values() if isinstance(args, Mapping) else (args or ())
+        assert not [a for a in arg_values if isinstance(a, BaseException)]
 
 
 class TestWorkerClosesExtendersEvenWhenChildBootstrapRaises:

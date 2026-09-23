@@ -20,15 +20,8 @@ def _noop_target(*args: Any, **kwargs: Any) -> None:
 
 
 def _loop_forever_target(command_queue: Any, result_queue: Any, worker_index: int) -> None:
-    """Picklable infinite worker receiving command/result queues followed by worker_index."""
+    """Picklable worker matching create_worker_process's signature; signals READY, never drains its command queue."""
     result_queue.put("READY")
-    while True:
-        time.sleep(0.1)
-
-
-def _loop_forever_target_matching_worker_signature(command_queue: Any, result_queue: Any, worker_index: int) -> None:
-    """Matches create_worker_process's real calling convention but never drains its queue,
-    so only a graceful-timeout-driven terminate() can end it."""
     while True:
         time.sleep(0.1)
 
@@ -728,9 +721,7 @@ class TestWorkerManagerJoinAll:
         """A worker that never drains its command queue must still be terminated once
         graceful_timeout elapses."""
         manager = WorkerManager()
-        process, _, _ = manager.create_worker_process(
-            cfw_uuid=uuid4(), target=_loop_forever_target_matching_worker_signature, args=()
-        )
+        process, _, _ = manager.create_worker_process(cfw_uuid=uuid4(), target=_loop_forever_target, args=())
         try:
             start_time = time.time()
             manager.join_all(graceful_timeout=0.3)

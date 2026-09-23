@@ -315,12 +315,10 @@ class TestWorkerManagerResultPolling:
     def test_poll_result_queues_ignores_stale_drop_complete_tuple(self) -> None:
         """A stale ("DROP_COMPLETE", cfw_uuid) control tuple must not be parsed as a UUID.
 
-        The worker's single result_queue carries BOTH step-completion UUID
-        strings and ("DROP_COMPLETE", cfw_uuid) control tuples. When a drop
-        wait times out, the tuple lingers in the queue and a later poll picks
-        it up. poll_result_queues must skip it instead of calling
-        ``UUID(("DROP_COMPLETE", cfw_uuid))`` (which raises
-        ``AttributeError: 'tuple' object has no attribute 'replace'``).
+        The worker's result_queue carries both step-uuid strings and
+        ("DROP_COMPLETE", cfw_uuid) control tuples. poll_result_queues must skip
+        the tuple instead of calling ``UUID(("DROP_COMPLETE", cfw_uuid))`` (which
+        raises ``AttributeError: 'tuple' object has no attribute 'replace'``).
         """
         manager = WorkerManager()
         cfw_uuid = uuid4()
@@ -338,10 +336,10 @@ class TestWorkerManagerResultPolling:
     def test_poll_result_queues_keeps_valid_uuid_when_interleaved_with_stale_tuple(self) -> None:
         """A valid UUID string must still be collected even when a stale tuple follows it.
 
-        Mirrors production: one poll consumes the step-completion UUID string,
-        a later poll consumes the lingering ("DROP_COMPLETE", cfw_uuid) tuple.
-        Extra ``queue.Empty()`` sentinels keep the test robust whether the fix
-        keeps single-get-per-poll semantics or drains each queue to empty.
+        Mirrors production: the result_queue interleaves a step-completion UUID
+        string with a ("DROP_COMPLETE", cfw_uuid) control tuple. Extra
+        ``queue.Empty()`` sentinels keep the test robust whether the fix keeps
+        single-get-per-poll semantics or drains each queue to empty.
         """
         manager = WorkerManager()
         valid_uuid = str(uuid4())
@@ -388,9 +386,7 @@ class TestWorkerManagerResultPolling:
 
         manager.poll_result_queues()
 
-        assert UUID(uuid1) in manager.result_uuids_collection
-        assert UUID(uuid2) in manager.result_uuids_collection
-        assert cfw_uuid not in manager.result_uuids_collection
+        assert manager.result_uuids_collection == {UUID(uuid1), UUID(uuid2)}
         # One get() per queued item, plus the Empty that ends the drain.
         assert mock_queue.get.call_count == 4
 
@@ -423,9 +419,9 @@ class TestWorkerManagerResultPolling:
             elapsed = time.time() - start_time
 
             assert elapsed < 3.0
-            assert UUID(uuid1) in manager.result_uuids_collection
-            assert UUID(uuid2) in manager.result_uuids_collection
-            assert cfw_uuid not in manager.result_uuids_collection
+            assert manager.result_uuids_collection == {UUID(uuid1), UUID(uuid2)}
+            with pytest.raises(queue.Empty):
+                mp_queue.get(timeout=0.1)
         finally:
             mp_queue.close()
             mp_queue.join_thread()

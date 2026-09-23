@@ -593,7 +593,7 @@ class TestDropTfsSourceIfPossibleResolvesViaSourceFrameworkUuid:
 class TestMarkChildrenAndTrackNeverBlocksOnWorkerOwnedCfw:
     """The planner thread must not stall on a worker's drop ack; the flyway fallback still tracks."""
 
-    def test_worker_owned_branch_never_reads_result_queue(self) -> None:
+    def test_worker_owned_branch_never_touches_result_queue(self) -> None:
         cfw_uuid = uuid_mod.uuid4()
         child_uuid = uuid_mod.uuid4()
         tracked_uuid = uuid_mod.uuid4()
@@ -616,14 +616,14 @@ class TestMarkChildrenAndTrackNeverBlocksOnWorkerOwnedCfw:
         orchestrator._mark_children_and_track(cfw, children)
 
         command_queue.put.assert_called_once_with(children)
-        result_queue.get.assert_not_called()
+        assert result_queue.mock_calls == []
         assert orchestrator.data_lifecycle_manager.track_data_to_drop[cfw.uuid] == set(cfw.children_if_root)
 
 
 class TestDropCfwDataRoutedNeverBlocksWhenWorkerAlive:
-    """_drop_cfw_data_routed's return value is never read; it must never wait on the worker."""
+    """_drop_cfw_data_routed must only queue the drop command, never wait on the worker's ack."""
 
-    def test_never_reads_result_queue_when_worker_alive(self) -> None:
+    def test_never_touches_result_queue_when_worker_alive(self) -> None:
         cfw_uuid = uuid_mod.uuid4()
         child_uuid = uuid_mod.uuid4()
 
@@ -641,7 +641,7 @@ class TestDropCfwDataRoutedNeverBlocksWhenWorkerAlive:
         orchestrator._drop_cfw_data_routed(cfw_uuid, cfw)
 
         command_queue.put.assert_called_once_with(set(cfw.children_if_root))
-        result_queue.get.assert_not_called()
+        assert result_queue.mock_calls == []
 
 
 class TestDropCfwDataRoutedFallsBackToDirectDropWhenWorkerDead:

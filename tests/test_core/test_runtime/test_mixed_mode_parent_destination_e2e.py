@@ -1388,8 +1388,8 @@ class TestTransformFrameworkStepSourceRootDropTiming:
         the destination step's own, ordinary completion is recorded, masking a still-empty
         `owed_tokens`. `ExecutionOrchestrator._drop_tfs_source_if_possible` is spied on directly (no
         public-API hook exists) to capture the flight-server state at that exact moment. The drop
-        itself is async now, so the spy waits for the worker's own drop acknowledgement before
-        snapshotting, rather than asserting an instantaneous state right after the queueing call."""
+        itself is async now, so the spy polls the flight server (bounded) until the source root
+        leaves it, rather than asserting an instantaneous state right after the queueing call."""
         plugin_collector = PluginCollector.enabled_feature_groups(
             {
                 _MpTransformSourceFG,
@@ -1581,7 +1581,7 @@ class TestTransformFrameworkStepSourceRootDropTiming:
         directly, unlike `_DiamondHopDescendantFG` in the survival test above. Same
         `add_compute_framework` / `_drop_tfs_source_if_possible` spy checkpoint pattern as
         `test_plain_hop_source_root_dropped_right_after_its_hop_when_its_class_is_shared_by_an_unrelated_join`,
-        including the wait for the worker's own drop acknowledgement, since the drop is async now."""
+        including the bounded poll for the source root to leave the flight server, since the drop is async."""
         plugin_collector = PluginCollector.enabled_feature_groups(
             {_ChainHopRootFG, _ChainHopMidFG, _ChainHopChain2FG, _ChainHopChain3FG}
         )

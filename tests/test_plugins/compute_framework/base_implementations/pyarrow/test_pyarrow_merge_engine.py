@@ -65,6 +65,69 @@ class TestPyArrowMergeEngineHelperColumnCollision:
         assert "rk" in result.column_names
 
 
+@pytest.mark.skipif(pa is None, reason="PyArrow is not installed. Skipping this test.")
+class TestPyArrowMergeEngineNestedColumns:
+    """Joins must preserve list/struct non-key columns instead of raising ArrowInvalid."""
+
+    @pytest.mark.parametrize("jointype", [JoinType.INNER, JoinType.LEFT, JoinType.RIGHT, JoinType.OUTER])
+    @pytest.mark.parametrize("keys", [("k", "k"), ("lk", "rk")])
+    def test_merge_preserves_list_and_struct_columns(self, jointype: JoinType, keys: tuple[str, str]) -> None:
+        left_key, right_key = keys
+        list_type = pa.list_(pa.string())
+        struct_type = pa.struct([("x", pa.int64())])
+
+        left = pa.Table.from_pydict(
+            {
+                left_key: [1, 2, 3],
+                "ls": pa.array([["a"], [], ["c", "d"]], type=list_type),
+            }
+        )
+        right = pa.Table.from_pydict(
+            {
+                right_key: [1, 2, 4],
+                "rs": pa.array([["x"], ["y", "z"], []], type=list_type),
+                "st": pa.array([{"x": 10}, {"x": 20}, {"x": 30}], type=struct_type),
+            }
+        )
+
+        expected: dict[int, dict[str, Any]] = {
+            1: {"ls": ["a"], "rs": ["x"], "st": {"x": 10}},
+            2: {"ls": [], "rs": ["y", "z"], "st": {"x": 20}},
+            3: {"ls": ["c", "d"], "rs": None, "st": None},
+            4: {"ls": None, "rs": [], "st": {"x": 30}},
+        }
+        expected_keys_by_type = {
+            JoinType.INNER: {1, 2},
+            JoinType.LEFT: {1, 2, 3},
+            JoinType.RIGHT: {1, 2, 4},
+            JoinType.OUTER: {1, 2, 3, 4},
+        }
+
+        result = PyArrowMergeEngine().merge(
+            left, right, make_merge_link(jointype, Index((left_key,)), Index((right_key,)))
+        )
+
+        assert result.schema.field("ls").type == list_type
+        assert result.schema.field("rs").type == list_type
+        assert result.schema.field("st").type == struct_type
+
+        expected_columns = {"ls", "rs", "st"}
+        expected_columns |= {"k"} if left_key == right_key else {"lk", "rk"}
+        assert set(result.column_names) == expected_columns
+
+        rows = result.to_pylist()
+        by_key: dict[Any, dict[str, Any]] = {}
+        for row in rows:
+            key = row["k"] if left_key == right_key else (row["lk"] if row["lk"] is not None else row["rk"])
+            by_key[key] = row
+
+        assert set(by_key.keys()) == expected_keys_by_type[jointype]
+        for key, row in by_key.items():
+            assert row["ls"] == expected[key]["ls"]
+            assert row["rs"] == expected[key]["rs"]
+            assert row["st"] == expected[key]["st"]
+
+
 class TestPyArrowMergeEngineMultiIndex(MultiIndexMergeEngineTestBase):
     """Test PyArrowMergeEngine using shared multi-index test scenarios."""
 

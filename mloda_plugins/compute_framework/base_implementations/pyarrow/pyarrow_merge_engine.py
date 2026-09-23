@@ -60,6 +60,24 @@ class PyArrowMergeEngine(BaseMergeEngine):
 
         return pa.table(new_columns, schema=pa.schema(new_fields))
 
+    @staticmethod
+    def _swap_out_nested_columns(
+        table: pa.Table, key_columns: list[str], taken: set[str], placeholders: dict[str, tuple[str, pa.ChunkedArray]]
+    ) -> pa.Table:
+        """Swap nested non-key columns for row-index placeholders: Arrow's hash join rejects nested columns."""
+        row_index: pa.Array | None = None
+        for i, field in enumerate(table.schema):
+            if field.name in key_columns or not pa.types.is_nested(field.type):
+                continue
+            if row_index is None:
+                n = table.num_rows
+                row_index = pc.subtract(pc.cumulative_sum(pa.repeat(pa.scalar(1, pa.int64()), n)), 1)
+            placeholder_name = pick_helper_column_name(taken=taken, prefix="mloda_nested_row")
+            taken.add(placeholder_name)
+            placeholders[placeholder_name] = (field.name, table.column(i))
+            table = table.set_column(i, placeholder_name, row_index)
+        return table
+
     def merge_inner(self, left_data: Any, right_data: Any, left_index: Index, right_index: Index) -> Any:
         return self.join_logic("inner", left_data, right_data, left_index, right_index, JoinType.INNER)
 
@@ -205,12 +223,22 @@ class PyArrowMergeEngine(BaseMergeEngine):
         left_data = self._normalize_string_types(left_data, left_keys)
         right_data = self._normalize_string_types(right_data, right_keys)
 
+        taken = set(left_data.column_names) | set(right_data.column_names)
+        placeholders: dict[str, tuple[str, pa.ChunkedArray]] = {}
+        left_data = self._swap_out_nested_columns(left_data, left_keys, taken, placeholders)
+        right_data = self._swap_out_nested_columns(right_data, right_keys, taken, placeholders)
+
         left_data = left_data.join(
             right_data,
             keys=left_keys,
             right_keys=right_keys,
             join_type=join_type,
         )
+
+        for i, name in enumerate(left_data.column_names):
+            if name in placeholders:
+                original_name, original_column = placeholders[name]
+                left_data = left_data.set_column(i, original_name, original_column.take(left_data.column(i)))
 
         if helper_columns:
             # Drop helpers by index: a shared non-key column name would make a name-based select ambiguous.

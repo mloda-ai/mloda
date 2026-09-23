@@ -156,7 +156,6 @@ class ExecutionOrchestrator:
             cfw.drop_last_data(self.location)
             return
 
-        self.worker_manager.clear_completed_drop(cfw_uuid)
         command_queue.put(set(cfw.children_if_root))
 
     def _init_run(self) -> tuple[set[UUID], set[UUID], set[UUID]]:
@@ -469,7 +468,6 @@ class ExecutionOrchestrator:
             if isinstance(data_to_drop, frozenset):
                 self.data_lifecycle_manager.track_data_to_drop[cfw.uuid] = set(data_to_drop)
         else:
-            self.worker_manager.clear_completed_drop(cfw.uuid)
             command_queue.put(children)
 
             flyway_datasets = self.cfw_register.get_uuid_flyway_datasets(cfw.uuid) or set(cfw.children_if_root)

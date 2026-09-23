@@ -23,10 +23,6 @@ class WorkerManager:
         self.process_register: dict[UUID, tuple[Any, Any, Any]] = {}
         self.result_queues_collection: set[Any] = set()
         self.result_uuids_collection: set[UUID] = set()
-        # cfw_uuid -> resolved flag, for DROP_COMPLETE tuples drained by poll_result_queues
-        # before wait_for_drop_completion reads them. resolved is True once the worker's own
-        # children_if_root is fully satisfied (it drops its data and exits).
-        self.completed_drops: dict[UUID, bool] = {}
         # cfw_uuid -> step uuids dispatched to that worker. Needed because a worker that
         # exits cleanly is invisible to find_dead_workers, so the only way to notice the
         # loss is that steps were assigned to it and no result ever arrived.
@@ -73,12 +69,12 @@ class WorkerManager:
         command_queue.put(command)
 
     def poll_result_queues(self) -> None:
-        """Non-blocking poll of all result queues; collects step-UUID strings and drains DROP_COMPLETE tuples into
-        completed_drops. Drains each queue to empty per call; a message still in flight through the queue's
-        feeder thread may not appear until a later poll."""
+        """Non-blocking poll of all result queues; collects step-UUID strings and discards the worker's
+        DROP_COMPLETE acks. Drains each queue to empty per call; a message still in flight through the
+        queue's feeder thread may not appear until a later poll."""
         for r_queue in self.result_queues_collection:
             # Safe to drain unbounded: a worker puts at most one message per command it
-            # processes (one step-uuid or one DROP_COMPLETE tuple), so a queue's backlog
+            # processes (one step-uuid or one DROP_COMPLETE ack), so a queue's backlog
             # is bounded by commands already dispatched to that worker, never unbounded.
             while True:
                 try:
@@ -87,10 +83,6 @@ class WorkerManager:
                     break
                 if isinstance(msg, str):
                     self.result_uuids_collection.add(UUID(msg))
-                elif isinstance(msg, tuple) and len(msg) >= 2 and msg[0] == "DROP_COMPLETE":
-                    # A 2-tuple (no resolved flag) is treated as resolved, matching the meaning a
-                    # bare ack always had before the flag was added.
-                    self.completed_drops[msg[1]] = bool(msg[2]) if len(msg) >= 3 else True
 
     def record_assignment(self, cfw_uuid: UUID, step_uuids: set[UUID]) -> None:
         """Remember that these steps were dispatched to this worker."""
@@ -131,30 +123,6 @@ class WorkerManager:
     def is_step_done(self, step_uuid: UUID) -> bool:
         """Return step_uuid in result_uuids_collection."""
         return step_uuid in self.result_uuids_collection
-
-    def clear_completed_drop(self, cfw_uuid: UUID) -> None:
-        """Discard a stale drop flag; a cfw goes through multiple drop cycles, and a late completion
-        drained for an earlier cycle must not be mistaken for a later one."""
-        self.completed_drops.pop(cfw_uuid, None)
-
-    def wait_for_drop_completion(self, result_queue: Any, cfw_uuid: UUID, timeout: float = 5.0) -> bool | None:
-        """Poll queue until ("DROP_COMPLETE", cfw_uuid, resolved) is received or timeout, checking
-        completed_drops first. Returns the worker's own resolved flag, or None on timeout (no ack
-        ever arrived)."""
-        start_time = time.time()
-        while time.time() - start_time < timeout:
-            if cfw_uuid in self.completed_drops:
-                return self.completed_drops.pop(cfw_uuid)
-            try:
-                msg = result_queue.get(block=False)
-                if isinstance(msg, tuple) and len(msg) >= 2 and msg[0] == "DROP_COMPLETE" and msg[1] == cfw_uuid:
-                    return bool(msg[2]) if len(msg) >= 3 else True
-                result_queue.put(msg, block=False)
-                time.sleep(0.001)
-            except queue.Empty:
-                time.sleep(0.001)
-        logger.warning(f"Drop operation for CFW {cfw_uuid} timed out after {timeout}s")
-        return None
 
     def join_all(self, graceful_timeout: float = 2.0) -> None:
         """Sends STOP to alive workers and waits up to graceful_timeout for them to exit

@@ -160,6 +160,8 @@ class Feature:
         # PROPERTY_MAPPING keys) entry appended per consumer feature group that declares this
         # feature as an input feature; excluded from equality and hash like link/index. Also
         # unioned in when value-equal requests merge at intake; membership is order-independent.
+        # Never reset: accumulates across runs on a reused instance, so the dual-option warning
+        # may read stale entries.
         self.consumer_attributions: list[tuple[str, frozenset[str]]] = []
 
         # Group keys forwarded onto this input feature, set by Features.merge_options; excluded
@@ -190,8 +192,8 @@ class Feature:
         """Record a consumer attribution, skipping an identical (name, keys) entry.
 
         Appended per consumer feature group that declares this feature as an input feature.
-        Idempotent so re-stamping the same Feature instance across mloda runs does not grow
-        the list unboundedly. Also called by the engine to union a merged twin's entries in.
+        Idempotent, which bounds growth on an instance reused across runs but not staleness.
+        Also called by the engine to union a merged twin's entries in.
         """
         entry = (name, keys)
         if entry not in self.consumer_attributions:

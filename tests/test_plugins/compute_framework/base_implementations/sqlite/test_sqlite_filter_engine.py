@@ -39,7 +39,9 @@ class TestSqliteFilterEngine(FilterEngineTestMixin, TimeRangeFilterEngineTestMix
 
     @pytest.fixture
     def nullable_category_sample_data(self, connection: sqlite3.Connection) -> Any:
-        arrow_table = pa.Table.from_pydict({"id": [1, 2, 3, 4, 5], "category": ["A", None, "B", None, "C"]})
+        arrow_table = pa.Table.from_pydict(
+            {"id": [1, 2, 3, 4, 5], "category": ["A", None, "B", None, "C"], "score": [1, None, 2, None, 3]}
+        )
         return SqliteRelation.from_arrow(connection, arrow_table)
 
     def get_column_values(self, result: Any, column: str) -> list[Any]:

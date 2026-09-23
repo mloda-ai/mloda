@@ -57,7 +57,9 @@ class TestDuckDBFilterEngine(FilterEngineTestMixin, TimeRangeFilterEngineTestMix
     @pytest.fixture
     def nullable_category_sample_data(self, connection: Any) -> Any:
         """Create a sample DuckDB relation with null categories for testing."""
-        arrow_table = pa.Table.from_pydict({"id": [1, 2, 3, 4, 5], "category": ["A", None, "B", None, "C"]})
+        arrow_table = pa.Table.from_pydict(
+            {"id": [1, 2, 3, 4, 5], "category": ["A", None, "B", None, "C"], "score": [1, None, 2, None, 3]}
+        )
         return DuckdbRelation.from_arrow(connection, arrow_table)
 
     @pytest.fixture

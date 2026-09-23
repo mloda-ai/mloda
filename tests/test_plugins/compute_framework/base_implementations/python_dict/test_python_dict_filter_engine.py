@@ -43,7 +43,7 @@ class TestPythonDictFilterEngine(FilterEngineTestMixin, TimeRangeFilterEngineTes
     @pytest.fixture
     def nullable_category_sample_data(self) -> Any:
         """Create a sample columnar dict with null categories for testing."""
-        return {"id": [1, 2, 3, 4, 5], "category": ["A", None, "B", None, "C"]}
+        return {"id": [1, 2, 3, 4, 5], "category": ["A", None, "B", None, "C"], "score": [1, None, 2, None, 3]}
 
     @pytest.fixture
     def decimal_sample_data(self) -> Any:

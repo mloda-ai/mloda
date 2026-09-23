@@ -65,4 +65,9 @@ class PandasFilterEngine(BaseFilterEngine):
         values = filter_feature.parameter.values
         if values is None:
             raise ValueError(f"Filter parameter 'values' not found in {filter_feature.parameter}")
-        return data[data[filter_feature.name].isin(values)]
+        column = data[filter_feature.name]
+        non_null = [v for v in values if v is not None]
+        mask = column.isin(non_null)
+        if len(non_null) != len(values):
+            mask = mask | column.isna()
+        return data[mask]

@@ -1,6 +1,8 @@
+import gc
 import importlib.metadata
 import inspect
-from typing import Any
+import weakref
+from typing import Any, cast
 
 import pytest
 
@@ -138,6 +140,40 @@ class TestClassSourceHashCaching:
         )
         second_reads = [obj for obj in calls if obj is second_class]
         assert len(second_reads) == 1, "The redefined class object must trigger its own source read"
+
+    @pytest.mark.parametrize(
+        ("class_name", "module", "expected_error"),
+        [
+            ("FailedLookupRealFileProbeFG", __name__, OSError),
+            ("FailedLookupFakeModuleProbeFG", "fake_module_for_failed_source_hash_probe", TypeError),
+        ],
+    )
+    def test_failed_lookup_is_cached_per_class(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        class_name: str,
+        module: str,
+        expected_error: type[Exception],
+    ) -> None:
+        calls = self._install_counting_getsource(monkeypatch)
+        cls = cast(type[FeatureGroup], type(class_name, (FeatureGroup,), {"__module__": module}))
+
+        with pytest.raises(expected_error) as first:
+            BaseFeatureGroupVersion.class_source_hash(cls)
+        with pytest.raises(expected_error) as second:
+            BaseFeatureGroupVersion.class_source_hash(cls)
+
+        assert type(second.value) is type(first.value)
+        assert str(second.value) == str(first.value)
+        reads = [obj for obj in calls if obj is cls]
+        assert len(reads) == 1, f"A failed lookup must be served from the cache, but getsource ran {len(reads)} times"
+
+        # The cached failure must not pin the class (tracebacks would reference it).
+        ref = weakref.ref(cls)
+        calls.clear()
+        del first, second, reads, cls
+        gc.collect()
+        assert ref() is None, "A class whose lookup failed must stay garbage-collectable"
 
 
 class TestMlodaVersionMemoization:

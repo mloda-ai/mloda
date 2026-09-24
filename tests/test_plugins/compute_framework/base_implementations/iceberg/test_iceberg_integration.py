@@ -353,4 +353,5 @@ class TestIcebergIntegrationWithMlodaAPI:
 
         # Verify results
         final_data = result[0]
-        assert isinstance(final_data, Mock)  # It's a mock Iceberg table
+        assert isinstance(final_data, pa.Table)
+        assert set(final_data.column_names) == {"id", "value", "category"}

@@ -167,7 +167,7 @@ Not every backend's native type system can distinguish every precision mloda dec
 | SQLite | no decimal storage type: inserting `Decimal` values fails | a `Decimal` filter or mask value renders as a numeric literal, which SQLite compares as REAL against a TEXT column | fails |
 | PythonDict | `DECIMAL` | exact | precision inferred from the values (a dict carries no schema) |
 | Spark | `DECIMAL` | mask `is_in` exact; filter and merge not checked | not checked (no schema is passed on the way in) |
-| Iceberg | `DECIMAL` | filter expressions exact for the column scale (other scales raise), no mask or merge | pass-through |
+| Iceberg | `DECIMAL` | filter expressions exact for the column scale (other scales raise); `pa.Table` data is filtered exactly, as PyArrow; no mask or merge | pass-through |
 
 ## Execution Plan Grouping
 

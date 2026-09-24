@@ -1,8 +1,6 @@
 from typing import Any
-from mloda.core.abstract_plugins.components.contract.comparison_contract import ColumnSemantics
-from mloda.provider import BaseFilterEngine
 from mloda.user import SingleFilter
-from mloda_plugins.compute_framework.base_implementations.sql.sql_type_semantics import column_semantics_from_arrow
+from mloda_plugins.compute_framework.base_implementations.pyarrow.pyarrow_filter_engine import PyArrowFilterEngine
 
 try:
     from pyiceberg.table import Table as IcebergTable
@@ -24,15 +22,8 @@ except ImportError:
     Reference: type[Any] | None = None  # type: ignore[no-redef]
 
 
-class IcebergFilterEngine(BaseFilterEngine):
-    """
-    Filter engine for Iceberg tables using predicate pushdown.
-
-    This engine translates mloda filter operations to Iceberg expressions
-    for optimal performance through predicate pushdown.
-    """
-
-    provides_column_semantics = True
+class IcebergFilterEngine(PyArrowFilterEngine):
+    """Filters Iceberg tables by scan pushdown and pa.Table data with the PyArrow filters."""
 
     @classmethod
     def final_filters(cls) -> bool:
@@ -40,36 +31,13 @@ class IcebergFilterEngine(BaseFilterEngine):
         return False
 
     @classmethod
-    def _column_semantics(cls, data: Any, column: str) -> ColumnSemantics:
-        """Derive column semantics from the arrow schema of the iceberg data.
-
-        Iceberg filters run via predicate pushdown in ``apply_filters`` rather than the
-        ``do_filter`` dispatch, so this hook is only used for completeness. An iceberg
-        ``Table`` exposes its schema as arrow; an already-materialized pyarrow table is
-        introspected directly.
-        """
-        if IcebergTable is not None and isinstance(data, IcebergTable):
-            arrow_schema = data.schema().as_arrow()
-            return column_semantics_from_arrow(arrow_schema.field(column).type)
-
-        from mloda_plugins.compute_framework.base_implementations.pyarrow import pyarrow_type_semantics
-
-        return pyarrow_type_semantics.column_semantics(data, column)
-
-    @classmethod
     def apply_filters(cls, data: Any, features: Any) -> Any:
         """
-        Apply filters to Iceberg table using predicate pushdown.
+        Push filters into an Iceberg table scan; other data goes through the PyArrow filters.
 
-        Args:
-            data: Iceberg table
-            features: Feature set with filter specifications
-
-        Returns:
-            Filtered Iceberg table scan result
+        Returns the filtered scan as a pa.Table, or the input unchanged when no filter applies.
         """
         if not isinstance(data, IcebergTable):
-            # If it's not an Iceberg table, fall back to default filtering
             return super().apply_filters(data, features)
 
         # Build Iceberg filter expressions
@@ -88,8 +56,8 @@ class IcebergFilterEngine(BaseFilterEngine):
             if And is not None:
                 combined_filter = And(combined_filter, expr)
 
-        # Apply filter to Iceberg table scan
-        return data.scan(row_filter=combined_filter)
+        # A bare scan has no schema the framework can read
+        return data.scan(row_filter=combined_filter).to_arrow()
 
     @classmethod
     def _build_iceberg_expression(cls, filter_feature: SingleFilter) -> Any:
@@ -170,31 +138,6 @@ class IcebergFilterEngine(BaseFilterEngine):
         if param_name == "max_exclusive":
             return True
         return value is not None
-
-    # Standard filter methods - not used for Iceberg but required by interface
-    @classmethod
-    def do_range_filter(cls, data: Any, filter_feature: SingleFilter) -> Any:
-        raise NotImplementedError("Use apply_filters method for Iceberg filtering")
-
-    @classmethod
-    def do_min_filter(cls, data: Any, filter_feature: SingleFilter) -> Any:
-        raise NotImplementedError("Use apply_filters method for Iceberg filtering")
-
-    @classmethod
-    def do_max_filter(cls, data: Any, filter_feature: SingleFilter) -> Any:
-        raise NotImplementedError("Use apply_filters method for Iceberg filtering")
-
-    @classmethod
-    def do_equal_filter(cls, data: Any, filter_feature: SingleFilter) -> Any:
-        raise NotImplementedError("Use apply_filters method for Iceberg filtering")
-
-    @classmethod
-    def do_regex_filter(cls, data: Any, filter_feature: SingleFilter) -> Any:
-        raise NotImplementedError("Regex filtering is not supported for Iceberg tables")
-
-    @classmethod
-    def do_categorical_inclusion_filter(cls, data: Any, filter_feature: SingleFilter) -> Any:
-        raise NotImplementedError("Categorical inclusion filtering is not yet implemented for Iceberg tables")
 
     @classmethod
     def do_custom_filter(cls, data: Any, filter_feature: SingleFilter) -> Any:

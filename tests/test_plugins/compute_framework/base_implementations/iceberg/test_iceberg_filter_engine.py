@@ -1,3 +1,4 @@
+from decimal import Decimal
 from typing import Any
 import pytest
 from unittest.mock import Mock, patch
@@ -30,12 +31,6 @@ except ImportError:
     LessThanOrEqual = None  # type: ignore
     EqualTo = None  # type: ignore
     And = None  # type: ignore
-
-
-_NOT_PUSHDOWN_REASON = (
-    "IcebergFilterEngine filters only by predicate pushdown on an Iceberg table scan; "
-    "its do_* filters raise NotImplementedError"
-)
 
 
 @pytest.mark.skipif(
@@ -76,75 +71,27 @@ class TestIcebergFilterEngine(FilterEngineTestMixin):
         """Test that final_filters returns False for Iceberg (predicate pushdown)."""
         assert filter_engine.final_filters() is False
 
-    @pytest.mark.skip(reason=_NOT_PUSHDOWN_REASON)
-    def test_do_range_filter(self, filter_engine: Any, sample_data: Any) -> None: ...
+    @pytest.fixture
+    def nullable_category_sample_data(self) -> Any:
+        return pa.Table.from_pydict(
+            {
+                "id": [1, 2, 3, 4, 5],
+                "category": ["A", None, "B", None, "C"],
+                "score": [1, None, 2, None, 3],
+                "ratio": pa.array([1.0, float("nan"), 2.0, None, 3.0], type=pa.float64()),
+            }
+        )
 
-    @pytest.mark.skip(reason=_NOT_PUSHDOWN_REASON)
-    def test_do_range_filter_exclusive(self, filter_engine: Any, sample_data: Any) -> None: ...
+    @pytest.fixture
+    def decimal_sample_data(self) -> Any:
+        values = [Decimal("12.34"), Decimal("5.50"), Decimal("99.99"), None]
+        return pa.table({"d": pa.array(values, type=pa.decimal128(10, 2))})
 
-    @pytest.mark.skip(reason=_NOT_PUSHDOWN_REASON)
-    def test_do_min_filter(self, filter_engine: Any, sample_data: Any) -> None: ...
+    def get_decimal_column_dtype(self, data: Any) -> Any:
+        return data["d"].type
 
-    @pytest.mark.skip(reason=_NOT_PUSHDOWN_REASON)
-    def test_do_max_filter(self, filter_engine: Any, sample_data: Any) -> None: ...
-
-    @pytest.mark.skip(reason=_NOT_PUSHDOWN_REASON)
-    def test_do_min_filter_drops_null_or_nan_rows(
-        self, filter_engine: Any, nullable_category_sample_data: Any
-    ) -> None: ...
-
-    @pytest.mark.skip(reason=_NOT_PUSHDOWN_REASON)
-    def test_do_max_filter_with_tuple(self, filter_engine: Any, sample_data: Any) -> None: ...
-
-    @pytest.mark.skip(reason=_NOT_PUSHDOWN_REASON)
-    def test_do_equal_filter(self, filter_engine: Any, sample_data: Any) -> None: ...
-
-    @pytest.mark.skip(reason=_NOT_PUSHDOWN_REASON)
-    def test_do_regex_filter(self, filter_engine: Any, sample_data: Any) -> None: ...
-
-    @pytest.mark.skip(reason=_NOT_PUSHDOWN_REASON)
-    def test_do_regex_filter_is_unanchored(self, filter_engine: Any, sample_data: Any) -> None: ...
-
-    @pytest.mark.skip(reason=_NOT_PUSHDOWN_REASON)
-    def test_do_categorical_inclusion_filter(self, filter_engine: Any, sample_data: Any) -> None: ...
-
-    @pytest.mark.skip(reason=_NOT_PUSHDOWN_REASON)
-    def test_do_categorical_inclusion_empty_values(self, filter_engine: Any, sample_data: Any) -> None: ...
-
-    @pytest.mark.skip(reason=_NOT_PUSHDOWN_REASON)
-    def test_do_categorical_inclusion_keeps_null_when_none_present(
-        self, filter_engine: Any, nullable_category_sample_data: Any, column: str, values: list[Any]
-    ) -> None: ...
-
-    @pytest.mark.skip(reason=_NOT_PUSHDOWN_REASON)
-    def test_do_categorical_inclusion_drops_null_when_none_absent(
-        self, filter_engine: Any, nullable_category_sample_data: Any, column: str, values: list[Any]
-    ) -> None: ...
-
-    @pytest.mark.skip(reason=_NOT_PUSHDOWN_REASON)
-    def test_do_categorical_inclusion_only_none_keeps_only_nulls(
-        self, filter_engine: Any, nullable_category_sample_data: Any, column: str, values: list[Any]
-    ) -> None: ...
-
-    @pytest.mark.skip(reason=_NOT_PUSHDOWN_REASON)
-    def test_apply_filters(self, filter_engine: Any, sample_data: Any) -> None: ...
-
-    @pytest.mark.skip(reason=_NOT_PUSHDOWN_REASON)
-    def test_do_range_filter_missing_parameters(self, filter_engine: Any, sample_data: Any) -> None: ...
-
-    @pytest.mark.skip(reason=_NOT_PUSHDOWN_REASON)
-    def test_min_filter_decimal(self, filter_engine: Any, decimal_sample_data: Any) -> None: ...
-
-    @pytest.mark.skip(reason=_NOT_PUSHDOWN_REASON)
-    def test_categorical_inclusion_decimal(self, filter_engine: Any, decimal_sample_data: Any) -> None: ...
-
-    @pytest.mark.skip(reason=_NOT_PUSHDOWN_REASON)
-    def test_categorical_inclusion_decimal_unrepresentable_values_match_nothing(
-        self, filter_engine: Any, decimal_sample_data: Any
-    ) -> None: ...
-
-    @pytest.mark.skip(reason=_NOT_PUSHDOWN_REASON)
-    def test_categorical_inclusion_decimal_with_null(self, filter_engine: Any, decimal_sample_data: Any) -> None: ...
+    def get_column_values(self, result: Any, column: str) -> list[Any]:
+        return result[column].to_pylist()  # type: ignore[no-any-return]
 
     def test_build_iceberg_expression_equal(self) -> None:
         """Test building equal filter expression."""
@@ -331,12 +278,13 @@ class TestIcebergFilterEngine(FilterEngineTestMixin):
         mock_feature_set.filters = [age_filter]
 
         # Apply filters
-        _result = IcebergFilterEngine.apply_filters(mock_iceberg_table, mock_feature_set)
+        result = IcebergFilterEngine.apply_filters(mock_iceberg_table, mock_feature_set)
 
         # Verify that scan was called with a filter
         mock_iceberg_table.scan.assert_called_once()
         call_args = mock_iceberg_table.scan.call_args
         assert "row_filter" in call_args.kwargs
+        assert result is mock_iceberg_table.scan.return_value.to_arrow.return_value
 
     def test_apply_filters_non_iceberg_table(self, mock_feature_set: Mock) -> None:
         """Test applying filters to non-Iceberg data falls back to parent method."""
@@ -421,33 +369,10 @@ class TestIcebergFilterEngine(FilterEngineTestMixin):
         # An unfiltered scan would indicate the filter was silently dropped instead of raising.
         mock_iceberg_table.scan.assert_not_called()
 
-    def test_standard_filter_methods_not_implemented(self) -> None:
-        """Test that standard filter methods raise NotImplementedError."""
-        mock_data = Mock()
-        mock_filter = Mock()
-
-        with pytest.raises(NotImplementedError, match="Use apply_filters method"):
-            IcebergFilterEngine.do_range_filter(mock_data, mock_filter)
-
-        with pytest.raises(NotImplementedError, match="Use apply_filters method"):
-            IcebergFilterEngine.do_min_filter(mock_data, mock_filter)
-
-        with pytest.raises(NotImplementedError, match="Use apply_filters method"):
-            IcebergFilterEngine.do_max_filter(mock_data, mock_filter)
-
-        with pytest.raises(NotImplementedError, match="Use apply_filters method"):
-            IcebergFilterEngine.do_equal_filter(mock_data, mock_filter)
-
     def test_unsupported_filter_methods(self) -> None:
         """Test that unsupported filter methods raise NotImplementedError."""
         mock_data = Mock()
         mock_filter = Mock()
-
-        with pytest.raises(NotImplementedError, match="Regex filtering is not supported"):
-            IcebergFilterEngine.do_regex_filter(mock_data, mock_filter)
-
-        with pytest.raises(NotImplementedError, match="Categorical inclusion filtering is not yet implemented"):
-            IcebergFilterEngine.do_categorical_inclusion_filter(mock_data, mock_filter)
 
         with pytest.raises(NotImplementedError, match="Custom filtering is not supported"):
             IcebergFilterEngine.do_custom_filter(mock_data, mock_filter)

@@ -45,12 +45,14 @@ class PolarsExprMaskEngine(BaseMaskEngine):
     @classmethod
     def equal(cls, data: Any, column: str, value: Any) -> Any:
         if is_null_or_nan(value):
+            cls._require_data(data, "equal")
             dtype = data.collect_schema().get(column)
             return null_or_nan(_require_polars().col(column), dtype)
         return _require_polars().col(column).eq_missing(value)
 
     @classmethod
     def greater_equal(cls, data: Any, column: str, value: Any) -> Any:
+        cls._require_data(data, "greater_equal")
         dtype = data.collect_schema().get(column)
         col = nan_as_null(_require_polars().col(column), dtype)
         return (col >= value).fill_null(False)
@@ -65,6 +67,7 @@ class PolarsExprMaskEngine(BaseMaskEngine):
 
     @classmethod
     def greater_than(cls, data: Any, column: str, value: Any) -> Any:
+        cls._require_data(data, "greater_than")
         dtype = data.collect_schema().get(column)
         col = nan_as_null(_require_polars().col(column), dtype)
         return (col > value).fill_null(False)
@@ -72,6 +75,7 @@ class PolarsExprMaskEngine(BaseMaskEngine):
     @classmethod
     def is_in(cls, data: Any, column: str, values: Any) -> Any:
         require_value_collection(values, "is_in values")
+        cls._require_data(data, "is_in")
         dtype = data.collect_schema().get(column)
         present, has_null_or_nan = split_null_or_nan(values)
         mask = _require_polars().col(column).is_in(is_in_values(present, dtype)).fill_null(False)

@@ -15,3 +15,8 @@ class DuckDBMaskEngine(SqlBaseMaskEngine):
     @classmethod
     def _nan_condition(cls, data: Any, column: str) -> str | None:
         return duckdb_type_semantics.nan_condition(data, column)
+
+    @classmethod
+    def _check_nan_data(cls, data: Any, method: str) -> None:
+        """Reject None before _nan_condition reads data's column types."""
+        cls._require_data(data, method)

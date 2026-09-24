@@ -41,6 +41,7 @@ jobs:
       - name: Generate License Files
         env:
           TOX_WRITE_THIRD_PARTY_LICENSES: true
+          PYTEST_WORKERS: 2
         run: |
             tox -e python310
             # Ship the committed ATTRIBUTION.md, not a copy regenerated from this

@@ -62,8 +62,9 @@ class TestClassSourceHashCaching:
     """Caching contract for BaseFeatureGroupVersion.class_source_hash.
 
     Within one process, the source of a given class OBJECT is read at most
-    once; later calls return the cached hash. Different class objects are
-    cached independently, including a redefined class with the same name.
+    once; later calls return the cached hash, or re-raise the cached failure.
+    Different class objects are cached independently, including a redefined
+    class with the same name.
     """
 
     def _install_counting_getsource(self, monkeypatch: pytest.MonkeyPatch) -> list[object]:
@@ -147,6 +148,7 @@ class TestClassSourceHashCaching:
             ("FailedLookupRealFileProbeFG", __name__, OSError),
             ("FailedLookupFakeModuleProbeFG", "fake_module_for_failed_source_hash_probe", TypeError),
         ],
+        ids=["real_file", "fake_module"],
     )
     def test_failed_lookup_is_cached_per_class(
         self,
@@ -163,16 +165,17 @@ class TestClassSourceHashCaching:
         with pytest.raises(expected_error) as second:
             BaseFeatureGroupVersion.class_source_hash(cls)
 
-        assert type(second.value) is type(first.value)
-        assert str(second.value) == str(first.value)
-        reads = [obj for obj in calls if obj is cls]
-        assert len(reads) == 1, f"A failed lookup must be served from the cache, but getsource ran {len(reads)} times"
-
-        # The cached failure must not pin the class (tracebacks would reference it).
+        # Clean up before asserting: a failed assertion's traceback would otherwise leak the class.
+        first_error = (type(first.value), str(first.value))
+        second_error = (type(second.value), str(second.value))
+        reads = len([obj for obj in calls if obj is cls])
         ref = weakref.ref(cls)
         calls.clear()
-        del first, second, reads, cls
+        del first, second, cls
         gc.collect()
+
+        assert second_error == first_error
+        assert reads == 1, f"A failed lookup must be served from the cache, but getsource ran {reads} times"
         assert ref() is None, "A class whose lookup failed must stay garbage-collectable"
 
 

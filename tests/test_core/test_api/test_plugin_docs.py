@@ -248,6 +248,43 @@ class TestGetFeatureGroupDocs:
         assert len(lower_filtered) == expected
         assert len(upper_filtered) == expected
 
+    @pytest.mark.parametrize(
+        ("filter_kwarg", "match"),
+        [
+            ("name", "_DocsVersionAfterFiltersFG"),
+            ("search", "records version() calls"),
+            ("compute_framework", "ComputeFramework"),
+        ],
+    )
+    def test_version_is_computed_only_for_classes_passing_the_filters(self, filter_kwarg: str, match: str) -> None:
+        """version() hashes the class source, so a class the cheap filters exclude must not pay for it."""
+        version_calls: list[str] = []
+
+        class _DocsVersionAfterFiltersFG(FeatureGroup):
+            """Test double that records version() calls."""
+
+            @classmethod
+            def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+                return {ComputeFramework}
+
+            @classmethod
+            def version(cls) -> str:
+                version_calls.append(cls.__name__)
+                return "recorded"
+
+        excluded: dict[str, Any] = {filter_kwarg: "zzz_matches_no_feature_group"}
+        included: dict[str, Any] = {filter_kwarg: match}
+        try:
+            assert get_feature_group_docs(**excluded) == []
+            assert version_calls == [], f"version() ran for a class excluded by {filter_kwarg}="
+
+            matched = [fg for fg in get_feature_group_docs(**included) if fg.name == "_DocsVersionAfterFiltersFG"]
+            assert [fg.version for fg in matched] == ["recorded"]
+            assert version_calls == ["_DocsVersionAfterFiltersFG"]
+        finally:
+            del _DocsVersionAfterFiltersFG
+            gc.collect()
+
 
 # Not frozen: a row's expected value is the very list or set the docs field returns, and the __hash__
 # frozen generates would raise on those.
@@ -616,27 +653,6 @@ class TestGetFeatureGroupDocsContractViolations:
             assert by_name["_DocsVersionNonStrUnfilteredFG"].version == "unavailable"
         finally:
             del _DocsVersionNonStrUnfilteredFG
-            gc.collect()
-
-    @pytest.mark.parametrize("filter_kwarg", ["name", "search", "compute_framework"])
-    def test_filtered_out_class_does_not_compute_version(self, filter_kwarg: str) -> None:
-        """version() hashes the class source, so a class the cheap filters exclude must not pay for it."""
-        version_calls: list[str] = []
-
-        class _DocsVersionSkippedByFilterFG(FeatureGroup):
-            """Test double that records version() calls."""
-
-            @classmethod
-            def version(cls) -> str:
-                version_calls.append(cls.__name__)
-                return "recorded"
-
-        filters: dict[str, Any] = {filter_kwarg: "zzz_matches_no_feature_group"}
-        try:
-            assert get_feature_group_docs(**filters) == []
-            assert version_calls == [], f"version() ran for a class excluded by {filter_kwarg}="
-        finally:
-            del _DocsVersionSkippedByFilterFG
             gc.collect()
 
 

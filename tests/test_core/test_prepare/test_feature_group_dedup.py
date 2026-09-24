@@ -1227,14 +1227,22 @@ def test_class_source_hash_getsource_wrong_text_no_fallback_raises(monkeypatch: 
     dyn_cls = cast(type[FeatureGroup], type(qualname, (FeatureGroup,), body))
     _REF_STORE.append(dyn_cls)
 
+    calls: list[object] = []
+
     def wrong_getsource(obj: Any) -> str:
         # Succeeds, but the text does not define the class.
+        calls.append(obj)
         return "import sys\n\nx = 1\n"
 
     monkeypatch.setattr(inspect, "getsource", wrong_getsource)
 
-    with pytest.raises(OSError):
+    with pytest.raises(OSError) as first:
         BaseFeatureGroupVersion.class_source_hash(dyn_cls)
+    # The failure is cached: a second call re-raises without reading the source again.
+    with pytest.raises(OSError) as second:
+        BaseFeatureGroupVersion.class_source_hash(dyn_cls)
+    assert str(second.value) == str(first.value)
+    assert calls == [dyn_cls]
 
 
 # ---------------------------------------------------------------------------

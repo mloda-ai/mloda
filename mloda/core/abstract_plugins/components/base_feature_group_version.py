@@ -51,7 +51,7 @@ class BaseFeatureGroupVersion(ABC):
         class (common for classes defined in long-lived namespaces such as
         Jupyter cells where ``__module__ == '__main__'``).
 
-        Both hashes and lookup failures are cached per class object.
+        Both hashes and lookup failures are cached for the class object's lifetime.
         """
 
         # Import FeatureGroup locally to avoid circular import.

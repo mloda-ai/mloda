@@ -53,7 +53,7 @@ jobs:
         python -m pip install --upgrade pip
         python -m pip install uv
         # Same tox pin as release.yaml; see the note there before bumping.
-        uv tool install tox==4.63.0 --with tox-uv==1.36.0
+        uv tool install tox==4.64.1 --with tox-uv==1.36.0
     - name: Run tox ${{ matrix.toxenv }}
       env:
         PYTEST_WORKERS: 2
@@ -74,7 +74,7 @@ jobs:
         python -m pip install --upgrade pip
         python -m pip install uv
         # Same tox pin as release.yaml; see the note there before bumping.
-        uv tool install tox==4.63.0 --with tox-uv==1.36.0
+        uv tool install tox==4.64.1 --with tox-uv==1.36.0
     - name: Run notebooks
       env:
         PYTEST_WORKERS: 2

@@ -36,11 +36,11 @@ jobs:
           # unreviewed [skip ci] commit, so an unpinned uv could silently change the
           # lockfile format underneath that commit.
           python -m pip install uv==0.11.8
-          # Pinned below 4.64: tox 4.64 writes a PEP 832 `.venv` redirect file after the
-          # run, and prepareCmd's `uv lock` then fails on it ("expected directory but
-          # found a file"). Before bumping, set `venv_redirect = false` under [tox] in
-          # tox.ini. Keep in sync with ci.yaml.
-          uv tool install tox==4.63.0 --with tox-uv==1.36.0
+          # tox >= 4.64 writes a PEP 832 `.venv` redirect file after each run, and
+          # prepareCmd's `uv lock` fails on it ("expected directory but found a file").
+          # tox.ini opts out with `venv_redirect = false`; the setting is provisional, so
+          # recheck the tox changelog before bumping. Keep in sync with ci.yaml.
+          uv tool install tox==4.64.1 --with tox-uv==1.36.0
 
       - name: Generate License Files
         env:

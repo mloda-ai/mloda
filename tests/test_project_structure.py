@@ -1,3 +1,5 @@
+import configparser
+import re
 import sys
 from pathlib import Path
 from typing import Any
@@ -220,3 +222,33 @@ class TestPackagingConfig:
         assert "build-system" in data, "pyproject.toml must have a [build-system] section"
         assert "requires" in data["build-system"], "pyproject.toml [build-system] must specify 'requires'"
         assert "build-backend" in data["build-system"], "pyproject.toml [build-system] must specify 'build-backend'"
+
+
+class TestToxConfig:
+    """Validate the tox settings the CI and release workflows depend on."""
+
+    WORKFLOWS = ("ci.yaml", "release.yaml")
+    TOX_PIN = re.compile(r"uv tool install (tox==\S+ --with tox-uv==\S+)")
+
+    def test_tox_opts_out_of_venv_redirect(self) -> None:
+        """tox >= 4.64 otherwise writes a .venv redirect file that makes the release job's `uv lock` fail."""
+        parser = configparser.ConfigParser(interpolation=None)
+        parser.read(PROJECT_ROOT / "tox.ini", encoding="utf-8")
+        assert not parser.getboolean("tox", "venv_redirect", fallback=True), (
+            "tox.ini must set `venv_redirect = false` under [tox]"
+        )
+
+    def test_workflows_pin_the_same_tox(self) -> None:
+        pins: dict[str, list[str]] = {}
+        for name in self.WORKFLOWS:
+            lines = [
+                line.strip()
+                for line in _read_text(PROJECT_ROOT / ".github" / "workflows" / name).splitlines()
+                if "uv tool install tox" in line
+            ]
+            assert lines, f"{name} must install tox with `uv tool install`"
+            for line in lines:
+                match = self.TOX_PIN.search(line)
+                assert match, f"{name} must pin tox and tox-uv exactly, found: {line}"
+                pins.setdefault(match.group(1), []).append(name)
+        assert len(pins) == 1, f"ci.yaml and release.yaml must install the same tox and tox-uv: {pins}"

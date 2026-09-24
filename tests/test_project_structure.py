@@ -227,28 +227,28 @@ class TestPackagingConfig:
 class TestToxConfig:
     """Validate the tox settings the CI and release workflows depend on."""
 
-    WORKFLOWS = ("ci.yaml", "release.yaml")
-    TOX_PIN = re.compile(r"uv tool install (tox==\S+ --with tox-uv==\S+)")
+    TOX_INSTALL = re.compile(r"\binstall\b.*(?<![\w-])tox(?![\w-])")
+    TOX_PIN = re.compile(r"uv tool install tox==\S+ --with tox-uv==\S+$")
 
     def test_tox_opts_out_of_venv_redirect(self) -> None:
         """tox >= 4.64 otherwise writes a .venv redirect file that makes the release job's `uv lock` fail."""
-        parser = configparser.ConfigParser(interpolation=None)
-        parser.read(PROJECT_ROOT / "tox.ini", encoding="utf-8")
+        parser = configparser.ConfigParser(interpolation=None, inline_comment_prefixes=("#",))
+        assert parser.read(PROJECT_ROOT / "tox.ini", encoding="utf-8"), "tox.ini not found"
         assert not parser.getboolean("tox", "venv_redirect", fallback=True), (
             "tox.ini must set `venv_redirect = false` under [tox]"
         )
 
     def test_workflows_pin_the_same_tox(self) -> None:
-        pins: dict[str, list[str]] = {}
-        for name in self.WORKFLOWS:
-            lines = [
-                line.strip()
-                for line in _read_text(PROJECT_ROOT / ".github" / "workflows" / name).splitlines()
-                if "uv tool install tox" in line
-            ]
-            assert lines, f"{name} must install tox with `uv tool install`"
-            for line in lines:
-                match = self.TOX_PIN.search(line)
-                assert match, f"{name} must pin tox and tox-uv exactly, found: {line}"
-                pins.setdefault(match.group(1), []).append(name)
-        assert len(pins) == 1, f"ci.yaml and release.yaml must install the same tox and tox-uv: {pins}"
+        pins: dict[str, set[str]] = {}
+        for workflow in sorted((PROJECT_ROOT / ".github" / "workflows").glob("*.y*ml")):
+            for line in _read_text(workflow).splitlines():
+                command = line.strip()
+                if command.startswith("#") or not self.TOX_INSTALL.search(command):
+                    continue
+                match = self.TOX_PIN.search(command)
+                assert match, (
+                    f"{workflow.name} must install `uv tool install tox==X --with tox-uv==Y`, found: {command}"
+                )
+                pins.setdefault(workflow.name, set()).add(match.group(0))
+        assert {"ci.yaml", "release.yaml"} <= pins.keys(), f"ci.yaml and release.yaml must install tox: {pins}"
+        assert len(set().union(*pins.values())) == 1, f"workflows must install the same tox and tox-uv: {pins}"

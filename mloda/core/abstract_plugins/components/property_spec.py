@@ -92,6 +92,8 @@ class PropertySpec:
     framework_set: bool = False
     # Reader-only: rejects a list/tuple/set/frozenset value outright instead of unpacking it element-wise.
     scalar_only: bool = False
+    # Names what the match_guard accepts, for the rejection reason.
+    expected: str | None = None
 
     def __post_init__(self) -> None:
         prefix = f"PropertySpec({self.explanation!r})"
@@ -143,6 +145,14 @@ class PropertySpec:
 
         if self.match_guard is not None and not callable(self.match_guard):
             raise ValueError(f"{prefix}: match_guard must be callable.")
+
+        if self.expected is not None:
+            if not isinstance(self.expected, str) or not self.expected.strip():
+                raise ValueError(f"{prefix}: expected must be a non-empty str, got {self.expected!r}.")
+            if self.match_guard is None:
+                raise ValueError(
+                    f"{prefix}: expected describes what the match_guard accepts and is never shown without one."
+                )
 
         if self.element_validator is not None and not self.strict_validation:
             raise ValueError(f"{prefix}: element_validator is never enforced without strict_validation=True.")
@@ -219,6 +229,7 @@ def property_spec(
     element_validator: Callable[[Any], Any] | None = None,
     required_when: Callable[[Any], Any] | None = None,
     match_guard: Callable[[Any], Any] | None = None,
+    expected: str | None = None,
     allow_explicit_none: bool = False,
     deferred_binding: bool = False,
 ) -> PropertySpec:
@@ -231,6 +242,7 @@ def property_spec(
         strict_validation=strict,
         element_validator=element_validator,
         match_guard=match_guard,
+        expected=expected,
         required_when=required_when,
         allow_explicit_none=allow_explicit_none,
         deferred_binding=deferred_binding,

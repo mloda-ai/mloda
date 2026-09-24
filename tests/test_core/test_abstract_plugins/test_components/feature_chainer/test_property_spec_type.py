@@ -222,6 +222,49 @@ class TestStrictNeedsAValueSpace:
         assert spec.element_validator is _is_int
 
 
+class TestExpected:
+    """``expected`` names what a ``match_guard`` accepts, for the rejection message."""
+
+    def test_expected_without_match_guard_raises(self) -> None:
+        """``expected`` set with no ``match_guard`` would never be shown: rejected up front."""
+        with pytest.raises(ValueError) as exc_info:
+            _spec("x", expected="a whole number of 1 or more")
+
+        message = str(exc_info.value)
+        del exc_info
+        assert "expected" in message
+        assert "match_guard" in message
+
+    def test_non_str_expected_raises(self) -> None:
+        """A non-str ``expected`` is rejected, naming the requirement."""
+        with pytest.raises(ValueError, match="(?i)expected must be a non-empty str"):
+            _spec("x", match_guard=_is_int, expected=5)
+
+    @pytest.mark.parametrize("blank", ["", "   "])
+    def test_blank_expected_raises(self, blank: str) -> None:
+        """A blank or whitespace-only ``expected`` is rejected."""
+        with pytest.raises(ValueError, match="(?i)expected must be a non-empty str"):
+            _spec("x", match_guard=_is_int, expected=blank)
+
+    def test_expected_omitted_is_none(self) -> None:
+        """``expected`` defaults to ``None``."""
+        spec = PropertySpec("x", match_guard=_is_int)
+
+        assert spec.expected is None
+
+    def test_expected_with_match_guard_is_valid(self) -> None:
+        """A non-empty str ``expected`` alongside a ``match_guard`` constructs fine."""
+        spec = PropertySpec("x", match_guard=_is_int, expected="an int")
+
+        assert spec.expected == "an int"
+
+    def test_expected_with_strict_match_guard_is_valid(self) -> None:
+        """``expected`` composes with ``strict_validation=True`` too."""
+        spec = PropertySpec("x", allowed_values=("a",), strict_validation=True, match_guard=_is_int, expected="an int")
+
+        assert spec.expected == "an int"
+
+
 class TestNoDefaultSentinel:
     """``NO_DEFAULT`` (no declared default) vs a DECLARED ``default=None`` (optional, no value)."""
 

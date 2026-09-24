@@ -125,6 +125,7 @@ def test_import_provider_base_classes() -> None:
         ComputeFramework,
         # Versioning
         BaseFeatureGroupVersion,
+        ThirdPartyVersionMode,
         # Feature set
         FeatureSet,
         # Input data
@@ -173,6 +174,7 @@ def test_import_provider_base_classes() -> None:
     assert ComputeFramework is not None
     # Versioning
     assert BaseFeatureGroupVersion is not None
+    assert ThirdPartyVersionMode is not None
     # Feature set
     assert FeatureSet is not None
     # Input data

@@ -1,6 +1,8 @@
+import gc
 import importlib.metadata
 import inspect
-from typing import Any
+import weakref
+from typing import Any, cast
 
 import pytest
 
@@ -60,8 +62,9 @@ class TestClassSourceHashCaching:
     """Caching contract for BaseFeatureGroupVersion.class_source_hash.
 
     Within one process, the source of a given class OBJECT is read at most
-    once; later calls return the cached hash. Different class objects are
-    cached independently, including a redefined class with the same name.
+    once; later calls return the cached hash, or re-raise the cached failure.
+    Different class objects are cached independently, including a redefined
+    class with the same name.
     """
 
     def _install_counting_getsource(self, monkeypatch: pytest.MonkeyPatch) -> list[object]:
@@ -138,6 +141,42 @@ class TestClassSourceHashCaching:
         )
         second_reads = [obj for obj in calls if obj is second_class]
         assert len(second_reads) == 1, "The redefined class object must trigger its own source read"
+
+    @pytest.mark.parametrize(
+        ("class_name", "module", "expected_error"),
+        [
+            ("FailedLookupRealFileProbeFG", __name__, OSError),
+            ("FailedLookupFakeModuleProbeFG", "fake_module_for_failed_source_hash_probe", TypeError),
+        ],
+        ids=["real_file", "fake_module"],
+    )
+    def test_failed_lookup_is_cached_per_class(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        class_name: str,
+        module: str,
+        expected_error: type[Exception],
+    ) -> None:
+        calls = self._install_counting_getsource(monkeypatch)
+        cls = cast(type[FeatureGroup], type(class_name, (FeatureGroup,), {"__module__": module}))
+
+        with pytest.raises(expected_error) as first:
+            BaseFeatureGroupVersion.class_source_hash(cls)
+        with pytest.raises(expected_error) as second:
+            BaseFeatureGroupVersion.class_source_hash(cls)
+
+        # Clean up before asserting: a failed assertion's traceback would otherwise leak the class.
+        first_error = (type(first.value), str(first.value))
+        second_error = (type(second.value), str(second.value))
+        reads = len([obj for obj in calls if obj is cls])
+        ref = weakref.ref(cls)
+        calls.clear()
+        del first, second, cls
+        gc.collect()
+
+        assert second_error == first_error
+        assert reads == 1, f"A failed lookup must be served from the cache, but getsource ran {reads} times"
+        assert ref() is None, "A class whose lookup failed must stay garbage-collectable"
 
 
 class TestMlodaVersionMemoization:

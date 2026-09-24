@@ -23,6 +23,12 @@ SOURCE_INTROSPECTION_ERRORS: Final = (OSError, TypeError)
 # not pinned for the process lifetime and can still be garbage-collected.
 _class_source_hash_cache: "weakref.WeakKeyDictionary[type[Any], str]" = weakref.WeakKeyDictionary()
 
+# Failed lookups as (exception type, message). Never the exception itself: its
+# traceback references the class and would keep the weak key alive.
+_class_source_hash_failures: "weakref.WeakKeyDictionary[type[Any], tuple[type[Exception], str]]" = (
+    weakref.WeakKeyDictionary()
+)
+
 
 class BaseFeatureGroupVersion(ABC):
     @classmethod
@@ -44,6 +50,8 @@ class BaseFeatureGroupVersion(ABC):
         ``__code__.co_filename`` when ``inspect.getsource`` cannot resolve the
         class (common for classes defined in long-lived namespaces such as
         Jupyter cells where ``__module__ == '__main__'``).
+
+        Both hashes and lookup failures are cached for the class object's lifetime.
         """
 
         # Import FeatureGroup locally to avoid circular import.
@@ -55,22 +63,29 @@ class BaseFeatureGroupVersion(ABC):
         cached = _class_source_hash_cache.get(target_class)
         if cached is not None:
             return cached
+        failure = _class_source_hash_failures.get(target_class)
+        if failure is not None:
+            error_type, message = failure
+            raise error_type(message)
 
         try:
             source: str = inspect.getsource(target_class)
-        except SOURCE_INTROSPECTION_ERRORS:
+        except SOURCE_INTROSPECTION_ERRORS as error:
             fallback = _linecache_source_for_class(target_class)
             if fallback is None:
+                _class_source_hash_failures[target_class] = (type(error), str(error))
                 raise
             source = fallback
         else:
             if not _source_defines_class(source, target_class.__name__):
                 fallback = _linecache_source_for_class(target_class)
                 if fallback is None:
-                    raise OSError(
+                    message = (
                         f"inspect.getsource returned text that does not define {target_class.__name__!r} "
                         "and no linecache fallback was available"
                     )
+                    _class_source_hash_failures[target_class] = (OSError, message)
+                    raise OSError(message)
                 source = fallback
         source_hash = hashlib.sha256(source.encode("utf-8")).hexdigest()
         _class_source_hash_cache[target_class] = source_hash

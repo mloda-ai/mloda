@@ -47,6 +47,7 @@ from mloda.core.prepare.resolution_types import (
     EvaluationResult,
     RenderFacts,
 )
+from mloda.provider import NAME_STAGE, record_match_rejection
 from tests.helpers.plugin_stubs import CountingStubFeatureGroup, HookCounter, StubFeatureGroup, StubHookError, make_fg
 
 
@@ -81,6 +82,8 @@ SHARED_LIVE_NAME_791 = "renderer_shared_name_791"
 SHARED_DEAD_NAME_791 = "renderer_shared_dead_791"
 VALUE_STAGE_FEATURE_791 = "renderer_value_stage_791"
 VALUE_STAGE_SPARE_791 = "renderer_value_stage_spare_791"
+NAME_STAGE_FEATURE_791 = "renderer_name_stage_791"
+NAME_STAGE_SPARE_791 = "renderer_name_stage_spare_791"
 CAPABILITY_STAGE_FEATURE_791 = "renderer_capability_stage_791"
 CAPABILITY_STAGE_SPARE_791 = "renderer_capability_stage_spare_791"
 RAISING_DEAD_NAMES_FEATURE_791 = "renderer_raising_dead_names_791"
@@ -139,11 +142,12 @@ DEAD_CLASS_PREFIX_791 = "RendererCrossDomainNameFG791_"
 DEAD_CLASS_NAME_TYPO_791 = "RendererCrossDoaminNameFG791"
 
 VALUE_STAGE_REJECTION_REASON_791 = "renderer_value_stage_791 declines every value of this option"
+NAME_STAGE_REJECTION_REASON_791 = "renderer_name_stage_791 is not a part this group returns"
 
 # The stages whose gate CAN see the feature name, so a sibling name of a candidate eliminated there may still
-# resolve. Pinned here as the complement of NAME_INDEPENDENT_STAGES: a tenth stage fails the partition test.
+# resolve. Pinned here as the complement of NAME_INDEPENDENT_STAGES: a new stage fails the partition test.
 NAME_DEPENDENT_STAGES_791: frozenset[EliminationStage] = frozenset(
-    {"value_rejection", "input_data", "matcher_error", "capability", "framework_pin"}
+    {"value_rejection", "input_data", "matcher_error", "capability", "framework_pin", "name"}
 )
 
 # The label each stage renders, stated here independently of the renderer: EliminationStage is checked against
@@ -160,13 +164,14 @@ EXPECTED_STAGE_LABELS_791: dict[EliminationStage, str] = {
     "frameworks_not_enabled": "compute framework",
     "framework_pin": "compute framework pin",
     "links": "links",
+    "name": "feature name",
 }
 
 # One synthetic near-miss, rendered once per stage, so every label is read back off a real rendered line.
 STAGE_LABEL_FEATURE_791 = "renderer_stage_label_791"
 STAGE_LABEL_REASON_791 = "eliminated at this stage"
 
-# Stands in for a tenth stage shipped without a near-miss label: no entry of the label table covers this token.
+# Stands in for a new stage shipped without a near-miss label: no entry of the label table covers this token.
 UNLABELED_STAGE_791 = "renderer_unlabeled_stage_791"
 UNLABELED_STAGE_FEATURE_791 = "renderer_unlabeled_stage_feature_791"
 UNLABELED_STAGE_REASON_791 = "eliminated at a stage this build has no label for"
@@ -591,6 +596,27 @@ class RendererValueStageFG791(CountingFeatureGroup791):
         if not super().match_feature_group_criteria(feature_name, options, data_access_collection):
             return False
         raise PropertyValueRejection(VALUE_STAGE_REJECTION_REASON_791)
+
+
+class RendererNameStageFG791(CountingFeatureGroup791):
+    """Eliminated at name, a name-DEPENDENT stage: it refused THIS name, not its sibling's."""
+
+    MATCHED_NAMES = frozenset({NAME_STAGE_FEATURE_791})
+    SUPPORTED_NAMES = frozenset({NAME_STAGE_SPARE_791})
+    FRAMEWORK_RULE = {RendererFwOne791}
+
+    @classmethod
+    def match_feature_group_criteria(
+        cls,
+        feature_name: FeatureName | str,
+        options: Options,
+        data_access_collection: DataAccessCollection | None = None,
+    ) -> bool:
+        # Name-guarded, so this globally visible class stays inert for every other name it is asked about.
+        if not super().match_feature_group_criteria(feature_name, options, data_access_collection):
+            return False
+        record_match_rejection(cls.__name__, NAME_STAGE_REJECTION_REASON_791, stage=NAME_STAGE)
+        return False
 
 
 # Eliminated at capability: the per-feature hook rejected the one framework the run enabled.
@@ -1257,6 +1283,11 @@ def shared_dead_and_live_name_scenario() -> Scenario:
 def value_stage_scenario() -> Scenario:
     """A value_rejection near-miss that keeps an enabled framework, so a sibling name could still resolve to it."""
     return Feature(VALUE_STAGE_FEATURE_791), {RendererValueStageFG791: {RendererFwOne791}}
+
+
+def name_stage_scenario() -> Scenario:
+    """A name near-miss that keeps an enabled framework, so a sibling name could still resolve to it."""
+    return Feature(NAME_STAGE_FEATURE_791), {RendererNameStageFG791: {RendererFwOne791}}
 
 
 def value_stage_without_frameworks_scenario() -> Scenario:
@@ -2494,6 +2525,21 @@ class TestSuggestionsNeverPointAtADeadGroupsSiblingName:
         assert message is not None
         assert _suggestions(message) == [VALUE_STAGE_SPARE_791]
 
+    def test_a_name_stage_candidates_sibling_name_is_still_suggested(self) -> None:
+        """name is name-DEPENDENT: the candidate refused this name, not the sibling's."""
+        scenario = name_stage_scenario()
+        feature, _ = scenario
+        result = _evaluate(scenario)
+
+        assert result.eliminations == {
+            RendererNameStageFG791: Elimination(stage="name", reason=NAME_STAGE_REJECTION_REASON_791)
+        }
+        assert NAME_STAGE_SPARE_791 not in result.facts.dead_only_names
+
+        message = render_resolution_failure(result, feature)
+        assert message is not None
+        assert _suggestions(message) == [NAME_STAGE_SPARE_791]
+
     def test_a_capability_candidates_sibling_name_is_still_suggested(self) -> None:
         """capability comes from supports_compute_framework(feature.name, ...), so a sibling name may pass it."""
         scenario = capability_stage_scenario()
@@ -3289,7 +3335,7 @@ class TestAMalformedDomainReturnIsDecidedLikeTheGateDecidesIt:
 
 
 class TestEveryEliminationStageIsClassified:
-    """A tenth stage must be classified and labelled before it ships, or it silently misrenders or misdrops names."""
+    """A new stage must be classified and labelled before it ships, or it silently misrenders or misdrops names."""
 
     def test_the_two_stage_sets_partition_the_stage_literal(self) -> None:
         """NAME_INDEPENDENT_STAGES and its name-dependent complement cover EliminationStage exactly once."""
@@ -3307,7 +3353,7 @@ class TestEveryEliminationStageIsClassified:
 class TestEveryStageLabelIsPinned:
     """TestEveryEliminationStageIsClassified pins the label table's KEYS; this one pins its VALUES as rendered text.
 
-    Every stage shipping today also has a hand-written rendered line: seven in
+    Every stage shipping today also has a hand-written rendered line: eight in
     tests/test_core/test_prepare/test_candidate_elimination_reasons.py, input_data in
     tests/test_plugins/feature_group/input_data/test_reader_match_rejections.py, matcher_error in
     tests/test_core/test_prepare/test_raising_matcher_containment.py, so a RENAME is already caught per stage.
@@ -3315,7 +3361,7 @@ class TestEveryStageLabelIsPinned:
     """
 
     def test_the_expected_table_names_every_stage(self) -> None:
-        """A tenth stage fails here until someone states the label it renders."""
+        """A new stage fails here until someone states the label it renders."""
         assert frozenset(EXPECTED_STAGE_LABELS_791) == frozenset(get_args(EliminationStage))
 
     @pytest.mark.parametrize(

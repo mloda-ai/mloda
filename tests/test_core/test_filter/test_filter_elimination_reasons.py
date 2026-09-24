@@ -21,6 +21,7 @@ from mloda.core.abstract_plugins.components.domain import Domain
 from mloda.core.abstract_plugins.components.match_rejection import (
     INPUT_DATA_OWNED_STAGE,
     INPUT_DATA_STAGE,
+    NAME_STAGE,
     record_match_rejection,
 )
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
@@ -92,6 +93,7 @@ CAPABILITY_STAGE: EliminationStage = "capability"
 FRAMEWORKS_NOT_ENABLED_STAGE: EliminationStage = "frameworks_not_enabled"
 FRAMEWORK_PIN_STAGE: EliminationStage = "framework_pin"
 LINKS_STAGE: EliminationStage = "links"
+NAME_ELIMINATION_STAGE: EliminationStage = "name"
 
 # The canonical seam's own wording over the one framework the filter would ride.
 CAPABILITY_REASON = f"supports_compute_framework rejected {[PythonDictFramework.__name__]}"
@@ -110,6 +112,7 @@ STAGE_HINT_TABLE: tuple[tuple[str, EliminationStage], ...] = (
     (INPUT_DATA_OWNED_STAGE, INPUT_DATA_ELIMINATION_STAGE),
     (VALUE_REJECTION_STAGE, VALUE_REJECTION_STAGE),
     (UNKNOWN_STAGE, VALUE_REJECTION_STAGE),
+    (NAME_STAGE, NAME_ELIMINATION_STAGE),
 )
 STAGE_HINT_IDS = [hint for hint, _ in STAGE_HINT_TABLE]
 
@@ -117,7 +120,7 @@ STAGE_HINT_IDS = [hint for hint, _ in STAGE_HINT_TABLE]
 EXPECTED_DEPTH_ORDER: tuple[tuple[EliminationStage, ...], ...] = (
     (MATCHER_ERROR_STAGE,),
     (INPUT_DATA_ELIMINATION_STAGE,),
-    (VALUE_REJECTION_STAGE,),
+    (VALUE_REJECTION_STAGE, NAME_ELIMINATION_STAGE),
     (DOMAIN_STAGE,),
     (SCOPE_STAGE,),
     (CAPABILITY_STAGE, FRAMEWORKS_NOT_ENABLED_STAGE),
@@ -1541,7 +1544,7 @@ class TestEveryEliminationStageCarriesADepth:
         assert unranked == [], f"_STAGE_DEPTH ranks no depth for {unranked}"
 
     def test_the_expected_order_names_every_stage(self) -> None:
-        """A tenth stage fails here until someone states where it ranks."""
+        """A new stage fails here until someone states where it ranks."""
         named = {stage for rank in EXPECTED_DEPTH_ORDER for stage in rank}
         assert named == set(get_args(EliminationStage)), f"the expected order names {sorted(named)}"
 

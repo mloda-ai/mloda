@@ -33,6 +33,8 @@ The probe runs per feature, but a matched filter attaches to the whole `FeatureS
 
 Every caller reads the return by truthiness: any falsy value is a non-match, any truthy value a match. Filter matching additionally reports a falsy value that is not `False`, and each distinct report is a WARNING once per setup.
 
+A match hook that refuses the feature because of its name, for example an unknown output part, records the reason with `record_match_rejection(cls.__name__, reason, stage=NAME_STAGE)` (both from `mloda.provider`) and returns `False`; the near-miss then reads `feature name` instead of `option value`. Record the reason only when the name is otherwise addressed to the group, for example its base or prefix matches but the output part is unknown; a plain name mismatch returns `False` without recording anything.
+
 The options view depends on the caller: feature resolution passes declared (pre-default) options, while filter matching runs after intake and passes the resolved feature's effective (post-default) options merged onto the filter feature's own. Matching logic that reads option values can see different values on the two paths. See [Applying declared defaults](property-mapping.md#applying-declared-defaults).
 
 ### 2. PROPERTY_MAPPING Configuration

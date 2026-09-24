@@ -157,6 +157,7 @@ def test_import_provider_base_classes() -> None:
         # Match rejection recording
         record_match_rejection,
         INPUT_DATA_STAGE,
+        NAME_STAGE,
         # Transformers
         BaseTransformer,
         ComputeFrameworkTransformer,
@@ -204,6 +205,7 @@ def test_import_provider_base_classes() -> None:
     # Match rejection recording
     assert callable(record_match_rejection)
     assert INPUT_DATA_STAGE == "input_data"
+    assert NAME_STAGE == "name"
     # Transformers
     assert BaseTransformer is not None
     assert ComputeFrameworkTransformer is not None

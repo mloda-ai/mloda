@@ -73,11 +73,12 @@ No enabled feature group both declared the requested name and survived every mat
 
 ### The eliminated candidates block
 
-Each line names a candidate the matcher considered and dropped: the first gate that eliminated it (the parenthesized label) and that gate's reason. A line does not prove the candidate declared the requested name; a candidate whose match hook raised or whose input-data gate declined is recorded regardless.
+Each line names a candidate the matcher considered and dropped: the first gate that eliminated it (the parenthesized label) and that gate's reason. A line does not prove the candidate declared the requested name; a candidate whose match hook raised, whose input-data gate declined, or that refused the name itself is recorded regardless.
 
 | Label | What eliminated the candidate | Typical fix |
 | --- | --- | --- |
 | `option value` | The group declined an option value in the request. | Fix the value the reason names. |
+| `feature name` | The group refused the requested feature name itself, for example an unknown output part. | Request a name the group serves; the reason may list them. |
 | `input data` | The input-data gate declined the request. | Point the request at data the group can read ([Data Access Patterns](../data-access-patterns.md)). |
 | `match hook` | The group's match hook raised; the error is contained and quoted. | Fix the plugin bug it names. |
 | `domain` | The group declares a different domain than the request. | Align the requested domain ([domain solution below](#3-use-domains-to-separate-feature-groups)). |

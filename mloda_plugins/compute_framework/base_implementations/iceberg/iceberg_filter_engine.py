@@ -1,3 +1,4 @@
+from functools import reduce
 from typing import Any
 from mloda.user import SingleFilter
 from mloda_plugins.compute_framework.base_implementations.pyarrow.pyarrow_filter_engine import PyArrowFilterEngine
@@ -5,6 +6,7 @@ from mloda_plugins.compute_framework.base_implementations.pyarrow.pyarrow_filter
 try:
     from pyiceberg.table import Table as IcebergTable
     from pyiceberg.expressions import (
+        AlwaysTrue,
         LessThan,
         GreaterThanOrEqual,
         LessThanOrEqual,
@@ -14,6 +16,7 @@ try:
     )
 except ImportError:
     IcebergTable: type[Any] | None = None  # type: ignore[no-redef]
+    AlwaysTrue: type[Any] | None = None  # type: ignore[no-redef]
     LessThan: type[Any] | None = None  # type: ignore[no-redef]
     GreaterThanOrEqual: type[Any] | None = None  # type: ignore[no-redef]
     LessThanOrEqual: type[Any] | None = None  # type: ignore[no-redef]
@@ -21,9 +24,11 @@ except ImportError:
     And: type[Any] | None = None  # type: ignore[no-redef]
     Reference: type[Any] | None = None  # type: ignore[no-redef]
 
+_PUSHDOWN_FILTER_TYPES = frozenset({"range", "min", "max", "equal"})
+
 
 class IcebergFilterEngine(PyArrowFilterEngine):
-    """Filters Iceberg tables by scan pushdown and pa.Table data with the PyArrow filters."""
+    """Filters Iceberg tables by scan pushdown plus the PyArrow filters, and pa.Table data with the PyArrow filters."""
 
     @classmethod
     def final_filters(cls) -> bool:
@@ -32,32 +37,21 @@ class IcebergFilterEngine(PyArrowFilterEngine):
 
     @classmethod
     def apply_filters(cls, data: Any, features: Any) -> Any:
-        """
-        Push filters into an Iceberg table scan; other data goes through the PyArrow filters.
-
-        Returns the filtered scan as a pa.Table, or the input unchanged when no filter applies.
-        """
+        """Push range, min, max and equal into the Iceberg scan, then apply every filter to the scan result with the PyArrow filters."""
         if not isinstance(data, IcebergTable):
             return super().apply_filters(data, features)
 
-        # Build Iceberg filter expressions
-        filter_expressions = []
-        for single_filter in cls.applicable_filters(features):
-            iceberg_expr = cls._build_iceberg_expression(single_filter)
-            if iceberg_expr is not None:
-                filter_expressions.append(iceberg_expr)
-
-        if not filter_expressions:
+        applicable = cls.applicable_filters(features)
+        if not applicable:
             return data
 
-        # Combine multiple filters with AND
-        combined_filter = filter_expressions[0]
-        for expr in filter_expressions[1:]:
-            if And is not None:
-                combined_filter = And(combined_filter, expr)
-
-        # A bare scan has no schema the framework can read
-        return data.scan(row_filter=combined_filter).to_arrow()
+        # Build pushable expressions before scanning so a malformed filter raises without a scan.
+        expressions: list[Any] = [
+            cls._build_iceberg_expression(f) for f in applicable if f.filter_type in _PUSHDOWN_FILTER_TYPES
+        ]
+        row_filter = reduce(And, expressions, AlwaysTrue())
+        # The PyArrow pass applies the filters Iceberg cannot push and re-checks the pushed ones.
+        return super().apply_filters(data.scan(row_filter=row_filter).to_arrow(), features)
 
     @classmethod
     def _build_iceberg_expression(cls, filter_feature: SingleFilter) -> Any:

@@ -19,7 +19,16 @@ try:
     import pyiceberg
     import pyarrow as pa
     from pyiceberg.table import Table as IcebergTable
-    from pyiceberg.expressions import GreaterThan, LessThan, GreaterThanOrEqual, LessThanOrEqual, EqualTo, And
+    from pyiceberg.expressions import (
+        GreaterThan,
+        LessThan,
+        GreaterThanOrEqual,
+        LessThanOrEqual,
+        EqualTo,
+        And,
+        Reference,
+        AlwaysTrue,
+    )
 except ImportError:
     logger.warning("PyIceberg or PyArrow is not installed. Some tests will be skipped.")
     pyiceberg = None  # type: ignore
@@ -31,6 +40,8 @@ except ImportError:
     LessThanOrEqual = None  # type: ignore
     EqualTo = None  # type: ignore
     And = None  # type: ignore
+    Reference = None  # type: ignore
+    AlwaysTrue = None  # type: ignore
 
 
 @pytest.mark.skipif(
@@ -53,10 +64,16 @@ class TestIcebergFilterEngine(FilterEngineTestMixin):
         )
 
     @pytest.fixture
-    def mock_iceberg_table(self) -> Mock:
-        """Create a mock Iceberg table for testing."""
+    def mock_iceberg_table(self, sample_data: Any) -> Mock:
+        """Create a mock Iceberg table for testing.
+
+        The mock scan does not apply the row filter itself: it always returns
+        sample_data unfiltered. Real filtering happens through the PyArrow
+        re-pass in apply_filters, which is what these tests exercise.
+        """
         mock_table = Mock(spec=IcebergTable)
         mock_scan = Mock()
+        mock_scan.to_arrow.return_value = sample_data
         mock_table.scan.return_value = mock_scan
         return mock_table
 
@@ -280,11 +297,14 @@ class TestIcebergFilterEngine(FilterEngineTestMixin):
         # Apply filters
         result = IcebergFilterEngine.apply_filters(mock_iceberg_table, mock_feature_set)
 
-        # Verify that scan was called with a filter
+        # Verify that scan was called with the pushed row filter
         mock_iceberg_table.scan.assert_called_once()
         call_args = mock_iceberg_table.scan.call_args
         assert "row_filter" in call_args.kwargs
-        assert result is mock_iceberg_table.scan.return_value.to_arrow.return_value
+        assert call_args.kwargs["row_filter"] == GreaterThanOrEqual(Reference("age"), 25)
+
+        # The PyArrow re-pass over the scan result keeps every row (age >= 25 matches all).
+        assert self.get_column_values(result, "id") == [1, 2, 3, 4, 5]
 
     def test_apply_filters_non_iceberg_table(self, mock_feature_set: Mock) -> None:
         """Test applying filters to non-Iceberg data falls back to parent method."""
@@ -327,12 +347,16 @@ class TestIcebergFilterEngine(FilterEngineTestMixin):
         mock_feature_set.filters = [age_filter, name_filter]
 
         # Apply filters
-        _result = IcebergFilterEngine.apply_filters(mock_iceberg_table, mock_feature_set)
+        result = IcebergFilterEngine.apply_filters(mock_iceberg_table, mock_feature_set)
 
-        # Verify that scan was called with combined filter
+        # Verify that scan was called with the combined pushed filter
         mock_iceberg_table.scan.assert_called_once()
         call_args = mock_iceberg_table.scan.call_args
         assert "row_filter" in call_args.kwargs
+        assert call_args.kwargs["row_filter"] == And(
+            GreaterThanOrEqual(Reference("age"), 25), EqualTo(Reference("name"), "Alice")
+        )
+        assert self.get_column_values(result, "id") == [1]
 
     def test_apply_filters_filtered_features(self, mock_iceberg_table: Mock, mock_feature_set: Mock) -> None:
         """Test applying filters where some features are not in the feature set."""
@@ -342,21 +366,68 @@ class TestIcebergFilterEngine(FilterEngineTestMixin):
         mock_feature_set.filters = [unknown_filter, age_filter]
 
         # Apply filters
-        _result = IcebergFilterEngine.apply_filters(mock_iceberg_table, mock_feature_set)
+        result = IcebergFilterEngine.apply_filters(mock_iceberg_table, mock_feature_set)
 
         # Should only apply the age filter (unknown_column is not in get_all_names)
         mock_iceberg_table.scan.assert_called_once()
+        call_args = mock_iceberg_table.scan.call_args
+        assert call_args.kwargs["row_filter"] == GreaterThanOrEqual(Reference("age"), 25)
+        assert self.get_column_values(result, "id") == [1, 2, 3, 4, 5]
 
-    def test_apply_filters_categorical_inclusion_raises(self, mock_iceberg_table: Mock, mock_feature_set: Mock) -> None:
-        """apply_filters must not silently drop an unsupported filter and return the unfiltered table."""
-        category_filter = SingleFilter(Feature("category"), FilterType.CATEGORICAL_INCLUSION, {"values": ["A", "B"]})
-        mock_feature_set.filters = [category_filter]
+    @pytest.mark.parametrize(
+        "filters,expected_row_filter,expected_ids",
+        [
+            pytest.param(
+                [
+                    SingleFilter(Feature("age"), FilterType.MIN, {"value": 30}),
+                    SingleFilter(Feature("category"), FilterType.CATEGORICAL_INCLUSION, {"values": ["A", "B"]}),
+                ],
+                GreaterThanOrEqual(Reference("age"), 30) if GreaterThanOrEqual is not None else None,
+                [2, 3, 5],
+                id="min_pushed_plus_categorical_inclusion",
+            ),
+            pytest.param(
+                [
+                    SingleFilter(Feature("age"), FilterType.MIN, {"value": 30}),
+                    SingleFilter(Feature("name"), FilterType.REGEX, {"value": "^[A-C]"}),
+                ],
+                GreaterThanOrEqual(Reference("age"), 30) if GreaterThanOrEqual is not None else None,
+                [2, 3],
+                id="min_pushed_plus_regex",
+            ),
+            pytest.param(
+                [SingleFilter(Feature("category"), FilterType.CATEGORICAL_INCLUSION, {"values": ["A", "B"]})],
+                AlwaysTrue() if AlwaysTrue is not None else None,
+                [1, 2, 3, 5],
+                id="categorical_inclusion_only_no_pushdown",
+            ),
+        ],
+    )
+    def test_apply_filters_non_pushdown_types_via_pyarrow_pass(
+        self,
+        mock_iceberg_table: Mock,
+        mock_feature_set: Mock,
+        filters: list[SingleFilter],
+        expected_row_filter: Any,
+        expected_ids: list[int],
+    ) -> None:
+        """Regex and categorical inclusion are not pushed but are applied on the scan result."""
+        mock_feature_set.filters = filters
 
-        with pytest.raises(NotImplementedError):
+        result = IcebergFilterEngine.apply_filters(mock_iceberg_table, mock_feature_set)
+
+        mock_iceberg_table.scan.assert_called_once()
+        call_args = mock_iceberg_table.scan.call_args
+        assert call_args.kwargs["row_filter"] == expected_row_filter
+        assert self.get_column_values(result, "id") == expected_ids
+
+    def test_apply_filters_custom_filter_type_raises(self, mock_iceberg_table: Mock, mock_feature_set: Mock) -> None:
+        """A filter type with no Iceberg pushdown and no PyArrow method reaches do_custom_filter."""
+        custom_filter = SingleFilter(Feature("age"), "custom_op", {"value": 1})
+        mock_feature_set.filters = [custom_filter]
+
+        with pytest.raises(NotImplementedError, match="Custom filtering is not supported"):
             IcebergFilterEngine.apply_filters(mock_iceberg_table, mock_feature_set)
-
-        # An unfiltered scan would indicate the filter was silently dropped instead of raising.
-        mock_iceberg_table.scan.assert_not_called()
 
     def test_apply_filters_equal_missing_value_raises(self, mock_iceberg_table: Mock, mock_feature_set: Mock) -> None:
         """apply_filters must not silently drop a missing-value filter and return the unfiltered table."""

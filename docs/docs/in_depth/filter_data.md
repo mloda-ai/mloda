@@ -323,7 +323,7 @@ def final_filters(cls) -> bool | None:
 
 | Return value | Meaning |
 |:------------:|---------|
-| `None` | Defer to the FilterEngine tied to the ComputeFramework. Most engines (Pandas, PyArrow, Polars, Spark) default to `True` (eliminate rows). Iceberg defaults to `False` (predicate pushdown handles it). |
+| `None` | Defer to the FilterEngine tied to the ComputeFramework. Every built-in engine defaults to `True` (eliminate rows). |
 | `False` | Skip row elimination. Use this when your FeatureGroup fully handles the filter itself. |
 | `True` | Force row elimination, even if the FilterEngine would skip it. |
 
@@ -338,7 +338,7 @@ filter is applied, not *where* the computation runs physically:
 | Eager | Pandas, PyArrow | Post-hoc filter in memory after full materialization |
 | Lazy (SQL) | DuckDB, SQLite | `.filter()` adds WHERE to query plan; optimizer may push to scan time |
 | Lazy (dataframe) | Polars, Spark | `.filter()` adds node to lazy plan; optimizer decides physical order |
-| Scan-time | Iceberg | Predicates pushed into scan expressions (`final_filters()=False`) |
+| Scan-time | Iceberg | For a `Table` result, range, min, max and equal predicates are pushed into the scan, then every filter is applied to the materialized `pa.Table` with the PyArrow filters; a `pa.Table` result is filtered as PyArrow |
 
 All frameworks that return `True` produce the same logical result (non-matching rows
 absent from output), but the physical execution path differs.
@@ -365,15 +365,16 @@ For patterns that use `features.mask_engine` to build boolean masks inside
 
 #### Pattern 4: Force elimination on a non-eliminating engine
 
-Some engines skip row elimination by default (e.g. Iceberg, which uses predicate pushdown
-at scan time). If your FeatureGroup computes derived columns that the scan could not
-filter, override `final_filters()` to force elimination:
+A custom FilterEngine can skip row elimination by returning `False` from
+`final_filters()` (e.g. an engine that applies filters at scan time). If your
+FeatureGroup computes derived columns that the scan could not filter, override
+`final_filters()` to force elimination:
 
 ```
-class DerivedIcebergFeature(FeatureGroup):
+class DerivedFeature(FeatureGroup):
     @classmethod
     def final_filters(cls) -> bool:
-        return True  # override Iceberg's default of False
+        return True  # override the engine's default of False
 ```
 
 ### The overlap contract

@@ -16,8 +16,11 @@ from mloda.provider import ComputeFramework
 from mloda.user import mloda
 from mloda.user import ParallelizationMode
 from mloda.user import DataAccessCollection
+from mloda.user import GlobalFilter
 from mloda_plugins.compute_framework.base_implementations.iceberg.iceberg_framework import IcebergFramework
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
+from tests.test_core.test_filter.test_feature_group_final_filters import RegularFeatureGroupForFilterTest
+from tests.test_core.test_tooling import PARALLELIZATION_MODES_SYNC_THREADING
 
 import logging
 
@@ -28,12 +31,18 @@ try:
     import pyarrow as pa
     from pyiceberg.table import Table as IcebergTable
     from pyiceberg.catalog import Catalog
+    from pyiceberg.schema import Schema
+    from pyiceberg.types import LongType, NestedField, StringType
 except ImportError:
     logger.warning("PyIceberg or PyArrow is not installed. Some tests will be skipped.")
     pyiceberg = None  # type: ignore
     pa = None  # type: ignore[assignment, unused-ignore]
     IcebergTable = None  # type: ignore
     Catalog = None  # type: ignore
+    Schema = None  # type: ignore
+    LongType = None  # type: ignore
+    NestedField = None  # type: ignore
+    StringType = None  # type: ignore
 
 
 @pytest.fixture
@@ -236,11 +245,82 @@ class IcebergToArrowFeatureGroup(FeatureGroup):
         return {PyArrowTable}
 
 
+class IcebergPyArrowRegularFeatureGroupForFilterTest(RegularFeatureGroupForFilterTest):
+    """Same data as RegularFeatureGroupForFilterTest, run on IcebergFramework via a pa.Table result."""
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {IcebergFramework}
+
+
+class IcebergTableRegularFeatureGroupForFilterTest(RegularFeatureGroupForFilterTest):
+    """Same data as RegularFeatureGroupForFilterTest, wrapped in a Mock Iceberg Table result.
+
+    ``schema()`` returns a real ``pyiceberg.schema.Schema`` so the framework's filter-column
+    validation runs against a real Iceberg schema, not a bare Mock.
+    """
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {IcebergFramework}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        arrow_data = pa.table(
+            {
+                cls.get_class_name(): [10, 20, 30, 40],
+                "status": ["active", "inactive", "active", "inactive"],
+            }
+        )
+
+        mock_table = Mock(spec=IcebergTable)
+        mock_scan = Mock()
+        mock_scan.to_arrow.return_value = arrow_data
+        mock_table.scan.return_value = mock_scan
+        mock_table.schema.return_value = Schema(
+            NestedField(1, cls.get_class_name(), LongType()),
+            NestedField(2, "status", StringType()),
+        )
+        return mock_table
+
+
 @pytest.mark.skipif(
     pyiceberg is None or pa is None, reason="PyIceberg or PyArrow is not installed. Skipping this test."
 )
 class TestIcebergIntegrationWithMlodaAPI:
     """Integration tests for IcebergFramework with mloda."""
+
+    @pytest.mark.parametrize(
+        "feature_group",
+        [
+            pytest.param(IcebergPyArrowRegularFeatureGroupForFilterTest, id="pa_table"),
+            pytest.param(IcebergTableRegularFeatureGroupForFilterTest, id="iceberg_table"),
+        ],
+    )
+    @PARALLELIZATION_MODES_SYNC_THREADING
+    def test_default_feature_group_final_filter_applied(
+        self, feature_group: type[FeatureGroup], modes: set[ParallelizationMode], flight_server: Any
+    ) -> None:
+        """A default FeatureGroup (final_filters() -> None) still gets its rows filtered on Iceberg."""
+        feature_name = feature_group.get_class_name()
+
+        plugin_collector = PluginCollector.enabled_feature_groups({feature_group})
+
+        global_filter = GlobalFilter()
+        global_filter.add_filter("status", "equal", {"value": "active"})
+
+        result = mloda.run_all(
+            [Feature(name=feature_name, initial_requested_data=True)],
+            flight_server=flight_server,
+            parallelization_modes=modes,
+            plugin_collector=plugin_collector,
+            compute_frameworks={IcebergFramework},
+            global_filter=global_filter,
+        )
+
+        for final_data in result:
+            assert final_data[feature_name].to_pylist() == [10, 30]
+            assert final_data.column_names == [feature_name]
 
     @pytest.mark.parametrize(
         "modes",

@@ -262,12 +262,7 @@ class IcebergTableRegularFeatureGroupForFilterTest(RegularFeatureGroupForFilterT
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
-        arrow_data = pa.table(
-            {
-                cls.get_class_name(): [10, 20, 30, 40],
-                "status": ["active", "inactive", "active", "inactive"],
-            }
-        )
+        arrow_data = super().calculate_feature(data, features)
 
         mock_table = Mock(spec=IcebergTable)
         mock_scan = Mock()

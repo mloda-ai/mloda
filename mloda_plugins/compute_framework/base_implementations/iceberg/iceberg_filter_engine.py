@@ -32,7 +32,7 @@ class IcebergFilterEngine(PyArrowFilterEngine):
 
     @classmethod
     def apply_filters(cls, data: Any, features: Any) -> Any:
-        """Push range, min, max and equal into the Iceberg scan, then apply every filter with the PyArrow filters."""
+        """Push range, min, max and equal into the Iceberg scan, then apply every filter to the pa.Table it returns."""
         if not isinstance(data, IcebergTable):
             return super().apply_filters(data, features)
 

@@ -101,68 +101,57 @@ class TestIcebergFilterEngine(FilterEngineTestMixin):
     def get_column_values(self, result: Any, column: str) -> list[Any]:
         return result[column].to_pylist()  # type: ignore[no-any-return]
 
-    def test_build_iceberg_expression_equal(self) -> None:
-        """Test building equal filter expression."""
+    @pytest.mark.parametrize(
+        "filter_type,parameter,expected_expression",
+        [
+            pytest.param(
+                FilterType.EQUAL,
+                {"value": 30},
+                lambda: EqualTo(Reference("age"), 30),
+                id="equal",
+            ),
+            pytest.param(
+                FilterType.MIN,
+                {"value": 25},
+                lambda: GreaterThanOrEqual(Reference("age"), 25),
+                id="min",
+            ),
+            pytest.param(
+                FilterType.MAX,
+                {"value": 50},
+                lambda: LessThanOrEqual(Reference("age"), 50),
+                id="max_simple",
+            ),
+            pytest.param(
+                FilterType.MAX,
+                {"max": 50, "max_exclusive": True},
+                lambda: LessThan(Reference("age"), 50),
+                id="max_complex_exclusive",
+            ),
+            pytest.param(
+                FilterType.RANGE,
+                {"min": 25, "max": 50, "max_exclusive": False},
+                lambda: And(GreaterThanOrEqual(Reference("age"), 25), LessThanOrEqual(Reference("age"), 50)),
+                id="range",
+            ),
+            pytest.param(
+                FilterType.RANGE,
+                {"min": 25, "max": 50, "max_exclusive": True},
+                lambda: And(GreaterThanOrEqual(Reference("age"), 25), LessThan(Reference("age"), 50)),
+                id="range_exclusive",
+            ),
+        ],
+    )
+    def test_build_iceberg_expression(
+        self, filter_type: FilterType, parameter: dict[str, Any], expected_expression: Any
+    ) -> None:
+        """pyiceberg unbound predicates compare by value, so the exact expression is asserted."""
         feature = Feature("age")
-        filter_type = FilterType.EQUAL
-        parameter = {"value": 30}
         single_filter = SingleFilter(feature, filter_type, parameter)
 
         expression = IcebergFilterEngine._build_iceberg_expression(single_filter)
 
-        # Since we can't easily test the actual Iceberg expression object,
-        # we'll test that it's not None (meaning it was created successfully)
-        assert expression is not None
-
-    def test_build_iceberg_expression_min(self) -> None:
-        """Test building min filter expression."""
-        feature = Feature("age")
-        filter_type = FilterType.MIN
-        parameter = {"value": 25}
-        single_filter = SingleFilter(feature, filter_type, parameter)
-
-        expression = IcebergFilterEngine._build_iceberg_expression(single_filter)
-        assert expression is not None
-
-    def test_build_iceberg_expression_max_simple(self) -> None:
-        """Test building max filter expression with simple parameter."""
-        feature = Feature("age")
-        filter_type = FilterType.MAX
-        parameter = {"value": 50}
-        single_filter = SingleFilter(feature, filter_type, parameter)
-
-        expression = IcebergFilterEngine._build_iceberg_expression(single_filter)
-        assert expression is not None
-
-    def test_build_iceberg_expression_max_complex(self) -> None:
-        """Test building max filter expression with complex parameter."""
-        feature = Feature("age")
-        filter_type = FilterType.MAX
-        parameter = {"max": 50, "max_exclusive": True}
-        single_filter = SingleFilter(feature, filter_type, parameter)
-
-        expression = IcebergFilterEngine._build_iceberg_expression(single_filter)
-        assert expression is not None
-
-    def test_build_iceberg_expression_range(self) -> None:
-        """Test building range filter expression."""
-        feature = Feature("age")
-        filter_type = FilterType.RANGE
-        parameter = {"min": 25, "max": 50, "max_exclusive": False}
-        single_filter = SingleFilter(feature, filter_type, parameter)
-
-        expression = IcebergFilterEngine._build_iceberg_expression(single_filter)
-        assert expression is not None
-
-    def test_build_iceberg_expression_range_exclusive(self) -> None:
-        """Test building range filter expression with exclusive max."""
-        feature = Feature("age")
-        filter_type = FilterType.RANGE
-        parameter = {"min": 25, "max": 50, "max_exclusive": True}
-        single_filter = SingleFilter(feature, filter_type, parameter)
-
-        expression = IcebergFilterEngine._build_iceberg_expression(single_filter)
-        assert expression is not None
+        assert expression == expected_expression()
 
     def test_build_iceberg_expression_unsupported(self) -> None:
         """Test that an unsupported filter type raises NotImplementedError."""

@@ -137,7 +137,10 @@ class IcebergFramework(ComputeFramework):
         )
         if IcebergTable is not None and isinstance(data, IcebergTable):
             # The scan projects in table schema order; the select below restores the requested order.
+            # A nested field ("b.c") comes back inside its struct column, so that result is not reordered.
             data = data.scan(selected_fields=tuple(selected)).to_arrow()
+            if not set(selected).issubset(data.schema.names):
+                return data
         return data.select(selected)
 
     def _extract_column_names(self, data: Any) -> set[str]:

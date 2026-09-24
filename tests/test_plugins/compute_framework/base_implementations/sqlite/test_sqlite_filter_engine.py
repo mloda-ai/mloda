@@ -21,9 +21,7 @@ from tests.test_plugins.compute_framework.base_implementations.time_range_filter
 
 
 class TestSqliteFilterEngine(FilterEngineTestMixin, TimeRangeFilterEngineTestMixin):
-    @pytest.fixture
-    def filter_engine(self) -> Any:
-        return SqliteFilterEngine
+    filter_engine_class = SqliteFilterEngine
 
     @pytest.fixture
     def sample_data(self, connection: sqlite3.Connection) -> Any:

@@ -13,11 +13,13 @@ from typing import Any
 import pytest
 
 from mloda.core.abstract_plugins.components.utils import get_all_subclasses
+from mloda.provider import BaseFilterEngine
 from mloda.provider import BaseMaskEngine
 from mloda.user import PluginLoader
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.base import AggregatedFeatureGroup
 from mloda_plugins.feature_group.experimental.data_quality.missing_value.base import MissingValueFeatureGroup
 from mloda_plugins.feature_group.experimental.time_window.base import TimeWindowFeatureGroup
+from tests.test_plugins.compute_framework.base_implementations.filter_engine_test_mixin import FilterEngineTestMixin
 from tests.test_plugins.compute_framework.base_implementations.mask_engine_test_mixin import MaskEngineTestMixin
 from tests.test_plugins.feature_group.experimental.test_base_aggregated_feature_group.aggregated_zero_row_test_mixin import (
     AggregatedZeroRowTestMixin,
@@ -86,6 +88,21 @@ CONTRACTS: tuple[MixinContract, ...] = (
             f"{_FRAMEWORKS}.python_dict.test_python_dict_mask_engine",
             f"{_FRAMEWORKS}.spark.test_spark_mask_engine",
             f"{_FRAMEWORKS}.sqlite.test_sqlite_mask_engine",
+        ),
+    ),
+    MixinContract(
+        BaseFilterEngine,
+        FilterEngineTestMixin,
+        "filter_engine_class",
+        (
+            f"{_FRAMEWORKS}.duckdb.test_duckdb_filter_engine",
+            f"{_FRAMEWORKS}.iceberg.test_iceberg_filter_engine",
+            f"{_FRAMEWORKS}.pandas.test_pandas_filter_engine",
+            f"{_FRAMEWORKS}.polars.test_polars_filter_engine",
+            f"{_FRAMEWORKS}.pyarrow.test_pyarrow_filter_engine",
+            f"{_FRAMEWORKS}.python_dict.test_python_dict_filter_engine",
+            f"{_FRAMEWORKS}.spark.test_spark_filter_engine",
+            f"{_FRAMEWORKS}.sqlite.test_sqlite_filter_engine",
         ),
     ),
 )

@@ -33,10 +33,7 @@ except ImportError:
 class TestPolarsFilterEngine(FilterEngineTestMixin, TimeRangeFilterEngineTestMixin):
     """Unit tests for the PolarsFilterEngine class using shared mixins."""
 
-    @pytest.fixture
-    def filter_engine(self) -> Any:
-        """Return the PolarsFilterEngine class."""
-        return PolarsFilterEngine
+    filter_engine_class = PolarsFilterEngine
 
     @pytest.fixture
     def sample_data(self) -> Any:

@@ -19,10 +19,7 @@ from tests.test_plugins.compute_framework.base_implementations.filter_engine_tes
 class TestPyArrowFilterEngine(FilterEngineTestMixin):
     """Unit tests for the PyArrowFilterEngine class using shared mixin."""
 
-    @pytest.fixture
-    def filter_engine(self) -> Any:
-        """Return the PyArrowFilterEngine class."""
-        return PyArrowFilterEngine
+    filter_engine_class = PyArrowFilterEngine
 
     @pytest.fixture
     def sample_data(self) -> Any:

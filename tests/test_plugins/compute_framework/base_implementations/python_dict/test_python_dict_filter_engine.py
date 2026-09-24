@@ -25,10 +25,7 @@ from tests.test_plugins.compute_framework.base_implementations.time_range_filter
 class TestPythonDictFilterEngine(FilterEngineTestMixin, TimeRangeFilterEngineTestMixin):
     """Unit tests for the PythonDictFilterEngine class using shared mixins."""
 
-    @pytest.fixture
-    def filter_engine(self) -> Any:
-        """Return the PythonDictFilterEngine class."""
-        return PythonDictFilterEngine
+    filter_engine_class = PythonDictFilterEngine
 
     @pytest.fixture
     def sample_data(self) -> Any:

@@ -1,15 +1,17 @@
 """Shared filter engine tests for BaseFilterEngine implementations.
 
-The default suite covers decimal data; frameworks that cannot support a test override it and skip it with a reason.
-Consumers implement every abstract fixture and method, including `decimal_sample_data` and `get_decimal_column_dtype`.
+Consumers set `filter_engine_class`, also read by `tests/test_plugins/test_mixin_consumer_coverage.py`, and
+implement the abstract fixtures and methods their tests need, including `decimal_sample_data` and
+`get_decimal_column_dtype`. A framework that cannot support a test overrides it and skips it with a reason.
 """
 
 from abc import abstractmethod
 from decimal import Decimal
-from typing import Any
+from typing import Any, ClassVar
 
 import pytest
 
+from mloda.provider import BaseFilterEngine
 from mloda.user import Feature
 from mloda.user import SingleFilter
 from mloda.user import FilterType
@@ -21,14 +23,11 @@ from tests.test_plugins.compute_framework.base_implementations.mask_engine_test_
 class FilterEngineTestMixin:
     """Shared tests for all BaseFilterEngine implementations."""
 
-    @pytest.fixture
-    @abstractmethod
-    def filter_engine(self) -> Any:
-        """Return the filter engine class to test.
+    filter_engine_class: ClassVar[type[BaseFilterEngine]]
 
-        Override in framework-specific test class.
-        """
-        raise NotImplementedError
+    @pytest.fixture
+    def filter_engine(self) -> type[BaseFilterEngine]:
+        return self.filter_engine_class
 
     @pytest.fixture
     @abstractmethod

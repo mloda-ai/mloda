@@ -618,6 +618,27 @@ class TestGetFeatureGroupDocsContractViolations:
             del _DocsVersionNonStrUnfilteredFG
             gc.collect()
 
+    @pytest.mark.parametrize("filter_kwarg", ["name", "search", "compute_framework"])
+    def test_filtered_out_class_does_not_compute_version(self, filter_kwarg: str) -> None:
+        """version() hashes the class source, so a class the cheap filters exclude must not pay for it."""
+        version_calls: list[str] = []
+
+        class _DocsVersionSkippedByFilterFG(FeatureGroup):
+            """Test double that records version() calls."""
+
+            @classmethod
+            def version(cls) -> str:
+                version_calls.append(cls.__name__)
+                return "recorded"
+
+        filters: dict[str, Any] = {filter_kwarg: "zzz_matches_no_feature_group"}
+        try:
+            assert get_feature_group_docs(**filters) == []
+            assert version_calls == [], f"version() ran for a class excluded by {filter_kwarg}="
+        finally:
+            del _DocsVersionSkippedByFilterFG
+            gc.collect()
+
 
 class TestDegradedReadLogging:
     """Feature-group reads are labelled, so they warn. Compute-framework reads are not, so they stay silent.

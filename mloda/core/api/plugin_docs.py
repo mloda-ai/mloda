@@ -150,7 +150,6 @@ def get_feature_group_docs(
         fg_name = safe_field(lambda: as_str(fg_class.get_class_name()), cls_name, field=f"{cls_name}.get_class_name")
         doc_fallback = (fg_class.__doc__ or "").strip() or cls_name
         description = safe_field(lambda: as_str(fg_class.description()), doc_fallback, field=f"{cls_name}.description")
-        version = _safe_version(fg_class)
         module = fg_class.__module__
         compute_frameworks: list[str] = safe_field(
             lambda: [cfw.__name__ for cfw in fg_class.compute_framework_definition()],
@@ -173,6 +172,8 @@ def get_feature_group_docs(
             if cfw_name.lower() not in {c.lower() for c in compute_frameworks}:
                 continue
 
+        # Read after the cheap filters: version() hashes the class source.
+        version = _safe_version(fg_class)
         if version_contains is not None and version_contains not in version:
             continue
 

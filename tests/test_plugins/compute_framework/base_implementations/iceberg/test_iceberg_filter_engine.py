@@ -65,12 +65,7 @@ class TestIcebergFilterEngine(FilterEngineTestMixin):
 
     @pytest.fixture
     def mock_iceberg_table(self, sample_data: Any) -> Mock:
-        """Create a mock Iceberg table for testing.
-
-        The mock scan does not apply the row filter itself: it always returns
-        sample_data unfiltered. Real filtering happens through the PyArrow
-        re-pass in apply_filters, which is what these tests exercise.
-        """
+        """Mock Iceberg table whose scan returns sample_data unfiltered; filtering happens in the PyArrow re-pass."""
         mock_table = Mock(spec=IcebergTable)
         mock_scan = Mock()
         mock_scan.to_arrow.return_value = sample_data
@@ -293,7 +288,6 @@ class TestIcebergFilterEngine(FilterEngineTestMixin):
         # Apply filters
         result = IcebergFilterEngine.apply_filters(mock_iceberg_table, mock_feature_set)
 
-        # Verify that scan was called with the pushed row filter
         mock_iceberg_table.scan.assert_called_once()
         call_args = mock_iceberg_table.scan.call_args
         assert "row_filter" in call_args.kwargs
@@ -345,7 +339,6 @@ class TestIcebergFilterEngine(FilterEngineTestMixin):
         # Apply filters
         result = IcebergFilterEngine.apply_filters(mock_iceberg_table, mock_feature_set)
 
-        # Verify that scan was called with the combined pushed filter
         mock_iceberg_table.scan.assert_called_once()
         call_args = mock_iceberg_table.scan.call_args
         assert "row_filter" in call_args.kwargs

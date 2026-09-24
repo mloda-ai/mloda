@@ -28,11 +28,11 @@ _PUSHDOWN_FILTER_TYPES = frozenset({"range", "min", "max", "equal"})
 
 
 class IcebergFilterEngine(PyArrowFilterEngine):
-    """Filters Iceberg tables by scan pushdown plus the PyArrow filters, and pa.Table data with the PyArrow filters."""
+    """Filters Iceberg tables by scan pushdown plus the PyArrow filters; other data via the PyArrow filters."""
 
     @classmethod
     def apply_filters(cls, data: Any, features: Any) -> Any:
-        """Push range, min, max and equal into the Iceberg scan, then apply every filter to the scan result with the PyArrow filters."""
+        """Push range, min, max and equal into the Iceberg scan, then apply every filter with the PyArrow filters."""
         if not isinstance(data, IcebergTable):
             return super().apply_filters(data, features)
 

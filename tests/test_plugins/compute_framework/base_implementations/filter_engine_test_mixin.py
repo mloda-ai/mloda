@@ -54,7 +54,9 @@ class FilterEngineTestMixin:
             id: [1, 2, 3, 4, 5]
             category: ["A", None, "B", None, "C"]
             score: [1, None, 2, None, 3]
-        Nulls in both category and score sit at ids 2 and 4.
+            ratio: [1.0, NaN, 2.0, None, 3.0]
+        Nulls in category and score sit at ids 2 and 4.
+        ratio has a NaN at id 2 and a null at id 4, so missing rows still sit at ids 2 and 4.
         """
         raise NotImplementedError
 
@@ -117,6 +119,14 @@ class FilterEngineTestMixin:
         assert self.result_row_count(result) == 2
         self._assert_values_equal(self.get_column_values(result, "age"), [40, 45])
         self._assert_values_equal(self.get_column_values(result, "id"), [4, 5])
+
+    def test_do_min_filter_drops_null_or_nan_rows(self, filter_engine: Any, nullable_category_sample_data: Any) -> None:
+        single_filter = SingleFilter(Feature("ratio"), FilterType.MIN, {"value": 2.0})
+
+        result = filter_engine.do_min_filter(nullable_category_sample_data, single_filter)
+
+        assert self.result_row_count(result) == 2
+        self._assert_values_equal(self.get_column_values(result, "id"), [3, 5])
 
     def test_do_max_filter(self, filter_engine: Any, sample_data: Any) -> None:
         """Test max filter."""
@@ -229,6 +239,8 @@ class FilterEngineTestMixin:
         [
             pytest.param("category", ["A", None], id="string_category"),
             pytest.param("score", [1, None], id="numeric_score"),
+            pytest.param("ratio", [1.0, None], id="float_ratio"),
+            pytest.param("ratio", [1.0, float("nan")], id="float_ratio_nan"),
         ],
     )
     def test_do_categorical_inclusion_keeps_null_when_none_present(
@@ -271,6 +283,7 @@ class FilterEngineTestMixin:
         [
             pytest.param("category", [None], id="string_category"),
             pytest.param("score", [None], id="numeric_score"),
+            pytest.param("ratio", [None], id="float_ratio"),
         ],
     )
     def test_do_categorical_inclusion_only_none_keeps_only_nulls(

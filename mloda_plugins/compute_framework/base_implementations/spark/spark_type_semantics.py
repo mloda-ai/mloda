@@ -39,6 +39,11 @@ except ImportError:
     _TEMPORAL_TYPES = ()
 
 
+def is_float_column(sdf: Any, column: str) -> bool:
+    """Return True if column is FloatType or DoubleType (the Spark types that can hold NaN)."""
+    return isinstance(sdf.schema[column].dataType, (FloatType, DoubleType))
+
+
 def column_semantics(sdf: Any, column: str) -> ColumnSemantics:
     """Return the observed semantics of ``column`` in a pyspark DataFrame."""
     data_type = sdf.schema[column].dataType

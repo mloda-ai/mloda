@@ -1,5 +1,6 @@
 from typing import Any
 from mloda.core.abstract_plugins.components.contract.comparison_contract import ColumnSemantics
+from mloda.core.abstract_plugins.components.mask.null_or_nan import split_null_or_nan
 from mloda.provider import BaseFilterEngine
 from mloda.user import SingleFilter
 from mloda_plugins.compute_framework.base_implementations.spark import spark_type_semantics
@@ -51,7 +52,10 @@ class SparkFilterEngine(BaseFilterEngine):
         if value is None:
             raise ValueError(f"Filter parameter 'value' not found in {filter_feature.parameter}")
 
-        return data.filter(F.col(column_name) >= value)
+        condition = F.col(column_name) >= value
+        if spark_type_semantics.is_float_column(data, column_name):
+            condition = condition & ~F.isnan(column_name)
+        return data.filter(condition)
 
     @classmethod
     def _apply_max_exclusive_filter(cls, data: Any, column_name: str, threshold: Any) -> Any:
@@ -100,8 +104,11 @@ class SparkFilterEngine(BaseFilterEngine):
             raise ValueError(f"Filter parameter 'values' not found in {filter_feature.parameter}")
 
         # Use Spark's isin function for categorical inclusion
-        non_null = [v for v in values if v is not None]
-        condition = F.col(column_name).isin(non_null)
-        if len(non_null) != len(values):
-            condition = condition | F.col(column_name).isNull()
+        present, has_null_or_nan = split_null_or_nan(values)
+        condition = F.col(column_name).isin(present)
+        if has_null_or_nan:
+            null_or_nan_condition = F.col(column_name).isNull()
+            if spark_type_semantics.is_float_column(data, column_name):
+                null_or_nan_condition = null_or_nan_condition | F.isnan(column_name)
+            condition = condition | null_or_nan_condition
         return data.filter(condition)

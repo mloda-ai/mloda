@@ -31,6 +31,7 @@ class TestPythonDictMaskEngine(MaskEngineTestMixin):
             "status": ["active", None, "inactive", None],
             "value": [10, 20, 30, 40],
             "score": [1, None, 3, None],
+            "ratio": [1.0, float("nan"), 3.0, None],
         }
 
     @pytest.fixture

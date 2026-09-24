@@ -49,6 +49,7 @@ class TestPolarsExprMaskEngine(MaskEngineTestMixin):
                 "status": pl.Series(["active", None, "inactive", None], dtype=pl.String),
                 "value": pl.Series([10, 20, 30, 40], dtype=pl.Int64),
                 "score": pl.Series([1, None, 3, None], dtype=pl.Int64),
+                "ratio": pl.Series([1.0, float("nan"), 3.0, None], dtype=pl.Float64),
             }
         )
 
@@ -98,6 +99,13 @@ class TestPolarsExprMaskEngine(MaskEngineTestMixin):
         result = lf.filter(mask).collect()
         assert result["status"].to_list() == ["active", "active"]
         assert result["value"].to_list() == [10, 30]
+
+    def test_greater_equal_missing_column_raises_column_not_found(self, engine: type[BaseMaskEngine]) -> None:
+        """A missing column must surface polars' own error, not an AttributeError from the NaN check."""
+        lf = pl.LazyFrame({"a": [1.0, 2.0]})
+        with pytest.raises(pl.exceptions.ColumnNotFoundError):
+            mask = engine.greater_equal(lf, "missing", 1.0)
+            lf.select(mask).collect()
 
 
 @pytest.mark.skipif(pl is None, reason="polars not installed")

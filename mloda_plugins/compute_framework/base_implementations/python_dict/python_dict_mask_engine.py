@@ -1,6 +1,7 @@
 from typing import Any, Callable
 
 from mloda.core.abstract_plugins.components.mask.base_mask_engine import BaseMaskEngine
+from mloda.core.abstract_plugins.components.mask.null_or_nan import is_null_or_nan, split_null_or_nan
 from mloda.core.abstract_plugins.components.utils import require_value_collection
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_utils import row_count
 
@@ -35,6 +36,8 @@ class PythonDictMaskEngine(BaseMaskEngine):
 
     @classmethod
     def equal(cls, data: Any, column: str, value: Any) -> list[Any]:
+        if is_null_or_nan(value):
+            return cls._mask(data, column, is_null_or_nan)
         return cls._mask(data, column, lambda v: v == value)
 
     @classmethod
@@ -57,4 +60,8 @@ class PythonDictMaskEngine(BaseMaskEngine):
     def is_in(cls, data: Any, column: str, values: Any) -> list[Any]:
         require_value_collection(values, "is_in values")
         allowed = set(values)
-        return cls._mask(data, column, lambda v: v in allowed)
+        present, has_null_or_nan = split_null_or_nan(allowed)
+        present_set = set(present)
+        if has_null_or_nan:
+            return cls._mask(data, column, lambda v: v in present_set or is_null_or_nan(v))
+        return cls._mask(data, column, lambda v: v in present_set)

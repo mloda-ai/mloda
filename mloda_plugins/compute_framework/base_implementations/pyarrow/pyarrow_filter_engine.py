@@ -1,6 +1,7 @@
 from typing import Any
 
 from mloda.core.abstract_plugins.components.contract.comparison_contract import ColumnSemantics
+from mloda.core.abstract_plugins.components.mask.null_or_nan import split_null_or_nan
 from mloda.provider import BaseFilterEngine
 from mloda.user import SingleFilter
 from mloda_plugins.compute_framework.base_implementations.pyarrow import pyarrow_type_semantics
@@ -111,6 +112,9 @@ class PyArrowFilterEngine(BaseFilterEngine):
         if values is None:
             raise ValueError(f"Filter parameter 'values' not found in {filter_feature.parameter}")
 
-        values_array = value_set(data[column_name], values)
+        present, has_null_or_nan = split_null_or_nan(values)
+        values_array = value_set(data[column_name], present)
         mask = pc.is_in(data[column_name], values_array)
+        if has_null_or_nan:
+            mask = pc.or_(mask, pc.is_null(data[column_name], nan_is_null=True))
         return data.filter(mask)

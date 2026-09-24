@@ -27,6 +27,14 @@ def is_ordered_arrow_type(t: "pa.DataType") -> bool:
     return bool(pa.types.is_integer(t) or pa.types.is_floating(t) or pa.types.is_decimal(t) or pa.types.is_temporal(t))
 
 
+def null_or_nan_condition(quoted_column: str, nan_condition: str | None) -> str:
+    """Return a SQL condition true when the column is NULL, plus ``nan_condition`` when given."""
+    cond = f"{quoted_column} IS NULL"
+    if nan_condition is not None:
+        return f"({cond} OR {nan_condition})"
+    return cond
+
+
 def quote_ident(name: str) -> str:
     """Quote a SQL identifier with double-quote escaping (SQL standard)."""
     return f'"{name.replace(chr(34), chr(34) + chr(34))}"'

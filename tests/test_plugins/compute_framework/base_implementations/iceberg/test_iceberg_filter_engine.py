@@ -89,6 +89,11 @@ class TestIcebergFilterEngine(FilterEngineTestMixin):
     def test_do_max_filter(self, filter_engine: Any, sample_data: Any) -> None: ...
 
     @pytest.mark.skip(reason=_NOT_PUSHDOWN_REASON)
+    def test_do_min_filter_drops_null_or_nan_rows(
+        self, filter_engine: Any, nullable_category_sample_data: Any
+    ) -> None: ...
+
+    @pytest.mark.skip(reason=_NOT_PUSHDOWN_REASON)
     def test_do_max_filter_with_tuple(self, filter_engine: Any, sample_data: Any) -> None: ...
 
     @pytest.mark.skip(reason=_NOT_PUSHDOWN_REASON)

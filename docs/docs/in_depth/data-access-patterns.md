@@ -76,6 +76,10 @@ Readers are classified structurally; no reader code is executed for classificati
 
 `BaseInputData.describe_columns(data_access) -> dict[str, DataType | None]` maps column name to `DataType` (`None` where unknown). It raises `NotImplementedError` when a reader can't enumerate columns, and `ImportError` when a backend it needs is missing; a missing or unreadable source raises `OSError` or `ValueError`. `ReadFile` supplies a family default wrapping `get_column_names` with unknown types and accepting a `str` or `Path` data access (anything else raises `ValueError`); `ParquetReader`, `FeatherReader`, and `OrcReader` override it to report the types stored in the file's own schema, and `JsonReader` the types pyarrow infers while parsing. `SQLITEReader` overrides it too, from SQLite's declared (unenforced) column types; it needs `data_access["table_name"]` already set, e.g. `{"sqlite": path, "table_name": "customers"}`.
 
+### Row counts
+
+`BaseInputData.count_rows(data_access, compute_framework) -> int | None` returns the row count of `data_access` without loading it, or `None` when only a read can tell (the default); it raises `ImportError` when a backend it needs is missing, and `OSError`/`ValueError` for a non-path, missing, or unreadable source. `ParquetReader`, `OrcReader`, and `FeatherReader` count from file metadata for every compute framework; `CsvReader` only under PythonDict, since other frameworks read CSV through pyarrow, whose row split can differ. A subclass overriding `load_data` gets `None` unless it also overrides `count_rows`. The count is of `data_access` itself, not of the step's output: filters, extenders, and feature-group logic may change what the step actually reports.
+
 ### Selecting among sibling readers
 
 A feature selects a specific reader with an Option whose key equals the reader's `BaseInputData.data_access_name()`, which defaults to `cls.__name__` (unique per class, so sibling readers cannot collide) and which a reader that overrides it keeps unique within its family itself:
@@ -86,7 +90,7 @@ Feature("value", options={UbaAirReader.__name__: url})
 
 The reader class itself is also accepted as the key, e.g. `Feature("value", options={UbaAirReader: url})`; it is normalized to the class-name string when the Options object is constructed, so both forms are one identity.
 
-The matched `(ReaderClass, data_access)` pair is stored under the reserved `"BaseInputData"` options key and consumed by `init_reader` at load time.
+The matched `(ReaderClass, data_access)` pair is stored under the reserved `"BaseInputData"` options key and consumed by `init_reader` at load time; `PlanStep.reader_data_access` exposes the same pair on a resolved plan. `data_access` may hold credentials, so use `reader.data_access_identity(data_access)` for display and logs.
 
 For non-file sources such as HTTP endpoints, subclassing `ReadFile` and overriding `match_subclass_data_access` plus `load_data` is a supported pattern; on that path `suffix()` is never consulted (it is inert). `ApiInputData` injects in-memory data passed through the API request and is not an HTTP client.
 

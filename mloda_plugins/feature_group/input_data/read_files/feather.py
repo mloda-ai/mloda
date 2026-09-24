@@ -1,9 +1,12 @@
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from mloda.core.optional_dependency import require
 from mloda.provider import FeatureSet
 from mloda.user import DataType
 from mloda_plugins.feature_group.input_data.read_file import ReadFile
+
+if TYPE_CHECKING:
+    from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 
 
 class FeatherReader(ReadFile):
@@ -123,3 +126,15 @@ class FeatherReader(ReadFile):
         file_name = cls._file_path(data_access)
         with pyarrow_ipc.open_file(file_name) as reader:
             return {field.name: DataType.from_arrow_type_safe(field.type) for field in reader.schema}
+
+    @classmethod
+    def count_rows(cls, data_access: Any, compute_framework: "type[ComputeFramework]") -> int | None:
+        if cls._is_overridden(FeatherReader, "load_data"):
+            return None
+        pyarrow_dataset = require("pyarrow.dataset", "counting Feather rows")
+        pyarrow_fs = require("pyarrow.fs", "counting Feather rows")
+        file_name = cls._file_path(data_access)
+        # One local file, not a dataset: a directory or missing path raises OSError, no URI fetch.
+        fragment = pyarrow_dataset.IpcFileFormat().make_fragment(file_name, filesystem=pyarrow_fs.LocalFileSystem())
+        count: int = fragment.count_rows()
+        return count

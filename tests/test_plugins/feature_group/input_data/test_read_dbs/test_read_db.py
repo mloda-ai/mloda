@@ -12,6 +12,9 @@ from mloda.user import Feature
 from mloda.user import Options
 from mloda.user import PluginCollector
 from mloda.user import mloda
+from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import (
+    PythonDictFramework,
+)
 from mloda_plugins.feature_group.input_data.read_db import ReadDB
 from mloda_plugins.feature_group.input_data.read_dbs.sqlite import SQLITEReader
 from tests.test_plugins.feature_group.input_data.test_classes.test_input_classes import DBInputDataTestFeatureGroup
@@ -157,6 +160,10 @@ class TestReadDB:
         """ReadDB does not override describe_columns, so this pins BaseInputData's own default raise."""
         with pytest.raises(NotImplementedError):
             ReadDB.describe_columns(None)
+
+    def test_count_rows_not_overridden(self) -> None:
+        """ReadDB does not override count_rows, so this pins BaseInputData's own default of None."""
+        assert ReadDB.count_rows(None, PythonDictFramework) is None
 
     def test_init_reader_no_options(self) -> None:
         read_db = ReadDB()

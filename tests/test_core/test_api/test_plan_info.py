@@ -31,6 +31,9 @@ Contract under test:
   * ``build_plan_steps`` raises ``ValueError`` on a step it does not know, instead of dropping it.
   * Compute steps carry ``feature_set_options`` (a deep-copied, group-only snapshot of the step's
     ``FeatureSet.options``) and ``step_uuid``; both stay out of equality.
+  * ``PlanStep.reader_data_access`` is a read-only property: the ``(ReaderClass, data_access)`` pair a
+    compute step resolved for reading its input file, or ``None`` for join/transform steps or a
+    compute step with no reader.
   * ``mlodaAPI.resolved_plan()`` returns ``list[PlanStep]`` on a prepared session, both before
     and after ``run()``, in execution-plan order, and matches the plan that actually executed.
   * ``mlodaAPI.explain(features, ...)`` mirrors the ``prepare`` parameter shape with keyword-only
@@ -58,6 +61,7 @@ import numpy as np
 import pandas as pd
 import pyarrow as pa
 import pyarrow.compute as pc
+import pyarrow.parquet as pq
 import pytest
 
 # Aliased: a bare ``import mloda.user`` would bind the name ``mloda`` to the package and collide
@@ -69,6 +73,7 @@ from mloda.core.prepare.resolved_join import ResolvedJoinPlan
 from mloda.provider import BaseInputData, ComputeFramework, DataCreator, FeatureGroup, FeatureSet
 from mloda.steward import Extender, ExtenderHook, HookContext
 from mloda.user import (
+    DataAccessCollection,
     Feature,
     FeatureName,
     Index,
@@ -83,6 +88,8 @@ from mloda.user import (
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.pandas import PandasAggregatedFeatureGroup
+from mloda_plugins.feature_group.input_data.read_file_feature import ReadFileFeature  # noqa: F401
+from mloda_plugins.feature_group.input_data.read_files.parquet import ParquetReader
 
 
 # ---------------------------------------------------------------------------
@@ -832,6 +839,52 @@ class TestPlanStepFeatureSetOptions:
         assert step == copy.deepcopy(step)
         assert step == without_options
         assert hash(step) == hash(without_options)
+
+
+# ---------------------------------------------------------------------------
+# reader_data_access
+# ---------------------------------------------------------------------------
+
+
+class TestPlanStepReaderDataAccess:
+    """reader_data_access is a read-only property, not a dataclass field."""
+
+    def test_compute_step_reading_a_file_reports_reader_and_data_access(self, tmp_path: Path) -> None:
+        file_path = tmp_path / "plan_info_rows.parquet"
+        table = pa.table({"plan_info_rows_a": [1, 2, 3]})
+        pq.write_table(table, str(file_path))
+        dac = DataAccessCollection(files={str(file_path)})
+
+        explained = mloda.explain(
+            ["plan_info_rows_a"],
+            compute_frameworks={PyArrowTable},
+            data_access_collection=dac,
+        )
+
+        compute_steps = [step for step in explained if step.step_kind == "compute"]
+        assert len(compute_steps) == 1
+        step = compute_steps[0]
+
+        assert step.reader_data_access == (ParquetReader, str(file_path))
+
+        reader, access = step.reader_data_access
+        assert step.compute_framework is not None
+        assert reader.count_rows(access, step.compute_framework) == 3
+
+    def test_reader_data_access_is_not_a_dataclass_field(self) -> None:
+        assert "reader_data_access" not in {field.name for field in dataclasses.fields(PlanStep)}
+
+    def test_data_creator_backed_compute_step_reports_none(self) -> None:
+        session = _prepare_chained_session()
+        step = next(s for s in session.resolved_plan() if s.feature_group is PlanInfoPandasSource)
+        assert step.reader_data_access is None
+
+    def test_join_and_transform_steps_report_none(self) -> None:
+        prepared = _prepare_cross_framework_join_session().resolved_plan()
+        non_compute_steps = [step for step in prepared if step.step_kind in ("join", "transform")]
+        assert non_compute_steps, "the fixture must plan a join or transform step"
+        for step in non_compute_steps:
+            assert step.reader_data_access is None
 
 
 # ---------------------------------------------------------------------------

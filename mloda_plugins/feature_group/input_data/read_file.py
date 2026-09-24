@@ -37,6 +37,7 @@ class ReadFile(BaseInputData):
     - suffix
     - get_column_names
     - describe_columns (optional; default wraps get_column_names with unknown types)
+    - count_rows (optional; default None)
 
     A ReadFile subclass classifies as a final reader by overriding ``load_data``
     wholesale. It may return its table directly, or a descriptor materialized by
@@ -108,7 +109,7 @@ class ReadFile(BaseInputData):
         """Coerce a str or Path data_access to a plain path string; anything else is a caller error."""
         if isinstance(data_access, (str, Path)):
             return str(data_access)
-        raise ValueError(f"describe_columns requires a file path (str or Path), got {type(data_access).__name__}.")
+        raise ValueError(f"A file reader requires a file path (str or Path), got {type(data_access).__name__}.")
 
     @classmethod
     def describe_columns(cls, data_access: Any) -> dict[str, DataType | None]:

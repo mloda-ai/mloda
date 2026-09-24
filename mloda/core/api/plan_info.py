@@ -1,15 +1,17 @@
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
-from typing import Literal, TYPE_CHECKING
+from typing import Any, Literal, TYPE_CHECKING
 from uuid import UUID
 
 from mloda.core.abstract_plugins.components.error_utils import internal_invariant_error
+from mloda.core.abstract_plugins.components.input_data.base_input_data import RESERVED_READER_OPTION_KEY
 from mloda.core.abstract_plugins.components.options import Options, _safe_deepcopy
 from mloda.core.core.step.feature_group_step import FeatureGroupStep
 from mloda.core.core.step.join_step import JoinStep
 from mloda.core.core.step.transform_frame_work_step import TransformFrameworkStep
 
 if TYPE_CHECKING:
+    from mloda.core.abstract_plugins.components.input_data.base_input_data import BaseInputData
     from mloda.core.abstract_plugins.compute_framework import ComputeFramework
     from mloda.core.abstract_plugins.feature_group import FeatureGroup
     from mloda.core.prepare.resolved_join import ResolvedJoin, ResolvedJoinPlan
@@ -57,6 +59,8 @@ class PlanStep:
     are None for join/transform steps and, like ``join_token``, excluded from equality.
     ``input_feature_edges`` maps each output feature name to its declared inputs (injected features absent);
     it participates in equality but is excluded from hashing.
+
+    ``reader_data_access`` is a derived property reading the (reader class, data access) pair from group options.
     """
 
     step_kind: Literal["compute", "join", "transform"]
@@ -104,6 +108,12 @@ class PlanStep:
     @property
     def declared_right_framework_names(self) -> tuple[str, ...]:
         return tuple(framework.get_class_name() for framework in self.declared_right_frameworks)
+
+    @property
+    def reader_data_access(self) -> tuple[type["BaseInputData"], Any] | None:
+        return (
+            None if self.feature_set_options is None else self.feature_set_options.group.get(RESERVED_READER_OPTION_KEY)
+        )
 
 
 def build_plan_steps(

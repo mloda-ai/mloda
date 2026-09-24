@@ -254,11 +254,7 @@ class IcebergPyArrowRegularFeatureGroupForFilterTest(RegularFeatureGroupForFilte
 
 
 class IcebergTableRegularFeatureGroupForFilterTest(RegularFeatureGroupForFilterTest):
-    """Same data as RegularFeatureGroupForFilterTest, wrapped in a Mock Iceberg Table result.
-
-    ``schema()`` returns a real ``pyiceberg.schema.Schema`` so the framework's filter-column
-    validation runs against a real Iceberg schema, not a bare Mock.
-    """
+    """Same data as RegularFeatureGroupForFilterTest, in a Mock Iceberg Table whose schema() returns a real Schema."""
 
     @classmethod
     def compute_framework_rule(cls) -> set[type[ComputeFramework]]:

@@ -338,7 +338,7 @@ filter is applied, not *where* the computation runs physically:
 | Eager | Pandas, PyArrow | Post-hoc filter in memory after full materialization |
 | Lazy (SQL) | DuckDB, SQLite | `.filter()` adds WHERE to query plan; optimizer may push to scan time |
 | Lazy (dataframe) | Polars, Spark | `.filter()` adds node to lazy plan; optimizer decides physical order |
-| Scan-time | Iceberg | For a `Table` result, range, min, max and equal predicates are pushed into the scan, then every filter is applied to the materialized `pa.Table` with the PyArrow filters; a `pa.Table` result is filtered as PyArrow |
+| Scan-time | Iceberg | For a `Table` result, range, min, max and equal are pushed into the scan, then every filter runs on the scan result as PyArrow; a `pa.Table` result is filtered as PyArrow |
 
 All frameworks that return `True` produce the same logical result (non-matching rows
 absent from output), but the physical execution path differs.

@@ -36,7 +36,7 @@ from tests.test_core.test_tooling import MlodaTestRunner, PARALLELIZATION_MODES_
 
 
 class InlineFilterEngine(PyArrowFilterEngine):
-    """Filter engine that returns final_filters()=False, simulating Iceberg-like behavior."""
+    """Filter engine that returns final_filters()=False, like an engine that filters at scan time."""
 
     @classmethod
     def final_filters(cls) -> bool:

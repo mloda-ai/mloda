@@ -84,10 +84,6 @@ class TestIcebergFilterEngine(FilterEngineTestMixin):
         mock_feature_set.get_all_names.return_value = ["age", "name", "category"]
         return mock_feature_set
 
-    def test_final_filters(self, filter_engine: Any) -> None:
-        """Test that final_filters returns False for Iceberg (predicate pushdown)."""
-        assert filter_engine.final_filters() is False
-
     @pytest.fixture
     def nullable_category_sample_data(self) -> Any:
         return pa.Table.from_pydict(

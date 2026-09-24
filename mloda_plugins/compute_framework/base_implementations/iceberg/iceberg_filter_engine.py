@@ -31,11 +31,6 @@ class IcebergFilterEngine(PyArrowFilterEngine):
     """Filters Iceberg tables by scan pushdown plus the PyArrow filters, and pa.Table data with the PyArrow filters."""
 
     @classmethod
-    def final_filters(cls) -> bool:
-        """Iceberg filters are applied during scan, not after feature calculation."""
-        return False
-
-    @classmethod
     def apply_filters(cls, data: Any, features: Any) -> Any:
         """Push range, min, max and equal into the Iceberg scan, then apply every filter to the scan result with the PyArrow filters."""
         if not isinstance(data, IcebergTable):

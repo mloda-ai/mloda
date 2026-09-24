@@ -1,9 +1,11 @@
+import re
 from decimal import Decimal
 from typing import Any
 
 import pyarrow as pa
 import pytest
 
+from mloda.provider import BaseMaskEngine
 from mloda_plugins.compute_framework.base_implementations.duckdb.duckdb_mask_engine import (
     DuckDBMaskEngine,
 )
@@ -77,3 +79,19 @@ class TestDuckDBSqlMaskEngine(SqlMaskEngineTestMixin):
         rel = DuckdbRelation.from_arrow(connection, table)
         mask = DuckDBMaskEngine.greater_equal(rel, "ratio", 1.0)
         assert self.evaluate_mask(mask, rel) == [True, False, True, False]
+
+    @pytest.mark.parametrize(
+        "method,arg",
+        [
+            ("equal", None),
+            ("greater_equal", 1.0),
+            ("greater_than", 1.0),
+            ("is_in", [None]),
+        ],
+    )
+    def test_data_none_raises_type_error(self, engine: type[BaseMaskEngine], method: str, arg: Any) -> None:
+        with pytest.raises(
+            TypeError,
+            match=re.escape(f"DuckDBMaskEngine.{method} needs the DuckdbRelation being masked as data, got None"),
+        ):
+            getattr(engine, method)(None, "value", arg)

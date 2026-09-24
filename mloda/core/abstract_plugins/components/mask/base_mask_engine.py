@@ -10,6 +10,7 @@ class BaseMaskEngine(ABC):
     A null or NaN row never matches (a mask holds False there) unless the call targets them, as
     ``equal(..., None)`` and ``is_in`` with None do; a NaN value counts as None. SQL conditions
     yield NULL, which WHERE and CASE WHEN treat as no match.
+    ``data`` is the frame or relation being masked, never None.
     """
 
     @classmethod
@@ -66,6 +67,13 @@ class BaseMaskEngine(ABC):
         """Boolean mask of data[column] in values (list/tuple/set/frozenset, else TypeError); empty matches
         nothing, a None or NaN in values matches null/NaN rows."""
         ...
+
+    @classmethod
+    def _require_data(cls, data: Any, method: str) -> None:
+        """Raise TypeError if data is None, naming the caller method and expected type."""
+        if data is None:
+            type_name = cls.supported_data_type().__name__
+            raise TypeError(f"{cls.__name__}.{method} needs the {type_name} being masked as data, got None")
 
     # -- Convenience methods (concrete, built from primitives above) ----------
 

@@ -41,7 +41,9 @@ Every `BaseMaskEngine` subclass implements these abstract classmethods:
 A null or NaN row never matches (a mask holds `False` there) unless the call targets them, as
 `equal(..., None)` and `is_in` with `None` do; a NaN value counts as `None`; SQL conditions yield
 NULL, which is treated as no match. The engines do not tell NaN from null, so use the framework's
-native API directly when that distinction matters.
+native API directly when that distinction matters. `data` is the frame or relation being masked,
+never `None`; the Polars lazy and DuckDB engines raise `TypeError` on `None` in the calls that
+read its column types.
 
 ### Convenience methods
 

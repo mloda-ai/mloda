@@ -4,6 +4,7 @@ This file adds Polars-expr-specific unit tests that verify pl.Expr return types
 and a LazyFrame end-to-end test.
 """
 
+import re
 from decimal import Decimal
 from typing import Any
 
@@ -106,6 +107,22 @@ class TestPolarsExprMaskEngine(MaskEngineTestMixin):
         with pytest.raises(pl.exceptions.ColumnNotFoundError):
             mask = engine.greater_equal(lf, "missing", 1.0)
             lf.select(mask).collect()
+
+    @pytest.mark.parametrize(
+        "method,arg",
+        [
+            ("equal", None),
+            ("greater_equal", 1.0),
+            ("greater_than", 1.0),
+            ("is_in", [1]),
+        ],
+    )
+    def test_data_none_raises_type_error(self, engine: type[BaseMaskEngine], method: str, arg: Any) -> None:
+        with pytest.raises(
+            TypeError,
+            match=re.escape(f"PolarsExprMaskEngine.{method} needs the LazyFrame being masked as data, got None"),
+        ):
+            getattr(engine, method)(None, "value", arg)
 
 
 @pytest.mark.skipif(pl is None, reason="polars not installed")

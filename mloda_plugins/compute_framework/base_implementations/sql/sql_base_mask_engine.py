@@ -32,6 +32,11 @@ class SqlBaseMaskEngine(BaseMaskEngine):
         return None
 
     @classmethod
+    def _check_nan_data(cls, data: Any, method: str) -> None:
+        """No-op hook; a dialect whose _nan_condition reads data overrides this to reject None."""
+        return None
+
+    @classmethod
     def _null_or_nan_condition(cls, data: Any, column: str) -> str:
         return null_or_nan_condition(quote_ident(column), cls._nan_condition(data, column))
 
@@ -46,12 +51,14 @@ class SqlBaseMaskEngine(BaseMaskEngine):
     @classmethod
     def equal(cls, data: Any, column: str, value: Any) -> str:
         if is_null_or_nan(value):
+            cls._check_nan_data(data, "equal")
             return cls._null_or_nan_condition(data, column)
         return f"{quote_ident(column)} = {quote_value(value)}"
 
     @classmethod
     def greater_equal(cls, data: Any, column: str, value: Any) -> str:
         cond = f"{quote_ident(column)} >= {quote_value(value)}"
+        cls._check_nan_data(data, "greater_equal")
         nan_cond = cls._nan_condition(data, column)
         if nan_cond is not None:
             return f"(({cond}) AND NOT {nan_cond})"
@@ -68,6 +75,7 @@ class SqlBaseMaskEngine(BaseMaskEngine):
     @classmethod
     def greater_than(cls, data: Any, column: str, value: Any) -> str:
         cond = f"{quote_ident(column)} > {quote_value(value)}"
+        cls._check_nan_data(data, "greater_than")
         nan_cond = cls._nan_condition(data, column)
         if nan_cond is not None:
             return f"(({cond}) AND NOT {nan_cond})"
@@ -88,6 +96,7 @@ class SqlBaseMaskEngine(BaseMaskEngine):
             quoted = ", ".join(quote_value(v) for v in present)
             parts.append(f"{quote_ident(column)} IN ({quoted})")
         if has_null_or_nan:
+            cls._check_nan_data(data, "is_in")
             parts.append(cls._null_or_nan_condition(data, column))
         if len(parts) == 1:
             return parts[0]

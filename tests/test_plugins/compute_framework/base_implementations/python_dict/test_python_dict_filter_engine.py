@@ -73,16 +73,6 @@ class TestPythonDictFilterEngine(FilterEngineTestMixin, TimeRangeFilterEngineTes
 
     # Framework-specific tests below
 
-    def test_do_min_filter_missing_value(self, sample_data: Any) -> None:
-        """Test min filter with missing value parameter."""
-        feature = Feature("age")
-        filter_type = FilterType.MIN
-        parameter = {"invalid": 30}  # Wrong parameter name
-        single_filter = SingleFilter(feature, filter_type, parameter)
-
-        with pytest.raises(ValueError, match="Filter parameter 'value' not found"):
-            PythonDictFilterEngine.do_min_filter(sample_data, single_filter)
-
     def test_do_min_filter_rejects_min_key_fallback(self) -> None:
         """``do_min_filter`` must accept ONLY the canonical ``{"value": ...}`` parameter key.
 
@@ -95,36 +85,6 @@ class TestPythonDictFilterEngine(FilterEngineTestMixin, TimeRangeFilterEngineTes
 
         with pytest.raises(ValueError, match="Filter parameter 'value' not found"):
             PythonDictFilterEngine.do_min_filter(data, single_filter)
-
-    def test_do_equal_filter_missing_value(self, sample_data: Any) -> None:
-        """Test equal filter with missing value parameter."""
-        feature = Feature("age")
-        filter_type = FilterType.EQUAL
-        parameter = {"invalid": 30}  # Wrong parameter name
-        single_filter = SingleFilter(feature, filter_type, parameter)
-
-        with pytest.raises(ValueError, match="Filter parameter 'value' not found"):
-            PythonDictFilterEngine.do_equal_filter(sample_data, single_filter)
-
-    def test_do_regex_filter_missing_value(self, sample_data: Any) -> None:
-        """Test regex filter with missing value parameter."""
-        feature = Feature("name")
-        filter_type = FilterType.REGEX
-        parameter = {"invalid": "^A"}  # Wrong parameter name
-        single_filter = SingleFilter(feature, filter_type, parameter)
-
-        with pytest.raises(ValueError, match="Filter parameter 'value' not found"):
-            PythonDictFilterEngine.do_regex_filter(sample_data, single_filter)
-
-    def test_do_categorical_inclusion_filter_missing_values(self, sample_data: Any) -> None:
-        """Test categorical inclusion filter with missing values parameter."""
-        feature = Feature("category")
-        filter_type = FilterType.CATEGORICAL_INCLUSION
-        parameter = {"invalid": ["A", "B"]}  # Wrong parameter name
-        single_filter = SingleFilter(feature, filter_type, parameter)
-
-        with pytest.raises(ValueError, match="Filter parameter 'values' not found"):
-            PythonDictFilterEngine.do_categorical_inclusion_filter(sample_data, single_filter)
 
     def test_filter_with_none_values(self, sample_data: Any) -> None:
         """Test filtering with None values in data."""

@@ -94,7 +94,14 @@ class TestIcebergFilterEngine(FilterEngineTestMixin):
     ) -> None: ...
 
     @pytest.mark.skip(reason=_NOT_PUSHDOWN_REASON)
-    def test_do_max_filter_with_tuple(self, filter_engine: Any, sample_data: Any) -> None: ...
+    def test_do_max_filter_with_tuple(
+        self,
+        filter_engine: Any,
+        sample_data: Any,
+        max_exclusive: bool,
+        expected_ages: list[int],
+        expected_ids: list[int],
+    ) -> None: ...
 
     @pytest.mark.skip(reason=_NOT_PUSHDOWN_REASON)
     def test_do_equal_filter(self, filter_engine: Any, sample_data: Any) -> None: ...
@@ -130,7 +137,15 @@ class TestIcebergFilterEngine(FilterEngineTestMixin):
     def test_apply_filters(self, filter_engine: Any, sample_data: Any) -> None: ...
 
     @pytest.mark.skip(reason=_NOT_PUSHDOWN_REASON)
-    def test_do_range_filter_missing_parameters(self, filter_engine: Any, sample_data: Any) -> None: ...
+    def test_do_filter_rejects_invalid_parameters(
+        self,
+        filter_engine: Any,
+        sample_data: Any,
+        filter_type: FilterType,
+        column: str,
+        parameter: dict[str, Any],
+        match: str,
+    ) -> None: ...
 
     @pytest.mark.skip(reason=_NOT_PUSHDOWN_REASON)
     def test_min_filter_decimal(self, filter_engine: Any, decimal_sample_data: Any) -> None: ...

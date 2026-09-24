@@ -263,7 +263,7 @@ result = mloda.run_all(
     [feature],
     data_access_collection=data_access_collection
 )
-result[0]  # Returns pyiceberg.table.Table or pyarrow.Table
+result[0]  # Returns pyarrow.Table
 ```
 
 **Note**: Iceberg framework requires a catalog connection object for table operations. It's optimized for data lake scenarios with schema evolution, time travel capabilities, and large-scale analytics. The framework uses PyArrow as an interchange format for compatibility with other mloda frameworks. Does not support mloda framework inherent multiprocessing (the catalog stays in the parent process).

@@ -141,12 +141,34 @@ class TestIcebergFrameworkComputeFramework:
         with pytest.raises(ValueError, match="Expected an Iceberg catalog or table"):
             self.iceberg_framework.set_framework_connection_object("invalid")
 
-    def test_select_data_by_column_names_non_iceberg(self) -> None:
-        """Test that non-Iceberg data passes through unchanged."""
-        data = "not_iceberg_table"
-        feature_names = [FeatureName("column1")]
-        result = self.iceberg_framework.select_data_by_column_names(data, feature_names)
-        assert result is data
+    def test_select_data_by_column_names_pyarrow_table(self) -> None:
+        """A pa.Table is column-selected like PyArrowTable does it."""
+        data = pa.table({"a": [1], "b": [2], "c": [3]})
+        result = self.iceberg_framework.select_data_by_column_names(data, [FeatureName("a")])
+        assert result.column_names == ["a"]
+
+    def test_select_data_by_column_names_iceberg_table(self) -> None:
+        """An Iceberg Table is scanned with selected_fields and materialized in request order."""
+        mock_table = Mock(spec=IcebergTable)
+        mock_schema = Mock()
+        mock_schema.column_names = ["a", "b", "c"]
+        mock_table.schema.return_value = mock_schema
+        mock_scan = Mock()
+        mock_scan.to_arrow.return_value = pa.table({"a": [1], "c": [3]})
+        mock_table.scan.return_value = mock_scan
+
+        result = self.iceberg_framework.select_data_by_column_names(
+            mock_table,
+            [FeatureName("c"), FeatureName("a")],
+            column_ordering="request_order",
+            request_feature_order=["c", "a"],
+        )
+
+        mock_table.scan.assert_called_once()
+        _, kwargs = mock_table.scan.call_args
+        assert set(kwargs["selected_fields"]) == {"a", "c"}
+        assert isinstance(result, pa.Table)
+        assert result.column_names == ["c", "a"]
 
     def test_set_column_names_iceberg_table(self) -> None:
         """Test setting column names from Iceberg table."""

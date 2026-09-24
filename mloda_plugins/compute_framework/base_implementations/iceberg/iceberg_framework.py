@@ -125,27 +125,20 @@ class IcebergFramework(ComputeFramework):
         column_ordering: str | None = None,
         request_feature_order: list[str] | None = None,
     ) -> Any:
-        """
-        Select specific columns from Iceberg table.
-
-        Args:
-            data: Iceberg table
-            selected_feature_names: Sequence of feature names to select
-            column_ordering: Optional column ordering strategy
-
-        Returns:
-            Iceberg table scan with selected columns
-        """
-        if not isinstance(data, IcebergTable):
-            return data
-
-        column_names = set(data.schema().column_names)
-        _selected_feature_names = self.identify_naming_convention(
-            selected_feature_names, column_names, ordering=column_ordering, request_feature_order=request_feature_order
+        """Select the requested columns; an Iceberg table is scanned into a pa.Table."""
+        column_names = self._extract_column_names(data)
+        selected = list(
+            self.identify_naming_convention(
+                selected_feature_names,
+                column_names,
+                ordering=column_ordering,
+                request_feature_order=request_feature_order,
+            )
         )
-
-        # Use Iceberg's scan with column selection
-        return data.scan(selected_fields=tuple(_selected_feature_names))
+        if IcebergTable is not None and isinstance(data, IcebergTable):
+            # The scan projects in table schema order; the select below restores the requested order.
+            data = data.scan(selected_fields=tuple(selected)).to_arrow()
+        return data.select(selected)
 
     def _extract_column_names(self, data: Any) -> set[str]:
         if IcebergTable is not None and isinstance(data, IcebergTable):

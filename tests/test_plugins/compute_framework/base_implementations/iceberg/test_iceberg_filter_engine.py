@@ -1,6 +1,8 @@
+import datetime
 from decimal import Decimal
 from typing import Any
 import pytest
+import numpy as np
 from unittest.mock import Mock, patch
 
 from mloda.user import Feature
@@ -19,6 +21,16 @@ try:
     import pyiceberg
     import pyarrow as pa
     from pyiceberg.table import Table as IcebergTable
+    from pyiceberg.schema import Schema
+    from pyiceberg.types import (
+        NestedField,
+        LongType,
+        StringType,
+        DoubleType,
+        DateType,
+        TimestampType,
+        StructType,
+    )
     from pyiceberg.expressions import (
         GreaterThan,
         LessThan,
@@ -26,22 +38,56 @@ try:
         LessThanOrEqual,
         EqualTo,
         And,
+        Or,
+        In,
+        IsNull,
+        IsNaN,
         Reference,
         AlwaysTrue,
     )
+    from pyiceberg.expressions.visitors import bind
 except ImportError:
     logger.warning("PyIceberg or PyArrow is not installed. Some tests will be skipped.")
     pyiceberg = None  # type: ignore
     pa = None  # type: ignore[assignment, unused-ignore]
     IcebergTable = None  # type: ignore
+    Schema = None  # type: ignore
+    NestedField = None  # type: ignore
+    LongType = None  # type: ignore
+    StringType = None  # type: ignore
+    DoubleType = None  # type: ignore
+    DateType = None  # type: ignore
+    TimestampType = None  # type: ignore
+    StructType = None  # type: ignore
     GreaterThan = None  # type: ignore
     LessThan = None  # type: ignore
     GreaterThanOrEqual = None  # type: ignore
     LessThanOrEqual = None  # type: ignore
     EqualTo = None  # type: ignore
     And = None  # type: ignore
+    Or = None  # type: ignore
+    In = None  # type: ignore
+    IsNull = None  # type: ignore
+    IsNaN = None  # type: ignore
     Reference = None  # type: ignore
     AlwaysTrue = None  # type: ignore
+    bind = None  # type: ignore
+
+
+def build_mock_iceberg_table(data: Any, schema: Any) -> Mock:
+    """Mock IcebergTable whose scan binds row_filter against schema (as a real scan would) then returns data unfiltered."""
+
+    def _scan(*args: Any, **kwargs: Any) -> Mock:
+        row_filter = kwargs.get("row_filter", AlwaysTrue())
+        bind(schema, row_filter, case_sensitive=True)
+        mock_scan = Mock()
+        mock_scan.to_arrow.return_value = data
+        return mock_scan
+
+    mock_table = Mock(spec=IcebergTable)
+    mock_table.schema.return_value = schema
+    mock_table.scan.side_effect = _scan
+    return mock_table
 
 
 @pytest.mark.skipif(
@@ -64,13 +110,18 @@ class TestIcebergFilterEngine(FilterEngineTestMixin):
         )
 
     @pytest.fixture
-    def mock_iceberg_table(self, sample_data: Any) -> Mock:
+    def sample_schema(self) -> Any:
+        return Schema(
+            NestedField(1, "id", LongType(), required=False),
+            NestedField(2, "age", LongType(), required=False),
+            NestedField(3, "name", StringType(), required=False),
+            NestedField(4, "category", StringType(), required=False),
+        )
+
+    @pytest.fixture
+    def mock_iceberg_table(self, sample_data: Any, sample_schema: Any) -> Mock:
         """Mock Iceberg table whose scan returns sample_data unfiltered; filtering happens in the PyArrow re-pass."""
-        mock_table = Mock(spec=IcebergTable)
-        mock_scan = Mock()
-        mock_scan.to_arrow.return_value = sample_data
-        mock_table.scan.return_value = mock_scan
-        return mock_table
+        return build_mock_iceberg_table(sample_data, sample_schema)
 
     @pytest.fixture
     def mock_feature_set(self) -> Mock:
@@ -140,6 +191,24 @@ class TestIcebergFilterEngine(FilterEngineTestMixin):
                 lambda: And(GreaterThanOrEqual(Reference("age"), 25), LessThan(Reference("age"), 50)),
                 id="range_exclusive",
             ),
+            pytest.param(
+                FilterType.CATEGORICAL_INCLUSION,
+                {"values": [30, 40]},
+                lambda: In(Reference("age"), {30, 40}),
+                id="categorical_inclusion",
+            ),
+            pytest.param(
+                FilterType.CATEGORICAL_INCLUSION,
+                {"values": [30, None]},
+                lambda: Or(In(Reference("age"), {30}), IsNull(Reference("age")), IsNaN(Reference("age"))),
+                id="categorical_inclusion_with_none",
+            ),
+            pytest.param(
+                FilterType.CATEGORICAL_INCLUSION,
+                {"values": [30.0, float("nan")]},
+                lambda: Or(In(Reference("age"), {30.0}), IsNull(Reference("age")), IsNaN(Reference("age"))),
+                id="categorical_inclusion_with_nan",
+            ),
         ],
     )
     def test_build_iceberg_expression(
@@ -158,16 +227,6 @@ class TestIcebergFilterEngine(FilterEngineTestMixin):
         feature = Feature("name")
         filter_type = FilterType.REGEX
         parameter = {"value": "^A"}
-        single_filter = SingleFilter(feature, filter_type, parameter)
-
-        with pytest.raises(NotImplementedError):
-            IcebergFilterEngine._build_iceberg_expression(single_filter)
-
-    def test_build_iceberg_expression_categorical_inclusion_raises(self) -> None:
-        """Unknown filter types must raise NotImplementedError, not silently fall through to None."""
-        feature = Feature("category")
-        filter_type = FilterType.CATEGORICAL_INCLUSION
-        parameter = {"values": ["A", "B"]}
         single_filter = SingleFilter(feature, filter_type, parameter)
 
         with pytest.raises(NotImplementedError):
@@ -360,7 +419,9 @@ class TestIcebergFilterEngine(FilterEngineTestMixin):
                     SingleFilter(Feature("age"), FilterType.MIN, {"value": 30}),
                     SingleFilter(Feature("category"), FilterType.CATEGORICAL_INCLUSION, {"values": ["A", "B"]}),
                 ],
-                GreaterThanOrEqual(Reference("age"), 30) if GreaterThanOrEqual is not None else None,
+                And(GreaterThanOrEqual(Reference("age"), 30), In(Reference("category"), {"A", "B"}))
+                if And is not None
+                else None,
                 [2, 3, 5],
                 id="min_pushed_plus_categorical_inclusion",
             ),
@@ -375,9 +436,9 @@ class TestIcebergFilterEngine(FilterEngineTestMixin):
             ),
             pytest.param(
                 [SingleFilter(Feature("category"), FilterType.CATEGORICAL_INCLUSION, {"values": ["A", "B"]})],
-                AlwaysTrue() if AlwaysTrue is not None else None,
+                In(Reference("category"), {"A", "B"}) if In is not None else None,
                 [1, 2, 3, 5],
-                id="categorical_inclusion_only_no_pushdown",
+                id="categorical_inclusion_only_pushed",
             ),
         ],
     )
@@ -389,7 +450,7 @@ class TestIcebergFilterEngine(FilterEngineTestMixin):
         expected_row_filter: Any,
         expected_ids: list[int],
     ) -> None:
-        """Regex and categorical inclusion are not pushed but are applied on the scan result."""
+        """Categorical inclusion is pushed; regex is not but is applied on the scan result."""
         mock_feature_set.filters = filters
 
         result = IcebergFilterEngine.apply_filters(mock_iceberg_table, mock_feature_set)
@@ -407,12 +468,28 @@ class TestIcebergFilterEngine(FilterEngineTestMixin):
         with pytest.raises(NotImplementedError, match="Custom filtering is not supported"):
             IcebergFilterEngine.apply_filters(mock_iceberg_table, mock_feature_set)
 
-    def test_apply_filters_equal_missing_value_raises(self, mock_iceberg_table: Mock, mock_feature_set: Mock) -> None:
-        """apply_filters must not silently drop a missing-value filter and return the unfiltered table."""
-        age_filter = SingleFilter(Feature("age"), FilterType.EQUAL, {"invalid": 30})
-        mock_feature_set.filters = [age_filter]
+    @pytest.mark.parametrize(
+        "filter_feature,expected_match",
+        [
+            pytest.param(
+                SingleFilter(Feature("age"), FilterType.EQUAL, {"invalid": 30}),
+                "Filter parameter 'value' not found",
+                id="equal",
+            ),
+            pytest.param(
+                SingleFilter(Feature("category"), FilterType.CATEGORICAL_INCLUSION, {"invalid": ["A"]}),
+                "Filter parameter 'values' not found",
+                id="categorical_inclusion",
+            ),
+        ],
+    )
+    def test_apply_filters_equal_missing_value_raises(
+        self, mock_iceberg_table: Mock, mock_feature_set: Mock, filter_feature: SingleFilter, expected_match: str
+    ) -> None:
+        """apply_filters must not silently drop a malformed filter and return the unfiltered table."""
+        mock_feature_set.filters = [filter_feature]
 
-        with pytest.raises(ValueError, match="Filter parameter 'value' not found"):
+        with pytest.raises(ValueError, match=expected_match):
             IcebergFilterEngine.apply_filters(mock_iceberg_table, mock_feature_set)
 
         # An unfiltered scan would indicate the filter was silently dropped instead of raising.
@@ -425,6 +502,166 @@ class TestIcebergFilterEngine(FilterEngineTestMixin):
 
         with pytest.raises(NotImplementedError, match="Custom filtering is not supported"):
             IcebergFilterEngine.do_custom_filter(mock_data, mock_filter)
+
+
+@pytest.mark.skipif(
+    pyiceberg is None or pa is None, reason="PyIceberg or PyArrow is not installed. Skipping this test."
+)
+class TestIcebergFilterEngineStructAndTypePinning:
+    """Type-exact pushdown decisions and nested-field survival, on one 4-row table."""
+
+    @pytest.fixture
+    def struct_schema(self) -> Any:
+        return Schema(
+            NestedField(1, "l", LongType(), required=False),
+            NestedField(2, "x", DoubleType(), required=False),
+            NestedField(3, "d", DateType(), required=False),
+            NestedField(4, "ts", TimestampType(), required=False),
+            NestedField(5, "b", StructType(NestedField(6, "c", LongType(), required=False)), required=False),
+        )
+
+    @pytest.fixture
+    def struct_data(self) -> Any:
+        return pa.table(
+            {
+                "l": pa.array([1, 2, 3, 4], type=pa.int64()),
+                "x": pa.array([1.0, 2.0, float("nan"), None], type=pa.float64()),
+                "d": pa.array(
+                    [
+                        datetime.date(2024, 1, 1),
+                        datetime.date(2024, 1, 2),
+                        datetime.date(2024, 1, 3),
+                        datetime.date(2024, 1, 4),
+                    ],
+                    type=pa.date32(),
+                ),
+                "ts": pa.array(
+                    [
+                        datetime.datetime(2024, 1, 1),
+                        datetime.datetime(2024, 1, 2),
+                        datetime.datetime(2024, 1, 3),
+                        datetime.datetime(2024, 1, 4),
+                    ],
+                    type=pa.timestamp("us"),
+                ),
+                "b": pa.array(
+                    [{"c": 100}, {"c": 200}, None, {"c": 400}],
+                    type=pa.struct([("c", pa.int64())]),
+                ),
+            }
+        )
+
+    @pytest.fixture
+    def mock_struct_table(self, struct_data: Any, struct_schema: Any) -> Mock:
+        return build_mock_iceberg_table(struct_data, struct_schema)
+
+    @pytest.fixture
+    def struct_feature_set(self) -> Mock:
+        mock_feature_set = Mock()
+        mock_feature_set.get_all_names.return_value = ["l", "x", "d", "ts", "b.c"]
+        return mock_feature_set
+
+    @pytest.mark.parametrize(
+        "filter_feature,expected_row_filter,expected_l,expected_bc",
+        [
+            pytest.param(
+                SingleFilter(Feature("l"), FilterType.MIN, {"value": 2.5}),
+                AlwaysTrue(),
+                [3, 4],
+                [None, 400],
+                id="min_float_on_long_not_pushed",
+            ),
+            pytest.param(
+                SingleFilter(Feature("x"), FilterType.EQUAL, {"value": float("nan")}),
+                AlwaysTrue(),
+                [],
+                [],
+                id="equal_nan_on_double_not_pushed",
+            ),
+            pytest.param(
+                SingleFilter(Feature("l"), FilterType.EQUAL, {"value": np.int64(2)}),
+                AlwaysTrue(),
+                [2],
+                [200],
+                id="equal_numpy_int64_on_long_not_pushed",
+            ),
+            pytest.param(
+                SingleFilter(Feature("d"), FilterType.EQUAL, {"value": datetime.datetime(2024, 1, 1)}),
+                AlwaysTrue(),
+                [1],
+                [100],
+                id="equal_datetime_on_date_not_pushed",
+            ),
+            pytest.param(
+                SingleFilter(Feature("l"), FilterType.CATEGORICAL_INCLUSION, {"values": [True]}),
+                AlwaysTrue(),
+                [1],
+                [100],
+                id="categorical_bool_on_long_not_pushed",
+            ),
+            pytest.param(
+                SingleFilter(Feature("l"), FilterType.CATEGORICAL_INCLUSION, {"values": [np.int64(2), np.int64(3)]}),
+                AlwaysTrue(),
+                [2, 3],
+                [200, None],
+                id="categorical_numpy_int64_on_long_not_pushed",
+            ),
+            pytest.param(
+                SingleFilter(Feature("x"), FilterType.CATEGORICAL_INCLUSION, {"values": [1.0, None]}),
+                Or(In(Reference("x"), {1.0}), IsNull(Reference("x")), IsNaN(Reference("x"))),
+                [1, 3, 4],
+                [100, None, 400],
+                id="categorical_with_null_on_double_pushed",
+            ),
+            pytest.param(
+                SingleFilter(
+                    Feature("d"),
+                    FilterType.RANGE,
+                    {"min": datetime.date(2024, 1, 2), "max": datetime.date(2024, 1, 3), "max_exclusive": False},
+                ),
+                And(
+                    GreaterThanOrEqual(Reference("d"), datetime.date(2024, 1, 2)),
+                    LessThanOrEqual(Reference("d"), datetime.date(2024, 1, 3)),
+                ),
+                [2, 3],
+                [200, None],
+                id="range_date_pushed",
+            ),
+            pytest.param(
+                SingleFilter(Feature("ts"), FilterType.MIN, {"value": datetime.datetime(2024, 1, 3)}),
+                GreaterThanOrEqual(Reference("ts"), datetime.datetime(2024, 1, 3)),
+                [3, 4],
+                [None, 400],
+                id="min_naive_datetime_on_timestamp_pushed",
+            ),
+            pytest.param(
+                SingleFilter(Feature("b.c"), FilterType.EQUAL, {"value": 200}),
+                EqualTo(Reference("b.c"), 200),
+                [2],
+                [200],
+                id="equal_on_nested_struct_field_pushed",
+            ),
+        ],
+    )
+    def test_apply_filters_struct_field_and_type_pinning(
+        self,
+        mock_struct_table: Mock,
+        struct_feature_set: Mock,
+        filter_feature: SingleFilter,
+        expected_row_filter: Any,
+        expected_l: list[int],
+        expected_bc: list[Any],
+    ) -> None:
+        """A filter is pushed only on exact-type match; b.c (nested, dropped by the plain scan) is kept when any filter applies."""
+        struct_feature_set.filters = [filter_feature]
+
+        result = IcebergFilterEngine.apply_filters(mock_struct_table, struct_feature_set)
+
+        mock_struct_table.scan.assert_called_once()
+        call_args = mock_struct_table.scan.call_args
+        assert call_args.kwargs["row_filter"] == expected_row_filter
+        assert result["l"].to_pylist() == expected_l
+        assert result["b.c"].to_pylist() == expected_bc
 
 
 @pytest.mark.skipif(

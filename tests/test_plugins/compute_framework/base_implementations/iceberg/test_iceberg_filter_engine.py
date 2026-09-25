@@ -429,9 +429,7 @@ class TestIcebergFilterEngine(FilterEngineTestMixin):
                     SingleFilter(Feature("age"), FilterType.MIN, {"value": 30}),
                     SingleFilter(Feature("category"), FilterType.CATEGORICAL_INCLUSION, {"values": ["A", "B"]}),
                 ],
-                And(GreaterThanOrEqual(Reference("age"), 30), In(Reference("category"), {"A", "B"}))
-                if And is not None
-                else None,
+                lambda: And(GreaterThanOrEqual(Reference("age"), 30), In(Reference("category"), {"A", "B"})),
                 [2, 3, 5],
                 id="min_pushed_plus_categorical_inclusion",
             ),
@@ -440,13 +438,13 @@ class TestIcebergFilterEngine(FilterEngineTestMixin):
                     SingleFilter(Feature("age"), FilterType.MIN, {"value": 30}),
                     SingleFilter(Feature("name"), FilterType.REGEX, {"value": "^[A-C]"}),
                 ],
-                GreaterThanOrEqual(Reference("age"), 30) if GreaterThanOrEqual is not None else None,
+                lambda: GreaterThanOrEqual(Reference("age"), 30),
                 [2, 3],
                 id="min_pushed_plus_regex",
             ),
             pytest.param(
                 [SingleFilter(Feature("category"), FilterType.CATEGORICAL_INCLUSION, {"values": ["A", "B"]})],
-                In(Reference("category"), {"A", "B"}) if In is not None else None,
+                lambda: In(Reference("category"), {"A", "B"}),
                 [1, 2, 3, 5],
                 id="categorical_inclusion_only_pushed",
             ),
@@ -467,7 +465,7 @@ class TestIcebergFilterEngine(FilterEngineTestMixin):
 
         mock_iceberg_table.scan.assert_called_once()
         call_args = mock_iceberg_table.scan.call_args
-        assert call_args.kwargs["row_filter"] == expected_row_filter
+        assert call_args.kwargs["row_filter"] == expected_row_filter()
         assert self.get_column_values(result, "id") == expected_ids
 
     def test_apply_filters_custom_filter_type_raises(self, mock_iceberg_table: Mock, mock_feature_set: Mock) -> None:
@@ -596,61 +594,63 @@ class TestIcebergFilterEngineStructAndTypePinning:
         "filter_feature,expected_row_filter,expected_l,expected_bc",
         [
             pytest.param(
-                SingleFilter(Feature("l"), FilterType.MIN, {"value": 2.5}),
-                AlwaysTrue(),
+                lambda: SingleFilter(Feature("l"), FilterType.MIN, {"value": 2.5}),
+                lambda: AlwaysTrue(),
                 [3, 4],
                 [None, 400],
                 id="min_float_on_long_not_pushed",
             ),
             pytest.param(
-                SingleFilter(Feature("x"), FilterType.EQUAL, {"value": float("nan")}),
-                AlwaysTrue(),
+                lambda: SingleFilter(Feature("x"), FilterType.EQUAL, {"value": float("nan")}),
+                lambda: AlwaysTrue(),
                 [],
                 [],
                 id="equal_nan_on_double_not_pushed",
             ),
             pytest.param(
-                SingleFilter(Feature("l"), FilterType.EQUAL, {"value": np.int64(2)}),
-                AlwaysTrue(),
+                lambda: SingleFilter(Feature("l"), FilterType.EQUAL, {"value": np.int64(2)}),
+                lambda: AlwaysTrue(),
                 [2],
                 [200],
                 id="equal_numpy_int64_on_long_not_pushed",
             ),
             pytest.param(
-                SingleFilter(Feature("d"), FilterType.EQUAL, {"value": datetime.datetime(2024, 1, 1)}),
-                AlwaysTrue(),
+                lambda: SingleFilter(Feature("d"), FilterType.EQUAL, {"value": datetime.datetime(2024, 1, 1)}),
+                lambda: AlwaysTrue(),
                 [1],
                 [100],
                 id="equal_datetime_on_date_not_pushed",
             ),
             pytest.param(
-                SingleFilter(Feature("l"), FilterType.CATEGORICAL_INCLUSION, {"values": [True]}),
-                AlwaysTrue(),
+                lambda: SingleFilter(Feature("l"), FilterType.CATEGORICAL_INCLUSION, {"values": [True]}),
+                lambda: AlwaysTrue(),
                 [1],
                 [100],
                 id="categorical_bool_on_long_not_pushed",
             ),
             pytest.param(
-                SingleFilter(Feature("l"), FilterType.CATEGORICAL_INCLUSION, {"values": [np.int64(2), np.int64(3)]}),
-                AlwaysTrue(),
+                lambda: SingleFilter(
+                    Feature("l"), FilterType.CATEGORICAL_INCLUSION, {"values": [np.int64(2), np.int64(3)]}
+                ),
+                lambda: AlwaysTrue(),
                 [2, 3],
                 [200, None],
                 id="categorical_numpy_int64_on_long_not_pushed",
             ),
             pytest.param(
-                SingleFilter(Feature("x"), FilterType.CATEGORICAL_INCLUSION, {"values": [1.0, None]}),
-                Or(In(Reference("x"), {1.0}), IsNull(Reference("x")), IsNaN(Reference("x"))),
+                lambda: SingleFilter(Feature("x"), FilterType.CATEGORICAL_INCLUSION, {"values": [1.0, None]}),
+                lambda: Or(In(Reference("x"), {1.0}), IsNull(Reference("x")), IsNaN(Reference("x"))),
                 [1, 3, 4],
                 [100, None, 400],
                 id="categorical_with_null_on_double_pushed",
             ),
             pytest.param(
-                SingleFilter(
+                lambda: SingleFilter(
                     Feature("d"),
                     FilterType.RANGE,
                     {"min": datetime.date(2024, 1, 2), "max": datetime.date(2024, 1, 3), "max_exclusive": False},
                 ),
-                And(
+                lambda: And(
                     GreaterThanOrEqual(Reference("d"), datetime.date(2024, 1, 2)),
                     LessThanOrEqual(Reference("d"), datetime.date(2024, 1, 3)),
                 ),
@@ -659,61 +659,63 @@ class TestIcebergFilterEngineStructAndTypePinning:
                 id="range_date_pushed",
             ),
             pytest.param(
-                SingleFilter(Feature("ts"), FilterType.MIN, {"value": datetime.datetime(2024, 1, 3)}),
-                GreaterThanOrEqual(Reference("ts"), datetime.datetime(2024, 1, 3)),
+                lambda: SingleFilter(Feature("ts"), FilterType.MIN, {"value": datetime.datetime(2024, 1, 3)}),
+                lambda: GreaterThanOrEqual(Reference("ts"), datetime.datetime(2024, 1, 3)),
                 [3, 4],
                 [None, 400],
                 id="min_naive_datetime_on_timestamp_pushed",
             ),
             pytest.param(
-                SingleFilter(Feature("b.c"), FilterType.EQUAL, {"value": 200}),
-                EqualTo(Reference("b.c"), 200),
+                lambda: SingleFilter(Feature("b.c"), FilterType.EQUAL, {"value": 200}),
+                lambda: EqualTo(Reference("b.c"), 200),
                 [2],
                 [200],
                 id="equal_on_nested_struct_field_pushed",
             ),
             pytest.param(
-                SingleFilter(Feature("x"), FilterType.MAX, {"max": 2.0, "max_exclusive": True}),
-                LessThanOrEqual(Reference("x"), 2.0),
+                lambda: SingleFilter(Feature("x"), FilterType.MAX, {"max": 2.0, "max_exclusive": True}),
+                lambda: LessThanOrEqual(Reference("x"), 2.0),
                 [1],
                 [100],
                 id="max_exclusive_on_double_pushed_inclusive",
             ),
             pytest.param(
-                SingleFilter(Feature("f"), FilterType.MIN, {"value": 1.5}),
-                AlwaysTrue(),
+                lambda: SingleFilter(Feature("f"), FilterType.MIN, {"value": 1.5}),
+                lambda: AlwaysTrue(),
                 [2, 3, 4],
                 [200, None, 400],
                 id="min_float32_not_pushed",
             ),
             pytest.param(
-                SingleFilter(Feature("dec"), FilterType.MIN, {"value": Decimal("1.50")}),
-                AlwaysTrue(),
+                lambda: SingleFilter(Feature("dec"), FilterType.MIN, {"value": Decimal("1.50")}),
+                lambda: AlwaysTrue(),
                 [2, 3, 4],
                 [200, None, 400],
                 id="min_decimal_not_pushed",
             ),
             pytest.param(
-                SingleFilter(Feature("i"), FilterType.EQUAL, {"value": 2}),
-                EqualTo(Reference("i"), 2),
+                lambda: SingleFilter(Feature("i"), FilterType.EQUAL, {"value": 2}),
+                lambda: EqualTo(Reference("i"), 2),
                 [2],
                 [200],
                 id="equal_int32_pushed",
             ),
             pytest.param(
-                SingleFilter(
+                lambda: SingleFilter(
                     Feature("tz"),
                     FilterType.MIN,
                     {"value": datetime.datetime(2024, 1, 3, tzinfo=datetime.timezone.utc)},
                 ),
-                GreaterThanOrEqual(Reference("tz"), datetime.datetime(2024, 1, 3, tzinfo=datetime.timezone.utc)),
+                lambda: GreaterThanOrEqual(
+                    Reference("tz"), datetime.datetime(2024, 1, 3, tzinfo=datetime.timezone.utc)
+                ),
                 [3, 4],
                 [None, 400],
                 id="min_aware_datetime_on_timestamptz_pushed",
             ),
             pytest.param(
-                SingleFilter(Feature("bo"), FilterType.EQUAL, {"value": True}),
-                EqualTo(Reference("bo"), True),
+                lambda: SingleFilter(Feature("bo"), FilterType.EQUAL, {"value": True}),
+                lambda: EqualTo(Reference("bo"), True),
                 [1, 3],
                 [100, None],
                 id="equal_bool_pushed",
@@ -724,19 +726,19 @@ class TestIcebergFilterEngineStructAndTypePinning:
         self,
         mock_struct_table: Mock,
         struct_feature_set: Mock,
-        filter_feature: SingleFilter,
+        filter_feature: Any,
         expected_row_filter: Any,
         expected_l: list[int],
         expected_bc: list[Any],
     ) -> None:
         """A filter is pushed only on exact-type match; b.c (nested, dropped by the plain scan) is kept when any filter applies."""
-        struct_feature_set.filters = [filter_feature]
+        struct_feature_set.filters = [filter_feature()]
 
         result = IcebergFilterEngine.apply_filters(mock_struct_table, struct_feature_set)
 
         mock_struct_table.scan.assert_called_once()
         call_args = mock_struct_table.scan.call_args
-        assert call_args.kwargs["row_filter"] == expected_row_filter
+        assert call_args.kwargs["row_filter"] == expected_row_filter()
         assert result["l"].to_pylist() == expected_l
         assert result["b.c"].to_pylist() == expected_bc
 

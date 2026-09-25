@@ -9,7 +9,6 @@ try:
     from pyiceberg.table import Table as IcebergTable
     from pyiceberg.expressions import (
         AlwaysTrue,
-        LessThan,
         GreaterThanOrEqual,
         LessThanOrEqual,
         EqualTo,
@@ -24,7 +23,6 @@ try:
 except ImportError:
     IcebergTable: type[Any] | None = None  # type: ignore[no-redef]
     AlwaysTrue: type[Any] | None = None  # type: ignore[no-redef]
-    LessThan: type[Any] | None = None  # type: ignore[no-redef]
     GreaterThanOrEqual: type[Any] | None = None  # type: ignore[no-redef]
     LessThanOrEqual: type[Any] | None = None  # type: ignore[no-redef]
     EqualTo: type[Any] | None = None  # type: ignore[no-redef]
@@ -67,18 +65,16 @@ class IcebergFilterEngine(PyArrowFilterEngine):
             return data
 
         schema = data.schema()
-        # Build pushable expressions before scanning so a malformed filter raises without a scan.
-        expressions: list[Any] = [
-            cls._build_iceberg_expression(f)
-            for f in applicable
-            if f.filter_type in _PUSHDOWN_FILTER_TYPES and cls._is_pushable(schema, f)
-        ]
+        # Build pushable expressions before scanning: a malformed filter raises before the scan
+        # only when it is pushable.
+        expressions: list[Any] = [cls._build_iceberg_expression(f) for f in applicable if cls._is_pushable(schema, f)]
         row_filter = reduce(And, expressions, AlwaysTrue())
         # No selected_fields: the engine cannot see which non-feature columns (e.g. join keys) later steps need.
         scanned = data.scan(row_filter=row_filter).to_arrow()
 
+        schema_columns = set(schema.column_names)
         for name in features.get_all_names():
-            if name in schema.column_names and name not in scanned.column_names:
+            if name in schema_columns and name not in scanned.column_names:
                 # Nested path (e.g. "b.c") dropped by the plain scan; surface it as a top-level column.
                 root, *rest = name.split(".")
                 scanned = scanned.append_column(name, pc.struct_field(scanned[root], rest))
@@ -100,6 +96,7 @@ class IcebergFilterEngine(PyArrowFilterEngine):
         if filter_feature.filter_type == "categorical_inclusion":
             values = filter_feature.parameter.values
             if values is None:
+                # _build_iceberg_expression raises for this before the scan.
                 return True
             present, _ = split_null_or_nan(values)
             bounds = present
@@ -121,7 +118,7 @@ class IcebergFilterEngine(PyArrowFilterEngine):
         """Build an Iceberg filter expression from a SingleFilter."""
         if any(
             expr is None
-            for expr in [EqualTo, And, Or, In, IsNull, IsNaN, LessThan, GreaterThanOrEqual, LessThanOrEqual, Reference]
+            for expr in [EqualTo, And, Or, In, IsNull, IsNaN, GreaterThanOrEqual, LessThanOrEqual, Reference]
         ):
             return None
 
@@ -145,14 +142,15 @@ class IcebergFilterEngine(PyArrowFilterEngine):
             has_value = cls._extract_parameter_value(filter_feature, "value") is not None
 
             if has_max:
-                min_param, max_param, is_max_exclusive = cls.get_min_max_operator(filter_feature)
+                min_param, max_param, _ = cls.get_min_max_operator(filter_feature)
                 if min_param is not None:
                     raise ValueError(
                         f"Filter parameter {filter_feature.parameter} not supported as max filter: "
                         f"{filter_feature.name}"
                     )
-                if is_max_exclusive is True:
-                    return LessThan(Reference(column_name), max_param)
+                # Always push the max as inclusive: pyiceberg rebinds a double bound to float32 per data
+                # file after a float-to-double promotion, so a strict bound could drop rows the PyArrow
+                # pass keeps. The PyArrow pass enforces exclusivity afterward.
                 return LessThanOrEqual(Reference(column_name), max_param)
             elif has_value:
                 value = cls._extract_parameter_value(filter_feature, "value")
@@ -161,16 +159,13 @@ class IcebergFilterEngine(PyArrowFilterEngine):
                 raise ValueError(f"No valid filter parameter found in {filter_feature.parameter}")
 
         elif filter_type == "range":
-            min_param, max_param, is_max_exclusive = cls.get_min_max_operator(filter_feature)
+            min_param, max_param, _ = cls.get_min_max_operator(filter_feature)
             if min_param is None or max_param is None:
                 raise ValueError(f"Filter parameter {filter_feature.parameter} not supported")
 
             expr_min = GreaterThanOrEqual(Reference(column_name), min_param)
-            expr_max: Any
-            if is_max_exclusive is True:
-                expr_max = LessThan(Reference(column_name), max_param)
-            else:
-                expr_max = LessThanOrEqual(Reference(column_name), max_param)
+            # Always push the max as inclusive; see the comment in the "max" branch above.
+            expr_max = LessThanOrEqual(Reference(column_name), max_param)
             return And(expr_min, expr_max)
 
         elif filter_type == "categorical_inclusion":

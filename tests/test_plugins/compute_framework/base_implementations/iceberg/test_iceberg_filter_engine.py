@@ -30,6 +30,11 @@ try:
         DateType,
         TimestampType,
         StructType,
+        FloatType,
+        DecimalType,
+        IntegerType,
+        TimestamptzType,
+        BooleanType,
     )
     from pyiceberg.expressions import (
         GreaterThan,
@@ -59,6 +64,11 @@ except ImportError:
     DateType = None  # type: ignore
     TimestampType = None  # type: ignore
     StructType = None  # type: ignore
+    FloatType = None  # type: ignore
+    DecimalType = None  # type: ignore
+    IntegerType = None  # type: ignore
+    TimestamptzType = None  # type: ignore
+    BooleanType = None  # type: ignore
     GreaterThan = None  # type: ignore
     LessThan = None  # type: ignore
     GreaterThanOrEqual = None  # type: ignore
@@ -176,8 +186,8 @@ class TestIcebergFilterEngine(FilterEngineTestMixin):
             pytest.param(
                 FilterType.MAX,
                 {"max": 50, "max_exclusive": True},
-                lambda: LessThan(Reference("age"), 50),
-                id="max_complex_exclusive",
+                lambda: LessThanOrEqual(Reference("age"), 50),
+                id="max_exclusive_pushed_inclusive",
             ),
             pytest.param(
                 FilterType.RANGE,
@@ -188,8 +198,8 @@ class TestIcebergFilterEngine(FilterEngineTestMixin):
             pytest.param(
                 FilterType.RANGE,
                 {"min": 25, "max": 50, "max_exclusive": True},
-                lambda: And(GreaterThanOrEqual(Reference("age"), 25), LessThan(Reference("age"), 50)),
-                id="range_exclusive",
+                lambda: And(GreaterThanOrEqual(Reference("age"), 25), LessThanOrEqual(Reference("age"), 50)),
+                id="range_exclusive_pushed_inclusive",
             ),
             pytest.param(
                 FilterType.CATEGORICAL_INCLUSION,
@@ -483,7 +493,7 @@ class TestIcebergFilterEngine(FilterEngineTestMixin):
             ),
         ],
     )
-    def test_apply_filters_equal_missing_value_raises(
+    def test_apply_filters_missing_value_raises(
         self, mock_iceberg_table: Mock, mock_feature_set: Mock, filter_feature: SingleFilter, expected_match: str
     ) -> None:
         """apply_filters must not silently drop a malformed filter and return the unfiltered table."""
@@ -518,6 +528,11 @@ class TestIcebergFilterEngineStructAndTypePinning:
             NestedField(3, "d", DateType(), required=False),
             NestedField(4, "ts", TimestampType(), required=False),
             NestedField(5, "b", StructType(NestedField(6, "c", LongType(), required=False)), required=False),
+            NestedField(7, "f", FloatType(), required=False),
+            NestedField(8, "dec", DecimalType(10, 2), required=False),
+            NestedField(9, "i", IntegerType(), required=False),
+            NestedField(10, "tz", TimestamptzType(), required=False),
+            NestedField(11, "bo", BooleanType(), required=False),
         )
 
     @pytest.fixture
@@ -548,6 +563,22 @@ class TestIcebergFilterEngineStructAndTypePinning:
                     [{"c": 100}, {"c": 200}, None, {"c": 400}],
                     type=pa.struct([("c", pa.int64())]),
                 ),
+                "f": pa.array([1.0, 2.0, 3.0, 4.0], type=pa.float32()),
+                "dec": pa.array(
+                    [Decimal("1.00"), Decimal("2.00"), Decimal("3.00"), Decimal("4.00")],
+                    type=pa.decimal128(10, 2),
+                ),
+                "i": pa.array([1, 2, 3, 4], type=pa.int32()),
+                "tz": pa.array(
+                    [
+                        datetime.datetime(2024, 1, 1, tzinfo=datetime.timezone.utc),
+                        datetime.datetime(2024, 1, 2, tzinfo=datetime.timezone.utc),
+                        datetime.datetime(2024, 1, 3, tzinfo=datetime.timezone.utc),
+                        datetime.datetime(2024, 1, 4, tzinfo=datetime.timezone.utc),
+                    ],
+                    type=pa.timestamp("us", tz="UTC"),
+                ),
+                "bo": pa.array([True, False, True, False], type=pa.bool_()),
             }
         )
 
@@ -558,7 +589,7 @@ class TestIcebergFilterEngineStructAndTypePinning:
     @pytest.fixture
     def struct_feature_set(self) -> Mock:
         mock_feature_set = Mock()
-        mock_feature_set.get_all_names.return_value = ["l", "x", "d", "ts", "b.c"]
+        mock_feature_set.get_all_names.return_value = ["l", "x", "d", "ts", "b.c", "f", "dec", "i", "tz", "bo"]
         return mock_feature_set
 
     @pytest.mark.parametrize(
@@ -640,6 +671,52 @@ class TestIcebergFilterEngineStructAndTypePinning:
                 [2],
                 [200],
                 id="equal_on_nested_struct_field_pushed",
+            ),
+            pytest.param(
+                SingleFilter(Feature("x"), FilterType.MAX, {"max": 2.0, "max_exclusive": True}),
+                LessThanOrEqual(Reference("x"), 2.0),
+                [1],
+                [100],
+                id="max_exclusive_on_double_pushed_inclusive",
+            ),
+            pytest.param(
+                SingleFilter(Feature("f"), FilterType.MIN, {"value": 1.5}),
+                AlwaysTrue(),
+                [2, 3, 4],
+                [200, None, 400],
+                id="min_float32_not_pushed",
+            ),
+            pytest.param(
+                SingleFilter(Feature("dec"), FilterType.MIN, {"value": Decimal("1.50")}),
+                AlwaysTrue(),
+                [2, 3, 4],
+                [200, None, 400],
+                id="min_decimal_not_pushed",
+            ),
+            pytest.param(
+                SingleFilter(Feature("i"), FilterType.EQUAL, {"value": 2}),
+                EqualTo(Reference("i"), 2),
+                [2],
+                [200],
+                id="equal_int32_pushed",
+            ),
+            pytest.param(
+                SingleFilter(
+                    Feature("tz"),
+                    FilterType.MIN,
+                    {"value": datetime.datetime(2024, 1, 3, tzinfo=datetime.timezone.utc)},
+                ),
+                GreaterThanOrEqual(Reference("tz"), datetime.datetime(2024, 1, 3, tzinfo=datetime.timezone.utc)),
+                [3, 4],
+                [None, 400],
+                id="min_aware_datetime_on_timestamptz_pushed",
+            ),
+            pytest.param(
+                SingleFilter(Feature("bo"), FilterType.EQUAL, {"value": True}),
+                EqualTo(Reference("bo"), True),
+                [1, 3],
+                [100, None],
+                id="equal_bool_pushed",
             ),
         ],
     )

@@ -74,13 +74,13 @@ class TestSparkFilterEngine(FilterEngineTestMixin):
     def nullable_category_sample_data(self, spark_session: Any) -> Any:
         return spark_session.createDataFrame(
             [
-                (1, "A", 1),
-                (2, None, None),
-                (3, "B", 2),
-                (4, None, None),
-                (5, "C", 3),
+                (1, "A", 1, 1.0),
+                (2, None, None, float("nan")),
+                (3, "B", 2, 2.0),
+                (4, None, None, None),
+                (5, "C", 3, 3.0),
             ],
-            "id bigint, category string, score bigint",
+            "id bigint, category string, score bigint, ratio double",
         )
 
     @pytest.fixture

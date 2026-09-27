@@ -32,7 +32,7 @@ try:
     from pyiceberg.table import Table as IcebergTable
     from pyiceberg.catalog import Catalog
     from pyiceberg.schema import Schema
-    from pyiceberg.types import LongType, NestedField, StringType
+    from pyiceberg.types import LongType, NestedField, StringType, StructType
 except ImportError:
     logger.warning("PyIceberg or PyArrow is not installed. Some tests will be skipped.")
     pyiceberg = None  # type: ignore
@@ -43,6 +43,7 @@ except ImportError:
     LongType = None  # type: ignore
     NestedField = None  # type: ignore
     StringType = None  # type: ignore
+    StructType = None  # type: ignore
 
 
 @pytest.fixture
@@ -275,6 +276,34 @@ class IcebergTableRegularFeatureGroupForFilterTest(RegularFeatureGroupForFilterT
         return mock_table
 
 
+class IcebergTableStructFieldFilterTest(FeatureGroup):
+    """Requests the nested field 'b.c', which the plain scan drops from the arrow result."""
+
+    @classmethod
+    def input_data(cls) -> BaseInputData | None:
+        return DataCreator({"b.c", "status"})
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {IcebergFramework}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        b = pa.array([{"c": 10}, {"c": 20}, {"c": 30}, {"c": 40}], type=pa.struct([("c", pa.int64())]))
+        status = pa.array(["active", "inactive", "active", "inactive"])
+        arrow_data = pa.table({"b": b, "status": status})
+
+        mock_table = Mock(spec=IcebergTable)
+        mock_scan = Mock()
+        mock_scan.to_arrow.return_value = arrow_data
+        mock_table.scan.return_value = mock_scan
+        mock_table.schema.return_value = Schema(
+            NestedField(1, "b", StructType(NestedField(2, "c", LongType(), required=False)), required=False),
+            NestedField(3, "status", StringType(), required=False),
+        )
+        return mock_table
+
+
 @pytest.mark.skipif(
     pyiceberg is None or pa is None, reason="PyIceberg or PyArrow is not installed. Skipping this test."
 )
@@ -312,6 +341,25 @@ class TestIcebergIntegrationWithMlodaAPI:
         for final_data in result:
             assert final_data[feature_name].to_pylist() == [10, 30]
             assert final_data.column_names == [feature_name]
+
+    def test_nested_struct_field_survives_final_filter_iceberg(self, flight_server: Any) -> None:
+        """A default FeatureGroup requesting 'b.c' (nested) keeps it after the final filter step."""
+        plugin_collector = PluginCollector.enabled_feature_groups({IcebergTableStructFieldFilterTest})
+
+        global_filter = GlobalFilter()
+        global_filter.add_filter("status", "equal", {"value": "active"})
+
+        result = mloda.run_all(
+            [Feature(name="b.c", initial_requested_data=True)],
+            flight_server=flight_server,
+            parallelization_modes={ParallelizationMode.SYNC},
+            plugin_collector=plugin_collector,
+            compute_frameworks={IcebergFramework},
+            global_filter=global_filter,
+        )
+
+        for final_data in result:
+            assert final_data["b.c"].to_pylist() == [10, 30]
 
     @pytest.mark.parametrize(
         "modes",

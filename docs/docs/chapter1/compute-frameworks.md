@@ -266,7 +266,7 @@ result = mloda.run_all(
 result[0]  # Returns pyarrow.Table
 ```
 
-**Note**: Iceberg framework requires a catalog connection object for table operations. It's optimized for data lake scenarios with schema evolution, time travel capabilities, and large-scale analytics. The framework uses PyArrow as an interchange format for compatibility with other mloda frameworks. A filtered Iceberg table is passed on to later feature groups and returned as a `pyarrow.Table`. Does not support mloda framework inherent multiprocessing (the catalog stays in the parent process).
+**Note**: Iceberg framework requires a catalog connection object for table operations. It's optimized for data lake scenarios with schema evolution, time travel capabilities, and large-scale analytics. The framework uses PyArrow as an interchange format for compatibility with other mloda frameworks. A filtered Iceberg table is passed on to later feature groups and returned as a `pyarrow.Table`. Does not support mloda framework inherent multiprocessing (the catalog stays in the parent process). The filter scan reads every column, since the filter engine cannot see which columns later steps join on. To bound reads on a wide table, a FeatureGroup can return `table.scan(row_filter=..., selected_fields=...).to_arrow()` itself; the row filter may cover only some filters, since every filter is re-applied. A nested field requested as a feature (e.g. `"b.c"`) comes back as its own column after a filter, and inside its struct column otherwise.
 
 Example using Spark framework:
 ```py

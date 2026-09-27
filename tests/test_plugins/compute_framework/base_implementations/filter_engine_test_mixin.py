@@ -141,18 +141,32 @@ class FilterEngineTestMixin:
         self._assert_values_equal(self.get_column_values(result, "age"), [25, 30])
         self._assert_values_equal(self.get_column_values(result, "id"), [1, 2])
 
-    def test_do_max_filter_with_tuple(self, filter_engine: Any, sample_data: Any) -> None:
+    @pytest.mark.parametrize(
+        ("max_exclusive", "expected_ages", "expected_ids"),
+        [
+            pytest.param(True, [25, 30], [1, 2], id="exclusive"),
+            pytest.param(False, [25, 30, 35], [1, 2, 3], id="inclusive"),
+        ],
+    )
+    def test_do_max_filter_with_tuple(
+        self,
+        filter_engine: Any,
+        sample_data: Any,
+        max_exclusive: bool,
+        expected_ages: list[int],
+        expected_ids: list[int],
+    ) -> None:
         """Test max filter with tuple parameter."""
         feature = Feature("age")
         filter_type = FilterType.MAX
-        parameter = {"max": 35, "max_exclusive": True}
+        parameter = {"max": 35, "max_exclusive": max_exclusive}
         single_filter = SingleFilter(feature, filter_type, parameter)
 
         result = filter_engine.do_max_filter(sample_data, single_filter)
 
-        assert self.result_row_count(result) == 2
-        self._assert_values_equal(self.get_column_values(result, "age"), [25, 30])
-        self._assert_values_equal(self.get_column_values(result, "id"), [1, 2])
+        assert self.result_row_count(result) == len(expected_ages)
+        self._assert_values_equal(self.get_column_values(result, "age"), expected_ages)
+        self._assert_values_equal(self.get_column_values(result, "id"), expected_ids)
 
     def test_do_equal_filter(self, filter_engine: Any, sample_data: Any) -> None:
         """Test equal filter."""
@@ -328,15 +342,57 @@ class FilterEngineTestMixin:
         """Test that final_filters returns True."""
         assert filter_engine.final_filters() is True
 
-    def test_do_range_filter_missing_parameters(self, filter_engine: Any, sample_data: Any) -> None:
-        """Test range filter with missing parameters."""
-        feature = Feature("age")
-        filter_type = FilterType.RANGE
-        parameter = {"min": 30}  # Missing max parameter
-        single_filter = SingleFilter(feature, filter_type, parameter)
+    @pytest.mark.parametrize(
+        ("filter_type", "column", "parameter", "match"),
+        [
+            pytest.param(
+                FilterType.RANGE, "age", {"min": 30}, "Filter parameter .* not supported", id="range_missing_max"
+            ),
+            pytest.param(
+                FilterType.MIN, "age", {"invalid": 30}, "Filter parameter 'value' not found", id="min_missing_value"
+            ),
+            pytest.param(
+                FilterType.EQUAL, "age", {"invalid": 30}, "Filter parameter 'value' not found", id="equal_missing_value"
+            ),
+            pytest.param(
+                FilterType.REGEX,
+                "name",
+                {"invalid": "^A"},
+                "Filter parameter 'value' not found",
+                id="regex_missing_value",
+            ),
+            pytest.param(
+                FilterType.CATEGORICAL_INCLUSION,
+                "category",
+                {"invalid": ["A", "B"]},
+                "Filter parameter 'values' not found",
+                id="categorical_inclusion_missing_values",
+            ),
+            pytest.param(
+                FilterType.MAX, "age", {"invalid": 30}, "No valid filter parameter found", id="max_invalid_parameters"
+            ),
+            pytest.param(
+                FilterType.MAX,
+                "age",
+                {"min": 20, "max": 30},
+                "Filter parameter .* not supported as max filter",
+                id="max_with_min_parameter",
+            ),
+        ],
+    )
+    def test_do_filter_rejects_invalid_parameters(
+        self,
+        filter_engine: Any,
+        sample_data: Any,
+        filter_type: FilterType,
+        column: str,
+        parameter: dict[str, Any],
+        match: str,
+    ) -> None:
+        single_filter = SingleFilter(Feature(column), filter_type, parameter)
 
-        with pytest.raises(ValueError, match="Filter parameter .* not supported"):
-            filter_engine.do_range_filter(sample_data, single_filter)
+        with pytest.raises(ValueError, match=match):
+            filter_engine.do_filter(sample_data, single_filter)
 
     @pytest.fixture
     @abstractmethod

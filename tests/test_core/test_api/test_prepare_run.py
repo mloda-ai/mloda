@@ -8,6 +8,8 @@ These tests define the contract for a two-phase execution model:
 
 from typing import Any
 
+import pytest
+
 from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook
 from mloda.user import mloda, mlodaAPI, Feature, PluginCollector
 from mloda.provider import BaseInputData, ComputeFramework, DataCreator, FeatureGroup, FeatureSet, ApiInputDataFeature
@@ -259,10 +261,10 @@ class _CalculateHookRecordingExtender(Extender):
 _pfext_enabled = PluginCollector.enabled_feature_groups({_PrepareRunExtenderFeatureGroup})
 
 
-class TestRunFallsBackToPrepareTimeFunctionExtender:
-    """Fix: run() with no function_extender of its own must still fire the extender passed to prepare()."""
+class TestRunUsesSessionFunctionExtender:
+    """function_extender is session-level: set once at prepare(), reused by every run()."""
 
-    def test_run_without_its_own_function_extender_uses_the_one_from_prepare(self) -> None:
+    def test_run_fires_the_extender_passed_to_prepare(self) -> None:
         recorder = _CalculateHookRecordingExtender()
 
         session = mloda.prepare(
@@ -276,29 +278,11 @@ class TestRunFallsBackToPrepareTimeFunctionExtender:
         assert recorder.call_count == 1
 
 
-class TestRunOwnFunctionExtenderOverridesPrepareTimeOne:
-    """An explicit run()-time function_extender replaces (does not merge with) prepare()'s."""
+class TestRunAndStreamRunRejectFunctionExtender:
+    """run()/stream_run() no longer accept function_extender; it is session-level, set only via prepare()."""
 
-    def test_explicit_run_function_extender_replaces_prepare_time_one(self) -> None:
-        recorder_a = _CalculateHookRecordingExtender()
-        recorder_b = _CalculateHookRecordingExtender()
-
-        session = mloda.prepare(
-            [Feature(f"{_PFEXT_MARKER}_col")],
-            compute_frameworks=["PythonDictFramework"],
-            plugin_collector=_pfext_enabled,
-            function_extender={recorder_a},
-        )
-        session.run(function_extender={recorder_b})
-
-        assert recorder_b.call_count == 1
-        assert recorder_a.call_count == 0
-
-
-class TestRunWithNoPrepareTimeExtenderRegressionGuard:
-    """Baseline guard: run()'s own function_extender still fires when prepare() had none."""
-
-    def test_run_function_extender_fires_when_prepare_had_none(self) -> None:
+    @pytest.mark.parametrize("name", ["run", "stream_run"])
+    def test_function_extender_kwarg_raises_type_error(self, name: str) -> None:
         recorder = _CalculateHookRecordingExtender()
 
         session = mloda.prepare(
@@ -306,6 +290,6 @@ class TestRunWithNoPrepareTimeExtenderRegressionGuard:
             compute_frameworks=["PythonDictFramework"],
             plugin_collector=_pfext_enabled,
         )
-        session.run(function_extender={recorder})
 
-        assert recorder.call_count == 1
+        with pytest.raises(TypeError, match="unexpected keyword argument 'function_extender'"):
+            getattr(session, name)(**{"function_extender": {recorder}})

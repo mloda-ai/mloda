@@ -21,7 +21,6 @@ from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.components.input_data.input_data_descriptor import InputDataDescriptor
 from mloda.core.abstract_plugins.components.parallelization_modes import ParallelizationMode
 from mloda.core.abstract_plugins.hook_context import HookContext, OutputSchema, instrument
-from mloda.core.abstract_plugins.plugin_version import resolve_plugin_version
 from mloda.core.abstract_plugins.run_context import RunContext
 from mloda.core.filter.filter_engine import BaseFilterEngine
 from mloda.core.abstract_plugins.components.mask.base_mask_engine import BaseMaskEngine
@@ -831,7 +830,7 @@ class ComputeFramework(ABC):
                 field=f"{feature_group_class}.version",
                 warn_once_for=feature_group_cls,
             ),
-            plugin_version=resolve_plugin_version(feature_group_cls.__module__),
+            plugin_version=(self.run_context.plugin_versions or {}).get(feature_group_cls.__module__),
             feature_names=feature_names,
             input_features=input_features,
             input_feature_edges=input_feature_edges,

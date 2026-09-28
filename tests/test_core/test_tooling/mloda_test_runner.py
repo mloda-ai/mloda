@@ -111,11 +111,11 @@ class MlodaTestRunner:
             api_data=api_data,
             plugin_collector=plugin_collector,
             strict_type_enforcement=strict_type_enforcement,
+            function_extender=function_extender,
         )
         results = api.run(
             parallelization_modes=parallelization_modes,
             flight_server=flight_server,
-            function_extender=function_extender,
         )
         artifacts = api.get_artifacts()
 
@@ -196,13 +196,15 @@ class MlodaTestRunner:
         if parallelization_modes is None:
             parallelization_modes = {ParallelizationMode.SYNC}
 
-        engine = Engine(features, compute_frameworks, links, global_filter=global_filter)
+        engine = Engine(
+            features, compute_frameworks, links, global_filter=global_filter, function_extender=function_extender
+        )
 
         use_flight = ParallelizationMode.MULTIPROCESSING in parallelization_modes
         runner = engine.compute(flight_server if use_flight else None)
 
         try:
-            runner.__enter__(parallelization_modes, function_extender, api_data)
+            runner.__enter__(parallelization_modes, function_extender, api_data, None, engine.run_context)
             runner.compute()
         finally:
             runner.__exit__(None, None, None)

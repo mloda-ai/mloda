@@ -263,12 +263,13 @@ class _RunCompleteProbeExtender(Extender):
         self.completions.append((run_id, os.getpid(), self._sentinel_path.exists()))
 
 
-def _prepare_run_complete_session(mode: ParallelizationMode) -> mloda:
+def _prepare_run_complete_session(mode: ParallelizationMode, extenders: set[Extender] | None = None) -> mloda:
     return mloda.prepare(
         [Feature(name=_RUN_COMPLETE_COLUMN)],
         compute_frameworks=["PythonDictFramework"],
         plugin_collector=_RUN_COMPLETE_ENABLED,
         parallelization_modes={mode},
+        function_extender=extenders,
     )
 
 
@@ -281,9 +282,9 @@ class TestRunCompleteNotifiesTheCallersOwnExtenderInTheParent:
         self, mode: ParallelizationMode, tmp_path: Path, flight_server: Any
     ) -> None:
         probe = _RunCompleteProbeExtender(tmp_path / "closed.txt")
-        session = _prepare_run_complete_session(mode)
+        session = _prepare_run_complete_session(mode, {probe})
 
-        session.run(parallelization_modes={mode}, function_extender={probe}, flight_server=flight_server)
+        session.run(parallelization_modes={mode}, flight_server=flight_server)
 
         assert [(run_id, pid) for run_id, pid, _ in probe.completions] == [(session.run_id, os.getpid())]
 
@@ -291,10 +292,10 @@ class TestRunCompleteNotifiesTheCallersOwnExtenderInTheParent:
         self, mode: ParallelizationMode, tmp_path: Path, flight_server: Any
     ) -> None:
         probe = _RunCompleteProbeExtender(tmp_path / "closed.txt")
-        session = _prepare_run_complete_session(mode)
+        session = _prepare_run_complete_session(mode, {probe})
 
-        session.run(parallelization_modes={mode}, function_extender={probe}, flight_server=flight_server)
-        session.run(parallelization_modes={mode}, function_extender={probe}, flight_server=flight_server)
+        session.run(parallelization_modes={mode}, flight_server=flight_server)
+        session.run(parallelization_modes={mode}, flight_server=flight_server)
 
         assert [run_id for run_id, _, _ in probe.completions] == [session.run_id, session.run_id]
 
@@ -305,11 +306,10 @@ class TestRunCompleteFiresAfterAMultiprocessingWorkerClosedItsExtender:
         self, tmp_path: Path, flight_server: Any
     ) -> None:
         probe = _RunCompleteProbeExtender(tmp_path / "closed.txt", close_delay=0.5)
-        session = _prepare_run_complete_session(ParallelizationMode.MULTIPROCESSING)
+        session = _prepare_run_complete_session(ParallelizationMode.MULTIPROCESSING, {probe})
 
         session.run(
             parallelization_modes={ParallelizationMode.MULTIPROCESSING},
-            function_extender={probe},
             flight_server=flight_server,
             graceful_shutdown_timeout=5.0,
         )
@@ -335,13 +335,12 @@ class TestRunCompleteFiresWhenSetupFails:
         self, call_site: str, tmp_path: Path
     ) -> None:
         probe = _RunCompleteProbeExtender(tmp_path / "closed.txt")
-        session = _prepare_run_complete_session(ParallelizationMode.MULTIPROCESSING)
+        session = _prepare_run_complete_session(ParallelizationMode.MULTIPROCESSING, {probe, _UnpicklableExtender()})
 
         with pytest.raises(ValueError, match="cannot be pickled"):
             list(
                 getattr(session, call_site)(
                     parallelization_modes={ParallelizationMode.MULTIPROCESSING},
-                    function_extender={probe, _UnpicklableExtender()},
                 )
             )
 

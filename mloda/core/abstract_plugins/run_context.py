@@ -1,4 +1,4 @@
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 
 
@@ -16,8 +16,12 @@ class RunContext:
     tenant_id: str | None = None
     project_id: str | None = None
     principal: str | None = None
+    # Plan-time owning-distribution version per module. None field: nothing resolved; None value: no owner.
+    plugin_versions: Mapping[str, str | None] | None = field(default=None, hash=False)
 
     def __post_init__(self) -> None:
         # Copy on ingest so a hook mutating the carrier never reaches the caller's dict.
         if self.carrier is not None:
             object.__setattr__(self, "carrier", dict(self.carrier))
+        if self.plugin_versions is not None:
+            object.__setattr__(self, "plugin_versions", dict(self.plugin_versions))

@@ -1,5 +1,6 @@
 from collections import defaultdict
 from copy import deepcopy
+from dataclasses import replace
 import logging
 from typing import Any, cast
 from uuid import UUID
@@ -24,8 +25,10 @@ from mloda.core.abstract_plugins.function_extender import (
     get_function_extender,
 )
 from mloda.core.abstract_plugins.hook_context import HookContext, instrument
+from mloda.core.abstract_plugins.plugin_version import resolve_plugin_version
 from mloda.core.abstract_plugins.run_context import RunContext
 from mloda.core.abstract_plugins.verified_context import current_verified_context
+from mloda.core.core.step.feature_group_step import FeatureGroupStep
 from mloda.core.prepare.execution_plan import ExecutionPlan
 from mloda.core.prepare.graph.build_graph import BuildGraph
 from mloda.core.prepare.resolve_graph import ResolveGraph
@@ -104,7 +107,18 @@ class Engine:
         self.resolved_input_feature_names: dict[UUID, frozenset[str] | None] = {}
         self.resolution_records: list[ResolutionRecord] = []
         self.execution_planner = self.create_setup_execution_plan(features)
+        if self.function_extender:
+            self.run_context = replace(self.run_context, plugin_versions=self._resolve_plugin_versions())
         self.tfs_connection_map = self._resolve_tfs_connection_map()
+
+    def _resolve_plugin_versions(self) -> dict[str, str | None] | None:
+        """Resolves each planned feature group module's owning-distribution version at plan time, so hooks only read it."""
+        versions = {
+            step.feature_group.__module__: resolve_plugin_version(step.feature_group.__module__)
+            for step in self.execution_planner
+            if isinstance(step, FeatureGroupStep)
+        }
+        return versions or None
 
     def _resolve_tfs_connection_map(self) -> dict[type[ComputeFramework], Any]:
         """Resolve a connection per TFS destination framework at setup time.

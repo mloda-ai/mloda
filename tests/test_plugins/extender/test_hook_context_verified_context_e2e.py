@@ -82,10 +82,10 @@ def _prepare_session(options: dict[str, Any] | None = None, function_extender: s
 class TestVerifiedContextSurfacesOnHookContext:
     def test_tenant_project_principal_surface_when_scope_wraps_session_run(self) -> None:
         extender = _ContextCapturingExtender()
-        session = _prepare_session()
+        session = _prepare_session(function_extender={extender})
 
         with verified_context(tenant_id="acme", project_id="proj1", principal="hash123"):
-            session.run(parallelization_modes={ParallelizationMode.SYNC}, function_extender={extender})
+            session.run(parallelization_modes={ParallelizationMode.SYNC})
 
         assert extender.captured is not None
         assert extender.captured.tenant_id == "acme"
@@ -96,9 +96,9 @@ class TestVerifiedContextSurfacesOnHookContext:
 class TestVerifiedContextAbsentWithoutScope:
     def test_tenant_project_principal_stay_none_with_no_active_scope(self) -> None:
         extender = _ContextCapturingExtender()
-        session = _prepare_session()
+        session = _prepare_session(function_extender={extender})
 
-        session.run(parallelization_modes={ParallelizationMode.SYNC}, function_extender={extender})
+        session.run(parallelization_modes={ParallelizationMode.SYNC})
 
         assert extender.captured is not None
         assert extender.captured.tenant_id is None
@@ -115,10 +115,10 @@ class TestStreamRunReadsVerifiedContextAtCreationNotAtIteration:
 
     def test_tenant_reflects_the_scope_active_at_creation_not_at_later_consumption(self) -> None:
         extender = _ContextCapturingExtender()
-        session = _prepare_session()
+        session = _prepare_session(function_extender={extender})
 
         with verified_context(tenant_id="acme", project_id="proj-a", principal="hash-a"):
-            stream = session.stream_run(parallelization_modes={ParallelizationMode.SYNC}, function_extender={extender})
+            stream = session.stream_run(parallelization_modes={ParallelizationMode.SYNC})
 
         list(stream)
 
@@ -132,10 +132,10 @@ class TestStreamRunReadsVerifiedContextAtCreationNotAtIteration:
         DIFFERENT tenant's later scope (e.g. a server reusing a worker across requests) must not
         stamp the run with the wrong tenant's identity."""
         extender = _ContextCapturingExtender()
-        session = _prepare_session()
+        session = _prepare_session(function_extender={extender})
 
         with verified_context(tenant_id="acme", project_id="proj-a", principal="hash-a"):
-            stream = session.stream_run(parallelization_modes={ParallelizationMode.SYNC}, function_extender={extender})
+            stream = session.stream_run(parallelization_modes={ParallelizationMode.SYNC})
 
         with verified_context(tenant_id="tenant-b", project_id="proj-b", principal="hash-b"):
             list(stream)
@@ -168,10 +168,10 @@ class TestOptionsCannotOverrideVerifiedContext:
 
     def test_spoofed_options_are_ignored_when_a_verified_scope_is_active(self) -> None:
         extender = _ContextCapturingExtender()
-        session = _prepare_session(self._SPOOFED_OPTIONS)
+        session = _prepare_session(self._SPOOFED_OPTIONS, function_extender={extender})
 
         with verified_context(tenant_id="acme", project_id="proj1", principal="hash123"):
-            session.run(parallelization_modes={ParallelizationMode.SYNC}, function_extender={extender})
+            session.run(parallelization_modes={ParallelizationMode.SYNC})
 
         assert extender.captured is not None
         assert extender.captured.tenant_id == "acme"
@@ -181,9 +181,9 @@ class TestOptionsCannotOverrideVerifiedContext:
 
     def test_spoofed_options_are_ignored_when_no_verified_scope_is_active(self) -> None:
         extender = _ContextCapturingExtender()
-        session = _prepare_session(self._SPOOFED_OPTIONS)
+        session = _prepare_session(self._SPOOFED_OPTIONS, function_extender={extender})
 
-        session.run(parallelization_modes={ParallelizationMode.SYNC}, function_extender={extender})
+        session.run(parallelization_modes={ParallelizationMode.SYNC})
 
         assert extender.captured is not None
         assert extender.captured.tenant_id is None

@@ -66,11 +66,11 @@ class TestExtenderCloseFlushesBufferedEventsInAMultiprocessingWorker:
             compute_frameworks=["PythonDictFramework"],
             plugin_collector=_ENABLED,
             parallelization_modes={ParallelizationMode.MULTIPROCESSING},
+            function_extender={probe},
         )
 
         session.run(
             parallelization_modes={ParallelizationMode.MULTIPROCESSING},
-            function_extender={probe},
             flight_server=flight_server,
         )
 

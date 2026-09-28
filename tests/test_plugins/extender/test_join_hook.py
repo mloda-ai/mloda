@@ -123,13 +123,13 @@ class TestJoinHookFiresWithCorrectContext:
             compute_frameworks=["PythonDictFramework"],
             plugin_collector=_ENABLED,
             parallelization_modes={ParallelizationMode.SYNC},
+            function_extender={extender},
         )
 
         with verified_context(tenant_id="acme", project_id="proj1", principal="hash123"):
             result = session.run(
                 parallelization_modes={ParallelizationMode.SYNC},
                 flight_server=flight_server,
-                function_extender={extender},
                 carrier=carrier,
             )
 

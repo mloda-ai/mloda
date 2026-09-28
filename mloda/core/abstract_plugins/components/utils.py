@@ -141,7 +141,7 @@ def unhashable_part(value: Any, catching: tuple[type[Exception], ...] = (Excepti
 
 
 def safe_value_text(value: Any) -> str:
-    """Render a guard-rejected value for a message without ever risking a caller-visible crash or secret."""
+    """Render a rejected option value for a message without ever risking a caller-visible crash or secret."""
     if type(value) in (str, int, float, bool):
         # 2**2126 < 10**640, the lowest settable str-digit limit, so repr cannot raise
         if type(value) is int and value.bit_length() > 2126:

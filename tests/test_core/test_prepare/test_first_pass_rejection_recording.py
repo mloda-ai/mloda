@@ -516,10 +516,7 @@ class TestFirstPassRejectionRecording:
 
 
 class TestExpectedGuardRejectionRecording:
-    """``expected`` names what the guard accepts; the recorded reason uses that text, and the facade agrees.
-
-    Also covers plain parser rejections (element_validator / allowed_values), which render values the same way.
-    """
+    """Guard (``expected``, strict) and parser rejections render values the same way, and the facade agrees."""
 
     def test_valid_value_matches(self) -> None:
         """A valid int value passes the guard: match_feature_group_criteria returns True."""

@@ -590,7 +590,7 @@ _MUST_CHANGE_CASES: list[tuple[str, str, str, str]] = [
     ("annotation_only", "base.py", "def annotated(self, x: int) -> None:", "def annotated(self, x: float) -> None:"),
     ("nested_class_body", "base.py", 'return "nested"', 'return "nested-changed"'),
     ("dotted_chain_pkg_mod_f", "mod.py", "return x + 1", "return x + 2"),
-    # Local (function-body) first-party imports: see TDD spec "hash function-local imports".
+    # Local (function-body) first-party imports.
     (
         "local_import_lazy_helper_body",
         "lazy.py",
@@ -716,8 +716,8 @@ class TestImplementationHashEditMatrix:
 class TestLocalImportDeterminism:
     """A function-local first-party import resolves the same whether its target is pre-imported or not.
 
-    Shape per spec: module-level ``import {top}.other`` in the FG module, a local ``import {top}.lazy``
-    inside the one hashed method, and a two-hop alias in lazy.py (``Y = Z``) that the method calls through.
+    Module-level ``import {top}.other`` in the FG module, a local ``import {top}.lazy`` inside the one
+    hashed method, and a two-hop alias in lazy.py (``Y = Z``) that the method calls through.
     """
 
     def _write(self, fixture_pkg: _FixturePkgHelper, top: str) -> None:

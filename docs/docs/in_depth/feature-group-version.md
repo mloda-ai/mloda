@@ -93,7 +93,7 @@ class ScaledValue(FeatureGroup):
         return data
 ```
 
-Editing `Scaler.apply` now changes `ScaledValue.version()`. A third-party class referenced this way records only its package name and version. There is no separate hook for this, since a reference is enough. `ReadFileFeature` and `ReadDocumentFeature` declare nothing: the readers they find depend on what is imported at runtime, which would make the version depend on import order. The readers shipped with mloda are covered by the version prefix. To version a custom reader, subclass the reader feature group and reference the reader in it.
+Editing `Scaler.apply` now changes `ScaledValue.version()`. A third-party class referenced this way records only its package name and version. `ReadFileFeature` and `ReadDocumentFeature` declare nothing: the readers they find depend on what is imported at runtime, which would make the version depend on import order. The readers shipped with mloda are covered by the version prefix. To version a custom reader, subclass the reader feature group and reference the reader in it.
 
 ## When it is computed
 

@@ -117,7 +117,7 @@ class TestValidateCanAddToGroup:
         ],
         ids=["dict", "dsn_str"],
     )
-    def test_different_value_conflict_masks_dict_value(self, value: object, group_value: object, marker: str) -> None:
+    def test_different_value_conflict_masks_value(self, value: object, group_value: object, marker: str) -> None:
         """The 'already exists ... with a different value' message must not echo the raw Mapping value."""
         key = "SQLITEReader"
         group = {"SQLITEReader": group_value}
@@ -202,7 +202,7 @@ class TestValidateCanAddToContext:
         ],
         ids=["dict", "dsn_str"],
     )
-    def test_different_value_conflict_masks_dict_value(self, value: object, context_value: object, marker: str) -> None:
+    def test_different_value_conflict_masks_value(self, value: object, context_value: object, marker: str) -> None:
         """The 'already exists ... with a different value' message must not echo the raw Mapping value."""
         key = "SQLITEReader"
         group: dict[str, Any] = {}

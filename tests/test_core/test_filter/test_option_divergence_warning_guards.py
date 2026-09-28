@@ -184,14 +184,14 @@ def test_the_surviving_none_warning_names_the_value_intake_materializes(caplog: 
     ],
     ids=["dict", "dsn_str"],
 )
-def test_diverging_dict_option_values_are_masked_but_warning_still_fires(
+def test_diverging_option_values_are_masked_but_warning_still_fires(
     caplog: pytest.LogCaptureFixture,
     host_value: object,
     filter_value: object,
     host_marker: str,
     filter_marker: str,
 ) -> None:
-    """Diverging plain dicts still trigger the warning, but neither value leaks into the message."""
+    """Diverging option values still trigger the warning, but neither value leaks into the message."""
     with caplog.at_level(logging.WARNING):
         _emit(
             None,

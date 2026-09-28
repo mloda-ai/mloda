@@ -90,6 +90,9 @@ def redact_mapping(mapping: Mapping[Any, Any]) -> dict[Any, str]:
     return {key: "***" for key in mapping}
 
 
+_MAX_RENDER_DEPTH = 32
+
+
 def _redact_recursive(value: Any, ancestors: set[int]) -> Any:
     """Redact mappings and credential-shaped strings, walking lists/tuples/sets with a cycle guard."""
     if isinstance(value, Mapping):
@@ -100,6 +103,8 @@ def _redact_recursive(value: Any, ancestors: set[int]) -> Any:
     if isinstance(value, (list, tuple, set, frozenset)):
         if id(value) in ancestors:
             return "<cycle>"
+        if len(ancestors) >= _MAX_RENDER_DEPTH:
+            return "<...>"
         child_ancestors = ancestors | {id(value)}
         rendered = [_redact_recursive(item, child_ancestors) for item in value]
         if isinstance(value, tuple):

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import time
+from enum import Enum
 from typing import Any
 
 import pytest
@@ -373,9 +374,18 @@ def test_redact_option_value(value: Any, expected: Any) -> None:
 
 
 def test_redact_option_value_plain_str_returns_same_object() -> None:
-    """A non-URI, non-keyword string is returned unchanged by identity (str subclasses keep their repr)."""
+    """A non-URI, non-keyword string is returned unchanged by identity."""
     value = "plain configuration text with no credentials"
     assert redact_option_value(value) is value
+
+
+class _Mode(str, Enum):
+    PLAIN = "plain"
+
+
+def test_redact_option_value_str_enum_member_returns_same_object() -> None:
+    """A str Enum member with nothing to scrub is returned as the same object."""
+    assert redact_option_value(_Mode.PLAIN) is _Mode.PLAIN
 
 
 def test_redact_option_value_self_referencing_list_renders_without_recursion_error() -> None:
@@ -388,6 +398,20 @@ def test_redact_option_value_self_referencing_list_renders_without_recursion_err
     rendered = repr(result)
     assert "cred_marker_q7" not in rendered
     assert "<cycle>" in rendered
+
+
+def test_redact_option_value_deeply_nested_non_cyclic_list_does_not_raise_recursion_error() -> None:
+    """A non-cyclic list nested 5000 levels deep must not blow the stack; past a depth cap it renders '<...>'."""
+    value: Any = [_DSN_URI_MARKER]
+    for _ in range(5000):
+        value = [value]
+
+    result = redact_option_value(value)
+
+    node = result
+    while isinstance(node, list):
+        node = node[0]
+    assert node == "<...>" or "cred_marker_q7" not in str(node)
 
 
 def test_redact_option_value_shared_inner_dict_without_cycle_renders_both_masked() -> None:

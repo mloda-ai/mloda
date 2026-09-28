@@ -443,6 +443,14 @@ def _locate_module_spec(modname: str) -> importlib.machinery.ModuleSpec | None:
         name = ".".join(parts[: i + 1])
         spec = _find_spec_quiet(name, search_locations)
         if spec is None:
+            if search_locations is not None:
+                seg = parts[i]
+                portions = [os.path.join(loc, seg) for loc in search_locations if os.path.isdir(os.path.join(loc, seg))]
+                if portions:
+                    spec = importlib.machinery.ModuleSpec(name, None, is_package=True)
+                    spec.submodule_search_locations = portions
+                    search_locations = portions
+                    continue
             return None
         if i + 1 < len(parts):
             if not spec.submodule_search_locations:
@@ -467,13 +475,7 @@ def _locate_static_module_index(modname: str) -> _ModuleIndex | None:
 
 
 def _is_namespace_module(modname: str) -> bool:
-    """True for a PEP 420 namespace package step: importable/locatable but with no source of its own."""
-    mod = sys.modules.get(modname)
-    if mod is not None:
-        mod_vars = safe_field(lambda: vars(mod), None)
-        if mod_vars is None or "__path__" not in mod_vars:
-            return False
-        return _get_module_index(modname) is None
+    """True for a PEP 420 namespace package step: locatable but with no ``.py`` source of its own."""
     spec = _locate_module_spec(modname)
     if spec is None:
         return False
@@ -799,6 +801,7 @@ class _Walker:
         self._queue: list[_Task] = []
         self._index_cache: dict[str, _ModuleIndex | None] = {}
         self._static_index_cache: dict[str, _ModuleIndex | None] = {}
+        self._namespace_step_cache: dict[str, bool] = {}
         self._dependency_by_top: dict[str, str | None] = {}
 
     def _module_index(self, modname: str) -> _ModuleIndex | None:
@@ -824,7 +827,11 @@ class _Walker:
         """A locatable module, or a namespace package step that is not the chain's final segment."""
         if self._static_module_index(modname) is not None:
             return True
-        return more_segments and _is_namespace_module(modname)
+        if not more_segments:
+            return False
+        if modname not in self._namespace_step_cache:
+            self._namespace_step_cache[modname] = _is_namespace_module(modname)
+        return self._namespace_step_cache[modname]
 
     def in_scope(self, modname: str) -> bool:
         top = _top(modname)
@@ -950,7 +957,7 @@ class _Walker:
                 return
         self.parts.add(f"nosrc:{modname}:{qualname}")
 
-    def _handle_binding(self, modname: str, name: str, static: bool, skip_none_assign: bool = False) -> None:
+    def _handle_binding(self, modname: str, name: str, static: bool) -> None:
         key = ("sb" if static else "b", modname, name)
         if key in self._seen:
             return
@@ -958,6 +965,12 @@ class _Walker:
         idx = self._static_module_index(modname) if static else self._module_index(modname)
         if idx is None:
             return
+        skip_none_assign = False
+        if static:
+            for entry in idx.imports.get(name, []):
+                if not self.in_scope(entry.source_module) and not _is_ignored_module_name(entry.source_module):
+                    self._add_dependency(entry.source_module)
+                    skip_none_assign = True
         candidates = idx.bindings.get(name)
         if candidates:
             for candidate in candidates:
@@ -1018,17 +1031,15 @@ class _Walker:
             self.parts.add(f"nosrc:{modname}:{ref}")
             return
         head, _, remainder = ref.partition(".")
-        # Mirrors _handle_ref: an out-of-scope import of head always adds a dep: entry, hiding a None fallback.
-        has_optional_import = False
+        # Mirrors _handle_ref: an out-of-scope import of head adds its dep: entry even when head is a definition.
         for entry in idx.imports.get(head, []):
             if not self.in_scope(entry.source_module) and not _is_ignored_module_name(entry.source_module):
                 self._add_dependency(entry.source_module)
-                has_optional_import = True
         if head in idx.definitions:
             self._accept_def_by_qualname(modname, head, idx, True)
             return
         if head in idx.bindings:
-            self._handle_binding(modname, head, True, skip_none_assign=has_optional_import)
+            self._handle_binding(modname, head, True)
             return
         import_entries = idx.imports.get(head, [])
         if import_entries:

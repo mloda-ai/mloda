@@ -435,8 +435,12 @@ class FeatureChainParserMixin:
             if reason is not None:
                 return reason
 
-        # The in_features gate itself is not reported here; it only gates whether a guard reason follows.
-        if not cls._validate_in_features(True, options, name_sources, feature_name):
+        # Mirrors the matcher's gate order: a name-carried count is reported, the options-path gate is a silent non-match.
+        if name_sources is not None:
+            reason = cls._in_feature_count_reason(feature_name, len(name_sources))
+            if reason is not None:
+                return reason
+        elif not cls._validate_in_features(True, options, None, feature_name):
             return None
 
         rejection = cls._first_rejecting_guard(effective_options, property_mapping)

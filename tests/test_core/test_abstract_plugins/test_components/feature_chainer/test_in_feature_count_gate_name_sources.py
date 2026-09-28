@@ -152,6 +152,19 @@ class TestNameSourceCountRejectionIsRecorded:
 
         assert result is False
         assert rejection_window == {OWNER_944: MatchRejection(reason=BELOW_MIN_REASON_944, stage=NAME_STAGE)}
+        assert (
+            _NameSourceGate944._strict_validation_rejection_reason(BELOW_MIN_NAME_944, _options())
+            == BELOW_MIN_REASON_944
+        )
+
+    def test_facade_call_inside_an_open_window_records_nothing(
+        self, rejection_window: dict[str, MatchRejection]
+    ) -> None:
+        """The facade is a standalone diagnostic: calling it must never write into an active recording window."""
+        reason = _NameSourceGate944._strict_validation_rejection_reason(BELOW_MIN_NAME_944, _options())
+
+        assert reason == BELOW_MIN_REASON_944
+        assert rejection_window == {}
 
     def test_above_max_records_the_actionable_reason(self, rejection_window: dict[str, MatchRejection]) -> None:
         """The reason keeps the pre-gate wording: the declared MAX and the count the name carries."""
@@ -184,15 +197,16 @@ class TestNameSourceCountRejectionIsRecorded:
     def test_the_count_reason_wins_over_a_rejected_guard(self, rejection_window: dict[str, MatchRejection]) -> None:
         """A too-few name count AND a guard-rejected key: the recorded reason is the count reason, never the guard's."""
         context = {"operation": "op1", "guarded_key_gate944": "ok_gate944"}
-        result = _NameSourceGuardGate944.match_feature_group_criteria("f1__op1_guardgate944", Options(context=context))
+        options = Options(context=context)
+        count_reason = "Feature 'f1__op1_guardgate944' requires at least 2 in_feature(s), but found 1"
+
+        result = _NameSourceGuardGate944.match_feature_group_criteria("f1__op1_guardgate944", options)
 
         assert result is False
-        assert rejection_window == {
-            "_NameSourceGuardGate944": MatchRejection(
-                reason=("Feature 'f1__op1_guardgate944' requires at least 2 in_feature(s), but found 1"),
-                stage=NAME_STAGE,
-            )
-        }
+        assert rejection_window == {"_NameSourceGuardGate944": MatchRejection(reason=count_reason, stage=NAME_STAGE)}
+        assert (
+            _NameSourceGuardGate944._strict_validation_rejection_reason("f1__op1_guardgate944", options) == count_reason
+        )
 
 
 class _OptionsOnlyGroupM951(FeatureChainParserMixin):

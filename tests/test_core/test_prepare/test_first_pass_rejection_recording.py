@@ -436,9 +436,9 @@ class TestFirstPassRejectionRecording:
 
     def test_strict_match_guard_rejection_is_not_reported_when_in_features_is_absent(self) -> None:
         """The in_features gate fails first (silently); the guard reason must not be recorded either."""
-        feature = Feature(GUARD_FEATURE_OS005R, Options(context={"guarded_key_os005r": "ok_os005r"}))
-        accessible_plugins: FeatureGroupEnvironmentMapping = {GuardRecordingFGOs005r: {RecorderFwOneOs005r}}
         options = Options(context={"guarded_key_os005r": "ok_os005r"})
+        feature = Feature(GUARD_FEATURE_OS005R, options)
+        accessible_plugins: FeatureGroupEnvironmentMapping = {GuardRecordingFGOs005r: {RecorderFwOneOs005r}}
 
         result = _failed_result(feature, accessible_plugins)
 
@@ -588,7 +588,7 @@ class TestExpectedGuardRejectionRecording:
                 EXPECTED_HUGEINT_FEATURE_MGE,
                 ExpectedGuardFGMge,
                 "concurrency_mge",
-                -(10**700),
+                -(10**5000),
                 EXPECTED_HUGEINT_REASON_MGE,
                 id="huge_int_value",
             ),
@@ -612,7 +612,7 @@ class TestExpectedGuardRejectionRecording:
                 STRICT_GUARD_HUGEINT_FEATURE_MGE,
                 StrictGuardOnlyFGMge,
                 "payload_strict_mge",
-                10**700,
+                10**5000,
                 STRICT_GUARD_HUGEINT_REASON_MGE,
                 id="strict_guard_huge_int_value",
             ),

@@ -429,5 +429,5 @@ class TestConfigBasedListRejection:
         reason = case.feature_group._strict_validation_rejection_reason("placeholder", options)
         assert reason is not None
         assert case.key in reason
-        assert "list" in reason
+        assert "Property value list rejected by match_guard" in reason
         assert str(case.list_value) not in reason

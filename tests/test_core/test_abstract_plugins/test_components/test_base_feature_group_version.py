@@ -1048,36 +1048,168 @@ class TestLocalImports:
         )
 
 
+_DOTTED_OTHER_SRC = "def other_func(x: int) -> int:\n    return x + 1\n"
+_DOTTED_LAZY_SRC = "def Z(x: int) -> int:\n    return x + 2\n\n\nY = Z\n"
+
+# case: (extra_files, sub_import, return_expr, lazy_suffix). extra_files=None means the default
+# other.py/lazy.py pair; sub_import/return_expr are formatted with top=<top>.
+_DOTTED_SUBMODULE_CASES: list[tuple[dict[str, str] | None, str, str, str]] = [
+    (None, "import {top}.other\n", "{top}.lazy.Y(x)", "lazy"),
+    (
+        {
+            "other.py": _DOTTED_OTHER_SRC,
+            "lazy.py": "import functools\n\n\n@functools.lru_cache\ndef Z(x: int) -> int:\n    return x + 2\n",
+        },
+        "import {top}.other\n",
+        "{top}.lazy.Z(x) + {top}.other.other_func(x)",
+        "lazy",
+    ),
+    (
+        {
+            "other.py": _DOTTED_OTHER_SRC,
+            "lazy.py": (
+                "try:\n"
+                "    import mloda_nonexistent_fastlib as fast\n"
+                "except ImportError:\n"
+                "    fast = None\n\n\n"
+                "def Z(x: int) -> int:\n"
+                "    return x if fast is None else fast.f(x)\n"
+            ),
+        },
+        "import {top}.other\n",
+        "{top}.lazy.Z(x) + {top}.other.other_func(x)",
+        "lazy",
+    ),
+    (
+        {"other.py": _DOTTED_OTHER_SRC, "ns/lazy.py": "def Z(x: int) -> int:\n    return x + 2\n"},
+        "import {top}.other\n",
+        "{top}.ns.lazy.Z(x) + {top}.other.other_func(x)",
+        "ns.lazy",
+    ),
+    (
+        {
+            "a/__init__.py": "",
+            "a/other.py": _DOTTED_OTHER_SRC,
+            "a/lazy.py": "def Z(x: int) -> int:\n    return x + 2\n",
+        },
+        "import {top}.a.other\n",
+        "{top}.a.lazy.Z(x) + {top}.a.other.other_func(x)",
+        "a.lazy",
+    ),
+    (
+        None,
+        "import {top}.other\n",
+        'getattr({top}.lazy, "Z")(x) + {top}.other.other_func(x)',
+        "lazy",
+    ),
+    (
+        {
+            "a/__init__.py": "",
+            "a/other.py": _DOTTED_OTHER_SRC,
+            "a/ns/lazy.py": "def Z(x: int) -> int:\n    return x + 2\n",
+        },
+        "import {top}.a.other\n",
+        "{top}.a.ns.lazy.Z(x) + {top}.a.other.other_func(x)",
+        "a.ns.lazy",
+    ),
+    (
+        {
+            "other.py": _DOTTED_OTHER_SRC,
+            "n1/n2/lazy.py": "def Z(x: int) -> int:\n    return x + 2\n",
+        },
+        "import {top}.other\n",
+        "{top}.n1.n2.lazy.Z(x) + {top}.other.other_func(x)",
+        "n1.n2.lazy",
+    ),
+]
+
+_DOTTED_SUBMODULE_IDS = [
+    "alias",
+    "lru_cache",
+    "optional_dependency",
+    "namespace_dir",
+    "two_level_chain",
+    "whole_module",
+    "namespace_under_subpackage",
+    "nested_namespace",
+]
+
+# a lazy.py with the optional-dependency try/except pattern, reached as a whole module, where the
+# target function does not itself reference the optional dependency's sentinel.
+_OPTIONAL_DEPENDENCY_UNUSED_CASE: tuple[dict[str, str] | None, str, str, str] = (
+    {
+        "other.py": _DOTTED_OTHER_SRC,
+        "lazy.py": (
+            "try:\n"
+            "    import mloda_nonexistent_fastlib as fast\n"
+            "except ImportError:\n"
+            "    fast = None\n\n\n"
+            "def Z(x: int) -> int:\n"
+            "    return x + 2\n"
+        ),
+    },
+    "import {top}.other\n",
+    'getattr({top}.lazy, "Z")(x) + {top}.other.other_func(x)',
+    "lazy",
+)
+
+_DOTTED_SUBMODULE_CASES_BY_ID = dict(zip(_DOTTED_SUBMODULE_IDS, _DOTTED_SUBMODULE_CASES))
+
+
 class TestDottedSubmoduleRefsThroughPackageGlobal:
     """A live ``{top}.sub.fn`` chain through a package global must resolve the same whether or not the
     intermediate submodule is already imported (no function-local import is involved here)."""
 
-    def _write_fixture(self, fixture_pkg: _FixturePkgHelper, top: str) -> None:
-        fixture_pkg.write(
-            top,
-            {
-                "other.py": "def other_func(x: int) -> int:\n    return x + 1\n",
-                "lazy.py": "def Z(x: int) -> int:\n    return x + 2\n\n\nY = Z\n",
-                "sub.py": (
-                    f"import {top}.other\n\n"
-                    "from mloda.provider import FeatureGroup\n\n\n"
-                    "class Leaf(FeatureGroup):\n"
-                    "    def calculate_feature(self, x: int) -> int:\n"
-                    f"        return {top}.lazy.Y(x)\n"
-                ),
-            },
+    def _write_fixture(
+        self,
+        fixture_pkg: _FixturePkgHelper,
+        top: str,
+        *,
+        extra_files: dict[str, str] | None = None,
+        sub_import: str = "import {top}.other\n",
+        return_expr: str = "{top}.lazy.Y(x)",
+    ) -> None:
+        files = (
+            dict(extra_files)
+            if extra_files is not None
+            else {"other.py": _DOTTED_OTHER_SRC, "lazy.py": _DOTTED_LAZY_SRC}
         )
+        files["sub.py"] = (
+            f"{sub_import.format(top=top)}\n"
+            "from mloda.provider import FeatureGroup\n\n\n"
+            "class Leaf(FeatureGroup):\n"
+            "    def calculate_feature(self, x: int) -> int:\n"
+            f"        return {return_expr.format(top=top)}\n"
+        )
+        fixture_pkg.write(top, files)
 
-    def test_hash_identical_pre_imported_or_not(self, fixture_pkg: _FixturePkgHelper) -> None:
+    @pytest.mark.parametrize(
+        ("extra_files", "sub_import", "return_expr", "lazy_suffix"),
+        _DOTTED_SUBMODULE_CASES,
+        ids=_DOTTED_SUBMODULE_IDS,
+    )
+    def test_hash_identical_pre_imported_or_not(
+        self,
+        fixture_pkg: _FixturePkgHelper,
+        extra_files: dict[str, str] | None,
+        sub_import: str,
+        return_expr: str,
+        lazy_suffix: str,
+    ) -> None:
         top = _unique_top("dottedsub")
-        self._write_fixture(fixture_pkg, top)
+        self._write_fixture(fixture_pkg, top, extra_files=extra_files, sub_import=sub_import, return_expr=return_expr)
         leaf_cold = fixture_pkg.import_leaf(top)
         hash_cold = BaseFeatureGroupVersion.implementation_hash(leaf_cold)
-        assert f"{top}.lazy" not in sys.modules, "hashing must not import the target submodule"
+        assert f"{top}.{lazy_suffix}" not in sys.modules, "hashing must not import the target submodule"
+
+        cold_parts = closure_parts(leaf_cold, True)
+        assert any(part.startswith(f"{top}.{lazy_suffix}:Z:") for part in cold_parts), (
+            f"cold walk must hash the target function's own body; got {cold_parts}"
+        )
 
         fixture_pkg.purge(top)
-        self._write_fixture(fixture_pkg, top)
-        importlib.import_module(f"{top}.lazy")
+        self._write_fixture(fixture_pkg, top, extra_files=extra_files, sub_import=sub_import, return_expr=return_expr)
+        importlib.import_module(f"{top}.{lazy_suffix}")
         leaf_warm = fixture_pkg.import_leaf(top)
         hash_warm = BaseFeatureGroupVersion.implementation_hash(leaf_warm)
 
@@ -1099,6 +1231,32 @@ class TestDottedSubmoduleRefsThroughPackageGlobal:
 
         assert after != before, (
             "editing the target's body must change the hash even when the submodule is never imported"
+        )
+
+    @pytest.mark.parametrize(
+        ("extra_files", "sub_import", "return_expr", "lazy_suffix"),
+        [_DOTTED_SUBMODULE_CASES_BY_ID["optional_dependency"], _OPTIONAL_DEPENDENCY_UNUSED_CASE],
+        ids=["optional_dependency", "optional_dependency_unused_whole_module"],
+    )
+    def test_optional_dependency_cold_walk_adds_dep_entry_and_skips_sentinel_fallback(
+        self,
+        fixture_pkg: _FixturePkgHelper,
+        extra_files: dict[str, str] | None,
+        sub_import: str,
+        return_expr: str,
+        lazy_suffix: str,
+    ) -> None:
+        """A cold optional-dependency walk must register a dep: entry but not hash the None-fallback assignment."""
+        top = _unique_top("dottedsubdep")
+        self._write_fixture(fixture_pkg, top, extra_files=extra_files, sub_import=sub_import, return_expr=return_expr)
+        leaf = fixture_pkg.import_leaf(top)
+        assert f"{top}.{lazy_suffix}" not in sys.modules, "precondition: the target submodule must stay cold"
+
+        parts = closure_parts(leaf, True)
+
+        assert "dep:mloda_nonexistent_fastlib" in parts, "the optional third-party import must register a dep: entry"
+        assert not any(part.startswith(f"{top}.lazy:=fast:") for part in parts), (
+            "the None fallback assignment for the optional dependency must not be hashed"
         )
 
 

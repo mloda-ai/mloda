@@ -14,6 +14,7 @@ The version has three parts, joined by `-`:
 
 - **Roots**: the feature group class and every base class in its MRO that is first-party. First-party means the feature group's own top-level package or the `mloda.*` plugin namespace, except mloda's own `mloda.core`, `mloda.user`, `mloda.provider` and `mloda.steward`. The version prefix covers mloda itself.
 - **Reachable code**: every function, class and module-level constant the roots reference by name or by `module.attr`, followed through first-party code. This includes helpers in other modules and constants imported with `from ... import`. A module used as a value, for example in `getattr(helpers, name)`, counts as a whole.
+- **Dotted references into submodules**, such as `pkg.sub.f`: followed from `pkg/sub.py` without importing it, also through namespace subdirectories, so the hash is the same whether or not `pkg.sub` was already imported.
 - **Imports inside a function body**, for example to avoid a circular import: first-party targets are followed from their source files, without importing them, so the hash is the same whether or not the target module was already imported. Third-party and stdlib imports inside a function body add nothing, not even a dependency version.
 - **Canonical form**: each definition is hashed from its syntax tree. Code, constants, decorators, base classes and type annotations count. Docstrings, comments, blank lines and formatting do not. Functions the feature group never references do not count either. The hash is the same on every supported Python version.
 
@@ -64,7 +65,7 @@ class DependencyAgnostic(FeatureGroup):
     - `getattr` on objects that are not modules,
     - names captured from an enclosing function.
 - Modules without Python source (C extensions, bytecode-only installs). Their definitions are recorded by name only.
-- Names served by a module-level `__getattr__`, and constants in modules without a source file (for example notebook cells). These are not recorded at all.
+- Names served by a module-level `__getattr__` (except submodules with a source file), and constants in modules without a source file (for example notebook cells). These are not recorded at all.
 - Data and configuration files the code reads.
 - Source edited after import in a long-lived process. The hash reads the source files the first time it runs for a class, then caches the result for that class object.
 

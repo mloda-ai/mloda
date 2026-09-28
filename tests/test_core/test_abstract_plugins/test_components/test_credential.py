@@ -92,9 +92,6 @@ class TestCredentialEqualityAndHash:
         assert Credential(a=1) != {"a": 1}
         assert {"a": 1} != Credential(a=1)
 
-    def test_credential_with_nested_dict_value_hashes(self) -> None:
-        assert isinstance(hash(Credential(a={"nested": 1})), int)
-
     def test_equal_credentials_with_nested_dict_values_hash_alike(self) -> None:
         assert hash(Credential(a={"nested": 1})) == hash(Credential(a={"nested": 1}))
 
@@ -357,8 +354,7 @@ _LIST_ENTRY_SECRET = "dsn-string-value-not-a-mapping"  # nosec B105
 
 
 class TestListFormCredentialsRejectsNonMappingEntries:
-    """List-form credentials entries must be mappings (Credential/dict); any other entry raises ValueError
-    naming the offending index and type, never the value."""
+    """A non-mapping list entry raises ValueError naming the offending index and type, never the value."""
 
     def _assert_entry_shape_error(self, msg: str, index: int, type_name: str) -> None:
         lowered = msg.lower()

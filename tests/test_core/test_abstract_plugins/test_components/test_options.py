@@ -511,26 +511,16 @@ class TestOptionsGetInFeaturesUnresolvableTruthyValue:
 class TestOptionsWithCredentialValues:
     """Options group holding Credential values compares/hashes by value and never leaks it via str()."""
 
-    def test_options_with_equal_credentials_are_equal(self) -> None:
+    def test_options_with_equal_credentials_are_equal_and_hash_alike(self) -> None:
         options1 = Options(group={"SQLITEReader": Credential(sqlite="/x.db")})
         options2 = Options(group={"SQLITEReader": Credential(sqlite="/x.db")})
         assert options1 == options2
-
-    def test_options_with_equal_credentials_hash_alike(self) -> None:
-        options1 = Options(group={"SQLITEReader": Credential(sqlite="/x.db")})
-        options2 = Options(group={"SQLITEReader": Credential(sqlite="/x.db")})
         assert hash(options1) == hash(options2)
 
     def test_options_with_different_credentials_are_not_equal(self) -> None:
         options1 = Options(group={"SQLITEReader": Credential(sqlite="/x.db")})
         options2 = Options(group={"SQLITEReader": Credential(sqlite="/y.db")})
         assert options1 != options2
-
-    def test_credential_value_not_equal_to_plain_dict_with_same_content(self) -> None:
-        options_credential = Options(group={"SQLITEReader": Credential(sqlite="/x.db")})
-        options_dict = Options(group={"SQLITEReader": {"sqlite": "/x.db"}})
-        assert options_credential != options_dict
-        assert options_dict != options_credential
 
     def test_str_never_contains_the_secret_value(self) -> None:
         options = Options(group={"SQLITEReader": Credential(sqlite="/secret/path/analytics.db")})

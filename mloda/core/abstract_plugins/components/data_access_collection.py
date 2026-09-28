@@ -108,7 +108,7 @@ class DataAccessCollection:
         if isinstance(unwrapped, dict):
             return unwrapped
         raise ValueError(
-            f"credentials list entry {index} is a {type(entry).__name__}, not a mapping. Each list entry "
+            f"credentials list entry {index} has type {type(entry).__name__}, not a mapping. Each list entry "
             f"must be a dict or a Credential, e.g. credentials=[Credential(dsn=...)]."
         )
 

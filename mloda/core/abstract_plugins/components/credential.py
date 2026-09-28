@@ -39,6 +39,8 @@ class Credential:
     def __hash__(self) -> int:
         return hash(_deep_hashable(self._data))
 
+    # Deliberately not a registered deep node: Feature._reduce must keep a Credential
+    # distinct from an equal plain dict.
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, Credential):
             return False

@@ -204,7 +204,7 @@ class MlodaTestRunner:
         runner = engine.compute(flight_server if use_flight else None)
 
         try:
-            runner.__enter__(parallelization_modes, function_extender, api_data, None, engine.run_context)
+            runner.__enter__(parallelization_modes, function_extender, api_data)
             runner.compute()
         finally:
             runner.__exit__(None, None, None)

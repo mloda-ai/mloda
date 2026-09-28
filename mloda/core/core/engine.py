@@ -152,6 +152,7 @@ class Engine:
             column_ordering=self.column_ordering,
             request_feature_order=self.request_feature_order,
             tfs_connection_map=self.tfs_connection_map,
+            run_context=self.run_context,
         )
         if isinstance(orchestrator, ExecutionOrchestrator):
             return orchestrator

@@ -46,7 +46,8 @@ class PandasDataFrame(ComputeFramework):
         )
         return data[[f for f in _selected_feature_names]]
 
-    def _extract_column_names(self, data: Any) -> set[str]:
+    @classmethod
+    def extract_column_names(cls, data: Any) -> set[str]:
         return set(data.columns)
 
     def _first_column_dtype(self, data: Any, column_name: str) -> Any | None:

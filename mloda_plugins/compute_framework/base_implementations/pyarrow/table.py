@@ -82,7 +82,8 @@ class PyArrowTable(ComputeFramework):
         )
         return data.select([f for f in _selected_feature_names])
 
-    def _extract_column_names(self, data: Any) -> set[str]:
+    @classmethod
+    def extract_column_names(cls, data: Any) -> set[str]:
         return set(data.schema.names)
 
     def _extract_column_dtype(self, data: Any, column_name: str) -> str | None:

@@ -80,7 +80,8 @@ class PythonDictFramework(ComputeFramework):
         # Copy the column lists so mutating the selection cannot mutate framework internals.
         return {k: list(data[k]) for k in _selected_feature_names if k in data}
 
-    def _extract_column_names(self, data: Any) -> set[str]:
+    @classmethod
+    def extract_column_names(cls, data: Any) -> set[str]:
         if isinstance(data, dict):
             return set(data.keys())
         # Row-wise list[dict] (still an accepted pre-transform shape): columns are the keys.

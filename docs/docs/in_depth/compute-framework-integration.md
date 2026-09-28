@@ -159,12 +159,13 @@ are never subject to this check.
 #### The schema-presence gate
 
 The guard detects a missing schema via the framework's existing
-`ComputeFramework._extract_column_names(self, data) -> set[str]`: an empty set
+`ComputeFramework.extract_column_names(data) -> set[str]` (a classmethod): an empty set
 means no schema, which is the error condition. Every framework already implements
 this off schema metadata, so it works on a zero-row frame and costs nothing extra
 (no row scan, collect, or count). No per-framework opt-in is needed when you
-implement a new compute framework, as long as `_extract_column_names` returns the
-columns for a zero-row frame.
+implement a new compute framework, as long as `extract_column_names` returns the
+columns for a zero-row frame. Feature groups can call
+`<Framework>.extract_column_names(data)` without an instance to resolve available columns.
 
 There is one representational caveat. The schema-bearing frameworks (PyArrow,
 Pandas, Polars, DuckDB, SQLite, Spark, Iceberg) carry their schema as metadata

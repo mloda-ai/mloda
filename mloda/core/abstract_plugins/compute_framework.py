@@ -531,12 +531,17 @@ class ComputeFramework(ABC):
             return True
         return any(dtype_str.startswith(p) for p in ComputeFramework._NUMERIC_PREFIXES)
 
+    @classmethod
+    def extract_column_names(cls, data: Any) -> set[str]:
+        """Column names of framework-native data, callable without an instance."""
+        raise NotImplementedError
+
     def _extract_column_names(self, data: Any) -> set[str]:
         """Extract column names from the framework's data after transform.
 
         Also called via _output_schema with a non-dict raw calculate_feature result, where a raise degrades to None.
         """
-        raise NotImplementedError
+        return type(self).extract_column_names(data)
 
     def _is_schemaless_empty(self, data: Any) -> bool:
         """Framework-representational hook: return True only when ``data`` is this

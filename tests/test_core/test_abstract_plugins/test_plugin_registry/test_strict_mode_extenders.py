@@ -11,9 +11,11 @@ Contract: mloda.core.prepare.accessible_plugins gains
   registry are dropped with a WARNING listing the dropped classes; registered
   instances survive; dropping every instance yields an empty set, no raise.
 
-mlodaAPI wires the helper at the seam where ``self.plugin_collector`` and
-``function_extender`` meet: ``_enter_runner_context`` must hand the runner the
-FILTERED set under strict mode.
+mlodaAPI filters extenders once, at prepare time, into ``self.engine.function_extender``
+(the strict-mode-filtered copy taken from the constructor argument). ``_enter_runner_context``
+reuses that prepare-time engine snapshot; it never re-reads or re-filters the live
+``self.function_extender`` attribute, so reassigning or mutating the latter after prepare
+has no effect on what the runner receives.
 
 The helper is imported inside each test so every test fails with a precise
 ImportError until the Green agent implements it; the integration test fails
@@ -26,9 +28,15 @@ from typing import Any, cast
 
 import pytest
 
+from mloda.core.abstract_plugins.components.feature import Feature
+from mloda.core.abstract_plugins.components.feature_set import FeatureSet
+from mloda.core.abstract_plugins.components.input_data.base_input_data import BaseInputData
+from mloda.core.abstract_plugins.components.input_data.creator.data_creator import DataCreator
 from mloda.core.abstract_plugins.components.parallelization_modes import ParallelizationMode
 from mloda.core.abstract_plugins.components.plugin_option.plugin_collector import PluginCollector
+from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook
+from mloda.core.abstract_plugins.plugin_loader.plugin_loader import PluginLoader
 from mloda.core.abstract_plugins.plugin_registry.plugin_registry import PluginRegistry, register_plugin
 from mloda.core.abstract_plugins.run_context import RunContext
 from mloda.core.api.request import mlodaAPI
@@ -73,6 +81,21 @@ class _ExtStrictInjectedOnly(Extender):
 
     def __call__(self, func: Any, *args: Any, **kwargs: Any) -> Any:
         return func(*args, **kwargs)
+
+
+_STRICT_WIRING_FEAT = "strict_mode_extenders_wiring_feature_unique_xyz"
+
+
+class _StrictWiringFeatureGroup(FeatureGroup):
+    """Root feature group used to build a real session for the runner-wiring tests."""
+
+    @classmethod
+    def input_data(cls) -> BaseInputData | None:
+        return DataCreator({_STRICT_WIRING_FEAT})
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return {_STRICT_WIRING_FEAT: [1, 2, 3]}
 
 
 def _qualid(cls: type) -> str:
@@ -182,20 +205,27 @@ class _RecordingRunner:
 
 
 class TestRequestWiring:
-    def test_runner_receives_filtered_extenders_under_strict_mode(self) -> None:
-        """mlodaAPI._enter_runner_context is the seam where self.plugin_collector and
-        function_extender meet; under strict mode the runner must receive the
-        FILTERED set, not the raw one."""
+    """_enter_runner_context hands the runner the engine's prepare-time extender snapshot,
+    never a live re-read of self.function_extender."""
+
+    def test_reassigning_function_extender_after_prepare_does_not_change_what_the_runner_receives(self) -> None:
+        PluginLoader().load_matching("compute_framework", "*python_dict*")
+        register_plugin(_StrictWiringFeatureGroup)
         register_plugin(_ExtStrictRegistered)
         registered = _ExtStrictRegistered()
         unregistered = _ExtStrictUnregisteredA()
 
-        api = mlodaAPI.__new__(mlodaAPI)
-        api.plugin_collector = PluginCollector().set_strict_mode("strict")
-        api.function_extender = {registered, unregistered}
+        session = mlodaAPI.prepare(
+            [Feature(_STRICT_WIRING_FEAT)],
+            compute_frameworks=["PythonDictFramework"],
+            plugin_collector=PluginCollector().set_strict_mode("strict"),
+            function_extender={registered, unregistered},
+        )
+
+        session.function_extender = {unregistered}
 
         recorder = _RecordingRunner()
-        api._enter_runner_context(
+        session._enter_runner_context(
             cast(ExecutionOrchestrator, recorder),
             {ParallelizationMode.SYNC},
             None,
@@ -203,5 +233,56 @@ class TestRequestWiring:
         )
 
         assert recorder.received_extenders == {registered}, (
-            "the runner must receive the strict-filtered extender set, not the raw one passed to the API"
+            "the runner must reuse the engine's prepare-time filtered set, not a live re-read of "
+            "the (reassigned) api.function_extender attribute"
         )
+
+    def test_mutating_the_set_passed_to_prepare_in_place_does_not_change_what_the_runner_receives(self) -> None:
+        # Strict mode always builds a new set, so this in-place check needs strict mode OFF,
+        # where the filter currently returns the caller's own set object unchanged.
+        PluginLoader().load_matching("compute_framework", "*python_dict*")
+        register_plugin(_StrictWiringFeatureGroup)
+        register_plugin(_ExtStrictRegistered)
+        original = _ExtStrictRegistered()
+        extenders: set[Extender] = {original}
+
+        session = mlodaAPI.prepare(
+            [Feature(_STRICT_WIRING_FEAT)],
+            compute_frameworks=["PythonDictFramework"],
+            plugin_collector=PluginCollector.enabled_feature_groups({_StrictWiringFeatureGroup}).set_strict_mode("off"),
+            function_extender=extenders,
+        )
+
+        extenders.add(_ExtStrictRegistered())  # mutate the caller's own set object after prepare
+
+        recorder = _RecordingRunner()
+        session._enter_runner_context(
+            cast(ExecutionOrchestrator, recorder),
+            {ParallelizationMode.SYNC},
+            None,
+            run_context=RunContext(),
+        )
+
+        assert recorder.received_extenders == {original}, (
+            "the runner must reuse the engine's own snapshot, not the caller's mutable set object"
+        )
+
+    def test_no_extenders_means_the_runner_receives_none_not_an_empty_set(self) -> None:
+        PluginLoader().load_matching("compute_framework", "*python_dict*")
+        register_plugin(_StrictWiringFeatureGroup)
+
+        session = mlodaAPI.prepare(
+            [Feature(_STRICT_WIRING_FEAT)],
+            compute_frameworks=["PythonDictFramework"],
+            plugin_collector=PluginCollector().set_strict_mode("strict"),
+        )
+
+        recorder = _RecordingRunner()
+        session._enter_runner_context(
+            cast(ExecutionOrchestrator, recorder),
+            {ParallelizationMode.SYNC},
+            None,
+            run_context=RunContext(),
+        )
+
+        assert recorder.received_extenders is None, "with no extenders the runner must receive None, not set()"

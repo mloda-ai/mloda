@@ -642,8 +642,10 @@ class mlodaAPI:
         artifacts: dict[str, Any] | None = None,
         run_context: RunContext | None = None,
     ) -> None:
-        """Enters the runner context with strict-mode-filtered extenders."""
-        function_extender = filter_extenders_by_strict_mode(self.function_extender, self.plugin_collector)
+        """Passes the runner the engine's prepare-time extender set."""
+        if self.engine is None:
+            raise ValueError("Internal error: engine not initialized. This is likely a bug in mloda.")
+        function_extender = self.engine.function_extender or None
         if run_context is None:
             run_context = self._build_run_context(None, None)
         runner.__enter__(parallelization_modes, function_extender, api_data, artifacts, run_context)
@@ -653,7 +655,8 @@ class mlodaAPI:
         runner.__exit__(None, None, None)
 
     def _create_engine(self) -> Engine:
-        function_extender = filter_extenders_by_strict_mode(self.function_extender, self.plugin_collector)
+        filtered = filter_extenders_by_strict_mode(self.function_extender, self.plugin_collector)
+        function_extender = set(filtered) if filtered is not None else None
         engine = Engine(
             self.features,
             self.compute_framework,

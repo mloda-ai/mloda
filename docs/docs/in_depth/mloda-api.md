@@ -28,7 +28,7 @@ This means, depending on your needs, you can run them all at once (**batch run**
 -   **compute_frameworks** (optional): Limit the compute frameworks using framework types or names.
 -   **links** (optional): Define dataset merging links with Link objects.
 -   **data_access_collection** (optional): Provide data sources for feature identification.
--   **function_extender** (optional): Add function extenders to customize computations. Session-level: accepted by every call that plans (the constructor, `prepare()`, `run_all()`, `stream_all()`, `explain()`, `diagnose()`) and snapshotted at that point; not accepted by `run()`/`stream_run()`, so changing the set afterwards has no effect.
+-   **function_extender** (optional): Add function extenders to customize computations. Session-level: accepted by every call that plans (the constructor, `prepare()`, `run_all()`, `stream_all()`, `explain()`, `diagnose()`) and snapshotted then; not accepted by `run()`/`stream_run()`, so changing the set afterwards has no effect.
 
 #### Runner & Execution Configuration
 

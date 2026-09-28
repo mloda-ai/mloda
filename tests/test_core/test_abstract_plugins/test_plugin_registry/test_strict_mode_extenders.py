@@ -11,11 +11,9 @@ Contract: mloda.core.prepare.accessible_plugins gains
   registry are dropped with a WARNING listing the dropped classes; registered
   instances survive; dropping every instance yields an empty set, no raise.
 
-mlodaAPI filters extenders once, at prepare time, into ``self.engine.function_extender``
-(the strict-mode-filtered copy taken from the constructor argument). ``_enter_runner_context``
-reuses that prepare-time engine snapshot; it never re-reads or re-filters the live
-``self.function_extender`` attribute, so reassigning or mutating the latter after prepare
-has no effect on what the runner receives.
+mlodaAPI filters extenders once at prepare time into ``self.engine.function_extender``.
+``_enter_runner_context`` reuses that snapshot; it never re-reads or re-filters the live
+``self.function_extender``, so reassigning or mutating it after prepare has no effect.
 
 The helper is imported inside each test so every test fails with a precise
 ImportError until the Green agent implements it; the integration test fails
@@ -205,8 +203,7 @@ class _RecordingRunner:
 
 
 class TestRequestWiring:
-    """_enter_runner_context hands the runner the engine's prepare-time extender snapshot,
-    never a live re-read of self.function_extender."""
+    """Runner receives the engine's prepare-time extender snapshot, never a live re-read of function_extender."""
 
     def test_reassigning_function_extender_after_prepare_does_not_change_what_the_runner_receives(self) -> None:
         PluginLoader().load_matching("compute_framework", "*python_dict*")
@@ -238,8 +235,7 @@ class TestRequestWiring:
         )
 
     def test_mutating_the_set_passed_to_prepare_in_place_does_not_change_what_the_runner_receives(self) -> None:
-        # Strict mode always builds a new set, so this in-place check needs strict mode OFF,
-        # where the filter currently returns the caller's own set object unchanged.
+        # Needs strict mode OFF: strict always builds a new set, off returns the caller's set unchanged.
         PluginLoader().load_matching("compute_framework", "*python_dict*")
         register_plugin(_StrictWiringFeatureGroup)
         register_plugin(_ExtStrictRegistered)

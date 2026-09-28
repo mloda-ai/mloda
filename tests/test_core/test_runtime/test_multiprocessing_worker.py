@@ -6,6 +6,7 @@ import inspect
 import logging
 import multiprocessing
 import queue
+import threading
 import time
 from collections.abc import Mapping
 from typing import Any
@@ -14,6 +15,7 @@ from uuid import uuid4
 
 import pytest
 
+from mloda.core.abstract_plugins.close_context import CloseContext
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.components.parallelization_modes import ParallelizationMode
 from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook
@@ -25,10 +27,16 @@ from mloda_plugins.compute_framework.base_implementations.python_dict.python_dic
 
 
 class _CloseRecordingExtender(Extender):
-    def __init__(self, sleep_after_record: float = 0.0, budgets: list[float | None] | None = None) -> None:
+    def __init__(
+        self,
+        sleep_after_record: float = 0.0,
+        contexts: list[CloseContext | None] | None = None,
+        remainings: list[float] | None = None,
+    ) -> None:
         self.close_calls: list[bool] = []
         self._sleep_after_record = sleep_after_record
-        self._budgets = budgets
+        self._contexts = contexts
+        self._remainings = remainings
 
     def wraps(self) -> set[ExtenderHook]:
         return set()
@@ -38,8 +46,12 @@ class _CloseRecordingExtender(Extender):
 
     def close(self) -> None:
         self.close_calls.append(True)
-        if self._budgets is not None:
-            self._budgets.append(Extender.remaining_close_budget())
+        ctx = CloseContext.current()
+        if self._contexts is not None:
+            self._contexts.append(ctx)
+        if self._remainings is not None:
+            assert ctx is not None
+            self._remainings.append(ctx.remaining())
         time.sleep(self._sleep_after_record)
 
 
@@ -238,6 +250,9 @@ class TestWorkerReportsCommandExceptionThroughTheErrorChannel:
         cfw_register.get_location.return_value = "grpc://localhost:9999"
         cfw_register.get_run_context.return_value = RunContext()
         cfw = PythonDictFramework(mode=ParallelizationMode.MULTIPROCESSING, children_if_root=frozenset())
+        contexts: list[CloseContext | None] = []
+        extender = _CloseRecordingExtender(contexts=contexts)
+        cfw.function_extender = {extender}
         command_queue.put(_RaisingCommand())
 
         worker(command_queue, result_queue, cfw_register, cfw, uuid4(), worker_index=0)
@@ -250,6 +265,9 @@ class TestWorkerReportsCommandExceptionThroughTheErrorChannel:
 
         assert "root" not in {r.name for r in caplog.records}
         assert not [r for r in caplog.records if "Traceback" in r.getMessage()]
+        assert len(contexts) == 1
+        recorded = contexts[0]
+        assert recorded is not None and recorded.reason == "error"
 
     def test_command_exception_whose_str_raises_is_still_reported_and_stops(self) -> None:
         ctx = mp_spawn_context()
@@ -341,9 +359,16 @@ class TestWorkerExitsWhenTheParentProcessIsNoLongerAlive:
         cfw_register.get_location.return_value = "grpc://localhost:9999"
         cfw_register.get_run_context.return_value = RunContext()
         cfw = PythonDictFramework(mode=ParallelizationMode.MULTIPROCESSING, children_if_root=frozenset())
+        contexts: list[CloseContext | None] = []
+        extender = _CloseRecordingExtender(contexts=contexts)
+        cfw.function_extender = {extender}
 
         # No STOP is queued; the dead-parent check alone must end the loop.
         worker(command_queue, result_queue, cfw_register, cfw, uuid4(), worker_index=0)
+
+        assert len(contexts) == 1
+        recorded = contexts[0]
+        assert recorded is not None and recorded.reason == "parent_gone"
 
 
 class TestWorkerClosesExtendersOnStop:
@@ -358,13 +383,17 @@ class TestWorkerClosesExtendersOnStop:
         cfw_register.get_location.return_value = "grpc://localhost:9999"
         cfw_register.get_run_context.return_value = RunContext()
         cfw = PythonDictFramework(mode=ParallelizationMode.MULTIPROCESSING, children_if_root=frozenset())
-        extender = _CloseRecordingExtender()
+        contexts: list[CloseContext | None] = []
+        extender = _CloseRecordingExtender(contexts=contexts)
         cfw.function_extender = {extender}
         command_queue.put("STOP")
 
         worker(command_queue, result_queue, cfw_register, cfw, uuid4(), worker_index=0)
 
         assert extender.close_calls == [True]
+        assert len(contexts) == 1
+        recorded = contexts[0]
+        assert recorded is not None and recorded.reason == "stop"
 
 
 class TestWorkerSwallowsExtenderCloseExceptions:
@@ -399,8 +428,9 @@ class TestWorkerSwallowsExtenderCloseExceptions:
         cfw = Mock(spec=ComputeFramework)
         cfw.function_extender = [raising_extender, ok_extender]
 
+        context = CloseContext(deadline=time.monotonic() + 5.0, reason="stop")
         with caplog.at_level(logging.ERROR):
-            _close_extenders(cfw)
+            _close_extenders(cfw, context)
 
         assert ok_extender.close_calls == [True]
         error_records = [r for r in caplog.records if r.levelno == logging.ERROR]
@@ -428,13 +458,17 @@ class TestWorkerClosesExtendersEvenWhenChildBootstrapRaises:
         bootstrap = Mock(side_effect=RuntimeError("boom"))
         cfw_register.get_run_context.return_value = RunContext(child_bootstrap=bootstrap)
         cfw = PythonDictFramework(mode=ParallelizationMode.MULTIPROCESSING, children_if_root=frozenset())
-        extender = _CloseRecordingExtender()
+        contexts: list[CloseContext | None] = []
+        extender = _CloseRecordingExtender(contexts=contexts)
         cfw.function_extender = {extender}
 
         worker(command_queue, result_queue, cfw_register, cfw, uuid4(), worker_index=0)
 
         bootstrap.assert_called_once()
         assert extender.close_calls == [True]
+        assert len(contexts) == 1
+        recorded = contexts[0]
+        assert recorded is not None and recorded.reason == "error"
 
 
 class TestWorkerProcessesQueuedCommandsBeforeClosingExtendersOnStop:
@@ -483,7 +517,8 @@ class TestWorkerProcessesQueuedCommandsBeforeClosingExtendersOnStop:
         cfw_register.get_run_context.return_value = RunContext()
         child = uuid4()
         cfw = PythonDictFramework(mode=ParallelizationMode.MULTIPROCESSING, children_if_root=frozenset({child}))
-        extender = _CloseRecordingExtender()
+        contexts: list[CloseContext | None] = []
+        extender = _CloseRecordingExtender(contexts=contexts)
         cfw.function_extender = {extender}
         command_queue.put({child})
 
@@ -493,49 +528,61 @@ class TestWorkerProcessesQueuedCommandsBeforeClosingExtendersOnStop:
         assert command_queue.get(timeout=2) == "STOP"
         result_queue.put.assert_not_called()
         assert extender.close_calls == [True]
+        assert len(contexts) == 1
+        recorded = contexts[0]
+        assert recorded is not None and recorded.reason == "stop"
 
 
-class TestExtenderRemainingCloseBudgetTracksTheSharedDeadline:
-    """remaining_close_budget() reflects one deadline shared across every extender closing in the same worker."""
+class TestCloseContextRemainingTracksTheSharedDeadline:
+    """CloseContext.remaining() reflects one deadline shared across every extender closing in the same worker."""
 
-    def test_second_extender_sees_less_budget_than_the_first(self) -> None:
-        budgets: list[float | None] = []
-        first = _CloseRecordingExtender(sleep_after_record=0.05, budgets=budgets)
-        second = _CloseRecordingExtender(budgets=budgets)
+    def test_second_extender_sees_less_remaining_than_the_first(self) -> None:
+        contexts: list[CloseContext | None] = []
+        remainings: list[float] = []
+        first = _CloseRecordingExtender(sleep_after_record=0.05, contexts=contexts, remainings=remainings)
+        second = _CloseRecordingExtender(contexts=contexts, remainings=remainings)
         cfw = Mock(spec=ComputeFramework)
         cfw.function_extender = [first, second]
+        context = CloseContext(deadline=time.monotonic() + 5.0, reason="stop")
 
-        _close_extenders(cfw, graceful_timeout=5.0)
+        _close_extenders(cfw, context)
 
-        assert len(budgets) == 2
-        first_budget, second_budget = budgets
-        assert first_budget is not None and second_budget is not None
-        assert first_budget - second_budget >= 0.04
+        assert len(contexts) == 2
+        first_ctx, second_ctx = contexts
+        assert first_ctx is not None and second_ctx is not None
+        assert first_ctx is second_ctx
 
-    def test_remaining_close_budget_is_none_outside_close(self) -> None:
-        assert Extender.remaining_close_budget() is None
+        assert len(remainings) == 2
+        first_remaining, second_remaining = remainings
+        assert first_remaining - second_remaining >= 0.04
 
-        budgets: list[float | None] = []
-        extender = _CloseRecordingExtender(budgets=budgets)
+    def test_current_is_none_outside_close(self) -> None:
+        assert CloseContext.current() is None
+
+        contexts: list[CloseContext | None] = []
+        extender = _CloseRecordingExtender(contexts=contexts)
         cfw = Mock(spec=ComputeFramework)
         cfw.function_extender = [extender]
+        context = CloseContext(deadline=time.monotonic() + 5.0, reason="stop")
 
-        _close_extenders(cfw, graceful_timeout=5.0)
+        _close_extenders(cfw, context)
 
-        assert len(budgets) == 1
-        assert budgets[0] is not None
-        assert Extender.remaining_close_budget() is None
+        assert len(contexts) == 1
+        assert contexts[0] is context
+        assert CloseContext.current() is None
 
-    def test_budget_is_clamped_to_zero_once_the_deadline_has_passed(self) -> None:
-        budgets: list[float | None] = []
-        slow = _CloseRecordingExtender(sleep_after_record=0.05, budgets=budgets)
-        late = _CloseRecordingExtender(budgets=budgets)
+    def test_remaining_is_clamped_to_zero_once_the_deadline_has_passed(self) -> None:
+        remainings: list[float] = []
+        slow = _CloseRecordingExtender(sleep_after_record=0.05, remainings=remainings)
+        late = _CloseRecordingExtender(remainings=remainings)
         cfw = Mock(spec=ComputeFramework)
         cfw.function_extender = [slow, late]
+        context = CloseContext(deadline=time.monotonic() + 0.01, reason="stop")
 
-        _close_extenders(cfw, graceful_timeout=0.01)
+        _close_extenders(cfw, context)
 
-        assert budgets[1] == 0.0
+        assert len(remainings) == 2
+        assert remainings[1] == 0.0
 
     def test_worker_run_context_graceful_shutdown_timeout_reaches_close_extenders(self) -> None:
         ctx = mp_spawn_context()
@@ -543,14 +590,73 @@ class TestExtenderRemainingCloseBudgetTracksTheSharedDeadline:
         result_queue: multiprocessing.Queue[Any] = ctx.Queue()
         cfw_register = Mock(spec=CfwManager)
         cfw_register.get_location.return_value = "grpc://localhost:9999"
-        cfw_register.get_run_context.return_value = RunContext(graceful_shutdown_timeout=7.5)
+        run_context = RunContext(
+            run_id="run-close-ctx",
+            carrier={"traceparent": "abc"},
+            tenant_id="tenant-1",
+            project_id="project-1",
+            principal="principal-1",
+            graceful_shutdown_timeout=7.5,
+        )
+        cfw_register.get_run_context.return_value = run_context
         cfw = PythonDictFramework(mode=ParallelizationMode.MULTIPROCESSING, children_if_root=frozenset())
-        budgets: list[float | None] = []
-        extender = _CloseRecordingExtender(budgets=budgets)
+        contexts: list[CloseContext | None] = []
+        remainings: list[float] = []
+        extender = _CloseRecordingExtender(contexts=contexts, remainings=remainings)
         cfw.function_extender = {extender}
         command_queue.put("STOP")
 
-        worker(command_queue, result_queue, cfw_register, cfw, uuid4(), worker_index=0)
+        worker(command_queue, result_queue, cfw_register, cfw, uuid4(), worker_index=3)
 
-        assert len(budgets) == 1
-        assert budgets[0] is not None and budgets[0] > 2.0
+        assert len(contexts) == 1
+        recorded = contexts[0]
+        assert recorded is not None
+        assert len(remainings) == 1
+        assert remainings[0] > 2.0
+        assert recorded.reason == "stop"
+        assert recorded.run_id == "run-close-ctx"
+        assert recorded.worker_index == 3
+        assert recorded.carrier == {"traceparent": "abc"}
+        assert recorded.tenant_id == "tenant-1"
+        assert recorded.project_id == "project-1"
+        assert recorded.principal == "principal-1"
+
+        assert recorded.carrier is not None
+        recorded.carrier["mutated"] = "yes"
+        assert "mutated" not in (run_context.carrier or {})
+
+
+class TestCloseContextIsUsableFromAThreadStartedInClose:
+    """A thread started inside close() reads a live, positive remaining() off the captured instance."""
+
+    def test_thread_reads_a_positive_remaining_within_the_timeout(self) -> None:
+        captured_remaining: list[float] = []
+
+        class _ThreadCapturingExtender(Extender):
+            def wraps(self) -> set[ExtenderHook]:
+                return set()
+
+            def __call__(self, func: Any, *args: Any, **kwargs: Any) -> Any:
+                return func(*args, **kwargs)
+
+            def close(self) -> None:
+                captured = CloseContext.current()
+                assert captured is not None
+
+                def _read() -> None:
+                    captured_remaining.append(captured.remaining())
+
+                thread = threading.Thread(target=_read)
+                thread.start()
+                thread.join(timeout=2)
+
+        cfw = Mock(spec=ComputeFramework)
+        cfw.function_extender = [_ThreadCapturingExtender()]
+        timeout = 5.0
+        context = CloseContext(deadline=time.monotonic() + timeout, reason="stop")
+
+        _close_extenders(cfw, context)
+
+        assert len(captured_remaining) == 1
+        assert captured_remaining[0] > 0.0
+        assert captured_remaining[0] <= timeout

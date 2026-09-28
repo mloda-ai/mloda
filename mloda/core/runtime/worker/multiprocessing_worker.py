@@ -8,10 +8,10 @@ from typing import Any
 from uuid import UUID
 from queue import Empty
 
+from mloda.core.abstract_plugins.close_context import CloseContext, CloseReason
 from mloda.core.abstract_plugins.components.error_utils import internal_invariant_error
 from mloda.core.abstract_plugins.components.utils import contained_raise_reason, failure_report
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
-from mloda.core.abstract_plugins.function_extender import close_deadline
 from mloda.core.abstract_plugins.run_context import RunContext
 from mloda.core.core.cfw_manager import CfwManager
 from mloda.core.core.step.feature_group_step import FeatureGroupStep
@@ -28,12 +28,12 @@ def _handle_stop_command(command_queue: multiprocessing.Queue[Any]) -> None:
         command_queue.put("STOP", block=False)
 
 
-def _close_extenders(cfw: ComputeFramework, graceful_timeout: float = 2.0) -> None:
+def _close_extenders(cfw: ComputeFramework, context: CloseContext) -> None:
     """A raising extender's close() must not stop the others from running.
 
-    Sets one shared close deadline exposed via ``Extender.remaining_close_budget()``.
+    Activates one shared CloseContext, exposed via ``CloseContext.current()``, for every close() call.
     """
-    with close_deadline(graceful_timeout):
+    with context.activate():
         for extender in getattr(cfw, "function_extender", None) or ():
             try:
                 extender.close()
@@ -129,11 +129,11 @@ def worker(
         return
 
     cfw.worker_index = worker_index
-    graceful_timeout = RunContext().graceful_shutdown_timeout
+    run_context = RunContext()
+    reason: CloseReason = "error"
 
     try:
         run_context = cfw_register.get_run_context()
-        graceful_timeout = run_context.graceful_shutdown_timeout
         bootstrap = run_context.child_bootstrap
         if bootstrap is not None:
             try:
@@ -159,15 +159,18 @@ def worker(
                 # completion before this loop is reached again (best-effort, not preemptive).
                 parent = multiprocessing.parent_process()
                 if parent is not None and not parent.is_alive():
+                    reason = "parent_gone"
                     break
                 time.sleep(0.01)
                 continue
 
             if command == "STOP":
+                reason = "stop"
                 break
 
             if isinstance(command, set):
                 if _handle_data_dropping(command_queue, cfw, command, location):
+                    reason = "stop"
                     break
                 continue
 
@@ -191,7 +194,17 @@ def worker(
 
             time.sleep(0.0001)
     finally:
-        _close_extenders(cfw, graceful_timeout)
+        context = CloseContext(
+            deadline=time.monotonic() + run_context.graceful_shutdown_timeout,
+            reason=reason,
+            run_id=run_context.run_id,
+            worker_index=worker_index,
+            carrier=run_context.carrier,
+            tenant_id=run_context.tenant_id,
+            project_id=run_context.project_id,
+            principal=run_context.principal,
+        )
+        _close_extenders(cfw, context)
 
 
 def error_out(cfw_register: CfwManager, command_queue: multiprocessing.Queue[Any]) -> None:

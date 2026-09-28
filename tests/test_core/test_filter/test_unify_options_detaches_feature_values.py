@@ -28,7 +28,7 @@ UFD_INNER_KEY = "ufd_inner_key"
 UFD_HOST_VALUE = "ufd_host_value"
 UFD_FILTER_VALUE = "ufd_filter_value"
 UFD_CREDENTIAL_KEY = "ufd_credential_key"
-UFD_SECRET_VALUE = "ufd_secret_value"
+UFD_CREDENTIAL_VALUE = "ufd_credential_value"
 
 
 class UfdHandle:
@@ -116,9 +116,8 @@ def test_a_feature_free_container_is_rebuilt_around_its_shared_leaves() -> None:
 
 
 def test_a_registered_credential_stays_its_own_type_and_stays_redacted() -> None:
-    """A RegisteredCredential is a dict subclass whose repr redacts values; rebuilding its
-    spine as a plain dict would silently lose both the subclass and the redaction."""
-    credential = RegisteredCredential({UFD_INNER_KEY: UFD_SECRET_VALUE})
+    """A RegisteredCredential keeps its type, and so its redacted repr, through the rebuilt spine."""
+    credential = RegisteredCredential({UFD_INNER_KEY: UFD_CREDENTIAL_VALUE})
     host = Options(group={UFD_CREDENTIAL_KEY: credential})
 
     imported = _unify(host).get(UFD_CREDENTIAL_KEY)
@@ -128,7 +127,9 @@ def test_a_registered_credential_stays_its_own_type_and_stays_redacted() -> None
     )
     assert imported == credential, f"the imported credential must stay value-equal to the host's: {imported!r}"
     assert imported is not credential, "the imported credential must be a copy, not the host's own object"
-    assert UFD_SECRET_VALUE not in repr(imported), f"the imported credential's repr must stay redacted: {imported!r}"
+    assert UFD_CREDENTIAL_VALUE not in repr(imported), (
+        f"the imported credential's repr must stay redacted: {imported!r}"
+    )
 
 
 def test_a_key_the_filter_feature_declares_is_never_rewritten() -> None:

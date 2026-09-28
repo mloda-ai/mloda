@@ -65,6 +65,8 @@ class Feature:
         index (Index | None): The index associated with the feature.
         feature_group_scope (str | type[FeatureGroup] | None): Read by feature resolution and filter
             matching; excluded from identity.
+        required_declarations (dict[str, str | int | float | bool | None] | None): Declared attributes a
+            candidate must offer for this feature (None value: any); excluded from identity.
 
     Quick start (recommended progression)::
 
@@ -116,6 +118,7 @@ class Feature:
         forward_group: frozenset[str] | set[str] | list[str] | tuple[str, ...] | bool | None = None,
         forward_group_exclude: frozenset[str] | set[str] | list[str] | tuple[str, ...] | None = None,
         inherit_context_keys: frozenset[str] | set[str] | list[str] | tuple[str, ...] = frozenset(),
+        required_declarations: Mapping[str, str | int | float | bool | None] | None = None,
     ):
         if options is None:
             options = {}
@@ -169,9 +172,9 @@ class Feature:
         # from equality and hash like link/index.
         self.forwarded_group_keys: frozenset[str] = frozenset()
 
-        # (consumer name, required declared attributes) assigned by the engine per consumer; excluded from
-        # equality and hash like link/index.
-        self.declaration_requirement: tuple[str, Mapping[str, Any]] | None = None
+        # Excluded from equality and hash like feature_group_scope; each request is checked during its own
+        # resolution, before intake merges twins.
+        self.required_declarations = self._normalize_required_declarations(required_declarations)
 
         # forward_group, forward_group_exclude and inherit_context_keys are merge directives
         # for input features with forward-by-default semantics (None/True inherit all consumer
@@ -214,6 +217,34 @@ class Feature:
             if not isinstance(element, str):
                 raise TypeError(f"{param_name} elements must be str, got {type(element).__name__}")
         return frozenset(value)
+
+    @staticmethod
+    def _normalize_required_declarations(
+        required: Mapping[str, str | int | float | bool | None] | None,
+    ) -> dict[str, str | int | float | bool | None] | None:
+        if required is None:
+            return None
+        if not isinstance(required, Mapping):
+            raise TypeError(f"required_declarations must be a Mapping, got {type(required).__name__}")
+        result: dict[str, str | int | float | bool | None] = {}
+        for key, value in required.items():
+            if not isinstance(key, str):
+                raise TypeError(f"required_declarations keys must be str, got {type(key).__name__}")
+            if value is None:
+                result[key] = None
+            elif isinstance(value, bool):
+                result[key] = bool(value)
+            elif isinstance(value, int):
+                result[key] = int(value)
+            elif isinstance(value, float):
+                result[key] = float(value)
+            elif isinstance(value, str):
+                result[key] = str.__str__(value)
+            else:
+                raise TypeError(
+                    f"required_declarations values must be str, int, float, bool or None, got {type(value).__name__}"
+                )
+        return result or None
 
     def _set_feature_group_scope(
         self, feature_group: str | type[FeatureGroup] | None

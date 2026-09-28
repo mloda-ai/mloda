@@ -561,9 +561,11 @@ class IdentifyFeatureGroupClass:
         self, feature_group: type[FeatureGroup], feature: Feature
     ) -> DeclarationRequirement | None:
         """The consumer's requirement with this candidate's own declarations; None when the request carries none."""
-        if feature.declaration_requirement is None:
+        required = feature.required_declarations
+        if required is None:
             return None
-        consumer, required = feature.declaration_requirement
+        consumers = sorted({name for name, _ in feature.consumer_attributions})
+        consumer = ", ".join(consumers) if consumers else f"request for '{feature.name}'"
         return DeclarationRequirement(consumer, required, feature_group, self._declarations)
 
     @staticmethod

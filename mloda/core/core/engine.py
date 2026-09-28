@@ -592,8 +592,6 @@ class Engine:
         for input_feature in features.collection:
             forwarded_declared_keys = input_feature.forwarded_group_keys & consumer_property_keys
             input_feature.add_consumer_attribution(consumer_name, forwarded_declared_keys)
-            required = feature_group_class.required_input_declarations(str(input_feature.name))
-            input_feature.declaration_requirement = (consumer_name, dict(required)) if required else None
         if features.child_uuid is None:
             raise ValueError(f"Features {features} has no parent uuid although it should have one.")
         self.feature_link_parents[features.child_uuid] = features.parent_uuids

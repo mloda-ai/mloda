@@ -834,13 +834,26 @@ class TestScopedAbstractOnlyCallout:
 
 
 def _requiring(feature: Feature, required: Mapping[str, Any]) -> Feature:
-    """Attach the consumer requirement the engine would assign to an input feature."""
-    feature.declaration_requirement = (DECL_CONSUMER, dict(required))
-    return feature
+    """Build the requiring feature, attributed to DECL_CONSUMER as the engine would."""
+    requiring = Feature(feature.name, required_declarations=dict(required))
+    requiring.add_consumer_attribution(DECL_CONSUMER, frozenset())
+    return requiring
 
 
 class TestDeclarationRequirements:
-    """A consumer's required_input_declarations is checked against each candidate's declarations."""
+    """A Feature's required_declarations are checked against each candidate's declarations."""
+
+    def test_unattributed_feature_is_labelled_as_a_request(self) -> None:
+        feature = Feature(DECL_MISSING_FEATURE, required_declarations={"scale": None})
+        plugins: FeatureGroupEnvironmentMapping = {DeclMissingFG1648: {ElimFwOne011}}
+
+        err = _fail(feature, plugins)
+
+        elimination = err.result.eliminations[DeclMissingFG1648]
+        assert elimination.stage == "declarations"
+        assert f"request for '{DECL_MISSING_FEATURE}'" in elimination.reason
+        assert DECL_CONSUMER not in elimination.reason
+        assert "'scale'" in elimination.reason
 
     def test_missing_key_eliminates_the_candidate(self) -> None:
         feature = _requiring(Feature(DECL_MISSING_FEATURE), {"scale": None})
@@ -854,6 +867,16 @@ class TestDeclarationRequirements:
         assert "'scale'" in elimination.reason
         assert "DeclMissingFG1648" in elimination.reason
         assert f"  - DeclMissingFG1648 (declarations): {elimination.reason}" in str(err)
+
+    def test_several_consumers_are_labelled_sorted_and_joined(self) -> None:
+        feature = Feature(DECL_MISSING_FEATURE, required_declarations={"scale": None})
+        feature.add_consumer_attribution("ZetaConsumer1648", frozenset())
+        feature.add_consumer_attribution("AlphaConsumer1648", frozenset())
+        plugins: FeatureGroupEnvironmentMapping = {DeclMissingFG1648: {ElimFwOne011}}
+
+        err = _fail(feature, plugins)
+
+        assert "AlphaConsumer1648, ZetaConsumer1648" in err.result.eliminations[DeclMissingFG1648].reason
 
     def test_mismatching_value_names_the_near_miss(self) -> None:
         feature = _requiring(Feature(DECL_MISMATCH_FEATURE), {"unit": "m"})

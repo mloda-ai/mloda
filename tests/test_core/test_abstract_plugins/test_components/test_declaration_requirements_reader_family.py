@@ -228,13 +228,11 @@ class _DeclConsumer(FeatureGroup):
         return {PythonDictFramework}
 
     @classmethod
-    def required_input_declarations(cls, input_feature_name: str) -> Mapping[str, str | int | float | bool | None]:
-        if cls.REQUIRES and input_feature_name != FRAME:
-            return {"scale": None}
-        return {}
+    def depth_requirement(cls) -> dict[str, str | int | float | bool | None] | None:
+        return {"scale": None} if cls.REQUIRES else None
 
     def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
-        return {Feature(DEPTH), Feature(FRAME)}
+        return {Feature(DEPTH, required_declarations=self.depth_requirement()), Feature(FRAME)}
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
@@ -254,7 +252,8 @@ class DeclDepthToMetresScoped1648(_DeclConsumer):
 
     def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         addressed = {DeclPlainDepthReader1648.__name__: PLAIN_ACCESS, DeclScaledDepthReader1648.__name__: SCALED_ACCESS}
-        return {Feature(DEPTH, options=addressed), Feature(FRAME)}
+        depth = Feature(DEPTH, options=addressed, required_declarations=self.depth_requirement())
+        return {depth, Feature(FRAME)}
 
 
 class DeclLonelyRequiringConsumer1648(_DeclConsumer):
@@ -263,7 +262,7 @@ class DeclLonelyRequiringConsumer1648(_DeclConsumer):
     OUT = OUT_LONELY_REQUIRING
 
     def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
-        return {Feature(LONELY_DEPTH)}
+        return {Feature(LONELY_DEPTH, required_declarations=self.depth_requirement())}
 
 
 class DeclLonelyPlainConsumer1648(DeclLonelyRequiringConsumer1648):
@@ -274,7 +273,7 @@ class DeclLonelyPlainConsumer1648(DeclLonelyRequiringConsumer1648):
 
 
 class DeclSharedInstanceRequiringConsumer1648(DeclLonelyRequiringConsumer1648):
-    """Returns the one shared input Feature instance, requiring scale of it."""
+    """Returns the one shared requiring input Feature instance."""
 
     OUT = "decl_out_shared_requiring_1648"
 
@@ -282,11 +281,10 @@ class DeclSharedInstanceRequiringConsumer1648(DeclLonelyRequiringConsumer1648):
         return {SHARED_LONELY_INPUT[0]}
 
 
-class DeclSharedInstancePlainConsumer1648(DeclLonelyRequiringConsumer1648):
-    """Returns the one shared input Feature instance, requiring nothing."""
+class DeclSharedInstanceSecondConsumer1648(DeclLonelyRequiringConsumer1648):
+    """Also returns the one shared requiring input Feature instance."""
 
-    OUT = "decl_out_shared_plain_1648"
-    REQUIRES = False
+    OUT = "decl_out_shared_second_1648"
 
     def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return {SHARED_LONELY_INPUT[0]}
@@ -301,7 +299,7 @@ ALL_GROUPS: set[type[FeatureGroup]] = {
     DeclLonelyRequiringConsumer1648,
     DeclLonelyPlainConsumer1648,
     DeclSharedInstanceRequiringConsumer1648,
-    DeclSharedInstancePlainConsumer1648,
+    DeclSharedInstanceSecondConsumer1648,
 }
 ENABLED = PluginCollector.enabled_feature_groups(ALL_GROUPS)
 DEPTH_DAC = DataAccessCollection(folders={DEPTH_HANDLE: "/decl/nowhere"})
@@ -328,8 +326,9 @@ def _clear_load_log() -> None:
 
 
 def _requiring(feature: Feature) -> Feature:
-    feature.declaration_requirement = ("DepthToMetres", {"scale": None})
-    return feature
+    requiring = Feature(feature.name, options=feature.options, required_declarations={"scale": None})
+    requiring.add_consumer_attribution("DepthToMetres", frozenset())
+    return requiring
 
 
 def _scoped_depth() -> Feature:
@@ -403,8 +402,7 @@ class TestReaderFamilyResolution:
         assert result.eliminations[DeclDerivedDepthFG1648].stage == "declarations"
 
     def test_name_rule_does_not_recover_a_reader_skipped_for_the_requirement_global(self) -> None:
-        feature = Feature(NAMERULE)
-        feature.declaration_requirement = ("DepthToMetres", {"scale": 5000})
+        feature = Feature(NAMERULE, required_declarations={"scale": 5000})
 
         with pytest.raises(FeatureResolutionError):
             evaluate_or_raise(feature, NAMERULE_MAPPING, data_access_collection=NAMERULE_DAC)
@@ -412,8 +410,11 @@ class TestReaderFamilyResolution:
         assert LOAD_LOG == []
 
     def test_name_rule_does_not_recover_a_reader_skipped_for_the_requirement_scoped(self) -> None:
-        feature = Feature(NAMERULE, options={DeclNameRuleReader1648.__name__: NAMERULE_ACCESS})
-        feature.declaration_requirement = ("DepthToMetres", {"scale": 5000})
+        feature = Feature(
+            NAMERULE,
+            options={DeclNameRuleReader1648.__name__: NAMERULE_ACCESS},
+            required_declarations={"scale": 5000},
+        )
 
         with pytest.raises(FeatureResolutionError):
             evaluate_or_raise(feature, NAMERULE_MAPPING)
@@ -443,7 +444,7 @@ class TestReaderFamilyResolution:
 
 
 class TestDeclarationRequirementsEndToEnd:
-    """The engine assigns the consumer requirement per input and resolution honours it."""
+    """A consumer's Feature carries the requirement per input and resolution honours it."""
 
     def test_global_family_sibling_reader_supplies_the_depth(self) -> None:
         result = _run([OUT_GLOBAL], DEPTH_DAC)
@@ -481,12 +482,45 @@ class TestDeclarationRequirementsEndToEnd:
         assert result[0][OUT_LONELY_PLAIN] == [1]
         assert LOAD_LOG == [DeclLonelyReader1648.__name__]
 
-    def test_reused_feature_instance_does_not_keep_a_stale_requirement(self) -> None:
-        SHARED_LONELY_INPUT.append(Feature(LONELY_DEPTH))
+    def test_shared_requiring_instance_is_refused_for_every_consumer_that_returns_it(self) -> None:
+        SHARED_LONELY_INPUT.append(Feature(LONELY_DEPTH, required_declarations={"scale": None}))
+
+        for consumer in (DeclSharedInstanceRequiringConsumer1648, DeclSharedInstanceSecondConsumer1648):
+            with pytest.raises(FeatureResolutionError) as excinfo:
+                _run([consumer.OUT], LONELY_DAC)
+            assert consumer.get_class_name() in str(excinfo.value)
+            assert "'scale'" in str(excinfo.value)
+        assert LOAD_LOG == []
+
+    def test_separate_plain_feature_of_the_same_name_resolves_normally(self) -> None:
+        SHARED_LONELY_INPUT.append(Feature(LONELY_DEPTH, required_declarations={"scale": None}))
 
         with pytest.raises(FeatureResolutionError):
             _run([DeclSharedInstanceRequiringConsumer1648.OUT], LONELY_DAC)
-        result = _run([DeclSharedInstancePlainConsumer1648.OUT], LONELY_DAC)
+        result = _run([OUT_LONELY_PLAIN], LONELY_DAC)
 
-        assert result[0][DeclSharedInstancePlainConsumer1648.OUT] == [1]
+        assert result[0][OUT_LONELY_PLAIN] == [1]
         assert LOAD_LOG == [DeclLonelyReader1648.__name__]
+
+
+class TestTopLevelRequestRequirement:
+    """A requiring Feature passed straight to run_all is checked like a consumer's input."""
+
+    def test_unmet_requirement_is_refused_before_any_load(self) -> None:
+        request = Feature(LONELY_DEPTH, required_declarations={"scale": None})
+
+        with pytest.raises(FeatureResolutionError) as excinfo:
+            _run([request], LONELY_DAC)
+
+        message = str(excinfo.value)
+        assert f"request for '{LONELY_DEPTH}'" in message
+        assert "'scale'" in message
+        assert LOAD_LOG == []
+
+    def test_met_requirement_resolves_through_the_declaring_reader(self) -> None:
+        request = Feature(DEPTH, required_declarations={"scale": None})
+
+        result = _run([request], DEPTH_DAC)
+
+        assert result[0][DEPTH] == [1]
+        assert LOAD_LOG == [DeclScaledDepthReader1648.__name__]

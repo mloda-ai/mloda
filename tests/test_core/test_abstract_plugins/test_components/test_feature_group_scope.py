@@ -15,6 +15,8 @@ tests/test_core/test_prepare/test_feature_group_scope_resolution.py.
 """
 
 import copy
+import enum
+import inspect
 
 import pytest
 
@@ -329,3 +331,116 @@ def test_not_typed_forwards_class_scope() -> None:
     """Feature.not_typed forwards a class-object scope to feature_group_scope."""
     feature = Feature.not_typed("subject_token", feature_group=_ScopeDummyFeatureGroup)
     assert feature.feature_group_scope is _ScopeDummyFeatureGroup
+
+
+# ---------------------------------------------------------------------------
+# required_declarations: a resolver-read constraint, excluded from identity
+# ---------------------------------------------------------------------------
+
+
+class _ReqUnit(str):
+    """A str subclass a caller might pass as a required value."""
+
+
+class _ReqLevel(enum.IntEnum):
+    """An int-subclass enum a caller might pass as a required value."""
+
+    THREE = 3
+
+
+def test_required_declarations_defaults_to_none() -> None:
+    """Without the keyword, required_declarations is None."""
+    assert Feature("subject_token").required_declarations is None
+
+
+def test_required_declarations_stored_as_dict() -> None:
+    """A mapping is stored as a plain dict with the given entries."""
+    feature = Feature("subject_token", required_declarations={"scale": None, "unit": "m"})
+    assert feature.required_declarations == {"scale": None, "unit": "m"}
+    assert type(feature.required_declarations) is dict
+
+
+def test_required_declarations_empty_mapping_is_none() -> None:
+    """An empty mapping is stored as None."""
+    assert Feature("subject_token", required_declarations={}).required_declarations is None
+
+
+def test_required_declarations_none_is_none() -> None:
+    """Explicit None is stored as None."""
+    assert Feature("subject_token", required_declarations=None).required_declarations is None
+
+
+def test_required_declarations_value_is_copied() -> None:
+    """Mutating the caller's dict afterwards does not reach the feature."""
+    required: dict[str, str | int | float | bool | None] = {"scale": None}
+    feature = Feature("subject_token", required_declarations=required)
+    required["unit"] = "m"
+    assert feature.required_declarations == {"scale": None}
+
+
+def test_required_declarations_excluded_from_equality() -> None:
+    """A feature with a requirement equals one without."""
+    assert Feature("subject_token", required_declarations={"scale": None}) == Feature("subject_token")
+
+
+def test_required_declarations_excluded_from_hash() -> None:
+    """A feature with a requirement hashes like one without, so they collapse in a set."""
+    required = Feature("subject_token", required_declarations={"scale": None})
+    plain = Feature("subject_token")
+    assert hash(required) == hash(plain)
+    assert len({required, plain}) == 1
+
+
+def test_required_declarations_kept_by_copy() -> None:
+    """copy() keeps the requirement."""
+    feature = Feature("subject_token", required_declarations={"scale": None})
+    assert copy.copy(feature).required_declarations == {"scale": None}
+
+
+def test_required_declarations_non_mapping_raises_typeerror() -> None:
+    """A non-Mapping requirement is a TypeError at construction."""
+    assert Feature("subject_token", required_declarations={"scale": None}).required_declarations
+    with pytest.raises(TypeError):
+        Feature("subject_token", required_declarations=["scale"])  # type: ignore[arg-type]
+
+
+def test_required_declarations_non_str_key_raises_typeerror() -> None:
+    """A non-str key is a TypeError at construction."""
+    assert Feature("subject_token", required_declarations={"scale": None}).required_declarations
+    with pytest.raises(TypeError):
+        Feature("subject_token", required_declarations={1: None})  # type: ignore[dict-item]
+
+
+@pytest.mark.parametrize("bad", [["a"], {"a": 1}], ids=["list", "dict"])
+def test_required_declarations_non_scalar_value_raises_typeerror(bad: object) -> None:
+    """A value outside str/int/float/bool/None is a TypeError at construction."""
+    assert Feature("subject_token", required_declarations={"scale": None}).required_declarations
+    with pytest.raises(TypeError):
+        Feature("subject_token", required_declarations={"scale": bad})  # type: ignore[dict-item]
+
+
+def test_required_declarations_scalar_subclasses_are_normalized() -> None:
+    """Scalar subclasses become exact builtins; bool stays bool."""
+    feature = Feature(
+        "subject_token",
+        required_declarations={"unit": _ReqUnit("m"), "level": _ReqLevel.THREE, "flag": True},
+    )
+    required = feature.required_declarations
+    assert required == {"unit": "m", "level": 3, "flag": True}
+    assert required is not None
+    assert type(required["unit"]) is str
+    assert type(required["level"]) is int
+    assert type(required["flag"]) is bool
+
+
+def test_required_declarations_is_the_last_keyword() -> None:
+    """required_declarations is appended last, so positional callers are unaffected."""
+    parameters = list(inspect.signature(Feature.__init__).parameters)
+    assert parameters[-1] == "required_declarations"
+
+
+def test_required_declarations_positional_callers_unaffected() -> None:
+    """Passing every earlier parameter positionally leaves required_declarations None."""
+    feature = Feature("subject_token", {"k": "v"}, None, None, None, False, None, None, None, None, None, frozenset())
+    assert feature.required_declarations is None
+    assert feature.options.get("k") == "v"

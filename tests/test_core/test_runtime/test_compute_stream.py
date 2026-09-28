@@ -344,9 +344,10 @@ class TestComputeStreamNotifiesExtenders:
             [Feature(name=_EARLY_CLOSE_COLUMN)],
             compute_frameworks=["PythonDictFramework"],
             plugin_collector=PluginCollector.enabled_feature_groups({_EarlyCloseFeatureGroup}),
+            function_extender={probe},
         )
 
-        stream = session.stream_run(function_extender={probe})
+        stream = session.stream_run()
         next(stream)
         stream.close()
 

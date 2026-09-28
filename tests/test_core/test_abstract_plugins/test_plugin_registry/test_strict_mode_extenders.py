@@ -192,12 +192,12 @@ class TestRequestWiring:
 
         api = mlodaAPI.__new__(mlodaAPI)
         api.plugin_collector = PluginCollector().set_strict_mode("strict")
+        api.function_extender = {registered, unregistered}
 
         recorder = _RecordingRunner()
         api._enter_runner_context(
             cast(ExecutionOrchestrator, recorder),
             {ParallelizationMode.SYNC},
-            {registered, unregistered},
             None,
             run_context=RunContext(),
         )

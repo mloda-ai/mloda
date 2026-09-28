@@ -83,7 +83,7 @@ class _MultiCaptureExtender(Extender):
 
 
 class TestCarrierParameterAcceptedAtEveryEntryPoint:
-    """carrier follows exactly the call path function_extender already takes."""
+    """carrier is accepted at every entry point: run_all/stream_all and session.run()/stream_run()."""
 
     def test_run_all_accepts_carrier_kwarg(self) -> None:
         result = mloda.run_all(
@@ -135,7 +135,7 @@ class TestCarrierParameterAcceptedAtEveryEntryPoint:
 
 
 class TestChildBootstrapParameterAcceptedAtEveryEntryPoint:
-    """child_bootstrap follows exactly the call path function_extender/carrier already take."""
+    """child_bootstrap is accepted at every entry point, like carrier."""
 
     def test_run_all_accepts_child_bootstrap_kwarg(self) -> None:
         result = mloda.run_all(
@@ -198,11 +198,11 @@ class TestRunIdAndCarrierSurfaceOnHookContext:
             compute_frameworks=["PythonDictFramework"],
             plugin_collector=_ENABLED,
             parallelization_modes={ParallelizationMode.SYNC},
+            function_extender={extender},
         )
 
         session.run(
             parallelization_modes={ParallelizationMode.SYNC},
-            function_extender={extender},
             carrier=_CARRIER,
         )
 
@@ -223,11 +223,11 @@ class TestCarrierIsCopiedOnIngestNotAliased:
             compute_frameworks=["PythonDictFramework"],
             plugin_collector=_ENABLED,
             parallelization_modes={ParallelizationMode.SYNC},
+            function_extender={extender},
         )
 
         session.run(
             parallelization_modes={ParallelizationMode.SYNC},
-            function_extender={extender},
             carrier=caller_carrier,
         )
 
@@ -255,9 +255,10 @@ class TestTwoFeatureGroupsShareSameRunId:
             compute_frameworks=["PythonDictFramework"],
             plugin_collector=_ENABLED,
             parallelization_modes={ParallelizationMode.SYNC},
+            function_extender={extender},
         )
 
-        session.run(parallelization_modes={ParallelizationMode.SYNC}, function_extender={extender})
+        session.run(parallelization_modes={ParallelizationMode.SYNC})
 
         assert len(extender.captured) == 2
         run_ids = {context.run_id for context in extender.captured}

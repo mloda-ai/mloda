@@ -223,7 +223,6 @@ class mlodaAPI:
             api_data=api_data,
             parallelization_modes=parallelization_modes,
             flight_server=flight_server,
-            function_extender=function_extender,
             carrier=carrier,
             child_bootstrap=child_bootstrap,
             graceful_shutdown_timeout=graceful_shutdown_timeout,
@@ -284,7 +283,6 @@ class mlodaAPI:
                 api_data=api_data,
                 parallelization_modes=parallelization_modes,
                 flight_server=flight_server,
-                function_extender=function_extender,
                 artifacts=None,
                 carrier=carrier,
                 child_bootstrap=child_bootstrap,
@@ -482,7 +480,6 @@ class mlodaAPI:
         api_data: dict[str, dict[str, Any]] | None = None,
         parallelization_modes: set[ParallelizationMode] = {ParallelizationMode.SYNC},
         flight_server: Any | None = None,
-        function_extender: set[Extender] | None = None,
         artifacts: dict[str, Any] | None = None,
         carrier: dict[str, str] | None = None,
         child_bootstrap: Callable[[], None] | None = None,
@@ -508,7 +505,6 @@ class mlodaAPI:
         runner = self._batch_run(
             parallelization_modes,
             flight_server,
-            function_extender,
             api_data=api_data,
             artifacts=artifacts,
             run_context=self._build_run_context(carrier, child_bootstrap, graceful_shutdown_timeout),
@@ -521,7 +517,6 @@ class mlodaAPI:
         api_data: dict[str, dict[str, Any]] | None = None,
         parallelization_modes: set[ParallelizationMode] = {ParallelizationMode.SYNC},
         flight_server: Any | None = None,
-        function_extender: set[Extender] | None = None,
         artifacts: dict[str, Any] | None = None,
         carrier: dict[str, str] | None = None,
         child_bootstrap: Callable[[], None] | None = None,
@@ -537,7 +532,6 @@ class mlodaAPI:
             api_data,
             parallelization_modes,
             flight_server,
-            function_extender,
             artifacts,
             carrier,
             child_bootstrap,
@@ -550,7 +544,6 @@ class mlodaAPI:
         api_data: dict[str, dict[str, Any]] | None,
         parallelization_modes: set[ParallelizationMode],
         flight_server: Any | None,
-        function_extender: set[Extender] | None,
         artifacts: dict[str, Any] | None,
         carrier: dict[str, str] | None,
         child_bootstrap: Callable[[], None] | None,
@@ -562,14 +555,13 @@ class mlodaAPI:
         runner = self._setup_engine_runner(parallelization_modes, flight_server)
         run_context = self._build_run_context(carrier, child_bootstrap, graceful_shutdown_timeout)
         return self._stream_run_results(
-            runner, parallelization_modes, function_extender, _api_data, artifacts, run_context, with_step_uuids
+            runner, parallelization_modes, _api_data, artifacts, run_context, with_step_uuids
         )
 
     def _stream_run_results(
         self,
         runner: ExecutionOrchestrator,
         parallelization_modes: set[ParallelizationMode],
-        function_extender: set[Extender] | None,
         api_data: dict[str, dict[str, Any]] | None,
         artifacts: dict[str, Any] | None,
         run_context: RunContext,
@@ -586,7 +578,6 @@ class mlodaAPI:
             self._enter_runner_context(
                 runner,
                 parallelization_modes,
-                function_extender,
                 api_data,
                 artifacts=artifacts,
                 run_context=run_context,
@@ -601,7 +592,6 @@ class mlodaAPI:
         self,
         parallelization_modes: set[ParallelizationMode] = {ParallelizationMode.SYNC},
         flight_server: Any | None = None,
-        function_extender: set[Extender] | None = None,
         api_data: dict[str, Any] | None = None,
         artifacts: dict[str, Any] | None = None,
         run_context: RunContext | None = None,
@@ -613,7 +603,6 @@ class mlodaAPI:
         self._run_engine_computation(
             runner,
             parallelization_modes,
-            function_extender,
             _api_data,
             artifacts=artifacts,
             run_context=run_context,
@@ -625,7 +614,6 @@ class mlodaAPI:
         self,
         runner: ExecutionOrchestrator,
         parallelization_modes: set[ParallelizationMode] = {ParallelizationMode.SYNC},
-        function_extender: set[Extender] | None = None,
         api_data: dict[str, Any] | None = None,
         artifacts: dict[str, Any] | None = None,
         run_context: RunContext | None = None,
@@ -638,7 +626,6 @@ class mlodaAPI:
             self._enter_runner_context(
                 runner,
                 parallelization_modes,
-                function_extender,
                 api_data,
                 artifacts=artifacts,
                 run_context=run_context,
@@ -651,14 +638,12 @@ class mlodaAPI:
         self,
         runner: ExecutionOrchestrator,
         parallelization_modes: set[ParallelizationMode],
-        function_extender: set[Extender] | None,
         api_data: dict[str, Any] | None,
         artifacts: dict[str, Any] | None = None,
         run_context: RunContext | None = None,
     ) -> None:
         """Enters the runner context with strict-mode-filtered extenders."""
-        function_extender = function_extender if function_extender is not None else self.function_extender
-        function_extender = filter_extenders_by_strict_mode(function_extender, self.plugin_collector)
+        function_extender = filter_extenders_by_strict_mode(self.function_extender, self.plugin_collector)
         if run_context is None:
             run_context = self._build_run_context(None, None)
         runner.__enter__(parallelization_modes, function_extender, api_data, artifacts, run_context)

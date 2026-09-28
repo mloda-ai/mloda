@@ -94,11 +94,11 @@ class TestWorkerIndexReachesHookContextUnderMultiprocessing:
             compute_frameworks=["PythonDictFramework"],
             plugin_collector=_ENABLED,
             parallelization_modes={ParallelizationMode.MULTIPROCESSING},
+            function_extender={extender_one, extender_two},
         )
 
         session.run(
             parallelization_modes={ParallelizationMode.MULTIPROCESSING},
-            function_extender={extender_one, extender_two},
             flight_server=flight_server,
             carrier=_CARRIER,
         )

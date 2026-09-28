@@ -9,7 +9,7 @@ from uuid import UUID
 from queue import Empty
 
 from mloda.core.abstract_plugins.components.error_utils import internal_invariant_error
-from mloda.core.abstract_plugins.components.utils import contained_raise_reason, safe_exc_str
+from mloda.core.abstract_plugins.components.utils import contained_raise_reason, failure_report
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.function_extender import close_deadline
 from mloda.core.abstract_plugins.run_context import RunContext
@@ -139,9 +139,7 @@ def worker(
             try:
                 bootstrap()
             except Exception as e:
-                error_message = f"An error occurred: {safe_exc_str(e)}"
-                msg = f"{error_message}\nFull traceback:\n{traceback.format_exc()}"
-                exc_info = traceback.format_exc()
+                msg, exc_info = failure_report(e)
                 if cfw_register:
                     try:
                         cfw_register.set_error(msg, exc_info, exception=e)
@@ -178,9 +176,7 @@ def worker(
                 _handle_command_result(command, cfw, location, data, result_queue)
 
             except Exception as e:
-                error_message = f"An error occurred: {safe_exc_str(e)}"
-                msg = f"{error_message}\nFull traceback:\n{traceback.format_exc()}"
-                exc_info = traceback.format_exc()
+                msg, exc_info = failure_report(e)
                 if cfw_register:
                     try:
                         cfw_register.set_error(msg, exc_info, exception=e)

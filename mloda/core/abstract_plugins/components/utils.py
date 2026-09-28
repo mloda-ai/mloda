@@ -4,7 +4,10 @@ from typing import Any, Callable, TypeVar
 
 import logging
 import reprlib
+import traceback
 import weakref
+
+from mloda.core.abstract_plugins.components.credential_scrub import scrub_credentials
 
 logger = logging.getLogger(__name__)
 
@@ -97,7 +100,14 @@ def safe_field(
 
 def contained_raise_reason(exc: BaseException) -> str:
     """Text form of a contained raise: type and message, never the exception object."""
-    return f"raised {type(exc).__name__}: {safe_exc_str(exc)}"
+    return f"raised {type(exc).__name__}: {scrub_credentials(safe_exc_str(exc))}"
+
+
+def failure_report(exc: BaseException) -> tuple[str, str]:
+    """(message, traceback) for a failure log or MlodaRunError, both scrubbed of credentials."""
+    tb = scrub_credentials("".join(traceback.format_exception(exc)))
+    message = f"An error occurred: {scrub_credentials(safe_exc_str(exc))}\nFull traceback:\n{tb}"
+    return message, tb
 
 
 def safe_field_with_error(

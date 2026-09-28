@@ -20,6 +20,7 @@ and because ``MlodaRunError`` does not yet exist.
 
 from __future__ import annotations
 
+import logging
 import threading
 from typing import Any
 
@@ -101,6 +102,167 @@ class CauseChainFeatureGroup(FeatureGroup):
 _ENABLED_IMPORT_ERROR = PluginCollector.enabled_feature_groups({ImportErrorFeatureGroup})
 _ENABLED_DOMAIN_ERROR = PluginCollector.enabled_feature_groups({DomainErrorFeatureGroup})
 _ENABLED_CAUSE_CHAIN = PluginCollector.enabled_feature_groups({CauseChainFeatureGroup})
+
+
+# --------------------------------------------------------------------------- #
+# Credential scrubbing: failure logs and MlodaRunError must never carry secrets,
+# while the exception raised to the caller keeps its raw, unscrubbed message.
+#
+# The secret value itself, not "secret"/"leak", is the only string the assertions
+# below search for, so it must never also appear in an identifier, comment or
+# source line: a raw traceback embeds the source line of the raise statement,
+# and an identifier match there would be a false positive, not a real leak.
+# --------------------------------------------------------------------------- #
+
+_LEAK_MARKER = "hunter2z9"
+_LEAK_PRESIGNED_URL = f"https://bucket.s3.amazonaws.com/key?X-Amz-Signature={_LEAK_MARKER}"
+_LEAK_USERINFO_URL = f"postgres://user:{_LEAK_MARKER}@host:5432/db"
+_LEAK_DSN = f"host=h password={_LEAK_MARKER} dbname=d"
+_LEAK_MESSAGE = f"failed for {_LEAK_PRESIGNED_URL} and {_LEAK_USERINFO_URL} and {_LEAK_DSN}"
+
+
+class SecretLeakFeatureGroup(FeatureGroup):
+    """Root FG whose ``calculate_feature`` raises an ``OSError`` carrying three credential shapes."""
+
+    @classmethod
+    def input_data(cls) -> BaseInputData | None:
+        return DataCreator(supports_features={"exc_secret_leak_col"})
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        raise OSError(_LEAK_MESSAGE)
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {"exc_secret_leak_col"}
+
+
+class SecretLeakChainedFeatureGroup(FeatureGroup):
+    """Root FG that raises ``RuntimeError`` from an ``OSError`` carrying the same credential shapes."""
+
+    @classmethod
+    def input_data(cls) -> BaseInputData | None:
+        return DataCreator(supports_features={"exc_secret_leak_chained_col"})
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        raise RuntimeError("load failed") from OSError(_LEAK_MESSAGE)
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {"exc_secret_leak_chained_col"}
+
+
+class UnpicklableSecretLeakError(RuntimeError):
+    """A RuntimeError with a non-picklable payload whose message also carries a secret."""
+
+    def __init__(self, message: str) -> None:
+        super().__init__(message)
+        self.lock = threading.Lock()  # not picklable
+
+
+class UnpicklableSecretLeakFeatureGroup(FeatureGroup):
+    """Root FG whose ``calculate_feature`` raises a non-picklable, secret-bearing exception."""
+
+    @classmethod
+    def input_data(cls) -> BaseInputData | None:
+        return DataCreator(supports_features={"exc_unpicklable_secret_col"})
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        raise UnpicklableSecretLeakError(_LEAK_MESSAGE)
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {"exc_unpicklable_secret_col"}
+
+
+_ENABLED_SECRET_LEAK = PluginCollector.enabled_feature_groups({SecretLeakFeatureGroup})
+_ENABLED_SECRET_LEAK_CHAINED = PluginCollector.enabled_feature_groups({SecretLeakChainedFeatureGroup})
+_ENABLED_UNPICKLABLE_SECRET_LEAK = PluginCollector.enabled_feature_groups({UnpicklableSecretLeakFeatureGroup})
+
+
+def test_sync_secret_leak_direct_raw_to_caller_scrubbed_in_logs(caplog: pytest.LogCaptureFixture) -> None:
+    """The caller keeps the raw secret-bearing message; ERROR log records never carry the secret."""
+    with pytest.raises(OSError) as excinfo:
+        mloda.run_all(
+            [Feature(name="exc_secret_leak_col")],
+            compute_frameworks=["PythonDictFramework"],
+            plugin_collector=_ENABLED_SECRET_LEAK,
+            parallelization_modes={ParallelizationMode.SYNC},
+        )
+
+    assert _LEAK_MARKER in str(excinfo.value)
+    error_records = [r for r in caplog.records if r.levelno == logging.ERROR]
+    assert error_records
+    assert all(_LEAK_MARKER not in r.getMessage() for r in error_records)
+
+
+def test_sync_secret_leak_chained_raw_to_caller_scrubbed_in_logs(caplog: pytest.LogCaptureFixture) -> None:
+    """The chained cause keeps its raw secret-bearing message; ERROR log records never carry the secret."""
+    with pytest.raises(RuntimeError) as excinfo:
+        mloda.run_all(
+            [Feature(name="exc_secret_leak_chained_col")],
+            compute_frameworks=["PythonDictFramework"],
+            plugin_collector=_ENABLED_SECRET_LEAK_CHAINED,
+            parallelization_modes={ParallelizationMode.SYNC},
+        )
+
+    assert isinstance(excinfo.value.__cause__, OSError)
+    assert _LEAK_MARKER in str(excinfo.value.__cause__)
+    error_records = [r for r in caplog.records if r.levelno == logging.ERROR]
+    assert error_records
+    assert all(_LEAK_MARKER not in r.getMessage() for r in error_records)
+
+
+def test_threading_secret_leak_scrubbed_in_logs(flight_server: Any, caplog: pytest.LogCaptureFixture) -> None:
+    with pytest.raises(OSError) as excinfo:
+        mloda.run_all(
+            [Feature(name="exc_secret_leak_col")],
+            compute_frameworks=["PythonDictFramework"],
+            plugin_collector=_ENABLED_SECRET_LEAK,
+            parallelization_modes={ParallelizationMode.THREADING},
+            flight_server=flight_server,
+        )
+
+    assert _LEAK_MARKER in str(excinfo.value)
+    error_records = [r for r in caplog.records if r.levelno == logging.ERROR]
+    assert error_records
+    assert all(_LEAK_MARKER not in r.getMessage() for r in error_records)
+
+
+def test_multiprocessing_secret_leak_scrubbed_in_logs(flight_server: Any, caplog: pytest.LogCaptureFixture) -> None:
+    with pytest.raises(OSError) as excinfo:
+        mloda.run_all(
+            [Feature(name="exc_secret_leak_col")],
+            compute_frameworks=["PythonDictFramework"],
+            plugin_collector=_ENABLED_SECRET_LEAK,
+            parallelization_modes={ParallelizationMode.MULTIPROCESSING},
+            flight_server=flight_server,
+        )
+
+    assert _LEAK_MARKER in str(excinfo.value)
+    error_records = [r for r in caplog.records if r.levelno == logging.ERROR]
+    assert error_records
+    assert all(_LEAK_MARKER not in r.getMessage() for r in error_records)
+
+
+@pytest.mark.timeout(15)
+def test_multiprocessing_unpicklable_secret_leak_message_is_scrubbed(flight_server: Any) -> None:
+    """The MlodaRunError fallback message for a non-picklable exception must not carry the secret."""
+    from mloda.core.abstract_plugins.components.error_utils import MlodaRunError
+
+    with pytest.raises(MlodaRunError) as excinfo:
+        mloda.run_all(
+            [Feature(name="exc_unpicklable_secret_col")],
+            compute_frameworks=["PythonDictFramework"],
+            plugin_collector=_ENABLED_UNPICKLABLE_SECRET_LEAK,
+            parallelization_modes={ParallelizationMode.MULTIPROCESSING},
+            flight_server=flight_server,
+        )
+
+    assert _LEAK_MARKER not in str(excinfo.value)
+    assert "UnpicklableSecretLeakError" in str(excinfo.value)
 
 
 # --------------------------------------------------------------------------- #

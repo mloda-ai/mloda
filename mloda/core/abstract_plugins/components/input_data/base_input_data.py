@@ -1,11 +1,11 @@
 import logging
 import os
-import re
 from abc import ABC
 from collections.abc import Iterable, Mapping
 from pathlib import PurePath
 from typing import TYPE_CHECKING, Any, ClassVar
 
+from mloda.core.abstract_plugins.components.credential_scrub import _URI_PATTERN, _uri_projection
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.abstract_plugins.components.data_types import DataType
 from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser import (
@@ -49,34 +49,8 @@ logger = logging.getLogger(__name__)
 RESERVED_READER_OPTION_KEY = "BaseInputData"
 
 
-_URI_PATTERN = re.compile(
-    r"(?P<scheme>(?:jdbc:)?[A-Za-z][A-Za-z0-9+.-]*)://"
-    r"(?:(?P<userinfo>[^/?#]*)@)?"
-    r"(?P<host>(?:[\w.~-]*|\[[0-9A-Fa-f:.]+\])(?::\d+)?)"
-    r"(?P<path>/[\w.~%/:=+-]*)?"
-    r"(?:[?#][^@]*)?"
-)
-_AZURE_CONTAINER_SCHEMES = frozenset({"abfs", "abfss", "wasb", "wasbs"})
-_AZURE_CONTAINER_PATTERN = re.compile(r"[a-z0-9-]{3,63}|\$(?:root|web|logs)")
-
-
 def _format_keys(keys: Iterable[str]) -> str:
     return "{" + ", ".join(sorted(set(keys))) + "}"
-
-
-def _uri_projection(match: re.Match[str]) -> str | None:
-    scheme, userinfo, host, path = match["scheme"], match["userinfo"], match["host"], match["path"] or ""
-    container = ""
-    if userinfo and scheme.lower() in _AZURE_CONTAINER_SCHEMES and _AZURE_CONTAINER_PATTERN.fullmatch(userinfo):
-        container = f"{userinfo}@"
-    if scheme.startswith("jdbc:"):
-        return f"{scheme}://{container}{host}"
-    if any("=" in segment.partition(":")[2] for segment in path.split("/")):
-        return None
-    head, percent, _ = path.partition("%")
-    if percent:
-        path = head[: head.rfind("/") + 1]
-    return f"{scheme}://{container}{host}{path}"
 
 
 class BaseInputData(ABC):

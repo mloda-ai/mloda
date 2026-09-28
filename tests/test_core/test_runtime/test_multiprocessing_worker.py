@@ -59,6 +59,11 @@ class _RaisingCloseExtender(Extender):
         raise self.error("close boom")
 
 
+# Only this token, never an identifier or comment, must be searched for in scrub assertions below.
+_LEAK_MARKER = "hunter2z9"
+_LEAK_MESSAGE = f"failed for https://u:p@h/db?sig={_LEAK_MARKER}"
+
+
 class _UnprintableError(Exception):
     def __str__(self) -> str:
         raise ValueError("str() of this exception is broken")
@@ -76,6 +81,20 @@ class _UnprintableRaisingCommand:
 
     def execute(self, *args: Any, **kwargs: Any) -> Any:
         raise _UnprintableError()
+
+
+class _LeakRaisingCommand:
+    """Module-level so it pickles through the spawn-context queue."""
+
+    def execute(self, *args: Any, **kwargs: Any) -> Any:
+        raise RuntimeError(_LEAK_MESSAGE)
+
+
+class _ChainedLeakRaisingCommand:
+    """Module-level so it pickles through the spawn-context queue."""
+
+    def execute(self, *args: Any, **kwargs: Any) -> Any:
+        raise RuntimeError("load failed") from RuntimeError(_LEAK_MESSAGE)
 
 
 _WORKER_LOGGER_NAME = "mloda.core.runtime.worker.multiprocessing_worker"
@@ -186,6 +205,27 @@ class TestWorkerReportsChildBootstrapExceptionThroughTheErrorChannel:
         assert call_args.kwargs.get("exception") is boom
         assert command_queue.get(timeout=2) == "STOP"
 
+    def test_bootstrap_exception_with_secret_is_scrubbed(self) -> None:
+        ctx = mp_spawn_context()
+        command_queue: multiprocessing.Queue[Any] = ctx.Queue()
+        result_queue: multiprocessing.Queue[Any] = ctx.Queue()
+        cfw_register = Mock(spec=CfwManager)
+        cfw_register.get_location.return_value = "grpc://localhost:9999"
+        boom = RuntimeError(_LEAK_MESSAGE)
+        bootstrap = Mock(side_effect=boom)
+        cfw_register.get_run_context.return_value = RunContext(child_bootstrap=bootstrap)
+        cfw = PythonDictFramework(mode=ParallelizationMode.MULTIPROCESSING, children_if_root=frozenset())
+
+        worker(command_queue, result_queue, cfw_register, cfw, uuid4(), worker_index=0)
+
+        cfw_register.set_error.assert_called_once()
+        call_args = cfw_register.set_error.call_args
+        error_msg, exc_info = call_args.args
+        assert _LEAK_MARKER not in error_msg
+        assert _LEAK_MARKER not in exc_info
+        assert call_args.kwargs.get("exception") is boom
+        assert command_queue.get(timeout=2) == "STOP"
+
 
 class TestWorkerReportsCommandExceptionThroughTheErrorChannel:
     def test_command_exception_is_reported_via_set_error_and_stop_without_logging_a_traceback(
@@ -227,6 +267,44 @@ class TestWorkerReportsCommandExceptionThroughTheErrorChannel:
         call_args = cfw_register.set_error.call_args
         assert call_args.args[0].startswith("An error occurred: _UnprintableError\n")
         assert isinstance(call_args.kwargs.get("exception"), _UnprintableError)
+        assert command_queue.get(timeout=2) == "STOP"
+
+    def test_command_exception_with_secret_is_scrubbed(self) -> None:
+        ctx = mp_spawn_context()
+        command_queue: multiprocessing.Queue[Any] = ctx.Queue()
+        result_queue: multiprocessing.Queue[Any] = ctx.Queue()
+        cfw_register = Mock(spec=CfwManager)
+        cfw_register.get_location.return_value = "grpc://localhost:9999"
+        cfw_register.get_run_context.return_value = RunContext()
+        cfw = PythonDictFramework(mode=ParallelizationMode.MULTIPROCESSING, children_if_root=frozenset())
+        command_queue.put(_LeakRaisingCommand())
+
+        worker(command_queue, result_queue, cfw_register, cfw, uuid4(), worker_index=0)
+
+        cfw_register.set_error.assert_called_once()
+        call_args = cfw_register.set_error.call_args
+        error_msg, exc_info = call_args.args
+        assert _LEAK_MARKER not in error_msg
+        assert _LEAK_MARKER not in exc_info
+        assert command_queue.get(timeout=2) == "STOP"
+
+    def test_command_exception_with_secret_in_chained_cause_is_scrubbed(self) -> None:
+        ctx = mp_spawn_context()
+        command_queue: multiprocessing.Queue[Any] = ctx.Queue()
+        result_queue: multiprocessing.Queue[Any] = ctx.Queue()
+        cfw_register = Mock(spec=CfwManager)
+        cfw_register.get_location.return_value = "grpc://localhost:9999"
+        cfw_register.get_run_context.return_value = RunContext()
+        cfw = PythonDictFramework(mode=ParallelizationMode.MULTIPROCESSING, children_if_root=frozenset())
+        command_queue.put(_ChainedLeakRaisingCommand())
+
+        worker(command_queue, result_queue, cfw_register, cfw, uuid4(), worker_index=0)
+
+        cfw_register.set_error.assert_called_once()
+        call_args = cfw_register.set_error.call_args
+        error_msg, exc_info = call_args.args
+        assert _LEAK_MARKER not in error_msg
+        assert _LEAK_MARKER not in exc_info
         assert command_queue.get(timeout=2) == "STOP"
 
 

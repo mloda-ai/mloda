@@ -227,7 +227,10 @@ class SQLITEReader(ReadDB):
             return False
 
         if not os.path.isfile(db_path):
-            raise ValueError(f"Database file {db_path} does not exist, but key is given.")
+            raise ValueError(
+                f"{cls.__name__}: the database file under the '{cls.db_path()}' credential key "
+                "does not exist or is not a file."
+            )
         return True
 
     @classmethod

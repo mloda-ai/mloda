@@ -5,6 +5,7 @@ from collections.abc import Callable
 from typing import Any, TYPE_CHECKING, cast
 from copy import deepcopy
 
+from mloda.core.abstract_plugins.components.credential import RegisteredCredential
 from mloda.core.abstract_plugins.components.hashable_dict import _deep_equal, _deep_hashable, register_deep_node
 from mloda.core.abstract_plugins.components.validators.options_validator import OptionsValidator
 from mloda.core.abstract_plugins.components.default_options_key import DefaultOptionKeys
@@ -39,12 +40,13 @@ def _isolate_forwarded_value(value: Any, memo: dict[int, Any], leaf: Callable[[A
     objects) by reference to preserve the identity the framework relies on for dedup, hashing,
     and conflict detection; a given ``leaf`` replaces that sharing with its own result. Custom
     container types (anything other than dict/list/set/tuple/frozenset) are shared by reference
-    (documented limitation)."""
+    (documented limitation). A ``RegisteredCredential`` keeps its own type so its redacted repr
+    survives the copy."""
     vid = id(value)
     if vid in memo:
         return memo[vid]
     if isinstance(value, dict):
-        result: dict[Any, Any] = {}
+        result: dict[Any, Any] = RegisteredCredential() if isinstance(value, RegisteredCredential) else {}
         memo[vid] = result
         for k, v in value.items():
             result[k] = _isolate_forwarded_value(v, memo, leaf)

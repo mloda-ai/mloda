@@ -6,6 +6,7 @@ from contextvars import ContextVar
 from dataclasses import dataclass
 from typing import Any
 
+from mloda.core.abstract_plugins.components.credential_scrub import scrub_credentials
 from mloda.core.abstract_plugins.components.utils import safe_field_with_error
 
 
@@ -18,8 +19,14 @@ def read_declared_attributes(owner: Any, features: Any) -> dict[str, str | int |
     for key, value in declared.items():
         if not isinstance(key, str):
             raise TypeError(f"declared_attributes keys must be str, got {type(key).__name__}")
-        if isinstance(value, (str, int, float, bool)):
-            result[key] = value
+        if isinstance(value, bool):
+            result[key] = bool(value)
+        elif isinstance(value, int):
+            result[key] = int(value)
+        elif isinstance(value, float):
+            result[key] = float(value)
+        elif isinstance(value, str):
+            result[key] = str.__str__(value)
     return result
 
 
@@ -43,7 +50,9 @@ _Declarations = dict[type, tuple[dict[str, str | int | float | bool], str | None
 def contained_declarations(owner: type, memo: _Declarations) -> tuple[dict[str, str | int | float | bool], str | None]:
     """Plan-time declarations of owner and the contained raise text, read once per memo."""
     if owner not in memo:
-        memo[owner] = safe_field_with_error(lambda: read_declared_attributes(owner, None), {})
+        fallback: dict[str, str | int | float | bool] = {}
+        declared, error = safe_field_with_error(lambda: read_declared_attributes(owner, None), fallback)
+        memo[owner] = (declared, None if error is None else scrub_credentials(error))
     return memo[owner]
 
 
@@ -53,14 +62,13 @@ class DeclarationRequirement:
 
     consumer: str
     required: Mapping[str, Any]
-    owner_declared: Mapping[str, Any]
-    owner_error: str | None
+    owner: type
     memo: _Declarations
 
     def unmet_reason(self, owner_name: str, reader: type | None) -> str | None:
-        """Reason the merged {group, reader} declarations miss the requirement, else None."""
-        declared = dict(self.owner_declared)
-        error = self.owner_error
+        """Reason the merged {group, reader} declarations miss the requirement, else None; reads them lazily."""
+        owner_declared, error = contained_declarations(self.owner, self.memo)
+        declared = dict(owner_declared)
         if reader is not None:
             reader_declared, reader_error = contained_declarations(reader, self.memo)
             declared.update(reader_declared)
@@ -78,8 +86,8 @@ def current_declaration_requirement() -> DeclarationRequirement | None:
 
 
 @contextmanager
-def declaration_requirement_scope(requirement: DeclarationRequirement) -> Iterator[None]:
-    """Make requirement current for reader selection inside the block."""
+def declaration_requirement_scope(requirement: DeclarationRequirement | None) -> Iterator[None]:
+    """Make requirement (or none) current for reader selection inside the block."""
     token = _CURRENT.set(requirement)
     try:
         yield

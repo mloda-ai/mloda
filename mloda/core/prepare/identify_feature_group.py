@@ -1,6 +1,5 @@
 import inspect
 from collections.abc import Sequence
-from contextlib import AbstractContextManager, nullcontext
 from copy import deepcopy
 from dataclasses import replace
 from typing import Any
@@ -27,9 +26,9 @@ from mloda.core.prepare.resolution_failure_renderer import (
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.abstract_plugins.components.declared_attributes import (
     DeclarationRequirement,
-    contained_declarations,
     declaration_requirement_scope,
 )
+from mloda.core.abstract_plugins.components.input_data.base_input_data import RESERVED_READER_OPTION_KEY
 from mloda.core.abstract_plugins.components.domain import Domain
 from mloda.core.abstract_plugins.components.match_rejection import MatchRejection
 from mloda.core.abstract_plugins.components.match_hook import probe_match_criteria
@@ -454,16 +453,13 @@ class IdentifyFeatureGroupClass:
             context_before = dict(feature.options.context)
             non_forwarded_before = feature.options.non_forwarded_group_keys
 
+            requirement = self._declaration_requirement(feature_group, feature)
             # A criteria non-match records a value_rejection only when the first pass recorded a reason for it:
             # a plain name mismatch is not a near-miss, but a value the candidate declined (with a reportable
             # reason) is. The criteria call above just recorded any rejection under this candidate's window, so
             # this reads it back for a criteria-FAILING candidate only; a matched/winning/abstract candidate is
             # never probed. Recorded regardless of domain/scope or of the overall outcome (a sibling may win).
-            requirement = self._declaration_requirement(feature_group, feature)
-            scope: AbstractContextManager[None] = (
-                nullcontext() if requirement is None else declaration_requirement_scope(requirement)
-            )
-            with scope:
+            with declaration_requirement_scope(requirement):
                 criteria_matched = self._filter_feature_group_by_criteria(
                     feature_group, feature, data_access_collection
                 )
@@ -549,7 +545,7 @@ class IdentifyFeatureGroupClass:
                 continue
 
             if requirement is not None:
-                reader = self._matched_reader(feature)
+                reader = self._written_reader(feature, group_before)
                 unmet = requirement.unmet_reason((reader or feature_group).__name__, reader)
                 if unmet is not None:
                     self._record_elimination(feature_group, "declarations", unmet)
@@ -568,13 +564,14 @@ class IdentifyFeatureGroupClass:
         if feature.declaration_requirement is None:
             return None
         consumer, required = feature.declaration_requirement
-        declared, error = contained_declarations(feature_group, self._declarations)
-        return DeclarationRequirement(consumer, required, declared, error, self._declarations)
+        return DeclarationRequirement(consumer, required, feature_group, self._declarations)
 
     @staticmethod
-    def _matched_reader(feature: Feature) -> type | None:
-        """The reader class of the (ReaderClass, data_access) pair a passed criteria match wrote, if any."""
-        matched = feature.options.get("BaseInputData")
+    def _written_reader(feature: Feature, group_before: dict[str, Any]) -> type | None:
+        """The reader of the (ReaderClass, data_access) pair this candidate's criteria match wrote, if it wrote one."""
+        matched = feature.options.group.get(RESERVED_READER_OPTION_KEY)
+        if matched is group_before.get(RESERVED_READER_OPTION_KEY):
+            return None
         return matched[0] if isinstance(matched, tuple) and matched else None
 
     def _record_elimination(self, feature_group: type[FeatureGroup], stage: EliminationStage, reason: str) -> None:

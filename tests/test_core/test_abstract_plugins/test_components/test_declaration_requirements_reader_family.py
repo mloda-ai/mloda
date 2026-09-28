@@ -11,6 +11,10 @@ from typing import Any, ClassVar
 
 import pytest
 
+from mloda.core.abstract_plugins.components.declared_attributes import (
+    DeclarationRequirement,
+    declaration_requirement_scope,
+)
 from mloda.core.abstract_plugins.components.input_data.base_input_data import BaseInputData
 from mloda.core.prepare.accessible_plugins import FeatureGroupEnvironmentMapping
 from mloda.core.prepare.identify_feature_group import FeatureResolutionError, IdentifyFeatureGroupClass
@@ -32,6 +36,10 @@ SCALED_ACCESS = "decl_scaled_access_1648"
 LONELY_ACCESS = "decl_lonely_access_1648"
 DEPTH_HANDLE = "decl_depth_handle_1648"
 LONELY_HANDLE = "decl_lonely_handle_1648"
+NAMERULE = "decl_namerule_1648"
+NAMERULE_ACCESS = "decl_namerule_access_1648"
+NAMERULE_HANDLE = "decl_namerule_handle_1648"
+OTHER_HANDLE = "decl_other_handle_1648"
 
 LOAD_LOG: list[str] = []
 SHARED_LONELY_INPUT: list[Feature] = []
@@ -96,6 +104,68 @@ class DeclLonelyReader1648(DeclLonelyFamily1648):
     ACCESS = LONELY_ACCESS
     HANDLE = LONELY_HANDLE
     FEATURE = LONELY_DEPTH
+
+
+class DeclNameRuleFamily1648(_DeclMarkedReader):
+    """Family whose only reader declares a scale that differs from its feature group's."""
+
+
+class DeclNameRuleReader1648(DeclNameRuleFamily1648):
+    """Matches the name-rule data but declares scale 1."""
+
+    ACCESS = NAMERULE_ACCESS
+    HANDLE = NAMERULE_HANDLE
+    FEATURE = NAMERULE
+
+    @classmethod
+    def declared_attributes(cls, features: FeatureSet | None) -> Mapping[str, str | int | float | bool]:
+        return {"scale": 1}
+
+
+class DeclNameRuleFG1648(FeatureGroup):
+    """Declares scale 5000 and lists its feature name, so the name rule can recover a skipped reader."""
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {NAMERULE}
+
+    @classmethod
+    def input_data(cls) -> BaseInputData | None:
+        return DeclNameRuleFamily1648()
+
+    @classmethod
+    def declared_attributes(cls, features: FeatureSet | None) -> Mapping[str, str | int | float | bool]:
+        return {"scale": 5000}
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PythonDictFramework}
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return None
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return {NAMERULE: [1]}
+
+
+class DeclDerivedDepthFG1648(FeatureGroup):
+    """Serves the depth name without a reader and declares nothing."""
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {DEPTH}
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PythonDictFramework}
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return None
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return {DEPTH: [1]}
 
 
 class DeclDepthFG1648(FeatureGroup):
@@ -236,8 +306,19 @@ ALL_GROUPS: set[type[FeatureGroup]] = {
 ENABLED = PluginCollector.enabled_feature_groups(ALL_GROUPS)
 DEPTH_DAC = DataAccessCollection(folders={DEPTH_HANDLE: "/decl/nowhere"})
 LONELY_DAC = DataAccessCollection(folders={LONELY_HANDLE: "/decl/nowhere"})
+OTHER_DAC = DataAccessCollection(folders={OTHER_HANDLE: "/decl/nowhere"})
+NAMERULE_DAC = DataAccessCollection(folders={NAMERULE_HANDLE: "/decl/nowhere"})
 DEPTH_MAPPING: FeatureGroupEnvironmentMapping = {DeclDepthFG1648: {PythonDictFramework}}
 LONELY_MAPPING: FeatureGroupEnvironmentMapping = {DeclLonelyFG1648: {PythonDictFramework}}
+NAMERULE_MAPPING: FeatureGroupEnvironmentMapping = {DeclNameRuleFG1648: {PythonDictFramework}}
+READER_FIRST_MAPPING: FeatureGroupEnvironmentMapping = {
+    DeclDepthFG1648: {PythonDictFramework},
+    DeclDerivedDepthFG1648: {PythonDictFramework},
+}
+DERIVED_FIRST_MAPPING: FeatureGroupEnvironmentMapping = {
+    DeclDerivedDepthFG1648: {PythonDictFramework},
+    DeclDepthFG1648: {PythonDictFramework},
+}
 
 
 @pytest.fixture(autouse=True)
@@ -303,10 +384,62 @@ class TestReaderFamilyResolution:
 
         assert result.identified == {}
         elimination = result.eliminations[DeclLonelyFG1648]
-        assert elimination.stage in {"input_data", "declarations"}
+        assert elimination.stage == "input_data"
         assert "DepthToMetres" in elimination.reason
         assert "'scale'" in elimination.reason
         assert LOAD_LOG == []
+
+    @pytest.mark.parametrize(
+        "mapping", [READER_FIRST_MAPPING, DERIVED_FIRST_MAPPING], ids=["reader_first", "derived_first"]
+    )
+    def test_reader_written_by_one_candidate_does_not_satisfy_another(
+        self, mapping: FeatureGroupEnvironmentMapping
+    ) -> None:
+        feature = _requiring(Feature(DEPTH))
+
+        result = IdentifyFeatureGroupClass.evaluate(feature, mapping, None, DEPTH_DAC)
+
+        assert set(result.identified) == {DeclDepthFG1648}
+        assert result.eliminations[DeclDerivedDepthFG1648].stage == "declarations"
+
+    def test_name_rule_does_not_recover_a_reader_skipped_for_the_requirement_global(self) -> None:
+        feature = Feature(NAMERULE)
+        feature.declaration_requirement = ("DepthToMetres", {"scale": 5000})
+
+        with pytest.raises(FeatureResolutionError):
+            evaluate_or_raise(feature, NAMERULE_MAPPING, data_access_collection=NAMERULE_DAC)
+
+        assert LOAD_LOG == []
+
+    def test_name_rule_does_not_recover_a_reader_skipped_for_the_requirement_scoped(self) -> None:
+        feature = Feature(NAMERULE, options={DeclNameRuleReader1648.__name__: NAMERULE_ACCESS})
+        feature.declaration_requirement = ("DepthToMetres", {"scale": 5000})
+
+        with pytest.raises(FeatureResolutionError):
+            evaluate_or_raise(feature, NAMERULE_MAPPING)
+
+    def test_global_reader_that_does_not_own_the_data_records_no_declaration_rejection(self) -> None:
+        feature = _requiring(Feature(DEPTH))
+
+        result = IdentifyFeatureGroupClass.evaluate(feature, DEPTH_MAPPING, None, OTHER_DAC)
+
+        assert all("requires declared" not in e.reason for e in result.eliminations.values())
+
+    def test_scoped_reader_that_does_not_own_the_data_records_no_declaration_rejection(self) -> None:
+        feature = _requiring(Feature(DEPTH, options={DeclPlainDepthReader1648.__name__: "decl_not_my_access_1648"}))
+
+        result = IdentifyFeatureGroupClass.evaluate(feature, DEPTH_MAPPING, None, None)
+
+        assert all("requires declared" not in e.reason for e in result.eliminations.values())
+
+    def test_outer_requirement_scope_does_not_leak_into_a_feature_without_one(self) -> None:
+        outer = DeclarationRequirement("OuterConsumer", {"scale": None}, DeclLonelyFG1648, {})
+        feature = Feature(LONELY_DEPTH)
+
+        with declaration_requirement_scope(outer):
+            result = IdentifyFeatureGroupClass.evaluate(feature, LONELY_MAPPING, None, LONELY_DAC)
+
+        assert set(result.identified) == {DeclLonelyFG1648}
 
 
 class TestDeclarationRequirementsEndToEnd:

@@ -339,13 +339,13 @@ class BaseInputData(ABC):
                     if wrapped is not value:
                         options.set(key, wrapped)
                         value = wrapped
-                    unmet = subclass._unmet_current_declaration()
-                    if unmet is not None:
-                        record_match_rejection(subclass.get_class_name(), unmet, stage=INPUT_DATA_OWNED_STAGE)
-                        break
                     known_owners = match_rejection_owners()
                     matched_data_access = subclass.match_subclass_data_access(value, [feature_name], options=options)  # type: ignore[attr-defined]
                     if matched_data_access:
+                        unmet = subclass._unmet_current_declaration()
+                        if unmet is not None:
+                            record_match_rejection(subclass.get_class_name(), unmet, stage=INPUT_DATA_OWNED_STAGE)
+                            break
                         cls.add_base_input_data_to_options(subclass, matched_data_access, options)
                         return True
                     # The addressed probe matched nothing, so whatever content decline it recorded becomes owned.
@@ -405,14 +405,14 @@ class BaseInputData(ABC):
             # A global probe never established ownership, so a silent absence veto cannot displace a real near-miss.
             if not subclass._reader_options_admit(options, record_absence=False):
                 continue
-            unmet = subclass._unmet_current_declaration()
-            if unmet is not None:
-                record_match_rejection(subclass.get_class_name(), unmet, stage=INPUT_DATA_STAGE)
-                continue
             matched_data_access = subclass.match_subclass_data_access(  # type: ignore[attr-defined]
                 data_access_collection, feature_names, options=options
             )
             if matched_data_access:
+                unmet = subclass._unmet_current_declaration()
+                if unmet is not None:
+                    record_match_rejection(subclass.get_class_name(), unmet, stage=INPUT_DATA_OWNED_STAGE)
+                    continue
                 return (subclass, matched_data_access)
 
         cls._record_unowned_pin(data_access_collection, feature_names)

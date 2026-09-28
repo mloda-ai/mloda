@@ -21,6 +21,7 @@ from typing import Any, ClassVar
 import pytest
 
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
+from mloda.core.abstract_plugins.components.declared_attributes import read_declared_attributes
 from mloda.core.abstract_plugins.components.domain import Domain
 from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser import PropertyValueRejection
@@ -496,6 +497,40 @@ class DeclRecordingFG1648(_DeclBaseFG1648):
         return {"scale": 1}
 
 
+DECL_LEAKY_FEATURE = "decl_leaky_feat_1648"
+DECL_SUBCLASS_FEATURE = "decl_subclass_feat_1648"
+DECL_SECRET_URL = "postgresql://user:hunter2@host/db"  # nosec B105
+
+
+class _Unit1648(str):
+    """A str subclass a plugin might declare."""
+
+
+class _Scale1648(float):
+    """A float subclass a plugin might declare."""
+
+
+class _Level1648(int):
+    """An int subclass a plugin might declare."""
+
+
+class DeclSecretFG1648(_DeclBaseFG1648):
+    """declared_attributes raises with a credential in the message."""
+
+    MATCHES = frozenset({DECL_LEAKY_FEATURE})
+
+    @classmethod
+    def declared_attributes(cls, features: FeatureSet | None) -> Mapping[str, str | int | float | bool]:
+        raise ValueError(DECL_SECRET_URL)
+
+
+class DeclSubclassFG1648(_DeclBaseFG1648):
+    """Declares scalar subclasses and a bool."""
+
+    MATCHES = frozenset({DECL_SUBCLASS_FEATURE})
+    DECLARED = {"unit": _Unit1648("m"), "scale": _Scale1648(5000.0), "level": _Level1648(3), "flag": True}
+
+
 # A link whose indexes ElimLinksFG011 does not support, driving the links gate to reject.
 ELIM_LINK = Link.inner(
     JoinSpec(ElimLinksFG011, "elim_left_index_011"),
@@ -909,6 +944,34 @@ class TestDeclarationRequirements:
 
         assert DECL_RECORDED_ARGS
         assert all(arg is None for arg in DECL_RECORDED_ARGS)
+
+    def test_raising_declared_attributes_reason_is_scrubbed_of_credentials(self) -> None:
+        feature = _requiring(Feature(DECL_LEAKY_FEATURE), {"scale": None})
+        plugins: FeatureGroupEnvironmentMapping = {DeclSecretFG1648: {ElimFwOne011}}
+
+        err = _fail(feature, plugins)
+
+        elimination = err.result.eliminations[DeclSecretFG1648]
+        assert elimination.stage == "declarations"
+        assert "hunter2" not in elimination.reason
+        assert "hunter2" not in str(err)
+
+    def test_scalar_subclasses_satisfy_requirements(self) -> None:
+        feature = _requiring(Feature(DECL_SUBCLASS_FEATURE), {"unit": "m", "scale": 5000.0, "level": 3, "flag": True})
+        plugins: FeatureGroupEnvironmentMapping = {DeclSubclassFG1648: {ElimFwOne011}}
+
+        winner, _ = identify_winner(feature, plugins)
+
+        assert winner is DeclSubclassFG1648
+
+    def test_read_declared_attributes_returns_exact_builtin_types(self) -> None:
+        declared = read_declared_attributes(DeclSubclassFG1648, None)
+
+        assert type(declared["unit"]) is str
+        assert type(declared["scale"]) is float
+        assert type(declared["level"]) is int
+        assert type(declared["flag"]) is bool
+        assert declared == {"unit": "m", "scale": 5000.0, "level": 3, "flag": True}
 
 
 def test_render_resolution_failure_is_importable() -> None:

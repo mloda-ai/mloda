@@ -73,19 +73,6 @@ class TestPythonDictFilterEngine(FilterEngineTestMixin, TimeRangeFilterEngineTes
 
     # Framework-specific tests below
 
-    def test_do_min_filter_rejects_min_key_fallback(self) -> None:
-        """``do_min_filter`` must accept ONLY the canonical ``{"value": ...}`` parameter key.
-
-        The pandas/pyarrow/polars filter engines raise when a min filter carries its
-        threshold under ``{"min": ...}``; PythonDict must behave identically instead of
-        silently falling back to ``parameter.min_value``.
-        """
-        data = {"x": [1, 2, 3]}
-        single_filter = SingleFilter(Feature("x"), FilterType.MIN, {"min": 2})
-
-        with pytest.raises(ValueError, match="Filter parameter 'value' not found"):
-            PythonDictFilterEngine.do_min_filter(data, single_filter)
-
     def test_filter_with_none_values(self, sample_data: Any) -> None:
         """Test filtering with None values in data."""
         data_with_none = {

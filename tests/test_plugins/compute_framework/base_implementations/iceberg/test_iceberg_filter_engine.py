@@ -485,6 +485,11 @@ class TestIcebergFilterEngine(FilterEngineTestMixin):
                 id="equal",
             ),
             pytest.param(
+                SingleFilter(Feature("age"), FilterType.MIN, {"min": 30}),
+                "Filter parameter 'value' not found",
+                id="min_rejects_min_key",
+            ),
+            pytest.param(
                 SingleFilter(Feature("category"), FilterType.CATEGORICAL_INCLUSION, {"invalid": ["A"]}),
                 "Filter parameter 'values' not found",
                 id="categorical_inclusion",

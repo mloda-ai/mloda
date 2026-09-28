@@ -352,6 +352,9 @@ class FilterEngineTestMixin:
                 FilterType.MIN, "age", {"invalid": 30}, "Filter parameter 'value' not found", id="min_missing_value"
             ),
             pytest.param(
+                FilterType.MIN, "age", {"min": 30}, "Filter parameter 'value' not found", id="min_rejects_min_key"
+            ),
+            pytest.param(
                 FilterType.EQUAL, "age", {"invalid": 30}, "Filter parameter 'value' not found", id="equal_missing_value"
             ),
             pytest.param(

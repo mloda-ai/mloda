@@ -10,10 +10,13 @@ import time
 from collections.abc import Callable, Generator
 from contextvars import ContextVar
 from dataclasses import dataclass
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from mloda.core.abstract_plugins.components.utils import safe_field
 from mloda.core.abstract_plugins.function_extender import ExtenderHook
+
+if TYPE_CHECKING:
+    from mloda.core.abstract_plugins.components.input_data.base_input_data import BaseInputData
 
 _current_hook_context: ContextVar["HookContext | None"] = ContextVar("_current_hook_context", default=None)
 
@@ -51,8 +54,12 @@ class HookContext:
     plan_feature_count: int | None = None
     plan_node_count: int | None = None
     plan_depth: int | None = None
+    declared_attributes: dict[str, str | int | float | bool] | None = None
+    reader_class: "type[BaseInputData] | None" = None
 
     def __post_init__(self) -> None:
+        if self.declared_attributes is not None:
+            self.declared_attributes = dict(self.declared_attributes)
         # Copy on ingest so a hook mutating the carrier or input_feature_edges never reaches the caller's dict.
         if self.carrier is not None:
             self.carrier = dict(self.carrier)

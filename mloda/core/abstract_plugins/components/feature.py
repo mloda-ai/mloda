@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Mapping
 from copy import copy
 from typing import TYPE_CHECKING, Any
 from uuid import uuid4
@@ -167,6 +168,10 @@ class Feature:
         # Group keys forwarded onto this input feature, set by Features.merge_options; excluded
         # from equality and hash like link/index.
         self.forwarded_group_keys: frozenset[str] = frozenset()
+
+        # (consumer name, required declared attributes) assigned by the engine per consumer; excluded from
+        # equality and hash like link/index.
+        self.declaration_requirement: tuple[str, Mapping[str, Any]] | None = None
 
         # forward_group, forward_group_exclude and inherit_context_keys are merge directives
         # for input features with forward-by-default semantics (None/True inherit all consumer

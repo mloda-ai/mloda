@@ -176,6 +176,12 @@ feature4 = Feature("placeholder", Options(
 ))
 ```
 
+## Declared Attributes and Input Requirements
+
+A feature group or reader can override the classmethod `declared_attributes(features)` to return what its output means, as a mapping of `str` keys to scalar (`str`, `int`, `float`, `bool`) values, for example `{"scale": 5000, "sensor": "Kinect"}`. The default is `{}`, and non-scalar values are dropped.
+
+A consumer states what its inputs must declare by overriding `required_input_declarations(input_feature_name)`. It returns a mapping of key to required value: `None` accepts any declared value, anything else must be equal and of the same type (`True` does not satisfy `1`). Resolution checks this for each input feature against the declarations of the candidate feature group merged with those of its selected reader (the reader wins on a shared key). Resolution calls `declared_attributes(None)`, so a declaration that depends on the runtime `FeatureSet` cannot be checked there. A reader in a family that misses the requirement is skipped so a sibling reader can match. A candidate that still misses it is eliminated at the `declarations` stage, and a `declared_attributes` that raises counts as a miss. When no candidate is left, the run fails before any data is loaded, naming the consumer and the key.
+
 ## Migration Path
 
 When modernizing a feature group:

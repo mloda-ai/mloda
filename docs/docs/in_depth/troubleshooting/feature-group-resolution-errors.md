@@ -86,6 +86,7 @@ Each line names a candidate the matcher considered and dropped: the first gate t
 | `compute framework` | None of the group's compute frameworks are usable: its capability hook rejected every enabled framework, or none of its frameworks is enabled for the run. | Enable a framework the group supports. |
 | `compute framework pin` | The `Feature` pins `compute_frameworks` to one that is not among the group's supported set for this run. | Change or drop the pin. |
 | `links` | No index column of the group matches the run's links. | Align the run's links with the group's index. |
+| `declarations` | A consumer requires a declared attribute of this input that the candidate or its reader does not declare, or declares with another value. | Provide a candidate or reader that declares the attribute the reason names. |
 
 A chained group that keeps the default `MIN_IN_FEATURES` but declares no `in_features` matches by options only when `in_features` is passed. The option path records no rejection reason (a non-matching candidate cannot be told apart from an unrelated one), so the failure report does not name this cause. The class-definition warning names the fix: set `MIN_IN_FEATURES = 0` or declare `in_features` in `PROPERTY_MAPPING`.
 

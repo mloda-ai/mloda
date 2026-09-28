@@ -363,6 +363,16 @@ class FeatureGroup(ABC):
         return ThirdPartyVersionMode.INCLUDE
 
     @classmethod
+    def declared_attributes(cls, features: FeatureSet | None) -> Mapping[str, str | int | float | bool]:
+        """Scalar attributes this group declares on its extender hooks; empty by default."""
+        return {}
+
+    @classmethod
+    def required_input_declarations(cls, input_feature_name: str) -> Mapping[str, str | int | float | bool | None]:
+        """Declared attributes this group requires of one input (None value: any value); empty by default."""
+        return {}
+
+    @classmethod
     def input_data(cls) -> BaseInputData | None:
         """
         This function should return the input data class used for this feature group.

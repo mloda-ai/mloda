@@ -10,6 +10,7 @@ from mloda.core.abstract_plugins.components.framework_transformer.cfw_transforme
     ComputeFrameworkTransformer,
 )
 from mloda.core.abstract_plugins.components.merge.base_merge_engine import BaseMergeEngine
+from mloda.core.abstract_plugins.components.declared_attributes import read_declared_attributes
 from mloda.core.abstract_plugins.components.utils import as_str, safe_field
 from mloda.core.abstract_plugins.function_extender import (
     Extender,
@@ -831,6 +832,12 @@ class ComputeFramework(ABC):
                 warn_once_for=feature_group_cls,
             ),
             plugin_version=(self.run_context.plugin_versions or {}).get(feature_group_cls.__module__),
+            declared_attributes=safe_field(
+                lambda: read_declared_attributes(feature_group_cls, features),
+                None,
+                field=f"{feature_group_class}.declared_attributes",
+                warn_once_for=feature_group_cls,
+            ),
             feature_names=feature_names,
             input_features=input_features,
             input_feature_edges=input_feature_edges,

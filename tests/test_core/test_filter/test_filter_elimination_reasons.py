@@ -93,6 +93,7 @@ CAPABILITY_STAGE: EliminationStage = "capability"
 FRAMEWORKS_NOT_ENABLED_STAGE: EliminationStage = "frameworks_not_enabled"
 FRAMEWORK_PIN_STAGE: EliminationStage = "framework_pin"
 LINKS_STAGE: EliminationStage = "links"
+DECLARATIONS_STAGE: EliminationStage = "declarations"
 NAME_ELIMINATION_STAGE: EliminationStage = "name"
 
 # The canonical seam's own wording over the one framework the filter would ride.
@@ -126,6 +127,7 @@ EXPECTED_DEPTH_ORDER: tuple[tuple[EliminationStage, ...], ...] = (
     (CAPABILITY_STAGE, FRAMEWORKS_NOT_ENABLED_STAGE),
     (FRAMEWORK_PIN_STAGE,),
     (LINKS_STAGE,),
+    (DECLARATIONS_STAGE,),
 )
 
 REPEAT_RUNS = 8  # runs of one scenario, so a readout that rides set iteration order shows up as a differing one

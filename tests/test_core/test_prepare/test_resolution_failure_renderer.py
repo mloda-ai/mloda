@@ -147,7 +147,7 @@ NAME_STAGE_REJECTION_REASON_791 = "renderer_name_stage_791 is not a part this gr
 # The stages whose gate CAN see the feature name, so a sibling name of a candidate eliminated there may still
 # resolve. Pinned here as the complement of NAME_INDEPENDENT_STAGES: a new stage fails the partition test.
 NAME_DEPENDENT_STAGES_791: frozenset[EliminationStage] = frozenset(
-    {"value_rejection", "input_data", "matcher_error", "capability", "framework_pin", "name"}
+    {"value_rejection", "input_data", "matcher_error", "capability", "framework_pin", "name", "declarations"}
 )
 
 # The label each stage renders, stated here independently of the renderer: EliminationStage is checked against
@@ -165,6 +165,7 @@ EXPECTED_STAGE_LABELS_791: dict[EliminationStage, str] = {
     "framework_pin": "compute framework pin",
     "links": "links",
     "name": "feature name",
+    "declarations": "declarations",
 }
 
 # One synthetic near-miss, rendered once per stage, so every label is read back off a real rendered line.

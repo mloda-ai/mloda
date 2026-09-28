@@ -482,7 +482,7 @@ _REGISTRATION_PATHS = [
 
 @pytest.mark.parametrize("build", _REGISTRATION_PATHS)
 class TestRegisteredCredentialRendering:
-    """RegisteredCredential redacts in every text rendering but keeps raw values through data access."""
+    """RegisteredCredential redacts in every text rendering, on every registration path."""
 
     def test_collection_repr_never_leaks_secret_but_keeps_keys(self, build: Any) -> None:
         dac = build(_LEAK_MARKER)
@@ -513,42 +513,49 @@ class TestRegisteredCredentialRendering:
         assert _LEAK_MARKER not in rendered
         assert "***" in rendered
 
-    def test_item_access_returns_raw_secret(self, build: Any) -> None:
-        dac = build(_LEAK_MARKER)
+
+class TestRegisteredCredentialStoredType:
+    """RegisteredCredential behaves like a plain dict for access, equality, and (de)serialization."""
+
+    def _build(self, value: Any) -> DataAccessCollection:
+        return _via_top_level_credential_kwargs(value)
+
+    def test_item_access_returns_raw_secret(self) -> None:
+        dac = self._build(_LEAK_MARKER)
         (entry,) = dac.credentials.values()
         assert entry["password"] == _LEAK_MARKER
 
-    def test_get_returns_raw_secret(self, build: Any) -> None:
-        dac = build(_LEAK_MARKER)
+    def test_get_returns_raw_secret(self) -> None:
+        dac = self._build(_LEAK_MARKER)
         (entry,) = dac.credentials.values()
         assert entry.get("password") == _LEAK_MARKER
 
-    def test_double_star_unpacking_yields_raw_secret(self, build: Any) -> None:
-        dac = build(_LEAK_MARKER)
+    def test_double_star_unpacking_yields_raw_secret(self) -> None:
+        dac = self._build(_LEAK_MARKER)
         (entry,) = dac.credentials.values()
         unpacked = {**entry}
         assert unpacked["password"] == _LEAK_MARKER
         assert type(unpacked) is dict
 
-    def test_resolve_returns_raw_secret(self, build: Any) -> None:
-        dac = build(_LEAK_MARKER)
+    def test_resolve_returns_raw_secret(self) -> None:
+        dac = self._build(_LEAK_MARKER)
         entry = dac.resolve("credentials")
         assert entry["password"] == _LEAK_MARKER
 
-    def test_entry_equals_plain_dict(self, build: Any) -> None:
-        dac = build(_LEAK_MARKER)
+    def test_entry_equals_plain_dict(self) -> None:
+        dac = self._build(_LEAK_MARKER)
         (entry,) = dac.credentials.values()
         assert entry == {"user": "u", "password": _LEAK_MARKER}
 
-    def test_pickle_round_trip_keeps_type_equality_and_redacting_repr(self, build: Any) -> None:
-        dac = build(_LEAK_MARKER)
+    def test_pickle_round_trip_keeps_type_equality_and_redacting_repr(self) -> None:
+        dac = self._build(_LEAK_MARKER)
         (entry,) = dac.credentials.values()
         restored = pickle.loads(pickle.dumps(entry))  # nosec B301
         assert type(restored) is RegisteredCredential
         assert restored == entry
         assert _LEAK_MARKER not in repr(restored)
 
-    def test_json_dumps_contains_raw_secret(self, build: Any) -> None:
-        dac = build(_LEAK_MARKER)
+    def test_json_dumps_contains_raw_secret(self) -> None:
+        dac = self._build(_LEAK_MARKER)
         (entry,) = dac.credentials.values()
         assert _LEAK_MARKER in json.dumps(entry)

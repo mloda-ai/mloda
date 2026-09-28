@@ -100,7 +100,7 @@ Registered credentials are stored as `RegisteredCredential`, a `dict` subclass, 
 Two safety behaviors come with it:
 
 - **Early mis-wrap error.** Passing a bare dict whose values are not mappings (the mis-wrap shape above) now raises `ValueError` at construction time, naming the offending handle and showing the three correct alternatives, instead of failing silently later during matcher selection.
-- **Redacted error output.** `repr(Credential(password="hunter2"))` prints `Credential(password='***')`, and the resolver's ambiguity error renders credential candidates with keys visible and values replaced by `***`. Printing `dac.credentials` or an entry (print, f-strings, logging, pprint) shows keys with values `***`; copies (`dict(cred)`, `{**cred}`, `.copy()`), `.items()`/`.values()` and serializers (json/yaml) bypass the redaction, and registration copies the caller's dict.
+- **Redacted error output.** `repr(Credential(password="hunter2"))` prints `Credential(password='***')`, and the resolver's ambiguity error renders credential candidates with keys visible and values replaced by `***`. Mapping credentials registered through the constructor or `add_credentials` print (print, f-strings, logging, pprint) with values `***`. Copies (`dict(cred)`, `{**cred}`, `.copy()`), `.items()`/`.values()` and `json.dumps` see raw values; `yaml.safe_dump` rejects the subclass, so convert with `dict(cred)` first. Non-mapping list entries (e.g. a DSN string) and values assigned directly into `dac.credentials` are stored as-is and print raw; registration copies the caller's dict.
 - **`dac.redact(text)`.** Exact-matches every registered credential string value of 8 or more characters (host, user, path, not just password; shorter values are left to the pattern rules), only from `credentials` (not connections, files, folders), then scrubs the result through `scrub_credentials`.
 
 ### Why a typed class: four kinds of users
@@ -109,7 +109,7 @@ The design serves four user groups that hit credentials differently:
 
 1. **Notebook users** (one data source) write the obvious shape from an example. For them the bare dict either has to work or fail loudly at construction; `Credential(sqlite="/data/x.db")` gives them a form with no nesting decision to get wrong, and the early error catches the legacy shape.
 2. **Production users** (multiple sources) live in the named-handle registry and disambiguate per feature via `data_access_handle`. For them `Credential` keeps the registry values homogeneous, so ambiguity errors and `handles()` introspection stay trustworthy.
-3. **Plugin authors** implement `is_valid_credentials` and previously had to isinstance-juggle whatever leaked through (including bare strings from mis-wrapped input). The framework now normalizes at the boundary: whatever the end user typed, the plugin receives a dict.
+3. **Plugin authors** implement `is_valid_credentials` and previously had to isinstance-juggle whatever leaked through (including bare strings from mis-wrapped input). The framework now normalizes at the boundary: the plugin receives a dict for every mapping credential.
 4. **Ops and data stewards** care about what is in the credential, not its shape. The resolver's ambiguity errors print candidate values, so credential candidates are rendered with redacted values (keys only), keeping passwords out of those messages and the logs that capture them.
 
 ## Resolution rule

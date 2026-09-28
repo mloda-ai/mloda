@@ -414,6 +414,21 @@ def _find_spec_quiet(name: str, locations: list[str] | None) -> importlib.machin
     return safe_field(lambda: importlib.machinery.PathFinder.find_spec(name, locations), None)
 
 
+def _static_module_source(spec: importlib.machinery.ModuleSpec, origin: str) -> str | bytes | None:
+    """Reads like ``_module_source`` (loader.get_source, else file bytes) so imported and unimported modules match."""
+    loader = spec.loader
+    if loader is not None and hasattr(loader, "get_source"):
+
+        def _read() -> str | None:
+            source = loader.get_source(spec.name)
+            return source if isinstance(source, str) else None
+
+        source = safe_field(_read, None, catching=_MODULE_INDEX_READ_ERRORS)
+        if source is not None:
+            return source
+    return safe_field(lambda: _read_file_bytes(origin), None, catching=(OSError,))
+
+
 def _locate_static_module_index(modname: str) -> _ModuleIndex | None:
     """Locates modname's source via PathFinder, from the nearest already-imported ancestor, without importing it."""
     parts = modname.split(".")
@@ -430,10 +445,12 @@ def _locate_static_module_index(modname: str) -> _ModuleIndex | None:
             if not spec.submodule_search_locations:
                 return None  # intermediate step has no submodule locations: never fall back to all of sys.path
             search_locations = list(spec.submodule_search_locations)
-    origin = spec.origin if spec is not None else None
+    if spec is None:
+        return None
+    origin = spec.origin
     if not origin or not origin.endswith(".py"):
         return None
-    source = safe_field(lambda: _read_file_bytes(origin), None, catching=(OSError,))
+    source = _static_module_source(spec, origin)
     if source is None:
         return None
     is_package = os.path.basename(origin) == "__init__.py"
@@ -546,16 +563,20 @@ def _apply_local_aliases(refs: list[str], bindings: dict[str, list[tuple[str, st
     return mapped
 
 
+def _local_mapped_refs(node: ast.AST, package: str | None) -> list[str | _AliasRef]:
+    """``_collect_refs(node)`` plus static refs for names bound by imports inside node."""
+    refs = _collect_refs(node)
+    bindings = _collect_local_import_bindings(node, package)
+    return _apply_local_aliases(refs, bindings) if bindings else list(refs)
+
+
 def _resolve_candidate(candidate: _Candidate, package: str | None) -> tuple[str | None, list[str | _AliasRef]]:
     if candidate.digest_refs is None:
         node = _parse_span_node(candidate)
         if node is None:
             candidate.digest_refs = (None, [])
         else:
-            refs = _collect_refs(node)
-            bindings = _collect_local_import_bindings(node, package)
-            mapped_refs: list[str | _AliasRef] = _apply_local_aliases(refs, bindings) if bindings else list(refs)
-            candidate.digest_refs = (_digest(node), mapped_refs)
+            candidate.digest_refs = (_digest(node), _local_mapped_refs(node, package))
     return candidate.digest_refs
 
 
@@ -696,6 +717,13 @@ def dependency_entry(module_name: str) -> str | None:
     top = _top(module_name)
     name, version = _dependency_name_version(module_name, top)
     return f"dep:{name}=={version}" if version else f"dep:{name}"
+
+
+def _module_package(modname: str) -> str | None:
+    module = sys.modules.get(modname)
+    if module is None:
+        return None
+    return safe_field(lambda: module.__package__, None)
 
 
 def _root_fallback_source(cls: type[Any]) -> str:
@@ -850,7 +878,7 @@ class _Walker:
             self.parts.add(f"nosrc:{modname}:{qualname}")
             return
         digest = _digest(node)
-        refs = _collect_refs(node)
+        refs = _local_mapped_refs(node, _module_package(modname))
         self.parts.add(f"{modname}:{qualname}:{digest}")
         self._enqueue_refs(modname, refs, False)
 
@@ -887,7 +915,7 @@ class _Walker:
             node = _parse_named_node(source, name, node_types)
             if node is not None:
                 digest = _digest(node)
-                refs = _collect_refs(node)
+                refs = _local_mapped_refs(node, _module_package(modname))
                 self.parts.add(f"{modname}:{qualname}:{digest}")
                 self._enqueue_refs(modname, refs, False)
                 return
@@ -1072,7 +1100,7 @@ class _Walker:
             return
         value = namespace[head]
         owner_mod, owner_name = ref_modname, head
-        for attr in rest:
+        for i, attr in enumerate(rest):
             if type(value) is not types.ModuleType:
                 break
             modname = safe_field(lambda: value.__name__, "")
@@ -1082,11 +1110,30 @@ class _Walker:
                 self._add_dependency(modname)
                 return
             mod_vars = safe_field(lambda: vars(value), None)
-            if mod_vars is None or attr not in mod_vars:
+            if mod_vars is None:
+                return
+            submodule = f"{modname}.{attr}"
+            # M.attr is an in-scope submodule: switch to the static path so cold (never imported) and
+            # warm (already imported, present in vars(M)) resolve the same rest of the chain.
+            if self.in_scope(submodule) and self._chain_step_is_submodule(mod_vars, attr, submodule):
+                remainder = ".".join(rest[i + 1 :])
+                if remainder:
+                    self._queue.append(("sref", submodule, remainder))
+                else:
+                    self._queue.append(("smodule", submodule))
+                return
+            if attr not in mod_vars:
                 return
             owner_mod, owner_name = modname, attr
             value = mod_vars[attr]
         self._queue.append(("value", value, owner_mod, owner_name, optional_dependency_sentinel))
+
+    def _chain_step_is_submodule(self, mod_vars: dict[str, Any], attr: str, submodule: str) -> bool:
+        if attr not in mod_vars:
+            # Package check by dict read: a module-level __getattr__ must never run.
+            return "__path__" in mod_vars and self._static_module_index(submodule) is not None
+        present = mod_vars[attr]
+        return type(present) is types.ModuleType and safe_field(lambda: present.__name__, "") == submodule
 
     def _dispatch(self, task: _Task) -> None:
         tag = task[0]

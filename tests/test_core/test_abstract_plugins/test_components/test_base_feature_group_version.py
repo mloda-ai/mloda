@@ -10,6 +10,7 @@ import types
 import uuid
 import warnings
 import weakref
+import zipfile
 from pathlib import Path
 from typing import Any, Callable, Iterator, cast
 
@@ -957,6 +958,191 @@ class TestLocalImports:
         digest = BaseFeatureGroupVersion.implementation_hash(leaf)
 
         assert len(digest) == 64
+
+    def test_add_root_fallback_source_path_follows_local_import(self, fixture_pkg: _FixturePkgHelper) -> None:
+        """add_root's source-fallback path (fileless exec'd root, see TestExistingFallbacksStayGreen) must
+        map a function-local first-party import the same way the module-indexed path does."""
+        top = _unique_top("rootfallback")
+        fixture_pkg.write(top, {"lazy.py": "def helper(x: int) -> int:\n    return x + 5\n"})
+
+        body = f"""
+        from mloda.provider import FeatureGroup
+
+        class FallbackLeaf(FeatureGroup):
+            def calculate_feature(self, x: int) -> int:
+                from {top}.lazy import helper
+
+                return helper(x)
+        """
+        # Same synthetic module name reused for both states, so only the digest (never the module
+        # name itself) can make the two ``parts`` results differ.
+        modname = f"{top}.exec_fallback_probe"
+        module_before = types.ModuleType(modname)
+        sys.modules[modname] = module_before
+        cls_before = _exec_fg_in_module("FallbackLeaf", body, "root-fallback-before", module_before)
+        before = closure_parts(cls_before, False)
+
+        fixture_pkg.rewrite(top, {"lazy.py": "def helper(x: int) -> int:\n    return x + 6\n"})
+
+        # rewrite already purged every "{top}.*" module (including modname); re-register fresh.
+        module_after = types.ModuleType(modname)
+        sys.modules[modname] = module_after
+        cls_after = _exec_fg_in_module("FallbackLeaf", body, "root-fallback-after", module_after)
+        after = closure_parts(cls_after, False)
+
+        assert after != before, "editing the locally-imported helper must change the fallback-rooted class's parts"
+
+    def test_handle_def_fallback_source_path_follows_local_import(self, fixture_pkg: _FixturePkgHelper) -> None:
+        """_handle_def's inspect.getsource fallback (a fileless function reached live, not the root class
+        itself) must map a function-local first-party import the same way the module-indexed path does."""
+        top = _unique_top("defallback")
+        fixture_pkg.write(
+            top,
+            {
+                "lazy.py": "def target(x: int) -> int:\n    return x + 9\n",
+                "sub.py": (
+                    "from mloda.provider import FeatureGroup\n\n\n"
+                    "class Leaf(FeatureGroup):\n"
+                    "    def calculate_feature(self, x: int) -> int:\n"
+                    "        return helper_func(x)\n"
+                ),
+            },
+        )
+        leaf = fixture_pkg.import_leaf(top)
+        sub_module_before = sys.modules[f"{top}.sub"]
+
+        body = f"""
+        def helper_func(x: int) -> int:
+            from {top}.lazy import target
+
+            return target(x)
+        """
+        # Same synthetic module name reused for both states, so only the digest (never the module
+        # name itself) can make the two ``parts`` results differ.
+        dyn_modname = f"{top}.dynhelper"
+        dyn_module_before = types.ModuleType(dyn_modname)
+        sys.modules[dyn_modname] = dyn_module_before
+        setattr(
+            sub_module_before,
+            "helper_func",
+            _exec_fg_in_module("helper_func", body, "handle-def-fallback-before", dyn_module_before),
+        )
+        before = closure_parts(leaf, False)
+
+        fixture_pkg.rewrite(top, {"lazy.py": "def target(x: int) -> int:\n    return x + 10\n"})
+        leaf_after = fixture_pkg.import_leaf(top)
+        sub_module_after = sys.modules[f"{top}.sub"]
+        # rewrite already purged every "{top}.*" module (including dyn_modname); re-register fresh.
+        dyn_module_after = types.ModuleType(dyn_modname)
+        sys.modules[dyn_modname] = dyn_module_after
+        setattr(
+            sub_module_after,
+            "helper_func",
+            _exec_fg_in_module("helper_func", body, "handle-def-fallback-after", dyn_module_after),
+        )
+        after = closure_parts(leaf_after, False)
+
+        assert after != before, (
+            "editing target's body, reached via a local import inside a _handle_def-fallback-hashed "
+            "function, must change the hash"
+        )
+
+
+class TestDottedSubmoduleRefsThroughPackageGlobal:
+    """A live ``{top}.sub.fn`` chain through a package global must resolve the same whether or not the
+    intermediate submodule is already imported (no function-local import is involved here)."""
+
+    def _write_fixture(self, fixture_pkg: _FixturePkgHelper, top: str) -> None:
+        fixture_pkg.write(
+            top,
+            {
+                "other.py": "def other_func(x: int) -> int:\n    return x + 1\n",
+                "lazy.py": "def Z(x: int) -> int:\n    return x + 2\n\n\nY = Z\n",
+                "sub.py": (
+                    f"import {top}.other\n\n"
+                    "from mloda.provider import FeatureGroup\n\n\n"
+                    "class Leaf(FeatureGroup):\n"
+                    "    def calculate_feature(self, x: int) -> int:\n"
+                    f"        return {top}.lazy.Y(x)\n"
+                ),
+            },
+        )
+
+    def test_hash_identical_pre_imported_or_not(self, fixture_pkg: _FixturePkgHelper) -> None:
+        top = _unique_top("dottedsub")
+        self._write_fixture(fixture_pkg, top)
+        leaf_cold = fixture_pkg.import_leaf(top)
+        hash_cold = BaseFeatureGroupVersion.implementation_hash(leaf_cold)
+        assert f"{top}.lazy" not in sys.modules, "hashing must not import the target submodule"
+
+        fixture_pkg.purge(top)
+        self._write_fixture(fixture_pkg, top)
+        importlib.import_module(f"{top}.lazy")
+        leaf_warm = fixture_pkg.import_leaf(top)
+        hash_warm = BaseFeatureGroupVersion.implementation_hash(leaf_warm)
+
+        assert hash_warm == hash_cold, (
+            "a dotted chain through a package global must resolve the same parts whether or not the "
+            "intermediate submodule is already imported"
+        )
+
+    def test_edit_changes_hash_when_target_submodule_never_imported(self, fixture_pkg: _FixturePkgHelper) -> None:
+        top = _unique_top("dottedsubedit")
+        self._write_fixture(fixture_pkg, top)
+        leaf_before = fixture_pkg.import_leaf(top)
+        before = BaseFeatureGroupVersion.implementation_hash(leaf_before)
+        assert f"{top}.lazy" not in sys.modules, "precondition: the target submodule must stay cold"
+
+        fixture_pkg.rewrite(top, {"lazy.py": "def Z(x: int) -> int:\n    return x + 3\n\n\nY = Z\n"})
+        leaf_after = fixture_pkg.import_leaf(top)
+        after = BaseFeatureGroupVersion.implementation_hash(leaf_after)
+
+        assert after != before, (
+            "editing the target's body must change the hash even when the submodule is never imported"
+        )
+
+
+class TestStaticModuleSourceMatchesLiveSource:
+    """The static (cold) module index must read source the same way the live (warm) index does."""
+
+    def test_zip_installed_package_local_import_no_nosrc_and_parts_match_warm(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        top = _unique_top("zippkg")
+        zip_path = tmp_path / f"{top}.zip"
+        with zipfile.ZipFile(zip_path, "w") as zf:
+            zf.writestr(f"{top}/__init__.py", "")
+            zf.writestr(f"{top}/lazy.py", "def lazy_helper(x: int) -> int:\n    return x + 1\n")
+            zf.writestr(
+                f"{top}/sub.py",
+                (
+                    "from mloda.provider import FeatureGroup\n\n\n"
+                    "class Leaf(FeatureGroup):\n"
+                    "    def calculate_feature(self, x: int) -> int:\n"
+                    f"        from {top}.lazy import lazy_helper\n\n"
+                    "        return lazy_helper(x)\n"
+                ),
+            )
+        monkeypatch.syspath_prepend(str(zip_path))
+        monkeypatch.setattr(sys, "dont_write_bytecode", True)
+        importlib.invalidate_caches()
+
+        try:
+            leaf_cold = importlib.import_module(f"{top}.sub").Leaf
+            parts_cold = closure_parts(leaf_cold, False)
+
+            importlib.import_module(f"{top}.lazy")
+            leaf_warm = importlib.import_module(f"{top}.sub").Leaf
+            parts_warm = closure_parts(leaf_warm, False)
+        finally:
+            _purge_package(top)
+            gc.collect()
+
+        assert not any(part.startswith(f"nosrc:{top}.lazy") for part in parts_cold), (
+            f"the cold static module lookup must read source the same way the live index does; "
+            f"got nosrc part(s) in {parts_cold}"
+        )
+        assert parts_cold == parts_warm, "pre-importing the zip-installed target must not change the parts"
 
 
 class TestVersionUsesImplementationHash:

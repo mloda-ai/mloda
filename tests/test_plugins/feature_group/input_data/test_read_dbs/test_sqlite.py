@@ -119,12 +119,18 @@ class TestSQLITEReader:
         assert SQLITEReader.is_valid_credentials(valid_credentials)
 
     def test_is_valid_credentials_nonexistent(self, tmp_path: Any) -> None:
-        credentials = {"sqlite": str(tmp_path / "nonexistent.db")}
-        with pytest.raises(
-            ValueError,
-            match=f"Database file {re.escape(credentials['sqlite'])} does not exist, but key is given.",
-        ):
+        """The error must not echo the database path or file name."""
+        db_path = str(tmp_path / "nonexistent.db")
+        credentials = {"sqlite": db_path}
+        expected_message = (
+            f"{SQLITEReader.__name__}: the database file under the "
+            f"'{SQLITEReader.db_path()}' credential key does not exist or is not a file."
+        )
+        with pytest.raises(ValueError, match=re.escape(expected_message)) as exc_info:
             SQLITEReader.is_valid_credentials(credentials)
+
+        assert db_path not in str(exc_info.value)
+        assert "nonexistent.db" not in str(exc_info.value)
 
     def test_load_data(self, valid_credentials: Any, mock_read_db: Any, mock_read_as_pa_data: Any) -> None:
         feature_set = FeatureSet()
@@ -261,14 +267,15 @@ class TestSQLITEReader:
         assert result["char_then_double"] == DataType.STRING
         assert result["double_then_blob"] == DataType.BINARY
 
-    def test_describe_columns_nonexistent_db_does_not_create_file_and_error_mentions_path(self, tmp_path: Any) -> None:
-        """sqlite3.connect would otherwise create the file; is_valid_credentials must fail fast, naming the path."""
+    def test_describe_columns_nonexistent_db_does_not_create_file_and_error_omits_path(self, tmp_path: Any) -> None:
+        """sqlite3.connect would otherwise create the file; is_valid_credentials must fail fast, omitting the path."""
         nonexistent_path = tmp_path / "nonexistent.db"
         assert not nonexistent_path.exists()
 
-        with pytest.raises(ValueError, match=re.escape(str(nonexistent_path))):
+        with pytest.raises(ValueError, match=re.escape("credential key does not exist or is not a file")) as exc_info:
             SQLITEReader.describe_columns({"sqlite": str(nonexistent_path), "table_name": "t"})
 
+        assert str(nonexistent_path) not in str(exc_info.value)
         assert not nonexistent_path.exists()
 
     def test_describe_columns_path_credential_rejected(self, tmp_path: Any) -> None:

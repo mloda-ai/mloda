@@ -5,6 +5,8 @@ from collections.abc import Callable
 from typing import Any, TYPE_CHECKING, cast
 from copy import deepcopy
 
+from mloda.core.abstract_plugins.components.credential import RegisteredCredential
+from mloda.core.abstract_plugins.components.credential_scrub import redact_option_value
 from mloda.core.abstract_plugins.components.hashable_dict import _deep_equal, _deep_hashable, register_deep_node
 from mloda.core.abstract_plugins.components.validators.options_validator import OptionsValidator
 from mloda.core.abstract_plugins.components.default_options_key import DefaultOptionKeys
@@ -39,12 +41,13 @@ def _isolate_forwarded_value(value: Any, memo: dict[int, Any], leaf: Callable[[A
     objects) by reference to preserve the identity the framework relies on for dedup, hashing,
     and conflict detection; a given ``leaf`` replaces that sharing with its own result. Custom
     container types (anything other than dict/list/set/tuple/frozenset) are shared by reference
-    (documented limitation)."""
+    (documented limitation). A ``RegisteredCredential`` keeps its own type so its redacted repr
+    survives the copy."""
     vid = id(value)
     if vid in memo:
         return memo[vid]
     if isinstance(value, dict):
-        result: dict[Any, Any] = {}
+        result: dict[Any, Any] = RegisteredCredential() if isinstance(value, RegisteredCredential) else {}
         memo[vid] = result
         for k, v in value.items():
             result[k] = _isolate_forwarded_value(v, memo, leaf)
@@ -78,6 +81,26 @@ def _normalize_reader_class_keys(d: dict[str, Any]) -> dict[str, Any]:
     return {
         (k.data_access_name() if isinstance(k, type) and hasattr(k, "data_access_name") else k): v for k, v in d.items()
     }
+
+
+def _is_reader_tuple(value: Any) -> bool:
+    """True for a (reader class, mapping) BaseInputData tuple, the same reader-class shape
+    ``_normalize_reader_class_keys`` recognizes."""
+    return (
+        isinstance(value, tuple)
+        and len(value) == 2
+        and isinstance(value[0], type)
+        and hasattr(value[0], "data_access_name")
+    )
+
+
+def _str_option_value(value: Any) -> Any:
+    """Mask only a reserved reader tuple; every other value prints raw."""
+    return redact_option_value(value) if _is_reader_tuple(value) else value
+
+
+def _str_option_dict(d: dict[str, Any]) -> dict[str, Any]:
+    return {k: _str_option_value(v) for k, v in d.items()}
 
 
 def validate_forwarding_directives(
@@ -372,7 +395,7 @@ class Options:
         return self.rebuild(safe_deepcopy_dict(self.group), safe_deepcopy_dict(self.context))
 
     def __str__(self) -> str:
-        parts = f"Options(group={self.group}, context={self.context}"
+        parts = f"Options(group={_str_option_dict(self.group)}, context={_str_option_dict(self.context)}"
         if self.propagate_context_keys:
             parts += f", propagate_context_keys={self.propagate_context_keys}"
         parts += ")"
@@ -471,15 +494,17 @@ class Options:
                 owner_clause = f" on input feature '{owner}'" if owner is not None else " on the input feature"
                 raise ValueError(
                     f"Option key '{key}' forwarded from the consumer as a group option conflicts with the "
-                    f"same key held in the child's context{owner_clause}: consumer='{consumer.group[key]}', "
-                    f"child context='{new_context[key]}'. Keep the key off the child with "
+                    f"same key held in the child's context{owner_clause}: "
+                    f"consumer={redact_option_value(consumer.group[key])!r}, "
+                    f"child context={redact_option_value(new_context[key])!r}. Keep the key off the child with "
                     f"forward_group_exclude={{'{key}'}}, an allowlist, or forward_group=False."
                 )
             if key in new_group and new_group[key] != consumer.group[key]:
                 owner_clause = f" on input feature '{owner}'" if owner is not None else " on the input feature"
                 raise ValueError(
                     f"Option key '{key}' forwarded from the consumer conflicts with the value already set"
-                    f"{owner_clause}: consumer='{consumer.group[key]}', child='{new_group[key]}'. "
+                    f"{owner_clause}: consumer={redact_option_value(consumer.group[key])!r}, "
+                    f"child={redact_option_value(new_group[key])!r}. "
                     f"Keep the key off the child with forward_group_exclude={{'{key}'}}, an allowlist, "
                     "or forward_group=False."
                 )
@@ -510,7 +535,10 @@ class Options:
 
             for key, value in propagating.items():
                 if key in new_context and new_context[key] != value:
-                    raise ValueError(f"Context key '{key}' conflict: consumer='{value}', child='{new_context[key]}'")
+                    raise ValueError(
+                        f"Context key '{key}' conflict: consumer={redact_option_value(value)!r}, "
+                        f"child={redact_option_value(new_context[key])!r}"
+                    )
 
             new_context.update({key: _isolate_forwarded_value(value, memo) for key, value in propagating.items()})
             inherited_context.update(propagating.keys())

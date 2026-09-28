@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from mloda.core.abstract_plugins.components.credential import RegisteredCredential
 from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.provider import DefaultOptionKeys
@@ -26,6 +27,8 @@ UFD_DICT_KEY = "ufd_dict_key"
 UFD_INNER_KEY = "ufd_inner_key"
 UFD_HOST_VALUE = "ufd_host_value"
 UFD_FILTER_VALUE = "ufd_filter_value"
+UFD_CREDENTIAL_KEY = "ufd_credential_key"
+UFD_CREDENTIAL_VALUE = "ufd_credential_value"
 
 
 class UfdHandle:
@@ -110,6 +113,23 @@ def test_a_feature_free_container_is_rebuilt_around_its_shared_leaves() -> None:
     assert imported == payload, f"the imported container must stay value-equal to the host's: {imported!r}"
     assert imported is not payload, "a container spine must be rebuilt, so a nested mutation cannot leak back"
     assert imported[UFD_INNER_KEY] is handle, "a non-container leaf that is no Feature must stay shared by reference"
+
+
+def test_a_registered_credential_stays_its_own_type_and_stays_redacted() -> None:
+    """A RegisteredCredential keeps its type, and so its redacted repr, through the rebuilt spine."""
+    credential = RegisteredCredential({UFD_INNER_KEY: UFD_CREDENTIAL_VALUE})
+    host = Options(group={UFD_CREDENTIAL_KEY: (UfdHandle, credential)})
+
+    imported = _unify(host).get(UFD_CREDENTIAL_KEY)[1]
+
+    assert type(imported) is RegisteredCredential, (
+        f"the imported credential must stay a RegisteredCredential: {type(imported)!r}"
+    )
+    assert imported == credential, f"the imported credential must stay value-equal to the host's: {imported!r}"
+    assert imported is not credential, "the imported credential must be a copy, not the host's own object"
+    assert UFD_CREDENTIAL_VALUE not in repr(imported), (
+        f"the imported credential's repr must stay redacted: {imported!r}"
+    )
 
 
 def test_a_key_the_filter_feature_declares_is_never_rewritten() -> None:

@@ -12,6 +12,7 @@ from mloda.core.abstract_plugins.components.property_spec import is_no_default
 from mloda.core.abstract_plugins.components.utils import as_str, safe_field
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.components.options import Options, _isolate_forwarded_value
+from mloda.core.abstract_plugins.components.credential_scrub import redact_option_value
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.match_hook import probe_match_criteria
@@ -269,12 +270,15 @@ class GlobalFilter:
             fill = self._intake_fill(feature_group, key, filter_options)
             if self._converges_at_intake(fill, value):
                 continue
+            masked_declared, masked_value = redact_option_value(declared), redact_option_value(value)
             if fill is None:
-                message = f"Options are not the same. {key} is different. {declared} != {value}"
+                message = f"Options are not the same. {key} is different. {masked_declared} != {masked_value}"
             else:
                 # Name the spec default, which is what the filter feature will actually compute with.
+                masked_fill = redact_option_value(fill)
                 message = (
-                    f"Options are not the same. {key} is different. {declared!r} (intake fills {fill!r}) != {value!r}"
+                    f"Options are not the same. {key} is different. "
+                    f"{masked_declared!r} (intake fills {masked_fill!r}) != {masked_value!r}"
                 )
             if message in self._warned_divergences:
                 continue

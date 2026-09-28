@@ -45,6 +45,14 @@ class ReadDB(BaseInputData):
     }
 
     @classmethod
+    def wrap_feature_scoped_access(cls, data_access: Any) -> Any:
+        """Wraps a plain dict (including dict subclasses) in a redacting RegisteredCredential copy
+        before it is stored/matched."""
+        if isinstance(data_access, dict) and not isinstance(data_access, RegisteredCredential):
+            return RegisteredCredential(data_access)
+        return data_access
+
+    @classmethod
     def prepare_credentials(cls, data_access: Any, features: FeatureSet) -> Any:
         """Overridable hook to normalize/validate credentials before connecting; default is pass-through."""
         return data_access

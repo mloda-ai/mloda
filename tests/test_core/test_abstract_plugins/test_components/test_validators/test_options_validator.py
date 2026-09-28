@@ -105,6 +105,31 @@ class TestValidateCanAddToGroup:
         # Verify error message includes the key
         assert key in str(exc_info.value)
 
+    @pytest.mark.parametrize(
+        "value,group_value,marker",
+        [
+            ({"sqlite": "/raw/consumer_marker.db"}, {"sqlite": "/raw/child_marker.db"}, "/raw/child_marker.db"),
+            (
+                "postgresql://dbuser:cred_marker_q7@dbhost1/db",
+                "postgresql://dbuser:cred_marker_q7@dbhost2/db",
+                "cred_marker_q7",
+            ),
+        ],
+        ids=["dict", "dsn_str"],
+    )
+    def test_different_value_conflict_masks_value(self, value: object, group_value: object, marker: str) -> None:
+        """The 'already exists ... with a different value' message must not echo the raw Mapping value."""
+        key = "SQLITEReader"
+        group = {"SQLITEReader": group_value}
+        context: dict[str, Any] = {}
+
+        with pytest.raises(ValueError, match="different value") as exc_info:
+            OptionsValidator.validate_can_add_to_group(key=key, value=value, group=group, context=context)
+
+        message = str(exc_info.value)
+        assert key in message
+        assert marker not in message
+
 
 class TestValidateCanAddToContext:
     """Test the validate_can_add_to_context static method."""
@@ -164,3 +189,28 @@ class TestValidateCanAddToContext:
 
         # Verify error message includes the key
         assert key in str(exc_info.value)
+
+    @pytest.mark.parametrize(
+        "value,context_value,marker",
+        [
+            ({"sqlite": "/raw/consumer_marker.db"}, {"sqlite": "/raw/child_marker.db"}, "/raw/child_marker.db"),
+            (
+                "postgresql://dbuser:cred_marker_q7@dbhost1/db",
+                "postgresql://dbuser:cred_marker_q7@dbhost2/db",
+                "cred_marker_q7",
+            ),
+        ],
+        ids=["dict", "dsn_str"],
+    )
+    def test_different_value_conflict_masks_value(self, value: object, context_value: object, marker: str) -> None:
+        """The 'already exists ... with a different value' message must not echo the raw Mapping value."""
+        key = "SQLITEReader"
+        group: dict[str, Any] = {}
+        context = {"SQLITEReader": context_value}
+
+        with pytest.raises(ValueError, match="different value") as exc_info:
+            OptionsValidator.validate_can_add_to_context(key=key, value=value, group=group, context=context)
+
+        message = str(exc_info.value)
+        assert key in message
+        assert marker not in message

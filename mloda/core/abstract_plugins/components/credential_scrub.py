@@ -88,3 +88,33 @@ def scrub_credentials(text: str) -> str:
 def redact_mapping(mapping: Mapping[Any, Any]) -> dict[Any, str]:
     """Keep every key, replace every value with ``'***'``."""
     return {key: "***" for key in mapping}
+
+
+_MAX_RENDER_DEPTH = 32
+
+
+def _redact_recursive(value: Any, ancestors: set[int]) -> Any:
+    """Redact mappings and credential-shaped strings, walking lists/tuples/sets with a cycle guard."""
+    if isinstance(value, Mapping):
+        return redact_mapping(value)
+    if isinstance(value, str):
+        scrubbed = scrub_credentials(value)
+        return value if scrubbed == value else scrubbed
+    if isinstance(value, (list, tuple, set, frozenset)):
+        if id(value) in ancestors:
+            return "<cycle>"
+        if len(ancestors) >= _MAX_RENDER_DEPTH:
+            return "<...>"
+        child_ancestors = ancestors | {id(value)}
+        rendered = [_redact_recursive(item, child_ancestors) for item in value]
+        if isinstance(value, tuple):
+            return tuple(rendered)
+        if isinstance(value, (set, frozenset)):
+            return sorted(rendered, key=repr)
+        return rendered
+    return value
+
+
+def redact_option_value(value: Any) -> Any:
+    """Redact a Mapping, a credential-shaped string, or any of those nested in a list/tuple/set."""
+    return _redact_recursive(value, set())

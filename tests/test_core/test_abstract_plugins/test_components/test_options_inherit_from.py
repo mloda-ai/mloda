@@ -2393,3 +2393,69 @@ class TestUnionOwnKeys:
         assert "k" in a_copy.own_context_keys
         assert "k" in b_copy2.own_context_keys
         assert a_copy.own_context_keys == b_copy2.own_context_keys
+
+
+_CONSUMER_DICT_VALUE = {"sqlite": "/raw/consumer_marker.db"}
+_CHILD_DICT_VALUE = {"sqlite": "/raw/child_marker.db"}
+_CONSUMER_DSN_VALUE = "postgresql://dbuser:cred_marker_q7@dbhost1/db"
+_CHILD_DSN_VALUE = "postgresql://dbuser:cred_marker_q7@dbhost2/db"
+_CONSUMER_LIST_VALUE = [_CONSUMER_DSN_VALUE]
+_CHILD_LIST_VALUE = [_CHILD_DSN_VALUE]
+
+_VALUE_SHAPES = [
+    pytest.param(_CONSUMER_DICT_VALUE, _CHILD_DICT_VALUE, "/raw/consumer_marker.db", "/raw/child_marker.db", id="dict"),
+    pytest.param(_CONSUMER_DSN_VALUE, _CHILD_DSN_VALUE, "cred_marker_q7", "cred_marker_q7", id="dsn_str"),
+    pytest.param(_CONSUMER_LIST_VALUE, _CHILD_LIST_VALUE, "cred_marker_q7", "cred_marker_q7", id="list_dsn"),
+]
+
+
+class TestInheritFromConflictMessagesMaskMappingValues:
+    """Conflict messages must not echo raw Mapping option values (e.g. a DB reader path); only keys stay visible."""
+
+    @pytest.mark.parametrize("consumer_value,child_value,consumer_marker,child_marker", _VALUE_SHAPES)
+    def test_group_vs_group_conflict_masks_both_values(
+        self, consumer_value: object, child_value: object, consumer_marker: str, child_marker: str
+    ) -> None:
+        consumer = Options(group={"SQLITEReader": consumer_value})
+        child = Options(group={"SQLITEReader": child_value})
+
+        with pytest.raises(ValueError) as excinfo:
+            child.inherit_from(consumer)
+
+        message = str(excinfo.value)
+        assert "SQLITEReader" in message
+        assert consumer_marker not in message
+        assert child_marker not in message
+
+    @pytest.mark.parametrize("consumer_value,child_value,consumer_marker,child_marker", _VALUE_SHAPES)
+    def test_group_vs_child_context_conflict_masks_both_values(
+        self, consumer_value: object, child_value: object, consumer_marker: str, child_marker: str
+    ) -> None:
+        consumer = Options(group={"SQLITEReader": consumer_value})
+        child = Options(context={"SQLITEReader": child_value})
+
+        with pytest.raises(ValueError, match="child's context") as excinfo:
+            child.inherit_from(consumer)
+
+        message = str(excinfo.value)
+        assert "SQLITEReader" in message
+        assert consumer_marker not in message
+        assert child_marker not in message
+
+    @pytest.mark.parametrize("consumer_value,child_value,consumer_marker,child_marker", _VALUE_SHAPES)
+    def test_propagate_context_keys_conflict_masks_both_values(
+        self, consumer_value: object, child_value: object, consumer_marker: str, child_marker: str
+    ) -> None:
+        consumer = Options(
+            context={"SQLITEReader": consumer_value},
+            propagate_context_keys=frozenset({"SQLITEReader"}),
+        )
+        child = Options(context={"SQLITEReader": child_value})
+
+        with pytest.raises(ValueError, match="Context key.*conflict") as excinfo:
+            child.inherit_from(consumer)
+
+        message = str(excinfo.value)
+        assert "SQLITEReader" in message
+        assert consumer_marker not in message
+        assert child_marker not in message

@@ -1,7 +1,7 @@
 from collections.abc import Iterable, Mapping
 from typing import Any, Callable
 
-from mloda.core.abstract_plugins.components.credential import Credential
+from mloda.core.abstract_plugins.components.credential import Credential, RegisteredCredential
 from mloda.core.abstract_plugins.components.credential_scrub import redact_mapping, scrub_credentials
 from mloda.core.abstract_plugins.components.hashable_dict import HashableDict
 
@@ -46,8 +46,9 @@ class DataAccessCollection:
             ``Credential`` entries in the list/dict forms). A credential is
             itself a dict, so the bare ``{connector_id: slot}`` shape would be
             read as ``{handle: value}``; the typed form removes that ambiguity
-            and is unwrapped to a plain dict at registration. Named-form
-            credential values must be mappings (``dict`` or ``Credential``);
+            and is stored as a ``RegisteredCredential`` (a dict whose repr
+            redacts values) at registration. Named-form credential values must
+            be mappings (``dict`` or ``Credential``);
             anything else raises an early mis-wrap ``ValueError``.
             ``HashableDict`` is no longer accepted on the credentials path; the
             class itself stays for hashability-required internals (e.g. ``Options``
@@ -85,7 +86,7 @@ class DataAccessCollection:
         if credentials is None:
             return None
         if isinstance(credentials, Credential):
-            return [credentials.data]
+            return [cls._unwrap_credential(credentials)]
         if isinstance(credentials, dict):
             context_keys = tuple(credentials.keys())
             return {
@@ -112,6 +113,8 @@ class DataAccessCollection:
                 "(HashableDict itself is not removed; it stays for hashability-required "
                 "internals such as Options hashing.)"
             )
+        if isinstance(value, dict):
+            return RegisteredCredential(value)
         return value
 
     @classmethod

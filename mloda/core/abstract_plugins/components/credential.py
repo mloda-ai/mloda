@@ -4,9 +4,9 @@ Wraps exactly one credential mapping so a single credential dict can no longer
 be mistaken for a ``{handle: value}`` registry. One type serves four user
 groups: notebook users get a constructor with no nesting to get wrong, multi-
 source production users keep a homogeneous handle registry, plugin authors
-keep receiving plain dicts (the wrapper is unwrapped at registration), and ops
-users get a value-redacting ``repr`` that keeps secrets out of logs and
-tracebacks. Full rationale: docs/docs/in_depth/named-data-access-handles.md.
+receive a dict subclass whose repr redacts values, and ops users get a value-
+redacting ``repr`` that keeps secrets out of logs and tracebacks. Full
+rationale: docs/docs/in_depth/named-data-access-handles.md.
 """
 
 from typing import Any
@@ -34,3 +34,10 @@ class Credential:
     def __repr__(self) -> str:
         redacted = ", ".join(f"{key}={value!r}" for key, value in redact_mapping(self._data).items())
         return f"Credential({redacted})"
+
+
+class RegisteredCredential(dict[str, Any]):
+    """A registered credential mapping whose repr/str redact values; item access stays raw."""
+
+    def __repr__(self) -> str:
+        return repr(redact_mapping(self))

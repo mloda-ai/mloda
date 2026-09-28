@@ -4,7 +4,7 @@ from typing import Any
 
 import pytest
 from mloda.core.abstract_plugins.components.default_options_key import DefaultOptionKeys
-from mloda.user import Options
+from mloda.user import Credential, Options
 
 IN_FEATURES = DefaultOptionKeys.in_features.value
 
@@ -506,3 +506,22 @@ class TestOptionsGetInFeaturesUnresolvableTruthyValue:
         """The unsupported-type message keeps naming the type alongside the value."""
         message = self._message(value)
         assert type(value).__name__ in message, message
+
+
+class TestOptionsWithCredentialValues:
+    """Options group holding Credential values compares/hashes by value and never leaks it via str()."""
+
+    def test_options_with_equal_credentials_are_equal_and_hash_alike(self) -> None:
+        options1 = Options(group={"SQLITEReader": Credential(sqlite="/x.db")})
+        options2 = Options(group={"SQLITEReader": Credential(sqlite="/x.db")})
+        assert options1 == options2
+        assert hash(options1) == hash(options2)
+
+    def test_options_with_different_credentials_are_not_equal(self) -> None:
+        options1 = Options(group={"SQLITEReader": Credential(sqlite="/x.db")})
+        options2 = Options(group={"SQLITEReader": Credential(sqlite="/y.db")})
+        assert options1 != options2
+
+    def test_str_never_contains_the_secret_value(self) -> None:
+        options = Options(group={"SQLITEReader": Credential(sqlite="/secret/path/analytics.db")})
+        assert "/secret/path/analytics.db" not in str(options)

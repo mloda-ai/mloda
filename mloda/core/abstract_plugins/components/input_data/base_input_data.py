@@ -38,6 +38,7 @@ from mloda.core.abstract_plugins.components.utils import (
     escalate_match_abort,
     get_all_subclasses,
     is_match_abort,
+    safe_value_text,
 )
 
 if TYPE_CHECKING:
@@ -248,7 +249,7 @@ class BaseInputData(ABC):
             owner = cls.get_class_name()
             record_match_rejection(
                 owner,
-                f"reader option '{key}' value {element!r} is rejected by the declaration of {owner}",
+                f"reader option '{key}' value {safe_value_text(element)} is rejected by the declaration of {owner}",
                 stage=INPUT_DATA_OWNED_STAGE if owned else INPUT_DATA_STAGE,
             )
             return False

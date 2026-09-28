@@ -202,8 +202,7 @@ class TestReadDB:
         assert credential.data == {"sqlite": self.db_path}
 
     def test_feature_scope_data_access_wraps_plain_dict_and_masks_db_path(self) -> None:
-        """A feature-scoped plain dict addressed to SQLITEReader ends up stored as a RegisteredCredential
-        (masking the db path in str(options)) and does not mutate the caller's own dict."""
+        """A feature-scoped plain dict addressed to SQLITEReader ends up stored as a RegisteredCredential, masking the db path, without mutating the caller's own dict."""
         call_dict = {SQLITEReader.db_path(): self.db_path}
         options = Options(group={SQLITEReader.__name__: call_dict})
 
@@ -216,8 +215,7 @@ class TestReadDB:
         assert "table_name" not in call_dict
 
     def test_feature_scope_data_access_does_not_wrap_read_file_reader_value(self) -> None:
-        """A ReadFile-family reader (CsvReader) addressed with a plain dict is not wrapped into a
-        RegisteredCredential; only DB readers get the stored-value wrap."""
+        """A ReadFile-family reader (CsvReader) is not wrapped into a RegisteredCredential; only DB readers get the stored-value wrap."""
         from mloda_plugins.feature_group.input_data.read_files.csv import CsvReader
 
         options = Options(group={CsvReader.__name__: {"k": "v"}})

@@ -167,8 +167,7 @@ def test_the_surviving_none_warning_names_the_value_intake_materializes(caplog: 
 
 
 def test_diverging_dict_option_values_are_masked_but_warning_still_fires(caplog: pytest.LogCaptureFixture) -> None:
-    """The host and the filter feature hold different plain dicts under the same key: the warning is
-    still emitted (key present) but neither dict's marker value leaks into the message."""
+    """Diverging plain dicts still trigger the warning, but neither dict's value leaks into the message."""
     with caplog.at_level(logging.WARNING):
         _emit(
             None,

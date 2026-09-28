@@ -2396,8 +2396,7 @@ class TestUnionOwnKeys:
 
 
 class TestOptionsValidatorConflictMessagesMaskMappingValues:
-    """OptionsValidator's 'already exists ... with a different value' messages must not echo the
-    raw Mapping value already stored; only the key stays visible."""
+    """OptionsValidator's 'already exists ... with a different value' messages must not echo the raw Mapping value; only the key stays visible."""
 
     def test_add_to_group_different_value_conflict_masks_dict_value(self) -> None:
         options = Options(group={"SQLITEReader": {"sqlite": "/raw/child_marker.db"}})
@@ -2421,8 +2420,7 @@ class TestOptionsValidatorConflictMessagesMaskMappingValues:
 
 
 class TestInheritFromConflictMessagesMaskMappingValues:
-    """Conflict messages must not echo raw Mapping option values (e.g. a DB reader path); only keys
-    stay visible. Plain dicts are used here on purpose: a RegisteredCredential already prints redacted."""
+    """Conflict messages must not echo raw Mapping option values (e.g. a DB reader path); only keys stay visible."""
 
     def test_group_vs_group_conflict_masks_both_dict_values(self) -> None:
         consumer = Options(group={"SQLITEReader": {"sqlite": "/raw/consumer_marker.db"}})

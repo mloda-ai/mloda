@@ -387,7 +387,8 @@ class TestRaisingElementValidatorIsARejection:
 
         message = str(exc_info.value)
         assert OPERATIONS_KEY in message
-        assert str(UNHASHABLE_VALUE) in message
+        assert "Property value dict " in message
+        assert str(UNHASHABLE_VALUE) not in message
 
 
 class TestRaisingElementValidatorRejectionReason:
@@ -401,7 +402,8 @@ class TestRaisingElementValidatorRejectionReason:
 
         assert reason is not None
         assert OPERATIONS_KEY in reason
-        assert str(UNHASHABLE_VALUE) in reason
+        assert "Property value dict " in reason
+        assert str(UNHASHABLE_VALUE) not in reason
 
     def test_reason_for_typeerror_validator_on_config_path(self) -> None:
         """The config-based path reports the same rejection."""
@@ -415,7 +417,8 @@ class TestRaisingElementValidatorRejectionReason:
 
         assert reason is not None
         assert OPERATIONS_KEY in reason
-        assert str(UNHASHABLE_VALUE) in reason
+        assert "Property value dict " in reason
+        assert str(UNHASHABLE_VALUE) not in reason
 
     def test_reason_for_attributeerror_validator(self) -> None:
         """An AttributeError-raising validator produces a reason, not an escape."""
@@ -506,7 +509,8 @@ class TestRejectionNeverEscapesTheEngine:
             f"A validator that raises must be a non-match, not an exception out of the engine, but got: {message}"
         )
         assert OPERATIONS_KEY in message
-        assert str(UNHASHABLE_VALUE) in message
+        assert "Property value dict " in message
+        assert str(UNHASHABLE_VALUE) not in message
 
     def test_valid_option_value_still_resolves_through_a_direct_parser_caller(self) -> None:
         """A valid strict value on a string-named feature still identifies its feature group."""

@@ -56,7 +56,6 @@ from __future__ import annotations
 import inspect
 import logging
 import os
-import reprlib
 from collections.abc import Callable
 from typing import Any, cast
 
@@ -86,6 +85,7 @@ from mloda.core.abstract_plugins.components.utils import (
     contained_raise_reason,
     escalate_match_abort,
     is_match_abort,
+    safe_value_text,
 )
 
 logger = logging.getLogger(__name__)
@@ -95,19 +95,6 @@ COLUMNWISE_HOOKS: frozenset[str] = frozenset({"_check_source_features_exist", "_
 
 # The pair plus the discovery hook, for a family that resolves column names against the data.
 COLUMN_DISCOVERY_HOOKS: frozenset[str] = COLUMNWISE_HOOKS | {"_get_available_columns"}
-
-
-def _safe_value_text(value: Any) -> str:
-    """Render a guard-rejected value for a message without ever risking a caller-visible crash or secret."""
-    if type(value) in (str, int, float, bool):
-        # 2**2126 < 10**640, the lowest settable str-digit limit, so repr cannot raise
-        if type(value) is int and value.bit_length() > 2126:
-            return "int"
-        return f"{type(value).__name__} {reprlib.repr(value)}"
-    if value is None:
-        return "None"
-    # No value text: a composite can hold data the caller should not see.
-    return type(value).__name__
 
 
 class FeatureChainParserMixin:
@@ -544,10 +531,10 @@ class FeatureChainParserMixin:
         Shared by the match-time recorder and the diagnostic facade, so the two text sources cannot drift.
         """
         if spec.expected is not None:
-            shown = _safe_value_text(value)
+            shown = safe_value_text(value)
             return f"option '{key}' must be {spec.expected}, got {shown}"
         if spec.strict_validation:
-            shown = _safe_value_text(value)
+            shown = safe_value_text(value)
             return f"Property value {shown} rejected by match_guard for '{key}'"
         return None
 

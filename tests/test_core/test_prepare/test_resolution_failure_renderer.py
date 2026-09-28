@@ -467,7 +467,7 @@ class RendererStrictFG791(FeatureChainParserMixin, FeatureGroup):
         return None
 
 
-WINDOW_REJECTION_REASON = "Property value '14' failed validation for 'window_size'"
+WINDOW_REJECTION_REASON = "Property value int 14 failed validation for 'window_size'"
 
 
 class RendererMissingOptionFG791(FeatureChainParserMixin, FeatureGroup):

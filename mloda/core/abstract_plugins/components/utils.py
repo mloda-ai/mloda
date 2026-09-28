@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any, Callable, TypeVar
 
 import logging
+import reprlib
 import weakref
 
 logger = logging.getLogger(__name__)
@@ -136,6 +137,19 @@ def unhashable_part(value: Any, catching: tuple[type[Exception], ...] = (Excepti
             found = unhashable_part(element, catching=catching)
             if found is not None:
                 return found
+    return type(value).__name__
+
+
+def safe_value_text(value: Any) -> str:
+    """Render a guard-rejected value for a message without ever risking a caller-visible crash or secret."""
+    if type(value) in (str, int, float, bool):
+        # 2**2126 < 10**640, the lowest settable str-digit limit, so repr cannot raise
+        if type(value) is int and value.bit_length() > 2126:
+            return "int"
+        return f"{type(value).__name__} {reprlib.repr(value)}"
+    if value is None:
+        return "None"
+    # No value text: a composite can hold data the caller should not see.
     return type(value).__name__
 
 

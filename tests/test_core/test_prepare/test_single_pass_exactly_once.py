@@ -72,7 +72,7 @@ BAD_NAME_VALUE_782 = 123
 BAD_PREFIX_VALUE_782 = 456
 BAD_REASON_VALUE_782 = 999
 HEALTHY_REJECTION_REASON_782 = "single pass healthy rejection reason 782"
-STRICT_REJECTION_REASON_782 = "Property value '14' failed validation for 'window_size_782'"
+STRICT_REJECTION_REASON_782 = "Property value int 14 failed validation for 'window_size_782'"
 
 # Same-named tie candidates get an explicit __module__ so only the module can break the sort tie.
 TIE_MODULE_A_782 = "tests.single_pass_tie_module_a_782"

@@ -32,29 +32,33 @@ _USERINFO_FALLBACK_PATTERN = re.compile(
 )
 
 # Shared suffix a credential-shaped key name must end with, reused by the keyword and quoted-key patterns.
-_SECRET_NAME = (
+_SECRET_NAME = (  # nosec B105
     r"(?:password|passwd|pwd|secret|token|signature|sig|api[_-]?key|access[_-]?key|"
     r"account[_-]?key|secret[_-]?key|private[_-]?key)"
 )
 
 # (?<![\w-]), not (?<![A-Za-z]): a name-start anchor so a prefixed identifier (sslpassword,
 # PGPASSWORD, X-Api-Key) still matches, captured whole so the prefix survives the replacement.
+# Trailing `}` optional: an unterminated `{` masks to end of line instead of rescanning.
 _KEYWORD_PATTERN = re.compile(
     rf"(?<![\w-])(?P<keyword>[\w-]*{_SECRET_NAME})(?P<sep>[ \t]*=[ \t]*)"
-    r"(?:'(?:[^'\\\n]|\\.)*'|\"(?:[^\"\\\n]|\\.)*\"|\{(?:[^}\n]|\}\})*\}|[^;&\s'\"]*)",
+    r"(?:'(?:[^'\\\n]|\\.)*'|\"(?:[^\"\\\n]|\\.)*\"|\{(?:[^}\n]|\}\})*\}?|[^;&\s'\"]*)",
     re.IGNORECASE,
 )
 
-# No lookbehind needed here: the quote character itself anchors the key name.
+# Anchored on a `{`/`,` lead so prose like `invalid password: too short` or unquoted `password: X` is left alone.
 _QUOTED_KEY_PATTERN = re.compile(
-    r"(?P<quote>['\"])(?P<keyword>[\w-]*" + _SECRET_NAME + r")(?P=quote)[ \t]*:[ \t]*"
-    r"(?:'(?:[^'\\\n]|\\.)*'|\"(?:[^\"\\\n]|\\.)*\"|[^,}\s]*)",
+    r"(?P<lead>[{,][ \t]*)(?P<quote>['\"])(?P<keyword>[\w-]*" + _SECRET_NAME + r")(?P=quote)[ \t]*:[ \t]*"
+    r"(?:b?'(?:[^'\\\n]|\\.)*'|b?\"(?:[^\"\\\n]|\\.)*\"|\[[^\]\n]*\]?|\{[^}\n]*\}?|[^,}\s]*)",
     re.IGNORECASE,
 )
 
 # Oracle-style slash DSN: user/password@host, distinguished from a lookalike path by the trailing
 # host shape (EZConnect //, a descriptor (, or host:port) so `path/to/x@y` and `user@example.com` are left alone.
-_SLASH_DSN_PATTERN = re.compile(r"(?<![\w.$#/-])(?P<user>[\w.$#-]+)/[^\s/]+@(?=//|\(|[\w.-]+:\d+(?!\w))")
+# (?!\d+/) keeps a bare port like `8080/` from being read as the user.
+_SLASH_DSN_PATTERN = re.compile(
+    r"(?<![\w.$#/-])(?!\d+/)(?P<user>[\w.$#-]+)/[^\s/]+@(?=//|\(|[\w.-]+:\d+(?!\w)|[\w.-]+/\w)"
+)
 
 
 def _cut_key_value_path(path: str) -> str:
@@ -99,7 +103,7 @@ def scrub_credentials(text: str) -> str:
     text = _drop_free_text_userinfo(text)
     text = _FREE_TEXT_URI_PATTERN.sub(_scrub_uri_match, text)
     text = _KEYWORD_PATTERN.sub(r"\g<keyword>\g<sep>***", text)
-    text = _QUOTED_KEY_PATTERN.sub(r"\g<quote>\g<keyword>\g<quote>: \g<quote>***\g<quote>", text)
+    text = _QUOTED_KEY_PATTERN.sub(r"\g<lead>\g<quote>\g<keyword>\g<quote>: \g<quote>***\g<quote>", text)
     text = _SLASH_DSN_PATTERN.sub(r"\g<user>/***@", text)
     return text
 

@@ -222,6 +222,36 @@ SCRUB_CASES: list[tuple[str, str, list[str], list[str]]] = [
         ["hunter2z9"],
         ["https://h/api"],
     ),
+    (
+        "nested_quoted_token_dict",
+        "{'token': {'access_token': 'hunter2z9'}}",
+        ["hunter2z9"],
+        ["'token'"],
+    ),
+    (
+        "nested_quoted_token_dict_sibling_key",
+        "{'token': {'access_token': 'a', 'other': 'hunter2z9'}}",
+        ["hunter2z9"],
+        ["'token'"],
+    ),
+    (
+        "nested_quoted_api_key_list",
+        "{'api_key': ['k1', 'hunter2z9']}",
+        ["hunter2z9"],
+        ["'api_key'"],
+    ),
+    (
+        "nested_quoted_password_bytes",
+        "{'password': b'a,hunter2z9'}",
+        ["hunter2z9"],
+        ["'password'"],
+    ),
+    (
+        "quoted_key_after_comma_with_other_key",
+        '{"a": 1, "token": "hunter2z9"}',
+        ["hunter2z9"],
+        ['"a": 1'],
+    ),
 ]
 
 
@@ -267,6 +297,7 @@ SLASH_DSN_CASES: list[tuple[str, str, str, str]] = [
         "scott/***@(DESCRIPTION=(ADDRESS=(HOST=h)))",
     ),
     ("at_in_password", "scott/p@hunter2z9@host:1521/svc", "p@hunter2z9", "scott/***@host:1521/svc"),
+    ("ezconnect_no_port", "scott/hunter2z9@host/service", "hunter2z9", "scott/***@host/service"),
 ]
 
 
@@ -296,6 +327,9 @@ UNCHANGED_LOOKALIKE_CASES: list[str] = [
     "library/python@sha256:0123abc",
     "https://s3.amazonaws.com/bucket/report@2024.csv",
     "{'host': 'db1'}",
+    "http://localhost:8080/models@v:2",
+    "Invalid option 'api_key': expected str, got int",
+    "option 'token': must be a str",
 ]
 
 
@@ -470,6 +504,28 @@ def test_slash_password_host_repeat_scrubs_fast() -> None:
     scrub_credentials(text)
     elapsed = time.perf_counter() - start
     assert elapsed < 1.0, f"scrub_credentials took {elapsed:.3f}s on a slash-dsn prefix followed by a long host run"
+
+
+def test_repeated_unterminated_token_brace_scrubs_fast() -> None:
+    text = "token={ " * 6000
+    start = time.perf_counter()
+    scrub_credentials(text)
+    elapsed = time.perf_counter() - start
+    assert elapsed < 1.0, f"scrub_credentials took {elapsed:.3f}s on a repeated unterminated token brace"
+
+
+def test_repeated_unterminated_password_brace_scrubs_fast() -> None:
+    text = "password={ " * 4400
+    start = time.perf_counter()
+    scrub_credentials(text)
+    elapsed = time.perf_counter() - start
+    assert elapsed < 1.0, f"scrub_credentials took {elapsed:.3f}s on a repeated unterminated password brace"
+
+
+def test_unterminated_password_brace_masks_to_end_of_line() -> None:
+    text = "password={a hunter2z9"
+    result = scrub_credentials(text)
+    assert "hunter2z9" not in result
 
 
 def test_contained_raise_reason_scrubs_secret_url() -> None:

@@ -5,6 +5,7 @@ from typing import Any
 import pytest
 from mloda.core.abstract_plugins.components.default_options_key import DefaultOptionKeys
 from mloda.user import Credential, Options
+from mloda_plugins.feature_group.input_data.read_dbs.sqlite import SQLITEReader
 
 IN_FEATURES = DefaultOptionKeys.in_features.value
 
@@ -525,3 +526,16 @@ class TestOptionsWithCredentialValues:
     def test_str_never_contains_the_secret_value(self) -> None:
         options = Options(group={"SQLITEReader": Credential(sqlite="/secret/path/analytics.db")})
         assert "/secret/path/analytics.db" not in str(options)
+
+    def test_str_redacts_a_reader_tuple_in_base_input_data_context(self) -> None:
+        """Only the reserved BaseInputData reader tuple is masked; a plain non-reader dict stays readable."""
+        options = Options(
+            context={"BaseInputData": (SQLITEReader, {"sqlite": "/raw/reader_tuple_marker.db"})},
+        )
+        text = str(options)
+        assert "/raw/reader_tuple_marker.db" not in text
+        assert "BaseInputData" in text
+        assert "sqlite" in text
+
+        plain = Options(group={"cfg": {"a": "b"}})
+        assert "'a': 'b'" in str(plain)

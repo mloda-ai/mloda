@@ -319,23 +319,21 @@ class _MarkerReader:
 
 
 @pytest.mark.parametrize(
-    "case_id,value,expected",
+    "value,expected",
     [
-        ("dict", {"sqlite": "raw_db_path_marker"}, {"sqlite": "***"}),
+        ({"sqlite": "raw_db_path_marker"}, {"sqlite": "***"}),
         (
-            "registered_credential",
             RegisteredCredential({"sqlite": "raw_db_path_marker"}),
             {"sqlite": "***"},
         ),
         (
-            "reader_class_tuple",
             (_MarkerReader, {"sqlite": "raw_db_path_marker"}),
             (_MarkerReader, {"sqlite": "***"}),
         ),
-        ("scalar_str", "raw_db_path_marker", "raw_db_path_marker"),
-        ("list_unchanged", ["raw_db_path_marker"], ["raw_db_path_marker"]),
+        ("raw_db_path_marker", "raw_db_path_marker"),
+        (["raw_db_path_marker"], ["raw_db_path_marker"]),
     ],
     ids=["dict", "registered_credential", "reader_class_tuple", "scalar_str", "list_unchanged"],
 )
-def test_redact_option_value(case_id: str, value: Any, expected: Any) -> None:
+def test_redact_option_value(value: Any, expected: Any) -> None:
     assert redact_option_value(value) == expected

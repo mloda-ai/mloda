@@ -1,4 +1,5 @@
 import os
+from collections import OrderedDict
 from pathlib import Path
 from typing import Any
 
@@ -19,6 +20,7 @@ from mloda_plugins.compute_framework.base_implementations.python_dict.python_dic
 )
 from mloda_plugins.feature_group.input_data.read_db import ReadDB
 from mloda_plugins.feature_group.input_data.read_dbs.sqlite import SQLITEReader
+from mloda_plugins.feature_group.input_data.read_files.csv import CsvReader
 from tests.test_plugins.feature_group.input_data.test_classes.test_input_classes import DBInputDataTestFeatureGroup
 from tests.test_core.test_integration.test_core.test_runner_one_compute_framework import SumFeature
 
@@ -214,15 +216,29 @@ class TestReadDB:
         assert self.db_path not in str(options)
         assert "table_name" not in call_dict
 
+        first = options.get(SQLITEReader.__name__)
+        matched_again = SQLITEReader.feature_scope_data_access(options, "name")
+        assert matched_again is True
+        assert options.get(SQLITEReader.__name__) is first
+
     def test_feature_scope_data_access_does_not_wrap_read_file_reader_value(self) -> None:
         """A ReadFile-family reader (CsvReader) is not wrapped into a RegisteredCredential; only DB readers get the stored-value wrap."""
-        from mloda_plugins.feature_group.input_data.read_files.csv import CsvReader
-
         options = Options(group={CsvReader.__name__: {"k": "v"}})
 
         CsvReader.feature_scope_data_access(options, "some_column")
 
         assert type(options.get(CsvReader.__name__)) is dict
+
+    def test_wrap_feature_scoped_access_wraps_dict_subclass(self) -> None:
+        """A dict subclass (not exactly dict) still ends up wrapped as a RegisteredCredential."""
+        wrapped = SQLITEReader.wrap_feature_scoped_access(OrderedDict(sqlite=self.db_path))
+        assert type(wrapped) is RegisteredCredential
+        assert wrapped == {"sqlite": self.db_path}
+
+    def test_wrap_feature_scoped_access_returns_same_registered_credential(self) -> None:
+        """An already-wrapped RegisteredCredential is returned unchanged, not re-wrapped."""
+        credential = RegisteredCredential({"sqlite": self.db_path})
+        assert SQLITEReader.wrap_feature_scoped_access(credential) is credential
 
     def test_get_connection_no_credentials(self) -> None:
         with pytest.raises(NotImplementedError):

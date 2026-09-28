@@ -105,6 +105,20 @@ class TestValidateCanAddToGroup:
         # Verify error message includes the key
         assert key in str(exc_info.value)
 
+    def test_different_value_conflict_masks_dict_value(self) -> None:
+        """The 'already exists ... with a different value' message must not echo the raw Mapping value."""
+        key = "SQLITEReader"
+        value = {"sqlite": "/raw/consumer_marker.db"}
+        group = {"SQLITEReader": {"sqlite": "/raw/child_marker.db"}}
+        context: dict[str, Any] = {}
+
+        with pytest.raises(ValueError, match="different value") as exc_info:
+            OptionsValidator.validate_can_add_to_group(key=key, value=value, group=group, context=context)
+
+        message = str(exc_info.value)
+        assert key in message
+        assert "/raw/child_marker.db" not in message
+
 
 class TestValidateCanAddToContext:
     """Test the validate_can_add_to_context static method."""
@@ -164,3 +178,17 @@ class TestValidateCanAddToContext:
 
         # Verify error message includes the key
         assert key in str(exc_info.value)
+
+    def test_different_value_conflict_masks_dict_value(self) -> None:
+        """The 'already exists ... with a different value' message must not echo the raw Mapping value."""
+        key = "SQLITEReader"
+        value = {"sqlite": "/raw/consumer_marker.db"}
+        group: dict[str, Any] = {}
+        context = {"SQLITEReader": {"sqlite": "/raw/child_marker.db"}}
+
+        with pytest.raises(ValueError, match="different value") as exc_info:
+            OptionsValidator.validate_can_add_to_context(key=key, value=value, group=group, context=context)
+
+        message = str(exc_info.value)
+        assert key in message
+        assert "/raw/child_marker.db" not in message

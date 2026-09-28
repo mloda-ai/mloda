@@ -83,6 +83,26 @@ def _normalize_reader_class_keys(d: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _is_reader_tuple(value: Any) -> bool:
+    """True for a (reader class, mapping) BaseInputData tuple, the same reader-class shape
+    ``_normalize_reader_class_keys`` recognizes."""
+    return (
+        isinstance(value, tuple)
+        and len(value) == 2
+        and isinstance(value[0], type)
+        and hasattr(value[0], "data_access_name")
+    )
+
+
+def _str_option_value(value: Any) -> Any:
+    """Mask only a reserved reader tuple; every other value prints raw."""
+    return redact_option_value(value) if _is_reader_tuple(value) else value
+
+
+def _str_option_dict(d: dict[str, Any]) -> dict[str, Any]:
+    return {k: _str_option_value(v) for k, v in d.items()}
+
+
 def validate_forwarding_directives(
     forward_group: frozenset[str] | bool | None, forward_group_exclude: frozenset[str]
 ) -> None:
@@ -375,7 +395,7 @@ class Options:
         return self.rebuild(safe_deepcopy_dict(self.group), safe_deepcopy_dict(self.context))
 
     def __str__(self) -> str:
-        parts = f"Options(group={self.group}, context={self.context}"
+        parts = f"Options(group={_str_option_dict(self.group)}, context={_str_option_dict(self.context)}"
         if self.propagate_context_keys:
             parts += f", propagate_context_keys={self.propagate_context_keys}"
         parts += ")"

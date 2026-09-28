@@ -660,5 +660,3 @@ class TestCloseContextIsUsableFromAThreadStartedInClose:
         assert len(captured_remaining) == 1
         assert captured_remaining[0] > 0.0
         assert captured_remaining[0] <= timeout
-
-

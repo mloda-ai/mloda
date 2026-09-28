@@ -568,7 +568,7 @@ class TestCloseContextRemainingTracksTheSharedDeadline:
         _close_extenders(cfw, context)
 
         assert len(contexts) == 1
-        assert contexts[0] is not None
+        assert contexts[0] is context
         assert CloseContext.current() is None
 
     def test_remaining_is_clamped_to_zero_once_the_deadline_has_passed(self) -> None:
@@ -662,14 +662,3 @@ class TestCloseContextIsUsableFromAThreadStartedInClose:
         assert captured_remaining[0] <= timeout
 
 
-class TestCloseContextActivateScopesCurrent:
-    """CloseContext.current() is the active instance only for the extent of activate()."""
-
-    def test_current_is_the_instance_only_inside_activate(self) -> None:
-        context = CloseContext(deadline=time.monotonic() - 1, reason="stop")
-
-        assert CloseContext.current() is None
-        with context.activate():
-            assert CloseContext.current() is context
-        assert CloseContext.current() is None
-        assert context.remaining() == 0.0

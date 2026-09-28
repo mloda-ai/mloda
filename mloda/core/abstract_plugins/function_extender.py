@@ -87,10 +87,10 @@ class Extender(ABC):
         best-effort and racy: it may not run at all, since that path skips Python cleanup. It must
         return within the run's ``graceful_shutdown_timeout`` (default 2.0s), a budget shared across
         every extender closing in that worker, or the worker may be terminated mid-close.
-        ``CloseContext.current()`` returns the ambient context for that shared budget (approximate:
-        it can overstate by the time between the parent sending STOP and this worker starting to
-        close; capture it and pass it to threads, since a thread started inside close() does not
-        inherit it; close order across extenders is unspecified)."""
+        ``CloseContext.current()`` returns the run fields, the close reason, and ``remaining()``.
+        ``remaining()`` is approximate: it can overstate by the time between the parent sending
+        STOP and this worker starting to close. Capture it and pass it to threads, since a thread
+        started inside close() does not inherit it; close order across extenders is unspecified."""
 
     def on_run_complete(self, run_id: str | None) -> None:
         """Called once per run in the PARENT on the caller's own extender objects, after all workers

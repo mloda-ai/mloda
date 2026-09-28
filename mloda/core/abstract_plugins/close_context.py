@@ -20,7 +20,7 @@ _current_close_context: ContextVar["CloseContext | None"] = ContextVar("_current
 class CloseContext:
     """Ambient context describing a worker's graceful close, shared across all extenders closing in it."""
 
-    deadline: float
+    deadline: float  # a time.monotonic() timestamp
     reason: CloseReason
     run_id: str | None = None
     worker_index: int | None = None

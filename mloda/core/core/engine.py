@@ -112,7 +112,7 @@ class Engine:
         self.tfs_connection_map = self._resolve_tfs_connection_map()
 
     def _resolve_plugin_versions(self) -> dict[str, str | None] | None:
-        """Resolves each planned feature group module's owning-distribution version at setup, so hooks only read it."""
+        """Resolves each planned feature group module's owning-distribution version at plan time, so hooks only read it."""
         versions = {
             step.feature_group.__module__: resolve_plugin_version(step.feature_group.__module__)
             for step in self.execution_planner

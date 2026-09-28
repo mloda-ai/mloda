@@ -16,7 +16,8 @@ class RunContext:
     tenant_id: str | None = None
     project_id: str | None = None
     principal: str | None = None
-    # Plan-time owning-distribution version per feature group module; None means unresolved.
+    # Plan-time owning-distribution version per feature group module. Field None: nothing resolved
+    # (no extenders or no planned feature groups); value None: no owning distribution.
     plugin_versions: Mapping[str, str | None] | None = field(default=None, hash=False)
 
     def __post_init__(self) -> None:

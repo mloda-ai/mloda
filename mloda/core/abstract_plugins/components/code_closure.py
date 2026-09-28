@@ -10,6 +10,7 @@ from __future__ import annotations
 import ast
 import functools
 import hashlib
+import importlib.machinery
 import importlib.metadata
 import importlib.util
 import inspect
@@ -19,6 +20,7 @@ import sys
 import types
 import warnings
 import weakref
+from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any, Final
 
@@ -169,6 +171,16 @@ _MODULE_INDEX_READ_ERRORS: Final = (OSError, ImportError, SyntaxError, ValueErro
 _WALK_READ_ERRORS: Final = _MODULE_INDEX_READ_ERRORS + (TypeError,)
 
 
+@dataclass(frozen=True)
+class _AliasRef:
+    """A ref whose head is bound by a local (function/class-body) import: resolved statically against
+    ``module``/``name`` instead of live namespace lookup. ``name == ""`` means a whole-module walk.
+    """
+
+    module: str
+    name: str
+
+
 class _Candidate:
     """One definition/binding occurrence; span (not the AST) is kept, re-parsed and memoized on first reach."""
 
@@ -182,7 +194,7 @@ class _Candidate:
         self.lineno = node.lineno
         self.col_offset = node.col_offset
         self.lines = lines
-        self.digest_refs: tuple[str | None, list[str]] | None = None
+        self.digest_refs: tuple[str | None, list[str | _AliasRef]] | None = None
 
 
 @dataclass(frozen=True)
@@ -197,6 +209,8 @@ class _ModuleIndex:
     bindings: dict[str, list[_Candidate]]  # name -> candidates, source order
     imports: dict[str, list[_ImportBinding]]  # local name -> import bindings
     star_imports: list[str]  # resolved source modules of ``from x import *``
+    package: str | None  # owning module's ``__package__``, used to resolve relative imports found inside bodies
+    is_package: bool  # has __path__ (or an __init__.py origin): only a package can have submodules
 
 
 # Every ast.parse call in this module goes through _parse_quiet with this sentinel filename, so a filter
@@ -218,6 +232,11 @@ def _parse_quiet(source: str | bytes) -> ast.Module:
     return ast.parse(source, filename=_PARSE_FILENAME)
 
 
+def _read_file_bytes(path: str) -> bytes:
+    with open(path, "rb") as handle:
+        return handle.read()
+
+
 def _module_source(module: types.ModuleType) -> str | bytes | None:
     loader = safe_field(lambda: module.__loader__, None)
     if loader is not None and hasattr(loader, "get_source"):
@@ -237,11 +256,7 @@ def _module_source(module: types.ModuleType) -> str | bytes | None:
     if not isinstance(path, str) or not path.endswith(".py"):
         return None
 
-    def _read_bytes() -> bytes:
-        with open(path, "rb") as handle:
-            return handle.read()
-
-    return safe_field(_read_bytes, None, catching=(OSError,))
+    return safe_field(lambda: _read_file_bytes(path), None, catching=(OSError,))
 
 
 def _parse_module_source(source: str | bytes) -> ast.Module | None:
@@ -345,10 +360,7 @@ def _index_body(
                     imports.setdefault(local, []).append(_ImportBinding(source_module, alias.name))
 
 
-def _build_module_index(module: types.ModuleType) -> _ModuleIndex | None:
-    source = _module_source(module)
-    if source is None:
-        return None
+def _build_index_from_source(source: str | bytes, package: str | None, is_package: bool) -> _ModuleIndex | None:
     tree = _parse_module_source(source)
     if tree is None:
         return None
@@ -356,10 +368,94 @@ def _build_module_index(module: types.ModuleType) -> _ModuleIndex | None:
     bindings: dict[str, list[_Candidate]] = {}
     imports: dict[str, list[_ImportBinding]] = {}
     star_imports: list[str] = []
-    package = safe_field(lambda: module.__package__, None)
     lines = _source_lines(source)
     _index_body(tree.body, "", package, definitions, bindings, imports, star_imports, lines)
-    return _ModuleIndex(definitions=definitions, bindings=bindings, imports=imports, star_imports=star_imports)
+    return _ModuleIndex(
+        definitions=definitions,
+        bindings=bindings,
+        imports=imports,
+        star_imports=star_imports,
+        package=package,
+        is_package=is_package,
+    )
+
+
+def _build_module_index(module: types.ModuleType) -> _ModuleIndex | None:
+    source = _module_source(module)
+    if source is None:
+        return None
+    package = safe_field(lambda: module.__package__, None)
+    is_package = safe_field(lambda: module.__path__, None, catching=(AttributeError,)) is not None
+    return _build_index_from_source(source, package, is_package)
+
+
+def _module_ancestor_search_locations(modname: str) -> tuple[int, list[str] | None]:
+    """Nearest ancestor of modname already in sys.modules, and its ``__path__`` for the next ``find_spec``.
+
+    Returns (ancestor segment count, search locations); (0, None) means no ancestor is imported and the
+    search starts from sys.path.
+    """
+
+    def _ancestor_path(ancestor: types.ModuleType) -> list[str] | None:
+        return list(ancestor.__path__)
+
+    parts = modname.split(".")
+    for i in range(len(parts) - 1, 0, -1):
+        ancestor = sys.modules.get(".".join(parts[:i]))
+        if ancestor is not None:
+            locations: list[str] | None = safe_field(
+                lambda: _ancestor_path(ancestor), None, catching=(AttributeError, TypeError)
+            )
+            return i, locations
+    return 0, None
+
+
+def _find_spec_quiet(name: str, locations: list[str] | None) -> importlib.machinery.ModuleSpec | None:
+    return safe_field(lambda: importlib.machinery.PathFinder.find_spec(name, locations), None)
+
+
+def _static_module_source(spec: importlib.machinery.ModuleSpec, origin: str) -> str | bytes | None:
+    """Reads like ``_module_source`` (loader.get_source, else file bytes) so imported and unimported modules match."""
+    loader = spec.loader
+    if loader is not None and hasattr(loader, "get_source"):
+
+        def _read() -> str | None:
+            source = loader.get_source(spec.name)
+            return source if isinstance(source, str) else None
+
+        source = safe_field(_read, None, catching=_MODULE_INDEX_READ_ERRORS)
+        if source is not None:
+            return source
+    return safe_field(lambda: _read_file_bytes(origin), None, catching=(OSError,))
+
+
+def _locate_static_module_index(modname: str) -> _ModuleIndex | None:
+    """Locates modname's source via PathFinder, from the nearest already-imported ancestor, without importing it."""
+    parts = modname.split(".")
+    ancestor_len, search_locations = _module_ancestor_search_locations(modname)
+    if ancestor_len > 0 and search_locations is None:
+        return None  # an imported ancestor without __path__ (not a package) is unlocatable
+    spec: importlib.machinery.ModuleSpec | None = None
+    for i in range(ancestor_len, len(parts)):
+        name = ".".join(parts[: i + 1])
+        spec = _find_spec_quiet(name, search_locations)
+        if spec is None:
+            return None
+        if i + 1 < len(parts):
+            if not spec.submodule_search_locations:
+                return None  # intermediate step has no submodule locations: never fall back to all of sys.path
+            search_locations = list(spec.submodule_search_locations)
+    if spec is None:
+        return None
+    origin = spec.origin
+    if not origin or not origin.endswith(".py"):
+        return None
+    source = _static_module_source(spec, origin)
+    if source is None:
+        return None
+    is_package = os.path.basename(origin) == "__init__.py"
+    package = modname if is_package else (modname.rsplit(".", 1)[0] if "." in modname else None)
+    return _build_index_from_source(source, package, is_package)
 
 
 _module_index_cache: "weakref.WeakKeyDictionary[types.ModuleType, tuple[tuple[int, int] | None, _ModuleIndex | None]]" = weakref.WeakKeyDictionary()
@@ -421,10 +517,66 @@ def _parse_span_node(candidate: _Candidate) -> ast.AST | None:
     return None
 
 
-def _resolve_candidate(candidate: _Candidate) -> tuple[str | None, list[str]]:
+def _collect_local_import_bindings(node: ast.AST, package: str | None) -> dict[str, list[tuple[str, str | None]]]:
+    """Import/ImportFrom nodes anywhere inside node: local name -> every (target, imported_name) it is bound to.
+
+    ``imported_name is None`` is a plain ``import``: target is the module the name binds (the full dotted
+    name when aliased, else its head, as Python binds it).
+    """
+    bindings: dict[str, list[tuple[str, str | None]]] = {}
+    for sub in ast.walk(node):
+        if isinstance(sub, ast.Import):
+            for alias in sub.names:
+                if alias.asname:
+                    bindings.setdefault(alias.asname, []).append((alias.name, None))
+                else:
+                    head = alias.name.split(".")[0]
+                    bindings.setdefault(head, []).append((head, None))
+        elif isinstance(sub, ast.ImportFrom):
+            source_module = _resolve_import_module(sub.module, sub.level, package)
+            if source_module is None:
+                continue
+            for alias in sub.names:
+                if alias.name == "*":
+                    continue
+                local = alias.asname or alias.name
+                bindings.setdefault(local, []).append((source_module, alias.name))
+    return bindings
+
+
+def _apply_local_aliases(refs: list[str], bindings: dict[str, list[tuple[str, str | None]]]) -> list[str | _AliasRef]:
+    mapped: list[str | _AliasRef] = []
+    for ref in refs:
+        head, _, rest = ref.partition(".")
+        binding_list = bindings.get(head)
+        if binding_list is None:
+            mapped.append(ref)
+            continue
+        # Bindings span the whole candidate, so a binding may belong to another method: keep the plain ref too.
+        mapped.append(ref)
+        for target, imported_name in binding_list:
+            if imported_name is None:
+                mapped.append(_AliasRef(target, rest))
+            else:
+                name = imported_name if not rest else f"{imported_name}.{rest}"
+                mapped.append(_AliasRef(target, name))
+    return mapped
+
+
+def _local_mapped_refs(node: ast.AST, package: str | None) -> list[str | _AliasRef]:
+    """``_collect_refs(node)`` plus static refs for names bound by imports inside node."""
+    refs = _collect_refs(node)
+    bindings = _collect_local_import_bindings(node, package)
+    return _apply_local_aliases(refs, bindings) if bindings else list(refs)
+
+
+def _resolve_candidate(candidate: _Candidate, package: str | None) -> tuple[str | None, list[str | _AliasRef]]:
     if candidate.digest_refs is None:
         node = _parse_span_node(candidate)
-        candidate.digest_refs = (None, []) if node is None else (_digest(node), _collect_refs(node))
+        if node is None:
+            candidate.digest_refs = (None, [])
+        else:
+            candidate.digest_refs = (_digest(node), _local_mapped_refs(node, package))
     return candidate.digest_refs
 
 
@@ -567,6 +719,13 @@ def dependency_entry(module_name: str) -> str | None:
     return f"dep:{name}=={version}" if version else f"dep:{name}"
 
 
+def _module_package(modname: str) -> str | None:
+    module = sys.modules.get(modname)
+    if module is None:
+        return None
+    return safe_field(lambda: module.__package__, None)
+
+
 def _root_fallback_source(cls: type[Any]) -> str:
     # Local import: base_feature_group_version imports closure_parts, so importing it back here at
     # module level would be circular. Both modules are already loaded by the time this call happens.
@@ -602,15 +761,21 @@ def _task_key(task: _Task) -> str:
 
 
 class _Walker:
-    """Worklist walk over the module index, driven by live values for name/attribute resolution."""
+    """Worklist walk over the module index, driven by live values for name/attribute resolution.
+
+    Static (``s``-prefixed) tasks resolve the same way but only from module indexes, never a live value,
+    so a candidate reached statically is hashed the same whether or not its module is imported. They carry
+    their own ``_seen`` namespace so a def already visited live is still visited (and hashed) statically.
+    """
 
     def __init__(self, tops: frozenset[str], include_dependencies: bool) -> None:
         self._tops = tops
         self._include_dependencies = include_dependencies
         self.parts: set[str] = set()
-        self._seen: set[tuple[str, str]] = set()
+        self._seen: set[tuple[str, str, str]] = set()
         self._queue: list[_Task] = []
         self._index_cache: dict[str, _ModuleIndex | None] = {}
+        self._static_index_cache: dict[str, _ModuleIndex | None] = {}
         self._dependency_by_top: dict[str, str | None] = {}
 
     def _module_index(self, modname: str) -> _ModuleIndex | None:
@@ -620,6 +785,17 @@ class _Walker:
         if modname not in self._index_cache:
             self._index_cache[modname] = _get_module_index(modname)
         return self._index_cache[modname]
+
+    def _static_module_index(self, modname: str) -> _ModuleIndex | None:
+        """Never imports: an already-imported module reuses the live index; otherwise located via
+        PathFinder from the nearest imported ancestor. Cached per walk, so a module reached by several
+        static refs is only located/parsed once.
+        """
+        if modname in sys.modules:
+            return self._module_index(modname)
+        if modname not in self._static_index_cache:
+            self._static_index_cache[modname] = _locate_static_module_index(modname)
+        return self._static_index_cache[modname]
 
     def in_scope(self, modname: str) -> bool:
         top = _top(modname)
@@ -642,22 +818,38 @@ class _Walker:
         if entry is not None:
             self.parts.add(entry)
 
-    def _enqueue_refs(self, modname: str, refs: list[str]) -> None:
+    def _enqueue_refs(self, modname: str, refs: Sequence[str | _AliasRef], static: bool) -> None:
+        # A ref mapped to a local-import alias is always resolved statically, regardless of whether the
+        # candidate that produced it was itself reached live or statically.
         for ref in refs:
-            self._queue.append(("ref", modname, ref))
+            if isinstance(ref, _AliasRef):
+                if not self.in_scope(ref.module):
+                    # An out-of-scope local-import target (stdlib, core surface, third-party) adds nothing:
+                    # no source parts, no dep: entry.
+                    continue
+                if ref.name:
+                    self._queue.append(("sref", ref.module, ref.name))
+                else:
+                    self._queue.append(("smodule", ref.module))
+            elif static:
+                self._queue.append(("sref", modname, ref))
+            else:
+                self._queue.append(("ref", modname, ref))
 
-    def _accept_candidate(self, modname: str, qualname: str, candidate: _Candidate) -> None:
-        digest, refs = _resolve_candidate(candidate)
+    def _accept_candidate(
+        self, modname: str, qualname: str, candidate: _Candidate, package: str | None, static: bool
+    ) -> None:
+        digest, refs = _resolve_candidate(candidate, package)
         if digest is None:
             self.parts.add(f"nosrc:{modname}:{qualname}")
             return
         self.parts.add(f"{modname}:{qualname}:{digest}")
-        self._enqueue_refs(modname, refs)
+        self._enqueue_refs(modname, refs, static)
 
     def add_root(self, cls: type[Any]) -> None:
         modname = cls.__module__
         qualname = cls.__qualname__
-        key = (modname, qualname)
+        key = ("d", modname, qualname)
         if key in self._seen:
             return
         self._seen.add(key)
@@ -669,7 +861,7 @@ class _Walker:
             candidates = [c for c in idx.definitions.get(qualname, []) if c.kind == "class"]
             if "<locals>" in qualname:
                 if len(candidates) == 1:
-                    self._accept_candidate(modname, qualname, candidates[0])
+                    self._accept_candidate(modname, qualname, candidates[0], idx.package, False)
                     return
             elif candidates and _root_identity_ok(modname, qualname, cls):
                 # Several if/else (or try/except) definitions can share this qualname; pick the one whose
@@ -678,7 +870,7 @@ class _Walker:
                 method_lines = _method_first_lines(cls)
                 matched = [c for c in candidates if any(c.start_line <= ln <= c.end_line for ln in method_lines)]
                 for candidate in matched or candidates:
-                    self._accept_candidate(modname, qualname, candidate)
+                    self._accept_candidate(modname, qualname, candidate, idx.package, False)
                 return
         source = _root_fallback_source(cls)  # raises SOURCE_INTROSPECTION_ERRORS on failure
         node = _parse_named_node(source, cls.__name__, (ast.ClassDef,))
@@ -686,34 +878,34 @@ class _Walker:
             self.parts.add(f"nosrc:{modname}:{qualname}")
             return
         digest = _digest(node)
-        refs = _collect_refs(node)
+        refs = _local_mapped_refs(node, _module_package(modname))
         self.parts.add(f"{modname}:{qualname}:{digest}")
-        self._enqueue_refs(modname, refs)
+        self._enqueue_refs(modname, refs, False)
 
-    def _accept_def_by_qualname(self, modname: str, qualname: str, idx: _ModuleIndex) -> None:
-        key = (modname, qualname)
+    def _accept_def_by_qualname(self, modname: str, qualname: str, idx: _ModuleIndex, static: bool) -> None:
+        key = ("sd" if static else "d", modname, qualname)
         if key in self._seen:
             return
         self._seen.add(key)
         for candidate in idx.definitions.get(qualname, []):
-            self._accept_candidate(modname, qualname, candidate)
+            self._accept_candidate(modname, qualname, candidate, idx.package, static)
 
     def _handle_def(self, obj: Any) -> None:
         modname = safe_field(lambda: obj.__module__, None)
         qualname = safe_field(lambda: obj.__qualname__, None)
         if not modname or not qualname:
             return
-        key = (modname, qualname)
+        key = ("d", modname, qualname)
         if key in self._seen:
             return
         idx = self._module_index(modname)
         if idx is not None and idx.definitions.get(qualname):
-            self._accept_def_by_qualname(modname, qualname, idx)
+            self._accept_def_by_qualname(modname, qualname, idx, False)
             return
         if idx is not None:
             parent = _enclosing_qualname(qualname)
             if parent is not None and idx.definitions.get(parent):
-                self._accept_def_by_qualname(modname, parent, idx)
+                self._accept_def_by_qualname(modname, parent, idx, False)
                 return
         self._seen.add(key)
         source = safe_field(lambda: inspect.getsource(obj), None, catching=_WALK_READ_ERRORS)
@@ -723,60 +915,125 @@ class _Walker:
             node = _parse_named_node(source, name, node_types)
             if node is not None:
                 digest = _digest(node)
-                refs = _collect_refs(node)
+                refs = _local_mapped_refs(node, _module_package(modname))
                 self.parts.add(f"{modname}:{qualname}:{digest}")
-                self._enqueue_refs(modname, refs)
+                self._enqueue_refs(modname, refs, False)
                 return
         self.parts.add(f"nosrc:{modname}:{qualname}")
 
-    def _handle_binding(self, modname: str, name: str) -> None:
-        key = (modname, f"={name}")
+    def _handle_binding(self, modname: str, name: str, static: bool) -> None:
+        key = ("sb" if static else "b", modname, name)
         if key in self._seen:
             return
         self._seen.add(key)
-        idx = self._module_index(modname)
+        idx = self._static_module_index(modname) if static else self._module_index(modname)
         if idx is None:
             return
         candidates = idx.bindings.get(name)
         if candidates:
             for candidate in candidates:
-                digest, refs = _resolve_candidate(candidate)
+                digest, refs = _resolve_candidate(candidate, idx.package)
                 if digest is None:
                     self.parts.add(f"nosrc:{modname}:={name}")
                     continue
                 self.parts.add(f"{modname}:={name}:{digest}")
-                self._enqueue_refs(modname, refs)
+                self._enqueue_refs(modname, refs, static)
             return
+        binding_tag = "sbinding" if static else "binding"
         for entry in idx.imports.get(name, []):
             if entry.imported_name is not None and self.in_scope(entry.source_module):
-                self._queue.append(("binding", entry.source_module, entry.imported_name))
+                self._queue.append((binding_tag, entry.source_module, entry.imported_name))
         for star_source in idx.star_imports:
             if self.in_scope(star_source):
-                self._queue.append(("binding", star_source, name))
+                self._queue.append((binding_tag, star_source, name))
 
-    def _handle_module(self, modname: str) -> None:
-        key = (modname, "*")
+    def _handle_module(self, modname: str, static: bool) -> None:
+        if static and not self.in_scope(modname):
+            return
+        key = ("sm" if static else "m", modname, "*")
         if key in self._seen:
             return
         self._seen.add(key)
-        idx = self._module_index(modname)
+        idx = self._static_module_index(modname) if static else self._module_index(modname)
         if idx is None:
             self.parts.add(f"nosrc:{modname}:*")
             return
         for qualname in idx.definitions:
             if "." not in qualname:
-                self._accept_def_by_qualname(modname, qualname, idx)
+                self._accept_def_by_qualname(modname, qualname, idx, static)
+        binding_tag = "sbinding" if static else "binding"
+        module_tag = "smodule" if static else "module"
         for name in idx.bindings:
-            self._queue.append(("binding", modname, name))
+            self._queue.append((binding_tag, modname, name))
         # A module used whole also reaches the names it re-exports through its own imports/star imports
         # (e.g. ``dispatch/__init__.py: from .impl import double``, read back via getattr(dispatch, "double")).
         for entries in idx.imports.values():
             for entry in entries:
                 if entry.imported_name is not None and self.in_scope(entry.source_module):
-                    self._queue.append(("binding", entry.source_module, entry.imported_name))
+                    self._queue.append((binding_tag, entry.source_module, entry.imported_name))
         for star_source in idx.star_imports:
             if self.in_scope(star_source):
-                self._queue.append(("module", star_source))
+                self._queue.append((module_tag, star_source))
+
+    def _handle_static_ref(self, modname: str, ref: str) -> None:
+        if not self.in_scope(modname):
+            return
+        key = ("sr", modname, ref)
+        if key in self._seen:
+            return
+        self._seen.add(key)
+        idx = self._static_module_index(modname)
+        if idx is None:
+            self.parts.add(f"nosrc:{modname}:{ref}")
+            return
+        head, _, remainder = ref.partition(".")
+        if head in idx.definitions:
+            self._accept_def_by_qualname(modname, head, idx, True)
+            return
+        if head in idx.bindings:
+            self._handle_binding(modname, head, True)
+            return
+        import_entries = idx.imports.get(head, [])
+        if import_entries:
+            for binding in import_entries:
+                if self.in_scope(binding.source_module):
+                    if binding.imported_name is not None:
+                        target = binding.imported_name if not remainder else f"{binding.imported_name}.{remainder}"
+                        self._queue.append(("sref", binding.source_module, target))
+                    else:
+                        self._resolve_static_module_chain(binding.source_module, remainder)
+                elif not _is_ignored_module_name(binding.source_module):
+                    self._add_dependency(binding.source_module)
+            return
+        for star_source in idx.star_imports:
+            if self.in_scope(star_source):
+                self._queue.append(("sref", star_source, ref))
+                return
+        submodule = f"{modname}.{head}"
+        if idx.is_package and self.in_scope(submodule) and self._static_module_index(submodule) is not None:
+            if remainder:
+                self._queue.append(("sref", submodule, remainder))
+            else:
+                self._queue.append(("smodule", submodule))
+
+    def _resolve_static_module_chain(self, base_module: str, remainder: str) -> None:
+        """Steps a plain ``import S`` module name down through remainder's segments while each extension is
+        a locatable in-scope submodule; the leftover (if any) is a static ref into the final module.
+        """
+        current = base_module
+        segments = remainder.split(".") if remainder else []
+        consumed = 0
+        for seg in segments:
+            candidate = f"{current}.{seg}"
+            if not self.in_scope(candidate) or self._static_module_index(candidate) is None:
+                break
+            current = candidate
+            consumed += 1
+        leftover = ".".join(segments[consumed:])
+        if leftover:
+            self._queue.append(("sref", current, leftover))
+        else:
+            self._queue.append(("smodule", current))
 
     def _handle_value(self, value: Any, ref_modname: str, ref_name: str, optional_dependency_sentinel: bool) -> None:
         """Classifies value by type(value), never isinstance()/value.__class__: a lazy proxy's __class__ can be
@@ -843,7 +1100,7 @@ class _Walker:
             return
         value = namespace[head]
         owner_mod, owner_name = ref_modname, head
-        for attr in rest:
+        for i, attr in enumerate(rest):
             if type(value) is not types.ModuleType:
                 break
             modname = safe_field(lambda: value.__name__, "")
@@ -853,24 +1110,49 @@ class _Walker:
                 self._add_dependency(modname)
                 return
             mod_vars = safe_field(lambda: vars(value), None)
-            if mod_vars is None or attr not in mod_vars:
+            if mod_vars is None:
+                return
+            submodule = f"{modname}.{attr}"
+            # M.attr is an in-scope submodule: switch to the static path so cold (never imported) and
+            # warm (already imported, present in vars(M)) resolve the same rest of the chain.
+            if self.in_scope(submodule) and self._chain_step_is_submodule(mod_vars, attr, submodule):
+                remainder = ".".join(rest[i + 1 :])
+                if remainder:
+                    self._queue.append(("sref", submodule, remainder))
+                else:
+                    self._queue.append(("smodule", submodule))
+                return
+            if attr not in mod_vars:
                 return
             owner_mod, owner_name = modname, attr
             value = mod_vars[attr]
         self._queue.append(("value", value, owner_mod, owner_name, optional_dependency_sentinel))
 
+    def _chain_step_is_submodule(self, mod_vars: dict[str, Any], attr: str, submodule: str) -> bool:
+        if attr not in mod_vars:
+            # Package check by dict read: a module-level __getattr__ must never run.
+            return "__path__" in mod_vars and self._static_module_index(submodule) is not None
+        present = mod_vars[attr]
+        return type(present) is types.ModuleType and safe_field(lambda: present.__name__, "") == submodule
+
     def _dispatch(self, task: _Task) -> None:
         tag = task[0]
         if tag == "ref":
             self._handle_ref(task[1], task[2])
+        elif tag == "sref":
+            self._handle_static_ref(task[1], task[2])
         elif tag == "value":
             self._handle_value(task[1], task[2], task[3], task[4])
         elif tag == "def":
             self._handle_def(task[1])
         elif tag == "binding":
-            self._handle_binding(task[1], task[2])
+            self._handle_binding(task[1], task[2], False)
+        elif tag == "sbinding":
+            self._handle_binding(task[1], task[2], True)
+        elif tag == "module":
+            self._handle_module(task[1], False)
         else:
-            self._handle_module(task[1])
+            self._handle_module(task[1], True)
 
     def run(self) -> None:
         while self._queue:

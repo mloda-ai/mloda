@@ -15,6 +15,7 @@ caller's own object, not a worker's copy, is notified in the parent."""
 
 from __future__ import annotations
 
+import json
 import os
 import pickle  # nosec B403
 import threading
@@ -237,9 +238,10 @@ _RUN_COMPLETE_ENABLED = PluginCollector.enabled_feature_groups({_RunCompleteFeat
 class _RunCompleteProbeExtender(Extender):
     """Records (run_id, pid, sentinel_exists) in the caller's own object; close() runs only in a worker's copy."""
 
-    def __init__(self, sentinel_path: Path, close_delay: float = 0.0) -> None:
+    def __init__(self, sentinel_path: Path, close_delay: float = 0.0, close_state_path: Path | None = None) -> None:
         self._sentinel_path = sentinel_path
         self._close_delay = close_delay
+        self._close_state_path = close_state_path
         self.completions: list[tuple[str | None, int, bool]] = []
 
     def wraps(self) -> set[ExtenderHook]:
@@ -251,6 +253,8 @@ class _RunCompleteProbeExtender(Extender):
     def close(self) -> None:
         time.sleep(self._close_delay)
         self._sentinel_path.write_text("closed")
+        if self._close_state_path is not None:
+            self._close_state_path.write_text(json.dumps([len(self.completions), Extender.remaining_close_budget()]))
 
     def on_run_complete(self, run_id: str | None) -> None:
         self.completions.append((run_id, os.getpid(), self._sentinel_path.exists()))
@@ -339,3 +343,40 @@ class TestRunCompleteFiresWhenSetupFails:
             )
 
         assert [(run_id, pid) for run_id, pid, _ in probe.completions] == [(session.run_id, os.getpid())]
+
+
+@pytest.mark.timeout(30)
+class TestRunAllTwiceWithTheSameProbeCarriesPriorRunStateIntoTheSecondWorker:
+    """The second worker sees the first run's on_run_complete state and its own graceful_shutdown_timeout."""
+
+    def test_second_run_worker_sees_first_runs_completions_and_the_custom_budget(
+        self, tmp_path: Path, flight_server: Any
+    ) -> None:
+        close_state_path = tmp_path / "close_state.json"
+        probe = _RunCompleteProbeExtender(tmp_path / "closed.txt", close_state_path=close_state_path)
+
+        mloda.run_all(
+            [Feature(name=_RUN_COMPLETE_COLUMN)],
+            compute_frameworks=["PythonDictFramework"],
+            plugin_collector=_RUN_COMPLETE_ENABLED,
+            parallelization_modes={ParallelizationMode.MULTIPROCESSING},
+            function_extender={probe},
+            flight_server=flight_server,
+        )
+        completions_after_first_run = len(probe.completions)
+        assert completions_after_first_run == 1
+
+        mloda.run_all(
+            [Feature(name=_RUN_COMPLETE_COLUMN)],
+            compute_frameworks=["PythonDictFramework"],
+            plugin_collector=_RUN_COMPLETE_ENABLED,
+            parallelization_modes={ParallelizationMode.MULTIPROCESSING},
+            function_extender={probe},
+            flight_server=flight_server,
+            graceful_shutdown_timeout=7.5,
+        )
+
+        seen_completions, seen_budget = json.loads(close_state_path.read_text())
+
+        assert seen_completions == completions_after_first_run
+        assert seen_budget > 2.0

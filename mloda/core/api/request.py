@@ -158,6 +158,7 @@ class mlodaAPI:
         column_ordering: str | None = None,
         carrier: dict[str, str] | None = None,
         child_bootstrap: Callable[[], None] | None = None,
+        graceful_shutdown_timeout: float = 2.0,
     ) -> RunResult:
         """
         Run feature computation in one step.
@@ -185,6 +186,9 @@ class mlodaAPI:
             carrier: Opaque W3C trace-context carrier dict, forwarded to every ``HookContext``.
             child_bootstrap: Picklable, no-argument callable run once in a spawned
                 MULTIPROCESSING worker before it processes its first command.
+            graceful_shutdown_timeout: Seconds a MULTIPROCESSING worker gets to run its
+                extenders' close() before being terminated, shared across every extender in
+                that worker.
 
         Returns:
             ``RunResult``, a list of computed results, one per feature group, in ``result.plan``
@@ -222,6 +226,7 @@ class mlodaAPI:
             function_extender=function_extender,
             carrier=carrier,
             child_bootstrap=child_bootstrap,
+            graceful_shutdown_timeout=graceful_shutdown_timeout,
         )
         result_items = session.runner.get_result_items() if session.runner is not None else None
         return RunResult(results, session.resolved_plan(), result_items)
@@ -244,14 +249,16 @@ class mlodaAPI:
         column_ordering: str | None = None,
         carrier: dict[str, str] | None = None,
         child_bootstrap: Callable[[], None] | None = None,
+        graceful_shutdown_timeout: float = 2.0,
     ) -> ResultStream:
         """Stream results at feature-group granularity.
 
         Like ``run_all`` but yields each feature group's result as it completes.
         ``list(stream_all(...))`` carries the same elements as ``run_all(...)``. Planning happens
         eagerly at the call; the returned ``ResultStream`` exposes ``plan`` before iteration.
-        ``carrier``/``child_bootstrap`` behave as in ``run_all``. Unlike ``run_all``, it yields in
-        completion order, which can differ from ``run_all``'s plan order under THREADING/MULTIPROCESSING.
+        ``carrier``/``child_bootstrap``/``graceful_shutdown_timeout`` behave as in ``run_all``. Unlike
+        ``run_all``, it yields in completion order, which can differ from ``run_all``'s plan order under
+        THREADING/MULTIPROCESSING.
 
         Returns:
             ``ResultStream`` yielding one complete result per feature group; ``stream.frames()`` pairs each
@@ -282,6 +289,7 @@ class mlodaAPI:
                 carrier=carrier,
                 child_bootstrap=child_bootstrap,
                 with_step_uuids=True,
+                graceful_shutdown_timeout=graceful_shutdown_timeout,
             ),
             session.resolved_plan(),
         )

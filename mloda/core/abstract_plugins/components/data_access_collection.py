@@ -1,4 +1,3 @@
-import re
 from collections.abc import Iterable, Mapping
 from typing import Any, Callable
 
@@ -7,6 +6,7 @@ from mloda.core.abstract_plugins.components.credential_scrub import redact_mappi
 from mloda.core.abstract_plugins.components.hashable_dict import HashableDict
 
 _MIN_REDACT_LENGTH = 8
+_PLACEHOLDER = "MLODAREDACTED"
 
 
 _KIND_TO_ATTR: dict[str, str] = {
@@ -291,7 +291,7 @@ class DataAccessCollection:
         all_auto = all(h in self._auto_handles for h in candidate_handles)
         if all_auto:
             if kind == "credentials":
-                bullets = "\n".join(f"  - {self._render_redacted_candidate(v)}" for _, v in matches)
+                bullets = "\n".join(f"  - {self._redacted_credential(v)}" for _, v in matches)
             else:
                 bullets = "\n".join(f"  - {v}" for _, v in matches)
             raise ValueError(
@@ -306,34 +306,78 @@ class DataAccessCollection:
         )
 
     @staticmethod
-    def _render_redacted_candidate(value: Any) -> str:
+    def _redacted_credential(value: Any) -> str:
         if isinstance(value, dict):
             return "{" + ", ".join(f"'{key}': {redacted!r}" for key, redacted in redact_mapping(value).items()) + "}"
         return "'***'"
 
     def redact(self, text: str) -> str:
-        """Scrub URI/keyword patterns, then mask registered credential values of 8+ chars."""
+        """Exact-match every registered credential string value of 8+ chars, then ``scrub_credentials``."""
+        spans = self._merge_spans(self._literal_spans(text, self._credential_str_leaves()))
+        text = self._replace_spans_with_placeholder(text, spans)
         text = scrub_credentials(text)
-        literals = sorted(self._credential_str_leaves(), key=len, reverse=True)
-        if not literals:
+        return text.replace(_PLACEHOLDER, "***")
+
+    @staticmethod
+    def _literal_spans(text: str, literals: set[str]) -> list[tuple[int, int]]:
+        spans: list[tuple[int, int]] = []
+        for literal in literals:
+            start = 0
+            while True:
+                index = text.find(literal, start)
+                if index == -1:
+                    break
+                spans.append((index, index + len(literal)))
+                start = index + 1
+        return spans
+
+    @staticmethod
+    def _merge_spans(spans: list[tuple[int, int]]) -> list[tuple[int, int]]:
+        if not spans:
+            return []
+        ordered = sorted(spans)
+        merged = [ordered[0]]
+        for start, end in ordered[1:]:
+            last_start, last_end = merged[-1]
+            if start <= last_end:
+                merged[-1] = (last_start, max(last_end, end))
+            else:
+                merged.append((start, end))
+        return merged
+
+    @staticmethod
+    def _replace_spans_with_placeholder(text: str, spans: list[tuple[int, int]]) -> str:
+        if not spans:
             return text
-        pattern = re.compile("|".join(re.escape(literal) for literal in literals))
-        return pattern.sub("***", text)
+        parts: list[str] = []
+        cursor = 0
+        for start, end in spans:
+            parts.append(text[cursor:start])
+            parts.append(_PLACEHOLDER)
+            cursor = end
+        parts.append(text[cursor:])
+        return "".join(parts)
 
     def _credential_str_leaves(self) -> set[str]:
         leaves: set[str] = set()
+        visited: set[int] = set()
         for value in self.credentials.values():
-            self._collect_str_leaves(value, leaves)
+            self._collect_str_leaves(value, leaves, visited)
         return leaves
 
     @classmethod
-    def _collect_str_leaves(cls, value: Any, leaves: set[str]) -> None:
+    def _collect_str_leaves(cls, value: Any, leaves: set[str], visited: set[int]) -> None:
+        if isinstance(value, Credential):
+            value = value.data
         if isinstance(value, str):
-            if len(value) >= _MIN_REDACT_LENGTH:
+            if len(value) >= _MIN_REDACT_LENGTH and value.strip():
                 leaves.add(value)
-        elif isinstance(value, Mapping):
-            for nested in value.values():
-                cls._collect_str_leaves(nested, leaves)
-        elif isinstance(value, (list, tuple)):
-            for nested in value:
-                cls._collect_str_leaves(nested, leaves)
+            return
+        if isinstance(value, (Mapping, list, tuple, set, frozenset)):
+            container_id = id(value)
+            if container_id in visited:
+                return
+            visited.add(container_id)
+            iterable: Iterable[Any] = value.values() if isinstance(value, Mapping) else value
+            for nested in iterable:
+                cls._collect_str_leaves(nested, leaves, visited)

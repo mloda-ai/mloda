@@ -8,6 +8,7 @@ from typing import Any
 
 import pytest
 
+from mloda.core.abstract_plugins.components.credential import Credential
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 
 
@@ -570,7 +571,7 @@ class TestRedact:
         assert self._REGISTERED_VALUE not in redacted
 
     def test_nested_named_credential_is_masked(self) -> None:
-        dac = DataAccessCollection(credentials={"pg": {"password": self._REGISTERED_VALUE}})
+        dac = DataAccessCollection(credentials={"pg": {"auth": {"password": self._REGISTERED_VALUE}}})
         redacted = dac.redact(f"nested {self._REGISTERED_VALUE} value")
         assert self._REGISTERED_VALUE not in redacted
 
@@ -594,12 +595,12 @@ class TestRedact:
     def test_overlapping_values_fully_masked_no_leftover_tail(self) -> None:
         dac = DataAccessCollection(
             credentials={
-                "a": {"password": "hunter2plus"},  # nosec B105 B106
-                "b": {"password": "hunter2plusextra"},  # nosec B105 B106
+                "a": {"password": self._REGISTERED_VALUE},
+                "b": {"password": f"{self._REGISTERED_VALUE}extra"},
             }
         )
-        redacted = dac.redact("saw hunter2plusextra in the logs")
-        assert "hunter2plus" not in redacted
+        redacted = dac.redact(f"saw {self._REGISTERED_VALUE}extra in the logs")
+        assert self._REGISTERED_VALUE not in redacted
         assert "extra" not in redacted
 
     def test_registered_host_masked_alongside_scrubbed_token(self) -> None:
@@ -624,27 +625,94 @@ class TestRedact:
         assert dac.credentials == {"pg": {"password": self._REGISTERED_VALUE}}
 
     def test_two_collections_mask_only_their_own_values(self) -> None:
-        dac1 = DataAccessCollection(credentials={"pg": {"password": "hunter2plus"}})  # nosec B105 B106
+        dac1 = DataAccessCollection(credentials={"pg": {"password": self._REGISTERED_VALUE}})
         dac2 = DataAccessCollection(credentials={"pg": {"password": "swordfishlong"}})  # nosec B105 B106
-        text = "hunter2plus and swordfishlong side by side"
+        text = f"{self._REGISTERED_VALUE} and swordfishlong side by side"
         redacted1 = dac1.redact(text)
-        assert "hunter2plus" not in redacted1
+        assert self._REGISTERED_VALUE not in redacted1
         assert "swordfishlong" in redacted1
         redacted2 = dac2.redact(text)
         assert "swordfishlong" not in redacted2
-        assert "hunter2plus" in redacted2
+        assert self._REGISTERED_VALUE in redacted2
 
     def test_large_text_with_secrets_redacts_well_under_one_second(self) -> None:
         dac = DataAccessCollection(
             credentials={
-                "a": {"password": "hunter2plus"},  # nosec B105 B106
+                "a": {"password": self._REGISTERED_VALUE},
                 "b": {"password": "swordfishlong"},  # nosec B105 B106
             }
         )
-        text = ("filler text " * 20_000) + "hunter2plus swordfishlong"
+        text = ("filler text " * 20_000) + f"{self._REGISTERED_VALUE} swordfishlong"
         start = time.perf_counter()
         redacted = dac.redact(text)
         elapsed = time.perf_counter() - start
         assert elapsed < 1.0, f"redact took {elapsed:.3f}s on 200k chars"
-        assert "hunter2plus" not in redacted
+        assert self._REGISTERED_VALUE not in redacted
         assert "swordfishlong" not in redacted
+
+    def test_password_with_semicolon_is_masked(self) -> None:
+        value = "abc;defghijk"  # nosec B105
+        dac = DataAccessCollection(credentials={"pg": {"password": value}})
+        keyword_form = dac.redact(f"password={value}")
+        prose = dac.redact(f"leaked {value} here")
+        assert "defghijk" not in keyword_form
+        assert "defghijk" not in prose
+
+    def test_password_with_space_is_masked(self) -> None:
+        value = "abc defghijk"  # nosec B105
+        dac = DataAccessCollection(credentials={"pg": {"password": value}})
+        keyword_form = dac.redact(f"password={value}")
+        prose = dac.redact(f"leaked {value} here")
+        assert "defghijk" not in keyword_form
+        assert "defghijk" not in prose
+
+    def test_password_with_ampersand_is_masked(self) -> None:
+        value = "abc&defghijk"  # nosec B105
+        dac = DataAccessCollection(credentials={"pg": {"password": value}})
+        keyword_form = dac.redact(f"password={value}")
+        prose = dac.redact(f"leaked {value} here")
+        assert "defghijk" not in keyword_form
+        assert "defghijk" not in prose
+
+    def test_mid_string_overlapping_values_leave_no_fragment(self) -> None:
+        first = "abcdefgh12"  # nosec B105
+        second = "gh12345678"  # nosec B105
+        dac = DataAccessCollection(credentials={"a": {"password": first}, "b": {"password": second}})
+        redacted = dac.redact("abcdefgh12345678")
+        assert "345678" not in redacted
+        assert "abcdef" not in redacted
+
+    def test_regex_metacharacter_value_masked_exactly_without_overmatching(self) -> None:
+        value = "a.b*c+d?e(f)"  # nosec B105
+        dac = DataAccessCollection(credentials={"pg": {"password": value}})
+        redacted = dac.redact(f"leaked {value} here")
+        assert value not in redacted
+        unrelated = dac.redact("aXb stays untouched")
+        assert unrelated == "aXb stays untouched"
+
+    def test_nested_credential_object_inside_named_dict_is_masked(self) -> None:
+        dac = DataAccessCollection(credentials={"pg": {"inner": Credential(password=self._REGISTERED_VALUE)}})
+        redacted = dac.redact(f"leaked {self._REGISTERED_VALUE} here")
+        assert self._REGISTERED_VALUE not in redacted
+
+    def test_value_inside_set_leaf_is_masked(self) -> None:
+        dac = DataAccessCollection(credentials={"pg": {"tags": {self._REGISTERED_VALUE}}})
+        redacted = dac.redact(f"leaked {self._REGISTERED_VALUE} here")
+        assert self._REGISTERED_VALUE not in redacted
+
+    def test_value_inside_frozenset_leaf_is_masked(self) -> None:
+        dac = DataAccessCollection(credentials={"pg": {"tags": frozenset({self._REGISTERED_VALUE})}})
+        redacted = dac.redact(f"leaked {self._REGISTERED_VALUE} here")
+        assert self._REGISTERED_VALUE not in redacted
+
+    def test_cyclic_container_does_not_raise_and_still_masks_other_values(self) -> None:
+        cyclic: list[Any] = []
+        cyclic.append(cyclic)
+        dac = DataAccessCollection(credentials={"pg": {"password": self._REGISTERED_VALUE, "loop": cyclic}})
+        redacted = dac.redact(f"leaked {self._REGISTERED_VALUE} here")
+        assert self._REGISTERED_VALUE not in redacted
+
+    def test_whitespace_only_value_does_not_mask_ordinary_whitespace(self) -> None:
+        dac = DataAccessCollection(credentials={"pg": {"password": " " * 8}})
+        text = "a line" + " " * 8 + "with padding"
+        assert dac.redact(text) == text

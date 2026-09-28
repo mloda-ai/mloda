@@ -101,7 +101,7 @@ Two safety behaviors come with it:
 
 - **Early mis-wrap error.** Passing a bare dict whose values are not mappings (the mis-wrap shape above) now raises `ValueError` at construction time, naming the offending handle and showing the three correct alternatives, instead of failing silently later during matcher selection.
 - **Redacted error output.** `repr(Credential(password="hunter2"))` prints `Credential(password='***')`, and the resolver's ambiguity error renders credential candidates with keys visible and values replaced by `***`. Note that the registered credential itself is a plain dict, so code that prints `dac.credentials` directly still sees raw values.
-- **`dac.redact(text)`.** Scrubs `text` through `scrub_credentials`, then masks any registered credential value of 8 or more characters regardless of field (host, user, path, not just password); shorter values are left to the pattern rules.
+- **`dac.redact(text)`.** Exact-matches every registered credential string value of 8 or more characters (host, user, path, not just password; shorter values are left to the pattern rules), only from `credentials` (not connections, files, folders), then scrubs the result through `scrub_credentials`.
 
 ### Why a typed class: four kinds of users
 

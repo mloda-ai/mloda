@@ -12,8 +12,9 @@ import mloda.core.abstract_plugins.plugin_version as plugin_version_module
 from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook
 from mloda.core.abstract_plugins.hook_context import HookContext
 from mloda.core.abstract_plugins.plugin_version import resolve_plugin_version
+from mloda.core.core.engine import Engine
 from mloda.provider import BaseInputData, ComputeFramework, DataCreator, FeatureGroup, FeatureSet
-from mloda.user import Feature, PluginCollector, mloda
+from mloda.user import Feature, Features, ParallelizationMode, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
 
 
@@ -324,6 +325,7 @@ class _PluginVersionCapturingExtender(Extender):
 
     def __init__(self) -> None:
         self.recorded: list[str | None] = []
+        self.run_ids: list[str | None] = []
 
     def wraps(self) -> set[ExtenderHook]:
         return {ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE}
@@ -333,6 +335,7 @@ class _PluginVersionCapturingExtender(Extender):
         context = HookContext.current()
         assert context is not None
         self.recorded.append(context.plugin_version)
+        self.run_ids.append(context.run_id)
         return result
 
 
@@ -362,6 +365,35 @@ class TestPluginVersionResolvedAtPlanTimeUnderSync:
         expected = f"v:{_PlanTimePluginVersionFeatureGroup.__module__}"
         assert extender.recorded, "extender never observed the feature group's calculate_feature call"
         assert extender.recorded == [expected]
+
+    def test_engine_orchestrator_entered_without_run_context_uses_plan_time_context(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(
+            "mloda.core.core.engine.resolve_plugin_version",
+            lambda module_name: f"v:{module_name}",
+        )
+        extender = _PluginVersionCapturingExtender()
+        engine = Engine(
+            Features([Feature(name="plan_time_plugin_version_col")]),
+            {PythonDictFramework},
+            None,
+            plugin_collector=_plan_time_enabled,
+            function_extender={extender},
+            run_id="engine-run-id",
+        )
+
+        orchestrator = engine.compute()
+        try:
+            orchestrator.__enter__({ParallelizationMode.SYNC}, {extender})
+            orchestrator.compute()
+        finally:
+            orchestrator.__exit__(None, None, None)
+
+        expected = f"v:{_PlanTimePluginVersionFeatureGroup.__module__}"
+        assert extender.recorded, "extender never observed the feature group's calculate_feature call"
+        assert extender.recorded == [expected]
+        assert extender.run_ids == ["engine-run-id"]
 
 
 class _PluginVersionCacheInfoRecordingExtender(Extender):

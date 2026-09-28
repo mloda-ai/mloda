@@ -94,6 +94,7 @@ class ExecutionOrchestrator:
         column_ordering: str | None = None,
         request_feature_order: list[str] | None = None,
         tfs_connection_map: dict[type[ComputeFramework], Any] | None = None,
+        run_context: RunContext | None = None,
     ) -> None:
         """
         Initializes the ExecutionOrchestrator with an execution plan and optional flight server.
@@ -101,6 +102,7 @@ class ExecutionOrchestrator:
         Args:
             execution_planner: The execution plan that defines the steps to be executed.
             flight_server: An optional flight server for data transfer.
+            run_context: The default run context used when __enter__ is called without one.
         """
         self.execution_planner = execution_planner
 
@@ -111,7 +113,8 @@ class ExecutionOrchestrator:
         self._workers_joined: bool = True
         self.worker_extender_payload: bytes | None = None
         self._hook_extenders: dict[ExtenderHook, Extender] | None = None
-        self._graceful_shutdown_timeout: float = RunContext().graceful_shutdown_timeout
+        self._default_run_context: RunContext = run_context if run_context is not None else RunContext()
+        self._graceful_shutdown_timeout: float = self._default_run_context.graceful_shutdown_timeout
 
         # multiprocessing - delegate to WorkerManager
         self.location: str | None = None
@@ -520,7 +523,7 @@ class ExecutionOrchestrator:
         """
         Enters the context of the ExecutionOrchestrator.
         """
-        run_context = run_context if run_context is not None else RunContext()
+        run_context = run_context if run_context is not None else self._default_run_context
         self.function_extender = function_extender
         hook_extenders = build_hook_extenders(function_extender or ())
         self._hook_extenders = hook_extenders

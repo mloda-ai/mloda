@@ -15,10 +15,9 @@ mlodaAPI filters extenders once at prepare time into ``self.engine.function_exte
 ``_enter_runner_context`` reuses that snapshot; it never re-reads or re-filters the live
 ``self.function_extender``, so reassigning or mutating it after prepare has no effect.
 
-The helper is imported inside each test so every test fails with a precise
-ImportError until the Green agent implements it; the integration test fails
-on the unfiltered set instead. All doubles are local, keeping xdist
-parallel-safety.
+The helper is imported inside each test rather than at module scope. The
+runner-wiring tests build a real session via PluginLoader with
+PythonDictFramework. All doubles are local, keeping xdist parallel-safety.
 """
 
 import logging

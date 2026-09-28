@@ -339,7 +339,10 @@ class _PluginVersionCapturingExtender(Extender):
 class TestPluginVersionResolvedAtPlanTimeUnderSync:
     """HookContext.plugin_version must come from the plan-time resolution, not a hook-time call."""
 
-    def test_hook_context_plugin_version_matches_plan_time_sentinel(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    @pytest.mark.parametrize("run_method", ["run", "stream_run"])
+    def test_hook_context_plugin_version_matches_plan_time_sentinel(
+        self, monkeypatch: pytest.MonkeyPatch, run_method: str
+    ) -> None:
         monkeypatch.setattr(
             "mloda.core.core.engine.resolve_plugin_version",
             lambda module_name: f"v:{module_name}",
@@ -352,7 +355,9 @@ class TestPluginVersionResolvedAtPlanTimeUnderSync:
             plugin_collector=_plan_time_enabled,
             function_extender={extender},
         )
-        session.run()
+        result = getattr(session, run_method)()
+        if run_method == "stream_run":
+            list(result)
 
         expected = f"v:{_PlanTimePluginVersionFeatureGroup.__module__}"
         assert extender.recorded, "extender never observed the feature group's calculate_feature call"

@@ -81,11 +81,12 @@ class TestRunContextPluginVersionsCopiedOnIngest:
 
 
 class TestRunContextPickleRoundTrip:
-    def test_pickle_round_trip_preserves_all_three_fields(self) -> None:
+    def test_pickle_round_trip_preserves_run_id_carrier_child_bootstrap_and_plugin_versions(self) -> None:
         ctx = RunContext(
             run_id="01909a3b-1234-7abc-8def-0123456789ab",
             carrier={"traceparent": "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"},
             child_bootstrap=_module_level_bootstrap,
+            plugin_versions={"m": "1.0"},
         )
 
         restored = pickle.loads(pickle.dumps(ctx))  # nosec B301
@@ -93,6 +94,7 @@ class TestRunContextPickleRoundTrip:
         assert restored.run_id == ctx.run_id
         assert restored.carrier == ctx.carrier
         assert restored.child_bootstrap is _module_level_bootstrap
+        assert restored.plugin_versions == ctx.plugin_versions
 
     def test_pickle_round_trip_preserves_tenant_id_project_id_and_principal(self) -> None:
         ctx = RunContext(tenant_id="acme", project_id="proj1", principal="hash123")

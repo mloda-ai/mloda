@@ -2,7 +2,7 @@
 
 The **Extender** class is an abstract base class (ABC) that provides an extensible framework for enhancing and wrapping functions with additional capabilities. It is especially useful for automating and monitoring various operations such as metadata harvesting, messaging integration, and event logging. This class offers a standardized approach to augmenting functions with critical features like performance monitoring, audit trails, and impact analysis.
 
-Extenders are configured on the session: every call that plans (the `mlodaAPI(...)` constructor, `prepare()`, `run_all()`, `stream_all()`, `explain()`, and `diagnose()`) accepts `function_extender` and snapshots it. `run()` and `stream_run()` don't take it and never re-read it: they reuse whatever the last planning call set, so changing `function_extender` afterwards has no effect.
+Extenders are configured on the session: every call that plans (the `mlodaAPI(...)` constructor, `prepare()`, `run_all()`, `stream_all()`, `explain()`, and `diagnose()`) accepts `function_extender` and snapshots it. `run()` and `stream_run()` don't take it and never re-read it: they reuse the set snapshotted when the session was planned (a session is planned exactly once), so changing `function_extender` afterwards has no effect.
 
 In the following example, we will reuse the previous feature group example and demonstrate how to monitor the execution time of the **calculate_feature** function using a custom extender.
 

@@ -44,7 +44,7 @@ _ENABLED = PluginCollector.enabled_feature_groups({_VerifiedContextMultiprocessi
 
 def _fake_resolve_plugin_version_returning_sentinel(module_name: str) -> str:
     """Module-level so it is never pickled: prepare() calls it only in the parent, at plan time."""
-    return "9.9.9-mp-sentinel"
+    return f"v:{module_name}"
 
 
 class _VerifiedContextRecordingExtender(Extender):
@@ -88,7 +88,6 @@ class TestVerifiedContextReachesHookContextUnderMultiprocessing:
         monkeypatch.setattr(
             "mloda.core.core.engine.resolve_plugin_version",
             _fake_resolve_plugin_version_returning_sentinel,
-            raising=False,
         )
         session = mloda.prepare(
             [Feature(name="verified_context_mp_e2e_col")],
@@ -114,4 +113,5 @@ class TestVerifiedContextReachesHookContextUnderMultiprocessing:
         # in-process degradation that would write the same JSON regardless.
         assert recorded["worker_index"] is not None
         assert recorded["pid"] != parent_pid
-        assert recorded["plugin_version"] == "9.9.9-mp-sentinel", "must be resolved in the parent at plan time"
+        expected_plugin_version = f"v:{_VerifiedContextMultiprocessingFeatureGroup.__module__}"
+        assert recorded["plugin_version"] == expected_plugin_version, "must be resolved in the parent at plan time"

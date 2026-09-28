@@ -154,14 +154,6 @@ class TestRunContextReplace:
         assert replaced.carrier == ctx.carrier
         assert replaced.carrier is not ctx.carrier
 
-    def test_replace_without_changes_copies_the_plugin_versions(self) -> None:
-        ctx = RunContext(plugin_versions={"mloda.core.abstract_plugins.function_extender": "1.2.3"})
-
-        replaced = dataclasses.replace(ctx)
-
-        assert replaced.plugin_versions == ctx.plugin_versions
-        assert replaced.plugin_versions is not ctx.plugin_versions
-
     def test_replace_tenant_id_project_id_principal_keeps_other_fields(self) -> None:
         ctx = RunContext(run_id="some-run-id", carrier={"k": "v"}, child_bootstrap=_module_level_bootstrap)
 

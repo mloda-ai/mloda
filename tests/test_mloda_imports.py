@@ -167,6 +167,8 @@ def test_import_provider_base_classes() -> None:
         # Engines
         BaseFilterEngine,
         BaseMergeEngine,
+        # Credential scrubbing
+        scrub_credentials,
     )
 
     # Base classes
@@ -217,6 +219,9 @@ def test_import_provider_base_classes() -> None:
     # Engines
     assert BaseFilterEngine is not None
     assert BaseMergeEngine is not None
+    # Credential scrubbing
+    assert callable(scrub_credentials)
+    assert "scrub_credentials" in provider_module.__all__
 
 
 # =============================================================================
@@ -247,6 +252,8 @@ def test_import_steward_governance() -> None:
         WarnOncePerInstance,
         # Resolved execution plan
         PlanStep,
+        # Credential scrubbing
+        scrub_credentials,
     )
 
     # Plugin inspection
@@ -272,6 +279,9 @@ def test_import_steward_governance() -> None:
     assert "pickle_failure_reason" in steward_module.__all__
     assert "is_picklable" in steward_module.__all__
     assert "WarnOncePerInstance" in steward_module.__all__
+    # Credential scrubbing
+    assert callable(scrub_credentials)
+    assert "scrub_credentials" in steward_module.__all__
 
 
 # =============================================================================

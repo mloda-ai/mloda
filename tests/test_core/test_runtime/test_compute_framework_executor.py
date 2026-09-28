@@ -28,6 +28,10 @@ from mloda.core.runtime.worker.thread_worker import thread_worker
 from mloda.core.runtime.worker_manager import WorkerManager
 from mloda_plugins.compute_framework.base_implementations.duckdb.duckdb_framework import DuckDBFramework
 
+# Only this token, never an identifier or comment, must be searched for in scrub assertions below.
+_LEAK_TOKEN = "hunter2z9"
+_LEAK_MESSAGE = f"failed for https://u:p@h/db?sig={_LEAK_TOKEN}"
+
 
 class _StateHoldingExtender(Extender):
     """Minimal concrete Extender carrying inspectable state, usable as a real pickle payload."""
@@ -1010,6 +1014,39 @@ class TestSyncExecuteStep:
         error_msg, exc_info = cfw_register.set_error.call_args[0]
         assert "Test error" in error_msg
 
+    def test_handles_exception_scrubs_secret_and_preserves_exception_object(self) -> None:
+        """A secret in the raised exception's text must not reach set_error's msg/exc_info."""
+        cfw_register = Mock(spec=CfwManager)
+        worker_manager = Mock(spec=WorkerManager)
+        executor = ComputeFrameworkExecutor(cfw_register, worker_manager)
+
+        step = Mock(spec=FeatureGroupStep)
+        step.tfs_ids = []
+        step.features = Mock()
+        step.features.any_uuid = uuid4()
+        step.children_if_root = []
+        step.compute_framework = Mock()
+        step.compute_framework.get_class_name.return_value = "TestCFW"
+
+        cfw_uuid = uuid4()
+        cfw_register.resolve_cfw_uuid_by_tfs_ids.return_value = cfw_uuid
+
+        mock_cfw = Mock(spec=ComputeFramework)
+        executor.cfw_collection[cfw_uuid] = mock_cfw
+
+        boom = RuntimeError(_LEAK_MESSAGE)
+        step.execute.side_effect = boom
+
+        executor.sync_execute_step(step)
+
+        cfw_register.set_error.assert_called_once()
+        call_args = cfw_register.set_error.call_args
+        error_msg, exc_info = call_args.args
+        assert _LEAK_TOKEN not in error_msg
+        assert _LEAK_TOKEN not in exc_info
+        assert call_args.kwargs["exception"] is boom
+        assert _LEAK_TOKEN in str(boom)
+
 
 class TestThreadExecuteStep:
     """Tests for thread_execute_step method."""
@@ -1108,6 +1145,22 @@ class TestThreadExecuteStep:
 
         cfw_register.set_error.assert_called_once()
         assert cfw_register.set_error.call_args.kwargs["exception"] is boom
+
+    def test_thread_worker_scrubs_secret_and_preserves_exception_object(self) -> None:
+        """A secret in the raised exception's text must not reach set_error's msg/exc_info."""
+        cfw_register = Mock(spec=CfwManager)
+        step = Mock(spec=FeatureGroupStep)
+        boom = RuntimeError(_LEAK_MESSAGE)
+        step.execute.side_effect = boom
+
+        thread_worker(step, cfw_register, Mock(spec=ComputeFramework), None)
+
+        cfw_register.set_error.assert_called_once()
+        call_args = cfw_register.set_error.call_args
+        error_msg, exc_info = call_args.args
+        assert _LEAK_TOKEN not in error_msg
+        assert _LEAK_TOKEN not in exc_info
+        assert call_args.kwargs["exception"] is boom
 
 
 class TestMultiExecuteStep:

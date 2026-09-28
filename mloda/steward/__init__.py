@@ -40,6 +40,9 @@ from mloda.core.abstract_plugins.pickle_safety import (
     WarnOncePerInstance,
 )
 
+# Credential scrubbing for text an Extender logs
+from mloda.core.abstract_plugins.components.credential_scrub import scrub_credentials
+
 # Plugin governance
 from mloda.core.abstract_plugins.plugin_registry.plugin_policy import (
     ApprovalStatus,
@@ -88,6 +91,8 @@ __all__ = [
     "pickle_failure_reason",
     "is_picklable",
     "WarnOncePerInstance",
+    # Credential scrubbing
+    "scrub_credentials",
     # Plugin governance
     "ApprovalStatus",
     "PluginPolicy",

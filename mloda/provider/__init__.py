@@ -34,6 +34,7 @@ from mloda.core.abstract_plugins.compute_framework import EmptyResultError as Em
 # Utilities
 from mloda.core.abstract_plugins.components.hashable_dict import HashableDict
 from mloda.core.abstract_plugins.components.utils import get_all_subclasses
+from mloda.core.abstract_plugins.components.credential_scrub import scrub_credentials
 
 # Feature set (internal computation container)
 from mloda.core.abstract_plugins.components.feature_set import FeatureSet
@@ -145,6 +146,7 @@ __all__ = [
     # Utilities
     "HashableDict",
     "get_all_subclasses",
+    "scrub_credentials",
     # Feature set
     "FeatureSet",
     # Input data

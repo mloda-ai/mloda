@@ -2,13 +2,13 @@ from __future__ import annotations
 
 import multiprocessing  # noqa: F401
 import threading
-import traceback
 import logging
 from dataclasses import replace
 from typing import Any, Callable
 from uuid import UUID, uuid4
 
 from mloda.core.abstract_plugins.components.error_utils import internal_invariant_error
+from mloda.core.abstract_plugins.components.utils import failure_report
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.components.parallelization_modes import ParallelizationMode
 from mloda.core.abstract_plugins.function_extender import Extender
@@ -326,9 +326,7 @@ class ComputeFrameworkExecutor:
             step.step_is_done = True
 
         except Exception as e:
-            error_message = f"An error occurred: {e}"
-            msg = f"{error_message}\nFull traceback:\n{traceback.format_exc()}"
-            exc_info = traceback.format_exc()
+            msg, exc_info = failure_report(e)
             self.cfw_register.set_error(msg, exc_info, exception=e)
 
     def thread_execute_step(self, step: Any) -> None:

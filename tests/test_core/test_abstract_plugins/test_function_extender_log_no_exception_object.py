@@ -22,6 +22,26 @@ class ExtenderExploded(RuntimeError):
     """Raised by the extender's own code, so the failure is contained and the fallback runs."""
 
 
+# Only this token, never an identifier or comment, must be searched for in scrub assertions below.
+_LEAK_TOKEN = "hunter2z9"
+_LEAK_URL = f"https://u:p@h/k?sig={_LEAK_TOKEN}"
+
+
+class SecretLeakingExtender(Extender):
+    """Fails with a secret-bearing message, same contained-failure branch as BrokenExtender."""
+
+    name = "secret_leak_probe"
+
+    def __init__(self) -> None:
+        self.raise_on_error = False
+
+    def wraps(self) -> set[ExtenderHook]:
+        return {ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE}
+
+    def __call__(self, func: Any, *args: Any, **kwargs: Any) -> Any:
+        raise ExtenderExploded(f"failed for {_LEAK_URL}")
+
+
 class BrokenExtender(Extender):
     """Fails before delegating, which is the branch that logs and falls back to the wrapped callable."""
 
@@ -85,3 +105,16 @@ class TestExtenderFailureLogsNoExceptionObject:
         assert "broken_probe" in messages[0], f"the extender name must stay in the message: {messages[0]}"
         assert "ExtenderExploded" in messages[0], f"the exception type must stay in the message: {messages[0]}"
         assert EXTENDER_MESSAGE in messages[0], f"the reason must stay readable: {messages[0]}"
+
+    def test_secret_url_is_scrubbed_but_extender_and_exception_type_stay(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        with caplog.at_level(logging.WARNING, logger=EXTENDER_LOGGER_NAME):
+            _invoke_extender(SecretLeakingExtender(), _inner, 21)
+
+        messages = [record.getMessage() for record in _extender_records(caplog)]
+        assert len(messages) == 1, f"exactly one WARNING record reports the failure, got: {messages}"
+        assert _LEAK_TOKEN not in messages[0], f"the secret must not reach the log: {messages[0]}"
+        assert "SecretLeakingExtender" in messages[0]
+        assert "secret_leak_probe" in messages[0]
+        assert "ExtenderExploded" in messages[0]

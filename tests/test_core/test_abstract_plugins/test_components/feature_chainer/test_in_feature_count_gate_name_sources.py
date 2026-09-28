@@ -39,8 +39,7 @@ class _NameSourceGate944(FeatureChainParserMixin):
 
 
 class _NameSourceGuardGate944(FeatureChainParserMixin):
-    """Two to three in_features; the second key's guard rejects every value, so an out-of-range
-    count must be recorded instead of the guard's own reason."""
+    """Second key's guard rejects every value; an out-of-range count must win over the guard's own reason."""
 
     PREFIX_PATTERN = r".*__([\w]+)_guardgate944$"
     MIN_IN_FEATURES = 2
@@ -183,8 +182,7 @@ class TestNameSourceCountRejectionIsRecorded:
         assert rejection_window == {}
 
     def test_the_count_reason_wins_over_a_rejected_guard(self, rejection_window: dict[str, MatchRejection]) -> None:
-        """A too-few name-carried sources AND a guard-rejected key: the recorded reason is the count
-        reason, stage ``NAME_STAGE``, never the guard reason."""
+        """A too-few name count AND a guard-rejected key: the recorded reason is the count reason, never the guard's."""
         context = {"operation": "op1", "guarded_key_gate944": "ok_gate944"}
         result = _NameSourceGuardGate944.match_feature_group_criteria("f1__op1_guardgate944", Options(context=context))
 

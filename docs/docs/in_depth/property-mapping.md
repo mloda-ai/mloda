@@ -566,13 +566,13 @@ PROPERTY_MAPPING = {
   - WorkerPoolFeatureGroup (option value): option 'concurrency' must be a whole number of 1 or more, got str '4'
 ```
 
-Both this `expected` reason and the strict match_guard reason (`Property value <text> rejected by
-match_guard for '<key>'`) echo the rejected value under the same rule: it is shown only when its
-type is exactly `str`, `int`, `float` or `bool`, with its text cut to about 30 characters, or when
-it is `None`. Any other value, a `str` subclass, a numpy scalar, or an int too large to safely
-print, is named by its type only. Both reasons reach the "No feature groups found" error and the
-filter near-miss warnings, so do not declare `expected` or `strict_validation` on a key that can
-carry a secret such as a token or a connection string.
+This `expected` reason and the strict match_guard reason (`Property value <text> rejected by
+match_guard for '<key>'`) echo the rejected value under the same rule: shown only when its type is
+exactly `str`, `int`, `float` or `bool`, with its text cut to about 30 characters, or when it is
+`None`. Any other value, a `str` subclass, a numpy scalar, or an int too large to safely print, is
+named by its type only. Both reasons reach the "No feature groups found" error and the filter
+near-miss warnings, so do not declare `expected` or `strict_validation` on a key that can carry a
+secret such as a token or a connection string.
 
 ## Conditional requirements with `required_when`
 

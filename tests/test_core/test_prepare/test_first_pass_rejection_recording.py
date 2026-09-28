@@ -305,8 +305,7 @@ STRICT_GUARD_STR_REASON_MGE = "Property value str 'ok_strict_mge' rejected by ma
 
 
 class ExpectedGuardDefaultMinInFeaturesFGMge(FeatureChainParserMixin, FeatureGroup):
-    """Non-strict ``expected`` guard whose group leaves MIN_IN_FEATURES at the default: the count
-    gate must reject before the guard is ever consulted, so no guard reason is recorded."""
+    """Default MIN_IN_FEATURES: the count gate must reject before the guard is ever consulted."""
 
     PROPERTY_MAPPING = {
         "concurrency_default_min_mge": property_spec(
@@ -321,8 +320,7 @@ class ExpectedGuardDefaultMinInFeaturesFGMge(FeatureChainParserMixin, FeatureGro
 
 
 class StrictGuardOnlyFGMge(FeatureChainParserMixin, FeatureGroup):
-    """Strict spec with no ``expected``: a match_guard rejection is still reportable, echoing only a
-    type-safe value (never the raw composite or an oversized int)."""
+    """Strict spec with no ``expected``: a match_guard rejection echoes only a type-safe value."""
 
     MIN_IN_FEATURES = 0
     PROPERTY_MAPPING = {
@@ -423,8 +421,7 @@ class TestFirstPassRejectionRecording:
         }
 
     def test_strict_match_guard_rejection_is_reported_from_the_first_pass(self) -> None:
-        """A guard rejection on a strict spec records the same message the facade produces, once the
-        in_features gate also passes."""
+        """A guard rejection on a strict spec records the same message the facade produces, once in_features passes."""
         feature = Feature(
             GUARD_FEATURE_OS005R,
             Options(context={"guarded_key_os005r": "ok_os005r", DefaultOptionKeys.in_features: "src"}),

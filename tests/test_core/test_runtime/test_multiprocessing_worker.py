@@ -90,6 +90,13 @@ class _LeakRaisingCommand:
         raise RuntimeError(_LEAK_MESSAGE)
 
 
+class _ChainedLeakRaisingCommand:
+    """Module-level so it pickles through the spawn-context queue."""
+
+    def execute(self, *args: Any, **kwargs: Any) -> Any:
+        raise RuntimeError("load failed") from RuntimeError(_LEAK_MESSAGE)
+
+
 _WORKER_LOGGER_NAME = "mloda.core.runtime.worker.multiprocessing_worker"
 
 
@@ -271,6 +278,25 @@ class TestWorkerReportsCommandExceptionThroughTheErrorChannel:
         cfw_register.get_run_context.return_value = RunContext()
         cfw = PythonDictFramework(mode=ParallelizationMode.MULTIPROCESSING, children_if_root=frozenset())
         command_queue.put(_LeakRaisingCommand())
+
+        worker(command_queue, result_queue, cfw_register, cfw, uuid4(), worker_index=0)
+
+        cfw_register.set_error.assert_called_once()
+        call_args = cfw_register.set_error.call_args
+        error_msg, exc_info = call_args.args
+        assert _LEAK_MARKER not in error_msg
+        assert _LEAK_MARKER not in exc_info
+        assert command_queue.get(timeout=2) == "STOP"
+
+    def test_command_exception_with_secret_in_chained_cause_is_scrubbed(self) -> None:
+        ctx = mp_spawn_context()
+        command_queue: multiprocessing.Queue[Any] = ctx.Queue()
+        result_queue: multiprocessing.Queue[Any] = ctx.Queue()
+        cfw_register = Mock(spec=CfwManager)
+        cfw_register.get_location.return_value = "grpc://localhost:9999"
+        cfw_register.get_run_context.return_value = RunContext()
+        cfw = PythonDictFramework(mode=ParallelizationMode.MULTIPROCESSING, children_if_root=frozenset())
+        command_queue.put(_ChainedLeakRaisingCommand())
 
         worker(command_queue, result_queue, cfw_register, cfw, uuid4(), worker_index=0)
 

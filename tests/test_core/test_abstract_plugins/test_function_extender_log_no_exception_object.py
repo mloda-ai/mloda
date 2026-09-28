@@ -25,6 +25,7 @@ class ExtenderExploded(RuntimeError):
 # Only this token, never an identifier or comment, must be searched for in scrub assertions below.
 _LEAK_MARKER = "hunter2z9"
 _LEAK_URL = f"https://u:p@h/k?sig={_LEAK_MARKER}"
+_LEAK_DSN = f"host=h password={_LEAK_MARKER} dbname=d"
 
 
 class SecretLeakingExtender(Extender):
@@ -39,7 +40,7 @@ class SecretLeakingExtender(Extender):
         return {ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE}
 
     def __call__(self, func: Any, *args: Any, **kwargs: Any) -> Any:
-        raise ExtenderExploded(f"failed for {_LEAK_URL}")
+        raise ExtenderExploded(f"failed for {_LEAK_URL} and {_LEAK_DSN}")
 
 
 class BrokenExtender(Extender):

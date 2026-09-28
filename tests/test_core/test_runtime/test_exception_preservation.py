@@ -250,7 +250,9 @@ def test_multiprocessing_secret_leak_scrubbed_in_logs(flight_server: Any, caplog
 @pytest.mark.timeout(15)
 def test_multiprocessing_unpicklable_secret_leak_message_is_scrubbed(flight_server: Any) -> None:
     """The MlodaRunError fallback message for a non-picklable exception must not carry the secret."""
-    with pytest.raises(Exception) as excinfo:
+    from mloda.core.abstract_plugins.components.error_utils import MlodaRunError
+
+    with pytest.raises(MlodaRunError) as excinfo:
         mloda.run_all(
             [Feature(name="exc_unpicklable_secret_col")],
             compute_frameworks=["PythonDictFramework"],
@@ -260,6 +262,7 @@ def test_multiprocessing_unpicklable_secret_leak_message_is_scrubbed(flight_serv
         )
 
     assert _LEAK_MARKER not in str(excinfo.value)
+    assert "UnpicklableSecretLeakError" in str(excinfo.value)
 
 
 # --------------------------------------------------------------------------- #

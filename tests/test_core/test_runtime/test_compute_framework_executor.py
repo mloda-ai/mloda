@@ -1162,6 +1162,23 @@ class TestThreadExecuteStep:
         assert _LEAK_MARKER not in exc_info
         assert call_args.kwargs["exception"] is boom
 
+    def test_thread_worker_scrubs_secret_in_chained_cause(self) -> None:
+        """A secret in the exception's __cause__ must not reach set_error's msg/exc_info either."""
+        cfw_register = Mock(spec=CfwManager)
+        step = Mock(spec=FeatureGroupStep)
+        boom = RuntimeError("load failed")
+        boom.__cause__ = RuntimeError(_LEAK_MESSAGE)
+        step.execute.side_effect = boom
+
+        thread_worker(step, cfw_register, Mock(spec=ComputeFramework), None)
+
+        cfw_register.set_error.assert_called_once()
+        call_args = cfw_register.set_error.call_args
+        error_msg, exc_info = call_args.args
+        assert _LEAK_MARKER not in error_msg
+        assert _LEAK_MARKER not in exc_info
+        assert call_args.kwargs["exception"] is boom
+
 
 class TestMultiExecuteStep:
     """Tests for multi_execute_step method."""

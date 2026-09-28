@@ -8,6 +8,8 @@ from __future__ import annotations
 import pickle  # nosec B403
 from typing import Any
 
+import pytest
+
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook
 
@@ -47,7 +49,10 @@ class TestPendingExtenderPayloadDefaultsAndConstruction:
 
     def test_holding_an_instance_with_a_pending_payload_never_materializes_it(self) -> None:
         _MaterializationCountingExtender.materializations = 0
-        payload = pickle.dumps({_MaterializationCountingExtender()})
+        from mloda.core.abstract_plugins.function_extender import build_hook_extenders
+
+        ext = _MaterializationCountingExtender()
+        payload = pickle.dumps(({ext}, build_hook_extenders({ext})))
 
         fw = InitDefaultsFramework()
         fw._pending_extender_payload = payload
@@ -59,7 +64,10 @@ class TestPendingExtenderPayloadDefaultsAndConstruction:
 class TestPendingExtenderPayloadMaterializesOnUnpickle:
     def test_unpickling_materializes_function_extender_and_clears_the_pending_payload(self) -> None:
         _MaterializationCountingExtender.materializations = 0
-        payload = pickle.dumps({_MaterializationCountingExtender()})
+        from mloda.core.abstract_plugins.function_extender import build_hook_extenders
+
+        ext = _MaterializationCountingExtender()
+        payload = pickle.dumps(({ext}, build_hook_extenders({ext})))
 
         fw = InitDefaultsFramework()
         fw._pending_extender_payload = payload
@@ -73,7 +81,10 @@ class TestPendingExtenderPayloadMaterializesOnUnpickle:
 
     def test_materialization_happens_exactly_once_not_on_every_subsequent_round_trip(self) -> None:
         _MaterializationCountingExtender.materializations = 0
-        payload = pickle.dumps({_MaterializationCountingExtender()})
+        from mloda.core.abstract_plugins.function_extender import build_hook_extenders
+
+        ext = _MaterializationCountingExtender()
+        payload = pickle.dumps(({ext}, build_hook_extenders({ext})))
 
         fw = InitDefaultsFramework()
         fw._pending_extender_payload = payload
@@ -84,3 +95,35 @@ class TestPendingExtenderPayloadMaterializesOnUnpickle:
         assert _MaterializationCountingExtender.materializations == 1
         assert restored_twice._pending_extender_payload is None
         assert len(restored_twice.function_extender) == 1
+
+
+class _IdentExtender(Extender):
+    """Same-class, equal-priority extender distinguished only by ident."""
+
+    def __init__(self, ident: str) -> None:
+        self.ident = ident
+
+    def wraps(self) -> set[ExtenderHook]:
+        return {ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE}
+
+    def __call__(self, func: Any, *args: Any, **kwargs: Any) -> Any:
+        return func(*args, **kwargs)
+
+
+class TestPendingPayloadPreservesParentSelectionOrder:
+    @pytest.mark.parametrize("reverse", [False, True])
+    def test_worker_restores_the_parents_composite_order(self, reverse: bool) -> None:
+        from mloda.core.abstract_plugins.function_extender import build_hook_extenders
+
+        hook = ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE
+        exts = [_IdentExtender(name) for name in ("a", "b", "c", "d")]
+        ordered = list(reversed(exts)) if reverse else exts
+        table = build_hook_extenders(ordered)
+        parent_order = [e.ident for e in table[hook].extenders]  # type: ignore[attr-defined]
+
+        fw = InitDefaultsFramework()
+        fw._pending_extender_payload = pickle.dumps((set(exts), table))
+        restored = pickle.loads(pickle.dumps(fw))  # nosec B301
+
+        restored_order = [e.ident for e in restored.get_function_extender(hook).extenders]
+        assert restored_order == parent_order

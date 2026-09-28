@@ -297,6 +297,7 @@ class TestGetFunctionExtenderWithComposite:
         # This will fail until get_function_extender supports multiple extenders
         # Currently it raises ValueError for multiple matches
         compute_fw = Mock(spec=ComputeFramework)
+        compute_fw._hook_extenders = None
         compute_fw.function_extender = [extender1, extender2]
         compute_fw.get_function_extender = ComputeFramework.get_function_extender.__get__(compute_fw)
 
@@ -316,6 +317,7 @@ class TestGetFunctionExtenderWithComposite:
         extender_mid = MockExtender("mid", priority=30)
 
         compute_fw = Mock(spec=ComputeFramework)
+        compute_fw._hook_extenders = None
         compute_fw.function_extender = [extender_high, extender_low, extender_mid]
         compute_fw.get_function_extender = ComputeFramework.get_function_extender.__get__(compute_fw)
 
@@ -351,6 +353,7 @@ class TestGetFunctionExtenderWithComposite:
         extender = MockExtender("only", priority=10)
 
         compute_fw = Mock(spec=ComputeFramework)
+        compute_fw._hook_extenders = None
         compute_fw.function_extender = [extender]
         compute_fw.get_function_extender = ComputeFramework.get_function_extender.__get__(compute_fw)
 
@@ -358,6 +361,44 @@ class TestGetFunctionExtenderWithComposite:
         result = compute_fw.get_function_extender(ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE)
 
         assert result is extender, "Single matching extender should be returned directly (backward compatibility)"
+
+
+class _WrapsCountingExtender(Extender):
+    """Counts wraps() calls."""
+
+    def __init__(self, priority: int = 100) -> None:
+        self.priority = priority
+        self.wraps_calls = 0
+
+    def wraps(self) -> set[ExtenderHook]:
+        self.wraps_calls += 1
+        return {ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE}
+
+    def __call__(self, func: Any, *args: Any, **kwargs: Any) -> Any:
+        return func(*args, **kwargs)
+
+
+class TestRealFrameworkSelectsExtenderOnce:
+    """A real ComputeFramework builds its hook table once and reuses it."""
+
+    def test_repeated_lookups_return_same_object_and_do_not_call_wraps_again(self) -> None:
+        from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import (
+            PythonDictFramework,
+        )
+
+        counting_a = _WrapsCountingExtender(priority=10)
+        counting_b = _WrapsCountingExtender(priority=20)
+        framework = PythonDictFramework(function_extender={counting_a, counting_b})
+        hook = ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE
+
+        first = framework.get_function_extender(hook)
+        calls_after_first = (counting_a.wraps_calls, counting_b.wraps_calls)
+        for _ in range(3):
+            assert framework.get_function_extender(hook) is first
+
+        assert isinstance(first, CompositeExtender)
+        assert (counting_a.wraps_calls, counting_b.wraps_calls) == calls_after_first
+        assert calls_after_first == (1, 1)
 
 
 class TestExtenderRaiseOnErrorProperty:
@@ -698,6 +739,7 @@ class TestSingleExtenderPathHonorsRaiseOnError:
     @staticmethod
     def _make_compute_framework(extenders: list[Extender]) -> Any:
         cf = Mock(spec=ComputeFramework)
+        cf._hook_extenders = None
         cf.data = "DATA"
         cf.function_extender = extenders
         cf.run_context = RunContext()
@@ -775,6 +817,7 @@ class TestSingleExtenderCannotSubstituteTheCalculatedResult:
     @staticmethod
     def _make_compute_framework(extenders: list[Extender]) -> Any:
         cf = Mock(spec=ComputeFramework)
+        cf._hook_extenders = None
         cf.data = "DATA"
         cf.function_extender = extenders
         cf.run_context = RunContext()

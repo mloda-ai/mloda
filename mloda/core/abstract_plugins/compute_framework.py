@@ -14,8 +14,8 @@ from mloda.core.abstract_plugins.components.utils import as_str, safe_field
 from mloda.core.abstract_plugins.function_extender import (
     Extender,
     ExtenderHook,
-    CompositeExtender,
     _invoke_extender,
+    build_hook_extenders,
 )
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.components.input_data.input_data_descriptor import InputDataDescriptor
@@ -86,6 +86,7 @@ class ComputeFramework(ABC):
     # Class-level default so the attribute exists even when a subclass's __getstate__
     # returns a filtered dict that omits it (e.g. dropping unpicklable live state).
     _pending_extender_payload: bytes | None = None
+    _hook_extenders: dict[ExtenderHook, Extender] | None = None
 
     def __init__(
         self,
@@ -125,7 +126,7 @@ class ComputeFramework(ABC):
         extender's own __setstate__ (e.g. building a live handle) fires in the worker's pid."""
         self.__dict__.update(state)
         if self._pending_extender_payload is not None:
-            self.function_extender = pickle.loads(self._pending_extender_payload)  # nosec B301
+            self.function_extender, self._hook_extenders = pickle.loads(self._pending_extender_payload)  # nosec B301
             self._pending_extender_payload = None
 
     @classmethod
@@ -791,18 +792,9 @@ class ComputeFramework(ABC):
 
     @final
     def get_function_extender(self, wrapper_function_enum: ExtenderHook) -> Extender | None:
-        matching_extenders = []
-        for extender in self.function_extender:
-            if wrapper_function_enum in extender.wraps():
-                matching_extenders.append(extender)
-
-        if len(matching_extenders) == 0:
-            return None
-        if len(matching_extenders) == 1:
-            return matching_extenders[0]
-
-        sorted_extenders = sorted(matching_extenders, key=lambda e: e.priority)
-        return CompositeExtender(sorted_extenders, wrapper_function_enum)
+        if self._hook_extenders is None:
+            self._hook_extenders = build_hook_extenders(self.function_extender)
+        return self._hook_extenders.get(wrapper_function_enum)
 
     @final
     def _build_hook_context(self, hook: ExtenderHook, feature_group: Any, features: Any) -> HookContext:

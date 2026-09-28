@@ -505,3 +505,34 @@ class TestExtenderCannotSubstituteTheMatchedFeatureGroup:
         assert result[0][veto_name] == [1, 2, 3], (
             "The real match (_MatchVetoFeatureGroupA) must win, not the tampered one"
         )
+
+
+class _MatchWrapsCountingExtender(Extender):
+    """Counts wraps() calls while wrapping FEATURE_GROUP_MATCHED."""
+
+    def __init__(self) -> None:
+        self.wraps_calls = 0
+
+    def wraps(self) -> set[ExtenderHook]:
+        self.wraps_calls += 1
+        return {ExtenderHook.FEATURE_GROUP_MATCHED}
+
+    def __call__(self, func: Any, *args: Any, **kwargs: Any) -> Any:
+        return func(*args, **kwargs)
+
+
+class TestEngineSelectsExtenderOncePerRun:
+    def test_wraps_is_called_once_while_planning_multiple_features(self) -> None:
+        extender = _MatchWrapsCountingExtender()
+
+        mloda.prepare(
+            [Feature(f"{_MARKER}_col_one"), Feature(f"{_MARKER}_col_two")],
+            compute_frameworks=["PythonDictFramework"],
+            plugin_collector=PluginCollector.enabled_feature_groups(
+                {_MatchHookColOneFeatureGroup, _MatchHookColTwoFeatureGroup}
+            ),
+            parallelization_modes={ParallelizationMode.SYNC},
+            function_extender={extender},
+        )
+
+        assert extender.wraps_calls == 1

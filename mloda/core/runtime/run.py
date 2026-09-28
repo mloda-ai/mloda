@@ -8,7 +8,7 @@ from typing import Any, Generator
 from uuid import UUID
 import logging
 
-from mloda.core.abstract_plugins.function_extender import Extender
+from mloda.core.abstract_plugins.function_extender import Extender, build_hook_extenders
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.run_context import RunContext
@@ -520,6 +520,7 @@ class ExecutionOrchestrator:
         """
         run_context = run_context if run_context is not None else RunContext()
         self.function_extender = function_extender
+        hook_extenders = build_hook_extenders(function_extender or ())
         self._run_id = run_context.run_id
         self._graceful_shutdown_timeout = run_context.graceful_shutdown_timeout
 
@@ -534,8 +535,10 @@ class ExecutionOrchestrator:
             raise_on_unpicklable_child_bootstrap(run_context.child_bootstrap)
             raise_on_unpicklable_extender(function_extender)
             # Snapshot right after the preflight, once, in this process: workers get this exact
-            # bytes payload, never a fetch through the register/proxy.
-            self.worker_extender_payload = pickle.dumps(function_extender) if function_extender is not None else None
+            # (extenders, hook table) bytes payload, never a fetch through the register/proxy.
+            self.worker_extender_payload = (
+                pickle.dumps((function_extender, hook_extenders)) if function_extender is not None else None
+            )
 
             MyManager.register("CfwManager", CfwManager)
             self.manager = MyManager(ctx=mp_spawn_context()).__enter__()

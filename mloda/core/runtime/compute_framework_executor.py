@@ -50,7 +50,7 @@ class ComputeFrameworkExecutor:
                 executor only does a dict lookup per TFS step on the run path.
             function_extender: The caller's own extenders, used for a framework staying resident
                 in this process.
-            worker_extender_payload: Pickled snapshot of the extenders for a framework dispatched
+            worker_extender_payload: Pickled (extenders, hook table) snapshot for a framework dispatched
                 to a spawned worker. Never unpickled here; attached to the new instance as
                 `_pending_extender_payload` and materialized by `ComputeFramework.__setstate__`
                 only once the instance is actually unpickled in the worker.

@@ -49,3 +49,22 @@ def test_enter_with_sync_mode_does_not_reject_the_same_unpicklable_extender() ->
     orchestrator.__enter__({ParallelizationMode.SYNC}, {OrchestratorUnpicklableInstanceExtender()})
 
     orchestrator.__exit__(None, None, None)
+
+
+class _OrchestratorRaisingWrapsExtender(Extender):
+    """Extender whose wraps() raises."""
+
+    def wraps(self) -> set[ExtenderHook]:
+        raise RuntimeError("wraps boom")
+
+    def __call__(self, func: Any, *args: Any, **kwargs: Any) -> Any:
+        return func(*args, **kwargs)
+
+
+def test_enter_in_sync_mode_raises_when_an_extender_wraps_raises() -> None:
+    orchestrator = ExecutionOrchestrator(_empty_plan())
+
+    with pytest.raises(RuntimeError, match="wraps boom"):
+        orchestrator.__enter__({ParallelizationMode.SYNC}, {_OrchestratorRaisingWrapsExtender()})
+
+    assert orchestrator.manager is None

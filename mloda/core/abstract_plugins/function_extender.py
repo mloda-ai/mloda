@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
 from enum import Enum
+from collections.abc import Iterable
 from typing import TYPE_CHECKING, Any
 import functools
 import inspect
@@ -157,15 +158,23 @@ class Extender(ABC):
         return feature_set.options
 
 
-def get_function_extender(function_extender: set[Extender], hook: ExtenderHook) -> Extender | None:
-    """Select the Extender(s) wrapping hook: None, the sole match, or a priority-sorted CompositeExtender."""
-    matching_extenders = [ext for ext in function_extender if hook in ext.wraps()]
-    if len(matching_extenders) == 0:
-        return None
-    if len(matching_extenders) == 1:
-        return matching_extenders[0]
-    sorted_extenders = sorted(matching_extenders, key=lambda e: e.priority)
-    return CompositeExtender(sorted_extenders, hook)
+def extender_sort_key(extender: Extender) -> tuple[int, str, str]:
+    """Deterministic order: priority, then class module and qualified name."""
+    return (extender.priority, type(extender).__module__, type(extender).__qualname__)
+
+
+def build_hook_extenders(function_extender: Iterable[Extender]) -> dict[ExtenderHook, Extender]:
+    """Map each hook to its sole extender or a sorted CompositeExtender, reading wraps() once per extender."""
+    grouped: dict[ExtenderHook, list[Extender]] = {}
+    for extender in sorted(function_extender, key=extender_sort_key):
+        for hook in extender.wraps():
+            grouped.setdefault(hook, []).append(extender)
+    return {hook: exts[0] if len(exts) == 1 else CompositeExtender(exts, hook) for hook, exts in grouped.items()}
+
+
+def get_function_extender(function_extender: Iterable[Extender], hook: ExtenderHook) -> Extender | None:
+    """Select the Extender(s) wrapping hook: None, the sole match, or a sorted CompositeExtender."""
+    return build_hook_extenders(function_extender).get(hook)
 
 
 class CompositeExtender(Extender):
@@ -175,7 +184,7 @@ class CompositeExtender(Extender):
     """
 
     def __init__(self, extenders: list[Extender], function_type: ExtenderHook | None = None):
-        self.extenders = sorted(extenders, key=lambda e: e.priority)
+        self.extenders = sorted(extenders, key=extender_sort_key)
         self.function_type = function_type
 
     def wraps(self) -> set[ExtenderHook]:

@@ -62,7 +62,7 @@ ERROR    test_getting_started:test_getting_started.py:29 Time taken: 0.001033782
 
 With this simple extender, you can easily log and monitor the execution time of any functionality within feature groups. By extending the Extender class, you can wrap additional behavior such as performance monitoring, logging, or auditing around critical functions to enhance observability and traceability in your data processing workflows.
 
-When multiple extenders are provided, they are automatically chained and executed in priority order (lower values first).
+When multiple extenders are provided, they are automatically chained and executed in priority order (lower values first). Each extender's `wraps()` is read once per run, so the hook set is fixed for the run.
 
 #### 4. Error handling
 
@@ -88,7 +88,7 @@ Only the extender's own failure is caught: an exception raised by the wrapped fu
 
 Once the wrapped call has run, an extender's return value is discarded: it can observe or fail the calculation but not substitute a different result. An extender that never calls the wrapped function has no wrapped result to prefer, so its own return value is used instead (this is what keeps a gate's raise-to-refuse or fallback pattern below working).
 
-A gate (an authorization or identity check that refuses a call by raising) sets `never_fall_back = True` in its class body or `__init__`: its failure always propagates, whatever `raise_on_error` says, and the wrapped function never runs as a fallback. Give a gate a `priority` value strictly lower than every other extender's on its hook, so it sorts outermost (equal values sort in no fixed order); an outer extender that catches errors from `func` could otherwise swallow the refusal. Registry strict mode (`"strict"`, see [Plugin Registry](../in_depth/plugin_registry.md#strict-mode)) drops unregistered extenders, gates included.
+A gate (an authorization or identity check that refuses a call by raising) sets `never_fall_back = True` in its class body or `__init__`: its failure always propagates, whatever `raise_on_error` says, and the wrapped function never runs as a fallback. Give a gate a `priority` value strictly lower than every other extender's on its hook, so it sorts outermost (equal priorities order by the extender class's module and qualified name; instances of the same class keep one order for the whole run, in the parent and every worker); an outer extender that catches errors from `func` could otherwise swallow the refusal. Registry strict mode (`"strict"`, see [Plugin Registry](../in_depth/plugin_registry.md#strict-mode)) drops unregistered extenders, gates included.
 
 #### 5. Reading call facts via HookContext
 

@@ -9,7 +9,12 @@ from typing import Any
 import pytest
 
 import mloda.core.abstract_plugins.plugin_version as plugin_version_module
+from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook
+from mloda.core.abstract_plugins.hook_context import HookContext
 from mloda.core.abstract_plugins.plugin_version import resolve_plugin_version
+from mloda.provider import BaseInputData, ComputeFramework, DataCreator, FeatureGroup, FeatureSet
+from mloda.user import Feature, PluginCollector, mloda
+from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
 
 
 @pytest.fixture(autouse=True)
@@ -293,3 +298,131 @@ class TestReadDistributionCaching:
 
         assert distribution_calls.count("dist-a") <= 1
         assert distribution_calls.count("dist-b") <= 1
+
+
+class _PlanTimePluginVersionFeatureGroup(FeatureGroup):
+    """Minimal root feature group for plan-time plugin_version resolution tests."""
+
+    @classmethod
+    def input_data(cls) -> BaseInputData | None:
+        return DataCreator({"plan_time_plugin_version_col"})
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PythonDictFramework}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return {"plan_time_plugin_version_col": [1, 2, 3]}
+
+
+_plan_time_enabled = PluginCollector.enabled_feature_groups({_PlanTimePluginVersionFeatureGroup})
+
+
+class _PluginVersionCapturingExtender(Extender):
+    """Records HookContext.current().plugin_version on every wrapped call."""
+
+    def __init__(self, priority: int = 100) -> None:
+        self.priority = priority
+        self.recorded: list[str | None] = []
+
+    def wraps(self) -> set[ExtenderHook]:
+        return {ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE}
+
+    def __call__(self, func: Any, *args: Any, **kwargs: Any) -> Any:
+        result = func(*args, **kwargs)
+        context = HookContext.current()
+        assert context is not None
+        self.recorded.append(context.plugin_version)
+        return result
+
+
+class TestPluginVersionResolvedAtPlanTimeUnderSync:
+    """HookContext.plugin_version must come from the plan-time resolution, not a hook-time call."""
+
+    def test_hook_context_plugin_version_matches_plan_time_sentinel(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        sentinel = "9.9.9-sentinel"
+        monkeypatch.setattr(
+            "mloda.core.core.engine.resolve_plugin_version",
+            lambda module_name: sentinel,
+            raising=False,
+        )
+        extender = _PluginVersionCapturingExtender()
+
+        session = mloda.prepare(
+            [Feature(name="plan_time_plugin_version_col")],
+            compute_frameworks=["PythonDictFramework"],
+            plugin_collector=_plan_time_enabled,
+            function_extender={extender},
+        )
+        session.run()
+
+        assert extender.recorded, "extender never observed the feature group's calculate_feature call"
+        assert all(value == sentinel for value in extender.recorded)
+
+
+class _PluginVersionCacheInfoRecordingExtender(Extender):
+    """Records resolve_plugin_version.cache_info() after every wrapped call, without asserting inside the hook."""
+
+    def __init__(self, priority: int = 100) -> None:
+        self.priority = priority
+        self.cache_infos: list[Any] = []
+
+    def wraps(self) -> set[ExtenderHook]:
+        return {ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE}
+
+    def __call__(self, func: Any, *args: Any, **kwargs: Any) -> Any:
+        result = func(*args, **kwargs)
+        self.cache_infos.append(resolve_plugin_version.cache_info())
+        return result
+
+
+class TestPluginVersionNotResolvedDuringExecution:
+    """Execution must never call resolve_plugin_version; only plan time (prepare()) may."""
+
+    def test_resolve_plugin_version_cache_untouched_during_run(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(
+            importlib.metadata,
+            "packages_distributions",
+            lambda: {"tests": ["fake-tests-dist"]},
+        )
+        extender = _PluginVersionCacheInfoRecordingExtender()
+
+        session = mloda.prepare(
+            [Feature(name="plan_time_plugin_version_col")],
+            compute_frameworks=["PythonDictFramework"],
+            plugin_collector=_plan_time_enabled,
+            function_extender={extender},
+        )
+        baseline = resolve_plugin_version.cache_info()
+
+        session.run()
+
+        assert extender.cache_infos, "extender never observed the feature group's calculate_feature call"
+        assert all(info == baseline for info in extender.cache_infos), (
+            "hook-time cache_info() drifted from the plan-time baseline: resolve_plugin_version was "
+            "called again during execution instead of being read from RunContext.plugin_versions."
+        )
+        assert resolve_plugin_version.cache_info() == baseline
+
+
+class TestPluginVersionNotResolvedWithoutExtenders:
+    """With no function_extender registered, no distribution scan may happen at all (plan-time gate)."""
+
+    def test_no_extenders_means_zero_distribution_scans(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        call_count = {"n": 0}
+
+        def counting_packages_distributions() -> dict[str, list[str]]:
+            call_count["n"] += 1
+            return {}
+
+        monkeypatch.setattr(importlib.metadata, "packages_distributions", counting_packages_distributions)
+
+        session = mloda.prepare(
+            [Feature(name="plan_time_plugin_version_col")],
+            compute_frameworks=["PythonDictFramework"],
+            plugin_collector=_plan_time_enabled,
+        )
+        session.run()
+
+        assert call_count["n"] == 0

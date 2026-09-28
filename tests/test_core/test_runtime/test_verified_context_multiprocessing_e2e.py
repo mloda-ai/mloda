@@ -42,6 +42,11 @@ class _VerifiedContextMultiprocessingFeatureGroup(FeatureGroup):
 _ENABLED = PluginCollector.enabled_feature_groups({_VerifiedContextMultiprocessingFeatureGroup})
 
 
+def _fake_resolve_plugin_version_returning_sentinel(module_name: str) -> str:
+    """Module-level so it is never pickled: prepare() calls it only in the parent, at plan time."""
+    return "9.9.9-mp-sentinel"
+
+
 class _VerifiedContextRecordingExtender(Extender):
     """Writes tenant_id/project_id/principal to output_path as JSON."""
 
@@ -64,6 +69,7 @@ class _VerifiedContextRecordingExtender(Extender):
                     "principal": context.principal,
                     "worker_index": context.worker_index,
                     "pid": os.getpid(),
+                    "plugin_version": context.plugin_version,
                 }
             )
         )
@@ -73,12 +79,17 @@ class _VerifiedContextRecordingExtender(Extender):
 @pytest.mark.timeout(30)
 class TestVerifiedContextReachesHookContextUnderMultiprocessing:
     def test_tenant_project_principal_survive_the_pickle_boundary_into_a_spawned_worker(
-        self, tmp_path: Path, flight_server: Any
+        self, tmp_path: Path, flight_server: Any, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         output_path = tmp_path / "verified_context.txt"
         extender = _VerifiedContextRecordingExtender(output_path)
         parent_pid = os.getpid()
 
+        monkeypatch.setattr(
+            "mloda.core.core.engine.resolve_plugin_version",
+            _fake_resolve_plugin_version_returning_sentinel,
+            raising=False,
+        )
         session = mloda.prepare(
             [Feature(name="verified_context_mp_e2e_col")],
             compute_frameworks=["PythonDictFramework"],
@@ -103,3 +114,7 @@ class TestVerifiedContextReachesHookContextUnderMultiprocessing:
         # in-process degradation that would write the same JSON regardless.
         assert recorded["worker_index"] is not None
         assert recorded["pid"] != parent_pid
+        assert recorded["plugin_version"] == "9.9.9-mp-sentinel", (
+            "plugin_version must be resolved at plan time in the parent and carried into the worker "
+            "via RunContext.plugin_versions, not recomputed inside the spawned worker process."
+        )

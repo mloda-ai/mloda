@@ -69,6 +69,14 @@ class TestRunContextCarrierCopiedOnIngest:
 
         assert ctx.carrier is None
 
+    def test_plugin_versions_is_equal_but_not_the_same_object(self) -> None:
+        given = {"mloda.core.abstract_plugins.function_extender": "1.2.3"}
+
+        ctx = RunContext(plugin_versions=given)
+
+        assert ctx.plugin_versions == given
+        assert ctx.plugin_versions is not given
+
 
 class TestRunContextPickleRoundTrip:
     def test_pickle_round_trip_preserves_all_three_fields(self) -> None:
@@ -122,6 +130,11 @@ class TestRunContextHash:
         assert RunContext(project_id="proj1") != RunContext(project_id="proj2")
         assert RunContext(principal="hash1") != RunContext(principal="hash2")
 
+    def test_hash_of_context_with_plugin_versions_returns_an_int(self) -> None:
+        ctx = RunContext(plugin_versions={"m": "1"})
+
+        assert isinstance(hash(ctx), int)
+
 
 class TestRunContextReplace:
     def test_replace_carrier_keeps_run_id_and_child_bootstrap(self) -> None:
@@ -140,6 +153,14 @@ class TestRunContextReplace:
 
         assert replaced.carrier == ctx.carrier
         assert replaced.carrier is not ctx.carrier
+
+    def test_replace_without_changes_copies_the_plugin_versions(self) -> None:
+        ctx = RunContext(plugin_versions={"mloda.core.abstract_plugins.function_extender": "1.2.3"})
+
+        replaced = dataclasses.replace(ctx)
+
+        assert replaced.plugin_versions == ctx.plugin_versions
+        assert replaced.plugin_versions is not ctx.plugin_versions
 
     def test_replace_tenant_id_project_id_principal_keeps_other_fields(self) -> None:
         ctx = RunContext(run_id="some-run-id", carrier={"k": "v"}, child_bootstrap=_module_level_bootstrap)

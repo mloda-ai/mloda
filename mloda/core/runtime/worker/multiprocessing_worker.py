@@ -11,6 +11,8 @@ from queue import Empty
 from mloda.core.abstract_plugins.components.error_utils import internal_invariant_error
 from mloda.core.abstract_plugins.components.utils import contained_raise_reason, safe_exc_str
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
+from mloda.core.abstract_plugins.function_extender import close_deadline
+from mloda.core.abstract_plugins.run_context import RunContext
 from mloda.core.core.cfw_manager import CfwManager
 from mloda.core.core.step.feature_group_step import FeatureGroupStep
 from mloda.core.core.step.join_step import JoinStep
@@ -26,13 +28,17 @@ def _handle_stop_command(command_queue: multiprocessing.Queue[Any]) -> None:
         command_queue.put("STOP", block=False)
 
 
-def _close_extenders(cfw: ComputeFramework) -> None:
-    """A raising extender's close() must not stop the others from running."""
-    for extender in getattr(cfw, "function_extender", None) or ():
-        try:
-            extender.close()
-        except Exception as e:
-            logger.error("Extender %s.close() %s", extender.__class__.__name__, contained_raise_reason(e))
+def _close_extenders(cfw: ComputeFramework, graceful_timeout: float = 2.0) -> None:
+    """A raising extender's close() must not stop the others from running.
+
+    Sets one shared close deadline exposed via ``Extender.remaining_close_budget()``.
+    """
+    with close_deadline(graceful_timeout):
+        for extender in getattr(cfw, "function_extender", None) or ():
+            try:
+                extender.close()
+            except Exception as e:
+                logger.error("Extender %s.close() %s", extender.__class__.__name__, contained_raise_reason(e))
 
 
 def _handle_data_dropping(
@@ -123,9 +129,12 @@ def worker(
         return
 
     cfw.worker_index = worker_index
+    graceful_timeout = RunContext().graceful_shutdown_timeout
 
     try:
-        bootstrap = cfw_register.get_run_context().child_bootstrap
+        run_context = cfw_register.get_run_context()
+        graceful_timeout = run_context.graceful_shutdown_timeout
+        bootstrap = run_context.child_bootstrap
         if bootstrap is not None:
             try:
                 bootstrap()
@@ -186,7 +195,7 @@ def worker(
 
             time.sleep(0.0001)
     finally:
-        _close_extenders(cfw)
+        _close_extenders(cfw, graceful_timeout)
 
 
 def error_out(cfw_register: CfwManager, command_queue: multiprocessing.Queue[Any]) -> None:

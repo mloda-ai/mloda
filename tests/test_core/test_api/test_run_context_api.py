@@ -2,9 +2,12 @@
 
 from typing import Any
 
+import pytest
+
 from mloda.core.abstract_plugins.run_context import RunContext
 from mloda.core.abstract_plugins.verified_context import verified_context
 from mloda.core.api.request import mlodaAPI
+from mloda.core.runtime.worker_manager import WorkerManager
 from mloda.provider import BaseInputData, ComputeFramework, DataCreator, FeatureGroup, FeatureSet
 from mloda.user import Feature, ParallelizationMode, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
@@ -112,6 +115,31 @@ class TestBuildRunContextGracefulShutdownTimeout:
 
         assert session.runner is not None
         assert session.runner.cfw_register.get_run_context().graceful_shutdown_timeout == 2.0
+
+    @pytest.mark.parametrize("call_site", ["run_all", "stream_all"])
+    def test_custom_graceful_shutdown_timeout_reaches_worker_manager_join_all(
+        self, call_site: str, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        recorded: list[float] = []
+        original_join_all = WorkerManager.join_all
+
+        def spy_join_all(self: WorkerManager, graceful_timeout: float = 2.0) -> None:
+            recorded.append(graceful_timeout)
+            original_join_all(self, graceful_timeout=graceful_timeout)
+
+        monkeypatch.setattr(WorkerManager, "join_all", spy_join_all)
+
+        result = getattr(mloda, call_site)(
+            [Feature(name="run_context_api_col")],
+            compute_frameworks=["PythonDictFramework"],
+            plugin_collector=_ENABLED,
+            parallelization_modes={ParallelizationMode.SYNC},
+            graceful_shutdown_timeout=9.5,
+        )
+        if call_site == "stream_all":
+            list(result)
+
+        assert recorded == [9.5]
 
 
 class TestBatchRunWithoutRunContextUsesSessionBase:

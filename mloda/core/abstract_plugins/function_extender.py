@@ -1,9 +1,12 @@
 from abc import ABC, abstractmethod
+from contextlib import contextmanager
+from contextvars import ContextVar
 from enum import Enum
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Iterator
 import functools
 import inspect
 import logging
+import time
 
 from mloda.core.abstract_plugins.components.utils import contained_raise_reason
 
@@ -13,6 +16,18 @@ if TYPE_CHECKING:
 
 
 logger = logging.getLogger(__name__)
+
+_close_deadline: ContextVar[float | None] = ContextVar("mloda_extender_close_deadline", default=None)
+
+
+@contextmanager
+def close_deadline(graceful_timeout: float) -> Iterator[None]:
+    """Internal: exposes a shared close deadline to remaining_close_budget() for the block."""
+    token = _close_deadline.set(time.monotonic() + graceful_timeout)
+    try:
+        yield
+    finally:
+        _close_deadline.reset(token)
 
 
 class ExtenderHook(Enum):
@@ -86,7 +101,11 @@ class Extender(ABC):
         and logged, never propagated. On the parent-death watchdog's ``os._exit(0)`` path this is
         best-effort and racy: it may not run at all, since that path skips Python cleanup. It must
         return within the run's ``graceful_shutdown_timeout`` (default 2.0s), a budget shared across
-        every extender closing in that worker, or the worker may be terminated mid-close."""
+        every extender closing in that worker, or the worker may be terminated mid-close.
+        ``Extender.remaining_close_budget()`` returns the seconds left of that shared budget
+        (approximate: it can overstate by the time between the parent sending STOP and this worker
+        starting to close; read it on the thread running close(), a thread started inside close()
+        sees None; close order across extenders is unspecified)."""
 
     def on_run_complete(self, run_id: str | None) -> None:
         """Called once per run in the PARENT on the caller's own extender objects, after all workers
@@ -97,7 +116,18 @@ class Extender(ABC):
         success signal. Does not fire for prepare, explain, a never-iterated stream, a failure while
         planning before setup, or when finalizing raised (collecting artifacts, joining or terminating
         the workers). A session re-run fires again with the same run_id. raise_on_error and
-        never_fall_back do not apply: an Exception raised here is always logged, never propagated."""
+        never_fall_back do not apply: an Exception raised here is always logged, never propagated.
+        The worker copy is pickled once per run at setup (a stream's first iteration), so for runs
+        executed one after another it reflects the parent's state after the previous run's
+        on_run_complete; its changes never flow back to the parent."""
+
+    @staticmethod
+    def remaining_close_budget() -> float | None:
+        """Seconds left of the shared close-time budget while closing in a worker, else None."""
+        deadline = _close_deadline.get()
+        if deadline is None:
+            return None
+        return max(0.0, deadline - time.monotonic())
 
     @staticmethod
     def feature_group_name(func: Any) -> str:

@@ -6,6 +6,7 @@ import inspect
 import logging
 import multiprocessing
 import queue
+import time
 from collections.abc import Mapping
 from typing import Any
 from unittest.mock import Mock
@@ -24,8 +25,10 @@ from mloda_plugins.compute_framework.base_implementations.python_dict.python_dic
 
 
 class _CloseRecordingExtender(Extender):
-    def __init__(self) -> None:
+    def __init__(self, sleep_after_record: float = 0.0, budgets: list[float | None] | None = None) -> None:
         self.close_calls: list[bool] = []
+        self._sleep_after_record = sleep_after_record
+        self._budgets = budgets
 
     def wraps(self) -> set[ExtenderHook]:
         return set()
@@ -35,6 +38,9 @@ class _CloseRecordingExtender(Extender):
 
     def close(self) -> None:
         self.close_calls.append(True)
+        if self._budgets is not None:
+            self._budgets.append(Extender.remaining_close_budget())
+        time.sleep(self._sleep_after_record)
 
 
 class _RaisingCloseExtender(Extender):
@@ -409,3 +415,64 @@ class TestWorkerProcessesQueuedCommandsBeforeClosingExtendersOnStop:
         assert command_queue.get(timeout=2) == "STOP"
         result_queue.put.assert_not_called()
         assert extender.close_calls == [True]
+
+
+class TestExtenderRemainingCloseBudgetTracksTheSharedDeadline:
+    """remaining_close_budget() reflects one deadline shared across every extender closing in the same worker."""
+
+    def test_second_extender_sees_less_budget_than_the_first(self) -> None:
+        budgets: list[float | None] = []
+        first = _CloseRecordingExtender(sleep_after_record=0.05, budgets=budgets)
+        second = _CloseRecordingExtender(budgets=budgets)
+        cfw = Mock(spec=ComputeFramework)
+        cfw.function_extender = [first, second]
+
+        _close_extenders(cfw, graceful_timeout=5.0)
+
+        assert len(budgets) == 2
+        first_budget, second_budget = budgets
+        assert first_budget is not None and second_budget is not None
+        assert first_budget - second_budget >= 0.04
+
+    def test_remaining_close_budget_is_none_outside_close(self) -> None:
+        assert Extender.remaining_close_budget() is None
+
+        budgets: list[float | None] = []
+        extender = _CloseRecordingExtender(budgets=budgets)
+        cfw = Mock(spec=ComputeFramework)
+        cfw.function_extender = [extender]
+
+        _close_extenders(cfw, graceful_timeout=5.0)
+
+        assert len(budgets) == 1
+        assert budgets[0] is not None
+        assert Extender.remaining_close_budget() is None
+
+    def test_budget_is_clamped_to_zero_once_the_deadline_has_passed(self) -> None:
+        budgets: list[float | None] = []
+        slow = _CloseRecordingExtender(sleep_after_record=0.05, budgets=budgets)
+        late = _CloseRecordingExtender(budgets=budgets)
+        cfw = Mock(spec=ComputeFramework)
+        cfw.function_extender = [slow, late]
+
+        _close_extenders(cfw, graceful_timeout=0.01)
+
+        assert budgets[1] == 0.0
+
+    def test_worker_run_context_graceful_shutdown_timeout_reaches_close_extenders(self) -> None:
+        ctx = mp_spawn_context()
+        command_queue: multiprocessing.Queue[Any] = ctx.Queue()
+        result_queue: multiprocessing.Queue[Any] = ctx.Queue()
+        cfw_register = Mock(spec=CfwManager)
+        cfw_register.get_location.return_value = "grpc://localhost:9999"
+        cfw_register.get_run_context.return_value = RunContext(graceful_shutdown_timeout=7.5)
+        cfw = PythonDictFramework(mode=ParallelizationMode.MULTIPROCESSING, children_if_root=frozenset())
+        budgets: list[float | None] = []
+        extender = _CloseRecordingExtender(budgets=budgets)
+        cfw.function_extender = {extender}
+        command_queue.put("STOP")
+
+        worker(command_queue, result_queue, cfw_register, cfw, uuid4(), worker_index=0)
+
+        assert len(budgets) == 1
+        assert budgets[0] is not None and budgets[0] > 2.0

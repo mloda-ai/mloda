@@ -327,7 +327,7 @@ def _clear_load_log() -> None:
 
 def _requiring(feature: Feature) -> Feature:
     requiring = Feature(feature.name, options=feature.options, required_declarations={"scale": None})
-    requiring.add_consumer_attribution("DepthToMetres", frozenset())
+    requiring.resolving_consumer = "DepthToMetres"
     return requiring
 
 
@@ -482,25 +482,41 @@ class TestDeclarationRequirementsEndToEnd:
         assert result[0][OUT_LONELY_PLAIN] == [1]
         assert LOAD_LOG == [DeclLonelyReader1648.__name__]
 
-    def test_shared_requiring_instance_is_refused_for_every_consumer_that_returns_it(self) -> None:
+    @pytest.mark.parametrize(
+        "consumers",
+        [
+            (DeclSharedInstanceRequiringConsumer1648, DeclSharedInstanceSecondConsumer1648),
+            (DeclSharedInstanceSecondConsumer1648, DeclSharedInstanceRequiringConsumer1648),
+        ],
+        ids=["a_then_b", "b_then_a"],
+    )
+    def test_shared_requiring_instance_is_refused_for_every_consumer_that_returns_it(
+        self, consumers: tuple[type[_DeclConsumer], type[_DeclConsumer]]
+    ) -> None:
         SHARED_LONELY_INPUT.append(Feature(LONELY_DEPTH, required_declarations={"scale": None}))
 
-        for consumer in (DeclSharedInstanceRequiringConsumer1648, DeclSharedInstanceSecondConsumer1648):
+        for consumer, other in (consumers, consumers[::-1]):
             with pytest.raises(FeatureResolutionError) as excinfo:
                 _run([consumer.OUT], LONELY_DAC)
-            assert consumer.get_class_name() in str(excinfo.value)
-            assert "'scale'" in str(excinfo.value)
+            message = str(excinfo.value)
+            assert f"{consumer.get_class_name()} requires declared 'scale'" in message
+            assert other.get_class_name() not in message
         assert LOAD_LOG == []
 
-    def test_separate_plain_feature_of_the_same_name_resolves_normally(self) -> None:
-        SHARED_LONELY_INPUT.append(Feature(LONELY_DEPTH, required_declarations={"scale": None}))
-
+    def test_shared_instance_requested_top_level_after_a_consumer_run_names_no_consumer(self) -> None:
+        shared = Feature(LONELY_DEPTH, required_declarations={"scale": None})
+        SHARED_LONELY_INPUT.append(shared)
         with pytest.raises(FeatureResolutionError):
             _run([DeclSharedInstanceRequiringConsumer1648.OUT], LONELY_DAC)
-        result = _run([OUT_LONELY_PLAIN], LONELY_DAC)
 
-        assert result[0][OUT_LONELY_PLAIN] == [1]
-        assert LOAD_LOG == [DeclLonelyReader1648.__name__]
+        with pytest.raises(FeatureResolutionError) as excinfo:
+            _run([shared], LONELY_DAC)
+
+        message = str(excinfo.value)
+        assert f"request for '{LONELY_DEPTH}'" in message
+        assert DeclSharedInstanceRequiringConsumer1648.get_class_name() not in message
+        assert DeclSharedInstanceSecondConsumer1648.get_class_name() not in message
+        assert LOAD_LOG == []
 
 
 class TestTopLevelRequestRequirement:

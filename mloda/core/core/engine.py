@@ -196,7 +196,9 @@ class Engine:
         )
         return execution_planner
 
-    def setup_features_recursion(self, features: Features, requested: bool = True, depth: int = 0) -> None:
+    def setup_features_recursion(
+        self, features: Features, requested: bool = True, depth: int = 0, consumer: str | None = None
+    ) -> None:
         # Register every sibling's own link before processing any, so index injection and feature-group
         # resolution see the whole batch regardless of order. Does not cover a link nested in a
         # co-sibling's input_features() subtree (see xfail
@@ -206,6 +208,8 @@ class Engine:
         for feature in features:
             self.add_feature_link_to_links(feature)
         for feature in features:
+            # Stamped right before resolution: a reused instance must name this consumer, not an earlier one.
+            feature.resolving_consumer = consumer
             self._process_feature(feature, features, requested, depth)
 
     def _process_feature(self, feature: Feature, features: Features, requested: bool, depth: int = 0) -> None:
@@ -595,7 +599,7 @@ class Engine:
         if features.child_uuid is None:
             raise ValueError(f"Features {features} has no parent uuid although it should have one.")
         self.feature_link_parents[features.child_uuid] = features.parent_uuids
-        self.setup_features_recursion(features, requested=False, depth=depth + 1)
+        self.setup_features_recursion(features, requested=False, depth=depth + 1, consumer=consumer_name)
         return frozenset(str(f.name) for f in features.collection)
 
     def set_compute_framework(self, feature: Feature, compute_frameworks: set[type[ComputeFramework]]) -> Feature:

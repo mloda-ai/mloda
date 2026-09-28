@@ -363,7 +363,7 @@ def resolve_feature(
 
     Engine inputs now covered: name, options, domain and compute-framework pin (carried on the Feature),
     scope (via the Feature's feature_group_scope or the feature_group argument for the string form), and
-    the ``links`` / ``data_access_collection`` arguments threaded into the seam. No engine input is left out.
+    the ``links`` / ``data_access_collection`` arguments threaded into the seam, plus the Feature's ``required_declarations``. No engine input is left out.
 
     Args:
         feature: A feature name string, or a Feature object used directly as the single source of truth for

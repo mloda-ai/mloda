@@ -168,6 +168,10 @@ class Feature:
         # may read stale entries.
         self.consumer_attributions: list[tuple[str, frozenset[str]]] = []
 
+        # Consumer resolving this feature, overwritten by the engine (None for a request);
+        # excluded from equality and hash.
+        self.resolving_consumer: str | None = None
+
         # Group keys forwarded onto this input feature, set by Features.merge_options; excluded
         # from equality and hash like link/index.
         self.forwarded_group_keys: frozenset[str] = frozenset()
@@ -257,11 +261,12 @@ class Feature:
         name: str | FeatureName,
         options: dict[str, Any] | None = None,
         feature_group: str | type[FeatureGroup] | None = None,
+        required_declarations: Mapping[str, str | int | float | bool | None] | None = None,
     ) -> Feature:
         if options is None:
             options = {}
         name = FeatureName(name) if isinstance(name, str) else name
-        return cls(name=name, options=options, feature_group=feature_group)
+        return cls(name=name, options=options, feature_group=feature_group, required_declarations=required_declarations)
 
     @classmethod
     def str_of(
@@ -269,8 +274,9 @@ class Feature:
         name: str | FeatureName,
         options: dict[str, Any] | None = None,
         feature_group: str | type[FeatureGroup] | None = None,
+        required_declarations: Mapping[str, str | int | float | bool | None] | None = None,
     ) -> Feature:
-        return cls._typed_of(name, DataType.STRING, options, feature_group)
+        return cls._typed_of(name, DataType.STRING, options, feature_group, required_declarations=required_declarations)
 
     @classmethod
     def int32_of(
@@ -278,8 +284,9 @@ class Feature:
         name: str | FeatureName,
         options: dict[str, Any] | None = None,
         feature_group: str | type[FeatureGroup] | None = None,
+        required_declarations: Mapping[str, str | int | float | bool | None] | None = None,
     ) -> Feature:
-        return cls._typed_of(name, DataType.INT32, options, feature_group)
+        return cls._typed_of(name, DataType.INT32, options, feature_group, required_declarations=required_declarations)
 
     @classmethod
     def int64_of(
@@ -287,8 +294,9 @@ class Feature:
         name: str | FeatureName,
         options: dict[str, Any] | None = None,
         feature_group: str | type[FeatureGroup] | None = None,
+        required_declarations: Mapping[str, str | int | float | bool | None] | None = None,
     ) -> "Feature":
-        return cls._typed_of(name, DataType.INT64, options, feature_group)
+        return cls._typed_of(name, DataType.INT64, options, feature_group, required_declarations=required_declarations)
 
     @classmethod
     def float_of(
@@ -296,8 +304,9 @@ class Feature:
         name: str | FeatureName,
         options: dict[str, Any] | None = None,
         feature_group: str | type[FeatureGroup] | None = None,
+        required_declarations: Mapping[str, str | int | float | bool | None] | None = None,
     ) -> "Feature":
-        return cls._typed_of(name, DataType.FLOAT, options, feature_group)
+        return cls._typed_of(name, DataType.FLOAT, options, feature_group, required_declarations=required_declarations)
 
     @classmethod
     def double_of(
@@ -305,8 +314,9 @@ class Feature:
         name: str | FeatureName,
         options: dict[str, Any] | None = None,
         feature_group: str | type[FeatureGroup] | None = None,
+        required_declarations: Mapping[str, str | int | float | bool | None] | None = None,
     ) -> "Feature":
-        return cls._typed_of(name, DataType.DOUBLE, options, feature_group)
+        return cls._typed_of(name, DataType.DOUBLE, options, feature_group, required_declarations=required_declarations)
 
     @classmethod
     def boolean_of(
@@ -314,8 +324,11 @@ class Feature:
         name: str | FeatureName,
         options: dict[str, Any] | None = None,
         feature_group: str | type[FeatureGroup] | None = None,
+        required_declarations: Mapping[str, str | int | float | bool | None] | None = None,
     ) -> "Feature":
-        return cls._typed_of(name, DataType.BOOLEAN, options, feature_group)
+        return cls._typed_of(
+            name, DataType.BOOLEAN, options, feature_group, required_declarations=required_declarations
+        )
 
     @classmethod
     def binary_of(
@@ -323,8 +336,9 @@ class Feature:
         name: str | FeatureName,
         options: dict[str, Any] | None = None,
         feature_group: str | type[FeatureGroup] | None = None,
+        required_declarations: Mapping[str, str | int | float | bool | None] | None = None,
     ) -> "Feature":
-        return cls._typed_of(name, DataType.BINARY, options, feature_group)
+        return cls._typed_of(name, DataType.BINARY, options, feature_group, required_declarations=required_declarations)
 
     @classmethod
     def date_of(
@@ -332,8 +346,9 @@ class Feature:
         name: str | FeatureName,
         options: dict[str, Any] | None = None,
         feature_group: str | type[FeatureGroup] | None = None,
+        required_declarations: Mapping[str, str | int | float | bool | None] | None = None,
     ) -> "Feature":
-        return cls._typed_of(name, DataType.DATE, options, feature_group)
+        return cls._typed_of(name, DataType.DATE, options, feature_group, required_declarations=required_declarations)
 
     @classmethod
     def timestamp_millis_of(
@@ -341,8 +356,11 @@ class Feature:
         name: str | FeatureName,
         options: dict[str, Any] | None = None,
         feature_group: str | type[FeatureGroup] | None = None,
+        required_declarations: Mapping[str, str | int | float | bool | None] | None = None,
     ) -> "Feature":
-        return cls._typed_of(name, DataType.TIMESTAMP_MILLIS, options, feature_group)
+        return cls._typed_of(
+            name, DataType.TIMESTAMP_MILLIS, options, feature_group, required_declarations=required_declarations
+        )
 
     @classmethod
     def timestamp_micros_of(
@@ -350,8 +368,11 @@ class Feature:
         name: str | FeatureName,
         options: dict[str, Any] | None = None,
         feature_group: str | type[FeatureGroup] | None = None,
+        required_declarations: Mapping[str, str | int | float | bool | None] | None = None,
     ) -> "Feature":
-        return cls._typed_of(name, DataType.TIMESTAMP_MICROS, options, feature_group)
+        return cls._typed_of(
+            name, DataType.TIMESTAMP_MICROS, options, feature_group, required_declarations=required_declarations
+        )
 
     @classmethod
     def decimal_of(
@@ -359,8 +380,11 @@ class Feature:
         name: str | FeatureName,
         options: dict[str, Any] | None = None,
         feature_group: str | type[FeatureGroup] | None = None,
+        required_declarations: Mapping[str, str | int | float | bool | None] | None = None,
     ) -> "Feature":
-        return cls._typed_of(name, DataType.DECIMAL, options, feature_group)
+        return cls._typed_of(
+            name, DataType.DECIMAL, options, feature_group, required_declarations=required_declarations
+        )
 
     @classmethod
     def _typed_of(
@@ -369,11 +393,18 @@ class Feature:
         data_type: DataType,
         options: dict[str, Any] | None = None,
         feature_group: str | type[FeatureGroup] | None = None,
+        required_declarations: Mapping[str, str | int | float | bool | None] | None = None,
     ) -> Feature:
         if options is None:
             options = {}
         name = FeatureName(name) if isinstance(name, str) else name
-        return cls(name=name, data_type=data_type, options=options, feature_group=feature_group)
+        return cls(
+            name=name,
+            data_type=data_type,
+            options=options,
+            feature_group=feature_group,
+            required_declarations=required_declarations,
+        )
 
     def __eq__(self, other: Any) -> bool:
         if not isinstance(other, Feature):

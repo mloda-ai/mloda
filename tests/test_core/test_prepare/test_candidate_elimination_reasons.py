@@ -836,7 +836,7 @@ class TestScopedAbstractOnlyCallout:
 def _requiring(feature: Feature, required: Mapping[str, Any]) -> Feature:
     """Build the requiring feature, attributed to DECL_CONSUMER as the engine would."""
     requiring = Feature(feature.name, required_declarations=dict(required))
-    requiring.add_consumer_attribution(DECL_CONSUMER, frozenset())
+    requiring.resolving_consumer = DECL_CONSUMER
     return requiring
 
 
@@ -867,16 +867,6 @@ class TestDeclarationRequirements:
         assert "'scale'" in elimination.reason
         assert "DeclMissingFG1648" in elimination.reason
         assert f"  - DeclMissingFG1648 (declarations): {elimination.reason}" in str(err)
-
-    def test_several_consumers_are_labelled_sorted_and_joined(self) -> None:
-        feature = Feature(DECL_MISSING_FEATURE, required_declarations={"scale": None})
-        feature.add_consumer_attribution("ZetaConsumer1648", frozenset())
-        feature.add_consumer_attribution("AlphaConsumer1648", frozenset())
-        plugins: FeatureGroupEnvironmentMapping = {DeclMissingFG1648: {ElimFwOne011}}
-
-        err = _fail(feature, plugins)
-
-        assert "AlphaConsumer1648, ZetaConsumer1648" in err.result.eliminations[DeclMissingFG1648].reason
 
     def test_mismatching_value_names_the_near_miss(self) -> None:
         feature = _requiring(Feature(DECL_MISMATCH_FEATURE), {"unit": "m"})
@@ -957,6 +947,16 @@ class TestDeclarationRequirements:
         assert elimination.stage == "declarations"
         assert DECL_CONSUMER in elimination.reason
         assert "decl_boom_1648" in elimination.reason
+
+    def test_empty_required_declarations_set_after_construction_is_not_checked(self) -> None:
+        feature = Feature(DECL_RAISING_FEATURE)
+        feature.required_declarations = {}
+        plugins: FeatureGroupEnvironmentMapping = {DeclRaisingFG1648: {ElimFwOne011}}
+
+        result = IdentifyFeatureGroupClass.evaluate(feature, plugins, None)
+
+        assert set(result.identified) == {DeclRaisingFG1648}
+        assert result.eliminations == {}
 
     def test_plan_time_check_reads_declarations_with_none(self) -> None:
         DECL_RECORDED_ARGS.clear()

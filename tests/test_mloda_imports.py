@@ -244,6 +244,7 @@ def test_import_steward_governance() -> None:
         # Function extenders (audit, monitoring, observability)
         Extender,
         ExtenderHook,
+        CloseContext,
         # Optional-dependency import guards
         traceback_blames_root,
         # Pickle safety
@@ -269,6 +270,8 @@ def test_import_steward_governance() -> None:
     # Function extenders
     assert Extender is not None
     assert ExtenderHook is not None
+    assert CloseContext is not None
+    assert "CloseContext" in steward_module.__all__
     # Optional-dependency import guards
     assert callable(traceback_blames_root)
     assert "traceback_blames_root" in steward_module.__all__

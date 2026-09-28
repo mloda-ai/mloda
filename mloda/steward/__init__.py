@@ -23,6 +23,7 @@ from mloda.core.abstract_plugins.function_extender import (
     CompositeExtender,
 )
 from mloda.core.abstract_plugins.hook_context import HookContext, OutputSchema
+from mloda.core.abstract_plugins.close_context import CloseContext
 
 # Server-verified tenant/project/principal context seam
 from mloda.core.abstract_plugins.verified_context import verified_context
@@ -81,6 +82,7 @@ __all__ = [
     "HookContext",
     "OutputSchema",
     "CompositeExtender",
+    "CloseContext",
     # Server-verified tenant/project/principal context seam
     "verified_context",
     # Plugin registry administration

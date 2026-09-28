@@ -26,6 +26,7 @@ from uuid import uuid4
 
 import pytest
 
+from mloda.core.abstract_plugins.close_context import CloseContext
 from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook
 from mloda.core.prepare.execution_plan import ExecutionPlan
 from mloda.core.runtime.run import ExecutionOrchestrator
@@ -254,7 +255,9 @@ class _RunCompleteProbeExtender(Extender):
         time.sleep(self._close_delay)
         self._sentinel_path.write_text("closed")
         if self._close_state_path is not None:
-            self._close_state_path.write_text(json.dumps([len(self.completions), Extender.remaining_close_budget()]))
+            ctx = CloseContext.current()
+            assert ctx is not None
+            self._close_state_path.write_text(json.dumps([len(self.completions), ctx.remaining(), ctx.reason]))
 
     def on_run_complete(self, run_id: str | None) -> None:
         self.completions.append((run_id, os.getpid(), self._sentinel_path.exists()))
@@ -376,7 +379,8 @@ class TestRunAllTwiceWithTheSameProbeCarriesPriorRunStateIntoTheSecondWorker:
             graceful_shutdown_timeout=7.5,
         )
 
-        seen_completions, seen_budget = json.loads(close_state_path.read_text())
+        seen_completions, seen_remaining, seen_reason = json.loads(close_state_path.read_text())
 
         assert seen_completions == completions_after_first_run
-        assert seen_budget > 2.0
+        assert seen_remaining > 2.0
+        assert seen_reason == "stop"

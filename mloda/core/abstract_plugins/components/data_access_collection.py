@@ -312,11 +312,7 @@ class DataAccessCollection:
         return "'***'"
 
     def redact(self, text: str) -> str:
-        """Scrub URI/keyword patterns, then mask every registered credential value of 8+ chars.
-
-        Shorter registered values are left to the pattern rules; nothing outside
-        ``credentials`` (connections, files, folders) is masked.
-        """
+        """Scrub URI/keyword patterns, then mask registered credential values of 8+ chars."""
         text = scrub_credentials(text)
         literals = sorted(self._credential_str_leaves(), key=len, reverse=True)
         if not literals:

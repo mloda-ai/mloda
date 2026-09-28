@@ -80,7 +80,7 @@ class TestCredentialReprRedactsValues:
         assert "***" in rendered
 
     def test_repr_exact_output_pinned(self) -> None:
-        """Pins today's byte-identical output through the redact_mapping refactor."""
+        """Pins the exact repr output."""
         rendered = repr(Credential(host="db1", password="hunter2"))  # nosec B106
         assert rendered == "Credential(host='***', password='***')"
 
@@ -332,7 +332,7 @@ class TestResolveAmbiguityRedactsCredentialValues:
         assert "data_access_handle" in msg
 
     def test_ambiguity_bullet_line_exact_output_pinned(self) -> None:
-        """Pins today's bullet-line output through the redact_mapping refactor."""
+        """Pins the exact bullet-line output."""
         dac = DataAccessCollection(
             credentials=[
                 Credential(host="db1", password="hunter2"),  # nosec B106

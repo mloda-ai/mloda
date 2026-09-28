@@ -118,9 +118,9 @@ def test_a_feature_free_container_is_rebuilt_around_its_shared_leaves() -> None:
 def test_a_registered_credential_stays_its_own_type_and_stays_redacted() -> None:
     """A RegisteredCredential keeps its type, and so its redacted repr, through the rebuilt spine."""
     credential = RegisteredCredential({UFD_INNER_KEY: UFD_CREDENTIAL_VALUE})
-    host = Options(group={UFD_CREDENTIAL_KEY: credential})
+    host = Options(group={UFD_CREDENTIAL_KEY: (UfdHandle, credential)})
 
-    imported = _unify(host).get(UFD_CREDENTIAL_KEY)
+    imported = _unify(host).get(UFD_CREDENTIAL_KEY)[1]
 
     assert type(imported) is RegisteredCredential, (
         f"the imported credential must stay a RegisteredCredential: {type(imported)!r}"

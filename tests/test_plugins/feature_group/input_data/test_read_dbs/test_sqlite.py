@@ -272,7 +272,7 @@ class TestSQLITEReader:
         nonexistent_path = tmp_path / "nonexistent.db"
         assert not nonexistent_path.exists()
 
-        with pytest.raises(ValueError) as exc_info:
+        with pytest.raises(ValueError, match=re.escape("credential key does not exist or is not a file")) as exc_info:
             SQLITEReader.describe_columns({"sqlite": str(nonexistent_path), "table_name": "t"})
 
         assert str(nonexistent_path) not in str(exc_info.value)

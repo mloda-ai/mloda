@@ -69,8 +69,10 @@ class TestRunContextCarrierCopiedOnIngest:
 
         assert ctx.carrier is None
 
+
+class TestRunContextPluginVersionsCopiedOnIngest:
     def test_plugin_versions_is_equal_but_not_the_same_object(self) -> None:
-        given = {"mloda.core.abstract_plugins.function_extender": "1.2.3"}
+        given = {"some.plugin.module": "1.2.3"}
 
         ctx = RunContext(plugin_versions=given)
 
@@ -130,10 +132,8 @@ class TestRunContextHash:
         assert RunContext(project_id="proj1") != RunContext(project_id="proj2")
         assert RunContext(principal="hash1") != RunContext(principal="hash2")
 
-    def test_hash_of_context_with_plugin_versions_returns_an_int(self) -> None:
-        ctx = RunContext(plugin_versions={"m": "1"})
-
-        assert isinstance(hash(ctx), int)
+    def test_plugin_versions_is_excluded_from_the_hash(self) -> None:
+        assert hash(RunContext(plugin_versions={"m": "1"})) == hash(RunContext())
 
 
 class TestRunContextReplace:

@@ -322,8 +322,7 @@ _plan_time_enabled = PluginCollector.enabled_feature_groups({_PlanTimePluginVers
 class _PluginVersionCapturingExtender(Extender):
     """Records HookContext.current().plugin_version on every wrapped call."""
 
-    def __init__(self, priority: int = 100) -> None:
-        self.priority = priority
+    def __init__(self) -> None:
         self.recorded: list[str | None] = []
 
     def wraps(self) -> set[ExtenderHook]:
@@ -357,14 +356,13 @@ class TestPluginVersionResolvedAtPlanTimeUnderSync:
 
         expected = f"v:{_PlanTimePluginVersionFeatureGroup.__module__}"
         assert extender.recorded, "extender never observed the feature group's calculate_feature call"
-        assert all(value == expected for value in extender.recorded)
+        assert extender.recorded == [expected]
 
 
 class _PluginVersionCacheInfoRecordingExtender(Extender):
     """Records resolve_plugin_version.cache_info() after every wrapped call, without asserting inside the hook."""
 
-    def __init__(self, priority: int = 100) -> None:
-        self.priority = priority
+    def __init__(self) -> None:
         self.cache_infos: list[Any] = []
 
     def wraps(self) -> set[ExtenderHook]:
@@ -398,9 +396,7 @@ class TestPluginVersionNotResolvedDuringExecution:
         session.run()
 
         assert extender.cache_infos, "extender never observed the feature group's calculate_feature call"
-        assert all(info == baseline for info in extender.cache_infos), (
-            "resolve_plugin_version was called again during execution"
-        )
+        assert extender.cache_infos == [baseline], "resolve_plugin_version was called again during execution"
         assert resolve_plugin_version.cache_info() == baseline
 
 

@@ -261,8 +261,10 @@ class _CalculateHookRecordingExtender(Extender):
 _pfext_enabled = PluginCollector.enabled_feature_groups({_PrepareRunExtenderFeatureGroup})
 
 
-class TestRunFallsBackToPrepareTimeFunctionExtender:
-    def test_run_without_its_own_function_extender_uses_the_one_from_prepare(self) -> None:
+class TestRunUsesSessionFunctionExtender:
+    """function_extender is session-level: set once at prepare(), reused by every run()."""
+
+    def test_run_fires_the_extender_passed_to_prepare(self) -> None:
         recorder = _CalculateHookRecordingExtender()
 
         session = mloda.prepare(
@@ -289,5 +291,5 @@ class TestRunAndStreamRunRejectFunctionExtender:
             plugin_collector=_pfext_enabled,
         )
 
-        with pytest.raises(TypeError):
+        with pytest.raises(TypeError, match="unexpected keyword argument 'function_extender'"):
             getattr(session, name)(**{"function_extender": {recorder}})

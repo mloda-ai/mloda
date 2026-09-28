@@ -1,6 +1,8 @@
 """Strip credentials from free text before it reaches core's failure logs or MlodaRunError."""
 
 import re
+from collections.abc import Mapping
+from typing import Any
 
 _URI_PATTERN = re.compile(
     r"(?P<scheme>(?:jdbc:)?[A-Za-z][A-Za-z0-9+.-]*)://"
@@ -81,3 +83,8 @@ def scrub_credentials(text: str) -> str:
     text = _FREE_TEXT_URI_PATTERN.sub(_scrub_uri_match, text)
     text = _PASSWORD_KEYWORD_PATTERN.sub(r"\g<keyword>\g<sep>***", text)
     return text
+
+
+def redact_mapping(mapping: Mapping[Any, Any]) -> dict[Any, str]:
+    """Keep every key, replace every value with ``'***'``."""
+    return {key: "***" for key in mapping}

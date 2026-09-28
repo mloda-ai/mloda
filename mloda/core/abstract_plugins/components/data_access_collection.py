@@ -1,8 +1,12 @@
-from collections.abc import Iterable
+import re
+from collections.abc import Iterable, Mapping
 from typing import Any, Callable
 
 from mloda.core.abstract_plugins.components.credential import Credential
+from mloda.core.abstract_plugins.components.credential_scrub import redact_mapping, scrub_credentials
 from mloda.core.abstract_plugins.components.hashable_dict import HashableDict
+
+_MIN_REDACT_LENGTH = 8
 
 
 _KIND_TO_ATTR: dict[str, str] = {
@@ -287,7 +291,7 @@ class DataAccessCollection:
         all_auto = all(h in self._auto_handles for h in candidate_handles)
         if all_auto:
             if kind == "credentials":
-                bullets = "\n".join(f"  - {self._redacted_credential(v)}" for _, v in matches)
+                bullets = "\n".join(f"  - {self._render_redacted_candidate(v)}" for _, v in matches)
             else:
                 bullets = "\n".join(f"  - {v}" for _, v in matches)
             raise ValueError(
@@ -302,7 +306,38 @@ class DataAccessCollection:
         )
 
     @staticmethod
-    def _redacted_credential(value: Any) -> str:
+    def _render_redacted_candidate(value: Any) -> str:
         if isinstance(value, dict):
-            return "{" + ", ".join(f"'{key}': '***'" for key in value) + "}"
+            return "{" + ", ".join(f"'{key}': {redacted!r}" for key, redacted in redact_mapping(value).items()) + "}"
         return "'***'"
+
+    def redact(self, text: str) -> str:
+        """Scrub URI/keyword patterns, then mask every registered credential value of 8+ chars.
+
+        Shorter registered values are left to the pattern rules; nothing outside
+        ``credentials`` (connections, files, folders) is masked.
+        """
+        text = scrub_credentials(text)
+        literals = sorted(self._credential_str_leaves(), key=len, reverse=True)
+        if not literals:
+            return text
+        pattern = re.compile("|".join(re.escape(literal) for literal in literals))
+        return pattern.sub("***", text)
+
+    def _credential_str_leaves(self) -> set[str]:
+        leaves: set[str] = set()
+        for value in self.credentials.values():
+            self._collect_str_leaves(value, leaves)
+        return leaves
+
+    @classmethod
+    def _collect_str_leaves(cls, value: Any, leaves: set[str]) -> None:
+        if isinstance(value, str):
+            if len(value) >= _MIN_REDACT_LENGTH:
+                leaves.add(value)
+        elif isinstance(value, Mapping):
+            for nested in value.values():
+                cls._collect_str_leaves(nested, leaves)
+        elif isinstance(value, (list, tuple)):
+            for nested in value:
+                cls._collect_str_leaves(nested, leaves)

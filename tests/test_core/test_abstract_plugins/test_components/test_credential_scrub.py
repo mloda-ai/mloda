@@ -6,7 +6,7 @@ import time
 
 import pytest
 
-from mloda.core.abstract_plugins.components.credential_scrub import scrub_credentials
+from mloda.core.abstract_plugins.components.credential_scrub import redact_mapping, scrub_credentials
 from mloda.core.abstract_plugins.components.utils import contained_raise_reason
 
 # (case id, input text, secret substrings that must be gone, substrings that must survive)
@@ -291,3 +291,18 @@ def test_contained_raise_reason_scrubs_secret_url() -> None:
     result = contained_raise_reason(exc)
     assert result.startswith("raised OSError:")
     assert "SECRET" not in result
+
+
+def test_redact_mapping_keeps_keys_but_replaces_every_value() -> None:
+    _REGISTERED_VALUE = "hunter2plus"  # nosec B105
+    result = redact_mapping({"host": "db1", "password": _REGISTERED_VALUE})
+    assert result == {"host": "***", "password": "***"}  # nosec B105
+
+
+def test_redact_mapping_empty_mapping_returns_empty_dict() -> None:
+    assert redact_mapping({}) == {}
+
+
+def test_redact_mapping_non_str_keys_are_preserved() -> None:
+    result = redact_mapping({1: "a", ("t",): "b"})
+    assert result == {1: "***", ("t",): "***"}

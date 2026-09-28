@@ -11,6 +11,8 @@ tracebacks. Full rationale: docs/docs/in_depth/named-data-access-handles.md.
 
 from typing import Any
 
+from mloda.core.abstract_plugins.components.credential_scrub import redact_mapping
+
 
 class Credential:
     """One credential mapping built from a dict, keyword fields, or both."""
@@ -30,5 +32,5 @@ class Credential:
         return dict(self._data)
 
     def __repr__(self) -> str:
-        redacted = ", ".join(f"{key}='***'" for key in self._data)
+        redacted = ", ".join(f"{key}={value!r}" for key, value in redact_mapping(self._data).items())
         return f"Credential({redacted})"

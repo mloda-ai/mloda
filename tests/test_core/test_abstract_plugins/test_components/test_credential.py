@@ -79,6 +79,11 @@ class TestCredentialReprRedactsValues:
         assert "/secret/path.db" not in rendered
         assert "***" in rendered
 
+    def test_repr_exact_output_pinned(self) -> None:
+        """Pins today's byte-identical output through the redact_mapping refactor."""
+        rendered = repr(Credential(host="db1", password="hunter2"))  # nosec B106
+        assert rendered == "Credential(host='***', password='***')"
+
 
 class TestCredentialPublicSurface:
     """``Credential`` is part of the public ``mloda.user`` API."""
@@ -325,6 +330,28 @@ class TestResolveAmbiguityRedactsCredentialValues:
         assert "host" in msg
         assert "password" in msg
         assert "data_access_handle" in msg
+
+    def test_ambiguity_bullet_line_exact_output_pinned(self) -> None:
+        """Pins today's bullet-line output through the redact_mapping refactor."""
+        dac = DataAccessCollection(
+            credentials=[
+                Credential(host="db1", password="hunter2"),  # nosec B106
+                Credential(host="db2", password="swordfish"),  # nosec B106
+            ]
+        )
+        with pytest.raises(ValueError) as excinfo:
+            dac.resolve("credentials")
+        msg = str(excinfo.value)
+        assert "  - {'host': '***', 'password': '***'}" in msg
+
+    def test_list_form_non_dict_entry_renders_as_star_star_star(self) -> None:
+        """A list-form entry that is not a dict falls back to the scalar '***' rendering."""
+        dac = DataAccessCollection(credentials=["dsn-string-value", {"host": "h"}])
+        with pytest.raises(ValueError) as excinfo:
+            dac.resolve("credentials")
+        msg = str(excinfo.value)
+        assert "'***'" in msg
+        assert "dsn-string-value" not in msg
 
     def test_auto_named_files_ambiguity_still_shows_values(self) -> None:
         """Guardrail: redaction is credentials-only; file paths stay visible in the listing."""

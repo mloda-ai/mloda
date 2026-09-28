@@ -14,6 +14,7 @@ The version has three parts, joined by `-`:
 
 - **Roots**: the feature group class and every base class in its MRO that is first-party. First-party means the feature group's own top-level package or the `mloda.*` plugin namespace, except mloda's own `mloda.core`, `mloda.user`, `mloda.provider` and `mloda.steward`. The version prefix covers mloda itself.
 - **Reachable code**: every function, class and module-level constant the roots reference by name or by `module.attr`, followed through first-party code. This includes helpers in other modules and constants imported with `from ... import`. A module used as a value, for example in `getattr(helpers, name)`, counts as a whole.
+- **Imports inside a function body**, for example to avoid a circular import: first-party targets are followed from their source files, without importing them, so the hash is the same whether or not the target module was already imported. Third-party imports inside a function body add nothing.
 - **Canonical form**: each definition is hashed from its syntax tree. Code, constants, decorators, base classes and type annotations count. Docstrings, comments, blank lines and formatting do not. Functions the feature group never references do not count either. The hash is the same on every supported Python version.
 
 ```python
@@ -57,16 +58,42 @@ class DependencyAgnostic(FeatureGroup):
 - mloda itself, beyond the version prefix. Edits to an editable mloda install do not change it.
 - Code reached only through runtime values:
     - registries filled elsewhere (`REGISTRY["k"] = f`, `REGISTRY.update(...)`),
-    - classes discovered by reflection, such as the file readers a reader feature group finds through `__subclasses__()`,
+    - classes discovered by reflection, such as the file readers `ReadFileFeature` finds through `__subclasses__()` (see below),
     - imports by a computed name (`importlib.import_module(name)`),
     - attributes assigned outside the class body,
     - `getattr` on objects that are not modules,
     - names captured from an enclosing function.
-- Imports inside a function body, for example to avoid a circular import. The import statement counts; the imported code does not.
 - Modules without Python source (C extensions, bytecode-only installs). Their definitions are recorded by name only.
 - Names served by a module-level `__getattr__`, and constants in modules without a source file (for example notebook cells). These are not recorded at all.
 - Data and configuration files the code reads.
 - Source edited after import in a long-lived process. The hash reads the source files the first time it runs for a class, then caches the result for that class object.
+
+Imports are never executed to close these gaps: `version()` runs during computation, and importing a module can register new feature groups or readers mid-run.
+
+### Code reached by reflection
+
+To make such code count, reference it in the class body. Any class attribute works, the name carries no meaning:
+
+```python
+from typing import Any
+
+from mloda.provider import FeatureGroup, FeatureSet
+
+
+class Scaler:
+    def apply(self, value: int) -> int:
+        return value * 2
+
+
+class ScaledValue(FeatureGroup):
+    VERSION_INCLUDES = (Scaler,)
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return data
+```
+
+Editing `Scaler.apply` now changes `ScaledValue.version()`. A third-party class referenced this way records only its package name and version. There is no separate hook for this, since a reference is enough. `ReadFileFeature` and `ReadDocumentFeature` declare nothing: the readers they find depend on what is imported at runtime, which would make the version depend on import order. The readers shipped with mloda are covered by the version prefix. To version a custom reader, subclass the reader feature group and reference the reader in it.
 
 ## When it is computed
 

@@ -3,10 +3,16 @@
 from __future__ import annotations
 
 import time
+from typing import Any
 
 import pytest
 
-from mloda.core.abstract_plugins.components.credential_scrub import redact_mapping, scrub_credentials
+from mloda.core.abstract_plugins.components.credential import RegisteredCredential
+from mloda.core.abstract_plugins.components.credential_scrub import (
+    redact_mapping,
+    redact_option_value,
+    scrub_credentials,
+)
 from mloda.core.abstract_plugins.components.utils import contained_raise_reason
 
 # (case id, input text, secret substrings that must be gone, substrings that must survive)
@@ -306,3 +312,30 @@ def test_redact_mapping_empty_mapping_returns_empty_dict() -> None:
 def test_redact_mapping_non_str_keys_are_preserved() -> None:
     result = redact_mapping({1: "a", ("t",): "b"})
     assert result == {1: "***", ("t",): "***"}
+
+
+class _MarkerReader:
+    """Stand-in for a reader class used only as a tuple element in these cases."""
+
+
+@pytest.mark.parametrize(
+    "case_id,value,expected",
+    [
+        ("dict", {"sqlite": "raw_db_path_marker"}, {"sqlite": "***"}),
+        (
+            "registered_credential",
+            RegisteredCredential({"sqlite": "raw_db_path_marker"}),
+            {"sqlite": "***"},
+        ),
+        (
+            "reader_class_tuple",
+            (_MarkerReader, {"sqlite": "raw_db_path_marker"}),
+            (_MarkerReader, {"sqlite": "***"}),
+        ),
+        ("scalar_str", "raw_db_path_marker", "raw_db_path_marker"),
+        ("list_unchanged", ["raw_db_path_marker"], ["raw_db_path_marker"]),
+    ],
+    ids=["dict", "registered_credential", "reader_class_tuple", "scalar_str", "list_unchanged"],
+)
+def test_redact_option_value(case_id: str, value: Any, expected: Any) -> None:
+    assert redact_option_value(value) == expected

@@ -166,6 +166,23 @@ def test_the_surviving_none_warning_names_the_value_intake_materializes(caplog: 
     ]
 
 
+def test_diverging_dict_option_values_are_masked_but_warning_still_fires(caplog: pytest.LogCaptureFixture) -> None:
+    """The host and the filter feature hold different plain dicts under the same key: the warning is
+    still emitted (key present) but neither dict's marker value leaks into the message."""
+    with caplog.at_level(logging.WARNING):
+        _emit(
+            None,
+            Options(group={DWG_KEY: {"sqlite": "/raw/host_marker.db"}}),
+            Options(group={DWG_KEY: {"sqlite": "/raw/filter_marker.db"}}),
+        )
+
+    messages = _messages(caplog, DWG_KEY)
+    assert messages, "a diverging dict option must still warn"
+    joined = " ".join(messages)
+    assert "/raw/host_marker.db" not in joined
+    assert "/raw/filter_marker.db" not in joined
+
+
 def test_the_plain_divergence_message_is_unchanged(caplog: pytest.LogCaptureFixture) -> None:
     """Two explicit values reach compute time as declared, so their message keeps its original wording."""
     with caplog.at_level(logging.WARNING):

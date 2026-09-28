@@ -1,5 +1,7 @@
 from typing import Any
 
+from mloda.core.abstract_plugins.components.credential_scrub import redact_option_value
+
 
 class OptionsValidator:
     """Validates Options configuration consistency."""
@@ -26,7 +28,10 @@ class OptionsValidator:
         """
         if key in group:
             if value != group[key]:
-                raise ValueError(f"Key {key} already exists in group options with a different value: {group[key]}")
+                raise ValueError(
+                    f"Key {key} already exists in group options with a different value: "
+                    f"{redact_option_value(group[key])}"
+                )
         if key in context:
             raise ValueError(f"Key {key} already exists in context options. Cannot add to group.")
 
@@ -41,7 +46,10 @@ class OptionsValidator:
         """
         if key in context:
             if value != context[key]:
-                raise ValueError(f"Key {key} already exists in context options with a different value: {context[key]}")
+                raise ValueError(
+                    f"Key {key} already exists in context options with a different value: "
+                    f"{redact_option_value(context[key])}"
+                )
         if key in group:
             raise ValueError(f"Key {key} already exists in group options. Cannot add to context.")
 

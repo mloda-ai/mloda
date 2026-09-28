@@ -257,6 +257,11 @@ class BaseInputData(ABC):
         return cls.__name__
 
     @classmethod
+    def wrap_feature_scoped_access(cls, data_access: Any) -> Any:
+        """Normalize a feature-scoped data access before matching; default is identity."""
+        return data_access
+
+    @classmethod
     def data_access_identity(cls, data_access: Any) -> str:
         """Mapping keys, a parsed URI's projection, an existing local path, else the type name."""
         if isinstance(data_access, Mapping):
@@ -317,6 +322,10 @@ class BaseInputData(ABC):
                     # The user addressed this reader family by name (ownership), so vetoes record as owned.
                     if not subclass._reader_options_admit(options, record_absence=True):
                         break
+                    wrapped = subclass.wrap_feature_scoped_access(value)
+                    if wrapped is not value:
+                        options.set(key, wrapped)
+                        value = wrapped
                     known_owners = match_rejection_owners()
                     matched_data_access = subclass.match_subclass_data_access(value, [feature_name], options=options)  # type: ignore[attr-defined]
                     if matched_data_access:

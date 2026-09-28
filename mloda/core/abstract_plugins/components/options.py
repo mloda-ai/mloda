@@ -6,6 +6,7 @@ from typing import Any, TYPE_CHECKING, cast
 from copy import deepcopy
 
 from mloda.core.abstract_plugins.components.credential import RegisteredCredential
+from mloda.core.abstract_plugins.components.credential_scrub import redact_option_value
 from mloda.core.abstract_plugins.components.hashable_dict import _deep_equal, _deep_hashable, register_deep_node
 from mloda.core.abstract_plugins.components.validators.options_validator import OptionsValidator
 from mloda.core.abstract_plugins.components.default_options_key import DefaultOptionKeys
@@ -473,15 +474,17 @@ class Options:
                 owner_clause = f" on input feature '{owner}'" if owner is not None else " on the input feature"
                 raise ValueError(
                     f"Option key '{key}' forwarded from the consumer as a group option conflicts with the "
-                    f"same key held in the child's context{owner_clause}: consumer='{consumer.group[key]}', "
-                    f"child context='{new_context[key]}'. Keep the key off the child with "
+                    f"same key held in the child's context{owner_clause}: "
+                    f"consumer={redact_option_value(consumer.group[key])!r}, "
+                    f"child context={redact_option_value(new_context[key])!r}. Keep the key off the child with "
                     f"forward_group_exclude={{'{key}'}}, an allowlist, or forward_group=False."
                 )
             if key in new_group and new_group[key] != consumer.group[key]:
                 owner_clause = f" on input feature '{owner}'" if owner is not None else " on the input feature"
                 raise ValueError(
                     f"Option key '{key}' forwarded from the consumer conflicts with the value already set"
-                    f"{owner_clause}: consumer='{consumer.group[key]}', child='{new_group[key]}'. "
+                    f"{owner_clause}: consumer={redact_option_value(consumer.group[key])!r}, "
+                    f"child={redact_option_value(new_group[key])!r}. "
                     f"Keep the key off the child with forward_group_exclude={{'{key}'}}, an allowlist, "
                     "or forward_group=False."
                 )
@@ -512,7 +515,10 @@ class Options:
 
             for key, value in propagating.items():
                 if key in new_context and new_context[key] != value:
-                    raise ValueError(f"Context key '{key}' conflict: consumer='{value}', child='{new_context[key]}'")
+                    raise ValueError(
+                        f"Context key '{key}' conflict: consumer={redact_option_value(value)!r}, "
+                        f"child={redact_option_value(new_context[key])!r}"
+                    )
 
             new_context.update({key: _isolate_forwarded_value(value, memo) for key, value in propagating.items()})
             inherited_context.update(propagating.keys())

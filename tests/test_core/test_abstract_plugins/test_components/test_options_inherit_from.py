@@ -2393,3 +2393,72 @@ class TestUnionOwnKeys:
         assert "k" in a_copy.own_context_keys
         assert "k" in b_copy2.own_context_keys
         assert a_copy.own_context_keys == b_copy2.own_context_keys
+
+
+class TestOptionsValidatorConflictMessagesMaskMappingValues:
+    """OptionsValidator's 'already exists ... with a different value' messages must not echo the
+    raw Mapping value already stored; only the key stays visible."""
+
+    def test_add_to_group_different_value_conflict_masks_dict_value(self) -> None:
+        options = Options(group={"SQLITEReader": {"sqlite": "/raw/child_marker.db"}})
+
+        with pytest.raises(ValueError, match="different value") as excinfo:
+            options.add_to_group("SQLITEReader", {"sqlite": "/raw/consumer_marker.db"})
+
+        message = str(excinfo.value)
+        assert "SQLITEReader" in message
+        assert "/raw/child_marker.db" not in message
+
+    def test_add_to_context_different_value_conflict_masks_dict_value(self) -> None:
+        options = Options(context={"SQLITEReader": {"sqlite": "/raw/child_marker.db"}})
+
+        with pytest.raises(ValueError, match="different value") as excinfo:
+            options.add_to_context("SQLITEReader", {"sqlite": "/raw/consumer_marker.db"})
+
+        message = str(excinfo.value)
+        assert "SQLITEReader" in message
+        assert "/raw/child_marker.db" not in message
+
+
+class TestInheritFromConflictMessagesMaskMappingValues:
+    """Conflict messages must not echo raw Mapping option values (e.g. a DB reader path); only keys
+    stay visible. Plain dicts are used here on purpose: a RegisteredCredential already prints redacted."""
+
+    def test_group_vs_group_conflict_masks_both_dict_values(self) -> None:
+        consumer = Options(group={"SQLITEReader": {"sqlite": "/raw/consumer_marker.db"}})
+        child = Options(group={"SQLITEReader": {"sqlite": "/raw/child_marker.db"}})
+
+        with pytest.raises(ValueError) as excinfo:
+            child.inherit_from(consumer)
+
+        message = str(excinfo.value)
+        assert "SQLITEReader" in message
+        assert "/raw/consumer_marker.db" not in message
+        assert "/raw/child_marker.db" not in message
+
+    def test_group_vs_child_context_conflict_masks_both_dict_values(self) -> None:
+        consumer = Options(group={"SQLITEReader": {"sqlite": "/raw/consumer_marker.db"}})
+        child = Options(context={"SQLITEReader": {"sqlite": "/raw/child_marker.db"}})
+
+        with pytest.raises(ValueError, match="child's context") as excinfo:
+            child.inherit_from(consumer)
+
+        message = str(excinfo.value)
+        assert "SQLITEReader" in message
+        assert "/raw/consumer_marker.db" not in message
+        assert "/raw/child_marker.db" not in message
+
+    def test_propagate_context_keys_conflict_masks_both_dict_values(self) -> None:
+        consumer = Options(
+            context={"SQLITEReader": {"sqlite": "/raw/consumer_marker.db"}},
+            propagate_context_keys=frozenset({"SQLITEReader"}),
+        )
+        child = Options(context={"SQLITEReader": {"sqlite": "/raw/child_marker.db"}})
+
+        with pytest.raises(ValueError, match="Context key.*conflict") as excinfo:
+            child.inherit_from(consumer)
+
+        message = str(excinfo.value)
+        assert "SQLITEReader" in message
+        assert "/raw/consumer_marker.db" not in message
+        assert "/raw/child_marker.db" not in message

@@ -88,3 +88,12 @@ def scrub_credentials(text: str) -> str:
 def redact_mapping(mapping: Mapping[Any, Any]) -> dict[Any, str]:
     """Keep every key, replace every value with ``'***'``."""
     return {key: "***" for key in mapping}
+
+
+def redact_option_value(value: Any) -> Any:
+    """Redact a Mapping value, or a Mapping nested one level inside a tuple; else return as-is."""
+    if isinstance(value, Mapping):
+        return redact_mapping(value)
+    if isinstance(value, tuple):
+        return tuple(redact_mapping(v) if isinstance(v, Mapping) else v for v in value)
+    return value

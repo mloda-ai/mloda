@@ -6,7 +6,10 @@ from mloda.user import FeatureName, ParallelizationMode
 from mloda.provider import ComputeFramework
 from mloda.provider import BaseFilterEngine
 from mloda.provider import OutputSchema
-from mloda_plugins.compute_framework.base_implementations.iceberg.iceberg_filter_engine import IcebergFilterEngine
+from mloda_plugins.compute_framework.base_implementations.iceberg.iceberg_filter_engine import (
+    IcebergFilterEngine,
+    scan_columns,
+)
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import (
     arrow_schema_field_type,
     arrow_schema_output_schema,
@@ -136,11 +139,7 @@ class IcebergFramework(ComputeFramework):
             )
         )
         if IcebergTable is not None and isinstance(data, IcebergTable):
-            # The scan projects in table schema order; the select below restores the requested order.
-            # A nested field ("b.c") comes back inside its struct column, so that result is not reordered.
-            data = data.scan(selected_fields=tuple(selected)).to_arrow()
-            if not set(selected).issubset(data.schema.names):
-                return data
+            data = scan_columns(data, selected)
         return data.select(selected)
 
     def _extract_column_names(self, data: Any) -> set[str]:

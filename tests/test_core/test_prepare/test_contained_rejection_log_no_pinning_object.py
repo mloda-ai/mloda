@@ -122,6 +122,65 @@ def _evaluate(caplog: pytest.LogCaptureFixture) -> None:
     assert not result.identified, "the rejected candidate must not win the feature"
 
 
+_LEAK_MARKER = "hunter2z9"
+
+CRLOG2_KEY = "crlog_rejected_key_creds"
+# Short (< reprlib's 30-char truncation window) so the marker survives safe_value_text's repr into the
+# PropertyValueRejection message the identify seam actually logs; the raising validator's own message text
+# is not itself propagated into that message.
+CRLOG2_VALUE = f"http://u:{_LEAK_MARKER}@h"
+CRLOG2_FEATURE = "source__rejected_crlog_creds"
+CRLOG2_PATTERN = r".*__rejected_crlog_creds$"
+CRLOG2_CLASS_NAME = "RejectingValueFGCrlogCreds"
+
+
+def _crlog2_validator_raises(value: Any) -> bool:
+    raise TypeError("crlog2 validator cannot judge")
+
+
+CRLOG2_PROPERTY_MAPPING = {
+    CRLOG2_KEY: PropertySpec(
+        "crlog2 touchy", context=True, strict_validation=True, element_validator=_crlog2_validator_raises
+    )
+}
+
+
+class RejectingValueFGCrlogCreds(FeatureGroup):
+    """Second plugin double: same shape as RejectingValueFGCrlog, validator message carries a credential marker."""
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]] | None:
+        return {CrlogFw}
+
+    @classmethod
+    def match_feature_group_criteria(
+        cls,
+        feature_name: FeatureName | str,
+        options: Options,
+        data_access_collection: DataAccessCollection | None = None,
+    ) -> bool:
+        if str(feature_name) != CRLOG2_FEATURE:
+            return False
+        return FeatureChainParser.match_configuration_feature_chain_parser(
+            str(feature_name),
+            options,
+            property_mapping=CRLOG2_PROPERTY_MAPPING,
+            prefix_patterns=[CRLOG2_PATTERN],
+        )
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return None
+
+
+def _evaluate_crlog2(caplog: pytest.LogCaptureFixture) -> None:
+    """Drive one evaluation whose only candidate rejects an option value with a credential-bearing message."""
+    feature = Feature(CRLOG2_FEATURE, Options(context={CRLOG2_KEY: [CRLOG2_VALUE]}))
+    plugins: FeatureGroupEnvironmentMapping = {RejectingValueFGCrlogCreds: {CrlogFw}}
+    with caplog.at_level(logging.DEBUG, logger=IDENTIFY_LOGGER_NAME):
+        result = IdentifyFeatureGroupClass.evaluate(feature, plugins, None)
+    assert not result.identified, "the rejected candidate must not win the feature"
+
+
 class TestContainedRejectionLogsNoPinningObject:
     """The contained PropertyValueRejection must reach the log as text only."""
 
@@ -155,3 +214,14 @@ class TestContainedRejectionLogsNoPinningObject:
         assert CRLOG_FEATURE in messages[0], f"the feature name must stay in the message: {messages[0]}"
         assert CRLOG_KEY in messages[0], f"the rejected key must stay in the message: {messages[0]}"
         assert CRLOG_VALUE in messages[0], f"the rejection text must stay readable: {messages[0]}"
+
+
+class TestContainedRejectionLogScrubsCredentials:
+    """A credential carried in the validator's own rejection message must not reach the log."""
+
+    def test_credential_marker_absent_from_rejection_record(self, caplog: pytest.LogCaptureFixture) -> None:
+        _evaluate_crlog2(caplog)
+
+        assert _rejection_records(caplog), "the contained rejection must report at DEBUG"
+        for record in _identify_records(caplog):
+            assert _LEAK_MARKER not in record.getMessage(), f"credential leaked into log: {record.getMessage()}"

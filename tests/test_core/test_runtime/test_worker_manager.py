@@ -1,5 +1,6 @@
 """Tests for WorkerManager class that manages thread/process lifecycle for parallel execution."""
 
+import logging
 import multiprocessing
 import queue
 import threading
@@ -681,6 +682,69 @@ class TestWorkerManagerJoinAll:
                 if process.is_alive():
                     process.kill()
                     process.join(timeout=5)
+
+
+class TestWorkerManagerJoinAllScrubsCredentials:
+    """join_all's three error-log sites must not leak a credential carried in the underlying exception text."""
+
+    _LEAK_MARKER = "hunter2z9"
+
+    def test_graceful_stop_put_error_is_scrubbed(self, caplog: pytest.LogCaptureFixture) -> None:
+        manager = WorkerManager()
+        cfw_uuid = uuid4()
+
+        mock_process = Mock(spec=multiprocessing.Process)
+        mock_process.is_alive.return_value = True
+        mock_command_queue = MagicMock()
+        mock_command_queue.put.side_effect = Exception(f"queue broken for postgres://u:{self._LEAK_MARKER}@h/db")
+        manager.process_register[cfw_uuid] = (mock_process, mock_command_queue, MagicMock())
+
+        with caplog.at_level(logging.ERROR):
+            manager.join_all()
+
+        error_records = [r for r in caplog.records if r.levelno == logging.ERROR]
+        assert error_records, "expected an ERROR record for the failed graceful STOP"
+        assert not any(self._LEAK_MARKER in r.getMessage() for r in error_records), (
+            f"credential leaked into an ERROR record: {[r.getMessage() for r in error_records]}"
+        )
+
+    def test_graceful_shutdown_join_error_is_scrubbed(self, caplog: pytest.LogCaptureFixture) -> None:
+        manager = WorkerManager()
+        cfw_uuid = uuid4()
+
+        mock_process = Mock(spec=multiprocessing.Process)
+        mock_process.is_alive.return_value = False
+        mock_process.join.side_effect = Exception(f"join broken for postgres://u:{self._LEAK_MARKER}@h/db")
+        manager.process_register[cfw_uuid] = (mock_process, MagicMock(), MagicMock())
+
+        with caplog.at_level(logging.ERROR):
+            manager.join_all()
+
+        error_records = [r for r in caplog.records if r.levelno == logging.ERROR]
+        assert error_records, "expected an ERROR record for the failed graceful shutdown join"
+        assert not any(self._LEAK_MARKER in r.getMessage() for r in error_records), (
+            f"credential leaked into an ERROR record: {[r.getMessage() for r in error_records]}"
+        )
+
+    def test_task_join_error_is_scrubbed_in_log_and_raised_exception(self, caplog: pytest.LogCaptureFixture) -> None:
+        manager = WorkerManager()
+
+        mock_process = Mock(spec=multiprocessing.Process)
+        mock_process.join.side_effect = Exception(f"task join broken for postgres://u:{self._LEAK_MARKER}@h/db")
+        manager.tasks.append(mock_process)
+
+        with caplog.at_level(logging.ERROR):
+            with pytest.raises(Exception) as exc_info:
+                manager.join_all()
+
+        error_records = [r for r in caplog.records if r.levelno == logging.ERROR]
+        assert error_records, "expected an ERROR record for the failed task join"
+        assert not any(self._LEAK_MARKER in r.getMessage() for r in error_records), (
+            f"credential leaked into an ERROR record: {[r.getMessage() for r in error_records]}"
+        )
+        assert self._LEAK_MARKER not in str(exc_info.value), (
+            f"credential leaked into the raised exception text: {exc_info.value}"
+        )
 
 
 class TestWorkerManagerIntegration:

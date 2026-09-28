@@ -242,6 +242,24 @@ class TestSafeFieldFieldLabelKeepsExistingBehavior:
         assert _warning_messages(caplog) == [], "A propagated exception is not a swallowed read, so it must not warn"
 
 
+class TestSafeFieldWarningScrubsCredentials:
+    """The WARNING on a swallowed read must not leak a credential carried in the exception message."""
+
+    def test_swallowed_read_warning_scrubs_credential_bearing_message(self, caplog: pytest.LogCaptureFixture) -> None:
+        leak_marker = "hunter2z9"
+
+        def raises() -> str:
+            raise RuntimeError(f"connection failed for postgres://u:{leak_marker}@h/db")
+
+        with caplog.at_level(logging.WARNING, logger=SAFE_FIELD_LOGGER):
+            result = safe_field(raises, "unavailable", field="dsn")
+
+        assert result == "unavailable"
+        messages = _warning_messages(caplog)
+        assert len(messages) == 1, f"Expected exactly one WARNING, got {messages}"
+        assert leak_marker not in messages[0], f"credential leaked into warning: {messages[0]}"
+
+
 class TestSafeFieldWarnOnceFor:
     """warn_once_for dedups the WARNING per key, so a hot call site warns only on the key's first swallow."""
 

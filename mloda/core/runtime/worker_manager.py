@@ -9,6 +9,8 @@ from multiprocessing.process import BaseProcess
 from typing import Any, Callable
 from uuid import UUID
 
+from mloda.core.abstract_plugins.components.credential_scrub import scrub_credentials
+from mloda.core.abstract_plugins.components.utils import contained_raise_reason, safe_exc_str
 from mloda.core.runtime.mp_context import mp_spawn_context, spawn_daemon_process
 
 logger = logging.getLogger(__name__)
@@ -132,14 +134,14 @@ class WorkerManager:
                 if process.is_alive():
                     command_queue.put("STOP", block=False)
             except Exception as e:
-                logger.error(f"Error sending graceful STOP: {e}")
+                logger.error("Error sending graceful STOP: %s", contained_raise_reason(e))
 
         deadline = time.time() + graceful_timeout
         for process, _, _ in self.process_register.values():
             try:
                 process.join(timeout=max(0.0, deadline - time.time()))
             except Exception as e:
-                logger.error(f"Error joining process during graceful shutdown: {e}")
+                logger.error("Error joining process during graceful shutdown: %s", contained_raise_reason(e))
 
         failures: list[str] = []
         for task in self.tasks:
@@ -148,8 +150,8 @@ class WorkerManager:
                     task.terminate()
                 task.join()
             except Exception as e:
-                logger.error(f"Error joining task: {e}")
-                failures.append(f"{getattr(task, 'name', None) or task}: {e}")
+                logger.error("Error joining task: %s", contained_raise_reason(e))
+                failures.append(f"{getattr(task, 'name', None) or task}: {scrub_credentials(safe_exc_str(e))}")
 
         if failures:
             raise Exception(

@@ -31,13 +31,30 @@ _USERINFO_FALLBACK_PATTERN = re.compile(
     r"[^\s/?#@:]*:(?!\d+(?:[/?#\s]|$))(?:(?!://)[^\s@])*@"
 )
 
-# (?<!\w), not (?<![A-Za-z]): a word-start anchor so a prefixed identifier (sslpassword,
-# PGPASSWORD, DB_PASSWORD) still matches, captured whole so the prefix survives the replacement.
-_PASSWORD_KEYWORD_PATTERN = re.compile(
-    r"(?<!\w)(?P<keyword>\w*(?:password|passwd|pwd))(?P<sep>[ \t]*=[ \t]*)"
+# Shared suffix a credential-shaped key name must end with, reused by the keyword and quoted-key patterns.
+_SECRET_NAME = (
+    r"(?:password|passwd|pwd|secret|token|signature|sig|api[_-]?key|access[_-]?key|"
+    r"account[_-]?key|secret[_-]?key|private[_-]?key)"
+)
+
+# (?<![\w-]), not (?<![A-Za-z]): a name-start anchor so a prefixed identifier (sslpassword,
+# PGPASSWORD, X-Api-Key) still matches, captured whole so the prefix survives the replacement.
+_KEYWORD_PATTERN = re.compile(
+    rf"(?<![\w-])(?P<keyword>[\w-]*{_SECRET_NAME})(?P<sep>[ \t]*=[ \t]*)"
     r"(?:'(?:[^'\\\n]|\\.)*'|\"(?:[^\"\\\n]|\\.)*\"|\{(?:[^}\n]|\}\})*\}|[^;&\s'\"]*)",
     re.IGNORECASE,
 )
+
+# Same lookbehind guard as _KEYWORD_PATTERN, on the quoted key name instead of a bare one.
+_QUOTED_KEY_PATTERN = re.compile(
+    r"(?P<quote>['\"])(?P<keyword>[\w-]*" + _SECRET_NAME + r")(?P=quote)[ \t]*:[ \t]*"
+    r"(?:'(?:[^'\\\n]|\\.)*'|\"(?:[^\"\\\n]|\\.)*\"|[^,}\s]*)",
+    re.IGNORECASE,
+)
+
+# Oracle-style slash DSN: user/password@host, distinguished from a lookalike path by the trailing
+# host shape (EZConnect //, a descriptor (, or host:port) so `path/to/x@y` and `user@example.com` are left alone.
+_SLASH_DSN_PATTERN = re.compile(r"(?<![\w.$#/-])(?P<user>[\w.$#-]+)/[^\s/]+@(?=//|\(|[\w.-]+:\d+(?!\w))")
 
 
 def _cut_key_value_path(path: str) -> str:
@@ -78,16 +95,25 @@ def _drop_free_text_userinfo(text: str) -> str:
 
 
 def scrub_credentials(text: str) -> str:
-    """Drop URI user info, query and fragment, and mask password= style values. Idempotent."""
+    """Mask URI user info, key=value secrets, quoted-key secrets and user/password@host DSNs. Idempotent."""
     text = _drop_free_text_userinfo(text)
     text = _FREE_TEXT_URI_PATTERN.sub(_scrub_uri_match, text)
-    text = _PASSWORD_KEYWORD_PATTERN.sub(r"\g<keyword>\g<sep>***", text)
+    text = _KEYWORD_PATTERN.sub(r"\g<keyword>\g<sep>***", text)
+    text = _QUOTED_KEY_PATTERN.sub(r"\g<quote>\g<keyword>\g<quote>: \g<quote>***\g<quote>", text)
+    text = _SLASH_DSN_PATTERN.sub(r"\g<user>/***@", text)
     return text
 
 
 def redact_mapping(mapping: Mapping[Any, Any]) -> dict[Any, str]:
-    """Keep every key, replace every value with ``'***'``."""
-    return {key: "***" for key in mapping}
+    """Keep every key (scrubbing a credential-shaped str key), replace every value with ``'***'``."""
+    result: dict[Any, str] = {}
+    for key in mapping:
+        if isinstance(key, str):
+            scrubbed = scrub_credentials(key)
+            result[key if scrubbed == key else scrubbed] = "***"
+        else:
+            result[key] = "***"
+    return result
 
 
 _MAX_RENDER_DEPTH = 32

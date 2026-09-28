@@ -162,6 +162,66 @@ SCRUB_CASES: list[tuple[str, str, list[str], list[str]]] = [
         ["p@ss", "user"],
         ["postgres://host/db"],
     ),
+    (
+        "azure_account_key",
+        "DefaultEndpointsProtocol=https;AccountName=acct;AccountKey=abc+/hunter2z9==;EndpointSuffix=core.windows.net",
+        ["hunter2z9"],
+        ["AccountName=acct", "AccountKey=***"],
+    ),
+    (
+        "sas_shared_access_key",
+        "Endpoint=sb://ns.servicebus.windows.net/;SharedAccessKeyName=root;SharedAccessKey=hunter2z9",
+        ["hunter2z9"],
+        ["SharedAccessKeyName=root", "SharedAccessKey=***"],
+    ),
+    (
+        "sas_signature",
+        "SharedAccessSignature=sv=2020-08-04&ss=b&sig=hunter2z9",
+        ["hunter2z9"],
+        ["SharedAccessSignature="],
+    ),
+    (
+        "token_keyword",
+        "token=hunter2z9",
+        ["hunter2z9"],
+        ["token=***"],
+    ),
+    (
+        "client_secret_keyword",
+        "client_secret=hunter2z9",
+        ["hunter2z9"],
+        ["client_secret=***"],
+    ),
+    (
+        "api_key_keyword",
+        "api_key=hunter2z9",
+        ["hunter2z9"],
+        ["api_key=***"],
+    ),
+    (
+        "x_api_key_keyword",
+        "X-Api-Key=hunter2z9",
+        ["hunter2z9"],
+        ["X-Api-Key=***"],
+    ),
+    (
+        "aws_secret_access_key_env_style",
+        "AWS_SECRET_ACCESS_KEY=hunter2z9",
+        ["hunter2z9"],
+        ["AWS_SECRET_ACCESS_KEY=***"],
+    ),
+    (
+        "secret_key_env_style",
+        "SECRET_KEY=hunter2z9",
+        ["hunter2z9"],
+        ["SECRET_KEY=***"],
+    ),
+    (
+        "url_path_token_keyword",
+        "https://h/api/token=hunter2z9",
+        ["hunter2z9"],
+        ["https://h/api"],
+    ),
 ]
 
 
@@ -174,6 +234,74 @@ def test_scrub_credentials_drops_secrets_and_keeps_context(
         assert secret not in result, f"{case_id}: secret {secret!r} leaked into {result!r}"
     for kept in keep:
         assert kept in result, f"{case_id}: expected {kept!r} kept in {result!r}"
+
+
+DICT_KEY_SCRUB_EXACT_CASES: list[tuple[str, str, str]] = [
+    ("dict_repr_password", "{'password': 'hunter2z9'}", "{'password': '***'}"),
+    ("dict_repr_numeric_password", "{'db_password': 123456789}", "{'db_password': '***'}"),
+]
+
+
+@pytest.mark.parametrize(
+    "case_id,text,expected", DICT_KEY_SCRUB_EXACT_CASES, ids=[case[0] for case in DICT_KEY_SCRUB_EXACT_CASES]
+)
+def test_scrub_credentials_masks_quoted_dict_keys_exact(case_id: str, text: str, expected: str) -> None:
+    assert scrub_credentials(text) == expected
+
+
+def test_scrub_credentials_masks_json_api_key_keeps_other_keys() -> None:
+    text = '{"api_key": "hunter2z9", "host": "h"}'
+    result = scrub_credentials(text)
+    assert "hunter2z9" not in result
+    assert '"host": "h"' in result
+
+
+SLASH_DSN_CASES: list[tuple[str, str, str, str]] = [
+    ("basic_host_port", "scott/hunter2z9@host:1521/service", "hunter2z9", "scott/***@host:1521/service"),
+    ("jdbc_thin", "jdbc:oracle:thin:scott/hunter2z9@host:1521:orcl", "hunter2z9", "scott/***@host:1521:orcl"),
+    ("ezconnect", "scott/hunter2z9@//host:1521/svc", "hunter2z9", "scott/***@//host:1521/svc"),
+    (
+        "descriptor",
+        "scott/hunter2z9@(DESCRIPTION=(ADDRESS=(HOST=h)))",
+        "hunter2z9",
+        "scott/***@(DESCRIPTION=(ADDRESS=(HOST=h)))",
+    ),
+    ("at_in_password", "scott/p@hunter2z9@host:1521/svc", "p@hunter2z9", "scott/***@host:1521/svc"),
+]
+
+
+@pytest.mark.parametrize(
+    "case_id,text,secret,expected_substring", SLASH_DSN_CASES, ids=[case[0] for case in SLASH_DSN_CASES]
+)
+def test_scrub_credentials_masks_slash_dsn_password(
+    case_id: str, text: str, secret: str, expected_substring: str
+) -> None:
+    result = scrub_credentials(text)
+    assert secret not in result, f"{case_id}: secret {secret!r} leaked into {result!r}"
+    assert expected_substring in result, f"{case_id}: expected {expected_substring!r} in {result!r}"
+
+
+UNCHANGED_LOOKALIKE_CASES: list[str] = [
+    "sort_key=col",
+    "primary_key=id",
+    "max_tokens=5",
+    "tokenizer=bert",
+    "key=path/x",
+    "SharedAccessKeyName=root",
+    "invalid password: too short",
+    "path/to/x@y",
+    "user@example.com",
+    "org/model@main",
+    "actions/checkout@v4",
+    "library/python@sha256:0123abc",
+    "https://s3.amazonaws.com/bucket/report@2024.csv",
+    "{'host': 'db1'}",
+]
+
+
+@pytest.mark.parametrize("text", UNCHANGED_LOOKALIKE_CASES)
+def test_scrub_credentials_lookalikes_kept_unchanged(text: str) -> None:
+    assert scrub_credentials(text) == text
 
 
 def test_azure_container_uri_kept_unchanged() -> None:
@@ -223,6 +351,9 @@ def test_text_without_url_is_unchanged() -> None:
         "postgres://user:pw@host:5432/db",
         "host=h password=SECRET dbname=d",
         "403 for https://bucket.s3.amazonaws.com/key?X-Amz-Signature=SECRET&X-Amz-Credential=AKIA",
+        "DefaultEndpointsProtocol=https;AccountName=acct;AccountKey=abc+/hunter2z9==;EndpointSuffix=core.windows.net",
+        "{'password': 'hunter2z9'}",
+        "scott/hunter2z9@host:1521/service",
     ],
 )
 def test_scrub_credentials_is_idempotent(text: str) -> None:
@@ -293,6 +424,54 @@ def test_long_word_followed_by_password_keyword_scrubs_fast() -> None:
     assert "SECRET" not in result
 
 
+def test_dash_run_scrubs_fast() -> None:
+    text = "a-" * 25_000
+    start = time.perf_counter()
+    scrub_credentials(text)
+    elapsed = time.perf_counter() - start
+    assert elapsed < 1.0, f"scrub_credentials took {elapsed:.3f}s on a repeated dash run"
+
+
+def test_quoted_api_key_repeat_scrubs_fast() -> None:
+    text = "'" + "api-key" * 7000
+    start = time.perf_counter()
+    scrub_credentials(text)
+    elapsed = time.perf_counter() - start
+    assert elapsed < 1.0, f"scrub_credentials took {elapsed:.3f}s on a quoted api-key repeat"
+
+
+def test_quoted_char_repeat_with_trailing_colon_value_scrubs_fast() -> None:
+    text = "'a'" * 20_000 + ": x"
+    start = time.perf_counter()
+    scrub_credentials(text)
+    elapsed = time.perf_counter() - start
+    assert elapsed < 1.0, f"scrub_credentials took {elapsed:.3f}s on a quoted char repeat with trailing colon value"
+
+
+def test_slash_run_scrubs_fast() -> None:
+    text = "a/" * 25_000
+    start = time.perf_counter()
+    scrub_credentials(text)
+    elapsed = time.perf_counter() - start
+    assert elapsed < 1.0, f"scrub_credentials took {elapsed:.3f}s on a repeated slash run"
+
+
+def test_slash_at_repeat_scrubs_fast() -> None:
+    text = "a/" + "b@" * 25_000
+    start = time.perf_counter()
+    scrub_credentials(text)
+    elapsed = time.perf_counter() - start
+    assert elapsed < 1.0, f"scrub_credentials took {elapsed:.3f}s on a slash followed by repeated at run"
+
+
+def test_slash_password_host_repeat_scrubs_fast() -> None:
+    text = "s/p@" + "h" * 50_000
+    start = time.perf_counter()
+    scrub_credentials(text)
+    elapsed = time.perf_counter() - start
+    assert elapsed < 1.0, f"scrub_credentials took {elapsed:.3f}s on a slash-dsn prefix followed by a long host run"
+
+
 def test_contained_raise_reason_scrubs_secret_url() -> None:
     exc = OSError("failed for https://u:p@h/k?sig=SECRET")
     result = contained_raise_reason(exc)
@@ -313,6 +492,22 @@ def test_redact_mapping_empty_mapping_returns_empty_dict() -> None:
 def test_redact_mapping_non_str_keys_are_preserved() -> None:
     result = redact_mapping({1: "a", ("t",): "b"})
     assert result == {1: "***", ("t",): "***"}
+
+
+def test_redact_mapping_scrubs_credential_shaped_str_keys() -> None:
+    result = redact_mapping({"postgresql://dbuser:hunter2z9@dbhost/db": "x"})
+    assert result == {"postgresql://dbhost/db": "***"}
+
+
+def test_redact_option_value_scrubs_credential_shaped_mapping_key() -> None:
+    result = redact_option_value({"postgresql://dbuser:hunter2z9@dbhost/db": "x"})
+    assert result == {"postgresql://dbhost/db": "***"}
+
+
+def test_redact_mapping_str_enum_key_with_nothing_to_scrub_keeps_identity() -> None:
+    """A str Enum key with nothing to scrub is kept as the exact same object, not merely equal."""
+    result = redact_mapping({_Mode.PLAIN: "value"})
+    assert next(iter(result)) is _Mode.PLAIN
 
 
 class _MarkerReader:

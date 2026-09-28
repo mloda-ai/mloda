@@ -718,6 +718,34 @@ def _finalize_then_exit(orchestrator: ExecutionOrchestrator) -> None:
     orchestrator.__exit__(None, None, None)
 
 
+class TestDropAllUploadedFlightTablesScrubsCredentials:
+    """A FlightServer.drop_tables failure logged as a best-effort WARNING must not leak a credential."""
+
+    def test_drop_tables_failure_warning_scrubs_credential(self, caplog: pytest.LogCaptureFixture) -> None:
+        leak_marker = "hunter2z9"
+        mock_planner = Mock(spec=ExecutionPlan)
+        orchestrator = ExecutionOrchestrator(mock_planner)
+        orchestrator.location = "flight-location"
+
+        cfw = Mock()
+        cfw.get_object_ids.return_value = []
+        orchestrator.executor = Mock()
+        orchestrator.executor.cfw_collection = {uuid_mod.uuid4(): cfw}
+
+        with patch(
+            "mloda.core.runtime.run.FlightServer.drop_tables",
+            side_effect=Exception(f"drop failed for postgres://u:{leak_marker}@h/db"),
+        ):
+            with caplog.at_level(logging.WARNING):
+                orchestrator._drop_all_uploaded_flight_tables()
+
+        warning_records = [r for r in caplog.records if r.levelno == logging.WARNING]
+        assert warning_records, "expected a WARNING record for the failed flight table drop"
+        assert not any(leak_marker in r.getMessage() for r in warning_records), (
+            f"credential leaked into a WARNING record: {[r.getMessage() for r in warning_records]}"
+        )
+
+
 class TestExitNotifiesExtendersOfRunCompletion:
     def test_notifies_with_the_run_id_after_join_and_the_flight_table_sweep(self) -> None:
         log: _RunLog = []

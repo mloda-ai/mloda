@@ -85,7 +85,9 @@ class TestParameterResolutionUnit:
             context={DefaultOptionKeys.in_features: "Sales", "ident": "invalid_identifier"},
         )
 
-        with pytest.raises(ValueError, match="Property value 'invalid_identifier' not found in mapping for 'ident'"):
+        with pytest.raises(
+            ValueError, match="Property value str 'invalid_identifier' not found in mapping for 'ident'"
+        ):
             FeatureChainParser.match_configuration_feature_chain_parser(
                 "test_feature", options_invalid_ident, property_mapping
             )
@@ -373,7 +375,9 @@ class TestParameterResolutionUnit:
             }
         )
 
-        with pytest.raises(ValueError, match="Property value 'invalid_value' not found in mapping for 'strict_param'"):
+        with pytest.raises(
+            ValueError, match="Property value str 'invalid_value' not found in mapping for 'strict_param'"
+        ):
             FeatureChainParser.match_configuration_feature_chain_parser(
                 "test_feature", options_strict_invalid, property_mapping_mixed
             )
@@ -512,7 +516,7 @@ class TestParameterResolutionUnit:
             },
         )
 
-        with pytest.raises(ValueError, match="Property value 'development' not found in mapping for 'data_source'"):
+        with pytest.raises(ValueError, match="Property value str 'development' not found in mapping for 'data_source'"):
             FeatureChainParser.match_configuration_feature_chain_parser(
                 "test_feature", options_invalid_strict, property_mapping_complex
             )

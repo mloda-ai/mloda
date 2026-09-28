@@ -62,7 +62,8 @@ class TestUnhashableOperationIsANonMatch:
 
         assert reason is not None
         assert TextCleaningFeatureGroup.CLEANING_OPERATIONS in reason
-        assert str(UNHASHABLE_OPERATION) in reason
+        assert "Property value dict " in reason
+        assert str(UNHASHABLE_OPERATION) not in reason
 
     def test_rejection_reason_names_key_and_value_on_config_path(self) -> None:
         reason = TextCleaningFeatureGroup._strict_validation_rejection_reason(
@@ -71,7 +72,8 @@ class TestUnhashableOperationIsANonMatch:
 
         assert reason is not None
         assert TextCleaningFeatureGroup.CLEANING_OPERATIONS in reason
-        assert str(UNHASHABLE_OPERATION) in reason
+        assert "Property value dict " in reason
+        assert str(UNHASHABLE_OPERATION) not in reason
 
 
 class TestOrdinaryOperationVerdictsUnchanged:
@@ -125,4 +127,5 @@ class TestUnhashableOperationAtEngineLevel:
             f"not a TypeError out of the engine, but got: {message}"
         )
         assert TextCleaningFeatureGroup.CLEANING_OPERATIONS in message
-        assert str(UNHASHABLE_OPERATION) in message
+        assert "Property value dict " in message
+        assert str(UNHASHABLE_OPERATION) not in message

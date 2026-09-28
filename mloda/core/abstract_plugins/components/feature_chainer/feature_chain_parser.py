@@ -21,6 +21,7 @@ from mloda.core.abstract_plugins.components.utils import (
     contained_raise_reason,
     escalate_match_abort,
     safe_field,
+    safe_value_text,
 )
 
 logger = logging.getLogger(__name__)
@@ -196,7 +197,7 @@ class FeatureChainParser:
             if not verdict:
                 # Contained: a rejected option value is this candidate's own verdict, recorded as its reason.
                 raise PropertyValueRejection(
-                    f"Property value '{found_property_val}' failed validation for '{property_name}'"
+                    f"Property value {safe_value_text(found_property_val)} failed validation for '{property_name}'"
                 ) from raised
         else:
             # Fallback to membership check.
@@ -208,7 +209,7 @@ class FeatureChainParser:
             if not is_member:
                 # Contained: a rejected option value is this candidate's own verdict, recorded as its reason.
                 raise PropertyValueRejection(
-                    f"Property value '{found_property_val}' not found in mapping for '{property_name}'"
+                    f"Property value {safe_value_text(found_property_val)} not found in mapping for '{property_name}'"
                 )
 
     @classmethod

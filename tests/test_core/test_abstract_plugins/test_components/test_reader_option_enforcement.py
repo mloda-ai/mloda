@@ -430,6 +430,33 @@ class TestFeatureScopeStrictValues:
         assert ROE_FORMAT_KEY in stored.reason
         assert "roe_bogus" in stored.reason
 
+    @pytest.mark.parametrize(
+        "value,safe_text",
+        [
+            ({"payload": "roe_hidden"}, "dict"),
+            (10**5000, "int"),
+        ],
+        ids=["dict", "huge_int"],
+    )
+    def test_a_composite_or_oversized_value_is_rendered_via_safe_value_text(
+        self, value: Any, safe_text: str, rejection_window: dict[str, MatchRejection]
+    ) -> None:
+        """The recorded reason renders the value through safe_value_text, never verbatim, never raising."""
+        options = Options({RoeStrictValuesReader.__name__: ROE_STRICT_ACCESS, ROE_FORMAT_KEY: value})
+
+        matched = BaseInputData.feature_scope_data_access(options, ROE_FEATURE_NAME)
+
+        assert matched is False
+        owner = RoeStrictValuesReader.get_class_name()
+        stored = rejection_window[owner]
+        assert stored.stage == INPUT_DATA_OWNED_STAGE
+        assert (
+            stored.reason == f"reader option '{ROE_FORMAT_KEY}' value {safe_text} is rejected by the "
+            f"declaration of {owner}"
+        )
+        if safe_text == "dict":
+            assert "roe_hidden" not in stored.reason
+
     def test_valid_membership_value_still_matches_and_pins_the_pair(
         self, rejection_window: dict[str, MatchRejection]
     ) -> None:

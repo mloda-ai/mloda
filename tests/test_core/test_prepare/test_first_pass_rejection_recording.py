@@ -46,7 +46,7 @@ MISSING_OPTION_FEATURE_OS005R = "missing_option_source_os005r__sum_os005rmiss"
 GUARD_FEATURE_OS005R = "guard_recording_feature_os005r"
 FACADE_FEATURE_OS005R = "facade_probe_feature_os005r"
 
-STRICT_REJECTION_REASON_OS005R = "Property value '14' failed validation for 'window_size_os005r'"
+STRICT_REJECTION_REASON_OS005R = "Property value int 14 failed validation for 'window_size_os005r'"
 MISSING_OPTION_REASON_OS005R = "required option(s) some_key_os005r are absent after declared defaults and name bindings"
 GUARD_REJECTION_REASON_OS005R = "Property value str 'ok_os005r' rejected by match_guard for 'guarded_key_os005r'"
 FACADE_SENTINEL_REASON_OS005R = "facade sentinel reason os005r"
@@ -57,8 +57,8 @@ COLLIDING_FEATURE_OS005C = "colliding_recording_feature_os005c"
 COLLIDING_NAME_OS005C = "CollidingRejectFGOs005c"
 COLLIDING_MODULE_A_OS005C = "tests.colliding_reject_module_a_os005c"
 COLLIDING_MODULE_B_OS005C = "tests.colliding_reject_module_b_os005c"
-COLLIDE_A_REASON_OS005C = "Property value 'bogus_os005c' not found in mapping for 'collide_a_os005c'"
-COLLIDE_B_REASON_OS005C = "Property value 'bogus_os005c' not found in mapping for 'collide_b_os005c'"
+COLLIDE_A_REASON_OS005C = "Property value str 'bogus_os005c' not found in mapping for 'collide_a_os005c'"
+COLLIDE_B_REASON_OS005C = "Property value str 'bogus_os005c' not found in mapping for 'collide_b_os005c'"
 
 # Every value the strict element_validator judged, across the WHOLE failed resolution. Reset per test.
 VALIDATOR_CALLS_OS005R: list[Any] = []
@@ -336,6 +336,45 @@ class StrictGuardOnlyFGMge(FeatureChainParserMixin, FeatureGroup):
         return None
 
 
+STRICT_ELEMENT_DICT_FEATURE_MGE = "strict_element_dict_mge"
+STRICT_ELEMENT_DICT_REASON_MGE = "Property value dict failed validation for 'payload_element_mge'"
+
+STRICT_ALLOWED_HUGEINT_FEATURE_MGE = "strict_allowed_hugeint_mge"
+STRICT_ALLOWED_HUGEINT_REASON_MGE = "Property value int not found in mapping for 'payload_allowed_mge'"
+
+
+class StrictElementRejectFGMge(FeatureChainParserMixin, FeatureGroup):
+    """Strict spec whose element_validator rejects everything; no match_guard involved."""
+
+    MIN_IN_FEATURES = 0
+    PROPERTY_MAPPING = {
+        "payload_element_mge": property_spec(
+            "payload rejected outright by element_validator",
+            strict=True,
+            element_validator=lambda _value: False,
+        ),
+    }
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return None
+
+
+class StrictAllowedValuesFGMge(FeatureChainParserMixin, FeatureGroup):
+    """Strict spec with only ``allowed_values``; the membership fallback rejects anything else."""
+
+    MIN_IN_FEATURES = 0
+    PROPERTY_MAPPING = {
+        "payload_allowed_mge": property_spec(
+            "payload judged by membership in allowed_values alone",
+            strict=True,
+            allowed_values=("ok_allowed_mge",),
+        ),
+    }
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return None
+
+
 def _build_colliding_rejection_groups_os005c() -> tuple[type[FeatureGroup], type[FeatureGroup]]:
     """Build two same-named candidates across modules, each strictly rejecting its OWN option key.
 
@@ -477,7 +516,7 @@ class TestFirstPassRejectionRecording:
 
 
 class TestExpectedGuardRejectionRecording:
-    """``expected`` names what the guard accepts; the recorded reason uses that text, and the facade agrees."""
+    """Guard (``expected``, strict) and parser rejections render values the same way, and the facade agrees."""
 
     def test_valid_value_matches(self) -> None:
         """A valid int value passes the guard: match_feature_group_criteria returns True."""
@@ -623,6 +662,22 @@ class TestExpectedGuardRejectionRecording:
                 "ok_strict_mge",
                 STRICT_GUARD_STR_REASON_MGE,
                 id="strict_guard_str_value",
+            ),
+            pytest.param(
+                STRICT_ELEMENT_DICT_FEATURE_MGE,
+                StrictElementRejectFGMge,
+                "payload_element_mge",
+                {"payload": "hidden_mge"},
+                STRICT_ELEMENT_DICT_REASON_MGE,
+                id="strict_element_validator_dict_value",
+            ),
+            pytest.param(
+                STRICT_ALLOWED_HUGEINT_FEATURE_MGE,
+                StrictAllowedValuesFGMge,
+                "payload_allowed_mge",
+                10**5000,
+                STRICT_ALLOWED_HUGEINT_REASON_MGE,
+                id="strict_allowed_values_huge_int_value",
             ),
         ],
     )

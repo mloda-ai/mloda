@@ -114,7 +114,4 @@ class TestVerifiedContextReachesHookContextUnderMultiprocessing:
         # in-process degradation that would write the same JSON regardless.
         assert recorded["worker_index"] is not None
         assert recorded["pid"] != parent_pid
-        assert recorded["plugin_version"] == "9.9.9-mp-sentinel", (
-            "plugin_version must be resolved at plan time in the parent and carried into the worker "
-            "via RunContext.plugin_versions, not recomputed inside the spawned worker process."
-        )
+        assert recorded["plugin_version"] == "9.9.9-mp-sentinel", "must be resolved in the parent at plan time"

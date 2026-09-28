@@ -262,8 +262,6 @@ _pfext_enabled = PluginCollector.enabled_feature_groups({_PrepareRunExtenderFeat
 
 
 class TestRunFallsBackToPrepareTimeFunctionExtender:
-    """run() always uses the function_extender passed to prepare(); it has none of its own."""
-
     def test_run_without_its_own_function_extender_uses_the_one_from_prepare(self) -> None:
         recorder = _CalculateHookRecordingExtender()
 

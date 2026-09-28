@@ -400,8 +400,7 @@ class TestPluginVersionNotResolvedDuringExecution:
 
         assert extender.cache_infos, "extender never observed the feature group's calculate_feature call"
         assert all(info == baseline for info in extender.cache_infos), (
-            "hook-time cache_info() drifted from the plan-time baseline: resolve_plugin_version was "
-            "called again during execution instead of being read from RunContext.plugin_versions."
+            "resolve_plugin_version was called again during execution"
         )
         assert resolve_plugin_version.cache_info() == baseline
 

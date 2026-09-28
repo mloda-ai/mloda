@@ -48,7 +48,7 @@ FACADE_FEATURE_OS005R = "facade_probe_feature_os005r"
 
 STRICT_REJECTION_REASON_OS005R = "Property value '14' failed validation for 'window_size_os005r'"
 MISSING_OPTION_REASON_OS005R = "required option(s) some_key_os005r are absent after declared defaults and name bindings"
-GUARD_REJECTION_REASON_OS005R = "Property value 'ok_os005r' rejected by match_guard for 'guarded_key_os005r'"
+GUARD_REJECTION_REASON_OS005R = "Property value str 'ok_os005r' rejected by match_guard for 'guarded_key_os005r'"
 FACADE_SENTINEL_REASON_OS005R = "facade sentinel reason os005r"
 
 # The name-collision groups carry an os005c suffix of their own so their names and option keys stay
@@ -292,6 +292,52 @@ class ExpectedGuardNamePathFGMge(FeatureChainParserMixin, FeatureGroup):
         return None
 
 
+EXPECTED_MIN_INFEATURES_FEATURE_MGE = "expected_guard_min_infeatures_mge"
+EXPECTED_HUGEINT_FEATURE_MGE = "expected_guard_hugeint_mge"
+EXPECTED_HUGEINT_REASON_MGE = "option 'concurrency_mge' must be a whole number of 1 or more, got int"
+
+STRICT_GUARD_DICT_FEATURE_MGE = "strict_guard_dict_mge"
+STRICT_GUARD_HUGEINT_FEATURE_MGE = "strict_guard_hugeint_mge"
+STRICT_GUARD_STR_FEATURE_MGE = "strict_guard_str_mge"
+STRICT_GUARD_DICT_REASON_MGE = "Property value dict rejected by match_guard for 'payload_strict_mge'"
+STRICT_GUARD_HUGEINT_REASON_MGE = "Property value int rejected by match_guard for 'payload_strict_mge'"
+STRICT_GUARD_STR_REASON_MGE = "Property value str 'ok_strict_mge' rejected by match_guard for 'payload_strict_mge'"
+
+
+class ExpectedGuardDefaultMinInFeaturesFGMge(FeatureChainParserMixin, FeatureGroup):
+    """Non-strict ``expected`` guard whose group leaves MIN_IN_FEATURES at the default: the count
+    gate must reject before the guard is ever consulted, so no guard reason is recorded."""
+
+    PROPERTY_MAPPING = {
+        "concurrency_default_min_mge": property_spec(
+            "concurrency count",
+            match_guard=_is_int_geq1_mge,
+            expected="a whole number of 1 or more",
+        ),
+    }
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return None
+
+
+class StrictGuardOnlyFGMge(FeatureChainParserMixin, FeatureGroup):
+    """Strict spec with no ``expected``: a match_guard rejection is still reportable, echoing only a
+    type-safe value (never the raw composite or an oversized int)."""
+
+    MIN_IN_FEATURES = 0
+    PROPERTY_MAPPING = {
+        "payload_strict_mge": property_spec(
+            "payload judged only by shape, rejected by match_guard",
+            strict=True,
+            element_validator=lambda _value: True,
+            match_guard=lambda _value: False,
+        ),
+    }
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return None
+
+
 def _build_colliding_rejection_groups_os005c() -> tuple[type[FeatureGroup], type[FeatureGroup]]:
     """Build two same-named candidates across modules, each strictly rejecting its OWN option key.
 
@@ -377,8 +423,12 @@ class TestFirstPassRejectionRecording:
         }
 
     def test_strict_match_guard_rejection_is_reported_from_the_first_pass(self) -> None:
-        """A guard rejection on a strict spec records the same message the facade produces."""
-        feature = Feature(GUARD_FEATURE_OS005R, Options(context={"guarded_key_os005r": "ok_os005r"}))
+        """A guard rejection on a strict spec records the same message the facade produces, once the
+        in_features gate also passes."""
+        feature = Feature(
+            GUARD_FEATURE_OS005R,
+            Options(context={"guarded_key_os005r": "ok_os005r", DefaultOptionKeys.in_features: "src"}),
+        )
         accessible_plugins: FeatureGroupEnvironmentMapping = {GuardRecordingFGOs005r: {RecorderFwOneOs005r}}
 
         result = _failed_result(feature, accessible_plugins)
@@ -386,6 +436,17 @@ class TestFirstPassRejectionRecording:
         assert result.eliminations == {
             GuardRecordingFGOs005r: Elimination(stage="value_rejection", reason=GUARD_REJECTION_REASON_OS005R)
         }
+
+    def test_strict_match_guard_rejection_is_not_reported_when_in_features_is_absent(self) -> None:
+        """The in_features gate fails first (silently); the guard reason must not be recorded either."""
+        feature = Feature(GUARD_FEATURE_OS005R, Options(context={"guarded_key_os005r": "ok_os005r"}))
+        accessible_plugins: FeatureGroupEnvironmentMapping = {GuardRecordingFGOs005r: {RecorderFwOneOs005r}}
+        options = Options(context={"guarded_key_os005r": "ok_os005r"})
+
+        result = _failed_result(feature, accessible_plugins)
+
+        assert result.eliminations == {}
+        assert GuardRecordingFGOs005r._strict_validation_rejection_reason(GUARD_FEATURE_OS005R, options) is None
 
     def test_same_named_candidates_each_keep_their_own_recorded_reason(self) -> None:
         """Two candidates sharing a __name__ each report the reason their OWN match produced.
@@ -525,6 +586,46 @@ class TestExpectedGuardRejectionRecording:
                 "4",
                 "option 'concurrency_name_mge' must be a whole number of 1 or more, got str '4'",
                 id="name_path_guarded_key",
+            ),
+            pytest.param(
+                EXPECTED_HUGEINT_FEATURE_MGE,
+                ExpectedGuardFGMge,
+                "concurrency_mge",
+                -(10**700),
+                EXPECTED_HUGEINT_REASON_MGE,
+                id="huge_int_value",
+            ),
+            pytest.param(
+                EXPECTED_MIN_INFEATURES_FEATURE_MGE,
+                ExpectedGuardDefaultMinInFeaturesFGMge,
+                "concurrency_default_min_mge",
+                "4",
+                None,
+                id="default_min_in_features_blocks_guard",
+            ),
+            pytest.param(
+                STRICT_GUARD_DICT_FEATURE_MGE,
+                StrictGuardOnlyFGMge,
+                "payload_strict_mge",
+                {"payload": "hidden_mge"},
+                STRICT_GUARD_DICT_REASON_MGE,
+                id="strict_guard_dict_value",
+            ),
+            pytest.param(
+                STRICT_GUARD_HUGEINT_FEATURE_MGE,
+                StrictGuardOnlyFGMge,
+                "payload_strict_mge",
+                10**700,
+                STRICT_GUARD_HUGEINT_REASON_MGE,
+                id="strict_guard_huge_int_value",
+            ),
+            pytest.param(
+                STRICT_GUARD_STR_FEATURE_MGE,
+                StrictGuardOnlyFGMge,
+                "payload_strict_mge",
+                "ok_strict_mge",
+                STRICT_GUARD_STR_REASON_MGE,
+                id="strict_guard_str_value",
             ),
         ],
     )

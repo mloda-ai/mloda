@@ -11,6 +11,7 @@ import gc
 
 from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser_mixin import FeatureChainParserMixin
+from mloda.core.abstract_plugins.components.match_rejection import NAME_STAGE
 from mloda.core.abstract_plugins.components.property_spec import property_spec
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.components.options import Options
@@ -26,7 +27,6 @@ MIN_COUNT_CLASS_NAME = "MinInFeaturesMixinFG944"
 BELOW_MIN_FEATURE = "src1__op1_mincount944"
 INSIDE_RANGE_FEATURE = "src1&src2__op1_mincount944"
 RESOLUTION_ERROR_NAME = "FeatureResolutionError"
-VALUE_REJECTION_STAGE = "value_rejection"
 BELOW_MIN_REASON = f"Feature '{BELOW_MIN_FEATURE}' requires at least 2 in_feature(s), but found 1"
 
 
@@ -76,6 +76,21 @@ def _resolve(feature_name: str) -> tuple[str | None, tuple[str, ...], tuple[tupl
     return error_type, identified, eliminations
 
 
+def _resolve_message(feature_name: str) -> str:
+    """Evaluate that name and return the rendered ``FeatureResolutionError`` message, or "" on a match."""
+    feature_group = _make_min_count_mixin_fg()
+    feature = Feature(feature_name, Options())
+    plugins: FeatureGroupEnvironmentMapping = {feature_group: {MinCountFw944}}
+    message = ""
+    try:
+        evaluate_or_raise(feature, plugins, None)
+    except FeatureResolutionError as exc:
+        message = str(exc)
+    del plugins, feature, feature_group
+    gc.collect()
+    return message
+
+
 class TestNameSourceCountBelowMinIsANearMiss:
     def test_resolution_still_fails(self) -> None:
         error_type, identified, _ = _resolve(BELOW_MIN_FEATURE)
@@ -87,7 +102,7 @@ class TestNameSourceCountBelowMinIsANearMiss:
         """The pre-gate diagnostic survives: the report names the declared MIN and the count the name carries."""
         _, _, eliminations = _resolve(BELOW_MIN_FEATURE)
 
-        expected = ((MIN_COUNT_CLASS_NAME, VALUE_REJECTION_STAGE, BELOW_MIN_REASON),)
+        expected = ((MIN_COUNT_CLASS_NAME, NAME_STAGE, BELOW_MIN_REASON),)
         assert eliminations == expected, f"the count reason must surface as a near-miss, got: {eliminations}"
 
     def test_a_count_inside_the_range_still_identifies_the_candidate(self) -> None:
@@ -97,3 +112,9 @@ class TestNameSourceCountBelowMinIsANearMiss:
         assert error_type is None, f"a count inside the range must still resolve, got: {error_type}"
         assert identified == (MIN_COUNT_CLASS_NAME,)
         assert eliminations == ()
+
+    def test_the_rendered_message_names_the_gate_as_feature_name(self) -> None:
+        """End-to-end: the failure text labels the near-miss ``(feature name)``, not ``(option value)``."""
+        message = _resolve_message(BELOW_MIN_FEATURE)
+
+        assert f"  - {MIN_COUNT_CLASS_NAME} (feature name): {BELOW_MIN_REASON}" in message

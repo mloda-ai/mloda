@@ -78,7 +78,7 @@ from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser
     PropertyValueRejection,
     option_key_is_present,
 )
-from mloda.core.abstract_plugins.components.match_rejection import record_match_rejection
+from mloda.core.abstract_plugins.components.match_rejection import NAME_STAGE, record_match_rejection
 from mloda.core.abstract_plugins.components.property_spec import PropertySpec, is_no_default
 from mloda.core.abstract_plugins.components.default_options_key import DefaultOptionKeys
 from mloda.core.abstract_plugins.components.utils import (
@@ -95,6 +95,19 @@ COLUMNWISE_HOOKS: frozenset[str] = frozenset({"_check_source_features_exist", "_
 
 # The pair plus the discovery hook, for a family that resolves column names against the data.
 COLUMN_DISCOVERY_HOOKS: frozenset[str] = COLUMNWISE_HOOKS | {"_get_available_columns"}
+
+
+def _safe_value_text(value: Any) -> str:
+    """Render a guard-rejected value for a message without ever risking a caller-visible crash or secret."""
+    if type(value) in (str, int, float, bool):
+        # 2**2126 < 10**640, the lowest settable str-digit limit, so repr cannot raise
+        if type(value) is int and value.bit_length() > 2126:
+            return "int"
+        return f"{type(value).__name__} {reprlib.repr(value)}"
+    if value is None:
+        return "None"
+    # No value text: a composite can hold data the caller should not see.
+    return type(value).__name__
 
 
 class FeatureChainParserMixin:
@@ -268,7 +281,7 @@ class FeatureChainParserMixin:
         carries when it identifies the group, else the in_features option value. A
         name-carried count outside the range is recorded as a reportable rejection; an
         in_features option value the matcher cannot resolve is a silent non-match. An
-        absent in_features counts as zero on the configuration path.
+        absent in_features counts as zero on the configuration path. This gate runs before ``match_guard``.
 
         ``required_when`` is NOT evaluated here. The guard installed at class definition
         runs the predicates after this method (or any override of it) returns True.
@@ -320,10 +333,10 @@ class FeatureChainParserMixin:
                 effective_options = FeatureChainParser._merge_bindings(options, bindings, property_mapping)
                 cls._validate_forwarded_name_mismatch(feature_name, bindings, options)
 
-        if not cls._validate_match_guards(result, effective_options, property_mapping):
+        if not cls._validate_in_features(result, options, name_sources, feature_name):
             return False
 
-        if not cls._validate_in_features(result, options, name_sources, feature_name):
+        if not cls._validate_match_guards(result, effective_options, property_mapping):
             return False
 
         return result
@@ -386,6 +399,7 @@ class FeatureChainParserMixin:
 
         name_matched = False
         effective_options = options
+        name_sources: list[str] | None = None
         prefix_patterns = cls._get_prefix_patterns()
         if prefix_patterns:
             try:
@@ -394,6 +408,8 @@ class FeatureChainParserMixin:
                 return None
             name_matched = FeatureChainParser._name_identifies_group(parsed, property_mapping)
             if name_matched:
+                if parsed.source_feature:
+                    name_sources = parsed.source_feature.split(cls.IN_FEATURE_SEPARATOR)
                 bindings = FeatureChainParser.bind_name_captures(parsed, property_mapping)
                 effective_options = FeatureChainParser._merge_bindings(options, bindings, property_mapping)
 
@@ -418,6 +434,10 @@ class FeatureChainParserMixin:
             reason = FeatureChainParser.name_path_presence_rejection_reason(effective_options, property_mapping)
             if reason is not None:
                 return reason
+
+        # The in_features gate itself is not reported here; it only gates whether a guard reason follows.
+        if not cls._validate_in_features(True, options, name_sources, feature_name):
+            return None
 
         rejection = cls._first_rejecting_guard(effective_options, property_mapping)
         if rejection is None:
@@ -520,16 +540,11 @@ class FeatureChainParserMixin:
         Shared by the match-time recorder and the diagnostic facade, so the two text sources cannot drift.
         """
         if spec.expected is not None:
-            if type(value) in (str, int, float, bool):
-                shown = f"{type(value).__name__} {reprlib.repr(value)}"
-            elif value is None:
-                shown = "None"
-            else:
-                # No value text: a composite can hold data the caller should not see.
-                shown = type(value).__name__
+            shown = _safe_value_text(value)
             return f"option '{key}' must be {spec.expected}, got {shown}"
         if spec.strict_validation:
-            return f"Property value '{value}' rejected by match_guard for '{key}'"
+            shown = _safe_value_text(value)
+            return f"Property value {shown} rejected by match_guard for '{key}'"
         return None
 
     @classmethod
@@ -570,7 +585,7 @@ class FeatureChainParserMixin:
             reason = cls._in_feature_count_reason(feature_name, len(name_sources))
             if reason is None:
                 return True
-            record_match_rejection(cls.__name__, reason)
+            record_match_rejection(cls.__name__, reason, stage=NAME_STAGE)
             return False
 
         in_features_raw = options.get(DefaultOptionKeys.in_features)

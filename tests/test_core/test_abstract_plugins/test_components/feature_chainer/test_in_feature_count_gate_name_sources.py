@@ -14,7 +14,7 @@ import pytest
 from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser_mixin import (
     FeatureChainParserMixin,
 )
-from mloda.core.abstract_plugins.components.match_rejection import MATCH_REJECTION_REASONS, MatchRejection
+from mloda.core.abstract_plugins.components.match_rejection import MATCH_REJECTION_REASONS, NAME_STAGE, MatchRejection
 from mloda.provider import DefaultOptionKeys, PropertySpec
 from mloda.user import Feature, Options
 
@@ -35,6 +35,29 @@ class _NameSourceGate944(FeatureChainParserMixin):
             context=True,
             strict_validation=True,
         )
+    }
+
+
+class _NameSourceGuardGate944(FeatureChainParserMixin):
+    """Two to three in_features; the second key's guard rejects every value, so an out-of-range
+    count must be recorded instead of the guard's own reason."""
+
+    PREFIX_PATTERN = r".*__([\w]+)_guardgate944$"
+    MIN_IN_FEATURES = 2
+    MAX_IN_FEATURES = 3
+    PROPERTY_MAPPING = {
+        "operation": PropertySpec(
+            "Operation to apply",
+            allowed_values={"op1": "Operation 1"},
+            context=True,
+            strict_validation=True,
+        ),
+        "guarded_key_gate944": PropertySpec(
+            "guarded key whose guard rejects every value",
+            allowed_values=("ok_gate944",),
+            strict_validation=True,
+            match_guard=lambda _value: False,
+        ),
     }
 
 
@@ -129,14 +152,14 @@ class TestNameSourceCountRejectionIsRecorded:
         result = _NameSourceGate944.match_feature_group_criteria(BELOW_MIN_NAME_944, _options())
 
         assert result is False
-        assert rejection_window == {OWNER_944: MatchRejection(reason=BELOW_MIN_REASON_944, stage="value_rejection")}
+        assert rejection_window == {OWNER_944: MatchRejection(reason=BELOW_MIN_REASON_944, stage=NAME_STAGE)}
 
     def test_above_max_records_the_actionable_reason(self, rejection_window: dict[str, MatchRejection]) -> None:
         """The reason keeps the pre-gate wording: the declared MAX and the count the name carries."""
         result = _NameSourceGate944.match_feature_group_criteria(ABOVE_MAX_NAME_944, _options())
 
         assert result is False
-        assert rejection_window == {OWNER_944: MatchRejection(reason=ABOVE_MAX_REASON_944, stage="value_rejection")}
+        assert rejection_window == {OWNER_944: MatchRejection(reason=ABOVE_MAX_REASON_944, stage=NAME_STAGE)}
 
     def test_below_min_records_the_name_count_even_with_a_passing_option(
         self, rejection_window: dict[str, MatchRejection]
@@ -144,7 +167,7 @@ class TestNameSourceCountRejectionIsRecorded:
         """The option value would pass the gate, so the reason must report the name's count, not the option's."""
         _NameSourceGate944.match_feature_group_criteria(BELOW_MIN_NAME_944, _options(["a", "b"]))
 
-        assert rejection_window == {OWNER_944: MatchRejection(reason=BELOW_MIN_REASON_944, stage="value_rejection")}
+        assert rejection_window == {OWNER_944: MatchRejection(reason=BELOW_MIN_REASON_944, stage=NAME_STAGE)}
 
     def test_a_count_inside_the_range_records_nothing(self, rejection_window: dict[str, MatchRejection]) -> None:
         result = _NameSourceGate944.match_feature_group_criteria("f1&f2&f3__op1_gate944", _options())
@@ -158,6 +181,20 @@ class TestNameSourceCountRejectionIsRecorded:
 
         assert result is False
         assert rejection_window == {}
+
+    def test_the_count_reason_wins_over_a_rejected_guard(self, rejection_window: dict[str, MatchRejection]) -> None:
+        """A too-few name-carried sources AND a guard-rejected key: the recorded reason is the count
+        reason, stage ``NAME_STAGE``, never the guard reason."""
+        context = {"operation": "op1", "guarded_key_gate944": "ok_gate944"}
+        result = _NameSourceGuardGate944.match_feature_group_criteria("f1__op1_guardgate944", Options(context=context))
+
+        assert result is False
+        assert rejection_window == {
+            "_NameSourceGuardGate944": MatchRejection(
+                reason=("Feature 'f1__op1_guardgate944' requires at least 2 in_feature(s), but found 1"),
+                stage=NAME_STAGE,
+            )
+        }
 
 
 class _OptionsOnlyGroupM951(FeatureChainParserMixin):

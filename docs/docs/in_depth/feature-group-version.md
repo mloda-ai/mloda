@@ -14,7 +14,7 @@ The version has three parts, joined by `-`:
 
 - **Roots**: the feature group class and every base class in its MRO that is first-party. First-party means the feature group's own top-level package or the `mloda.*` plugin namespace, except mloda's own `mloda.core`, `mloda.user`, `mloda.provider` and `mloda.steward`. The version prefix covers mloda itself.
 - **Reachable code**: every function, class and module-level constant the roots reference by name or by `module.attr`, followed through first-party code. This includes helpers in other modules and constants imported with `from ... import`. A module used as a value, for example in `getattr(helpers, name)`, counts as a whole.
-- **Imports inside a function body**, for example to avoid a circular import: first-party targets are followed from their source files, without importing them, so the hash is the same whether or not the target module was already imported. Third-party imports inside a function body add nothing.
+- **Imports inside a function body**, for example to avoid a circular import: first-party targets are followed from their source files, without importing them, so the hash is the same whether or not the target module was already imported. Third-party and stdlib imports inside a function body add nothing, not even a dependency version.
 - **Canonical form**: each definition is hashed from its syntax tree. Code, constants, decorators, base classes and type annotations count. Docstrings, comments, blank lines and formatting do not. Functions the feature group never references do not count either. The hash is the same on every supported Python version.
 
 ```python
@@ -93,11 +93,11 @@ class ScaledValue(FeatureGroup):
         return data
 ```
 
-Editing `Scaler.apply` now changes `ScaledValue.version()`. A third-party class referenced this way records only its package name and version. `ReadFileFeature` and `ReadDocumentFeature` declare nothing: the readers they find depend on what is imported at runtime, which would make the version depend on import order. The readers shipped with mloda are covered by the version prefix. To version a custom reader, subclass the reader feature group and reference the reader in it.
+Editing `Scaler.apply` now changes `ScaledValue.version()`. A third-party class referenced this way records only its package name and version, and nothing under `ThirdPartyVersionMode.EXCLUDE`. `ReadFileFeature` and `ReadDocumentFeature` declare nothing: the readers they find depend on what is imported at runtime, which would make the version depend on import order. The readers shipped with mloda are covered by the version prefix. To version a custom reader, subclass the reader feature group and reference the reader in it.
 
 ## When it is computed
 
-`version()` runs for every hook call while an extender is active, and in `get_feature_group_docs()`. The hash is computed once per class and cached for the lifetime of the class object. Each module is parsed once per process, and only the definitions the walk reaches are hashed.
+`version()` runs for every hook call while an extender is active, and in `get_feature_group_docs()`. The hash is computed once per class and cached for the lifetime of the class object. Each imported module is parsed once per process (a module found only through a function-local import, once per hash), and only the definitions the walk reaches are hashed.
 
 ## Custom versioning
 

@@ -337,6 +337,7 @@ from {top} import dispatch as dispatch_module
 from {top}.deco import deco
 from {top}.helpers import LIMIT, helper
 from {top}.readers import Reader
+from {top}.shadow_a import shadow_value
 from mloda.provider import FeatureGroup
 
 
@@ -397,6 +398,35 @@ class Base(FeatureGroup):
             return nested_target_helper(y)
 
         return inner(x)
+
+    def calculate_via_module_level_shadow_target(self, x: int) -> int:
+        return shadow_value(x)
+
+    def calculate_via_locally_shadowed_same_name(self, x: int) -> int:
+        from {top}.shadow_b import shadow_value
+
+        return shadow_value(x)
+
+    def calculate_via_aliased_lazy_import(self, x: int) -> int:
+        import {top}.lazy as lz
+
+        return lz.aliased_target_helper(x)
+
+    def calculate_via_sibling_unaliased_imports(self, x: int) -> int:
+        import {top}.lazy
+        import {top}.lazy_deep
+
+        return {top}.lazy.sibling_lazy_target(x) + {top}.lazy_deep.sibling_lazy_deep_target(x)
+
+    def calculate_via_relative_local_import(self, x: int) -> int:
+        from .lazy import relative_target_helper
+
+        return relative_target_helper(x)
+
+    def calculate_via_try_fallback_module(self, x: int) -> int:
+        import {top}.tryfallback
+
+        return {top}.tryfallback.use_impl(x)
 """
 
 LAZY_SRC_TMPL = """\
@@ -413,6 +443,18 @@ def nested_target_helper(x: int) -> int:
 
 def unrelated_lazy_helper() -> str:
     return "unrelated function in lazy module"
+
+
+def aliased_target_helper(x: int) -> int:
+    return x + 500
+
+
+def sibling_lazy_target(x: int) -> int:
+    return x + 600
+
+
+def relative_target_helper(x: int) -> int:
+    return x + 800
 """
 
 LAZY_DEEP_SRC_TMPL = """\
@@ -426,12 +468,47 @@ def nested_class_target_helper(x: int) -> int:
 
 def unrelated_lazy_deep_helper() -> str:
     return "unrelated function in lazy_deep module"
+
+
+def sibling_lazy_deep_target(x: int) -> int:
+    return x + 700
 """
 
 READERS_SRC = """\
 class Reader:
     def read(self) -> str:
         return "reader-body"
+"""
+
+SHADOW_A_SRC = """\
+def shadow_value(x: int) -> int:
+    return x + 300
+"""
+
+SHADOW_B_SRC = """\
+def shadow_value(x: int) -> int:
+    return x + 400
+"""
+
+FASTIMPL_SRC = """\
+def impl(x: int) -> int:
+    return x + 900
+"""
+
+SLOWIMPL_SRC = """\
+def impl(x: int) -> int:
+    return x + 950
+"""
+
+TRYFALLBACK_SRC_TMPL = """\
+try:
+    from {top}.fastimpl import impl
+except ImportError:
+    from {top}.slowimpl import impl
+
+
+def use_impl(x: int) -> int:
+    return impl(x)
 """
 
 SUB_SRC_TMPL = """\
@@ -460,6 +537,11 @@ def _base_files(top: str) -> dict[str, str]:
         "readers.py": READERS_SRC,
         "lazy.py": LAZY_SRC_TMPL.format(top=top),
         "lazy_deep.py": LAZY_DEEP_SRC_TMPL,
+        "shadow_a.py": SHADOW_A_SRC,
+        "shadow_b.py": SHADOW_B_SRC,
+        "fastimpl.py": FASTIMPL_SRC,
+        "slowimpl.py": SLOWIMPL_SRC,
+        "tryfallback.py": TRYFALLBACK_SRC_TMPL.format(top=top),
         "base.py": BASE_SRC_TMPL.format(top=top),
         "sub.py": SUB_SRC_TMPL.format(top=top),
     }
@@ -600,9 +682,15 @@ _MUST_CHANGE_CASES: list[tuple[str, str, str, str]] = [
     ("local_import_nested_function_target_body", "lazy.py", "return x + 100", "return x + 101"),
     ("local_import_nested_class_target_body", "lazy_deep.py", "return x + 200", "return x + 201"),
     ("local_import_transitive_second_module_body", "lazy_deep.py", "return x + 1", "return x + 2"),
-    # Reflection idiom (READERS = (Reader,)) is resolved through today's live/static ref path already;
-    # characterization guard, expected to pass before any production-code change.
+    # Reflection idiom (READERS = (Reader,)): guards the documented class-attribute idiom.
     ("reflection_idiom_reader_body", "readers.py", 'return "reader-body"', 'return "reader-body-changed"'),
+    # Review-fix round: aliasing, sibling shared-head imports, relative import, try/except fallback, shadowing.
+    ("shadowed_module_level_helper_body", "shadow_a.py", "return x + 300", "return x + 301"),
+    ("local_import_aliased_module_target_body", "lazy.py", "return x + 500", "return x + 501"),
+    ("local_import_sibling_lazy_target_body", "lazy.py", "return x + 600", "return x + 601"),
+    ("local_import_sibling_lazy_deep_target_body", "lazy_deep.py", "return x + 700", "return x + 701"),
+    ("local_import_relative_target_body", "lazy.py", "return x + 800", "return x + 801"),
+    ("local_import_try_except_fallback_body", "slowimpl.py", "return x + 950", "return x + 951"),
 ]
 
 _MUST_NOT_CHANGE_CASES: list[tuple[str, str, str, str]] = [
@@ -713,14 +801,20 @@ class TestImplementationHashEditMatrix:
         int(digest, 16)
 
 
-class TestLocalImportDeterminism:
-    """A function-local first-party import resolves the same whether its target is pre-imported or not.
+def _part_module_segments(part: str) -> list[str]:
+    """Dotted module-name segments a closure_parts entry is filed under (``mod:qual:digest`` or
+    ``nosrc:mod:qual``), so a stdlib name can be matched as a module component, not a substring."""
+    pieces = part.split(":")
+    modname = pieces[1] if pieces[0] == "nosrc" and len(pieces) > 1 else pieces[0]
+    return modname.split(".")
 
-    Module-level ``import {top}.other`` in the FG module, a local ``import {top}.lazy`` inside the one
-    hashed method, and a two-hop alias in lazy.py (``Y = Z``) that the method calls through.
-    """
 
-    def _write(self, fixture_pkg: _FixturePkgHelper, top: str) -> None:
+class TestLocalImports:
+    """Function-local first-party imports: static resolution, out-of-scope no-ops, and pathological shapes."""
+
+    def _write_determinism_fixture(self, fixture_pkg: _FixturePkgHelper, top: str) -> None:
+        """Module-level ``import {top}.other``, a local ``import {top}.lazy`` inside the hashed method,
+        and a two-hop alias in lazy.py (``Y = Z``) that the method calls through."""
         fixture_pkg.write(
             top,
             {
@@ -741,21 +835,19 @@ class TestLocalImportDeterminism:
         self, fixture_pkg: _FixturePkgHelper
     ) -> None:
         top = _unique_top("localdet")
-        self._write(fixture_pkg, top)
+        self._write_determinism_fixture(fixture_pkg, top)
         leaf_cold = fixture_pkg.import_leaf(top)
         hash_cold = BaseFeatureGroupVersion.implementation_hash(leaf_cold)
         assert f"{top}.lazy" not in sys.modules, "hashing must not import the local-import target module"
 
         fixture_pkg.purge(top)
-        self._write(fixture_pkg, top)
+        self._write_determinism_fixture(fixture_pkg, top)
         importlib.import_module(f"{top}.lazy")
         leaf_warm = fixture_pkg.import_leaf(top)
         hash_warm = BaseFeatureGroupVersion.implementation_hash(leaf_warm)
 
         assert hash_warm == hash_cold, "resolution is static: pre-importing the target must not change the hash"
 
-
-class TestLocalImportUnlocatableTarget:
     def test_typoed_local_import_target_does_not_raise_and_adds_nosrc_part(
         self, fixture_pkg: _FixturePkgHelper
     ) -> None:
@@ -774,17 +866,17 @@ class TestLocalImportUnlocatableTarget:
         )
         leaf = fixture_pkg.import_leaf(top)
 
-        digest_first = BaseFeatureGroupVersion.implementation_hash(leaf)
-        parts = closure_parts(leaf, False)
+        parts_first = closure_parts(leaf, False)
+        parts_second = closure_parts(leaf, False)
 
-        assert any(part.startswith("nosrc:") for part in parts), (
+        assert any(part.startswith("nosrc:") for part in parts_first), (
             "an unlocatable local-import target must add a deterministic nosrc: part, never raise"
         )
-        assert digest_first == BaseFeatureGroupVersion.implementation_hash(leaf), "must stay deterministic"
+        assert parts_first == parts_second, "must stay deterministic across repeated walks"
 
-
-class TestLocalImportOutOfScopeNoOp:
-    def test_local_core_surface_and_stdlib_imports_add_no_parts(self, fixture_pkg: _FixturePkgHelper) -> None:
+    def test_local_core_surface_and_stdlib_and_third_party_imports_add_no_parts(
+        self, fixture_pkg: _FixturePkgHelper
+    ) -> None:
         top = _unique_top("localnoop")
         fixture_pkg.write(
             top,
@@ -793,8 +885,12 @@ class TestLocalImportOutOfScopeNoOp:
                     "from mloda.provider import FeatureGroup\n\n\n"
                     "class Leaf(FeatureGroup):\n"
                     "    def calculate_feature(self, x: int) -> int:\n"
-                    "        from mloda.core.abstract_plugins.feature_group import FeatureGroup as _FG\n"
-                    "        import json\n\n"
+                    "        import json\n"
+                    "        from mloda.core.abstract_plugins.components.utils import safe_field\n"
+                    "        from typing_extensions import deprecated\n\n"
+                    "        json.dumps(x)\n"
+                    "        safe_field(lambda: x, None)\n"
+                    "        str(deprecated)\n"
                     "        return x + 1\n"
                 )
             },
@@ -803,8 +899,64 @@ class TestLocalImportOutOfScopeNoOp:
 
         parts = closure_parts(leaf, True)
 
-        assert not any("mloda.core.abstract_plugins.feature_group" in part for part in parts)
-        assert not any("json" in part for part in parts)
+        assert not any(part.split(":", 1)[0] == "json" for part in parts), (
+            "a local stdlib import must add no source parts"
+        )
+        assert not any("mloda.core.abstract_plugins.components.utils" in part for part in parts), (
+            "a local mloda.core import must add no source parts"
+        )
+        assert not any("typing_extensions" in part for part in parts), (
+            "a local third-party import must add no source parts and no dep: entry"
+        )
+
+    def test_local_variable_named_like_stdlib_module_adds_no_module_parts(self, fixture_pkg: _FixturePkgHelper) -> None:
+        top = _unique_top("localvar")
+        fixture_pkg.write(
+            top,
+            {
+                "lazymod.py": "def f(x: int) -> int:\n    copy = x\n    return copy\n",
+                "sub.py": (
+                    "from mloda.provider import FeatureGroup\n\n\n"
+                    "class Leaf(FeatureGroup):\n"
+                    "    def calculate_feature(self, x: int) -> int:\n"
+                    f"        from {top}.lazymod import f\n\n"
+                    "        return f(x)\n"
+                ),
+            },
+        )
+        leaf = fixture_pkg.import_leaf(top)
+
+        parts = closure_parts(leaf, True)
+
+        assert not any("copy" in _part_module_segments(part) for part in parts), (
+            "a local variable named like a stdlib module must not be looked up as a `copy` submodule "
+            f"of the lazily imported module; got parts: {parts}"
+        )
+
+    @pytest.mark.timeout(5)
+    def test_star_import_cycle_terminates(self, fixture_pkg: _FixturePkgHelper) -> None:
+        """a.py and b.py star-import each other; a local `from {top}.a import f` where f is undefined
+        must not loop forever resolving through the cycle (no seen-guard is the pre-fix bug)."""
+        top = _unique_top("starcycle")
+        fixture_pkg.write(
+            top,
+            {
+                "a.py": f"from {top}.b import *\n",
+                "b.py": f"from {top}.a import *\n",
+                "sub.py": (
+                    "from mloda.provider import FeatureGroup\n\n\n"
+                    "class Leaf(FeatureGroup):\n"
+                    "    def calculate_feature(self, x: int) -> int:\n"
+                    f"        from {top}.a import f\n\n"
+                    "        return f(x)\n"
+                ),
+            },
+        )
+        leaf = fixture_pkg.import_leaf(top)
+
+        digest = BaseFeatureGroupVersion.implementation_hash(leaf)
+
+        assert len(digest) == 64
 
 
 class TestVersionUsesImplementationHash:

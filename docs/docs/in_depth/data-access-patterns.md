@@ -90,7 +90,7 @@ Feature("value", options={UbaAirReader.__name__: url})
 
 The reader class itself is also accepted as the key, e.g. `Feature("value", options={UbaAirReader: url})`; it is normalized to the class-name string when the Options object is constructed, so both forms are one identity.
 
-The matched `(ReaderClass, data_access)` pair is stored under the reserved `"BaseInputData"` options key and consumed by `init_reader` at load time; `PlanStep.reader_data_access` exposes the same pair on a resolved plan. `data_access` may hold credentials, so use `reader.data_access_identity(data_access)` for display and logs. When a reader's own error text may itself carry a credential (e.g. a raw connection string in an exception message), scrub it with `mloda.provider.scrub_credentials` before logging.
+The matched `(ReaderClass, data_access)` pair is stored under the reserved `"BaseInputData"` options key and consumed by `init_reader` at load time; `PlanStep.reader_data_access` exposes the same pair on a resolved plan. `data_access` may hold credentials, so use `reader.data_access_identity(data_access)` for display and logs. If a reader's own error text may carry a credential, scrub it with `mloda.provider.scrub_credentials` before logging.
 
 For non-file sources such as HTTP endpoints, subclassing `ReadFile` and overriding `match_subclass_data_access` plus `load_data` is a supported pattern; on that path `suffix()` is never consulted (it is inert). `ApiInputData` injects in-memory data passed through the API request and is not an HTTP client.
 

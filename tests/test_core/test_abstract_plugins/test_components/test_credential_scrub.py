@@ -318,6 +318,12 @@ class _MarkerReader:
     """Stand-in for a reader class used only as a tuple element in these cases."""
 
 
+_DSN_URI_MARKER = "postgresql://dbuser:cred_marker_q7@dbhost/db"
+_DSN_URI_SCRUBBED = "postgresql://dbhost/db"
+_DSN_KEYWORD_MARKER = "host=dbhost password=cred_marker_q7"
+_DSN_KEYWORD_SCRUBBED = "host=dbhost password=***"
+
+
 @pytest.mark.parametrize(
     "value,expected",
     [
@@ -332,8 +338,63 @@ class _MarkerReader:
         ),
         ("raw_db_path_marker", "raw_db_path_marker"),
         (["raw_db_path_marker"], ["raw_db_path_marker"]),
+        (_DSN_URI_MARKER, _DSN_URI_SCRUBBED),
+        (_DSN_KEYWORD_MARKER, _DSN_KEYWORD_SCRUBBED),
+        ([{"sqlite": "raw_db_path_marker"}], [{"sqlite": "***"}]),
+        (
+            (("outer",), {"sqlite": "raw_db_path_marker"}),
+            (("outer",), {"sqlite": "***"}),
+        ),
+        (
+            {_DSN_URI_MARKER, "postgresql://dbuser2:cred_marker_q7@dbhost2/db"},
+            sorted([_DSN_URI_SCRUBBED, "postgresql://dbhost2/db"], key=repr),
+        ),
+        (
+            frozenset({_DSN_URI_MARKER}),
+            [_DSN_URI_SCRUBBED],
+        ),
     ],
-    ids=["dict", "registered_credential", "reader_class_tuple", "scalar_str", "list_unchanged"],
+    ids=[
+        "dict",
+        "registered_credential",
+        "reader_class_tuple",
+        "scalar_str",
+        "list_unchanged",
+        "uri_dsn_str",
+        "keyword_dsn_str",
+        "list_with_dict",
+        "tuple_nested_two_levels_with_dict",
+        "set_of_two_uri_dsn_strings",
+        "frozenset_single_uri_dsn_string",
+    ],
 )
 def test_redact_option_value(value: Any, expected: Any) -> None:
     assert redact_option_value(value) == expected
+
+
+def test_redact_option_value_plain_str_returns_same_object() -> None:
+    """A non-URI, non-keyword string is returned unchanged by identity (str subclasses keep their repr)."""
+    value = "plain configuration text with no credentials"
+    assert redact_option_value(value) is value
+
+
+def test_redact_option_value_self_referencing_list_renders_without_recursion_error() -> None:
+    """A list that contains itself must not blow the stack; the cycle renders as the literal '<cycle>'."""
+    a: list[Any] = [_DSN_URI_MARKER]
+    a.append(a)
+
+    result = redact_option_value(a)
+
+    rendered = repr(result)
+    assert "cred_marker_q7" not in rendered
+    assert "<cycle>" in rendered
+
+
+def test_redact_option_value_shared_inner_dict_without_cycle_renders_both_masked() -> None:
+    """The same inner dict referenced twice (no cycle) is masked independently at each position."""
+    inner = {"sqlite": "raw_db_path_marker"}
+    result = redact_option_value([inner, inner])
+
+    assert result == [{"sqlite": "***"}, {"sqlite": "***"}]
+    rendered = repr(result)
+    assert "<cycle>" not in rendered

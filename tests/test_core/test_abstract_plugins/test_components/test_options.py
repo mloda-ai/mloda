@@ -539,3 +539,12 @@ class TestOptionsWithCredentialValues:
 
         plain = Options(group={"cfg": {"a": "b"}})
         assert "'a': 'b'" in str(plain)
+
+    def test_str_redacts_a_reader_tuple_dsn_string_in_base_input_data_context(self) -> None:
+        """The reserved BaseInputData reader tuple also masks a DSN string second element."""
+        options = Options(
+            context={"BaseInputData": (SQLITEReader, "postgresql://dbuser:cred_marker_q7@dbhost/db")},
+        )
+        text = str(options)
+        assert "cred_marker_q7" not in text
+        assert "BaseInputData" in text

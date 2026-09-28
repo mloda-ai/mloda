@@ -17,7 +17,7 @@ import pytest
 
 from mloda.user import ParallelizationMode
 from mloda.provider import ComputeFramework
-from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook
+from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook, build_hook_extenders
 from mloda.core.abstract_plugins.run_context import RunContext
 from mloda.core.core.cfw_manager import CfwManager
 from mloda.core.core.step.feature_group_step import FeatureGroupStep
@@ -268,7 +268,8 @@ class TestInitComputeFrameworkWithDirectFunctionExtender:
         worker_manager = Mock(spec=WorkerManager)
         caller_extender = _StateHoldingExtender("caller")
         provided_function_extender: set[Extender] = {caller_extender}
-        payload = pickle.dumps({_StateHoldingExtender("payload")})
+        payload_extender = _StateHoldingExtender("payload")
+        payload = pickle.dumps(({payload_extender}, build_hook_extenders({payload_extender})))
         executor = ComputeFrameworkExecutor(
             cfw_register,
             worker_manager,
@@ -304,7 +305,8 @@ class TestInitComputeFrameworkWithDirectFunctionExtender:
         worker_manager = Mock(spec=WorkerManager)
         caller_extender = _StateHoldingExtender("caller")
         provided_function_extender: set[Extender] = {caller_extender}
-        payload = pickle.dumps({_StateHoldingExtender("payload")})
+        payload_extender = _StateHoldingExtender("payload")
+        payload = pickle.dumps(({payload_extender}, build_hook_extenders({payload_extender})))
         executor = ComputeFrameworkExecutor(
             cfw_register,
             worker_manager,

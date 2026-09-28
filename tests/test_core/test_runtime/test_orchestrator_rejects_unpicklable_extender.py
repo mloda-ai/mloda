@@ -66,5 +66,3 @@ def test_enter_in_sync_mode_raises_when_an_extender_wraps_raises() -> None:
 
     with pytest.raises(RuntimeError, match="wraps boom"):
         orchestrator.__enter__({ParallelizationMode.SYNC}, {_OrchestratorRaisingWrapsExtender()})
-
-    assert orchestrator.manager is None

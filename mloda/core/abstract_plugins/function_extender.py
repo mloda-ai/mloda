@@ -167,7 +167,10 @@ def build_hook_extenders(function_extender: Iterable[Extender]) -> dict[Extender
     """Map each hook to its sole extender or a sorted CompositeExtender, reading wraps() once per extender."""
     grouped: dict[ExtenderHook, list[Extender]] = {}
     for extender in sorted(function_extender, key=extender_sort_key):
-        for hook in extender.wraps():
+        hooks = extender.wraps()
+        if not all(isinstance(hook, ExtenderHook) for hook in hooks):
+            raise TypeError(f"{type(extender).__name__}.wraps() must return ExtenderHook members, got {hooks!r}")
+        for hook in dict.fromkeys(hooks):
             grouped.setdefault(hook, []).append(extender)
     return {hook: exts[0] if len(exts) == 1 else CompositeExtender(exts, hook) for hook, exts in grouped.items()}
 
@@ -180,7 +183,7 @@ def get_function_extender(function_extender: Iterable[Extender], hook: ExtenderH
 class CompositeExtender(Extender):
     """Chains multiple Extenders together, running them in priority order.
 
-    Constructed internally by get_function_extender(); not meant to be subclassed or instantiated directly.
+    Constructed internally by build_hook_extenders(); not meant to be subclassed or instantiated directly.
     """
 
     def __init__(self, extenders: list[Extender], function_type: ExtenderHook | None = None):

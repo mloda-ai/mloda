@@ -792,6 +792,7 @@ class ComputeFramework(ABC):
 
     @final
     def get_function_extender(self, wrapper_function_enum: ExtenderHook) -> Extender | None:
+        # Built once on first lookup (or attached by the executor); not rebuilt if function_extender is reassigned.
         if self._hook_extenders is None:
             self._hook_extenders = build_hook_extenders(self.function_extender)
         return self._hook_extenders.get(wrapper_function_enum)

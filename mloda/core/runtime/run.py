@@ -8,7 +8,7 @@ from typing import Any, Generator
 from uuid import UUID
 import logging
 
-from mloda.core.abstract_plugins.function_extender import Extender, build_hook_extenders
+from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook, build_hook_extenders
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.run_context import RunContext
@@ -110,6 +110,7 @@ class ExecutionOrchestrator:
         self._run_id: str | None = None
         self._workers_joined: bool = True
         self.worker_extender_payload: bytes | None = None
+        self._hook_extenders: dict[ExtenderHook, Extender] | None = None
         self._graceful_shutdown_timeout: float = RunContext().graceful_shutdown_timeout
 
         # multiprocessing - delegate to WorkerManager
@@ -171,6 +172,7 @@ class ExecutionOrchestrator:
             tfs_connection_map=self.tfs_connection_map,
             function_extender=self.function_extender,
             worker_extender_payload=self.worker_extender_payload,
+            hook_extenders=self._hook_extenders,
         )
         self._register_modes = self.cfw_register.get_parallelization_modes()
 
@@ -521,6 +523,7 @@ class ExecutionOrchestrator:
         run_context = run_context if run_context is not None else RunContext()
         self.function_extender = function_extender
         hook_extenders = build_hook_extenders(function_extender or ())
+        self._hook_extenders = hook_extenders
         self._run_id = run_context.run_id
         self._graceful_shutdown_timeout = run_context.graceful_shutdown_timeout
 

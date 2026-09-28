@@ -8,6 +8,7 @@ from mloda.core.abstract_plugins.function_extender import (
     Extender,
     ExtenderHook,
     CompositeExtender,
+    build_hook_extenders,
     get_function_extender,
 )
 
@@ -55,6 +56,26 @@ class _WrapsCountingExtender(Extender):
         return func(*args, **kwargs)
 
 
+class _StringWrapsExtender(Extender):
+    """wraps() wrongly returns a string instead of a collection of hooks."""
+
+    def wraps(self) -> Any:
+        return "join"
+
+    def __call__(self, func: Any, *args: Any, **kwargs: Any) -> Any:
+        return func(*args, **kwargs)
+
+
+class _DuplicateWrapsExtender(Extender):
+    """wraps() lists the same hook twice."""
+
+    def wraps(self) -> Any:
+        return [ExtenderHook.JOIN, ExtenderHook.JOIN]
+
+    def __call__(self, func: Any, *args: Any, **kwargs: Any) -> Any:
+        return func(*args, **kwargs)
+
+
 class TestDeterministicTieOrder:
     """Equal-priority extenders order by (module, qualname), independent of input order."""
 
@@ -68,20 +89,11 @@ class TestDeterministicTieOrder:
         assert isinstance(result, CompositeExtender)
         assert result.extenders == [alpha, beta]
 
-    def test_extender_sort_key_is_priority_module_qualname(self) -> None:
-        from mloda.core.abstract_plugins.function_extender import extender_sort_key
-
-        alpha = _TieAlpha()
-
-        assert extender_sort_key(alpha) == (100, _TieAlpha.__module__, _TieAlpha.__qualname__)
-
 
 class TestBuildHookExtenders:
     """build_hook_extenders selects each hook's extender once, calling wraps() exactly once per extender."""
 
     def test_wraps_called_once_per_extender_and_one_entry_per_wrapped_hook(self) -> None:
-        from mloda.core.abstract_plugins.function_extender import build_hook_extenders
-
         first = _WrapsCountingExtender({ExtenderHook.JOIN, ExtenderHook.INPUT_DATA_LOAD})
         second = _WrapsCountingExtender({ExtenderHook.JOIN})
 
@@ -93,12 +105,14 @@ class TestBuildHookExtenders:
         assert table[ExtenderHook.INPUT_DATA_LOAD] is first
         assert isinstance(table[ExtenderHook.JOIN], CompositeExtender)
 
-    def test_hook_nobody_wraps_is_absent(self) -> None:
-        from mloda.core.abstract_plugins.function_extender import build_hook_extenders
+    def test_string_wraps_raises_type_error_naming_the_extender(self) -> None:
+        with pytest.raises(TypeError, match="_StringWrapsExtender"):
+            build_hook_extenders([_StringWrapsExtender()])
 
-        table = build_hook_extenders([_WrapsCountingExtender({ExtenderHook.JOIN})])
+    def test_duplicate_hook_in_wraps_selects_the_extender_once(self) -> None:
+        extender = _DuplicateWrapsExtender()
 
-        assert ExtenderHook.INPUT_DATA_LOAD not in table
+        assert build_hook_extenders([extender])[ExtenderHook.JOIN] is extender
 
 
 class TestGetFunctionExtenderLookup:

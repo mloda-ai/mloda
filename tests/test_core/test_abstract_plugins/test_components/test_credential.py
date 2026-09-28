@@ -76,6 +76,29 @@ class TestCredentialDataIsDefensiveCopy:
         assert cred.data == {"sqlite": "/data/x.db"}
 
 
+class TestCredentialEqualityAndHash:
+    """Credential compares and hashes by value, like HashableDict."""
+
+    def test_equal_credentials_from_kwargs_and_mapping_compare_equal(self) -> None:
+        assert Credential(a=1) == Credential({"a": 1})
+
+    def test_equal_credentials_hash_alike(self) -> None:
+        assert hash(Credential(a=1)) == hash(Credential({"a": 1}))
+
+    def test_different_value_credentials_compare_unequal(self) -> None:
+        assert Credential(a=1) != Credential(a=2)
+
+    def test_credential_does_not_equal_plain_dict_with_same_content(self) -> None:
+        assert Credential(a=1) != {"a": 1}
+        assert {"a": 1} != Credential(a=1)
+
+    def test_credential_with_nested_dict_value_hashes(self) -> None:
+        assert isinstance(hash(Credential(a={"nested": 1})), int)
+
+    def test_equal_credentials_with_nested_dict_values_hash_alike(self) -> None:
+        assert hash(Credential(a={"nested": 1})) == hash(Credential(a={"nested": 1}))
+
+
 class TestCredentialReprRedactsValues:
     """``repr()`` must never leak secret values; it shows keys with redacted values."""
 
@@ -330,6 +353,51 @@ class TestTopLevelCredentialsRejectsScalarValues:
         assert self.SECRET not in msg
 
 
+_LIST_ENTRY_SECRET = "dsn-string-value-not-a-mapping"  # nosec B105
+
+
+class TestListFormCredentialsRejectsNonMappingEntries:
+    """List-form credentials entries must be mappings (Credential/dict); any other entry raises ValueError
+    naming the offending index and type, never the value."""
+
+    def _assert_entry_shape_error(self, msg: str, index: int, type_name: str) -> None:
+        lowered = msg.lower()
+        assert str(index) in msg
+        assert type_name in lowered
+        assert "Credential" in msg
+        assert "dict" in lowered
+        assert "list" in lowered
+
+    def test_list_form_str_entry_raises_value_error_naming_index_and_type(self) -> None:
+        with pytest.raises(ValueError) as excinfo:
+            DataAccessCollection(credentials=[_LIST_ENTRY_SECRET, {"host": "h"}])
+        msg = str(excinfo.value)
+        self._assert_entry_shape_error(msg, 0, "str")
+        assert _LIST_ENTRY_SECRET not in msg
+
+    def test_list_form_int_entry_raises_value_error_naming_index_and_type(self) -> None:
+        with pytest.raises(ValueError) as excinfo:
+            DataAccessCollection(credentials=[{"host": "h"}, 42])
+        msg = str(excinfo.value)
+        self._assert_entry_shape_error(msg, 1, "int")
+        assert "42" not in msg
+
+    def test_list_form_bytes_entry_raises_value_error_naming_index_and_type(self) -> None:
+        with pytest.raises(ValueError) as excinfo:
+            DataAccessCollection(credentials=[_LIST_ENTRY_SECRET.encode(), {"host": "h"}])
+        msg = str(excinfo.value)
+        self._assert_entry_shape_error(msg, 0, "bytes")
+        assert _LIST_ENTRY_SECRET not in msg
+
+    def test_list_form_credential_entry_keeps_working(self) -> None:
+        dac = DataAccessCollection(credentials=[Credential(sqlite="/a.db")])
+        assert len(dac.credentials) == 1
+
+    def test_list_form_dict_entry_keeps_working(self) -> None:
+        dac = DataAccessCollection(credentials=[{"sqlite": "/a.db"}])
+        assert len(dac.credentials) == 1
+
+
 class TestResolveAmbiguityRedactsCredentialValues:
     """Cycle 3, Finding A (security): the all-auto ambiguity error in ``resolve()``
     must not print stored credential values verbatim.
@@ -368,8 +436,11 @@ class TestResolveAmbiguityRedactsCredentialValues:
         assert "  - {'host': '***', 'password': '***'}" in msg
 
     def test_list_form_non_dict_entry_renders_as_star_star_star(self) -> None:
-        """A list-form entry that is not a dict falls back to the scalar '***' rendering."""
-        dac = DataAccessCollection(credentials=["dsn-string-value", {"host": "h"}])
+        """A registered entry that is not a dict (bypassing entry validation post-registration)
+        falls back to the scalar '***' rendering."""
+        dac = DataAccessCollection(credentials=[{"host": "a"}, {"host": "b"}])
+        (overwritten_handle,) = [handle for handle, value in dac.credentials.items() if value == {"host": "a"}]
+        dac.credentials[overwritten_handle] = "dsn-string-value"
         with pytest.raises(ValueError) as excinfo:
             dac.resolve("credentials")
         msg = str(excinfo.value)

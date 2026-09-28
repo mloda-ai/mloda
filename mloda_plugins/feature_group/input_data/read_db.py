@@ -1,6 +1,7 @@
 from typing import Any, ClassVar
+from mloda.core.abstract_plugins.components.credential import RegisteredCredential
 from mloda.core.abstract_plugins.components.utils import is_match_abort
-from mloda.user import DataAccessCollection
+from mloda.user import Credential, DataAccessCollection
 from mloda.provider import (
     FeatureSet,
     BaseInputData,
@@ -139,6 +140,8 @@ class ReadDB(BaseInputData):
                 data_accesses.append(creds)
         elif isinstance(data_access, dict):
             data_accesses.append(data_access)
+        elif isinstance(data_access, Credential):
+            data_accesses.append(RegisteredCredential(data_access.data))
 
         if not data_accesses:
             return None

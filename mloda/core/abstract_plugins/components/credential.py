@@ -12,6 +12,7 @@ docs/docs/in_depth/named-data-access-handles.md.
 from typing import Any
 
 from mloda.core.abstract_plugins.components.credential_scrub import redact_mapping
+from mloda.core.abstract_plugins.components.hashable_dict import _deep_equal, _deep_hashable
 
 
 class Credential:
@@ -34,6 +35,14 @@ class Credential:
     def __repr__(self) -> str:
         redacted = ", ".join(f"{key}={value!r}" for key, value in redact_mapping(self._data).items())
         return f"Credential({redacted})"
+
+    def __hash__(self) -> int:
+        return hash(_deep_hashable(self._data))
+
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, Credential):
+            return False
+        return _deep_equal(self._data, other._data)
 
 
 class RegisteredCredential(dict[str, Any]):

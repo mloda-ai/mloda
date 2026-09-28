@@ -7,6 +7,8 @@ import sqlite3
 
 import pytest
 
+from mloda.core.abstract_plugins.components.credential import RegisteredCredential
+from mloda.user import Credential
 from mloda.user import DataAccessCollection
 from mloda.user import Feature
 from mloda.user import Options
@@ -41,10 +43,15 @@ class TestInputDataDB:
         os.close(self.db_fd)
         os.remove(self.db_path)
 
-    def test_load_csv_local_feature_scope_data_access_with_a_concrete_file(self) -> Any:
+    @pytest.mark.parametrize(
+        "wrap",
+        [lambda mapping: mapping, lambda mapping: Credential(mapping)],
+        ids=["plain_dict", "credential"],
+    )
+    def test_load_csv_local_feature_scope_data_access_with_a_concrete_file(self, wrap: Any) -> Any:
         f = Feature(
             name="id",
-            options={SQLITEReader.__name__: {SQLITEReader.db_path(): self.db_path, "table_name": "test_table"}},
+            options={SQLITEReader.__name__: wrap({SQLITEReader.db_path(): self.db_path, "table_name": "test_table"})},
         )
 
         result = mloda.run_all(
@@ -181,6 +188,18 @@ class TestReadDB:
         feature_names = ["name"]
         result = ReadDB.match_subclass_data_access(data_access, feature_names, options=Options({}))
         assert not result
+
+    def test_match_subclass_data_access_with_bare_credential(self) -> None:
+        """A bare Credential (not wrapped in DataAccessCollection) matches and returns a
+        RegisteredCredential with the raw path and table_name filled in, leaving the
+        caller's Credential unchanged."""
+        credential = Credential(sqlite=self.db_path)
+        feature_names = ["name"]
+        result = SQLITEReader.match_subclass_data_access(credential, feature_names, options=Options({}))
+        assert type(result) is RegisteredCredential
+        assert result[SQLITEReader.db_path()] == self.db_path
+        assert result["table_name"] == "test_table"
+        assert credential.data == {"sqlite": self.db_path}
 
     def test_get_connection_no_credentials(self) -> None:
         with pytest.raises(NotImplementedError):

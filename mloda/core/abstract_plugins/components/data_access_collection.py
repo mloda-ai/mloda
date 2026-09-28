@@ -47,8 +47,8 @@ class DataAccessCollection:
             itself a dict, so the bare ``{connector_id: slot}`` shape would be
             read as ``{handle: value}``; the typed form removes that ambiguity
             and is stored as a ``RegisteredCredential`` (a dict whose repr
-            redacts values) at registration. Named-form credential values must
-            be mappings (``dict`` or ``Credential``);
+            redacts values) at registration. List-form and named-form
+            credential values must be mappings (``dict`` or ``Credential``);
             anything else raises an early mis-wrap ``ValueError``.
             ``HashableDict`` is no longer accepted on the credentials path; the
             class itself stays for hashability-required internals (e.g. ``Options``
@@ -100,7 +100,17 @@ class DataAccessCollection:
                 f"credentials must be a Credential, a dict of {{handle: credential}}, or a list of credentials; "
                 f"got {type(credentials).__name__}."
             )
-        return [cls._unwrap_credential(entry) for entry in credentials]
+        return [cls._validated_list_entry(index, entry) for index, entry in enumerate(credentials)]
+
+    @classmethod
+    def _validated_list_entry(cls, index: int, entry: Any) -> Any:
+        unwrapped = cls._unwrap_credential(entry)
+        if isinstance(unwrapped, dict):
+            return unwrapped
+        raise ValueError(
+            f"credentials list entry {index} is a {type(entry).__name__}, not a mapping. Each list entry "
+            f"must be a dict or a Credential, e.g. credentials=[Credential(dsn=...)]."
+        )
 
     @staticmethod
     def _unwrap_credential(value: Any) -> Any:

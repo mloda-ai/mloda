@@ -1,3 +1,4 @@
+from collections.abc import Sequence
 from datetime import date, datetime
 from functools import reduce
 from typing import Any
@@ -36,6 +37,22 @@ except ImportError:
 
 _PUSHDOWN_FILTER_TYPES = frozenset({"range", "min", "max", "equal", "categorical_inclusion"})
 
+
+def scan_columns(table: Any, names: Sequence[str], row_filter: Any = None) -> Any:
+    """Scan an Iceberg table selecting `names`, surfacing a nested path (e.g. "b.c") dropped by
+    the plain scan as its own top-level column, read from its struct column."""
+    kwargs: dict[str, Any] = {"selected_fields": tuple(names)}
+    if row_filter is not None:
+        kwargs["row_filter"] = row_filter
+    scanned = table.scan(**kwargs).to_arrow()
+
+    for name in names:
+        if "." in name and name not in scanned.column_names:
+            root, *rest = name.split(".")
+            scanned = scanned.append_column(name, pc.struct_field(scanned[root], rest))
+    return scanned
+
+
 # Iceberg primitive type name -> Python value types pyiceberg converts to that type exactly.
 # float and decimal are absent: float32 rounding can make a pushed bound stricter than PyArrow's,
 # and a decimal scale mismatch fails to bind rather than filtering correctly.
@@ -69,15 +86,18 @@ class IcebergFilterEngine(PyArrowFilterEngine):
         # only when it is pushable.
         expressions: list[Any] = [cls._build_iceberg_expression(f) for f in applicable if cls._is_pushable(schema, f)]
         row_filter = reduce(And, expressions, AlwaysTrue())
-        # No selected_fields: the engine cannot see which non-feature columns (e.g. join keys) later steps need.
-        scanned = data.scan(row_filter=row_filter).to_arrow()
 
-        schema_columns = set(schema.column_names)
-        for name in features.get_all_names():
-            if name in schema_columns and name not in scanned.column_names:
-                # Nested path (e.g. "b.c") dropped by the plain scan; surface it as a top-level column.
-                root, *rest = name.split(".")
-                scanned = scanned.append_column(name, pc.struct_field(scanned[root], rest))
+        feature_names = features.get_all_names()
+        needed = (
+            set(feature_names) | {str(f.filter_feature.name) for f in applicable} | set(features.link_index_columns)
+        )
+        selected = [
+            name
+            for name in schema.column_names
+            if name in needed or any(name.startswith(f"{feature_name}~") for feature_name in feature_names)
+        ]
+
+        scanned = scan_columns(data, selected, row_filter=row_filter)
 
         # The PyArrow pass applies the filters Iceberg cannot push and re-checks the pushed ones.
         return super().apply_filters(scanned, features)

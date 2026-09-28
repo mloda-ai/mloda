@@ -171,7 +171,7 @@ class TestIcebergFrameworkComputeFramework:
         assert result.column_names == ["c", "a"]
 
     def test_select_data_by_column_names_iceberg_table_nested_field(self) -> None:
-        """A nested field path comes back inside its struct column, so the scan result is returned without reordering."""
+        """A nested field path comes back as its own top-level column, named "b.c", in requested order."""
         mock_table = Mock(spec=IcebergTable)
         mock_schema = Mock()
         mock_schema.column_names = ["id", "b.c", "b"]
@@ -196,8 +196,10 @@ class TestIcebergFrameworkComputeFramework:
         mock_table.scan.assert_called_once()
         _, kwargs = mock_table.scan.call_args
         assert set(kwargs["selected_fields"]) == {"id", "b.c"}
-        assert result is scanned
-        assert result.column_names == ["id", "b"]
+        assert result.column_names == ["id", "b.c"]
+        assert "b" not in result.column_names
+        assert result["b.c"].to_pylist() == [2]
+        assert result["b.c"].type == pa.int64()
 
     def test_set_column_names_iceberg_table(self) -> None:
         """Test setting column names from Iceberg table."""

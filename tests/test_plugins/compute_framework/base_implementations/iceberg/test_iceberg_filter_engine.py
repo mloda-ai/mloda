@@ -138,6 +138,7 @@ class TestIcebergFilterEngine(FilterEngineTestMixin):
         """Create a mock feature set for testing."""
         mock_feature_set = Mock()
         mock_feature_set.get_all_names.return_value = ["age", "name", "category"]
+        mock_feature_set.link_index_columns = frozenset()
         return mock_feature_set
 
     @pytest.fixture
@@ -351,8 +352,46 @@ class TestIcebergFilterEngine(FilterEngineTestMixin):
         assert "row_filter" in call_args.kwargs
         assert call_args.kwargs["row_filter"] == GreaterThanOrEqual(Reference("age"), 25)
 
+        # selected_fields is exactly the feature names plus the filter column, in schema order;
+        # "id" is an unrelated schema column and must not be selected.
+        assert call_args.kwargs["selected_fields"] == ("age", "name", "category")
+
         # The PyArrow re-pass over the scan result keeps every row (age >= 25 matches all).
         assert self.get_column_values(result, "id") == [1, 2, 3, 4, 5]
+
+    def test_apply_filters_iceberg_table_selected_fields_include_link_index_column(
+        self, mock_iceberg_table: Mock, mock_feature_set: Mock
+    ) -> None:
+        """A link index column present in the schema but not a feature of this step is still selected."""
+        age_filter = SingleFilter(Feature("age"), FilterType.MIN, {"value": 25})
+        mock_feature_set.filters = [age_filter]
+        mock_feature_set.link_index_columns = frozenset({"id"})
+
+        IcebergFilterEngine.apply_filters(mock_iceberg_table, mock_feature_set)
+
+        call_args = mock_iceberg_table.scan.call_args
+        assert set(call_args.kwargs["selected_fields"]) == {"age", "name", "category", "id"}
+
+    def test_apply_filters_iceberg_table_selected_fields_include_multi_output_columns(
+        self, mock_iceberg_table: Mock, mock_feature_set: Mock
+    ) -> None:
+        """A schema column named '<feature>~0' (multi-output) is selected alongside its base feature."""
+        age_filter = SingleFilter(Feature("age"), FilterType.MIN, {"value": 25})
+        mock_feature_set.filters = [age_filter]
+
+        mock_iceberg_table.schema.return_value = Schema(
+            NestedField(1, "id", LongType(), required=False),
+            NestedField(2, "age", LongType(), required=False),
+            NestedField(3, "name~0", StringType(), required=False),
+            NestedField(4, "category", StringType(), required=False),
+        )
+
+        IcebergFilterEngine.apply_filters(mock_iceberg_table, mock_feature_set)
+
+        call_args = mock_iceberg_table.scan.call_args
+        # "name" is in get_all_names(); "name~0" is its multi-output column and must be selected too.
+        assert set(call_args.kwargs["selected_fields"]) == {"age", "category", "name~0"}
+        assert "id" not in call_args.kwargs["selected_fields"]
 
     def test_apply_filters_non_iceberg_table(self, mock_feature_set: Mock) -> None:
         """Test applying filters to non-Iceberg data falls back to parent method."""
@@ -593,6 +632,7 @@ class TestIcebergFilterEngineStructAndTypePinning:
     def struct_feature_set(self) -> Mock:
         mock_feature_set = Mock()
         mock_feature_set.get_all_names.return_value = ["l", "x", "d", "ts", "b.c", "f", "dec", "i", "tz", "bo"]
+        mock_feature_set.link_index_columns = frozenset()
         return mock_feature_set
 
     @pytest.mark.parametrize(
@@ -744,8 +784,22 @@ class TestIcebergFilterEngineStructAndTypePinning:
         mock_struct_table.scan.assert_called_once()
         call_args = mock_struct_table.scan.call_args
         assert call_args.kwargs["row_filter"] == expected_row_filter()
+        # Schema order, "b" (the struct column itself) excluded since only "b.c" is a requested feature.
+        assert call_args.kwargs["selected_fields"] == ("l", "x", "d", "ts", "b.c", "f", "dec", "i", "tz", "bo")
         assert result["l"].to_pylist() == expected_l
         assert result["b.c"].to_pylist() == expected_bc
+
+    def test_apply_filters_struct_selected_fields_include_link_index_column_not_a_feature(
+        self, mock_struct_table: Mock, struct_feature_set: Mock
+    ) -> None:
+        """ "b" (the struct column) is not a feature, but is selected when it is a link index column."""
+        struct_feature_set.filters = [SingleFilter(Feature("l"), FilterType.EQUAL, {"value": 2})]
+        struct_feature_set.link_index_columns = frozenset({"b"})
+
+        IcebergFilterEngine.apply_filters(mock_struct_table, struct_feature_set)
+
+        call_args = mock_struct_table.scan.call_args
+        assert "b" in call_args.kwargs["selected_fields"]
 
 
 @pytest.mark.skipif(

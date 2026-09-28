@@ -17,6 +17,8 @@ from mloda.user import mloda
 from mloda.user import ParallelizationMode
 from mloda.user import DataAccessCollection
 from mloda.user import GlobalFilter
+from mloda.user import Index
+from mloda.user import Link
 from mloda_plugins.compute_framework.base_implementations.iceberg.iceberg_framework import IcebergFramework
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from tests.test_core.test_filter.test_feature_group_final_filters import RegularFeatureGroupForFilterTest
@@ -304,6 +306,89 @@ class IcebergTableStructFieldFilterTest(FeatureGroup):
         return mock_table
 
 
+IJK_KEY = "ijk_key"
+IJK_PAYLOAD = "ijk_payload"
+IJK_STATUS = "ijk_status"
+IJK_RIGHT_PAYLOAD = "ijk_right_payload"
+
+# Populated by IcebergJoinKeyLeftFG.calculate_feature with the Mock Iceberg table it returns, so the
+# test can inspect the scan() call after mloda.run_all finishes.
+ijk_captured_tables: list[Mock] = []
+
+
+class IcebergJoinKeyLeftFG(FeatureGroup):
+    """Only the payload is requested by the consumer; the join key is never a requested feature."""
+
+    @classmethod
+    def input_data(cls) -> BaseInputData | None:
+        return DataCreator(supports_features={IJK_KEY, IJK_PAYLOAD, IJK_STATUS})
+
+    @classmethod
+    def index_columns(cls) -> list[Index] | None:
+        return [Index((IJK_KEY,))]
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {IcebergFramework}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        arrow_data = pa.table(
+            {
+                IJK_KEY: [1, 2, 3, 4],
+                IJK_PAYLOAD: [10, 20, 30, 40],
+                IJK_STATUS: ["active", "inactive", "active", "inactive"],
+            }
+        )
+        mock_table = Mock(spec=IcebergTable)
+        mock_scan = Mock()
+        mock_scan.to_arrow.return_value = arrow_data
+        mock_table.scan.return_value = mock_scan
+        mock_table.schema.return_value = Schema(
+            NestedField(1, IJK_KEY, LongType(), required=False),
+            NestedField(2, IJK_PAYLOAD, LongType(), required=False),
+            NestedField(3, IJK_STATUS, StringType(), required=False),
+        )
+        ijk_captured_tables.append(mock_table)
+        return mock_table
+
+
+class IcebergJoinKeyRightFG(FeatureGroup):
+    @classmethod
+    def input_data(cls) -> BaseInputData | None:
+        return DataCreator(supports_features={IJK_KEY, IJK_RIGHT_PAYLOAD})
+
+    @classmethod
+    def index_columns(cls) -> list[Index] | None:
+        return [Index((IJK_KEY,))]
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PyArrowTable}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return pa.table({IJK_KEY: [1, 2, 3], IJK_RIGHT_PAYLOAD: ["r1", "r2", "r3"]})
+
+
+class IcebergJoinKeyConsumerFG(FeatureGroup):
+    """Combines both payloads; requesting neither side's join key directly."""
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return {Feature(name=IJK_PAYLOAD), Feature(name=IJK_RIGHT_PAYLOAD)}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        payloads = data[IJK_PAYLOAD].to_pylist()
+        right_payloads = data[IJK_RIGHT_PAYLOAD].to_pylist()
+        combined = [f"{left}|{right}" for left, right in zip(payloads, right_payloads)]
+        return data.append_column(cls.get_class_name(), pa.array(combined))
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PyArrowTable}
+
+
 @pytest.mark.skipif(
     pyiceberg is None or pa is None, reason="PyIceberg or PyArrow is not installed. Skipping this test."
 )
@@ -360,6 +445,71 @@ class TestIcebergIntegrationWithMlodaAPI:
 
         for final_data in result:
             assert final_data["b.c"].to_pylist() == [10, 30]
+            assert final_data.column_names == ["b.c"]
+            assert final_data["b.c"].type == pa.int64()
+
+    def test_nested_struct_field_same_shape_with_and_without_filter_iceberg(self, flight_server: Any) -> None:
+        """The same nested feature 'b.c' must have the same column name and type whether or not a
+        global filter is active, so a consumer downstream of the scan sees one consistent shape."""
+        plugin_collector = PluginCollector.enabled_feature_groups({IcebergTableStructFieldFilterTest})
+
+        global_filter = GlobalFilter()
+        global_filter.add_filter("status", "equal", {"value": "active"})
+
+        filtered_result = mloda.run_all(
+            [Feature(name="b.c", initial_requested_data=True)],
+            flight_server=flight_server,
+            parallelization_modes={ParallelizationMode.SYNC},
+            plugin_collector=plugin_collector,
+            compute_frameworks={IcebergFramework},
+            global_filter=global_filter,
+        )
+        unfiltered_result = mloda.run_all(
+            [Feature(name="b.c", initial_requested_data=True)],
+            flight_server=flight_server,
+            parallelization_modes={ParallelizationMode.SYNC},
+            plugin_collector=plugin_collector,
+            compute_frameworks={IcebergFramework},
+        )
+
+        filtered_data = next(iter(filtered_result))
+        unfiltered_data = next(iter(unfiltered_result))
+
+        assert filtered_data.column_names == unfiltered_data.column_names == ["b.c"]
+        assert filtered_data["b.c"].type == unfiltered_data["b.c"].type == pa.int64()
+        assert unfiltered_data["b.c"].to_pylist() == [10, 20, 30, 40]
+
+    def test_join_key_not_a_requested_feature_survives_projected_filter_scan(self, flight_server: Any) -> None:
+        """The join index column is not itself a requested feature of the Iceberg side, but a filtered,
+        projected scan must still keep it so the join downstream can succeed."""
+        ijk_captured_tables.clear()
+        plugin_collector = PluginCollector.enabled_feature_groups(
+            {IcebergJoinKeyLeftFG, IcebergJoinKeyRightFG, IcebergJoinKeyConsumerFG}
+        )
+        global_filter = GlobalFilter()
+        global_filter.add_filter(IJK_STATUS, "equal", {"value": "active"})
+        link = Link.inner_on(IcebergJoinKeyLeftFG, IcebergJoinKeyRightFG)
+
+        result = mloda.run_all(
+            [Feature(name=IcebergJoinKeyConsumerFG.get_class_name(), initial_requested_data=True)],
+            flight_server=flight_server,
+            parallelization_modes={ParallelizationMode.SYNC},
+            plugin_collector=plugin_collector,
+            compute_frameworks={IcebergFramework, PyArrowTable},
+            links={link},
+            global_filter=global_filter,
+        )
+
+        assert len(ijk_captured_tables) == 1
+        call_args = ijk_captured_tables[0].scan.call_args
+        assert IJK_KEY in call_args.kwargs["selected_fields"]
+
+        matching = [
+            frame for frame in result if IcebergJoinKeyConsumerFG.get_class_name() in getattr(frame, "column_names", [])
+        ]
+        assert len(matching) == 1
+        values = sorted(matching[0][IcebergJoinKeyConsumerFG.get_class_name()].to_pylist())
+        assert values == ["10|r1", "30|r3"]
 
     @pytest.mark.parametrize(
         "modes",

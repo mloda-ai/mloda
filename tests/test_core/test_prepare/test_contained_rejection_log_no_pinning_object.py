@@ -125,9 +125,7 @@ def _evaluate(caplog: pytest.LogCaptureFixture) -> None:
 _LEAK_MARKER = "hunter2z9"
 
 CRLOG2_KEY = "crlog_rejected_key_creds"
-# Short (< reprlib's 30-char truncation window) so the marker survives safe_value_text's repr into the
-# PropertyValueRejection message the identify seam actually logs; the raising validator's own message text
-# is not itself propagated into that message.
+# Short (< reprlib's 30-char truncation window) so the marker survives safe_value_text's repr into the logged message.
 CRLOG2_VALUE = f"http://u:{_LEAK_MARKER}@h"
 CRLOG2_FEATURE = "source__rejected_crlog_creds"
 CRLOG2_PATTERN = r".*__rejected_crlog_creds$"
@@ -146,7 +144,7 @@ CRLOG2_PROPERTY_MAPPING = {
 
 
 class RejectingValueFGCrlogCreds(FeatureGroup):
-    """Second plugin double: same shape as RejectingValueFGCrlog, validator message carries a credential marker."""
+    """Like RejectingValueFGCrlog, but its rejected option value carries a credential marker."""
 
     @classmethod
     def compute_framework_rule(cls) -> set[type[ComputeFramework]] | None:
@@ -217,7 +215,7 @@ class TestContainedRejectionLogsNoPinningObject:
 
 
 class TestContainedRejectionLogScrubsCredentials:
-    """A credential carried in the validator's own rejection message must not reach the log."""
+    """A credential carried in the rejected option value must not reach the log."""
 
     def test_credential_marker_absent_from_rejection_record(self, caplog: pytest.LogCaptureFixture) -> None:
         _evaluate_crlog2(caplog)

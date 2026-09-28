@@ -45,7 +45,7 @@ _KEYWORD_PATTERN = re.compile(
     re.IGNORECASE,
 )
 
-# Same lookbehind guard as _KEYWORD_PATTERN, on the quoted key name instead of a bare one.
+# No lookbehind needed here: the quote character itself anchors the key name.
 _QUOTED_KEY_PATTERN = re.compile(
     r"(?P<quote>['\"])(?P<keyword>[\w-]*" + _SECRET_NAME + r")(?P=quote)[ \t]*:[ \t]*"
     r"(?:'(?:[^'\\\n]|\\.)*'|\"(?:[^\"\\\n]|\\.)*\"|[^,}\s]*)",

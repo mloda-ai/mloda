@@ -29,8 +29,8 @@ from mloda.core.runtime.worker_manager import WorkerManager
 from mloda_plugins.compute_framework.base_implementations.duckdb.duckdb_framework import DuckDBFramework
 
 # Only this token, never an identifier or comment, must be searched for in scrub assertions below.
-_LEAK_TOKEN = "hunter2z9"
-_LEAK_MESSAGE = f"failed for https://u:p@h/db?sig={_LEAK_TOKEN}"
+_LEAK_MARKER = "hunter2z9"
+_LEAK_MESSAGE = f"failed for https://u:p@h/db?sig={_LEAK_MARKER}"
 
 
 class _StateHoldingExtender(Extender):
@@ -1042,10 +1042,10 @@ class TestSyncExecuteStep:
         cfw_register.set_error.assert_called_once()
         call_args = cfw_register.set_error.call_args
         error_msg, exc_info = call_args.args
-        assert _LEAK_TOKEN not in error_msg
-        assert _LEAK_TOKEN not in exc_info
+        assert _LEAK_MARKER not in error_msg
+        assert _LEAK_MARKER not in exc_info
         assert call_args.kwargs["exception"] is boom
-        assert _LEAK_TOKEN in str(boom)
+        assert _LEAK_MARKER in str(boom)
 
 
 class TestThreadExecuteStep:
@@ -1158,8 +1158,8 @@ class TestThreadExecuteStep:
         cfw_register.set_error.assert_called_once()
         call_args = cfw_register.set_error.call_args
         error_msg, exc_info = call_args.args
-        assert _LEAK_TOKEN not in error_msg
-        assert _LEAK_TOKEN not in exc_info
+        assert _LEAK_MARKER not in error_msg
+        assert _LEAK_MARKER not in exc_info
         assert call_args.kwargs["exception"] is boom
 
 

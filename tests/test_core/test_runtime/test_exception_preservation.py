@@ -114,10 +114,10 @@ _ENABLED_CAUSE_CHAIN = PluginCollector.enabled_feature_groups({CauseChainFeature
 # and an identifier match there would be a false positive, not a real leak.
 # --------------------------------------------------------------------------- #
 
-_LEAK_TOKEN = "hunter2z9"
-_LEAK_PRESIGNED_URL = f"https://bucket.s3.amazonaws.com/key?X-Amz-Signature={_LEAK_TOKEN}"
-_LEAK_USERINFO_URL = f"postgres://user:{_LEAK_TOKEN}@host:5432/db"
-_LEAK_DSN = f"host=h password={_LEAK_TOKEN} dbname=d"
+_LEAK_MARKER = "hunter2z9"
+_LEAK_PRESIGNED_URL = f"https://bucket.s3.amazonaws.com/key?X-Amz-Signature={_LEAK_MARKER}"
+_LEAK_USERINFO_URL = f"postgres://user:{_LEAK_MARKER}@host:5432/db"
+_LEAK_DSN = f"host=h password={_LEAK_MARKER} dbname=d"
 _LEAK_MESSAGE = f"failed for {_LEAK_PRESIGNED_URL} and {_LEAK_USERINFO_URL} and {_LEAK_DSN}"
 
 
@@ -192,10 +192,10 @@ def test_sync_secret_leak_direct_raw_to_caller_scrubbed_in_logs(caplog: pytest.L
             parallelization_modes={ParallelizationMode.SYNC},
         )
 
-    assert _LEAK_TOKEN in str(excinfo.value)
+    assert _LEAK_MARKER in str(excinfo.value)
     error_records = [r for r in caplog.records if r.levelno == logging.ERROR]
     assert error_records
-    assert all(_LEAK_TOKEN not in r.getMessage() for r in error_records)
+    assert all(_LEAK_MARKER not in r.getMessage() for r in error_records)
 
 
 def test_sync_secret_leak_chained_raw_to_caller_scrubbed_in_logs(caplog: pytest.LogCaptureFixture) -> None:
@@ -209,10 +209,10 @@ def test_sync_secret_leak_chained_raw_to_caller_scrubbed_in_logs(caplog: pytest.
         )
 
     assert isinstance(excinfo.value.__cause__, OSError)
-    assert _LEAK_TOKEN in str(excinfo.value.__cause__)
+    assert _LEAK_MARKER in str(excinfo.value.__cause__)
     error_records = [r for r in caplog.records if r.levelno == logging.ERROR]
     assert error_records
-    assert all(_LEAK_TOKEN not in r.getMessage() for r in error_records)
+    assert all(_LEAK_MARKER not in r.getMessage() for r in error_records)
 
 
 def test_threading_secret_leak_scrubbed_in_logs(flight_server: Any, caplog: pytest.LogCaptureFixture) -> None:
@@ -225,10 +225,10 @@ def test_threading_secret_leak_scrubbed_in_logs(flight_server: Any, caplog: pyte
             flight_server=flight_server,
         )
 
-    assert _LEAK_TOKEN in str(excinfo.value)
+    assert _LEAK_MARKER in str(excinfo.value)
     error_records = [r for r in caplog.records if r.levelno == logging.ERROR]
     assert error_records
-    assert all(_LEAK_TOKEN not in r.getMessage() for r in error_records)
+    assert all(_LEAK_MARKER not in r.getMessage() for r in error_records)
 
 
 def test_multiprocessing_secret_leak_scrubbed_in_logs(flight_server: Any, caplog: pytest.LogCaptureFixture) -> None:
@@ -241,10 +241,10 @@ def test_multiprocessing_secret_leak_scrubbed_in_logs(flight_server: Any, caplog
             flight_server=flight_server,
         )
 
-    assert _LEAK_TOKEN in str(excinfo.value)
+    assert _LEAK_MARKER in str(excinfo.value)
     error_records = [r for r in caplog.records if r.levelno == logging.ERROR]
     assert error_records
-    assert all(_LEAK_TOKEN not in r.getMessage() for r in error_records)
+    assert all(_LEAK_MARKER not in r.getMessage() for r in error_records)
 
 
 @pytest.mark.timeout(15)
@@ -259,7 +259,7 @@ def test_multiprocessing_unpicklable_secret_leak_message_is_scrubbed(flight_serv
             flight_server=flight_server,
         )
 
-    assert _LEAK_TOKEN not in str(excinfo.value)
+    assert _LEAK_MARKER not in str(excinfo.value)
 
 
 # --------------------------------------------------------------------------- #

@@ -60,8 +60,8 @@ class _RaisingCloseExtender(Extender):
 
 
 # Only this token, never an identifier or comment, must be searched for in scrub assertions below.
-_LEAK_TOKEN = "hunter2z9"
-_LEAK_MESSAGE = f"failed for https://u:p@h/db?sig={_LEAK_TOKEN}"
+_LEAK_MARKER = "hunter2z9"
+_LEAK_MESSAGE = f"failed for https://u:p@h/db?sig={_LEAK_MARKER}"
 
 
 class _UnprintableError(Exception):
@@ -214,8 +214,8 @@ class TestWorkerReportsChildBootstrapExceptionThroughTheErrorChannel:
         cfw_register.set_error.assert_called_once()
         call_args = cfw_register.set_error.call_args
         error_msg, exc_info = call_args.args
-        assert _LEAK_TOKEN not in error_msg
-        assert _LEAK_TOKEN not in exc_info
+        assert _LEAK_MARKER not in error_msg
+        assert _LEAK_MARKER not in exc_info
         assert call_args.kwargs.get("exception") is boom
         assert command_queue.get(timeout=2) == "STOP"
 
@@ -277,8 +277,8 @@ class TestWorkerReportsCommandExceptionThroughTheErrorChannel:
         cfw_register.set_error.assert_called_once()
         call_args = cfw_register.set_error.call_args
         error_msg, exc_info = call_args.args
-        assert _LEAK_TOKEN not in error_msg
-        assert _LEAK_TOKEN not in exc_info
+        assert _LEAK_MARKER not in error_msg
+        assert _LEAK_MARKER not in exc_info
         assert command_queue.get(timeout=2) == "STOP"
 
 

@@ -23,8 +23,8 @@ class ExtenderExploded(RuntimeError):
 
 
 # Only this token, never an identifier or comment, must be searched for in scrub assertions below.
-_LEAK_TOKEN = "hunter2z9"
-_LEAK_URL = f"https://u:p@h/k?sig={_LEAK_TOKEN}"
+_LEAK_MARKER = "hunter2z9"
+_LEAK_URL = f"https://u:p@h/k?sig={_LEAK_MARKER}"
 
 
 class SecretLeakingExtender(Extender):
@@ -114,7 +114,7 @@ class TestExtenderFailureLogsNoExceptionObject:
 
         messages = [record.getMessage() for record in _extender_records(caplog)]
         assert len(messages) == 1, f"exactly one WARNING record reports the failure, got: {messages}"
-        assert _LEAK_TOKEN not in messages[0], f"the secret must not reach the log: {messages[0]}"
+        assert _LEAK_MARKER not in messages[0], f"the secret must not reach the log: {messages[0]}"
         assert "SecretLeakingExtender" in messages[0]
         assert "secret_leak_probe" in messages[0]
         assert "ExtenderExploded" in messages[0]

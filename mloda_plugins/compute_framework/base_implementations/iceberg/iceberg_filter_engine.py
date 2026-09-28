@@ -39,8 +39,7 @@ _PUSHDOWN_FILTER_TYPES = frozenset({"range", "min", "max", "equal", "categorical
 
 
 def scan_columns(table: Any, names: Sequence[str], row_filter: Any = None) -> Any:
-    """Scan an Iceberg table selecting `names`, surfacing a nested path (e.g. "b.c") dropped by
-    the plain scan as its own top-level column, read from its struct column."""
+    """Scan an Iceberg table selecting `names`, surfacing a nested path (e.g. "b.c") as its own top-level column."""
     kwargs: dict[str, Any] = {"selected_fields": tuple(names)}
     if row_filter is not None:
         kwargs["row_filter"] = row_filter

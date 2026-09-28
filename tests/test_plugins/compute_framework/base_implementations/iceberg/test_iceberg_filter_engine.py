@@ -352,7 +352,6 @@ class TestIcebergFilterEngine(FilterEngineTestMixin):
         assert "row_filter" in call_args.kwargs
         assert call_args.kwargs["row_filter"] == GreaterThanOrEqual(Reference("age"), 25)
 
-        # selected_fields is exactly the feature names plus the filter column, in schema order;
         # "id" is an unrelated schema column and must not be selected.
         assert call_args.kwargs["selected_fields"] == ("age", "name", "category")
 
@@ -389,7 +388,7 @@ class TestIcebergFilterEngine(FilterEngineTestMixin):
         IcebergFilterEngine.apply_filters(mock_iceberg_table, mock_feature_set)
 
         call_args = mock_iceberg_table.scan.call_args
-        # "name" is in get_all_names(); "name~0" is its multi-output column and must be selected too.
+        # "name~0" is the multi-output column and must be selected too.
         assert set(call_args.kwargs["selected_fields"]) == {"age", "category", "name~0"}
         assert "id" not in call_args.kwargs["selected_fields"]
 

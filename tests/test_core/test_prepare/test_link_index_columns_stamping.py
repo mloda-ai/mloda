@@ -1,5 +1,4 @@
-"""FeatureSet.link_index_columns must be stamped, per FeatureGroupStep, with the union of both
-sides' link index columns for every JoinStep whose framework uuids intersect that step's features."""
+"""FeatureSet.link_index_columns must be stamped with the union of both sides' link index columns."""
 
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.abstract_plugins.components.link import Link

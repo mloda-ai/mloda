@@ -311,8 +311,7 @@ IJK_PAYLOAD = "ijk_payload"
 IJK_STATUS = "ijk_status"
 IJK_RIGHT_PAYLOAD = "ijk_right_payload"
 
-# Populated by IcebergJoinKeyLeftFG.calculate_feature with the Mock Iceberg table it returns, so the
-# test can inspect the scan() call after mloda.run_all finishes.
+# Captured Mock Iceberg table so the test can inspect its scan() call after mloda.run_all finishes.
 ijk_captured_tables: list[Mock] = []
 
 
@@ -449,8 +448,7 @@ class TestIcebergIntegrationWithMlodaAPI:
             assert final_data["b.c"].type == pa.int64()
 
     def test_nested_struct_field_same_shape_with_and_without_filter_iceberg(self, flight_server: Any) -> None:
-        """The same nested feature 'b.c' must have the same column name and type whether or not a
-        global filter is active, so a consumer downstream of the scan sees one consistent shape."""
+        """'b.c' must have the same column name and type whether or not a global filter is active."""
         plugin_collector = PluginCollector.enabled_feature_groups({IcebergTableStructFieldFilterTest})
 
         global_filter = GlobalFilter()
@@ -480,8 +478,7 @@ class TestIcebergIntegrationWithMlodaAPI:
         assert unfiltered_data["b.c"].to_pylist() == [10, 20, 30, 40]
 
     def test_join_key_not_a_requested_feature_survives_projected_filter_scan(self, flight_server: Any) -> None:
-        """The join index column is not itself a requested feature of the Iceberg side, but a filtered,
-        projected scan must still keep it so the join downstream can succeed."""
+        """A projected, filtered scan must still keep a join index column that is not itself requested."""
         ijk_captured_tables.clear()
         plugin_collector = PluginCollector.enabled_feature_groups(
             {IcebergJoinKeyLeftFG, IcebergJoinKeyRightFG, IcebergJoinKeyConsumerFG}

@@ -534,7 +534,7 @@ class ComputeFramework(ABC):
     @classmethod
     def extract_column_names(cls, data: Any) -> set[str]:
         """Column names of framework-native data, callable without an instance."""
-        raise NotImplementedError
+        raise NotImplementedError(f"{cls.__name__} must implement the extract_column_names classmethod")
 
     def _extract_column_names(self, data: Any) -> set[str]:
         """Extract column names from the framework's data after transform.

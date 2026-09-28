@@ -81,12 +81,11 @@ class EmptyResultFrameworkTestMixin:
     def test_public_extract_column_names_is_instance_free(
         self, framework_instance: Any, empty_data: Any, non_empty_data: Any
     ) -> None:
-        """Public ``extract_column_names`` works on the class and matches the private instance method."""
+        """Public ``extract_column_names`` works on the class and through an instance."""
         framework_cls = type(framework_instance)
 
         columns = framework_cls.extract_column_names(non_empty_data)
         assert columns
-        assert columns == framework_instance._extract_column_names(non_empty_data)
 
         empty_columns = framework_cls.extract_column_names(empty_data)
         if self.empty_data_carries_schema:

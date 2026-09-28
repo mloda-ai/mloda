@@ -184,9 +184,9 @@ class _AliasRef:
 class _Candidate:
     """One definition/binding occurrence; span (not the AST) is kept, re-parsed and memoized on first reach."""
 
-    __slots__ = ("kind", "start_line", "end_line", "lineno", "col_offset", "lines", "digest_refs")
+    __slots__ = ("kind", "start_line", "end_line", "lineno", "col_offset", "lines", "digest_refs", "is_none_assign")
 
-    def __init__(self, kind: str, node: ast.stmt, lines: list[str]) -> None:
+    def __init__(self, kind: str, node: ast.stmt, lines: list[str], is_none_assign: bool = False) -> None:
         self.kind = kind
         decorators = getattr(node, "decorator_list", [])
         self.start_line = decorators[0].lineno if decorators else node.lineno
@@ -195,6 +195,7 @@ class _Candidate:
         self.col_offset = node.col_offset
         self.lines = lines
         self.digest_refs: tuple[str | None, list[str | _AliasRef]] | None = None
+        self.is_none_assign = is_none_assign
 
 
 @dataclass(frozen=True)
@@ -338,7 +339,9 @@ def _index_body(
             targets = stmt.targets if isinstance(stmt, ast.Assign) else [stmt.target]
             names = {n.id for t in targets for n in ast.walk(t) if isinstance(n, ast.Name)}
             if names:
-                candidate = _Candidate("stmt", stmt, lines)
+                value_node = stmt.value if isinstance(stmt, (ast.Assign, ast.AnnAssign)) else None
+                is_none_assign = isinstance(value_node, ast.Constant) and value_node.value is None
+                candidate = _Candidate("stmt", stmt, lines, is_none_assign=is_none_assign)
                 for name in names:
                     bindings.setdefault(name, []).append(candidate)
         elif isinstance(stmt, ast.Import):
@@ -429,8 +432,8 @@ def _static_module_source(spec: importlib.machinery.ModuleSpec, origin: str) -> 
     return safe_field(lambda: _read_file_bytes(origin), None, catching=(OSError,))
 
 
-def _locate_static_module_index(modname: str) -> _ModuleIndex | None:
-    """Locates modname's source via PathFinder, from the nearest already-imported ancestor, without importing it."""
+def _locate_module_spec(modname: str) -> importlib.machinery.ModuleSpec | None:
+    """Locates modname's spec via PathFinder, from the nearest already-imported ancestor, without importing it."""
     parts = modname.split(".")
     ancestor_len, search_locations = _module_ancestor_search_locations(modname)
     if ancestor_len > 0 and search_locations is None:
@@ -445,6 +448,11 @@ def _locate_static_module_index(modname: str) -> _ModuleIndex | None:
             if not spec.submodule_search_locations:
                 return None  # intermediate step has no submodule locations: never fall back to all of sys.path
             search_locations = list(spec.submodule_search_locations)
+    return spec
+
+
+def _locate_static_module_index(modname: str) -> _ModuleIndex | None:
+    spec = _locate_module_spec(modname)
     if spec is None:
         return None
     origin = spec.origin
@@ -456,6 +464,21 @@ def _locate_static_module_index(modname: str) -> _ModuleIndex | None:
     is_package = os.path.basename(origin) == "__init__.py"
     package = modname if is_package else (modname.rsplit(".", 1)[0] if "." in modname else None)
     return _build_index_from_source(source, package, is_package)
+
+
+def _is_namespace_module(modname: str) -> bool:
+    """True for a PEP 420 namespace package step: importable/locatable but with no source of its own."""
+    mod = sys.modules.get(modname)
+    if mod is not None:
+        mod_vars = safe_field(lambda: vars(mod), None)
+        if mod_vars is None or "__path__" not in mod_vars:
+            return False
+        return _get_module_index(modname) is None
+    spec = _locate_module_spec(modname)
+    if spec is None:
+        return False
+    origin = spec.origin
+    return bool(spec.submodule_search_locations) and not (origin and origin.endswith(".py"))
 
 
 _module_index_cache: "weakref.WeakKeyDictionary[types.ModuleType, tuple[tuple[int, int] | None, _ModuleIndex | None]]" = weakref.WeakKeyDictionary()
@@ -797,6 +820,12 @@ class _Walker:
             self._static_index_cache[modname] = _locate_static_module_index(modname)
         return self._static_index_cache[modname]
 
+    def _is_valid_static_step(self, modname: str, more_segments: bool) -> bool:
+        """A locatable module, or a namespace package step that is not the chain's final segment."""
+        if self._static_module_index(modname) is not None:
+            return True
+        return more_segments and _is_namespace_module(modname)
+
     def in_scope(self, modname: str) -> bool:
         top = _top(modname)
         if top in sys.stdlib_module_names or modname == "builtins":
@@ -921,7 +950,7 @@ class _Walker:
                 return
         self.parts.add(f"nosrc:{modname}:{qualname}")
 
-    def _handle_binding(self, modname: str, name: str, static: bool) -> None:
+    def _handle_binding(self, modname: str, name: str, static: bool, skip_none_assign: bool = False) -> None:
         key = ("sb" if static else "b", modname, name)
         if key in self._seen:
             return
@@ -932,6 +961,8 @@ class _Walker:
         candidates = idx.bindings.get(name)
         if candidates:
             for candidate in candidates:
+                if skip_none_assign and candidate.is_none_assign:
+                    continue
                 digest, refs = _resolve_candidate(candidate, idx.package)
                 if digest is None:
                     self.parts.add(f"nosrc:{modname}:={name}")
@@ -987,11 +1018,17 @@ class _Walker:
             self.parts.add(f"nosrc:{modname}:{ref}")
             return
         head, _, remainder = ref.partition(".")
+        # Mirrors _handle_ref: an out-of-scope import of head always adds a dep: entry, hiding a None fallback.
+        has_optional_import = False
+        for entry in idx.imports.get(head, []):
+            if not self.in_scope(entry.source_module) and not _is_ignored_module_name(entry.source_module):
+                self._add_dependency(entry.source_module)
+                has_optional_import = True
         if head in idx.definitions:
             self._accept_def_by_qualname(modname, head, idx, True)
             return
         if head in idx.bindings:
-            self._handle_binding(modname, head, True)
+            self._handle_binding(modname, head, True, skip_none_assign=has_optional_import)
             return
         import_entries = idx.imports.get(head, [])
         if import_entries:
@@ -1002,8 +1039,6 @@ class _Walker:
                         self._queue.append(("sref", binding.source_module, target))
                     else:
                         self._resolve_static_module_chain(binding.source_module, remainder)
-                elif not _is_ignored_module_name(binding.source_module):
-                    self._add_dependency(binding.source_module)
             return
         for star_source in idx.star_imports:
             if self.in_scope(star_source):
@@ -1023,9 +1058,10 @@ class _Walker:
         current = base_module
         segments = remainder.split(".") if remainder else []
         consumed = 0
-        for seg in segments:
+        for i, seg in enumerate(segments):
             candidate = f"{current}.{seg}"
-            if not self.in_scope(candidate) or self._static_module_index(candidate) is None:
+            more_segments = i + 1 < len(segments)
+            if not self.in_scope(candidate) or not self._is_valid_static_step(candidate, more_segments):
                 break
             current = candidate
             consumed += 1
@@ -1110,30 +1146,27 @@ class _Walker:
                 self._add_dependency(modname)
                 return
             mod_vars = safe_field(lambda: vars(value), None)
-            if mod_vars is None:
-                return
-            submodule = f"{modname}.{attr}"
-            # M.attr is an in-scope submodule: switch to the static path so cold (never imported) and
-            # warm (already imported, present in vars(M)) resolve the same rest of the chain.
-            if self.in_scope(submodule) and self._chain_step_is_submodule(mod_vars, attr, submodule):
-                remainder = ".".join(rest[i + 1 :])
-                if remainder:
-                    self._queue.append(("sref", submodule, remainder))
-                else:
-                    self._queue.append(("smodule", submodule))
-                return
-            if attr not in mod_vars:
+            # Only a package can have a submodule step; checked via __dict__ so __getattr__ never runs.
+            if mod_vars is not None and "__path__" in mod_vars:
+                submodule = f"{modname}.{attr}"
+                attr_value = mod_vars.get(attr)
+                names_submodule = attr not in mod_vars or (
+                    type(attr_value) is types.ModuleType and safe_field(lambda: attr_value.__name__, None) == submodule
+                )
+                # M.attr is an in-scope submodule (possibly a namespace dir): switch to the static path so
+                # cold (never imported) and warm (already imported, present in vars(M)) resolve the same way.
+                if (
+                    names_submodule
+                    and self.in_scope(submodule)
+                    and self._is_valid_static_step(submodule, i + 1 < len(rest))
+                ):
+                    self._resolve_static_module_chain(modname, ".".join(rest[i:]))
+                    return
+            if mod_vars is None or attr not in mod_vars:
                 return
             owner_mod, owner_name = modname, attr
             value = mod_vars[attr]
         self._queue.append(("value", value, owner_mod, owner_name, optional_dependency_sentinel))
-
-    def _chain_step_is_submodule(self, mod_vars: dict[str, Any], attr: str, submodule: str) -> bool:
-        if attr not in mod_vars:
-            # Package check by dict read: a module-level __getattr__ must never run.
-            return "__path__" in mod_vars and self._static_module_index(submodule) is not None
-        present = mod_vars[attr]
-        return type(present) is types.ModuleType and safe_field(lambda: present.__name__, "") == submodule
 
     def _dispatch(self, task: _Task) -> None:
         tag = task[0]

@@ -158,7 +158,7 @@ class ExecutionPlan:
         # records already-resolved Links) is only populated by add_joinstep's run_link calls, and a
         # split already bridged by a Link must not be blamed (see _stamp_option_split_hints).
         self._stamp_option_split_hints(fw_execution_plan, graph.parent_to_children_mapping)
-        self._stamp_link_index_columns(fw_execution_plan)
+        self._stamp_link_index_columns(fw_execution_plan, graph.parent_to_children_mapping)
 
         # Built before add_tfs, whose write serialization edges are not part of the join decision.
         join_steps = [step for step in fw_execution_plan if isinstance(step, JoinStep)]
@@ -256,15 +256,30 @@ class ExecutionPlan:
         self._option_split_buckets = {}
         self._option_split_keys = {}
 
-    def _stamp_link_index_columns(self, plan: list[JoinStep | FeatureGroupStep]) -> None:
-        """Stamp each FeatureGroupStep read by a JoinStep with both sides' link index columns."""
+    def _stamp_link_index_columns(
+        self,
+        plan: list[JoinStep | FeatureGroupStep],
+        parent_to_children_mapping: dict[UUID, set[UUID]],
+    ) -> None:
+        """Stamp link-read columns on the join members and every step upstream of them, which may pass them through."""
         for join_step in plan:
             if not isinstance(join_step, JoinStep):
                 continue
             members = join_step.destination_framework_uuids | join_step.source_framework_uuids
             index_columns = frozenset(join_step.link.left_index.index) | frozenset(join_step.link.right_index.index)
+            asof_config = join_step.link.asof_config
+            if asof_config is not None:
+                index_columns = index_columns | frozenset({asof_config.left_time_column, asof_config.right_time_column})
+
+            reached: set[UUID] = set(members)
+            stack: list[UUID] = list(members)
+            while stack:
+                for parent in parent_to_children_mapping.get(stack.pop(), set()) - reached:
+                    reached.add(parent)
+                    stack.append(parent)
+
             for step in plan:
-                if isinstance(step, FeatureGroupStep) and step.get_uuids() & members:
+                if isinstance(step, FeatureGroupStep) and step.get_uuids() & reached:
                     step.features.link_index_columns = step.features.link_index_columns | index_columns
 
     def _exclude_link_resolved_buckets(

@@ -19,6 +19,7 @@ from mloda.user import DataAccessCollection
 from mloda.user import GlobalFilter
 from mloda.user import Index
 from mloda.user import Link
+from mloda.user import JoinSpec
 from mloda_plugins.compute_framework.base_implementations.iceberg.iceberg_framework import IcebergFramework
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from tests.test_core.test_filter.test_feature_group_final_filters import RegularFeatureGroupForFilterTest
@@ -307,6 +308,7 @@ class IcebergTableStructFieldFilterTest(FeatureGroup):
 
 
 IJK_KEY = "ijk_key"
+IJK_KEY2 = "ijk_key2"
 IJK_PAYLOAD = "ijk_payload"
 IJK_STATUS = "ijk_status"
 IJK_RIGHT_PAYLOAD = "ijk_right_payload"
@@ -316,15 +318,16 @@ ijk_captured_tables: list[Mock] = []
 
 
 class IcebergJoinKeyLeftFG(FeatureGroup):
-    """Only the payload is requested by the consumer; the join key is never a requested feature."""
+    """Only the payload is requested by the consumer; the composite index's second column (ijk_key2) is
+    never a requested feature and only survives a projected, filtered scan via the link index column stamp."""
 
     @classmethod
     def input_data(cls) -> BaseInputData | None:
-        return DataCreator(supports_features={IJK_KEY, IJK_PAYLOAD, IJK_STATUS})
+        return DataCreator(supports_features={IJK_KEY, IJK_KEY2, IJK_PAYLOAD, IJK_STATUS})
 
     @classmethod
     def index_columns(cls) -> list[Index] | None:
-        return [Index((IJK_KEY,))]
+        return [Index((IJK_KEY, IJK_KEY2))]
 
     @classmethod
     def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
@@ -335,18 +338,25 @@ class IcebergJoinKeyLeftFG(FeatureGroup):
         arrow_data = pa.table(
             {
                 IJK_KEY: [1, 2, 3, 4],
+                IJK_KEY2: ["k1", "k2", "k3", "k4"],
                 IJK_PAYLOAD: [10, 20, 30, 40],
                 IJK_STATUS: ["active", "inactive", "active", "inactive"],
             }
         )
+
+        def _scan(*args: Any, **kwargs: Any) -> Mock:
+            selected = kwargs.get("selected_fields", arrow_data.column_names)
+            mock_scan = Mock()
+            mock_scan.to_arrow.return_value = arrow_data.select(list(selected))
+            return mock_scan
+
         mock_table = Mock(spec=IcebergTable)
-        mock_scan = Mock()
-        mock_scan.to_arrow.return_value = arrow_data
-        mock_table.scan.return_value = mock_scan
+        mock_table.scan.side_effect = _scan
         mock_table.schema.return_value = Schema(
             NestedField(1, IJK_KEY, LongType(), required=False),
-            NestedField(2, IJK_PAYLOAD, LongType(), required=False),
-            NestedField(3, IJK_STATUS, StringType(), required=False),
+            NestedField(2, IJK_KEY2, StringType(), required=False),
+            NestedField(3, IJK_PAYLOAD, LongType(), required=False),
+            NestedField(4, IJK_STATUS, StringType(), required=False),
         )
         ijk_captured_tables.append(mock_table)
         return mock_table
@@ -355,11 +365,11 @@ class IcebergJoinKeyLeftFG(FeatureGroup):
 class IcebergJoinKeyRightFG(FeatureGroup):
     @classmethod
     def input_data(cls) -> BaseInputData | None:
-        return DataCreator(supports_features={IJK_KEY, IJK_RIGHT_PAYLOAD})
+        return DataCreator(supports_features={IJK_KEY, IJK_KEY2, IJK_RIGHT_PAYLOAD})
 
     @classmethod
     def index_columns(cls) -> list[Index] | None:
-        return [Index((IJK_KEY,))]
+        return [Index((IJK_KEY, IJK_KEY2))]
 
     @classmethod
     def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
@@ -367,7 +377,13 @@ class IcebergJoinKeyRightFG(FeatureGroup):
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
-        return pa.table({IJK_KEY: [1, 2, 3], IJK_RIGHT_PAYLOAD: ["r1", "r2", "r3"]})
+        return pa.table(
+            {
+                IJK_KEY: [1, 2, 3],
+                IJK_KEY2: ["k1", "k2", "k3"],
+                IJK_RIGHT_PAYLOAD: ["r1", "r2", "r3"],
+            }
+        )
 
 
 class IcebergJoinKeyConsumerFG(FeatureGroup):
@@ -381,6 +397,126 @@ class IcebergJoinKeyConsumerFG(FeatureGroup):
         payloads = data[IJK_PAYLOAD].to_pylist()
         right_payloads = data[IJK_RIGHT_PAYLOAD].to_pylist()
         combined = [f"{left}|{right}" for left, right in zip(payloads, right_payloads)]
+        return data.append_column(cls.get_class_name(), pa.array(combined))
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PyArrowTable}
+
+
+ANCESTOR_STAMP_DESC_K = "ancestor_stamp_desc_k"
+ANCESTOR_STAMP_VALUE = "ancestor_stamp_value"
+ANCESTOR_STAMP_STATUS = "ancestor_stamp_status"
+ANCESTOR_STAMP_C_KEY = "ancestor_stamp_c_key"
+ANCESTOR_STAMP_C_PAYLOAD = "ancestor_stamp_c_payload"
+
+
+class AncestorStampRootFG(FeatureGroup):
+    """Iceberg root: key column desc_k, value, status, filtered by a GlobalFilter on status."""
+
+    @classmethod
+    def input_data(cls) -> BaseInputData | None:
+        return DataCreator(supports_features={ANCESTOR_STAMP_DESC_K, ANCESTOR_STAMP_VALUE, ANCESTOR_STAMP_STATUS})
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {IcebergFramework}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        arrow_data = pa.table(
+            {
+                ANCESTOR_STAMP_DESC_K: ["d1", "d2", "d3", "d4"],
+                ANCESTOR_STAMP_VALUE: [10, 20, 30, 40],
+                ANCESTOR_STAMP_STATUS: ["active", "inactive", "active", "inactive"],
+            }
+        )
+
+        def _scan(*args: Any, **kwargs: Any) -> Mock:
+            selected = kwargs.get("selected_fields", arrow_data.column_names)
+            mock_scan = Mock()
+            mock_scan.to_arrow.return_value = arrow_data.select(list(selected))
+            return mock_scan
+
+        mock_table = Mock(spec=IcebergTable)
+        mock_table.scan.side_effect = _scan
+        mock_table.schema.return_value = Schema(
+            NestedField(1, ANCESTOR_STAMP_DESC_K, StringType(), required=False),
+            NestedField(2, ANCESTOR_STAMP_VALUE, LongType(), required=False),
+            NestedField(3, ANCESTOR_STAMP_STATUS, StringType(), required=False),
+        )
+        return mock_table
+
+
+class AncestorStampMiddleFG(FeatureGroup):
+    """Consumes the root's value; desc_k (the join index) is passed through raw from the root's data and
+    is never itself a declared input_feature, so it depends entirely on the root step being stamped."""
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        if str(feature_name) == ANCESTOR_STAMP_DESC_K:
+            return None
+        return {Feature(ANCESTOR_STAMP_VALUE)}
+
+    @classmethod
+    def index_columns(cls) -> list[Index] | None:
+        return [Index((ANCESTOR_STAMP_DESC_K,))]
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {ANCESTOR_STAMP_DESC_K}
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PyArrowTable}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        import pyarrow.compute as pc
+
+        result = data
+        for feat in features.features:
+            if str(feat.name) == cls.get_class_name():
+                doubled = pc.multiply(data[ANCESTOR_STAMP_VALUE], 2)
+                result = result.append_column(cls.get_class_name(), doubled)
+        return result
+
+
+class AncestorStampOtherFG(FeatureGroup):
+    """Unrelated PyArrow data creator, joined to the middle FG's desc_k on c_key."""
+
+    @classmethod
+    def input_data(cls) -> BaseInputData | None:
+        return DataCreator(supports_features={ANCESTOR_STAMP_C_KEY, ANCESTOR_STAMP_C_PAYLOAD})
+
+    @classmethod
+    def index_columns(cls) -> list[Index] | None:
+        return [Index((ANCESTOR_STAMP_C_KEY,))]
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PyArrowTable}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return pa.table(
+            {
+                ANCESTOR_STAMP_C_KEY: ["d1", "d2", "d3"],
+                ANCESTOR_STAMP_C_PAYLOAD: ["p1", "p2", "p3"],
+            }
+        )
+
+
+class AncestorStampConsumerFG(FeatureGroup):
+    """Combines the middle FG's own feature with the other side's payload."""
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return {Feature(name=AncestorStampMiddleFG.get_class_name()), Feature(name=ANCESTOR_STAMP_C_PAYLOAD)}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        middles = data[AncestorStampMiddleFG.get_class_name()].to_pylist()
+        payloads = data[ANCESTOR_STAMP_C_PAYLOAD].to_pylist()
+        combined = [f"{middle}|{payload}" for middle, payload in zip(middles, payloads)]
         return data.append_column(cls.get_class_name(), pa.array(combined))
 
     @classmethod
@@ -500,6 +636,7 @@ class TestIcebergIntegrationWithMlodaAPI:
         assert len(ijk_captured_tables) == 1
         call_args = ijk_captured_tables[0].scan.call_args
         assert IJK_KEY in call_args.kwargs["selected_fields"]
+        assert IJK_KEY2 in call_args.kwargs["selected_fields"]
 
         matching = [
             frame for frame in result if IcebergJoinKeyConsumerFG.get_class_name() in getattr(frame, "column_names", [])
@@ -507,6 +644,36 @@ class TestIcebergIntegrationWithMlodaAPI:
         assert len(matching) == 1
         values = sorted(matching[0][IcebergJoinKeyConsumerFG.get_class_name()].to_pylist())
         assert values == ["10|r1", "30|r3"]
+
+    def test_ancestor_of_join_member_gets_link_index_column_stamped(self, flight_server: Any) -> None:
+        """An Iceberg step two hops above a join member (through a pass-through FG) must still get the
+        join index column stamped, since the join key reaches the join only as raw passed-through data."""
+        plugin_collector = PluginCollector.enabled_feature_groups(
+            {AncestorStampRootFG, AncestorStampMiddleFG, AncestorStampOtherFG, AncestorStampConsumerFG}
+        )
+        global_filter = GlobalFilter()
+        global_filter.add_filter(ANCESTOR_STAMP_STATUS, "equal", {"value": "active"})
+        link = Link.inner(
+            JoinSpec(AncestorStampMiddleFG, Index((ANCESTOR_STAMP_DESC_K,))),
+            JoinSpec(AncestorStampOtherFG, Index((ANCESTOR_STAMP_C_KEY,))),
+        )
+
+        result = mloda.run_all(
+            [Feature(name=AncestorStampConsumerFG.get_class_name(), initial_requested_data=True)],
+            flight_server=flight_server,
+            parallelization_modes={ParallelizationMode.SYNC},
+            plugin_collector=plugin_collector,
+            compute_frameworks={IcebergFramework, PyArrowTable},
+            links={link},
+            global_filter=global_filter,
+        )
+
+        matching = [
+            frame for frame in result if AncestorStampConsumerFG.get_class_name() in getattr(frame, "column_names", [])
+        ]
+        assert len(matching) == 1
+        values = sorted(matching[0][AncestorStampConsumerFG.get_class_name()].to_pylist())
+        assert values == ["20|p1", "60|p3"]
 
     @pytest.mark.parametrize(
         "modes",

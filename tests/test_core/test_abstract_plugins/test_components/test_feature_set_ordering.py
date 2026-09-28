@@ -98,20 +98,6 @@ class TestNameOfOneFeatureDeterministic:
 
         assert features.get_name_of_one_feature() == FeatureName("a_col")
 
-
-class TestLinkIndexColumnsDefault:
-    """FeatureSet.link_index_columns is a planner-stamped frozenset, empty until the planner writes it."""
-
-    def test_defaults_to_empty_frozenset(self) -> None:
-        features = FeatureSet()
-
-        assert features.link_index_columns == frozenset()
-
-    def test_default_is_a_frozenset_instance(self) -> None:
-        features = FeatureSet()
-
-        assert isinstance(features.link_index_columns, frozenset)
-
     def test_order_independent_across_explicit_orderings(self) -> None:
         names = ["c_col", "a_col", "b_col"]
         orderings = [names, list(reversed(names)), sorted(names), ["b_col", "c_col", "a_col"]]

@@ -1,5 +1,7 @@
 """FeatureSet.link_index_columns must be stamped with the union of both sides' link index columns."""
 
+from uuid import UUID
+
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.abstract_plugins.components.link import Link
 from mloda.core.core.step.feature_group_step import FeatureGroupStep
@@ -51,6 +53,14 @@ class LinkStampUnrelatedFG(LinkStampBaseFG):
     pass
 
 
+class LinkStampGrandparentFG(LinkStampBaseFG):
+    pass
+
+
+class LinkStampParentFG(LinkStampBaseFG):
+    pass
+
+
 def _feature(name: str, cfw: type[ComputeFramework], index: Index | None = None) -> Feature:
     feature = Feature(name, index=index)
     feature.compute_frameworks = {cfw}
@@ -83,7 +93,7 @@ def test_step_read_by_a_link_gets_both_sides_index_columns_stamped() -> None:
 
     steps: list[JoinStep | FeatureGroupStep] = [left_step, right_step, join_step]
 
-    ExecutionPlan()._stamp_link_index_columns(steps)
+    ExecutionPlan()._stamp_link_index_columns(steps, {})
 
     expected = frozenset({LEFT_INDEX_COLUMN, RIGHT_INDEX_COLUMN})
     assert left_step.features.link_index_columns == expected
@@ -112,6 +122,95 @@ def test_step_not_read_by_any_link_keeps_empty_frozenset() -> None:
 
     steps: list[JoinStep | FeatureGroupStep] = [left_step, right_step, unrelated_step, join_step]
 
-    ExecutionPlan()._stamp_link_index_columns(steps)
+    ExecutionPlan()._stamp_link_index_columns(steps, {})
 
     assert unrelated_step.features.link_index_columns == frozenset()
+
+
+def test_asof_join_stamps_both_sides_time_columns() -> None:
+    """An ASOF link's left/right time columns must be stamped alongside the by-key index columns."""
+    left_time_column = "link_stamp_left_asof_ts"
+    right_time_column = "link_stamp_right_asof_ts"
+
+    left_payload = _feature("link_stamp_left_payload", PyArrowTable)
+    left_step = _fg_step(LinkStampLeftFG, [left_payload], PyArrowTable)
+
+    right_payload = _feature("link_stamp_right_payload", PandasDataFrame)
+    right_step = _fg_step(LinkStampRightFG, [right_payload], PandasDataFrame)
+
+    link = Link.asof(
+        JoinSpec(LinkStampLeftFG, LEFT_INDEX),
+        JoinSpec(LinkStampRightFG, RIGHT_INDEX),
+        left_time_column=left_time_column,
+        right_time_column=right_time_column,
+    )
+    join_step = JoinStep(
+        link=link,
+        destination_framework=PyArrowTable,
+        source_framework=PandasDataFrame,
+        required_uuids={left_payload.uuid, right_payload.uuid},
+        destination_framework_uuids={left_payload.uuid},
+        source_framework_uuids={right_payload.uuid},
+    )
+
+    steps: list[JoinStep | FeatureGroupStep] = [left_step, right_step, join_step]
+
+    ExecutionPlan()._stamp_link_index_columns(steps, {})
+
+    expected = frozenset({LEFT_INDEX_COLUMN, RIGHT_INDEX_COLUMN, left_time_column, right_time_column})
+    assert left_step.features.link_index_columns == expected
+    assert right_step.features.link_index_columns == expected
+
+
+def test_transitive_ancestor_of_join_member_gets_stamped() -> None:
+    """A step two levels upstream of a join member (via parent_to_children_mapping) is also stamped."""
+    grandparent_payload = _feature("link_stamp_grandparent_payload", PyArrowTable)
+    grandparent_step = _fg_step(LinkStampGrandparentFG, [grandparent_payload], PyArrowTable)
+
+    parent_payload = _feature("link_stamp_parent_payload", PyArrowTable)
+    parent_step = _fg_step(LinkStampParentFG, [parent_payload], PyArrowTable)
+
+    left_payload = _feature("link_stamp_left_payload", PyArrowTable)
+    left_step = _fg_step(LinkStampLeftFG, [left_payload], PyArrowTable)
+
+    right_payload = _feature("link_stamp_right_payload", PandasDataFrame)
+    right_step = _fg_step(LinkStampRightFG, [right_payload], PandasDataFrame)
+
+    unrelated_payload = _feature("link_stamp_unrelated_payload", PyArrowTable)
+    unrelated_step = _fg_step(LinkStampUnrelatedFG, [unrelated_payload], PyArrowTable)
+
+    link = Link.inner(JoinSpec(LinkStampLeftFG, LEFT_INDEX), JoinSpec(LinkStampRightFG, RIGHT_INDEX))
+    join_step = JoinStep(
+        link=link,
+        destination_framework=PyArrowTable,
+        source_framework=PandasDataFrame,
+        required_uuids={left_payload.uuid, right_payload.uuid},
+        destination_framework_uuids={left_payload.uuid},
+        source_framework_uuids={right_payload.uuid},
+    )
+
+    steps: list[JoinStep | FeatureGroupStep] = [
+        grandparent_step,
+        parent_step,
+        left_step,
+        right_step,
+        unrelated_step,
+        join_step,
+    ]
+
+    # left_payload's ancestors, flattened two levels deep, as Graph.parent_to_children_mapping stores them.
+    parent_to_children_mapping: dict[UUID, set[UUID]] = {
+        left_payload.uuid: {parent_payload.uuid, grandparent_payload.uuid},
+    }
+
+    ExecutionPlan()._stamp_link_index_columns(steps, parent_to_children_mapping)
+
+    expected = frozenset({LEFT_INDEX_COLUMN, RIGHT_INDEX_COLUMN})
+    assert grandparent_step.features.link_index_columns == expected
+    assert parent_step.features.link_index_columns == expected
+    assert left_step.features.link_index_columns == expected
+    assert unrelated_step.features.link_index_columns == frozenset()
+
+
+def test_link_index_columns_defaults_to_empty_frozenset() -> None:
+    assert FeatureSet().link_index_columns == frozenset()

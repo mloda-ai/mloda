@@ -28,6 +28,23 @@ class TestScalingFeatureGroup:
         assert not ScalingFeatureGroup.match_feature_group_criteria("income__standard_scale", Options())
         assert not ScalingFeatureGroup.match_feature_group_criteria("income_standard_scaled", Options())
 
+    def test_declared_scaler_type_contradicting_the_name_aborts(self) -> None:
+        options = Options(context={ScalingFeatureGroup.SCALER_TYPE: "minmax"})
+
+        with pytest.raises(ValueError) as exc_info:
+            ScalingFeatureGroup.match_feature_group_criteria("x__standard_scaled", options)
+
+        message = str(exc_info.value)
+        assert ScalingFeatureGroup.SCALER_TYPE in message
+        assert "minmax" in message
+        assert "standard" in message
+
+    @pytest.mark.parametrize("declared", ["standard", ["standard"]])
+    def test_declared_scaler_type_agreeing_with_the_name_matches(self, declared: str | list[str]) -> None:
+        options = Options(context={ScalingFeatureGroup.SCALER_TYPE: declared})
+
+        assert ScalingFeatureGroup.match_feature_group_criteria("x__standard_scaled", options) is True
+
     def test_get_scaler_type(self) -> None:
         """Test the get_scaler_type method."""
         # Valid feature names

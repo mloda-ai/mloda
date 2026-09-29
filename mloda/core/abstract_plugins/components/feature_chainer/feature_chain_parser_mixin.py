@@ -85,6 +85,7 @@ from mloda.core.abstract_plugins.components.utils import (
     contained_raise_reason,
     escalate_match_abort,
     is_match_abort,
+    safe_field,
     safe_value_text,
 )
 
@@ -325,10 +326,13 @@ class FeatureChainParserMixin:
                     if not cls._validate_string_match(feature_name, operation_config, parsed.source_feature):
                         return False
                 effective_options = FeatureChainParser._merge_bindings(options, bindings, property_mapping)
-                cls._validate_forwarded_name_mismatch(feature_name, bindings, options)
 
         if not cls._validate_in_features(result, options, name_sources, feature_name):
             return False
+
+        if result and resolution.owned:
+            cls._validate_forwarded_name_mismatch(feature_name, bindings, options)
+            cls._validate_name_agreement(feature_name, bindings, name_sources, options)
 
         if not cls._validate_match_guards(result, effective_options, property_mapping):
             return False
@@ -490,11 +494,69 @@ class FeatureChainParserMixin:
                 f"takes precedence, so the forwarded value would be silently ignored. {remedy} Set "
                 f"MLODA_ALLOW_FORWARDED_NAME_MISMATCH=1 to downgrade this error to a warning."
             )
-            if os.environ.get("MLODA_ALLOW_FORWARDED_NAME_MISMATCH", "").lower() in ("1", "true"):
-                logger.warning(message)
+            if cls._name_mismatch_downgraded(message):
                 continue
             # Marked: user misconfiguration; containing it would let a rival group win with the value ignored (#845).
             raise escalate_match_abort(ValueError(message))
+
+    @classmethod
+    def _name_mismatch_downgraded(cls, message: str) -> bool:
+        """Warn and return True when MLODA_ALLOW_FORWARDED_NAME_MISMATCH downgrades the mismatch error."""
+        if os.environ.get("MLODA_ALLOW_FORWARDED_NAME_MISMATCH", "").lower() not in ("1", "true"):
+            return False
+        logger.warning(message)
+        return True
+
+    @classmethod
+    def _validate_name_agreement(
+        cls,
+        feature_name: str | FeatureName,
+        bindings: dict[str, str],
+        name_sources: list[str] | None,
+        options: Options,
+    ) -> None:
+        """Abort when a declared option or in_features contradicts what the name binds (#1716 R3)."""
+        inherited_keys = options.inherited_group_keys | options.inherited_context_keys
+        env_hint = "Set MLODA_ALLOW_FORWARDED_NAME_MISMATCH=1 to downgrade this error to a warning."
+        for key, name_value in bindings.items():
+            declared = options.get(key)
+            if declared is None or key in inherited_keys or not options.is_own(key):
+                continue
+            unpacked = FeatureChainParser._unpack_property_value(declared)
+            if len(unpacked) == 1 and str(unpacked[0]) == name_value:
+                continue
+            message = (
+                f"Feature '{feature_name}': option '{key}' is '{declared}', but the feature name encodes "
+                f"'{name_value}'. The name is authoritative: remove the option or change it to match. {env_hint}"
+            )
+            if cls._name_mismatch_downgraded(message):
+                continue
+            # Marked: a declared value contradicting the name is user misconfiguration (#1716).
+            raise escalate_match_abort(ValueError(message))
+
+        in_features_key = DefaultOptionKeys.in_features.value
+        declared_in_features = options.get(in_features_key)
+        if name_sources is None or not declared_in_features or in_features_key in inherited_keys:
+            return
+        if not options.is_own(in_features_key):
+            return
+        declared_names = safe_field(
+            lambda: [str(f.name) for f in options.get_in_features()], None, catching=(TypeError, ValueError)
+        )
+        expected = list(name_sources)
+        if isinstance(declared_in_features, (set, frozenset)):
+            expected = sorted(expected)
+        if declared_names != expected:
+            shown = declared_in_features if declared_names is None else declared_names
+            message = (
+                f"Feature '{feature_name}': in_features is {shown!r}, "
+                f"but the feature name's direct sources are {list(name_sources)}. in_features must list the name's "
+                f"direct sources (the part before the last '__'), not the root source: drop it or make it match. "
+                f"{env_hint}"
+            )
+            if not cls._name_mismatch_downgraded(message):
+                # Marked: a declared in_features contradicting the name is user misconfiguration (#1716).
+                raise escalate_match_abort(ValueError(message))
 
     @classmethod
     def _first_rejecting_guard(

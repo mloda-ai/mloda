@@ -63,6 +63,20 @@ class TestGeoDistanceFeatureGroup:
 
         assert not GeoDistanceFeatureGroup.match_feature_group_criteria("point1&point2__haversine_invalid", Options())
 
+    @pytest.mark.parametrize("in_features", [["p1", "p2"], ["b", "a"]])
+    def test_declared_in_features_contradicting_the_name_aborts(self, in_features: list[str]) -> None:
+        options = Options(context={DefaultOptionKeys.in_features: in_features})
+
+        with pytest.raises(ValueError) as exc_info:
+            GeoDistanceFeatureGroup.match_feature_group_criteria("a&b__haversine_distance", options)
+
+        assert "in_features" in str(exc_info.value)
+
+    def test_declared_in_features_agreeing_with_the_name_matches(self) -> None:
+        options = Options(context={DefaultOptionKeys.in_features: ["a", "b"]})
+
+        assert GeoDistanceFeatureGroup.match_feature_group_criteria("a&b__haversine_distance", options) is True
+
     @pytest.mark.parametrize("name", ["&b__haversine_distance", "a&__haversine_distance"])
     def test_empty_operand_name_does_not_match(self, name: str) -> None:
         assert not GeoDistanceFeatureGroup.match_feature_group_criteria(name, Options())

@@ -36,13 +36,13 @@ def test_parse_multi_level_chained_feature() -> None:
 
     Multi-level chained features follow the pattern: source_feature__op2__op1
     (e.g., "age__mean_imputed__standard_scaled").
-    This test verifies that the parser correctly extracts the in_features
-    from deeply nested chained operations.
+    This test verifies that the parser keeps the in_features of a multi-level
+    chained name, which lists the name's direct source ("age__mean_imputed").
     """
     config_str = """[
         {
             "name": "age__mean_imputed__standard_scaled",
-            "in_features": ["age"]
+            "in_features": ["age__mean_imputed"]
         }
     ]"""
 
@@ -51,7 +51,7 @@ def test_parse_multi_level_chained_feature() -> None:
     assert len(result) == 1
     assert isinstance(result[0], FeatureConfig)
     assert result[0].name == "age__mean_imputed__standard_scaled"
-    assert result[0].in_features == ["age"]
+    assert result[0].in_features == ["age__mean_imputed"]
 
 
 def test_load_chained_feature_as_string() -> None:

@@ -130,6 +130,29 @@ class TestTimeWindowFeatureGroup:
         assert len(recorded) == 1
         assert "bogus" in recorded[0]
 
+    def test_declared_window_function_contradicting_the_name_aborts(self) -> None:
+        """R3 on a secondary-free named capture: the name says sum, the option says max."""
+        options = Options(context={TimeWindowFeatureGroup.WINDOW_FUNCTION: "max"})
+
+        with pytest.raises(ValueError) as exc_info:
+            TimeWindowFeatureGroup.match_feature_group_criteria("x__sum_7_day_window", options)
+
+        message = str(exc_info.value)
+        assert TimeWindowFeatureGroup.WINDOW_FUNCTION in message
+        assert "max" in message
+        assert "sum" in message
+
+    def test_declared_window_values_agreeing_with_the_name_match(self) -> None:
+        options = Options(
+            context={
+                TimeWindowFeatureGroup.WINDOW_FUNCTION: "sum",
+                TimeWindowFeatureGroup.WINDOW_SIZE: 7,
+                TimeWindowFeatureGroup.TIME_UNIT: "day",
+            }
+        )
+
+        assert TimeWindowFeatureGroup.match_feature_group_criteria("x__sum_7_day_window", options) is True
+
     def test_name_path_source_count_above_max_is_a_recorded_non_match(
         self, rejection_window: dict[str, MatchRejection]
     ) -> None:

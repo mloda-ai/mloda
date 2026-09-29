@@ -70,11 +70,25 @@ def _options(in_features: Any = None) -> Options:
 class TestNameSourcesDriveTheGate:
     """The name path counts the name's own sources, not the option value."""
 
-    def test_junk_in_features_option_does_not_reject_a_name_carried_source_count(self) -> None:
-        """The name carries two sources, inside MIN=2 / MAX=3; the uncountable option is not consulted."""
+    def test_junk_in_features_option_does_not_reject_a_name_carried_source_count(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The name carries two sources, inside MIN=2 / MAX=3; the gate reads the name, not the option.
+
+        The env var downgrades the R3 contradiction so only the count gate is under test.
+        """
+        monkeypatch.setenv("MLODA_ALLOW_FORWARDED_NAME_MISMATCH", "1")
+
         result = _NameSourceGate944.match_feature_group_criteria("f1&f2__op1_gate944", _options(JUNK_IN_FEATURES))
 
         assert result is True
+
+    def test_junk_in_features_option_aborts_a_name_match(self) -> None:
+        """An in_features value the matcher cannot resolve contradicts the name (#1716 R3)."""
+        with pytest.raises(ValueError) as exc_info:
+            _NameSourceGate944.match_feature_group_criteria("f1&f2__op1_gate944", _options(JUNK_IN_FEATURES))
+
+        assert "in_features" in str(exc_info.value)
 
     def test_name_source_count_below_min_is_a_non_match(self) -> None:
         """One name source is below MIN=2, even though the option value would have passed the gate."""
@@ -99,6 +113,44 @@ class TestNameSourcesDriveTheGate:
         result = _NameSourceGate944.match_feature_group_criteria("f1&f2&f3__op1_gate944", _options())
 
         assert result is True
+
+
+class TestDeclaredInFeaturesAgreeWithName:
+    """#1716 R3: a declared in_features must list exactly the name's direct sources."""
+
+    NAME = "f1&f2__op1_gate944"
+
+    def test_equal_list_matches(self) -> None:
+        assert _NameSourceGate944.match_feature_group_criteria(self.NAME, _options(["f1", "f2"])) is True
+
+    def test_reordered_list_aborts(self) -> None:
+        with pytest.raises(ValueError) as exc_info:
+            _NameSourceGate944.match_feature_group_criteria(self.NAME, _options(["f2", "f1"]))
+
+        message = str(exc_info.value)
+        assert "in_features" in message
+        assert "f1" in message
+        assert "f2" in message
+        assert "direct source" in message
+
+    @pytest.mark.parametrize("in_features", [frozenset({"f1", "f2"}), {"f2", "f1"}])
+    def test_set_in_any_order_matches(self, in_features: Any) -> None:
+        assert _NameSourceGate944.match_feature_group_criteria(self.NAME, _options(in_features)) is True
+
+    def test_feature_objects_compare_by_name(self) -> None:
+        assert _NameSourceGate944.match_feature_group_criteria(self.NAME, _options([Feature("f1"), Feature("f2")]))
+
+    def test_different_names_abort(self) -> None:
+        with pytest.raises(ValueError):
+            _NameSourceGate944.match_feature_group_criteria(self.NAME, _options(["a", "b"]))
+
+    def test_empty_list_is_ignored(self) -> None:
+        assert _NameSourceGate944.match_feature_group_criteria(self.NAME, _options([])) is True
+
+    def test_env_var_downgrades_to_a_warning(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("MLODA_ALLOW_FORWARDED_NAME_MISMATCH", "1")
+
+        assert _NameSourceGate944.match_feature_group_criteria(self.NAME, _options(["a", "b"])) is True
 
 
 class TestOptionPathGateUnchanged:

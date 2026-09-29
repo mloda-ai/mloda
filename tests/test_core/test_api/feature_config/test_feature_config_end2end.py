@@ -81,12 +81,11 @@ def test_integration_json_file() -> None:
     assert features[7].options.group.get("in_features") == "age"
     assert features[7].options.group.get("scaler_type") == "minmax"
 
-    # Ninth feature: age__max_aggr with in_features=["minmaxscaledage"]
+    # Ninth feature: age__max_aggr with in_features=["age"] (the name's direct source)
     assert isinstance(features[8], Feature)
     assert features[8].name == "age__max_aggr"
-    # The in_features should be a tuple referencing feature 7
     mloda_source_8 = features[8].options.context.get("in_features")
-    assert mloda_source_8 == ("minmaxscaledage",)
+    assert mloda_source_8 == ("age",)
 
     # Tenth feature: min_max with in_features="age__max_aggr" in options
     assert isinstance(features[9], Feature)
@@ -149,7 +148,7 @@ def test_end2end_chained_features() -> None:
             },
             {
                 "name": "age__mean_imputed__standard_scaled",
-                "in_features": ["age"],
+                "in_features": ["age__mean_imputed"],
             },
         ]
     )
@@ -190,6 +189,32 @@ def test_end2end_chained_features() -> None:
     # Verify the chained feature has values (basic sanity check)
     assert len(result_df["age__mean_imputed__standard_scaled"]) == 5
     assert not result_df["age__mean_imputed__standard_scaled"].isna().any()
+
+
+def test_end2end_chained_name_with_root_in_features_names_the_direct_sources() -> None:
+    """A chained name with the root source as in_features contradicts the name; the error names the direct sources."""
+    pytest.importorskip("sklearn")
+    from mloda_plugins.feature_group.experimental.sklearn.scaling.pandas import PandasScalingFeatureGroup
+    from mloda_plugins.feature_group.experimental.data_quality.missing_value.pandas import (
+        PandasMissingValueFeatureGroup,
+    )
+
+    config_str = json.dumps(
+        [
+            "age",
+            {"name": "age__mean_imputed", "in_features": ["age"]},
+            {"name": "age__mean_imputed__standard_scaled", "in_features": ["age"]},
+        ]
+    )
+    features = load_features_from_config(config_str, format="json")
+    plugin_collector = PluginCollector.enabled_feature_groups(
+        {ChainedFeatureTestDataCreator, PandasScalingFeatureGroup, PandasMissingValueFeatureGroup}
+    )
+
+    with pytest.raises(Exception) as exc_info:
+        mloda.run_all(features, compute_frameworks={PandasDataFrame}, plugin_collector=plugin_collector)
+
+    assert "direct source" in str(exc_info.value)
 
 
 def test_end2end_group_context_options() -> None:
@@ -473,11 +498,11 @@ def test_complete_integration_json() -> None:
     assert features[7].name == "minmaxscaledage", "Base feature name should be 'minmaxscaledage'"
     assert features[7].options.group.get("in_features") == "age", "Base feature mloda_source should be 'age'"
 
-    # Feature index 8: age__max_aggr with in_features=["minmaxscaledage"]
+    # Feature index 8: age__max_aggr with in_features=["age"]
     assert isinstance(features[8], Feature), "Feature with aggregation should be a Feature object"
     assert features[8].name == "age__max_aggr", "Feature name should be 'age__max_aggr'"
     mloda_source_8 = features[8].options.context.get("in_features")
-    assert mloda_source_8 == ("minmaxscaledage",), "in_features should be tuple with 'minmaxscaledage'"
+    assert mloda_source_8 == ("age",), "in_features should be tuple with 'age'"
     validated_patterns["feature_reference"] = True
 
     # Feature index 9: min_max with in_features="age__max_aggr" in options

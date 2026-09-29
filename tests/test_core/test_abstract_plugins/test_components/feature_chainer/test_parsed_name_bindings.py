@@ -795,10 +795,21 @@ class TestForwardedMismatchOverBindings:
 
         assert ForwardedSecondaryGroup.match_feature_group_criteria(FORWARDED_FEATURE_NAME, child_options) is True
 
-    def test_author_set_secondary_value_does_not_raise(self) -> None:
-        """Only FORWARDED values are protected; an author-set one keeps today's name precedence."""
+    def test_author_set_secondary_value_contradicting_the_name_raises(self) -> None:
+        """A declared secondary value contradicting the name's capture aborts the match (#1716 R3)."""
         child_options = Options(group={SOLVER_KEY: "arpack"})
         assert child_options.inherited_group_keys == frozenset()  # precondition
+
+        with pytest.raises(ValueError) as exc_info:
+            ForwardedSecondaryGroup.match_feature_group_criteria(FORWARDED_FEATURE_NAME, child_options)
+
+        message = str(exc_info.value)
+        assert SOLVER_KEY in message
+        assert "arpack" in message
+        assert "auto" in message
+
+    def test_author_set_secondary_value_agreeing_with_the_name_matches(self) -> None:
+        child_options = Options(group={SOLVER_KEY: "auto"})
 
         assert ForwardedSecondaryGroup.match_feature_group_criteria(FORWARDED_FEATURE_NAME, child_options) is True
 

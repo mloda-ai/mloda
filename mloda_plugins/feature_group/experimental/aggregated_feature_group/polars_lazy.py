@@ -47,16 +47,12 @@ class PolarsLazyAggregatedFeatureGroup(AggregatedFeatureGroup):
         Raises:
             ValueError: If none of the resolved features exist in the data
         """
-        if hasattr(data, "collect_schema"):
-            schema_names = set(data.collect_schema().names())
-            missing_features = [name for name in feature_names if name not in schema_names]
-            if len(missing_features) == len(feature_names):
-                raise ValueError(
-                    f"None of the source features {feature_names} found in data. "
-                    f"Available columns: {list(schema_names)}"
-                )
-        else:
-            raise ValueError("Data does not have a collect_schema method, cannot check feature existence.")
+        available_columns = cls._get_available_columns(data)
+        missing_features = [name for name in feature_names if name not in available_columns]
+        if len(missing_features) == len(feature_names):
+            raise ValueError(
+                f"None of the source features {feature_names} found in data. Available columns: {list(available_columns)}"
+            )
 
     @classmethod
     def _add_result_to_data(cls, data: Any, feature_name: str, result: Any) -> Any:

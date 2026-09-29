@@ -48,6 +48,10 @@ class TestForecastingFeatureGroup:
         chained = "category__onehot_encoded__linear_forecast_7day"
         assert ForecastingFeatureGroup.parse_forecast_suffix(chained) == ("linear", 7, "day")
 
+        assert ForecastingFeatureGroup.parse_forecast_suffix("sales__linear_forecast_7day~0") == ("linear", 7, "day")
+        selected_chain = "x__linear_forecast_7day~0__linear_forecast_3day"
+        assert ForecastingFeatureGroup.parse_forecast_suffix(selected_chain) == ("linear", 3, "day")
+
     def test_match_feature_group_criteria(self) -> None:
         """Test matching of feature names to the feature group criteria."""
         # Valid feature names
@@ -56,6 +60,9 @@ class TestForecastingFeatureGroup:
         # This test is failing because the feature name doesn't match the expected pattern
         # Let's modify it to use a valid feature name
         assert ForecastingFeatureGroup.match_feature_group_criteria("sales__randomforest_forecast_3day", Options())
+        assert ForecastingFeatureGroup.match_feature_group_criteria("sales__linear_forecast_7day~0", Options())
+        chained = "x__linear_forecast_7day~0__linear_forecast_3day"
+        assert ForecastingFeatureGroup.match_feature_group_criteria(chained, Options())
 
         # Invalid feature names
         assert not ForecastingFeatureGroup.match_feature_group_criteria("invalid_feature_name", Options())
@@ -269,6 +276,9 @@ class TestForecastingFeatureGroup:
         assert ForecastingFeatureGroup._has_valid_forecast_suffix("temp__gbr_forecast_12hour") is True
         chained = "category__onehot_encoded__linear_forecast_7day"
         assert ForecastingFeatureGroup._has_valid_forecast_suffix(chained) is True
+        assert ForecastingFeatureGroup._has_valid_forecast_suffix("sales__linear_forecast_7day~0") is True
+        selected_chain = "x__linear_forecast_7day~0__linear_forecast_3day"
+        assert ForecastingFeatureGroup._has_valid_forecast_suffix(selected_chain) is True
 
     def test_has_valid_forecast_suffix_invalid(self) -> None:
         """Test that _has_valid_forecast_suffix returns False for invalid feature names."""
@@ -406,6 +416,80 @@ class TestForecastingFeatureGroup:
 
         with pytest.raises(ValueError, match="artifact"):
             self._calculate(self._expanded_df(["2", "3"]), self._load_feature_set(serialized))
+
+    SELECTED_NAME = "sales__linear_forecast_7day~10"
+
+    def _selected_feature_set(self, confidence_intervals: bool = False) -> FeatureSet:
+        feature_set = FeatureSet()
+        feature_set.add(Feature(self.SELECTED_NAME, self._options(confidence_intervals)))
+        return feature_set
+
+    def test_selector_forecasts_only_selected_column(self) -> None:
+        """`name~10` forecasts only `sales~10`, matching that column of the full run."""
+        df = self._expanded_df(["2", "10"])
+        full = self._calculate(df)
+        result = self._calculate(df, self._selected_feature_set())
+
+        assert self.SELECTED_NAME in result.columns
+        assert f"{self.FEATURE_NAME}~2" not in result.columns
+        assert self.FEATURE_NAME not in result.columns
+        assert np.allclose(result[self.SELECTED_NAME].to_numpy(), full[f"{self.FEATURE_NAME}~10"].to_numpy())
+
+    def test_selector_with_confidence_intervals(self) -> None:
+        """A selected column gets `~lower/~upper` bounds and no other column is forecast."""
+        result = self._calculate(self._expanded_df(["2", "10"]), self._selected_feature_set(True))
+
+        for name in (self.SELECTED_NAME, f"{self.SELECTED_NAME}~lower", f"{self.SELECTED_NAME}~upper"):
+            assert name in result.columns
+        assert not [c for c in result.columns if c.startswith(f"{self.FEATURE_NAME}~2")]
+
+    def test_selector_artifact_round_trip_is_flat(self) -> None:
+        """A selected forecast saves a flat single-model artifact and reproduces the forecast."""
+        df = self._expanded_df(["2", "10"])
+        feature_set = self._selected_feature_set()
+        feature_set.artifact_to_save = self.SELECTED_NAME
+        trained = self._calculate(df, feature_set)
+
+        assert feature_set.save_artifact is not None
+        assert "columns" not in feature_set.save_artifact
+        serialized = ForecastingArtifact._serialize_artifact(feature_set.save_artifact)
+
+        options = self._options()
+        options.add_to_group(self.SELECTED_NAME, serialized)
+        load_set = FeatureSet()
+        load_set.add(Feature(self.SELECTED_NAME, options))
+        load_set.artifact_to_load = self.SELECTED_NAME
+        loaded = self._calculate(df, load_set)
+
+        assert np.allclose(trained[self.SELECTED_NAME].to_numpy(), loaded[self.SELECTED_NAME].to_numpy())
+
+    def test_unknown_selector_raises(self) -> None:
+        """A selector matching no resolved column raises ValueError naming the selector."""
+        feature_set = FeatureSet()
+        feature_set.add(Feature("sales__linear_forecast_7day~3", self._options()))
+
+        with pytest.raises(ValueError, match="selector") as excinfo:
+            self._calculate(self._expanded_df(["2", "10"]), feature_set)
+        assert "~3" in str(excinfo.value)
+
+    def test_selector_on_literal_source_raises(self) -> None:
+        """A selector on a literal single-column source raises ValueError naming the selector."""
+        feature_set = FeatureSet()
+        feature_set.add(Feature("sales__linear_forecast_7day~0", self._options()))
+
+        with pytest.raises(ValueError, match=r"selector"):
+            self._calculate(self.df, feature_set)
+
+    def test_chaining_skips_bound_columns(self) -> None:
+        """Chaining on a multi-column forecast forecasts `~0`, `~1` but not the `~lower/~upper` bounds."""
+        df = self._expanded_df(["0", "1"])
+        df["sales~0~lower"] = df["sales~0"] - 1.0
+        df["sales~0~upper"] = df["sales~0"] + 1.0
+
+        result = self._calculate(df)
+
+        forecast_columns = [c for c in result.columns if c.startswith(self.FEATURE_NAME)]
+        assert sorted(forecast_columns) == [f"{self.FEATURE_NAME}~0", f"{self.FEATURE_NAME}~1"]
 
     @pytest.mark.parametrize("extra", [np.arange(30, dtype=float) * 3.0, ["x"] * 30])
     def test_unrelated_columns_are_not_regressors(self, extra: Any) -> None:

@@ -83,6 +83,22 @@ class TestForecastingArtifactIntegration:
         for suffix in ("0", "1", "2"):
             assert f"{feature_name}~{suffix}" in columns2
 
+    def test_forecast_chained_onehot_source_selects_one_category(self) -> None:
+        """Requesting `name~1` on a chained one-hot source returns only the `~1` forecast."""
+        plugin_collector = PluginCollector.enabled_feature_groups(
+            {ForecastingCategoryTestDataCreator, PandasEncodingFeatureGroup, PandasForecastingFeatureGroup}
+        )
+        base_name = "category__onehot_encoded__linear_forecast_7day"
+        options = Options({DefaultOptionKeys.reference_time: "time_filter"})
+        feature = Feature(f"{base_name}~1", options)
+
+        results = mloda([feature], compute_frameworks={PandasDataFrame}, plugin_collector=plugin_collector).run()
+
+        columns = [c for r in results for c in r.columns]
+        assert f"{base_name}~1" in columns
+        assert f"{base_name}~0" not in columns
+        assert f"{base_name}~2" not in columns
+
     def test_artifact_save_and_load(self) -> None:
         """Test saving and loading forecasting artifacts."""
         # Enable the necessary feature groups

@@ -81,8 +81,8 @@ class ForecastingFeatureGroup(TimeReferenceMixin, FeatureChainParserMixin, Featu
     resolution/splitting would be placed here.
 
     Multi-column (`~`) sources produce one forecast per column as `name~<suffix>` (bounds as
-    `name~<suffix>~lower/~upper`), with one model per column. A consumer chaining on `name`
-    receives every `name~*` column, bounds included.
+    `name~<suffix>~lower/~upper`), with one model per column. Request `name~<suffix>` for a
+    single column; a forecast chained on `name` skips the bounds.
 
     ## Supported Forecasting Algorithms
 
@@ -128,7 +128,7 @@ class ForecastingFeatureGroup(TimeReferenceMixin, FeatureChainParserMixin, Featu
     }
 
     # Define the prefix pattern for this feature group
-    PREFIX_PATTERN = r".*__([\w]+)_forecast_(\d+)([\w]+)$"
+    PREFIX_PATTERN = r".*__([\w]+)_forecast_(\d+)([\w]+)(?:~[^~]+)?$"
 
     # In-feature configuration for FeatureChainParserMixin
     MIN_IN_FEATURES = 1
@@ -228,7 +228,7 @@ class ForecastingFeatureGroup(TimeReferenceMixin, FeatureChainParserMixin, Featu
                 f"Invalid forecast feature name format: {feature_name}. Missing double underscore separator."
             )
 
-        suffix = feature_name[suffix_start + 2 :]
+        suffix = feature_name[suffix_start + 2 :].split("~", 1)[0]
 
         # Parse the suffix components
         parts = suffix.split("_")
@@ -329,6 +329,10 @@ class ForecastingFeatureGroup(TimeReferenceMixin, FeatureChainParserMixin, Featu
             # A "~" source such as "product__onehot_encoded" expands to ["...~0", "...~1", ...]
             available_columns = cls._get_available_columns(original_data)
             resolved_columns = cls.resolve_multi_column_feature(in_features, available_columns)
+            # Chaining forecasts direct sub-columns only, skipping bound columns such as "~0~lower"
+            resolved_columns = [
+                c for c in resolved_columns if c == in_features or "~" not in c.removeprefix(f"{in_features}~")
+            ]
 
             # Check that resolved columns exist
             cls._check_source_features_exist(original_data, resolved_columns)
@@ -347,6 +351,15 @@ class ForecastingFeatureGroup(TimeReferenceMixin, FeatureChainParserMixin, Featu
             suffixes: list[str | None] = [
                 None if column == in_features else column.removeprefix(expanded_prefix) for column in resolved_columns
             ]
+            selector = cls._extract_selector(feature.name)
+            if selector is not None:
+                if selector not in suffixes:
+                    available = sorted(str(s) for s in suffixes if s is not None)
+                    raise ValueError(
+                        f"Unknown selector '~{selector}' for source '{in_features}'. Available suffixes: {available}"
+                    )
+                resolved_columns = [f"{in_features}~{selector}"]
+                suffixes = [None]
             expanded = any(suffix is not None for suffix in suffixes)
             column_artifacts = cls._column_artifacts(model_artifact, suffixes, expanded)
 
@@ -391,6 +404,14 @@ class ForecastingFeatureGroup(TimeReferenceMixin, FeatureChainParserMixin, Featu
             data = cls._add_result_to_data(data, feature_name, result)
 
         return data
+
+    @classmethod
+    def _extract_selector(cls, feature_name: str) -> str | None:
+        """Return the trailing `~<selector>` of a string-based forecast name, else None."""
+        if not cls._has_valid_forecast_suffix(feature_name):
+            return None
+        _, _, suffix = feature_name.rpartition(CHAIN_SEPARATOR)
+        return suffix.split("~", 1)[1] if "~" in suffix else None
 
     @classmethod
     def _column_artifacts(
@@ -441,7 +462,7 @@ class ForecastingFeatureGroup(TimeReferenceMixin, FeatureChainParserMixin, Featu
         suffix_start = feature_name.rfind(CHAIN_SEPARATOR)
         if suffix_start == -1:
             return False
-        suffix = feature_name[suffix_start + 2 :]
+        suffix = feature_name[suffix_start + 2 :].split("~", 1)[0]
         parts = suffix.split("_")
         if len(parts) < 3 or parts[1] != "forecast":
             return False

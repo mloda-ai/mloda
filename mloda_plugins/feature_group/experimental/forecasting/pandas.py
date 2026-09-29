@@ -117,7 +117,7 @@ class PandasForecastingFeatureGroup(ForecastingFeatureGroup):
         algorithm: str,
         horizon: int,
         time_unit: str,
-        in_features: list[str],
+        source_column: str,
         time_filter_feature: str,
         model_artifact: Any | None = None,
     ) -> tuple[pd.Series, dict[str, Any]]:
@@ -130,14 +130,12 @@ class PandasForecastingFeatureGroup(ForecastingFeatureGroup):
         3. Generates forecasts for the specified horizon
         4. Returns the forecasts and the updated artifact
 
-        Only the first source column is forecast.
-
         Args:
             data: The pandas DataFrame
             algorithm: The forecasting algorithm to use
             horizon: The forecast horizon
             time_unit: The time unit for the horizon
-            in_features: List of resolved source feature names to forecast
+            source_column: The single source column to forecast
             time_filter_feature: The name of the time filter feature
             model_artifact: Optional artifact containing a trained model
 
@@ -165,8 +163,7 @@ class PandasForecastingFeatureGroup(ForecastingFeatureGroup):
         # Determine appropriate lag features based on horizon, time unit, and data size
         lag_features = cls._determine_lag_features(horizon, time_unit, len(df))
 
-        # Only the first source column is forecast.
-        source_feature_name = in_features[0]
+        source_feature_name = source_column
 
         # Create or load the model
         if model_artifact is None:
@@ -317,8 +314,8 @@ class PandasForecastingFeatureGroup(ForecastingFeatureGroup):
         Returns:
             A tuple containing (feature_matrix, target_vector)
         """
-        # Create a copy of the DataFrame
-        df_features = df.copy()
+        # Only the source and time columns are used, so unrelated columns never become regressors
+        df_features = df[[in_features, time_filter_feature]].copy()
 
         # Extract target variable
         y = df_features[in_features]
@@ -502,7 +499,7 @@ class PandasForecastingFeatureGroup(ForecastingFeatureGroup):
         algorithm: str,
         horizon: int,
         time_unit: str,
-        in_features: list[str],
+        source_column: str,
         time_filter_feature: str,
         model_artifact: Any | None = None,
     ) -> tuple[pd.Series, pd.Series, pd.Series, dict[str, Any]]:
@@ -520,7 +517,7 @@ class PandasForecastingFeatureGroup(ForecastingFeatureGroup):
             algorithm: The forecasting algorithm to use
             horizon: The forecast horizon
             time_unit: The time unit for the horizon
-            in_features: List of resolved source feature names to forecast
+            source_column: The single source column to forecast
             time_filter_feature: The name of the time filter feature
             model_artifact: Optional artifact containing a trained model
 
@@ -548,8 +545,7 @@ class PandasForecastingFeatureGroup(ForecastingFeatureGroup):
         # Determine appropriate lag features based on horizon, time unit, and data size
         lag_features = cls._determine_lag_features(horizon, time_unit, len(df))
 
-        # Only the first source column is forecast.
-        source_feature_name = in_features[0]
+        source_feature_name = source_column
 
         # Create or load the model
         if model_artifact is None:

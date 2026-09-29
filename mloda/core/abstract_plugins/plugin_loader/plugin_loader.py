@@ -198,11 +198,12 @@ class PluginLoader:
                         if isinstance(e, ModuleNotFoundError) and (
                             e.name == entry_point.module or entry_point.module.startswith(f"{e.name}.")
                         ):
-                            dist_label = f"'{dist_name}'" if dist_name else "the distribution that provides it"
+                            dist_label = f"distribution '{dist_name}'" if dist_name else "an unidentified distribution"
                             raise ModuleNotFoundError(
-                                f"Entry point '{entry_point.name}' ({entry_point.value}) of distribution "
+                                f"Entry point '{entry_point.name}' ({entry_point.value}) of "
                                 f"{dist_label} cannot import its own module '{e.name}': the distribution is "
-                                f"installed but its files are missing. Reinstall it: "
+                                f"installed but its files are missing, or the entry point names a module it does "
+                                f"not ship. Reinstall it: "
                                 f"pip install --force-reinstall {dist_name or '<distribution>'}",
                                 name=e.name,
                             ) from e

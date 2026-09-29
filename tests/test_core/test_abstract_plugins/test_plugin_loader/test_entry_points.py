@@ -675,10 +675,11 @@ class TestLoadEntryPointsMissingDependencies:
         with pytest.raises(ModuleNotFoundError):
             PluginLoader().load_entry_points()
 
+    @pytest.mark.parametrize("case", ["package", "manifest"])
     def test_deleted_own_package_raises_actionable_reinstall_message(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+        self, case: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        pkg = "eptest_deleted_own_pkg"
+        pkg = f"eptest_deleted_own_{case}_pkg"
         dist = pkg.replace("_", "-")
         _build_distribution(
             tmp_path,
@@ -689,20 +690,47 @@ class TestLoadEntryPointsMissingDependencies:
             gone = {pkg}.manifest:FEATURE_GROUPS
             """,
         )
-        shutil.rmtree(tmp_path / pkg)
+        if case == "package":
+            shutil.rmtree(tmp_path / pkg)
+            expected_name = pkg
+        else:
+            (tmp_path / pkg / "manifest.py").unlink()
+            expected_name = f"{pkg}.manifest"
         importlib.invalidate_caches()
         monkeypatch.syspath_prepend(str(tmp_path))
 
         with pytest.raises(ModuleNotFoundError) as exc_info:
             PluginLoader().load_entry_points()
 
-        assert exc_info.value.name == pkg
+        assert exc_info.value.name == expected_name
         assert isinstance(exc_info.value.__cause__, ModuleNotFoundError)
         message = str(exc_info.value)
         assert "gone" in message
         assert dist in message
-        assert pkg in message
+        assert expected_name in message
         assert f"pip install --force-reinstall {dist}" in message
+
+    def test_own_package_plain_import_error_gets_no_reinstall_message(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        pkg = "eptest_own_plain_import_error_pkg"
+        _build_distribution(
+            tmp_path,
+            pkg,
+            _import_error_fg_manifest_source(pkg, "EpOwnPlainImportErrorFeatureGroup"),
+            f"""
+            [mloda.feature_groups]
+            plain = {pkg}.manifest:FEATURE_GROUPS
+            """,
+        )
+        monkeypatch.syspath_prepend(str(tmp_path))
+
+        with pytest.raises(ImportError) as exc_info:
+            PluginLoader().load_entry_points()
+
+        assert not isinstance(exc_info.value, ModuleNotFoundError)
+        assert "--force-reinstall" not in str(exc_info.value)
+        assert exc_info.value.__cause__ is None
 
 
 class TestLoadEntryPointsOptionalDependenciesDeclaration:

@@ -11,7 +11,7 @@ from mloda.core.abstract_plugins.components.error_utils import internal_invarian
 from mloda.core.abstract_plugins.components.utils import failure_report
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.components.parallelization_modes import ParallelizationMode
-from mloda.core.abstract_plugins.function_extender import Extender
+from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook
 from mloda.core.core.cfw_manager import CfwManager
 from mloda.core.core.step.feature_group_step import FeatureGroupStep
 from mloda.core.core.step.join_step import JoinStep
@@ -37,6 +37,7 @@ class ComputeFrameworkExecutor:
         tfs_connection_map: dict[type[ComputeFramework], Any] | None = None,
         function_extender: set[Extender] | None = None,
         worker_extender_payload: bytes | None = None,
+        hook_extenders: dict[ExtenderHook, Extender] | None = None,
     ) -> None:
         """
         Initialize the executor with dependencies.
@@ -50,10 +51,11 @@ class ComputeFrameworkExecutor:
                 executor only does a dict lookup per TFS step on the run path.
             function_extender: The caller's own extenders, used for a framework staying resident
                 in this process.
-            worker_extender_payload: Pickled snapshot of the extenders for a framework dispatched
+            worker_extender_payload: Pickled (extenders, hook table) snapshot for a framework dispatched
                 to a spawned worker. Never unpickled here; attached to the new instance as
                 `_pending_extender_payload` and materialized by `ComputeFramework.__setstate__`
                 only once the instance is actually unpickled in the worker.
+            hook_extenders: The run's hook table, shared with parent-resident frameworks.
         """
         self.cfw_collection: dict[UUID, ComputeFramework] = {}
         self.cfw_register = cfw_register
@@ -61,6 +63,7 @@ class ComputeFrameworkExecutor:
         self.tfs_connection_map: dict[type[ComputeFramework], Any] = tfs_connection_map or {}
         self.function_extender = function_extender
         self.worker_extender_payload = worker_extender_payload
+        self.hook_extenders = hook_extenders
         self._cfw_lock = threading.Lock()
 
     def init_compute_framework(
@@ -104,6 +107,8 @@ class ComputeFrameworkExecutor:
             # Materialization happens only in ComputeFramework.__setstate__, once this instance is
             # actually unpickled in the worker; never here in the parent that dispatches it.
             new_cfw._pending_extender_payload = self.worker_extender_payload
+        if not dispatched_to_worker and self.hook_extenders is not None:
+            new_cfw._hook_extenders = self.hook_extenders
         # replace() re-runs __post_init__, so each framework owns its carrier copy.
         new_cfw.run_context = replace(self.cfw_register.get_run_context())
 

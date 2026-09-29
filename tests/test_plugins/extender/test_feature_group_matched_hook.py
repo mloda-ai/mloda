@@ -458,9 +458,9 @@ class TestPlanCountsAndDepthOnMatchContext:
 
 
 class TestEngineFunctionExtenderAndRunIdConstruction:
-    """Engine stores function_extender/run_id on a RunContext; get_function_extender delegates to the free function."""
+    """Engine stores function_extender/run_id on a RunContext and selects extenders from its own table."""
 
-    def test_engine_accepts_kwargs_and_get_function_extender_delegates(self) -> None:
+    def test_engine_accepts_kwargs_and_selects_extenders_from_its_own_table(self) -> None:
         with (
             patch(
                 "mloda.core.prepare.accessible_plugins.PreFilterPlugins.resolve_feature_group_compute_framework_limitations"
@@ -505,3 +505,50 @@ class TestExtenderCannotSubstituteTheMatchedFeatureGroup:
         assert result[0][veto_name] == [1, 2, 3], (
             "The real match (_MatchVetoFeatureGroupA) must win, not the tampered one"
         )
+
+
+class _MatchWrapsCountingExtender(Extender):
+    """Counts wraps() calls while wrapping FEATURE_GROUP_MATCHED and FEATURE_GROUP_CALCULATE_FEATURE."""
+
+    def __init__(self) -> None:
+        self.wraps_calls = 0
+
+    def wraps(self) -> set[ExtenderHook]:
+        self.wraps_calls += 1
+        return {ExtenderHook.FEATURE_GROUP_MATCHED, ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE}
+
+    def __call__(self, func: Any, *args: Any, **kwargs: Any) -> Any:
+        return func(*args, **kwargs)
+
+
+class TestEngineSelectsExtenderOncePerRun:
+    def test_wraps_is_called_once_while_planning_multiple_features(self) -> None:
+        extender = _MatchWrapsCountingExtender()
+
+        mloda.prepare(
+            [Feature(f"{_MARKER}_col_one"), Feature(f"{_MARKER}_col_two")],
+            compute_frameworks=["PythonDictFramework"],
+            plugin_collector=PluginCollector.enabled_feature_groups(
+                {_MatchHookColOneFeatureGroup, _MatchHookColTwoFeatureGroup}
+            ),
+            parallelization_modes={ParallelizationMode.SYNC},
+            function_extender={extender},
+        )
+
+        assert extender.wraps_calls == 1
+
+    def test_wraps_is_called_once_in_engine_and_once_at_run_entry_across_frameworks(self) -> None:
+        extender = _MatchWrapsCountingExtender()
+
+        session = mloda.prepare(
+            [Feature(f"{_MARKER}_col_one"), Feature(f"{_MARKER}_col_two")],
+            compute_frameworks=["PythonDictFramework"],
+            plugin_collector=PluginCollector.enabled_feature_groups(
+                {_MatchHookColOneFeatureGroup, _MatchHookColTwoFeatureGroup}
+            ),
+            parallelization_modes={ParallelizationMode.SYNC},
+            function_extender={extender},
+        )
+        session.run(parallelization_modes={ParallelizationMode.SYNC})
+
+        assert extender.wraps_calls == 2

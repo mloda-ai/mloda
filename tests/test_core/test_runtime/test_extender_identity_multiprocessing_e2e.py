@@ -27,7 +27,12 @@ from uuid import uuid4
 import pytest
 
 from mloda.core.abstract_plugins.close_context import CloseContext
-from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook
+from mloda.core.abstract_plugins.function_extender import (
+    CompositeExtender,
+    Extender,
+    ExtenderHook,
+    build_hook_extenders,
+)
 from mloda.core.prepare.execution_plan import ExecutionPlan
 from mloda.core.runtime.run import ExecutionOrchestrator
 from mloda.provider import BaseInputData, ComputeFramework, DataCreator, FeatureGroup, FeatureSet
@@ -80,6 +85,24 @@ class _HandleStrippingExtender(Extender):
         state = self.__dict__.copy()
         state["handle"] = None
         return state
+
+
+class _IdentExtender(Extender):
+    """Picklable same-class, equal-priority extender distinguished only by ident."""
+
+    def __init__(self, ident: str) -> None:
+        self.ident = ident
+
+    def wraps(self) -> set[ExtenderHook]:
+        return {ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE}
+
+    def __call__(self, func: Any, *args: Any, **kwargs: Any) -> Any:
+        return func(*args, **kwargs)
+
+
+def _ident_of(extender: Extender) -> str:
+    assert isinstance(extender, _IdentExtender)
+    return extender.ident
 
 
 def _empty_plan() -> ExecutionPlan:
@@ -212,6 +235,31 @@ class TestHandleStrippingExtenderNeverLosesStateToTheRegisterProxy:
             orchestrator.executor.init_compute_framework(
                 PythonDictFramework, ParallelizationMode.MULTIPROCESSING, set(), uuid4()
             )
+        finally:
+            orchestrator.__exit__(None, None, None)
+
+
+@pytest.mark.timeout(30)
+class TestWorkerPayloadShipsTheParentsSelectionTable:
+    def test_payload_table_keeps_parent_order_and_the_shipped_extender_objects(self) -> None:
+        hook = ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE
+        caller_function_extender: set[Extender] = {_IdentExtender(name) for name in ("a", "b", "c", "d")}
+
+        orchestrator = ExecutionOrchestrator(_empty_plan())
+        orchestrator.__enter__({ParallelizationMode.MULTIPROCESSING}, caller_function_extender)
+        try:
+            assert orchestrator.worker_extender_payload is not None
+            fe, table = pickle.loads(orchestrator.worker_extender_payload)  # nosec B301
+
+            expected_composite = build_hook_extenders(caller_function_extender)[hook]
+            assert isinstance(expected_composite, CompositeExtender)
+            shipped_composite = table[hook]
+            assert isinstance(shipped_composite, CompositeExtender)
+
+            shipped = [_ident_of(e) for e in shipped_composite.extenders]
+            expected = [_ident_of(e) for e in expected_composite.extenders]
+            assert shipped == expected
+            assert all(any(m is x for x in fe) for m in shipped_composite.extenders)
         finally:
             orchestrator.__exit__(None, None, None)
 

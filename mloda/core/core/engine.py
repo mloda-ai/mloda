@@ -22,7 +22,7 @@ from mloda.core.abstract_plugins.function_extender import (
     Extender,
     ExtenderHook,
     _invoke_extender,
-    get_function_extender,
+    build_hook_extenders,
 )
 from mloda.core.abstract_plugins.hook_context import HookContext, instrument
 from mloda.core.abstract_plugins.plugin_version import resolve_plugin_version
@@ -72,6 +72,7 @@ class Engine:
     ) -> None:
         # setup variables which track the primary sources and the compute platforms
         self.function_extender = function_extender if function_extender is not None else set()
+        self._hook_extenders = build_hook_extenders(self.function_extender)
         self.run_context = RunContext(run_id=run_id)
         # Holds the Feature objects ResolveComputeFrameworks.links rewrites: hash-stale after planning, so only read it before planning (as today).
         self.feature_group_collection: dict[type[FeatureGroup], set[Feature]] = defaultdict(set)
@@ -140,8 +141,8 @@ class Engine:
         return connection_map
 
     def get_function_extender(self, hook: ExtenderHook) -> Extender | None:
-        """Select the extender(s) registered for hook, delegating to the shared free function."""
-        return get_function_extender(self.function_extender, hook)
+        """Select the extender(s) registered for hook, from the table built at init."""
+        return self._hook_extenders.get(hook)
 
     def compute(self, flight_server: ParallelRunnerFlightServer | None = None) -> ExecutionOrchestrator:
         execution_plan_copy = deepcopy(self.execution_planner)

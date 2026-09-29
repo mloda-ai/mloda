@@ -72,11 +72,11 @@ class PyArrowAggregatedFeatureGroup(AggregatedFeatureGroup):
         Raises:
             ValueError: If none of the resolved features exist in the data
         """
-        schema_names = set(data.schema.names)
-        missing_features = [name for name in feature_names if name not in schema_names]
+        available_columns = cls._get_available_columns(data)
+        missing_features = [name for name in feature_names if name not in available_columns]
         if len(missing_features) == len(feature_names):
             raise ValueError(
-                f"None of the source features {feature_names} found in data. Available columns: {list(schema_names)}"
+                f"None of the source features {feature_names} found in data. Available columns: {sorted(available_columns, key=str)}"
             )
 
     @classmethod

@@ -44,7 +44,7 @@ class PythonDictMissingValueFeatureGroup(MissingValueFeatureGroup):
         missing_features = [f for f in feature_names if f not in available_features]
         if missing_features:
             raise ValueError(
-                f"Source features not found in data: {missing_features}. Available columns: {list(available_features)}"
+                f"Source features not found in data: {missing_features}. Available columns: {sorted(available_features, key=str)}"
             )
 
     @classmethod

@@ -148,3 +148,13 @@ class ColumnDiscoveryHooksTestMixin(ColumnwiseHooksTestMixin):
         available = plugin_class._get_available_columns(sample_data)
         for framework in plugin_class.compute_framework_rule():
             assert available == framework.extract_column_names(sample_data)
+
+    def test_check_reads_columns_through_discovery_hook(
+        self, plugin_class: Any, sample_data: Any, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The check hook lists columns via the discovery hook, so the two cannot drift."""
+        available = set(self.column_names(sample_data)) | {"injected"}
+        monkeypatch.setattr(plugin_class, DISCOVERY_HOOK, classmethod(lambda cls, data: available))
+        plugin_class._check_source_features_exist(sample_data, ["injected"])
+        with pytest.raises(ValueError, match="injected"):
+            plugin_class._check_source_features_exist(sample_data, ["nonexistent"])

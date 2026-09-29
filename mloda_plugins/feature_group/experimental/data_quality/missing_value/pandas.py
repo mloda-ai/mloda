@@ -31,10 +31,11 @@ class PandasMissingValueFeatureGroup(MissingValueFeatureGroup):
     @classmethod
     def _check_source_features_exist(cls, data: pd.DataFrame, feature_names: list[str]) -> None:
         """Check if the resolved source features exist in the DataFrame."""
-        missing_features = [f for f in feature_names if f not in data.columns]
+        available_columns = cls._get_available_columns(data)
+        missing_features = [f for f in feature_names if f not in available_columns]
         if missing_features:
             raise ValueError(
-                f"Source features not found in data: {missing_features}. Available columns: {list(data.columns)}"
+                f"Source features not found in data: {missing_features}. Available columns: {sorted(available_columns, key=str)}"
             )
 
     @classmethod

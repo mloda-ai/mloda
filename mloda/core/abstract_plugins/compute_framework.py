@@ -60,12 +60,6 @@ class EmptyResultError(ValueError):
     zero rows with a schema is valid."""
 
 
-def _private_only_extract_column_names(cls: type, data: Any) -> set[str]:
-    raise NotImplementedError(
-        f"{cls.__name__} overrides _extract_column_names; it must implement the extract_column_names classmethod"
-    )
-
-
 class ComputeFramework(ABC):
     """
     Documentation ComputeFramework:
@@ -539,23 +533,17 @@ class ComputeFramework(ABC):
             return True
         return any(dtype_str.startswith(p) for p in ComputeFramework._NUMERIC_PREFIXES)
 
-    def __init_subclass__(cls, **kwargs: Any) -> None:
-        """A private-only _extract_column_names override must not inherit a parent's public classmethod."""
-        super().__init_subclass__(**kwargs)
-        if "_extract_column_names" in cls.__dict__ and "extract_column_names" not in cls.__dict__:
-            setattr(cls, "extract_column_names", classmethod(_private_only_extract_column_names))
-
-    @classmethod
-    def extract_column_names(cls, data: Any) -> set[str]:
-        """Column names of framework-native data, callable without an instance."""
-        raise NotImplementedError(f"{cls.__name__} must implement the extract_column_names classmethod")
+    @final
+    def extract_column_names(self, data: Any) -> set[str]:
+        """Public column listing of framework-native data; frameworks override _extract_column_names."""
+        return self._extract_column_names(data)
 
     def _extract_column_names(self, data: Any) -> set[str]:
         """Extract column names from the framework's data after transform.
 
         Also called via _output_schema with a non-dict raw calculate_feature result, where a raise degrades to None.
         """
-        return type(self).extract_column_names(data)
+        raise NotImplementedError
 
     def _is_schemaless_empty(self, data: Any) -> bool:
         """Framework-representational hook: return True only when ``data`` is this

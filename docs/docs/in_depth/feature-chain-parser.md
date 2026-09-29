@@ -153,7 +153,7 @@ Beyond parsing, the mixin declares three column-wise data hooks: `_get_available
 (pandas, PyArrow, Polars, python dict, ...) implements them; the inherited defaults raise
 `NotImplementedError` naming the class and the hook, so a missing implementation fails loudly
 instead of silently. A group that resolves column names against the data implements the discovery
-hook too; the others only need the check/add pair. `_get_available_columns` can return `<Framework>.extract_column_names(data)`, the framework's own instance-free column listing.
+hook too; the others only need the check/add pair.
 
 Whether `_check_source_features_exist` tolerates partial presence (some source names missing) or
 rejects it is a per-feature-group policy, not a framework rule.
@@ -181,7 +181,7 @@ class PandasRolling(RollingBase):
 
     @classmethod
     def _get_available_columns(cls, data):
-        return PandasDataFrame.extract_column_names(data)
+        return set(data.columns)
 
     @classmethod
     def _check_source_features_exist(cls, data, feature_names):

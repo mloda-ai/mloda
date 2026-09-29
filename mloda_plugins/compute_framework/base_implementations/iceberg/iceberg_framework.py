@@ -142,8 +142,7 @@ class IcebergFramework(ComputeFramework):
             data = scan_columns(data, selected)
         return data.select(selected)
 
-    @classmethod
-    def extract_column_names(cls, data: Any) -> set[str]:
+    def _extract_column_names(self, data: Any) -> set[str]:
         if IcebergTable is not None and isinstance(data, IcebergTable):
             return set(data.schema().column_names)
         # After transform, data may be a PyArrow table

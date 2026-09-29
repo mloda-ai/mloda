@@ -51,6 +51,27 @@ class TestPandasNodeCentralityFeatureGroup:
         assert "centrality_result" in updated_data.columns
         assert len(updated_data["centrality_result"]) == len(sample_data)
 
+    @pytest.mark.parametrize(
+        "name, mapped_column",
+        [("a__degree_centrality", "a"), ("a__b", "source")],
+    )
+    def test_add_result_to_data_maps_through_column_only_for_prefix_pattern(
+        self, name: str, mapped_column: str
+    ) -> None:
+        """Only names matching PREFIX_PATTERN map through the column before the last separator."""
+        data = pd.DataFrame(
+            {
+                "source": ["A", "B", "C", "D"],
+                "target": ["B", "C", "D", "E"],
+                "a": ["B", "C", "D", "E"],
+            }
+        )
+        scores = pd.Series([0.5, 0.3, 0.2, 0.1, 0.0], index=["A", "B", "C", "D", "E"])
+
+        updated = PandasNodeCentralityFeatureGroup._add_result_to_data(data.copy(), name, scores)
+
+        assert updated[name].tolist() == data[mapped_column].map(scores).tolist()
+
     def test_create_adjacency_matrix(self, sample_data: pd.DataFrame) -> None:
         """Test the _create_adjacency_matrix method."""
         # Get unique nodes

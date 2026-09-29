@@ -9,9 +9,7 @@ from typing import Any
 
 from mloda.provider import FeatureGroup
 from mloda.user import Feature
-from mloda.user import FeatureName
 from mloda.provider import FeatureSet
-from mloda.user import Options
 from mloda.provider import CHAIN_SEPARATOR, FeatureChainParser
 from mloda.provider import (
     FeatureChainParserMixin,
@@ -124,25 +122,6 @@ class GeoDistanceFeatureGroup(FeatureChainParserMixin, FeatureGroup):
         ),
     }
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
-        """Extract point features from either configuration-based options or string parsing."""
-
-        # Try string-based parsing first
-        # For L->R: "point1&point2__distance_type_distance"
-        # We need to extract everything before the last "__"
-        feature_name_str = feature_name
-        parts = feature_name_str.rsplit(CHAIN_SEPARATOR, 1)
-        if len(parts) == 2:
-            # parts[0] contains "point1&point2", parts[1] contains "distance_type_distance"
-            point_parts = parts[0].split("&", 1)
-            if len(point_parts) == 2:
-                return {Feature(point_parts[0]), Feature(point_parts[1])}
-
-        # Fall back to configuration-based approach
-        source_features = options.get_in_features()
-        self.validate_in_feature_count(feature_name, len(source_features))
-        return set(source_features)
-
     @classmethod
     def get_distance_type(cls, feature_name: str) -> str:
         """Extract the distance type from the feature name."""
@@ -213,40 +192,22 @@ class GeoDistanceFeatureGroup(FeatureChainParserMixin, FeatureGroup):
         """
         # Use the mixin method to extract source features
         source_features = cls._extract_source_features(feature)
+        cls.validate_in_feature_count(feature.name, len(source_features))
 
-        # Extract distance type
         distance_type = cls._extract_distance_unit(feature)
 
-        if distance_type is None or len(source_features) != 2:
+        if distance_type is None:
             raise ValueError(f"Could not extract geo distance parameters from: {feature.name}")
 
         return distance_type, source_features[0], source_features[1]
 
     @classmethod
     def _extract_distance_unit(cls, feature: Feature) -> str | None:
-        """
-        Extract distance unit (distance type) from a feature.
-
-        Tries string-based parsing first, falls back to configuration-based approach.
-
-        Args:
-            feature: The feature to extract distance unit from
-
-        Returns:
-            Distance unit/type (haversine, euclidean, manhattan) or None
-
-        Raises:
-            ValueError: If distance type is invalid
-        """
-        # Try string-based parsing first
-        feature_name_str = feature.name
-
-        if FeatureChainParser.is_chained_feature(feature_name_str):
-            distance_type = cls.get_distance_type(feature_name_str)
-            return distance_type
-
-        # Fall back to configuration-based approach
-        distance_type = feature.options.get(cls.DISTANCE_TYPE)
+        """Extract the distance type from the prefix-gated name or the options, or None."""
+        if FeatureChainParser.parse_name(feature.name, cls._get_prefix_patterns()).matched:
+            distance_type = cls.get_distance_type(feature.name)
+        else:
+            distance_type = feature.options.get(cls.DISTANCE_TYPE)
         if distance_type is None:
             return None
 

@@ -112,11 +112,12 @@ class TestGeoDistanceInputFeatureDefaults:
         assert by_name["point1"].forward_group is None
         assert by_name["point2"].forward_group is None
 
-    def test_config_declared_children_have_forward_group_none(self) -> None:
+    @pytest.mark.parametrize("name", ["placeholder", "my&name__custom"], ids=["plain", "amp_dunder"])
+    def test_config_declared_children_have_forward_group_none(self, name: str) -> None:
         group = PandasGeoDistanceFeatureGroup()
         options = Options(group={DefaultOptionKeys.in_features: frozenset({Feature("point1"), Feature("point2")})})
 
-        by_name = _by_name(group.input_features(options, FeatureName("placeholder")))
+        by_name = _by_name(group.input_features(options, FeatureName(name)))
 
         assert set(by_name) == {"point1", "point2"}
         assert by_name["point1"].forward_group is None

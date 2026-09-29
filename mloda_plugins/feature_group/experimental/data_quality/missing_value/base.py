@@ -232,7 +232,7 @@ class MissingValueFeatureGroup(FeatureChainParserMixin, FeatureGroup):
         """
         feature_name = feature.name
 
-        # Try string-based parsing first
+        # Name path only when the name matches PREFIX_PATTERN, else options
         if FeatureChainParser.parse_name(feature_name, cls._get_prefix_patterns()).matched:
             # Use get_imputation_method which handles parse_feature_name correctly
             return cls.get_imputation_method(feature_name)

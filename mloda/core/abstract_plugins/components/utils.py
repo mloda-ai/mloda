@@ -94,7 +94,9 @@ def safe_field(
     except catching as exc:
         if field and (warn_once_for is None or not _warn_once_for_seen(warn_once_for)):
             # str(exc), not exc: a retained log record must not pin the traceback, its frames and the plugin class.
-            logger.warning("Degraded field '%s': %s: %s", field, type(exc).__name__, safe_exc_str(exc))
+            logger.warning(
+                "Degraded field '%s': %s: %s", field, type(exc).__name__, scrub_credentials(safe_exc_str(exc))
+            )
         return fallback
 
 

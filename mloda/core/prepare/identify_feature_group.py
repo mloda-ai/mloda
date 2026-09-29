@@ -23,6 +23,7 @@ from mloda.core.prepare.resolution_failure_renderer import (
     _prefix_name,
     _supported_feature_names,
 )
+from mloda.core.abstract_plugins.components.credential_scrub import scrub_credentials
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.abstract_plugins.components.domain import Domain
 from mloda.core.abstract_plugins.components.match_rejection import MatchRejection
@@ -651,7 +652,7 @@ class IdentifyFeatureGroupClass:
                 # A plugin-owned read past the hook call's containment, so it degrades instead of escaping the seam.
                 safe_field(lambda: feature_group.get_class_name(), "<unnamed feature group>"),
                 feature.name,
-                safe_exc_str(exc),
+                scrub_credentials(safe_exc_str(exc)),
             )
         elif probe.matcher_error is not None:
             reason = contained_raise_reason(probe.matcher_error)

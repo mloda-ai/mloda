@@ -277,7 +277,7 @@ class ExecutionOrchestrator:
         except Exception as e:
             # Best-effort cleanup runs inside a finally: raising here would replace whatever
             # real exception is propagating (e.g. a dead flight server) with this one.
-            logger.warning(f"Failed to drop uploaded flight tables during finalize: {e}")
+            logger.warning("Failed to drop uploaded flight tables during finalize: %s", contained_raise_reason(e))
 
     def _check_for_error(self) -> bool:
         """Return True if the run loop should stop (compute framework manager gone).

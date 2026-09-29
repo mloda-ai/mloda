@@ -129,9 +129,7 @@ class PandasForecastingFeatureGroup(ForecastingFeatureGroup):
         3. Generates forecasts for the specified horizon
         4. Returns the forecasts and the updated artifact
 
-        Supports both single-column and multi-column forecasting:
-        - Single column: forecasts a single time series
-        - Multi-column: forecasts multiple time series (e.g., from one-hot encoded features)
+        Only the first source column is forecast.
 
         Args:
             data: The pandas DataFrame
@@ -166,10 +164,8 @@ class PandasForecastingFeatureGroup(ForecastingFeatureGroup):
         # Determine appropriate lag features based on horizon, time unit, and data size
         lag_features = cls._determine_lag_features(horizon, time_unit, len(df))
 
-        # For multi-column features, we need to handle each column separately or aggregate them
-        # For now, we'll use the first column for single-column behavior
-        # In the future, this could be extended to forecast multiple columns or aggregated columns
-        source_feature_name = in_features[0] if len(in_features) == 1 else in_features[0]
+        # Only the first source column is forecast.
+        source_feature_name = in_features[0]
 
         # Create or load the model
         if model_artifact is None:
@@ -551,8 +547,8 @@ class PandasForecastingFeatureGroup(ForecastingFeatureGroup):
         # Determine appropriate lag features based on horizon, time unit, and data size
         lag_features = cls._determine_lag_features(horizon, time_unit, len(df))
 
-        # For multi-column features, use the first column
-        source_feature_name = in_features[0] if len(in_features) == 1 else in_features[0]
+        # Only the first source column is forecast.
+        source_feature_name = in_features[0]
 
         # Create or load the model
         if model_artifact is None:

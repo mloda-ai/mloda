@@ -57,6 +57,30 @@ class TestClusteringFeatureGroup:
         with pytest.raises(ValueError):
             ClusteringFeatureGroup.parse_clustering_prefix("customer_behavior_cluster_kmeans_5")
 
+    @pytest.mark.parametrize(
+        ("feature_name", "algorithm", "k_value"),
+        [
+            ("a__standard_scaled__cluster_kmeans_3", "kmeans", "3"),
+            ("sensor__normalized__cluster_dbscan_auto", "dbscan", "auto"),
+        ],
+    )
+    def test_parse_clustering_prefix_with_chained_source(
+        self, feature_name: str, algorithm: str, k_value: str
+    ) -> None:
+        """The clustering suffix follows the final chain separator, not one in its source."""
+        assert ClusteringFeatureGroup.parse_clustering_prefix(feature_name) == (algorithm, k_value)
+
+    @pytest.mark.parametrize(
+        "feature_name",
+        [
+            "a__standard_scaled__cluster_kmeans_3",
+            "sensor__normalized__cluster_dbscan_auto",
+        ],
+    )
+    def test_match_feature_group_criteria_with_chained_source(self, feature_name: str) -> None:
+        """A clustering operation can consume the output of an earlier feature-chain operation."""
+        assert ClusteringFeatureGroup.match_feature_group_criteria(feature_name, Options())
+
     def test_get_algorithm(self) -> None:
         """Test extracting algorithm from feature names using parse_clustering_prefix."""
         algorithm, _ = ClusteringFeatureGroup.parse_clustering_prefix("customer_behavior__cluster_kmeans_5")

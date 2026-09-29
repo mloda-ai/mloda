@@ -59,13 +59,29 @@ class TestForecastingArtifactIntegration:
             {ForecastingCategoryTestDataCreator, PandasEncodingFeatureGroup, PandasForecastingFeatureGroup}
         )
         feature_name = "category__onehot_encoded__linear_forecast_7day"
-        feature = Feature(feature_name, Options({DefaultOptionKeys.reference_time: "time_filter"}))
+        options = Options({DefaultOptionKeys.reference_time: "time_filter"})
+        feature = Feature(feature_name, options)
 
-        results = mloda.run_all([feature], compute_frameworks={PandasDataFrame}, plugin_collector=plugin_collector)
+        api = mloda([feature], compute_frameworks={PandasDataFrame}, plugin_collector=plugin_collector)
+        results = api.run()
 
         columns = [c for r in results for c in r.columns]
+        assert feature_name not in columns
         for suffix in ("0", "1", "2"):
             assert f"{feature_name}~{suffix}" in columns
+
+        artifacts = api.get_artifacts()
+        assert feature_name in artifacts
+
+        feature2 = Feature(feature_name, options=options)
+        feature2.options.add_to_group(feature_name, artifacts[feature_name])
+        api2 = mloda([feature2], compute_frameworks={PandasDataFrame}, plugin_collector=plugin_collector)
+        results2 = api2.run()
+
+        columns2 = [c for r in results2 for c in r.columns]
+        assert feature_name not in columns2
+        for suffix in ("0", "1", "2"):
+            assert f"{feature_name}~{suffix}" in columns2
 
     def test_artifact_save_and_load(self) -> None:
         """Test saving and loading forecasting artifacts."""

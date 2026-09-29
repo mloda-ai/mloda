@@ -81,8 +81,8 @@ class ForecastingFeatureGroup(TimeReferenceMixin, FeatureChainParserMixin, Featu
     resolution/splitting would be placed here.
 
     Multi-column (`~`) sources produce one forecast per column as `name~<suffix>` (bounds as
-    `name~<suffix>~lower/~upper`), with one model per column. Downstream consumers should request
-    `name~<suffix>`, since `name` also matches the `~lower`/`~upper` bounds.
+    `name~<suffix>~lower/~upper`), with one model per column. A consumer chaining on `name`
+    receives every `name~*` column, bounds included.
 
     ## Supported Forecasting Algorithms
 

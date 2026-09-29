@@ -14,6 +14,7 @@ from mloda.user import Options
 from mloda_plugins.feature_group.experimental.forecasting.base import ForecastingFeatureGroup
 from mloda_plugins.feature_group.experimental.forecasting.pandas import PandasForecastingFeatureGroup
 from mloda.provider import DefaultOptionKeys
+from mloda_plugins.feature_group.experimental.forecasting.forecasting_artifact import ForecastingArtifact
 
 
 class TestForecastingFeatureGroup:
@@ -161,9 +162,6 @@ class TestForecastingFeatureGroup:
         options2 = Options(group=self.options.group.copy(), context=self.options.context.copy())
 
         # We need to serialize the artifact before setting it in the options
-        # Import the ForecastingArtifact class to use its serialization method
-        from mloda_plugins.feature_group.experimental.forecasting.forecasting_artifact import ForecastingArtifact
-
         serialized_artifact = ForecastingArtifact._serialize_artifact(saved_artifact)
 
         # Set the serialized artifact in the options using the feature name as the key
@@ -279,6 +277,7 @@ class TestForecastingFeatureGroup:
         assert ForecastingFeatureGroup._has_valid_forecast_suffix("sales__unknown_forecast_7day") is False
         assert ForecastingFeatureGroup._has_valid_forecast_suffix("sales__linear_forecast_day") is False
         assert ForecastingFeatureGroup._has_valid_forecast_suffix("sales__linear_forecast_7invalid") is False
+        assert ForecastingFeatureGroup._has_valid_forecast_suffix("a__b__linear_forecast_7day__foo") is False
 
     def test_extract_forecast_params_string_based(self) -> None:
         """Test that _extract_forecast_params extracts parameters from a string-based feature name."""
@@ -316,18 +315,23 @@ class TestForecastingFeatureGroup:
         result: pd.DataFrame = PandasForecastingFeatureGroup.calculate_feature(df.copy(), feature_set)
         return result
 
-    def _save_artifact(self, df: pd.DataFrame) -> tuple[pd.DataFrame, str]:
+    def _options(self, confidence_intervals: bool = False) -> Options:
+        options = Options(group=self.options.group.copy(), context=self.options.context.copy())
+        if confidence_intervals:
+            options.add_to_group(ForecastingFeatureGroup.OUTPUT_CONFIDENCE_INTERVALS, True)
+        return options
+
+    def _save_artifact(self, df: pd.DataFrame, confidence_intervals: bool = False) -> tuple[pd.DataFrame, str]:
         feature_set = FeatureSet()
-        feature_set.add(Feature(self.FEATURE_NAME, self.options))
+        feature_set.add(Feature(self.FEATURE_NAME, self._options(confidence_intervals)))
         feature_set.artifact_to_save = self.FEATURE_NAME
         result = self._calculate(df, feature_set)
-        from mloda_plugins.feature_group.experimental.forecasting.forecasting_artifact import ForecastingArtifact
 
         assert feature_set.save_artifact is not None
         return result, ForecastingArtifact._serialize_artifact(feature_set.save_artifact)
 
-    def _load_feature_set(self, serialized: str) -> FeatureSet:
-        options = Options(group=self.options.group.copy(), context=self.options.context.copy())
+    def _load_feature_set(self, serialized: str, confidence_intervals: bool = False) -> FeatureSet:
+        options = self._options(confidence_intervals)
         options.add_to_group(self.FEATURE_NAME, serialized)
         feature_set = FeatureSet()
         feature_set.add(Feature(self.FEATURE_NAME, options))
@@ -366,16 +370,21 @@ class TestForecastingFeatureGroup:
             assert f"{base}~lower" in result.columns
             assert f"{base}~upper" in result.columns
 
-    def test_expanded_source_artifact_round_trip(self) -> None:
+    @pytest.mark.parametrize("output_confidence_intervals", [False, True])
+    def test_expanded_source_artifact_round_trip(self, output_confidence_intervals: bool) -> None:
         """A nested multi-column artifact serializes, loads and reproduces the forecasts."""
         df = self._expanded_df(["2", "10"])
-        trained, serialized = self._save_artifact(df)
+        trained, serialized = self._save_artifact(df, output_confidence_intervals)
 
-        loaded = self._calculate(df, self._load_feature_set(serialized))
+        loaded = self._calculate(df, self._load_feature_set(serialized, output_confidence_intervals))
 
         for suffix in ("2", "10"):
             column = f"{self.FEATURE_NAME}~{suffix}"
-            assert np.allclose(trained[column].to_numpy(), loaded[column].to_numpy())
+            columns = [column]
+            if output_confidence_intervals:
+                columns += [f"{column}~lower", f"{column}~upper"]
+            for name in columns:
+                assert np.allclose(trained[name].to_numpy(), loaded[name].to_numpy())
 
     def test_flat_artifact_with_expanded_source_raises(self) -> None:
         """Loading a flat artifact against an expanded source raises ValueError."""

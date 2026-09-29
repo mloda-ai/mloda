@@ -526,7 +526,7 @@ class FeatureChainParserMixin:
             if len(unpacked) == 1 and str(unpacked[0]) == name_value:
                 continue
             message = (
-                f"Feature '{feature_name}': option '{key}' is '{declared}', but the feature name encodes "
+                f"Feature '{feature_name}': option '{key}' is {safe_value_text(declared)}, but the feature name encodes "
                 f"'{name_value}'. The name is authoritative: remove the option or change it to match. {env_hint}"
             )
             if cls._name_mismatch_downgraded(message):
@@ -543,20 +543,34 @@ class FeatureChainParserMixin:
         declared_names = safe_field(
             lambda: [str(f.name) for f in options.get_in_features()], None, catching=(TypeError, ValueError)
         )
-        expected = list(name_sources)
+        expected = cls.declared_source_names(name_sources)
         if isinstance(declared_in_features, (set, frozenset)):
             expected = sorted(expected)
         if declared_names != expected:
-            shown = declared_in_features if declared_names is None else declared_names
+            shown = (
+                safe_value_text(declared_in_features)
+                if declared_names is None
+                else [safe_value_text(name) for name in declared_names]
+            )
+            hints = ""
+            if declared_names is not None and sorted(declared_names) == sorted(expected):
+                hints += " Order matters: list them in the name's order."
+            if any("__" in source for source in name_sources):
+                hints += (
+                    " in_features must list the name's direct sources, not the root source: drop it or make it match."
+                )
             message = (
-                f"Feature '{feature_name}': in_features is {shown!r}, "
-                f"but the feature name's direct sources are {list(name_sources)}. in_features must list the name's "
-                f"direct sources (the part before the last '__'), not the root source: drop it or make it match. "
-                f"{env_hint}"
+                f"Feature '{feature_name}': in_features is {shown}, "
+                f"but the feature name's direct sources are {expected}.{hints} {env_hint}"
             )
             if not cls._name_mismatch_downgraded(message):
                 # Marked: a declared in_features contradicting the name is user misconfiguration.
                 raise escalate_match_abort(ValueError(message))
+
+    @classmethod
+    def declared_source_names(cls, name_sources: list[str]) -> list[str]:
+        """Map the name's sources to the source names this group declares; identity by default."""
+        return list(name_sources)
 
     @classmethod
     def _first_rejecting_guard(
@@ -817,7 +831,8 @@ class FeatureChainParserMixin:
                 return operation_config
         value = _options.get(_key)
         if value is not None:
-            return str(value)
+            unpacked = FeatureChainParser._unpack_property_value(value)
+            return str(unpacked[0] if len(unpacked) == 1 else value)
         return None
 
     # Column-wise data hooks: the concrete compute-framework subclass (pandas, pyarrow, ...) implements

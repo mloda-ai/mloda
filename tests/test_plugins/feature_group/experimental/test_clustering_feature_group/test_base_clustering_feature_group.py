@@ -2,25 +2,14 @@
 Tests for the base ClusteringFeatureGroup class.
 """
 
-from collections.abc import Iterator
-
 import pytest
 
-from mloda.core.abstract_plugins.components.match_rejection import MATCH_REJECTION_REASONS, MatchRejection
+from mloda.core.abstract_plugins.components.match_rejection import MatchRejection
 from mloda.user import Feature
 from mloda.user import FeatureName
 from mloda.user import Options
 from mloda_plugins.feature_group.experimental.clustering.base import ClusteringFeatureGroup
 from mloda_plugins.feature_group.experimental.clustering.pandas import PandasClusteringFeatureGroup
-
-
-@pytest.fixture
-def rejection_window() -> Iterator[dict[str, MatchRejection]]:
-    """Open a per-test recording window and always close it again."""
-    reasons: dict[str, MatchRejection] = {}
-    token = MATCH_REJECTION_REASONS.set(reasons)
-    yield reasons
-    MATCH_REJECTION_REASONS.reset(token)
 
 
 class TestClusteringFeatureGroup:
@@ -114,6 +103,12 @@ class TestClusteringFeatureGroup:
         assert ClusteringFeatureGroup.get_k_value("customer_behavior__cluster_kmeans_5") == 5
         assert ClusteringFeatureGroup.get_k_value("sensor_readings__cluster_dbscan_auto") == "auto"
         assert ClusteringFeatureGroup.get_k_value("transaction_patterns__cluster_hierarchical_3") == 3
+
+    def test_public_helpers_accept_chained_names(self) -> None:
+        chained = "s__mean_imputed__cluster_kmeans_5"
+
+        assert ClusteringFeatureGroup.get_k_value(chained) == 5
+        assert ClusteringFeatureGroup.parse_clustering_prefix(chained) == ("kmeans", "5")
 
     def test_input_features(self) -> None:
         """Test the input_features method."""

@@ -1,10 +1,9 @@
-from collections.abc import Iterator
 from typing import Any
 
 import pandas as pd
 import pytest
 
-from mloda.core.abstract_plugins.components.match_rejection import MATCH_REJECTION_REASONS, MatchRejection
+from mloda.core.abstract_plugins.components.match_rejection import MatchRejection
 
 from mloda.user import mloda
 from mloda.user import Feature
@@ -24,14 +23,6 @@ from tests.test_plugins.feature_group.experimental.test_base_aggregated_feature_
     validate_aggregated_features,
 )
 from tests.test_plugins.feature_group.experimental.zero_row_result_type_test_mixin import PandasZeroRowAdapter
-
-
-@pytest.fixture
-def rejection_window() -> Iterator[dict[str, MatchRejection]]:
-    reasons: dict[str, MatchRejection] = {}
-    token = MATCH_REJECTION_REASONS.set(reasons)
-    yield reasons
-    MATCH_REJECTION_REASONS.reset(token)
 
 
 class ConcreteAggregatedFeatureGroupForTest(AggregatedFeatureGroup):

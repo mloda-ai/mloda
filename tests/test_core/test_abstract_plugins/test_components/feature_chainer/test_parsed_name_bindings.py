@@ -437,9 +437,10 @@ class TestNameResolution:
         assert resolution.value_for(ALGORITHM_KEY) == "pca"
         assert resolution.value_for(SIZE_KEY) is None
 
-    def test_unmapped_named_capture_is_not_owned_and_binds_nothing(self) -> None:
+    def test_unmapped_named_capture_is_owned_binds_nothing_and_is_readable_by_name(self) -> None:
         resolution = _resolve("f0__pca_unmapped_pnb770", UnmappedNamedCaptureGroup)
 
+        assert resolution.owned is True
         assert dict(resolution.bindings) == {}
         assert resolution.value_for("unmapped_pnb770") == "pca"
 

@@ -207,8 +207,12 @@ class EncodingFeatureGroup(FeatureChainParserMixin, FeatureGroup):
         resolution = self.resolve_feature_name(feature_name)
         if resolution.owned and len(resolution.sources) == 1:
             # Remove ~suffix if present (for OneHot column patterns like category~1)
-            return {Feature(self.get_column_base_feature(resolution.sources[0]))}
+            return {Feature(self.declared_source_names(list(resolution.sources))[0])}
         return super().input_features(options, feature_name)
+
+    @classmethod
+    def declared_source_names(cls, name_sources: list[str]) -> list[str]:
+        return [cls.get_column_base_feature(source) for source in name_sources]
 
     @classmethod
     def get_encoder_type(cls, feature_name: str) -> str:

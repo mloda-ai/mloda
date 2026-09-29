@@ -38,6 +38,9 @@ class TestAggregatedResolveSubtype:
     def test_resolves_from_feature_name(self) -> None:
         assert AggregatedFeatureGroup.resolve_subtype("sales__sum_aggr", Options()) == "sum"
 
+    def test_resolves_from_a_chained_feature_name(self) -> None:
+        assert AggregatedFeatureGroup.resolve_subtype("s__mean_imputed__sum_aggr", Options()) == "sum"
+
     def test_resolves_from_options_path(self) -> None:
         options = Options(context={AggregatedFeatureGroup.AGGREGATION_TYPE: "max"})
         assert AggregatedFeatureGroup.resolve_subtype("aggr_config_placeholder", options) == "max"

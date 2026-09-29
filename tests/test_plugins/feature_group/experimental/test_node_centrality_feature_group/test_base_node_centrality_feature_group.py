@@ -2,25 +2,15 @@
 Tests for the base NodeCentralityFeatureGroup class.
 """
 
-from collections.abc import Iterator
-
 import pytest
 
-from mloda.core.abstract_plugins.components.match_rejection import MATCH_REJECTION_REASONS, MatchRejection
+from mloda.core.abstract_plugins.components.match_rejection import MatchRejection
 from mloda.user import Feature
 from mloda.user import FeatureName
 from mloda.user import Options
 from mloda.provider import DefaultOptionKeys
 from mloda_plugins.feature_group.experimental.node_centrality.base import NodeCentralityFeatureGroup
 from mloda_plugins.feature_group.experimental.node_centrality.pandas import PandasNodeCentralityFeatureGroup
-
-
-@pytest.fixture
-def rejection_window() -> Iterator[dict[str, MatchRejection]]:
-    reasons: dict[str, MatchRejection] = {}
-    token = MATCH_REJECTION_REASONS.set(reasons)
-    yield reasons
-    MATCH_REJECTION_REASONS.reset(token)
 
 
 class TestNodeCentralityFeatureGroup:

@@ -160,7 +160,7 @@ class TimeWindowFeatureGroup(TimeReferenceMixin, FeatureChainParserMixin, Featur
         """
         Extract time window parameters (window_function, window_size, time_unit) from a feature.
 
-        Tries string-based parsing first using parse_time_window_prefix, falls back to configuration.
+        Resolves each parameter from the feature name first, then from options.
 
         Args:
             feature: The feature to extract parameters from
@@ -173,17 +173,6 @@ class TimeWindowFeatureGroup(TimeReferenceMixin, FeatureChainParserMixin, Featur
         time_unit = cls._resolve_operation(feature, cls.TIME_UNIT)
 
         if window_size is not None:
-            window_size = int(window_size)
-
-        return window_function, window_size, time_unit
-
-        # Fall back to configuration
-        window_function = feature.options.get(cls.WINDOW_FUNCTION)
-        window_size = feature.options.get(cls.WINDOW_SIZE)
-        time_unit = feature.options.get(cls.TIME_UNIT)
-
-        # Convert window_size to int if it's a string
-        if window_size is not None and isinstance(window_size, str):
             window_size = int(window_size)
 
         return window_function, window_size, time_unit

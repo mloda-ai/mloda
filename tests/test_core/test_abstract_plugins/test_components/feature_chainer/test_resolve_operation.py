@@ -52,6 +52,11 @@ class TestResolveOperationUnit:
         result = MockResolverFG._resolve_operation("source__sum_op", options, "aggregation_type")
         assert result == "sum"
 
+    def test_config_fallback_unpacks_a_singleton_option(self) -> None:
+        feature = Feature("config_feature", Options(context={"aggregation_type": ["sum"]}))
+
+        assert AggregatedFeatureGroup._resolve_operation(feature, "aggregation_type") == "sum"
+
     def test_returns_config_when_pattern_does_not_match(self) -> None:
         """When feature name does not match, falls back to options[config_key]."""
         options = Options(context={"aggregation_type": "avg"})

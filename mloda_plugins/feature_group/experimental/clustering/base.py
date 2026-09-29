@@ -166,8 +166,8 @@ class ClusteringFeatureGroup(FeatureChainParserMixin, FeatureGroup):
         Raises:
             ValueError: If the suffix doesn't match the expected pattern
         """
-        # Extract the suffix part (everything after the double underscore)
-        suffix_start = feature_name.find(CHAIN_SEPARATOR)
+        # Extract the suffix part (everything after the last double underscore)
+        suffix_start = feature_name.rfind(CHAIN_SEPARATOR)
         if suffix_start == -1:
             raise ValueError(
                 f"Invalid clustering feature name format: {feature_name}. Missing double underscore separator."

@@ -58,6 +58,18 @@ class TestEncodingFeatureGroup:
                 f"Feature name '{name}' should not match criteria"
             )
 
+    def test_column_suffixed_name_matches_declared_base_in_features(self) -> None:
+        """The declared source is the column base, as input_features builds it, not the ~suffixed name."""
+        options = Options(context={DefaultOptionKeys.in_features: ["x"]})
+
+        assert EncodingFeatureGroup.match_feature_group_criteria(FeatureName("x~1__onehot_encoded"), options) is True
+
+    def test_column_suffixed_name_aborts_on_other_in_features(self) -> None:
+        options = Options(context={DefaultOptionKeys.in_features: ["y"]})
+
+        with pytest.raises(ValueError, match="in_features"):
+            EncodingFeatureGroup.match_feature_group_criteria(FeatureName("x~1__onehot_encoded"), options)
+
     def test_match_feature_group_criteria_unsupported_encoder(self) -> None:
         """Test that unsupported encoder types do not match the criteria."""
         unsupported_names = [

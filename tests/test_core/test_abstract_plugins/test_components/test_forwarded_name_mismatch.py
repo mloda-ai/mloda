@@ -65,6 +65,14 @@ class _NameMismatchChainedGroup(FeatureChainParserMixin):
     }
 
 
+class _OpenValueGroup(FeatureChainParserMixin):
+    """Named capture with no allowed_values, so a long declared value can reach the contradiction message."""
+
+    PREFIX_PATTERN = r".*__(?P<open_key_lv>\w+)_openlv$"
+    MIN_IN_FEATURES = 0
+    PROPERTY_MAPPING = {"open_key_lv": PropertySpec("Open-valued key", context=False)}
+
+
 def _inherited_child_options(consumer_group: dict[str, Any]) -> Options:
     """Build child options exactly like the engine does: inherit_from the consumer."""
     child_options = Options()
@@ -156,6 +164,16 @@ class TestForwardedNameMismatch:
         assert "sum" in message
         assert "max" in message
         assert "remove" in message
+
+    def test_message_does_not_carry_a_long_raw_option_value(self) -> None:
+        long_value = "m" * 200
+
+        with pytest.raises(ValueError) as exc_info:
+            _OpenValueGroup.match_feature_group_criteria(
+                "sales__short_openlv", Options(group={"open_key_lv": long_value})
+            )
+
+        assert long_value not in str(exc_info.value)
 
     def test_env_var_downgrades_to_warning(
         self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture

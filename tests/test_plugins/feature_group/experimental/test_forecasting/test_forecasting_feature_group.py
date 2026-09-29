@@ -5,11 +5,10 @@ Tests for the ForecastingFeatureGroup.
 import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
-from collections.abc import Iterator
 from typing import Any
 import pytest
 
-from mloda.core.abstract_plugins.components.match_rejection import MATCH_REJECTION_REASONS, MatchRejection
+from mloda.core.abstract_plugins.components.match_rejection import MatchRejection
 from mloda.user import Feature
 from mloda.user import FeatureName
 from mloda.provider import FeatureSet
@@ -18,15 +17,6 @@ from mloda_plugins.feature_group.experimental.forecasting.base import Forecastin
 from mloda_plugins.feature_group.experimental.forecasting.pandas import PandasForecastingFeatureGroup
 from mloda.provider import DefaultOptionKeys
 from mloda_plugins.feature_group.experimental.forecasting.forecasting_artifact import ForecastingArtifact
-
-
-@pytest.fixture
-def rejection_window() -> Iterator[dict[str, MatchRejection]]:
-    """Open a per-test recording window and always close it again."""
-    reasons: dict[str, MatchRejection] = {}
-    token = MATCH_REJECTION_REASONS.set(reasons)
-    yield reasons
-    MATCH_REJECTION_REASONS.reset(token)
 
 
 class TestForecastingFeatureGroup:

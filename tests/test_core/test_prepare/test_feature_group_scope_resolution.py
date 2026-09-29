@@ -14,6 +14,7 @@ Follows the construction conventions in test_identify_feature_group_error_messag
 """
 
 import inspect
+from collections.abc import Callable
 from abc import abstractmethod
 from typing import Any, ClassVar
 
@@ -731,3 +732,70 @@ def test_end2end_python_feature_abstract_family_base_scope_resolves_to_pandas_su
     aggregated = [df for df in results if "scope_python_sales__sum_aggr" in df.columns]
     assert len(aggregated) == 1
     assert aggregated[0]["scope_python_sales__sum_aggr"].iloc[0] == 100
+
+
+# ---------------------------------------------------------------------------
+# A name-owning candidate's marked match abort must not outrank the scope and domain gates
+# ---------------------------------------------------------------------------
+
+_ABORT_NAME = "sales__sum_aggr"
+
+
+class ScopeAbortRival(StubFeatureGroup):
+    """Rival that also matches the aggregated name, so a pin or domain can route the feature to it."""
+
+    MATCHED_NAMES: ClassVar[frozenset[str]] = frozenset({_ABORT_NAME})
+    SUPPORTED_NAMES: ClassVar[frozenset[str]] = MATCHED_NAMES
+
+
+class DomainAbortRival(StubFeatureGroup):
+    MATCHED_NAMES: ClassVar[frozenset[str]] = frozenset({_ABORT_NAME})
+    SUPPORTED_NAMES: ClassVar[frozenset[str]] = MATCHED_NAMES
+    DOMAIN_NAME: ClassVar[str | None] = "abort_rival_domain"
+
+
+def _abort_candidates() -> FeatureGroupEnvironmentMapping:
+    return {
+        PandasAggregatedFeatureGroup: {PandasDataFrame},
+        ScopeAbortRival: {MockComputeFramework},
+        DomainAbortRival: {MockComputeFramework},
+    }
+
+
+def _forwarded_max() -> Options:
+    options = Options()
+    options.inherit_from(Options(group={"aggregation_type": "max"}))
+    return options
+
+
+_CONTRADICTING_OPTIONS = [
+    pytest.param(lambda: Options(context={"in_features": ["raw"]}), id="in_features_contradicts_name"),
+    pytest.param(lambda: Options(context={"aggregation_type": "max"}), id="declared_option_contradicts_name"),
+    pytest.param(_forwarded_max, id="forwarded_option_contradicts_name"),
+]
+
+
+@pytest.mark.parametrize("make_options", _CONTRADICTING_OPTIONS)
+def test_pin_to_another_group_skips_the_owning_candidates_abort(make_options: Callable[[], Options]) -> None:
+    feature = Feature(_ABORT_NAME, make_options(), feature_group=ScopeAbortRival)
+
+    winner, _frameworks = next(iter(evaluate_or_raise(feature, _abort_candidates()).identified.items()))
+
+    assert winner is ScopeAbortRival
+
+
+@pytest.mark.parametrize("make_options", _CONTRADICTING_OPTIONS)
+def test_domain_gated_owning_candidate_does_not_abort(make_options: Callable[[], Options]) -> None:
+    feature = Feature(_ABORT_NAME, make_options(), domain="abort_rival_domain")
+
+    winner, _frameworks = next(iter(evaluate_or_raise(feature, _abort_candidates()).identified.items()))
+
+    assert winner is DomainAbortRival
+
+
+@pytest.mark.parametrize("make_options", _CONTRADICTING_OPTIONS)
+def test_unpinned_contradiction_still_aborts(make_options: Callable[[], Options]) -> None:
+    feature = Feature(_ABORT_NAME, make_options())
+
+    with pytest.raises(ValueError):
+        evaluate_or_raise(feature, _abort_candidates())

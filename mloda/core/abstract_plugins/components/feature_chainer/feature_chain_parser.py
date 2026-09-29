@@ -353,7 +353,7 @@ class FeatureChainParser:
     def validate_name_bindings(cls, bindings: Mapping[str, str], property_mapping: dict[str, PropertySpec]) -> None:
         """Validate each name-bound value like an option value; raises PropertyValueRejection on the first invalid."""
         for key, value in bindings.items():
-            spec = property_mapping[key]
+            spec = cls._require_spec(cls.__name__, key, property_mapping[key])
             cls._process_found_property_value(value, cls.extract_property_values(spec), key, spec)
 
     @classmethod

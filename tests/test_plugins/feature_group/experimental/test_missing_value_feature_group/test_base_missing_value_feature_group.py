@@ -1,9 +1,8 @@
-from collections.abc import Iterator
 from typing import Any
 
 import pytest
 
-from mloda.core.abstract_plugins.components.match_rejection import MATCH_REJECTION_REASONS, MatchRejection
+from mloda.core.abstract_plugins.components.match_rejection import MatchRejection
 
 from mloda.user import Feature
 from mloda.user import FeatureName
@@ -12,14 +11,6 @@ from mloda.provider import DefaultOptionKeys
 
 from mloda_plugins.feature_group.experimental.data_quality.missing_value.base import MissingValueFeatureGroup
 from mloda.provider import FeatureChainParser
-
-
-@pytest.fixture
-def rejection_window() -> Iterator[dict[str, MatchRejection]]:
-    reasons: dict[str, MatchRejection] = {}
-    token = MATCH_REJECTION_REASONS.set(reasons)
-    yield reasons
-    MATCH_REJECTION_REASONS.reset(token)
 
 
 class ConcreteMissingValueFeatureGroup(MissingValueFeatureGroup):

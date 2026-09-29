@@ -105,6 +105,14 @@ class TestSklearnPipelineFeatureGroup:
             SklearnPipelineFeatureGroup._extract_source_features(Feature(name))
         )
 
+    def test_input_features_keep_the_space_after_a_comma(self) -> None:
+        name = "a, b__sklearn_pipeline_scaling"
+        result = PandasSklearnPipelineFeatureGroup().input_features(Options({}), FeatureName(name))
+
+        assert result is not None
+        assert {str(f.name) for f in result} == {"a", " b"}
+        assert set(SklearnPipelineFeatureGroup._extract_source_features(Feature(name))) == {"a", " b"}
+
     def test_create_default_pipeline_config_preprocessing(self) -> None:
         """Test default pipeline configuration for preprocessing."""
         # Skip test if sklearn not available

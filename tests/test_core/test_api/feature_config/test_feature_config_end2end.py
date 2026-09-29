@@ -211,7 +211,7 @@ def test_end2end_chained_name_with_root_in_features_names_the_direct_sources() -
         {ChainedFeatureTestDataCreator, PandasScalingFeatureGroup, PandasMissingValueFeatureGroup}
     )
 
-    with pytest.raises(Exception) as exc_info:
+    with pytest.raises(ValueError) as exc_info:
         mloda.run_all(features, compute_frameworks={PandasDataFrame}, plugin_collector=plugin_collector)
 
     assert "direct source" in str(exc_info.value)

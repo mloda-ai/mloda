@@ -310,6 +310,15 @@ class TestParserEntryPointRequiresPropertySpec:
                 "any_feature", Options(context={"operation_type": "add"}), property_mapping
             )
 
+    def test_match_configuration_rejects_a_dict_spec_on_a_prefix_pattern_name(self) -> None:
+        """A named-capture name over a dict spec raises the actionable ValueError, not an AttributeError."""
+        property_mapping: Any = {"op": {"explanation": "x"}}
+
+        with pytest.raises(ValueError, match=r"PROPERTY_MAPPING\['op'\] is a dict, not a PropertySpec"):
+            FeatureChainParser.match_configuration_feature_chain_parser(
+                "x__sum_op", Options(), property_mapping=property_mapping, prefix_patterns=[r".*__(?P<op>\w+)_op$"]
+            )
+
     def test_validate_property_mapping_defaults_rejects_a_dict_spec(self) -> None:
         """The class-definition check and the entry point share one rule and one message."""
         property_mapping: Any = {"operation_type": {"add": "Addition"}}

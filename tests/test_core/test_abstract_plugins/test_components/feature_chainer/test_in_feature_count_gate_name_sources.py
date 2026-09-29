@@ -17,6 +17,7 @@ from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser
 from mloda.core.abstract_plugins.components.match_rejection import MATCH_REJECTION_REASONS, NAME_STAGE, MatchRejection
 from mloda.provider import DefaultOptionKeys, PropertySpec
 from mloda.user import Feature, FeatureName, Options
+from mloda_plugins.feature_group.experimental.aggregated_feature_group.base import AggregatedFeatureGroup
 
 # A dict is uncountable for get_in_features: it raises TypeError instead of yielding features.
 JUNK_IN_FEATURES: dict[str, int] = {"a": 1}
@@ -132,6 +133,34 @@ class TestDeclaredInFeaturesAgreeWithName:
         assert "f1" in message
         assert "f2" in message
         assert "direct source" in message
+
+    def test_message_does_not_carry_a_long_raw_value(self) -> None:
+        long_value = "n" * 200
+
+        with pytest.raises(ValueError) as exc_info:
+            _NameSourceGate944.match_feature_group_criteria(self.NAME, _options([long_value, "b"]))
+
+        assert long_value not in str(exc_info.value)
+
+    def test_message_omits_the_root_source_hint_for_a_flat_name(self) -> None:
+        with pytest.raises(ValueError) as exc_info:
+            _NameSourceGate944.match_feature_group_criteria(self.NAME, _options(["p1", "p2"]))
+
+        assert "root source" not in str(exc_info.value)
+
+    def test_message_says_the_root_source_when_the_name_sources_are_chained(self) -> None:
+        options = Options(context={DefaultOptionKeys.in_features: ["s"]})
+
+        with pytest.raises(ValueError) as exc_info:
+            AggregatedFeatureGroup.match_feature_group_criteria("s__mean_imputed__sum_aggr", options)
+
+        assert "not the root source" in str(exc_info.value)
+
+    def test_message_says_order_matters_for_the_same_names_reordered(self) -> None:
+        with pytest.raises(ValueError) as exc_info:
+            _NameSourceGate944.match_feature_group_criteria(self.NAME, _options(["f2", "f1"]))
+
+        assert "order" in str(exc_info.value).lower()
 
     @pytest.mark.parametrize("in_features", [frozenset({"f1", "f2"}), {"f2", "f1"}])
     def test_set_in_any_order_matches(self, in_features: Any) -> None:

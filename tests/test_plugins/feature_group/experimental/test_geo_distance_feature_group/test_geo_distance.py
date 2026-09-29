@@ -2,12 +2,10 @@
 Tests for the GeoDistanceFeatureGroup.
 """
 
-from collections.abc import Iterator
-
 import pandas as pd
 import pytest
 
-from mloda.core.abstract_plugins.components.match_rejection import MATCH_REJECTION_REASONS, MatchRejection
+from mloda.core.abstract_plugins.components.match_rejection import MatchRejection
 
 from mloda.user import Feature
 from mloda.user import FeatureName
@@ -16,14 +14,6 @@ from mloda.user import Options
 
 from mloda_plugins.feature_group.experimental.geo_distance.base import GeoDistanceFeatureGroup
 from mloda_plugins.feature_group.experimental.geo_distance.pandas import PandasGeoDistanceFeatureGroup
-
-
-@pytest.fixture
-def rejection_window() -> Iterator[dict[str, MatchRejection]]:
-    reasons: dict[str, MatchRejection] = {}
-    token = MATCH_REJECTION_REASONS.set(reasons)
-    yield reasons
-    MATCH_REJECTION_REASONS.reset(token)
 
 
 class TestGeoDistanceFeatureGroup:
@@ -175,8 +165,9 @@ class TestGeoDistanceFeatureGroup:
             options=Options(context={GeoDistanceFeatureGroup.DISTANCE_TYPE: "haversine"}),
         )
         assert GeoDistanceFeatureGroup.match_feature_group_criteria(feature.name, feature.options) is False
-        assert [r.reason for r in rejection_window.values()] != []
-        assert all("haversine_distance" in r.reason for r in rejection_window.values())
+        reasons = [r.reason for r in rejection_window.values()]
+        assert len(reasons) == 1
+        assert "haversine_distance" in reasons[0]
         with pytest.raises(ValueError, match="Unsupported distance type"):
             GeoDistanceFeatureGroup._extract_geo_distance_parameters(feature)
 

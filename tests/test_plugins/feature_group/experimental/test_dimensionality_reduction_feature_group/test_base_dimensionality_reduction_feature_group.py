@@ -2,11 +2,9 @@
 Tests for the base DimensionalityReductionFeatureGroup class.
 """
 
-from collections.abc import Iterator
-
 import pytest
 
-from mloda.core.abstract_plugins.components.match_rejection import MATCH_REJECTION_REASONS, MatchRejection
+from mloda.core.abstract_plugins.components.match_rejection import MatchRejection
 from mloda.user import Feature
 from mloda.user import FeatureName
 from mloda.user import Options
@@ -15,15 +13,6 @@ from mloda_plugins.feature_group.experimental.dimensionality_reduction.base impo
 from mloda_plugins.feature_group.experimental.dimensionality_reduction.pandas import (
     PandasDimensionalityReductionFeatureGroup,
 )
-
-
-@pytest.fixture
-def rejection_window() -> Iterator[dict[str, MatchRejection]]:
-    """Open a per-test recording window and always close it again."""
-    reasons: dict[str, MatchRejection] = {}
-    token = MATCH_REJECTION_REASONS.set(reasons)
-    yield reasons
-    MATCH_REJECTION_REASONS.reset(token)
 
 
 class TestDimensionalityReductionFeatureGroup:

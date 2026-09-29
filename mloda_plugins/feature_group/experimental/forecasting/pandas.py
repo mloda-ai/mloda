@@ -41,7 +41,7 @@ class PandasForecastingFeatureGroup(ForecastingFeatureGroup):
     @classmethod
     def _get_available_columns(cls, data: pd.DataFrame) -> set[str]:
         """Get the set of available column names from the DataFrame."""
-        return set(data.columns)
+        return PandasDataFrame.extract_column_names(data)
 
     @classmethod
     def _check_reference_time_column_exists(cls, data: pd.DataFrame, reference_time_column: str) -> None:

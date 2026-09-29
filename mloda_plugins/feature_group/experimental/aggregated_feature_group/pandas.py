@@ -21,7 +21,7 @@ class PandasAggregatedFeatureGroup(AggregatedFeatureGroup):
     @classmethod
     def _get_available_columns(cls, data: Any) -> set[str]:
         """Get the set of available column names from the DataFrame."""
-        return set(data.columns)
+        return PandasDataFrame.extract_column_names(data)
 
     @classmethod
     def _check_source_features_exist(cls, data: Any, feature_names: list[str]) -> None:

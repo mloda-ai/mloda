@@ -12,6 +12,7 @@ from mloda.user import Options
 from mloda.provider import DefaultOptionKeys
 from mloda.core.abstract_plugins.components.match_rejection import MATCH_REJECTION_REASONS, MatchRejection
 from mloda_plugins.feature_group.experimental.time_window.base import TimeWindowFeatureGroup
+from mloda_plugins.feature_group.experimental.time_window.pandas import PandasTimeWindowFeatureGroup
 from mloda.provider import FeatureChainParser
 
 
@@ -128,6 +129,20 @@ class TestTimeWindowFeatureGroup:
         recorded = [r.reason for r in rejection_window.values()]
         assert len(recorded) == 1
         assert "bogus" in recorded[0]
+
+    def test_name_path_source_count_above_max_is_a_recorded_non_match(
+        self, rejection_window: dict[str, MatchRejection]
+    ) -> None:
+        """The name path validates the source count via the mixin (MAX_IN_FEATURES = 1)."""
+        name = "a&b__sum_7_day_window"
+        assert not TimeWindowFeatureGroup.match_feature_group_criteria(name, Options())
+        reason = rejection_window["TimeWindowFeatureGroup"].reason
+        assert "at most 1" in reason
+        assert "found 2" in reason
+
+        with pytest.raises(ValueError) as exc_info:
+            PandasTimeWindowFeatureGroup().input_features(Options(), FeatureName(name))
+        assert str(exc_info.value) == reason
 
     def test_input_features(self) -> None:
         """Test input_features method."""
@@ -327,6 +342,10 @@ class TestTimeWindowFeatureGroup:
         feature = Feature("temperature__avg_3_day_window")
         result = TimeWindowFeatureGroup._extract_time_window_params(feature)
         assert result == ("avg", 3, "day")
+
+    def test_extract_time_window_params_chained_name(self) -> None:
+        feature = Feature("price__mean_imputed__sum_7_day_window")
+        assert TimeWindowFeatureGroup._extract_time_window_params(feature) == ("sum", 7, "day")
 
     def test_extract_time_window_params_config_fallback(self) -> None:
         """Test _extract_time_window_params falls back to configuration-based options."""

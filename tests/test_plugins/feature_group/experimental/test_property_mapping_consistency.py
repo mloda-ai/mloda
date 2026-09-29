@@ -89,7 +89,7 @@ class TestPropertyMappingConsistency:
         )
 
 
-# Single-capture plugins migrated to named captures (issue #1716); text_cleaning is captureless.
+# Plugins migrated to named captures (issue #1716); text_cleaning is captureless, forecasting is pending.
 NAMED_CAPTURE_PLUGINS: list[type[Any]] = [
     GeoDistanceFeatureGroup,
     MissingValueFeatureGroup,
@@ -98,6 +98,9 @@ NAMED_CAPTURE_PLUGINS: list[type[Any]] = [
     NodeCentralityFeatureGroup,
     EncodingFeatureGroup,
     SklearnPipelineFeatureGroup,
+    DimensionalityReductionFeatureGroup,
+    ClusteringFeatureGroup,
+    TimeWindowFeatureGroup,
 ]
 
 

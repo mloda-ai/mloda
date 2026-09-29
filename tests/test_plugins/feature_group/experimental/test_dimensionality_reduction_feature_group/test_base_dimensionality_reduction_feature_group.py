@@ -2,8 +2,11 @@
 Tests for the base DimensionalityReductionFeatureGroup class.
 """
 
+from collections.abc import Iterator
+
 import pytest
 
+from mloda.core.abstract_plugins.components.match_rejection import MATCH_REJECTION_REASONS, MatchRejection
 from mloda.user import Feature
 from mloda.user import FeatureName
 from mloda.user import Options
@@ -12,6 +15,15 @@ from mloda_plugins.feature_group.experimental.dimensionality_reduction.base impo
 from mloda_plugins.feature_group.experimental.dimensionality_reduction.pandas import (
     PandasDimensionalityReductionFeatureGroup,
 )
+
+
+@pytest.fixture
+def rejection_window() -> Iterator[dict[str, MatchRejection]]:
+    """Open a per-test recording window and always close it again."""
+    reasons: dict[str, MatchRejection] = {}
+    token = MATCH_REJECTION_REASONS.set(reasons)
+    yield reasons
+    MATCH_REJECTION_REASONS.reset(token)
 
 
 class TestDimensionalityReductionFeatureGroup:
@@ -51,6 +63,30 @@ class TestDimensionalityReductionFeatureGroup:
         assert not DimensionalityReductionFeatureGroup.match_feature_group_criteria(
             "customer_metrics_pca_2d", Options()
         )
+
+    def test_chained_source_name_matches_and_extracts_the_chained_source(self) -> None:
+        """The pattern parses from the last suffix, so a chained source is the whole prefix."""
+        name = "s__mean_imputed__pca_2d"
+        assert DimensionalityReductionFeatureGroup.match_feature_group_criteria(name, Options())
+        assert DimensionalityReductionFeatureGroup._extract_source_features(Feature(name)) == ["s__mean_imputed"]
+
+    def test_zero_dimension_is_a_recorded_non_match_naming_the_dimension(
+        self, rejection_window: dict[str, MatchRejection]
+    ) -> None:
+        assert not DimensionalityReductionFeatureGroup.match_feature_group_criteria("x__pca_0d", Options())
+        recorded = rejection_window["DimensionalityReductionFeatureGroup"]
+        assert "dimension" in recorded.reason
+
+    def test_valid_name_records_no_rejection(self, rejection_window: dict[str, MatchRejection]) -> None:
+        assert DimensionalityReductionFeatureGroup.match_feature_group_criteria("x__pca_2d", Options())
+        assert rejection_window == {}
+
+    @pytest.mark.parametrize("name", ["x__pca_2d", "s__mean_imputed__pca_2d"])
+    def test_extract_dim_reduction_params_reads_the_named_captures(self, name: str) -> None:
+        algorithm, dimension, _ = DimensionalityReductionFeatureGroup._extract_dim_reduction_params(Feature(name))
+        assert algorithm == "pca"
+        assert dimension == 2
+        assert isinstance(dimension, int)
 
     def test_parse_reduction_suffix(self) -> None:
         """Test the parse_reduction_suffix method."""
